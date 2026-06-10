@@ -189,3 +189,188 @@ export interface Confidence {
   label: string;
   pct: number;
 }
+
+// ─── PRDs ────────────────────────────────────────────────────────────────────
+
+export interface PrdRequirement {
+  id: string;
+  text: string;
+  crit: string;
+}
+
+export interface Prd {
+  id: string;
+  bucket: string;
+  title: string;
+  status: string;
+  approvedBy: string;
+  drafted: string;
+  problem: string;
+  reqs: PrdRequirement[];
+  nonGoals: string[];
+  rollback: string;
+}
+
+// ─── Timeline overlays ───────────────────────────────────────────────────────
+
+export interface Cycle {
+  id: string;
+  name: string;
+  from: number;
+  to: number;
+}
+
+export type MilestoneState = "now" | "upcoming" | "risk";
+
+export interface Milestone {
+  id: string;
+  bucket: string;
+  name: string;
+  col: number;
+  state: MilestoneState;
+  sp: string;
+}
+
+// ─── Risks ───────────────────────────────────────────────────────────────────
+
+export type RiskLevel = "High" | "Medium" | "Low";
+
+export interface Risk {
+  id: string;
+  bucket: string;
+  title: string;
+  like: RiskLevel;
+  impact: RiskLevel;
+  owner: string;
+  status: "open" | "mitigating" | "closed";
+  mit: string;
+  sync: SyncRef;
+}
+
+// ─── Agent activity feed ─────────────────────────────────────────────────────
+
+export type FeedKind =
+  | "run"
+  | "review"
+  | "pr"
+  | "shot"
+  | "sync"
+  | "approve"
+  | "block"
+  | "comment";
+
+export interface FeedEvent {
+  age: string;
+  actor: string;
+  task: string;
+  kind: FeedKind;
+  text: string;
+  chip: string;
+  live?: boolean;
+  human?: boolean;
+  warn?: boolean;
+  shots?: string[];
+}
+
+// ─── Traceability matrix ─────────────────────────────────────────────────────
+
+export type TraceStatus = "satisfied" | "in-review" | "in-progress" | "gap";
+
+export interface TraceRow {
+  req: string;
+  tasks: string[];
+  prs: string[];
+  evidence: "complete" | "partial" | "incomplete";
+  test: string;
+  merge: string;
+  status: TraceStatus;
+}
+
+export interface Trace {
+  bucket: string;
+  rows: TraceRow[];
+}
+
+// ─── Files / document library ────────────────────────────────────────────────
+
+export type FileKind = "folder" | "doc" | "pdf" | "sheet" | "img" | "zip" | "md";
+export type DocType = "PRD" | "Evidence" | "Deed" | "Report" | "Spec" | "Export";
+
+export interface FileEntry {
+  id: string;
+  name: string;
+  kind: FileKind;
+  parent: string | null;
+  bucket?: string;
+  docType?: DocType;
+  modified?: string;
+  modifiedBy?: string;
+  size?: string;
+  sync?: SyncRef;
+}
+
+// ─── SharePoint schema (the system-of-record spec) ───────────────────────────
+
+export type SyncDirection = "two-way" | "push" | "pull";
+
+export interface SpColumn {
+  name: string;
+  type: string;
+  mc: string;
+  dir: SyncDirection;
+  required?: boolean;
+  note?: string;
+}
+
+export interface SpListDef {
+  key: string;
+  title: string;
+  kind: "list" | "library";
+  entity: string;
+  icon: string;
+  maps: string;
+  itemCount: number;
+  direction: SyncDirection;
+  lastSync: string;
+  counts: { synced: number; pending: number; conflict: number; error: number };
+  columns: SpColumn[];
+  folders?: string;
+}
+
+export interface SpSite {
+  name: string;
+  host: string;
+  path: string;
+  tz: string;
+  connected: boolean;
+}
+
+export interface SpConflict {
+  id: string;
+  list: string;
+  entity: string;
+  entityId: string;
+  field: string;
+  mcVal: string;
+  spVal: string;
+  detected: string;
+  by: string;
+  note: string;
+}
+
+export interface SpError {
+  id: string;
+  list: string;
+  entity: string;
+  entityId: string;
+  field: string;
+  value: string;
+  reason: string;
+}
+
+export interface AuditRow {
+  ts: string;
+  actor: string;
+  body: string;
+  state: SyncState;
+}

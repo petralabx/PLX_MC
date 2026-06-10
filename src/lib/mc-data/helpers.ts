@@ -58,8 +58,9 @@ export function liveAgentCount(): number {
 }
 
 // Tasks the viewer owns, co-owns, or reports — drives the Inbox "Assigned to me".
-export function tasksForUser(userId: string = CURRENT_USER): Task[] {
-  return TASKS.filter(
+// Pass the store's live task array for reactive screens; defaults to the fixture.
+export function tasksForUser(userId: string = CURRENT_USER, tasks: Task[] = TASKS): Task[] {
+  return tasks.filter(
     (t) =>
       t.assignee === userId ||
       t.coassignees.includes(userId) ||

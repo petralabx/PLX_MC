@@ -2,13 +2,16 @@
 // Ported from docs/product/prototype/mc-views.jsx › InboxView. Two sections:
 // "Needs your attention" (notifications) and "Assigned to me" (the viewer's tasks).
 import { ACTORS, CURRENT_USER, INBOX, tasksForUser, unreadInboxCount } from "@/lib/mc-data";
+import { useMcVersion } from "@/lib/mc-data/hooks";
+import { allTasks } from "@/lib/mc-data/store";
 
 import { Confidence } from "./atoms";
-import type { Screen } from "./chrome";
+import type { ScreenProps } from "./route";
 
-export function InboxView({ nav }: { nav: (screen: Screen) => void }) {
+export function InboxView({ nav }: ScreenProps) {
+  useMcVersion();
   const firstName = ACTORS[CURRENT_USER].name.split(" ")[0];
-  const mine = tasksForUser().slice(0, 5);
+  const mine = tasksForUser(CURRENT_USER, allTasks()).slice(0, 5);
   const unread = unreadInboxCount();
 
   return (
@@ -28,7 +31,8 @@ export function InboxView({ nav }: { nav: (screen: Screen) => void }) {
           <button type="button" className="btn ghost" onClick={() => nav("feed")}>
             Agent activity ◉
           </button>
-          <button type="button" className="btn" onClick={() => nav("new")}>
+          {/* Wired to the New Task modal by the authoring lane. */}
+          <button type="button" className="btn" title="New task — coming soon">
             New ⌘K
           </button>
         </div>
@@ -44,7 +48,7 @@ export function InboxView({ nav }: { nav: (screen: Screen) => void }) {
             type="button"
             className={`nrow${n.unread ? " unread" : ""}`}
             key={n.id}
-            onClick={() => nav("task")}
+            onClick={() => nav("task", { taskId: n.task })}
           >
             <span className="dot" />
             <span style={{ display: "flex", alignItems: "center", gap: 11 }}>
@@ -60,7 +64,12 @@ export function InboxView({ nav }: { nav: (screen: Screen) => void }) {
           <span className="ct">{mine.length} reporting</span>
         </div>
         {mine.map((t) => (
-          <button type="button" className="nrow" key={t.id} onClick={() => nav("task")}>
+          <button
+            type="button"
+            className="nrow"
+            key={t.id}
+            onClick={() => nav("task", { taskId: t.id })}
+          >
             <span className="dot" />
             <span style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
               <span className="id">{t.id}</span>

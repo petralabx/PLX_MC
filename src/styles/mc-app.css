@@ -94,6 +94,111 @@
 .mc .av.lg { width:34px; height:34px; font-size:11px; }
 .mc .av.xl { width:46px; height:46px; font-size:14px; }
 
+/* assignee chip (name + kind cue) */
+.mc .who { display:inline-flex; align-items:center; gap:7px; min-width:0; }
+.mc .who .nm { font-size:12px; color:var(--p-ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mc .who .tag { font-family:var(--mono); font-size:7.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--p-muted);
+  border:1px solid var(--p-grid); padding:1px 4px; line-height:1.3; }
+.mc .who .tag.model { color:var(--p-accent); border-color:var(--p-accent-soft); }
+.mc .unassigned { font-family:var(--mono); font-size:9px; letter-spacing:0.14em; text-transform:uppercase; color:var(--p-muted);
+  border:1px dashed var(--p-grid); padding:3px 8px; cursor:pointer; }
+.mc .unassigned:hover { border-color:var(--p-ink-2); color:var(--p-ink-2); }
+.mc .avstack { display:inline-flex; }
+.mc .avstack .av { margin-left:-5px; box-shadow:0 0 0 1.5px var(--p-paper); }
+.mc .avstack .av:first-child { margin-left:0; }
+
+/* ─── Sync tick — silent when healthy, loud on conflict/error ─────────────── */
+.mc .sync { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:8.5px;
+  letter-spacing:0.12em; text-transform:uppercase; color:var(--p-muted); }
+.mc .sync .d { width:5px; height:5px; border-radius:50%; background:var(--p-ok); flex:0 0 auto; }
+.mc .sync.pending .d { background:var(--p-muted); }
+.mc .sync.conflict { color:var(--p-warn); }
+.mc .sync.conflict .d { background:var(--p-warn); border-radius:1px; }
+.mc .sync.error { color:var(--p-hot); }
+.mc .sync.error .d { background:var(--p-hot); border-radius:1px; }
+.mc .sync .ts { color:var(--p-muted); }
+
+/* ─── Chips: REQ · repo · label · priority · estimate ─────────────────────── */
+.mc .reqchip { font-family:var(--mono); font-size:8.5px; letter-spacing:0.1em; color:var(--p-accent);
+  border:1px solid var(--p-accent-soft); padding:2px 6px; background:transparent; white-space:nowrap; }
+.mc .reqchip.gap { color:var(--p-warn); border-color:var(--p-warn); }
+.mc .repochip { font-family:var(--mono); font-size:8.5px; letter-spacing:0.06em; color:var(--p-ink-2);
+  border:1px solid var(--p-grid); padding:2px 6px; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+.mc .repochip::before { content:""; width:5px; height:5px; background:var(--p-muted); flex:0 0 auto; }
+.mc .label { font-family:var(--mono); font-size:8px; letter-spacing:0.1em; text-transform:uppercase; color:var(--p-muted);
+  background:var(--p-paper-2); padding:2px 6px; white-space:nowrap; }
+.mc .prio { font-family:var(--mono); font-size:9px; letter-spacing:0.04em; display:inline-flex; align-items:center; gap:5px; }
+.mc .prio .bars { letter-spacing:-1px; font-size:8px; }
+.mc .prio.hot { color:var(--p-hot); } .mc .prio.warn { color:var(--p-warn); }
+.mc .prio.info { color:var(--p-info); } .mc .prio.muted { color:var(--p-muted); }
+.mc .est { font-family:var(--mono); font-size:8.5px; letter-spacing:0.08em; color:var(--p-muted); border:1px solid var(--p-grid); padding:1px 5px; }
+
+/* ─── Lifecycle mini-spine (cards / rows) ─────────────────────────────────── */
+.mc .spine { display:flex; gap:1.5px; height:3px; align-items:stretch; }
+.mc .spine span { flex:1; background:var(--p-grid-2); border-radius:1px; }
+.mc .spine span.done { background:var(--p-ink); }
+.mc .spine span.now { background:var(--p-accent); }
+.mc .spine span.now.blocked { background:var(--p-hot); }
+
+/* ─── Status pills ────────────────────────────────────────────────────────── */
+.mc .pill { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border:1px solid currentColor;
+  font-family:var(--mono); font-size:8.5px; letter-spacing:0.16em; text-transform:uppercase; }
+.mc .pill .dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
+.mc .pill.ok { color:var(--p-ok); } .mc .pill.warn { color:var(--p-warn); }
+.mc .pill.info { color:var(--p-info); } .mc .pill.hot { color:var(--p-hot); }
+.mc .pill.acc { color:var(--p-accent); } .mc .pill.muted { color:var(--p-muted); }
+
+/* ─── Slate placeholder ───────────────────────────────────────────────────── */
+.mc .slate { aspect-ratio:16/10; border:1px solid var(--p-grid); background:var(--p-canvas); position:relative; display:flex;
+  align-items:flex-end; padding:9px; overflow:hidden; }
+.mc .slate .cross { position:absolute; top:7px; left:7px; width:13px; height:13px; }
+.mc .slate .cross::before, .mc .slate .cross::after { content:""; position:absolute; background:var(--p-muted); }
+.mc .slate .cross::before { left:6px; top:0; width:1px; height:13px; }
+.mc .slate .cross::after { top:6px; left:0; height:1px; width:13px; }
+.mc .slate .cap { font-family:var(--mono); font-size:8px; letter-spacing:0.1em; color:var(--p-muted); }
+.mc .slate .lb { position:absolute; top:8px; right:9px; font-family:var(--mono); font-size:7.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--p-ink-2); }
+
+/* ─── Empty / first-run states ────────────────────────────────────────────── */
+.mc .empty { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+  padding:70px 26px; gap:14px; flex:1; }
+.mc .empty .glyph { width:54px; height:54px; border:1px solid var(--p-grid); display:flex; align-items:center; justify-content:center;
+  font-family:var(--mazius); font-size:22px; color:var(--p-muted); position:relative; }
+.mc .empty .glyph::before, .mc .empty .glyph::after { content:""; position:absolute; background:var(--p-grid); }
+.mc .empty .glyph::before { top:-1px; left:8px; right:8px; height:1px; } .mc .empty .glyph::after { bottom:-1px; left:8px; right:8px; height:1px; }
+.mc .empty h3 { font-family:var(--mazius); font-size:22px; font-weight:400; margin:0; letter-spacing:-0.01em; }
+.mc .empty p { font-size:13px; color:var(--p-muted); margin:0; max-width:44ch; line-height:1.55; }
+.mc .empty .acts { display:flex; gap:9px; margin-top:6px; }
+.mc .colempty { padding:18px 4px; text-align:center; font-family:var(--mono); font-size:8.5px; letter-spacing:0.16em;
+  text-transform:uppercase; color:var(--p-muted); border:1px dashed var(--p-grid-2); border-radius:4px; }
+
+/* ─── Back link + section headers (shared by detail screens) ──────────────── */
+.mc .back { font-family:var(--mono); font-size:9.5px; letter-spacing:0.16em; text-transform:uppercase; color:var(--p-muted);
+  cursor:pointer; background:none; border:0; padding:0; display:inline-flex; gap:8px; align-items:center; }
+.mc .back:hover { color:var(--p-ink); }
+.mc .bh.sec { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:22px 0 12px; }
+.mc .bh.sec .kk { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase; color:var(--p-muted); }
+.mc .splink { font-family:var(--mono); font-size:9px; letter-spacing:0.14em; text-transform:uppercase; color:var(--p-accent); cursor:pointer; text-decoration:none; }
+.mc .splink:hover { text-decoration:underline; }
+
+/* ─── Toolbar (view switch · filters) ─────────────────────────────────────── */
+.mc .tb { display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:10px 26px; border-bottom:1px solid var(--p-grid); background:var(--p-paper); flex-wrap:wrap; }
+.mc .tb .l, .mc .tb .r { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.mc .vsw { display:inline-flex; border:1px solid var(--p-grid); }
+.mc .vsw button { font-family:var(--mono); font-size:9.5px; letter-spacing:0.18em; text-transform:uppercase; color:var(--p-muted);
+  background:transparent; border:0; border-left:1px solid var(--p-grid); padding:7px 13px; cursor:pointer; transition:all var(--p-dur-fast) var(--p-ease); }
+.mc .vsw button:first-child { border-left:0; }
+.mc .vsw button:hover { color:var(--p-ink-2); }
+.mc .vsw button.on { color:var(--p-paper); background:var(--p-ink); }
+.mc .tb .seg { display:inline-flex; align-items:center; gap:0; border:1px solid var(--p-grid); }
+.mc .tb .seg button { font-family:var(--mono); font-size:9px; letter-spacing:0.14em; text-transform:uppercase; color:var(--p-muted);
+  background:transparent; border:0; border-left:1px solid var(--p-grid); padding:6px 11px; cursor:pointer; }
+.mc .tb .seg button:first-child { border-left:0; }
+.mc .tb .seg button.on { color:var(--p-ink); background:var(--p-paper-2); }
+.mc .tb .lbl { font-family:var(--mono); font-size:9px; letter-spacing:0.2em; text-transform:uppercase; color:var(--p-muted); }
+.mc .tb .count { font-family:var(--mono); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--p-muted); }
+.mc .tb .count b { color:var(--p-ink); font-weight:500; }
+
 /* ─── Confidence signal — ONE quiet read per task ─────────────────────────── */
 .mc .conf { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:8.5px;
   letter-spacing:0.16em; text-transform:uppercase; color:var(--p-muted); }

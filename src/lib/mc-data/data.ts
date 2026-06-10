@@ -5,14 +5,27 @@
 
 import type {
   Agent,
+  AgentMode,
   Bucket,
+  Cycle,
+  FeedEvent,
+  FileEntry,
   Human,
   InboxNotification,
+  Milestone,
+  Prd,
   PriorityConfig,
   PriorityKey,
+  Repo,
+  Risk,
+  SpConflict,
+  SpError,
+  SpListDef,
+  SpSite,
   Stage,
   SyncRegister,
   Task,
+  Trace,
 } from "./types";
 
 // The signed-in human whose cockpit this is (the prototype's fixed viewer).
@@ -62,7 +75,38 @@ export const AGENTS: Record<string, Agent> = {
   scribe: { id: "scribe", kind: "agent", name: "Scribe", init: "SC", model: "Opus", team: "Ops", mode: "approve", online: true },
 };
 
-export const ACTORS: Record<string, Human | Agent> = { ...HUMANS, ...AGENTS };
+// Wider taskable directory (placeholder colleagues across both Petra domains).
+export const DIRECTORY_EXTRA: Record<string, Human> = {
+  priya: { id: "priya", kind: "human", name: "Priya Raman", init: "PR", role: "Data Scientist", dept: "Data", email: "priya.raman@petralabx.com", online: true },
+  felix: { id: "felix", kind: "human", name: "Felix Gunnarsson", init: "FG", role: "Platform Engineer", dept: "Platform", email: "felix.gunnarsson@petralabx.com", online: false },
+  dana: { id: "dana", kind: "human", name: "Dana Okafor", init: "DO", role: "Head of Operations", dept: "Operations", email: "dana.okafor@petrasoap.com", online: true },
+  sam: { id: "sam", kind: "human", name: "Sam Whitfield", init: "SW", role: "Lead Formulator", dept: "Formulation", email: "sam.whitfield@petrasoap.com", online: true },
+  ines: { id: "ines", kind: "human", name: "Inès Marchetti", init: "IM", role: "Supply Chain Mgr", dept: "Supply", email: "ines.marchetti@petrasoap.com", online: false },
+  omar: { id: "omar", kind: "human", name: "Omar Haddad", init: "OH", role: "Brand & Marketing", dept: "Marketing", email: "omar.haddad@petrasoap.com", online: true },
+  grace: { id: "grace", kind: "human", name: "Grace Liu", init: "GL", role: "Finance", dept: "Finance", email: "grace.liu@petrasoap.com", online: false },
+  ruben: { id: "ruben", kind: "human", name: "Rubén Álvarez", init: "RA", role: "QA & Compliance", dept: "Compliance", email: "ruben.alvarez@petrasoap.com", online: true },
+};
+
+export const ACTORS: Record<string, Human | Agent> = {
+  ...HUMANS,
+  ...DIRECTORY_EXTRA,
+  ...AGENTS,
+};
+
+export const MODE: Record<AgentMode, { label: string; short: string }> = {
+  auto: { label: "Autonomous", short: "AUTO" },
+  approve: { label: "Needs-approval", short: "APPROVE" },
+};
+
+export const PETRA_DOMAINS = ["petralabx.com", "petrasoap.com"];
+
+export const REPOS: Record<string, Repo> = {
+  "portal-web": { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript · Next.js", openPRs: 4, openTasks: 9, def: "main" },
+  "portal-api": { id: "portal-api", name: "plx-portal-api", lang: "TypeScript · Node", openPRs: 2, openTasks: 6, def: "main" },
+  "mrp-core": { id: "mrp-core", name: "plx-mrp-core", lang: "Go", openPRs: 1, openTasks: 5, def: "main" },
+  "design-sys": { id: "design-sys", name: "plx-design-system", lang: "CSS · TS", openPRs: 2, openTasks: 3, def: "main" },
+  infra: { id: "infra", name: "plx-infra", lang: "Terraform", openPRs: 0, openTasks: 2, def: "main" },
+};
 
 export const BUCKETS: Bucket[] = [
   { id: "BKT-CPV2", name: "Customer Portal v2", owner: "maya", health: "risk", target: "Jul 18", started: "2026.04.02", desc: "Rebuild the brand-owner portal on the new design system.", repos: ["portal-web", "portal-api", "design-sys"], sync: { state: "synced", ts: "2026.06.09 · 08:14", sp: "Roadmap · row 12" }, prd: "PRD-CPV2" },
@@ -213,12 +257,200 @@ export const INBOX: InboxNotification[] = [
   { id: "n5", kind: "assigned", task: "TASK-129", actor: "tariq", text: "Tariq assigned you TASK-129 — Rate-limit /deeds/sign", age: "2h", unread: false },
 ];
 
-// Per-list sync counts — authoritative source for the topbar pill, sidebar
-// badge, and (later) the Sync console. Mirrors MC_SP.lists[].counts.
-export const SYNC_REGISTERS: SyncRegister[] = [
-  { key: "todos", title: "ToDos", kind: "list", maps: "Tasks", counts: { synced: 12, pending: 1, conflict: 1, error: 0 } },
-  { key: "roadmap", title: "Roadmap", kind: "list", maps: "Initiatives", counts: { synced: 5, pending: 0, conflict: 0, error: 0 } },
-  { key: "milestones", title: "Milestone Register", kind: "list", maps: "Milestones", counts: { synced: 5, pending: 0, conflict: 0, error: 0 } },
-  { key: "risks", title: "Risk Register", kind: "list", maps: "Risks", counts: { synced: 3, pending: 0, conflict: 1, error: 1 } },
-  { key: "documents", title: "Project Documents", kind: "library", maps: "Files / folders", counts: { synced: 11, pending: 1, conflict: 0, error: 0 } },
+// ─── PRDs (Problem · Requirements · Acceptance · Non-goals · Rollback) ───────
+export const PRDS: Record<string, Prd> = {
+  "PRD-CPV2": {
+    id: "PRD-CPV2", bucket: "BKT-CPV2", title: "Customer Portal v2",
+    status: "approved", approvedBy: "maya", drafted: "scribe",
+    problem: "Brand owners wait days to approve formulas and sign deeds because the portal round-trips through email and PDF. v2 makes every decision happen on the page, with a live project workbench.",
+    reqs: [
+      { id: "REQ-1", text: "Brand owners can approve a formula version from the workbench without leaving the page.", crit: "Approval writes a signed, timestamped record; the formula card flips to APPROVED within 1s." },
+      { id: "REQ-2", text: "Deeds of formulation are signable inline, producing an auditable sealed record.", crit: "Signature captures initials + UTC timestamp; a sealed PDF is generated and mirrored to SharePoint." },
+      { id: "REQ-3", text: "The workbench shows live project phase and next milestone for every active project.", crit: "Phase reflects MRP state within 5s; milestone due-date matches the Milestone Register." },
+      { id: "REQ-4", text: "Customers receive a single daily digest instead of per-event email.", crit: "Digest batches all events in a 24h window; opt-out honored; zero per-event email sent." },
+    ],
+    nonGoals: ["No net-new payment flows in v2.", "No public (logged-out) project pages.", "Mobile is deferred to the Mobile Companion initiative."],
+    rollback: "Feature-flag portal_v2 off restores v1 routes; data writes are additive (no destructive migrations), so revert is a flag flip plus cache purge.",
+  },
+};
+
+// ─── Cycles + Milestones (timeline overlays; day cols in a 30-day June grid) ─
+export const CYCLES: Cycle[] = [
+  { id: "C-23", name: "Cycle 23", from: 1, to: 14 },
+  { id: "C-24", name: "Cycle 24", from: 15, to: 28 },
 ];
+
+export const MILESTONES: Milestone[] = [
+  { id: "M-1", bucket: "BKT-CPV2", name: "Deeds signable inline", col: 8, state: "now", sp: "Milestone Register · 1" },
+  { id: "M-2", bucket: "BKT-CPV2", name: "v2 beta to 5 customers", col: 22, state: "upcoming", sp: "Milestone Register · 2" },
+  { id: "M-3", bucket: "BKT-MRP", name: "Floor sync live", col: 18, state: "upcoming", sp: "Milestone Register · 3" },
+  { id: "M-4", bucket: "BKT-DS", name: "DS 2.0 cut", col: 12, state: "now", sp: "Milestone Register · 4" },
+  { id: "M-5", bucket: "BKT-AUTH", name: "Security review", col: 10, state: "risk", sp: "Milestone Register · 5" },
+];
+
+// ─── Risks (roll up to buckets, mirror to Risk Register) ─────────────────────
+export const RISKS: Risk[] = [
+  { id: "RISK-7", bucket: "BKT-MRP", title: "Surfactant supplier 11-week lead time", like: "High", impact: "High", owner: "maya", status: "open", mit: "Qualify a second supplier; hold safety stock.", sync: { state: "synced", ts: "2026.06.09 · 07:42", sp: "Risk Register · 7" } },
+  { id: "RISK-4", bucket: "BKT-AUTH", title: "SSO provider IdP metadata drift", like: "Medium", impact: "High", owner: "evan", status: "open", mit: "Pin IdP metadata; alert on cert rotation.", sync: { state: "error", ts: "2026.06.09 · 06:31", sp: "Risk Register · 4", reason: "SharePoint column 'Likelihood' rejected value" } },
+  { id: "RISK-2", bucket: "BKT-CPV2", title: "Sealed PDF UTC offset ambiguity", like: "Low", impact: "Medium", owner: "tariq", status: "mitigating", mit: "Embed explicit UTC offset; add E2E assertion.", sync: { state: "synced", ts: "2026.06.09 · 09:10", sp: "Risk Register · 2" } },
+  { id: "RISK-1", bucket: "BKT-CPV2", title: "Digest opt-out not honored on legacy accounts", like: "Medium", impact: "Medium", owner: "maya", status: "open", mit: "Backfill opt-out flags before kill-switch.", sync: { state: "synced", ts: "2026.06.09 · 09:01", sp: "Risk Register · 1" } },
+];
+
+// ─── Agent activity feed ─────────────────────────────────────────────────────
+export const AGENT_FEED: FeedEvent[] = [
+  { age: "now", actor: "vibes", task: "TASK-214", kind: "run", text: "running E2E QA on", chip: "11/11 passed", live: true, shots: ["before · unsigned deed", "after · sealed record"] },
+  { age: "2m", actor: "sentry", task: "TASK-188", kind: "run", text: "executing regression suite on", chip: "running · 6/9", live: true },
+  { age: "8m", actor: "tariq", task: "TASK-214", kind: "comment", text: "left a note on", chip: "confirm UTC offset", human: true },
+  { age: "14m", actor: "vibes", task: "TASK-214", kind: "pr", text: "opened PR #42 + #88 across 2 repos for", chip: "2 PRs open" },
+  { age: "26m", actor: "atlas", task: "TASK-176", kind: "block", text: "flagged a blocker on", chip: "supplier lead time" },
+  { age: "40m", actor: "scribe", task: "TASK-138", kind: "comment", text: "drafted PRD acceptance criteria for", chip: "PRD draft" },
+  { age: "1h", actor: "tariq", task: "TASK-188", kind: "review", text: "requested changes on PR #84 for", chip: "changes requested", human: true },
+  { age: "2h", actor: "vibes", task: "TASK-219", kind: "run", text: "QA red — digest template failing on", chip: "2 failed", warn: true },
+  { age: "3h", actor: "scribe", task: "TASK-204", kind: "sync", text: "mapped deed → SharePoint library for", chip: "sync mapped" },
+  { age: "4h", actor: "maya", task: "TASK-201", kind: "approve", text: "approved + verified", chip: "REQ-1 satisfied", human: true },
+];
+
+// ─── Traceability matrix (REQ → Task → PR → Evidence → Test → Merge) ─────────
+export const TRACE: Trace = {
+  bucket: "BKT-CPV2",
+  rows: [
+    { req: "REQ-1", tasks: ["TASK-201"], prs: ["portal-web #71", "portal-api #35"], evidence: "complete", test: "8/8", merge: "a91f3c2", status: "satisfied" },
+    { req: "REQ-2", tasks: ["TASK-214", "TASK-129", "TASK-204"], prs: ["portal-web #88", "portal-api #42"], evidence: "complete", test: "11/11", merge: "—", status: "in-review" },
+    { req: "REQ-3", tasks: ["TASK-188"], prs: ["portal-web #84"], evidence: "partial", test: "in review", merge: "—", status: "in-progress" },
+    { req: "REQ-4", tasks: ["TASK-219"], prs: [], evidence: "incomplete", test: "3/5", merge: "—", status: "gap" },
+  ],
+};
+
+// ─── Project Documents library (flat list with parent pointers) ──────────────
+export const FILES: FileEntry[] = [
+  { id: "fo-cpv2", name: "Customer Portal v2", kind: "folder", parent: null, bucket: "BKT-CPV2" },
+  { id: "fo-cpv2-prd", name: "PRD", kind: "folder", parent: "fo-cpv2", bucket: "BKT-CPV2" },
+  { id: "fo-cpv2-ev", name: "Evidence", kind: "folder", parent: "fo-cpv2", bucket: "BKT-CPV2" },
+  { id: "fo-cpv2-deeds", name: "Deeds", kind: "folder", parent: "fo-cpv2", bucket: "BKT-CPV2" },
+  { id: "fo-cpv2-rep", name: "Reports", kind: "folder", parent: "fo-cpv2", bucket: "BKT-CPV2" },
+  { id: "fi-prd-cpv2", name: "PRD-CPV2 — Customer Portal v2.docx", kind: "doc", parent: "fo-cpv2-prd", bucket: "BKT-CPV2", docType: "PRD", modified: "2026.06.08 · 14:20", modifiedBy: "scribe", size: "48 KB", sync: { state: "synced", ts: "2026.06.08 · 14:21", sp: "Project Documents" } },
+  { id: "fi-deed-214", name: "Sealed deed — TASK-214.pdf", kind: "pdf", parent: "fo-cpv2-deeds", bucket: "BKT-CPV2", docType: "Deed", modified: "2026.06.09 · 09:08", modifiedBy: "vibes", size: "212 KB", sync: { state: "pending", ts: "2026.06.09 · 09:09", sp: "Project Documents" } },
+  { id: "fi-ev-214", name: "TASK-214 — E2E evidence bundle.zip", kind: "zip", parent: "fo-cpv2-ev", bucket: "BKT-CPV2", docType: "Evidence", modified: "2026.06.09 · 09:08", modifiedBy: "vibes", size: "1.4 MB", sync: { state: "synced", ts: "2026.06.09 · 09:09", sp: "Project Documents" } },
+  { id: "fi-shots-214", name: "Before-after — sealed record.png", kind: "img", parent: "fo-cpv2-ev", bucket: "BKT-CPV2", docType: "Evidence", modified: "2026.06.09 · 09:04", modifiedBy: "vibes", size: "640 KB", sync: { state: "synced", ts: "2026.06.09 · 09:05", sp: "Project Documents" } },
+  { id: "fi-rep-cpv2", name: "Portal v2 — weekly status.xlsx", kind: "sheet", parent: "fo-cpv2-rep", bucket: "BKT-CPV2", docType: "Report", modified: "2026.06.09 · 08:00", modifiedBy: "maya", size: "33 KB", sync: { state: "synced", ts: "2026.06.09 · 08:01", sp: "Project Documents" } },
+  { id: "fo-mrp", name: "MRP Floor Sync", kind: "folder", parent: null, bucket: "BKT-MRP" },
+  { id: "fo-mrp-prd", name: "PRD", kind: "folder", parent: "fo-mrp", bucket: "BKT-MRP" },
+  { id: "fo-mrp-rep", name: "Reports", kind: "folder", parent: "fo-mrp", bucket: "BKT-MRP" },
+  { id: "fi-prd-mrp", name: "PRD-MRP — Floor Sync.docx", kind: "doc", parent: "fo-mrp-prd", bucket: "BKT-MRP", docType: "PRD", modified: "2026.06.05 · 11:10", modifiedBy: "scribe", size: "41 KB", sync: { state: "synced", ts: "2026.06.05 · 11:11", sp: "Project Documents" } },
+  { id: "fi-rep-mrp", name: "Supplier lead-time comparison.xlsx", kind: "sheet", parent: "fo-mrp-rep", bucket: "BKT-MRP", docType: "Report", modified: "2026.06.09 · 07:40", modifiedBy: "atlas", size: "28 KB", sync: { state: "synced", ts: "2026.06.09 · 07:41", sp: "Project Documents" } },
+  { id: "fo-auth", name: "Auth & SSO Hardening", kind: "folder", parent: null, bucket: "BKT-AUTH" },
+  { id: "fo-auth-rep", name: "Reports", kind: "folder", parent: "fo-auth", bucket: "BKT-AUTH" },
+  { id: "fi-runbook-auth", name: "Shadow cutover runbook.pdf", kind: "pdf", parent: "fo-auth-rep", bucket: "BKT-AUTH", docType: "Report", modified: "2026.06.08 · 16:30", modifiedBy: "evan", size: "180 KB", sync: { state: "synced", ts: "2026.06.08 · 16:31", sp: "Project Documents" } },
+  { id: "fo-shared", name: "Shared", kind: "folder", parent: null },
+  { id: "fi-brand", name: "PLX brand & glyph kit.pdf", kind: "pdf", parent: "fo-shared", docType: "Spec", modified: "2026.06.01 · 11:00", modifiedBy: "lena", size: "2.1 MB", sync: { state: "synced", ts: "2026.06.01 · 11:01", sp: "Project Documents" } },
+  { id: "fi-trace", name: "Traceability export — PRD-CPV2.xlsx", kind: "sheet", parent: "fo-shared", docType: "Export", modified: "2026.06.09 · 09:14", modifiedBy: "maya", size: "52 KB", sync: { state: "synced", ts: "2026.06.09 · 09:15", sp: "Project Documents" } },
+];
+
+// ─── Canonical SharePoint schema (system of record) ──────────────────────────
+export const SP_SITE: SpSite = {
+  name: "PLX Mission Control",
+  host: "petrasoap.sharepoint.com",
+  path: "/sites/plx-mission-control",
+  tz: "UTC",
+  connected: true,
+};
+export const SP_LAST_SWEEP = "2026.06.09 · 09:12";
+export const SP_CADENCE = "every 5 min + on change (webhook)";
+
+export const SP_LISTS: SpListDef[] = [
+  {
+    key: "todos", title: "ToDos", kind: "list", entity: "Task", icon: "▦",
+    maps: "Tasks", itemCount: 14, direction: "two-way",
+    lastSync: "2026.06.09 · 09:12", counts: { synced: 12, pending: 1, conflict: 1, error: 0 },
+    columns: [
+      { name: "Title", type: "Single line of text", mc: "title", dir: "two-way", required: true },
+      { name: "Task ID", type: "Single line of text", mc: "id", dir: "pull", required: true, note: "indexed · unique key" },
+      { name: "Status", type: "Choice", mc: "stage", dir: "two-way", note: "Backlog→Verified (9)" },
+      { name: "Assigned To", type: "Person", mc: "assignee", dir: "two-way" },
+      { name: "Reporter", type: "Person", mc: "reporter", dir: "push" },
+      { name: "Priority", type: "Choice", mc: "priority", dir: "two-way", note: "Urgent/High/Medium/Low" },
+      { name: "Due Date", type: "Date and time", mc: "due", dir: "two-way" },
+      { name: "Initiative", type: "Lookup → Roadmap", mc: "bucket", dir: "two-way" },
+      { name: "PRD Requirements", type: "Multi line of text", mc: "reqs", dir: "push" },
+      { name: "Estimate", type: "Choice", mc: "estimate", dir: "push", note: "S/M/L" },
+      { name: "Repos", type: "Multi line of text", mc: "repos", dir: "push" },
+      { name: "Evidence Complete", type: "Yes/No", mc: "evidence", dir: "push" },
+      { name: "Description", type: "Multi line of text", mc: "description", dir: "two-way" },
+    ],
+  },
+  {
+    key: "roadmap", title: "Roadmap", kind: "list", entity: "Initiative", icon: "◷",
+    maps: "Buckets / Initiatives + Gantt", itemCount: 5, direction: "two-way",
+    lastSync: "2026.06.09 · 08:14", counts: { synced: 5, pending: 0, conflict: 0, error: 0 },
+    columns: [
+      { name: "Title", type: "Single line of text", mc: "name", dir: "two-way", required: true },
+      { name: "Initiative ID", type: "Single line of text", mc: "id", dir: "pull", required: true },
+      { name: "Owner", type: "Person", mc: "owner", dir: "two-way" },
+      { name: "Health", type: "Choice", mc: "health", dir: "two-way", note: "On track/At risk/Off track" },
+      { name: "Start Date", type: "Date and time", mc: "started", dir: "two-way", note: "Gantt bar start" },
+      { name: "Target Date", type: "Date and time", mc: "target", dir: "two-way", note: "Gantt bar end" },
+      { name: "% Complete", type: "Number", mc: "progress", dir: "push" },
+      { name: "PRD Link", type: "Hyperlink", mc: "prd", dir: "push" },
+    ],
+  },
+  {
+    key: "milestones", title: "Milestone Register", kind: "list", entity: "Milestone", icon: "◆",
+    maps: "Milestones", itemCount: 5, direction: "two-way",
+    lastSync: "2026.06.09 · 08:55", counts: { synced: 5, pending: 0, conflict: 0, error: 0 },
+    columns: [
+      { name: "Title", type: "Single line of text", mc: "name", dir: "two-way", required: true },
+      { name: "Initiative", type: "Lookup → Roadmap", mc: "bucket", dir: "two-way" },
+      { name: "State", type: "Choice", mc: "state", dir: "two-way", note: "Upcoming/Active/At risk/Met" },
+      { name: "Due Date", type: "Date and time", mc: "col", dir: "two-way" },
+      { name: "Register Ref", type: "Single line of text", mc: "sp", dir: "pull" },
+    ],
+  },
+  {
+    key: "risks", title: "Risk Register", kind: "list", entity: "Risk", icon: "△",
+    maps: "Risks", itemCount: 4, direction: "two-way",
+    lastSync: "2026.06.09 · 09:10", counts: { synced: 3, pending: 0, conflict: 1, error: 1 },
+    columns: [
+      { name: "Title", type: "Single line of text", mc: "title", dir: "two-way", required: true },
+      { name: "Initiative", type: "Lookup → Roadmap", mc: "bucket", dir: "two-way" },
+      { name: "Likelihood", type: "Choice", mc: "like", dir: "two-way", note: "High/Medium/Low" },
+      { name: "Impact", type: "Choice", mc: "impact", dir: "two-way", note: "High/Medium/Low" },
+      { name: "Owner", type: "Person", mc: "owner", dir: "two-way" },
+      { name: "Status", type: "Choice", mc: "status", dir: "two-way", note: "Open/Mitigating/Closed" },
+      { name: "Mitigation", type: "Multi line of text", mc: "mit", dir: "two-way" },
+    ],
+  },
+  {
+    key: "documents", title: "Project Documents", kind: "library", entity: "File", icon: "❒",
+    maps: "Files / folders", itemCount: 12, direction: "two-way",
+    lastSync: "2026.06.09 · 08:48", counts: { synced: 11, pending: 1, conflict: 0, error: 0 },
+    folders: "/{Initiative}/PRD · /Evidence · /Deeds · /Reports  +  /Shared",
+    columns: [
+      { name: "Name", type: "File", mc: "name", dir: "two-way", required: true },
+      { name: "Initiative", type: "Lookup → Roadmap", mc: "bucket", dir: "push", note: "folder metadata" },
+      { name: "Document Type", type: "Choice", mc: "docType", dir: "two-way", note: "PRD/Evidence/Deed/Report/Spec/Export" },
+      { name: "Modified", type: "Date and time", mc: "modified", dir: "two-way" },
+      { name: "Modified By", type: "Person", mc: "modifiedBy", dir: "pull" },
+    ],
+  },
+];
+
+// Conflict review queue (manual resolution — a human picks the winner).
+export const SP_CONFLICTS: SpConflict[] = [
+  { id: "cf-140", list: "todos", entity: "Task", entityId: "TASK-140", field: "Status", mcVal: "In Progress · due Jun 18", spVal: "Blocked · due Jun 20", detected: "06:31", by: "dana", note: "Edited in SharePoint while MC also changed it." },
+  { id: "cf-risk1", list: "risks", entity: "Risk", entityId: "RISK-1", field: "Likelihood", mcVal: "Medium", spVal: "High", detected: "08:40", by: "ruben", note: "Compliance raised likelihood in the Risk Register." },
+];
+
+// A push error that needs a value fix (not a two-sided conflict).
+export const SP_ERRORS: SpError[] = [
+  { id: "er-risk4", list: "risks", entity: "Risk", entityId: "RISK-4", field: "Likelihood", value: "Medium", reason: "SharePoint Choice column rejects \u201cMedium\u201d — expects High / Med / Low." },
+];
+
+// Per-list sync counts — derived from the SharePoint schema so the topbar
+// pill, sidebar badge, and Sync console all read one source.
+export const SYNC_REGISTERS: SyncRegister[] = SP_LISTS.map((l) => ({
+  key: l.key,
+  title: l.title,
+  kind: l.kind,
+  maps: l.maps,
+  counts: l.counts,
+}));

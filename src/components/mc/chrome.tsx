@@ -1,33 +1,15 @@
 // Mission Control chrome: the Topbar and Sidebar shared by every screen.
-// Ported from docs/product/prototype/mc-chrome.jsx. The command palette and
-// cross-screen routing land with later screens; deferred affordances are
-// rendered but clearly inert (the search field) or route to a not-built panel.
+// Ported from docs/product/prototype/mc-chrome.jsx. Counts come from the
+// runtime store so the sync pill and badges stay live after store actions.
+// The command palette (⌘K) mounts here when the authoring lane lands.
 import type { ReactNode } from "react";
 
-import {
-  BUCKETS,
-  liveAgentCount,
-  syncCounts,
-  unreadInboxCount,
-} from "@/lib/mc-data";
+import { AGENTS, BUCKETS, INBOX } from "@/lib/mc-data";
+import { useMcVersion } from "@/lib/mc-data/hooks";
+import { storeSyncCounts } from "@/lib/mc-data/store";
 
 import { Avatar, PMark } from "./atoms";
-
-export type Screen =
-  | "home"
-  | "board"
-  | "list"
-  | "timeline"
-  | "matrix"
-  | "feed"
-  | "bucket"
-  | "repos"
-  | "files"
-  | "sync"
-  | "task"
-  | "new";
-
-type Nav = (screen: Screen) => void;
+import type { Nav, Route, Screen } from "./route";
 
 export function Topbar({
   nav,
@@ -38,7 +20,8 @@ export function Topbar({
   dark: boolean;
   setDark: (next: boolean) => void;
 }) {
-  const c = syncCounts();
+  useMcVersion();
+  const c = storeSyncCounts();
   const need = c.conflict + c.error;
   const cls = need > 0 ? "warn" : c.pending > 0 ? "pending" : "ok";
   const label =
@@ -58,7 +41,8 @@ export function Topbar({
         </div>
       </div>
       <div className="r">
-        {/* Command palette is deferred — this is a visual affordance for now. */}
+        {/* Command palette is the authoring lane's surface; until it lands
+            this is a visual affordance only. */}
         <div className="search" title="Command palette — coming soon">
           <span style={{ fontFamily: "var(--mono)", fontSize: "10px", letterSpacing: "0.1em" }}>
             Search · jump · create…
@@ -88,21 +72,17 @@ export function Topbar({
   );
 }
 
-export function Sidebar({ screen, nav }: { screen: Screen; nav: Nav }) {
-  const unread = unreadInboxCount();
-  const live = liveAgentCount();
-  const sc = syncCounts();
+export function Sidebar({ route, nav }: { route: Route; nav: Nav }) {
+  useMcVersion();
+  const unread = INBOX.filter((n) => n.unread).length;
+  const live = Object.values(AGENTS).filter((a) => a.online).length;
+  const sc = storeSyncCounts();
   const conflicts = sc.conflict + sc.error;
 
-  const item = (
-    target: Screen,
-    ic: string,
-    label: string,
-    badge?: ReactNode
-  ) => (
+  const item = (target: Screen, ic: string, label: string, badge?: ReactNode) => (
     <button
       type="button"
-      className={`item${screen === target ? " active" : ""}`}
+      className={`item${route.screen === target ? " active" : ""}`}
       onClick={() => nav(target)}
     >
       <span className="ic">{ic}</span>
@@ -132,7 +112,12 @@ export function Sidebar({ screen, nav }: { screen: Screen; nav: Nav }) {
       <div className="grp">
         <div className="h">Buckets</div>
         {BUCKETS.map((b) => (
-          <button type="button" key={b.id} className="item" onClick={() => nav("bucket")}>
+          <button
+            type="button"
+            key={b.id}
+            className={`item${route.screen === "bucket" && route.bucketId === b.id ? " active" : ""}`}
+            onClick={() => nav("bucket", { bucketId: b.id })}
+          >
             <span className={`hl ${b.health}`} />
             <span className="nm">{b.name}</span>
           </button>

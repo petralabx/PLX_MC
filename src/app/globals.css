@@ -1,6 +1,11 @@
 @import "../styles/brand-tokens.css";
 @import "../styles/mc-surface.css";
 @import "../styles/mc-app.css";
+@import "../styles/mc-views.css";
+@import "../styles/mc-task.css";
+@import "../styles/mc-record.css";
+@import "../styles/mc-overview.css";
+@import "../styles/mc-authoring.css";
 
 * {
   box-sizing: border-box;

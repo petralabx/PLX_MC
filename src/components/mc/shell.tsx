@@ -1,62 +1,40 @@
 "use client";
 
 // The Mission Control application shell: the brand boundary, dark-mode state,
-// and the chrome (Topbar + Sidebar) shared by every screen. Today only the
-// Inbox is built; other destinations render an honest "not built yet" panel so
-// the navigation map is real without faking functionality.
-import { useState } from "react";
+// route state, and the chrome (Topbar + Sidebar) shared by every screen.
+// Screens come from the registry in screens.tsx; modal-level surfaces (New
+// Task, command palette) mount here when their lane lands.
+import { useCallback, useEffect, useState } from "react";
 
 import { BrandBoundary } from "@/components/brand";
+import { hydrateFromStorage } from "@/lib/mc-data/store";
 
 import { Sidebar, Topbar } from "./chrome";
-import type { Screen } from "./chrome";
-import { InboxView } from "./inbox";
-
-const SCREEN_TITLES: Record<Exclude<Screen, "home">, string> = {
-  board: "Board",
-  list: "List",
-  timeline: "Timeline",
-  matrix: "Traceability",
-  feed: "Agent activity",
-  bucket: "Initiative",
-  repos: "Repos",
-  files: "Files",
-  sync: "Sync console",
-  task: "Task detail",
-  new: "New task",
-};
-
-function ComingSoon({ screen }: { screen: Exclude<Screen, "home"> }) {
-  return (
-    <div className="mc-main">
-      <div className="ph">
-        <div>
-          <span className="kk">Mission Control</span>
-          <h1>{SCREEN_TITLES[screen]}</h1>
-          <p className="sub">This screen is part of the build, but isn&apos;t implemented yet.</p>
-        </div>
-      </div>
-      <div className="notbuilt">
-        <p className="lead">
-          The shell and the Inbox are live. {SCREEN_TITLES[screen]} is rebuilt in a later
-          increment, screen by screen, from the design handoff.
-        </p>
-        <p className="ref">spec · docs/product/README.md §6 · docs/product/screenshots/SCREENS.md</p>
-      </div>
-    </div>
-  );
-}
+import type { Nav, Route, Screen } from "./route";
+import { SCREENS } from "./screens";
 
 export function MissionControlShell() {
   const [dark, setDark] = useState(false);
-  const [screen, setScreen] = useState<Screen>("home");
+  const [route, setRoute] = useState<Route>({ screen: "home" });
+
+  // Rehydrate user-created tasks / invited people after hydration so SSR HTML
+  // and the first client render stay identical.
+  useEffect(() => {
+    hydrateFromStorage();
+  }, []);
+
+  const nav = useCallback<Nav>((screen: Screen, extra) => {
+    setRoute({ screen, ...extra });
+  }, []);
+
+  const ScreenComponent = SCREENS[route.screen];
 
   return (
     <BrandBoundary className={`mc${dark ? " dark" : ""}`}>
-      <Topbar nav={setScreen} dark={dark} setDark={setDark} />
+      <Topbar nav={nav} dark={dark} setDark={setDark} />
       <div className="mc-shell">
-        <Sidebar screen={screen} nav={setScreen} />
-        {screen === "home" ? <InboxView nav={setScreen} /> : <ComingSoon screen={screen} />}
+        <Sidebar route={route} nav={nav} />
+        <ScreenComponent route={route} nav={nav} />
       </div>
     </BrandBoundary>
   );

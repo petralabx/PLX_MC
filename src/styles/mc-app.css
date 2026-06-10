@@ -239,11 +239,6 @@
 .mc .nrow .age { font-family:var(--mono); font-size:8.5px; color:var(--p-muted); }
 .mc .nrow .id { font-family:var(--mono); font-size:10px; color:var(--p-muted); }
 
-/* ─── Placeholder for screens not yet built (honest scaffold) ─────────────── */
-.mc .notbuilt { padding:48px 26px; display:flex; flex-direction:column; gap:8px; max-width:60ch; }
-.mc .notbuilt .lead { font-size:13px; color:var(--p-ink-2); line-height:1.55; }
-.mc .notbuilt .ref { font-family:var(--mono); font-size:10px; letter-spacing:0.08em; color:var(--p-muted); }
-
 /* ════════ RESPONSIVE — desktop-first cockpit ════════ */
 @media (max-width:900px) {
   .mc .mc-shell { grid-template-columns:1fr; }

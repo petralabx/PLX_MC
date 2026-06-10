@@ -5,6 +5,7 @@ import type { ComponentType } from "react";
 
 import { InboxView } from "./inbox";
 import type { Screen, ScreenProps } from "./route";
+import { TaskDetailView } from "./task-detail";
 
 const SCREEN_TITLES: Record<Screen, string> = {
   home: "Inbox",
@@ -58,5 +59,5 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   repos: comingSoon("repos"),
   files: comingSoon("files"),
   sync: comingSoon("sync"),
-  task: comingSoon("task"),
+  task: TaskDetailView,
 };

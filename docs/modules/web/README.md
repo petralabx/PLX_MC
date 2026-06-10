@@ -2,12 +2,15 @@
 
 ## What
 
-The Next.js (App Router) application shell — the Mission Control UI. Today it
-ships the shared chrome (Topbar + Sidebar), the **Inbox/home** screen, a
-client shell with a working dark-mode toggle, and a typed prototype data layer.
-Screens not yet built render an honest "not built yet" panel. It owns routing,
-screens, and client state only — it is NOT the system of record (SharePoint is)
-and NOT the sync engine (a future `sync` module per
+The Next.js (App Router) application shell — the Mission Control UI. All
+eleven screens from the design handoff are built: Inbox, Board/List/Timeline,
+Traceability, Agent activity, Bucket detail, Task detail (evidence bundle +
+TaskRecord), Sync console (registers, review queue, audit log), Files, and
+Repos — plus the ⌘K command palette, New Task modal, and PeoplePicker (Petra
+domain rule enforced in the UI). State flows through the runtime store
+(`src/lib/mc-data/store.ts`), the prototype stand-in for the sync engine. It
+owns routing, screens, and client state only — it is NOT the system of record
+(SharePoint is) and NOT the sync engine (a future `sync` module per
 `docs/product/SHAREPOINT_INTEGRATION.md`).
 
 ## Why

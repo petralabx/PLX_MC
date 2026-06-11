@@ -40,8 +40,20 @@ tenant against the committed schema with exit codes.
   `scripts/migrate.mjs`); numbering serialization enforced by
   `scripts/check-migrations.py` in every preflight mode. Tables: `delta_links`,
   `sync_conflicts`, `sync_push_errors`, `sync_audit_log`, `entities`.
-- Next increment: outbound/inbound sync engine (runs inside the Next.js app),
-  webhooks once the app has a public domain.
+- Engine v1 (landed 2026-06-11, `src/lib/sync/`): outbound push + inbound
+  Graph delta poll for ToDos and Risk Register against the staging site.
+  Inbound runs BEFORE outbound in every sweep so dirty-field edits raise
+  conflicts (§5.1) instead of last-write-wins. Mapping layer (`mapping.ts`)
+  enforces §3 directions and the §5.2 `Medium` → `Med` Likelihood
+  normalization. Runs inside the Next.js process: `src/instrumentation.ts`
+  starts the 5-min scheduler when `PLX_MC_SYNC_ENABLED=1` (default OFF);
+  `POST /api/sync/sweep` runs one on demand. API surface per spec §6 under
+  `src/app/api/` (shared wrapper + zod). Evidence:
+  `artifacts/sync/2026-06-11-sync-engine/`.
+- Deferred to the public-deploy increment: Graph change webhooks, the
+  directory module (person columns: Assigned To / Reporter / Owner),
+  notifications, lookup columns (Initiative), and Project Documents
+  (driveItem) sync — file entities are display fixtures until then.
 
 ## Dependencies
 

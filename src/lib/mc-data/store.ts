@@ -14,6 +14,8 @@ import {
   ACTORS,
   CURRENT_USER,
   FILES,
+  INBOX,
+  RISKS,
   SP_CONFLICTS,
   SP_ERRORS,
   SP_LAST_SWEEP,
@@ -26,6 +28,8 @@ import type {
   AuditRow,
   FileEntry,
   Human,
+  InboxNotification,
+  Risk,
   SpConflict,
   SpError,
   SpListDef,
@@ -39,6 +43,8 @@ const INVITED_KEY = "plx_mc_invited_people_v1";
 interface McState {
   tasks: Task[];
   files: FileEntry[];
+  risks: Risk[];
+  notifications: InboxNotification[];
   actors: Record<string, Actor>;
   lists: SpListDef[];
   conflicts: SpConflict[];
@@ -54,6 +60,8 @@ function initialState(): McState {
   return {
     tasks: clone(TASKS),
     files: clone(FILES),
+    risks: clone(RISKS),
+    notifications: clone(INBOX),
     actors: { ...ACTORS },
     lists: clone(SP_LISTS),
     conflicts: clone(SP_CONFLICTS),
@@ -90,6 +98,9 @@ export function getVersion(): number {
 export const allTasks = (): Task[] => state.tasks;
 export const taskById = (id: string): Task | undefined => state.tasks.find((t) => t.id === id);
 export const allFiles = (): FileEntry[] => state.files;
+export const allRisks = (): Risk[] => state.risks;
+export const inboxNotifications = (): InboxNotification[] => state.notifications;
+export const unreadCount = (): number => state.notifications.filter((n) => n.unread).length;
 export const filesIn = (parentId: string | null): FileEntry[] =>
   state.files.filter((f) => (f.parent ?? null) === (parentId ?? null));
 export const fileById = (id: string): FileEntry | undefined => state.files.find((f) => f.id === id);
@@ -299,12 +310,33 @@ export function invitePerson(email: string): string | null {
   return id;
 }
 
-// Reassign a task. Mirrors assignee → SharePoint "Assigned To" and (in the
-// prototype) dispatches the Teams/email notification trail.
-export function reassignTask(taskId: string, actorId: string) {
+// Mark an inbox notification read (clears the topbar/sidebar unread badge).
+export function markRead(notificationId: string) {
+  const n = state.notifications.find((x) => x.id === notificationId);
+  if (!n || !n.unread) return;
+  n.unread = false;
+  emit();
+}
+
+// Reassign a task (null = unassign). Mirrors assignee → SharePoint
+// "Assigned To" and (in the prototype) dispatches the Teams/email trail.
+export function reassignTask(taskId: string, actorId: string | null) {
   const t = taskById(taskId);
+  if (!t) return;
+  if (actorId === null) {
+    if (t.assignee === null) return;
+    t.assignee = null;
+    t.activity = [
+      { age: "now", who: CURRENT_USER, kind: "sync", what: "unassigned — mirrored to SharePoint" },
+      ...t.activity,
+    ];
+    pushAudit(CURRENT_USER, `Unassigned ${taskId} — Assigned To cleared in SharePoint.`, "synced");
+    persistUserTasks();
+    emit();
+    return;
+  }
   const who = state.actors[actorId];
-  if (!t || !who) return;
+  if (!who) return;
   t.assignee = actorId;
   t.activity = [
     {
@@ -386,6 +418,13 @@ export function resolveConflict(conflictId: string, winner: "mc" | "sp") {
       delete t.sync.spVal;
     }
   }
+  if (c.entity === "Risk") {
+    const r = state.risks.find((x) => x.id === c.entityId);
+    if (r) {
+      r.sync.state = "synced";
+      r.sync.ts = stamp();
+    }
+  }
   const kept = winner === "mc" ? c.mcVal : c.spVal;
   pushAudit(
     CURRENT_USER,
@@ -405,6 +444,14 @@ export function retryError(errorId: string) {
   if (list && list.counts.error > 0) {
     list.counts.error -= 1;
     list.counts.synced += 1;
+  }
+  if (e.entity === "Risk") {
+    const r = state.risks.find((x) => x.id === e.entityId);
+    if (r) {
+      r.sync.state = "synced";
+      r.sync.ts = stamp();
+      delete r.sync.reason;
+    }
   }
   pushAudit(
     CURRENT_USER,

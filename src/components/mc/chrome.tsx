@@ -4,9 +4,9 @@
 // The command palette (⌘K) mounts here when the authoring lane lands.
 import type { ReactNode } from "react";
 
-import { AGENTS, BUCKETS, INBOX } from "@/lib/mc-data";
+import { AGENTS, BUCKETS } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { storeSyncCounts } from "@/lib/mc-data/store";
+import { storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
 
 import { Avatar, PMark } from "./atoms";
 import type { Nav, Route, Screen } from "./route";
@@ -74,7 +74,7 @@ export function Topbar({
 
 export function Sidebar({ route, nav }: { route: Route; nav: Nav }) {
   useMcVersion();
-  const unread = INBOX.filter((n) => n.unread).length;
+  const unread = unreadCount();
   const live = Object.values(AGENTS).filter((a) => a.online).length;
   const sc = storeSyncCounts();
   const conflicts = sc.conflict + sc.error;

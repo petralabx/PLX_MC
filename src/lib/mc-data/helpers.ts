@@ -6,7 +6,6 @@
 import {
   AGENTS,
   CURRENT_USER,
-  INBOX,
   STAGE_IDX,
   STAGES,
   SYNC_REGISTERS,
@@ -47,10 +46,6 @@ export function syncCounts(): SyncCounts {
 
 export function pendingTasks(): Task[] {
   return TASKS.filter((t) => t.sync.state === "pending");
-}
-
-export function unreadInboxCount(): number {
-  return INBOX.filter((n) => n.unread).length;
 }
 
 export function liveAgentCount(): number {

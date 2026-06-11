@@ -94,8 +94,10 @@
 .mc .av.lg { width:34px; height:34px; font-size:11px; }
 .mc .av.xl { width:46px; height:46px; font-size:14px; }
 
-/* assignee chip (name + kind cue) */
+/* assignee chip (name + kind cue) — also rendered as a <button> when interactive */
 .mc .who { display:inline-flex; align-items:center; gap:7px; min-width:0; }
+.mc button.who { background:none; border:0; padding:0; font:inherit; text-align:left; cursor:pointer; }
+.mc button.unassigned { background:none; font-family:var(--mono); cursor:pointer; }
 .mc .who .nm { font-size:12px; color:var(--p-ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .mc .who .tag { font-family:var(--mono); font-size:7.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--p-muted);
   border:1px solid var(--p-grid); padding:1px 4px; line-height:1.3; }

@@ -86,8 +86,11 @@ export function FilesView() {
           {items.map((entry) => {
             const health = entry.bucket ? BUCKET_IDX[entry.bucket]?.health : undefined;
             const childCount = entry.kind === "folder" ? filesIn(entry.id).length : 0;
+            // Folders are <button>s (keyboard-accessible drill-down); files are static rows.
+            const Row = entry.kind === "folder" ? "button" : "div";
             return (
-              <div
+              <Row
+                {...(entry.kind === "folder" ? { type: "button" as const } : {})}
                 className={`frow${entry.kind === "folder" ? " isfolder" : ""}`}
                 key={entry.id}
                 onClick={() => entry.kind === "folder" && setFolderId(entry.id)}
@@ -113,7 +116,7 @@ export function FilesView() {
                     entry.kind === "folder" && <span className="folderdir">{childCount} items</span>
                   )}
                 </span>
-              </div>
+              </Row>
             );
           })}
         </div>

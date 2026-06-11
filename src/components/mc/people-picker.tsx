@@ -40,14 +40,14 @@ function PersonRow({
   const meta =
     actor.kind === "agent" ? `${actor.model} · ${actor.team}` : (domainOf(actor.email ?? "") || actor.role);
   return (
-    <div className={`pi${active ? " on" : ""}`} onClick={() => onPick(actor.id)}>
+    <button type="button" className={`pi${active ? " on" : ""}`} onClick={() => onPick(actor.id)}>
       <Avatar id={actor.id} size="sm" />
       <span className="pp-name">
         {actor.name}
         {actor.kind === "human" && actor.invited ? <span className="pp-inv">invited</span> : null}
       </span>
       <span className="pp-meta">{meta}</span>
-    </div>
+    </button>
   );
 }
 
@@ -162,20 +162,20 @@ export function PeoplePicker({
         ) : null}
 
         {decision.showInvite ? (
-          <div className="pi invite" onClick={invite}>
+          <button type="button" className="pi invite" onClick={invite}>
             <span className="pp-plus">+</span>
             <span className="pp-name">Invite {decision.normalizedQuery}</span>
             <span className="pp-meta">{domainOf(decision.normalizedQuery)}</span>
-          </div>
+          </button>
         ) : null}
 
         {current && !normalizedQuery ? (
-          <div className="pi clear" onClick={() => pick(null)}>
+          <button type="button" className="pi clear" onClick={() => pick(null)}>
             <span className="pp-plus">×</span>
             <span className="pp-name" style={{ color: "var(--p-muted)" }}>
               Unassign
             </span>
-          </div>
+          </button>
         ) : null}
 
         {coreTeam.length > 0 ? <div className="pg">Core team</div> : null}

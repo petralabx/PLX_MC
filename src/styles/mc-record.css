@@ -556,6 +556,19 @@
 
 .mc .ftable .frow.isfolder {
   cursor: pointer;
+  /* Folder rows are <button>s (keyboard drill-down) — neutralize UA styling. */
+  width: 100%;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--p-grid-2);
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.mc .ftable .frow.isfolder:last-child {
+  border-bottom: 0;
 }
 
 .mc .ftable .frow.isfolder:hover {

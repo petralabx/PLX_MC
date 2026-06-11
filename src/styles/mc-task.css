@@ -128,3 +128,6 @@
   .mc .td { grid-template-columns:1fr; }
   .mc .td .main { border-right:0; border-bottom:1px solid var(--p-grid); }
 }
+
+/* assignee reassign wrapper - anchors the PeoplePicker drawer */
+.mc .asgwrap { position: relative; display: inline-flex; }

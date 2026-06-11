@@ -64,7 +64,8 @@ export function AvatarStack({ ids, lead }: { ids: string[]; lead?: string }) {
   );
 }
 
-// Assignee — name + kind cue (agents show their model badge).
+// Assignee — name + kind cue (agents show their model badge). Renders a real
+// <button> when interactive so it stays keyboard-accessible.
 export function Assignee({
   id,
   size,
@@ -75,20 +76,29 @@ export function Assignee({
   onClick?: MouseEventHandler;
 }) {
   if (!id) {
-    return (
-      <span className="unassigned" onClick={onClick}>
+    return onClick ? (
+      <button type="button" className="unassigned" onClick={onClick}>
         + Assign
-      </span>
+      </button>
+    ) : (
+      <span className="unassigned">+ Assign</span>
     );
   }
   const a = ACTORS[id];
   if (!a) return null;
-  return (
-    <span className="who" onClick={onClick} style={onClick ? { cursor: "pointer" } : undefined}>
+  const inner = (
+    <>
       <Avatar id={id} size={size ?? "sm"} />
       <span className="nm">{a.name}</span>
       {a.kind === "agent" && <span className="tag model">{a.model}</span>}
-    </span>
+    </>
+  );
+  return onClick ? (
+    <button type="button" className="who" onClick={onClick} title="Reassign">
+      {inner}
+    </button>
+  ) : (
+    <span className="who">{inner}</span>
   );
 }
 

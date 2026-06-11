@@ -4,10 +4,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   addTask,
+  allRisks,
   allTasks,
   applyInbound,
+  inboxNotifications,
   invitePerson,
   markAllSynced,
+  markRead,
   nextTaskId,
   openConflicts,
   openErrors,
@@ -17,6 +20,7 @@ import {
   retryError,
   storeSyncCounts,
   taskById,
+  unreadCount,
 } from "@/lib/mc-data/store";
 
 beforeEach(() => resetStore());
@@ -63,14 +67,33 @@ describe("resolveConflict", () => {
     expect(storeSyncCounts().conflict).toBe(before.conflict - 1);
     expect(taskById("TASK-140")?.sync.state).toBe("synced");
   });
+
+  it("marks Risk entities synced too (risks live in the store)", () => {
+    resolveConflict("cf-risk1", "mc");
+    expect(allRisks().find((r) => r.id === "RISK-1")?.sync.state).toBe("synced");
+  });
 });
 
 describe("retryError", () => {
-  it("normalizes the value, clears the error, and decrements the count", () => {
+  it("normalizes the value, clears the error, decrements the count, and syncs the risk", () => {
     const before = storeSyncCounts();
     retryError("er-risk4");
     expect(openErrors()).toHaveLength(0);
     expect(storeSyncCounts().error).toBe(before.error - 1);
+    const risk = allRisks().find((r) => r.id === "RISK-4");
+    expect(risk?.sync.state).toBe("synced");
+    expect(risk?.sync.reason).toBeUndefined();
+  });
+});
+
+describe("markRead", () => {
+  it("clears a notification's unread state and the unread count", () => {
+    const before = unreadCount();
+    expect(before).toBeGreaterThan(0);
+    const firstUnread = inboxNotifications().find((n) => n.unread)!;
+    markRead(firstUnread.id);
+    expect(unreadCount()).toBe(before - 1);
+    expect(inboxNotifications().find((n) => n.id === firstUnread.id)?.unread).toBe(false);
   });
 });
 
@@ -92,5 +115,12 @@ describe("reassignTask", () => {
     const t = taskById("TASK-133");
     expect(t?.assignee).toBe("priya");
     expect(t?.activity[0]?.what).toContain("mirrored to SharePoint");
+  });
+
+  it("supports unassigning", () => {
+    reassignTask("TASK-129", null);
+    const t = taskById("TASK-129");
+    expect(t?.assignee).toBeNull();
+    expect(t?.activity[0]?.what).toContain("unassigned");
   });
 });

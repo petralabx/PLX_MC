@@ -1,9 +1,9 @@
 // Inbox / Home — the default cockpit screen.
 // Ported from docs/product/prototype/mc-views.jsx › InboxView. Two sections:
 // "Needs your attention" (notifications) and "Assigned to me" (the viewer's tasks).
-import { ACTORS, CURRENT_USER, INBOX, tasksForUser, unreadInboxCount } from "@/lib/mc-data";
+import { ACTORS, CURRENT_USER, tasksForUser } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allTasks } from "@/lib/mc-data/store";
+import { allTasks, inboxNotifications, markRead, unreadCount } from "@/lib/mc-data/store";
 
 import { Confidence } from "./atoms";
 import type { ScreenProps } from "./route";
@@ -12,7 +12,7 @@ export function InboxView({ nav, openNewTask }: ScreenProps & { openNewTask?: ()
   useMcVersion();
   const firstName = ACTORS[CURRENT_USER].name.split(" ")[0];
   const mine = tasksForUser(CURRENT_USER, allTasks()).slice(0, 5);
-  const unread = unreadInboxCount();
+  const unread = unreadCount();
 
   return (
     <div className="mc-main">
@@ -42,12 +42,15 @@ export function InboxView({ nav, openNewTask }: ScreenProps & { openNewTask?: ()
           <span className="nm">Needs your attention</span>
           <span className="ct">{unread} unread</span>
         </div>
-        {INBOX.map((n) => (
+        {inboxNotifications().map((n) => (
           <button
             type="button"
             className={`nrow${n.unread ? " unread" : ""}`}
             key={n.id}
-            onClick={() => nav("task", { taskId: n.task })}
+            onClick={() => {
+              markRead(n.id);
+              nav("task", { taskId: n.task });
+            }}
           >
             <span className="dot" />
             <span style={{ display: "flex", alignItems: "center", gap: 11 }}>

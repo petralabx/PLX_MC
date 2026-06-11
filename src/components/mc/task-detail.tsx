@@ -18,6 +18,7 @@ import {
   applyInbound,
   markAllSynced,
   openConflicts,
+  reassignTask,
   resolveConflict,
   spLists,
   taskById,
@@ -34,6 +35,7 @@ import {
   Slate,
   SyncTick,
 } from "./atoms";
+import { NotifyTrail, PeoplePicker } from "./people-picker";
 import type { ScreenProps } from "./route";
 
 export const SOR_FIELD_NAMES = ["Status", "Assigned To", "Due Date", "Priority"] as const;
@@ -100,13 +102,13 @@ function fieldValue(fieldName: SorFieldName, task: Task): string {
   return PRIORITY[task.priority]?.label ?? task.priority;
 }
 
-const noOp = () => {};
-
 export function TaskDetailView({ route, nav }: ScreenProps) {
   useMcVersion();
   const taskId = route.taskId ?? "TASK-214";
   const task = taskById(taskId);
   const [resolved, setResolved] = useState<{ taskId: string; winner: "mc" | "sp" } | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [reassigned, setReassigned] = useState<{ taskId: string; actorId: string } | null>(null);
 
   if (!task) {
     return (
@@ -181,10 +183,25 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                 <Label key={label} text={label} />
               ))}
               <Estimate v={task.estimate} />
-              <span title="Reassign — people picker coming soon">
-                <Assignee id={task.assignee} onClick={noOp} />
+              <span className="asgwrap">
+                <Assignee
+                  id={task.assignee}
+                  onClick={() => setPickerOpen((open) => !open)}
+                />
+                {pickerOpen && (
+                  <PeoplePicker
+                    current={task.assignee}
+                    onPick={(actorId) => {
+                      reassignTask(task.id, actorId);
+                      setReassigned(actorId ? { taskId: task.id, actorId } : null);
+                    }}
+                    onClose={() => setPickerOpen(false)}
+                    style={{ top: "calc(100% + 6px)", left: 0 }}
+                  />
+                )}
               </span>
             </div>
+            {reassigned?.taskId === task.id && <NotifyTrail id={reassigned.actorId} />}
           </div>
 
           {task.description && (

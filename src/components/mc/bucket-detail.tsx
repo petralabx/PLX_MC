@@ -4,7 +4,6 @@ import {
   MILESTONES,
   PRDS,
   REPOS,
-  RISKS,
   STAGES,
   STAGE_IDX,
   TRACE,
@@ -14,7 +13,7 @@ import {
   type Trace,
 } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allTasks } from "@/lib/mc-data/store";
+import { allRisks, allTasks } from "@/lib/mc-data/store";
 
 import { Avatar, AvatarStack, HealthPill, PMark, ReqChip, SyncTick } from "./atoms";
 import type { ScreenProps } from "./route";
@@ -57,7 +56,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
   useMcVersion();
 
   const bucket = BUCKET_IDX[route.bucketId ?? FALLBACK_BUCKET_ID] ?? BUCKET_IDX[FALLBACK_BUCKET_ID];
-  const rollups = rollupsForBucket(bucket.id, allTasks(), MILESTONES, RISKS);
+  const rollups = rollupsForBucket(bucket.id, allTasks(), MILESTONES, allRisks());
   const prd = bucket.prd ? PRDS[bucket.prd] : null;
   const trace = TRACE.bucket === bucket.id ? TRACE : null;
   const traceSummary = summarizeTrace(trace);

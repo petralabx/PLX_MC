@@ -11,7 +11,7 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
 import { entraAuthConfigured, entraAuthCredentials } from "@/lib/secrets";
 
-import { isAllowedUser } from "./gate";
+import { basicGate, isAllowedUser } from "./gate";
 
 export { basicGate, isAllowedUser } from "./gate";
 export const oidcEnabled = entraAuthConfigured;
@@ -22,7 +22,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
   const creds = entraAuthConfigured() ? entraAuthCredentials() : null;
   return {
     trustHost: true,
-    secret: creds?.authSecret,
+    // In dormant mode no provider exists, no session can ever be issued, and
+    // `authorized` ignores sessions entirely — the placeholder only keeps the
+    // JWT plumbing from throwing in local dev/tests.
+    secret: creds?.authSecret ?? "plx-mc-dormant-mode-placeholder",
     session: { strategy: "jwt" },
     providers: creds
       ? [
@@ -38,8 +41,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
         const claims = profile as { email?: string; preferred_username?: string } | null;
         return isAllowedUser(claims?.email ?? claims?.preferred_username);
       },
-      authorized({ auth: session }) {
-        // Drives the middleware: unauthenticated → redirect to sign-in.
+      // Drives the middleware (src/middleware.ts default-exports `auth`):
+      // OIDC mode: unauthenticated → false → redirect to Microsoft sign-in.
+      // Dormant/fallback mode: the Basic gate decides (Response = challenge).
+      authorized({ request, auth: session }) {
+        if (!entraAuthConfigured()) {
+          return basicGate(request) ?? true;
+        }
         return !!session?.user;
       },
     },

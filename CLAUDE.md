@@ -123,6 +123,16 @@ steps.
 - Compatibility shims must include a removal date comment: module-shim — remove after YYYY-MM-DD
 - A shim past its expiry date is a CRITICAL violation
 
+## Database Safety
+
+- NEVER use DROP TABLE, TRUNCATE, or DELETE FROM without a WHERE clause
+- Treat every connection as if it has full DDL privileges on production data
+- All DDL goes through a numbered migration runner — no inline CREATE TABLE or ALTER TABLE in application code
+- All SQL uses parameterized placeholders — never string interpolation of user input
+- All migration INSERTs must be idempotent (ON CONFLICT DO NOTHING or equivalent)
+- Migration failures must crash the deploy (exit 1), never continue with broken schema
+- Numbered migrations are globally serialized — two PRs must never ship the same numeric prefix; CI fails on duplicates
+
 ## Branch Hygiene
 
 - One PR per logical theme — never stack unrelated work on a shared branch

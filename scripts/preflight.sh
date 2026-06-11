@@ -46,6 +46,9 @@ run_policy() {
 
   step "Repo hygiene"
   "$PY" scripts/check-repo-hygiene.py
+
+  step "Migration numbering (serialized prefixes)"
+  "$PY" scripts/check-migrations.py
 }
 
 # ---------------------------------------------------------------------------

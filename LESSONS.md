@@ -16,6 +16,20 @@
 
 ## Lessons
 
+### 2026-06-11 (ET) — PowerShell 7 round-trip de-escaped prod/ec2-secrets unicode
+
+- **What happened:** Merging `PLX_MC_DATABASE_URL` into `prod/ec2-secrets` via
+  `ConvertFrom-Json | ConvertTo-Json` re-stored a `\uE10D` escape as a raw
+  UTF-8 char; the AWS CLI's cp1252 output path then failed on every
+  `get-secret-value`, breaking `~/load-secrets.ps1` until the secret was
+  re-stored with `json.dumps(..., ensure_ascii=True)` via boto3.
+- **Root cause:** PowerShell 7's `ConvertTo-Json` emits raw non-ASCII; the
+  secret's loader-safety depends on the stored JSON staying ASCII-escaped.
+- **Rule going forward:** Never round-trip `prod/ec2-secrets` through
+  PowerShell JSON cmdlets. Mutate it with a tool that guarantees
+  `ensure_ascii` output, and verify the loader fetch path immediately after
+  any write.
+
 ### 2026-06-10 (ET) — Killed an unrelated dev server with a too-broad process filter
 
 - **What happened:** While clearing stray Next dev servers for this repo, a

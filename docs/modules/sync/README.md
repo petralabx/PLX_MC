@@ -32,8 +32,15 @@ tenant against the committed schema with exit codes.
   hyperlinkOrPicture columns app-only → `PRD Link` is a text column; Risk
   `Likelihood` choices are `High/Med/Low` BY DESIGN (spec §5.2) — the engine's
   mapping layer normalizes MC's `Medium` → `Med`.
-- Next increment: Postgres persistence (deltaLinks, conflict queue, audit
-  log — re-adds the contract `database` section), outbound/inbound sync,
+- Persistence (landed 2026-06-11): dedicated `plx_mc` database on the staging
+  RDS instance (`plx-postgres-staging`, us-east-1), owned by the app-only
+  `plx_mc_app` role — never the trading database or its credentials. Runtime
+  URL: `PLX_MC_DATABASE_URL` (AWS Secrets Manager via the loader). Schema via
+  numbered migrations in `db/migrations/` (`npm run migrate`,
+  `scripts/migrate.mjs`); numbering serialization enforced by
+  `scripts/check-migrations.py` in every preflight mode. Tables: `delta_links`,
+  `sync_conflicts`, `sync_push_errors`, `sync_audit_log`, `entities`.
+- Next increment: outbound/inbound sync engine (runs inside the Next.js app),
   webhooks once the app has a public domain.
 
 ## Dependencies

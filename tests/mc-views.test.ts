@@ -82,14 +82,26 @@ describe("timeline math helpers", () => {
     expect(range.endDay).toBe(24);
   });
 
-  it("clamps start and end days inside the month window", () => {
+  it("clamps out-of-window days to a zero-width pin at the grid edge", () => {
     const late = timelineRangeForTask("Jun 42", "L");
     expect(late.endDay).toBe(30);
-    expect(late.startDay).toBe(19);
+    expect(late.startDay).toBe(30);
+    expect(late.widthPct).toBe(0);
 
     const early = timelineRangeForTask("Jun 0", "L");
     expect(early.endDay).toBe(1);
     expect(early.startDay).toBe(1);
     expect(early.widthPct).toBe(0);
+  });
+
+  it("maps non-June dues beyond the June grid, never onto a June day", () => {
+    expect(dueDay("Jul 20")).toBe(50);
+    expect(dueDay("Sep 01")).toBe(93);
+    expect(dueDay("May 30")).toBe(-1);
+
+    // A July due must not draw a bar inside the June window (go-live plan).
+    const july = timelineRangeForTask("Jul 20", "M");
+    expect(july.endDay).toBe(30);
+    expect(july.widthPct).toBe(0);
   });
 });

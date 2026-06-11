@@ -30,6 +30,23 @@
   `ensure_ascii` output, and verify the loader fetch path immediately after
   any write.
 
+### 2026-06-11 (ET) — IDE-browser snapshots fake React hydration errors
+
+- **What happened:** The dev overlay reported hydration text mismatches
+  (first in `Topbar`, later in `InboxView`), suggesting an SSR/client bug in
+  the store's API hydration. The overlay's actual diff was
+  `- data-cursor-ref="e37"` — an attribute the Cursor IDE browser's
+  accessibility-snapshot tooling injects into the live DOM, tripping React's
+  hydration comparison (the documented "extension messes with the HTML
+  before React loads" case). Time was spent chasing an app bug that did not
+  exist.
+- **Root cause:** Snapshot instrumentation mutates the DOM while React is
+  hydrating; React attributes the mismatch to the nearest component.
+- **Rule going forward:** Before chasing a hydration error seen in the IDE
+  browser, read the overlay's +/- diff first; if it names `data-cursor-ref`
+  (or any non-app attribute), it is tooling noise — verify in a plain
+  browser only if doubt remains.
+
 ### 2026-06-11 (ET) — Idle RDS pool connections hang requests without timeouts
 
 - **What happened:** After ~80 idle minutes, the dev server's pooled Postgres

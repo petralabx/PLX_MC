@@ -39,8 +39,10 @@ describe("deriveRepoRows", () => {
   it("derives task counts from repo membership, not fixture rollups", () => {
     const rows = deriveRepoRows(REPOS, allTasks());
     const infra = rows.find((row) => row.repo.id === "infra");
-    expect(infra?.tasks).toHaveLength(1);
-    expect(infra?.tasks[0]?.id).toBe("TASK-140");
+    const ids = infra?.tasks.map((t) => t.id);
+    expect(ids).toContain("TASK-140");
+    expect(ids).toContain("TASK-235"); // go-live infra checklist (plan seed)
+    expect(infra?.tasks).toHaveLength(2);
   });
 
   it("retains task linkage on repo PR rows", () => {

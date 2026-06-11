@@ -100,7 +100,18 @@ export function bucketsForTimeline(tasks: Task[]): Bucket[] {
   return BUCKETS.filter((bucket) => tasks.some((task) => task.bucket === bucket.id));
 }
 
+// Day offsets from Jun 1 — the timeline is a June grid (CYCLES). Month-aware
+// so a "Jul 20" or "Sep 01" due maps beyond the window (and clamps to the
+// grid edge) instead of landing on the same-numbered June day.
+const MONTH_GRID_OFFSET: Record<string, number> = {
+  Apr: -61, May: -31, Jun: 0, Jul: 30, Aug: 61, Sep: 92, Oct: 122, Nov: 153, Dec: 183,
+};
+
 export function dueDay(due: string): number | null {
+  const withMonth = String(due ?? "").match(/^([A-Z][a-z]{2})\s+(\d+)$/);
+  if (withMonth && withMonth[1] in MONTH_GRID_OFFSET) {
+    return MONTH_GRID_OFFSET[withMonth[1]] + Number.parseInt(withMonth[2], 10);
+  }
   const match = String(due ?? "").match(/(\d+)/);
   if (!match) return null;
   return Number.parseInt(match[1], 10);
@@ -133,8 +144,12 @@ export function timelineRangeForTask(
   estimate?: string,
   monthDays = TIMELINE_MONTH_DAYS
 ): TimelineRange {
-  const endDay = clampDay(dueDay(due) ?? TIMELINE_DEFAULT_END_DAY, monthDays);
-  const startDay = clampDay(endDay - spanOf(estimate), monthDays);
+  // Span is taken from the RAW due day before clamping, so a due beyond the
+  // window collapses to a zero-width pin at the grid edge instead of drawing
+  // a misleading bar inside June.
+  const rawEnd = dueDay(due) ?? TIMELINE_DEFAULT_END_DAY;
+  const endDay = clampDay(rawEnd, monthDays);
+  const startDay = clampDay(rawEnd - spanOf(estimate), monthDays);
   const leftPct = pctOfDay(startDay, monthDays);
   const widthPct = Math.max(0, pctOfDay(endDay, monthDays) - leftPct);
   return { startDay, endDay, leftPct, widthPct };

@@ -85,6 +85,9 @@ export const DIRECTORY_EXTRA: Record<string, Human> = {
   omar: { id: "omar", kind: "human", name: "Omar Haddad", init: "OH", role: "Brand & Marketing", dept: "Marketing", email: "omar.haddad@petrasoap.com", online: true },
   grace: { id: "grace", kind: "human", name: "Grace Liu", init: "GL", role: "Finance", dept: "Finance", email: "grace.liu@petrasoap.com", online: false },
   ruben: { id: "ruben", kind: "human", name: "Rubén Álvarez", init: "RA", role: "QA & Compliance", dept: "Compliance", email: "ruben.alvarez@petrasoap.com", online: true },
+  // Placeholder identity (2026-06-11): bucket owner for the PLX Portal
+  // go-live plan; full name/dept to be confirmed by the operator.
+  vince: { id: "vince", kind: "human", name: "Vince", init: "V", role: "Owner", dept: "Petra Soap", email: "vince@petrasoap.com", online: true },
 };
 
 export const ACTORS: Record<string, Human | Agent> = {
@@ -114,6 +117,17 @@ export const BUCKETS: Bucket[] = [
   { id: "BKT-DS", name: "Design System 2.0", owner: "lena", health: "track", target: "Jun 30", started: "2026.02.18", desc: "Token layer, components, and the PMark glyph system shared across surfaces.", repos: ["design-sys"], sync: { state: "pending", ts: "2026.06.09 · 09:02", sp: "Roadmap · row 14" }, prd: "PRD-DS" },
   { id: "BKT-AUTH", name: "Auth & SSO Hardening", owner: "evan", health: "off", target: "Jun 20", started: "2026.05.01", desc: "SAML/SSO, session hardening, and audit logging ahead of the security review.", repos: ["portal-api", "infra"], sync: { state: "conflict", ts: "2026.06.09 · 06:31", sp: "Roadmap · row 15" }, prd: "PRD-AUTH" },
   { id: "BKT-MOB", name: "Mobile Companion", owner: "maya", health: "track", target: "—", started: "2026.06.08", desc: "A read-mostly mobile companion for approvals and status — awaiting a PRD.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · row 16" }, prd: null, empty: true },
+  // ─── PLX Portal go-live plan (seeded 2026-06-11) — one bucket per workstream.
+  // All pending with "unprovisioned" refs until /sites/plx-mission-control is
+  // provisioned and the engine points at it (no fabricated sync evidence).
+  { id: "BKT-WMS", name: "WMS Integration", owner: "vince", health: "track", target: "Jun 15", started: "2026.06.11", desc: "Warehouse management system integration for the portal go-live.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-DAPI", name: "Decoupling API", owner: "vince", health: "track", target: "Jun 15", started: "2026.06.11", desc: "Decouple the portal from backend services — the Swagger-first contract is the deliverable.", repos: ["portal-api"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-PROD", name: "Product Development", owner: "vince", health: "track", target: "Jun 29", started: "2026.06.11", desc: "Portal product development through the Jun 29 test gate; Account Management is stretch scope.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-FIN", name: "Finance", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Finance workstream — build Jun 29–Jul 13, test complete Jul 20.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-QMS", name: "QMS", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Quality management system — forms + DocuSign.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-SHOP", name: "Shopify → Business Central", owner: "vince", health: "track", target: "Aug 31", started: "2026.06.11", desc: "Shopify to Business Central migration — owned by Greg and Stephen (directory entries pending).", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-INFRA", name: "Backend Infra", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Cross-cutting platform/infra work supporting go-live.", repos: ["infra"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-UAT", name: "UAT", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Owns parallel testing and the go-live milestones.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
 ];
 
 export const BUCKET_IDX: Record<string, Bucket> = Object.fromEntries(
@@ -288,6 +302,136 @@ export const TASKS: Task[] = [
     due: "Jun 17", sync: { state: "synced", ts: "2026.06.09 · 08:48", sp: "ToDos · item 204" }, subtasks: [],
     activity: [{ age: "1h", who: "scribe", what: "mapped deed → SharePoint document library", kind: "sync" }],
   },
+  // ─── PLX Portal go-live plan (seeded 2026-06-11): 10-week schedule. All
+  // pending with "unprovisioned" refs until /sites/plx-mission-control lands.
+  // Greg/Stephen (Shopify → BC owners) are not in the directory yet, so those
+  // tasks stay unassigned.
+  {
+    id: "TASK-221", title: "WMS integration", bucket: "BKT-WMS", stage: "planned", priority: "medium",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live"], prs: [],
+    due: "Jun 15", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jun 15", kind: "move" }],
+  },
+  {
+    id: "TASK-222", title: "Decoupling API — Swagger-first contract", bucket: "BKT-DAPI", stage: "planned", priority: "medium",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: ["portal-api"], estimate: "M",
+    labels: ["go-live", "api"], prs: [],
+    due: "Jun 15", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — the Swagger contract is the deliverable", kind: "move" }],
+  },
+  {
+    id: "TASK-223", title: "Product development", bucket: "BKT-PROD", stage: "planned", priority: "medium",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live"], prs: [],
+    due: "Jun 15", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jun 15", kind: "move" }],
+  },
+  {
+    id: "TASK-224", title: "Product development (cont.)", bucket: "BKT-PROD", stage: "planned", priority: "medium",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live"], prs: [],
+    due: "Jun 22", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jun 22", kind: "move" }],
+  },
+  {
+    id: "TASK-225", title: "Stretch: Account Management", bucket: "BKT-PROD", stage: "backlog", priority: "low",
+    description: "Stretch scope — only pulled if Product Development is ahead of schedule.",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live", "stretch"], prs: [],
+    due: "Jun 22", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded as stretch scope — pulled only if ahead", kind: "move" }],
+  },
+  {
+    id: "TASK-226", title: "Build Finance", bucket: "BKT-FIN", stage: "planned", priority: "medium",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live", "finance"], prs: [],
+    due: "Jun 29", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — build starts week of Jun 29", kind: "move" }],
+  },
+  {
+    id: "TASK-227", title: "Test product development", bucket: "BKT-PROD", stage: "qa", priority: "high",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live", "testing"], prs: [],
+    due: "Jun 29", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    evidence: {
+      summary: "Evidence-gated test week for Product Development (Jun 29).",
+      items: [
+        { key: "summary", label: "Summary — what was tested", done: false },
+        { key: "qa", label: "E2E QA results", done: false },
+        { key: "shots", label: "Before / after screenshots", done: false },
+        { key: "rollback", label: "Rollback plan", done: false },
+      ],
+    },
+    activity: [{ age: "now", who: "vince", what: "seeded as the evidence-gated Product Development test week", kind: "move" }],
+  },
+  {
+    id: "TASK-228", title: "Build Finance (cont.)", bucket: "BKT-FIN", stage: "planned", priority: "medium",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live", "finance"], prs: [],
+    due: "Jul 06", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jul 6", kind: "move" }],
+  },
+  {
+    id: "TASK-229", title: "Build Finance (cont.)", bucket: "BKT-FIN", stage: "planned", priority: "medium",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live", "finance"], prs: [],
+    due: "Jul 13", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jul 13", kind: "move" }],
+  },
+  {
+    id: "TASK-230", title: "Test Finance", bucket: "BKT-FIN", stage: "qa", priority: "high",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live", "testing", "finance"], prs: [],
+    due: "Jul 20", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    evidence: {
+      summary: "Evidence-gated test week for Finance (Jul 20).",
+      items: [
+        { key: "summary", label: "Summary — what was tested", done: false },
+        { key: "qa", label: "E2E QA results", done: false },
+        { key: "shots", label: "Before / after screenshots", done: false },
+        { key: "rollback", label: "Rollback plan", done: false },
+      ],
+    },
+    activity: [{ age: "now", who: "vince", what: "seeded as the evidence-gated Finance test week", kind: "move" }],
+  },
+  {
+    id: "TASK-231", title: "QMS — Forms + DocuSign", bucket: "BKT-QMS", stage: "planned", priority: "medium",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live", "qms"], prs: [],
+    due: "Jul 20", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jul 20", kind: "move" }],
+  },
+  {
+    id: "TASK-232", title: "Shopify → Business Central migration", bucket: "BKT-SHOP", stage: "planned", priority: "medium",
+    description: "Owned by Greg and Stephen — unassigned until their directory entries exist.",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "L",
+    labels: ["go-live", "migration"], prs: [],
+    due: "Aug 31", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — August, owners Greg & Stephen", kind: "move" }],
+  },
+  {
+    id: "TASK-233", title: "Unstructured to-dos — needs breakdown", bucket: "BKT-SHOP", stage: "backlog", priority: "low",
+    description: "Single placeholder for the August unstructured items; break down before the build window.",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "M",
+    labels: ["go-live", "needs-breakdown"], prs: [],
+    due: "Aug 31", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded as a placeholder — needs breakdown", kind: "move" }],
+  },
+  {
+    id: "TASK-234", title: "Parallel system testing — execution", bucket: "BKT-UAT", stage: "planned", priority: "high",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: [], estimate: "L",
+    labels: ["go-live", "testing", "uat"], prs: [],
+    due: "Sep 01", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — parallel testing from Sept 1", kind: "move" }],
+  },
+  {
+    id: "TASK-235", title: "Define go-live infra checklist — environments, cutover, rollback", bucket: "BKT-INFRA", stage: "backlog", priority: "medium",
+    assignee: null, coassignees: [], reporter: "vince", reqs: [], repos: ["infra"], estimate: "M",
+    labels: ["go-live", "infra"], prs: [],
+    due: "Oct 01", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
+    activity: [{ age: "now", who: "vince", what: "seeded as the Backend Infra placeholder — concrete items to follow", kind: "move" }],
+  },
 ];
 
 export const TASK_IDX: Record<string, Task> = Object.fromEntries(
@@ -331,6 +475,11 @@ export const MILESTONES: Milestone[] = [
   { id: "M-3", bucket: "BKT-MRP", name: "Floor sync live", col: 18, state: "upcoming", sp: "Milestone Register · 3" },
   { id: "M-4", bucket: "BKT-DS", name: "DS 2.0 cut", col: 12, state: "now", sp: "Milestone Register · 4" },
   { id: "M-5", bucket: "BKT-AUTH", name: "Security review", col: 10, state: "risk", sp: "Milestone Register · 5" },
+  // PLX Portal go-live plan (2026-06-11). col is days from Jun 1 — these fall
+  // beyond the 30-day June timeline grid, so the timeline pins them at the
+  // grid's right edge (pctOfDay clamps); milestone lists show them in full.
+  { id: "M-6", bucket: "BKT-UAT", name: "Parallel System Testing", col: 93, state: "upcoming", sp: "Milestone Register · unprovisioned" },
+  { id: "M-7", bucket: "BKT-UAT", name: "Production Go-Live", col: 123, state: "upcoming", sp: "Milestone Register · unprovisioned" },
 ];
 
 // ─── Risks (roll up to buckets, mirror to Risk Register) ─────────────────────
@@ -339,6 +488,10 @@ export const RISKS: Risk[] = [
   { id: "RISK-4", bucket: "BKT-AUTH", title: "SSO provider IdP metadata drift", like: "Medium", impact: "High", owner: "evan", status: "open", mit: "Pin IdP metadata; alert on cert rotation.", sync: { state: "error", ts: "2026.06.09 · 06:31", sp: "Risk Register · 4", reason: "SharePoint column 'Likelihood' rejected value" } },
   { id: "RISK-2", bucket: "BKT-CPV2", title: "Sealed PDF UTC offset ambiguity", like: "Low", impact: "Medium", owner: "tariq", status: "mitigating", mit: "Embed explicit UTC offset; add E2E assertion.", sync: { state: "synced", ts: "2026.06.09 · 09:10", sp: "Risk Register · 2" } },
   { id: "RISK-1", bucket: "BKT-CPV2", title: "Digest opt-out not honored on legacy accounts", like: "Medium", impact: "Medium", owner: "maya", status: "open", mit: "Backfill opt-out flags before kill-switch.", sync: { state: "synced", ts: "2026.06.09 · 09:01", sp: "Risk Register · 1" } },
+  // PLX Portal go-live plan (2026-06-11).
+  { id: "RISK-8", bucket: "BKT-PROD", title: "Account Management slips out of scope if Product Development runs long", like: "Medium", impact: "Medium", owner: "vince", status: "open", mit: "Stretch scope is only pulled if ahead; review at the Jun 29 test gate.", sync: { state: "pending", ts: "—", sp: "Risk Register · unprovisioned" } },
+  { id: "RISK-9", bucket: "BKT-SHOP", title: "Shopify → BC migration owned outside the core team, landing directly before parallel testing", like: "Medium", impact: "High", owner: "vince", status: "open", mit: "Confirm Greg/Stephen ownership and a mid-August checkpoint before Sept 1 parallel testing.", sync: { state: "pending", ts: "—", sp: "Risk Register · unprovisioned" } },
+  { id: "RISK-10", bucket: "BKT-UAT", title: "SharePoint provisioning not complete before the plan needs to sync", like: "Medium", impact: "High", owner: "vince", status: "open", mit: "Track site provisioning; keep sync sweeps off until /sites/plx-mission-control is live and the engine points at it.", sync: { state: "pending", ts: "—", sp: "Risk Register · unprovisioned" } },
 ];
 
 // ─── Agent activity feed ─────────────────────────────────────────────────────

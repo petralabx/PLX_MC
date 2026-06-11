@@ -43,7 +43,12 @@ const SYNC_ACTOR = "scribe"; // the ops agent persona attributed to engine sweep
 // their states so the review queues are exercised end-to-end. Files keep
 // fixture states (documents sync is a later increment).
 export async function ensureSeeded(): Promise<boolean> {
-  if ((await repo.entityCount()) > 0) return false;
+  // Re-runs when fixtures grow (e.g. the go-live plan, 2026-06-11): inserts
+  // are ON CONFLICT DO NOTHING, so existing mirror rows are never touched.
+  const newestFixture = TASKS[TASKS.length - 1];
+  if ((await repo.entityCount()) > 0 && (await repo.getEntity("task", newestFixture.id))) {
+    return false;
+  }
 
   const conflictIds = new Set(SP_CONFLICTS.map((c) => c.entityId));
   const errorIds = new Set(SP_ERRORS.map((e) => e.entityId));

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { REPOS } from "@/lib/mc-data";
-import type { FileEntry } from "@/lib/mc-data";
+import { REPOS, TASKS } from "@/lib/mc-data";
+import type { FileEntry, Task } from "@/lib/mc-data";
 import { buildBreadcrumbPath, deriveRepoRows } from "@/components/mc/record-logic";
 import { allTasks, fileById, resetStore } from "@/lib/mc-data/store";
 
@@ -12,9 +12,23 @@ describe("buildBreadcrumbPath", () => {
     expect(buildBreadcrumbPath(null, fileById)).toEqual([]);
   });
 
-  it("builds an ancestor-to-leaf breadcrumb trail", () => {
-    const trail = buildBreadcrumbPath("fo-cpv2-ev", fileById).map((entry) => entry.name);
-    expect(trail).toEqual(["Customer Portal v2", "Evidence"]);
+  it("resolves a top-level workstream folder", () => {
+    const trail = buildBreadcrumbPath("fo-uat", fileById).map((entry) => entry.name);
+    expect(trail).toEqual(["UAT"]);
+  });
+
+  it("builds an ancestor-to-leaf breadcrumb trail across nesting", () => {
+    const byId = (id: string): FileEntry | undefined =>
+      (
+        {
+          parent: { id: "parent", name: "Finance", kind: "folder", parent: null },
+          child: { id: "child", name: "Evidence", kind: "folder", parent: "parent" },
+        } as Record<string, FileEntry>
+      )[id];
+    expect(buildBreadcrumbPath("child", byId).map((entry) => entry.name)).toEqual([
+      "Finance",
+      "Evidence",
+    ]);
   });
 
   it("returns known ancestors even if the chain breaks", () => {
@@ -29,27 +43,41 @@ describe("buildBreadcrumbPath", () => {
 });
 
 describe("deriveRepoRows", () => {
+  // Plan tasks carry no PRs yet, so PR aggregation invariants are protected
+  // with synthetic tasks layered over the real fixture set.
+  const withPrs: Task[] = [
+    ...TASKS,
+    {
+      ...TASKS.find((t) => t.id === "TASK-222")!,
+      id: "TASK-9001",
+      repos: ["portal-api"],
+      prs: [
+        { repo: "portal-api", num: 7, status: "open", title: "feat: swagger contract" },
+        { repo: "portal-api", num: 8, status: "merged", title: "chore: scaffolding" },
+      ],
+    },
+  ];
+
   it("derives open PR counts from task PRs", () => {
-    const rows = deriveRepoRows(REPOS, allTasks());
-    const web = rows.find((row) => row.repo.id === "portal-web");
-    expect(web?.openPrCount).toBe(2);
-    expect(web?.prs).toHaveLength(3);
+    const rows = deriveRepoRows(REPOS, withPrs);
+    const api = rows.find((row) => row.repo.id === "portal-api");
+    expect(api?.openPrCount).toBe(1);
+    expect(api?.prs).toHaveLength(2);
   });
 
   it("derives task counts from repo membership, not fixture rollups", () => {
     const rows = deriveRepoRows(REPOS, allTasks());
     const infra = rows.find((row) => row.repo.id === "infra");
-    const ids = infra?.tasks.map((t) => t.id);
-    expect(ids).toContain("TASK-140");
-    expect(ids).toContain("TASK-235"); // go-live infra checklist (plan seed)
-    expect(infra?.tasks).toHaveLength(2);
+    expect(infra?.tasks.map((t) => t.id)).toEqual(["TASK-235"]); // go-live infra checklist
+    const api = rows.find((row) => row.repo.id === "portal-api");
+    expect(api?.tasks.map((t) => t.id)).toContain("TASK-222");
   });
 
   it("retains task linkage on repo PR rows", () => {
-    const rows = deriveRepoRows(REPOS, allTasks());
+    const rows = deriveRepoRows(REPOS, withPrs);
     const api = rows.find((row) => row.repo.id === "portal-api");
-    const pr42 = api?.prs.find((pr) => pr.num === 42);
-    expect(pr42?.taskId).toBe("TASK-214");
-    expect(pr42?.status).toBe("open");
+    const pr7 = api?.prs.find((pr) => pr.num === 7);
+    expect(pr7?.taskId).toBe("TASK-9001");
+    expect(pr7?.status).toBe("open");
   });
 });

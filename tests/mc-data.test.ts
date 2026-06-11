@@ -61,28 +61,30 @@ describe("evidenceComplete", () => {
 });
 
 describe("syncCounts", () => {
-  it("aggregates to the expected unresolved totals", () => {
-    expect(syncCounts()).toEqual({ pending: 2, conflict: 2, error: 1 });
+  it("aggregates the unprovisioned go-live plan as all-pending, nothing to resolve", () => {
+    expect(syncCounts()).toEqual({ pending: 28, conflict: 0, error: 0 });
   });
 
   it("treats conflicts + errors as the 'to resolve' count", () => {
     const c = syncCounts();
-    expect(c.conflict + c.error).toBe(3);
+    expect(c.conflict + c.error).toBe(0);
   });
 });
 
 describe("tasksForUser", () => {
   it("returns only tasks the user owns, co-owns, or reports", () => {
-    const mine = tasksForUser("maya");
+    const mine = tasksForUser("vince");
+    expect(mine.length).toBeGreaterThan(0);
     for (const t of mine) {
       const involved =
-        t.assignee === "maya" || t.coassignees.includes("maya") || t.reporter === "maya";
+        t.assignee === "vince" || t.coassignees.includes("vince") || t.reporter === "vince";
       expect(involved).toBe(true);
     }
-    const ids = mine.map((t) => t.id);
-    expect(ids).toContain("TASK-214"); // reporter
-    expect(ids).toContain("TASK-176"); // co-assignee
-    expect(ids).not.toContain("TASK-160"); // tariq only
+    expect(mine.map((t) => t.id)).toContain("TASK-221"); // reporter
+  });
+
+  it("returns nothing for someone with no involvement", () => {
+    expect(tasksForUser("lena")).toHaveLength(0);
   });
 });
 
@@ -90,25 +92,25 @@ describe("confidenceOf", () => {
   const byId = (id: string) => TASKS.find((t) => t.id === id)!;
 
   it("flags blocked tasks", () => {
-    expect(confidenceOf(byId("TASK-176")).state).toBe("blocked");
+    expect(confidenceOf({ ...byId("TASK-221"), blocked: true }).state).toBe("blocked");
   });
 
   it("treats verified/merged as ready at 100%", () => {
-    const c = confidenceOf(byId("TASK-201"));
+    const c = confidenceOf({ ...byId("TASK-221"), stage: "verified" });
     expect(c.state).toBe("ready");
     expect(c.pct).toBe(100);
   });
 
   it("shows an evidence gap in QA/review with the right ratio", () => {
-    const c = confidenceOf(byId("TASK-214")); // qa, 5/6 done
+    const c = confidenceOf(byId("TASK-227")); // qa, 0/4 done
     expect(c.state).toBe("gap");
-    expect(c.label).toBe("5/6 evidence");
-    expect(c.pct).toBe(83);
+    expect(c.label).toBe("0/4 evidence");
+    expect(c.pct).toBe(0);
   });
 
-  it("reads as building while in progress", () => {
-    expect(confidenceOf(byId("TASK-219")).state).toBe("building"); // progress, 2/6
-    expect(confidenceOf(byId("TASK-133")).label).toBe("Planned"); // backlog, no evidence
+  it("reads as building/planned before the doing band", () => {
+    expect(confidenceOf({ ...byId("TASK-221"), stage: "progress" }).state).toBe("building");
+    expect(confidenceOf(byId("TASK-225")).label).toBe("Planned"); // backlog, no evidence
   });
 });
 

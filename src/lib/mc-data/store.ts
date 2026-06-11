@@ -54,7 +54,6 @@ interface McState {
   errors: SpError[];
   audit: AuditRow[];
   lastSweep: string;
-  inboundApplied: boolean;
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -70,11 +69,9 @@ function initialState(): McState {
     conflicts: clone(SP_CONFLICTS),
     errors: clone(SP_ERRORS),
     audit: [
-      { ts: SP_LAST_SWEEP, actor: "scribe", body: "Sweep completed — 1 outbound push, 0 inbound changes.", state: "synced" },
-      { ts: "2026.06.09 · 06:31", actor: "dana", body: "Conflict detected on TASK-140 · Status (edited both sides).", state: "conflict" },
+      { ts: "—", actor: "scribe", body: "Go-live plan seeded — awaiting first outbound push to the record.", state: "pending" },
     ],
     lastSweep: SP_LAST_SWEEP,
-    inboundApplied: false,
   };
 }
 
@@ -438,26 +435,6 @@ export function markAllSynced(): string {
     await refreshFromServer();
   });
   return ts;
-}
-
-// Apply a single simulated INBOUND SharePoint edit (TASK-188 due date) so the
-// two-way flow is visible. Idempotent: only the first sweep pulls it.
-// Deliberately local-only (spec §6: "no endpoint — this is what the real
-// inbound delta does"); markAllSynced's real sweep carries actual inbound.
-export function applyInbound(): { taskId: string; field: string; from: string; to: string; by: string } | null {
-  if (state.inboundApplied) return null;
-  const t = taskById("TASK-188");
-  if (!t) return null;
-  state.inboundApplied = true;
-  const from = t.due;
-  t.due = "Jun 13";
-  t.activity = [
-    { age: "now", who: "dana", what: `↓ inbound from SharePoint — Due Date ${from} → Jun 13`, kind: "sync" },
-    ...t.activity,
-  ];
-  pushAudit("dana", `Inbound change pulled — TASK-188 Due Date ${from} → Jun 13.`, "synced");
-  emit();
-  return { taskId: "TASK-188", field: "Due Date", from, to: "Jun 13", by: "dana" };
 }
 
 // Manual conflict resolution — a human picks the winner; the choice is audited.

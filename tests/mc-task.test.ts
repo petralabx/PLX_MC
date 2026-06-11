@@ -14,28 +14,40 @@ import {
 
 const byId = (id: string): Task => TASKS.find((task) => task.id === id)!;
 
+// Evidence-gated QA task from the go-live plan, with one item flipped done so
+// both the "items remaining" and "all complete" paths stay covered.
+const qaTask = (): Task => {
+  const base = byId("TASK-227");
+  return {
+    ...base,
+    evidence: {
+      ...base.evidence!,
+      items: base.evidence!.items.map((item, idx) => ({ ...item, done: idx === 0 })),
+    },
+  };
+};
+
 describe("deriveEvidenceProgress", () => {
   it("derives done/total and the gate-closed reason for incomplete evidence", () => {
-    const p = deriveEvidenceProgress(byId("TASK-214"));
-    expect(p.done).toBe(5);
-    expect(p.total).toBe(6);
+    const p = deriveEvidenceProgress(qaTask());
+    expect(p.done).toBe(1);
+    expect(p.total).toBe(4);
     expect(p.ready).toBe(false);
-    expect(p.reason).toBe("1 item remaining · gate closed");
+    expect(p.reason).toBe("3 items remaining · gate closed");
   });
 
   it("reports readiness when all evidence items are complete", () => {
-    const task = byId("TASK-214");
+    const task = qaTask();
     const allDone: Task = {
       ...task,
-      stage: "qa",
       evidence: {
         ...task.evidence!,
         items: task.evidence!.items.map((item) => ({ ...item, done: true })),
       },
     };
     const p = deriveEvidenceProgress(allDone);
-    expect(p.done).toBe(6);
-    expect(p.total).toBe(6);
+    expect(p.done).toBe(4);
+    expect(p.total).toBe(4);
     expect(p.ready).toBe(true);
     expect(p.reason).toBe("All evidence complete. Ready to submit.");
   });

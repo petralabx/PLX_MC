@@ -53,6 +53,13 @@ export function TraceabilityMatrix({ nav }: ScreenProps) {
             <span className="h">Status</span>
           </div>
 
+          {TRACE.rows.length === 0 && (
+            <div className="colempty">
+              No traceability rows yet — the matrix fills when the first go-live PRD lands and
+              its requirements map to tasks.
+            </div>
+          )}
+
           {TRACE.rows.map((row) => {
             const view = traceStatusView(row.status);
             return (

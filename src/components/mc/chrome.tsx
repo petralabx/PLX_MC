@@ -4,7 +4,7 @@
 // The command palette (⌘K) mounts here when the authoring lane lands.
 import type { ReactNode } from "react";
 
-import { AGENTS, BUCKETS } from "@/lib/mc-data";
+import { ACTORS, AGENTS, BUCKETS, CURRENT_USER } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import { storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
 
@@ -66,7 +66,11 @@ export function Topbar({
         >
           {dark ? "☀" : "☾"}
         </button>
-        <Avatar id="maya" size="lg" title="Maya Aldosari · Admin" />
+        <Avatar
+          id={CURRENT_USER}
+          size="lg"
+          title={`${ACTORS[CURRENT_USER].name} · ${ACTORS[CURRENT_USER].kind === "human" ? ACTORS[CURRENT_USER].role : "Agent"}`}
+        />
       </div>
     </header>
   );

@@ -15,7 +15,7 @@ import {
 } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
-  applyInbound,
+  allTasks,
   markAllSynced,
   openConflicts,
   reassignTask,
@@ -104,7 +104,7 @@ function fieldValue(fieldName: SorFieldName, task: Task): string {
 
 export function TaskDetailView({ route, nav }: ScreenProps) {
   useMcVersion();
-  const taskId = route.taskId ?? "TASK-214";
+  const taskId = route.taskId ?? allTasks()[0]?.id ?? "";
   const task = taskById(taskId);
   const [resolved, setResolved] = useState<{ taskId: string; winner: "mc" | "sp" } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -117,15 +117,12 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
           <div className="glyph">?</div>
           <h3>Task not found</h3>
           <p>
-            {taskId} is not in this workspace snapshot. Use the board to pick another task, or
-            open the default task detail view.
+            {taskId || "This task"} is not in this workspace snapshot. Use the board to pick
+            another task.
           </p>
           <div className="acts">
             <button type="button" className="btn ghost" onClick={() => nav("board")}>
               Go to board
-            </button>
-            <button type="button" className="btn" onClick={() => nav("task", { taskId: "TASK-214" })}>
-              Open TASK-214
             </button>
           </div>
         </div>
@@ -140,9 +137,9 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
   const progress = deriveEvidenceProgress(task);
   const conflict = openConflicts().find((entry) => entry.entityId === task.id);
 
+  // Real engine sweep; the demo inbound simulation is gone.
   const syncNow = () => {
     markAllSynced();
-    applyInbound();
   };
 
   const resolveTaskConflict = (winner: "mc" | "sp") => {

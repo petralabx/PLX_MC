@@ -39,6 +39,9 @@ export function AgentFeed({ nav }: ScreenProps) {
       </div>
 
       <div className="feed">
+        {AGENT_FEED.length === 0 && (
+          <div className="colempty">No agent activity yet — events appear as agents pick up tasks.</div>
+        )}
         {AGENT_FEED.map((event, idx) => {
           const actor = ACTORS[event.actor];
           const task = taskById(event.task);

@@ -28,8 +28,8 @@ import type {
   Trace,
 } from "./types";
 
-// The signed-in human whose cockpit this is (the prototype's fixed viewer).
-export const CURRENT_USER = "maya";
+// The signed-in human whose cockpit this is (the operator, until M365 auth lands).
+export const CURRENT_USER = "vince";
 
 export const STAGES: Stage[] = [
   { n: "01", key: "backlog", name: "Backlog", band: "todo" },
@@ -111,12 +111,10 @@ export const REPOS: Record<string, Repo> = {
   infra: { id: "infra", name: "plx-infra", lang: "Terraform", openPRs: 0, openTasks: 2, def: "main" },
 };
 
+// Demo/prototype buckets purged 2026-06-11 — only the PLX Portal go-live plan
+// remains (operator request; the prototype look/behavior spec lives in
+// docs/product/prototype/ if reference data is ever needed again).
 export const BUCKETS: Bucket[] = [
-  { id: "BKT-CPV2", name: "Customer Portal v2", owner: "maya", health: "risk", target: "Jul 18", started: "2026.04.02", desc: "Rebuild the brand-owner portal on the new design system.", repos: ["portal-web", "portal-api", "design-sys"], sync: { state: "synced", ts: "2026.06.09 · 08:14", sp: "Roadmap · row 12" }, prd: "PRD-CPV2" },
-  { id: "BKT-MRP", name: "MRP Floor Sync", owner: "tariq", health: "track", target: "Aug 04", started: "2026.03.10", desc: "Real-time sync between the formulation floor and the MRP system of record.", repos: ["mrp-core", "portal-api"], sync: { state: "synced", ts: "2026.06.09 · 07:50", sp: "Roadmap · row 13" }, prd: "PRD-MRP" },
-  { id: "BKT-DS", name: "Design System 2.0", owner: "lena", health: "track", target: "Jun 30", started: "2026.02.18", desc: "Token layer, components, and the PMark glyph system shared across surfaces.", repos: ["design-sys"], sync: { state: "pending", ts: "2026.06.09 · 09:02", sp: "Roadmap · row 14" }, prd: "PRD-DS" },
-  { id: "BKT-AUTH", name: "Auth & SSO Hardening", owner: "evan", health: "off", target: "Jun 20", started: "2026.05.01", desc: "SAML/SSO, session hardening, and audit logging ahead of the security review.", repos: ["portal-api", "infra"], sync: { state: "conflict", ts: "2026.06.09 · 06:31", sp: "Roadmap · row 15" }, prd: "PRD-AUTH" },
-  { id: "BKT-MOB", name: "Mobile Companion", owner: "maya", health: "track", target: "—", started: "2026.06.08", desc: "A read-mostly mobile companion for approvals and status — awaiting a PRD.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · row 16" }, prd: null, empty: true },
   // ─── PLX Portal go-live plan (seeded 2026-06-11) — one bucket per workstream.
   // All pending with "unprovisioned" refs until /sites/plx-mission-control is
   // provisioned and the engine points at it (no fabricated sync evidence).
@@ -134,174 +132,8 @@ export const BUCKET_IDX: Record<string, Bucket> = Object.fromEntries(
   BUCKETS.map((b) => [b.id, b])
 );
 
+// Demo/prototype tasks purged 2026-06-11 — only the go-live plan remains.
 export const TASKS: Task[] = [
-  {
-    id: "TASK-214", title: "Inline deed signing on the workbench", bucket: "BKT-CPV2", stage: "qa", priority: "high",
-    assignee: "vibes", coassignees: ["tariq"], reporter: "maya", reqs: ["REQ-2"], repos: ["portal-web", "portal-api"], estimate: "L",
-    labels: ["frontend", "deeds", "agent-built"],
-    prs: [
-      { repo: "portal-web", num: 88, status: "open", title: "feat: inline deed signature pad + sealed-record flip" },
-      { repo: "portal-api", num: 42, status: "open", title: "feat: /deeds/sign endpoint + sealed PDF render" },
-    ],
-    due: "Jun 16", sync: { state: "synced", ts: "2026.06.09 · 09:12", sp: "ToDos · item 214" },
-    subtasks: [
-      { id: "214.1", t: "Signature pad component", done: true, who: "vibes" },
-      { id: "214.2", t: "Seal + timestamp record", done: true, who: "vibes" },
-      { id: "214.3", t: "Sealed-PDF render service", done: true, who: "vibes" },
-      { id: "214.4", t: "Mirror sealed deed to SharePoint", done: false, who: "scribe" },
-    ],
-    evidence: {
-      summary: "Inline signature pad seals the deed record with initials + UTC timestamp and renders a sealed PDF.",
-      items: [
-        { key: "summary", label: "Summary — what I did", done: true },
-        { key: "reqs", label: "PRD requirement satisfied — REQ-2", done: true },
-        { key: "shots", label: "Before / after screenshots", done: true },
-        { key: "qa", label: "E2E QA results", done: true },
-        { key: "prs", label: "PR / diff links (2 repos)", done: true },
-        { key: "rollback", label: "Rollback plan", done: false },
-      ],
-      shots: [
-        { label: "Before · unsigned deed card", cap: "portal-web · /workbench/deed" },
-        { label: "After · sealed record", cap: "portal-web · sealed state" },
-      ],
-      qa: {
-        pass: 11, fail: 0, total: 11, suite: "e2e/deeds.spec.ts", ran: "2026.06.09 · 09:08",
-        tests: [
-          { name: "renders signature pad on unsigned deed", status: "pass" },
-          { name: "captures initials + UTC timestamp on sign", status: "pass" },
-          { name: "flips card to SEALED within 1s", status: "pass" },
-          { name: "generates sealed PDF artifact", status: "pass" },
-          { name: "mirrors sealed deed to SharePoint", status: "pass" },
-        ],
-      },
-      rollback: null,
-    },
-    activity: [{ age: "now", who: "vibes", what: "E2E suite passed — 11/11 on e2e/deeds.spec.ts", kind: "qa" }],
-  },
-  {
-    id: "TASK-219", title: "Daily digest batching + opt-out", bucket: "BKT-CPV2", stage: "progress", priority: "medium",
-    assignee: "vibes", coassignees: [], reporter: "maya", reqs: ["REQ-4"], repos: ["portal-api"], estimate: "M",
-    labels: ["backend", "email", "agent-built"], prs: [],
-    due: "Jun 24", sync: { state: "pending", ts: "2026.06.09 · 09:01", sp: "ToDos · item 219" }, subtasks: [],
-    evidence: {
-      summary: "Started the 24h event-collection window. Digest template and opt-out path still in progress.",
-      items: [
-        { key: "summary", label: "Summary — what I did", done: true },
-        { key: "reqs", label: "PRD requirement satisfied — REQ-4", done: true },
-        { key: "shots", label: "Before / after screenshots", done: false },
-        { key: "qa", label: "E2E QA results", done: false },
-        { key: "prs", label: "PR / diff links", done: false },
-        { key: "rollback", label: "Rollback plan", done: false },
-      ],
-      shots: [],
-      qa: {
-        pass: 3, fail: 2, total: 5, suite: "e2e/digest.spec.ts", ran: "2026.06.09 · 08:40",
-        tests: [
-          { name: "collects events into 24h window", status: "pass" },
-          { name: "renders digest template", status: "fail" },
-          { name: "honors opt-out", status: "fail" },
-        ],
-      },
-      rollback: null,
-    },
-    activity: [{ age: "20m", who: "vibes", what: "digest template render failing — 2 E2E red", kind: "qa" }],
-  },
-  {
-    id: "TASK-201", title: "Approve formula version from workbench", bucket: "BKT-CPV2", stage: "verified", priority: "high",
-    assignee: "lena", coassignees: ["vibes"], reporter: "maya", reqs: ["REQ-1"], repos: ["portal-web", "portal-api"], estimate: "L",
-    labels: ["frontend", "approvals"],
-    prs: [
-      { repo: "portal-web", num: 71, status: "merged", title: "feat: approve formula from workbench" },
-      { repo: "portal-api", num: 35, status: "merged", title: "feat: signed approval record" },
-    ],
-    due: "Jun 06", sync: { state: "synced", ts: "2026.06.07 · 17:20", sp: "ToDos · item 201" }, subtasks: [],
-    evidence: {
-      summary: "Formula approval writes a signed, timestamped record and flips the card to APPROVED within 1s. Verified in production behind the flag.",
-      items: [
-        { key: "summary", label: "Summary — what I did", done: true },
-        { key: "reqs", label: "PRD requirement satisfied — REQ-1", done: true },
-        { key: "shots", label: "Before / after screenshots", done: true },
-        { key: "qa", label: "E2E QA results", done: true },
-        { key: "prs", label: "PR / diff links (2 repos)", done: true },
-        { key: "rollback", label: "Rollback plan", done: true },
-      ],
-      shots: [{ label: "Approved formula card", cap: "portal-web · approved" }],
-      qa: { pass: 8, fail: 0, total: 8, suite: "e2e/approve.spec.ts", ran: "2026.06.06 · 14:02", tests: [] },
-      rollback: "Flag approve_inline off; approval records are append-only.",
-    },
-    merge: { sha: "a91f3c2", on: "2026.06.06" },
-    activity: [{ age: "3d", who: "tariq", what: "verified in production — REQ-1 satisfied", kind: "move" }],
-  },
-  {
-    id: "TASK-188", title: "Live phase + next-milestone on workbench cards", bucket: "BKT-CPV2", stage: "review", priority: "medium",
-    assignee: "evan", coassignees: ["sentry"], reporter: "tariq", reqs: ["REQ-3"], repos: ["portal-web", "mrp-core"], estimate: "M",
-    labels: ["frontend", "realtime"], prs: [{ repo: "portal-web", num: 84, status: "open", title: "feat: live phase pill + milestone" }],
-    due: "Jun 14", sync: { state: "synced", ts: "2026.06.09 · 08:55", sp: "ToDos · item 188" }, subtasks: [],
-    activity: [{ age: "5h", who: "evan", what: "requested review from Tariq", kind: "move" }],
-  },
-  {
-    id: "TASK-176", title: "Surfactant supplier lead-time risk spike", bucket: "BKT-MRP", stage: "progress", priority: "urgent",
-    assignee: "atlas", coassignees: ["maya"], reporter: "maya", reqs: [], repos: ["mrp-core"], estimate: "S",
-    labels: ["research", "risk"], blocked: true, blockedReason: "Awaiting supplier confirmation — 11wk lead time", prs: [],
-    due: "Jun 12", sync: { state: "synced", ts: "2026.06.09 · 07:40", sp: "ToDos · item 176" }, subtasks: [],
-    activity: [{ age: "6h", who: "atlas", what: "compiled lead-time comparison across 3 suppliers", kind: "qa" }],
-  },
-  {
-    id: "TASK-160", title: "BOM-lock event → MRP core", bucket: "BKT-MRP", stage: "merged", priority: "high",
-    assignee: "tariq", coassignees: [], reporter: "tariq", reqs: [], repos: ["mrp-core", "portal-api"], estimate: "M",
-    labels: ["backend"], prs: [{ repo: "mrp-core", num: 19, status: "merged", title: "feat: bom-lock event bus" }],
-    due: "Jun 09", sync: { state: "synced", ts: "2026.06.08 · 18:10", sp: "ToDos · item 160" }, subtasks: [],
-    activity: [{ age: "1d", who: "tariq", what: "merged PR #19", kind: "pr" }],
-  },
-  {
-    id: "TASK-152", title: "PMark glyph component + favicon set", bucket: "BKT-DS", stage: "verified", priority: "low",
-    assignee: "lena", coassignees: [], reporter: "lena", reqs: [], repos: ["design-sys"], estimate: "S",
-    labels: ["design-system"], prs: [{ repo: "design-sys", num: 12, status: "merged", title: "feat: PMark + favicons" }],
-    due: "May 30", sync: { state: "synced", ts: "2026.06.01 · 11:00", sp: "ToDos · item 152" }, subtasks: [],
-    activity: [{ age: "1w", who: "lena", what: "verified", kind: "move" }],
-  },
-  {
-    id: "TASK-149", title: "Tokenize spacing + radius scale", bucket: "BKT-DS", stage: "planned", priority: "medium",
-    assignee: "scribe", coassignees: ["lena"], reporter: "lena", reqs: [], repos: ["design-sys"], estimate: "M",
-    labels: ["design-system"], prs: [],
-    due: "Jun 26", sync: { state: "pending", ts: "2026.06.09 · 09:02", sp: "ToDos · item 149" }, subtasks: [],
-    activity: [{ age: "1d", who: "scribe", what: "drafted token map from existing CSS", kind: "comment" }],
-  },
-  {
-    id: "TASK-140", title: "SAML assertion validation", bucket: "BKT-AUTH", stage: "progress", priority: "urgent",
-    assignee: "evan", coassignees: ["atlas"], reporter: "evan", reqs: [], repos: ["portal-api", "infra"], estimate: "L",
-    labels: ["backend", "security"], prs: [{ repo: "portal-api", num: 40, status: "open", title: "feat: SAML assertion validation" }],
-    due: "Jun 18",
-    sync: { state: "conflict", ts: "2026.06.09 · 06:31", sp: "ToDos · item 140", wsVal: "In Progress · due Jun 18", spVal: "Blocked · due Jun 20" },
-    subtasks: [], activity: [{ age: "3h", who: "evan", what: "SharePoint shows a conflicting status", kind: "sync" }],
-  },
-  {
-    id: "TASK-138", title: "Session rotation + audit log", bucket: "BKT-AUTH", stage: "specced", priority: "high",
-    assignee: "scribe", coassignees: ["evan"], reporter: "evan", reqs: [], repos: ["portal-api"], estimate: "M",
-    labels: ["security"], prs: [],
-    due: "Jun 22", sync: { state: "synced", ts: "2026.06.09 · 08:00", sp: "ToDos · item 138" }, subtasks: [],
-    activity: [{ age: "1d", who: "scribe", what: "drafted PRD section · acceptance criteria", kind: "comment" }],
-  },
-  {
-    id: "TASK-133", title: "Workbench empty + first-run states", bucket: "BKT-CPV2", stage: "backlog", priority: "low",
-    assignee: null, coassignees: [], reporter: "maya", reqs: [], repos: ["portal-web"], estimate: "S",
-    labels: ["frontend"], prs: [],
-    due: "—", sync: { state: "pending", ts: "—", sp: "ToDos · item 133" }, subtasks: [], activity: [],
-  },
-  {
-    id: "TASK-129", title: "Rate-limit /deeds/sign", bucket: "BKT-CPV2", stage: "approved", priority: "medium",
-    assignee: "atlas", coassignees: [], reporter: "tariq", reqs: ["REQ-2"], repos: ["portal-api"], estimate: "S",
-    labels: ["backend", "security"], prs: [],
-    due: "Jun 20", sync: { state: "synced", ts: "2026.06.09 · 08:20", sp: "ToDos · item 129" }, subtasks: [],
-    activity: [{ age: "2h", who: "atlas", what: "researched rate-limit thresholds", kind: "comment" }],
-  },
-  {
-    id: "TASK-204", title: "Sealed-deed PDF mirror to SharePoint", bucket: "BKT-CPV2", stage: "planned", priority: "high",
-    assignee: "scribe", coassignees: ["vibes"], reporter: "maya", reqs: ["REQ-2"], repos: ["portal-api"], estimate: "M",
-    labels: ["ops", "sync"], prs: [],
-    due: "Jun 17", sync: { state: "synced", ts: "2026.06.09 · 08:48", sp: "ToDos · item 204" }, subtasks: [],
-    activity: [{ age: "1h", who: "scribe", what: "mapped deed → SharePoint document library", kind: "sync" }],
-  },
   // ─── PLX Portal go-live plan (seeded 2026-06-11): 10-week schedule. All
   // pending with "unprovisioned" refs until /sites/plx-mission-control lands.
   // Greg/Stephen (Shopify → BC owners) are not in the directory yet, so those
@@ -438,30 +270,15 @@ export const TASK_IDX: Record<string, Task> = Object.fromEntries(
   TASKS.map((t) => [t.id, t])
 );
 
+// Demo notifications purged 2026-06-11; one honest seed entry remains so the
+// unread-badge path stays exercised until real notifications land.
 export const INBOX: InboxNotification[] = [
-  { id: "n1", kind: "approval", task: "TASK-214", actor: "vibes", text: "Vibes submitted TASK-214 for review — evidence complete", age: "now", unread: true },
-  { id: "n2", kind: "conflict", task: "TASK-140", actor: "scribe", text: "SharePoint sync conflict on TASK-140 status", age: "3h", unread: true },
-  { id: "n3", kind: "review", task: "TASK-188", actor: "evan", text: "Evan requested your review on PR #84", age: "5h", unread: true },
-  { id: "n4", kind: "mention", task: "TASK-214", actor: "tariq", text: "Tariq mentioned you: confirm sealed PDF embeds UTC offset", age: "1h", unread: false },
-  { id: "n5", kind: "assigned", task: "TASK-129", actor: "tariq", text: "Tariq assigned you TASK-129 — Rate-limit /deeds/sign", age: "2h", unread: false },
+  { id: "n1", kind: "mention", task: "TASK-221", actor: "scribe", text: "Go-live plan seeded — 15 tasks across 8 workstreams await owners", age: "now", unread: true },
 ];
 
 // ─── PRDs (Problem · Requirements · Acceptance · Non-goals · Rollback) ───────
-export const PRDS: Record<string, Prd> = {
-  "PRD-CPV2": {
-    id: "PRD-CPV2", bucket: "BKT-CPV2", title: "Customer Portal v2",
-    status: "approved", approvedBy: "maya", drafted: "scribe",
-    problem: "Brand owners wait days to approve formulas and sign deeds because the portal round-trips through email and PDF. v2 makes every decision happen on the page, with a live project workbench.",
-    reqs: [
-      { id: "REQ-1", text: "Brand owners can approve a formula version from the workbench without leaving the page.", crit: "Approval writes a signed, timestamped record; the formula card flips to APPROVED within 1s." },
-      { id: "REQ-2", text: "Deeds of formulation are signable inline, producing an auditable sealed record.", crit: "Signature captures initials + UTC timestamp; a sealed PDF is generated and mirrored to SharePoint." },
-      { id: "REQ-3", text: "The workbench shows live project phase and next milestone for every active project.", crit: "Phase reflects MRP state within 5s; milestone due-date matches the Milestone Register." },
-      { id: "REQ-4", text: "Customers receive a single daily digest instead of per-event email.", crit: "Digest batches all events in a 24h window; opt-out honored; zero per-event email sent." },
-    ],
-    nonGoals: ["No net-new payment flows in v2.", "No public (logged-out) project pages.", "Mobile is deferred to the Mobile Companion initiative."],
-    rollback: "Feature-flag portal_v2 off restores v1 routes; data writes are additive (no destructive migrations), so revert is a flag flip plus cache purge.",
-  },
-};
+// Demo PRD purged 2026-06-11; go-live workstreams have no PRDs yet (prd: null).
+export const PRDS: Record<string, Prd> = {};
 
 // ─── Cycles + Milestones (timeline overlays; day cols in a 30-day June grid) ─
 export const CYCLES: Cycle[] = [
@@ -469,12 +286,8 @@ export const CYCLES: Cycle[] = [
   { id: "C-24", name: "Cycle 24", from: 15, to: 28 },
 ];
 
+// Demo milestones purged 2026-06-11 — only the go-live plan remains.
 export const MILESTONES: Milestone[] = [
-  { id: "M-1", bucket: "BKT-CPV2", name: "Deeds signable inline", col: 8, state: "now", sp: "Milestone Register · 1" },
-  { id: "M-2", bucket: "BKT-CPV2", name: "v2 beta to 5 customers", col: 22, state: "upcoming", sp: "Milestone Register · 2" },
-  { id: "M-3", bucket: "BKT-MRP", name: "Floor sync live", col: 18, state: "upcoming", sp: "Milestone Register · 3" },
-  { id: "M-4", bucket: "BKT-DS", name: "DS 2.0 cut", col: 12, state: "now", sp: "Milestone Register · 4" },
-  { id: "M-5", bucket: "BKT-AUTH", name: "Security review", col: 10, state: "risk", sp: "Milestone Register · 5" },
   // PLX Portal go-live plan (2026-06-11). col is days from Jun 1 — these fall
   // beyond the 30-day June timeline grid, so the timeline pins them at the
   // grid's right edge (pctOfDay clamps); milestone lists show them in full.
@@ -483,11 +296,8 @@ export const MILESTONES: Milestone[] = [
 ];
 
 // ─── Risks (roll up to buckets, mirror to Risk Register) ─────────────────────
+// Demo risks purged 2026-06-11 — only the go-live plan remains.
 export const RISKS: Risk[] = [
-  { id: "RISK-7", bucket: "BKT-MRP", title: "Surfactant supplier 11-week lead time", like: "High", impact: "High", owner: "maya", status: "open", mit: "Qualify a second supplier; hold safety stock.", sync: { state: "synced", ts: "2026.06.09 · 07:42", sp: "Risk Register · 7" } },
-  { id: "RISK-4", bucket: "BKT-AUTH", title: "SSO provider IdP metadata drift", like: "Medium", impact: "High", owner: "evan", status: "open", mit: "Pin IdP metadata; alert on cert rotation.", sync: { state: "error", ts: "2026.06.09 · 06:31", sp: "Risk Register · 4", reason: "SharePoint column 'Likelihood' rejected value" } },
-  { id: "RISK-2", bucket: "BKT-CPV2", title: "Sealed PDF UTC offset ambiguity", like: "Low", impact: "Medium", owner: "tariq", status: "mitigating", mit: "Embed explicit UTC offset; add E2E assertion.", sync: { state: "synced", ts: "2026.06.09 · 09:10", sp: "Risk Register · 2" } },
-  { id: "RISK-1", bucket: "BKT-CPV2", title: "Digest opt-out not honored on legacy accounts", like: "Medium", impact: "Medium", owner: "maya", status: "open", mit: "Backfill opt-out flags before kill-switch.", sync: { state: "synced", ts: "2026.06.09 · 09:01", sp: "Risk Register · 1" } },
   // PLX Portal go-live plan (2026-06-11).
   { id: "RISK-8", bucket: "BKT-PROD", title: "Account Management slips out of scope if Product Development runs long", like: "Medium", impact: "Medium", owner: "vince", status: "open", mit: "Stretch scope is only pulled if ahead; review at the Jun 29 test gate.", sync: { state: "pending", ts: "—", sp: "Risk Register · unprovisioned" } },
   { id: "RISK-9", bucket: "BKT-SHOP", title: "Shopify → BC migration owned outside the core team, landing directly before parallel testing", like: "Medium", impact: "High", owner: "vince", status: "open", mit: "Confirm Greg/Stephen ownership and a mid-August checkpoint before Sept 1 parallel testing.", sync: { state: "pending", ts: "—", sp: "Risk Register · unprovisioned" } },
@@ -495,53 +305,30 @@ export const RISKS: Risk[] = [
 ];
 
 // ─── Agent activity feed ─────────────────────────────────────────────────────
-export const AGENT_FEED: FeedEvent[] = [
-  { age: "now", actor: "vibes", task: "TASK-214", kind: "run", text: "running E2E QA on", chip: "11/11 passed", live: true, shots: ["before · unsigned deed", "after · sealed record"] },
-  { age: "2m", actor: "sentry", task: "TASK-188", kind: "run", text: "executing regression suite on", chip: "running · 6/9", live: true },
-  { age: "8m", actor: "tariq", task: "TASK-214", kind: "comment", text: "left a note on", chip: "confirm UTC offset", human: true },
-  { age: "14m", actor: "vibes", task: "TASK-214", kind: "pr", text: "opened PR #42 + #88 across 2 repos for", chip: "2 PRs open" },
-  { age: "26m", actor: "atlas", task: "TASK-176", kind: "block", text: "flagged a blocker on", chip: "supplier lead time" },
-  { age: "40m", actor: "scribe", task: "TASK-138", kind: "comment", text: "drafted PRD acceptance criteria for", chip: "PRD draft" },
-  { age: "1h", actor: "tariq", task: "TASK-188", kind: "review", text: "requested changes on PR #84 for", chip: "changes requested", human: true },
-  { age: "2h", actor: "vibes", task: "TASK-219", kind: "run", text: "QA red — digest template failing on", chip: "2 failed", warn: true },
-  { age: "3h", actor: "scribe", task: "TASK-204", kind: "sync", text: "mapped deed → SharePoint library for", chip: "sync mapped" },
-  { age: "4h", actor: "maya", task: "TASK-201", kind: "approve", text: "approved + verified", chip: "REQ-1 satisfied", human: true },
-];
+// Demo feed purged 2026-06-11; fills as agents pick up go-live plan tasks.
+export const AGENT_FEED: FeedEvent[] = [];
 
 // ─── Traceability matrix (REQ → Task → PR → Evidence → Test → Merge) ─────────
+// Demo matrix purged 2026-06-11; rows return when the first go-live PRD lands.
 export const TRACE: Trace = {
-  bucket: "BKT-CPV2",
-  rows: [
-    { req: "REQ-1", tasks: ["TASK-201"], prs: ["portal-web #71", "portal-api #35"], evidence: "complete", test: "8/8", merge: "a91f3c2", status: "satisfied" },
-    { req: "REQ-2", tasks: ["TASK-214", "TASK-129", "TASK-204"], prs: ["portal-web #88", "portal-api #42"], evidence: "complete", test: "11/11", merge: "—", status: "in-review" },
-    { req: "REQ-3", tasks: ["TASK-188"], prs: ["portal-web #84"], evidence: "partial", test: "in review", merge: "—", status: "in-progress" },
-    { req: "REQ-4", tasks: ["TASK-219"], prs: [], evidence: "incomplete", test: "3/5", merge: "—", status: "gap" },
-  ],
+  bucket: "BKT-PROD",
+  rows: [],
 };
 
 // ─── Project Documents library (flat list with parent pointers) ──────────────
+// Demo documents purged 2026-06-11. One folder per go-live workstream plus
+// Shared (the spec's per-initiative tree grows when documents sync lands);
+// no fabricated files.
 export const FILES: FileEntry[] = [
-  { id: "fo-cpv2", name: "Customer Portal v2", kind: "folder", parent: null, bucket: "BKT-CPV2" },
-  { id: "fo-cpv2-prd", name: "PRD", kind: "folder", parent: "fo-cpv2", bucket: "BKT-CPV2" },
-  { id: "fo-cpv2-ev", name: "Evidence", kind: "folder", parent: "fo-cpv2", bucket: "BKT-CPV2" },
-  { id: "fo-cpv2-deeds", name: "Deeds", kind: "folder", parent: "fo-cpv2", bucket: "BKT-CPV2" },
-  { id: "fo-cpv2-rep", name: "Reports", kind: "folder", parent: "fo-cpv2", bucket: "BKT-CPV2" },
-  { id: "fi-prd-cpv2", name: "PRD-CPV2 — Customer Portal v2.docx", kind: "doc", parent: "fo-cpv2-prd", bucket: "BKT-CPV2", docType: "PRD", modified: "2026.06.08 · 14:20", modifiedBy: "scribe", size: "48 KB", sync: { state: "synced", ts: "2026.06.08 · 14:21", sp: "Project Documents" } },
-  { id: "fi-deed-214", name: "Sealed deed — TASK-214.pdf", kind: "pdf", parent: "fo-cpv2-deeds", bucket: "BKT-CPV2", docType: "Deed", modified: "2026.06.09 · 09:08", modifiedBy: "vibes", size: "212 KB", sync: { state: "pending", ts: "2026.06.09 · 09:09", sp: "Project Documents" } },
-  { id: "fi-ev-214", name: "TASK-214 — E2E evidence bundle.zip", kind: "zip", parent: "fo-cpv2-ev", bucket: "BKT-CPV2", docType: "Evidence", modified: "2026.06.09 · 09:08", modifiedBy: "vibes", size: "1.4 MB", sync: { state: "synced", ts: "2026.06.09 · 09:09", sp: "Project Documents" } },
-  { id: "fi-shots-214", name: "Before-after — sealed record.png", kind: "img", parent: "fo-cpv2-ev", bucket: "BKT-CPV2", docType: "Evidence", modified: "2026.06.09 · 09:04", modifiedBy: "vibes", size: "640 KB", sync: { state: "synced", ts: "2026.06.09 · 09:05", sp: "Project Documents" } },
-  { id: "fi-rep-cpv2", name: "Portal v2 — weekly status.xlsx", kind: "sheet", parent: "fo-cpv2-rep", bucket: "BKT-CPV2", docType: "Report", modified: "2026.06.09 · 08:00", modifiedBy: "maya", size: "33 KB", sync: { state: "synced", ts: "2026.06.09 · 08:01", sp: "Project Documents" } },
-  { id: "fo-mrp", name: "MRP Floor Sync", kind: "folder", parent: null, bucket: "BKT-MRP" },
-  { id: "fo-mrp-prd", name: "PRD", kind: "folder", parent: "fo-mrp", bucket: "BKT-MRP" },
-  { id: "fo-mrp-rep", name: "Reports", kind: "folder", parent: "fo-mrp", bucket: "BKT-MRP" },
-  { id: "fi-prd-mrp", name: "PRD-MRP — Floor Sync.docx", kind: "doc", parent: "fo-mrp-prd", bucket: "BKT-MRP", docType: "PRD", modified: "2026.06.05 · 11:10", modifiedBy: "scribe", size: "41 KB", sync: { state: "synced", ts: "2026.06.05 · 11:11", sp: "Project Documents" } },
-  { id: "fi-rep-mrp", name: "Supplier lead-time comparison.xlsx", kind: "sheet", parent: "fo-mrp-rep", bucket: "BKT-MRP", docType: "Report", modified: "2026.06.09 · 07:40", modifiedBy: "atlas", size: "28 KB", sync: { state: "synced", ts: "2026.06.09 · 07:41", sp: "Project Documents" } },
-  { id: "fo-auth", name: "Auth & SSO Hardening", kind: "folder", parent: null, bucket: "BKT-AUTH" },
-  { id: "fo-auth-rep", name: "Reports", kind: "folder", parent: "fo-auth", bucket: "BKT-AUTH" },
-  { id: "fi-runbook-auth", name: "Shadow cutover runbook.pdf", kind: "pdf", parent: "fo-auth-rep", bucket: "BKT-AUTH", docType: "Report", modified: "2026.06.08 · 16:30", modifiedBy: "evan", size: "180 KB", sync: { state: "synced", ts: "2026.06.08 · 16:31", sp: "Project Documents" } },
+  { id: "fo-wms", name: "WMS Integration", kind: "folder", parent: null, bucket: "BKT-WMS" },
+  { id: "fo-dapi", name: "Decoupling API", kind: "folder", parent: null, bucket: "BKT-DAPI" },
+  { id: "fo-prod", name: "Product Development", kind: "folder", parent: null, bucket: "BKT-PROD" },
+  { id: "fo-fin", name: "Finance", kind: "folder", parent: null, bucket: "BKT-FIN" },
+  { id: "fo-qms", name: "QMS", kind: "folder", parent: null, bucket: "BKT-QMS" },
+  { id: "fo-shop", name: "Shopify → Business Central", kind: "folder", parent: null, bucket: "BKT-SHOP" },
+  { id: "fo-infra", name: "Backend Infra", kind: "folder", parent: null, bucket: "BKT-INFRA" },
+  { id: "fo-uat", name: "UAT", kind: "folder", parent: null, bucket: "BKT-UAT" },
   { id: "fo-shared", name: "Shared", kind: "folder", parent: null },
-  { id: "fi-brand", name: "PLX brand & glyph kit.pdf", kind: "pdf", parent: "fo-shared", docType: "Spec", modified: "2026.06.01 · 11:00", modifiedBy: "lena", size: "2.1 MB", sync: { state: "synced", ts: "2026.06.01 · 11:01", sp: "Project Documents" } },
-  { id: "fi-trace", name: "Traceability export — PRD-CPV2.xlsx", kind: "sheet", parent: "fo-shared", docType: "Export", modified: "2026.06.09 · 09:14", modifiedBy: "maya", size: "52 KB", sync: { state: "synced", ts: "2026.06.09 · 09:15", sp: "Project Documents" } },
 ];
 
 // ─── Canonical SharePoint schema (system of record) ──────────────────────────
@@ -552,14 +339,16 @@ export const SP_SITE: SpSite = {
   tz: "UTC",
   connected: true,
 };
-export const SP_LAST_SWEEP = "2026.06.09 · 09:12";
+// No sweep has run against the production site yet; live values arrive from
+// the API on hydration.
+export const SP_LAST_SWEEP = "—";
 export const SP_CADENCE = "every 5 min + on change (webhook)";
 
 export const SP_LISTS: SpListDef[] = [
   {
     key: "todos", title: "ToDos", kind: "list", entity: "Task", icon: "▦",
-    maps: "Tasks", itemCount: 14, direction: "two-way",
-    lastSync: "2026.06.09 · 09:12", counts: { synced: 12, pending: 1, conflict: 1, error: 0 },
+    maps: "Tasks", itemCount: 15, direction: "two-way",
+    lastSync: "—", counts: { synced: 0, pending: 15, conflict: 0, error: 0 },
     columns: [
       { name: "Title", type: "Single line of text", mc: "title", dir: "two-way", required: true },
       { name: "Task ID", type: "Single line of text", mc: "id", dir: "pull", required: true, note: "indexed · unique key" },
@@ -578,8 +367,8 @@ export const SP_LISTS: SpListDef[] = [
   },
   {
     key: "roadmap", title: "Roadmap", kind: "list", entity: "Initiative", icon: "◷",
-    maps: "Buckets / Initiatives + Gantt", itemCount: 5, direction: "two-way",
-    lastSync: "2026.06.09 · 08:14", counts: { synced: 5, pending: 0, conflict: 0, error: 0 },
+    maps: "Buckets / Initiatives + Gantt", itemCount: 8, direction: "two-way",
+    lastSync: "—", counts: { synced: 0, pending: 8, conflict: 0, error: 0 },
     columns: [
       { name: "Title", type: "Single line of text", mc: "name", dir: "two-way", required: true },
       { name: "Initiative ID", type: "Single line of text", mc: "id", dir: "pull", required: true },
@@ -593,8 +382,8 @@ export const SP_LISTS: SpListDef[] = [
   },
   {
     key: "milestones", title: "Milestone Register", kind: "list", entity: "Milestone", icon: "◆",
-    maps: "Milestones", itemCount: 5, direction: "two-way",
-    lastSync: "2026.06.09 · 08:55", counts: { synced: 5, pending: 0, conflict: 0, error: 0 },
+    maps: "Milestones", itemCount: 2, direction: "two-way",
+    lastSync: "—", counts: { synced: 0, pending: 2, conflict: 0, error: 0 },
     columns: [
       { name: "Title", type: "Single line of text", mc: "name", dir: "two-way", required: true },
       { name: "Initiative", type: "Lookup → Roadmap", mc: "bucket", dir: "two-way" },
@@ -605,8 +394,8 @@ export const SP_LISTS: SpListDef[] = [
   },
   {
     key: "risks", title: "Risk Register", kind: "list", entity: "Risk", icon: "△",
-    maps: "Risks", itemCount: 4, direction: "two-way",
-    lastSync: "2026.06.09 · 09:10", counts: { synced: 3, pending: 0, conflict: 1, error: 1 },
+    maps: "Risks", itemCount: 3, direction: "two-way",
+    lastSync: "—", counts: { synced: 0, pending: 3, conflict: 0, error: 0 },
     columns: [
       { name: "Title", type: "Single line of text", mc: "title", dir: "two-way", required: true },
       { name: "Initiative", type: "Lookup → Roadmap", mc: "bucket", dir: "two-way" },
@@ -619,8 +408,8 @@ export const SP_LISTS: SpListDef[] = [
   },
   {
     key: "documents", title: "Project Documents", kind: "library", entity: "File", icon: "❒",
-    maps: "Files / folders", itemCount: 12, direction: "two-way",
-    lastSync: "2026.06.09 · 08:48", counts: { synced: 11, pending: 1, conflict: 0, error: 0 },
+    maps: "Files / folders", itemCount: 9, direction: "two-way",
+    lastSync: "—", counts: { synced: 0, pending: 0, conflict: 0, error: 0 },
     folders: "/{Initiative}/PRD · /Evidence · /Deeds · /Reports  +  /Shared",
     columns: [
       { name: "Name", type: "File", mc: "name", dir: "two-way", required: true },
@@ -633,15 +422,12 @@ export const SP_LISTS: SpListDef[] = [
 ];
 
 // Conflict review queue (manual resolution — a human picks the winner).
-export const SP_CONFLICTS: SpConflict[] = [
-  { id: "cf-140", list: "todos", entity: "Task", entityId: "TASK-140", field: "Status", mcVal: "In Progress · due Jun 18", spVal: "Blocked · due Jun 20", detected: "06:31", by: "dana", note: "Edited in SharePoint while MC also changed it." },
-  { id: "cf-risk1", list: "risks", entity: "Risk", entityId: "RISK-1", field: "Likelihood", mcVal: "Medium", spVal: "High", detected: "08:40", by: "ruben", note: "Compliance raised likelihood in the Risk Register." },
-];
+// Demo conflicts purged 2026-06-11; the engine raises real ones (§5.1).
+export const SP_CONFLICTS: SpConflict[] = [];
 
-// A push error that needs a value fix (not a two-sided conflict).
-export const SP_ERRORS: SpError[] = [
-  { id: "er-risk4", list: "risks", entity: "Risk", entityId: "RISK-4", field: "Likelihood", value: "Medium", reason: "SharePoint Choice column rejects \u201cMedium\u201d — expects High / Med / Low." },
-];
+// Push errors (one-sided rejects). Demo error purged 2026-06-11; the engine
+// queues real ones (§5.2).
+export const SP_ERRORS: SpError[] = [];
 
 // Per-list sync counts — derived from the SharePoint schema so the topbar
 // pill, sidebar badge, and Sync console all read one source.

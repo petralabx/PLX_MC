@@ -6,7 +6,6 @@ import { SP_CADENCE, SP_SITE } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   actorById,
-  applyInbound,
   auditLog,
   lastSweep,
   markAllSynced,
@@ -40,9 +39,10 @@ export function SyncConsole({ nav }: ScreenProps) {
     return new Map(lists.map((list) => [list.key, list]));
   }, [lists]);
 
+  // markAllSynced triggers a real engine sweep (outbound push + inbound
+  // delta) and adopts the result; the old demo inbound simulation is gone.
   const onSyncNow = () => {
     markAllSynced();
-    applyInbound();
   };
 
   const overallClass = unresolved > 0 ? "warn" : counts.pending > 0 ? "pending" : "";

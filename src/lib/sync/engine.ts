@@ -45,8 +45,13 @@ const SYNC_ACTOR = "scribe"; // the ops agent persona attributed to engine sweep
 export async function ensureSeeded(): Promise<boolean> {
   // Re-runs when fixtures grow (e.g. the go-live plan, 2026-06-11): inserts
   // are ON CONFLICT DO NOTHING, so existing mirror rows are never touched.
-  const newestFixture = TASKS[TASKS.length - 1];
-  if ((await repo.entityCount()) > 0 && (await repo.getEntity("task", newestFixture.id))) {
+  const newestTask = TASKS[TASKS.length - 1];
+  const newestFile = FILES[FILES.length - 1];
+  if (
+    (await repo.entityCount()) > 0 &&
+    (await repo.getEntity("task", newestTask.id)) &&
+    (!newestFile || (await repo.getEntity("file", newestFile.id)))
+  ) {
     return false;
   }
 

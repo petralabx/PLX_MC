@@ -4,7 +4,7 @@
 // contract, not the implementation.
 
 import { describe, expect, it } from "vitest";
-import { TASKS, RISKS } from "@/lib/mc-data/data";
+import type { Risk, Task } from "@/lib/mc-data";
 import {
   dueToIso,
   inboundPatches,
@@ -14,8 +14,48 @@ import {
   reconcileInbound,
 } from "@/lib/sync/mapping";
 
-const task = TASKS.find((t) => t.id === "TASK-214")!;
-const mediumRisk = RISKS.find((r) => r.like === "Medium")!;
+// Inline contract anchors — the mapping layer's behavior must not depend on
+// whatever narrative fixtures currently exist.
+const task: Task = {
+  id: "TASK-214",
+  title: "Inline deed signing on the workbench",
+  bucket: "BKT-X",
+  stage: "qa",
+  priority: "high",
+  assignee: null,
+  coassignees: [],
+  reporter: "vince",
+  reqs: ["REQ-2"],
+  repos: ["portal-web", "portal-api"],
+  estimate: "L",
+  labels: [],
+  prs: [],
+  due: "Jun 16",
+  sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" },
+  subtasks: [],
+  activity: [],
+  evidence: {
+    summary: "x",
+    items: [
+      { key: "a", label: "a", done: true },
+      { key: "b", label: "b", done: false },
+    ],
+  },
+};
+
+const riskOf = (like: Risk["like"]): Risk => ({
+  id: "RISK-X",
+  bucket: "BKT-X",
+  title: "Likelihood normalization anchor",
+  like,
+  impact: "High",
+  owner: "vince",
+  status: "open",
+  mit: "—",
+  sync: { state: "pending", ts: "—", sp: "Risk Register · unprovisioned" },
+});
+
+const mediumRisk = riskOf("Medium");
 
 describe("outbound task mapping", () => {
   const fields = outboundFields("task", task as never, { creating: true });
@@ -54,8 +94,8 @@ describe("§5.2 Likelihood normalization", () => {
   });
 
   it("keeps High/Low untouched", () => {
-    const high = RISKS.find((r) => r.like === "High")!;
-    expect(outboundFields("risk", high as never).Likelihood).toBe("High");
+    expect(outboundFields("risk", riskOf("High") as never).Likelihood).toBe("High");
+    expect(outboundFields("risk", riskOf("Low") as never).Likelihood).toBe("Low");
   });
 
   it("denormalizes Med → Medium inbound", () => {

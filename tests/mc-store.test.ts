@@ -1,12 +1,13 @@
-// Invariant tests for the runtime store (the prototype sync engine): task
-// creation, the sweep, conflict resolution, error retry, invites.
+// Invariant tests for the runtime store (the client cache over the sync
+// engine): task creation, the sweep, safe no-op reconciliation, invites,
+// reassignment. Conflict/error resolution semantics live in the engine
+// (tests/sync-mapping.test.ts + the live evidence bundles); the store-side
+// invariants here are the optimistic-local behaviors.
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   addTask,
-  allRisks,
   allTasks,
-  applyInbound,
   inboxNotifications,
   invitePerson,
   markAllSynced,
@@ -29,7 +30,7 @@ describe("addTask", () => {
   it("creates a pending, user-created task with the next id and bumps the ToDos pending count", () => {
     const before = storeSyncCounts();
     const id = nextTaskId();
-    const t = addTask({ title: "  New thing  ", bucket: "BKT-CPV2" });
+    const t = addTask({ title: "  New thing  ", bucket: "BKT-WMS" });
     expect(t.id).toBe(id);
     expect(t.title).toBe("New thing");
     expect(t.stage).toBe("backlog");
@@ -40,49 +41,27 @@ describe("addTask", () => {
   });
 });
 
-describe("markAllSynced + applyInbound (the sweep)", () => {
+describe("markAllSynced (the sweep)", () => {
   it("flips every pending item to synced and zeroes pending counts", () => {
-    addTask({ title: "x", bucket: "BKT-CPV2" });
+    addTask({ title: "x", bucket: "BKT-WMS" });
     markAllSynced();
     const counts = storeSyncCounts();
     expect(counts.pending).toBe(0);
     expect(allTasks().every((t) => t.sync.state !== "pending")).toBe(true);
   });
-
-  it("pulls exactly one inbound edit, once", () => {
-    const first = applyInbound();
-    expect(first).toEqual(
-      expect.objectContaining({ taskId: "TASK-188", field: "Due Date", to: "Jun 13" })
-    );
-    expect(taskById("TASK-188")?.due).toBe("Jun 13");
-    expect(applyInbound()).toBeNull();
-  });
 });
 
-describe("resolveConflict", () => {
-  it("removes the conflict, decrements the list count, and marks the entity synced", () => {
-    const before = storeSyncCounts();
-    resolveConflict("cf-140", "sp");
-    expect(openConflicts().some((c) => c.id === "cf-140")).toBe(false);
-    expect(storeSyncCounts().conflict).toBe(before.conflict - 1);
-    expect(taskById("TASK-140")?.sync.state).toBe("synced");
-  });
-
-  it("marks Risk entities synced too (risks live in the store)", () => {
-    resolveConflict("cf-risk1", "mc");
-    expect(allRisks().find((r) => r.id === "RISK-1")?.sync.state).toBe("synced");
-  });
-});
-
-describe("retryError", () => {
-  it("normalizes the value, clears the error, decrements the count, and syncs the risk", () => {
-    const before = storeSyncCounts();
-    retryError("er-risk4");
+describe("conflict / error reconciliation", () => {
+  it("starts with empty queues (demo seeds purged; the engine raises real ones)", () => {
+    expect(openConflicts()).toHaveLength(0);
     expect(openErrors()).toHaveLength(0);
-    expect(storeSyncCounts().error).toBe(before.error - 1);
-    const risk = allRisks().find((r) => r.id === "RISK-4");
-    expect(risk?.sync.state).toBe("synced");
-    expect(risk?.sync.reason).toBeUndefined();
+  });
+
+  it("treats resolving or retrying an unknown id as a safe no-op", () => {
+    const before = storeSyncCounts();
+    expect(() => resolveConflict("cf-nope", "mc")).not.toThrow();
+    expect(() => retryError("er-nope")).not.toThrow();
+    expect(storeSyncCounts()).toEqual(before);
   });
 });
 
@@ -111,15 +90,16 @@ describe("invitePerson", () => {
 
 describe("reassignTask", () => {
   it("sets the assignee and logs the notify trail", () => {
-    reassignTask("TASK-133", "priya");
-    const t = taskById("TASK-133");
+    reassignTask("TASK-221", "priya");
+    const t = taskById("TASK-221");
     expect(t?.assignee).toBe("priya");
     expect(t?.activity[0]?.what).toContain("mirrored to SharePoint");
   });
 
   it("supports unassigning", () => {
-    reassignTask("TASK-129", null);
-    const t = taskById("TASK-129");
+    reassignTask("TASK-222", "felix");
+    reassignTask("TASK-222", null);
+    const t = taskById("TASK-222");
     expect(t?.assignee).toBeNull();
     expect(t?.activity[0]?.what).toContain("unassigned");
   });

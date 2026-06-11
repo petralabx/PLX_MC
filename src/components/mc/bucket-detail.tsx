@@ -1,5 +1,6 @@
 import {
   ACTORS,
+  BUCKETS,
   BUCKET_IDX,
   MILESTONES,
   PRDS,
@@ -18,7 +19,7 @@ import { allRisks, allTasks } from "@/lib/mc-data/store";
 import { Avatar, AvatarStack, HealthPill, PMark, ReqChip, SyncTick } from "./atoms";
 import type { ScreenProps } from "./route";
 
-const FALLBACK_BUCKET_ID = "BKT-CPV2";
+const FALLBACK_BUCKET_ID = BUCKETS[0].id;
 
 interface BucketRollups {
   tasks: Task[];

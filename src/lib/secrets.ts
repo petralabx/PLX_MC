@@ -29,3 +29,24 @@ export function graphCredentials(): GraphCredentials {
     clientSecret: requireSecret("MICROSOFT_GRAPH_CLIENT_SECRET"),
   };
 }
+
+// User sign-in (OIDC auth-code flow) uses its own app registration —
+// `plx-mission-control` in the Petra tenant — distinct from the app-only
+// Graph credentials above. Configured on Vercel; absent in local dev, where
+// the auth gate stays dormant.
+export interface EntraAuthCredentials extends GraphCredentials {
+  authSecret: string;
+}
+
+export function entraAuthConfigured(): boolean {
+  return !!(process.env.PLX_MC_AUTH_CLIENT_ID && process.env.PLX_MC_AUTH_CLIENT_SECRET);
+}
+
+export function entraAuthCredentials(): EntraAuthCredentials {
+  return {
+    tenantId: requireSecret("MICROSOFT_GRAPH_TENANT_ID"),
+    clientId: requireSecret("PLX_MC_AUTH_CLIENT_ID"),
+    clientSecret: requireSecret("PLX_MC_AUTH_CLIENT_SECRET"),
+    authSecret: requireSecret("AUTH_SECRET"),
+  };
+}

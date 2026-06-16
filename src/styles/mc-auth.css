@@ -1,0 +1,109 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   SIGN-IN SURFACE — scoped under `.mc-auth`
+   The one screen an unauthenticated visitor sees. Built in plain CSS against
+   the PLX `--p-*` tokens (no Tailwind in this app), matching the `mc-*.css`
+   convention. Tokens only — no raw hex. Light/paper only by design; this is
+   the brand threshold into the system of record.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.mc-auth {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--p-space-5);
+  background: var(--p-paper);
+  color: var(--p-ink);
+  font-family: var(--p-font-sans);
+  font-feature-settings: "ss01", "ss02";
+}
+
+.mc-auth .card {
+  width: 100%;
+  max-width: 392px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-3);
+  padding: var(--p-space-5);
+  border: 1px solid var(--p-grid);
+  background: var(--p-paper);
+}
+
+.mc-auth .logo {
+  height: 40px;
+  width: auto;
+}
+
+.mc-auth .mc-auth-kicker {
+  display: block;
+  margin-bottom: var(--p-space-1);
+}
+
+.mc-auth h1 {
+  margin: 0;
+  font-family: var(--p-font-serif);
+  font-weight: 400;
+  font-size: var(--p-text-h1);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  color: var(--p-ink);
+}
+
+.mc-auth .lede {
+  margin: 0;
+  max-width: 42ch;
+  font-size: var(--p-text-body);
+  line-height: 1.55;
+  color: var(--p-muted);
+}
+
+.mc-auth .mc-auth-banner {
+  border: 1px solid var(--p-hot);
+  background: var(--p-paper-2);
+  color: var(--p-hot);
+  padding: var(--p-space-2) var(--p-space-3);
+  font-size: var(--p-text-small);
+  line-height: 1.5;
+}
+
+.mc-auth .form {
+  margin: 0;
+}
+
+.mc-auth-msbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--p-space-2);
+  width: 100%;
+  padding: var(--p-space-3);
+  border: 1px solid var(--p-ink);
+  background: var(--p-ink);
+  color: var(--p-paper);
+  font-family: var(--p-font-mono);
+  font-size: var(--p-text-small);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background var(--p-dur-fast) var(--p-ease),
+    border-color var(--p-dur-fast) var(--p-ease);
+}
+
+.mc-auth-msbtn:hover {
+  background: var(--p-accent);
+  border-color: var(--p-accent);
+}
+
+.mc-auth-msbtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mc-auth .note {
+  margin: 0;
+  font-family: var(--p-font-mono);
+  font-size: var(--p-text-meta);
+  letter-spacing: var(--p-track-meta);
+  text-transform: uppercase;
+  color: var(--p-muted);
+}

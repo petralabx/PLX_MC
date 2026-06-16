@@ -11,7 +11,7 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
 import { entraAuthConfigured, entraAuthCredentials } from "@/lib/secrets";
 
-import { basicGate, isAllowedUser } from "./gate";
+import { basicGate, isAllowedUser, isPublicAsset } from "./gate";
 
 export { basicGate, isAllowedUser } from "./gate";
 export const oidcEnabled = entraAuthConfigured;
@@ -27,6 +27,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
     // JWT plumbing from throwing in local dev/tests.
     secret: creds?.authSecret ?? "plx-mc-dormant-mode-placeholder",
     session: { strategy: "jwt" },
+    // The branded sign-in page replaces Auth.js's default /api/auth/signin
+    // screen — the only surface an unauthenticated visitor ever sees.
+    pages: { signIn: "/signin" },
     providers: creds
       ? [
           MicrosoftEntraID({
@@ -45,6 +48,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
       // OIDC mode: unauthenticated → false → redirect to Microsoft sign-in.
       // Dormant/fallback mode: the Basic gate decides (Response = challenge).
       authorized({ request, auth: session }) {
+        // The sign-in page and the brand/font assets it renders must load
+        // before auth, or OIDC mode loops /signin → /signin and the logo
+        // 307s instead of returning an image. These paths expose no data.
+        if (isPublicAsset(request.nextUrl.pathname)) return true;
         if (!entraAuthConfigured()) {
           return basicGate(request) ?? true;
         }

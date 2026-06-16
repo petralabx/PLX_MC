@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { BUCKET_IDX, CYCLES, MILESTONES, STAGES, STAGE_IDX } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
@@ -9,22 +9,38 @@ import { allTasks } from "@/lib/mc-data/store";
 import type { Bucket, Stage, Task } from "@/lib/mc-data";
 
 import { Assignee, Confidence, Label, Priority, RepoChip, ReqChip, Spine, SyncTick } from "./atoms";
+import { FilterBar } from "./filter-bar";
 import type { ScreenProps } from "./route";
 import {
+  assigneeUniverse,
+  applyFilters,
   boardColumns,
   bucketsForTimeline,
   filterTasksByBucket,
   groupTasksForList,
+  hasActiveFilters,
   isTimelineCritical,
+  labelUniverse,
   partitionSwimlanes,
   partitionTasksByColumn,
   pctOfDay,
+  swimlanesAllowed,
   timelineRangeForTask,
   timelineSegmentClass,
-  type BoardGrouping,
   type BoardSwimlanes,
-  type ListGroupBy,
+  type FilterState,
+  type GroupBy,
 } from "./work-views.helpers";
+
+// The five group-by axes, in toolbar order. `band` is the default (the current
+// 3-band lifecycle); `stage` is the full 9-stage lifecycle.
+const GROUP_BY_OPTIONS: Array<{ key: GroupBy; label: string }> = [
+  { key: "band", label: "Band" },
+  { key: "stage", label: "Stage" },
+  { key: "bucket", label: "Initiative" },
+  { key: "priority", label: "Priority" },
+  { key: "assignee", label: "Assignee" },
+];
 
 function splitTitleAccent(name: string): { lead: string; accent: string } {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -74,22 +90,24 @@ function TaskCard({ task, onOpen }: { task: Task; onOpen: (taskId: string) => vo
 
 function BoardView({
   tasks,
-  grouping,
+  groupBy,
   swimlanes,
   onOpen,
 }: {
   tasks: Task[];
-  grouping: BoardGrouping;
+  groupBy: GroupBy;
   swimlanes: BoardSwimlanes;
   onOpen: (taskId: string) => void;
 }) {
-  const columns = boardColumns(grouping);
-  const byColumn = partitionTasksByColumn(tasks, grouping);
+  const columns = boardColumns(groupBy, tasks);
+  const byColumn = partitionTasksByColumn(tasks, groupBy);
 
   const stageByKey = useMemo(() => Object.fromEntries(STAGES.map((s) => [s.key, s])), []);
 
+  // The compact 244px column grid applies to every multi-column axis (stage=9,
+  // bucket, priority, assignee); only `band` (3 columns) keeps the wide default.
   return (
-    <div className={`board${grouping === "full" ? " full" : ""}`}>
+    <div className={`board${groupBy === "band" ? "" : " compact"}`}>
       {columns.map((column) => {
         const list = byColumn[column.key];
         const stage = stageByKey[column.key] as Stage | undefined;
@@ -158,7 +176,7 @@ function ListView({
   onOpen,
 }: {
   tasks: Task[];
-  groupBy: ListGroupBy;
+  groupBy: GroupBy;
   onOpen: (taskId: string) => void;
 }) {
   const groups = groupTasksForList(tasks, groupBy);
@@ -318,15 +336,70 @@ function TimelineView({ tasks, onOpen }: { tasks: Task[]; onOpen: (taskId: strin
 }
 
 export function WorkViews({ route, nav }: ScreenProps) {
-  useMcVersion();
+  // Bind the store version so the grouping/filter memo recomputes after any
+  // mutation (drag/inline edit re-pivots the board). `useMcVersion()` was
+  // formerly called as a bare statement and its return discarded.
+  const version = useMcVersion();
 
-  const [grouping, setGrouping] = useState<BoardGrouping>("band");
+  // One unified axis drives board + list; `swimlanes` stays board-only state.
+  // Both `groupBy` and `filters` live here (not in BoardView/ListView) so they
+  // persist across the board/list/timeline tab switch — the `vsw` switcher
+  // keeps WorkViews mounted.
+  const [groupBy, setGroupBy] = useState<GroupBy>("band");
   const [swimlanes, setSwimlanes] = useState<BoardSwimlanes>("off");
-  const [listGroupBy, setListGroupBy] = useState<ListGroupBy>("bucket");
+  const [filters, setFilters] = useState<FilterState>({});
+  const filterInputRef = useRef<HTMLInputElement | null>(null);
+
+  const screen = route.screen;
+
+  // Switching to a non-band/stage axis forces swimlanes OFF (not merely hides
+  // the toggle): BoardView keys its sub-lanes off the `swimlanes` prop alone,
+  // so leaving it "agents" under bucket/priority/assignee would render
+  // meaningless sub-lanes inside those columns (SPEC §5 swimlanes reset).
+  const changeGroupBy = (next: GroupBy) => {
+    setGroupBy(next);
+    if (!swimlanesAllowed(next)) setSwimlanes("off");
+  };
 
   const bucket = route.bucketId ? BUCKET_IDX[route.bucketId] : undefined;
-  const tasks = filterTasksByBucket(allTasks(), route.bucketId);
-  const screen = route.screen;
+  const baseTasks = filterTasksByBucket(allTasks(), route.bucketId);
+  const visible = useMemo(
+    () => applyFilters(filterTasksByBucket(allTasks(), route.bucketId), filters),
+    // `version` is a deliberate dependency: `allTasks()` reads the external
+    // store (not a captured value the linter can see), so the bumped version is
+    // what re-pivots the filtered/grouped board after a mutation. Without it the
+    // memo would return a stale snapshot on the next store emit (SPEC §5).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [route.bucketId, filters, version]
+  );
+
+  const labelOptions = useMemo(() => labelUniverse(baseTasks), [baseTasks]);
+  const assigneeOptions = useMemo(() => assigneeUniverse(baseTasks), [baseTasks]);
+  const hasUnassigned = useMemo(() => baseTasks.some((task) => !task.assignee), [baseTasks]);
+  const filtersActive = hasActiveFilters(filters);
+
+  // Keyboard (SPEC §3): "/" focuses the filter input, "Esc" clears filters.
+  // Both are gated so they never fire while the user is typing in a field, and
+  // PeoplePicker's capture-phase Esc (it stopPropagation()s) closes an open
+  // picker before this bubble-phase handler runs.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const inField = !!(event.target as HTMLElement | null)?.closest?.(
+        "input,textarea,[contenteditable]"
+      );
+      if (event.key === "/" && !inField) {
+        event.preventDefault();
+        filterInputRef.current?.focus();
+        return;
+      }
+      if (event.key === "Escape" && !inField && filtersActive) {
+        event.preventDefault();
+        setFilters({});
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [filtersActive]);
 
   const goView = (next: "board" | "list" | "timeline") => {
     nav(next, route.bucketId ? { bucketId: route.bucketId } : undefined);
@@ -386,79 +459,95 @@ export function WorkViews({ route, nav }: ScreenProps) {
           </div>
         </div>
         <div className="r">
-          {screen === "board" && (
+          {(screen === "board" || screen === "list") && (
             <>
-              <span className="lbl">Stages</span>
+              <span className="lbl">Group by</span>
               <div className="seg">
-                <button
-                  type="button"
-                  className={grouping === "band" ? "on" : ""}
-                  onClick={() => setGrouping("band")}
-                >
-                  3-band
-                </button>
-                <button
-                  type="button"
-                  className={grouping === "full" ? "on" : ""}
-                  onClick={() => setGrouping("full")}
-                >
-                  Full lifecycle
-                </button>
-              </div>
-              <span className="lbl">Swimlanes</span>
-              <div className="seg">
-                <button
-                  type="button"
-                  className={swimlanes === "off" ? "on" : ""}
-                  onClick={() => setSwimlanes("off")}
-                >
-                  Off
-                </button>
-                <button
-                  type="button"
-                  className={swimlanes === "agents" ? "on" : ""}
-                  onClick={() => setSwimlanes("agents")}
-                >
-                  Human · Agent
-                </button>
-              </div>
-            </>
-          )}
-          {screen === "list" && (
-            <>
-              <span className="lbl">Group</span>
-              <div className="seg">
-                {(["bucket", "status", "assignee"] as const).map((groupingKey) => (
+                {GROUP_BY_OPTIONS.map((option) => (
                   <button
-                    key={groupingKey}
+                    key={option.key}
                     type="button"
-                    className={listGroupBy === groupingKey ? "on" : ""}
-                    onClick={() => setListGroupBy(groupingKey)}
+                    className={groupBy === option.key ? "on" : ""}
+                    onClick={() => changeGroupBy(option.key)}
                   >
-                    {groupingKey}
+                    {option.label}
                   </button>
                 ))}
               </div>
+              {screen === "board" && swimlanesAllowed(groupBy) && (
+                <>
+                  <span className="lbl">Swimlanes</span>
+                  <div className="seg">
+                    <button
+                      type="button"
+                      className={swimlanes === "off" ? "on" : ""}
+                      onClick={() => setSwimlanes("off")}
+                    >
+                      Off
+                    </button>
+                    <button
+                      type="button"
+                      className={swimlanes === "agents" ? "on" : ""}
+                      onClick={() => setSwimlanes("agents")}
+                    >
+                      Human · Agent
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
           <span className="count">
-            <b>{tasks.length}</b> tasks
+            <b>{screen === "timeline" ? baseTasks.length : visible.length}</b> tasks
           </span>
         </div>
       </div>
 
-      {tasks.length === 0 ? (
-        <div className="empty">
-          <h3>A calm, empty board</h3>
-          <p>No tasks match this filter yet.</p>
-        </div>
+      {/* The filter bar drives the board + list only; the timeline stays the
+          fixed June grid over the full bucket scope (filtering it is Cycle 2). */}
+      {screen === "timeline" ? (
+        baseTasks.length === 0 ? (
+          <div className="empty">
+            <h3>A calm, empty board</h3>
+            <p>No tasks in this initiative yet.</p>
+          </div>
+        ) : (
+          <TimelineView tasks={baseTasks} onOpen={openTask} />
+        )
       ) : (
         <>
-          {screen === "board" && (
-            <BoardView tasks={tasks} grouping={grouping} swimlanes={swimlanes} onOpen={openTask} />
+          <FilterBar
+            ref={filterInputRef}
+            filters={filters}
+            onChange={setFilters}
+            resultCount={visible.length}
+            labels={labelOptions}
+            assignees={assigneeOptions}
+            hasUnassigned={hasUnassigned}
+          />
+
+          {visible.length === 0 ? (
+            <div className="empty">
+              {filtersActive ? (
+                <>
+                  <h3>No tasks match these filters</h3>
+                  <p>Try removing a filter to widen the results.</p>
+                  <button type="button" className="btn ghost" onClick={() => setFilters({})}>
+                    Clear filters
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h3>A calm, empty board</h3>
+                  <p>No tasks in this initiative yet.</p>
+                </>
+              )}
+            </div>
+          ) : screen === "board" ? (
+            <BoardView tasks={visible} groupBy={groupBy} swimlanes={swimlanes} onOpen={openTask} />
+          ) : (
+            <ListView tasks={visible} groupBy={groupBy} onOpen={openTask} />
           )}
-          {screen === "list" && <ListView tasks={tasks} groupBy={listGroupBy} onOpen={openTask} />}
-          {screen === "timeline" && <TimelineView tasks={tasks} onOpen={openTask} />}
         </>
       )}
     </div>

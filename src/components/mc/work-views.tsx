@@ -1,11 +1,18 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, DragEvent } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { BUCKET_IDX, CYCLES, MILESTONES, STAGES, STAGE_IDX } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allTasks } from "@/lib/mc-data/store";
+import {
+  allTasks,
+  reassignTask,
+  setTaskBucket,
+  setTaskPriority,
+  setTaskStage,
+  taskById,
+} from "@/lib/mc-data/store";
 import type { Bucket, Stage, Task } from "@/lib/mc-data";
 
 import { Assignee, Confidence, Label, Priority, RepoChip, ReqChip, Spine, SyncTick } from "./atoms";
@@ -16,14 +23,17 @@ import {
   applyFilters,
   boardColumns,
   bucketsForTimeline,
+  dragEnabledForAxis,
   filterTasksByBucket,
   groupTasksForList,
   hasActiveFilters,
+  isNoopDrop,
   isTimelineCritical,
   labelUniverse,
   partitionSwimlanes,
   partitionTasksByColumn,
   pctOfDay,
+  resolveColumnDrop,
   swimlanesAllowed,
   timelineRangeForTask,
   timelineSegmentClass,
@@ -51,12 +61,75 @@ function splitTitleAccent(name: string): { lead: string; accent: string } {
   };
 }
 
-function TaskCard({ task, onOpen }: { task: Task; onOpen: (taskId: string) => void }) {
+// MIME type for the dragged card id. A typed key (not text/plain) so the board
+// only accepts its own cards, never arbitrary dropped text.
+const DRAG_MIME = "application/x-mc-task";
+
+// Route a resolved column-drop through the matching PR-0 spine wrapper. Pure
+// dispatch — all persistence (optimistic apply + PATCH + rollback) lives in the
+// store. Drag is purely additive: the same fields are mutable by their non-drag
+// paths (assignee picker today; stage/priority/bucket detail controls in PR-C).
+function dispatchColumnDrop(taskId: string, groupBy: GroupBy, columnKey: string) {
+  const task = taskById(taskId);
+  if (!task) return;
+  // No-op guard: a drop on the card's current column must not PATCH (avoids a
+  // spurious write + the sweep race, SPEC §5).
+  if (isNoopDrop(task, groupBy, columnKey)) return;
+  const resolved = resolveColumnDrop(groupBy, columnKey);
+  if (!resolved) return; // unknown target / non-drag axis — drop, never write
+  switch (resolved.field) {
+    case "stage":
+      setTaskStage(taskId, resolved.value as Task["stage"]);
+      return;
+    case "priority":
+      setTaskPriority(taskId, resolved.value as Task["priority"]);
+      return;
+    case "bucket":
+      setTaskBucket(taskId, resolved.value as string);
+      return;
+    case "assignee":
+      // value is an actor id, or null for the "Unassigned" column.
+      reassignTask(taskId, resolved.value as string | null);
+      return;
+  }
+}
+
+function TaskCard({
+  task,
+  onOpen,
+  draggable,
+}: {
+  task: Task;
+  onOpen: (taskId: string) => void;
+  draggable: boolean;
+}) {
+  // A drag-occurred flag suppresses the click-open that fires after a drag
+  // completes on a <button> (SPEC R8 drag-vs-click). Kept keyboard-accessible:
+  // the element stays a real <button>, so Enter/Space still open the task.
+  const draggedRef = useRef(false);
+
   return (
     <button
       type="button"
       className={`tcard${task.blocked ? " blocked" : ""}`}
-      onClick={() => onOpen(task.id)}
+      draggable={draggable}
+      onDragStart={(event) => {
+        draggedRef.current = true;
+        event.dataTransfer.setData(DRAG_MIME, task.id);
+        event.dataTransfer.effectAllowed = "move";
+        event.currentTarget.classList.add("dragging");
+      }}
+      onDragEnd={(event) => {
+        event.currentTarget.classList.remove("dragging");
+        // Clear the flag after the click that the drag-release synthesizes.
+        window.setTimeout(() => {
+          draggedRef.current = false;
+        }, 0);
+      }}
+      onClick={() => {
+        if (draggedRef.current) return; // a drag just ended — don't open
+        onOpen(task.id);
+      }}
     >
       <div className="ct-top">
         <span className="ct-id">{task.id}</span>
@@ -104,6 +177,33 @@ function BoardView({
 
   const stageByKey = useMemo(() => Object.fromEntries(STAGES.map((s) => [s.key, s])), []);
 
+  // Drag is enabled only on axes where a column-drop maps to a real, persisted
+  // field mutation (SPEC §5 "respect axis sensibility"). Every Cycle-1 axis
+  // qualifies, but the predicate is explicit so a future non-persistable axis
+  // is disabled (no draggable cards / no drop targets), never a silent no-op.
+  const dragEnabled = dragEnabledForAxis(groupBy);
+
+  // Drop handlers, built per column. Reading the dragged id from dataTransfer
+  // and routing through the pure resolver keeps the board's own cards the only
+  // accepted payload (the DRAG_MIME key).
+  const onColumnDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!dragEnabled || !event.dataTransfer.types.includes(DRAG_MIME)) return;
+    event.preventDefault(); // allow the drop
+    event.dataTransfer.dropEffect = "move";
+    event.currentTarget.classList.add("drop-active");
+  };
+  const onColumnDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.currentTarget.classList.remove("drop-active");
+  };
+  const onColumnDrop = (columnKey: string) => (event: DragEvent<HTMLDivElement>) => {
+    event.currentTarget.classList.remove("drop-active");
+    if (!dragEnabled) return;
+    const taskId = event.dataTransfer.getData(DRAG_MIME);
+    if (!taskId) return;
+    event.preventDefault();
+    dispatchColumnDrop(taskId, groupBy, columnKey);
+  };
+
   // The compact 244px column grid applies to every multi-column axis (stage=9,
   // bucket, priority, assignee); only `band` (3 columns) keeps the wide default.
   return (
@@ -121,7 +221,12 @@ function BoardView({
               </span>
               <span className="ct">{list.length}</span>
             </div>
-            <div className="bbody">
+            <div
+              className="bbody"
+              onDragOver={dragEnabled ? onColumnDragOver : undefined}
+              onDragLeave={dragEnabled ? onColumnDragLeave : undefined}
+              onDrop={dragEnabled ? onColumnDrop(column.key) : undefined}
+            >
               {swimlanes === "agents" ? (
                 <>
                   {(() => {
@@ -132,7 +237,7 @@ function BoardView({
                           <>
                             <div className="swlabel">Agents</div>
                             {lanes.agents.map((task) => (
-                              <TaskCard key={task.id} task={task} onOpen={onOpen} />
+                              <TaskCard key={task.id} task={task} onOpen={onOpen} draggable={dragEnabled} />
                             ))}
                           </>
                         )}
@@ -140,7 +245,7 @@ function BoardView({
                           <>
                             <div className="swlabel">Humans</div>
                             {lanes.humans.map((task) => (
-                              <TaskCard key={task.id} task={task} onOpen={onOpen} />
+                              <TaskCard key={task.id} task={task} onOpen={onOpen} draggable={dragEnabled} />
                             ))}
                           </>
                         )}
@@ -148,7 +253,7 @@ function BoardView({
                           <>
                             <div className="swlabel">Unassigned</div>
                             {lanes.unassigned.map((task) => (
-                              <TaskCard key={task.id} task={task} onOpen={onOpen} />
+                              <TaskCard key={task.id} task={task} onOpen={onOpen} draggable={dragEnabled} />
                             ))}
                           </>
                         )}
@@ -158,7 +263,9 @@ function BoardView({
                   })()}
                 </>
               ) : list.length > 0 ? (
-                list.map((task) => <TaskCard key={task.id} task={task} onOpen={onOpen} />)
+                list.map((task) => (
+                  <TaskCard key={task.id} task={task} onOpen={onOpen} draggable={dragEnabled} />
+                ))
               ) : (
                 <div className="colempty">Empty</div>
               )}

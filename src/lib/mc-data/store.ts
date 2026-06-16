@@ -97,6 +97,51 @@ export function getVersion(): number {
   return version;
 }
 
+// ─── Notices (minimal toast/notice channel) ───────────────────────────────────
+// No toast primitive existed in atoms.tsx / chrome.tsx (the only "trail" was the
+// assignment-specific NotifyTrail), so this is a tiny, self-contained reactive
+// channel. Its first and only producer is the optimistic-rollback path in
+// patchTaskFields: when a mirrored PATCH fails, the optimistic edit is restored
+// and a NON-SILENT notice is surfaced here (SPEC §5 Module B "recommended"
+// reconcile-on-failure). Rendered by <NoticeHost> (mounted in shell.tsx).
+
+export type NoticeTone = "error" | "info";
+
+export interface Notice {
+  id: string;
+  tone: NoticeTone;
+  body: string;
+}
+
+let notices: Notice[] = [];
+let noticeSeq = 0;
+const noticeListeners = new Set<() => void>();
+
+function emitNotices() {
+  for (const l of noticeListeners) l();
+}
+
+export const activeNotices = (): Notice[] => notices;
+
+export function subscribeNotices(listener: () => void): () => void {
+  noticeListeners.add(listener);
+  return () => noticeListeners.delete(listener);
+}
+
+export function pushNotice(body: string, tone: NoticeTone = "error"): string {
+  const id = `ntc-${++noticeSeq}`;
+  notices = [{ id, tone, body }, ...notices];
+  emitNotices();
+  return id;
+}
+
+export function dismissNotice(id: string) {
+  const next = notices.filter((n) => n.id !== id);
+  if (next.length === notices.length) return;
+  notices = next;
+  emitNotices();
+}
+
 // ─── Getters ─────────────────────────────────────────────────────────────────
 
 export const allTasks = (): Task[] => state.tasks;
@@ -369,32 +414,96 @@ export type TaskFieldPatch = Partial<
   Pick<Task, "stage" | "priority" | "bucket" | "labels" | "coassignees" | "subtasks" | "assignee">
 >;
 
-// The single persisted task mutation: optimistic local apply + honest
-// activity, emit(), then mirror to PATCH /api/tasks/{id}. On success adopt the
-// server's returned task so optimistic state reconciles to DB truth (closes
-// the "optimistic-only, lost on hydrate" gap). A no-op when the patch is empty.
-export function patchTaskFields(taskId: string, patch: TaskFieldPatch, opts?: { activity?: string }) {
+// The PATCH mirror seam. Production default issues the real PATCH and returns
+// the server's reconciled task; the catch in patchTaskFields turns a rejection
+// into a rollback + notice. Overridable in tests (__setPatchMirrorForTests) so
+// the rollback-on-failure path is unit-testable even though `serverCall` is a
+// no-op under SSR/test (typeof window === "undefined").
+type PatchMirror = (taskId: string, patch: TaskFieldPatch) => Promise<Task>;
+
+const defaultPatchMirror: PatchMirror = (taskId, patch) =>
+  api<Task>(`/tasks/${taskId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ actor: CURRENT_USER, ...patch }),
+  });
+
+let patchMirror: PatchMirror = defaultPatchMirror;
+let patchMirrorInjected = false;
+
+// Test-only: inject a mirror that resolves/rejects deterministically so the
+// real optimistic→mirror→(reconcile | rollback) path runs in the Node test
+// env (where `serverCall`/the default mirror would otherwise be a no-op). Pass
+// null to restore the production default. While injected, patchTaskFields runs
+// the mirror regardless of `window`, so a test can await the settle.
+export function __setPatchMirrorForTests(fn: PatchMirror | null) {
+  patchMirror = fn ?? defaultPatchMirror;
+  patchMirrorInjected = fn !== null;
+}
+
+// The single persisted task mutation: optimistic local apply + honest activity,
+// emit(), then mirror to PATCH /api/tasks/{id}. On SUCCESS adopt the server's
+// returned task so optimistic state reconciles to DB truth (closes the
+// "optimistic-only, lost on hydrate" gap). On FAILURE restore the pre-edit
+// values of exactly the patched fields (+ the optimistic activity line),
+// re-emit, and surface a non-silent notice — so a write the user saw is never
+// silently dropped (the prime-directive guard, SPEC §5 Module B "recommended").
+// A no-op when the patch is empty. Returns the in-flight mirror promise (for
+// tests); fire-and-forget for callers.
+export function patchTaskFields(
+  taskId: string,
+  patch: TaskFieldPatch,
+  opts?: { activity?: string }
+): Promise<void> | void {
   const t = taskById(taskId);
   if (!t) return;
   const entries = Object.entries(patch).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return; // empty patch is a safe no-op
+
+  // Snapshot the prior values of exactly the patched fields, plus the activity
+  // array (we prepend an optimistic line below — a failed write must revert it
+  // too, or a spurious "moved to…" entry would persist). Deep-cloned so a later
+  // in-place mutation of the live object can't corrupt the snapshot.
+  const patchedKeys = entries.map(([k]) => k) as Array<keyof Task>;
+  const prior = clone(
+    Object.fromEntries(patchedKeys.map((k) => [k, t[k]]))
+  ) as Partial<Task>;
+  const priorActivity = opts?.activity ? t.activity : undefined;
+
   Object.assign(t, Object.fromEntries(entries));
   if (opts?.activity) {
     t.activity = [{ age: "now", who: CURRENT_USER, kind: "move", what: opts.activity }, ...t.activity];
   }
   emit();
-  serverCall(async () => {
-    const updated = await api<Task>(`/tasks/${taskId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ actor: CURRENT_USER, ...patch }),
-    });
-    // Reconcile optimistic state to the server's DB truth.
+
+  const rollback = (err: unknown) => {
+    const cur = taskById(taskId);
+    if (cur) {
+      Object.assign(cur, prior);
+      if (priorActivity) cur.activity = priorActivity;
+    }
+    pushNotice(
+      `Couldn't save the change to ${taskId} — it was rolled back. ${
+        err instanceof Error ? err.message : "The server rejected the update."
+      }`
+    );
+    emit();
+  };
+
+  const reconcile = (updated: Task) => {
+    // Adopt the server's DB truth for this task.
     const i = state.tasks.findIndex((x) => x.id === taskId);
     if (i !== -1) {
       state.tasks[i] = updated;
       emit();
     }
-  });
+  };
+
+  // SSR/tests: with no injected mirror, the optimistic state simply stands (no
+  // network to fail) — matching the existing serverCall no-op contract. On the
+  // client (or when a test injects a mirror) the mirror runs and either
+  // reconciles to server truth or rolls back + notices.
+  if (typeof window === "undefined" && !patchMirrorInjected) return;
+  return patchMirror(taskId, patch).then(reconcile, rollback);
 }
 
 // ─── Thin persisted-mutation wrappers (used by drag + inline editing) ─────────
@@ -595,5 +704,9 @@ export function retryError(errorId: string) {
 // Test-only: reset the store to the seed fixture.
 export function resetStore() {
   state = initialState();
+  notices = [];
+  noticeSeq = 0;
+  patchMirror = defaultPatchMirror;
+  patchMirrorInjected = false;
   emit();
 }

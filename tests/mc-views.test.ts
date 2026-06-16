@@ -5,13 +5,18 @@ import type { PriorityKey, Task } from "@/lib/mc-data";
 import {
   applyFilters,
   assigneeUniverse,
+  BAND_ENTRY_STAGE,
   boardColumns,
   columnsFor,
+  dragEnabledForAxis,
+  dragFieldForAxis,
   dueDay,
   groupTasksForList,
+  isNoopDrop,
   labelUniverse,
   partitionSwimlanes,
   partitionTasksByColumn,
+  resolveColumnDrop,
   spanOf,
   swimlanesAllowed,
   timelineRangeForTask,
@@ -131,6 +136,77 @@ describe("swimlanes axis gating (SPEC §5 reset)", () => {
     expect(swimlanesAllowed("bucket")).toBe(false);
     expect(swimlanesAllowed("priority")).toBe(false);
     expect(swimlanesAllowed("assignee")).toBe(false);
+  });
+});
+
+describe("drag-to-mutate axis → field resolution (Module B)", () => {
+  it("enables drag on every Cycle-1 axis (all map to a real field mutation)", () => {
+    for (const axis of ["band", "stage", "bucket", "priority", "assignee"] as const) {
+      expect(dragEnabledForAxis(axis)).toBe(true);
+      expect(dragFieldForAxis(axis)).not.toBeNull();
+    }
+  });
+
+  it("maps the stage axis: a drop sets stage to the dropped column's stage key", () => {
+    const resolved = resolveColumnDrop("stage", "qa");
+    expect(resolved).toEqual({ field: "stage", value: "qa" });
+    // The board only writes real stage keys; an unknown column is dropped.
+    expect(resolveColumnDrop("stage", "not-a-stage")).toBeNull();
+  });
+
+  it("maps the band axis to each band's documented ENTRY stage", () => {
+    // SPEC §5 Module B: todo→backlog, doing→progress, done→merged.
+    expect(BAND_ENTRY_STAGE).toEqual({ todo: "backlog", doing: "progress", done: "merged" });
+    expect(resolveColumnDrop("band", "todo")).toEqual({ field: "stage", value: "backlog" });
+    expect(resolveColumnDrop("band", "doing")).toEqual({ field: "stage", value: "progress" });
+    expect(resolveColumnDrop("band", "done")).toEqual({ field: "stage", value: "merged" });
+    // Every entry stage is a real stage key.
+    for (const key of Object.values(BAND_ENTRY_STAGE)) {
+      expect(STAGES.some((s) => s.key === key)).toBe(true);
+    }
+    expect(resolveColumnDrop("band", "nope")).toBeNull();
+  });
+
+  it("maps the priority axis: a drop sets priority to the dropped column's key", () => {
+    for (const key of Object.keys(PRIORITY) as PriorityKey[]) {
+      expect(resolveColumnDrop("priority", key)).toEqual({ field: "priority", value: key });
+    }
+    expect(resolveColumnDrop("priority", "not-a-priority")).toBeNull();
+  });
+
+  it("maps the bucket axis: a drop sets bucket to the dropped initiative id", () => {
+    const bucketId = BUCKETS[0].id;
+    expect(resolveColumnDrop("bucket", bucketId)).toEqual({ field: "bucket", value: bucketId });
+    expect(resolveColumnDrop("bucket", "BKT-NOPE")).toBeNull();
+  });
+
+  it("maps the assignee axis: an actor column reassigns; the Unassigned column unassigns", () => {
+    expect(resolveColumnDrop("assignee", "maya")).toEqual({ field: "assignee", value: "maya" });
+    expect(resolveColumnDrop("assignee", UNASSIGNED_KEY)).toEqual({
+      field: "assignee",
+      value: null,
+    });
+  });
+
+  it("treats a drop on the card's CURRENT column as a no-op (the same-column guard)", () => {
+    const task: Task = { ...TASKS[0], stage: "qa", priority: "high", bucket: "BKT-WMS", assignee: "maya" };
+    // Same column on each axis → no-op (would skip the PATCH).
+    expect(isNoopDrop(task, "stage", "qa")).toBe(true);
+    expect(isNoopDrop(task, "priority", "high")).toBe(true);
+    expect(isNoopDrop(task, "bucket", "BKT-WMS")).toBe(true);
+    expect(isNoopDrop(task, "assignee", "maya")).toBe(true);
+    // The band column the card already sits in (qa → doing) is also a no-op.
+    expect(isNoopDrop(task, "band", "doing")).toBe(true);
+    // A different column on each axis → not a no-op.
+    expect(isNoopDrop(task, "stage", "merged")).toBe(false);
+    expect(isNoopDrop(task, "priority", "low")).toBe(false);
+    expect(isNoopDrop(task, "assignee", UNASSIGNED_KEY)).toBe(false);
+  });
+
+  it("resolves an unassigned card's no-op against the Unassigned column", () => {
+    const task: Task = { ...TASKS[0], assignee: null };
+    expect(isNoopDrop(task, "assignee", UNASSIGNED_KEY)).toBe(true);
+    expect(isNoopDrop(task, "assignee", "maya")).toBe(false);
   });
 });
 

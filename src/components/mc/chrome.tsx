@@ -5,8 +5,8 @@
 import type { ReactNode } from "react";
 
 import { ACTORS, AGENTS, BUCKETS, CURRENT_USER } from "@/lib/mc-data";
-import { useMcVersion } from "@/lib/mc-data/hooks";
-import { storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
+import { useMcNotices, useMcVersion } from "@/lib/mc-data/hooks";
+import { dismissNotice, storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
 
 import { Avatar, PMark } from "./atoms";
 import type { Nav, Route, Screen } from "./route";
@@ -139,5 +139,32 @@ export function Sidebar({ route, nav }: { route: Route; nav: Nav }) {
         )}
       </div>
     </nav>
+  );
+}
+
+// NoticeHost — the only consumer of the store's notice channel. Surfaces the
+// non-silent rollback message when a drag/inline PATCH fails (SPEC §5 Module B):
+// the optimistic edit is restored in the store and this renders the toast so the
+// dropped write is visible, never silent. Minimal, token-styled, dismissible.
+export function NoticeHost() {
+  const notices = useMcNotices();
+  if (notices.length === 0) return null;
+  return (
+    <div className="mc-notices" role="status" aria-live="polite">
+      {notices.map((notice) => (
+        <div key={notice.id} className={`mc-notice ${notice.tone}`}>
+          <span className="d" />
+          <span className="body">{notice.body}</span>
+          <button
+            type="button"
+            className="x"
+            aria-label="Dismiss"
+            onClick={() => dismissNotice(notice.id)}
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }

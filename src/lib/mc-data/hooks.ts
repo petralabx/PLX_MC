@@ -5,8 +5,17 @@
 // store action (the prototype's `mc-sync` window event, made idiomatic).
 import { useSyncExternalStore } from "react";
 
-import { getVersion, subscribe } from "./store";
+import { activeNotices, getVersion, subscribe, subscribeNotices } from "./store";
+import type { Notice } from "./store";
 
 export function useMcVersion(): number {
   return useSyncExternalStore(subscribe, getVersion, getVersion);
+}
+
+// The notice channel (rollback-on-PATCH-failure surfacing). Separate from the
+// version channel so a transient notice never forces a board-wide re-render.
+const NO_NOTICES: Notice[] = [];
+
+export function useMcNotices(): Notice[] {
+  return useSyncExternalStore(subscribeNotices, activeNotices, () => NO_NOTICES);
 }

@@ -19,6 +19,20 @@ export function isAllowedUser(
   return allowed.includes(addr);
 }
 
+// Public, non-sensitive paths that must load BEFORE authentication: the
+// branded sign-in page and the static brand assets it renders (logo,
+// favicons, webfonts). Without this bypass an unauthenticated visitor in OIDC
+// mode is redirected to pages.signIn (/signin), which is itself gated — an
+// infinite redirect loop — and the /brand favicons resolve to a redirect
+// instead of an image. None of these paths expose data.
+export function isPublicAsset(pathname: string): boolean {
+  return (
+    pathname === "/signin" ||
+    pathname.startsWith("/brand/") ||
+    pathname.startsWith("/fonts/")
+  );
+}
+
 // Basic-auth fallback gate (used only when Entra OIDC is not configured):
 // dormant without the shared secret, 401 challenge otherwise.
 export function basicGate(req: Request): Response | null {

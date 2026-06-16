@@ -4,7 +4,7 @@
 
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { basicGate, isAllowedUser } from "@/lib/auth/gate";
+import { basicGate, isAllowedUser, isPublicAsset } from "@/lib/auth/gate";
 import middleware from "@/middleware";
 
 const req = (auth?: string) =>
@@ -64,5 +64,27 @@ describe("OIDC sign-in allowlist", () => {
   it("fails closed with no allowlist configured", () => {
     expect(isAllowedUser("vince@petrasoap.com", undefined)).toBe(false);
     expect(isAllowedUser("vince@petrasoap.com", "")).toBe(false);
+  });
+});
+
+describe("public asset + sign-in bypass", () => {
+  it("allow-lists only the sign-in page and brand/font assets", () => {
+    expect(isPublicAsset("/signin")).toBe(true);
+    expect(isPublicAsset("/brand/logo-horizontal-ink.png")).toBe(true);
+    expect(isPublicAsset("/fonts/mazius/MaziusDisplay-Regular.woff2")).toBe(true);
+    expect(isPublicAsset("/")).toBe(false);
+    expect(isPublicAsset("/tasks")).toBe(false);
+    // Prefix safety: a sibling route must not inherit the /brand/ bypass.
+    expect(isPublicAsset("/branding")).toBe(false);
+  });
+
+  it("lets the sign-in page and brand assets through the Basic gate", async () => {
+    process.env.PLX_MC_STAGING_PASSWORD = "s3cret";
+    expect((await run(new NextRequest("http://test/signin"))).status).toBe(200);
+    expect(
+      (await run(new NextRequest("http://test/brand/logo-horizontal-ink.png"))).status
+    ).toBe(200);
+    // A normal route still challenges — the bypass is scoped, not a hole.
+    expect((await run(req())).status).toBe(401);
   });
 });

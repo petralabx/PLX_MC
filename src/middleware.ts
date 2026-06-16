@@ -10,6 +10,8 @@ import { auth } from "@/lib/auth";
 export default auth;
 
 export const config = {
-  // Never gate the auth endpoints themselves or static assets.
-  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico).*)"],
+  // Never gate the auth endpoints, framework static assets, the branded
+  // sign-in page, or the brand/font assets it renders (those load pre-auth;
+  // the `authorized` callback also allow-lists them via isPublicAsset).
+  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico|signin|brand|fonts).*)"],
 };

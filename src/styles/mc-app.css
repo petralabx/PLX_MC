@@ -12,8 +12,8 @@
   padding:9px 18px; border-bottom:1px solid var(--p-grid); background:var(--p-paper);
   position:sticky; top:0; z-index:30; }
 .mc .mc-top .l, .mc .mc-top .r { display:flex; align-items:center; gap:12px; }
-.mc .mc-top .brand { display:flex; align-items:baseline; gap:9px; cursor:pointer; flex:0 0 auto; background:none; border:0; padding:0; }
-.mc .mc-top .brand .mark { font-family:var(--mazius); font-size:18px; line-height:1; letter-spacing:-0.02em; white-space:nowrap; color:var(--p-ink); }
+.mc .mc-top .brand { display:flex; align-items:center; gap:9px; cursor:pointer; flex:0 0 auto; background:none; border:0; padding:0; }
+.mc .mc-top .brand .brand-logo { height:18px; width:auto; display:block; }
 .mc .mc-top .brand .sub { font-family:var(--mono); font-size:8.5px; letter-spacing:0.24em; text-transform:uppercase; white-space:nowrap;
   color:var(--p-muted); padding-left:9px; border-left:1px solid var(--p-grid); }
 .mc .mc-top .ws { display:flex; align-items:center; gap:8px; padding:5px 9px; border:1px solid var(--p-grid); cursor:pointer; font-size:11px; color:var(--p-ink-2); }

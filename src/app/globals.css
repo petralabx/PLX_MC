@@ -6,6 +6,7 @@
 @import "../styles/mc-record.css";
 @import "../styles/mc-overview.css";
 @import "../styles/mc-authoring.css";
+@import "../styles/mc-auth.css";
 
 * {
   box-sizing: border-box;

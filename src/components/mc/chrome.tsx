@@ -3,6 +3,7 @@
 // runtime store so the sync pill and badges stay live after store actions.
 // The command palette (⌘K) mounts here when the authoring lane lands.
 import type { ReactNode } from "react";
+import Image from "next/image";
 
 import { ACTORS, AGENTS, BUCKETS, CURRENT_USER } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion } from "@/lib/mc-data/hooks";
@@ -10,6 +11,8 @@ import { dismissNotice, storeSyncCounts, unreadCount } from "@/lib/mc-data/store
 
 import { Avatar, PMark } from "./atoms";
 import type { Nav, Route, Screen } from "./route";
+import logoHorizontalCream from "../../../public/brand/logo-horizontal-cream.png";
+import logoHorizontalInk from "../../../public/brand/logo-horizontal-ink.png";
 
 export function Topbar({
   nav,
@@ -33,7 +36,12 @@ export function Topbar({
     <header className="mc-top">
       <div className="l">
         <button type="button" className="brand" onClick={() => nav("home")}>
-          <span className="mark">Petra Lab-X</span>
+          <Image
+            src={dark ? logoHorizontalCream : logoHorizontalInk}
+            alt="Petra Lab-X"
+            className="brand-logo"
+            priority
+          />
           <span className="sub">Mission Control</span>
         </button>
         <div className="ws">

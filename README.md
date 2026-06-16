@@ -7,6 +7,8 @@ of record — the app is a fast, opinionated lens over it, with manual conflict
 resolution and a full audit trail. Colleagues across `@petralabx.com` /
 `@petrasoap.com` can be tasked via the Microsoft 365 directory.
 
+**Public app:** https://mc.plxcustomer.io
+
 **Why:** everything resolves to a Task, every change mirrors to the record,
 and work is traceable end-to-end (PRD requirement → task → PR → evidence →
 test status → merge commit). The full product spec lives in

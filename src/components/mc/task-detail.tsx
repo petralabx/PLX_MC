@@ -13,7 +13,6 @@ import {
   confidenceOf,
   type PriorityKey,
   type SpColumn,
-  type StageKey,
   type SyncDirection,
   type Task,
 } from "@/lib/mc-data";

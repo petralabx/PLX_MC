@@ -174,12 +174,14 @@ function BoardView({
   groupBy,
   swimlanes,
   version,
+  filtersActive,
   onOpen,
 }: {
   tasks: Task[];
   groupBy: GroupBy;
   swimlanes: BoardSwimlanes;
   version: number;
+  filtersActive: boolean;
   onOpen: (taskId: string) => void;
 }) {
   const columns = boardColumns(groupBy, tasks);
@@ -234,8 +236,18 @@ function BoardView({
       {columns.map((column) => {
         const list = byColumn[column.key];
         const stage = stageByKey[column.key] as Stage | undefined;
+        // a11y: each column is a labelled region so screen readers announce the
+        // column name + card count during keyboard nav (WCAG 1.3.1). The header
+        // name span carries the visible text; the region label restates it with
+        // the count so the relationship card→column is announced.
+        const emptyLabel = filtersActive ? "No matches in this column" : "Empty";
         return (
-          <div className="bcol" key={column.key}>
+          <div
+            className="bcol"
+            key={column.key}
+            role="region"
+            aria-label={`${column.name} · ${list.length} ${list.length === 1 ? "task" : "tasks"}`}
+          >
             <div className="bhead">
               <span className="nm">
                 {stage?.n && <span className="n">{stage.n}</span>}
@@ -280,7 +292,7 @@ function BoardView({
                             ))}
                           </>
                         )}
-                        {list.length === 0 && <div className="colempty">Empty</div>}
+                        {list.length === 0 && <div className="colempty">{emptyLabel}</div>}
                       </>
                     );
                   })()}
@@ -290,7 +302,7 @@ function BoardView({
                   <TaskCard key={task.id} task={task} onOpen={onOpen} draggable={dragEnabled} />
                 ))
               ) : (
-                <div className="colempty">Empty</div>
+                <div className="colempty">{emptyLabel}</div>
               )}
             </div>
           </div>
@@ -714,7 +726,14 @@ export function WorkViews({ route, nav }: ScreenProps) {
               )}
             </div>
           ) : view === "board" ? (
-            <BoardView tasks={visible} groupBy={groupBy} swimlanes={swimlanes} version={version} onOpen={openTask} />
+            <BoardView
+              tasks={visible}
+              groupBy={groupBy}
+              swimlanes={swimlanes}
+              version={version}
+              filtersActive={filtersActive}
+              onOpen={openTask}
+            />
           ) : (
             <ListView tasks={visible} groupBy={groupBy} onOpen={openTask} />
           )}

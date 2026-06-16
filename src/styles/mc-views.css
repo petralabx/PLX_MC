@@ -141,6 +141,10 @@
   line-height: 1.16;
   letter-spacing: -0.01em;
   color: var(--p-ink);
+  /* Long unbroken titles (pasted URLs, long initiative names) must wrap rather
+     than blow out the compact 244px column. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .mc .tcard .ct-meta {
@@ -148,6 +152,9 @@
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  min-width: 0;
+  /* A long single label must wrap inside its chip, not widen the card. */
+  overflow-wrap: anywhere;
 }
 
 .mc .tcard .ct-foot {
@@ -180,9 +187,17 @@
   opacity: 0.55;
   transform: scale(1.02);
   cursor: grabbing;
-  transition:
-    opacity var(--p-dur) var(--p-ease),
-    transform var(--p-dur) var(--p-ease);
+}
+
+/* The lift itself (opacity/scale above) stays for the drop affordance under
+   any motion preference; only the animated transition into it is gated, so
+   reduced-motion users get the final state with no tween (mirrors ntmIn). */
+@media (prefers-reduced-motion: no-preference) {
+  .mc .tcard.dragging {
+    transition:
+      opacity var(--p-dur) var(--p-ease),
+      transform var(--p-dur) var(--p-ease);
+  }
 }
 
 /* The drop target is the column body (.bbody); the active ring is drawn inset
@@ -550,6 +565,15 @@
 
 .mc .filterbar .fb-input::placeholder {
   color: var(--p-muted);
+}
+
+/* Keyboard focus ring — the input clears its UA outline above, so restore a
+   visible focus-visible ring for keyboard users (WCAG 2.4.7). Drawn on the
+   .fb-search wrapper via :focus-within so the ring frames the whole field
+   (magnifier + input) rather than just the borderless text box. */
+.mc .filterbar .fb-search:focus-within {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 1px;
 }
 
 .mc .filterbar .fb-facets {

@@ -64,8 +64,23 @@ function FacetPopover({
     const onDocPointer = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) onClose();
     };
+    // Esc closes just this popover (keyboard parity with the outside-click
+    // close, mirroring PeoplePicker). Capture phase + stopPropagation so it does
+    // not also reach the global no-field Esc-clear in WorkViews — closing the
+    // open facet takes precedence over clearing all filters (SPEC §3).
+    const onEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }
+    };
     window.addEventListener("mousedown", onDocPointer);
-    return () => window.removeEventListener("mousedown", onDocPointer);
+    window.addEventListener("keydown", onEsc, true);
+    return () => {
+      window.removeEventListener("mousedown", onDocPointer);
+      window.removeEventListener("keydown", onEsc, true);
+    };
   }, [onClose]);
 
   return (

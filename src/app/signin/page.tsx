@@ -9,8 +9,6 @@ import { redirect } from "next/navigation";
 import { Kicker } from "@/components/brand";
 import { auth, oidcEnabled, signIn } from "@/lib/auth";
 
-import logoHorizontal from "../../../public/brand/logo-horizontal-ink.png";
-
 // The Auth.js `?error=` codes this gate can realistically surface, in plain,
 // honest copy. The allowlist rejection (isAllowedUser → false) lands here as
 // "AccessDenied".
@@ -51,7 +49,14 @@ export default async function SignInPage({
   return (
     <main className="mc-auth">
       <section className="card">
-        <Image src={logoHorizontal} alt="Petra Lab-X" className="logo" priority />
+        <Image
+          src="/brand/logo-horizontal-ink.png"
+          alt="Petra Lab-X"
+          width={409}
+          height={107}
+          className="logo"
+          priority
+        />
         <div>
           <Kicker className="mc-auth-kicker">Mission Control</Kicker>
           <h1>Sign in</h1>

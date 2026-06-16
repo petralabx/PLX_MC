@@ -11,8 +11,6 @@ import { dismissNotice, storeSyncCounts, unreadCount } from "@/lib/mc-data/store
 
 import { Avatar, PMark } from "./atoms";
 import type { Nav, Route, Screen } from "./route";
-import logoHorizontalCream from "../../../public/brand/logo-horizontal-cream.png";
-import logoHorizontalInk from "../../../public/brand/logo-horizontal-ink.png";
 
 export function Topbar({
   nav,
@@ -37,8 +35,10 @@ export function Topbar({
       <div className="l">
         <button type="button" className="brand" onClick={() => nav("home")}>
           <Image
-            src={dark ? logoHorizontalCream : logoHorizontalInk}
+            src={dark ? "/brand/logo-horizontal-cream.png" : "/brand/logo-horizontal-ink.png"}
             alt="Petra Lab-X"
+            width={409}
+            height={107}
             className="brand-logo"
             priority
           />

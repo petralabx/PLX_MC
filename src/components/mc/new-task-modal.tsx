@@ -17,6 +17,7 @@ import { useMcVersion } from "@/lib/mc-data/hooks";
 import { actorById, addTask, nextTaskId } from "@/lib/mc-data/store";
 
 import { Avatar } from "./atoms";
+import { LabelEditor } from "./label-editor";
 import { NotifyTrail, PeoplePicker } from "./people-picker";
 import type { Nav } from "./route";
 
@@ -80,7 +81,6 @@ export function NewTaskModal({
   const [requirements, setRequirements] = useState<string[]>([]);
   const [repos, setRepos] = useState<string[]>([]);
   const [labels, setLabels] = useState<string[]>([]);
-  const [labelDraft, setLabelDraft] = useState("");
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
@@ -115,14 +115,6 @@ export function NewTaskModal({
 
   const toggle = (values: string[], value: string, set: (next: string[]) => void) => {
     set(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
-  };
-
-  const addLabel = () => {
-    const normalized = labelDraft.trim().toLowerCase();
-    if (normalized && !labels.includes(normalized)) {
-      setLabels((prev) => [...prev, normalized]);
-    }
-    setLabelDraft("");
   };
 
   const submit = useCallback(() => {
@@ -339,31 +331,7 @@ export function NewTaskModal({
 
           <div className="ntm-chips">
             <span className="k">Labels</span>
-            <div className="row">
-              {labels.map((label) => (
-                <button
-                  type="button"
-                  key={label}
-                  className="ntm-chip label on"
-                  onClick={() => toggle(labels, label, setLabels)}
-                >
-                  {label} <span className="rm">✕</span>
-                </button>
-              ))}
-              <input
-                className="ntm-label-input"
-                value={labelDraft}
-                onChange={(event) => setLabelDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    addLabel();
-                  }
-                }}
-                onBlur={addLabel}
-                placeholder="+ label"
-              />
-            </div>
+            <LabelEditor labels={labels} onChange={setLabels} />
           </div>
         </div>
 

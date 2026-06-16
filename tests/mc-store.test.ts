@@ -6,10 +6,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  __setPatchMirrorForTests,
+  activeNotices,
   addSubtask,
   addTask,
   allTasks,
   auditLog,
+  dismissNotice,
   inboxNotifications,
   invitePerson,
   markAllSynced,
@@ -18,6 +21,7 @@ import {
   openConflicts,
   openErrors,
   patchTaskFields,
+  pushNotice,
   reassignTask,
   resetStore,
   resolveConflict,
@@ -32,6 +36,7 @@ import {
   toggleSubtask,
   unreadCount,
 } from "@/lib/mc-data/store";
+import type { Task } from "@/lib/mc-data";
 
 beforeEach(() => resetStore());
 
@@ -159,6 +164,118 @@ describe("patchTaskFields (the shared mutation spine)", () => {
     expect(t?.stage).toBe("merged");
     expect(t?.priority).toBe("urgent");
     expect(t?.bucket).toBe("BKT-DAPI");
+  });
+});
+
+// The prime-directive guard (SPEC §5 Module B "recommended" reconcile-on-failure
+// + §6 E2E #3a). `patchTaskFields` mirrors the optimistic edit to PATCH; on
+// SUCCESS it adopts the server's returned task, on FAILURE it restores the
+// pre-edit values of exactly the patched fields (and the optimistic activity
+// line), re-emits, and surfaces a NON-SILENT notice — so a write the user saw
+// is never silently dropped on the next hydrate. `serverCall`/the default mirror
+// are no-ops under the Node test env, so these drive the real path through the
+// injectable mirror seam (__setPatchMirrorForTests).
+describe("patchTaskFields PATCH mirror — success reconcile", () => {
+  it("adopts the server's returned task on a resolved mirror", async () => {
+    // The server is the source of truth: it can return a task that differs from
+    // the optimistic one (here it also bumps the title), and we must adopt it.
+    const serverTask: Task = { ...taskById("TASK-221")!, stage: "qa", title: "Server-canonical title" };
+    __setPatchMirrorForTests(async () => serverTask);
+
+    await patchTaskFields("TASK-221", { stage: "qa" });
+
+    const t = taskById("TASK-221");
+    expect(t?.stage).toBe("qa");
+    expect(t?.title).toBe("Server-canonical title"); // reconciled to DB truth
+    expect(activeNotices()).toHaveLength(0); // success path surfaces no notice
+  });
+});
+
+describe("patchTaskFields PATCH mirror — failure rollback (prime-directive guard)", () => {
+  it("restores the patched field and surfaces a non-silent notice when the PATCH rejects", async () => {
+    const before = taskById("TASK-221")!.stage;
+    expect(before).not.toBe("qa"); // guard: the edit is a real change
+    __setPatchMirrorForTests(async () => {
+      throw new Error("PATCH 500");
+    });
+
+    await patchTaskFields("TASK-221", { stage: "qa" });
+
+    // The optimistic move is rolled back to the pre-edit value …
+    expect(taskById("TASK-221")?.stage).toBe(before);
+    // … and the failure is surfaced, not silently swallowed.
+    const notices = activeNotices();
+    expect(notices).toHaveLength(1);
+    expect(notices[0].tone).toBe("error");
+    expect(notices[0].body).toContain("TASK-221");
+    expect(notices[0].body.toLowerCase()).toContain("rolled back");
+  });
+
+  it("reverts the optimistic activity line and leaves unpatched fields intact", async () => {
+    const t0 = taskById("TASK-221")!;
+    const priorActivityLen = t0.activity.length;
+    const priorTopActivity = t0.activity[0]?.what;
+    const priorPriority = t0.priority; // an unpatched field — must be untouched
+    __setPatchMirrorForTests(async () => {
+      throw new Error("network down");
+    });
+
+    // setTaskStage prepends a "moved to …" activity line before the mirror runs.
+    await setTaskStage("TASK-221", "merged");
+
+    const t = taskById("TASK-221")!;
+    expect(t.stage).toBe(t0.stage); // rolled back
+    expect(t.priority).toBe(priorPriority); // unpatched field unchanged
+    // The optimistic activity entry is also reverted (no spurious "moved to…").
+    expect(t.activity).toHaveLength(priorActivityLen);
+    expect(t.activity[0]?.what).toBe(priorTopActivity);
+  });
+
+  it("rolls back a DB-only field edit (labels) and notices on failure", async () => {
+    const before = [...taskById("TASK-221")!.labels];
+    __setPatchMirrorForTests(async () => {
+      throw new Error("PATCH 500");
+    });
+
+    await setTaskLabels("TASK-221", ["go-live", "wms"]);
+
+    expect(taskById("TASK-221")?.labels).toEqual(before); // restored
+    expect(activeNotices()).toHaveLength(1);
+  });
+
+  it("rolls back a reassign through the same spine path", async () => {
+    const before = taskById("TASK-221")!.assignee;
+    __setPatchMirrorForTests(async () => {
+      throw new Error("PATCH 500");
+    });
+
+    await reassignTask("TASK-221", "priya");
+
+    expect(taskById("TASK-221")?.assignee).toBe(before); // reassign rolled back
+    expect(activeNotices()).toHaveLength(1);
+  });
+});
+
+describe("notice channel (rollback surfacing primitive)", () => {
+  it("pushNotice prepends newest-first and returns an id; dismissNotice removes by id", () => {
+    expect(activeNotices()).toHaveLength(0);
+    const first = pushNotice("first problem");
+    const second = pushNotice("second problem");
+    const notices = activeNotices();
+    expect(notices).toHaveLength(2);
+    expect(notices[0].id).toBe(second); // newest first
+    expect(notices[1].id).toBe(first);
+
+    dismissNotice(first);
+    expect(activeNotices().map((n) => n.id)).toEqual([second]);
+    // Dismissing an unknown id is a safe no-op.
+    dismissNotice("ntc-nope");
+    expect(activeNotices()).toHaveLength(1);
+  });
+
+  it("defaults to the error tone", () => {
+    pushNotice("boom");
+    expect(activeNotices()[0].tone).toBe("error");
   });
 });
 

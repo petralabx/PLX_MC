@@ -1,5 +1,5 @@
 import { ACTORS, BANDS, BUCKETS, BUCKET_IDX, PRIORITY, STAGES, bandOf } from "@/lib/mc-data";
-import type { Bucket, PriorityKey, StageKey, Task } from "@/lib/mc-data";
+import type { Band, Bucket, PriorityKey, StageKey, Task } from "@/lib/mc-data";
 
 // One unified column axis drives BOTH the board and the list (resolves OQ i;
 // replaces the former ad-hoc `BoardGrouping` + `ListGroupBy`). Single-cell:
@@ -80,6 +80,95 @@ export function columnKeyForTask(task: Task, groupBy: GroupBy): string {
     default:
       return bandOf(task.stage);
   }
+}
+
+// ─── Drag-to-mutate axis → field resolution (Module B, pure + tested) ─────────
+
+// The band axis has no single "band" field on a Task; dropping into a band
+// column sets the band's ENTRY stage (the first stage of that band). Documented
+// map (SPEC §5 Module B): todo→backlog, doing→progress, done→merged. These keys
+// are the n=01 / n=05 / n=08 stages of each band in STAGES.
+export const BAND_ENTRY_STAGE: Record<Band, StageKey> = {
+  todo: "backlog",
+  doing: "progress",
+  done: "merged",
+};
+
+// Which Task field a drop on the given axis mutates. Used both to ENABLE drag
+// (only axes that map to a real field are drag-targets) and to route the drop
+// through the right PR-0 spine wrapper. Every Cycle-1 axis is persistable, so
+// this is non-null for all five — but the union is explicit so a future,
+// non-persistable axis (e.g. a derived/computed lane) is disabled, not a silent
+// no-op (SPEC §5 "Respect axis sensibility").
+export type DragField = "stage" | "priority" | "bucket" | "assignee";
+
+export function dragFieldForAxis(groupBy: GroupBy): DragField | null {
+  switch (groupBy) {
+    case "band":
+    case "stage":
+      return "stage";
+    case "priority":
+      return "priority";
+    case "bucket":
+      return "bucket";
+    case "assignee":
+      return "assignee";
+    default:
+      return null;
+  }
+}
+
+// True when dropping a card onto a column under this axis maps to a real,
+// persisted field mutation. Drives whether cards are `draggable` + columns are
+// drop targets (SPEC §5: disable drag on axes where a drop maps to no field,
+// rather than no-op silently). All five Cycle-1 axes qualify.
+export function dragEnabledForAxis(groupBy: GroupBy): boolean {
+  return dragFieldForAxis(groupBy) !== null;
+}
+
+// A resolved drop: the field to set and the value to set it to, for the column
+// the card was dropped on. `null` when the axis is not drag-mutable or the
+// column key is not a real value on that axis (defensive — an unknown drop
+// target is dropped, never written). The assignee "Unassigned" column resolves
+// to `assignee: null` (unassign). Pure: no store reads, no side effects.
+export interface ResolvedDrop {
+  field: DragField;
+  value: StageKey | PriorityKey | string | null;
+}
+
+export function resolveColumnDrop(groupBy: GroupBy, columnKey: string): ResolvedDrop | null {
+  switch (groupBy) {
+    case "stage":
+      // Only a real stage key is a valid target.
+      return STAGES.some((s) => s.key === columnKey)
+        ? { field: "stage", value: columnKey as StageKey }
+        : null;
+    case "band": {
+      const entry = BAND_ENTRY_STAGE[columnKey as Band];
+      return entry ? { field: "stage", value: entry } : null;
+    }
+    case "priority":
+      return columnKey in PRIORITY
+        ? { field: "priority", value: columnKey as PriorityKey }
+        : null;
+    case "bucket":
+      return columnKey in BUCKET_IDX ? { field: "bucket", value: columnKey } : null;
+    case "assignee":
+      // The "Unassigned" sentinel column unassigns; any other key is an actor id.
+      return columnKey === UNASSIGNED_KEY
+        ? { field: "assignee", value: null }
+        : { field: "assignee", value: columnKey };
+    default:
+      return null;
+  }
+}
+
+// True when the card already lives in the dropped column on this axis — the
+// no-op guard (SPEC §5): a same-column drop must not PATCH (avoids spurious
+// writes + the sweep race). Reuses the single read-side column resolver so the
+// no-op test is exactly the inverse of where the card renders.
+export function isNoopDrop(task: Task, groupBy: GroupBy, columnKey: string): boolean {
+  return columnKeyForTask(task, groupBy) === columnKey;
 }
 
 export function partitionTasksByColumn(

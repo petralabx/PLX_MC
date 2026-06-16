@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandBoundary } from "@/components/brand";
 import { hydrate } from "@/lib/mc-data/store";
 
-import { Sidebar, Topbar } from "./chrome";
+import { NoticeHost, Sidebar, Topbar } from "./chrome";
 import { CommandPalette } from "./command-palette";
 import { InboxView } from "./inbox";
 import { NewTaskModal } from "./new-task-modal";
@@ -133,6 +133,7 @@ export function MissionControlShell() {
         />
       ) : null}
       {newTaskOpen ? <NewTaskModal ctx={newTaskCtx} onClose={closeNewTask} nav={nav} /> : null}
+      <NoticeHost />
     </BrandBoundary>
   );
 }

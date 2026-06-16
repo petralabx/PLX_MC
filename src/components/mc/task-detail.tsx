@@ -4,29 +4,41 @@ import { useState } from "react";
 
 import {
   ACTORS,
+  BUCKETS,
   BUCKET_IDX,
+  CURRENT_USER,
   PRIORITY,
   STAGES,
   STAGE_IDX,
   confidenceOf,
+  type PriorityKey,
   type SpColumn,
+  type StageKey,
   type SyncDirection,
   type Task,
 } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
+  addSubtask,
   allTasks,
   markAllSynced,
   openConflicts,
   reassignTask,
   resolveConflict,
+  setCoassignees,
+  setTaskBucket,
+  setTaskLabels,
+  setTaskPriority,
+  setTaskStage,
   spLists,
   taskById,
+  toggleSubtask,
 } from "@/lib/mc-data/store";
 
 import {
   Assignee,
   Avatar,
+  AvatarStack,
   Estimate,
   Label,
   Priority,
@@ -35,6 +47,7 @@ import {
   Slate,
   SyncTick,
 } from "./atoms";
+import { LabelEditor } from "./label-editor";
 import { NotifyTrail, PeoplePicker } from "./people-picker";
 import type { ScreenProps } from "./route";
 
@@ -108,7 +121,9 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
   const task = taskById(taskId);
   const [resolved, setResolved] = useState<{ taskId: string; winner: "mc" | "sp" } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [coPickerOpen, setCoPickerOpen] = useState(false);
   const [reassigned, setReassigned] = useState<{ taskId: string; actorId: string } | null>(null);
+  const [subtaskDraft, setSubtaskDraft] = useState("");
 
   if (!task) {
     return (
@@ -193,6 +208,37 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                       setReassigned(actorId ? { taskId: task.id, actorId } : null);
                     }}
                     onClose={() => setPickerOpen(false)}
+                    style={{ top: "calc(100% + 6px)", left: 0 }}
+                  />
+                )}
+              </span>
+              <span className="asgwrap coasg">
+                {task.coassignees.length > 0 && <AvatarStack ids={task.coassignees} />}
+                <button
+                  type="button"
+                  className="coasg-add"
+                  onClick={() => setCoPickerOpen((open) => !open)}
+                  title="Add a co-assignee"
+                  aria-label="Add a co-assignee"
+                >
+                  +<span className="coasg-lab">Co-assign</span>
+                </button>
+                {coPickerOpen && (
+                  <PeoplePicker
+                    // Humans-only for coassignees (§5 Module C recommendation).
+                    allowAgents={false}
+                    current={null}
+                    onPick={(actorId) => {
+                      // Accumulate: the picker is single-pick, so toggle the
+                      // chosen id into the existing set; the store dedupes and
+                      // drops the primary assignee (setCoassignees).
+                      if (!actorId) return;
+                      const next = task.coassignees.includes(actorId)
+                        ? task.coassignees.filter((id) => id !== actorId)
+                        : [...task.coassignees, actorId];
+                      setCoassignees(task.id, next);
+                    }}
+                    onClose={() => setCoPickerOpen(false)}
                     style={{ top: "calc(100% + 6px)", left: 0 }}
                   />
                 )}
@@ -328,28 +374,52 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
             </div>
           )}
 
-          {task.subtasks.length > 0 && (
-            <div className="blk">
-              <div className="bh">
-                <span className="kk">
-                  / Subtasks · <b>{task.subtasks.filter((subtask) => subtask.done).length}</b>/
-                  {task.subtasks.length}
-                </span>
-              </div>
-              <div className="subs">
-                {task.subtasks.map((subtask) => (
-                  <div className={`sub${subtask.done ? " done" : ""}`} key={subtask.id}>
-                    <span className="box">{subtask.done ? "✓" : ""}</span>
-                    <span className="id">{subtask.id}</span>
-                    <span className="t">{subtask.t}</span>
-                    <span className="who">
-                      <Avatar id={subtask.who} size="sm" />
-                    </span>
-                  </div>
-                ))}
+          <div className="blk">
+            <div className="bh">
+              <span className="kk">
+                / Subtasks · <b>{task.subtasks.filter((subtask) => subtask.done).length}</b>/
+                {task.subtasks.length}
+              </span>
+            </div>
+            <div className="subs">
+              {task.subtasks.map((subtask) => (
+                <div className={`sub${subtask.done ? " done" : ""}`} key={subtask.id}>
+                  <button
+                    type="button"
+                    className="box"
+                    onClick={() => toggleSubtask(task.id, subtask.id)}
+                    title={subtask.done ? "Mark not done" : "Mark done"}
+                    aria-label={`Toggle subtask ${subtask.t}`}
+                    aria-pressed={subtask.done}
+                  >
+                    {subtask.done ? "✓" : ""}
+                  </button>
+                  <span className="id">{subtask.id}</span>
+                  <span className="t">{subtask.t}</span>
+                  <span className="who">
+                    <Avatar id={subtask.who} size="sm" />
+                  </span>
+                </div>
+              ))}
+              <div className="sub-add">
+                <span className="box" aria-hidden="true" />
+                <input
+                  className="sub-input"
+                  value={subtaskDraft}
+                  onChange={(event) => setSubtaskDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addSubtask(task.id, subtaskDraft, CURRENT_USER);
+                      setSubtaskDraft("");
+                    }
+                  }}
+                  placeholder="+ Add subtask"
+                  aria-label="Add a subtask"
+                />
               </div>
             </div>
-          )}
+          </div>
 
           <div className="blk">
             <div className="bh">
@@ -398,8 +468,23 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                       : index === stageIdx
                         ? "now"
                         : "";
+                const isCurrent = stage.key === task.stage;
                 return (
-                  <div className={`s ${cls}`} key={stage.key}>
+                  // Editable lifecycle rail (R7 non-drag path for `stage`):
+                  // clicking a step sets the task's stage via the spine wrapper.
+                  // Stays keyboard-accessible (a real <button>); the current
+                  // stage is a no-op (aria-current marks it).
+                  <button
+                    type="button"
+                    className={`s ${cls}`}
+                    key={stage.key}
+                    onClick={() => {
+                      if (!isCurrent) setTaskStage(task.id, stage.key);
+                    }}
+                    aria-current={isCurrent ? "step" : undefined}
+                    aria-label={`Set stage to ${stage.name}`}
+                    title={isCurrent ? `Current stage · ${stage.name}` : `Move to ${stage.name}`}
+                  >
                     <div className="gut">
                       <span className="mk" />
                       <span className="line" />
@@ -411,7 +496,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                         {stage.gate && <span className="gate">{stage.gate}</span>}
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -436,18 +521,75 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                 <span className="k">Reporter</span>
                 <span className="v">{ACTORS[task.reporter]?.name ?? task.reporter}</span>
               </div>
+              {/* Priority — editable (R7 non-drag path); SP-tier, mirrors. */}
+              <div className="rfact">
+                <span className="k">Priority</span>
+                <span className="v">
+                  <label className="rfact-select">
+                    <Priority p={task.priority} />
+                    <select
+                      value={task.priority}
+                      onChange={(event) =>
+                        setTaskPriority(task.id, event.target.value as PriorityKey)
+                      }
+                      aria-label="Set priority"
+                    >
+                      {(Object.entries(PRIORITY) as [PriorityKey, (typeof PRIORITY)[PriorityKey]][]).map(
+                        ([key, cfg]) => (
+                          <option key={key} value={key}>
+                            {cfg.label}
+                          </option>
+                        )
+                      )}
+                    </select>
+                    <span className="caret" aria-hidden="true">▾</span>
+                  </label>
+                </span>
+              </div>
+              {/* Initiative (bucket) — editable, DB-only (Initiative is an SP
+                  Lookup → Roadmap; the lookup-id write lands with the directory
+                  increment, so no sync claim here). This is also the non-drag /
+                  touch-reachable path for `bucket` (R7). */}
+              <div className="rfact">
+                <span className="k">Initiative</span>
+                <span className="v">
+                  <label className="rfact-select">
+                    <select
+                      value={task.bucket}
+                      onChange={(event) => setTaskBucket(task.id, event.target.value)}
+                      aria-label="Set initiative"
+                    >
+                      {BUCKETS.map((bucketOption) => (
+                        <option key={bucketOption.id} value={bucketOption.id}>
+                          {bucketOption.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="caret" aria-hidden="true">▾</span>
+                  </label>
+                  <span
+                    className="rfact-note"
+                    title="Initiative mirror lands with the directory/lookup increment"
+                  >
+                    mirror deferred
+                  </span>
+                </span>
+              </div>
               <div className="rfact">
                 <span className="k">Repos</span>
                 <span className="v">
                   {task.repos.length ? task.repos.map((repo) => <RepoChip key={repo} id={repo} />) : "—"}
                 </span>
               </div>
+              {/* Labels — editable inline (DB-only, no sync claim). Shares the
+                  LabelEditor with the New Task modal (Pillar 3). */}
               <div className="rfact">
                 <span className="k">Labels</span>
                 <span className="v">
-                  {task.labels.length
-                    ? task.labels.map((label) => <Label key={label} text={label} />)
-                    : "—"}
+                  <LabelEditor
+                    labels={task.labels}
+                    onChange={(labels) => setTaskLabels(task.id, labels)}
+                  />
                 </span>
               </div>
               <div className="rfact">

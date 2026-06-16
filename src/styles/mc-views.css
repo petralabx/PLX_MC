@@ -168,6 +168,30 @@
   border-left: 2px solid var(--p-hot);
 }
 
+/* ════════ DRAG-TO-MUTATE (Module B, native HTML5 DnD) ════════
+   Drag is enabled only on axes where a column-drop maps to a real field
+   mutation; on those, cards get a grab cursor and a lift while dragging, and
+   the target column body shows an inset accent ring. Tokens only — no raw hex. */
+.mc .tcard[draggable="true"] {
+  cursor: grab;
+}
+
+.mc .tcard.dragging {
+  opacity: 0.55;
+  transform: scale(1.02);
+  cursor: grabbing;
+  transition:
+    opacity var(--p-dur) var(--p-ease),
+    transform var(--p-dur) var(--p-ease);
+}
+
+/* The drop target is the column body (.bbody); the active ring is drawn inset
+   so it reads as "drop here" without shifting layout. */
+.mc .board .bbody.drop-active {
+  box-shadow: inset 0 0 0 1px var(--p-accent);
+  background: var(--p-accent-soft);
+}
+
 /* ════════ LIST ════════ */
 .mc .list {
   padding: 0 0 80px;

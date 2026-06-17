@@ -14,12 +14,15 @@ export async function gotoBoard(page: Page): Promise<void> {
   await expect(page.getByText("Group by")).toBeVisible();
 }
 
-// Wait for client hydration before driving React-state navigation: the topbar
-// sync pill label is computed client-side from the store, so its appearance
-// means the client handlers (sidebar nav, chords) are wired. Avoids the
-// SSR-HTML-present-but-not-interactive window where a click would no-op.
+// Wait for client hydration before driving React-state navigation or keyboard
+// shortcuts. The shell sets data-mc-ready ONLY from a post-mount effect, after
+// its global keydown listener is attached — so this marks true interactivity.
+// The previous anchor (the sync-pill label) is server-rendered and already
+// present in the SSR HTML, so it resolved immediately and raced the ⌘K handler
+// under load (page.keyboard.press has no actionability delay, unlike .click()).
+// See LESSONS 2026-06-17.
 export async function waitForHydration(page: Page): Promise<void> {
-  await expect(page.locator(".mc-top .topsync .lb")).toBeVisible();
+  await expect(page.locator("[data-mc-ready='true']")).toBeAttached();
 }
 
 export async function openSidebar(page: Page, label: string): Promise<void> {

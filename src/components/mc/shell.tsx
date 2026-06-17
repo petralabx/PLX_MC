@@ -22,6 +22,10 @@ export function MissionControlShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskCtx, setNewTaskCtx] = useState<{ bucketId?: string } | undefined>(undefined);
+  // Post-hydration readiness flag (see the effect below): surfaced as
+  // data-mc-ready on the shell root so automation can wait for genuine
+  // interactivity, not the SSR-present-but-not-hydrated DOM.
+  const [ready, setReady] = useState(false);
 
   // Hydrate after mount so SSR HTML and the first client render stay
   // identical: invited people from localStorage, then the engine's live
@@ -121,10 +125,19 @@ export function MissionControlShell() {
     };
   }, [nav, newTaskOpen, paletteOpen]);
 
+  // Flip the readiness flag once, AFTER mount — i.e. after the client effects
+  // above (notably the global ⌘K / `g _` chord keydown listener) have attached.
+  // The marker only paints on the re-render that follows this first effect
+  // flush, so its presence guarantees the shell is interactive, not merely
+  // server-painted. Lets E2E wait for true interactivity (see e2e/helpers.ts).
+  useEffect(() => {
+    setReady(true);
+  }, []);
+
   const ScreenComponent = SCREENS[route.screen];
 
   return (
-    <BrandBoundary className={`mc${dark ? " dark" : ""}`}>
+    <BrandBoundary className={`mc${dark ? " dark" : ""}`} data-mc-ready={ready ? "true" : undefined}>
       <Topbar nav={nav} dark={dark} setDark={setDark} onOpenPalette={openPalette} />
       <div className="mc-shell">
         <Sidebar route={route} nav={nav} />

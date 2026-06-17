@@ -16,7 +16,7 @@
 .mc .reg {
   background: var(--p-paper);
   border: 1px solid var(--p-grid);
-  border-radius: 4px;
+  border-radius: var(--p-radius);
   padding: 15px;
 }
 
@@ -82,7 +82,7 @@
   align-items: center;
   background: var(--p-paper);
   border: 1px solid var(--p-grid);
-  border-radius: 4px;
+  border-radius: var(--p-radius);
   display: flex;
   flex-wrap: wrap;
   gap: 20px;
@@ -161,7 +161,7 @@
 .mc .spreg {
   background: var(--p-paper);
   border: 1px solid var(--p-grid);
-  border-radius: 4px;
+  border-radius: var(--p-radius);
   overflow: hidden;
 }
 
@@ -351,7 +351,7 @@
 
 .mc .conflict-row {
   border: 1px solid var(--p-warn);
-  border-radius: 4px;
+  border-radius: var(--p-radius);
   margin-bottom: 13px;
   overflow: hidden;
 }
@@ -445,7 +445,7 @@
 
 .mc .auditlog {
   border: 1px solid var(--p-grid);
-  border-radius: 4px;
+  border-radius: var(--p-radius);
 }
 
 .mc .auditlog .arow {
@@ -525,7 +525,7 @@
 .mc .ftable {
   background: var(--p-paper);
   border: 1px solid var(--p-grid);
-  border-radius: 4px;
+  border-radius: var(--p-radius);
   overflow: hidden;
 }
 

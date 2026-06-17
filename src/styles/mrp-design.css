@@ -205,7 +205,7 @@
 .mrp-shell .mrp-btn.ghost { background: transparent; color: var(--p-ink); border-color: var(--p-grid); }
 .mrp-shell .mrp-btn.ghost:hover:not(:disabled) { background: transparent; color: var(--p-ink); border-color: var(--p-ink); }
 .mrp-shell .mrp-btn.sm { padding: 5px 10px; font-size: 9px; }
-.mrp-shell .mrp-btn.acc { background: var(--p-accent); border-color: var(--p-accent); color: #fff; }
+.mrp-shell .mrp-btn.acc { background: var(--p-accent); border-color: var(--p-accent); color: var(--p-paper); }
 .mrp-shell .mrp-btn.full { width: 100%; justify-content: center; margin-top: 14px; }
 
 /* ─── Status pills ─── */

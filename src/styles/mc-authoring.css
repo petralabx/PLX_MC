@@ -21,7 +21,7 @@
   max-width: 92vw;
   background: var(--p-paper);
   border: 1px solid var(--p-grid);
-  border-radius: 6px;
+  border-radius: var(--p-radius-lg);
   box-shadow: var(--p-shadow-lg);
 }
 
@@ -116,7 +116,7 @@
   z-index: 50;
   background: var(--p-paper);
   border: 1px solid var(--p-grid);
-  border-radius: 4px;
+  border-radius: var(--p-radius);
   box-shadow: var(--p-shadow-md);
 }
 
@@ -180,7 +180,7 @@
   max-width: 100%;
   background: var(--p-paper);
   border: 1px solid var(--p-grid);
-  border-radius: 6px;
+  border-radius: var(--p-radius-lg);
   box-shadow: var(--p-shadow-lg);
   opacity: 1;
 }
@@ -282,7 +282,7 @@
   border: 1px solid var(--p-grid);
   background: var(--p-canvas);
   padding: 10px 12px;
-  border-radius: 4px;
+  border-radius: var(--p-radius);
   color: var(--p-ink);
   font-size: 13px;
   line-height: 1.5;

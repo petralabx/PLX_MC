@@ -338,7 +338,7 @@
 .mc .clegend .sw {
   width: 11px;
   height: 11px;
-  border-radius: 3px;
+  border-radius: var(--p-radius-sm);
   flex: 0 0 auto;
 }
 

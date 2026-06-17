@@ -105,7 +105,7 @@
 .mc .tcard {
   background: var(--p-paper);
   border: 1px solid var(--p-grid);
-  border-radius: 4px;
+  border-radius: var(--p-radius);
   padding: 11px 12px;
   display: flex;
   flex-direction: column;

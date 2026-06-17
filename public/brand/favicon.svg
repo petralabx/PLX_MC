@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Petra Lab-X">
+  <rect x="0.5" y="0.5" width="31" height="31" fill="#FBF9F5" stroke="#1B1A17" stroke-width="1" />
+  <text x="3" y="9" fill="#1B1A17" font-family="JetBrains Mono, ui-monospace, monospace" font-size="5" letter-spacing=".3">14</text>
+  <text x="29" y="27" fill="#1B1A17" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="14" font-style="italic">Px</text>
+</svg>

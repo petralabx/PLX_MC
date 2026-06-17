@@ -79,14 +79,14 @@
 .mc .btn:hover { background:var(--p-accent); border-color:var(--p-accent); }
 .mc .btn.ghost { background:transparent; color:var(--p-ink); border-color:var(--p-grid); }
 .mc .btn.ghost:hover { background:transparent; color:var(--p-ink); border-color:var(--p-ink); }
-.mc .btn.acc { background:var(--p-accent); border-color:var(--p-accent); color:#fff; }
+.mc .btn.acc { background:var(--p-accent); border-color:var(--p-accent); color:var(--p-paper); }
 .mc .btn.sm { padding:5px 9px; font-size:8.5px; }
 
 /* ─── Avatars: HUMAN = circle · AGENT = sharp square + model tag ──────────── */
 .mc .av { width:24px; height:24px; flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
   font-family:var(--mono); font-size:9px; letter-spacing:0; background:var(--p-ink); color:var(--p-paper); position:relative; }
 .mc .av.human { border-radius:50%; }
-.mc .av.agent { border-radius:1px; background:var(--p-accent); color:#fff; box-shadow:0 0 0 1px var(--p-paper), 0 0 0 2px var(--p-accent); }
+.mc .av.agent { border-radius:1px; background:var(--p-accent); color:var(--p-paper); box-shadow:0 0 0 1px var(--p-paper), 0 0 0 2px var(--p-accent); }
 .mc .av.agent::after { content:""; position:absolute; top:-1px; right:-1px; width:0; height:0;
   border-top:5px solid var(--p-paper); border-left:5px solid transparent; }
 .mc .av.lead { box-shadow:0 0 0 1.5px var(--p-accent); }
@@ -171,7 +171,7 @@
 .mc .empty p { font-size:13px; color:var(--p-muted); margin:0; max-width:44ch; line-height:1.55; }
 .mc .empty .acts { display:flex; gap:9px; margin-top:6px; }
 .mc .colempty { padding:18px 4px; text-align:center; font-family:var(--mono); font-size:8.5px; letter-spacing:0.16em;
-  text-transform:uppercase; color:var(--p-muted); border:1px dashed var(--p-grid-2); border-radius:4px; }
+  text-transform:uppercase; color:var(--p-muted); border:1px dashed var(--p-grid-2); border-radius:var(--p-radius); }
 
 /* ─── Back link + section headers (shared by detail screens) ──────────────── */
 .mc .back { font-family:var(--mono); font-size:9.5px; letter-spacing:0.16em; text-transform:uppercase; color:var(--p-muted);

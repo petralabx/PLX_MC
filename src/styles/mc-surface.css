@@ -8,10 +8,13 @@
    design system (docs/product/DESIGN_TOKENS.md §1-2) treats the three-layer
    rail < canvas < paper hierarchy as fundamental to the instrument-panel look.
 
-   This layer ADDS the two missing tokens for the MC surface only — it does NOT
-   alter any existing --p-* value (those stay the Portal's verbatim). Values are
-   taken from DESIGN_TOKENS.md and match the precedent already in the bundle
-   (src/styles/mrp-design.css `.mrp-shell`). Decision recorded in
+   This layer ADDS the MC-only surface tokens — it does NOT alter any existing
+   --p-* value (those stay the Portal's verbatim). --p-rail / --p-canvas values
+   are taken from DESIGN_TOKENS.md and match the precedent already in the bundle
+   (src/styles/mrp-design.css `.mrp-shell`); the --p-shadow-* elevation tokens
+   are MC-local too (the Portal mirror at fb8e065 defines no shadow tokens) and
+   match the hairline-soft shadows used inline elsewhere in the MC skin.
+   Decision recorded in
    docs/design-system/decisions/ADR-004-mission-control-surface-tokens.md.
 
    It also aliases the prototype font var names (--mazius/--sans/--mono) onto the
@@ -22,6 +25,14 @@
   /* Added surface tokens (light) — fill the rail/canvas gap, no value changes. */
   --p-rail: #eeebe3;
   --p-canvas: #f5f3ec;
+
+  /* Elevation tokens for the MC overlay surfaces (command palette, New Task
+     modal, pickers). Referenced by mc-authoring.css; previously undefined. They
+     are ink-tinted via color-mix(... var(--p-ink) ...), so they adapt to dark
+     mode automatically (no separate .dark values needed) — matching the inline
+     shadows already in mc-app.css / mc-views.css. Never a pure-black shadow. */
+  --p-shadow-md: 0 4px 12px color-mix(in srgb, var(--p-ink) 10%, transparent);
+  --p-shadow-lg: 0 8px 28px color-mix(in srgb, var(--p-ink) 14%, transparent);
 
   /* Font-name bridge to the canonical tokens loaded by app/layout.tsx. */
   --mazius: var(--p-font-serif);

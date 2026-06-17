@@ -41,6 +41,14 @@ export const metadata: Metadata = {
     "Agent-operated work hub for Petra Lab-X with a two-way SharePoint mirror as the system of record.",
   icons: {
     icon: [
+      // SVG first (crisp at any size); the dark variant is picked via the media
+      // query. PNGs remain as fallbacks for clients without SVG favicon support.
+      { url: "/brand/favicon.svg", type: "image/svg+xml" },
+      {
+        url: "/brand/favicon-dark.svg",
+        media: "(prefers-color-scheme: dark)",
+        type: "image/svg+xml",
+      },
       { url: "/brand/favicon-16.png", sizes: "16x16", type: "image/png" },
       { url: "/brand/favicon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/brand/favicon-64.png", sizes: "64x64", type: "image/png" },

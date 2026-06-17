@@ -811,3 +811,26 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* Due-range preset facet (Module G, SPEC §3.G.1). Reuses the .fb-pill / .fb-pop
+   / .fb-opt skins; tokens only — no raw hex. The pill picks up an accent tint
+   when a range is active so the "Due" facet reads as engaged without a chip
+   scan; the popover is a touch wider to fit the cycle labels. */
+.mc .filterbar .fb-due .fb-pill.has {
+  border-color: color-mix(in oklch, var(--p-accent) 55%, var(--p-grid));
+  color: var(--p-ink);
+}
+
+.mc .filterbar .fb-due-pop {
+  min-width: 188px;
+}
+
+.mc .filterbar .fb-due-pop .fb-due-clear {
+  border-top: 1px solid var(--p-grid);
+  margin-top: 4px;
+  color: var(--p-muted);
+}
+
+.mc .filterbar .fb-due-pop .fb-due-clear:hover {
+  color: var(--p-hot);
+}

@@ -12,7 +12,9 @@ import {
   dragFieldForAxis,
   dueDay,
   groupTasksForList,
+  hasActiveFilters,
   isNoopDrop,
+  isTaskDueInRange,
   labelUniverse,
   partitionSwimlanes,
   partitionTasksByColumn,
@@ -345,5 +347,143 @@ describe("timeline math helpers", () => {
     const july = timelineRangeForTask("Jul 20", "M");
     expect(july.endDay).toBe(30);
     expect(july.widthPct).toBe(0);
+  });
+});
+
+// ─── Module G: due-range filter (SPEC §3.G.1 / §3.G.3) ────────────────────────
+// Day-offset convention (verified against dueDay's MONTH_GRID_OFFSET["Jun"]=0):
+// Jun 1 = day 1, Jun 14 = 14, Jun 15 = 15, Jun 30 = 30, Jul 1 = 31. Both bounds
+// (dueStart/dueEnd) are INCLUSIVE; an undated task (dueDay → null) falls OUT of
+// any explicit range; both-undefined is the identity.
+describe("isTaskDueInRange (due-range boundary truth table)", () => {
+  // A task whose `due` parses to the given day on the dueDay scale.
+  const dueOn = (due: string): Task => ({ ...TASKS[0], id: `D-${due}`, due });
+
+  it("confirms the day-offset convention against dueDay (Jun 1=1 … Jun 30=30, Jul 1=31)", () => {
+    expect(dueDay("Jun 1")).toBe(1);
+    expect(dueDay("Jun 14")).toBe(14);
+    expect(dueDay("Jun 15")).toBe(15);
+    expect(dueDay("Jun 30")).toBe(30);
+    expect(dueDay("Jul 1")).toBe(31);
+    expect(dueDay("—")).toBeNull();
+  });
+
+  it("is the identity (true) when NO range is set (both bounds undefined)", () => {
+    expect(isTaskDueInRange(dueOn("Jun 14"))).toBe(true);
+    expect(isTaskDueInRange(dueOn("Jun 14"), undefined, undefined)).toBe(true);
+    // Even an undated task passes when there is no range — a range is a positive
+    // selection, so "no bound" constrains nothing.
+    expect(isTaskDueInRange(dueOn("—"))).toBe(true);
+  });
+
+  it("includes a task due EXACTLY on dueStart (inclusive low bound)", () => {
+    expect(isTaskDueInRange(dueOn("Jun 14"), 14, 28)).toBe(true);
+  });
+
+  it("includes a task due EXACTLY on dueEnd (inclusive high bound)", () => {
+    expect(isTaskDueInRange(dueOn("Jun 28"), 14, 28)).toBe(true);
+  });
+
+  it("excludes a task one day BELOW dueStart", () => {
+    expect(isTaskDueInRange(dueOn("Jun 13"), 14, 28)).toBe(false);
+  });
+
+  it("excludes a task one day ABOVE dueEnd", () => {
+    expect(isTaskDueInRange(dueOn("Jun 29"), 14, 28)).toBe(false);
+  });
+
+  it("supports an open-ended LOW bound (dueStart undefined ⇒ everything ≤ dueEnd)", () => {
+    expect(isTaskDueInRange(dueOn("Jun 1"), undefined, 15)).toBe(true);
+    expect(isTaskDueInRange(dueOn("Jun 15"), undefined, 15)).toBe(true);
+    expect(isTaskDueInRange(dueOn("Jun 16"), undefined, 15)).toBe(false);
+  });
+
+  it("supports an open-ended HIGH bound (dueEnd undefined ⇒ everything ≥ dueStart)", () => {
+    expect(isTaskDueInRange(dueOn("Jun 29"), 30, undefined)).toBe(false);
+    expect(isTaskDueInRange(dueOn("Jun 30"), 30, undefined)).toBe(true);
+    expect(isTaskDueInRange(dueOn("Jul 1"), 30, undefined)).toBe(true); // day 31 — beyond June
+  });
+
+  it("excludes an UNDATED task from ANY explicit range (documented)", () => {
+    expect(isTaskDueInRange(dueOn("—"), 1, 14)).toBe(false);
+    expect(isTaskDueInRange(dueOn("—"), undefined, 15)).toBe(false);
+    expect(isTaskDueInRange(dueOn("—"), 30, undefined)).toBe(false);
+  });
+});
+
+describe("due-range presets align with the day-offset grid (SPEC §3.G.1)", () => {
+  const dueOn = (due: string): Task => ({ ...TASKS[0], id: `P-${due}`, due });
+
+  it("'This cycle' {dueStart:1,dueEnd:14} matches a Jun 14 task and excludes Jun 15", () => {
+    // The exact patch the filter-bar preset applies (Jun 1 = day 1 convention).
+    const thisCycle = { dueStart: 1, dueEnd: 14 };
+    expect(isTaskDueInRange(dueOn("Jun 14"), thisCycle.dueStart, thisCycle.dueEnd)).toBe(true);
+    expect(isTaskDueInRange(dueOn("Jun 1"), thisCycle.dueStart, thisCycle.dueEnd)).toBe(true);
+    expect(isTaskDueInRange(dueOn("Jun 15"), thisCycle.dueStart, thisCycle.dueEnd)).toBe(false);
+  });
+
+  it("'Next cycle' {dueStart:15,dueEnd:28} brackets Jun 15–28 inclusive", () => {
+    const next = { dueStart: 15, dueEnd: 28 };
+    expect(isTaskDueInRange(dueOn("Jun 15"), next.dueStart, next.dueEnd)).toBe(true);
+    expect(isTaskDueInRange(dueOn("Jun 28"), next.dueStart, next.dueEnd)).toBe(true);
+    expect(isTaskDueInRange(dueOn("Jun 14"), next.dueStart, next.dueEnd)).toBe(false);
+    expect(isTaskDueInRange(dueOn("Jun 29"), next.dueStart, next.dueEnd)).toBe(false);
+  });
+
+  it("'Beyond June' {dueStart:30} is open-ended high and captures Jul dues", () => {
+    const beyond = { dueStart: 30 };
+    expect(isTaskDueInRange(dueOn("Jun 29"), beyond.dueStart, undefined)).toBe(false);
+    expect(isTaskDueInRange(dueOn("Jun 30"), beyond.dueStart, undefined)).toBe(true);
+    expect(isTaskDueInRange(dueOn("Jul 20"), beyond.dueStart, undefined)).toBe(true);
+  });
+});
+
+describe("applyFilters AND-combines the due-range with other facets", () => {
+  const base = TASKS[0];
+  const fixture: Task[] = [
+    { ...base, id: "R-1", priority: "urgent", assignee: "vince", due: "Jun 10" },
+    { ...base, id: "R-2", priority: "low", assignee: "maya", due: "Jun 20" },
+    { ...base, id: "R-3", priority: "low", assignee: null, due: "—" }, // undated
+    { ...base, id: "R-4", priority: "low", assignee: "maya", due: "Jul 5" }, // beyond June (day 35)
+  ];
+
+  it("is the identity (same array) when no due bound is set", () => {
+    expect(applyFilters(fixture, {})).toBe(fixture);
+  });
+
+  it("filters by dueStart/dueEnd alone (inclusive), excluding undated tasks", () => {
+    expect(applyFilters(fixture, { dueStart: 1, dueEnd: 14 }).map((t) => t.id)).toEqual(["R-1"]);
+    expect(applyFilters(fixture, { dueStart: 15, dueEnd: 28 }).map((t) => t.id)).toEqual(["R-2"]);
+    // Open-ended high bound captures the July (beyond-June) task; undated R-3 is out.
+    expect(applyFilters(fixture, { dueStart: 30 }).map((t) => t.id)).toEqual(["R-4"]);
+    // Open-ended low bound (Overdue-style) captures everything up to the bound.
+    expect(applyFilters(fixture, { dueEnd: 15 }).map((t) => t.id)).toEqual(["R-1"]);
+  });
+
+  it("AND-combines the due-range with another facet", () => {
+    // priority=low AND due ≤ day 28 → R-2 (R-4 is day 35; R-3 is undated).
+    expect(
+      applyFilters(fixture, { priority: ["low"] as PriorityKey[], dueEnd: 28 }).map((t) => t.id)
+    ).toEqual(["R-2"]);
+    // assignee=maya AND beyond June → R-4 only.
+    expect(applyFilters(fixture, { assignee: ["maya"], dueStart: 30 }).map((t) => t.id)).toEqual([
+      "R-4",
+    ]);
+  });
+});
+
+describe("hasActiveFilters recognizes a due bound", () => {
+  it("is true when only dueStart is set", () => {
+    expect(hasActiveFilters({ dueStart: 30 })).toBe(true);
+  });
+
+  it("is true when only dueEnd is set", () => {
+    expect(hasActiveFilters({ dueEnd: 15 })).toBe(true);
+  });
+
+  it("is false for an empty filter and a zero-bound is still 'active'", () => {
+    expect(hasActiveFilters({})).toBe(false);
+    // dueStart:0 is a legitimate bound (uses != null, not falsiness).
+    expect(hasActiveFilters({ dueStart: 0 })).toBe(true);
   });
 });

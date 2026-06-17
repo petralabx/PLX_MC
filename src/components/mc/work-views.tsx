@@ -870,74 +870,66 @@ export function WorkViews({ route, nav }: ScreenProps) {
             </>
           )}
           <span className="count">
-            <b>{view === "timeline" ? baseTasks.length : visible.length}</b> tasks
+            <b>{visible.length}</b> tasks
           </span>
         </div>
       </div>
 
-      {/* The filter bar drives the board + list only; the timeline stays the
-          fixed June grid over the full bucket scope (filtering it is Cycle 2). */}
-      {view === "timeline" ? (
-        baseTasks.length === 0 ? (
-          <div className="empty">
-            <h3>A calm, empty board</h3>
-            <p>{isMine ? "Nothing is assigned to, co-owned by, or reported by you yet." : "No tasks in this initiative yet."}</p>
-          </div>
-        ) : (
-          <TimelineView tasks={baseTasks} onOpen={openTask} />
-        )
-      ) : (
-        <>
-          <FilterBar
-            ref={filterInputRef}
-            filters={filters}
-            onChange={setFilters}
-            resultCount={visible.length}
-            labels={labelOptions}
-            assignees={assigneeOptions}
-            hasUnassigned={hasUnassigned}
-            savedViews={screenViews}
-            activeViewId={activeViewId}
-            activeViewDirty={activeViewDirty}
-            onSaveView={onSaveView}
-            onApplyView={onApplyView}
-            onDeleteView={onDeleteView}
-          />
+      {/* The filter bar now drives ALL three lenses (Module G, SPEC §3.G.1): the
+          board + list AND the timeline read the same filtered `visible` set, so
+          one FilterState narrows three lenses (incl. the due-range facet). The
+          fixed June grid / milestones / Gantt math are untouched — only the SET
+          of rows narrows. */}
+      <FilterBar
+        ref={filterInputRef}
+        filters={filters}
+        onChange={setFilters}
+        resultCount={visible.length}
+        labels={labelOptions}
+        assignees={assigneeOptions}
+        hasUnassigned={hasUnassigned}
+        savedViews={screenViews}
+        activeViewId={activeViewId}
+        activeViewDirty={activeViewDirty}
+        onSaveView={onSaveView}
+        onApplyView={onApplyView}
+        onDeleteView={onDeleteView}
+      />
 
-          {visible.length === 0 ? (
-            <div className="empty">
-              {filtersActive ? (
-                <>
-                  <h3>No tasks match these filters</h3>
-                  <p>Try removing a filter to widen the results.</p>
-                  <button type="button" className="btn ghost" onClick={() => setFilters({})}>
-                    Clear filters
-                  </button>
-                </>
-              ) : (
-                <>
-                  <h3>A calm, empty board</h3>
-                  <p>
-                    {isMine
-                      ? "Nothing is assigned to, co-owned by, or reported by you yet."
-                      : "No tasks in this initiative yet."}
-                  </p>
-                </>
-              )}
-            </div>
-          ) : view === "board" ? (
-            <BoardView
-              tasks={visible}
-              groupBy={groupBy}
-              swimlanes={swimlanes}
-              version={version}
-              filtersActive={filtersActive}
-              onOpen={openTask}
-            />
+      {visible.length === 0 ? (
+        <div className="empty">
+          {filtersActive ? (
+            <>
+              <h3>No tasks match these filters</h3>
+              <p>Try removing a filter to widen the results.</p>
+              <button type="button" className="btn ghost" onClick={() => setFilters({})}>
+                Clear filters
+              </button>
+            </>
           ) : (
-            <ListView tasks={visible} groupBy={groupBy} onOpen={openTask} />
+            <>
+              <h3>A calm, empty board</h3>
+              <p>
+                {isMine
+                  ? "Nothing is assigned to, co-owned by, or reported by you yet."
+                  : "No tasks in this initiative yet."}
+              </p>
+            </>
           )}
-        </>
+        </div>
+      ) : view === "board" ? (
+        <BoardView
+          tasks={visible}
+          groupBy={groupBy}
+          swimlanes={swimlanes}
+          version={version}
+          filtersActive={filtersActive}
+          onOpen={openTask}
+        />
+      ) : view === "timeline" ? (
+        <TimelineView tasks={visible} onOpen={openTask} />
+      ) : (
+        <ListView tasks={visible} groupBy={groupBy} onOpen={openTask} />
       )}
     </div>
   );

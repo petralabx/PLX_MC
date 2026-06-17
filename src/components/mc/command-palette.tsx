@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { AGENTS, BUCKETS } from "@/lib/mc-data";
+import { AGENTS, BUCKETS, CURRENT_USER } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allTasks } from "@/lib/mc-data/store";
+import { allTasks, reassignTask, setTaskStage } from "@/lib/mc-data/store";
 
 import type { Nav } from "./route";
 
@@ -111,13 +111,45 @@ export function CommandPalette({
       run: () => nav("bucket", { bucketId: bucket.id }),
     }));
 
-    const taskCommands: PaletteCommand[] = tasks.map((task) => ({
-      key: `task:${task.id}`,
-      icon: "▸",
-      label: `${task.id} · ${task.title}`,
-      hint: "task",
-      run: () => nav("task", { taskId: task.id }),
-    }));
+    // Per-task commands: the "go to detail" navigate (existing) plus two REAL
+    // spine-backed actions (Module G, SPEC §3.G.2) replacing the former dead
+    // create/agent stubs. Both route through the FROZEN spine wrappers
+    // (setTaskStage / reassignTask → patchTaskFields → optimistic + PATCH +
+    // reconcile/rollback + notice), so no new store code and no half-wire.
+    // "Done" = the `verified` stage (band=done); "to me" = CURRENT_USER.
+    // Already-done / already-mine are handled by HIDING the action (a per-task
+    // command rebuilt from `tasks`), so the palette never offers a no-op.
+    const taskCommands: PaletteCommand[] = tasks.flatMap((task) => {
+      const commands: PaletteCommand[] = [
+        {
+          key: `task:${task.id}`,
+          icon: "▸",
+          label: `${task.id} · ${task.title}`,
+          hint: "task",
+          run: () => nav("task", { taskId: task.id }),
+        },
+      ];
+      const isDone = task.stage === "verified" || task.stage === "merged";
+      if (!isDone) {
+        commands.push({
+          key: `task-done:${task.id}`,
+          icon: "✓",
+          label: `Mark ${task.id} done`,
+          hint: "task action",
+          run: () => setTaskStage(task.id, "verified"), // band=done; spine wrapper
+        });
+      }
+      if (task.assignee !== CURRENT_USER) {
+        commands.push({
+          key: `assign-me:${task.id}`,
+          icon: "☺",
+          label: `Assign ${task.id} to me`,
+          hint: "task action",
+          run: () => reassignTask(task.id, CURRENT_USER), // spine wrapper; honest deferred-mirror copy
+        });
+      }
+      return commands;
+    });
 
     const assignAgents: PaletteCommand[] = Object.values(AGENTS).map((agent) => ({
       key: `assign:${agent.id}`,

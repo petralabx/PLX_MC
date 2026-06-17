@@ -67,12 +67,6 @@ const PRIORITY_KEYS = new Set<string>(Object.keys(PRIORITY));
 const STAGE_KEYS = new Set<string>(STAGES.map((s) => s.key));
 const GROUP_BY_KEYS = new Set<GroupBy>(["band", "stage", "bucket", "priority", "assignee"]);
 
-// FilterState carries optional numeric due bounds once Module G lands; F's
-// sanitizer already validates them (SPEC §3.A.4) so the field is forward-safe.
-// Until G adds them to the exported FilterState type, address them through this
-// local superset so the sanitizer compiles and round-trips them cleanly.
-type FilterStateWithDue = FilterState & { dueStart?: number; dueEnd?: number };
-
 // Keep only string members of `pool` from an unknown value; non-array → []
 // (the caller drops an empty facet). Pure, total.
 function keepStringMembers(raw: unknown, pool: Set<string>): string[] {
@@ -90,7 +84,7 @@ function keepStrings(raw: unknown): string[] {
 // dropping unknown keys / out-of-allow-list values. Pure, total, never throws.
 // Identity on a clean FilterState. Reused by Module E for click-to-filter.
 export function sanitizeFilterState(raw: unknown): FilterState {
-  const out: FilterStateWithDue = {};
+  const out: FilterState = {};
   if (typeof raw !== "object" || raw === null) return out;
   const src = raw as Record<string, unknown>;
 

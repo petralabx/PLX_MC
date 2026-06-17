@@ -14,12 +14,50 @@ import { Fragment, forwardRef, useCallback, useEffect, useMemo, useRef, useState
 
 import { ACTORS, PRIORITY, STAGES } from "@/lib/mc-data";
 import type { PriorityKey, StageKey } from "@/lib/mc-data";
+import { INSIGHTS_TODAY_DAY } from "@/lib/mc-data/insights";
 
 import type { FilterState } from "./work-views.helpers";
 import { UNASSIGNED_KEY, hasActiveFilters } from "./work-views.helpers";
 import type { SavedView } from "./work-views.persist";
 
 type Facet = "priority" | "assignee" | "label" | "stage";
+
+// The "Due" facet (Module G, SPEC §3.G.1) is preset-based, not a multi-select:
+// each preset applies an exact {dueStart?,dueEnd?} patch on the shared June-grid
+// dueDay() scale (MONTH_GRID_OFFSET["Jun"] = 0 ⇒ Jun 1 = day 1 … Jun 30 = day 30,
+// Jul 1 = day 31). Both bounds are INCLUSIVE. Presets (not a calendar) keep this
+// native + honest to the fixed-June grid (month/zoom is Cycle-3). The "Overdue"
+// bound reuses the injected INSIGHTS_TODAY_DAY grid cursor so Insights and the
+// filter share one "now" — everything due strictly before it (Jun 16 ⇒ dueEnd 15).
+interface DuePreset {
+  key: string;
+  label: string;
+  patch: { dueStart?: number; dueEnd?: number };
+}
+
+const DUE_PRESETS: DuePreset[] = [
+  { key: "overdue", label: "Overdue", patch: { dueEnd: INSIGHTS_TODAY_DAY - 1 } },
+  { key: "this-cycle", label: "This cycle (Jun 1–14)", patch: { dueStart: 1, dueEnd: 14 } },
+  { key: "next-cycle", label: "Next cycle (Jun 15–28)", patch: { dueStart: 15, dueEnd: 28 } },
+  { key: "beyond-june", label: "Beyond June", patch: { dueStart: 30 } },
+];
+
+// A preset is "selected" when the live filter's due bounds match its patch
+// exactly (an undefined bound in the patch must be undefined in the filter).
+function duePresetActive(filters: FilterState, preset: DuePreset): boolean {
+  return filters.dueStart === preset.patch.dueStart && filters.dueEnd === preset.patch.dueEnd;
+}
+
+// Human-readable label for the active due-range chip (mirrors a matched preset's
+// label, else a generic bounded description on the grid-day scale).
+function dueRangeLabel(filters: FilterState): string {
+  const matched = DUE_PRESETS.find((p) => duePresetActive(filters, p));
+  if (matched) return matched.label;
+  const { dueStart, dueEnd } = filters;
+  if (dueStart != null && dueEnd != null) return `Day ${dueStart}–${dueEnd}`;
+  if (dueStart != null) return `Day ${dueStart}+`;
+  return `Up to day ${dueEnd}`;
+}
 
 // Facets in toolbar order. The per-facet option universe, current selection,
 // and toggle handler are looked up from one config map below (one source — no
@@ -104,6 +142,73 @@ function FacetPopover({
           </button>
         ))
       )}
+    </div>
+  );
+}
+
+// The "Due" preset popover: a list of single-apply ranges (not multi-select).
+// Clicking a preset sets the due bounds (replacing any prior range); the active
+// preset shows a check. Mirrors the .fb-pop / .fb-opt skin (outside-click + Esc
+// close), identical to FacetPopover.
+function DuePopover({
+  filters,
+  onApply,
+  onClear,
+  onClose,
+}: {
+  filters: FilterState;
+  onApply: (patch: { dueStart?: number; dueEnd?: number }) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onDocPointer = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
+    };
+    const onEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("mousedown", onDocPointer);
+    window.addEventListener("keydown", onEsc, true);
+    return () => {
+      window.removeEventListener("mousedown", onDocPointer);
+      window.removeEventListener("keydown", onEsc, true);
+    };
+  }, [onClose]);
+
+  const hasRange = filters.dueStart != null || filters.dueEnd != null;
+
+  return (
+    <div className="fb-pop fb-due-pop" ref={ref} onClick={(event) => event.stopPropagation()}>
+      <div className="fb-pop-hd">Due</div>
+      {DUE_PRESETS.map((preset) => {
+        const on = duePresetActive(filters, preset);
+        return (
+          <button
+            type="button"
+            key={preset.key}
+            className={`fb-opt${on ? " on" : ""}`}
+            onClick={() => (on ? onClear() : onApply(preset.patch))}
+          >
+            <span className="fb-check" aria-hidden>
+              {on ? "✓" : ""}
+            </span>
+            {preset.label}
+          </button>
+        );
+      })}
+      {hasRange ? (
+        <button type="button" className="fb-opt fb-due-clear" onClick={onClear}>
+          <span className="fb-check" aria-hidden />
+          Clear due range
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -256,6 +361,7 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
   inputRef
 ) {
   const [openFacet, setOpenFacet] = useState<Facet | null>(null);
+  const [dueOpen, setDueOpen] = useState(false);
   const [viewsOpen, setViewsOpen] = useState(false);
 
   // The switcher renders only when the parent wires the saved-views CRUD (the
@@ -295,6 +401,11 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
     onChange({ ...filters, label: toggleValue(filters.label, value) });
   const toggleAssignee = (value: string) =>
     onChange({ ...filters, assignee: toggleValue(filters.assignee, value) });
+  // Apply a due preset: replace any prior range with exactly this patch's bounds
+  // (an absent bound clears that side — `undefined` is "open", SPEC §3.G.1).
+  const applyDuePreset = (patch: { dueStart?: number; dueEnd?: number }) =>
+    onChange({ ...filters, dueStart: patch.dueStart, dueEnd: patch.dueEnd });
+  const clearDue = () => onChange({ ...filters, dueStart: undefined, dueEnd: undefined });
   const clearAll = () => onChange({});
   // Stable so FacetPopover's outside-click effect isn't re-bound every render.
   const closeFacet = useCallback(() => setOpenFacet(null), []);
@@ -332,11 +443,16 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
     for (const label of filters.label ?? []) {
       out.push({ key: `label:${label}`, label: `Label · ${label}`, onRemove: () => toggleLabel(label) });
     }
+    // The due-range is a single removable chip (Module G); clearing it drops both
+    // bounds. Present whenever either bound is set (an explicit range).
+    if (filters.dueStart != null || filters.dueEnd != null) {
+      out.push({ key: "due", label: `Due · ${dueRangeLabel(filters)}`, onRemove: clearDue });
+    }
     return out;
     // togglePriority/etc. close over `filters` + `onChange`; `filters` is the
-    // real input, so depend on the four selection arrays (re-derive on change).
+    // real input, so depend on the selection arrays + the due bounds.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.priority, filters.stage, filters.assignee, filters.label]);
+  }, [filters.priority, filters.stage, filters.assignee, filters.label, filters.dueStart, filters.dueEnd]);
 
   const facetButton = (facet: Facet) => {
     const config = facetConfig[facet];
@@ -391,6 +507,36 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
         {FACET_ORDER.map(({ facet }) => (
           <Fragment key={facet}>{facetButton(facet)}</Fragment>
         ))}
+        {/* The "Due" preset facet (Module G) — a single-apply range picker, so
+            it lives outside the multi-select facetConfig map but reuses the same
+            .fb-pill / .fb-pop skin. */}
+        <div className="fb-facet fb-due">
+          <button
+            type="button"
+            className={`pill fb-pill${dueOpen ? " on" : ""}${
+              filters.dueStart != null || filters.dueEnd != null ? " has" : ""
+            }`}
+            aria-haspopup="menu"
+            aria-expanded={dueOpen}
+            onClick={() => setDueOpen((prev) => !prev)}
+          >
+            + Due
+          </button>
+          {dueOpen ? (
+            <DuePopover
+              filters={filters}
+              onApply={(patch) => {
+                applyDuePreset(patch);
+                setDueOpen(false);
+              }}
+              onClear={() => {
+                clearDue();
+                setDueOpen(false);
+              }}
+              onClose={() => setDueOpen(false)}
+            />
+          ) : null}
+        </div>
       </div>
 
       {chips.length > 0 ? (

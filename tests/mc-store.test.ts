@@ -36,6 +36,7 @@ import {
   toggleSubtask,
   unreadCount,
 } from "@/lib/mc-data/store";
+import { CURRENT_USER } from "@/lib/mc-data";
 import type { Task } from "@/lib/mc-data";
 
 beforeEach(() => resetStore());
@@ -164,6 +165,72 @@ describe("patchTaskFields (the shared mutation spine)", () => {
     expect(t?.stage).toBe("merged");
     expect(t?.priority).toBe("urgent");
     expect(t?.bucket).toBe("BKT-DAPI");
+  });
+});
+
+// The two palette spine actions (Module G, SPEC §3.G.2 / §3.G.3). The palette's
+// run handlers are thin wrappers around these store actions; the invariant is
+// that "Mark done" → stage:"verified" (band=done) and "Assign to me" →
+// assignee: CURRENT_USER, both routed through the FROZEN spine (optimistic +
+// PATCH + reconcile/rollback + notice). The already-done / already-mine cases
+// are handled by the palette HIDING the command (asserted by the gating predicates).
+describe("palette spine actions — Mark done / Assign to me (Module G)", () => {
+  it("'Mark done' sets stage to verified optimistically (reflected by taskById)", () => {
+    // TASK-221 seeds as stage "planned" (band=todo), so this is a real change.
+    expect(taskById("TASK-221")?.stage).toBe("planned");
+    setTaskStage("TASK-221", "verified");
+    expect(taskById("TASK-221")?.stage).toBe("verified");
+  });
+
+  it("'Assign to me' sets the assignee to CURRENT_USER optimistically", () => {
+    // TASK-221 seeds unassigned (assignee null), so assigning to me is a change.
+    expect(taskById("TASK-221")?.assignee).toBeNull();
+    reassignTask("TASK-221", CURRENT_USER);
+    expect(taskById("TASK-221")?.assignee).toBe(CURRENT_USER);
+  });
+
+  it("hides the action when already in the target state (the gating predicates)", () => {
+    // The palette appends "Mark done" only when stage ∉ {verified, merged}, and
+    // "Assign to me" only when assignee !== CURRENT_USER. Mirror those predicates
+    // so the no-op-avoidance contract is pinned (SPEC §3.G.2).
+    const done: Task = { ...taskById("TASK-221")!, stage: "verified" };
+    const mine: Task = { ...taskById("TASK-221")!, assignee: CURRENT_USER };
+    const isDone = (t: Task) => t.stage === "verified" || t.stage === "merged";
+    expect(isDone(done)).toBe(true);
+    expect(isDone({ ...done, stage: "merged" })).toBe(true);
+    expect(isDone(taskById("TASK-221")!)).toBe(false); // "planned" → action shown
+    expect(mine.assignee === CURRENT_USER).toBe(true); // → "Assign to me" hidden
+    expect(taskById("TASK-221")!.assignee === CURRENT_USER).toBe(false); // → shown
+  });
+
+  it("'Mark done' rolls back + surfaces a notice when the PATCH rejects", async () => {
+    const before = taskById("TASK-221")!.stage;
+    expect(before).not.toBe("verified"); // guard: a real change
+    __setPatchMirrorForTests(async () => {
+      throw new Error("PATCH 500");
+    });
+
+    await setTaskStage("TASK-221", "verified");
+
+    expect(taskById("TASK-221")?.stage).toBe(before); // rolled back to "planned"
+    const notices = activeNotices();
+    expect(notices).toHaveLength(1);
+    expect(notices[0].tone).toBe("error");
+    expect(notices[0].body).toContain("TASK-221");
+    expect(notices[0].body.toLowerCase()).toContain("rolled back");
+  });
+
+  it("'Assign to me' rolls back + surfaces a notice when the PATCH rejects", async () => {
+    const before = taskById("TASK-221")!.assignee;
+    expect(before).not.toBe(CURRENT_USER); // guard: a real change
+    __setPatchMirrorForTests(async () => {
+      throw new Error("PATCH 500");
+    });
+
+    await reassignTask("TASK-221", CURRENT_USER);
+
+    expect(taskById("TASK-221")?.assignee).toBe(before); // reassign rolled back
+    expect(activeNotices()).toHaveLength(1);
   });
 });
 

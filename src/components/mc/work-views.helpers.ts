@@ -227,15 +227,35 @@ export function groupTasksForList(tasks: Task[], groupBy: GroupBy): TaskGroup[] 
 
 // ─── Filtering (pure, exported → unit-testable with zero persistence risk) ────
 
-// One filter shape shared by the board + list. Each facet is a multi-select;
-// an unset/empty facet does not constrain. Facets AND-combine; within a facet
-// the values OR. `assignee` may include UNASSIGNED_KEY to match unassigned tasks.
+// One filter shape shared by the board + list + timeline. Each facet is a
+// multi-select; an unset/empty facet does not constrain. Facets AND-combine;
+// within a facet the values OR. `assignee` may include UNASSIGNED_KEY to match
+// unassigned tasks. `dueStart`/`dueEnd` (Module G, SPEC §3.G.1) are a due-range
+// over the same June-grid `dueDay()` scale — both bounds INCLUSIVE; undefined =
+// open. They reuse the existing date model (no calendar widget); the timeline,
+// board, and list all read this one shape (one filter, three lenses).
 export interface FilterState {
   text?: string;
   priority?: PriorityKey[];
   assignee?: string[];
   label?: string[];
   stage?: StageKey[];
+  dueStart?: number; // inclusive day offset (dueDay scale); undefined = open
+  dueEnd?: number; // inclusive; undefined = open
+}
+
+// A task's due date falls within an explicit [start, end] day-offset range (both
+// bounds inclusive, dueDay scale). With NO range set (both undefined) this is the
+// identity (every task passes). An undated task (dueDay → null) falls OUT of any
+// explicit range — documented (SPEC §3.G.1): a range is a positive selection, so
+// "no due date" is excluded once a bound is set. Pure; no store reads.
+export function isTaskDueInRange(task: Task, start?: number, end?: number): boolean {
+  if (start === undefined && end === undefined) return true;
+  const d = dueDay(task.due);
+  if (d === null) return false; // undated tasks fall OUT of an explicit range
+  if (start !== undefined && d < start) return false;
+  if (end !== undefined && d > end) return false;
+  return true;
 }
 
 export function hasActiveFilters(f: FilterState): boolean {
@@ -244,7 +264,9 @@ export function hasActiveFilters(f: FilterState): boolean {
     !!f.priority?.length ||
     !!f.assignee?.length ||
     !!f.label?.length ||
-    !!f.stage?.length
+    !!f.stage?.length ||
+    f.dueStart != null ||
+    f.dueEnd != null
   );
 }
 
@@ -258,6 +280,8 @@ export function applyFilters(tasks: Task[], f: FilterState): Task[] {
   const labels = f.label?.length ? new Set(f.label) : null;
   const stages = f.stage?.length ? new Set(f.stage) : null;
 
+  const hasDueRange = f.dueStart != null || f.dueEnd != null;
+
   return tasks.filter((task) => {
     if (text) {
       const haystack = [task.id, task.title, ...task.labels].join(" ").toLowerCase();
@@ -267,6 +291,7 @@ export function applyFilters(tasks: Task[], f: FilterState): Task[] {
     if (assignee && !assignee.has(task.assignee ?? UNASSIGNED_KEY)) return false;
     if (stages && !stages.has(task.stage)) return false;
     if (labels && !task.labels.some((label) => labels.has(label))) return false;
+    if (hasDueRange && !isTaskDueInRange(task, f.dueStart, f.dueEnd)) return false;
     return true;
   });
 }

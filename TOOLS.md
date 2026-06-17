@@ -46,6 +46,42 @@ code that needs a secret). No hardcoded keys, no scattered `process.env` reads.
 | AWS Secrets Manager | Vince | One accessor; rotation happens in AWS, never in repo |
 | GitHub Actions CI | Vince | Runs `scripts/preflight.sh --mode ci` then `--mode pre-push` |
 
+## In-app sync scheduler — dev-only enablement
+
+The 5-minute in-app sweep scheduler (`src/lib/sync/scheduler.ts`, booted by
+`src/instrumentation.ts` when `NEXT_RUNTIME === "nodejs"`) is **DORMANT BY
+DEFAULT** and must stay that way in every committed config. The only switch is
+the `PLX_MC_SYNC_ENABLED` env var, read as an exact-string compare
+(`process.env.PLX_MC_SYNC_ENABLED === "1"`):
+
+- **Default / production / CI / E2E — OFF.** The var is unset (or `""`); on boot
+  `startSyncScheduler()` logs `"[sync] scheduler disabled (PLX_MC_SYNC_ENABLED != 1)"`
+  and returns without scheduling anything. Vercel pins it `0` (serverless timers
+  are unreliable — sweeps are manual via `POST /api/sync/sweep`), and the
+  Playwright `webServer.env` pins it `""`. **Do not flip the default in any
+  committed file** (no `.env`, no config, no CI var).
+- **Local dev opt-in (per developer, in your own shell only):**
+
+  ```bash
+  # bash/zsh — this shell session only; never commit this
+  PLX_MC_SYNC_ENABLED=1 npm run dev
+  ```
+
+  ```powershell
+  # PowerShell — this session only
+  $env:PLX_MC_SYNC_ENABLED = "1"; npm run dev
+  ```
+
+  On boot you'll see `"[sync] scheduler started — sweeping every 5 min"` followed
+  by `"[sync] sweep ok — pushed=… pulled=… conflicts=… errors=…"` each cadence.
+  With no DB / SharePoint credentials loaded the sweep exercises the in-memory
+  engine (the same path as the on-demand "Sync now"), so enabling it proves the
+  **cadence**, not a real remote write.
+- **Kill switch:** unset the var (close the shell, or `unset PLX_MC_SYNC_ENABLED`
+  / `Remove-Item Env:PLX_MC_SYNC_ENABLED`) and restart — the scheduler logs
+  "scheduler disabled" and stays dormant. The cadence itself is verified
+  deterministically (fake timers, no real clock) in `tests/sync-scheduler.test.ts`.
+
 ## Guardrails
 
 - The sync engine never deletes SharePoint items; removals are soft (status

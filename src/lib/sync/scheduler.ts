@@ -5,7 +5,9 @@
 
 import { runSweep } from "./engine";
 
-const CADENCE_MS = 5 * 60 * 1000;
+// Exported for test visibility only (the cadence test advances fake timers by
+// exactly this interval — see tests/sync-scheduler.test.ts); no behavior change.
+export const CADENCE_MS = 5 * 60 * 1000;
 
 const globalForScheduler = globalThis as unknown as { __plxMcSyncTimer?: ReturnType<typeof setInterval> };
 

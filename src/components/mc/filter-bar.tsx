@@ -17,6 +17,7 @@ import type { PriorityKey, StageKey } from "@/lib/mc-data";
 
 import type { FilterState } from "./work-views.helpers";
 import { UNASSIGNED_KEY, hasActiveFilters } from "./work-views.helpers";
+import type { SavedView } from "./work-views.persist";
 
 type Facet = "priority" | "assignee" | "label" | "stage";
 
@@ -114,13 +115,154 @@ export interface FilterBarProps {
   labels: string[];
   assignees: string[];
   hasUnassigned: boolean;
+  // Saved-views switcher (Module F, SPEC §3.A.6). All optional so non-persisting
+  // callers render the bar exactly as before. The parent (WorkViews) owns the
+  // list + CRUD; this component is presentational.
+  savedViews?: SavedView[];
+  activeViewId?: string | null;
+  activeViewDirty?: boolean;
+  onSaveView?: (name: string) => void;
+  onApplyView?: (id: string) => void;
+  onDeleteView?: (id: string) => void;
+}
+
+// The "Views ▾" popover: lists this screen's saved views (apply on click, per-row
+// delete) and a name field to save the current filter/group/swimlane state as a
+// new view. Mirrors the .fb-pop / .fb-opt skin (outside-click + Esc close).
+function ViewsPopover({
+  savedViews,
+  activeViewId,
+  onApply,
+  onDelete,
+  onSave,
+  onClose,
+}: {
+  savedViews: SavedView[];
+  activeViewId: string | null;
+  onApply: (id: string) => void;
+  onDelete: (id: string) => void;
+  onSave: (name: string) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    const onDocPointer = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
+    };
+    const onEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("mousedown", onDocPointer);
+    window.addEventListener("keydown", onEsc, true);
+    return () => {
+      window.removeEventListener("mousedown", onDocPointer);
+      window.removeEventListener("keydown", onEsc, true);
+    };
+  }, [onClose]);
+
+  const submitSave = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onSave(trimmed);
+    setName("");
+  };
+
+  return (
+    <div className="fb-pop fb-views-pop" ref={ref} onClick={(event) => event.stopPropagation()}>
+      <div className="fb-pop-hd">Saved views</div>
+      {savedViews.length === 0 ? (
+        <div className="fb-pop-empty">No saved views yet</div>
+      ) : (
+        savedViews.map((view) => (
+          <div key={view.id} className={`fb-viewrow${view.id === activeViewId ? " on" : ""}`}>
+            <button
+              type="button"
+              className="fb-opt fb-viewapply"
+              onClick={() => {
+                onApply(view.id);
+                onClose();
+              }}
+            >
+              <span className="fb-check" aria-hidden>
+                {view.id === activeViewId ? "✓" : ""}
+              </span>
+              {view.name}
+            </button>
+            <button
+              type="button"
+              className="fb-viewdel"
+              title={`Delete view ${view.name}`}
+              aria-label={`Delete view ${view.name}`}
+              onClick={() => onDelete(view.id)}
+            >
+              ✕
+            </button>
+          </div>
+        ))
+      )}
+      <div className="fb-viewsave">
+        <input
+          className="fb-input fb-viewname"
+          value={name}
+          placeholder="Save current as…"
+          aria-label="New view name"
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              submitSave();
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              onClose();
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="btn ghost fb-viewsavebtn"
+          disabled={!name.trim()}
+          onClick={submitSave}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function FilterBar(
-  { filters, onChange, resultCount, labels, assignees, hasUnassigned },
+  {
+    filters,
+    onChange,
+    resultCount,
+    labels,
+    assignees,
+    hasUnassigned,
+    savedViews,
+    activeViewId = null,
+    activeViewDirty = false,
+    onSaveView,
+    onApplyView,
+    onDeleteView,
+  },
   inputRef
 ) {
   const [openFacet, setOpenFacet] = useState<Facet | null>(null);
+  const [viewsOpen, setViewsOpen] = useState(false);
+
+  // The switcher renders only when the parent wires the saved-views CRUD (the
+  // work surfaces). The active view's name (+ a "• modified" dirty dot) labels
+  // the trigger so the current view is always visible (SPEC §3.A.6).
+  const viewsEnabled = !!(savedViews && onSaveView && onApplyView && onDeleteView);
+  const activeView = savedViews?.find((v) => v.id === activeViewId) ?? null;
 
   // Option universes per facet. Priority/stage are static; label/assignee are
   // derived from the parent-supplied universes, so memoize on those inputs (the
@@ -281,6 +423,43 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
         <button type="button" className="btn ghost fb-clear" onClick={clearAll}>
           Clear filters
         </button>
+      ) : null}
+
+      {viewsEnabled ? (
+        <div className="fb-views">
+          <button
+            type="button"
+            className={`pill fb-pill fb-viewstrigger${viewsOpen ? " on" : ""}`}
+            aria-haspopup="menu"
+            aria-expanded={viewsOpen}
+            onClick={() => setViewsOpen((prev) => !prev)}
+          >
+            {activeView ? (
+              <>
+                {activeView.name}
+                {activeViewDirty ? (
+                  <span className="fb-dirty" title="Modified since saved" aria-label="modified">
+                    {" "}
+                    •
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              "Views"
+            )}{" "}
+            ▾
+          </button>
+          {viewsOpen ? (
+            <ViewsPopover
+              savedViews={savedViews ?? []}
+              activeViewId={activeViewId}
+              onApply={onApplyView!}
+              onDelete={onDeleteView!}
+              onSave={onSaveView!}
+              onClose={() => setViewsOpen(false)}
+            />
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

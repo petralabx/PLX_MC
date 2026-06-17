@@ -25,7 +25,20 @@ import type { Bucket, Stage, Task } from "@/lib/mc-data";
 
 import { Assignee, Confidence, Label, Priority, RepoChip, ReqChip, Spine, SyncTick } from "./atoms";
 import { FilterBar } from "./filter-bar";
-import type { ScreenProps } from "./route";
+import type { Route, Screen, ScreenProps } from "./route";
+import {
+  deleteSavedView,
+  loadPersistedView,
+  loadSavedViews,
+  newSavedViewId,
+  PERSIST_VERSION,
+  sanitizeFilterState,
+  savePersistedView,
+  saveSavedViews,
+  serializeView,
+  upsertSavedView,
+} from "./work-views.persist";
+import type { SavedView } from "./work-views.persist";
 import {
   assigneeUniverse,
   applyFilters,
@@ -503,6 +516,31 @@ export function WorkViews({ route, nav }: ScreenProps) {
   const [mineView, setMineView] = useState<"board" | "list" | "timeline">("list");
   const filterInputRef = useRef<HTMLInputElement | null>(null);
 
+  // ── Module F: filter / view persistence (SPEC §3.A) ─────────────────────────
+  // Per-screen last-used state persists to localStorage and hydrates on mount
+  // without an SSR mismatch (defaults render first; persisted state applies one
+  // tick later). Only the work surfaces persist; the per-screen key split means
+  // "My urgent" on `mine` never leaks onto the all-work board.
+  const PERSIST_SCREENS: Screen[] = useMemo(() => ["board", "list", "timeline", "mine"], []);
+  const persists = PERSIST_SCREENS.includes(screen);
+
+  // Named saved views (SPEC §3.A.6) — the full list across screens; the switcher
+  // filters to this screen. Hydrated in the mount effect (never at init, SSR).
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+
+  // Write-loop / echo guards (SPEC §3.A.5.1): the persist-write effect no-ops
+  // while a programmatic adopt (hydrate, route.filter, or a peer-tab storage
+  // event) is in flight, so an adopt never echoes a write back to localStorage
+  // or fans a storage event out to another tab.
+  const hydratedRef = useRef(false);
+  const adoptingRef = useRef(false);
+
+  // route.filter is added to the Route type in Module E (the click-to-filter
+  // seam, SPEC §3.B.3); this PR scaffolds the adopt so it activates the moment
+  // E lands. Read defensively until then (no Route edit in PR-F).
+  const routeFilter = (route as Route & { filter?: FilterState }).filter;
+
   // The effective board/list/timeline lens: the route screen for the normal
   // views, the local toggle for My Tasks.
   const view: "board" | "list" | "timeline" = isMine
@@ -564,6 +602,162 @@ export function WorkViews({ route, nav }: ScreenProps) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [filtersActive]);
+
+  // ── F effect 1: hydrate-adopt (mount-only) ──────────────────────────────────
+  // Read the persisted last-used view + the saved-views list, adopt the view if
+  // present, then mark hydrated. `adoptingRef` is held true around the `set*`
+  // calls so the write effect they schedule sees an adopt in flight and no-ops
+  // (SPEC §3.A.5.1 step 1). Runs once; the empty dep array is intentional.
+  useEffect(() => {
+    // SSR-safe hydration (SPEC §3.A.3 #1, the store.ts:277 precedent): localStorage
+    // must NOT be read in render/useState (SSR↔client mismatch), so the one-shot
+    // adopt necessarily setStates from a mount effect. The cascading-render the
+    // rule warns about is the intended single post-hydrate re-render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSavedViews(loadSavedViews());
+    if (persists) {
+      adoptingRef.current = true;
+      const view = loadPersistedView(screen);
+      if (view) {
+        setGroupBy(view.groupBy);
+        // Mirror the changeGroupBy invariant: swimlanes are only meaningful on
+        // band/stage, so a persisted (or hand-edited) "agents" under another axis
+        // is coerced off rather than rendering meaningless sub-lanes.
+        setSwimlanes(swimlanesAllowed(view.groupBy) ? view.swimlanes : "off");
+        setFilters(view.filters);
+      }
+      // Clear the adopt guard after the set*-scheduled write effect has run.
+      const id = window.setTimeout(() => {
+        adoptingRef.current = false;
+      }, 0);
+      hydratedRef.current = true;
+      return () => window.clearTimeout(id);
+    }
+    hydratedRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── F effect 2: route.filter adopt (Module E seam; scaffolded here) ──────────
+  // Runs after hydrate on the same mount and again whenever route.filter changes.
+  // route.filter is EXPLICIT user intent (an Insights slice click) so it WINS
+  // over the persisted last-used filter — which is why it runs second (SPEC
+  // §3.A.5.1 step 2 / §3.B.3). Sanitized through F's trust boundary before it
+  // can reach applyFilters; gated by adoptingRef so it never echoes a write.
+  useEffect(() => {
+    if (routeFilter === undefined) return;
+    adoptingRef.current = true;
+    // Adopt is an external-event sync (a route/slice click), guarded by
+    // adoptingRef; the setState here is the intended adopt, not a render loop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFilters(sanitizeFilterState(routeFilter));
+    setActiveViewId(null);
+    const id = window.setTimeout(() => {
+      adoptingRef.current = false;
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [routeFilter]);
+
+  // ── F effect 3: persist-write (observes the state mutators) ──────────────────
+  // Never writes during the initial paint, the hydrate-adopt, or a route.filter
+  // / storage-event adopt (the guard). The `screen` dep means board↔list↔mine
+  // each write/read their own key (SPEC §3.A.5.1 step 3).
+  useEffect(() => {
+    if (!hydratedRef.current || adoptingRef.current) return;
+    if (!persists) return;
+    savePersistedView(screen, { v: PERSIST_VERSION, groupBy, swimlanes, filters });
+  }, [persists, screen, groupBy, swimlanes, filters]);
+
+  // ── F effect 4: cross-tab sync (mount-only `storage` listener) ───────────────
+  // Fires only in OTHER tabs. On a StorageEvent for THIS screen's key, re-run the
+  // same deserialize/sanitize path and adopt; a peer-tab clear() (newValue null)
+  // is ignored so it never blows away an active tab's filters (SPEC §3.A.3 #4).
+  // The adopt sets adoptingRef so it never echoes a write back out.
+  useEffect(() => {
+    if (!persists) return;
+    const key = `plx_mc_view_v1:${screen}`;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null) return; // a full clear() — ignore
+      if (event.key !== key) return;
+      if (event.newValue === null) return; // peer-tab removed this key — keep ours
+      const view = loadPersistedView(screen);
+      if (!view) return;
+      adoptingRef.current = true;
+      setGroupBy(view.groupBy);
+      setSwimlanes(swimlanesAllowed(view.groupBy) ? view.swimlanes : "off");
+      setFilters(view.filters);
+      window.setTimeout(() => {
+        adoptingRef.current = false;
+      }, 0);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [persists, screen]);
+
+  // ── Saved-views CRUD (lifted to the filter bar via props, SPEC §3.A.6) ───────
+  // Persist the whole list (across screens) on every change; the switcher shows
+  // only this screen's views. Applying a view adopts its {groupBy,swimlanes,
+  // filters} under the adopt guard so it doesn't echo a redundant write.
+  const persistViews = (next: SavedView[]) => {
+    setSavedViews(next);
+    saveSavedViews(next);
+  };
+  const onSaveView = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const view: SavedView = {
+      id: newSavedViewId(),
+      name: trimmed,
+      screen,
+      groupBy,
+      swimlanes,
+      filters: sanitizeFilterState(filters),
+    };
+    persistViews(upsertSavedView(savedViews, view));
+    setActiveViewId(view.id);
+  };
+  const onApplyView = (id: string) => {
+    const view = savedViews.find((v) => v.id === id);
+    if (!view) return;
+    adoptingRef.current = true;
+    setGroupBy(view.groupBy);
+    if (!swimlanesAllowed(view.groupBy)) {
+      setSwimlanes("off");
+    } else {
+      setSwimlanes(view.swimlanes);
+    }
+    setFilters(view.filters);
+    setActiveViewId(view.id);
+    window.setTimeout(() => {
+      adoptingRef.current = false;
+    }, 0);
+  };
+  const onDeleteView = (id: string) => {
+    persistViews(deleteSavedView(savedViews, id));
+    if (activeViewId === id) setActiveViewId(null);
+  };
+  // Views saved on this screen (the switcher's scope).
+  const screenViews = useMemo(
+    () => savedViews.filter((v) => v.screen === screen),
+    [savedViews, screen]
+  );
+
+  // Dirty cue (SPEC §3.A.6, OPTIONAL — cheap given the switcher is in this PR):
+  // the active view shows a subtle "• modified" dot when the live state diverges
+  // from its saved snapshot. Compared via the same serializer so a field-order or
+  // empty-facet difference doesn't false-positive; re-saving or applying clears it.
+  const activeViewDirty = useMemo(() => {
+    if (activeViewId === null) return false;
+    const view = savedViews.find((v) => v.id === activeViewId);
+    if (!view) return false;
+    const live = serializeView({ v: PERSIST_VERSION, groupBy, swimlanes, filters });
+    const saved = serializeView({
+      v: PERSIST_VERSION,
+      groupBy: view.groupBy,
+      swimlanes: view.swimlanes,
+      filters: view.filters,
+    });
+    return live !== saved;
+  }, [activeViewId, savedViews, groupBy, swimlanes, filters]);
 
   // On the normal screens the lens switch is a route navigation; on My Tasks it
   // flips the local lens so the user stays inside their pre-filtered view.
@@ -702,6 +896,12 @@ export function WorkViews({ route, nav }: ScreenProps) {
             labels={labelOptions}
             assignees={assigneeOptions}
             hasUnassigned={hasUnassigned}
+            savedViews={screenViews}
+            activeViewId={activeViewId}
+            activeViewDirty={activeViewDirty}
+            onSaveView={onSaveView}
+            onApplyView={onApplyView}
+            onDeleteView={onDeleteView}
           />
 
           {visible.length === 0 ? (

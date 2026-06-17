@@ -721,3 +721,93 @@
   padding: 5px 9px;
   font-size: 8.5px;
 }
+
+/* Saved-views switcher (Module F, SPEC §3.A.6). Reuses the .fb-pill / .fb-pop /
+   .fb-opt skins; tokens only — no raw hex. The trigger sits on the right edge so
+   its popover anchors right (the facet popovers anchor left). */
+.mc .filterbar .fb-views {
+  position: relative;
+}
+
+.mc .filterbar .fb-viewstrigger {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mc .filterbar .fb-dirty {
+  color: var(--p-hot);
+  font-weight: 700;
+}
+
+.mc .filterbar .fb-views-pop {
+  left: auto;
+  right: 0;
+  min-width: 220px;
+}
+
+.mc .filterbar .fb-viewrow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mc .filterbar .fb-viewrow.on .fb-viewapply {
+  color: var(--p-ink);
+}
+
+.mc .filterbar .fb-viewapply {
+  flex: 1;
+  min-width: 0;
+}
+
+.mc .filterbar .fb-viewdel {
+  flex: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--p-muted);
+  font-size: 9px;
+  padding: 4px 6px;
+  transition: color var(--p-dur-fast) var(--p-ease);
+}
+
+.mc .filterbar .fb-viewdel:hover {
+  color: var(--p-hot);
+}
+
+.mc .filterbar .fb-viewsave {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--p-grid);
+  margin-top: 4px;
+  padding: 7px 6px 4px;
+}
+
+.mc .filterbar .fb-viewname {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  border: 1px solid var(--p-grid);
+  background: var(--p-canvas);
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.mc .filterbar .fb-viewname:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 1px;
+}
+
+.mc .filterbar .fb-viewsavebtn {
+  flex: none;
+  padding: 5px 10px;
+  font-size: 8.5px;
+}
+
+.mc .filterbar .fb-viewsavebtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

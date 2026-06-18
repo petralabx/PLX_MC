@@ -118,6 +118,21 @@ describe("patchTask — new DB-only fields round-trip through entities.data", ()
   });
 });
 
+describe("patchTask — comments round-trip DB-only (EN-001 / WS-3)", () => {
+  it("persists comments into the jsonb blob without re-queuing a push", async () => {
+    seedTask();
+    const comments = [
+      { id: "CMT-1", author: "vince", body: "kickoff @greg", ts: "2026.06.16 · 00:00", mentions: ["greg"] },
+    ];
+    const updated = await patchTask("TASK-900", { comments }, "vince");
+    expect(updated!.comments).toEqual(comments);
+    const row = store.rows.get("task:TASK-900")!;
+    expect(row.data.comments).toEqual(comments);
+    expect(row.sync_state).toBe("synced"); // app-only — never pushed to SharePoint
+    expect(row.dirty_fields).toEqual([]);
+  });
+});
+
 describe("patchTask — per-field tier at the server boundary", () => {
   it("DB-only fields do NOT flip sync_state to pending or add dirty fields", async () => {
     seedTask();

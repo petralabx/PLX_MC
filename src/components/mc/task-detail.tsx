@@ -18,9 +18,12 @@ import {
 } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
-  addSubtask,
+  addComment,
   allTasks,
+  deleteComment,
+  editComment,
   markAllSynced,
+  mentionables,
   openConflicts,
   reassignTask,
   resolveConflict,
@@ -28,12 +31,12 @@ import {
   setCoassignees,
   setHumanOnly,
   setTaskBucket,
+  setTaskDescription,
   setTaskLabels,
   setTaskPriority,
   setTaskStage,
   spLists,
   taskById,
-  toggleSubtask,
 } from "@/lib/mc-data/store";
 
 import {
@@ -51,6 +54,8 @@ import {
 import { LabelEditor } from "./label-editor";
 import { NotifyTrail, PeoplePicker } from "./people-picker";
 import type { ScreenProps } from "./route";
+import { SubtaskList } from "./subtask-list";
+import { Timeline } from "./timeline";
 
 export const SOR_FIELD_NAMES = ["Status", "Assigned To", "Due Date", "Priority"] as const;
 type SorFieldName = (typeof SOR_FIELD_NAMES)[number];
@@ -125,7 +130,8 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
   const [accountablePickerOpen, setAccountablePickerOpen] = useState(false);
   const [coPickerOpen, setCoPickerOpen] = useState(false);
   const [reassigned, setReassigned] = useState<{ taskId: string; actorId: string } | null>(null);
-  const [subtaskDraft, setSubtaskDraft] = useState("");
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState("");
 
   if (!task) {
     return (
@@ -251,14 +257,55 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
             {reassigned?.taskId === task.id && <NotifyTrail id={reassigned.actorId} />}
           </div>
 
-          {task.description && (
-            <div className="blk">
-              <div className="bh">
-                <span className="kk">/ Description</span>
-              </div>
-              <div className="prose">{task.description}</div>
+          <div className="blk">
+            <div className="bh">
+              <span className="kk">/ Description</span>
+              {!editingDesc && (
+                <button
+                  type="button"
+                  className="tl-link"
+                  onClick={() => {
+                    setDescDraft(task.description ?? "");
+                    setEditingDesc(true);
+                  }}
+                >
+                  {task.description ? "Edit" : "Add description"}
+                </button>
+              )}
             </div>
-          )}
+            {editingDesc ? (
+              <div className="desc-edit">
+                <textarea
+                  className="desc-input"
+                  value={descDraft}
+                  onChange={(event) => setDescDraft(event.target.value)}
+                  placeholder="Describe the work — mirrors to the SharePoint Description column."
+                  aria-label="Edit description"
+                  rows={4}
+                  autoFocus
+                />
+                <div className="desc-edit-acts">
+                  <button type="button" className="btn ghost sm" onClick={() => setEditingDesc(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={() => {
+                      setTaskDescription(task.id, descDraft.trim());
+                      setEditingDesc(false);
+                    }}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : task.description ? (
+              <div className="prose">{task.description}</div>
+            ) : (
+              <div className="prose muted">No description yet.</div>
+            )}
+          </div>
 
           {task.evidence && (
             <div className="blk">
@@ -385,70 +432,28 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                 {task.subtasks.length}
               </span>
             </div>
-            <div className="subs">
-              {task.subtasks.map((subtask) => (
-                <div className={`sub${subtask.done ? " done" : ""}`} key={subtask.id}>
-                  <button
-                    type="button"
-                    className="box"
-                    onClick={() => toggleSubtask(task.id, subtask.id)}
-                    title={subtask.done ? "Mark not done" : "Mark done"}
-                    aria-label={`Toggle subtask ${subtask.t}`}
-                    aria-pressed={subtask.done}
-                  >
-                    {subtask.done ? "✓" : ""}
-                  </button>
-                  <span className="id">{subtask.id}</span>
-                  <span className="t">{subtask.t}</span>
-                  <span className="who">
-                    <Avatar id={subtask.who} size="sm" />
-                  </span>
-                </div>
-              ))}
-              <div className="sub-add">
-                <span className="box" aria-hidden="true" />
-                <input
-                  className="sub-input"
-                  value={subtaskDraft}
-                  onChange={(event) => setSubtaskDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addSubtask(task.id, subtaskDraft, CURRENT_USER);
-                      setSubtaskDraft("");
-                    }
-                  }}
-                  placeholder="+ Add subtask"
-                  aria-label="Add a subtask"
-                />
-              </div>
-            </div>
+            <SubtaskList
+              taskId={task.id}
+              subtasks={task.subtasks}
+              // Human-only tasks hide agents from the sub-task assignee picker too.
+              allowAgents={!task.humanOnly}
+              onPromote={(newTaskId) => nav("task", { taskId: newTaskId })}
+            />
           </div>
 
           <div className="blk">
             <div className="bh">
-              <span className="kk">/ Activity</span>
+              <span className="kk">/ Timeline · comments + activity</span>
             </div>
-            <div className="log">
-              {task.activity.length ? (
-                task.activity.map((entry, index) => {
-                  const actor = ACTORS[entry.who];
-                  return (
-                    <div className="logrow" key={`${entry.what}-${index}`}>
-                      <span>
-                        {actor ? <Avatar id={entry.who} size="sm" /> : <span className="fallback" />}
-                      </span>
-                      <span className="body">
-                        <b>{actor?.name ?? entry.who}</b> {entry.what}
-                      </span>
-                      <span className="age">{entry.age}</span>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="logempty">No activity yet.</div>
-              )}
-            </div>
+            <Timeline
+              comments={task.comments ?? []}
+              activity={task.activity}
+              people={mentionables()}
+              currentUser={CURRENT_USER}
+              onAdd={(body) => addComment(task.id, body)}
+              onEdit={(commentId, body) => editComment(task.id, commentId, body)}
+              onDelete={(commentId) => deleteComment(task.id, commentId)}
+            />
           </div>
         </div>
 

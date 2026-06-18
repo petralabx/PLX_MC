@@ -194,6 +194,120 @@
 .mc .sub .box { cursor: pointer; appearance: none; padding: 0; }
 .mc .sub .box:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 1px; }
 
+/* ─── EN-001 / WS-3 — collaboration surfaces (token-only) ─────────────────────
+
+   Editable description, enriched sub-tasks, and the unified comment/activity
+   timeline (shared by the task + bucket detail). All color comes from --p-*. */
+
+/* Editable description */
+.mc .prose.muted { color: var(--p-muted); font-style: italic; }
+.mc .desc-edit { display: flex; flex-direction: column; gap: 9px; }
+.mc .desc-input {
+  width: 100%; border: 1px solid var(--p-grid); background: var(--p-paper); color: var(--p-ink);
+  font: inherit; font-size: 13.5px; line-height: 1.55; padding: 9px 11px; border-radius: 4px; resize: vertical;
+}
+.mc .desc-input:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 1px; border-color: var(--p-ink-2); }
+.mc .desc-edit-acts { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Enriched sub-task rows */
+.mc .sub.rich { flex-direction: column; align-items: stretch; gap: 0; }
+.mc .sub.rich .sub-head { display: flex; align-items: center; gap: 11px; }
+.mc .sub-title-btn {
+  background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--p-ink-2);
+  text-align: left; cursor: pointer; flex: 1;
+}
+.mc .sub.rich.done .sub-title-btn { color: var(--p-muted); text-decoration: line-through; text-decoration-color: var(--p-grid); }
+.mc .sub-title-btn:hover { color: var(--p-ink); }
+.mc .sub-title-btn:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 1px; }
+.mc .sub-status {
+  font-family: var(--mono); font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 2px 6px; border: 1px solid var(--p-grid-2); color: var(--p-muted); border-radius: 3px;
+}
+.mc .sub-status.doing { color: var(--p-accent); border-color: var(--p-accent-soft); }
+.mc .sub-status.blocked { color: var(--p-hot); border-color: var(--p-hot); }
+.mc .sub-status.done { color: var(--p-ok); border-color: var(--p-ok); }
+.mc .sub-reorder { display: inline-flex; gap: 2px; }
+.mc .sub-mv {
+  background: none; border: 1px solid var(--p-grid-2); color: var(--p-muted);
+  font-size: 9px; line-height: 1; padding: 2px 5px; cursor: pointer; border-radius: 3px;
+}
+.mc .sub-mv:hover:not(:disabled) { color: var(--p-ink); border-color: var(--p-ink-2); }
+.mc .sub-mv:disabled { opacity: 0.35; cursor: default; }
+.mc .sub-mv:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 1px; }
+
+.mc .sub-edit { display: flex; flex-direction: column; gap: 9px; padding: 10px 0 4px 25px; }
+.mc .sub-edit-title, .mc .sub-edit-desc, .mc .sub-edit-due {
+  border: 1px solid var(--p-grid); background: var(--p-paper); color: var(--p-ink);
+  font: inherit; font-size: 12.5px; padding: 6px 9px; border-radius: 4px; width: 100%;
+}
+.mc .sub-edit-desc { resize: vertical; line-height: 1.5; }
+.mc .sub-edit-title:focus-visible, .mc .sub-edit-desc:focus-visible, .mc .sub-edit-due:focus-visible {
+  outline: 2px solid var(--p-accent); outline-offset: 1px; border-color: var(--p-ink-2);
+}
+.mc .sub-edit-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.mc .sub-edit-field { display: flex; flex-direction: column; gap: 4px; }
+.mc .sub-edit-field .k { font-family: var(--mono); font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--p-muted); }
+.mc .sub-assignee-btn {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--p-paper); border: 1px solid var(--p-grid);
+  padding: 4px 9px; cursor: pointer; border-radius: 4px; font: inherit; font-size: 12px; color: var(--p-ink);
+}
+.mc .sub-assignee-btn:hover { border-color: var(--p-ink-2); }
+.mc .sub-edit-status {
+  appearance: none; -webkit-appearance: none; border: 1px solid var(--p-grid); background: var(--p-paper);
+  color: var(--p-ink); font: inherit; font-size: 12px; padding: 4px 9px; cursor: pointer; border-radius: 4px;
+}
+.mc .sub-edit-acts { display: flex; justify-content: flex-end; }
+
+/* Unified timeline (comments + activity) */
+.mc .tl { display: flex; flex-direction: column; gap: 16px; }
+.mc .tl-composer { border: 1px solid var(--p-grid); border-radius: 5px; background: var(--p-paper); overflow: visible; }
+.mc .tl-input-wrap { position: relative; }
+.mc .tl-input {
+  width: 100%; border: 0; background: transparent; color: var(--p-ink); font: inherit; font-size: 13px;
+  line-height: 1.55; padding: 11px 12px; resize: vertical; outline: none; display: block;
+}
+.mc .tl-input::placeholder { color: var(--p-muted); }
+.mc .tl-mentions {
+  position: absolute; left: 10px; top: calc(100% - 4px); z-index: 30; min-width: 220px;
+  background: var(--p-paper); border: 1px solid var(--p-grid); border-radius: 5px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--p-ink) 12%, transparent); overflow: hidden;
+}
+.mc .tl-mention-opt {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0;
+  padding: 7px 10px; cursor: pointer; font: inherit; color: var(--p-ink);
+}
+.mc .tl-mention-opt:hover, .mc .tl-mention-opt.on { background: var(--p-rail); }
+.mc .tl-mention-opt .nm { font-size: 12.5px; }
+.mc .tl-mention-opt .hd { margin-left: auto; font-family: var(--mono); font-size: 9px; color: var(--p-muted); }
+.mc .tl-composer-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 12px; border-top: 1px solid var(--p-grid-2); background: var(--p-paper-2);
+}
+.mc .tl-hint { font-family: var(--mono); font-size: 8px; letter-spacing: 0.08em; color: var(--p-muted); }
+.mc .tl-composer-acts { display: flex; gap: 8px; }
+
+.mc .tl-stream { display: flex; flex-direction: column; }
+.mc .tl-row { display: grid; grid-template-columns: auto 1fr; gap: 11px; padding: 11px 0; border-bottom: 1px dotted var(--p-grid-2); }
+.mc .tl-row:last-child { border-bottom: 0; }
+.mc .tl-gut { padding-top: 1px; }
+.mc .tl-age { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.06em; color: var(--p-muted); }
+/* System event — quiet, single-line (visually distinct from a comment card). */
+.mc .tl-row.event { align-items: baseline; }
+.mc .tl-row.event .tl-body { font-size: 12px; color: var(--p-ink-2); line-height: 1.5; }
+.mc .tl-row.event .tl-body b { font-weight: 500; color: var(--p-ink); }
+.mc .tl-row.event .tl-age { grid-column: 2; justify-self: start; margin-top: 2px; }
+/* Comment — a bordered card so it reads as an authored message. */
+.mc .tl-card { border: 1px solid var(--p-grid-2); border-radius: 5px; background: var(--p-paper); padding: 9px 11px; }
+.mc .tl-meta { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
+.mc .tl-meta b { font-size: 12.5px; font-weight: 600; color: var(--p-ink); }
+.mc .tl-acts { margin-left: auto; display: flex; gap: 10px; }
+.mc .tl-link { background: none; border: 0; padding: 0; font: inherit; font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--p-muted); cursor: pointer; }
+.mc .tl-link:hover { color: var(--p-accent); }
+.mc .tl-link.danger:hover { color: var(--p-hot); }
+.mc .tl-link:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 1px; }
+.mc .tl-text { font-size: 13px; line-height: 1.55; color: var(--p-ink-2); white-space: pre-wrap; word-break: break-word; }
+.mc .tl-mention { color: var(--p-accent); font-weight: 600; }
+
 /* ─── Shared LabelEditor (.le-*) — used by the task detail + New Task modal ───
    Component-neutral so it renders in both .ntm and .td surfaces (the original
    block was .ntm-scoped). Mirrors the .ntm-chip.label + .ntm-label-input skin. */

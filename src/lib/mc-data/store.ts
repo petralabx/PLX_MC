@@ -537,7 +537,10 @@ export function requestRepo(input: NewRepoRequestInput, actorId: string = CURREN
 }
 
 // Approve a pending request — gated to an approver (Owner/Admin, EN-003 roles).
-// Adds the repo to the registry/allow-list. Returns true on success.
+// Adds the repo to the registry/allow-list. Returns true on success. An
+// UNVERIFIED request (one that failed GitHub-org validation) can never be
+// approved — that would put an unvalidated repo on the allow-list, exactly what
+// the validation gate prevents (error-code-style reason: repo_unverified).
 export function approveRepo(requestId: string, actorId: string = CURRENT_USER): boolean {
   if (!isApprover(state.actors[actorId])) {
     pushNotice("Only an Owner or Admin can approve a repo request.");
@@ -545,6 +548,10 @@ export function approveRepo(requestId: string, actorId: string = CURRENT_USER): 
   }
   const req = state.repoRequests.find((r) => r.id === requestId);
   if (!req || req.status !== "pending") return false;
+  if (!req.verified) {
+    pushNotice(`${req.name} hasn't been verified against the GitHub org — it can't be approved.`);
+    return false;
+  }
   req.status = "approved";
   req.decidedBy = actorId;
   req.decidedTs = stamp();

@@ -118,7 +118,13 @@ export function ReposView({ nav }: ScreenProps) {
               </span>
               {approver && req.status === "pending" && (
                 <span className="repo-req-acts">
-                  <button type="button" className="btn acc sm" onClick={() => approveRepo(req.id)}>
+                  <button
+                    type="button"
+                    className="btn acc sm"
+                    disabled={!req.verified}
+                    title={req.verified ? undefined : "Unverified against the GitHub org — can't be approved"}
+                    onClick={() => approveRepo(req.id)}
+                  >
                     Approve
                   </button>
                   <button type="button" className="btn ghost sm" onClick={() => rejectRepo(req.id)}>

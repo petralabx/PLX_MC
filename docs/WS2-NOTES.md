@@ -46,6 +46,14 @@ Every one of the 8 buckets and all 15 seeded tasks now attach `["portal-web"]`
 - Getters `allRepos()`, `repoRequests()`.
 - Actions `requestRepo` (any collaborator), `approveRepo` / `rejectRepo`
   (gated by `isApprover`; approve adds the repo to the registry/allow-list).
+- **Hardened approval gate (orchestrator decision, 2026-06-17):** `approveRepo`
+  also requires `verified === true`. An unverified request (one that failed
+  GitHub-org validation) can never be approved — `approveRepo` returns `false`
+  with a clear `repo_unverified`-style notice and nothing joins the allow-list.
+  The Repos-screen Approve button is `disabled` for unverified requests while the
+  unverified flag stays visible; Reject remains available. (No server approve
+  route exists — approval is store-enforced only — so the guard lives in the
+  store action + UI.)
 - Injectable GitHub-validation seam `__setRepoValidatorForTests` +
   `__repoValidationSettled` (mirrors the existing `patchMirror` test seam).
 - `addTask` now clamps `repos` to the allow-list and surfaces a notice for any
@@ -83,12 +91,12 @@ tests the validator is **mocked** through the injectable seam (hermetic; no
 network).
 
 ## Deferred (with reason)
-- **SharePoint list for the repo registry (SHOULD):** deferred. Standing up a new
-  SharePoint list is an External Integrations change (owner/scope/auth/kill-
-  switch declaration) and the WS-2 brief says don't disturb the existing `Repos`
-  column mapping. The runtime registry + request queue are in-store only for now;
-  mirroring to the system of record should land with the directory/person-column
-  sync increment. **TODO:** add a `Repo Registry` list to
+- **SharePoint list for the repo registry (SHOULD):** deferred — **approved by the
+  orchestrator (2026-06-17)** to land with the person-column/sync increment.
+  Standing up a new SharePoint list is an External Integrations change
+  (owner/scope/auth/kill-switch declaration) and the WS-2 brief says don't disturb
+  the existing `Repos` column mapping. The runtime registry + request queue are
+  in-store only for now. **TODO:** add a `Repo Registry` list to
   `config/sharepoint-schema.json` + `SP_LISTS` + `mapping.ts` when that increment
   runs.
 - **Persisting requests/approved repos across reloads:** in-memory for now (reset
@@ -96,9 +104,9 @@ network).
 
 ## Verification (all green)
 - `npm run typecheck` → exit 0
-- `npm run test` → 19 files, **271 passed** (was 257; +14 WS-2 tests in
-  `tests/mc-repos.test.ts`, `tests/mc-record.test.ts` updated for the new
-  registry)
+- `npm run test` → 19 files, **272 passed** (was 257; +15 WS-2 tests in
+  `tests/mc-repos.test.ts` incl. the unverified-approval guard,
+  `tests/mc-record.test.ts` updated for the new registry)
 - `npm run build` → success; `/api/repos/validate` registered
 - `./scripts/preflight.sh --mode pre-commit` → all checks passed
 - Heavy Playwright E2E intentionally skipped (per brief).

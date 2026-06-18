@@ -143,6 +143,17 @@ describe("self-service request → approve", () => {
     expect(r.note).toContain("not found");
   });
 
+  it("refuses to approve an unverified request even for an approver (repo_unverified guard)", async () => {
+    __setRepoValidatorForTests(async () => ({ ok: false, note: "not found in the org" }));
+    const req = requestRepo({ name: "unverified-repo" });
+    await __repoValidationSettled();
+    expect(repoRequests().find((r) => r.id === req.id)?.verified).toBe(false);
+
+    expect(approveRepo(req.id)).toBe(false); // vince is Owner, but the repo is unverified
+    expect(repoRequests().find((r) => r.id === req.id)?.status).toBe("pending");
+    expect(allRepos()["unverified-repo"]).toBeUndefined();
+  });
+
   it("rejects a request without adding it to the registry", () => {
     const req = requestRepo({ name: "wontfix" });
     expect(rejectRepo(req.id)).toBe(true);

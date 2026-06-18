@@ -810,3 +810,13 @@
   display: flex;
   gap: 8px;
 }
+
+.mc .repo-req-acts .btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.mc .repo-req-acts .btn:disabled:hover {
+  background: var(--p-accent);
+  border-color: var(--p-accent);
+}

@@ -69,6 +69,9 @@ GitHub status-check workflow.
 - `scripts/compliance-checkout.mjs` + `.cursor/compliance-hooks.json` — the capture hook (disabled by default)
 - `scripts/compliance-ci-check.sh` — workflow/hook validator (P3 acceptance)
 - `db/migrations/005_compliance.sql` — `mc_events`, `mc_dispatch`, `mc_compliance_check`
+- `db/migrations/006_compliance_reconcile.sql` — `mc_reconcile_queue` (fail-closed replay)
+- `src/app/api/compliance/reconcile/route.ts` — reconciliation sweep entrypoint
+- `docs/runbooks/compliance-gate-rollout.md` — operator activation + External Integrations declaration
 - `tests/compliance.test.ts` — risk truth table + verifier verdicts (pure)
 - `tests/compliance-server.test.ts` — service orchestration (mocked DB seam)
 - `tests/compliance-ingest.test.ts` — webhook signature/parse + ingestion (mocked seam)

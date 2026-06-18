@@ -63,10 +63,15 @@ GitHub status-check workflow.
 - `src/lib/compliance/index.ts` — pure-core barrel (import through here)
 - `src/lib/compliance/service.ts` — server service: checkout / complete / verifyPr / listEvents (subpath import, like `mc-data/store`)
 - `src/lib/compliance/repo.ts` — Postgres accessors (dispatch ledger, mc_events, check ledger)
-- `src/app/api/compliance/{checkout,complete,verify}/route.ts`, `src/app/api/events/route.ts` — the API surface
+- `src/lib/compliance/webhook.ts` — GitHub HMAC verify + PR-event parse (git→MC ingestion)
+- `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts` — the API surface
+- `.github/workflows/compliance-gate.yml` — the required PR status check (default-off; soft→hard)
+- `scripts/compliance-checkout.mjs` + `.cursor/compliance-hooks.json` — the capture hook (disabled by default)
+- `scripts/compliance-ci-check.sh` — workflow/hook validator (P3 acceptance)
 - `db/migrations/005_compliance.sql` — `mc_events`, `mc_dispatch`, `mc_compliance_check`
 - `tests/compliance.test.ts` — risk truth table + verifier verdicts (pure)
 - `tests/compliance-server.test.ts` — service orchestration (mocked DB seam)
+- `tests/compliance-ingest.test.ts` — webhook signature/parse + ingestion (mocked seam)
 - `docs/product/SYSTEM_OF_RECORD.md` — the governing spec (EN-007)
 
 ## Owner

@@ -1,0 +1,17 @@
+{
+  "description": "EN-007 compliance capture hook (P3). Wires scripts/compliance-checkout.mjs to run at an agent run's start, claim an MC task, and stamp the PR body with 'MC-Checkout: <id>' so the gate resolves the agent + task. DISABLED by default (operator-local tooling; governance: ships disabled, opt-in). To enable: merge this entry into .cursor/hooks.json and set COMPLIANCE_CAPTURE=1 plus MC_BASE_URL / MC_TASK_ID / MC_ACCOUNTABLE / MC_REPO in the run env.",
+  "enabled": false,
+  "version": 1,
+  "hook": {
+    "event": "beforeAgentRun",
+    "command": "node scripts/compliance-checkout.mjs",
+    "env": [
+      "COMPLIANCE_CAPTURE",
+      "MC_BASE_URL",
+      "MC_TASK_ID",
+      "MC_ACCOUNTABLE",
+      "MC_REPO",
+      "MC_RUNTIME"
+    ]
+  }
+}

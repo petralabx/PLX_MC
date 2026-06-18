@@ -1,0 +1,77 @@
+# PLX MC Compliance Gate (EN-007) — the required PR status check.
+#
+# Calls the PLX MC verify API and blocks (hard) or warns (soft) on the verdict.
+# Safe + default-off: if PLX_MC_BASE_URL is not configured the gate SKIPS (exit 0),
+# so adding this workflow to a repo never blocks it before rollout. Reusable via
+# workflow_call (other repos add a 3-line caller); also self-triggers on PRs so
+# PLX_MC dogfoods it first. Untrusted PR fields are passed via env (never
+# interpolated into the shell) to avoid script injection.
+
+name: PLX MC Compliance Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_call:
+    inputs:
+      mode:
+        description: "soft (warn) or hard (block)"
+        type: string
+        default: "soft"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  compliance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify against PLX MC
+        env:
+          MC_BASE_URL: ${{ secrets.PLX_MC_BASE_URL }}
+          MODE: ${{ inputs.mode || vars.COMPLIANCE_MODE || 'soft' }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_REF: ${{ github.base_ref }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MC_BASE_URL:-}" ]; then
+            echo "PLX_MC_BASE_URL not configured — compliance gate skipped (pre-rollout)."
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$PR_BASE_REF" || true
+          changed=$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" \
+            | jq -R -s 'split("\n") | map(select(length>0))')
+          checkout=$(printf '%s' "$PR_BODY" | grep -oE 'MC-Checkout: dsp_[A-Za-z0-9]+' | head -n1 | sed 's/.* //' || true)
+          body=$(jq -n \
+            --arg repo "$REPO_NAME" \
+            --argjson prNumber "$PR_NUMBER" \
+            --arg headSha "$PR_HEAD_SHA" \
+            --argjson changedPaths "$changed" \
+            --argjson labels "${PR_LABELS:-[]}" \
+            --arg checkoutId "${checkout:-}" \
+            '{repo:$repo, prNumber:$prNumber, headSha:$headSha, changedPaths:$changedPaths, labels:$labels}
+             + (if $checkoutId != "" then {checkoutId:$checkoutId} else {} end)')
+          resp=$(curl -sS -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
+            -H 'content-type: application/json' -d "$body")
+          echo "verify response: $resp"
+          verdict=$(printf '%s' "$resp" | jq -r '.data.verdict // "block"')
+          reasons=$(printf '%s' "$resp" | jq -r '(.data.reasons // []) | join("; ")')
+          echo "verdict=$verdict mode=$MODE"
+          if [ "$verdict" = "pass" ]; then
+            echo "Compliance gate: PASS"
+            exit 0
+          fi
+          echo "Compliance gate: BLOCK — $reasons"
+          if [ "$MODE" = "hard" ]; then
+            exit 1
+          fi
+          echo "soft mode — recording only, not failing the check"
+          exit 0

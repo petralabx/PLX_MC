@@ -748,3 +748,65 @@
   font-family: var(--mono);
   font-size: 9.5px;
 }
+
+/* ─── Repo self-service: request form + review queue (EN-002 / WS-2) ───────── */
+.mc .repo-req-form {
+  align-items: center;
+  border-bottom: 1px solid var(--p-grid-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 26px;
+}
+
+.mc .repo-req-input {
+  background: var(--p-paper);
+  border: 1px solid var(--p-grid);
+  color: var(--p-ink);
+  flex: 1 1 240px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 8px 11px;
+}
+
+.mc .repo-req-input::placeholder {
+  color: var(--p-muted);
+}
+
+.mc .repo-req-input:focus {
+  border-color: var(--p-accent);
+  outline: none;
+}
+
+.mc .repo-reqs {
+  border-bottom: 1px solid var(--p-grid-2);
+  padding: 0 26px 16px;
+}
+
+.mc .repo-req-row {
+  align-items: center;
+  border-top: 1px dotted var(--p-grid-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.mc .repo-req-row .nm {
+  color: var(--p-ink);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.mc .repo-req-meta {
+  color: var(--p-muted);
+  flex: 1 1 220px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.mc .repo-req-acts {
+  display: flex;
+  gap: 8px;
+}

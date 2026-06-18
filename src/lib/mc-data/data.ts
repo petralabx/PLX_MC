@@ -94,12 +94,18 @@ export const MODE: Record<AgentMode, { label: string; short: string }> = {
 
 export const PETRA_DOMAINS = ["petralabx.com", "petrasoap.com"];
 
+// Repo registry = the allow-list (EN-002 / WS-2). Exactly the three canonical
+// repos under the taylorvalton GitHub org; the four demo placeholders were
+// removed. Metadata (visibility, default branch, language) is resolved from the
+// GitHub org — honest values only, no fabricated PR/task counts (the Repos
+// screen derives live counts from task membership and PRs). The org is the
+// validation source for self-service additions (see lib/mc-data/repos.ts).
+export const REPO_ORG = "taylorvalton";
+
 export const REPOS: Record<string, Repo> = {
-  "portal-web": { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript · Next.js", openPRs: 4, openTasks: 9, def: "main" },
-  "portal-api": { id: "portal-api", name: "plx-portal-api", lang: "TypeScript · Node", openPRs: 2, openTasks: 6, def: "main" },
-  "mrp-core": { id: "mrp-core", name: "plx-mrp-core", lang: "Go", openPRs: 1, openTasks: 5, def: "main" },
-  "design-sys": { id: "design-sys", name: "plx-design-system", lang: "CSS · TS", openPRs: 2, openTasks: 3, def: "main" },
-  infra: { id: "infra", name: "plx-infra", lang: "Terraform", openPRs: 0, openTasks: 2, def: "main" },
+  "portal-web": { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript · Next.js", def: "master", owner: REPO_ORG, visibility: "private", scope: "Customer portal web application — the go-live codebase." },
+  "agentic-swarm": { id: "agentic-swarm", name: "agentic-swarm", lang: "TypeScript", def: "main", owner: REPO_ORG, visibility: "private", scope: "Background agent swarm that does the work." },
+  "plx-mc": { id: "plx-mc", name: "PLX_MC", lang: "TypeScript", def: "main", owner: REPO_ORG, visibility: "public", scope: "Mission Control — the human cockpit over the agents." },
 };
 
 // Demo/prototype buckets purged 2026-06-11 — only the PLX Portal go-live plan
@@ -109,14 +115,16 @@ export const BUCKETS: Bucket[] = [
   // ─── PLX Portal go-live plan (seeded 2026-06-11) — one bucket per workstream.
   // All pending with "unprovisioned" refs until /sites/plx-mission-control is
   // provisioned and the engine points at it (no fabricated sync evidence).
-  { id: "BKT-WMS", name: "WMS Integration", owner: "vince", health: "track", target: "Jun 15", started: "2026.06.11", desc: "Warehouse management system integration for the portal go-live.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-DAPI", name: "Decoupling API", owner: "vince", health: "track", target: "Jun 15", started: "2026.06.11", desc: "Decouple the portal from backend services — the Swagger-first contract is the deliverable.", repos: ["portal-api"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-PROD", name: "Product Development", owner: "vince", health: "track", target: "Jun 29", started: "2026.06.11", desc: "Portal product development through the Jun 29 test gate; Account Management is stretch scope.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-FIN", name: "Finance", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Finance workstream — build Jun 29–Jul 13, test complete Jul 20.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-QMS", name: "QMS", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Quality management system — forms + DocuSign.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-SHOP", name: "Shopify → Business Central", owner: "vince", health: "track", target: "Aug 31", started: "2026.06.11", desc: "Shopify to Business Central migration — owned by Greg and Stephen (directory entries pending).", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-INFRA", name: "Backend Infra", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Cross-cutting platform/infra work supporting go-live.", repos: ["infra"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-UAT", name: "UAT", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Owns parallel testing and the go-live milestones.", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  // EN-002 backfill (2026-06-17): every bucket attaches plx-customer-portal
+  // (id "portal-web") — all current workstreams are PLX Portal go-live work.
+  { id: "BKT-WMS", name: "WMS Integration", owner: "vince", health: "track", target: "Jun 15", started: "2026.06.11", desc: "Warehouse management system integration for the portal go-live.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-DAPI", name: "Decoupling API", owner: "vince", health: "track", target: "Jun 15", started: "2026.06.11", desc: "Decouple the portal from backend services — the Swagger-first contract is the deliverable.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-PROD", name: "Product Development", owner: "vince", health: "track", target: "Jun 29", started: "2026.06.11", desc: "Portal product development through the Jun 29 test gate; Account Management is stretch scope.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-FIN", name: "Finance", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Finance workstream — build Jun 29–Jul 13, test complete Jul 20.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-QMS", name: "QMS", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Quality management system — forms + DocuSign.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-SHOP", name: "Shopify → Business Central", owner: "vince", health: "track", target: "Aug 31", started: "2026.06.11", desc: "Shopify to Business Central migration — owned by Greg and Stephen (directory entries pending).", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-INFRA", name: "Backend Infra", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Cross-cutting platform/infra work supporting go-live.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-UAT", name: "UAT", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Owns parallel testing and the go-live milestones.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
 ];
 
 export const BUCKET_IDX: Record<string, Bucket> = Object.fromEntries(
@@ -131,28 +139,28 @@ export const TASKS: Task[] = [
   // tasks stay unassigned.
   {
     id: "TASK-221", title: "WMS integration", bucket: "BKT-WMS", stage: "planned", priority: "medium",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live"], prs: [],
     due: "Jun 15", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jun 15", kind: "move" }],
   },
   {
     id: "TASK-222", title: "Decoupling API — Swagger-first contract", bucket: "BKT-DAPI", stage: "planned", priority: "medium",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-api"], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live", "api"], prs: [],
     due: "Jun 15", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — the Swagger contract is the deliverable", kind: "move" }],
   },
   {
     id: "TASK-223", title: "Product development", bucket: "BKT-PROD", stage: "planned", priority: "medium",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live"], prs: [],
     due: "Jun 15", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jun 15", kind: "move" }],
   },
   {
     id: "TASK-224", title: "Product development (cont.)", bucket: "BKT-PROD", stage: "planned", priority: "medium",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live"], prs: [],
     due: "Jun 22", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jun 22", kind: "move" }],
@@ -160,21 +168,21 @@ export const TASKS: Task[] = [
   {
     id: "TASK-225", title: "Stretch: Account Management", bucket: "BKT-PROD", stage: "backlog", priority: "low",
     description: "Stretch scope — only pulled if Product Development is ahead of schedule.",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live", "stretch"], prs: [],
     due: "Jun 22", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded as stretch scope — pulled only if ahead", kind: "move" }],
   },
   {
     id: "TASK-226", title: "Build Finance", bucket: "BKT-FIN", stage: "planned", priority: "medium",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live", "finance"], prs: [],
     due: "Jun 29", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — build starts week of Jun 29", kind: "move" }],
   },
   {
     id: "TASK-227", title: "Test product development", bucket: "BKT-PROD", stage: "qa", priority: "high",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live", "testing"], prs: [],
     due: "Jun 29", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     evidence: {
@@ -190,21 +198,21 @@ export const TASKS: Task[] = [
   },
   {
     id: "TASK-228", title: "Build Finance (cont.)", bucket: "BKT-FIN", stage: "planned", priority: "medium",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live", "finance"], prs: [],
     due: "Jul 06", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jul 6", kind: "move" }],
   },
   {
     id: "TASK-229", title: "Build Finance (cont.)", bucket: "BKT-FIN", stage: "planned", priority: "medium",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live", "finance"], prs: [],
     due: "Jul 13", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jul 13", kind: "move" }],
   },
   {
     id: "TASK-230", title: "Test Finance", bucket: "BKT-FIN", stage: "qa", priority: "high",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live", "testing", "finance"], prs: [],
     due: "Jul 20", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     evidence: {
@@ -220,7 +228,7 @@ export const TASKS: Task[] = [
   },
   {
     id: "TASK-231", title: "QMS — Forms + DocuSign", bucket: "BKT-QMS", stage: "planned", priority: "medium",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live", "qms"], prs: [],
     due: "Jul 20", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — week of Jul 20", kind: "move" }],
@@ -228,7 +236,7 @@ export const TASKS: Task[] = [
   {
     id: "TASK-232", title: "Shopify → Business Central migration", bucket: "BKT-SHOP", stage: "planned", priority: "medium",
     description: "Owned by Greg and Stephen — unassigned until their directory entries exist.",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "L",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "L",
     labels: ["go-live", "migration"], prs: [],
     due: "Aug 31", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — August, owners Greg & Stephen", kind: "move" }],
@@ -236,21 +244,21 @@ export const TASKS: Task[] = [
   {
     id: "TASK-233", title: "Unstructured to-dos — needs breakdown", bucket: "BKT-SHOP", stage: "backlog", priority: "low",
     description: "Single placeholder for the August unstructured items; break down before the build window.",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live", "needs-breakdown"], prs: [],
     due: "Aug 31", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded as a placeholder — needs breakdown", kind: "move" }],
   },
   {
     id: "TASK-234", title: "Parallel system testing — execution", bucket: "BKT-UAT", stage: "planned", priority: "high",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: [], estimate: "L",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "L",
     labels: ["go-live", "testing", "uat"], prs: [],
     due: "Sep 01", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded from the PLX Portal go-live plan — parallel testing from Sept 1", kind: "move" }],
   },
   {
     id: "TASK-235", title: "Define go-live infra checklist — environments, cutover, rollback", bucket: "BKT-INFRA", stage: "backlog", priority: "medium",
-    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["infra"], estimate: "M",
+    assignee: null, coassignees: [], reporter: "vince", accountableOwner: "vince", reqs: [], repos: ["portal-web"], estimate: "M",
     labels: ["go-live", "infra"], prs: [],
     due: "Oct 01", sync: { state: "pending", ts: "—", sp: "ToDos · unprovisioned" }, subtasks: [],
     activity: [{ age: "now", who: "vince", what: "seeded as the Backend Infra placeholder — concrete items to follow", kind: "move" }],

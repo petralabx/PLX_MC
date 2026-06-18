@@ -19,6 +19,8 @@ import {
   CURRENT_USER,
   FILES,
   INBOX,
+  REPOS,
+  REPO_ORG,
   RISKS,
   SP_CONFLICTS,
   SP_ERRORS,
@@ -31,12 +33,15 @@ import {
 } from "./data";
 import { domainOf, isPetraEmail } from "./helpers";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "./policy";
+import { allowedReposOnly, disallowedRepos, isApprover, repoFromRequest } from "./repos";
 import type {
   Actor,
   AuditRow,
   FileEntry,
   Human,
   InboxNotification,
+  Repo,
+  RepoRequest,
   Risk,
   SpConflict,
   SpError,
@@ -59,6 +64,11 @@ interface McState {
   errors: SpError[];
   audit: AuditRow[];
   lastSweep: string;
+  // EN-002 / WS-2: the repo registry (= allow-list) and the self-service
+  // request queue. Seeded from the REPOS fixture; an approved request adds to
+  // `repos`. Runtime-only for now (not yet mirrored to the system of record).
+  repos: Record<string, Repo>;
+  repoRequests: RepoRequest[];
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -77,6 +87,8 @@ function initialState(): McState {
       { ts: "—", actor: "scribe", body: "Go-live plan seeded — awaiting first outbound push to the record.", state: "pending" },
     ],
     lastSweep: SP_LAST_SWEEP,
+    repos: clone(REPOS),
+    repoRequests: [],
   };
 }
 
@@ -161,6 +173,9 @@ export const openConflicts = (): SpConflict[] => state.conflicts;
 export const openErrors = (): SpError[] => state.errors;
 export const auditLog = (): AuditRow[] => state.audit;
 export const lastSweep = (): string => state.lastSweep;
+// EN-002 / WS-2 — the repo registry (allow-list) and self-service request queue.
+export const allRepos = (): Record<string, Repo> => state.repos;
+export const repoRequests = (): RepoRequest[] => state.repoRequests;
 
 export interface StoreSyncCounts {
   pending: number;
@@ -335,6 +350,17 @@ export function addTask(input: NewTaskInput): Task {
   const assignee =
     input.humanOnly && isAgentId(input.assignee ?? null) ? null : (input.assignee ?? null);
   const who = assignee ? state.actors[assignee] : undefined;
+  // Allow-list enforcement (EN-002): a task may only attach registry repos.
+  // Anything off the list is dropped at the boundary with a non-silent notice.
+  const requestedRepos = input.repos ?? [];
+  const repos = allowedReposOnly(requestedRepos, state.repos);
+  const droppedRepos = disallowedRepos(requestedRepos, state.repos);
+  if (droppedRepos.length > 0) {
+    pushNotice(
+      `Skipped repos not in the registry: ${droppedRepos.join(", ")}. Request them first.`,
+      "info"
+    );
+  }
   const task: Task = {
     id,
     title: (input.title ?? "").trim(),
@@ -348,7 +374,7 @@ export function addTask(input: NewTaskInput): Task {
     accountableOwner: input.accountableOwner ?? null,
     humanOnly: input.humanOnly,
     reqs: input.reqs ?? [],
-    repos: input.repos ?? [],
+    repos,
     estimate: input.estimate ?? "M",
     labels: input.labels ?? [],
     prs: [],
@@ -374,7 +400,7 @@ export function addTask(input: NewTaskInput): Task {
   serverCall(async () => {
     const created = await api<Task>("/tasks", {
       method: "POST",
-      body: JSON.stringify({ ...input, reporter }),
+      body: JSON.stringify({ ...input, reporter, repos }),
     });
     const local = state.tasks.findIndex((t) => t.id === id);
     if (local !== -1 && created.id !== id) {
@@ -412,6 +438,137 @@ export function invitePerson(email: string): string | null {
   persistInvited();
   emit();
   return id;
+}
+
+// ─── Repo registry: self-service request → approve (EN-002 / WS-2) ───────────
+
+// GitHub-org validation seam. Production default issues the real POST to
+// /api/repos/validate (which calls the org with GITHUB_TOKEN). Overridable in
+// tests (__setRepoValidatorForTests) so the request→validate→reconcile path is
+// unit-testable even though `serverCall`/the default validator are no-ops under
+// SSR/test. Result shape mirrors lib/sync/github.ts RepoValidation.
+interface RepoValidationResult {
+  ok: boolean;
+  visibility?: Repo["visibility"];
+  def?: string;
+  lang?: string;
+  note?: string;
+}
+type RepoValidator = (owner: string, name: string) => Promise<RepoValidationResult>;
+
+const defaultRepoValidator: RepoValidator = (owner, name) =>
+  api<RepoValidationResult>("/repos/validate", {
+    method: "POST",
+    body: JSON.stringify({ owner, name }),
+  });
+
+let repoValidator: RepoValidator = defaultRepoValidator;
+let repoValidatorInjected = false;
+let repoRequestSeq = 0;
+// Test seam: the in-flight validation of the last requestRepo call so a test
+// can await the reconcile (mirrors the patchTaskFields return-promise pattern).
+let repoValidationInFlight: Promise<void> = Promise.resolve();
+
+export function __setRepoValidatorForTests(fn: RepoValidator | null) {
+  repoValidator = fn ?? defaultRepoValidator;
+  repoValidatorInjected = fn !== null;
+}
+
+export function __repoValidationSettled(): Promise<void> {
+  return repoValidationInFlight;
+}
+
+export interface NewRepoRequestInput {
+  name: string;
+  owner?: string;
+  scope?: string;
+}
+
+// File a self-service request to add a repo to the registry. Any collaborator
+// may request; the request lands `pending` + unverified, then is validated
+// against the GitHub org. An unverified request is never auto-promoted — an
+// approver still has to approve it (approveRepo) before it joins the allow-list.
+export function requestRepo(input: NewRepoRequestInput, actorId: string = CURRENT_USER): RepoRequest {
+  const name = (input.name ?? "").trim();
+  const owner = (input.owner ?? "").trim() || REPO_ORG;
+  const id = `RR-${++repoRequestSeq}`;
+  const request: RepoRequest = {
+    id,
+    name,
+    owner,
+    scope: (input.scope ?? "").trim() || undefined,
+    requestedBy: actorId,
+    requestedTs: stamp(),
+    status: "pending",
+    verified: false,
+  };
+  state.repoRequests = [request, ...state.repoRequests];
+  pushAudit(actorId, `Requested repo ${name} — pending GitHub-org validation and approval.`, "pending");
+  emit();
+
+  const reconcile = (result: RepoValidationResult) => {
+    const r = state.repoRequests.find((x) => x.id === id);
+    if (!r) return;
+    r.verified = result.ok;
+    if (result.ok) {
+      r.visibility = result.visibility;
+      r.def = result.def;
+      r.lang = result.lang;
+      r.note = `Validated against ${owner} on GitHub.`;
+    } else {
+      r.note = result.note ?? "Could not be validated against the org.";
+    }
+    emit();
+  };
+  const onError = (err: unknown) => {
+    const r = state.repoRequests.find((x) => x.id === id);
+    if (!r) return;
+    r.verified = false;
+    r.note = `Validation failed: ${err instanceof Error ? err.message : "unknown error"}.`;
+    emit();
+  };
+
+  // SSR/tests with no injected validator: leave the request unverified (no
+  // network to call) — matching the serverCall no-op contract.
+  if (typeof window !== "undefined" || repoValidatorInjected) {
+    repoValidationInFlight = repoValidator(owner, name).then(reconcile, onError);
+  }
+  return request;
+}
+
+// Approve a pending request — gated to an approver (Owner/Admin, EN-003 roles).
+// Adds the repo to the registry/allow-list. Returns true on success.
+export function approveRepo(requestId: string, actorId: string = CURRENT_USER): boolean {
+  if (!isApprover(state.actors[actorId])) {
+    pushNotice("Only an Owner or Admin can approve a repo request.");
+    return false;
+  }
+  const req = state.repoRequests.find((r) => r.id === requestId);
+  if (!req || req.status !== "pending") return false;
+  req.status = "approved";
+  req.decidedBy = actorId;
+  req.decidedTs = stamp();
+  const repo = repoFromRequest(req);
+  state.repos = { ...state.repos, [repo.id]: repo };
+  pushAudit(actorId, `Approved repo ${req.name} — added to the registry allow-list.`, "pending");
+  emit();
+  return true;
+}
+
+// Reject a pending request — gated to an approver. Nothing joins the registry.
+export function rejectRepo(requestId: string, actorId: string = CURRENT_USER): boolean {
+  if (!isApprover(state.actors[actorId])) {
+    pushNotice("Only an Owner or Admin can reject a repo request.");
+    return false;
+  }
+  const req = state.repoRequests.find((r) => r.id === requestId);
+  if (!req || req.status !== "pending") return false;
+  req.status = "rejected";
+  req.decidedBy = actorId;
+  req.decidedTs = stamp();
+  pushAudit(actorId, `Rejected repo request ${req.name}.`, "pending");
+  emit();
+  return true;
 }
 
 // Mark an inbox notification read (clears the topbar/sidebar unread badge).
@@ -772,5 +929,9 @@ export function resetStore() {
   noticeSeq = 0;
   patchMirror = defaultPatchMirror;
   patchMirrorInjected = false;
+  repoValidator = defaultRepoValidator;
+  repoValidatorInjected = false;
+  repoRequestSeq = 0;
+  repoValidationInFlight = Promise.resolve();
   emit();
 }

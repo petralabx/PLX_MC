@@ -61,13 +61,43 @@ export interface Agent {
 
 export type Actor = Human | Agent;
 
+export type RepoVisibility = "public" | "private";
+
 export interface Repo {
   id: string;
   name: string;
   lang: string;
-  openPRs: number;
-  openTasks: number;
+  // Default branch (the repo's GitHub default). `def` predates EN-002.
   def: string;
+  // EN-002 governance metadata — the allow-list registry carries an owner,
+  // visibility, and a one-line scope. Honest values only (resolved from the
+  // GitHub org, never fabricated).
+  owner: string;
+  visibility: RepoVisibility;
+  scope: string;
+}
+
+// A self-service request to add a repo to the registry/allow-list (EN-002).
+// Any collaborator may file one; an approver (Owner/Admin) approves before it
+// joins the registry. `verified` records the GitHub-org validation outcome at
+// request time — an unverified request is never auto-promoted or fabricated.
+export type RepoRequestStatus = "pending" | "approved" | "rejected";
+
+export interface RepoRequest {
+  id: string;
+  name: string;
+  owner: string;
+  lang?: string;
+  visibility?: RepoVisibility;
+  scope?: string;
+  def?: string;
+  requestedBy: string;
+  requestedTs: string;
+  status: RepoRequestStatus;
+  verified: boolean;
+  note?: string;
+  decidedBy?: string;
+  decidedTs?: string;
 }
 
 export type Health = "track" | "risk" | "off";

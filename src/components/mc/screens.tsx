@@ -6,6 +6,7 @@ import { BucketDetail } from "./bucket-detail";
 import { FilesView } from "./files-view";
 import { InboxView } from "./inbox";
 import { InsightsView } from "./insights";
+import { MeetingIntakeView } from "./meeting-intake";
 import { ReposView } from "./repos-view";
 import type { Screen, ScreenProps } from "./route";
 import { SyncConsole } from "./sync-console";
@@ -27,5 +28,6 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   repos: ReposView,
   files: FilesView,
   sync: SyncConsole,
+  intake: MeetingIntakeView,
   task: TaskDetailView,
 };

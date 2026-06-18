@@ -1,0 +1,56 @@
+# External Integrations Register
+#
+# Per the governance contract (config/governance-contract.yaml →
+# external_integrations): every external provider / autonomous integration must
+# declare — before merge — owner, scope, auth source, default state, kill switch
+# or feature flag, health check, fallback path, and data/audit boundary.
+#
+# This file is the declaration surface for those integrations (the contract
+# carries the RULES; this carries the per-integration DECLARATIONS). It is read
+# by humans and agents reviewing integration changes. It is NOT a generated
+# governance block — edit it directly.
+#
+# Canonical location: config/integrations.yaml
+# Owner: Vince (vince@petrasoap.com)
+
+version: "0.1.0"
+
+integrations:
+  - id: meeting-intake
+    name: Meeting → Mission Control bridge
+    resolves: EN-004 (WS-4)
+    owner: Vince (vince@petrasoap.com)
+    criticality: Medium
+    # runtime = ships in the deployed app; local-only = operator tool. This is a
+    # runtime feature but ships OFF and is not represented as deployed capability
+    # until explicitly enabled.
+    scope: runtime (gated; off by default)
+    autonomous: true # derives proposed tasks from meeting artifacts
+    default_state: off
+    feature_flag: PLX_MC_MEETING_INTAKE_ENABLED (env; NEXT_PUBLIC_ variant for the UI gate)
+    kill_switch: tripMeetingIntakeKillSwitch() — forces off regardless of the flag (src/lib/meeting-intake/flag.ts)
+    auth_source:
+      # All credentials come from the shared secrets accessor (src/lib/secrets.ts) —
+      # no hardcoded keys, no scattered env lookups.
+      - Microsoft Graph (app-only client credentials) — MICROSOFT_GRAPH_* via graphCredentials()
+      - Azure OpenAI (in-tenant transcript extractor) — AZURE_OPENAI_* via azureOpenAiConfig()
+    health_check: meetingIntakeHealth() — reports flag/kill-switch state + whether Graph/Azure env is configured (src/lib/meeting-intake/health.ts)
+    fallback_path: >-
+      Two capture tiers: native Graph aiInsights (Copilot-licensed) with a
+      fallback to raw transcript (.vtt) + in-tenant extraction. When neither the
+      flag is on nor a meeting is opted in, capture is a no-op; when Azure is
+      unconfigured the Tier A live path stays dormant and fails visibly rather
+      than fabricating action items.
+    data_audit_boundary: >-
+      Transcripts are reasoned over IN-TENANT only (Azure OpenAI) — never an
+      external LLM. Captured items land as PROPOSED tasks in a human-confirmed
+      triage queue; nothing auto-enters the governed plan. On promotion the
+      governed task carries the meeting source (snippet + timestamp) as a
+      traceability artifact and mirrors through the standard ToDos path.
+    scope_v1: >-
+      Opt-in only — a simple meeting register (by meeting id / calendar tag)
+      designates which meetings feed the bridge. Loop is deferred; Teams meeting
+      artifacts only.
+    deferred:
+      - Graph change-notification subscription wiring (needs a public webhook
+        endpoint) — capture entrypoints accept payloads directly until then.

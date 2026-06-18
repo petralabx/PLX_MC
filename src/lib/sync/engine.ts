@@ -425,6 +425,26 @@ export async function runSweep(actor: string = SYNC_ACTOR): Promise<SweepResult>
 
 // ─── Manual reconciliation (humans decide — SOUL non-negotiable) ─────────────
 
+// Targeted outbound push of a SINGLE MC field (conflict "keep MC" / error retry).
+// For a task PERSON column the `<Column>LookupId` must be resolved first —
+// otherwise the write is an empty no-op that would still let the caller mark the
+// row synced (a fabricated person sync — the exact class the audit flagged).
+// Returns `true` when the field was genuinely written; `false` when it is a
+// person column not yet resolvable to a site user, so the caller re-queues for
+// the next sweep (which resolves + audits) instead of claiming success.
+async function pushSingleField(ctx: SiteContext, type: EntityType, row: repo.EntityRow, mcField: string): Promise<boolean> {
+  if (!row.sp_item_id) return false;
+  const listKey = type === "task" ? "todos" : "risks";
+  let persons: ResolvedPersons["persons"] | undefined;
+  if (type === "task") {
+    persons = (await resolveTaskPersons(ctx, row.data as unknown as Task)).persons;
+    const isPerson = TASK_PERSON_FIELDS.some((f) => f.mc === mcField);
+    if (isPerson && persons[mcField as TaskPersonMc] === undefined) return false; // unresolved person — never fabricate
+  }
+  await patchListItemFields(ctx, listKey, row.sp_item_id, outboundFields(type, row.data, { only: [mcField], persons }));
+  return true;
+}
+
 export async function resolveConflict(conflictId: string, winner: "mc" | "sp", actor: string): Promise<boolean> {
   const conflict = await repo.getConflict(conflictId);
   if (!conflict) return false;
@@ -439,14 +459,21 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
       syncState: "synced",
     });
   } else if (row && winner === "mc") {
-    // Push MC's value to the loser. No item yet → it goes out with the next sweep.
-    if (row.sp_item_id) {
-      const ctx = await siteContext();
-      const listKey = type === "task" ? "todos" : "risks";
-      await patchListItemFields(ctx, listKey, row.sp_item_id, outboundFields(type, row.data, { only: [mcField] }));
+    // Push MC's value to the loser. No item yet (or an unresolved person column)
+    // → re-queue for the next sweep rather than claim a sync that didn't happen.
+    const ctx = row.sp_item_id ? await siteContext() : null;
+    const pushed = ctx ? await pushSingleField(ctx, type, row, mcField) : false;
+    if (pushed) {
       await repo.updateEntity(type, conflict.entityId, { syncState: "synced", dirtyFields: [] });
     } else {
       await repo.updateEntity(type, conflict.entityId, { syncState: "pending" });
+      if (row.sp_item_id) {
+        await repo.appendAudit(
+          actor,
+          `Kept Mission Control on ${conflict.entityId} · ${conflict.field}, but its person isn't resolvable to a site user yet — re-queued for the next sweep.`,
+          "pending"
+        );
+      }
     }
   }
 
@@ -471,10 +498,20 @@ export async function retryError(errorId: string, actor: string): Promise<boolea
   const mcField = mcFieldFor(type, error.field) ?? error.field;
   try {
     if (row.sp_item_id) {
-      // The mapping layer normalizes on the way out (§5.2) — the retry succeeds.
-      await patchListItemFields(ctx, listKey, row.sp_item_id, outboundFields(type, row.data, { only: [mcField] }));
+      const pushed = await pushSingleField(ctx, type, row, mcField);
+      if (!pushed) {
+        // Unresolved person column — don't claim the retry succeeded; re-queue.
+        await repo.updateEntity(type, row.id, { syncState: "pending" });
+        await repo.appendAudit(
+          actor,
+          `Retry deferred for ${error.entityId} · ${error.field} — its person isn't resolvable to a site user yet; re-queued for the next sweep.`,
+          "pending"
+        );
+        return false;
+      }
     } else {
-      const itemId = await createListItem(ctx, listKey, outboundFields(type, row.data, { creating: true }));
+      const persons = type === "task" ? (await resolveTaskPersons(ctx, row.data as unknown as Task)).persons : undefined;
+      const itemId = await createListItem(ctx, listKey, outboundFields(type, row.data, { creating: true, persons }));
       await repo.updateEntity(type, row.id, { spItemId: itemId });
     }
   } catch (err) {
@@ -488,7 +525,7 @@ export async function retryError(errorId: string, actor: string): Promise<boolea
   await repo.updateEntity(type, row.id, { syncState: "synced", dirtyFields: [] });
   await repo.appendAudit(
     actor,
-    `Retried push for ${error.entityId} · ${error.field} — value normalized ("${error.value}" → "${displayValue(outboundFields(type, row.data, { only: [mcField] })[error.field])}") and accepted.`,
+    `Retried push for ${error.entityId} · ${error.field} — re-pushed and accepted.`,
     "synced"
   );
   return true;

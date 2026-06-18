@@ -4,7 +4,7 @@
 // path (spec §6 "pending until the first successful write, then synced").
 
 import { ApiError } from "@/lib/api/route";
-import { REPOS, SP_LISTS } from "@/lib/mc-data/data";
+import { SP_LISTS } from "@/lib/mc-data/data";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
 import { disallowedRepos } from "@/lib/mc-data/repos";
 import type {
@@ -95,10 +95,15 @@ export interface CreateTaskInput {
 
 export async function createTask(input: CreateTaskInput): Promise<Task> {
   await ensureSeeded();
+  await ensureReposSeeded();
   // Allow-list enforcement (EN-002): a task may only attach registry repos.
   // Humans and agents hit this same server gate — an unknown repo is rejected,
   // never silently accepted (request → approve adds it to the registry first).
-  const offlist = disallowedRepos(input.repos ?? [], REPOS);
+  // Check the PERSISTED registry (canonical seed + approved repos), not the
+  // fixture, so an approved+persisted repo is actually accepted (Item 2).
+  const registry = await repo.getRepos();
+  const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
+  const offlist = disallowedRepos(input.repos ?? [], registryMap);
   if (offlist.length > 0) {
     throw new ApiError(
       "repo_not_allowed",

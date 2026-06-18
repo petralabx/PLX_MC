@@ -32,7 +32,7 @@ if (!repo) fail("MC_REPO not set");
 const res = await fetch(`${base.replace(/\/$/, "")}/api/compliance/checkout`, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify({ taskId, runtime, accountableHuman, repo, actorKind: "agent" }),
+  body: JSON.stringify({ taskId, runtime, accountableHuman, repo }),
 });
 
 if (!res.ok) fail(`checkout failed: HTTP ${res.status}`);

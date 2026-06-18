@@ -6,12 +6,13 @@ import { z } from "zod";
 import { parseBody, route } from "@/lib/api/route";
 import { checkout } from "@/lib/compliance/service";
 
+// No actorKind — a checkout always mints an agent credential server-side
+// (security review CRITICAL #1); the client cannot self-declare as an operator.
 const checkoutSchema = z.object({
   taskId: z.string().min(1),
   runtime: z.string().min(1),
   accountableHuman: z.string().min(1),
   repo: z.string().min(1),
-  actorKind: z.enum(["agent", "operator"]).optional(),
 });
 
 export const POST = route(async (req) => checkout(await parseBody(req, checkoutSchema)));

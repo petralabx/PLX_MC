@@ -22,6 +22,17 @@ function genId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Resolve the task a checkout credential is bound to — strictly. The credential
+// must be unrevoked, unexpired, AND bound to this repo; otherwise it yields null
+// (so the gate blocks the agent PR — an expired/forged/mismatched credential is
+// never silently downgraded to an operator pass). Hardening for the security
+// review (CRITICAL #1 / #5 / #6): a present checkoutId always means an agent run.
+async function resolveTaskFromCheckout(checkoutId: string, repoName: string): Promise<string | null> {
+  const d = await repo.getDispatch(checkoutId);
+  const valid = !!d && !d.revoked && new Date(d.expiresAt).getTime() > Date.now() && d.repo === repoName;
+  return valid ? d!.taskId : null;
+}
+
 // ─── Checkout (the handshake, decision 3) ────────────────────────────────────
 
 export interface CheckoutInput {
@@ -29,15 +40,17 @@ export interface CheckoutInput {
   runtime: string;
   accountableHuman: string;
   repo: string;
-  actorKind?: ActorKind;
 }
 
 export async function checkout(input: CheckoutInput): Promise<{ checkoutId: string }> {
   const checkoutId = genId("dsp");
-  const actorKind: ActorKind = input.actorKind ?? "agent";
+  // A checkout ALWAYS mints an agent credential — it is the agent handshake.
+  // Operators do not check out (their PRs are recorded ungated). The actor kind
+  // is never taken from the client (that would bypass the bundle gate — security
+  // review CRITICAL #1).
   await repo.insertDispatch({
     id: checkoutId,
-    actorKind,
+    actorKind: "agent",
     runtime: input.runtime,
     taskId: input.taskId,
     accountableHuman: input.accountableHuman,
@@ -49,7 +62,7 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
     actor: input.runtime,
     repo: input.repo,
     taskId: input.taskId,
-    payload: { checkoutId, accountableHuman: input.accountableHuman, actorKind },
+    payload: { checkoutId, accountableHuman: input.accountableHuman, actorKind: "agent" },
   });
   return { checkoutId };
 }
@@ -108,15 +121,14 @@ export async function verifyPr(input: VerifyPrInput): Promise<VerifyPrResult> {
   const tier = classifyRiskTier(input.changedPaths, input.labels ?? []);
 
   // Actor + task come from the checkout credential, never git metadata
-  // (decision 9). No (valid) checkout ⇒ operator path.
+  // (decision 9). A present checkoutId means an agent run; a missing/invalid one
+  // is resolved strictly (expiry + repo binding) so a bad credential blocks
+  // rather than downgrades to an operator pass. No checkoutId ⇒ operator path.
   let actorKind: ActorKind = "operator";
   let taskId = input.taskId ?? null;
   if (input.checkoutId) {
-    const d = await repo.getDispatch(input.checkoutId);
-    if (d && !d.revoked) {
-      actorKind = d.actorKind;
-      taskId = d.taskId;
-    }
+    actorKind = "agent";
+    taskId = await resolveTaskFromCheckout(input.checkoutId, input.repo);
   }
 
   const task = await loadTask(taskId);
@@ -164,11 +176,8 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
   let actorKind: ActorKind = "operator";
   let taskId: string | null = null;
   if (evt.checkoutId) {
-    const d = await repo.getDispatch(evt.checkoutId);
-    if (d && !d.revoked) {
-      actorKind = d.actorKind;
-      taskId = d.taskId;
-    }
+    actorKind = "agent";
+    taskId = await resolveTaskFromCheckout(evt.checkoutId, evt.repo);
   }
 
   if (evt.action === "closed" && evt.merged) {

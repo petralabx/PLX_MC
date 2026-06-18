@@ -82,6 +82,30 @@ Drive `POST {MC}/api/compliance/reconcile` on a schedule (cron / the sync
 scheduler) so any work queued during an MC/DB outage replays on recovery. Held
 PR checks stay non-pass (fail-closed) until then.
 
+## Security prerequisites (mandatory before `hard` mode)
+
+These close the EN-007 security-review findings that are deployment/infra (the
+code-level findings are already fixed on the branch):
+
+- **Pin the required workflow (review #4).** On a `pull_request`, GitHub runs the
+  workflow file from the **PR branch** — a PR could edit `compliance-gate.yml` to
+  pass. Enforce via an **org ruleset "required workflow" pinned to the
+  default-branch ref** (or a caller that only `uses:` the reusable workflow at an
+  immutable ref). Never rely on the PR-head copy as the required check.
+- **Authenticate the verify endpoint + carve out middleware (review #3).** Put
+  `POST /api/compliance/verify` behind **GitHub OIDC** (or a shared CI token) and
+  exempt `/api/compliance/webhook` (HMAC) + `/api/compliance/verify` from the UI
+  auth middleware; keep `checkout` / `complete` / `reconcile` / `events` behind
+  operator credentials. **Do not deploy with auth dormant** — that makes the
+  control plane world-callable.
+- **Enrolled-repo strict policy (review #2).** A PR with no valid agent dispatch is
+  treated as operator work and passes (recorded, ungated) by design (decision 5).
+  Telling a real human operator apart from an agent that skipped checkout needs the
+  authenticated identity above. Until then the safeguards are: a present
+  `checkoutId` is always treated as agent and validated strictly (unrevoked,
+  unexpired, repo-bound) so a bad credential **blocks**, and autonomous agents have
+  no way to act except via the token + capture hook.
+
 ## Rollback / kill switch
 
 - **Per repo:** set `COMPLIANCE_MODE=soft` (warn only) or remove the required-check
@@ -97,7 +121,7 @@ PR checks stay non-pass (fail-closed) until then.
 | **Provider** | PLX MC Compliance GitHub App + the MC verify/webhook endpoints |
 | **Owner** | Vince |
 | **Scope** | Runtime, per-repo (PR status check + `pull_request` webhook ingestion) |
-| **Auth source** | GitHub App private key + `COMPLIANCE_WEBHOOK_SECRET` via the secrets manager (shared accessor `src/lib/secrets.ts`); no hardcoded keys |
+| **Auth source** | GitHub App private key + `COMPLIANCE_WEBHOOK_SECRET` (webhook HMAC) + GitHub OIDC / CI token (verify endpoint), all via the secrets manager (shared accessor `src/lib/secrets.ts`); no hardcoded keys |
 | **Default state** | **Off** — workflow skips without `PLX_MC_BASE_URL`; webhook 503 without the secret; capture hook `enabled:false`; per-repo `soft` before `hard` |
 | **Kill switch** | Per-repo `COMPLIANCE_MODE=soft` / remove required check; global unset `PLX_MC_BASE_URL`; uninstall the App |
 | **Health check** | `GET {MC}/api/events` (DB reachable); webhook returns 401 on bad signature, 503 when unconfigured |

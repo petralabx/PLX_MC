@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 
 const db = vi.hoisted(() => ({
-  dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string; revoked: boolean }>(),
+  dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string; revoked: boolean; expiresAt: string }>(),
   events: [] as { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown> }[],
   checks: [] as { id: string; verdict: string; reasons: string[]; actorKind: string; taskId: string | null }[],
   tasks: new Map<string, Task>(),
@@ -15,7 +15,7 @@ const db = vi.hoisted(() => ({
 
 vi.mock("@/lib/compliance/repo", () => ({
   async insertDispatch(d: { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string }) {
-    db.dispatches.set(d.id, { ...d, revoked: false });
+    db.dispatches.set(d.id, { ...d, revoked: false, expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
   },
   async getDispatch(id: string) {
     return db.dispatches.get(id) ?? null;
@@ -121,6 +121,33 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
     const r = await verifyPr({ repo: "PLX_MC", prNumber: 10, headSha: "jkl", changedPaths: ["db/migrations/007_x.sql"] });
     expect(r.actorKind).toBe("operator");
     expect(r.verdict).toBe("pass");
+  });
+
+  // Hardening (security review): a present checkoutId is always an agent run; an
+  // expired or repo-mismatched credential must BLOCK, never downgrade to operator.
+  it("blocks an agent PR whose checkout is expired (no downgrade to operator)", async () => {
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert" } }));
+    db.dispatches.set("dsp_old", {
+      id: "dsp_old", actorKind: "agent", runtime: "cursor", taskId: "TASK-900",
+      accountableHuman: "vince", repo: "PLX_MC", revoked: false,
+      expiresAt: new Date(Date.now() - 1000).toISOString(),
+    });
+    const r = await verifyPr({ repo: "PLX_MC", prNumber: 11, headSha: "x", changedPaths: ["src/x.ts"], checkoutId: "dsp_old" });
+    expect(r.actorKind).toBe("agent");
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.some((x) => /no checked-out MC task/.test(x))).toBe(true);
+  });
+
+  it("blocks an agent PR whose checkout is bound to a different repo", async () => {
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert" } }));
+    db.dispatches.set("dsp_other", {
+      id: "dsp_other", actorKind: "agent", runtime: "cursor", taskId: "TASK-900",
+      accountableHuman: "vince", repo: "agentic-swarm", revoked: false,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    const r = await verifyPr({ repo: "PLX_MC", prNumber: 12, headSha: "y", changedPaths: ["src/x.ts"], checkoutId: "dsp_other" });
+    expect(r.actorKind).toBe("agent");
+    expect(r.verdict).toBe("block");
   });
 });
 

@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { parsePullRequestEvent, verifyGithubSignature } from "@/lib/compliance/webhook";
 
 const db = vi.hoisted(() => ({
-  dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; taskId: string; revoked: boolean }>(),
+  dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; taskId: string; revoked: boolean; repo: string; expiresAt: string }>(),
   events: [] as { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown> }[],
 }));
 
@@ -73,7 +73,7 @@ describe("parsePullRequestEvent", () => {
 
 describe("ingestPullRequest", () => {
   it("records an agent PR open against its checked-out task", async () => {
-    db.dispatches.set("dsp_x", { id: "dsp_x", actorKind: "agent", taskId: "TASK-900", revoked: false });
+    db.dispatches.set("dsp_x", { id: "dsp_x", actorKind: "agent", taskId: "TASK-900", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
     const evt = parsePullRequestEvent(prPayload({}, { body: "x\nMC-Checkout: dsp_x" }))!;
     const r = await ingestPullRequest(evt);
     expect(r).toMatchObject({ actorKind: "agent", taskId: "TASK-900", recorded: true });
@@ -92,7 +92,7 @@ describe("ingestPullRequest", () => {
   });
 
   it("emits pr.merged + a task.promotion.requested seam on merge", async () => {
-    db.dispatches.set("dsp_x", { id: "dsp_x", actorKind: "agent", taskId: "TASK-900", revoked: false });
+    db.dispatches.set("dsp_x", { id: "dsp_x", actorKind: "agent", taskId: "TASK-900", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
     const evt = parsePullRequestEvent(prPayload({ action: "closed" }, { merged: true, body: "x\nMC-Checkout: dsp_x" }))!;
     await ingestPullRequest(evt);
     expect(db.events.map((e) => e.kind)).toEqual(expect.arrayContaining(["pr.merged", "task.promotion.requested"]));

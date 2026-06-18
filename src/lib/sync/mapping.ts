@@ -16,7 +16,7 @@
 
 import { ACTORS, HUMANS, PRIORITY, STAGES } from "@/lib/mc-data/data";
 import { evidenceComplete } from "@/lib/mc-data/helpers";
-import type { Repo, Risk, StageKey, Task } from "@/lib/mc-data/types";
+import type { Repo, Risk, StageKey, Subtask, Task } from "@/lib/mc-data/types";
 
 export type EntityType = "task" | "risk" | "file";
 export type EntityData = Record<string, unknown>;
@@ -102,6 +102,27 @@ export function actorIdByEmail(email: string): string | null {
   return hit?.id ?? null;
 }
 
+// ─── Sub-tasks (ToDos, push-only — Item 3) ───────────────────────────────────
+
+// Serialize a task's sub-tasks to a stable, human-readable multiline string for
+// the push-only `Subtasks` ToDos column. One line per sub-task:
+//   `[x] SUB-1 · title · @Executor · due Jun 16 · status`
+// Push-only by design — Mission Control owns the structured Subtask[] (the
+// system of record), so the column is a one-way human-readable mirror and is
+// never parsed back (inboundPatches ignores it).
+export function serializeSubtasks(subtasks: Subtask[] | undefined): string {
+  return (subtasks ?? [])
+    .map((s) => {
+      const parts = [`${s.done ? "[x]" : "[ ]"} ${s.id} · ${s.t}`];
+      const exec = s.assignee ?? s.who;
+      if (exec) parts.push(`@${ACTORS[exec]?.name ?? exec}`);
+      if (s.due && s.due !== "—") parts.push(`due ${s.due}`);
+      if (s.status) parts.push(s.status);
+      return parts.join(" · ");
+    })
+    .join("\n");
+}
+
 // ─── Outbound (push + two-way columns) ───────────────────────────────────────
 
 // Returns the Graph `fields` payload for an entity. `creating` additionally
@@ -130,6 +151,7 @@ export function outboundFields(
     if (include("estimate")) out.Estimate = t.estimate;
     if (include("repos")) out.Repos = (t.repos ?? []).join("\n");
     if (include("evidence")) out.EvidenceComplete = evidenceComplete(t.evidence);
+    if (include("subtasks")) out.Subtasks = serializeSubtasks(t.subtasks); // Item 3 — push-only
     // Person columns: emit `<sp>LookupId` from the pre-resolved `persons` map.
     // A number sets the person, `null` clears it; a field absent from the map is
     // left untouched (the engine omits UIL-miss / agent persons — never faked).
@@ -241,6 +263,7 @@ const FIELD_DISPLAY: Record<EntityType, Record<string, string>> = {
     estimate: "Estimate",
     repos: "Repos",
     evidence: "Evidence Complete",
+    subtasks: "Sub-tasks",
   },
   risk: { title: "Title", like: "Likelihood", impact: "Impact", status: "Status", mit: "Mitigation" },
   file: { name: "Name", docType: "Document Type", modified: "Modified" },

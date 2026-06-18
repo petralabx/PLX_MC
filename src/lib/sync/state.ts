@@ -159,14 +159,14 @@ export interface PatchTaskInput {
 }
 
 // Persistence tiers:
-//   SP  (pushed): title, stage, priority, due, description, plus the person
-//       columns assignee/accountableOwner/reporter (Item 1 — the engine resolves
-//       each actor to its site-user lookup id on the sweep). A person-only patch
-//       re-queues the entity for push.
-//   DB  (jsonb-only, NOT pushed): bucket, labels, coassignees, subtasks, comments,
-//       humanOnly. bucket/labels promote to SP once the Initiative lookup + a
-//       Labels column exist; subtasks promote to a push-only column in Item 3.
-const PUSHED_FIELDS = ["title", "stage", "priority", "due", "description", "assignee", "accountableOwner", "reporter"];
+//   SP  (pushed): title, stage, priority, due, description; the person columns
+//       assignee/accountableOwner/reporter (Item 1 — resolved to site-user lookup
+//       ids on the sweep); and subtasks (Item 3 — push-only serialized mirror).
+//       A patch touching any of these re-queues the entity for push.
+//   DB  (jsonb-only, NOT pushed): bucket, labels, coassignees, comments, humanOnly.
+//       bucket/labels promote to SP once the Initiative lookup + a Labels column
+//       exist; comments stay app-only (EN-001 decision).
+const PUSHED_FIELDS = ["title", "stage", "priority", "due", "description", "assignee", "accountableOwner", "reporter", "subtasks"];
 
 export async function patchTask(id: string, patch: PatchTaskInput, actor: string): Promise<Task | null> {
   await ensureSeeded();

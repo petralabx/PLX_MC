@@ -12,6 +12,7 @@ import {
   outboundFields,
   parseFieldValue,
   reconcileInbound,
+  serializeSubtasks,
 } from "@/lib/sync/mapping";
 
 // Inline contract anchors — the mapping layer's behavior must not depend on
@@ -117,24 +118,46 @@ describe("outbound task mapping", () => {
     expect(out.AssignedToLookupId).toBe(9);
   });
 
-  it("never emits the Cycle-1 DB-only fields outbound (bucket/labels/coassignees) — locks the DB-only tier; promotion must be a conscious test edit", () => {
-    const withDbOnly: Task = {
+  it("emits the push-only Subtasks column (Item 3) but still not bucket/labels/coassignees/Initiative", () => {
+    const t: Task = {
       ...task,
       bucket: "BKT-DAPI",
       labels: ["go-live", "api"],
       coassignees: ["ricardo", "stephen"],
       subtasks: [{ id: "SUB-1", t: "spike", done: false, who: "vince" }],
     };
-    const keys = Object.keys(outboundFields("task", withDbOnly as never, { creating: true }));
+    const keys = Object.keys(outboundFields("task", t as never, { creating: true }));
+    expect(keys).toContain("Subtasks"); // Item 3 — sub-tasks now mirror (push-only)
+    // …the rest stay DB-only until their lookup/columns exist.
     expect(keys).not.toContain("Initiative");
     expect(keys).not.toContain("Bucket");
     expect(keys).not.toContain("Labels");
     expect(keys).not.toContain("Coassignees");
-    expect(keys).not.toContain("Subtasks");
   });
 
   it("honors the `only` filter for targeted pushes", () => {
     expect(Object.keys(outboundFields("task", task as never, { only: ["stage"] }))).toEqual(["Status"]);
+  });
+});
+
+describe("serializeSubtasks (Item 3 — push-only sub-task mirror)", () => {
+  it("renders one stable human-readable line per sub-task with executor/due/status", () => {
+    const out = serializeSubtasks([
+      { id: "SUB-1", t: "spike the adapter", done: true, who: "vince", assignee: "ricardo", due: "Jun 16", status: "done" },
+      { id: "SUB-2", t: "write tests", done: false, who: "vince" },
+    ]);
+    const lines = out.split("\n");
+    expect(lines[0]).toContain("[x] SUB-1 · spike the adapter");
+    expect(lines[0]).toContain("@Ricardo"); // assignee resolved to a display name
+    expect(lines[0]).toContain("due Jun 16");
+    expect(lines[0]).toContain("done");
+    // Falls back to the legacy single-avatar `who` when no explicit assignee.
+    expect(lines[1]).toBe("[ ] SUB-2 · write tests · @Vince Alton");
+  });
+
+  it("is the empty string for no sub-tasks (nothing to mirror)", () => {
+    expect(serializeSubtasks([])).toBe("");
+    expect(serializeSubtasks(undefined)).toBe("");
   });
 });
 

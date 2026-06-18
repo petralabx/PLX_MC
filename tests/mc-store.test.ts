@@ -353,12 +353,13 @@ describe("notice channel (rollback surfacing primitive)", () => {
 });
 
 describe("DB-only tier guarantee (DB-only edits never fabricate a pending push)", () => {
-  it("patching labels / subtasks / coassignees / bucket leaves task.sync.state unchanged", () => {
+  it("patching labels / coassignees / bucket leaves task.sync.state unchanged", () => {
+    // bucket/labels/coassignees stay DB-only. (subtasks moved to a pushed column
+    // in Item 3 — its push tier is covered server-side in mc-patch.test.ts; the
+    // client optimistic edit still never flips sync.state, the sweep owns that.)
     const t0 = taskById("TASK-221")!;
     const before = t0.sync.state;
     setTaskLabels("TASK-221", ["go-live", "wms"]);
-    expect(taskById("TASK-221")?.sync.state).toBe(before);
-    addSubtask("TASK-221", "spike the adapter", "vince");
     expect(taskById("TASK-221")?.sync.state).toBe(before);
     setCoassignees("TASK-221", ["stephen"]);
     expect(taskById("TASK-221")?.sync.state).toBe(before);

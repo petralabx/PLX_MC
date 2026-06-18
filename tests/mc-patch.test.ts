@@ -92,7 +92,7 @@ beforeEach(() => {
   store.audits.length = 0;
 });
 
-describe("patchTask — new DB-only fields round-trip through entities.data", () => {
+describe("patchTask — newly-editable fields round-trip through entities.data", () => {
   it("persists bucket / labels / coassignees / subtasks into the jsonb blob", async () => {
     seedTask();
     const updated = await patchTask(
@@ -161,6 +161,14 @@ describe("patchTask — per-field tier at the server boundary", () => {
     // ...but the DB-only fields still persisted.
     expect(row.data.labels).toEqual(["x"]);
     expect(row.data.bucket).toBe("BKT-DAPI");
+  });
+
+  it("subtasks re-queues a push (Item 3 — now a pushed column, dirties only subtasks)", async () => {
+    seedTask();
+    await patchTask("TASK-900", { subtasks: [{ id: "SUB-1", t: "spike", done: false, who: "vince" }] }, "vince");
+    const row = store.rows.get("task:TASK-900")!;
+    expect(row.sync_state).toBe("pending");
+    expect(row.dirty_fields).toEqual(["subtasks"]);
   });
 });
 

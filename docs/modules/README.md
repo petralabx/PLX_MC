@@ -19,3 +19,4 @@ key files change, update its contract in the same PR.
 | design-system | Vince | High | `docs/modules/design-system/README.md` |
 | web | Vince | Critical | `docs/modules/web/README.md` |
 | sync | Vince | Critical | `docs/modules/sync/README.md` |
+| meeting-intake | Vince | Medium | `docs/modules/meeting-intake/README.md` |

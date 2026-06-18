@@ -23,6 +23,7 @@ const EXPECTED_SCREENS = {
   repos: true,
   files: true,
   sync: true,
+  intake: true,
   task: true,
 } satisfies Record<Screen, true>;
 

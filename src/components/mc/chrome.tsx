@@ -8,6 +8,7 @@ import Image from "next/image";
 import { ACTORS, AGENTS, BUCKETS, CURRENT_USER } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion } from "@/lib/mc-data/hooks";
 import { dismissNotice, storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
+import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 
 import { Avatar, PMark } from "./atoms";
 import type { Nav, Route, Screen } from "./route";
@@ -147,6 +148,8 @@ export function Sidebar({ route, nav }: { route: Route; nav: Nav }) {
           "Sync",
           conflicts ? <span className="badge hot">{conflicts}</span> : null
         )}
+        {/* Meeting bridge nav appears only when the WS-4 flag is on (off by default). */}
+        {meetingIntakeEnabled() ? item("intake", "🗒", "Meeting intake") : null}
       </div>
     </nav>
   );

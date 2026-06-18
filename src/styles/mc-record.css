@@ -820,3 +820,79 @@
   background: var(--p-accent);
   border-color: var(--p-accent);
 }
+
+/* ── Meeting Intake triage queue (EN-004 / WS-4) ──────────────────────────── */
+
+.mc .intake-queue {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 26px 80px;
+}
+
+.mc .intake-row {
+  border-bottom: 1px solid var(--p-grid);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px 0;
+}
+
+.mc .intake-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mc .intake-head .id {
+  color: var(--p-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.mc .intake-head .body {
+  color: var(--p-ink);
+  flex: 1 1 240px;
+  font-size: 13px;
+}
+
+.mc .intake-meta {
+  color: var(--p-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  gap: 14px;
+  letter-spacing: 0.04em;
+}
+
+.mc .intake-snippet {
+  border-left: 2px solid var(--p-grid-2);
+  color: var(--p-muted);
+  font-size: 11.5px;
+  font-style: italic;
+  padding-left: 11px;
+}
+
+.mc .intake-acts {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mc .intake-bucket {
+  background: var(--p-paper);
+  border: 1px solid var(--p-grid);
+  border-radius: 4px;
+  color: var(--p-ink);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 5px 8px;
+}
+
+.mc .intake-acts .btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}

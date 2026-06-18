@@ -17,6 +17,7 @@ export type Screen =
   | "repos"
   | "files"
   | "sync"
+  | "intake"
   | "task";
 
 export interface Route {

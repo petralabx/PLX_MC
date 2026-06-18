@@ -44,6 +44,7 @@ DESIGN_TOKENS).
 | design-system | Vince | High |
 | web | Vince | Critical |
 | sync | Vince | Critical |
+| meeting-intake | Vince | Medium |
 
 ## Canonical Operations Docs
 

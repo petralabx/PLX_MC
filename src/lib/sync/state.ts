@@ -4,8 +4,9 @@
 // path (spec §6 "pending until the first successful write, then synced").
 
 import { ApiError } from "@/lib/api/route";
-import { SP_LISTS } from "@/lib/mc-data/data";
+import { REPOS, SP_LISTS } from "@/lib/mc-data/data";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
+import { disallowedRepos } from "@/lib/mc-data/repos";
 import type { AuditRow, FileEntry, Risk, SpConflict, SpError, Task } from "@/lib/mc-data/types";
 import { ensureSeeded } from "./engine";
 import type { EntityData } from "./mapping";
@@ -67,6 +68,17 @@ export interface CreateTaskInput {
 
 export async function createTask(input: CreateTaskInput): Promise<Task> {
   await ensureSeeded();
+  // Allow-list enforcement (EN-002): a task may only attach registry repos.
+  // Humans and agents hit this same server gate — an unknown repo is rejected,
+  // never silently accepted (request → approve adds it to the registry first).
+  const offlist = disallowedRepos(input.repos ?? [], REPOS);
+  if (offlist.length > 0) {
+    throw new ApiError(
+      "repo_not_allowed",
+      `These repos are not in the registry: ${offlist.join(", ")}. Request and get them approved first.`,
+      422
+    );
+  }
   const rows = await repo.getEntities("task");
   const max = Math.max(0, ...rows.map((r) => parseInt((/(\d+)/.exec(r.id) ?? [])[1] ?? "0", 10)));
   const id = `TASK-${max + 1}`;

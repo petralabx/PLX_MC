@@ -12,6 +12,7 @@ export {
   reconcileInbound,
   type EntityType,
 } from "./mapping";
+export { validateRepoInOrg, type RepoValidation } from "./github";
 export { startSyncScheduler, syncEnabled } from "./scheduler";
 export {
   createTask,

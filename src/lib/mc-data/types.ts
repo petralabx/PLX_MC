@@ -124,6 +124,10 @@ export interface Bucket {
   sync: SyncRef;
   prd: string | null;
   empty?: boolean;
+  // Bucket-level discussion thread (EN-001 / WS-3). Optional + app-only; the
+  // runtime authority is the store's bucket-comment map (buckets have no
+  // server persistence layer yet).
+  comments?: Comment[];
 }
 
 export interface PullRequest {
@@ -133,11 +137,37 @@ export interface PullRequest {
   title: string;
 }
 
+// Sub-task status (EN-001 / WS-3 medium depth). `done` stays the canonical
+// completion flag (drives the existing checkbox + counts); `status` is the
+// richer lifecycle label, defaulting to derived from `done` when unset.
+export type SubtaskStatus = "todo" | "doing" | "blocked" | "done";
+
 export interface Subtask {
   id: string;
   t: string;
   done: boolean;
+  // Original single-avatar field; kept for back-compat. `assignee` (below)
+  // augments it as the explicit executor (human or agent) for v1 enrichment.
   who: string;
+  // EN-001 / WS-3 sub-task enrichment (all optional — additive over the
+  // prototype's flat checklist).
+  description?: string;
+  assignee?: string | null;
+  due?: string;
+  status?: SubtaskStatus;
+}
+
+// A free-form discussion comment (EN-001 / WS-3). App-only — never mirrored to
+// a SharePoint column (aligned decision); lives in the task jsonb blob (server
+// DB-only tier) or, for buckets, the store's bucket-comment map (no bucket
+// server persistence exists yet — see WS3-NOTES.md).
+export interface Comment {
+  id: string;
+  author: string;
+  body: string;
+  ts: string;
+  mentions: string[];
+  editedTs?: string;
 }
 
 export interface ActivityEntry {
@@ -192,6 +222,10 @@ export interface Task {
   sync: SyncRef;
   subtasks: Subtask[];
   activity: ActivityEntry[];
+  // Task discussion thread (EN-001 / WS-3). Optional + app-only; persisted in
+  // the task jsonb blob (server DB-only tier), never mirrored to a SharePoint
+  // comment column (aligned decision).
+  comments?: Comment[];
   evidence?: Evidence;
   blocked?: boolean;
   blockedReason?: string;

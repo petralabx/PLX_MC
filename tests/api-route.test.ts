@@ -88,4 +88,40 @@ describe("patchTaskSchema (PATCH /api/tasks/{id} validation contract)", () => {
   it("requires a non-empty actor", () => {
     expect(patchTaskSchema.safeParse({ actor: "", labels: ["x"] }).success).toBe(false);
   });
+
+  it("accepts the WS-3 enriched sub-task fields (description/assignee/due/status)", () => {
+    const parsed = patchTaskSchema.safeParse({
+      actor: "vince",
+      subtasks: [
+        { id: "SUB-1", t: "spike", done: false, who: "vince", description: "look", assignee: "ricardo", due: "Jun 22", status: "doing" },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects an unknown sub-task status", () => {
+    const parsed = patchTaskSchema.safeParse({
+      actor: "vince",
+      subtasks: [{ id: "SUB-1", t: "spike", done: false, who: "vince", status: "wip" }],
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts a comments array (EN-001 / WS-3, app-only DB-only field)", () => {
+    const parsed = patchTaskSchema.safeParse({
+      actor: "vince",
+      comments: [
+        { id: "CMT-1", author: "vince", body: "hi @greg", ts: "2026.06.17 · 21:40", mentions: ["greg"] },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects a comment with an empty body", () => {
+    const parsed = patchTaskSchema.safeParse({
+      actor: "vince",
+      comments: [{ id: "CMT-1", author: "vince", body: "", ts: "t", mentions: [] }],
+    });
+    expect(parsed.success).toBe(false);
+  });
 });

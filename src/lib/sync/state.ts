@@ -125,7 +125,8 @@ export interface PatchTaskInput {
   bucket?: string; // NEW — DB-only (see §4)
   labels?: string[]; // NEW — DB-only
   coassignees?: string[]; // NEW — DB-only
-  subtasks?: Task["subtasks"]; // NEW — DB-only (Subtask[])
+  subtasks?: Task["subtasks"]; // NEW — DB-only (Subtask[], enriched in WS-3)
+  comments?: Task["comments"]; // EN-001 / WS-3 — DB-only, app-only (never pushed)
   accountableOwner?: string | null; // EN-003 — DB-only (person column, deferred mirror)
   humanOnly?: boolean; // EN-003 — DB-only assignment policy
 }

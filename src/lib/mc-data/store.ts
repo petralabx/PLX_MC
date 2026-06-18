@@ -16,6 +16,7 @@ import { api } from "@/lib/api";
 
 import {
   ACTORS,
+  BUCKETS,
   CURRENT_USER,
   FILES,
   INBOX,
@@ -31,12 +32,14 @@ import {
   STAGES,
   TASKS,
 } from "./data";
+import { parseMentions } from "./collab";
 import { domainOf, isPetraEmail } from "./helpers";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "./policy";
 import { allowedReposOnly, disallowedRepos, isApprover, repoFromRequest } from "./repos";
 import type {
   Actor,
   AuditRow,
+  Comment,
   FileEntry,
   Human,
   InboxNotification,
@@ -69,6 +72,11 @@ interface McState {
   // `repos`. Runtime-only for now (not yet mirrored to the system of record).
   repos: Record<string, Repo>;
   repoRequests: RepoRequest[];
+  // Bucket discussion threads (EN-001 / WS-3), keyed by bucket id. Buckets have
+  // no server persistence layer yet, so these are store-authoritative for v1
+  // (see WS3-NOTES.md). Task comments, by contrast, persist through the task
+  // PATCH spine.
+  bucketComments: Record<string, Comment[]>;
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -89,6 +97,9 @@ function initialState(): McState {
     lastSweep: SP_LAST_SWEEP,
     repos: clone(REPOS),
     repoRequests: [],
+    bucketComments: Object.fromEntries(
+      BUCKETS.map((b) => [b.id, clone(b.comments ?? [])])
+    ),
   };
 }
 
@@ -216,6 +227,20 @@ export function personByEmail(email: string): Human | undefined {
     (a): a is Human => a.kind === "human" && (a.email ?? "").toLowerCase() === needle
   );
 }
+
+// Everyone who can be @mentioned in a comment (EN-001 / WS-3): the ordered
+// human directory followed by the agent roster. Reused by the composer's
+// mention autocomplete and as the validity set for parseMentions.
+export function mentionables(): Actor[] {
+  const agents = Object.values(state.actors).filter((a): a is Actor => a.kind === "agent");
+  return [...directory(), ...agents];
+}
+
+const mentionableIdSet = (): Set<string> => new Set(mentionables().map((a) => a.id));
+
+// Bucket discussion thread (store-authoritative for v1 — see McState.bucketComments).
+export const commentsForBucket = (bucketId: string): Comment[] =>
+  state.bucketComments[bucketId] ?? [];
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -578,6 +603,47 @@ export function rejectRepo(requestId: string, actorId: string = CURRENT_USER): b
   return true;
 }
 
+let notifSeq = 0;
+
+// Fire the @mention notification path (EN-001 / WS-3). Reuses the SAME honest
+// deferred-mirror narrative as assignment (reassignTask): an in-app inbox
+// notification is created now, and an audit row records that the Teams + email
+// mirror is deferred to the directory/notification increment — we never claim a
+// delivery that did not happen (Truth Before Action). Bucket threads have no
+// task target for the inbox row, so they record the audit trail only.
+function notifyMentions(
+  mentions: string[],
+  author: string,
+  target: { taskId?: string; label: string }
+) {
+  const recipients = mentions.filter((id) => id !== author);
+  if (recipients.length === 0) return;
+  const names = recipients.map((id) => state.actors[id]?.name ?? id).join(", ");
+  if (target.taskId) {
+    for (const id of recipients) {
+      state.notifications = [
+        {
+          id: `ntf-${++notifSeq}`,
+          kind: "mention",
+          task: target.taskId,
+          actor: author,
+          text: `${state.actors[author]?.name ?? author} mentioned ${
+            state.actors[id]?.name ?? id
+          } on ${target.label}`,
+          age: "now",
+          unread: true,
+        },
+        ...state.notifications,
+      ];
+    }
+  }
+  pushAudit(
+    author,
+    `Mentioned ${names} on ${target.label} — Teams + email mirror deferred to the directory/notification increment.`,
+    "pending"
+  );
+}
+
 // Mark an inbox notification read (clears the topbar/sidebar unread badge).
 export function markRead(notificationId: string) {
   const n = state.notifications.find((x) => x.id === notificationId);
@@ -594,9 +660,11 @@ export type TaskFieldPatch = Partial<
     | "stage"
     | "priority"
     | "bucket"
+    | "description"
     | "labels"
     | "coassignees"
     | "subtasks"
+    | "comments"
     | "assignee"
     | "accountableOwner"
     | "humanOnly"
@@ -773,6 +841,183 @@ export const toggleSubtask = (taskId: string, subtaskId: string) => {
   patchTaskFields(taskId, { subtasks }, { activity: "toggled a subtask" }); // DB-only
 };
 
+// Edit the enriched sub-task fields (EN-001 / WS-3 medium depth). `done` and
+// `status` are kept consistent: a "done" status implies done=true and vice
+// versa, so the existing checkbox + counts never disagree with the label.
+export type SubtaskPatch = Partial<Pick<Subtask, "t" | "description" | "assignee" | "due" | "status" | "done">>;
+
+export const updateSubtask = (taskId: string, subtaskId: string, patch: SubtaskPatch) => {
+  const t = taskById(taskId);
+  if (!t) return;
+  let touched = false;
+  const subtasks = t.subtasks.map((s) => {
+    if (s.id !== subtaskId) return s;
+    touched = true;
+    const next: Subtask = { ...s, ...patch };
+    if (patch.status !== undefined) next.done = patch.status === "done";
+    else if (patch.done !== undefined) next.status = patch.done ? "done" : (s.status === "done" ? "doing" : s.status);
+    return next;
+  });
+  if (!touched) return;
+  patchTaskFields(taskId, { subtasks }, { activity: "edited a subtask" }); // DB-only
+};
+
+// Reorder sub-tasks to the given id order (drag/keyboard reorder). Ignores
+// unknown ids and appends any not listed, so a partial order is safe.
+export const reorderSubtasks = (taskId: string, orderedIds: string[]) => {
+  const t = taskById(taskId);
+  if (!t) return;
+  const byId = new Map(t.subtasks.map((s) => [s.id, s]));
+  const ordered: Subtask[] = [];
+  for (const id of orderedIds) {
+    const s = byId.get(id);
+    if (s) {
+      ordered.push(s);
+      byId.delete(id);
+    }
+  }
+  for (const s of byId.values()) ordered.push(s);
+  if (ordered.length !== t.subtasks.length) return;
+  patchTaskFields(taskId, { subtasks: ordered }, { activity: "reordered subtasks" }); // DB-only
+};
+
+// Promote a sub-task into a full governed Task (EN-001 / WS-3). Reuses addTask
+// (Pillar 3) — the new task inherits the parent's bucket + repos, carries the
+// sub-task's description/assignee/due, and the sub-task is removed from the
+// parent. Returns the new task, or null when nothing matched.
+export function promoteSubtaskToTask(taskId: string, subtaskId: string): Task | null {
+  const t = taskById(taskId);
+  if (!t) return null;
+  const sub = t.subtasks.find((s) => s.id === subtaskId);
+  if (!sub) return null;
+  const created = addTask({
+    title: sub.t,
+    description: sub.description ?? "",
+    bucket: t.bucket,
+    assignee: sub.assignee ?? null,
+    reporter: CURRENT_USER,
+    repos: t.repos,
+    due: sub.due,
+  });
+  patchTaskFields(
+    taskId,
+    { subtasks: t.subtasks.filter((s) => s.id !== subtaskId) },
+    { activity: `promoted a subtask to ${created.id}` }
+  );
+  return created;
+}
+
+// ─── Description (SP-tier — mirrors via the Description column) ────────────────
+
+// Edit the task description. Unlike the person/lookup columns, Description IS
+// mapped two-way (mapping.ts), so the trail honestly claims a pending push.
+export const setTaskDescription = (taskId: string, description: string) =>
+  patchTaskFields(taskId, { description }, { activity: "edited the description — pending push" });
+
+// ─── Comments (app-only discussion thread) ────────────────────────────────────
+
+let commentSeq = 0;
+
+function buildComment(body: string, author: string): Comment | null {
+  const text = body.trim();
+  if (!text) return null;
+  return {
+    id: `CMT-${++commentSeq}`,
+    author,
+    body: text,
+    ts: stamp(),
+    mentions: parseMentions(text, mentionableIdSet()),
+  };
+}
+
+// Add a comment to a task's thread (EN-001 / WS-3). Persists through the task
+// PATCH spine (DB-only tier — comments are never mirrored to SharePoint), then
+// fires the @mention notify path for anyone tagged.
+export function addComment(taskId: string, body: string, author: string = CURRENT_USER): Comment | null {
+  const t = taskById(taskId);
+  if (!t) return null;
+  const comment = buildComment(body, author);
+  if (!comment) return null;
+  patchTaskFields(taskId, { comments: [...(t.comments ?? []), comment] }, { activity: "added a comment" });
+  notifyMentions(comment.mentions, author, { taskId, label: taskId });
+  return comment;
+}
+
+// Edit one's own comment. Re-parses mentions and stamps editedTs; newly-added
+// mentions fire the notify path (already-notified recipients are not re-fired
+// because the inbox is append-only and the author dedup excludes the editor).
+export function editComment(taskId: string, commentId: string, body: string, editor: string = CURRENT_USER) {
+  const t = taskById(taskId);
+  if (!t) return;
+  const text = body.trim();
+  if (!text) return;
+  const existing = (t.comments ?? []).find((c) => c.id === commentId);
+  if (!existing || existing.author !== editor) return;
+  const mentions = parseMentions(text, mentionableIdSet());
+  const added = mentions.filter((id) => !existing.mentions.includes(id));
+  const comments = (t.comments ?? []).map((c) =>
+    c.id === commentId ? { ...c, body: text, mentions, editedTs: stamp() } : c
+  );
+  patchTaskFields(taskId, { comments }, { activity: "edited a comment" });
+  if (added.length) notifyMentions(added, editor, { taskId, label: taskId });
+}
+
+// Delete one's own comment.
+export function deleteComment(taskId: string, commentId: string, actor: string = CURRENT_USER) {
+  const t = taskById(taskId);
+  if (!t) return;
+  const existing = (t.comments ?? []).find((c) => c.id === commentId);
+  if (!existing || existing.author !== actor) return;
+  patchTaskFields(
+    taskId,
+    { comments: (t.comments ?? []).filter((c) => c.id !== commentId) },
+    { activity: "deleted a comment" }
+  );
+}
+
+// ─── Bucket comments (store-authoritative — no bucket server layer yet) ───────
+
+export function addBucketComment(bucketId: string, body: string, author: string = CURRENT_USER): Comment | null {
+  const comment = buildComment(body, author);
+  if (!comment) return null;
+  state.bucketComments = {
+    ...state.bucketComments,
+    [bucketId]: [...(state.bucketComments[bucketId] ?? []), comment],
+  };
+  emit();
+  notifyMentions(comment.mentions, author, { label: bucketId });
+  return comment;
+}
+
+export function editBucketComment(bucketId: string, commentId: string, body: string, editor: string = CURRENT_USER) {
+  const text = body.trim();
+  if (!text) return;
+  const list = state.bucketComments[bucketId] ?? [];
+  const existing = list.find((c) => c.id === commentId);
+  if (!existing || existing.author !== editor) return;
+  const mentions = parseMentions(text, mentionableIdSet());
+  const added = mentions.filter((id) => !existing.mentions.includes(id));
+  state.bucketComments = {
+    ...state.bucketComments,
+    [bucketId]: list.map((c) =>
+      c.id === commentId ? { ...c, body: text, mentions, editedTs: stamp() } : c
+    ),
+  };
+  emit();
+  if (added.length) notifyMentions(added, editor, { label: bucketId });
+}
+
+export function deleteBucketComment(bucketId: string, commentId: string, actor: string = CURRENT_USER) {
+  const list = state.bucketComments[bucketId] ?? [];
+  const existing = list.find((c) => c.id === commentId);
+  if (!existing || existing.author !== actor) return;
+  state.bucketComments = {
+    ...state.bucketComments,
+    [bucketId]: list.filter((c) => c.id !== commentId),
+  };
+  emit();
+}
+
 // Reassign a task (null = unassign). Thin wrapper over the shared mutation
 // spine. The Assigned To person column is NOT mirrored yet (M365 directory
 // increment) — the activity + audit copy reflect that deferral honestly, the
@@ -934,6 +1179,8 @@ export function resetStore() {
   state = initialState();
   notices = [];
   noticeSeq = 0;
+  notifSeq = 0;
+  commentSeq = 0;
   patchMirror = defaultPatchMirror;
   patchMirrorInjected = false;
   repoValidator = defaultRepoValidator;

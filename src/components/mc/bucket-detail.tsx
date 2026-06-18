@@ -1,7 +1,10 @@
+"use client";
+
 import {
   ACTORS,
   BUCKETS,
   BUCKET_IDX,
+  CURRENT_USER,
   MILESTONES,
   PRDS,
   REPOS,
@@ -14,10 +17,19 @@ import {
   type Trace,
 } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allRisks, allTasks } from "@/lib/mc-data/store";
+import {
+  addBucketComment,
+  allRisks,
+  allTasks,
+  commentsForBucket,
+  deleteBucketComment,
+  editBucketComment,
+  mentionables,
+} from "@/lib/mc-data/store";
 
 import { Avatar, AvatarStack, HealthPill, PMark, ReqChip, SyncTick } from "./atoms";
 import type { ScreenProps } from "./route";
+import { Timeline } from "./timeline";
 
 const FALLBACK_BUCKET_ID = BUCKETS[0].id;
 
@@ -275,6 +287,21 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                   <span>Last sync {bucket.sync.ts}</span>
                 </div>
               </div>
+            </div>
+
+            <div className="blk">
+              <div className="bh">
+                <span className="kk">/ Discussion</span>
+                <span className="kk">app-only thread</span>
+              </div>
+              <Timeline
+                comments={commentsForBucket(bucket.id)}
+                people={mentionables()}
+                currentUser={CURRENT_USER}
+                onAdd={(body) => addBucketComment(bucket.id, body)}
+                onEdit={(commentId, body) => editBucketComment(bucket.id, commentId, body)}
+                onDelete={(commentId) => deleteBucketComment(bucket.id, commentId)}
+              />
             </div>
           </div>
 

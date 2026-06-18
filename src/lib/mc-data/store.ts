@@ -39,6 +39,7 @@ import { allowedReposOnly, disallowedRepos, isApprover, repoFromRequest } from "
 import type {
   Actor,
   AuditRow,
+  Bucket,
   Comment,
   FileEntry,
   Human,
@@ -72,11 +73,13 @@ interface McState {
   // `repos`. Runtime-only for now (not yet mirrored to the system of record).
   repos: Record<string, Repo>;
   repoRequests: RepoRequest[];
-  // Bucket discussion threads (EN-001 / WS-3), keyed by bucket id. Buckets have
-  // no server persistence layer yet, so these are store-authoritative for v1
-  // (see WS3-NOTES.md). Task comments, by contrast, persist through the task
-  // PATCH spine.
+  // Bucket discussion threads (EN-001 / WS-3), keyed by bucket id. Task comments,
+  // by contrast, persist through the task PATCH spine.
   bucketComments: Record<string, Comment[]>;
+  // EN-005: buckets/initiatives, keyed by id. Seeded from the BUCKETS fixture,
+  // hydrated from the server snapshot; a created bucket adds here. The single
+  // source of truth behind allBuckets()/bucketById() (no more direct fixture reads).
+  buckets: Record<string, Bucket>;
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -100,6 +103,7 @@ function initialState(): McState {
     bucketComments: Object.fromEntries(
       BUCKETS.map((b) => [b.id, clone(b.comments ?? [])])
     ),
+    buckets: Object.fromEntries(BUCKETS.map((b) => [b.id, clone(b)])),
   };
 }
 
@@ -238,9 +242,14 @@ export function mentionables(): Actor[] {
 
 const mentionableIdSet = (): Set<string> => new Set(mentionables().map((a) => a.id));
 
-// Bucket discussion thread (store-authoritative for v1 — see McState.bucketComments).
+// Bucket discussion thread (persisted via the bucket-comment mirror).
 export const commentsForBucket = (bucketId: string): Comment[] =>
   state.bucketComments[bucketId] ?? [];
+
+// EN-005 — the live bucket/initiative set: the single source of truth that
+// replaces direct BUCKETS / BUCKET_IDX fixture reads. Reactive via useMcVersion.
+export const allBuckets = (): Bucket[] => Object.values(state.buckets);
+export const bucketById = (id: string): Bucket | undefined => state.buckets[id];
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -281,6 +290,8 @@ interface ServerSnapshot {
   repoRequests?: RepoRequest[];
   // EN-001 / Item 4 — persisted bucket discussion threads.
   bucketComments?: Record<string, Comment[]>;
+  // EN-005 — persisted buckets/initiatives.
+  buckets?: Bucket[];
 }
 
 // Adopt the server's truth for everything the engine owns; notifications,
@@ -300,6 +311,9 @@ function applyServerState(snapshot: ServerSnapshot) {
   // EN-001 / Item 4 — adopt the persisted bucket threads so they survive a
   // reload (the server is the source of truth on hydrate).
   if (snapshot.bucketComments) state.bucketComments = snapshot.bucketComments;
+  // EN-005 — adopt the persisted buckets so created/edited initiatives survive a
+  // reload (the server is the source of truth on hydrate).
+  if (snapshot.buckets) state.buckets = Object.fromEntries(snapshot.buckets.map((b) => [b.id, b]));
   for (const list of state.lists) {
     const counts = snapshot.counts[list.key];
     if (counts) {
@@ -1114,6 +1128,167 @@ export function deleteBucketComment(bucketId: string, commentId: string, actor: 
   persistBucketThread(bucketId, prior);
 }
 
+// ─── Buckets / initiatives (EN-005) ──────────────────────────────────────────
+
+export interface NewBucketInput {
+  name: string;
+  owner?: string;
+  health?: Bucket["health"];
+  target?: string;
+  started?: string;
+  desc?: string;
+  repos?: string[];
+  prd?: string | null;
+}
+
+function bucketIdFromName(name: string, existing: Set<string>): string {
+  const slug = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+  const base = `BKT-${slug || "NEW"}`;
+  if (!existing.has(base)) return base;
+  let n = 2;
+  while (existing.has(`${base}-${n}`)) n += 1;
+  return `${base}-${n}`;
+}
+
+// The bucket-create POST mirror seam (parallels bucketUpdateMirror): default
+// issues the real POST; tests inject a deterministic mirror to exercise the
+// reconcile (adopt server id) / rollback (remove optimistic + notice) paths.
+type BucketCreateMirror = (input: NewBucketInput & { repos: string[] }) => Promise<Bucket>;
+const defaultBucketCreateMirror: BucketCreateMirror = (input) =>
+  api<Bucket>("/buckets", { method: "POST", body: JSON.stringify(input) });
+let bucketCreateMirror = defaultBucketCreateMirror;
+let bucketCreateMirrorInjected = false;
+let bucketCreateInFlight: Promise<void> = Promise.resolve();
+
+export function __setBucketCreateMirrorForTests(fn: BucketCreateMirror | null) {
+  bucketCreateMirror = fn ?? defaultBucketCreateMirror;
+  bucketCreateMirrorInjected = fn !== null;
+}
+
+export function __bucketCreateSettled(): Promise<void> {
+  return bucketCreateInFlight;
+}
+
+// Create an initiative/bucket. Optimistic-local (client id from the name) +
+// mirror to POST /api/buckets; the server owns the id, so adopt its bucket if
+// the optimistic id raced/collided. On a FAILED mirror the optimistic bucket is
+// rolled back with a non-silent notice — a created initiative is never silently
+// dropped (it would otherwise vanish on the next hydrate). Repos are clamped to
+// the allow-list at the boundary with a non-silent notice (EN-002).
+export function addBucket(input: NewBucketInput): Bucket {
+  const name = (input.name ?? "").trim();
+  const id = bucketIdFromName(name, new Set(Object.keys(state.buckets)));
+  const requestedRepos = input.repos ?? [];
+  const repos = allowedReposOnly(requestedRepos, state.repos);
+  const dropped = disallowedRepos(requestedRepos, state.repos);
+  if (dropped.length > 0) {
+    pushNotice(`Skipped repos not in the registry: ${dropped.join(", ")}. Request them first.`, "info");
+  }
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, ".");
+  const bucket: Bucket = {
+    id,
+    name,
+    owner: input.owner || CURRENT_USER,
+    health: input.health ?? "track",
+    target: (input.target ?? "").trim() || "—",
+    started: (input.started ?? "").trim() || today,
+    desc: (input.desc ?? "").trim(),
+    repos,
+    sync: { state: "pending", ts: stamp(), sp: "Roadmap · unprovisioned" },
+    prd: input.prd ?? null,
+  };
+  state.buckets = { ...state.buckets, [id]: bucket };
+  pushAudit(bucket.owner, `Created initiative ${id} (${name}) — pending Roadmap mirror.`, "pending");
+  emit();
+  if (typeof window === "undefined" && !bucketCreateMirrorInjected) return bucket;
+  bucketCreateInFlight = bucketCreateMirror({ ...input, repos }).then(
+    (created) => {
+      const next = { ...state.buckets };
+      if (created.id !== id) delete next[id]; // adopt the server's id
+      next[created.id] = created;
+      state.buckets = next;
+      emit();
+    },
+    (err) => {
+      const next = { ...state.buckets };
+      delete next[id]; // never leave an unpersisted initiative that vanishes on reload
+      state.buckets = next;
+      pushNotice(
+        `Couldn't save the new initiative "${name}" — it was rolled back. ${
+          err instanceof Error ? err.message : "The server rejected it."
+        }`
+      );
+      emit();
+    }
+  );
+  return bucket;
+}
+
+// The editable subset of a Bucket, routed through the single persisted-edit path.
+export type BucketPatch = Partial<
+  Pick<Bucket, "name" | "owner" | "health" | "target" | "started" | "desc" | "repos" | "prd">
+>;
+
+// The bucket-edit PATCH mirror seam (mirrors patchMirror): default issues the
+// real PATCH; tests inject a deterministic mirror to exercise reconcile/rollback.
+type BucketUpdateMirror = (id: string, patch: BucketPatch) => Promise<Bucket>;
+const defaultBucketUpdateMirror: BucketUpdateMirror = (id, patch) =>
+  api<Bucket>(`/buckets/${id}`, { method: "PATCH", body: JSON.stringify({ actor: CURRENT_USER, ...patch }) });
+let bucketUpdateMirror = defaultBucketUpdateMirror;
+let bucketUpdateMirrorInjected = false;
+let bucketUpdateInFlight: Promise<void> = Promise.resolve();
+
+export function __setBucketUpdateMirrorForTests(fn: BucketUpdateMirror | null) {
+  bucketUpdateMirror = fn ?? defaultBucketUpdateMirror;
+  bucketUpdateMirrorInjected = fn !== null;
+}
+
+export function __bucketUpdateSettled(): Promise<void> {
+  return bucketUpdateInFlight;
+}
+
+// Edit an initiative. Optimistic merge + emit, then mirror PATCH /api/buckets/{id};
+// on SUCCESS adopt the server's bucket, on FAILURE restore the prior bucket and
+// surface a non-silent notice (the same reconcile/rollback spine as patchTaskFields).
+export function updateBucket(id: string, patch: BucketPatch): Promise<void> | void {
+  const existing = state.buckets[id];
+  if (!existing) return;
+  let clamped: BucketPatch = patch;
+  if (patch.repos) {
+    const repos = allowedReposOnly(patch.repos, state.repos);
+    const dropped = disallowedRepos(patch.repos, state.repos);
+    if (dropped.length > 0) pushNotice(`Skipped repos not in the registry: ${dropped.join(", ")}.`, "info");
+    clamped = { ...patch, repos };
+  }
+  const entries = Object.entries(clamped).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return;
+  const prior = clone(existing);
+  state.buckets = { ...state.buckets, [id]: { ...existing, ...Object.fromEntries(entries) } };
+  emit();
+  if (typeof window === "undefined" && !bucketUpdateMirrorInjected) return;
+  bucketUpdateInFlight = bucketUpdateMirror(id, clamped).then(
+    (saved) => {
+      state.buckets = { ...state.buckets, [id]: saved };
+      emit();
+    },
+    (err) => {
+      state.buckets = { ...state.buckets, [id]: prior };
+      pushNotice(
+        `Couldn't save the change to ${id} — it was rolled back. ${
+          err instanceof Error ? err.message : "The server rejected the update."
+        }`
+      );
+      emit();
+    }
+  );
+  return bucketUpdateInFlight;
+}
+
 // Reassign a task (null = unassign). Thin wrapper over the shared mutation
 // spine. The Assigned To person column now mirrors to SharePoint on the next
 // sync (Item 1) — the server (state.ts) re-queues the entity for push and the
@@ -1287,5 +1462,11 @@ export function resetStore() {
   bucketCommentMirror = defaultBucketCommentMirror;
   bucketCommentMirrorInjected = false;
   bucketMirrorInFlight = Promise.resolve();
+  bucketUpdateMirror = defaultBucketUpdateMirror;
+  bucketUpdateMirrorInjected = false;
+  bucketUpdateInFlight = Promise.resolve();
+  bucketCreateMirror = defaultBucketCreateMirror;
+  bucketCreateMirrorInjected = false;
+  bucketCreateInFlight = Promise.resolve();
   emit();
 }

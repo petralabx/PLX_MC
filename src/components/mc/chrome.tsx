@@ -5,9 +5,9 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 
-import { ACTORS, AGENTS, BUCKETS, CURRENT_USER } from "@/lib/mc-data";
+import { ACTORS, AGENTS, CURRENT_USER } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion } from "@/lib/mc-data/hooks";
-import { dismissNotice, storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
+import { allBuckets, dismissNotice, storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
 import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 
 import { Avatar, PMark } from "./atoms";
@@ -85,7 +85,15 @@ export function Topbar({
   );
 }
 
-export function Sidebar({ route, nav }: { route: Route; nav: Nav }) {
+export function Sidebar({
+  route,
+  nav,
+  onNewInitiative,
+}: {
+  route: Route;
+  nav: Nav;
+  onNewInitiative: () => void;
+}) {
   useMcVersion();
   const unread = unreadCount();
   const live = Object.values(AGENTS).filter((a) => a.online).length;
@@ -126,7 +134,7 @@ export function Sidebar({ route, nav }: { route: Route; nav: Nav }) {
       </div>
       <div className="grp">
         <div className="h">Buckets</div>
-        {BUCKETS.map((b) => (
+        {allBuckets().map((b) => (
           <button
             type="button"
             key={b.id}
@@ -137,6 +145,10 @@ export function Sidebar({ route, nav }: { route: Route; nav: Nav }) {
             <span className="nm">{b.name}</span>
           </button>
         ))}
+        <button type="button" className="item side-new-initiative" onClick={onNewInitiative}>
+          <span className="ic">+</span>
+          <span className="nm">New initiative</span>
+        </button>
       </div>
       <div className="grp">
         <div className="h">System of record</div>

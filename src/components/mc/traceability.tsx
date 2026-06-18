@@ -1,4 +1,5 @@
-import { BUCKET_IDX, PRDS, TRACE, type TraceStatus } from "@/lib/mc-data";
+import { PRDS, TRACE, type TraceStatus } from "@/lib/mc-data";
+import { bucketById } from "@/lib/mc-data/store";
 
 import type { ScreenProps } from "./route";
 
@@ -16,7 +17,8 @@ export function traceStatusView(status: TraceStatus): TraceStatusView {
 }
 
 export function TraceabilityMatrix({ nav }: ScreenProps) {
-  const bucket = BUCKET_IDX[TRACE.bucket];
+  const bucket = bucketById(TRACE.bucket);
+  if (!bucket) return null;
   const prd = bucket.prd ? PRDS[bucket.prd] : null;
   const reqText = new Map(prd?.reqs.map((req) => [req.id, req.text]) ?? []);
 

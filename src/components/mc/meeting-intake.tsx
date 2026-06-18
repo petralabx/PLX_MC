@@ -6,9 +6,8 @@
 // reviews, picks the initiative, and PROMOTES into a governed task, or dismisses.
 import { useState } from "react";
 
-import { BUCKETS } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { actorById } from "@/lib/mc-data/store";
+import { actorById, allBuckets } from "@/lib/mc-data/store";
 import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 import { useMeetingIntakeVersion } from "@/lib/meeting-intake/hooks";
 import {
@@ -115,7 +114,7 @@ export function MeetingIntakeView({ nav }: ScreenProps) {
                   }
                 >
                   <option value="">Pick an initiative…</option>
-                  {BUCKETS.map((b) => (
+                  {allBuckets().map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
                     </option>

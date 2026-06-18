@@ -1,5 +1,10 @@
-import { ACTORS, BANDS, BUCKETS, BUCKET_IDX, PRIORITY, STAGES, bandOf } from "@/lib/mc-data";
+import { ACTORS, BANDS, BUCKETS, PRIORITY, STAGES, bandOf } from "@/lib/mc-data";
 import type { Band, Bucket, PriorityKey, StageKey, Task } from "@/lib/mc-data";
+
+// Buckets are INJECTED (default = fixture) so these stay pure, deterministic
+// functions of their inputs — no store reads. The view passes the live
+// allBuckets() set (EN-005) so user-created initiatives appear as columns / drop
+// targets / timeline rows once they hold tasks.
 
 // One unified column axis drives BOTH the board and the list (resolves OQ i;
 // replaces the former ad-hoc `BoardGrouping` + `ListGroupBy`). Single-cell:
@@ -36,12 +41,12 @@ export function swimlanesAllowed(groupBy: GroupBy): boolean {
 // axis is data-derived (the distinct assignees present, in directory order,
 // then an "Unassigned" column last) so it never renders a column per directory
 // member. Pass `tasks` for the assignee axis; the static axes ignore it.
-export function columnsFor(groupBy: GroupBy, tasks: Task[] = []): BoardColumn[] {
+export function columnsFor(groupBy: GroupBy, tasks: Task[] = [], buckets: Bucket[] = BUCKETS): BoardColumn[] {
   switch (groupBy) {
     case "stage":
       return STAGES.map((stage) => ({ key: stage.key, name: stage.name }));
     case "bucket":
-      return BUCKETS.map((bucket) => ({ key: bucket.id, name: bucket.name }));
+      return buckets.map((bucket) => ({ key: bucket.id, name: bucket.name }));
     case "priority":
       return PRIORITY_ORDER.map((key) => ({ key, name: PRIORITY[key].label }));
     case "assignee": {
@@ -62,8 +67,8 @@ export function columnsFor(groupBy: GroupBy, tasks: Task[] = []): BoardColumn[] 
   }
 }
 
-export function boardColumns(groupBy: GroupBy, tasks: Task[] = []): BoardColumn[] {
-  return columnsFor(groupBy, tasks);
+export function boardColumns(groupBy: GroupBy, tasks: Task[] = [], buckets: Bucket[] = BUCKETS): BoardColumn[] {
+  return columnsFor(groupBy, tasks, buckets);
 }
 
 export function columnKeyForTask(task: Task, groupBy: GroupBy): string {
@@ -136,7 +141,7 @@ export interface ResolvedDrop {
   value: StageKey | PriorityKey | string | null;
 }
 
-export function resolveColumnDrop(groupBy: GroupBy, columnKey: string): ResolvedDrop | null {
+export function resolveColumnDrop(groupBy: GroupBy, columnKey: string, buckets: Bucket[] = BUCKETS): ResolvedDrop | null {
   switch (groupBy) {
     case "stage":
       // Only a real stage key is a valid target.
@@ -152,7 +157,7 @@ export function resolveColumnDrop(groupBy: GroupBy, columnKey: string): Resolved
         ? { field: "priority", value: columnKey as PriorityKey }
         : null;
     case "bucket":
-      return columnKey in BUCKET_IDX ? { field: "bucket", value: columnKey } : null;
+      return buckets.some((b) => b.id === columnKey) ? { field: "bucket", value: columnKey } : null;
     case "assignee":
       // The "Unassigned" sentinel column unassigns; any other key is an actor id.
       return columnKey === UNASSIGNED_KEY
@@ -173,9 +178,10 @@ export function isNoopDrop(task: Task, groupBy: GroupBy, columnKey: string): boo
 
 export function partitionTasksByColumn(
   tasks: Task[],
-  groupBy: GroupBy
+  groupBy: GroupBy,
+  buckets: Bucket[] = BUCKETS
 ): Record<string, Task[]> {
-  const out = Object.fromEntries(boardColumns(groupBy, tasks).map((c) => [c.key, [] as Task[]]));
+  const out = Object.fromEntries(boardColumns(groupBy, tasks, buckets).map((c) => [c.key, [] as Task[]]));
   for (const task of tasks) {
     const key = columnKeyForTask(task, groupBy);
     // Every task lands in a column (the assignee column model is derived from
@@ -218,9 +224,9 @@ export interface TaskGroup {
 // — kills the former board/list divergence). The list only renders non-empty
 // groups; the board renders the full column model. The former list "status"
 // option is the unified "band" axis.
-export function groupTasksForList(tasks: Task[], groupBy: GroupBy): TaskGroup[] {
-  const byColumn = partitionTasksByColumn(tasks, groupBy);
-  return columnsFor(groupBy, tasks)
+export function groupTasksForList(tasks: Task[], groupBy: GroupBy, buckets: Bucket[] = BUCKETS): TaskGroup[] {
+  const byColumn = partitionTasksByColumn(tasks, groupBy, buckets);
+  return columnsFor(groupBy, tasks, buckets)
     .map((column) => ({ key: column.key, name: column.name, list: byColumn[column.key] ?? [] }))
     .filter((group) => group.list.length > 0);
 }
@@ -313,8 +319,8 @@ export function assigneeUniverse(tasks: Task[]): string[] {
   return [...known, ...unknown];
 }
 
-export function bucketsForTimeline(tasks: Task[]): Bucket[] {
-  return BUCKETS.filter((bucket) => tasks.some((task) => task.bucket === bucket.id));
+export function bucketsForTimeline(tasks: Task[], buckets: Bucket[] = BUCKETS): Bucket[] {
+  return buckets.filter((bucket) => tasks.some((task) => task.bucket === bucket.id));
 }
 
 // Day offsets from Jun 1 — the timeline is a June grid (CYCLES). Month-aware
@@ -372,10 +378,13 @@ export function timelineRangeForTask(
   return { startDay, endDay, leftPct, widthPct };
 }
 
-export function timelineSegmentClass(task: Task): "seg-track" | "seg-risk" | "seg-blocked" | "seg-done" {
+export function timelineSegmentClass(
+  task: Task,
+  buckets: Bucket[] = BUCKETS
+): "seg-track" | "seg-risk" | "seg-blocked" | "seg-done" {
   if (task.blocked) return "seg-blocked";
   if (task.stage === "verified" || task.stage === "merged") return "seg-done";
-  const bucket = BUCKET_IDX[task.bucket];
+  const bucket = buckets.find((b) => b.id === task.bucket);
   if (task.priority === "urgent" || bucket?.health === "risk") return "seg-risk";
   return "seg-track";
 }

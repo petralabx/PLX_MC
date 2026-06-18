@@ -7,7 +7,7 @@
 // already uses — see the INSIGHTS_TODAY_DAY note below and SPEC §1.1.
 
 import { ACTORS, BANDS, BUCKETS, PRIORITY, STAGES, bandOf } from "@/lib/mc-data";
-import type { Band, PriorityKey, Task } from "@/lib/mc-data";
+import type { Band, Bucket, PriorityKey, Task } from "@/lib/mc-data";
 import {
   UNASSIGNED_KEY,
   assigneeUniverse,
@@ -89,7 +89,11 @@ export function filterForSegment(
 
 export function buildInsights(
   tasks: Task[],
-  todayDay = INSIGHTS_TODAY_DAY
+  todayDay = INSIGHTS_TODAY_DAY,
+  // Buckets are INJECTED (default = fixture) so this stays a pure, deterministic
+  // aggregator with no store reads; the view passes the live allBuckets() set
+  // (EN-005) so user-created initiatives chart once they hold tasks.
+  buckets: Bucket[] = BUCKETS
 ): InsightsModel {
   // ── Status (band) — the donut. BANDS order; bandOf maps each stage to a band,
   // so the partition is disjoint + complete over `tasks`. ──────────────────────
@@ -114,7 +118,7 @@ export function buildInsights(
   for (const task of tasks) {
     bucketCounts.set(task.bucket, (bucketCounts.get(task.bucket) ?? 0) + 1);
   }
-  const byBucket: ChartSlice[] = BUCKETS.filter(
+  const byBucket: ChartSlice[] = buckets.filter(
     (b) => (bucketCounts.get(b.id) ?? 0) > 0
   ).map((b) => ({
     key: b.id,

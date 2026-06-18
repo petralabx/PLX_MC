@@ -4,7 +4,6 @@ import type { CSSProperties, DragEvent } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  BUCKET_IDX,
   CURRENT_USER,
   CYCLES,
   MILESTONES,
@@ -14,7 +13,9 @@ import {
 } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
+  allBuckets,
   allTasks,
+  bucketById,
   reassignTask,
   setTaskBucket,
   setTaskPriority,
@@ -96,7 +97,7 @@ function dispatchColumnDrop(taskId: string, groupBy: GroupBy, columnKey: string)
   // No-op guard: a drop on the card's current column must not PATCH (avoids a
   // spurious write + the sweep race, SPEC §5).
   if (isNoopDrop(task, groupBy, columnKey)) return;
-  const resolved = resolveColumnDrop(groupBy, columnKey);
+  const resolved = resolveColumnDrop(groupBy, columnKey, allBuckets());
   if (!resolved) return; // unknown target / non-drag axis — drop, never write
   switch (resolved.field) {
     case "stage":
@@ -197,7 +198,7 @@ function BoardView({
   filtersActive: boolean;
   onOpen: (taskId: string) => void;
 }) {
-  const columns = boardColumns(groupBy, tasks);
+  const columns = boardColumns(groupBy, tasks, allBuckets());
   // Single-pass partition. `version` is a load-bearing dependency: a drag/inline
   // mutation applies optimistically by MUTATING the task object IN PLACE
   // (store.patchTaskFields → Object.assign), so `tasks` keeps the same array AND
@@ -207,7 +208,7 @@ function BoardView({
   // does NOT re-bucket on a swimlane toggle (local state — `version`/`tasks`/
   // `groupBy` all unchanged), preserving the original optimization intent.
   const byColumn = useMemo(
-    () => partitionTasksByColumn(tasks, groupBy),
+    () => partitionTasksByColumn(tasks, groupBy, allBuckets()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tasks, groupBy, version]
   );
@@ -334,7 +335,7 @@ function ListView({
   groupBy: GroupBy;
   onOpen: (taskId: string) => void;
 }) {
-  const groups = groupTasksForList(tasks, groupBy);
+  const groups = groupTasksForList(tasks, groupBy, allBuckets());
   return (
     <div className="list">
       {groups.map((group) => (
@@ -398,7 +399,7 @@ function bucketHealthDotStyle(bucket: Bucket): CSSProperties {
 }
 
 function TimelineView({ tasks, onOpen }: { tasks: Task[]; onOpen: (taskId: string) => void }) {
-  const buckets = bucketsForTimeline(tasks);
+  const buckets = bucketsForTimeline(tasks, allBuckets());
   return (
     <div className="tl">
       <div className="grid">
@@ -470,7 +471,7 @@ function TimelineView({ tasks, onOpen }: { tasks: Task[]; onOpen: (taskId: strin
                         />
                       ))}
                       <div
-                        className={`bar ${timelineSegmentClass(task)}${
+                        className={`bar ${timelineSegmentClass(task, allBuckets())}${
                           isTimelineCritical(task) ? " crit" : ""
                         }`}
                         style={{
@@ -560,7 +561,7 @@ export function WorkViews({ route, nav }: ScreenProps) {
   // (it is not composed on top of filterTasksByBucket), then user `filters`,
   // then group-by. A `mine` route arriving with a bucketId must NOT silently
   // show "my tasks in that one bucket", so route.bucketId is ignored here.
-  const bucket = isMine ? undefined : route.bucketId ? BUCKET_IDX[route.bucketId] : undefined;
+  const bucket = isMine ? undefined : route.bucketId ? bucketById(route.bucketId) : undefined;
   const baseTasks = isMine
     ? tasksForUser(CURRENT_USER, allTasks())
     : filterTasksByBucket(allTasks(), route.bucketId);

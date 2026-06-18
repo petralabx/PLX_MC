@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ACTORS, BANDS, BUCKETS, PRIORITY, STAGES, TASKS } from "@/lib/mc-data";
-import type { PriorityKey, Task } from "@/lib/mc-data";
+import type { Bucket, PriorityKey, Task } from "@/lib/mc-data";
 import {
   applyFilters,
   assigneeUniverse,
@@ -92,6 +92,30 @@ describe("board column partitioning", () => {
 
   it("orders bucket columns by the BUCKETS definition order", () => {
     expect(columnsFor("bucket").map((c) => c.key)).toEqual(BUCKETS.map((b) => b.id));
+  });
+
+  it("reflects the injected (live) bucket set so a user-created initiative is a column (EN-005)", () => {
+    const custom: Bucket = {
+      id: "BKT-CUSTOM",
+      name: "Custom Initiative",
+      owner: "vince",
+      health: "track",
+      target: "—",
+      started: "2026.06.18",
+      desc: "",
+      repos: [],
+      sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" },
+      prd: null,
+    };
+    const buckets = [...BUCKETS, custom];
+    expect(columnsFor("bucket", [], buckets).map((c) => c.key)).toContain("BKT-CUSTOM");
+    // …and a drop onto that column is a valid, persistable mutation.
+    expect(resolveColumnDrop("bucket", "BKT-CUSTOM", buckets)).toEqual({
+      field: "bucket",
+      value: "BKT-CUSTOM",
+    });
+    // A bucket not in the injected set is still rejected (no fabricated target).
+    expect(resolveColumnDrop("bucket", "BKT-CUSTOM")).toBeNull();
   });
 
   it("ends the assignee axis with an Unassigned column when an unassigned task exists", () => {

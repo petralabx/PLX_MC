@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  BUCKETS,
   CURRENT_USER,
   PRDS,
   PRIORITY,
@@ -13,7 +12,7 @@ import {
   type StageKey,
 } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { actorById, addTask, allRepos, nextTaskId } from "@/lib/mc-data/store";
+import { actorById, addTask, allBuckets, allRepos, bucketById, nextTaskId } from "@/lib/mc-data/store";
 
 import { Avatar } from "./atoms";
 import { LabelEditor } from "./label-editor";
@@ -68,7 +67,7 @@ export function NewTaskModal({
   nav: Nav;
 }) {
   useMcVersion();
-  const startingBucketId = ctx?.bucketId ?? BUCKETS[0]?.id ?? "";
+  const startingBucketId = ctx?.bucketId ?? allBuckets()[0]?.id ?? "";
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [bucketId, setBucketId] = useState(startingBucketId);
@@ -95,7 +94,7 @@ export function NewTaskModal({
   // Repo chooser is sourced from the registry (= allow-list, EN-002): only
   // registry repos can be attached. Approved self-service repos appear here too.
   const registry = allRepos();
-  const bucket = useMemo(() => BUCKETS.find((b) => b.id === bucketId) ?? null, [bucketId]);
+  const bucket = useMemo(() => bucketById(bucketId) ?? null, [bucketId]);
   const prd = useMemo(() => (bucket?.prd ? PRDS[bucket.prd] : undefined), [bucket]);
   const owner = ownerId ? actorById(ownerId) : undefined;
   const accountable = accountableId ? actorById(accountableId) : undefined;
@@ -114,7 +113,7 @@ export function NewTaskModal({
   const canCreate = title.trim().length > 0 && !!bucketId;
   const handleBucketChange = (nextBucketId: string) => {
     setBucketId(nextBucketId);
-    const nextBucket = BUCKETS.find((bucketOption) => bucketOption.id === nextBucketId) ?? null;
+    const nextBucket = bucketById(nextBucketId) ?? null;
     const nextPrd = nextBucket?.prd ? PRDS[nextBucket.prd] : undefined;
     const nextRepoOptions =
       nextBucket?.repos && nextBucket.repos.length > 0 ? nextBucket.repos : Object.keys(registry);
@@ -222,7 +221,7 @@ export function NewTaskModal({
               <span className="k">Initiative</span>
               <div className="ntm-select-wrap">
                 <select value={bucketId} onChange={(event) => handleBucketChange(event.target.value)}>
-                  {BUCKETS.map((bucketOption) => (
+                  {allBuckets().map((bucketOption) => (
                     <option key={bucketOption.id} value={bucketOption.id}>
                       {bucketOption.name}
                     </option>

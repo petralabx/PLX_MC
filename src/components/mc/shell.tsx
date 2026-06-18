@@ -12,6 +12,7 @@ import { hydrate } from "@/lib/mc-data/store";
 import { NoticeHost, Sidebar, Topbar } from "./chrome";
 import { CommandPalette } from "./command-palette";
 import { InboxView } from "./inbox";
+import { NewInitiativeModal } from "./new-initiative-modal";
 import { NewTaskModal } from "./new-task-modal";
 import type { Nav, Route, Screen } from "./route";
 import { SCREENS } from "./screens";
@@ -22,6 +23,7 @@ export function MissionControlShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskCtx, setNewTaskCtx] = useState<{ bucketId?: string } | undefined>(undefined);
+  const [newInitiativeOpen, setNewInitiativeOpen] = useState(false);
   // Post-hydration readiness flag (see the effect below): surfaced as
   // data-mc-ready on the shell root so automation can wait for genuine
   // interactivity, not the SSR-present-but-not-hydrated DOM.
@@ -57,6 +59,15 @@ export function MissionControlShell() {
     setNewTaskCtx(undefined);
   }, []);
 
+  const openNewInitiative = useCallback(() => {
+    setPaletteOpen(false);
+    setNewInitiativeOpen(true);
+  }, []);
+
+  const closeNewInitiative = useCallback(() => {
+    setNewInitiativeOpen(false);
+  }, []);
+
   // Pending `g`-prefix for two-key view chords (g b / g l / g t / g m / g i). A
   // ref (not state) so arming the prefix never triggers a render.
   const gPrefix = useRef<number | null>(null);
@@ -81,7 +92,7 @@ export function MissionControlShell() {
       // ⌘K / Ctrl-K toggles the palette (a modifier combo — safe while typing);
       // only suppressed while the New Task modal is open, as before.
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        if (newTaskOpen) return;
+        if (newTaskOpen || newInitiativeOpen) return;
         event.preventDefault();
         setPaletteOpen((prev) => !prev);
         return;
@@ -90,7 +101,7 @@ export function MissionControlShell() {
       // Bare-key chords are gated so they never fire while typing or while a
       // modal/palette owns the keyboard (the filter input lives on the views
       // surface; PeoplePicker's capture-phase Esc closes a picker first).
-      if (newTaskOpen || paletteOpen) return;
+      if (newTaskOpen || newInitiativeOpen || paletteOpen) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest?.("input,textarea,[contenteditable]")) return;
@@ -123,7 +134,7 @@ export function MissionControlShell() {
       window.removeEventListener("keydown", onKeyDown);
       if (gPrefix.current !== null) window.clearTimeout(gPrefix.current);
     };
-  }, [nav, newTaskOpen, paletteOpen]);
+  }, [nav, newTaskOpen, newInitiativeOpen, paletteOpen]);
 
   // Flip the readiness flag once, AFTER mount — i.e. after the client effects
   // above (notably the global ⌘K / `g _` chord keydown listener) have attached.
@@ -140,7 +151,7 @@ export function MissionControlShell() {
     <BrandBoundary className={`mc${dark ? " dark" : ""}`} data-mc-ready={ready ? "true" : undefined}>
       <Topbar nav={nav} dark={dark} setDark={setDark} onOpenPalette={openPalette} />
       <div className="mc-shell">
-        <Sidebar route={route} nav={nav} />
+        <Sidebar route={route} nav={nav} onNewInitiative={openNewInitiative} />
         {route.screen === "home" ? (
           <InboxView route={route} nav={nav} openNewTask={() => openNewTask()} />
         ) : (
@@ -152,9 +163,11 @@ export function MissionControlShell() {
           onClose={closePalette}
           nav={nav}
           onOpenNewTask={() => openNewTask({ bucketId: route.bucketId })}
+          onOpenNewInitiative={openNewInitiative}
         />
       ) : null}
       {newTaskOpen ? <NewTaskModal ctx={newTaskCtx} onClose={closeNewTask} nav={nav} /> : null}
+      {newInitiativeOpen ? <NewInitiativeModal onClose={closeNewInitiative} nav={nav} /> : null}
       <NoticeHost />
     </BrandBoundary>
   );

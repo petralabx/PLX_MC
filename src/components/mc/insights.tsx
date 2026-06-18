@@ -13,7 +13,7 @@ import { useMemo } from "react";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import { INSIGHTS_TODAY_DAY, buildInsights } from "@/lib/mc-data/insights";
 import type { ChartSlice } from "@/lib/mc-data/insights";
-import { allTasks } from "@/lib/mc-data/store";
+import { allBuckets, allTasks } from "@/lib/mc-data/store";
 
 import { CategoryBar, StatusDonut, StatusLegend } from "./charts";
 import type { ScreenProps } from "./route";
@@ -24,7 +24,7 @@ export function InsightsView({ nav }: ScreenProps) {
   // uses the injected INSIGHTS_TODAY_DAY grid cursor — never a live clock (§1.1).
   const version = useMcVersion();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const model = useMemo(() => buildInsights(allTasks(), INSIGHTS_TODAY_DAY), [version]);
+  const model = useMemo(() => buildInsights(allTasks(), INSIGHTS_TODAY_DAY, allBuckets()), [version]);
 
   // STATUS / PRIORITY / ASSIGNEE apply a FilterState and navigate; BUCKET is a
   // board AXIS, not a FilterState facet, so it navigates by route param.

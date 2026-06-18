@@ -4,8 +4,6 @@ import { useState } from "react";
 
 import {
   ACTORS,
-  BUCKETS,
-  BUCKET_IDX,
   CURRENT_USER,
   PRIORITY,
   STAGES,
@@ -19,7 +17,9 @@ import {
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   addComment,
+  allBuckets,
   allTasks,
+  bucketById,
   deleteComment,
   editComment,
   markAllSynced,
@@ -153,7 +153,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
     );
   }
 
-  const bucket = BUCKET_IDX[task.bucket];
+  const bucket = bucketById(task.bucket);
   const stageIdx = STAGE_IDX[task.stage] ?? 0;
   const todos = spLists().find((list) => list.key === "todos");
   const sharePointItem = task.sync.sp.split("· ")[1] ?? task.sync.sp;
@@ -613,7 +613,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                       onChange={(event) => setTaskBucket(task.id, event.target.value)}
                       aria-label="Set initiative"
                     >
-                      {BUCKETS.map((bucketOption) => (
+                      {allBuckets().map((bucketOption) => (
                         <option key={bucketOption.id} value={bucketOption.id}>
                           {bucketOption.name}
                         </option>

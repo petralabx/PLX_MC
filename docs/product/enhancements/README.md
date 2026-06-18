@@ -492,3 +492,17 @@ The four items WS‑1…WS‑3 explicitly deferred are now resolved, in two PRs:
 
 Still deferred (honestly): Teams/email notification delivery, Graph change
 webhooks, the Initiative lookup column, and Project Documents (driveItem) sync.
+
+### EN‑005 — Flexible buckets (create/edit initiatives) · 2026‑06‑18
+
+Buckets/initiatives were a static `BUCKETS` fixture consumed directly by ~12
+files with no create path. EN‑005 makes them first‑class and dynamic.
+
+| | |
+|---|---|
+| **Persistence** | `buckets` table (migration `007`, full Bucket in `data` jsonb, idempotently seeded from the fixture via `ensureBucketsSeeded`); `snapshot()` returns buckets; the store hydrates them. |
+| **Create / edit** | `POST /api/buckets` + `PATCH /api/buckets/{id}` (shared wrapper + zod); store `addBucket` / `updateBucket` are optimistic with reconcile‑on‑success / rollback+notice‑on‑failure; attached repos clamped to the persisted registry. |
+| **Dynamic consumers** | `allBuckets()` / `bucketById()` are the single source of truth; every fixture consumer (sidebar, command palette, board/list/timeline + helpers, task/bucket detail, new‑task modal, files, traceability, meeting intake) reads them reactively. Pure helpers (insights, board helpers) take an injected `buckets` param (default = fixture) to stay deterministic. |
+| **UI** | "New initiative" modal mounted in the shell, triggered from a sidebar "+ New initiative" affordance and the command palette. |
+| **Verify** | Store create/edit reconcile+rollback + allow‑list tests, dynamic‑column helper test, create‑flow E2E; `typecheck` + 363 unit + `build` + `preflight --mode pre-push`; independent auditor ACCEPT. | PR `feat/enh-buckets-flexible` |
+| **Deferred (honestly)** | The buckets ↔ Roadmap SharePoint two‑way mirror + the Initiative lookup on ToDos (the engine does not mirror the Roadmap list yet) — buckets are app‑persistent for now, like the repo registry shipped DB‑first. Bucket DELETE/archive is also out of v1. |

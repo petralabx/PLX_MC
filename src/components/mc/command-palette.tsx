@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { AGENTS, BUCKETS, CURRENT_USER } from "@/lib/mc-data";
+import { AGENTS, CURRENT_USER } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allTasks, reassignTask, setTaskStage } from "@/lib/mc-data/store";
+import { allBuckets, allTasks, reassignTask, setTaskStage } from "@/lib/mc-data/store";
 
 import type { Nav } from "./route";
 
@@ -45,23 +45,28 @@ export function CommandPalette({
   onClose,
   nav,
   onOpenNewTask,
+  onOpenNewInitiative,
 }: {
   onClose: () => void;
   nav: Nav;
   onOpenNewTask: () => void;
+  onOpenNewInitiative: () => void;
 }) {
-  useMcVersion();
+  const version = useMcVersion();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const tasks = allTasks();
 
+  // `version` is load-bearing: bucket/task commands read the live store, so a
+  // store mutation while the palette is open must recompute the groups.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const groups = useMemo<PaletteGroup<PaletteCommand>[]>(() => {
-    const firstBucket = BUCKETS[0]?.id;
+    const firstBucket = allBuckets()[0]?.id;
     const firstTask = tasks[0]?.id;
     const create: PaletteCommand[] = [
       { key: "create:new-task", icon: "+", label: "New task", hint: "create", run: onOpenNewTask },
-      { key: "create:new-bucket", icon: "+", label: "New bucket", hint: "create", run: () => {} },
+      { key: "create:new-bucket", icon: "+", label: "New initiative", hint: "create", run: onOpenNewInitiative },
       {
         key: "create:draft-prd",
         icon: "✎",
@@ -103,7 +108,7 @@ export function CommandPalette({
       },
     ];
 
-    const buckets: PaletteCommand[] = BUCKETS.map((bucket) => ({
+    const buckets: PaletteCommand[] = allBuckets().map((bucket) => ({
       key: `bucket:${bucket.id}`,
       icon: "●",
       label: `Bucket · ${bucket.name}`,
@@ -166,7 +171,7 @@ export function CommandPalette({
       { title: "Tasks", items: taskCommands },
       { title: "Assign agents", items: assignAgents },
     ];
-  }, [nav, onOpenNewTask, tasks]);
+  }, [nav, onOpenNewTask, onOpenNewInitiative, tasks, version]);
 
   const filtered = useMemo(() => filterPaletteGroups(groups, query), [groups, query]);
   const flat = useMemo(() => filtered.flatMap((group) => group.items), [filtered]);

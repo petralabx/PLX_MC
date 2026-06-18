@@ -11,8 +11,8 @@
 // Everything here is gated by the feature flag + opt-in register (governance:
 // disabled by default, only designated meetings feed in).
 
-import { BUCKET_IDX, CURRENT_USER } from "@/lib/mc-data";
-import { addTask, directory, pushNotice } from "@/lib/mc-data/store";
+import { CURRENT_USER } from "@/lib/mc-data";
+import { addTask, bucketById, directory, pushNotice } from "@/lib/mc-data/store";
 import type { Task } from "@/lib/mc-data";
 
 import { parseAiInsights, transcriptToActionItems } from "./adapters";
@@ -198,7 +198,7 @@ export function promoteProposedTask(proposedId: string, opts: PromoteOptions = {
   const assignee = opts.assignee ?? p.ownerId;
   // Inherit the initiative's repos by default (WS-2 backfill convention);
   // addTask clamps to the allow-list regardless.
-  const repos = opts.repos ?? BUCKET_IDX[bucket]?.repos ?? [];
+  const repos = opts.repos ?? bucketById(bucket)?.repos ?? [];
 
   const task = addTask({
     title: p.suggestedTitle,

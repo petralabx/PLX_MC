@@ -4,11 +4,12 @@
 // path (spec §6 "pending until the first successful write, then synced").
 
 import { ApiError } from "@/lib/api/route";
-import { SP_LISTS } from "@/lib/mc-data/data";
+import { CURRENT_USER, SP_LISTS } from "@/lib/mc-data/data";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
 import { disallowedRepos } from "@/lib/mc-data/repos";
 import type {
   AuditRow,
+  Bucket,
   Comment,
   FileEntry,
   Repo,
@@ -18,7 +19,7 @@ import type {
   SpError,
   Task,
 } from "@/lib/mc-data/types";
-import { ensureReposSeeded, ensureSeeded } from "./engine";
+import { ensureBucketsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import type { EntityData } from "./mapping";
 import * as repo from "./repo";
 
@@ -38,12 +39,15 @@ export interface StateSnapshot {
   // EN-001 / Item 4 — persisted bucket discussion threads (keyed by bucket id),
   // so they survive a reload. App-only (never mirrored to SharePoint).
   bucketComments: Record<string, Comment[]>;
+  // EN-005 — persisted buckets/initiatives, so user-created ones survive reload.
+  buckets: Bucket[];
 }
 
 export async function snapshot(): Promise<StateSnapshot> {
   await ensureSeeded();
   await ensureReposSeeded();
-  const [tasks, risks, files, conflicts, errors, audit, counts, repos, repoRequests, bucketComments] = await Promise.all([
+  await ensureBucketsSeeded();
+  const [tasks, risks, files, conflicts, errors, audit, counts, repos, repoRequests, bucketComments, buckets] = await Promise.all([
     repo.getEntities("task"),
     repo.getEntities("risk"),
     repo.getEntities("file"),
@@ -54,6 +58,7 @@ export async function snapshot(): Promise<StateSnapshot> {
     repo.getRepos(),
     repo.getRepoRequests(),
     repo.bucketCommentsByBucket(),
+    repo.getBuckets(),
   ]);
   return {
     tasks: tasks.map((r) => r.data as unknown as Task),
@@ -75,6 +80,7 @@ export async function snapshot(): Promise<StateSnapshot> {
     })),
     repoRequests,
     bucketComments,
+    buckets,
     // Lists not yet mirrored (roadmap, milestones) keep their fixture counts;
     // mirrored lists report live counts. The store merges via SP_LISTS keys.
     lastSweep: audit.find((a) => a.body.startsWith("Sweep completed"))?.ts ?? SP_LISTS[0].lastSync,
@@ -87,6 +93,105 @@ export async function snapshot(): Promise<StateSnapshot> {
 // comments are never pushed to SharePoint.
 export async function setBucketComments(bucketId: string, comments: Comment[]): Promise<Comment[]> {
   return repo.replaceBucketComments(bucketId, comments);
+}
+
+// ─── Buckets / initiatives (EN-005) ──────────────────────────────────────────
+
+// `BKT-<SLUG>` from the name (uppercased, hyphenated, capped), with a numeric
+// suffix on collision — matching the semantic style of the fixture ids.
+function nextBucketId(name: string, existing: Set<string>): string {
+  const slug = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+  const base = `BKT-${slug || "NEW"}`;
+  if (!existing.has(base)) return base;
+  let n = 2;
+  while (existing.has(`${base}-${n}`)) n += 1;
+  return `${base}-${n}`;
+}
+
+const definedEntries = <T extends object>(patch: T): Partial<T> =>
+  Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<T>;
+
+export interface CreateBucketInput {
+  name: string;
+  owner?: string;
+  health?: Bucket["health"];
+  target?: string;
+  started?: string;
+  desc?: string;
+  repos?: string[];
+  prd?: string | null;
+}
+
+export async function createBucket(input: CreateBucketInput): Promise<Bucket> {
+  await ensureSeeded();
+  await ensureReposSeeded();
+  await ensureBucketsSeeded();
+  const name = input.name.trim();
+  if (!name) throw new ApiError("invalid_request", "A bucket needs a name.", 422);
+  // Allow-list clamp (EN-002): a bucket may only attach registry repos.
+  const registry = await repo.getRepos();
+  const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
+  const offlist = disallowedRepos(input.repos ?? [], registryMap);
+  if (offlist.length > 0) {
+    throw new ApiError(
+      "repo_not_allowed",
+      `These repos are not in the registry: ${offlist.join(", ")}. Request and get them approved first.`,
+      422
+    );
+  }
+  const existing = await repo.getBuckets();
+  const id = nextBucketId(name, new Set(existing.map((b) => b.id)));
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, ".");
+  const bucket: Bucket = {
+    id,
+    name,
+    owner: input.owner || CURRENT_USER,
+    health: input.health ?? "track",
+    target: input.target?.trim() || "—",
+    started: input.started?.trim() || today,
+    desc: (input.desc ?? "").trim(),
+    repos: input.repos ?? [],
+    sync: { state: "pending", ts: repo.stamp(), sp: "Roadmap · unprovisioned" },
+    prd: input.prd ?? null,
+  };
+  await repo.upsertBucket(bucket);
+  await repo.appendAudit(bucket.owner, `Created initiative ${id} (${name}) — pending Roadmap mirror.`, "pending");
+  return bucket;
+}
+
+export interface PatchBucketInput {
+  name?: string;
+  owner?: string;
+  health?: Bucket["health"];
+  target?: string;
+  started?: string;
+  desc?: string;
+  repos?: string[];
+  prd?: string | null;
+}
+
+export async function patchBucket(id: string, patch: PatchBucketInput, actor: string): Promise<Bucket | null> {
+  await ensureBucketsSeeded();
+  const existing = (await repo.getBuckets()).find((b) => b.id === id);
+  if (!existing) return null;
+  if (patch.repos) {
+    await ensureReposSeeded();
+    const registry = await repo.getRepos();
+    const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
+    const offlist = disallowedRepos(patch.repos, registryMap);
+    if (offlist.length > 0) {
+      throw new ApiError("repo_not_allowed", `These repos are not in the registry: ${offlist.join(", ")}.`, 422);
+    }
+  }
+  const next: Bucket = { ...existing, ...definedEntries(patch) };
+  await repo.upsertBucket(next);
+  await repo.appendAudit(actor, `Edited initiative ${id} — pending Roadmap mirror.`, "pending");
+  return next;
 }
 
 export interface CreateTaskInput {

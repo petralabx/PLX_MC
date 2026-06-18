@@ -2,9 +2,8 @@
 
 import { Fragment, useMemo, useState } from "react";
 
-import { BUCKET_IDX } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allFiles, fileById, filesIn, markAllSynced } from "@/lib/mc-data/store";
+import { allFiles, bucketById, fileById, filesIn, markAllSynced } from "@/lib/mc-data/store";
 
 import { Avatar, SyncTick } from "./atoms";
 import { buildBreadcrumbPath, sortFileEntries } from "./record-logic";
@@ -84,7 +83,7 @@ export function FilesView() {
           </div>
           {items.length === 0 && <div className="colempty">Empty folder</div>}
           {items.map((entry) => {
-            const health = entry.bucket ? BUCKET_IDX[entry.bucket]?.health : undefined;
+            const health = entry.bucket ? bucketById(entry.bucket)?.health : undefined;
             const childCount = entry.kind === "folder" ? filesIn(entry.id).length : 0;
             // Folders are <button>s (keyboard-accessible drill-down); files are static rows.
             const Row = entry.kind === "folder" ? "button" : "div";

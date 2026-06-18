@@ -6,6 +6,7 @@
 import { query, withTransaction } from "@/lib/db";
 import type {
   AuditRow,
+  Bucket,
   Comment,
   Repo,
   RepoRequest,
@@ -511,5 +512,40 @@ export async function upsertRepoRequest(req: RepoRequest): Promise<void> {
       req.decidedBy ?? null,
       req.decidedTs ?? null,
     ]
+  );
+}
+
+// ─── Buckets / initiatives (EN-005) ──────────────────────────────────────────
+
+interface BucketRow {
+  id: string;
+  data: Bucket;
+}
+
+export async function getBuckets(): Promise<Bucket[]> {
+  const rows = await query<BucketRow>("SELECT id, data FROM buckets ORDER BY created_at, id");
+  return rows.map((r) => r.data);
+}
+
+// Idempotent seed of the fixture buckets — never disturbs an existing/edited row
+// (ON CONFLICT DO NOTHING), so a fresh DB gets the 8 initiatives and any edits
+// persist across boots.
+export async function seedBuckets(buckets: Bucket[]): Promise<void> {
+  for (const b of buckets) {
+    await query(
+      `INSERT INTO buckets (id, data, sync_state) VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO NOTHING`,
+      [b.id, JSON.stringify(b), b.sync?.state ?? "pending"]
+    );
+  }
+}
+
+// Upsert a bucket (create or edit). An edit re-queues the (future) Roadmap mirror
+// (sync_state -> pending), preserving the prior sp_item_id.
+export async function upsertBucket(b: Bucket): Promise<void> {
+  await query(
+    `INSERT INTO buckets (id, data, sync_state) VALUES ($1, $2, 'pending')
+     ON CONFLICT (id) DO UPDATE SET data = $2, sync_state = 'pending', updated_at = now()`,
+    [b.id, JSON.stringify(b)]
   );
 }

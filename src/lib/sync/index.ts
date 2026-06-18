@@ -15,11 +15,15 @@ export {
 export { validateRepoInOrg, type RepoValidation } from "./github";
 export { startSyncScheduler, syncEnabled } from "./scheduler";
 export {
+  createBucket,
   createTask,
+  patchBucket,
   patchTask,
   setBucketComments,
   snapshot,
+  type CreateBucketInput,
   type CreateTaskInput,
+  type PatchBucketInput,
   type PatchTaskInput,
   type StateSnapshot,
 } from "./state";

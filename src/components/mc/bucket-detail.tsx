@@ -139,7 +139,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             </span>
           </div>
           <div className="f">
-            <span className="k">Owner</span>
+            <span className="k">Accountable owner</span>
             <span className="v sm fact-owner">
               <Avatar id={bucket.owner} size="sm" />
               {ACTORS[bucket.owner].name}

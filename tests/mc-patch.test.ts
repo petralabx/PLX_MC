@@ -64,6 +64,7 @@ function seedTask(over: Partial<Task> = {}): Task {
     assignee: null,
     coassignees: [],
     reporter: "vince",
+    accountableOwner: "vince",
     reqs: [],
     repos: [],
     estimate: "M",
@@ -99,7 +100,7 @@ describe("patchTask — new DB-only fields round-trip through entities.data", ()
       {
         bucket: "BKT-DAPI",
         labels: ["go-live", "api"],
-        coassignees: ["lena", "evan"],
+        coassignees: ["ricardo", "stephen"],
         subtasks: [{ id: "SUB-1", t: "spike", done: false, who: "vince" }],
       },
       "vince"
@@ -107,7 +108,7 @@ describe("patchTask — new DB-only fields round-trip through entities.data", ()
     expect(updated).not.toBeNull();
     expect(updated!.bucket).toBe("BKT-DAPI");
     expect(updated!.labels).toEqual(["go-live", "api"]);
-    expect(updated!.coassignees).toEqual(["lena", "evan"]);
+    expect(updated!.coassignees).toEqual(["ricardo", "stephen"]);
     expect(updated!.subtasks).toEqual([{ id: "SUB-1", t: "spike", done: false, who: "vince" }]);
 
     // And the persisted row carries them too (the hydrate source of truth).
@@ -145,6 +146,66 @@ describe("patchTask — per-field tier at the server boundary", () => {
     // ...but the DB-only fields still persisted.
     expect(row.data.labels).toEqual(["x"]);
     expect(row.data.bucket).toBe("BKT-DAPI");
+  });
+});
+
+describe("patchTask — accountableOwner / humanOnly round-trip (EN-003, DB-only)", () => {
+  it("persists accountableOwner + humanOnly into the jsonb blob without re-queuing a push", async () => {
+    seedTask({ accountableOwner: null });
+    const updated = await patchTask(
+      "TASK-900",
+      { accountableOwner: "greg", humanOnly: true },
+      "vince"
+    );
+    expect(updated!.accountableOwner).toBe("greg");
+    expect(updated!.humanOnly).toBe(true);
+    const row = store.rows.get("task:TASK-900")!;
+    expect(row.data.accountableOwner).toBe("greg");
+    expect(row.data.humanOnly).toBe(true);
+    expect(row.sync_state).toBe("synced"); // DB-only — never re-queued for push
+    expect(row.dirty_fields).toEqual([]);
+  });
+});
+
+describe("patchTask — accountability enforcement (EN-003 gates)", () => {
+  it("rejects advancing past planned without a human accountable owner", async () => {
+    seedTask({ stage: "planned", accountableOwner: null });
+    await expect(patchTask("TASK-900", { stage: "qa" }, "vince")).rejects.toMatchObject({
+      code: "stage_blocked",
+    });
+    // State untouched — the failed gate is not a silent partial write.
+    expect(store.rows.get("task:TASK-900")!.data.stage).toBe("planned");
+  });
+
+  it("allows advancing past planned once a human accountable owner is set", async () => {
+    seedTask({ stage: "planned", accountableOwner: "vince" });
+    const updated = await patchTask("TASK-900", { stage: "qa" }, "vince");
+    expect(updated!.stage).toBe("qa");
+  });
+
+  it("rejects a done-stage move while the evidence bundle is incomplete", async () => {
+    seedTask({
+      stage: "review",
+      accountableOwner: "vince",
+      evidence: { summary: "x", items: [{ key: "a", label: "a", done: false }] },
+    });
+    await expect(patchTask("TASK-900", { stage: "verified" }, "vince")).rejects.toMatchObject({
+      code: "stage_blocked",
+    });
+  });
+
+  it("rejects an agent executor on a human-only task", async () => {
+    seedTask({ humanOnly: true });
+    await expect(patchTask("TASK-900", { assignee: "vibes" }, "vince")).rejects.toMatchObject({
+      code: "human_only_violation",
+    });
+    expect(store.rows.get("task:TASK-900")!.data.assignee).toBeNull();
+  });
+
+  it("allows a human executor on a human-only task", async () => {
+    seedTask({ humanOnly: true });
+    const updated = await patchTask("TASK-900", { assignee: "greg" }, "vince");
+    expect(updated!.assignee).toBe("greg");
   });
 });
 

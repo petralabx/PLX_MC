@@ -9,8 +9,6 @@ import { actorById, directory, invitePerson, personByEmail } from "@/lib/mc-data
 
 import { Avatar } from "./atoms";
 
-const CORE_TEAM_IDS = new Set(["maya", "tariq", "lena", "evan", "noor"]);
-
 export interface InviteOfferDecision {
   normalizedQuery: string;
   showInvite: boolean;
@@ -95,15 +93,6 @@ export function PeoplePicker({
     });
   }, [normalizedQuery]);
 
-  const coreTeam = useMemo(
-    () => humans.filter((person) => CORE_TEAM_IDS.has(person.id)),
-    [humans]
-  );
-  const directoryTeam = useMemo(
-    () => humans.filter((person) => !CORE_TEAM_IDS.has(person.id)),
-    [humans]
-  );
-
   const agents = useMemo(() => {
     if (!allowAgents) return [];
     return Object.values(AGENTS).filter((agent) => {
@@ -130,8 +119,7 @@ export function PeoplePicker({
   };
 
   const noMatches =
-    coreTeam.length === 0 &&
-    directoryTeam.length === 0 &&
+    humans.length === 0 &&
     agents.length === 0 &&
     !decision.showInvite &&
     !decision.blockedExternalDomain;
@@ -178,13 +166,8 @@ export function PeoplePicker({
           </button>
         ) : null}
 
-        {coreTeam.length > 0 ? <div className="pg">Core team</div> : null}
-        {coreTeam.map((person) => (
-          <PersonRow key={person.id} actor={person} active={current === person.id} onPick={pick} />
-        ))}
-
-        {directoryTeam.length > 0 ? <div className="pg">Directory</div> : null}
-        {directoryTeam.map((person: Human) => (
+        {humans.length > 0 ? <div className="pg">Directory</div> : null}
+        {humans.map((person: Human) => (
           <PersonRow key={person.id} actor={person} active={current === person.id} onPick={pick} />
         ))}
 

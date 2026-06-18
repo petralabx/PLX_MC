@@ -30,6 +30,7 @@ import {
   TASKS,
 } from "./data";
 import { domainOf, isPetraEmail } from "./helpers";
+import { assignmentViolation, isAgentId, stageAdvanceViolation } from "./policy";
 import type {
   Actor,
   AuditRow,
@@ -178,15 +179,20 @@ export function storeSyncCounts(): StoreSyncCounts {
   );
 }
 
-// Ordered directory for pickers: core team first, then the rest, alpha.
+// Ordered directory for pickers: by role (Owner/Admin/Lead first), then online,
+// then name. No hardcoded id list (EN-003 / WS-1 — the directory is the real
+// roster resolved from M365).
+const DIRECTORY_ROLE_RANK: Record<string, number> = { Owner: 0, Admin: 1, Lead: 2 };
+
 export function directory(): Human[] {
-  const core = ["maya", "tariq", "lena", "evan", "noor"];
   const humans = Object.values(state.actors).filter((a): a is Human => a.kind === "human");
-  const rank = (p: Human) => {
-    const i = core.indexOf(p.id);
-    return i === -1 ? 99 : i;
-  };
-  return humans.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  const rank = (p: Human) => DIRECTORY_ROLE_RANK[p.role] ?? 50;
+  return humans.sort(
+    (a, b) =>
+      rank(a) - rank(b) ||
+      Number(b.online) - Number(a.online) ||
+      a.name.localeCompare(b.name)
+  );
 }
 
 export function personByEmail(email: string): Human | undefined {
@@ -309,6 +315,8 @@ export interface NewTaskInput {
   assignee?: string | null;
   coassignees?: string[];
   reporter?: string;
+  accountableOwner?: string | null;
+  humanOnly?: boolean;
   reqs?: string[];
   repos?: string[];
   estimate?: Task["estimate"];
@@ -322,7 +330,11 @@ export function addTask(input: NewTaskInput): Task {
   const id = nextTaskId();
   const num = (id.match(/(\d+)/) ?? ["", ""])[1];
   const reporter = input.reporter ?? CURRENT_USER;
-  const who = input.assignee ? state.actors[input.assignee] : undefined;
+  // A human-only task can never carry an agent executor (EN-003 policy) — clamp
+  // defensively even though the authoring picker hides agents in that mode.
+  const assignee =
+    input.humanOnly && isAgentId(input.assignee ?? null) ? null : (input.assignee ?? null);
+  const who = assignee ? state.actors[assignee] : undefined;
   const task: Task = {
     id,
     title: (input.title ?? "").trim(),
@@ -330,9 +342,11 @@ export function addTask(input: NewTaskInput): Task {
     bucket: input.bucket,
     stage: input.stage ?? "backlog",
     priority: input.priority ?? "medium",
-    assignee: input.assignee ?? null,
+    assignee,
     coassignees: input.coassignees ?? [],
     reporter,
+    accountableOwner: input.accountableOwner ?? null,
+    humanOnly: input.humanOnly,
     reqs: input.reqs ?? [],
     repos: input.repos ?? [],
     estimate: input.estimate ?? "M",
@@ -411,7 +425,18 @@ export function markRead(notificationId: string) {
 // The patchable subset of a Task — the fields routed through the single
 // persisted-mutation path. Mirrors PatchTaskInput (state.ts) on the server.
 export type TaskFieldPatch = Partial<
-  Pick<Task, "stage" | "priority" | "bucket" | "labels" | "coassignees" | "subtasks" | "assignee">
+  Pick<
+    Task,
+    | "stage"
+    | "priority"
+    | "bucket"
+    | "labels"
+    | "coassignees"
+    | "subtasks"
+    | "assignee"
+    | "accountableOwner"
+    | "humanOnly"
+  >
 >;
 
 // The PATCH mirror seam. Production default issues the real PATCH and returns
@@ -458,6 +483,17 @@ export function patchTaskFields(
   if (!t) return;
   const entries = Object.entries(patch).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return; // empty patch is a safe no-op
+
+  // Accountability policy (EN-003): block a stage advance that would orphan the
+  // task past `planned` without a human owner, or mark it done with incomplete
+  // evidence. Surface the reason and leave state untouched (no optimistic apply).
+  if (patch.stage !== undefined) {
+    const reason = stageAdvanceViolation(t, patch.stage);
+    if (reason) {
+      pushNotice(reason);
+      return;
+    }
+  }
 
   // Snapshot the prior values of exactly the patched fields, plus the activity
   // array (we prepend an optimistic line below — a failed write must revert it
@@ -531,6 +567,27 @@ export const setCoassignees = (taskId: string, ids: string[]) => {
   patchTaskFields(taskId, { coassignees }, { activity: "updated co-assignees" }); // DB-only
 };
 
+// Set the human accountable owner (EN-003). Rejects an agent — accountability
+// is always human. DB-only: the Accountable Owner person column is part of the
+// deferred directory mirror, so no sync claim is made here.
+export const setAccountableOwner = (taskId: string, ownerId: string | null) => {
+  if (isAgentId(ownerId)) {
+    pushNotice("Accountability is always human — an agent can't be the accountable owner.");
+    return;
+  }
+  patchTaskFields(taskId, { accountableOwner: ownerId }, { activity: "set the accountable owner" });
+};
+
+// Toggle the per-task human-only policy. Turning it on while an agent is the
+// executor clears the executor so the invariant holds.
+export const setHumanOnly = (taskId: string, humanOnly: boolean) => {
+  const t = taskById(taskId);
+  if (!t) return;
+  const patch: TaskFieldPatch = { humanOnly };
+  if (humanOnly && isAgentId(t.assignee)) patch.assignee = null;
+  patchTaskFields(taskId, patch, { activity: humanOnly ? "marked human-only" : "allowed agent execution" });
+};
+
 export const addSubtask = (taskId: string, text: string, who: string) => {
   const t = taskById(taskId);
   if (!t) return;
@@ -559,6 +616,13 @@ export const toggleSubtask = (taskId: string, subtaskId: string) => {
 export function reassignTask(taskId: string, actorId: string | null) {
   const t = taskById(taskId);
   if (!t) return;
+  // Human-only tasks reject an agent executor (EN-003 policy) before anything
+  // is logged or mirrored.
+  const violation = assignmentViolation(t, actorId);
+  if (violation) {
+    pushNotice(violation);
+    return;
+  }
   if (actorId === null) {
     if (t.assignee === null) return;
     pushAudit(

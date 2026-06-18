@@ -22,9 +22,10 @@ function task(over: Partial<Task> = {}): Task {
     bucket: "BKT-WMS",
     stage: "planned",
     priority: "medium",
-    assignee: "maya",
+    assignee: "greg",
     coassignees: [],
     reporter: "vince",
+    accountableOwner: "vince",
     reqs: [],
     repos: [],
     estimate: "M",
@@ -43,12 +44,12 @@ function task(over: Partial<Task> = {}): Task {
 // click-to-filter contract is exercised across each axis.
 function mixedTasks(): Task[] {
   return [
-    task({ stage: "backlog", priority: "urgent", assignee: "maya", bucket: "BKT-WMS", due: "Jun 5" }),
-    task({ stage: "specced", priority: "high", assignee: "tariq", bucket: "BKT-WMS", due: "Jun 20" }),
-    task({ stage: "progress", priority: "high", assignee: "maya", bucket: "BKT-DAPI", due: "Jun 8", blocked: true }),
+    task({ stage: "backlog", priority: "urgent", assignee: "greg", bucket: "BKT-WMS", due: "Jun 5" }),
+    task({ stage: "specced", priority: "high", assignee: "rishi", bucket: "BKT-WMS", due: "Jun 20" }),
+    task({ stage: "progress", priority: "high", assignee: "greg", bucket: "BKT-DAPI", due: "Jun 8", blocked: true }),
     task({ stage: "qa", priority: "medium", assignee: null, bucket: "BKT-DAPI", due: "Jun 12" }),
-    task({ stage: "review", priority: "low", assignee: "tariq", bucket: "BKT-WMS", due: "Jul 02" }),
-    task({ stage: "merged", priority: "medium", assignee: "maya", bucket: "BKT-DAPI", due: "Jun 1" }),
+    task({ stage: "review", priority: "low", assignee: "rishi", bucket: "BKT-WMS", due: "Jul 02" }),
+    task({ stage: "merged", priority: "medium", assignee: "greg", bucket: "BKT-DAPI", due: "Jun 1" }),
     task({ stage: "verified", priority: "urgent", assignee: null, bucket: "BKT-WMS", due: "Jun 3" }),
   ];
 }
@@ -89,7 +90,7 @@ describe("buildInsights — counts & partition invariants (SPEC §3.B.7)", () =>
     expect(withUnassigned.byAssignee.some((s) => s.key === UNASSIGNED_KEY)).toBe(true);
     expect(withUnassigned.unassigned).toBe(2);
 
-    const allAssigned = buildInsights([task({ assignee: "maya" }), task({ assignee: "tariq" })]);
+    const allAssigned = buildInsights([task({ assignee: "greg" }), task({ assignee: "rishi" })]);
     expect(allAssigned.byAssignee.some((s) => s.key === UNASSIGNED_KEY)).toBe(false);
     expect(allAssigned.unassigned).toBe(0);
   });
@@ -207,7 +208,7 @@ describe("click-to-filter contract — every slice.filter selects exactly its ta
     // priority → [key].
     expect(filterForSegment("priority", "high")).toEqual({ priority: ["high" as PriorityKey] });
     // assignee → [key], including the unassigned sentinel.
-    expect(filterForSegment("assignee", "maya")).toEqual({ assignee: ["maya"] });
+    expect(filterForSegment("assignee", "greg")).toEqual({ assignee: ["greg"] });
     expect(filterForSegment("assignee", UNASSIGNED_KEY)).toEqual({ assignee: [UNASSIGNED_KEY] });
   });
 

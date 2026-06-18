@@ -3,7 +3,9 @@
 // the mirror pending/dirty — the engine's sweep is the single outbound code
 // path (spec §6 "pending until the first successful write, then synced").
 
+import { ApiError } from "@/lib/api/route";
 import { SP_LISTS } from "@/lib/mc-data/data";
+import { assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
 import type { AuditRow, FileEntry, Risk, SpConflict, SpError, Task } from "@/lib/mc-data/types";
 import { ensureSeeded } from "./engine";
 import type { EntityData } from "./mapping";
@@ -54,6 +56,8 @@ export interface CreateTaskInput {
   assignee?: string | null;
   coassignees?: string[];
   reporter: string;
+  accountableOwner?: string | null;
+  humanOnly?: boolean;
   reqs?: string[];
   repos?: string[];
   estimate?: Task["estimate"];
@@ -66,6 +70,9 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
   const rows = await repo.getEntities("task");
   const max = Math.max(0, ...rows.map((r) => parseInt((/(\d+)/.exec(r.id) ?? [])[1] ?? "0", 10)));
   const id = `TASK-${max + 1}`;
+  // A human-only task can never carry an agent executor (EN-003 policy).
+  const assignee =
+    input.humanOnly && isAgentId(input.assignee ?? null) ? null : (input.assignee ?? null);
   const task: Task = {
     id,
     title: input.title.trim(),
@@ -73,9 +80,11 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     bucket: input.bucket,
     stage: input.stage ?? "backlog",
     priority: input.priority ?? "medium",
-    assignee: input.assignee ?? null,
+    assignee,
     coassignees: input.coassignees ?? [],
     reporter: input.reporter,
+    accountableOwner: input.accountableOwner ?? null,
+    humanOnly: input.humanOnly,
     reqs: input.reqs ?? [],
     repos: input.repos ?? [],
     estimate: input.estimate ?? "M",
@@ -105,6 +114,8 @@ export interface PatchTaskInput {
   labels?: string[]; // NEW — DB-only
   coassignees?: string[]; // NEW — DB-only
   subtasks?: Task["subtasks"]; // NEW — DB-only (Subtask[])
+  accountableOwner?: string | null; // EN-003 — DB-only (person column, deferred mirror)
+  humanOnly?: boolean; // EN-003 — DB-only assignment policy
 }
 
 // Persistence tiers (Cycle 1):
@@ -123,6 +134,22 @@ export async function patchTask(id: string, patch: PatchTaskInput, actor: string
 
   const entries = Object.entries(patch).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return row.data as unknown as Task;
+
+  // Accountability policy (EN-003), enforced server-side in lockstep with the
+  // client store: reject an agent executor on a human-only task, and reject a
+  // stage advance that orphans the task past `planned` (or marks it done with
+  // incomplete evidence). The effective task folds the incoming patch so a
+  // patch that sets both owner and stage is evaluated against the new owner.
+  const current = row.data as unknown as Task;
+  const effective = { ...current, ...patch } as Task;
+  if ("assignee" in patch) {
+    const violation = assignmentViolation(effective, patch.assignee ?? null);
+    if (violation) throw new ApiError("human_only_violation", violation, 409);
+  }
+  if ("stage" in patch && patch.stage) {
+    const violation = stageAdvanceViolation(effective, patch.stage);
+    if (violation) throw new ApiError("stage_blocked", violation, 409);
+  }
 
   const pushedDirty = entries.map(([k]) => k).filter((k) => PUSHED_FIELDS.includes(k));
   const dirty = Array.from(new Set([...row.dirty_fields, ...pushedDirty]));

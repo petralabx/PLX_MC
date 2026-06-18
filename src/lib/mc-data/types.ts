@@ -146,6 +146,13 @@ export interface Task {
   assignee: string | null;
   coassignees: string[];
   reporter: string;
+  // Accountable owner — always a human (EN-003 split model): distinct from the
+  // executor (`assignee`, human or agent). null until a human takes it on; a
+  // task cannot advance past `planned` without one (see lib/mc-data/policy.ts).
+  accountableOwner: string | null;
+  // When set, agents cannot be the executor — enforced across the picker
+  // (allowAgents=false), the store mutation, and the server.
+  humanOnly?: boolean;
   reqs: string[];
   repos: string[];
   estimate: "S" | "M" | "L";

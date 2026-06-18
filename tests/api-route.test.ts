@@ -58,7 +58,7 @@ describe("patchTaskSchema (PATCH /api/tasks/{id} validation contract)", () => {
       actor: "vince",
       bucket: "BKT-DAPI",
       labels: ["go-live", "api"],
-      coassignees: ["lena", "evan"],
+      coassignees: ["ricardo", "stephen"],
       subtasks: [{ id: "SUB-1", t: "spike", done: false, who: "vince" }],
     });
     expect(parsed.success).toBe(true);

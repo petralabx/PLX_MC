@@ -3,9 +3,12 @@
 // come from config/sharepoint-schema.json; directions mirror SP_LISTS in
 // src/lib/mc-data/data.ts (keep all three aligned — the spec wins).
 //
-// Person and lookup columns (Assigned To, Reporter, Owner, Initiative) are
-// deliberately NOT mapped yet: person fields need real M365 identities and
-// belong to the deferred directory/notification increment.
+// Person and lookup columns (Assigned To, Accountable Owner, Reporter, Owner,
+// Initiative) are deliberately NOT mapped yet: the columns are defined in the
+// system-of-record schema (config/sharepoint-schema.json + SP_LISTS), but
+// person-column two-way sync belongs to the deferred directory/notification
+// increment. EN-003 / WS-1 made the directory real; wiring the person push is
+// the next sync increment (see WS1-NOTES.md).
 //
 // §5.2: the Risk Register's Likelihood column stores High/Med/Low BY DESIGN;
 // this layer normalizes MC's "Medium" → "Med" outbound and back inbound —

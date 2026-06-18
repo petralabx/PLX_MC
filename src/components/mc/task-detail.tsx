@@ -24,7 +24,9 @@ import {
   openConflicts,
   reassignTask,
   resolveConflict,
+  setAccountableOwner,
   setCoassignees,
+  setHumanOnly,
   setTaskBucket,
   setTaskLabels,
   setTaskPriority,
@@ -120,6 +122,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
   const task = taskById(taskId);
   const [resolved, setResolved] = useState<{ taskId: string; winner: "mc" | "sp" } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [accountablePickerOpen, setAccountablePickerOpen] = useState(false);
   const [coPickerOpen, setCoPickerOpen] = useState(false);
   const [reassigned, setReassigned] = useState<{ taskId: string; actorId: string } | null>(null);
   const [subtaskDraft, setSubtaskDraft] = useState("");
@@ -201,6 +204,8 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                 />
                 {pickerOpen && (
                   <PeoplePicker
+                    // Human-only tasks hide agents from the executor picker (EN-003).
+                    allowAgents={!task.humanOnly}
                     current={task.assignee}
                     onPick={(actorId) => {
                       reassignTask(task.id, actorId);
@@ -519,6 +524,51 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
               <div className="rfact">
                 <span className="k">Reporter</span>
                 <span className="v">{ACTORS[task.reporter]?.name ?? task.reporter}</span>
+              </div>
+              {/* Accountable owner — always human (EN-003). A task can't advance
+                  past Planned without one (enforced in the store + server). */}
+              <div className="rfact">
+                <span className="k">Accountable owner</span>
+                <span className="v" style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    className="ntm-field-btn"
+                    onClick={() => setAccountablePickerOpen((open) => !open)}
+                  >
+                    {task.accountableOwner ? (
+                      <span className="who" style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                        <Avatar id={task.accountableOwner} size="sm" />
+                        <span className="nm">{ACTORS[task.accountableOwner]?.name ?? task.accountableOwner}</span>
+                      </span>
+                    ) : (
+                      <span className="unassigned">+ Assign accountable owner</span>
+                    )}
+                    <span className="caret" aria-hidden="true">▾</span>
+                  </button>
+                  {accountablePickerOpen && (
+                    <PeoplePicker
+                      allowAgents={false}
+                      current={task.accountableOwner}
+                      onPick={(actorId) => setAccountableOwner(task.id, actorId)}
+                      onClose={() => setAccountablePickerOpen(false)}
+                      style={{ top: "calc(100% + 6px)", left: 0 }}
+                    />
+                  )}
+                </span>
+              </div>
+              <div className="rfact">
+                <span className="k">Human-only</span>
+                <span className="v">
+                  <label className="rfact-toggle">
+                    <input
+                      type="checkbox"
+                      checked={!!task.humanOnly}
+                      onChange={(event) => setHumanOnly(task.id, event.target.checked)}
+                      aria-label="Toggle human-only assignment policy"
+                    />
+                    <span>{task.humanOnly ? "Agents blocked" : "Agents allowed"}</span>
+                  </label>
+                </span>
               </div>
               {/* Priority — editable (R7 non-drag path); SP-tier, mirrors. */}
               <div className="rfact">

@@ -25,6 +25,7 @@ const task: Task = {
   assignee: null,
   coassignees: [],
   reporter: "vince",
+  accountableOwner: "vince",
   reqs: ["REQ-2"],
   repos: ["portal-web", "portal-api"],
   estimate: "L",
@@ -79,6 +80,7 @@ describe("outbound task mapping", () => {
 
   it("never emits person or lookup columns (directory increment)", () => {
     expect(Object.keys(fields)).not.toContain("AssignedTo");
+    expect(Object.keys(fields)).not.toContain("AccountableOwner");
     expect(Object.keys(fields)).not.toContain("Reporter");
     expect(Object.keys(fields)).not.toContain("Initiative");
   });
@@ -88,7 +90,7 @@ describe("outbound task mapping", () => {
       ...task,
       bucket: "BKT-DAPI",
       labels: ["go-live", "api"],
-      coassignees: ["lena", "evan"],
+      coassignees: ["ricardo", "stephen"],
       subtasks: [{ id: "SUB-1", t: "spike", done: false, who: "vince" }],
     };
     const keys = Object.keys(outboundFields("task", withDbOnly as never, { creating: true }));

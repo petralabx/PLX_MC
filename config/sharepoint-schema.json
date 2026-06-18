@@ -37,6 +37,7 @@
         { "name": "TaskID", "displayName": "Task ID", "type": "text", "required": true, "indexed": true, "unique": true },
         { "name": "Status", "displayName": "Status", "type": "choice", "choices": ["Backlog", "Specced", "Approved", "Planned", "In Progress", "In QA", "In Review", "Merged", "Verified"] },
         { "name": "AssignedTo", "displayName": "Assigned To", "type": "person" },
+        { "name": "AccountableOwner", "displayName": "Accountable Owner", "type": "person", "$comment": "EN-003 — human accountable owner, distinct from the executor (Assigned To). Person-column two-way sync is part of the deferred directory increment (see src/lib/sync/mapping.ts)." },
         { "name": "Reporter", "displayName": "Reporter", "type": "person" },
         { "name": "Priority", "displayName": "Priority", "type": "choice", "choices": ["Urgent", "High", "Medium", "Low"] },
         { "name": "DueDate", "displayName": "Due Date", "type": "dateTime" },

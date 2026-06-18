@@ -74,6 +74,10 @@ export function NewTaskModal({
   const [description, setDescription] = useState("");
   const [bucketId, setBucketId] = useState(startingBucketId);
   const [ownerId, setOwnerId] = useState<string | null>(null);
+  // EN-003: a human is always accountable; default to the operator authoring it.
+  const [accountableId, setAccountableId] = useState<string | null>(CURRENT_USER);
+  const [humanOnly, setHumanOnly] = useState(false);
+  const [accountablePickerOpen, setAccountablePickerOpen] = useState(false);
   const [priority, setPriority] = useState<PriorityKey>("medium");
   const [stage, setStage] = useState<StageKey>("backlog");
   const [estimate, setEstimate] = useState<"S" | "M" | "L">("M");
@@ -92,6 +96,14 @@ export function NewTaskModal({
   const bucket = useMemo(() => BUCKETS.find((b) => b.id === bucketId) ?? null, [bucketId]);
   const prd = useMemo(() => (bucket?.prd ? PRDS[bucket.prd] : undefined), [bucket]);
   const owner = ownerId ? actorById(ownerId) : undefined;
+  const accountable = accountableId ? actorById(accountableId) : undefined;
+
+  // Turning on human-only drops an already-chosen agent executor so the policy
+  // invariant holds before submit (the executor picker also hides agents).
+  const toggleHumanOnly = (next: boolean) => {
+    setHumanOnly(next);
+    if (next && owner?.kind === "agent") setOwnerId(null);
+  };
   const repoOptions = useMemo(() => {
     if (bucket?.repos && bucket.repos.length > 0) return bucket.repos;
     return Object.keys(REPOS);
@@ -124,6 +136,8 @@ export function NewTaskModal({
       description,
       bucket: bucketId,
       assignee: ownerId,
+      accountableOwner: accountableId,
+      humanOnly,
       priority,
       stage,
       due: formatDueDate(dueISO),
@@ -136,11 +150,13 @@ export function NewTaskModal({
     onClose();
     nav("board", { bucketId: created.bucket });
   }, [
+    accountableId,
     bucketId,
     canCreate,
     description,
     dueISO,
     estimate,
+    humanOnly,
     labels,
     nav,
     onClose,
@@ -215,7 +231,38 @@ export function NewTaskModal({
             </label>
 
             <div className="ntm-fact">
-              <span className="k">Owner</span>
+              <span className="k">Accountable owner</span>
+              <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  className="ntm-field-btn"
+                  onClick={() => setAccountablePickerOpen((prev) => !prev)}
+                >
+                  {accountable ? (
+                    <span className="who" style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      <Avatar id={accountable.id} size="sm" />
+                      <span className="nm">{accountable.name}</span>
+                    </span>
+                  ) : (
+                    <span className="unassigned">+ Assign accountable owner</span>
+                  )}
+                  <span className="caret">▾</span>
+                </button>
+                {accountablePickerOpen ? (
+                  <PeoplePicker
+                    // Accountability is always human (EN-003) — no agents.
+                    allowAgents={false}
+                    current={accountableId}
+                    onPick={setAccountableId}
+                    onClose={() => setAccountablePickerOpen(false)}
+                    style={{ top: "100%", left: 0, marginTop: 5, minWidth: "100%" }}
+                  />
+                ) : null}
+              </div>
+            </div>
+
+            <div className="ntm-fact">
+              <span className="k">Executor</span>
               <div style={{ position: "relative" }}>
                 <button
                   type="button"
@@ -229,12 +276,14 @@ export function NewTaskModal({
                       {owner.kind === "agent" ? <span className="tag model">{owner.model}</span> : null}
                     </span>
                   ) : (
-                    <span className="unassigned">+ Assign owner</span>
+                    <span className="unassigned">+ Assign executor</span>
                   )}
                   <span className="caret">▾</span>
                 </button>
                 {ownerPickerOpen ? (
                   <PeoplePicker
+                    // Human-only tasks hide agents (EN-003 policy via allowAgents).
+                    allowAgents={!humanOnly}
                     current={ownerId}
                     onPick={setOwnerId}
                     onClose={() => setOwnerPickerOpen(false)}
@@ -242,6 +291,14 @@ export function NewTaskModal({
                   />
                 ) : null}
               </div>
+              <label className="ntm-humanonly">
+                <input
+                  type="checkbox"
+                  checked={humanOnly}
+                  onChange={(event) => toggleHumanOnly(event.target.checked)}
+                />
+                <span>Human-only — agents can&apos;t execute</span>
+              </label>
               <NotifyTrail id={ownerId} />
             </div>
 

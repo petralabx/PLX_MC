@@ -105,9 +105,9 @@ describe("invitePerson", () => {
 
 describe("reassignTask", () => {
   it("sets the assignee and logs the honest deferred-mirror trail (not a fabricated push)", () => {
-    reassignTask("TASK-221", "priya");
+    reassignTask("TASK-221", "ricardo");
     const t = taskById("TASK-221");
-    expect(t?.assignee).toBe("priya");
+    expect(t?.assignee).toBe("ricardo");
     // The mirror is deferred to the directory increment — the trail must say so
     // and must NOT claim a SharePoint mirror / Teams notify that did not happen.
     expect(t?.activity[0]?.what).not.toContain("mirrored to SharePoint");
@@ -116,7 +116,7 @@ describe("reassignTask", () => {
   });
 
   it("supports unassigning with the honest deferred-mirror trail", () => {
-    reassignTask("TASK-222", "felix");
+    reassignTask("TASK-222", "rishi");
     reassignTask("TASK-222", null);
     const t = taskById("TASK-222");
     expect(t?.assignee).toBeNull();
@@ -127,7 +127,7 @@ describe("reassignTask", () => {
 
 describe("assignee-mirror audit honesty (the untested unassign/reassign lie)", () => {
   it("reassign audit reads the deferred-mirror truth and is state=pending, not synced", () => {
-    reassignTask("TASK-221", "priya");
+    reassignTask("TASK-221", "ricardo");
     const top = auditLog()[0];
     expect(top.body).toContain("deferred to the directory increment");
     expect(top.body).not.toContain("Assigned To mirrored");
@@ -136,7 +136,7 @@ describe("assignee-mirror audit honesty (the untested unassign/reassign lie)", (
   });
 
   it("unassign audit reads the deferred-mirror truth and is state=pending, not synced", () => {
-    reassignTask("TASK-222", "felix");
+    reassignTask("TASK-222", "rishi");
     reassignTask("TASK-222", null);
     const top = auditLog()[0];
     expect(top.body).toContain("deferred to the directory increment");
@@ -316,7 +316,7 @@ describe("patchTaskFields PATCH mirror — failure rollback (prime-directive gua
       throw new Error("PATCH 500");
     });
 
-    await reassignTask("TASK-221", "priya");
+    await reassignTask("TASK-221", "ricardo");
 
     expect(taskById("TASK-221")?.assignee).toBe(before); // reassign rolled back
     expect(activeNotices()).toHaveLength(1);
@@ -354,7 +354,7 @@ describe("DB-only tier guarantee (DB-only edits never fabricate a pending push)"
     expect(taskById("TASK-221")?.sync.state).toBe(before);
     addSubtask("TASK-221", "spike the adapter", "vince");
     expect(taskById("TASK-221")?.sync.state).toBe(before);
-    setCoassignees("TASK-221", ["lena"]);
+    setCoassignees("TASK-221", ["stephen"]);
     expect(taskById("TASK-221")?.sync.state).toBe(before);
     setTaskBucket("TASK-221", "BKT-DAPI");
     expect(taskById("TASK-221")?.sync.state).toBe(before);
@@ -375,7 +375,7 @@ describe("inline-edit field wrappers", () => {
 
   it("addSubtask generates a unique id and appends; toggleSubtask flips done", () => {
     addSubtask("TASK-221", "first", "vince");
-    addSubtask("TASK-221", "second", "lena");
+    addSubtask("TASK-221", "second", "stephen");
     const subs = taskById("TASK-221")!.subtasks;
     expect(subs).toHaveLength(2);
     expect(new Set(subs.map((s) => s.id)).size).toBe(2);
@@ -394,9 +394,9 @@ describe("inline-edit field wrappers", () => {
   });
 
   it("setCoassignees dedupes and never includes the primary assignee", () => {
-    reassignTask("TASK-221", "priya");
-    setCoassignees("TASK-221", ["lena", "lena", "priya", "evan"]);
+    reassignTask("TASK-221", "ricardo");
+    setCoassignees("TASK-221", ["stephen", "stephen", "ricardo", "ross"]);
     const co = taskById("TASK-221")!.coassignees;
-    expect(co).toEqual(["lena", "evan"]); // deduped; primary "priya" excluded
+    expect(co).toEqual(["stephen", "ross"]); // deduped; primary "ricardo" excluded
   });
 });

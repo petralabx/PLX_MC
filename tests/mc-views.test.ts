@@ -107,11 +107,11 @@ describe("board column partitioning", () => {
   it("omits the Unassigned column when every task has an assignee", () => {
     const tasks: Task[] = [
       { ...TASKS[0], id: "T-A", assignee: "vince" },
-      { ...TASKS[0], id: "T-B", assignee: "maya" },
+      { ...TASKS[0], id: "T-B", assignee: "greg" },
     ];
     const keys = columnsFor("assignee", tasks).map((c) => c.key);
     expect(keys).not.toContain(UNASSIGNED_KEY);
-    expect(new Set(keys)).toEqual(new Set(["vince", "maya"]));
+    expect(new Set(keys)).toEqual(new Set(["vince", "greg"]));
   });
 });
 
@@ -183,7 +183,7 @@ describe("drag-to-mutate axis → field resolution (Module B)", () => {
   });
 
   it("maps the assignee axis: an actor column reassigns; the Unassigned column unassigns", () => {
-    expect(resolveColumnDrop("assignee", "maya")).toEqual({ field: "assignee", value: "maya" });
+    expect(resolveColumnDrop("assignee", "greg")).toEqual({ field: "assignee", value: "greg" });
     expect(resolveColumnDrop("assignee", UNASSIGNED_KEY)).toEqual({
       field: "assignee",
       value: null,
@@ -191,12 +191,12 @@ describe("drag-to-mutate axis → field resolution (Module B)", () => {
   });
 
   it("treats a drop on the card's CURRENT column as a no-op (the same-column guard)", () => {
-    const task: Task = { ...TASKS[0], stage: "qa", priority: "high", bucket: "BKT-WMS", assignee: "maya" };
+    const task: Task = { ...TASKS[0], stage: "qa", priority: "high", bucket: "BKT-WMS", assignee: "greg" };
     // Same column on each axis → no-op (would skip the PATCH).
     expect(isNoopDrop(task, "stage", "qa")).toBe(true);
     expect(isNoopDrop(task, "priority", "high")).toBe(true);
     expect(isNoopDrop(task, "bucket", "BKT-WMS")).toBe(true);
-    expect(isNoopDrop(task, "assignee", "maya")).toBe(true);
+    expect(isNoopDrop(task, "assignee", "greg")).toBe(true);
     // The band column the card already sits in (qa → doing) is also a no-op.
     expect(isNoopDrop(task, "band", "doing")).toBe(true);
     // A different column on each axis → not a no-op.
@@ -208,7 +208,7 @@ describe("drag-to-mutate axis → field resolution (Module B)", () => {
   it("resolves an unassigned card's no-op against the Unassigned column", () => {
     const task: Task = { ...TASKS[0], assignee: null };
     expect(isNoopDrop(task, "assignee", UNASSIGNED_KEY)).toBe(true);
-    expect(isNoopDrop(task, "assignee", "maya")).toBe(false);
+    expect(isNoopDrop(task, "assignee", "greg")).toBe(false);
   });
 });
 
@@ -238,7 +238,7 @@ describe("applyFilters truth table", () => {
   const base = TASKS[0];
   const fixture: Task[] = [
     { ...base, id: "F-1", title: "Alpha widget", priority: "urgent", assignee: "vince", stage: "backlog", labels: ["api", "go-live"] },
-    { ...base, id: "F-2", title: "Beta service", priority: "low", assignee: "maya", stage: "progress", labels: ["api"] },
+    { ...base, id: "F-2", title: "Beta service", priority: "low", assignee: "greg", stage: "progress", labels: ["api"] },
     { ...base, id: "F-3", title: "Gamma report", priority: "low", assignee: null, stage: "qa", labels: ["finance"] },
   ];
 
@@ -291,7 +291,7 @@ describe("applyFilters truth table", () => {
 describe("filter option universes", () => {
   const base = TASKS[0];
   const fixture: Task[] = [
-    { ...base, id: "U-1", assignee: "maya", labels: ["go-live", "api"] },
+    { ...base, id: "U-1", assignee: "greg", labels: ["go-live", "api"] },
     { ...base, id: "U-2", assignee: "vince", labels: ["api"] },
     { ...base, id: "U-3", assignee: null, labels: ["go-live"] },
   ];
@@ -303,9 +303,9 @@ describe("filter option universes", () => {
   it("dedupes assignees in directory order and excludes the unassigned sentinel", () => {
     const ids = assigneeUniverse(fixture);
     expect(ids).not.toContain(UNASSIGNED_KEY);
-    expect(new Set(ids)).toEqual(new Set(["maya", "vince"]));
+    expect(new Set(ids)).toEqual(new Set(["greg", "vince"]));
     // Directory order: ACTORS lists maya before vince.
-    expect(ids.indexOf("maya")).toBeLessThan(ids.indexOf("vince"));
+    expect(ids.indexOf("greg")).toBeLessThan(ids.indexOf("vince"));
     // Every returned id is a known actor.
     for (const id of ids) expect(id in ACTORS).toBe(true);
   });
@@ -442,9 +442,9 @@ describe("applyFilters AND-combines the due-range with other facets", () => {
   const base = TASKS[0];
   const fixture: Task[] = [
     { ...base, id: "R-1", priority: "urgent", assignee: "vince", due: "Jun 10" },
-    { ...base, id: "R-2", priority: "low", assignee: "maya", due: "Jun 20" },
+    { ...base, id: "R-2", priority: "low", assignee: "greg", due: "Jun 20" },
     { ...base, id: "R-3", priority: "low", assignee: null, due: "—" }, // undated
-    { ...base, id: "R-4", priority: "low", assignee: "maya", due: "Jul 5" }, // beyond June (day 35)
+    { ...base, id: "R-4", priority: "low", assignee: "greg", due: "Jul 5" }, // beyond June (day 35)
   ];
 
   it("is the identity (same array) when no due bound is set", () => {
@@ -466,7 +466,7 @@ describe("applyFilters AND-combines the due-range with other facets", () => {
       applyFilters(fixture, { priority: ["low"] as PriorityKey[], dueEnd: 28 }).map((t) => t.id)
     ).toEqual(["R-2"]);
     // assignee=maya AND beyond June → R-4 only.
-    expect(applyFilters(fixture, { assignee: ["maya"], dueStart: 30 }).map((t) => t.id)).toEqual([
+    expect(applyFilters(fixture, { assignee: ["greg"], dueStart: 30 }).map((t) => t.id)).toEqual([
       "R-4",
     ]);
   });

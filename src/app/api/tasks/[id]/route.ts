@@ -28,6 +28,8 @@ export const patchTaskSchema = z.object({
   labels: z.array(z.string()).max(25).optional(), // NEW — soft cap (see Risk R6)
   coassignees: z.array(z.string()).optional(), // NEW
   subtasks: z.array(subtaskSchema).optional(), // NEW
+  accountableOwner: z.string().nullable().optional(), // EN-003
+  humanOnly: z.boolean().optional(), // EN-003
 });
 
 export const PATCH = route(async (req, ctx) => {

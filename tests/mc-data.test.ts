@@ -85,7 +85,7 @@ describe("tasksForUser", () => {
   });
 
   it("returns nothing for someone with no involvement", () => {
-    expect(tasksForUser("lena")).toHaveLength(0);
+    expect(tasksForUser("ross")).toHaveLength(0);
   });
 
   // PR-D1 (My Tasks) membership: the view seeds from tasksForUser, so it must
@@ -95,10 +95,10 @@ describe("tasksForUser", () => {
   it("includes assignee, co-assignee, and reporter tasks; excludes the rest", () => {
     const base = TASKS[0];
     const fixture: Task[] = [
-      { ...base, id: "MINE-ASG", assignee: "vince", coassignees: [], reporter: "maya" },
-      { ...base, id: "MINE-CO", assignee: "maya", coassignees: ["vince"], reporter: "maya" },
-      { ...base, id: "MINE-REP", assignee: "maya", coassignees: [], reporter: "vince" },
-      { ...base, id: "NOT-MINE", assignee: "maya", coassignees: ["lena"], reporter: "maya" },
+      { ...base, id: "MINE-ASG", assignee: "vince", coassignees: [], reporter: "greg" },
+      { ...base, id: "MINE-CO", assignee: "greg", coassignees: ["vince"], reporter: "greg" },
+      { ...base, id: "MINE-REP", assignee: "greg", coassignees: [], reporter: "vince" },
+      { ...base, id: "NOT-MINE", assignee: "greg", coassignees: ["ross"], reporter: "greg" },
     ];
     const mine = tasksForUser("vince", fixture).map((t) => t.id);
     expect(mine).toEqual(["MINE-ASG", "MINE-CO", "MINE-REP"]);
@@ -155,8 +155,8 @@ describe("confidenceOf", () => {
 
 describe("Petra domain rule", () => {
   it("accepts both Petra domains, case-insensitively", () => {
-    expect(isPetraEmail("maya.aldosari@petralabx.com")).toBe(true);
-    expect(isPetraEmail("Dana.Okafor@PETRASOAP.COM")).toBe(true);
+    expect(isPetraEmail("team@petralabx.com")).toBe(true);
+    expect(isPetraEmail("Ross.Pennino@PETRASOAP.COM")).toBe(true);
   });
 
   it("rejects external domains and malformed input", () => {
@@ -167,6 +167,6 @@ describe("Petra domain rule", () => {
   });
 
   it("extracts a lowercased domain", () => {
-    expect(domainOf("Sam.Whitfield@PetraSoap.com")).toBe("petrasoap.com");
+    expect(domainOf("Ross.Pennino@PetraSoap.com")).toBe("petrasoap.com");
   });
 });

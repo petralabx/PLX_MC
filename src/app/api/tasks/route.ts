@@ -16,6 +16,8 @@ const createTaskSchema = z.object({
   assignee: z.string().nullable().optional(),
   coassignees: z.array(z.string()).optional(),
   reporter: z.string().min(1),
+  accountableOwner: z.string().nullable().optional(),
+  humanOnly: z.boolean().optional(),
   reqs: z.array(z.string()).optional(),
   repos: z.array(z.string()).optional(),
   estimate: z.enum(["S", "M", "L"]).optional(),

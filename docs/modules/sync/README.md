@@ -39,8 +39,9 @@ tenant against the committed schema with exit codes.
   numbered migrations in `db/migrations/` (`npm run migrate`,
   `scripts/migrate.mjs`); numbering serialization enforced by
   `scripts/check-migrations.py` in every preflight mode. Tables: `delta_links`,
-  `sync_conflicts`, `sync_push_errors`, `sync_audit_log`, `entities`, and
-  (Item 2) `repos` / `repo_requests`.
+  `sync_conflicts`, `sync_push_errors`, `sync_audit_log`, `entities`,
+  (Item 2) `repos` / `repo_requests`, (Item 4) `bucket_comments`, and
+  (EN-005) `buckets`.
 - Engine v1 (landed 2026-06-11, `src/lib/sync/`): outbound push + inbound
   Graph delta poll for ToDos and Risk Register against the staging site.
   Inbound runs BEFORE outbound in every sweep so dirty-field edits raise
@@ -75,10 +76,24 @@ tenant against the committed schema with exit codes.
   add/edit/delete optimistically (reconcile-on-success / rollback+notice-on-failure,
   the same spine as `patchTaskFields`). App-only — bucket comments are NEVER
   pushed to SharePoint (the EN-001 decision).
+- Flexible buckets (landed 2026-06-18, EN-005): initiatives are no longer a
+  static fixture — they persist in a dedicated `buckets` table (migration `007`,
+  full Bucket shape in `data` jsonb, seeded idempotently from the BUCKETS fixture
+  via `ensureBucketsSeeded`). `createBucket` / `patchBucket` (state) back
+  `POST /api/buckets` + `PATCH /api/buckets/{id}` (shared wrapper + zod);
+  attached repos are clamped to the persisted registry. The store exposes
+  `allBuckets()` / `bucketById()` as the single source of truth (every consumer
+  migrated off the fixture) plus optimistic create/edit
+  (reconcile-on-success / rollback+notice-on-failure). The buckets ↔ Roadmap
+  SharePoint mirror is DEFERRED (the engine does not mirror the Roadmap list
+  yet) — buckets are app-persistent for now, exactly as the repo registry
+  shipped DB-first; `sync_state` / `sp_item_id` columns are carried for that
+  future increment.
 - Still deferred to the public-deploy increment: Graph change webhooks,
   notification DELIVERY (Teams/email — assignment/mention still in-app + audit
-  only), lookup columns (Initiative), and Project Documents (driveItem) sync —
-  file entities are display fixtures until then.
+  only), lookup columns (Initiative), the buckets ↔ Roadmap list two-way mirror,
+  and Project Documents (driveItem) sync — file entities are display fixtures
+  until then.
 
 ## Dependencies
 

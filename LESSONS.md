@@ -16,6 +16,56 @@
 
 ## Lessons
 
+### 2026-06-19 (ET) — Called a long-lived integration branch "promotable" without diffing it against main
+
+- **What happened:** After merging EN-005 into `feat/enhancements-integration`,
+  I told the operator we were "done — just promote," and ran `npm run migrate`
+  from the integration tree against the **shared** staging `plx_mc` DB. A later
+  check showed integration had **diverged from main at EN-003** (ahead 20, behind
+  27): main had independently shipped EN-001/002/004 + an EN-006 sync increment +
+  a *different* "EN-005" (flexible buckets) + its **own** repo-registry
+  persistence (`repos`/`repo_requests`, `005_repo_registry.sql`), while
+  integration carried EN-006/007 compliance + EN-005 agent/repo (`mc_repos`,
+  `008_repo_registry.sql`). Promotion is blocked: duplicate migration prefixes
+  (`005`/`006`/`007` on both branches, different content) and two parallel
+  repo-registry implementations.
+- **Root cause:** Treated the integration branch as a clean fast-forward ahead of
+  main without `git fetch` + a compare. Ran a DB migration from a stale branch's
+  tree against a DB shared with main's deployed app, so the shared DB accumulated
+  both branches' prefix-colliding migrations.
+- **Rule going forward:** Before calling any branch promotable — or running its
+  migrations against a shared environment — `git fetch` and compare to the deploy
+  target: `gh api repos/<o>/<r>/compare/<base>...<head>` and require `behind_by==0`
+  for a clean promote, else plan a reconciliation. Never `npm run migrate` from a
+  feature/integration branch against a DB shared with another branch's deployed
+  app; migrations are globally serialized, so a stale tree introduces prefix
+  collisions. Confirm the migration set matches the deploy target's tree first.
+
+### 2026-06-19 (ET) — `gh pr merge --delete-branch` fails when the base is in a sibling worktree
+
+- **What happened:** `gh pr merge 44 --merge --delete-branch` merged the PR on
+  GitHub but exited 1 on the local post-merge step (`'feat/enhancements-integration'
+  is already used by worktree at ...`), leaving the remote head branch undeleted.
+- **Root cause:** `--delete-branch` tries to check out the base branch locally and
+  delete the head; the base was checked out in another git worktree, so the local
+  switch failed *after* the API merge had already succeeded.
+- **Rule going forward:** In multi-worktree setups, confirm the merge landed with
+  `gh pr view <n> --json state,mergeCommit` regardless of the command's exit code,
+  and delete the remote branch explicitly (`git push origin --delete <branch>`)
+  instead of relying on `--delete-branch`. (Second distinct `--delete-branch`
+  failure mode — see 2026-06-17; promote to a rule if it recurs once more.)
+
+### 2026-06-19 (ET) — A `/tmp` Node script can't resolve repo `node_modules`
+
+- **What happened:** `node /tmp/verify.cjs` failed with `Cannot find module 'pg'`
+  even when run from the repo directory.
+- **Root cause:** Node resolves `require()` relative to the **script's** location,
+  not the CWD; a script under `/tmp` has no `node_modules` on its resolution path.
+- **Rule going forward:** For one-off DB/verification scripts kept outside the
+  repo, set `NODE_PATH="$(pwd)/node_modules"` (or place the script inside the repo
+  and delete it after). Keep such scripts read-only (SELECT) and remove them when
+  done.
+
 ### 2026-06-17 (ET) — `--delete-branch` mid-stack closed the next stacked PR
 
 - **What happened:** Merging the bottom of the Cycle-2 stack (#30) with

@@ -20,3 +20,4 @@ key files change, update its contract in the same PR.
 | web | Vince | Critical | `docs/modules/web/README.md` |
 | sync | Vince | Critical | `docs/modules/sync/README.md` |
 | meeting-intake | Vince | Medium | `docs/modules/meeting-intake/README.md` |
+| compliance | Vince | Critical | `docs/modules/compliance/README.md` |

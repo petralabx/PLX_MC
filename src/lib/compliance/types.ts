@@ -1,0 +1,38 @@
+// EN-007 compliance gate — pure domain types. The verifier and risk classifier
+// in this module are I/O-free and unit-tested (tests/compliance.test.ts). The
+// persistence layer (mc_events, the dispatch ledger) and the /api/compliance
+// routes build on top in a later increment — see docs/product/SYSTEM_OF_RECORD.md
+// (phases P1b onward).
+
+import type { Task } from "@/lib/mc-data";
+
+// Risk tier of a change — decides how much of the bundle is required (EN-007
+// decision 12). Derived from the changed paths + labels at PR time.
+export type RiskTier = "low" | "standard" | "high";
+
+// Who authored the work, resolved from the checkout credential — never git
+// metadata (decision 9). Operators are ungated (detail optional); agents are
+// held to the tier-appropriate bundle.
+export type ActorKind = "agent" | "operator";
+
+// What a tier requires of the bundle. `evidence` is the floor on the evidence
+// object; `rollback` and `prd` are hard requirements when true.
+export interface BundleRequirement {
+  evidence: "full" | "note" | "minimal";
+  rollback: boolean;
+  prd: boolean;
+}
+
+export interface VerifyInput {
+  // The MC task the PR resolves to, or null when no checkout/link exists.
+  task: Task | null;
+  actor: ActorKind;
+  tier: RiskTier;
+  // Whether the task's bucket has an approved PRD (per-bucket PRD, decision 12).
+  bucketHasPrd: boolean;
+}
+
+export interface VerifyResult {
+  verdict: "pass" | "block";
+  reasons: string[];
+}

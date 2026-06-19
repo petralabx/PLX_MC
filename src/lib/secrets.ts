@@ -87,3 +87,14 @@ export function azureOpenAiConfig(): AzureOpenAIConfig {
     apiVersion: process.env.AZURE_OPENAI_API_VERSION ?? "2024-10-21",
   };
 }
+
+// EN-007 compliance webhook (git → MC ingestion). The shared secret signs the
+// GitHub webhook delivery (HMAC-SHA256). Absent by default — the webhook route
+// returns 503 until it is configured (the gate ships default-off).
+export function complianceWebhookConfigured(): boolean {
+  return !!process.env.COMPLIANCE_WEBHOOK_SECRET;
+}
+
+export function complianceWebhookSecret(): string {
+  return requireSecret("COMPLIANCE_WEBHOOK_SECRET");
+}

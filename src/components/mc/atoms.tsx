@@ -3,8 +3,9 @@
 // SHARED ACROSS SCREEN LANES — extend only at integration, never per-lane.
 import type { CSSProperties, MouseEventHandler } from "react";
 
-import { ACTORS, PRIORITY, REPOS, STAGES, STAGE_IDX, confidenceOf } from "@/lib/mc-data";
+import { ACTORS, PRIORITY, STAGES, STAGE_IDX, confidenceOf } from "@/lib/mc-data";
 import type { Health, PriorityKey, SyncRef, Task } from "@/lib/mc-data";
+import { allRepos } from "@/lib/mc-data/store";
 
 type AvatarSize = "sm" | "lg" | "xl";
 
@@ -123,7 +124,9 @@ export function ReqChip({ id, gap }: { id: string; gap?: boolean }) {
 }
 
 export function RepoChip({ id }: { id: string }) {
-  const r = REPOS[id];
+  // Read the runtime registry (allow-list), not the static REPOS fixture, so a
+  // newly-approved repo renders by name rather than a raw id (EN-005 obs. #8).
+  const r = allRepos()[id];
   return <span className="repochip">{r ? r.name : id}</span>;
 }
 

@@ -1,8 +1,9 @@
-import { ACTORS, AGENT_FEED, AGENTS } from "@/lib/mc-data";
+import { ACTORS, AGENTS, MODE, agentIsActive } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { taskById } from "@/lib/mc-data/store";
+import { allTasks, taskById } from "@/lib/mc-data/store";
 
 import { Avatar, Slate } from "./atoms";
+import { deriveAgentFeed } from "./record-logic";
 import type { ScreenProps } from "./route";
 
 function chipClassName(live?: boolean, warn?: boolean): string {
@@ -13,7 +14,10 @@ function chipClassName(live?: boolean, warn?: boolean): string {
 
 export function AgentFeed({ nav }: ScreenProps) {
   useMcVersion();
+  const tasks = allTasks();
   const liveAgents = Object.values(AGENTS);
+  // Real feed: derived from agent-authored task activity (EN-005), not a fixture.
+  const feed = deriveAgentFeed(tasks);
 
   return (
     <div className="mc-main">
@@ -29,20 +33,31 @@ export function AgentFeed({ nav }: ScreenProps) {
           </p>
         </div>
         <div className="r feed-head-agents">
-          {liveAgents.map((agent) => (
-            <span key={agent.id} className="feed-agent-pill" title={`${agent.name} · ${agent.team}`}>
-              <Avatar id={agent.id} size="sm" />
-              <span>{agent.team}</span>
-            </span>
-          ))}
+          {liveAgents.map((agent) => {
+            // Honest presence: derived from in-flight assignment, not fabricated.
+            const active = agentIsActive(agent.id, tasks);
+            return (
+              <span
+                key={agent.id}
+                className="feed-agent-pill"
+                title={`${agent.name} · ${MODE[agent.mode].label} · ${agent.capabilities.join(", ")} · ${active ? "active" : "idle"}`}
+              >
+                {active && <span className="livedot" />}
+                <Avatar id={agent.id} size="sm" />
+                <span>
+                  {agent.team} · {MODE[agent.mode].short}
+                </span>
+              </span>
+            );
+          })}
         </div>
       </div>
 
       <div className="feed">
-        {AGENT_FEED.length === 0 && (
+        {feed.length === 0 && (
           <div className="colempty">No agent activity yet — events appear as agents pick up tasks.</div>
         )}
-        {AGENT_FEED.map((event, idx) => {
+        {feed.map((event, idx) => {
           const actor = ACTORS[event.actor];
           const task = taskById(event.task);
           const chipCls = chipClassName(event.live, event.warn);

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AGENTS, BUCKETS, CURRENT_USER } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allTasks, reassignTask, setTaskStage } from "@/lib/mc-data/store";
+import { allTasks, pushNotice, reassignTask, setTaskStage } from "@/lib/mc-data/store";
 
 import type { Nav } from "./route";
 
@@ -151,12 +151,22 @@ export function CommandPalette({
       return commands;
     });
 
+    // Assign an agent to the first OPEN, agent-eligible task (unassigned, not
+    // human-only, not yet done) via the real reassignTask spine (EN-005 — replaces
+    // the former no-op). reassignTask enforces the human-only policy; a notice
+    // fires when nothing qualifies, so the command is never a silent no-op.
     const assignAgents: PaletteCommand[] = Object.values(AGENTS).map((agent) => ({
       key: `assign:${agent.id}`,
       icon: "◧",
       label: `Assign open task to ${agent.name}`,
       hint: agent.model,
-      run: () => {},
+      run: () => {
+        const open = tasks.find(
+          (t) => !t.assignee && !t.humanOnly && t.stage !== "merged" && t.stage !== "verified"
+        );
+        if (open) reassignTask(open.id, agent.id);
+        else pushNotice(`No open, agent-eligible task to assign to ${agent.name}.`, "info");
+      },
     }));
 
     return [

@@ -11,7 +11,7 @@ import {
   SYNC_REGISTERS,
   TASKS,
 } from "./data";
-import type { Band, Confidence, Evidence, Task } from "./types";
+import type { Band, Confidence, Evidence, StageKey, Task } from "./types";
 
 const PETRA_EMAIL = /^[^@\s]+@(petralabx|petrasoap)\.com$/i;
 
@@ -48,8 +48,17 @@ export function pendingTasks(): Task[] {
   return TASKS.filter((t) => t.sync.state === "pending");
 }
 
-export function liveAgentCount(): number {
-  return Object.values(AGENTS).filter((a) => a.online).length;
+// An agent is "active" when it executes an in-flight (doing-band) task — real,
+// derived presence, not a fabricated heartbeat (EN-005 obs. #1/#4). Pass the
+// store's live task array for reactive screens; defaults to the fixture.
+const DOING_BAND_STAGES: StageKey[] = ["progress", "qa", "review"];
+
+export function agentIsActive(agentId: string, tasks: Task[] = TASKS): boolean {
+  return tasks.some((t) => t.assignee === agentId && DOING_BAND_STAGES.includes(t.stage));
+}
+
+export function liveAgentCount(tasks: Task[] = TASKS): number {
+  return Object.keys(AGENTS).filter((id) => agentIsActive(id, tasks)).length;
 }
 
 // Tasks the viewer owns, co-owns, or reports — drives the Inbox "Assigned to me".

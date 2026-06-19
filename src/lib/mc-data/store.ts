@@ -35,7 +35,7 @@ import {
 import { parseMentions } from "./collab";
 import { domainOf, isPetraEmail } from "./helpers";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "./policy";
-import { allowedReposOnly, disallowedRepos, isApprover, repoFromRequest } from "./repos";
+import { allowedReposOnly, disallowedRepos, isApprover, repoFromRequest, repoIdFromName } from "./repos";
 import type {
   Actor,
   AuditRow,
@@ -276,6 +276,10 @@ interface ServerSnapshot {
   audit: AuditRow[];
   counts: Record<string, { synced: number; pending: number; conflict: number; error: number }>;
   lastSweep: string;
+  // EN-005 / WS-5: the persisted repo registry + request queue (optional so an
+  // older server snapshot that predates them still hydrates).
+  repos?: Record<string, Repo>;
+  repoRequests?: RepoRequest[];
 }
 
 // Adopt the server's truth for everything the engine owns; notifications,
@@ -288,6 +292,10 @@ function applyServerState(snapshot: ServerSnapshot) {
   state.errors = snapshot.errors;
   state.audit = snapshot.audit;
   state.lastSweep = snapshot.lastSweep;
+  // EN-005 / WS-5: adopt the persisted registry + requests so the client reads
+  // the SAME allow-list the server enforces in createTask (kills the drift).
+  if (snapshot.repos) state.repos = snapshot.repos;
+  if (snapshot.repoRequests) state.repoRequests = snapshot.repoRequests;
   for (const list of state.lists) {
     const counts = snapshot.counts[list.key];
     if (counts) {
@@ -489,7 +497,6 @@ const defaultRepoValidator: RepoValidator = (owner, name) =>
 
 let repoValidator: RepoValidator = defaultRepoValidator;
 let repoValidatorInjected = false;
-let repoRequestSeq = 0;
 // Test seam: the in-flight validation of the last requestRepo call so a test
 // can await the reconcile (mirrors the patchTaskFields return-promise pattern).
 let repoValidationInFlight: Promise<void> = Promise.resolve();
@@ -516,7 +523,10 @@ export interface NewRepoRequestInput {
 export function requestRepo(input: NewRepoRequestInput, actorId: string = CURRENT_USER): RepoRequest {
   const name = (input.name ?? "").trim();
   const owner = (input.owner ?? "").trim() || REPO_ORG;
-  const id = `RR-${++repoRequestSeq}`;
+  // Deterministic id from the repo name so the client and the server (state.ts
+  // createRepoRequest) always address the SAME request across the optimistic
+  // mirror — no id divergence on the subsequent approve/reject.
+  const id = `RR-${repoIdFromName(name)}`;
   const request: RepoRequest = {
     id,
     name,
@@ -530,6 +540,16 @@ export function requestRepo(input: NewRepoRequestInput, actorId: string = CURREN
   state.repoRequests = [request, ...state.repoRequests];
   pushAudit(actorId, `Requested repo ${name} — pending GitHub-org validation and approval.`, "pending");
   emit();
+
+  // Mirror to the server so the request persists + is validated server-side
+  // (fire-and-forget; the server is the source of truth and the client adopts it
+  // on the next hydrate). No-op under SSR/test (serverCall guards on window).
+  serverCall(async () => {
+    await api("/repos", {
+      method: "POST",
+      body: JSON.stringify({ name, owner, scope: request.scope, requestedBy: actorId }),
+    });
+  });
 
   const reconcile = (result: RepoValidationResult) => {
     const r = state.repoRequests.find((x) => x.id === id);
@@ -584,6 +604,11 @@ export function approveRepo(requestId: string, actorId: string = CURRENT_USER): 
   state.repos = { ...state.repos, [repo.id]: repo };
   pushAudit(actorId, `Approved repo ${req.name} — added to the registry allow-list.`, "pending");
   emit();
+  // Mirror to the server so the persisted registry gets the new repo — the same
+  // allow-list createTask validates against (the drift fix). No-op under SSR/test.
+  serverCall(async () => {
+    await api(`/repos/${req.id}/approve`, { method: "POST", body: JSON.stringify({ actor: actorId }) });
+  });
   return true;
 }
 
@@ -600,6 +625,9 @@ export function rejectRepo(requestId: string, actorId: string = CURRENT_USER): b
   req.decidedTs = stamp();
   pushAudit(actorId, `Rejected repo request ${req.name}.`, "pending");
   emit();
+  serverCall(async () => {
+    await api(`/repos/${req.id}/reject`, { method: "POST", body: JSON.stringify({ actor: actorId }) });
+  });
   return true;
 }
 
@@ -668,6 +696,8 @@ export type TaskFieldPatch = Partial<
     | "assignee"
     | "accountableOwner"
     | "humanOnly"
+    | "repos"
+    | "agentRunApproved"
   >
 >;
 
@@ -791,6 +821,22 @@ export const setTaskBucket = (taskId: string, bucket: string) =>
 export const setTaskLabels = (taskId: string, labels: string[]) =>
   patchTaskFields(taskId, { labels }, { activity: "updated labels" }); // DB-only — no sync claim
 
+// Edit a task's repos post-creation (EN-005). Constrained to the registry
+// allow-list (humans + agents alike) — anything off-list is dropped at the
+// boundary with a non-silent notice; the server (state.ts) re-validates against
+// the same persisted registry. DB-only: repos re-push on edit is deferred to
+// EN-006 (repos currently pushes on create only).
+export const setTaskRepos = (taskId: string, repos: string[]) => {
+  const t = taskById(taskId);
+  if (!t) return;
+  const allowed = Array.from(new Set(allowedReposOnly(repos, state.repos)));
+  const dropped = disallowedRepos(repos, state.repos);
+  if (dropped.length > 0) {
+    pushNotice(`Skipped repos not in the registry: ${dropped.join(", ")}. Request them first.`, "info");
+  }
+  patchTaskFields(taskId, { repos: allowed }, { activity: "updated repos" });
+};
+
 export const setCoassignees = (taskId: string, ids: string[]) => {
   const t = taskById(taskId);
   if (!t) return;
@@ -809,6 +855,16 @@ export const setAccountableOwner = (taskId: string, ownerId: string | null) => {
   }
   patchTaskFields(taskId, { accountableOwner: ownerId }, { activity: "set the accountable owner" });
 };
+
+// Operator approval of an approve-mode agent's run (EN-005). Unblocks a stage
+// advance into the doing band for a task whose executor is a needs-approval
+// agent (see policy.stageAdvanceViolation). DB-only — no SharePoint column.
+export const setAgentRunApproved = (taskId: string, approved: boolean) =>
+  patchTaskFields(
+    taskId,
+    { agentRunApproved: approved },
+    { activity: approved ? "approved the agent run" : "revoked agent-run approval" }
+  );
 
 // Toggle the per-task human-only policy. Turning it on while an agent is the
 // executor clears the executor so the invariant holds.
@@ -1185,7 +1241,6 @@ export function resetStore() {
   patchMirrorInjected = false;
   repoValidator = defaultRepoValidator;
   repoValidatorInjected = false;
-  repoRequestSeq = 0;
   repoValidationInFlight = Promise.resolve();
   emit();
 }

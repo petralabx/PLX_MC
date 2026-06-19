@@ -1,4 +1,5 @@
-import type { FileEntry, Repo, Task } from "@/lib/mc-data";
+import { isAgentId } from "@/lib/mc-data";
+import type { FeedEvent, FileEntry, Repo, Task } from "@/lib/mc-data";
 
 export function directionGlyph(direction: "two-way" | "push" | "pull"): string {
   if (direction === "push") return "→";
@@ -58,6 +59,46 @@ export interface RepoRowData {
   openPrCount: number;
   prs: RepoPrRow[];
   tasks: RepoTaskRow[];
+}
+
+// Map a task-activity kind to a feed-event kind (the feed taxonomy is richer;
+// most activity is a generic "run" entry, comments stay comments).
+const FEED_KIND_FOR_ACTIVITY: Record<string, FeedEvent["kind"]> = {
+  comment: "comment",
+  move: "run",
+};
+
+const FEED_CHIP: Record<FeedEvent["kind"], string> = {
+  run: "Activity",
+  comment: "Comment",
+  review: "Review",
+  pr: "PR",
+  shot: "Evidence",
+  sync: "Sync",
+  approve: "Approved",
+  block: "Blocked",
+};
+
+// Derive the agent activity feed from REAL task events (EN-005 obs. #3): every
+// task-activity entry authored by an agent becomes a feed event. Empty until
+// agents actually pick up work — no fabricated feed.
+export function deriveAgentFeed(tasks: Task[]): FeedEvent[] {
+  const out: FeedEvent[] = [];
+  for (const task of tasks) {
+    for (const entry of task.activity) {
+      if (!isAgentId(entry.who)) continue;
+      const kind = FEED_KIND_FOR_ACTIVITY[entry.kind] ?? "run";
+      out.push({
+        age: entry.age,
+        actor: entry.who,
+        task: task.id,
+        kind,
+        text: entry.what,
+        chip: FEED_CHIP[kind],
+      });
+    }
+  }
+  return out;
 }
 
 export function deriveRepoRows(repos: Record<string, Repo>, tasks: Task[]): RepoRowData[] {

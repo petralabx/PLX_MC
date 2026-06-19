@@ -255,7 +255,7 @@ _Compliance / enforcement:_ promote selected governance rules from documented �
 
 | | |
 |---|---|
-| **Status** | Triage |
+| **Status** | Aligned |
 | **Type** | Enhancement + Feature |
 | **Area** | Agents (`src/lib/mc-data/data.ts` `AGENTS`, `types.ts` `Agent`, `people-picker.tsx`, `agent-feed.tsx`, `command-palette.tsx`, `store.ts`); Repos (`mc-data/repos.ts`, `REPOS`, `store.ts` registry, `sync/state.ts`, `atoms.tsx` `RepoChip`, `repos-view.tsx`) |
 | **Screenshot** | _none (code investigation; follows EN‑002/EN‑003)_ |
@@ -300,15 +300,38 @@ _Repos (hardening the EN‑002 prototype):_
 - **Reuse the repo request→approve pattern** for agent registration rather than inventing a new governance shape.
 - Keep **agent↔repo binding optional for v1** (the shared task‑level allow‑list already governs humans and agents); add hard constraints only if the operator wants them.
 
-**Open questions / for alignment**
+**Aligned decisions (2026‑06‑19)** _(adopted as the recommended defaults when the operator chose to proceed without changing them; reversible — flag any to revisit)_
 
-1. Authoritative agent roster — the same 4 with real backing, or a different real set from agentic‑swarm? What's the source of truth?
-2. Persist registry/agents in Postgres, SharePoint, or both? (overlaps the EN‑006 sync increment)
-3. Is agent↔repo binding in scope for v1, or is the shared task allow‑list enough?
-4. Repo health in the MC UI, MCP‑only, or both (+ refresh cadence)?
-5. Is agent pickup autonomous (swarm pulls tasks) or operator‑driven assignment only?
-6. Should `mode: approve` require an inbox approval before stage advance?
-7. Split vs combine: land the EN‑003 agent‑trim as its own small PR, or inside this epic?
+1. **Agent roster source of truth — in‑repo fixture (`data.ts`), hydrated via the
+   existing API seam** (the same pattern `REPOS` used). No runtime coupling to
+   agentic‑swarm. The four agents (Vibes/Atlas/Sentry/Scribe) are retained as the
+   curated v1 roster and given a **real operational model** (capabilities, default
+   repos, honest presence/status, enforced `mode`); the operator can swap in the
+   live swarm names later. No DB/SharePoint persistence for agents in v1.
+2. **Repo registry + requests persist in Postgres** — a numbered migration (008) +
+   a server accessor mirroring the sync/compliance entity store. The server task
+   mutation validates against the **DB registry** (killing the static‑`REPOS`
+   drift, obs. #7); the client hydrates the registry from the server. A SharePoint
+   "Repo Registry" list is **deferred to the EN‑006 sync increment** (the site is
+   still unprovisioned — claiming an SP mirror now would be fabricated evidence).
+3. **No hard per‑agent↔repo binding in v1.** `defaultRepos` is **advisory** on the
+   Agent model (informs assignment + UI); enforcement stays at the shared
+   task‑level allow‑list (humans and agents alike).
+4. **Repo health — honest derived status in‑app; live GitHub health stays
+   MCP‑only.** The app surfaces only values it can prove (tracked, open‑PR/task
+   counts, last GitHub validation). A live in‑app GitHub health fetch is a
+   declared, default‑off integration deferred to a later increment.
+5. **Operator‑driven assignment for v1; `mode` is enforced.** No autonomous
+   swarm‑pull loop in MC — the palette "Assign to {agent}" no‑ops are wired to the
+   real `reassignTask` spine. An **`approve`‑mode agent executor** blocks a task
+   from advancing into the In‑Progress band (or done) without an explicit operator
+   approval, enforced in the shared `policy.ts` (mirroring the EN‑003
+   accountable‑owner gate). `auto`‑mode agents advance subject only to the existing
+   EN‑003 gates.
+6. **Single PR (combine).** The never‑executed EN‑003 "trim `AGENTS`" leftover is
+   finished **inside this epic** (one branch / one PR, branch hygiene), not split
+   out — the trim here means giving the roster a real operational model, not
+   deleting agents.
 
 **Dependencies:** EN‑002 (done) and EN‑003 (done minus agent items); registry persistence overlaps the EN‑006 sync person‑column increment.
 
@@ -723,11 +746,12 @@ WS-4 lands last (depends on the directory, triage promotion, and repo linkage).
 | **Promote** | Human confirm → `addTask` (governed), repo linkage via WS‑2, mirror to SharePoint, keep meeting source as traceability artifact. |
 | **Verify** | Adapter unit tests on fixture payloads; extraction eval; promotion creates a governed task; integration disabled-by-default assertion. `preflight`. |
 
-### WS‑5 — Agent roster & repo‑registry hardening · resolves **EN‑005** · _proposed (pending alignment)_ · P1
+### WS‑5 — Agent roster & repo‑registry hardening · resolves **EN‑005** · _aligned 2026‑06‑19_ · P1
 
-> Not yet formalized — depends on the EN‑005 open questions (authoritative
-> roster, persistence target, binding scope). Captured here as the proposed
-> build approach.
+> Formalized per the EN‑005 aligned decisions (roster = in‑repo fixture; registry
+> persists in Postgres; binding advisory; health derived in‑app; operator‑driven
+> assignment with enforced `mode`). One branch / one PR; gated by
+> `./scripts/preflight.sh`.
 
 | | |
 |---|---|

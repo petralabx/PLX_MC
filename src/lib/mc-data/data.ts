@@ -8,7 +8,6 @@ import type {
   AgentMode,
   Bucket,
   Cycle,
-  FeedEvent,
   FileEntry,
   Human,
   InboxNotification,
@@ -75,11 +74,18 @@ export const HUMANS: Record<string, Human> = {
   vince: { id: "vince", kind: "human", name: "Vince Alton", init: "VA", role: "Owner", online: true, email: "vince@petrasoap.com", dept: "IT" },
 };
 
+// Agent roster (EN-005 / WS-5). Curated in-repo fixture is the source of truth
+// for v1 (no runtime coupling to agentic-swarm; the operator can swap in live
+// swarm names later). Each agent now carries a real operational model:
+// `capabilities` (what it does), `defaultRepos` (advisory — registry ids; the
+// task allow-list still governs), and an enforced `mode` (auto vs needs-approval,
+// see policy.ts). `online` is honest: there is no heartbeat, so it is false —
+// live presence is DERIVED from in-flight assignment (helpers.agentIsActive).
 export const AGENTS: Record<string, Agent> = {
-  vibes: { id: "vibes", kind: "agent", name: "Vibes", init: "VB", model: "Sonnet", team: "Dev", mode: "auto", online: true },
-  atlas: { id: "atlas", kind: "agent", name: "Atlas", init: "AT", model: "Opus", team: "Research", mode: "approve", online: true },
-  sentry: { id: "sentry", kind: "agent", name: "Sentry", init: "SY", model: "Sonnet", team: "QA", mode: "auto", online: true },
-  scribe: { id: "scribe", kind: "agent", name: "Scribe", init: "SC", model: "Opus", team: "Ops", mode: "approve", online: true },
+  vibes: { id: "vibes", kind: "agent", name: "Vibes", init: "VB", model: "Sonnet", team: "Dev", mode: "auto", online: false, capabilities: ["code", "refactor", "tests"], defaultRepos: ["portal-web", "agentic-swarm"] },
+  atlas: { id: "atlas", kind: "agent", name: "Atlas", init: "AT", model: "Opus", team: "Research", mode: "approve", online: false, capabilities: ["research", "prd", "design"], defaultRepos: ["plx-mc"] },
+  sentry: { id: "sentry", kind: "agent", name: "Sentry", init: "SY", model: "Sonnet", team: "QA", mode: "auto", online: false, capabilities: ["qa", "tests", "evidence"], defaultRepos: ["portal-web"] },
+  scribe: { id: "scribe", kind: "agent", name: "Scribe", init: "SC", model: "Opus", team: "Ops", mode: "approve", online: false, capabilities: ["docs", "sync", "prd"], defaultRepos: ["plx-mc"] },
 };
 
 export const ACTORS: Record<string, Human | Agent> = {
@@ -304,8 +310,9 @@ export const RISKS: Risk[] = [
 ];
 
 // ─── Agent activity feed ─────────────────────────────────────────────────────
-// Demo feed purged 2026-06-11; fills as agents pick up go-live plan tasks.
-export const AGENT_FEED: FeedEvent[] = [];
+// Derived from real agent-authored task activity at render (EN-005 / WS-5; see
+// components/mc/record-logic.ts deriveAgentFeed) — no static fixture. Empty until
+// agents actually pick up go-live plan tasks.
 
 // ─── Traceability matrix (REQ → Task → PR → Evidence → Test → Merge) ─────────
 // Demo matrix purged 2026-06-11; rows return when the first go-live PRD lands.

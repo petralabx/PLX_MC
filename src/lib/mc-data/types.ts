@@ -55,8 +55,17 @@ export interface Agent {
   init: string;
   model: string;
   team: string;
+  // Autonomy mode (EN-005): `auto` advances subject only to the EN-003 gates;
+  // `approve` requires an operator to approve the run before it enters the doing
+  // band (enforced in policy.ts stageAdvanceViolation — no longer a dead label).
   mode: AgentMode;
+  // Presence is honest: there is no agent heartbeat/session, so this static flag
+  // is false. Live "working now" presence is DERIVED from in-flight assignment
+  // (helpers.agentIsActive), never fabricated here (EN-005 obs. #1, #4).
   online: boolean;
+  // EN-005 operational model.
+  capabilities: string[]; // what the agent does — informs assignment + UI surfacing
+  defaultRepos: string[]; // advisory default repos (NOT a hard binding; the task allow-list governs — EN-005 decision 3)
 }
 
 export type Actor = Human | Agent;
@@ -213,6 +222,10 @@ export interface Task {
   // When set, agents cannot be the executor — enforced across the picker
   // (allowAgents=false), the store mutation, and the server.
   humanOnly?: boolean;
+  // Operator approval of an approve-mode agent's run (EN-005). Required before a
+  // task whose executor is a needs-approval agent can advance into the doing band
+  // (see lib/mc-data/policy.ts). DB-only; no SharePoint column.
+  agentRunApproved?: boolean;
   reqs: string[];
   repos: string[];
   estimate: "S" | "M" | "L";

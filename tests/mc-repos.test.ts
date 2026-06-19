@@ -29,6 +29,8 @@ import {
   repoRequests,
   requestRepo,
   resetStore,
+  setTaskRepos,
+  taskById,
 } from "@/lib/mc-data/store";
 
 beforeEach(() => resetStore());
@@ -113,6 +115,18 @@ describe("addTask allow-list enforcement", () => {
   it("drops repos that are not in the registry", () => {
     const task = addTask({ title: "t", bucket: "BKT-WMS", repos: ["portal-web", "not-a-repo"] });
     expect(task.repos).toEqual(["portal-web"]);
+  });
+});
+
+describe("setTaskRepos — edit a task's repos post-create (EN-005)", () => {
+  it("keeps only registry repos and de-dupes when editing", () => {
+    setTaskRepos("TASK-221", ["portal-web", "agentic-swarm", "agentic-swarm", "ghost"]);
+    expect(taskById("TASK-221")?.repos).toEqual(["portal-web", "agentic-swarm"]);
+  });
+
+  it("can clear a task's repos", () => {
+    setTaskRepos("TASK-222", []);
+    expect(taskById("TASK-222")?.repos).toEqual([]);
   });
 });
 

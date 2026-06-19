@@ -1,36 +1,53 @@
 # Data Model
 
-Canonical entity shapes, taken from `prototype/mc-data.js`. Field names map to SharePoint columns per `SHAREPOINT_INTEGRATION.md §3`. Types are descriptive; use your platform's idioms (DTOs, enums, FK relations).
+Canonical entity shapes. Field names map to SharePoint columns per
+`SHAREPOINT_INTEGRATION.md §3`. Types are descriptive; use your platform's idioms
+(DTOs, enums, FK relations). The implementation lives in `src/lib/mc-data/types.ts`
+(authoritative) — this doc tracks it. Refreshed for the directory/accountability
+(EN-003), repo registry (EN-002/005), collaboration (EN-001), and agent
+operational-model (EN-005) increments: the roster is real (no fabricated humans),
+`Repo` carries governance metadata (no fabricated `openPRs`/`openTasks`), and the
+repo registry is persisted (`mc_repos` / `mc_repo_requests`, migration 008).
 
 ---
 
 ## Task  (`MC_TASKS`, indexed by `MC_TASK_IDX`)
 ```jsonc
 {
-  "id": "TASK-214",                 // string, unique, indexed
-  "title": "Inline deed signing on the workbench",
-  "description": "",                // long text, optional
-  "bucket": "BKT-CPV2",             // FK → Initiative.id
-  "stage": "qa",                    // enum key, see Lifecycle
-  "priority": "high",               // urgent | high | medium | low
-  "assignee": "vibes",             // FK → Person/Agent id, nullable
+  "id": "TASK-223",                 // string, unique, indexed
+  "title": "Product development",
+  "description": "",                // long text, optional (editable, EN-001)
+  "bucket": "BKT-PROD",             // FK → Initiative.id
+  "stage": "planned",               // enum key, see Lifecycle
+  "priority": "medium",             // urgent | high | medium | low
+  "assignee": "vibes",             // FK → Person/Agent id (executor), nullable
   "coassignees": [],                // FK[]
-  "reporter": "maya",              // FK → Person id
+  "reporter": "vince",             // FK → Person id
+  "accountableOwner": "vince",     // FK → human id (EN-003); null until taken; gate past `planned`
+  "humanOnly": false,              // EN-003 — when true, agents can't be the executor
+  "agentRunApproved": false,       // EN-005 — operator approval of an approve-mode agent run
   "reqs": ["REQ-2"],               // PRD requirement ids
-  "repos": ["portal-web","portal-api"], // FK[] → Repo key
+  "repos": ["portal-web"],         // FK[] → Repo registry id (allow-list enforced; editable, EN-005)
   "estimate": "M",                 // S | M | L
-  "labels": ["frontend"],
+  "labels": ["go-live"],
   "prs": [ /* PR refs */ ],
-  "due": "Jun 16",                 // date (prototype uses display strings)
-  "sync": { "state": "synced", "ts": "2026.06.09 · 09:09", "sp": "ToDos · item 214" },
-  "subtasks": [],
+  "due": "Jun 15",                 // date (display strings)
+  "sync": { "state": "pending", "ts": "—", "sp": "ToDos · item 223" },
+  "subtasks": [],                   // Subtask[] (EN-001: + description/assignee/due/status)
   "activity": [ { "age": "now", "who": "vibes", "what": "…", "kind": "move|sync|comment|…" } ],
+  "comments": [ /* Comment[] — app-only discussion thread, EN-001; never mirrored */ ],
   "evidence": { "summary": "…", "items": [ { "label": "…", "done": true } ] }, // optional
-  "userCreated": false             // true for modal-created tasks (prototype persistence flag)
+  "userCreated": false             // true for app-created tasks (persistence flag)
 }
 ```
 - `sync.state ∈ { synced, pending, conflict, error }`.
-- New tasks (modal): `stage:"backlog"`, `sync.state:"pending"`, `userCreated:true`, id = `MC_nextTaskId()`.
+- New tasks: `stage:"backlog"`, `sync.state:"pending"`, `userCreated:true`, id = `nextTaskId()`.
+- Accountability/mode gates (`lib/mc-data/policy.ts`, enforced client + server): a
+  task can't advance past `planned` without a human `accountableOwner`; an
+  `approve`-mode agent executor can't enter the doing band without
+  `agentRunApproved`; a done stage requires a complete evidence bundle.
+- `Subtask`: `{ id, t, done, who, description?, assignee?, due?, status? }`.
+  `Comment`: `{ id, author, body, ts, mentions[], editedTs? }` (app-only).
 
 ## Lifecycle  (`MC_STAGES`, 9 stages → 3 bands)
 | # | key | name | band | gate |
@@ -68,22 +85,50 @@ Bands (`MC_BANDS`): `todo` "To do" · `doing` "In progress" · `done` "Done". Th
 
 ## Person & Agent  (`MC_HUMANS`, `MC_AGENTS`, merged into `MC_ACTORS`)
 ```jsonc
-// Human
-{ "id":"maya", "kind":"human", "name":"Maya Aldosari", "init":"MA",
-  "role":"Admin", "dept":"Engineering", "email":"maya.aldosari@petralabx.com", "online":true,
+// Human (the real PLX directory — Greg, Rishi, Ricardo, Stephen, Ross, Vince; EN-003)
+{ "id":"vince", "kind":"human", "name":"Vince Alton", "init":"VA",
+  "role":"Owner", "dept":"IT", "email":"vince@petrasoap.com", "online":true,
   "invited": false }              // invited:true for email-invited colleagues
-// Agent
+// Agent (curated roster + operational model; EN-005)
 { "id":"vibes", "kind":"agent", "name":"Vibes", "init":"VB",
-  "model":"Sonnet", "team":"Dev", "mode":"auto", "online":true }
+  "model":"Sonnet", "team":"Dev", "mode":"auto", "online":false,
+  "capabilities":["code","refactor","tests"], "defaultRepos":["portal-web","agentic-swarm"] }
 ```
-- Agent `mode ∈ { auto "Autonomous", approve "Needs-approval" }` (`MC_MODE`).
-- Directory helpers: `MC_directory()`, `MC_isPetraEmail(email)`, `MC_invitePerson(email)`, `MC_personByEmail(email)`, `MC_domainOf(email)`. Domains: `petralabx.com`, `petrasoap.com`.
+- Agent `mode ∈ { auto "Autonomous", approve "Needs-approval" }` (`MODE`) — **enforced**
+  (`policy.ts`), not a display-only label: an `approve`-mode executor needs operator
+  approval before the doing band.
+- `Agent.online` is honest (no heartbeat → `false`); live presence is **derived**
+  from in-flight assignment (`agentIsActive` / `liveAgentCount`). `defaultRepos` is
+  **advisory** (the task-level allow-list governs; no hard binding in v1).
+- Directory helpers: `directory()`, `isPetraEmail(email)`, `invitePerson(email)`,
+  `personByEmail(email)`, `domainOf(email)`. Domains: `petralabx.com`, `petrasoap.com`.
 
-## Repo  (`MC_REPOS`)
+## Repo  (`REPOS` seed → persisted `mc_repos`; EN-002/005)
 ```jsonc
-{ "id":"portal-web", "name":"plx-customer-portal",
-  "lang":"TypeScript · Next.js", "openPRs":4, "openTasks":9, "def":"main" }
+// Registry entry (= the allow-list). Honest metadata only — no fabricated counts;
+// open-PR/task counts are DERIVED from task membership (repos-view).
+{ "id":"portal-web", "name":"plx-customer-portal", "lang":"TypeScript · Next.js",
+  "def":"master", "owner":"taylorvalton", "visibility":"private",
+  "scope":"Customer portal web application — the go-live codebase." }
 ```
+- The registry is the **allow-list**: only registry ids may attach to a bucket/task
+  (humans and agents alike), enforced client + server against the **persisted**
+  registry (`mc_repos`) — not the static fixture.
+- `visibility ∈ { public, private }`. The three canonical repos are `portal-web`
+  (plx-customer-portal), `agentic-swarm`, and `plx-mc`.
+
+### RepoRequest  (self-service request → approve; persisted `mc_repo_requests`)
+```jsonc
+{ "id":"RR-new-tool", "name":"new-tool", "owner":"taylorvalton",
+  "scope":"…", "requestedBy":"greg", "requestedTs":"2026.06.19 · 12:00",
+  "status":"pending",              // pending | approved | rejected
+  "verified":true,                 // GitHub-org validation outcome (never fabricated)
+  "visibility":"public", "def":"main", "lang":"TypeScript",
+  "decidedBy":"vince", "decidedTs":"…" }
+```
+- A request joins the registry only via an **approver** (Owner/Admin) approval that
+  **re-validates** against the GitHub org. Endpoints: `POST /api/repos`,
+  `POST /api/repos/{id}/approve|reject`.
 
 ## Milestone / Risk
 Milestone: `{ name, bucket, state(Upcoming|Active|At risk|Met), col(date), sp }`.

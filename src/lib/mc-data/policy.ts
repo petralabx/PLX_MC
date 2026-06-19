@@ -39,12 +39,19 @@ export function assignmentViolation(
 
 // Why this task cannot move to `nextStage`, or null when the move is allowed.
 export function stageAdvanceViolation(
-  task: Pick<Task, "id" | "accountableOwner" | "evidence">,
+  task: Pick<Task, "id" | "accountableOwner" | "evidence" | "assignee" | "agentRunApproved">,
   nextStage: StageKey
 ): string | null {
   const nextIdx = STAGE_IDX[nextStage];
   if (nextIdx > STAGE_IDX[ACCOUNTABLE_GATE_STAGE] && !hasHumanAccountableOwner(task)) {
     return `${task.id} needs a human accountable owner before it can move past Planned.`;
+  }
+  // Agent autonomy gate (EN-005): an approve-mode agent executor can't take the
+  // task into the doing band without an explicit operator approval of the run.
+  // auto-mode agents are not gated here (subject only to the EN-003 gates).
+  const executor = task.assignee ? AGENTS[task.assignee] : undefined;
+  if (executor && executor.mode === "approve" && !task.agentRunApproved && nextIdx >= STAGE_IDX.progress) {
+    return `${task.id} is run by ${executor.name} (needs-approval mode) — an operator must approve the run before it advances to In Progress.`;
   }
   if (DONE_STAGES.includes(nextStage) && task.evidence && !evidenceComplete(task.evidence)) {
     return `${task.id} can't be marked ${nextStage} until its evidence bundle is complete.`;

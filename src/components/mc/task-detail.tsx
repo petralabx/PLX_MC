@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import {
   ACTORS,
+  AGENTS,
   BUCKETS,
   BUCKET_IDX,
   CURRENT_USER,
@@ -28,12 +29,14 @@ import {
   reassignTask,
   resolveConflict,
   setAccountableOwner,
+  setAgentRunApproved,
   setCoassignees,
   setHumanOnly,
   setTaskBucket,
   setTaskDescription,
   setTaskLabels,
   setTaskPriority,
+  setTaskRepos,
   setTaskStage,
   spLists,
   taskById,
@@ -53,6 +56,7 @@ import {
 } from "./atoms";
 import { LabelEditor } from "./label-editor";
 import { NotifyTrail, PeoplePicker } from "./people-picker";
+import { RepoEditor } from "./repo-editor";
 import type { ScreenProps } from "./route";
 import { SubtaskList } from "./subtask-list";
 import { Timeline } from "./timeline";
@@ -159,6 +163,11 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
   const sharePointItem = task.sync.sp.split("· ")[1] ?? task.sync.sp;
   const progress = deriveEvidenceProgress(task);
   const conflict = openConflicts().find((entry) => entry.entityId === task.id);
+  // Approve-mode agent executor needs an explicit operator approval before the
+  // task advances into the doing band (EN-005). null when the executor isn't a
+  // needs-approval agent (the `?.` guards a human/empty assignee at runtime).
+  const runApprovalAgent =
+    task.assignee && AGENTS[task.assignee]?.mode === "approve" ? AGENTS[task.assignee] : null;
 
   // Real engine sweep; the demo inbound simulation is gone.
   const syncNow = () => {
@@ -222,6 +231,20 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                   />
                 )}
               </span>
+              {runApprovalAgent && (
+                <span className="asgwrap">
+                  <button
+                    type="button"
+                    className={`btn sm ${task.agentRunApproved ? "ok" : "acc"}`}
+                    onClick={() => setAgentRunApproved(task.id, !task.agentRunApproved)}
+                    title={`${runApprovalAgent.name} runs in needs-approval mode — operator approval gates advance into In Progress`}
+                  >
+                    {task.agentRunApproved
+                      ? `${runApprovalAgent.name} run approved ✓`
+                      : `Approve ${runApprovalAgent.name} run`}
+                  </button>
+                </span>
+              )}
               <span className="asgwrap coasg">
                 {task.coassignees.length > 0 && <AvatarStack ids={task.coassignees} />}
                 <button
@@ -629,10 +652,13 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                   </span>
                 </span>
               </div>
+              {/* Repos — editable inline (EN-005), constrained to the registry
+                  allow-list. DB-only: repos re-push on edit is deferred to EN-006
+                  (repos currently pushes on create only). */}
               <div className="rfact">
                 <span className="k">Repos</span>
                 <span className="v">
-                  {task.repos.length ? task.repos.map((repo) => <RepoChip key={repo} id={repo} />) : "—"}
+                  <RepoEditor repos={task.repos} onChange={(repos) => setTaskRepos(task.id, repos)} />
                 </span>
               </div>
               {/* Labels — editable inline (DB-only, no sync claim). Shares the

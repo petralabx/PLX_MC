@@ -20,6 +20,7 @@ const createTaskSchema = z.object({
   humanOnly: z.boolean().optional(),
   reqs: z.array(z.string()).optional(),
   repos: z.array(z.string()).optional(),
+  targetEnv: z.enum(["staging", "production"]).optional(),
   estimate: z.enum(["S", "M", "L"]).optional(),
   labels: z.array(z.string()).optional(),
   due: z.string().optional(),

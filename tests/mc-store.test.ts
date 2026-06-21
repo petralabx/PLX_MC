@@ -30,7 +30,9 @@ import {
   setTaskBucket,
   setTaskLabels,
   setTaskPriority,
+  setTaskRepos,
   setTaskStage,
+  setTaskTargetEnv,
   storeSyncCounts,
   taskById,
   toggleSubtask,
@@ -53,6 +55,11 @@ describe("addTask", () => {
     expect(t.userCreated).toBe(true);
     expect(allTasks().some((x) => x.id === t.id)).toBe(true);
     expect(storeSyncCounts().pending).toBe(before.pending + 1);
+  });
+
+  it("defaults a new task to staging and honors explicit production", () => {
+    expect(addTask({ title: "staged", bucket: "BKT-WMS" }).targetEnv).toBe("staging");
+    expect(addTask({ title: "prod", bucket: "BKT-WMS", targetEnv: "production" }).targetEnv).toBe("production");
   });
 });
 
@@ -405,5 +412,35 @@ describe("inline-edit field wrappers", () => {
     setCoassignees("TASK-221", ["stephen", "stephen", "ricardo", "ross"]);
     const co = taskById("TASK-221")!.coassignees;
     expect(co).toEqual(["stephen", "ross"]); // deduped; primary "ricardo" excluded
+  });
+});
+
+describe("setTaskRepos (target repos — pushed field + audited Retarget)", () => {
+  it("sets the target repos optimistically with an honest pending-push trail", () => {
+    setTaskRepos("TASK-221", ["portal-web"]);
+    expect(taskById("TASK-221")?.repos).toEqual(["portal-web"]);
+    expect(taskById("TASK-221")?.activity[0]?.what).toContain("updated target repos");
+    expect(taskById("TASK-221")?.activity[0]?.what).toContain("pending push");
+  });
+
+  it("records the reason in audit and activity on Retarget", () => {
+    setTaskRepos("TASK-221", ["portal-web"], { reason: "confirm customer portal target" });
+    const t = taskById("TASK-221");
+    expect(t?.repos).toEqual(["portal-web"]);
+    expect(t?.activity[0]?.what).toContain("retargeted repos");
+    expect(t?.activity[0]?.what).toContain("confirm customer portal target");
+    const top = auditLog()[0];
+    expect(top.body).toContain("Retargeted repos for TASK-221");
+    expect(top.body).toContain("confirm customer portal target");
+    expect(top.state).toBe("pending");
+  });
+});
+
+describe("setTaskTargetEnv (target environment — pushed, not locked)", () => {
+  it("sets the target environment optimistically with a pending-push trail", () => {
+    setTaskTargetEnv("TASK-221", "production");
+    expect(taskById("TASK-221")?.targetEnv).toBe("production");
+    expect(taskById("TASK-221")?.activity[0]?.what).toContain("set target environment to Production");
+    expect(taskById("TASK-221")?.activity[0]?.what).toContain("pending push");
   });
 });

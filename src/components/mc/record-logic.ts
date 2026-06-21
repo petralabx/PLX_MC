@@ -1,5 +1,17 @@
 import { AGENTS, MODE, agentIsActive, agentRunApprovalNeeded, isAgentId } from "@/lib/mc-data";
-import type { FeedEvent, FileEntry, Repo, Task } from "@/lib/mc-data";
+import type { FeedEvent, FileEntry, Repo, StageKey, Task } from "@/lib/mc-data";
+
+const PLANNING_STAGES: ReadonlySet<StageKey> = new Set([
+  "backlog",
+  "specced",
+  "approved",
+  "planned",
+]);
+
+export function repoEditMode(stage: StageKey, hasRepos: boolean): "open" | "locked" {
+  if (!hasRepos) return "open";
+  return PLANNING_STAGES.has(stage) ? "open" : "locked";
+}
 
 export function directionGlyph(direction: "two-way" | "push" | "pull"): string {
   if (direction === "push") return "→";

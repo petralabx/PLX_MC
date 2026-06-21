@@ -28,6 +28,11 @@ export interface Stage {
 export type PriorityKey = "urgent" | "high" | "medium" | "low";
 export type Tone = "ok" | "warn" | "info" | "hot" | "muted" | "acc";
 
+// The deployment target a task ships to. Defaults to "staging" (the active
+// environment per policy); promoting to "production" is normal progression, so
+// unlike `repos` it is NOT lifecycle-locked.
+export type TargetEnv = "staging" | "production";
+
 export interface PriorityConfig {
   label: string;
   cls: Extract<Tone, "hot" | "warn" | "info" | "muted">;
@@ -228,6 +233,7 @@ export interface Task {
   agentRunApproved?: boolean;
   reqs: string[];
   repos: string[];
+  targetEnv?: TargetEnv;
   estimate: "S" | "M" | "L";
   labels: string[];
   prs: PullRequest[];

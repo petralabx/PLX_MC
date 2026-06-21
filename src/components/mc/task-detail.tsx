@@ -9,10 +9,12 @@ import {
   PRIORITY,
   STAGES,
   STAGE_IDX,
+  TARGET_ENV,
   confidenceOf,
   type PriorityKey,
   type SpColumn,
   type SyncDirection,
+  type TargetEnv,
   type Task,
 } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
@@ -38,6 +40,7 @@ import {
   setTaskPriority,
   setTaskRepos,
   setTaskStage,
+  setTaskTargetEnv,
   spLists,
   taskById,
 } from "@/lib/mc-data/store";
@@ -56,6 +59,7 @@ import {
 } from "./atoms";
 import { LabelEditor } from "./label-editor";
 import { NotifyTrail, PeoplePicker } from "./people-picker";
+import { repoEditMode } from "./record-logic";
 import { RepoEditor } from "./repo-editor";
 import type { ScreenProps } from "./route";
 import { SubtaskList } from "./subtask-list";
@@ -123,6 +127,80 @@ function fieldValue(fieldName: SorFieldName, task: Task): string {
   }
   if (fieldName === "Due Date") return task.due;
   return PRIORITY[task.priority]?.label ?? task.priority;
+}
+
+function RepoFact({ task }: { task: Task }) {
+  const [unlocked, setUnlocked] = useState(false);
+  const [retargeting, setRetargeting] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const editable = repoEditMode(task.stage, task.repos.length > 0) === "open" || unlocked;
+
+  if (editable) {
+    return (
+      <RepoEditor
+        repos={task.repos}
+        onChange={(repos) => {
+          const pending = reason.trim();
+          if (unlocked && pending) {
+            setTaskRepos(task.id, repos, { reason: pending });
+            setReason("");
+            return;
+          }
+          setTaskRepos(task.id, repos);
+        }}
+      />
+    );
+  }
+
+  return (
+    <span className="repo-locked">
+      {task.repos.map((repo) => (
+        <RepoChip key={repo} id={repo} />
+      ))}
+      {!retargeting ? (
+        <button
+          type="button"
+          className="repo-retarget"
+          onClick={() => setRetargeting(true)}
+          title="Target is locked once work is in flight — retarget with a reason"
+        >
+          Retarget
+        </button>
+      ) : (
+        <span className="repo-retarget-form">
+          <input
+            className="le-input"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Reason for retarget"
+            aria-label="Reason for retargeting repos"
+          />
+          <button
+            type="button"
+            className="btn ghost sm"
+            disabled={!reason.trim()}
+            onClick={() => {
+              setUnlocked(true);
+              setRetargeting(false);
+            }}
+          >
+            Unlock
+          </button>
+          <button
+            type="button"
+            className="btn ghost sm"
+            onClick={() => {
+              setRetargeting(false);
+              setReason("");
+            }}
+          >
+            Cancel
+          </button>
+        </span>
+      )}
+    </span>
+  );
 }
 
 export function TaskDetailView({ route, nav }: ScreenProps) {
@@ -652,13 +730,37 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                   </span>
                 </span>
               </div>
-              {/* Repos — editable inline (EN-005), constrained to the registry
-                  allow-list. DB-only: repos re-push on edit is deferred to a later
-                  sync increment (repos currently pushes on create only). */}
+              {/* Repos — editable target (PUSHED). Lifecycle-gated: free while
+                  planning / unset, locked behind Retarget once in flight. */}
               <div className="rfact">
                 <span className="k">Repos</span>
                 <span className="v">
-                  <RepoEditor repos={task.repos} onChange={(repos) => setTaskRepos(task.id, repos)} />
+                  <RepoFact key={task.id} task={task} />
+                </span>
+              </div>
+              {/* Target environment — editable (PUSHED). Not lifecycle-locked:
+                  staging → production is normal progression toward go-live. */}
+              <div className="rfact">
+                <span className="k">Environment</span>
+                <span className="v">
+                  <label className="rfact-select">
+                    <select
+                      value={task.targetEnv ?? "staging"}
+                      onChange={(event) =>
+                        setTaskTargetEnv(task.id, event.target.value as TargetEnv)
+                      }
+                      aria-label="Set target environment"
+                    >
+                      {(Object.entries(TARGET_ENV) as [TargetEnv, (typeof TARGET_ENV)[TargetEnv]][]).map(
+                        ([key, cfg]) => (
+                          <option key={key} value={key}>
+                            {cfg.label}
+                          </option>
+                        )
+                      )}
+                    </select>
+                    <span className="caret" aria-hidden="true">▾</span>
+                  </label>
                 </span>
               </div>
               {/* Labels — editable inline (DB-only, no sync claim). Shares the

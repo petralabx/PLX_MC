@@ -30,6 +30,7 @@ import {
   SP_LISTS,
   STAGE_IDX,
   STAGES,
+  TARGET_ENV,
   TASKS,
 } from "./data";
 import { parseMentions } from "./collab";
@@ -393,6 +394,7 @@ export interface NewTaskInput {
   humanOnly?: boolean;
   reqs?: string[];
   repos?: string[];
+  targetEnv?: Task["targetEnv"];
   estimate?: Task["estimate"];
   labels?: string[];
   due?: string;
@@ -434,6 +436,7 @@ export function addTask(input: NewTaskInput): Task {
     humanOnly: input.humanOnly,
     reqs: input.reqs ?? [],
     repos,
+    targetEnv: input.targetEnv ?? "staging",
     estimate: input.estimate ?? "M",
     labels: input.labels ?? [],
     prs: [],
@@ -715,6 +718,7 @@ export type TaskFieldPatch = Partial<
     | "accountableOwner"
     | "humanOnly"
     | "repos"
+    | "targetEnv"
     | "agentRunApproved"
   >
 >;
@@ -842,8 +846,8 @@ export const setTaskLabels = (taskId: string, labels: string[]) =>
 // Edit a task's repos post-creation (EN-005). Constrained to the registry
 // allow-list (humans + agents alike) — anything off-list is dropped at the
 // boundary with a non-silent notice; the server (state.ts) re-validates against
-// the same persisted registry.
-export const setTaskRepos = (taskId: string, repos: string[]) => {
+// the same persisted registry. A reason marks an in-flight Retarget action.
+export const setTaskRepos = (taskId: string, repos: string[], opts?: { reason?: string }) => {
   const t = taskById(taskId);
   if (!t) return;
   const allowed = Array.from(new Set(allowedReposOnly(repos, state.repos)));
@@ -851,8 +855,23 @@ export const setTaskRepos = (taskId: string, repos: string[]) => {
   if (dropped.length > 0) {
     pushNotice(`Skipped repos not in the registry: ${dropped.join(", ")}. Request them first.`, "info");
   }
-  patchTaskFields(taskId, { repos: allowed }, { activity: "updated repos" });
+  const reason = opts?.reason?.trim();
+  if (reason) {
+    pushAudit(CURRENT_USER, `Retargeted repos for ${taskId} — reason: "${reason}".`, "pending");
+    patchTaskFields(taskId, { repos: allowed }, { activity: `retargeted repos — reason: "${reason}" — pending push` });
+    return;
+  }
+  patchTaskFields(taskId, { repos: allowed }, { activity: "updated target repos — pending push" });
 };
+
+// Target environment — a PUSHED field (Target Environment Choice column).
+// Not lifecycle-locked: promoting staging → production is normal progression.
+export const setTaskTargetEnv = (taskId: string, targetEnv: NonNullable<Task["targetEnv"]>) =>
+  patchTaskFields(
+    taskId,
+    { targetEnv },
+    { activity: `set target environment to ${TARGET_ENV[targetEnv].label} — pending push` }
+  );
 
 // Operator approval of an approve-mode agent's run (EN-005). Unblocks a stage
 // advance into the doing band for a task whose executor is a needs-approval

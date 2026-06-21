@@ -150,6 +150,7 @@ export function outboundFields(
     if (include("reqs")) out.PRDRequirements = (t.reqs ?? []).join("\n");
     if (include("estimate")) out.Estimate = t.estimate;
     if (include("repos")) out.Repos = (t.repos ?? []).join("\n");
+    if (include("targetEnv")) out.TargetEnvironment = capitalize(t.targetEnv ?? "staging");
     if (include("evidence")) out.EvidenceComplete = evidenceComplete(t.evidence);
     if (include("subtasks")) out.Subtasks = serializeSubtasks(t.subtasks); // Item 3 — push-only
     // Person columns: emit `<sp>LookupId` from the pre-resolved `persons` map.
@@ -262,6 +263,7 @@ const FIELD_DISPLAY: Record<EntityType, Record<string, string>> = {
     reqs: "PRD Requirements",
     estimate: "Estimate",
     repos: "Repos",
+    targetEnv: "Target Environment",
     evidence: "Evidence Complete",
     subtasks: "Sub-tasks",
   },

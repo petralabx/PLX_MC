@@ -42,7 +42,7 @@ Per‑field direction overrides the list default. Direction semantics:
 
 > Column `Name` = the SharePoint display name (set a stable internal name too). `MC field` = the property on the MC entity (see DATA_MODEL.md). Choice columns must be created with **exactly** the listed values.
 
-### 3.1 `ToDos` — Task  (two‑way, ~14 items)
+### 3.1 `ToDos` — Task  (two‑way, ~15 items)
 | SharePoint column | Type | MC field | Dir | Notes |
 |---|---|---|---|---|
 | Title | Single line of text | `title` | ↔ | required |
@@ -56,6 +56,7 @@ Per‑field direction overrides the list default. Direction semantics:
 | PRD Requirements | Multi line of text | `reqs` | → | requirement IDs, newline‑joined |
 | Estimate | Choice | `estimate` | → | S / M / L |
 | Repos | Multi line of text | `repos` | → | repo keys, newline‑joined |
+| Target Environment | Choice | `targetEnv` | → | Staging / Production (default Staging) |
 | Evidence Complete | Yes/No | `evidence` | → | derived: all evidence items done |
 | Description | Multi line of text | `description` | ↔ | |
 

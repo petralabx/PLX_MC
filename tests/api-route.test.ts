@@ -85,6 +85,14 @@ describe("patchTaskSchema (PATCH /api/tasks/{id} validation contract)", () => {
     expect(parsed.success).toBe(false);
   });
 
+  it("accepts target repos and targetEnv, and rejects unknown environments", () => {
+    expect(
+      patchTaskSchema.safeParse({ actor: "vince", repos: ["portal-web"], targetEnv: "staging" }).success
+    ).toBe(true);
+    expect(patchTaskSchema.safeParse({ actor: "vince", targetEnv: "production" }).success).toBe(true);
+    expect(patchTaskSchema.safeParse({ actor: "vince", targetEnv: "prod" }).success).toBe(false);
+  });
+
   it("requires a non-empty actor", () => {
     expect(patchTaskSchema.safeParse({ actor: "", labels: ["x"] }).success).toBe(false);
   });

@@ -79,6 +79,11 @@ describe("outbound task mapping", () => {
     expect(fields.PRDRequirements).toBe("REQ-2");
   });
 
+  it("defaults Target Environment to Staging and serializes an explicit value", () => {
+    expect(fields.TargetEnvironment).toBe("Staging");
+    expect(outboundFields("task", { ...task, targetEnv: "production" } as never).TargetEnvironment).toBe("Production");
+  });
+
   it("emits person columns as <Name>LookupId from pre-resolved ids, never the bare column or the Initiative lookup", () => {
     // The person mirror is now wired (Item 1): the engine resolves each MC actor
     // to its site User Information List id and passes it in `persons`; the pure
@@ -180,6 +185,7 @@ describe("inbound direction filtering", () => {
   it("never applies push-only columns inbound", () => {
     const patches = inboundPatches("task", {
       Repos: "evil",
+      TargetEnvironment: "Production",
       PRDRequirements: "evil",
       Estimate: "S",
       EvidenceComplete: false,

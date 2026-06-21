@@ -45,6 +45,7 @@
         { "name": "PRDRequirements", "displayName": "PRD Requirements", "type": "multiline" },
         { "name": "Estimate", "displayName": "Estimate", "type": "choice", "choices": ["S", "M", "L"] },
         { "name": "Repos", "displayName": "Repos", "type": "multiline" },
+        { "name": "TargetEnvironment", "displayName": "Target Environment", "type": "choice", "choices": ["Staging", "Production"] },
         { "name": "EvidenceComplete", "displayName": "Evidence Complete", "type": "boolean" },
         { "name": "Description", "displayName": "Description", "type": "multiline" },
         { "name": "Subtasks", "displayName": "Sub-tasks", "type": "multiline", "$comment": "Item 3 — push-only human-readable mirror of the DB-only Subtask[] (one line per sub-task). MC is authoritative; never read back." }

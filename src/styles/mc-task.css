@@ -329,3 +329,13 @@
 .mc .le-input::placeholder { color: var(--p-muted); }
 .mc .le-input:focus { border-bottom-color: var(--p-ink-2); }
 .mc .le-input:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 1px; }
+
+.mc .repo-locked { display: inline-flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.mc .repo-retarget {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--p-muted); background: transparent; border: 1px dashed var(--p-grid);
+  padding: 3px 7px; cursor: pointer;
+}
+.mc .repo-retarget:hover { color: var(--p-accent); border-color: var(--p-accent); }
+.mc .repo-retarget:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 1px; }
+.mc .repo-retarget-form { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }

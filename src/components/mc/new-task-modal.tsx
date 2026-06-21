@@ -8,8 +8,10 @@ import {
   PRIORITY,
   STAGES,
   STAGE_IDX,
+  TARGET_ENV,
   type PriorityKey,
   type StageKey,
+  type TargetEnv,
 } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import { actorById, addTask, allBuckets, allRepos, bucketById, nextTaskId } from "@/lib/mc-data/store";
@@ -78,6 +80,7 @@ export function NewTaskModal({
   const [accountablePickerOpen, setAccountablePickerOpen] = useState(false);
   const [priority, setPriority] = useState<PriorityKey>("medium");
   const [stage, setStage] = useState<StageKey>("backlog");
+  const [targetEnv, setTargetEnv] = useState<TargetEnv>("staging");
   const [estimate, setEstimate] = useState<"S" | "M" | "L">("M");
   const [dueISO, setDueISO] = useState("");
   const [requirements, setRequirements] = useState<string[]>([]);
@@ -145,6 +148,7 @@ export function NewTaskModal({
       estimate,
       reqs: requirements,
       repos,
+      targetEnv,
       labels,
       reporter: CURRENT_USER,
     });
@@ -166,6 +170,7 @@ export function NewTaskModal({
     repos,
     requirements,
     stage,
+    targetEnv,
     title,
   ]);
 
@@ -324,6 +329,25 @@ export function NewTaskModal({
                       {stageOption.n} · {stageOption.name}
                     </option>
                   ))}
+                </select>
+                <span className="caret">▾</span>
+              </div>
+            </label>
+
+            <label className="ntm-fact">
+              <span className="k">Environment</span>
+              <div className="ntm-select-wrap">
+                <select
+                  value={targetEnv}
+                  onChange={(event) => setTargetEnv(event.target.value as TargetEnv)}
+                >
+                  {(Object.entries(TARGET_ENV) as [TargetEnv, (typeof TARGET_ENV)[TargetEnv]][]).map(
+                    ([key, cfg]) => (
+                      <option key={key} value={key}>
+                        {cfg.label}
+                      </option>
+                    )
+                  )}
                 </select>
                 <span className="caret">▾</span>
               </div>

@@ -18,6 +18,7 @@ Canonical entity shapes, taken from `prototype/mc-data.js`. Field names map to S
   "reporter": "maya",              // FK → Person id
   "reqs": ["REQ-2"],               // PRD requirement ids
   "repos": ["portal-web","portal-api"], // FK[] → Repo key
+  "targetEnv": "staging",          // staging | production (optional; default staging)
   "estimate": "M",                 // S | M | L
   "labels": ["frontend"],
   "prs": [ /* PR refs */ ],
@@ -31,6 +32,8 @@ Canonical entity shapes, taken from `prototype/mc-data.js`. Field names map to S
 ```
 - `sync.state ∈ { synced, pending, conflict, error }`.
 - New tasks (modal): `stage:"backlog"`, `sync.state:"pending"`, `userCreated:true`, id = `MC_nextTaskId()`.
+- `repos` is an editable target (multi-select, pushed via the Repos column). Mutability is lifecycle-gated: freely editable while planning (`backlog`→`planned`) or while unset; once work is in flight (`progress`→`verified`) an existing target locks behind an explicit **Retarget** action that requires a reason (recorded to the activity trail + audit log). Policy lives in `repoEditMode` (`src/components/mc/record-logic.ts`).
+- `targetEnv` is the deployment target (`staging` default / `production`), pushed via the **Target Environment** Choice column. Always editable — unlike `repos`, promoting staging→production is normal lifecycle progression, not a retarget.
 
 ## Lifecycle  (`MC_STAGES`, 9 stages → 3 bands)
 | # | key | name | band | gate |

@@ -207,6 +207,7 @@ export interface CreateTaskInput {
   humanOnly?: boolean;
   reqs?: string[];
   repos?: string[];
+  targetEnv?: Task["targetEnv"];
   estimate?: Task["estimate"];
   labels?: string[];
   due?: string;
@@ -250,6 +251,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     humanOnly: input.humanOnly,
     reqs: input.reqs ?? [],
     repos: input.repos ?? [],
+    targetEnv: input.targetEnv ?? "staging",
     estimate: input.estimate ?? "M",
     labels: input.labels ?? [],
     prs: [],
@@ -280,19 +282,33 @@ export interface PatchTaskInput {
   comments?: Task["comments"]; // EN-001 / WS-3 — DB-only, app-only (never pushed)
   accountableOwner?: string | null; // Item 1 — pushed to the Accountable Owner person column (push-only)
   humanOnly?: boolean; // EN-003 — DB-only assignment policy
-  repos?: string[]; // EN-005 — DB-only, allow-list enforced; re-push deferred to a later sync increment
+  repos?: string[]; // EN-005 — pushed, allow-list enforced
+  targetEnv?: Task["targetEnv"]; // pushed Target Environment column
   agentRunApproved?: boolean; // EN-005 — DB-only operator approval of an approve-mode agent run
 }
 
 // Persistence tiers:
 //   SP  (pushed): title, stage, priority, due, description; the person columns
 //       assignee/accountableOwner/reporter (Item 1 — resolved to site-user lookup
-//       ids on the sweep); and subtasks (Item 3 — push-only serialized mirror).
-//       A patch touching any of these re-queues the entity for push.
+//       ids on the sweep); subtasks (Item 3 — push-only serialized mirror);
+//       repos and targetEnv (push-only targeting fields). A patch touching any
+//       of these re-queues the entity for push.
 //   DB  (jsonb-only, NOT pushed): bucket, labels, coassignees, comments, humanOnly.
 //       bucket/labels promote to SP once the Initiative lookup + a Labels column
 //       exist; comments stay app-only (EN-001 decision).
-const PUSHED_FIELDS = ["title", "stage", "priority", "due", "description", "assignee", "accountableOwner", "reporter", "subtasks"];
+const PUSHED_FIELDS = [
+  "title",
+  "stage",
+  "priority",
+  "due",
+  "description",
+  "assignee",
+  "accountableOwner",
+  "reporter",
+  "subtasks",
+  "repos",
+  "targetEnv",
+];
 
 export async function patchTask(id: string, patch: PatchTaskInput, actor: string): Promise<Task | null> {
   await ensureSeeded();

@@ -121,6 +121,20 @@ describe("patchTask — newly-editable fields round-trip through entities.data",
     expect(row.data.bucket).toBe("BKT-DAPI");
     expect(row.data.labels).toEqual(["go-live", "api"]);
   });
+
+  it("persists repos and targetEnv into the jsonb blob", async () => {
+    seedTask();
+    const updated = await patchTask(
+      "TASK-900",
+      { repos: ["portal-web"], targetEnv: "production" },
+      "vince"
+    );
+    expect(updated!.repos).toEqual(["portal-web"]);
+    expect(updated!.targetEnv).toBe("production");
+    const row = store.rows.get("task:TASK-900")!;
+    expect(row.data.repos).toEqual(["portal-web"]);
+    expect(row.data.targetEnv).toBe("production");
+  });
 });
 
 describe("patchTask — comments round-trip DB-only (EN-001 / WS-3)", () => {
@@ -174,6 +188,14 @@ describe("patchTask — per-field tier at the server boundary", () => {
     const row = store.rows.get("task:TASK-900")!;
     expect(row.sync_state).toBe("pending");
     expect(row.dirty_fields).toEqual(["subtasks"]);
+  });
+
+  it("repos and targetEnv are pushed fields", async () => {
+    seedTask();
+    await patchTask("TASK-900", { repos: ["portal-web"], targetEnv: "production" }, "vince");
+    const row = store.rows.get("task:TASK-900")!;
+    expect(row.sync_state).toBe("pending");
+    expect(row.dirty_fields).toEqual(expect.arrayContaining(["repos", "targetEnv"]));
   });
 });
 
@@ -248,15 +270,15 @@ describe("patchTask — accountability enforcement (EN-003 gates)", () => {
   });
 });
 
-describe("patchTask — repos edit allow-list enforcement (EN-005, DB-only)", () => {
-  it("persists an allow-listed repos edit into the jsonb blob without re-queuing a push", async () => {
+describe("patchTask — repos edit allow-list enforcement (EN-005, pushed)", () => {
+  it("persists an allow-listed repos edit and re-queues a push", async () => {
     seedTask({ repos: [] });
     const updated = await patchTask("TASK-900", { repos: ["portal-web"] }, "vince");
     expect(updated!.repos).toEqual(["portal-web"]);
     const row = store.rows.get("task:TASK-900")!;
     expect(row.data.repos).toEqual(["portal-web"]);
-    expect(row.sync_state).toBe("synced"); // DB-only — repos not in PUSHED_FIELDS
-    expect(row.dirty_fields).toEqual([]);
+    expect(row.sync_state).toBe("pending");
+    expect(row.dirty_fields).toEqual(["repos"]);
   });
 
   it("rejects an off-registry repo and leaves the task untouched", async () => {

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { REPOS, TASKS } from "@/lib/mc-data";
-import type { FileEntry, Task } from "@/lib/mc-data";
-import { buildBreadcrumbPath, deriveRepoRows } from "@/components/mc/record-logic";
+import type { FileEntry, StageKey, Task } from "@/lib/mc-data";
+import { buildBreadcrumbPath, deriveRepoRows, repoEditMode } from "@/components/mc/record-logic";
 import { allTasks, fileById, resetStore } from "@/lib/mc-data/store";
 
 beforeEach(() => resetStore());
@@ -81,5 +81,28 @@ describe("deriveRepoRows", () => {
     const pr7 = portal?.prs.find((pr) => pr.num === 7);
     expect(pr7?.taskId).toBe("TASK-9001");
     expect(pr7?.status).toBe("open");
+  });
+});
+
+describe("repoEditMode (repo targeting lifecycle lock)", () => {
+  const PLANNING: StageKey[] = ["backlog", "specced", "approved", "planned"];
+  const IN_FLIGHT: StageKey[] = ["progress", "qa", "review", "merged", "verified"];
+
+  it("is open through planning even when a target is set", () => {
+    for (const stage of PLANNING) {
+      expect(repoEditMode(stage, true)).toBe("open");
+    }
+  });
+
+  it("locks an existing target once work is in flight", () => {
+    for (const stage of IN_FLIGHT) {
+      expect(repoEditMode(stage, true)).toBe("locked");
+    }
+  });
+
+  it("stays open when no target is set", () => {
+    for (const stage of [...PLANNING, ...IN_FLIGHT]) {
+      expect(repoEditMode(stage, false)).toBe("open");
+    }
   });
 });

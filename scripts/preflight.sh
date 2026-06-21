@@ -71,6 +71,8 @@ run_quick() {
   if [[ -f package.json ]]; then
     step "TypeScript typecheck"
     npm run typecheck
+    step "ESLint"
+    npm run lint
   else
     echo "[preflight] SKIP node quick checks (no package.json)"
   fi

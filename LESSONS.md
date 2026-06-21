@@ -16,6 +16,18 @@
 
 ## Lessons
 
+### 2026-06-21 (ET) — ESLint was outside preflight, so lint regressions could sit undetected
+
+- **What happened:** A React Hooks lint issue surfaced only when `npm run lint`
+  was run directly; the canonical `scripts/preflight.sh --mode pre-commit` gate
+  had been green because it only ran TypeScript typecheck for Node quick checks.
+- **Root cause:** ESLint was defined in `package.json` but not included in
+  `run_quick`, so neither local pre-commit/pre-push nor CI mode treated lint as
+  part of the single definition of "passing."
+- **Rule going forward:** `scripts/preflight.sh` runs `npm run lint` in
+  `run_quick`, so lint executes in every preflight mode. Fix legitimate lint
+  failures in code; only suppress a rule with a narrow, documented reason.
+
 ### 2026-06-19 (ET) — Called a long-lived integration branch "promotable" without diffing it against main
 
 - **What happened:** After merging EN-005 into `feat/enhancements-integration`,

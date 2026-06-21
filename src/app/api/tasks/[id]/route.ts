@@ -48,7 +48,8 @@ export const patchTaskSchema = z.object({
   comments: z.array(commentSchema).max(500).optional(), // EN-001 / WS-3 — DB-only
   accountableOwner: z.string().nullable().optional(), // EN-003
   humanOnly: z.boolean().optional(), // EN-003
-  repos: z.array(z.string()).max(50).optional(), // EN-005 — DB-only, allow-list enforced server-side
+  repos: z.array(z.string()).max(50).optional(), // EN-005 — pushed, allow-list enforced server-side
+  targetEnv: z.enum(["staging", "production"]).optional(), // pushed target environment
   agentRunApproved: z.boolean().optional(), // EN-005 — DB-only operator approval of an approve-mode agent run
 });
 

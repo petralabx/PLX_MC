@@ -23,6 +23,7 @@ import type {
   SpSite,
   Stage,
   SyncRegister,
+  TargetEnv,
   Task,
   Trace,
 } from "./types";
@@ -58,6 +59,13 @@ export const PRIORITY: Record<PriorityKey, PriorityConfig> = {
   medium: { label: "Medium", cls: "info", tick: "▰▰▱▱" },
   low: { label: "Low", cls: "muted", tick: "▰▱▱▱" },
 };
+
+export const TARGET_ENV: Record<TargetEnv, { label: string }> = {
+  staging: { label: "Staging" },
+  production: { label: "Production" },
+};
+
+export const DEFAULT_TARGET_ENV: TargetEnv = "staging";
 
 // Real PLX directory — the six people resolved from the Microsoft 365 tenant
 // via Microsoft Graph (EN-003 / WS-1; see scripts/resolve-directory.mjs and
@@ -368,6 +376,7 @@ export const SP_LISTS: SpListDef[] = [
       { name: "PRD Requirements", type: "Multi line of text", mc: "reqs", dir: "push" },
       { name: "Estimate", type: "Choice", mc: "estimate", dir: "push", note: "S/M/L" },
       { name: "Repos", type: "Multi line of text", mc: "repos", dir: "push" },
+      { name: "Target Environment", type: "Choice", mc: "targetEnv", dir: "push", note: "Staging/Production" },
       { name: "Evidence Complete", type: "Yes/No", mc: "evidence", dir: "push" },
       { name: "Description", type: "Multi line of text", mc: "description", dir: "two-way" },
       { name: "Sub-tasks", type: "Multi line of text", mc: "subtasks", dir: "push", note: "Item 3 — serialized push-only mirror" },

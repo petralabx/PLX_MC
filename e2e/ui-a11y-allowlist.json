@@ -1,0 +1,5 @@
+{
+  "__doc__": "Route-keyed axe rule allowlist for the ui-ux-design-loop G4 gate. Burn down to empty: fix violations first; only allowlist triaged items with tracking context. Strict mode honors this list and fails on any UN-triaged violation. NEVER allowlist structural rules (roles/names/aria) — only deliberate design-system palette rules.",
+  "/loop-ledgers": ["color-contrast"],
+  "/loop-ledgers__note": "DESIGN-SYSTEM EXCEPTION (not a burn-down item). Every color-contrast failure on this surface is the brand --p-muted token (#807A6F) on --p-paper (#FBF9F5) = 4.04 (AA needs 4.5) at the design system's intentional small/meta sizes. The screen conforms to the design system (G1 token gate passes); the contrast is a brand-token property under ADR-003 authority (brand authority: plx-customer-portal), NOT a loop-ledgers defect. ESCALATED to the design authority to decide whether --p-muted should meet AA (tracked, pending). Structural a11y rules are NOT allowlisted and remain true-zero on this surface."
+}

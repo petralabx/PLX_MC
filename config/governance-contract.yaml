@@ -130,6 +130,8 @@ repo_hygiene:
     - vercel.json
     - .gitignore
     - .pre-commit-config.yaml
+    - ui-loop.config.json
+    - ui-loop.schema.json
 
   report_location: "artifacts/<domain>/<yyyy-mm-dd>-<slug>/REPORT.md"
   archive_location: "archive/<yyyy-mm-dd>-<reason>/"

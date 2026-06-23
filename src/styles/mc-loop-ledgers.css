@@ -654,3 +654,23 @@
   font-size: var(--p-text-small);
   background: color-mix(in srgb, var(--p-hot) 5%, transparent);
 }
+
+/* ─── Responsive: narrow viewports ────────────────────────────────────────── */
+/* The dense hairline tables have fixed column tracks (~600px). Below the tablet
+   breakpoint, let each table scroll horizontally WITHIN its own container so the
+   loop-ledgers surface never forces a page-level horizontal scroll, while the
+   columns stay readable rather than crushing. */
+@media (max-width: 760px) {
+  .ll-table,
+  .ll-artifacts {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .ll-table-head,
+  .ll-row,
+  .ll-artifacts-head,
+  .ll-artifact-row {
+    min-width: 600px;
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ui-loop adapter manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "appDir",
+    "tokenCheck",
+    "componentMap",
+    "routesGlob",
+    "renderGuard",
+    "a11yAllowlist",
+    "viewports",
+    "baseUrlEnv",
+    "authBypassEnv",
+    "previewCommand"
+  ],
+  "properties": {
+    "appDir": { "type": "string", "minLength": 1 },
+    "tokenCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "args", "fileGlobs"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "fileGlobs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "componentMap": { "type": "array", "items": { "type": "string" } },
+    "routesGlob": { "type": "string", "minLength": 1 },
+    "renderGuard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authHeading", "errorHeading"],
+      "properties": {
+        "authHeading": { "type": "string", "minLength": 1 },
+        "errorHeading": { "type": "string", "minLength": 1 }
+      }
+    },
+    "a11yAllowlist": { "type": "string", "minLength": 1 },
+    "viewports": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "baseUrlEnv": { "type": "string", "minLength": 1 },
+    "authBypassEnv": { "type": "string", "minLength": 1 },
+    "previewCommand": { "type": "string", "minLength": 1 }
+  }
+}

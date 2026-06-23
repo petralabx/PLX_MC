@@ -23,6 +23,10 @@ definition of "passing."
   `python scripts/generate-governance-surfaces.py` → surfaces update between
   `governance:auto` markers. Never hand-edit a generated block.
 - `--check` is the drift gate: exit 1 if any surface differs from the contract.
+- The contract carries an `agent_workflow` section (task/PR discipline for
+  agent-driven work — resolve to an MC task, `MC-Checkout` stamps incl. multi-task,
+  the tier bundle, never bypass the gate) rendered into every runtime surface, so
+  the same rules reach Cursor, Claude Code, and ChatGPT/Codex from one source.
 - `scripts/check-repo-hygiene.py` enforces `docs/REPO_HYGIENE_SPEC.md`
   (approved root files, forbidden patterns, dated artifact bundles, documented
   archives) with exit codes.

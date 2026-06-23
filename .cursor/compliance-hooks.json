@@ -1,5 +1,5 @@
 {
-  "description": "EN-007 compliance capture hook (P3). Wires scripts/compliance-checkout.mjs to run at an agent run's start, claim an MC task, and stamp the PR body with 'MC-Checkout: <id>' so the gate resolves the agent + task. DISABLED by default (operator-local tooling; governance: ships disabled, opt-in). To enable: merge this entry into .cursor/hooks.json and set COMPLIANCE_CAPTURE=1 plus MC_BASE_URL / MC_TASK_ID / MC_ACCOUNTABLE / MC_REPO in the run env.",
+  "description": "EN-007 compliance capture hook (P3). Wires scripts/compliance-checkout.mjs to run at an agent run's start: it checks out the MC task(s) — or AUTO-CREATES one when none is supplied (MC_TASK_TITLE + MC_BUCKET) — and stamps the PR body with one 'MC-Checkout: <id>' per task so the gate resolves the agent + tasks (multi-task PRs supported). DISABLED by default (operator-local tooling; governance: ships disabled, opt-in). To enable: merge this entry into .cursor/hooks.json and set COMPLIANCE_CAPTURE=1 plus MC_BASE_URL / MC_ACCOUNTABLE / MC_REPO and either MC_TASK_ID (comma/space-separated for N tasks) or MC_TASK_TITLE + MC_BUCKET to auto-create. checkout/tasks are session-gated, so set MC_BASIC_AUTH ('user:pass') against a gated instance.",
   "enabled": false,
   "version": 1,
   "hook": {
@@ -9,9 +9,13 @@
       "COMPLIANCE_CAPTURE",
       "MC_BASE_URL",
       "MC_TASK_ID",
+      "MC_TASK_TITLE",
+      "MC_BUCKET",
+      "MC_REPORTER",
       "MC_ACCOUNTABLE",
       "MC_REPO",
-      "MC_RUNTIME"
+      "MC_RUNTIME",
+      "MC_BASIC_AUTH"
     ]
   }
 }

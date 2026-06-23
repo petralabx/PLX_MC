@@ -23,9 +23,10 @@ function genId(prefix: string): string {
 }
 
 // Deterministic check id so recordCheck's upsert actually dedups across
-// reconciliation replays (review S3) — one row per (repo, pr, headSha).
-function checkId(repoName: string, prNumber: number, headSha: string): string {
-  return `chk_${repoName}_${prNumber}_${headSha}`.replace(/[^A-Za-z0-9_.-]/g, "_");
+// reconciliation replays (review S3) — one row per (repo, pr, headSha, task).
+// taskId is part of the key so a multi-task PR records one check per task.
+function checkId(repoName: string, prNumber: number, headSha: string, taskId?: string | null): string {
+  return `chk_${repoName}_${prNumber}_${headSha}${taskId ? `_${taskId}` : ""}`.replace(/[^A-Za-z0-9_.-]/g, "_");
 }
 
 // Resolve a checkout credential strictly — unrevoked, unexpired, AND repo-bound —
@@ -112,13 +113,23 @@ export interface VerifyPrInput {
   headSha: string;
   changedPaths: string[];
   labels?: string[];
-  checkoutId?: string | null;
+  checkoutId?: string | null; // single checkout (back-compat)
+  checkoutIds?: string[] | null; // multi-task: one MC-Checkout per task on the PR
+}
+
+// Per-task verdict for a multi-task PR (one entry per checked-out task).
+export interface VerifyPrTaskResult {
+  checkoutId: string;
+  taskId: string | null;
+  verdict: "pass" | "block";
+  reasons: string[];
 }
 
 export interface VerifyPrResult extends VerifyResult {
   tier: RiskTier;
   actorKind: ActorKind;
-  taskId: string | null;
+  taskId: string | null; // first resolved task (back-compat)
+  tasks: VerifyPrTaskResult[]; // per-task verdicts; empty for an operator PR
 }
 
 async function loadTask(taskId: string | null): Promise<Task | null> {
@@ -127,30 +138,18 @@ async function loadTask(taskId: string | null): Promise<Task | null> {
   return row ? (row.data as unknown as Task) : null;
 }
 
-export async function verifyPr(input: VerifyPrInput): Promise<VerifyPrResult> {
-  const tier = classifyRiskTier(input.changedPaths, input.labels ?? []);
-
-  // Actor + task come from the checkout credential, never git metadata
-  // (decision 9). A present checkoutId means an agent run; an invalid/expired/
-  // repo-mismatched one yields no task so the agent PR blocks. The client cannot
-  // supply a taskId for attribution (review S7).
-  let actorKind: ActorKind = "operator";
-  let taskId: string | null = null;
-  let actorIdentity = "operator";
-  if (input.checkoutId) {
-    actorKind = "agent";
-    const d = await resolveDispatch(input.checkoutId, input.repo);
-    taskId = d?.taskId ?? null;
-    actorIdentity = d?.runtime ?? "agent";
-  }
-
-  const task = await loadTask(taskId);
-  // No server bucket store yet (EN-005/006) → PRD presence is "unknown", so the
-  // high-risk PRD requirement is advisory, not a hard block (review S1).
-  const result = verifyCompliance({ task, actor: actorKind, tier, bucketPrd: "unknown" });
-
+// Record a single task's verdict: one check row + one gate event, keyed by task
+// so a multi-task PR never collides (one check + one event per task).
+async function recordVerdict(
+  input: VerifyPrInput,
+  tier: RiskTier,
+  actorKind: ActorKind,
+  taskId: string | null,
+  actorIdentity: string,
+  result: VerifyResult
+): Promise<void> {
   await repo.recordCheck({
-    id: checkId(input.repo, input.prNumber, input.headSha),
+    id: checkId(input.repo, input.prNumber, input.headSha, taskId),
     repo: input.repo,
     prNumber: input.prNumber,
     headSha: input.headSha,
@@ -166,12 +165,56 @@ export async function verifyPr(input: VerifyPrInput): Promise<VerifyPrResult> {
     taskId,
     pr: String(input.prNumber),
     payload: { actorKind, tier, headSha: input.headSha, reasons: result.reasons },
-    // Idempotent per (repo, pr, sha, verdict): a replay dedups; a genuine
-    // re-verify that flips the verdict still records a new event (review S3).
-    dedupKey: `gate:${input.repo}:${input.prNumber}:${input.headSha}:${result.verdict}`,
+    // Idempotent per (repo, pr, sha, task, verdict): a replay dedups; a re-verify
+    // that flips a task's verdict still records (review S3). taskId keeps the
+    // tasks of a multi-task PR distinct.
+    dedupKey: `gate:${input.repo}:${input.prNumber}:${input.headSha}:${taskId ?? "none"}:${result.verdict}`,
   });
+}
 
-  return { ...result, tier, actorKind, taskId };
+export async function verifyPr(input: VerifyPrInput): Promise<VerifyPrResult> {
+  const tier = classifyRiskTier(input.changedPaths, input.labels ?? []);
+
+  // Actor + task(s) come from the checkout credential(s), never git metadata
+  // (decision 9). Prefer the multi-task list; fall back to the single id
+  // (back-compat). Dedup. No checkouts → an operator PR (recorded, ungated).
+  const ids = Array.from(
+    new Set(
+      (input.checkoutIds?.length ? input.checkoutIds : input.checkoutId ? [input.checkoutId] : []).filter(Boolean)
+    )
+  ) as string[];
+
+  // Operator PR: one verdict, recorded ungated (decision 5). PRD presence is
+  // "unknown" (no server bucket store yet, EN-005/006) → advisory (review S1).
+  if (ids.length === 0) {
+    const result = verifyCompliance({ task: null, actor: "operator", tier, bucketPrd: "unknown" });
+    await recordVerdict(input, tier, "operator", null, "operator", result);
+    return { ...result, tier, actorKind: "operator", taskId: null, tasks: [] };
+  }
+
+  // Agent PR: verify EVERY checked-out task. The PR passes only if ALL pass — one
+  // incomplete task blocks the whole PR (one logical theme, N related tasks). Each
+  // task's verdict is its own recorded check + event.
+  const tasks: VerifyPrTaskResult[] = [];
+  for (const cid of ids) {
+    const d = await resolveDispatch(cid, input.repo);
+    const taskId = d?.taskId ?? null;
+    const actorIdentity = d?.runtime ?? "agent";
+    const task = await loadTask(taskId);
+    const result = verifyCompliance({ task, actor: "agent", tier, bucketPrd: "unknown" });
+    await recordVerdict(input, tier, "agent", taskId, actorIdentity, result);
+    tasks.push({ checkoutId: cid, taskId, verdict: result.verdict, reasons: result.reasons });
+  }
+
+  // Pass only if EVERY task passes. When blocked, surface only the blocking
+  // tasks' reasons (exactly what to fix); when passing, surface the pass reasons.
+  // Each reason is prefixed with its task id so a multi-task PR is unambiguous.
+  const blocked = tasks.filter((t) => t.verdict === "block");
+  const verdict: "pass" | "block" = blocked.length === 0 ? "pass" : "block";
+  const reasons = (blocked.length ? blocked : tasks).flatMap((t) =>
+    t.reasons.map((r) => `${t.taskId ?? `checkout ${t.checkoutId}`}: ${r}`)
+  );
+  return { verdict, reasons, tier, actorKind: "agent", taskId: tasks[0]?.taskId ?? null, tasks };
 }
 
 // ─── git → MC ingestion (decision 8, the auto-maintained record) ─────────────

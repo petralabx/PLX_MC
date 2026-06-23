@@ -23,5 +23,6 @@ test -f "$wf"
 grep -q "workflow_call" "$wf"
 grep -q "/api/compliance/verify" "$wf"
 grep -q "compliance gate skipped" "$wf"   # default-off skip path
+grep -qE "MC-Checkout.*\|\| true" "$wf"    # stamp read is no-match-safe (operator PR under pipefail)
 
 echo "[compliance-ci-check] OK"

@@ -73,6 +73,11 @@ def render_block(c: dict) -> str:
         out += [f"## {behavior.get('title', 'Agent Behavioral Contract')}", ""]
         out += _numbered(behavior["rules"]) + [""]
 
+    workflow = c.get("agent_workflow", {})
+    if workflow.get("rules"):
+        out += [f"## {workflow.get('title', 'Agent Task & PR Workflow')}", ""]
+        out += _bullets(workflow["rules"]) + [""]
+
     hygiene = c.get("repo_hygiene", {})
     if hygiene:
         out += ["## Repo Hygiene", ""]

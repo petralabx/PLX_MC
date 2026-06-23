@@ -50,16 +50,22 @@ jobs:
           git fetch --no-tags --depth=1 origin "$PR_BASE_REF" || true
           changed=$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" 2>/dev/null \
             | jq -R -s 'split("\n") | map(select(length>0))' || echo '[]')
-          checkout=$(printf '%s' "$PR_BODY" | grep -oE 'MC-Checkout: dsp_[A-Za-z0-9]+' | head -n1 | sed 's/.* //' || true)
+          # Read EVERY MC-Checkout stamp (one per task) — a PR may complete N
+          # related tasks; verify checks all of them and blocks if any is incomplete.
+          # `grep || true` swallows the no-match exit (operator PR) under pipefail;
+          # jq then emits a valid empty array for the no-stamp case.
+          checkoutIds=$(printf '%s' "$PR_BODY" \
+            | { grep -oE 'MC-Checkout: dsp_[A-Za-z0-9]+' || true; } \
+            | sed 's/.* //' | sort -u \
+            | jq -R -s 'split("\n") | map(select(length>0))')
           body=$(jq -n \
             --arg repo "$REPO_NAME" \
             --argjson prNumber "$PR_NUMBER" \
             --arg headSha "$PR_HEAD_SHA" \
             --argjson changedPaths "$changed" \
             --argjson labels "${PR_LABELS:-[]}" \
-            --arg checkoutId "${checkout:-}" \
-            '{repo:$repo, prNumber:$prNumber, headSha:$headSha, changedPaths:$changedPaths, labels:$labels}
-             + (if $checkoutId != "" then {checkoutId:$checkoutId} else {} end)')
+            --argjson checkoutIds "${checkoutIds:-[]}" \
+            '{repo:$repo, prNumber:$prNumber, headSha:$headSha, changedPaths:$changedPaths, labels:$labels, checkoutIds:$checkoutIds}')
           resp=$(curl -sS --max-time 20 -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
             -H 'content-type: application/json' \
             -H "authorization: Bearer ${MC_CI_TOKEN:-}" \

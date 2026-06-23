@@ -8,8 +8,9 @@ import { ApiError, parseBody, route } from "@/lib/api/route";
 import { complianceCiToken, complianceCiTokenConfigured } from "@/lib/secrets";
 import { verifyPrOrQueue } from "@/lib/compliance/service";
 
-// No taskId — attribution comes from the checkout credential, not the client
-// (review S7); the status-check workflow never sends one.
+// No taskId — attribution comes from the checkout credential(s), not the client
+// (review S7); the status-check workflow never sends one. checkoutIds carries one
+// MC-Checkout per task for a multi-task PR; checkoutId stays for back-compat.
 const verifySchema = z.object({
   repo: z.string().min(1),
   prNumber: z.number().int().nonnegative(),
@@ -17,6 +18,7 @@ const verifySchema = z.object({
   changedPaths: z.array(z.string()).default([]),
   labels: z.array(z.string()).optional(),
   checkoutId: z.string().optional(),
+  checkoutIds: z.array(z.string()).optional(),
 });
 
 export const POST = route(async (req) => {

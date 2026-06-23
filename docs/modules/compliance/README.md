@@ -34,6 +34,11 @@ truth table is proven before any plumbing exists.
   PRs pass (recorded, ungated); an agent PR with no checked-out task is blocked;
   agent PRs must carry a human accountable owner (EN-003) + the tier bundle. The
   soft-vs-hard (warn vs block) decision belongs to the caller.
+- `verifyPr` (service) wraps the pure verdict for a PR: it reads **every**
+  `MC-Checkout` stamp, verifies each checked-out task, and passes only if **all**
+  pass — one incomplete task blocks the PR (a PR may complete N related tasks).
+  Each task's verdict is recorded as its own check + `gate.passed/blocked` event;
+  a single stamp is the back-compat subset.
 
 Landed in P1b: the checkout/complete/verify handshake (`service.ts` + `repo.ts` +
 `/api/compliance/*`), the dispatch ledger + compliance-check ledger, and the
@@ -66,7 +71,7 @@ GitHub status-check workflow.
 - `src/lib/compliance/webhook.ts` — GitHub HMAC verify + PR-event parse (git→MC ingestion)
 - `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts` — the API surface
 - `.github/workflows/compliance-gate.yml` — the required PR status check (default-off; soft→hard)
-- `scripts/compliance-checkout.mjs` + `.cursor/compliance-hooks.json` — the capture hook (disabled by default)
+- `scripts/compliance-checkout.mjs` + `.cursor/compliance-hooks.json` — the capture hook: checks out N tasks (or auto-creates one), emits one MC-Checkout stamp per task (disabled by default)
 - `scripts/compliance-ci-check.sh` — workflow/hook validator (P3 acceptance)
 - `db/migrations/005_compliance.sql` — `mc_events`, `mc_dispatch`, `mc_compliance_check`
 - `db/migrations/006_compliance_reconcile.sql` — `mc_reconcile_queue` (fail-closed replay)
@@ -75,6 +80,8 @@ GitHub status-check workflow.
 - `docs/runbooks/compliance-gate-rollout.md` — operator activation + External Integrations declaration
 - `tests/compliance.test.ts` — risk truth table + verifier verdicts (pure)
 - `tests/compliance-server.test.ts` — service orchestration (mocked DB seam)
+- `tests/compliance-multitask.test.ts` — multi-task PRs: verify N tasks, pass iff all pass
+- `tests/compliance-capture.test.ts` — capture hook: default-off, multi-task, auto-create
 - `tests/compliance-ingest.test.ts` — webhook signature/parse + ingestion (mocked seam)
 - `docs/product/SYSTEM_OF_RECORD.md` — the governing spec (EN-007)
 

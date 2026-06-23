@@ -1,0 +1,61 @@
+# Module: github-app
+
+## What
+
+Server-side GitHub authentication for read-only repository Contents reads. Mints
+short-lived **GitHub App installation access tokens** (JWT RS256 → installation
+token, scoped to read-only Contents + Metadata), caches them, and exposes one
+shared resolver — `resolveGithubToken()` — that every server-side GitHub read
+goes through. It is NOT a general GitHub client and performs no writes; it only
+produces a bearer token (or null).
+
+## Why
+
+The loop-ledgers observatory and self-service repo validation previously read a
+long-lived classic `GITHUB_TOKEN` PAT. A hardening audit flagged that the
+provisioned PAT was broadly scoped (`repo, admin:org, workflow, …`) — a
+least-privilege violation. A GitHub App issues **short-lived (≤1h), narrowly
+scoped, fully API-managed** installation tokens instead, so a leak has a bounded
+blast radius and credentials rotate automatically. The App is the path to
+retiring the broad PAT entirely.
+
+## How
+
+- `mintAppJwt(creds, now?)` — RS256 JWT signed with the App private key via
+  `node:crypto` (no extra dependency); `iat` backdated 60s, `exp` ≤10 min.
+- `requestInstallationToken(creds, opts?)` — `POST /app/installations/{id}/access_tokens`
+  with the JWT, requesting `{ permissions: { contents: read, metadata: read } }`
+  (defence in depth even if the App grant is broader). Throws an honest error on
+  non-2xx; never returns a bogus token.
+- `getInstallationToken(opts?)` — module-cached token, refreshed 60s before
+  expiry to avoid boundary races.
+- `resolveGithubToken(opts?)` — the one accessor consumers use:
+  App installation token when `githubAppConfigured()` (all three `GITHUB_APP_*`
+  secrets present), else the static `GITHUB_TOKEN`, else `null` (callers then
+  emit an honest degraded result — never a throw at the call site). If the App is
+  configured but a mint transiently fails, it warns and falls back to the PAT so
+  the surface stays up.
+- Default-off: with no App secrets, behavior is identical to the prior PAT path,
+  so this ships dormant and is safe to merge before the App is provisioned.
+
+## Dependencies
+
+- `node:crypto` (RS256 signing) — no new package.
+- `@/lib/secrets` — `githubAppConfigured()` / `githubAppCredentials()`.
+- Depended on by: `loop-ledgers` (github-api source adapter) and `sync`
+  (`validateRepoInOrg`). Both import `resolveGithubToken` through this barrel.
+
+### Key Files
+
+- `src/lib/github-app/token.ts` — JWT mint, installation-token exchange + cache, `resolveGithubToken`
+- `src/lib/github-app/index.ts` — module barrel
+- `src/lib/secrets.ts` — `githubAppConfigured` / `githubAppCredentials`
+- `tests/github-app.test.ts` — JWT/mint/cache/fallback contract tests
+
+## Owner
+
+Vince
+
+## Criticality
+
+Medium

@@ -46,6 +46,7 @@ DESIGN_TOKENS).
 | sync | Vince | Critical |
 | meeting-intake | Vince | Medium |
 | loop-ledgers | Vince | Medium |
+| github-app | Vince | Medium |
 
 ## Canonical Operations Docs
 

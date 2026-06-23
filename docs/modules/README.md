@@ -20,6 +20,7 @@ key files change, update its contract in the same PR.
 | web | Vince | Critical | `docs/modules/web/README.md` |
 | sync | Vince | Critical | `docs/modules/sync/README.md` |
 | meeting-intake | Vince | Medium | `docs/modules/meeting-intake/README.md` |
+| github-app | Vince | Medium | `docs/modules/github-app/README.md` |
 | agents | Vince | Medium | `docs/modules/agents/README.md` |
 | compliance | Vince | Critical | `docs/modules/compliance/README.md` |
 | loop-ledgers | Vince | Medium | `docs/modules/loop-ledgers/README.md` |

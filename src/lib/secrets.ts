@@ -88,6 +88,36 @@ export function azureOpenAiConfig(): AzureOpenAIConfig {
   };
 }
 
+// GitHub App auth for read-only repo Contents reads (loop-ledgers + repo
+// validation). Preferred over a long-lived classic PAT: the App mints
+// short-lived (≤1h) installation access tokens scoped to read-only Contents on
+// only the installed repos. Absent by default → the github-app module falls back
+// to the static GITHUB_TOKEN (and then to honest degraded). The private key is a
+// PEM string (runtime-injected from the secrets manager — never logged/committed).
+export interface GithubAppCredentials {
+  appId: string;
+  privateKey: string;
+  installationId: string;
+}
+
+export function githubAppConfigured(): boolean {
+  return !!(
+    process.env.GITHUB_APP_ID &&
+    process.env.GITHUB_APP_PRIVATE_KEY &&
+    process.env.GITHUB_APP_INSTALLATION_ID
+  );
+}
+
+export function githubAppCredentials(): GithubAppCredentials {
+  return {
+    appId: requireSecret("GITHUB_APP_ID"),
+    // Support both a literal PEM and a \n-escaped single-line secret (common in
+    // env/secret stores that can't hold real newlines).
+    privateKey: requireSecret("GITHUB_APP_PRIVATE_KEY").replace(/\\n/g, "\n"),
+    installationId: requireSecret("GITHUB_APP_INSTALLATION_ID"),
+  };
+}
+
 // EN-007 compliance webhook (git → MC ingestion). The shared secret signs the
 // GitHub webhook delivery (HMAC-SHA256). Absent by default — the webhook route
 // returns 503 until it is configured (the gate ships default-off).

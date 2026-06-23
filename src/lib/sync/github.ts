@@ -1,11 +1,13 @@
 // GitHub org validation for self-service repo requests (EN-002 / WS-2). A new
 // repo joins the registry/allow-list only after it is confirmed to exist in the
 // org — this is the "validate against the GitHub org via API at registration"
-// rule. Server-only: reads GITHUB_TOKEN from the environment (the shared
-// credential, never hardcoded). When the token is missing or the call fails the
-// result is `ok: false` with an honest note — the caller marks the request
-// unverified rather than fabricating membership.
+// rule. Server-only: auth via resolveGithubToken (src/lib/github-app) — a
+// short-lived GitHub App installation token when configured, else the static
+// GITHUB_TOKEN. When no auth is configured or the call fails the result is
+// `ok: false` with an honest note — the caller marks the request unverified
+// rather than fabricating membership.
 
+import { resolveGithubToken } from "@/lib/github-app";
 import type { RepoVisibility } from "@/lib/mc-data/types";
 
 export interface RepoValidation {
@@ -23,9 +25,9 @@ interface GitHubRepoPayload {
 }
 
 export async function validateRepoInOrg(owner: string, name: string): Promise<RepoValidation> {
-  const token = process.env.GITHUB_TOKEN;
+  const token = await resolveGithubToken();
   if (!token) {
-    return { ok: false, note: "GITHUB_TOKEN is not set — repo could not be validated against the org." };
+    return { ok: false, note: "no GitHub auth configured (GitHub App or GITHUB_TOKEN) — repo could not be validated against the org." };
   }
   let res: Response;
   try {

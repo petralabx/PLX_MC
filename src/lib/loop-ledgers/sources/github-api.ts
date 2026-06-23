@@ -3,13 +3,14 @@
 // then fetches each file's raw content via the Contents API with the raw media
 // type — avoids base64 + the Contents 1MB inline cap.
 //
-// Mirrors the auth convention from src/lib/sync/github.ts:
-//   - read-only token from process.env.GITHUB_TOKEN
+// Auth goes through resolveGithubToken (src/lib/github-app): a short-lived App
+// installation token when the App is configured, else the static GITHUB_TOKEN,
+// else null → honest degraded (never throws, never fabricates).
 //   - Bearer auth header, accept vnd.github+json, x-github-api-version
-//   - honest degraded result on missing token or non-200 — never throws, never fabricates
 //
 // One repo failing MUST NOT kill the batch — results are accumulated independently.
 
+import { resolveGithubToken } from "@/lib/github-app";
 import type { LedgerRef, RegistryConfig, RepoEntry } from "@/lib/loop-ledgers/types";
 import type {
   DiscoveredLedger,
@@ -280,14 +281,14 @@ async function discoverRepo(
 /** Production-default source adapter that reads ledgers via the GitHub API. */
 export class GithubApiSource implements LedgerSource {
   async listLedgers(registry: RegistryConfig): Promise<LedgerSourceResult[]> {
-    const token = process.env.GITHUB_TOKEN;
+    const token = await resolveGithubToken();
     if (!token) {
-      // One degraded result per repo — every repo is unreachable without the token
+      // One degraded result per repo — every repo is unreachable without auth
       return registry.repos.map((entry) => ({
         ok: false as const,
         repo: entry.repo,
         reason: "token_missing" as SourceDegradedReason,
-        note: "GITHUB_TOKEN is not set — ledgers cannot be fetched from GitHub",
+        note: "no GitHub auth configured (GitHub App or GITHUB_TOKEN) — ledgers cannot be fetched",
       }));
     }
 
@@ -299,13 +300,13 @@ export class GithubApiSource implements LedgerSource {
   }
 
   async getLedger(ref: LedgerRef): Promise<LedgerDetailResult> {
-    const token = process.env.GITHUB_TOKEN;
+    const token = await resolveGithubToken();
     if (!token) {
       return {
         ok: false,
         ref,
         reason: "token_missing",
-        note: "GITHUB_TOKEN is not set — ledger cannot be fetched from GitHub",
+        note: "no GitHub auth configured (GitHub App or GITHUB_TOKEN) — ledger cannot be fetched",
       };
     }
 

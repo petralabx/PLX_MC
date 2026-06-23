@@ -1,0 +1,35 @@
+{
+  "sha": "abc123def456",
+  "url": "https://api.github.com/repos/taylorvalton/agentic-swarm/git/trees/main?recursive=1",
+  "tree": [
+    {
+      "path": "docs/vmc/quality-ledger/chat.artifacts.json",
+      "type": "blob",
+      "sha": "blobsha001",
+      "url": "https://api.github.com/repos/taylorvalton/agentic-swarm/git/blobs/blobsha001",
+      "size": 2048
+    },
+    {
+      "path": "docs/vmc/quality-ledger/swarm.artifacts.json",
+      "type": "blob",
+      "sha": "blobsha002",
+      "url": "https://api.github.com/repos/taylorvalton/agentic-swarm/git/blobs/blobsha002",
+      "size": 1024
+    },
+    {
+      "path": "docs/vmc/quality-ledger/README.md",
+      "type": "blob",
+      "sha": "blobsha003",
+      "url": "https://api.github.com/repos/taylorvalton/agentic-swarm/git/blobs/blobsha003",
+      "size": 512
+    },
+    {
+      "path": "src/index.ts",
+      "type": "blob",
+      "sha": "blobsha004",
+      "url": "https://api.github.com/repos/taylorvalton/agentic-swarm/git/blobs/blobsha004",
+      "size": 256
+    }
+  ],
+  "truncated": false
+}

@@ -8,6 +8,24 @@ The code ships **default-off**: with no `GITHUB_APP_*` secrets, `resolveGithubTo
 falls back to `GITHUB_TOKEN`. These steps flip it on; only Step 1–2 are manual
 (GitHub has no PAT-issuable App-creation API), everything after is API-managed.
 
+## Provisioned status (2026-06-23)
+
+The App is **live**. Non-secret coordinates for operational traceability (the
+private key lives only in the secret stores — never here):
+
+- **App:** `PLX MC Compliance` (slug `plx-mc-compliance`), **App ID `4125227`**
+- **Installation ID `142149327`** (account `taylorvalton`, selected repos:
+  `agentic-swarm`, `PLX_MC`, `plx-customer-portal`)
+- **Secrets set** (`GITHUB_APP_ID` / `GITHUB_APP_INSTALLATION_ID` /
+  `GITHUB_APP_PRIVATE_KEY`): AWS Secrets Manager `prod/ec2-secrets` +
+  `staging/ec2-secrets`, and Vercel project `plx-mission-control`
+  (production + preview). Production was redeployed to pick them up.
+- **Verified:** installation token mints with `contents:read, metadata:read` and
+  resolves all three repos.
+- **PAT note:** Vercel never had a `GITHUB_TOKEN` (the deployed app is App-only).
+  The AWS `GITHUB_TOKEN` is a **shared** dev-box credential used by other tooling
+  and was intentionally left in place — do not remove it as part of this module.
+
 ## Step 1 — Create the App (one-time, interactive)
 
 GitHub → **Settings → Developer settings → GitHub Apps → New GitHub App** (under

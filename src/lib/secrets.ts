@@ -98,3 +98,32 @@ export function complianceWebhookConfigured(): boolean {
 export function complianceWebhookSecret(): string {
   return requireSecret("COMPLIANCE_WEBHOOK_SECRET");
 }
+
+// Vercel Cron auth for the scheduled sweep on the deployed app. The in-app
+// setInterval scheduler stays OFF on Vercel (serverless timers are unreliable —
+// TOOLS.md); a Vercel Cron job (vercel.json, every 5 min) calls
+// GET /api/cron/sweep instead. Vercel injects `Authorization: Bearer
+// $CRON_SECRET` on each cron invocation; the route rejects anything that does
+// not match. Absent by default → the cron route returns 503 (the scheduled
+// sweep ships default-off until CRON_SECRET is configured).
+export function cronConfigured(): boolean {
+  return !!process.env.CRON_SECRET;
+}
+
+export function cronSecret(): string {
+  return requireSecret("CRON_SECRET");
+}
+
+// CI auth for the compliance verify endpoint (EN-007 review #3). The GitHub
+// status-check workflow calls POST /api/compliance/verify with
+// `Authorization: Bearer $COMPLIANCE_CI_TOKEN`; the route rejects anything that
+// doesn't match. Absent by default → the verify route returns 503, so even
+// though it is carved out of the UI auth middleware it is never world-callable
+// (closed/unconfigured, not open).
+export function complianceCiTokenConfigured(): boolean {
+  return !!process.env.COMPLIANCE_CI_TOKEN;
+}
+
+export function complianceCiToken(): string {
+  return requireSecret("COMPLIANCE_CI_TOKEN");
+}

@@ -42,6 +42,7 @@ APPROVED_ROOT_FILES = {
     "eslint.config.mjs",
     "vitest.config.ts",
     "playwright.config.ts",
+    "vercel.json",
     ".gitignore",
     ".pre-commit-config.yaml",
 }

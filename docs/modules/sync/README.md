@@ -47,8 +47,11 @@ tenant against the committed schema with exit codes.
   Inbound runs BEFORE outbound in every sweep so dirty-field edits raise
   conflicts (§5.1) instead of last-write-wins. Mapping layer (`mapping.ts`)
   enforces §3 directions and the §5.2 `Medium` → `Med` Likelihood
-  normalization. Runs inside the Next.js process: `src/instrumentation.ts`
-  starts the 5-min scheduler when `PLX_MC_SYNC_ENABLED=1` (default OFF);
+  normalization.   Runs inside the Next.js process: `src/instrumentation.ts`
+  starts the 5-min scheduler when `PLX_MC_SYNC_ENABLED=1` (default OFF, intended
+  for a long-lived host — e.g. the dev box). On Vercel, where serverless timers
+  are unreliable, the in-app scheduler stays OFF and the 5-min cadence runs via
+  Vercel Cron (`vercel.json` → `GET /api/cron/sweep`, authed by `CRON_SECRET`);
   `POST /api/sync/sweep` runs one on demand. API surface per spec §6 under
   `src/app/api/` (shared wrapper + zod). Evidence:
   `artifacts/sync/2026-06-11-sync-engine/`.

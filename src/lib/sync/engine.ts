@@ -419,13 +419,21 @@ export async function runSweep(actor: string = SYNC_ACTOR): Promise<SweepResult>
   pushed += await pushRepoRegistry(ctx);
 
   const lastSweep = repo.stamp();
-  await repo.appendAudit(
-    actor,
-    `Sweep completed — ${pushed} outbound push${pushed === 1 ? "" : "es"}, ${pulled} inbound change${pulled === 1 ? "" : "s"}${
-      conflicts ? `, ${conflicts} conflict${conflicts === 1 ? "" : "s"} raised` : ""
-    }${pushErrors ? `, ${pushErrors} push error${pushErrors === 1 ? "" : "s"}` : ""}.`,
-    pushErrors > 0 ? "error" : conflicts > 0 ? "conflict" : "synced"
-  );
+  // Only audit a sweep that actually changed something. Under the scheduled
+  // 5-min cron the common case is a no-op sweep (0 pushed / 0 pulled); writing a
+  // "0 outbound, 0 inbound" row every cadence would flood sync_audit_log. The
+  // "last sync" heartbeat is tracked separately via delta_links.updated_at
+  // (re-stamped on every sweep — see repo.lastSweepAt), so the UI indicator
+  // still advances even when a sweep records nothing.
+  if (pushed > 0 || pulled > 0 || conflicts > 0 || pushErrors > 0) {
+    await repo.appendAudit(
+      actor,
+      `Sweep completed — ${pushed} outbound push${pushed === 1 ? "" : "es"}, ${pulled} inbound change${pulled === 1 ? "" : "s"}${
+        conflicts ? `, ${conflicts} conflict${conflicts === 1 ? "" : "s"} raised` : ""
+      }${pushErrors ? `, ${pushErrors} push error${pushErrors === 1 ? "" : "s"}` : ""}.`,
+      pushErrors > 0 ? "error" : conflicts > 0 ? "conflict" : "synced"
+    );
+  }
 
   return { pushed, pushErrors, pulled, conflicts, skippedInbound, counts: await repo.countsByList(), lastSweep };
 }

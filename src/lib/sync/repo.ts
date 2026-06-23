@@ -144,6 +144,18 @@ export async function saveDeltaLink(listKey: string, deltaLink: string): Promise
   );
 }
 
+// The last-sweep heartbeat. Every sweep re-stamps each list's delta cursor
+// (saveDeltaLink above), so max(updated_at) is "when a sweep last ran" —
+// independent of whether that sweep wrote an audit row. The snapshot uses this
+// for the "Last sync" indicator so it advances even on no-op sweeps (the engine
+// no longer audits idle sweeps).
+export async function lastSweepAt(): Promise<string | null> {
+  const rows = await query<{ updated_at: Date | null }>(
+    "SELECT max(updated_at) AS updated_at FROM delta_links"
+  );
+  return rows[0]?.updated_at ? stamp(rows[0].updated_at) : null;
+}
+
 // ─── Conflicts ───────────────────────────────────────────────────────────────
 
 interface ConflictRow {

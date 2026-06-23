@@ -33,6 +33,7 @@ jobs:
       - name: Verify against PLX MC
         env:
           MC_BASE_URL: ${{ secrets.PLX_MC_BASE_URL }}
+          MC_CI_TOKEN: ${{ secrets.COMPLIANCE_CI_TOKEN }}
           MODE: ${{ inputs.mode || vars.COMPLIANCE_MODE || 'soft' }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
@@ -60,7 +61,9 @@ jobs:
             '{repo:$repo, prNumber:$prNumber, headSha:$headSha, changedPaths:$changedPaths, labels:$labels}
              + (if $checkoutId != "" then {checkoutId:$checkoutId} else {} end)')
           resp=$(curl -sS --max-time 20 -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
-            -H 'content-type: application/json' -d "$body" || true)
+            -H 'content-type: application/json' \
+            -H "authorization: Bearer ${MC_CI_TOKEN:-}" \
+            -d "$body" || true)
           echo "verify response: $resp"
           if [ -z "$resp" ]; then
             echo "Compliance gate: MC unreachable (network/timeout)."

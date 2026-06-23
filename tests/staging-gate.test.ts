@@ -97,9 +97,10 @@ describe("middleware matcher — unauthenticated bypass list", () => {
   // route with NO self-auth would expose the control plane (EN-007 review #3).
   const matches = (pathname: string) => new RegExp(`^${config.matcher[0]}$`).test(pathname);
 
-  it("excludes only the self-authenticating external endpoints (cron, webhook, auth)", () => {
+  it("excludes only the self-authenticating external endpoints (cron, webhook, verify, auth)", () => {
     expect(matches("/api/cron/sweep")).toBe(false); // CRON_SECRET bearer
     expect(matches("/api/compliance/webhook")).toBe(false); // GitHub HMAC signature
+    expect(matches("/api/compliance/verify")).toBe(false); // COMPLIANCE_CI_TOKEN bearer
     expect(matches("/api/auth/callback/microsoft-entra-id")).toBe(false);
   });
 
@@ -108,8 +109,8 @@ describe("middleware matcher — unauthenticated bypass list", () => {
     expect(matches("/tasks")).toBe(true);
     expect(matches("/api/state")).toBe(true);
     // These have no self-auth — they MUST stay behind the session gate.
-    expect(matches("/api/compliance/verify")).toBe(true);
     expect(matches("/api/compliance/checkout")).toBe(true);
+    expect(matches("/api/compliance/complete")).toBe(true);
     expect(matches("/api/compliance/reconcile")).toBe(true);
     expect(matches("/api/events")).toBe(true);
   });

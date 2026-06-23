@@ -4,7 +4,8 @@
 // decision belongs to the caller (the status-check workflow), not this route.
 
 import { z } from "zod";
-import { parseBody, route } from "@/lib/api/route";
+import { ApiError, parseBody, route } from "@/lib/api/route";
+import { complianceCiToken, complianceCiTokenConfigured } from "@/lib/secrets";
 import { verifyPrOrQueue } from "@/lib/compliance/service";
 
 // No taskId — attribution comes from the checkout credential, not the client
@@ -18,4 +19,16 @@ const verifySchema = z.object({
   checkoutId: z.string().optional(),
 });
 
-export const POST = route(async (req) => verifyPrOrQueue(await parseBody(req, verifySchema)));
+export const POST = route(async (req) => {
+  // Self-authenticating endpoint (EN-007 review #3): it is carved out of the UI
+  // session gate (src/middleware.ts), so the CI bearer is its only protection.
+  // Default-off → 503 until COMPLIANCE_CI_TOKEN is configured, so it is never
+  // silently world-callable.
+  if (!complianceCiTokenConfigured()) {
+    throw new ApiError("verify_disabled", "Compliance verify is not configured (COMPLIANCE_CI_TOKEN unset).", 503);
+  }
+  if (req.headers.get("authorization") !== `Bearer ${complianceCiToken()}`) {
+    throw new ApiError("unauthorized", "Invalid or missing CI authorization.", 401);
+  }
+  return verifyPrOrQueue(await parseBody(req, verifySchema));
+});

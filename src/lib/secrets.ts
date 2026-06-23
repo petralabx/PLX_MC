@@ -113,3 +113,17 @@ export function cronConfigured(): boolean {
 export function cronSecret(): string {
   return requireSecret("CRON_SECRET");
 }
+
+// CI auth for the compliance verify endpoint (EN-007 review #3). The GitHub
+// status-check workflow calls POST /api/compliance/verify with
+// `Authorization: Bearer $COMPLIANCE_CI_TOKEN`; the route rejects anything that
+// doesn't match. Absent by default → the verify route returns 503, so even
+// though it is carved out of the UI auth middleware it is never world-callable
+// (closed/unconfigured, not open).
+export function complianceCiTokenConfigured(): boolean {
+  return !!process.env.COMPLIANCE_CI_TOKEN;
+}
+
+export function complianceCiToken(): string {
+  return requireSecret("COMPLIANCE_CI_TOKEN");
+}

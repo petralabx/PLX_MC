@@ -12,19 +12,19 @@ export default auth;
 export const config = {
   // Never gate endpoints that carry their OWN authentication and are invoked
   // with no user session: the auth endpoints, the Vercel Cron sweep
-  // (`src/app/api/cron/sweep` — CRON_SECRET bearer), and the GitHub compliance
-  // webhook (`src/app/api/compliance/webhook` — HMAC signature). Also exempt
-  // framework static assets, the branded sign-in page, and the brand/font assets
-  // it renders (those load pre-auth; `authorized` also allow-lists them via
-  // isPublicAsset).
+  // (`src/app/api/cron/sweep` — CRON_SECRET bearer), the GitHub compliance
+  // webhook (`src/app/api/compliance/webhook` — HMAC signature), and the
+  // compliance verify endpoint (`src/app/api/compliance/verify` — CI bearer
+  // token). Also exempt framework static assets, the branded sign-in page, and
+  // the brand/font assets it renders (those load pre-auth; `authorized` also
+  // allow-lists them via isPublicAsset).
   //
-  // SECURITY: the carve-out is path-EXACT for `api/compliance/webhook` only. The
-  // sibling compliance routes (checkout/complete/verify/reconcile) and
-  // `/api/events` do NOT self-authenticate yet, so they stay behind the gate —
-  // exempting `api/compliance` broadly would make the control plane
-  // world-callable (EN-007 runbook, review #3). `verify` gets its own carve-out
-  // only after it is given auth (GitHub OIDC or a CI token).
+  // SECURITY: each carve-out is path-EXACT and only for a route that
+  // self-authenticates. The remaining compliance routes
+  // (checkout/complete/reconcile) and `/api/events` do NOT self-authenticate, so
+  // they stay behind the gate — exempting `api/compliance` broadly would make the
+  // control plane world-callable (EN-007 runbook, review #3).
   matcher: [
-    "/((?!api/auth|api/cron|api/compliance/webhook|_next/static|_next/image|favicon.ico|signin|brand|fonts).*)",
+    "/((?!api/auth|api/cron|api/compliance/webhook|api/compliance/verify|_next/static|_next/image|favicon.ico|signin|brand|fonts).*)",
   ],
 };

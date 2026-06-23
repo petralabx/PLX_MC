@@ -37,10 +37,13 @@ Repeat against production only after staging is verified.
 Deploy the app and set, via the secrets manager (no hardcoded keys):
 
 - `COMPLIANCE_WEBHOOK_SECRET` — HMAC secret for the GitHub webhook (shared with Step 3).
+- `COMPLIANCE_CI_TOKEN` — bearer token the status-check workflow sends to `POST /api/compliance/verify` (shared with the `COMPLIANCE_CI_TOKEN` repo secret in Step 4).
 - `PLX_MC_DATABASE_URL` — already set for the app.
 
-Confirm the endpoints answer: `GET {MC}/api/events` returns `{ data: { events, nextCursor } }`;
-`POST {MC}/api/compliance/webhook` returns `503` (default-off) until the secret is set, then `401` for an unsigned body.
+Confirm the endpoints answer: `POST {MC}/api/compliance/webhook` returns `503`
+(default-off) until the secret is set, then `401` for an unsigned body;
+`POST {MC}/api/compliance/verify` returns `503` until `COMPLIANCE_CI_TOKEN` is
+set, then `401` without the `Authorization: Bearer` token.
 
 ## Step 3 — Register + install the GitHub App
 
@@ -55,7 +58,9 @@ Confirm the endpoints answer: `GET {MC}/api/events` returns `{ data: { events, n
 The workflow `.github/workflows/compliance-gate.yml` is already in `PLX_MC` and is
 **safe**: it skips while `PLX_MC_BASE_URL` is unset.
 
-1. Set repo secret `PLX_MC_BASE_URL = {MC}` and variable `COMPLIANCE_MODE = soft`.
+1. Set repo secrets `PLX_MC_BASE_URL = {MC}` and `COMPLIANCE_CI_TOKEN` (matching
+   the deployment's value so the workflow can authenticate to `verify`), and
+   variable `COMPLIANCE_MODE = soft`.
 2. Open a test PR; confirm the check runs and records (soft = warn only).
 3. When clean, set `COMPLIANCE_MODE = hard` and add the check to **branch
    protection** as a required status on the protected branches (`master` keeps its
@@ -98,11 +103,14 @@ code-level findings are already fixed on the branch):
   auth middleware; keep `checkout` / `complete` / `reconcile` / `events` behind
   operator credentials. **Do not deploy with auth dormant** — that makes the
   control plane world-callable.
-  - **Status:** the `/api/compliance/webhook` carve-out is **implemented** in
-    `src/middleware.ts` (HMAC self-auth, so it is safe to bypass the session
-    gate). `verify` is **not** carved out yet — it still needs its own auth
-    (OIDC or CI token) added first; until then it stays behind the session gate
-    along with `checkout` / `complete` / `reconcile` / `events`.
+  - **Status:** both carve-outs are **implemented** in `src/middleware.ts`:
+    `/api/compliance/webhook` (HMAC self-auth) and `/api/compliance/verify`
+    (CI bearer token — `COMPLIANCE_CI_TOKEN`, enforced in the route: 503 when
+    unset, 401 on a bad/missing token, runs on a match). `checkout` / `complete`
+    / `reconcile` / `events` have no self-auth and remain behind the session gate
+    (operator credentials). To activate `verify` set `COMPLIANCE_CI_TOKEN` on the
+    deployment (Step 2) **and** as the matching `COMPLIANCE_CI_TOKEN` repo secret
+    so the workflow can authenticate (Step 4).
 - **Enrolled-repo strict policy (review #2).** A PR with no valid agent dispatch is
   treated as operator work and passes (recorded, ungated) by design (decision 5).
   Telling a real human operator apart from an agent that skipped checkout needs the

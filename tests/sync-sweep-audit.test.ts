@@ -22,6 +22,9 @@ vi.mock("@/lib/sync/graph", () => {
     patchListItemFields: async () => {},
     createListItem: async () => "new-item",
     findItemByField: async () => null,
+    REPO_REGISTRY_KEY: "reporegistry",
+    resolveSiteUserLookupId: async () => null,
+    resolveEmailByLookupId: async () => null,
   };
 });
 
@@ -33,6 +36,12 @@ vi.mock("@/lib/sync/mapping", () => ({
   mcFieldFor: (_t: string, f: string) => f,
   parseFieldValue: () => undefined,
   reconcileInbound: () => ({ apply: {}, conflicts: [] }),
+  // main's pushEntity resolves person columns before a push; an empty plan keeps
+  // it a no-op (no Graph lookups) for these audit-discipline cases.
+  planTaskPersons: () => ({ clear: [], resolve: [] }),
+  actorIdByEmail: () => null,
+  repoOutboundFields: () => ({}),
+  TASK_PERSON_FIELDS: [],
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
@@ -53,6 +62,10 @@ vi.mock("@/lib/sync/repo", () => ({
   },
   updateEntity: async () => {},
   countsByList: async () => ({}),
+  // main's runSweep also seeds the repo registry and mirrors it; an empty
+  // registry makes that a no-op so the "idle" sweep is genuinely idle.
+  seedRepos: async () => {},
+  getRepos: async () => [],
 }));
 
 // Imported AFTER the mocks so engine's repo/graph/mapping imports resolve to them.

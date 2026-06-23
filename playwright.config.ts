@@ -49,10 +49,29 @@ export default defineConfig({
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
   },
+  // The ui-ux-design-loop G3/G4 gates run across a desktop/tablet/mobile matrix.
+  // Only the UI-loop specs run on the tablet/mobile projects — the existing
+  // Cycle-1 specs assume a desktop layout and stay chromium-only (so the full
+  // `npx playwright test` does not run desktop specs at mobile widths).
   projects: [
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      // Chromium engine at a tablet viewport (the iPad descriptor defaults to
+      // webkit, which is not installed in CI; we only need the width for G3).
+      name: "tablet",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 820, height: 1180 } },
+      testMatch: /ui-(a11y|loop-ledgers-responsive)\.spec\.ts/,
+    },
+    {
+      // Chromium engine at a phone viewport. G3/G4 test CSS layout width, not
+      // touch/UA emulation; isMobile's visual-viewport behavior adds noise that
+      // is out of scope for a responsive-width + a11y gate.
+      name: "mobile-chrome",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 393, height: 851 } },
+      testMatch: /ui-(a11y|loop-ledgers-responsive)\.spec\.ts/,
     },
   ],
   webServer: {

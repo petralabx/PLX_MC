@@ -1,0 +1,23 @@
+{
+  "appDir": ".",
+  "tokenCheck": {
+    "command": "python3",
+    "args": ["scripts/check-plx-theme-tokens.py"],
+    "fileGlobs": [
+      "src/components/mc/loop-ledgers/*.tsx",
+      "src/components/mc/loop-ledgers/*.ts",
+      "src/styles/mc-loop-ledgers.css"
+    ]
+  },
+  "componentMap": ["BrandBoundary", "Kicker", "MonoData", "PMark"],
+  "routesGlob": "e2e/helpers/ui-loop/*.routes.ts",
+  "renderGuard": {
+    "authHeading": "Sign in",
+    "errorHeading": "Something went wrong"
+  },
+  "a11yAllowlist": "e2e/ui-a11y-allowlist.json",
+  "viewports": ["chromium", "tablet", "mobile-chrome"],
+  "baseUrlEnv": "PLX_MC_E2E_BASE_URL",
+  "authBypassEnv": "PLX_MC_LOCAL_AUTH_BYPASS",
+  "previewCommand": "npm run dev"
+}

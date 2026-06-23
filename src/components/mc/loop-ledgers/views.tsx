@@ -490,9 +490,18 @@ export function DetailView({
         )}
       </div>
 
-      {/* Artifact list */}
+      {/* Artifact list — keyboard-focusable so the horizontal scroll (narrow
+          viewports) is reachable without a pointer; its rows are non-interactive
+          (unlike the index table whose rows are buttons), so the container itself
+          carries keyboard access (axe scrollable-region-focusable). */}
       {artifacts.length > 0 && (
-        <div className="ll-artifacts" data-testid="ll-artifacts">
+        <div
+          className="ll-artifacts"
+          data-testid="ll-artifacts"
+          tabIndex={0}
+          role="group"
+          aria-label="Ledger artifacts (scrolls horizontally on narrow screens)"
+        >
           <div className="ll-artifacts-head" aria-hidden>
             <span>#</span>
             <span>Title</span>

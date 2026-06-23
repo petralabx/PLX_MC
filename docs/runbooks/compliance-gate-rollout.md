@@ -83,9 +83,12 @@ work is enrolled.
 
 ## Step 7 — Schedule reconciliation
 
-Drive `POST {MC}/api/compliance/reconcile` on a schedule (cron / the sync
-scheduler) so any work queued during an MC/DB outage replays on recovery. Held
-PR checks stay non-pass (fail-closed) until then.
+**Implemented** as a Vercel Cron: `vercel.json` runs `GET /api/cron/reconcile`
+every 5 min (authed by the Vercel-injected `CRON_SECRET` bearer, same as the
+sweep cron). It replays `mc_reconcile_queue` so any work queued during an MC/DB
+outage clears on recovery; held PR checks stay non-pass (fail-closed) until then.
+A manual replay is still available via `POST {MC}/api/compliance/reconcile`
+(operator-gated). Kill switch: remove the `crons` entry or unset `CRON_SECRET`.
 
 ## Security prerequisites (mandatory before `hard` mode)
 

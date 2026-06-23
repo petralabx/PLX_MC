@@ -187,6 +187,24 @@ async function fetchRawContent(
   return { ok: true, raw };
 }
 
+// Pick the most frequent failure reason (ties broken by first occurrence) so a
+// repo whose files all 403 reports permission_denied, not a generic network_error.
+function dominantReason(reasons: SourceDegradedReason[]): SourceDegradedReason {
+  if (reasons.length === 0) return "network_error";
+  const counts = new Map<SourceDegradedReason, number>();
+  for (const r of reasons) counts.set(r, (counts.get(r) ?? 0) + 1);
+  let best = reasons[0];
+  let bestCount = 0;
+  for (const r of reasons) {
+    const c = counts.get(r) ?? 0;
+    if (c > bestCount) {
+      best = r;
+      bestCount = c;
+    }
+  }
+  return best;
+}
+
 // ─── Per-repo discovery ───────────────────────────────────────────────────────
 
 async function discoverRepo(
@@ -228,6 +246,7 @@ async function discoverRepo(
   // BUT if ALL fetches fail, we must surface a loud degraded row instead of silently
   // returning ok=true with zero ledgers (which causes the repo to disappear).
   const ledgers: DiscoveredLedger[] = [];
+  const failReasons: SourceDegradedReason[] = [];
   for (const p of matchingPaths) {
     const rawResult = await fetchRawContent(owner, name, branch, p, token);
     if (rawResult.ok) {
@@ -236,14 +255,19 @@ async function discoverRepo(
         raw: rawResult.raw,
         commitSha: treeResult.treeSha,
       });
+    } else {
+      failReasons.push(rawResult.reason);
     }
   }
 
   if (matchingPaths.length > 0 && ledgers.length === 0) {
+    // Carry the dominant per-file failure reason (e.g. all 403 -> permission_denied)
+    // instead of flattening to network_error — this observatory is built on precise
+    // degraded reasons. Falls back to network_error only if none was captured.
     return {
       ok: false,
       repo: entry.repo,
-      reason: "network_error",
+      reason: dominantReason(failReasons),
       note: `${owner}/${name}: ${matchingPaths.length} path(s) matched the glob but all content fetches failed`,
     };
   }

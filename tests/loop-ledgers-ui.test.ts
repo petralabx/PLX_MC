@@ -19,7 +19,6 @@ import {
   matchesSearchText,
   rowFreshness,
   rowHealthCode,
-  sortScariest,
 } from "@/components/mc/loop-ledgers/helpers";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -385,74 +384,10 @@ describe("matchesSearchText", () => {
   });
 });
 
-// ─── sortScariest ─────────────────────────────────────────────────────────────
-
-describe("sortScariest", () => {
-  it("places permission_denied (rank 0) before no_ledgers (rank 4)", () => {
-    const rows: LoaderSummaryRow[] = [
-      makeDegradedRow("no_ledgers"),       // rank 4
-      makeDegradedRow("permission_denied"), // rank 0
-    ];
-    const sorted = sortScariest(rows);
-    expect(sorted[0].kind === "degraded-source" && (sorted[0] as DegradedSourceRow).reason).toBe("permission_denied");
-    expect(sorted[1].kind === "degraded-source" && (sorted[1] as DegradedSourceRow).reason).toBe("no_ledgers");
-  });
-
-  it("places schema_mismatch (rank 0) before stale (rank 2)", () => {
-    const rows: LoaderSummaryRow[] = [
-      makeStaleLedgerRow(),               // rank 2 (stale)
-      makeDegradedRow("schema_mismatch"), // rank 0
-    ];
-    const sorted = sortScariest(rows);
-    expect(rowHealthCode(sorted[0])).toBe("schema_mismatch");
-  });
-
-  it("places stale (rank 2) before valid+critical (rank 3)", () => {
-    const critRow = makeLedgerRow({
-      repo: "org/crit",
-      repoDisplayName: "Crit",
-      validationResult: {
-        valid: true,
-        healthCode: "valid",
-        ledger: {
-          schema_version: "vmc-quality-ledger/v1",
-          module: "m",
-          generated_at: new Date().toISOString(),
-          branch: "main",
-          summary: { total_artifacts: 1, by_type: {}, by_status: {}, by_severity: { critical: 1 }, by_safety_class: { red: 1 } },
-          artifacts: [{
-            artifact_id: "X-001", module: "m", artifact_type: "defect",
-            title: "Critical bug", status: "broken", severity: "critical",
-            safety_class: "red", confidence: 0.5,
-          }],
-        },
-        errors: [],
-        freshnessInfo: { level: "fresh", ageDays: 1, reason: "1d" },
-      },
-    });
-    const rows: LoaderSummaryRow[] = [critRow, makeStaleLedgerRow()];
-    const sorted = sortScariest(rows);
-    // stale → rank 2, critical+red → rank 3; stale comes first
-    expect(rowFreshness(sorted[0])).toBe("stale");
-    expect(sorted[1].repo).toBe("org/crit");
-  });
-
-  it("places a valid fresh healthy row last (rank 6)", () => {
-    const rows: LoaderSummaryRow[] = [
-      makeLedgerRow(),                    // rank 6 (valid, fresh, no crit)
-      makeDegradedRow("permission_denied"), // rank 0
-    ];
-    const sorted = sortScariest(rows);
-    expect(rowHealthCode(sorted[0])).toBe("permission_denied");
-    expect(rowHealthCode(sorted[1])).toBe("valid");
-  });
-
-  it("returns a new array (pure)", () => {
-    const rows: LoaderSummaryRow[] = [makeLedgerRow(), makeDegradedRow()];
-    const sorted = sortScariest(rows);
-    expect(sorted).not.toBe(rows);
-  });
-});
+// Scariest-first ordering (incl. the confidence/generated_at tiebreak) is applied
+// server-side by the loader and covered by tests/loop-ledgers-adapters.test.ts. The
+// legacy client-side sortScariest helper was pruned (it was unused by the views and
+// risked drifting from the server ranking), so its unit tests were removed with it.
 
 // ─── encodeRef ────────────────────────────────────────────────────────────────
 

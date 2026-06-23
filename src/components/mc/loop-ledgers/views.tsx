@@ -576,6 +576,13 @@ const GALLERY_CARDS: GalleryCard[] = [
     example: "glob 'docs/portal/quality-ledger/*.artifacts.json' → 0 matches",
   },
   {
+    code: "truncated",
+    title: "Tree truncated",
+    description:
+      "The Git Trees API returned truncated=true (repo too large), so the ledger glob could not be matched against the complete tree. Surfaced loudly instead of trusting a partial listing that could silently drop ledgers.",
+    example: "git/trees/main?recursive=1 → truncated: true",
+  },
+  {
     code: "invalid_json",
     title: "Invalid JSON",
     description:

@@ -292,7 +292,7 @@ test.describe("loop ledgers screen", () => {
     await expect(gallery).toBeVisible();
 
     const cards = page.locator("[data-testid='ll-gallery-card']");
-    await expect(cards).toHaveCount(11); // GALLERY_CARDS length
+    await expect(cards).toHaveCount(12); // GALLERY_CARDS length (incl. truncated)
 
     // Cards for observed reasons should be marked .live
     const permCard = page.locator("[data-testid='ll-gallery-card'][data-code='permission_denied']");

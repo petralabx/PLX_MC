@@ -4,11 +4,9 @@
 
 // Only `import type` from @/lib/loop-ledgers — this guarantees the client
 // bundle does NOT pull in the server-only local-fs adapter (node:fs/promises).
-// The one runtime value we needed (riskRank) is inlined here instead.
 import type {
   Freshness,
   LedgerRef,
-  LedgerValidationResult,
   SafetyClass,
   Severity,
   SourceDegradedReason,
@@ -196,54 +194,10 @@ export function applyFilters(
   });
 }
 
-// ─── Scariest-first sort for mixed-type rows ──────────────────────────────────
-
-function sourceReasonRankLocal(reason: SourceDegradedReason): number {
-  switch (reason) {
-    case "token_missing":
-    case "permission_denied":
-    case "network_error":
-    case "invalid_json":
-    case "schema_mismatch":
-      return 0;
-    case "rate_limit":
-      return 1;
-    case "not_found":
-      return 2;
-    case "truncated":
-      return 1;
-    case "no_ledgers":
-    case "disabled":
-      return 4;
-    default:
-      return 1;
-  }
-}
-
-// Inlined from @/lib/loop-ledgers/validator.ts riskRank() — kept in sync manually.
-// Not imported to avoid pulling the server-only local-fs adapter into the client bundle.
-function validationResultRisk(result: LedgerValidationResult): number {
-  const hc: string = result.healthCode;
-  if (hc === "invalid_json" || hc === "schema_mismatch") return 0;
-  if (hc === "partial") return 1;
-  if (result.freshnessInfo.level === "stale") return 2;
-  if (result.valid) {
-    const sum = result.ledger.summary;
-    if ((sum.by_safety_class?.red ?? 0) > 0 || (sum.by_severity?.critical ?? 0) > 0) return 3;
-  }
-  if (hc === "no_ledgers") return 4;
-  return 6;
-}
-
-function rowRisk(row: LoaderSummaryRow): number {
-  if (row.kind === "degraded-source") return sourceReasonRankLocal(row.reason);
-  return validationResultRisk(row.validationResult);
-}
-
-/** Sort rows scariest-first (pure — returns a new array). */
-export function sortScariest(rows: LoaderSummaryRow[]): LoaderSummaryRow[] {
-  return [...rows].sort((a, b) => rowRisk(a) - rowRisk(b));
-}
+// NOTE: scariest-first ordering is applied server-side by the loader
+// (src/lib/loop-ledgers/loader.ts, including the confidence/generated_at
+// tiebreak). The UI renders that order verbatim, so no client-side sort is kept
+// here — a second copy would only risk drifting from the server's ranking.
 
 // ─── Label helpers ────────────────────────────────────────────────────────────
 

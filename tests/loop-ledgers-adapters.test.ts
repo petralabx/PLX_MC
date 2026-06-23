@@ -783,6 +783,32 @@ describe("GithubApiSource — N4 regression: all content fetches fail → degrad
     expect(results[0].note).toMatch(/2 path/i);
   });
 
+  it("NEW-3 regression: carries the dominant per-file reason (all 403 → permission_denied, not network_error)", async () => {
+    setToken("test-token");
+
+    const twoPathTree = {
+      sha: "abc123",
+      tree: [
+        { path: "docs/vmc/quality-ledger/chat.artifacts.json", type: "blob", sha: "s1" },
+        { path: "docs/vmc/quality-ledger/swarm.artifacts.json", type: "blob", sha: "s2" },
+      ],
+      truncated: false,
+    };
+
+    setupFetchFn((url) => {
+      if (url.includes("/git/trees/")) return mockResponse(200, JSON.stringify(twoPathTree));
+      // Every content fetch is forbidden — the repo-level reason must reflect that,
+      // not flatten to a generic network_error.
+      return mockResponse(403, JSON.stringify({ message: "Forbidden" }));
+    });
+
+    const results = await new GithubApiSource().listLedgers(makeRegistry());
+    expect(results).toHaveLength(1);
+    expect(results[0].ok).toBe(false);
+    if (results[0].ok) return;
+    expect(results[0].reason).toBe("permission_denied");
+  });
+
   it("visible degraded row appears in listLedgerSummaries output (repo not dropped)", async () => {
     setToken("test-token");
 

@@ -25,6 +25,7 @@ const EXPECTED_SCREENS = {
   sync: true,
   intake: true,
   task: true,
+  "loop-ledgers": true,
 } satisfies Record<Screen, true>;
 
 describe("SCREENS registry (PR-D1)", () => {

@@ -18,7 +18,8 @@ export type Screen =
   | "files"
   | "sync"
   | "intake"
-  | "task";
+  | "task"
+  | "loop-ledgers";
 
 export interface Route {
   screen: Screen;

@@ -162,6 +162,7 @@ export function Sidebar({
           "Sync",
           conflicts ? <span className="badge hot">{conflicts}</span> : null
         )}
+        {item("loop-ledgers", "◰", "Loop ledgers")}
         {/* Meeting bridge nav appears only when the WS-4 flag is on (off by default). */}
         {meetingIntakeEnabled() ? item("intake", "🗒", "Meeting intake") : null}
       </div>

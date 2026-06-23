@@ -45,6 +45,7 @@ DESIGN_TOKENS).
 | web | Vince | Critical |
 | sync | Vince | Critical |
 | meeting-intake | Vince | Medium |
+| loop-ledgers | Vince | Medium |
 
 ## Canonical Operations Docs
 

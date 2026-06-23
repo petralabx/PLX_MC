@@ -7,6 +7,7 @@ import { FilesView } from "./files-view";
 import { InboxView } from "./inbox";
 import { InsightsView } from "./insights";
 import { MeetingIntakeView } from "./meeting-intake";
+import { LoopLedgersView } from "./loop-ledgers";
 import { ReposView } from "./repos-view";
 import type { Screen, ScreenProps } from "./route";
 import { SyncConsole } from "./sync-console";
@@ -30,4 +31,5 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   sync: SyncConsole,
   intake: MeetingIntakeView,
   task: TaskDetailView,
+  "loop-ledgers": LoopLedgersView,
 };

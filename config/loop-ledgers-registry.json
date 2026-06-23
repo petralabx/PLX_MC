@@ -1,0 +1,30 @@
+{
+  "schema_version": "plx-loop-ledger-registry/v1",
+  "freshness": { "warn_after_days": 7, "stale_after_days": 30 },
+  "repos": [
+    {
+      "repo": "taylorvalton/agentic-swarm",
+      "display_name": "Agentic Swarm",
+      "default_branch": "main",
+      "ledger_glob": "docs/vmc/quality-ledger/*.artifacts.json",
+      "human_ledger_glob": "docs/vmc/quality-ledger/*.md",
+      "evidence_dir": "docs/vmc/quality-ledger/evidence"
+    },
+    {
+      "repo": "taylorvalton/PLX_MC",
+      "display_name": "PLX Mission Control",
+      "default_branch": "main",
+      "ledger_glob": "docs/plx-mc/quality-ledger/*.artifacts.json",
+      "human_ledger_glob": "docs/plx-mc/quality-ledger/*.md",
+      "evidence_dir": "docs/plx-mc/quality-ledger/evidence"
+    },
+    {
+      "repo": "taylorvalton/plx-customer-portal",
+      "display_name": "PLX Customer Portal",
+      "default_branch": "master",
+      "ledger_glob": "docs/portal/quality-ledger/*.artifacts.json",
+      "human_ledger_glob": "docs/portal/quality-ledger/*.md",
+      "evidence_dir": "docs/portal/quality-ledger/evidence"
+    }
+  ]
+}

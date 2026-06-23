@@ -1,0 +1,299 @@
+[WebServer] 
+[WebServer] > plx-mission-control@0.1.0 dev
+[WebServer] > next dev
+[WebServer] 
+[WebServer] ▲ Next.js 16.2.9 (Turbopack)
+[WebServer] - Local:         http://localhost:3931
+[WebServer] - Network:       http://192.168.1.93:3931
+[WebServer] ✓ Ready in 132ms
+[WebServer] ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[WebServer] [sync] scheduler disabled (PLX_MC_SYNC_ENABLED != 1)
+[WebServer] 
+
+Running 10 tests using 1 worker
+
+[WebServer]  GET / 200 in 195ms (next.js: 40ms, proxy.ts: 44ms, application-code: 111ms)
+(node:1076469) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer]  GET / 200 in 44ms (next.js: 3ms, proxy.ts: 5ms, application-code: 36ms)
+  ✓   1 [chromium] › e2e/loop-ledgers.spec.ts:169:7 › loop ledgers screen › renders the index with all rows in scariest-first order (540ms)
+[WebServer] [api] unhandled error: Error: missing secret PLX_MC_DATABASE_URL — run the secrets loader (see TOOLS.md)
+[WebServer]     at requireSecret (src/lib/secrets.ts:10:11)
+[WebServer]     at databaseUrl (src/lib/secrets.ts:16:10)
+[WebServer]     at pool (src/lib/db/index.ts:16:36)
+[WebServer]     at query (src/lib/db/index.ts:37:24)
+[WebServer]     at Module.entityCount (src/lib/sync/repo.ts:40:27)
+[WebServer]     at ensureSeeded (src/lib/sync/engine.ts:97:28)
+[WebServer]     at snapshot (src/lib/sync/state.ts:47:21)
+[WebServer]     at <unknown> (src/app/api/state/route.ts:6:46)
+[WebServer]     at <unknown> (src/lib/api/route.ts:26:26)
+[WebServer]    8 |   const value = process.env[name];
+[WebServer]    9 |   if (!value) {
+[WebServer] > 10 |     throw new Error(`missing secret ${name} — run the secrets loader (see TOOLS.md)`);
+[WebServer]      |           ^
+[WebServer]   11 |   }
+[WebServer]   12 |   return value;
+[WebServer]   13 | }
+[WebServer]  GET /api/state 500 in 263ms (next.js: 179ms, proxy.ts: 3ms, application-code: 81ms)
+[WebServer]  GET / 200 in 22ms (next.js: 1548µs, proxy.ts: 2ms, application-code: 18ms)
+[WebServer] [api] unhandled error: Error: missing secret PLX_MC_DATABASE_URL — run the secrets loader (see TOOLS.md)
+[WebServer]     at requireSecret (src/lib/secrets.ts:10:11)
+[WebServer]     at databaseUrl (src/lib/secrets.ts:16:10)
+[WebServer]     at pool (src/lib/db/index.ts:16:36)
+[WebServer]     at query (src/lib/db/index.ts:37:24)
+[WebServer]     at Module.entityCount (src/lib/sync/repo.ts:40:27)
+[WebServer]     at ensureSeeded (src/lib/sync/engine.ts:97:28)
+[WebServer]     at snapshot (src/lib/sync/state.ts:47:21)
+[WebServer]     at <unknown> (src/app/api/state/route.ts:6:46)
+[WebServer]     at <unknown> (src/lib/api/route.ts:26:26)
+[WebServer]    8 |   const value = process.env[name];
+[WebServer]    9 |   if (!value) {
+[WebServer] > 10 |     throw new Error(`missing secret ${name} — run the secrets loader (see TOOLS.md)`);
+[WebServer]      |           ^
+[WebServer]   11 |   }
+[WebServer]   12 |   return value;
+[WebServer]   13 | }
+[WebServer]  GET /api/state 500 in 60ms (next.js: 1570µs, proxy.ts: 3ms, application-code: 55ms)
+[WebServer] [browser] [mc-store] server mirror unavailable — staying on local state: Error: Internal error.
+[WebServer]     at api (src/lib/api/index.ts:27:11)
+[WebServer]     at async refreshFromServer (src/lib/mc-data/store.ts:337:20)
+[WebServer]   25 |   }
+[WebServer]   26 |   if (!resp.ok || body.error) {
+[WebServer] > 27 |     throw new ApiClientError(body.error?.code ?? "http_error", body.error?.message ?? `HTT...
+[WebServer]      |           ^
+[WebServer]   28 |   }
+[WebServer]   29 |   return body.data as T;
+[WebServer]   30 | } (src/lib/mc-data/store.ts:275:13)
+  ✓   2 [chromium] › e2e/loop-ledgers.spec.ts:191:7 › loop ledgers screen › stat cards show correct counts (519ms)
+[WebServer]  GET / 200 in 48ms (next.js: 3ms, proxy.ts: 6ms, application-code: 39ms)
+[WebServer] [api] unhandled error: Error: missing secret PLX_MC_DATABASE_URL — run the secrets loader (see TOOLS.md)
+[WebServer]     at requireSecret (src/lib/secrets.ts:10:11)
+[WebServer]     at databaseUrl (src/lib/secrets.ts:16:10)
+[WebServer]     at pool (src/lib/db/index.ts:16:36)
+[WebServer]     at query (src/lib/db/index.ts:37:24)
+[WebServer]     at Module.entityCount (src/lib/sync/repo.ts:40:27)
+[WebServer]     at ensureSeeded (src/lib/sync/engine.ts:97:28)
+[WebServer]     at snapshot (src/lib/sync/state.ts:47:21)
+[WebServer]     at <unknown> (src/app/api/state/route.ts:6:46)
+[WebServer]     at <unknown> (src/lib/api/route.ts:26:26)
+[WebServer]    8 |   const value = process.env[name];
+[WebServer]    9 |   if (!value) {
+[WebServer] > 10 |     throw new Error(`missing secret ${name} — run the secrets loader (see TOOLS.md)`);
+[WebServer]      |           ^
+[WebServer]   11 |   }
+[WebServer]   12 |   return value;
+[WebServer]   13 | }
+[WebServer]  GET /api/state 500 in 71ms (next.js: 2ms, proxy.ts: 4ms, application-code: 64ms)
+  ✓   3 [chromium] › e2e/loop-ledgers.spec.ts:219:7 › loop ledgers screen › attention banner lists unreachable and invalid rows (406ms)
+[WebServer]  GET / 200 in 22ms (next.js: 1976µs, proxy.ts: 3ms, application-code: 17ms)
+[WebServer] [api] unhandled error: Error: missing secret PLX_MC_DATABASE_URL — run the secrets loader (see TOOLS.md)
+[WebServer]     at requireSecret (src/lib/secrets.ts:10:11)
+[WebServer]     at databaseUrl (src/lib/secrets.ts:16:10)
+[WebServer]     at pool (src/lib/db/index.ts:16:36)
+[WebServer]     at query (src/lib/db/index.ts:37:24)
+[WebServer]     at Module.entityCount (src/lib/sync/repo.ts:40:27)
+[WebServer]     at ensureSeeded (src/lib/sync/engine.ts:97:28)
+[WebServer]     at snapshot (src/lib/sync/state.ts:47:21)
+[WebServer]     at <unknown> (src/app/api/state/route.ts:6:46)
+[WebServer]     at <unknown> (src/lib/api/route.ts:26:26)
+[WebServer]    8 |   const value = process.env[name];
+[WebServer]    9 |   if (!value) {
+[WebServer] > 10 |     throw new Error(`missing secret ${name} — run the secrets loader (see TOOLS.md)`);
+[WebServer]      |           ^
+[WebServer]   11 |   }
+[WebServer]   12 |   return value;
+[WebServer]   13 | }
+[WebServer]  GET /api/state 500 in 44ms (next.js: 2ms, proxy.ts: 3ms, application-code: 38ms)
+[WebServer] [browser] [mc-store] server mirror unavailable — staying on local state: Error: Internal error.
+[WebServer]     at api (src/lib/api/index.ts:27:11)
+[WebServer]     at async refreshFromServer (src/lib/mc-data/store.ts:337:20)
+[WebServer]   25 |   }
+[WebServer]   26 |   if (!resp.ok || body.error) {
+[WebServer] > 27 |     throw new ApiClientError(body.error?.code ?? "http_error", body.error?.message ?? `HTT...
+[WebServer]      |           ^
+[WebServer]   28 |   }
+[WebServer]   29 |   return body.data as T;
+[WebServer]   30 | } (src/lib/mc-data/store.ts:275:13)
+  ✓   4 [chromium] › e2e/loop-ledgers.spec.ts:228:7 › loop ledgers screen › repo filter narrows rows to matching repo (554ms)
+[WebServer]  GET / 200 in 20ms (next.js: 1541µs, proxy.ts: 3ms, application-code: 16ms)
+[WebServer] [api] unhandled error: Error: missing secret PLX_MC_DATABASE_URL — run the secrets loader (see TOOLS.md)
+[WebServer]     at requireSecret (src/lib/secrets.ts:10:11)
+[WebServer]     at databaseUrl (src/lib/secrets.ts:16:10)
+[WebServer]     at pool (src/lib/db/index.ts:16:36)
+[WebServer]     at query (src/lib/db/index.ts:37:24)
+[WebServer]     at Module.entityCount (src/lib/sync/repo.ts:40:27)
+[WebServer]     at ensureSeeded (src/lib/sync/engine.ts:97:28)
+[WebServer]     at snapshot (src/lib/sync/state.ts:47:21)
+[WebServer]     at <unknown> (src/app/api/state/route.ts:6:46)
+[WebServer]     at <unknown> (src/lib/api/route.ts:26:26)
+[WebServer]    8 |   const value = process.env[name];
+[WebServer]    9 |   if (!value) {
+[WebServer] > 10 |     throw new Error(`missing secret ${name} — run the secrets loader (see TOOLS.md)`);
+[WebServer]      |           ^
+[WebServer]   11 |   }
+[WebServer]   12 |   return value;
+[WebServer]   13 | }
+[WebServer]  GET /api/state 500 in 48ms (next.js: 1404µs, proxy.ts: 2ms, application-code: 45ms)
+[WebServer] [browser] [mc-store] server mirror unavailable — staying on local state: Error: Internal error.
+[WebServer]     at api (src/lib/api/index.ts:27:11)
+[WebServer]     at async refreshFromServer (src/lib/mc-data/store.ts:337:20)
+[WebServer]   25 |   }
+[WebServer]   26 |   if (!resp.ok || body.error) {
+[WebServer] > 27 |     throw new ApiClientError(body.error?.code ?? "http_error", body.error?.message ?? `HTT...
+[WebServer]      |           ^
+[WebServer]   28 |   }
+[WebServer]   29 |   return body.data as T;
+[WebServer]   30 | } (src/lib/mc-data/store.ts:275:13)
+  ✓   5 [chromium] › e2e/loop-ledgers.spec.ts:243:7 › loop ledgers screen › health filter narrows rows to valid-only (533ms)
+[WebServer]  GET / 200 in 17ms (next.js: 1409µs, proxy.ts: 1958µs, application-code: 14ms)
+[WebServer] [api] unhandled error: Error: missing secret PLX_MC_DATABASE_URL — run the secrets loader (see TOOLS.md)
+[WebServer]     at requireSecret (src/lib/secrets.ts:10:11)
+[WebServer]     at databaseUrl (src/lib/secrets.ts:16:10)
+[WebServer]     at pool (src/lib/db/index.ts:16:36)
+[WebServer]     at query (src/lib/db/index.ts:37:24)
+[WebServer]     at Module.entityCount (src/lib/sync/repo.ts:40:27)
+[WebServer]     at ensureSeeded (src/lib/sync/engine.ts:97:28)
+[WebServer]     at snapshot (src/lib/sync/state.ts:47:21)
+[WebServer]     at <unknown> (src/app/api/state/route.ts:6:46)
+[WebServer]     at <unknown> (src/lib/api/route.ts:26:26)
+[WebServer]    8 |   const value = process.env[name];
+[WebServer]    9 |   if (!value) {
+[WebServer] > 10 |     throw new Error(`missing secret ${name} — run the secrets loader (see TOOLS.md)`);
+[WebServer]      |           ^
+[WebServer]   11 |   }
+[WebServer]   12 |   return value;
+[WebServer]   13 | }
+[WebServer]  GET /api/state 500 in 41ms (next.js: 1649µs, proxy.ts: 4ms, application-code: 36ms)
+[WebServer] [browser] [mc-store] server mirror unavailable — staying on local state: Error: Internal error.
+[WebServer]     at api (src/lib/api/index.ts:27:11)
+[WebServer]     at async refreshFromServer (src/lib/mc-data/store.ts:337:20)
+[WebServer]   25 |   }
+[WebServer]   26 |   if (!resp.ok || body.error) {
+[WebServer] > 27 |     throw new ApiClientError(body.error?.code ?? "http_error", body.error?.message ?? `HTT...
+[WebServer]      |           ^
+[WebServer]   28 |   }
+[WebServer]   29 |   return body.data as T;
+[WebServer]   30 | } (src/lib/mc-data/store.ts:275:13)
+  ✓   6 [chromium] › e2e/loop-ledgers.spec.ts:260:7 › loop ledgers screen › clicking a row opens the detail view (478ms)
+[WebServer]  GET / 200 in 18ms (next.js: 1288µs, proxy.ts: 3ms, application-code: 14ms)
+[WebServer] [api] unhandled error: Error: missing secret PLX_MC_DATABASE_URL — run the secrets loader (see TOOLS.md)
+[WebServer]     at requireSecret (src/lib/secrets.ts:10:11)
+[WebServer]     at databaseUrl (src/lib/secrets.ts:16:10)
+[WebServer]     at pool (src/lib/db/index.ts:16:36)
+[WebServer]     at query (src/lib/db/index.ts:37:24)
+[WebServer]     at Module.entityCount (src/lib/sync/repo.ts:40:27)
+[WebServer]     at ensureSeeded (src/lib/sync/engine.ts:97:28)
+[WebServer]     at snapshot (src/lib/sync/state.ts:47:21)
+[WebServer]     at <unknown> (src/app/api/state/route.ts:6:46)
+[WebServer]     at <unknown> (src/lib/api/route.ts:26:26)
+[WebServer]    8 |   const value = process.env[name];
+[WebServer]    9 |   if (!value) {
+[WebServer] > 10 |     throw new Error(`missing secret ${name} — run the secrets loader (see TOOLS.md)`);
+[WebServer]      |           ^
+[WebServer]   11 |   }
+[WebServer]   12 |   return value;
+[WebServer]   13 | }
+[WebServer]  GET /api/state 500 in 39ms (next.js: 1194µs, proxy.ts: 2ms, application-code: 35ms)
+[WebServer] [browser] [mc-store] server mirror unavailable — staying on local state: Error: Internal error.
+[WebServer]     at api (src/lib/api/index.ts:27:11)
+[WebServer]     at async refreshFromServer (src/lib/mc-data/store.ts:337:20)
+[WebServer]   25 |   }
+[WebServer]   26 |   if (!resp.ok || body.error) {
+[WebServer] > 27 |     throw new ApiClientError(body.error?.code ?? "http_error", body.error?.message ?? `HTT...
+[WebServer]      |           ^
+[WebServer]   28 |   }
+[WebServer]   29 |   return body.data as T;
+[WebServer]   30 | } (src/lib/mc-data/store.ts:275:13)
+  ✓   7 [chromium] › e2e/loop-ledgers.spec.ts:277:7 › loop ledgers screen › detail view has a back button that returns to index (458ms)
+[WebServer]  GET / 200 in 18ms (next.js: 1317µs, proxy.ts: 1988µs, application-code: 15ms)
+[WebServer] [api] unhandled error: Error: missing secret PLX_MC_DATABASE_URL — run the secrets loader (see TOOLS.md)
+[WebServer]     at requireSecret (src/lib/secrets.ts:10:11)
+[WebServer]     at databaseUrl (src/lib/secrets.ts:16:10)
+[WebServer]     at pool (src/lib/db/index.ts:16:36)
+[WebServer]     at query (src/lib/db/index.ts:37:24)
+[WebServer]     at Module.entityCount (src/lib/sync/repo.ts:40:27)
+[WebServer]     at ensureSeeded (src/lib/sync/engine.ts:97:28)
+[WebServer]     at snapshot (src/lib/sync/state.ts:47:21)
+[WebServer]     at <unknown> (src/app/api/state/route.ts:6:46)
+[WebServer]     at <unknown> (src/lib/api/route.ts:26:26)
+[WebServer]    8 |   const value = process.env[name];
+[WebServer]    9 |   if (!value) {
+[WebServer] > 10 |     throw new Error(`missing secret ${name} — run the secrets loader (see TOOLS.md)`);
+[WebServer]      |           ^
+[WebServer]   11 |   }
+[WebServer]   12 |   return value;
+[WebServer]   13 | }
+[WebServer]  GET /api/state 500 in 63ms (next.js: 2ms, proxy.ts: 3ms, application-code: 58ms)
+[WebServer] [browser] [mc-store] server mirror unavailable — staying on local state: Error: Internal error.
+[WebServer]     at api (src/lib/api/index.ts:27:11)
+[WebServer]     at async refreshFromServer (src/lib/mc-data/store.ts:337:20)
+[WebServer]   25 |   }
+[WebServer]   26 |   if (!resp.ok || body.error) {
+[WebServer] > 27 |     throw new ApiClientError(body.error?.code ?? "http_error", body.error?.message ?? `HTT...
+[WebServer]      |           ^
+[WebServer]   28 |   }
+[WebServer]   29 |   return body.data as T;
+[WebServer]   30 | } (src/lib/mc-data/store.ts:275:13)
+  ✓   8 [chromium] › e2e/loop-ledgers.spec.ts:288:7 › loop ledgers screen › degraded gallery tab shows failure-mode cards (501ms)
+[WebServer]  GET / 200 in 20ms (next.js: 1380µs, proxy.ts: 2ms, application-code: 17ms)
+[WebServer] [api] unhandled error: Error: missing secret PLX_MC_DATABASE_URL — run the secrets loader (see TOOLS.md)
+[WebServer]     at requireSecret (src/lib/secrets.ts:10:11)
+[WebServer]     at databaseUrl (src/lib/secrets.ts:16:10)
+[WebServer]     at pool (src/lib/db/index.ts:16:36)
+[WebServer]     at query (src/lib/db/index.ts:37:24)
+[WebServer]     at Module.entityCount (src/lib/sync/repo.ts:40:27)
+[WebServer]     at ensureSeeded (src/lib/sync/engine.ts:97:28)
+[WebServer]     at snapshot (src/lib/sync/state.ts:47:21)
+[WebServer]     at <unknown> (src/app/api/state/route.ts:6:46)
+[WebServer]     at <unknown> (src/lib/api/route.ts:26:26)
+[WebServer]    8 |   const value = process.env[name];
+[WebServer]    9 |   if (!value) {
+[WebServer] > 10 |     throw new Error(`missing secret ${name} — run the secrets loader (see TOOLS.md)`);
+[WebServer]      |           ^
+[WebServer]   11 |   }
+[WebServer]   12 |   return value;
+[WebServer]   13 | }
+[WebServer]  GET /api/state 500 in 44ms (next.js: 1646µs, proxy.ts: 2ms, application-code: 39ms)
+[WebServer] [browser] [mc-store] server mirror unavailable — staying on local state: Error: Internal error.
+[WebServer]     at api (src/lib/api/index.ts:27:11)
+[WebServer]     at async refreshFromServer (src/lib/mc-data/store.ts:337:20)
+[WebServer]   25 |   }
+[WebServer]   26 |   if (!resp.ok || body.error) {
+[WebServer] > 27 |     throw new ApiClientError(body.error?.code ?? "http_error", body.error?.message ?? `HTT...
+[WebServer]      |           ^
+[WebServer]   28 |   }
+[WebServer]   29 |   return body.data as T;
+[WebServer]   30 | } (src/lib/mc-data/store.ts:275:13)
+  ✓   9 [chromium] › e2e/loop-ledgers.spec.ts:311:7 › loop ledgers screen › no mutation controls exist in the loop-ledgers screen (445ms)
+[WebServer]  GET / 200 in 21ms (next.js: 2ms, proxy.ts: 2ms, application-code: 17ms)
+[WebServer] [api] unhandled error: Error: missing secret PLX_MC_DATABASE_URL — run the secrets loader (see TOOLS.md)
+[WebServer]     at requireSecret (src/lib/secrets.ts:10:11)
+[WebServer]     at databaseUrl (src/lib/secrets.ts:16:10)
+[WebServer]     at pool (src/lib/db/index.ts:16:36)
+[WebServer]     at query (src/lib/db/index.ts:37:24)
+[WebServer]     at Module.entityCount (src/lib/sync/repo.ts:40:27)
+[WebServer]     at ensureSeeded (src/lib/sync/engine.ts:97:28)
+[WebServer]     at snapshot (src/lib/sync/state.ts:47:21)
+[WebServer]     at <unknown> (src/app/api/state/route.ts:6:46)
+[WebServer]     at <unknown> (src/lib/api/route.ts:26:26)
+[WebServer]    8 |   const value = process.env[name];
+[WebServer]    9 |   if (!value) {
+[WebServer] > 10 |     throw new Error(`missing secret ${name} — run the secrets loader (see TOOLS.md)`);
+[WebServer]      |           ^
+[WebServer]   11 |   }
+[WebServer]   12 |   return value;
+[WebServer]   13 | }
+[WebServer]  GET /api/state 500 in 56ms (next.js: 1505µs, proxy.ts: 3ms, application-code: 52ms)
+[WebServer] [browser] [mc-store] server mirror unavailable — staying on local state: Error: Internal error.
+[WebServer]     at api (src/lib/api/index.ts:27:11)
+[WebServer]     at async refreshFromServer (src/lib/mc-data/store.ts:337:20)
+[WebServer]   25 |   }
+[WebServer]   26 |   if (!resp.ok || body.error) {
+[WebServer] > 27 |     throw new ApiClientError(body.error?.code ?? "http_error", body.error?.message ?? `HTT...
+[WebServer]      |           ^
+[WebServer]   28 |   }
+[WebServer]   29 |   return body.data as T;
+[WebServer]   30 | } (src/lib/mc-data/store.ts:275:13)
+  ✓  10 [chromium] › e2e/loop-ledgers.spec.ts:324:7 › loop ledgers screen › sidebar shows Loop ledgers in the System of record group (408ms)
+
+  10 passed (6.1s)

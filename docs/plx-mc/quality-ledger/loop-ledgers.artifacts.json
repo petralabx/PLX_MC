@@ -1,0 +1,73 @@
+{
+  "schema_version": "vmc-quality-ledger/v1",
+  "module": "loop-ledgers",
+  "generated_at": "2026-06-23",
+  "branch": "proj/loop-ledger",
+  "evidence_scope": "validator unit + github-api/local-fs adapter contract + route auth/envelope + UI helpers + Playwright E2E (mocked API)",
+  "summary": {
+    "total_artifacts": 3,
+    "by_type":         { "user_story": 2, "defect": 0, "risk": 0, "test_gap": 0, "ticket": 1, "blocker": 0 },
+    "by_status":       { "unknown": 0, "works_observed": 0, "broken": 0, "partially_broken": 0, "missing_test": 0, "covered": 0, "fixed_pending_regression": 0, "verified": 3, "deferred": 0, "waived": 0, "blocked": 0 },
+    "by_severity":     { "critical": 0, "high": 0, "medium": 2, "low": 1 },
+    "by_safety_class": { "green": 3, "yellow": 0, "red": 0 }
+  },
+  "artifacts": [
+    {
+      "artifact_id": "LL-001",
+      "module": "loop-ledgers",
+      "artifact_type": "user_story",
+      "title": "Operator sees all loop ledgers across repos before running more hardening loops",
+      "status": "verified",
+      "severity": "medium",
+      "safety_class": "green",
+      "blast_radius": "read-only observability dashboard; no source mutation",
+      "owner": "tvalton",
+      "source": "docs/plx-mc/quality-ledger/evidence/ll-e2e.txt",
+      "linked_routes": ["GET /api/loop-ledgers", "GET /api/loop-ledgers/[ref]"],
+      "linked_files": ["src/components/mc/loop-ledgers/index.tsx", "src/components/mc/loop-ledgers/views.tsx"],
+      "tests_existing": ["tests/loop-ledgers-validator.test.ts", "tests/loop-ledgers-adapters.test.ts", "tests/loop-ledgers-route.test.ts", "tests/loop-ledgers-ui.test.ts", "e2e/loop-ledgers.spec.ts"],
+      "tests_needed": [],
+      "evidence": ["docs/plx-mc/quality-ledger/evidence/ll-route.txt", "docs/plx-mc/quality-ledger/evidence/ll-ui.txt", "docs/plx-mc/quality-ledger/evidence/ll-e2e.txt"],
+      "confidence": 0.9,
+      "next_action": "none — index + detail wired; monitor live github-api reads after deploy"
+    },
+    {
+      "artifact_id": "LL-002",
+      "module": "loop-ledgers",
+      "artifact_type": "ticket",
+      "title": "Every missing/stale/invalid/unreachable source stays visible and loud",
+      "status": "verified",
+      "severity": "medium",
+      "safety_class": "green",
+      "blast_radius": "observability fidelity",
+      "owner": "tvalton",
+      "source": "docs/plx-mc/quality-ledger/evidence/ll-adapters.txt",
+      "linked_routes": ["GET /api/loop-ledgers"],
+      "linked_files": ["src/lib/loop-ledgers/sources/github-api.ts", "src/lib/loop-ledgers/loader.ts", "src/components/mc/loop-ledgers/views.tsx"],
+      "tests_existing": ["tests/loop-ledgers-adapters.test.ts", "e2e/loop-ledgers.spec.ts (degraded gallery tab)"],
+      "tests_needed": [],
+      "evidence": ["docs/plx-mc/quality-ledger/evidence/ll-adapters.txt", "docs/plx-mc/quality-ledger/evidence/ll-e2e.txt"],
+      "confidence": 0.9,
+      "next_action": "none — adapter contract + degraded gallery E2E pass"
+    },
+    {
+      "artifact_id": "LL-003",
+      "module": "loop-ledgers",
+      "artifact_type": "user_story",
+      "title": "No mutation/sync/repair/rerun affordance is present anywhere",
+      "status": "verified",
+      "severity": "low",
+      "safety_class": "green",
+      "blast_radius": "safety guardrail (read-only, green)",
+      "owner": "tvalton",
+      "source": "docs/plx-mc/quality-ledger/evidence/ll-route.txt",
+      "linked_routes": ["GET /api/loop-ledgers", "GET /api/loop-ledgers/[ref]"],
+      "linked_files": ["src/app/api/loop-ledgers/route.ts", "src/app/api/loop-ledgers/[ref]/route.ts"],
+      "tests_existing": ["tests/loop-ledgers-route.test.ts (read-only methods)", "e2e/loop-ledgers.spec.ts (no mutation controls)"],
+      "tests_needed": [],
+      "evidence": ["docs/plx-mc/quality-ledger/evidence/ll-route.txt", "docs/plx-mc/quality-ledger/evidence/ll-e2e.txt"],
+      "confidence": 0.95,
+      "next_action": "none — API exposes GET only; UI has no mutation controls"
+    }
+  ]
+}

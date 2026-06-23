@@ -1,0 +1,36 @@
+{
+  "schema_version": "vmc-quality-ledger/v1",
+  "module": "chat",
+  "generated_at": "2026-06-22T10:00:00Z",
+  "branch": "main",
+  "evidence_scope": "docs/vmc/quality-ledger/evidence/",
+  "summary": {
+    "total_artifacts": 2,
+    "by_type": { "defect": 1, "test_gap": 1 },
+    "by_status": { "broken": 1, "missing_test": 1 },
+    "by_severity": { "high": 1, "medium": 1 },
+    "by_safety_class": { "yellow": 2 }
+  },
+  "artifacts": [
+    {
+      "artifact_id": "CHAT-001",
+      "module": "chat",
+      "artifact_type": "defect",
+      "title": "Message ordering race condition",
+      "status": "broken",
+      "severity": "high",
+      "safety_class": "yellow",
+      "confidence": 0.9
+    },
+    {
+      "artifact_id": "CHAT-002",
+      "module": "chat",
+      "artifact_type": "test_gap",
+      "title": "Missing retry test coverage",
+      "status": "missing_test",
+      "severity": "medium",
+      "safety_class": "yellow",
+      "confidence": 0.8
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "sha": "deadbeef0001",
+  "url": "https://api.github.com/repos/taylorvalton/plx-customer-portal/git/trees/master?recursive=1",
+  "tree": [
+    {
+      "path": "src/index.ts",
+      "type": "blob",
+      "sha": "blobsha100",
+      "url": "https://api.github.com/repos/taylorvalton/plx-customer-portal/git/blobs/blobsha100",
+      "size": 1024
+    },
+    {
+      "path": "docs/README.md",
+      "type": "blob",
+      "sha": "blobsha101",
+      "url": "https://api.github.com/repos/taylorvalton/plx-customer-portal/git/blobs/blobsha101",
+      "size": 512
+    }
+  ],
+  "truncated": false
+}

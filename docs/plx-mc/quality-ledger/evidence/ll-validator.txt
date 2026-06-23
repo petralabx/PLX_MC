@@ -1,0 +1,9 @@
+
+ RUN  v4.1.8 /home/vinnysachet/PLX_MC-loop-ledger
+
+
+ Test Files  1 passed (1)
+      Tests  46 passed (46)
+   Start at  15:04:59
+   Duration  211ms (transform 63ms, setup 0ms, import 111ms, tests 11ms, environment 0ms)
+

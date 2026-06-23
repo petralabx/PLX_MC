@@ -27,3 +27,6 @@ Thumbs.db
 # vercel deploy metadata
 .vercel
 .vercel
+
+# Project Orchestrator scratch (specs, phase evidence) — promote to artifacts/ if kept
+.orchestrator/

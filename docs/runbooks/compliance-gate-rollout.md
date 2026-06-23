@@ -98,6 +98,11 @@ code-level findings are already fixed on the branch):
   auth middleware; keep `checkout` / `complete` / `reconcile` / `events` behind
   operator credentials. **Do not deploy with auth dormant** — that makes the
   control plane world-callable.
+  - **Status:** the `/api/compliance/webhook` carve-out is **implemented** in
+    `src/middleware.ts` (HMAC self-auth, so it is safe to bypass the session
+    gate). `verify` is **not** carved out yet — it still needs its own auth
+    (OIDC or CI token) added first; until then it stays behind the session gate
+    along with `checkout` / `complete` / `reconcile` / `events`.
 - **Enrolled-repo strict policy (review #2).** A PR with no valid agent dispatch is
   treated as operator work and passes (recorded, ungated) by design (decision 5).
   Telling a real human operator apart from an agent that skipped checkout needs the

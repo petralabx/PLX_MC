@@ -10,10 +10,21 @@ import { auth } from "@/lib/auth";
 export default auth;
 
 export const config = {
-  // Never gate the auth endpoints, the Vercel Cron sweep endpoint (it carries
-  // its own CRON_SECRET bearer auth — src/app/api/cron/sweep — and is called by
-  // Vercel with no user session), framework static assets, the branded sign-in
-  // page, or the brand/font assets it renders (those load pre-auth; the
-  // `authorized` callback also allow-lists them via isPublicAsset).
-  matcher: ["/((?!api/auth|api/cron|_next/static|_next/image|favicon.ico|signin|brand|fonts).*)"],
+  // Never gate endpoints that carry their OWN authentication and are invoked
+  // with no user session: the auth endpoints, the Vercel Cron sweep
+  // (`src/app/api/cron/sweep` — CRON_SECRET bearer), and the GitHub compliance
+  // webhook (`src/app/api/compliance/webhook` — HMAC signature). Also exempt
+  // framework static assets, the branded sign-in page, and the brand/font assets
+  // it renders (those load pre-auth; `authorized` also allow-lists them via
+  // isPublicAsset).
+  //
+  // SECURITY: the carve-out is path-EXACT for `api/compliance/webhook` only. The
+  // sibling compliance routes (checkout/complete/verify/reconcile) and
+  // `/api/events` do NOT self-authenticate yet, so they stay behind the gate —
+  // exempting `api/compliance` broadly would make the control plane
+  // world-callable (EN-007 runbook, review #3). `verify` gets its own carve-out
+  // only after it is given auth (GitHub OIDC or a CI token).
+  matcher: [
+    "/((?!api/auth|api/cron|api/compliance/webhook|_next/static|_next/image|favicon.ico|signin|brand|fonts).*)",
+  ],
 };

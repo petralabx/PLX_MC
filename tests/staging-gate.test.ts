@@ -90,20 +90,27 @@ describe("public asset + sign-in bypass", () => {
 });
 
 describe("middleware matcher — unauthenticated bypass list", () => {
-  // The matcher decides which paths the session gate runs for at all. The cron
-  // sweep endpoint MUST be excluded (it carries its own CRON_SECRET bearer, and
-  // Vercel calls it with no user session) — re-gating it would 302 the cron to
-  // Microsoft sign-in and the scheduled sweep would silently never run.
+  // The matcher decides which paths the session gate runs for at all. Only
+  // endpoints that carry their OWN auth and are called with no user session may
+  // be excluded — re-gating them would 302 the external caller to Microsoft
+  // sign-in (the cron/webhook would silently never run). Conversely, exempting a
+  // route with NO self-auth would expose the control plane (EN-007 review #3).
   const matches = (pathname: string) => new RegExp(`^${config.matcher[0]}$`).test(pathname);
 
-  it("excludes the Vercel Cron sweep endpoint and the auth endpoints", () => {
-    expect(matches("/api/cron/sweep")).toBe(false);
+  it("excludes only the self-authenticating external endpoints (cron, webhook, auth)", () => {
+    expect(matches("/api/cron/sweep")).toBe(false); // CRON_SECRET bearer
+    expect(matches("/api/compliance/webhook")).toBe(false); // GitHub HMAC signature
     expect(matches("/api/auth/callback/microsoft-entra-id")).toBe(false);
   });
 
-  it("still gates the app shell and its data API", () => {
+  it("still gates the app shell, its data API, and the non-self-auth control plane", () => {
     expect(matches("/")).toBe(true);
     expect(matches("/tasks")).toBe(true);
     expect(matches("/api/state")).toBe(true);
+    // These have no self-auth — they MUST stay behind the session gate.
+    expect(matches("/api/compliance/verify")).toBe(true);
+    expect(matches("/api/compliance/checkout")).toBe(true);
+    expect(matches("/api/compliance/reconcile")).toBe(true);
+    expect(matches("/api/events")).toBe(true);
   });
 });

@@ -99,6 +99,7 @@ describe("middleware matcher — unauthenticated bypass list", () => {
 
   it("excludes only the self-authenticating external endpoints (cron, webhook, verify, auth)", () => {
     expect(matches("/api/cron/sweep")).toBe(false); // CRON_SECRET bearer
+    expect(matches("/api/cron/reconcile")).toBe(false); // CRON_SECRET bearer
     expect(matches("/api/compliance/webhook")).toBe(false); // GitHub HMAC signature
     expect(matches("/api/compliance/verify")).toBe(false); // COMPLIANCE_CI_TOKEN bearer
     expect(matches("/api/auth/callback/microsoft-entra-id")).toBe(false);

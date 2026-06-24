@@ -103,8 +103,12 @@ jobs:
             exit 0
           fi
           git fetch --no-tags --depth=1 origin "$PR_BASE_REF" || true
-          changed=$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" 2>/dev/null \
-            | jq -R -s 'split("\n") | map(select(length>0))' || echo '[]')
+          # Capture the diff separately from jq. Piping `git diff | jq ... || echo '[]'`
+          # double-emits ([] from jq AND [] from the ||) when git diff prints nothing
+          # AND fails (a shallow fetch of a busy base has no merge base) — that invalid
+          # JSON crashes the --argjson below and hard-fails this otherwise-soft gate.
+          diff_out=$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" 2>/dev/null || true)
+          changed=$(printf '%s' "$diff_out" | jq -R -s 'split("\n") | map(select(length>0))')
           # Read EVERY MC-Checkout stamp (one per task) — a PR may complete N
           # related tasks; verify checks all of them and blocks if any is incomplete.
           # `grep || true` swallows the no-match exit (operator PR) under pipefail;

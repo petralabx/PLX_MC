@@ -16,6 +16,22 @@
 
 ## Lessons
 
+### 2026-06-24 (ET) — A PowerShell helper named its parameter `$Args`, silently dropping every splatted argument
+
+- **What happened:** A cross-repo worktree-bootstrap helper (`Invoke-Native`)
+  declared `param([string]$Exe, [string[]]$Args, ...)` and called `& $Exe @Args`.
+  Bootstrap "failed" with no clear cause — `npm` printed its usage banner and
+  exited 1, even though the script logged `[run] npm ci` immediately before.
+- **Root cause:** `$Args` is a PowerShell **automatic variable**. The reserved
+  automatic shadows the parameter when splatting (`@Args`), so the native command
+  received **zero** arguments — `npm` ran bare, not `npm ci`.
+- **Rule going forward:** Never name a PowerShell variable or parameter after a
+  reserved automatic (`$Args`, `$Input`, `$_`, `$PSItem`, `$this`, `$Host`,
+  `$Error`, `$Matches`, `$Foreach`, `$Switch`). Use an explicit name such as
+  `$Arguments`. Promoted to an enforced rule in
+  `config/governance-contract.yaml` (`code_standards.powershell`) so it renders
+  into every agent surface.
+
 ### 2026-06-21 (ET) — ESLint was outside preflight, so lint regressions could sit undetected
 
 - **What happened:** A React Hooks lint issue surfaced only when `npm run lint`

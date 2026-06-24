@@ -15,8 +15,11 @@ export interface PrEvent {
   title: string;
   author: string;
   labels: string[];
-  // Parsed from a PR-body marker the capture hook stamps (P3): "MC-Checkout: dsp_…".
+  // Parsed from the PR-body markers the capture hook stamps (P3): "MC-Checkout:
+  // dsp_…". `checkoutId` is the first (back-compat); `checkoutIds` is every stamp
+  // on the PR — a multi-task PR completes N tasks, so ingestion attributes all.
   checkoutId: string | null;
+  checkoutIds: string[];
 }
 
 // GitHub signs the raw body with HMAC-SHA256 (header `X-Hub-Signature-256:
@@ -33,7 +36,14 @@ export function verifyGithubSignature(
   return got.length === exp.length && timingSafeEqual(got, exp);
 }
 
-const CHECKOUT_RE = /MC-Checkout:\s*(dsp_[A-Za-z0-9]+)/;
+// Collect EVERY stamp on the PR (multi-task), deduped, order-preserving.
+const CHECKOUT_RE_G = /MC-Checkout:\s*(dsp_[A-Za-z0-9]+)/g;
+
+function parseCheckoutIds(body: string): string[] {
+  const ids = new Set<string>();
+  for (const m of body.matchAll(CHECKOUT_RE_G)) ids.add(m[1]);
+  return Array.from(ids);
+}
 
 function asObj(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
@@ -53,7 +63,8 @@ export function parsePullRequestEvent(payload: unknown): PrEvent | null {
   const repository = asObj(p.repository);
   const user = asObj(pr.user);
   const labelsRaw = Array.isArray(pr.labels) ? pr.labels : [];
-  const match = CHECKOUT_RE.exec(asStr(pr.body));
+  const body = asStr(pr.body);
+  const checkoutIds = parseCheckoutIds(body);
 
   return {
     action: asStr(p.action),
@@ -65,6 +76,7 @@ export function parsePullRequestEvent(payload: unknown): PrEvent | null {
     title: asStr(pr.title),
     author: asStr(user.login),
     labels: labelsRaw.map((l) => asStr(asObj(l).name)).filter((s) => s.length > 0),
-    checkoutId: match ? match[1] : null,
+    checkoutId: checkoutIds[0] ?? null,
+    checkoutIds,
   };
 }

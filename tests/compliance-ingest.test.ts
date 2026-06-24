@@ -69,6 +69,19 @@ describe("parsePullRequestEvent", () => {
     expect(parsePullRequestEvent({ action: "push" })).toBeNull();
     expect(parsePullRequestEvent(null)).toBeNull();
   });
+
+  it("extracts EVERY checkout stamp (multi-task), deduped, first as checkoutId", () => {
+    const body = "Two tasks.\n\nMC-Checkout: dsp_aaa\nMC-Checkout: dsp_bbb\nMC-Checkout: dsp_aaa";
+    const evt = parsePullRequestEvent(prPayload({}, { body }))!;
+    expect(evt.checkoutIds).toEqual(["dsp_aaa", "dsp_bbb"]);
+    expect(evt.checkoutId).toBe("dsp_aaa");
+  });
+
+  it("has an empty checkoutIds and null checkoutId when there is no stamp", () => {
+    const evt = parsePullRequestEvent(prPayload())!;
+    expect(evt.checkoutIds).toEqual([]);
+    expect(evt.checkoutId).toBeNull();
+  });
 });
 
 describe("ingestPullRequest", () => {
@@ -117,5 +130,27 @@ describe("ingestPullRequest", () => {
     const evt = parsePullRequestEvent(prPayload({ action: "synchronize" }))!;
     await ingestPullRequest(evt);
     expect(db.events.some((e) => e.kind === "pr.synchronized")).toBe(true);
+  });
+
+  // Multi-task parity: a PR completing N tasks attributes ALL of them.
+  it("attributes every checked-out task on a multi-task PR open", async () => {
+    db.dispatches.set("dsp_a", { id: "dsp_a", actorKind: "agent", taskId: "TASK-1", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    db.dispatches.set("dsp_b", { id: "dsp_b", actorKind: "agent", taskId: "TASK-2", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    const evt = parsePullRequestEvent(prPayload({}, { body: "two\nMC-Checkout: dsp_a\nMC-Checkout: dsp_b" }))!;
+    const r = await ingestPullRequest(evt);
+    expect(r).toMatchObject({ actorKind: "agent", taskId: "TASK-1", recorded: true });
+    const e = db.events.find((x) => x.kind === "pr.opened")!;
+    expect(e.taskId).toBe("TASK-1"); // primary = first (back-compat)
+    expect(e.payload).toMatchObject({ taskIds: ["TASK-1", "TASK-2"], actorKind: "agent" });
+  });
+
+  it("emits one task.promotion.requested per task on a multi-task merge", async () => {
+    db.dispatches.set("dsp_a", { id: "dsp_a", actorKind: "agent", taskId: "TASK-1", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    db.dispatches.set("dsp_b", { id: "dsp_b", actorKind: "agent", taskId: "TASK-2", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    const evt = parsePullRequestEvent(prPayload({ action: "closed" }, { merged: true, body: "two\nMC-Checkout: dsp_a\nMC-Checkout: dsp_b" }))!;
+    await ingestPullRequest(evt);
+    const promo = db.events.filter((e) => e.kind === "task.promotion.requested");
+    expect(promo.map((e) => e.taskId).sort()).toEqual(["TASK-1", "TASK-2"]);
+    expect(db.events.find((e) => e.kind === "pr.merged")!.payload).toMatchObject({ taskIds: ["TASK-1", "TASK-2"] });
   });
 });

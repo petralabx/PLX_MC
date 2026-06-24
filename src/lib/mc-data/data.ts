@@ -117,7 +117,7 @@ export const PETRA_DOMAINS = ["petralabx.com", "petrasoap.com"];
 export const REPO_ORG = "taylorvalton";
 
 export const REPOS: Record<string, Repo> = {
-  "portal-web": { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript · Next.js", def: "master", owner: REPO_ORG, visibility: "private", scope: "Customer portal web application — the go-live codebase." },
+  "portal-web": { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript · Next.js", def: "staging", owner: REPO_ORG, visibility: "private", scope: "Customer portal web application — the go-live codebase." },
   "agentic-swarm": { id: "agentic-swarm", name: "agentic-swarm", lang: "TypeScript", def: "main", owner: REPO_ORG, visibility: "private", scope: "Background agent swarm that does the work." },
   "plx-mc": { id: "plx-mc", name: "PLX_MC", lang: "TypeScript", def: "main", owner: REPO_ORG, visibility: "public", scope: "Mission Control — the human cockpit over the agents." },
 };

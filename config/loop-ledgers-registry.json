@@ -21,7 +21,7 @@
     {
       "repo": "taylorvalton/plx-customer-portal",
       "display_name": "PLX Customer Portal",
-      "default_branch": "master",
+      "default_branch": "staging",
       "ledger_glob": "docs/portal/quality-ledger/*.artifacts.json",
       "human_ledger_glob": "docs/portal/quality-ledger/*.md",
       "evidence_dir": "docs/portal/quality-ledger/evidence"

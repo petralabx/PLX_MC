@@ -68,7 +68,7 @@ GitHub status-check workflow.
 - `src/lib/compliance/index.ts` — pure-core barrel (import through here)
 - `src/lib/compliance/service.ts` — server service: checkout / complete / verifyPr / listEvents (subpath import, like `mc-data/store`)
 - `src/lib/compliance/repo.ts` — Postgres accessors (dispatch ledger, mc_events, check ledger)
-- `src/lib/compliance/webhook.ts` — GitHub HMAC verify + PR-event parse (git→MC ingestion)
+- `src/lib/compliance/webhook.ts` — GitHub HMAC verify + PR-event parse (git→MC ingestion); parses **all** MC-Checkout stamps so a multi-task PR attributes every task
 - `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts` — the API surface
 - `.github/workflows/compliance-gate.yml` — the required PR status check (default-off; soft→hard)
 - `scripts/compliance-checkout.mjs` + `.cursor/compliance-hooks.json` — the capture hook: checks out N tasks (or auto-creates one), emits one MC-Checkout stamp per task (disabled by default)

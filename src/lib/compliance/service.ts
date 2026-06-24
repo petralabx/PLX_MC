@@ -242,11 +242,20 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
   let actorKind: ActorKind = "operator";
   let taskId: string | null = null;
   let actorIdentity = evt.author || "operator";
-  if (evt.checkoutId) {
+  // Resolve EVERY stamped checkout (multi-task PRs complete N tasks) so the record
+  // attributes them all, not just the first. Prefer the full list; fall back to
+  // the single id (back-compat). The primary taskId stays the first resolved one.
+  const ids = evt.checkoutIds?.length ? evt.checkoutIds : evt.checkoutId ? [evt.checkoutId] : [];
+  let taskIds: string[] = [];
+  if (ids.length > 0) {
     actorKind = "agent";
-    const d = await resolveDispatch(evt.checkoutId, evt.repo);
-    taskId = d?.taskId ?? null;
-    actorIdentity = d?.runtime ?? "agent";
+    for (const cid of ids) {
+      const d = await resolveDispatch(cid, evt.repo);
+      if (d?.taskId) taskIds.push(d.taskId);
+      if (actorIdentity === (evt.author || "operator") && d?.runtime) actorIdentity = d.runtime;
+    }
+    taskIds = Array.from(new Set(taskIds));
+    taskId = taskIds[0] ?? null;
   }
 
   // Only record the lifecycle actions we model; ignore the rest (edited, labeled,
@@ -262,14 +271,20 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
     if (evt.merged) {
       await repo.appendEvent({
         kind: "pr.merged", actor: actorIdentity, repo: evt.repo, taskId, pr: String(evt.prNumber),
-        payload: { actorKind, sha: evt.headSha, branch: evt.branch, title: evt.title },
+        payload: { actorKind, sha: evt.headSha, branch: evt.branch, title: evt.title, taskIds },
         dedupKey: `pr.merged:${evt.repo}:${evt.prNumber}:${evt.headSha}`,
       });
-      await repo.appendEvent({
-        kind: "task.promotion.requested", actor: actorIdentity, repo: evt.repo, taskId, pr: String(evt.prNumber),
-        payload: { actorKind, sha: evt.headSha },
-        dedupKey: `task.promotion.requested:${evt.repo}:${evt.prNumber}:${evt.headSha}`,
-      });
+      // One promotion seam PER task — a multi-task PR promotes every task it
+      // completed, not just the first (keyed per task so replays dedup). An
+      // operator merge (no tasks) emits a single sparse seam, as before.
+      const promote = taskIds.length > 0 ? taskIds : [null];
+      for (const tid of promote) {
+        await repo.appendEvent({
+          kind: "task.promotion.requested", actor: actorIdentity, repo: evt.repo, taskId: tid, pr: String(evt.prNumber),
+          payload: { actorKind, sha: evt.headSha },
+          dedupKey: `task.promotion.requested:${evt.repo}:${evt.prNumber}:${evt.headSha}:${tid ?? "none"}`,
+        });
+      }
     } else {
       // Closed WITHOUT merging is its own kind — NOT pr.opened (review B1).
       await repo.appendEvent({
@@ -291,7 +306,7 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
     repo: evt.repo,
     taskId,
     pr: String(evt.prNumber),
-    payload: { actorKind, branch: evt.branch, title: evt.title, author: evt.author, headSha: evt.headSha, sparse },
+    payload: { actorKind, branch: evt.branch, title: evt.title, author: evt.author, headSha: evt.headSha, sparse, taskIds },
     dedupKey: `${kind}:${idBase}`,
   });
   return { action: evt.action, actorKind, taskId, recorded: true };

@@ -78,7 +78,7 @@ describe("fail-closed verify", () => {
 
   it("ingest queues on failure too", async () => {
     db.fail.on = true;
-    const evt = { action: "opened", merged: false, repo: "PLX_MC", prNumber: 9, headSha: "z", branch: "f", title: "t", author: "greg", labels: [], checkoutId: null };
+    const evt = { action: "opened", merged: false, repo: "PLX_MC", prNumber: 9, headSha: "z", branch: "f", title: "t", author: "greg", labels: [], checkoutId: null, checkoutIds: [] };
     const r = await ingestOrQueue(evt);
     expect(r).toMatchObject({ ingested: false, queued: true });
     expect(pending().some((q) => q.kind === "ingest")).toBe(true);

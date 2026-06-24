@@ -67,6 +67,30 @@ All coding agents and humans must run the canonical gate command:
 Enforcement surfaces: `.pre-commit-config.yaml` (local hooks) and
 `.github/workflows/ci.yml` (CI re-runs the same script).
 
+## Agentic Swarm Delegation (Runtime Integration)
+
+Agents in this repo may delegate work to the **agentic-swarm** (41 agents / 7
+teams) via the `dispatch_to_swarm` MCP tool (stdio server at
+`tools/swarm-dispatch-mcp/`) or the `bin/swarm` CLI. The swarm runs locally on
+`127.0.0.1:8900` (cloned to `./.swarm`, started by `.cursor/environment.json`).
+
+Per the External Integrations contract, this integration declares:
+
+| Attribute | Value |
+|---|---|
+| Owner | Vince (human accountable; agents execute) |
+| Scope | Runtime, in-VM / local-only — calls a loopback `swarm serve`; no public ingress |
+| Auth source | AWS Secrets Manager (`prod/ec2-secrets`) via the swarm's `get_secret` accessor + the VM IAM role; the MCP server resolves `SWARM_API_KEY` at runtime (`SWARM_KEY_CMD`), so auth stays on with no duplicated secret |
+| Default state | **Disabled** — `SWARM_DISPATCH_ENABLED=0` in committed `.cursor/mcp.json`; explicit opt-in per session/operator |
+| Kill switch | `SWARM_DISPATCH_ENABLED=0` (or remove `swarm-dispatch` from MCP config) |
+| Health check | `swarm_health` tool → `GET /health` |
+| Fallback path | `bin/swarm ask "..."` CLI, or `curl POST /dispatch` |
+| Data/audit boundary | Loopback only; swarm drafts (no autonomous send) and escalates plan deviations to the CEO |
+
+To enable: set `SWARM_DISPATCH_ENABLED=1` (local `.cursor/mcp.json` env, or the
+team MCP server env at cursor.com/agents for Cloud Agents). Swarm-produced changes
+still pass `./scripts/preflight.sh` before commit/PR.
+
 <!-- governance:auto:start -->
 
 ## Core Doctrine Pillars

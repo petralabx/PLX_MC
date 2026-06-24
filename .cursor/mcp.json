@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "swarm-dispatch": {
+      "command": "node",
+      "args": ["tools/swarm-dispatch-mcp/server.mjs"],
+      "env": {
+        "SWARM_API_URL": "http://127.0.0.1:8900",
+        "SWARM_API_KEY": "${env:SWARM_API_KEY}",
+        "SWARM_KEY_CMD": ".swarm/.venv/bin/python -c \"import sys; sys.path.insert(0, '.swarm'); from src.secrets import get_secret; sys.stdout.write(get_secret('SWARM_API_KEY'))\"",
+        "SWARM_DISPATCH_ENABLED": "0"
+      }
+    }
+  }
+}

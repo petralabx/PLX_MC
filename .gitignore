@@ -38,3 +38,6 @@ Thumbs.db
 
 # Project Orchestrator scratch (specs, phase evidence) — promote to artifacts/ if kept
 .orchestrator/
+
+# Vendored agentic-swarm checkout (cloned by .cursor/environment.json for swarm delegation)
+.swarm/

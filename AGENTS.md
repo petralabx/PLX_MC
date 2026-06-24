@@ -47,6 +47,7 @@ DESIGN_TOKENS).
 | meeting-intake | Vince | Medium |
 | loop-ledgers | Vince | Medium |
 | github-app | Vince | Medium |
+| mcp | Vince | Critical |
 
 ## Canonical Operations Docs
 
@@ -67,29 +68,37 @@ All coding agents and humans must run the canonical gate command:
 Enforcement surfaces: `.pre-commit-config.yaml` (local hooks) and
 `.github/workflows/ci.yml` (CI re-runs the same script).
 
-## Agentic Swarm Delegation (Runtime Integration)
+## PLX-MC MCP Integration (Runtime)
 
-Agents in this repo may delegate work to the **agentic-swarm** (41 agents / 7
-teams) via the `dispatch_to_swarm` MCP tool (stdio server at
-`tools/swarm-dispatch-mcp/`) or the `bin/swarm` CLI. The swarm runs locally on
-`127.0.0.1:8900` (cloned to `./.swarm`, started by `.cursor/environment.json`).
+Team-distributed MCP server **`PLX-MC`** exposes MC task lifecycle tools, audit trail,
+standard `{ data, meta }` envelope, and composed swarm delegation.
 
-Per the External Integrations contract, this integration declares:
+| Surface | Location |
+|---------|----------|
+| Stdio client | `tools/plx-mc-mcp/index.ts` |
+| Cursor REST API | `/api/cursor/*` |
+| Streamable HTTP MCP | `/api/cursor/mcp` |
+| Legacy shim | `tools/swarm-dispatch-mcp/` (deprecated — use PLX-MC) |
 
 | Attribute | Value |
 |---|---|
 | Owner | Vince (human accountable; agents execute) |
-| Scope | Runtime, in-VM / local-only — calls a loopback `swarm serve`; no public ingress |
-| Auth source | AWS Secrets Manager (`prod/ec2-secrets`) via the swarm's `get_secret` accessor + the VM IAM role; the MCP server resolves `SWARM_API_KEY` at runtime (`SWARM_KEY_CMD`), so auth stays on with no duplicated secret |
-| Default state | **Disabled** — `SWARM_DISPATCH_ENABLED=0` in committed `.cursor/mcp.json`; explicit opt-in per session/operator |
-| Kill switch | `SWARM_DISPATCH_ENABLED=0` (or remove `swarm-dispatch` from MCP config) |
-| Health check | `swarm_health` tool → `GET /health` |
-| Fallback path | `bin/swarm ask "..."` CLI, or `curl POST /dispatch` |
-| Data/audit boundary | Loopback only; swarm drafts (no autonomous send) and escalates plan deviations to the CEO |
+| Scope | Runtime — stdio client + HTTPS cursor API on `mc.plxcustomer.io`; swarm leg loopback `127.0.0.1:8900` |
+| Auth source | `PLX_MC_MCP_API_KEY` + `PLX_MC_ALLOWED_USERS` operator email (AWS Secrets Manager); swarm via `SWARM_KEY_CMD` / `get_secret` |
+| Default state | **Disabled** — `PLX_MC_MCP_ENABLED=0` in committed `.cursor/mcp.json` |
+| Kill switch | `PLX_MC_MCP_ENABLED=0` and/or remove `PLX-MC` from MCP config; `SWARM_DISPATCH_ENABLED=0` for dispatch only |
+| Health check | `mc_self_check` → `GET /api/cursor/self-check` |
+| Fallback path | `scripts/compliance-checkout.mjs` + `/api/compliance/*`; `bin/swarm ask` for dispatch |
+| Data/audit boundary | All MC tool calls append `mcp.tool.invoked` to `mc_events`; task writes via sync engine only |
 
-To enable: set `SWARM_DISPATCH_ENABLED=1` (local `.cursor/mcp.json` env, or the
-team MCP server env at cursor.com/agents for Cloud Agents). Swarm-produced changes
-still pass `./scripts/preflight.sh` before commit/PR.
+To enable: set `PLX_MC_MCP_ENABLED=1`, `MC_MCP_API_KEY`, `MC_OPERATOR_EMAIL`, `MC_REPO`
+in team MCP env ([runbook](docs/runbooks/plx-mc-mcp-team-registration.md)). Swarm:
+`SWARM_DISPATCH_ENABLED=1`. All changes still pass `./scripts/preflight.sh`.
+
+## Agentic Swarm Delegation (composed)
+
+Swarm dispatch is **composed into PLX-MC** (`dispatch_to_swarm`, `list_swarm_teams`,
+`swarm_health`). Standalone `swarm-dispatch` MCP remains as a compatibility shim only.
 
 <!-- governance:auto:start -->
 

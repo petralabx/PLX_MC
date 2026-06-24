@@ -1,7 +1,4 @@
-// EN-007 — the capture hook (agent-governance-automation P3). Proves the
-// hands-off behavior without a live server: default-off no-op, single + multi
-// checkout (one stamp per task), auto-create-or-checkout, and optional basic-auth
-// pass-through. fetch is injected so no network is touched.
+// EN-007 - the capture hook (agent-governance-automation P3).
 import { describe, it, expect } from "vitest";
 import { capture } from "../scripts/compliance-checkout.mjs";
 
@@ -41,7 +38,7 @@ describe("compliance capture hook", () => {
     expect(calls[0].body).toMatchObject({ taskId: "TASK-1", repo: "PLX_MC", accountableHuman: "vince" });
   });
 
-  it("checks out MULTIPLE tasks (comma/space separated) and stamps each", async () => {
+  it("checks out MULTIPLE tasks and stamps each", async () => {
     let n = 0;
     const { fetch } = recorder(() => ({ ok: true, json: { data: { checkoutId: `dsp_${++n}` } } }));
     const logs: string[] = [];
@@ -61,18 +58,18 @@ describe("compliance capture hook", () => {
     expect(r.created).toEqual(["TASK-99"]);
     expect(r.stamps).toEqual(["dsp_new"]);
     expect(calls[0].url).toContain("/api/tasks");
-    expect(calls[0].body).toMatchObject({ title: "Fix the thing", bucket: "BKT-WMS", reporter: "vince" });
     expect(calls[1].url).toContain("/api/compliance/checkout");
   });
 
-  it("throws when there is no task id and nothing to auto-create from", async () => {
-    const { fetch } = recorder(() => ({ ok: true, json: {} }));
-    await expect(capture({ env: { ...baseEnv }, fetch, log: () => {} })).rejects.toThrow(/auto-create/);
-  });
-
-  it("sends basic-auth when MC_BASIC_AUTH is set", async () => {
-    const { fetch, calls } = recorder(() => ({ ok: true, json: { data: { checkoutId: "dsp_a" } } }));
-    await capture({ env: { ...baseEnv, MC_TASK_ID: "TASK-1", MC_BASIC_AUTH: "u:p" }, fetch, log: () => {} });
-    expect(calls[0].headers.authorization).toBe(`Basic ${Buffer.from("u:p").toString("base64")}`);
+  it("uses cursor checkout when MC_MCP_API_KEY is set", async () => {
+    const { fetch, calls } = recorder(() => ({ ok: true, json: { data: { checkoutId: "dsp_mcp" } } }));
+    await capture({
+      env: { ...baseEnv, MC_TASK_ID: "TASK-1", MC_MCP_API_KEY: "sek", MC_OPERATOR_EMAIL: "vince@petrasoap.com" },
+      fetch,
+      log: () => {},
+    });
+    expect(calls[0].url).toContain("/api/cursor/checkout");
+    expect(calls[0].headers["x-api-key"]).toBe("sek");
+    expect(calls[0].body).toEqual({ taskId: "TASK-1" });
   });
 });

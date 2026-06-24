@@ -1,0 +1,21 @@
+# Delegating via PLX-MC MCP
+
+Prefer the **PLX-MC** MCP server for task lifecycle + optional swarm delegation.
+
+## Tools
+
+| Tool | Purpose |
+|------|---------|
+| `mc_checkout_task` | Mint checkout + `MC-Checkout` PR stamp |
+| `mc_report_progress` | Stage/notes updates |
+| `mc_complete_task` | Done marker + evidence |
+| `mc_search_tasks` / `mc_get_context` | Discovery |
+| `dispatch_to_swarm` | COS orchestration (requires `SWARM_DISPATCH_ENABLED=1`) |
+
+## Default state
+
+Ships **disabled**: `PLX_MC_MCP_ENABLED=0` in committed `.cursor/mcp.json`.
+
+## Governance
+
+See `docs/modules/mcp/README.md` and `AGENTS.md` → Agentic MCP Integration.

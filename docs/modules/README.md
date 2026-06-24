@@ -23,4 +23,5 @@ key files change, update its contract in the same PR.
 | github-app | Vince | Medium | `docs/modules/github-app/README.md` |
 | agents | Vince | Medium | `docs/modules/agents/README.md` |
 | compliance | Vince | Critical | `docs/modules/compliance/README.md` |
+| mcp | Vince | Critical | `docs/modules/mcp/README.md` |
 | loop-ledgers | Vince | Medium | `docs/modules/loop-ledgers/README.md` |

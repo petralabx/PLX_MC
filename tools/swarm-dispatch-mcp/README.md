@@ -1,5 +1,9 @@
 # swarm-dispatch MCP server
 
+> **Deprecated:** use the unified **`PLX-MC`** MCP server (`tools/plx-mc-mcp/`) which
+> composes these swarm tools alongside MC task lifecycle. This shim remains for
+> backward compatibility only.
+
 A tiny, **dependency-free** MCP (Model Context Protocol) stdio server that lets
 Cursor agents — both the local IDE agent and **Cloud Agents** — delegate work to
 the [`agentic-swarm`](https://github.com/taylorvalton/agentic-swarm) (41 agents /

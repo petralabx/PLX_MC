@@ -5,7 +5,7 @@ import { checkout, complete } from "@/lib/compliance/service";
 import * as complianceRepo from "@/lib/compliance/repo";
 import { createTask, patchTask, snapshot, type CreateTaskInput } from "@/lib/sync";
 import { getEntity } from "@/lib/sync/repo";
-import type { Task } from "@/lib/mc-data";
+import type { Evidence, Task } from "@/lib/mc-data";
 import type { McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
 import { syncMetaForTask } from "./sync-meta";
@@ -153,6 +153,7 @@ export async function actionComplete(
     prUrl?: string;
     verificationCommands?: string[];
     filesChanged?: string[];
+    rollback?: string;
   }
 ) {
   await complete({
@@ -163,6 +164,24 @@ export async function actionComplete(
   });
   const dispatch = await complianceRepo.getDispatch(input.checkoutId);
   const taskId = dispatch?.taskId ?? "";
+
+  // Write the structured evidence bundle onto the task entity so the compliance
+  // gate (verifyCompliance → task.evidence: summary + done checklist + rollback)
+  // is satisfiable through the MCP flow — completing a task is the agent's
+  // evidence hand-in, not just an event. Mirrors actionProgress's patchTask path.
+  if (taskId) {
+    const evidence: Evidence = {
+      summary: input.summary,
+      items: [
+        { key: "summary", label: "Summary — what changed", done: true },
+        { key: "verification", label: "Verification commands run", done: (input.verificationCommands?.length ?? 0) > 0 },
+        { key: "rollback", label: "Rollback plan", done: !!input.rollback?.trim() },
+      ],
+      rollback: input.rollback?.trim() || null,
+    };
+    await patchTask(taskId, { evidence } as Parameters<typeof patchTask>[1], dispatch?.accountableHuman ?? "agent");
+  }
+
   return {
     ok: true,
     checkoutId: input.checkoutId,
@@ -174,6 +193,7 @@ export async function actionComplete(
       prUrl: input.prUrl ?? null,
       verificationCommands: input.verificationCommands ?? [],
       filesChanged: input.filesChanged ?? [],
+      rollback: input.rollback ?? null,
     },
     sync: taskId ? await syncMetaForTask(taskId) : undefined,
   };

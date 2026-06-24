@@ -35,6 +35,15 @@ MC_BASE_URL=https://mc.plxcustomer.io
 
 **PR stamp:** `mc_checkout_task` → `meta.links.checkoutStamp` = `MC-Checkout: dsp_*`
 
+**Compliance handshake (hard mode):** an agent PR that carries a `MC-Checkout` stamp
+is held to the tier bundle. `mc_complete_task` writes the task's `evidence`
+(`summary` + a done checklist + `rollback`) so the gate is satisfiable through the
+MCP flow — pass `rollback` (and `verificationCommands`) when completing. The verify
+gate matches `repo` on the **bare** GitHub name (`github.event.repository.name`), so
+a checkout minted with either `MC_REPO=PLX_MC` or `MC_REPO=taylorvalton/PLX_MC`
+resolves. The capture hook auto-creates via `/api/cursor/tasks` (not the
+session-gated `/api/tasks`) when `MC_MCP_API_KEY` is set.
+
 ## Dependencies
 
 - `src/lib/compliance/*` — checkout/complete ledger

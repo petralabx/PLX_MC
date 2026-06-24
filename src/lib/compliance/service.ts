@@ -33,9 +33,19 @@ function checkId(repoName: string, prNumber: number, headSha: string, taskId?: s
 // returning the dispatch it points at, or null. A present checkoutId always means
 // an agent run; an invalid one yields null so the gate blocks the agent PR (never
 // a silent downgrade to operator). Hardening: security review CRITICAL #1/#5/#6.
+// The gate sends `repo` as the bare GitHub name (github.event.repository.name,
+// e.g. "PLX_MC"), but a checkout may be minted with the full "owner/name" slug
+// (what .cursor/mcp.json + the team-registration runbook show as MC_REPO). Match
+// on the bare repo name so either form resolves — without this, a slug-minted
+// stamp resolves taskId=null and a valid agent PR is wrongly blocked.
+function bareRepo(r: string): string {
+  return r.includes("/") ? r.slice(r.lastIndexOf("/") + 1) : r;
+}
+
 async function resolveDispatch(checkoutId: string, repoName: string): Promise<repo.DispatchRow | null> {
   const d = await repo.getDispatch(checkoutId);
-  const valid = !!d && !d.revoked && new Date(d.expiresAt).getTime() > Date.now() && d.repo === repoName;
+  const repoMatches = !!d && bareRepo(d.repo) === bareRepo(repoName);
+  const valid = !!d && !d.revoked && new Date(d.expiresAt).getTime() > Date.now() && repoMatches;
   return valid ? d : null;
 }
 

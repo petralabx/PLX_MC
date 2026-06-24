@@ -10,6 +10,7 @@ const completeSchema = z.object({
   prUrl: z.string().optional(),
   verificationCommands: z.array(z.string()).optional(),
   filesChanged: z.array(z.string()).optional(),
+  rollback: z.string().optional(),
 });
 
 export const POST = cursorRoute("mc_complete_task", async (req, _ctx, _identity, meta) => {

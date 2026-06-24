@@ -115,6 +115,18 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
     expect(db.events.some((e) => e.kind === "gate.passed")).toBe(true);
   });
 
+  it("resolves a checkout minted with the full owner/name slug against the gate's bare repo name (P0c)", async () => {
+    // The gate sends repo = github.event.repository.name ("PLX_MC"); a stamp
+    // minted with MC_REPO="taylorvalton/PLX_MC" (the runbook/mcp.json form) must
+    // still resolve its task — else taskId=null wrongly blocks a valid agent PR.
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor", accountableHuman: "vince", repo: "taylorvalton/PLX_MC" });
+
+    const r = await verifyPr({ repo: "PLX_MC", prNumber: 11, headSha: "slug", changedPaths: ["src/lib/x.ts"], checkoutId });
+    expect(r.taskId).toBe("TASK-900");
+    expect(r.verdict).toBe("pass");
+  });
+
   it("classifies a migration change as high-risk; PRD is advisory (no bucket store) so a full bundle passes (S1)", async () => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert", shots: [{ label: "ui", cap: "x" }] } }));
     const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });

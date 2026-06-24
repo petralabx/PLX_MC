@@ -44,6 +44,9 @@ run_policy() {
   step "Governance alignment (contract -> surfaces)"
   "$PY" scripts/generate-governance-surfaces.py --check
 
+  step "Compliance gate alignment (source -> workflow)"
+  "$PY" scripts/generate-compliance-gate.py --check
+
   step "Repo hygiene"
   "$PY" scripts/check-repo-hygiene.py
 

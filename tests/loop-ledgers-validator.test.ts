@@ -657,7 +657,8 @@ describe("config/loop-ledgers-registry.json — seeded registry", () => {
     const byRepo = Object.fromEntries(result.config.repos.map((r) => [r.repo, r]));
     expect(byRepo["taylorvalton/agentic-swarm"]?.default_branch).toBe("main");
     expect(byRepo["taylorvalton/PLX_MC"]?.default_branch).toBe("main");
-    expect(byRepo["taylorvalton/plx-customer-portal"]?.default_branch).toBe("master");
+    // Portal ships on staging; loop-ledger reads resolve there (branch-truth P1).
+    expect(byRepo["taylorvalton/plx-customer-portal"]?.default_branch).toBe("staging");
   });
 
   it("has correct top-level freshness defaults", () => {

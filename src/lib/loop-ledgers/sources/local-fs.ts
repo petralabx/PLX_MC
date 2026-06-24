@@ -8,7 +8,7 @@
 // for files matching the glob pattern.
 
 import { readdir, readFile } from "node:fs/promises";
-import { normalize, resolve } from "node:path";
+import { normalize, resolve, sep } from "node:path";
 
 import type { LedgerRef, RegistryConfig, RepoEntry } from "@/lib/loop-ledgers/types";
 import type {
@@ -40,7 +40,8 @@ function safeResolve(root: string, relativePath: string): string | null {
   if (hasTraversal(relativePath)) return null;
   const abs = resolve(root, relativePath);
   const rootAbs = resolve(root);
-  if (!abs.startsWith(rootAbs + "/") && abs !== rootAbs) return null;
+  const rootPrefix = rootAbs.endsWith(sep) ? rootAbs : rootAbs + sep;
+  if (!abs.startsWith(rootPrefix) && abs !== rootAbs) return null;
   return abs;
 }
 

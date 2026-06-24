@@ -74,7 +74,11 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
     const bucket = env.MC_BUCKET;
     if (!title) throw new Error("no MC_TASK_ID and no MC_TASK_TITLE to auto-create a task");
     if (!bucket) throw new Error("auto-create needs MC_BUCKET");
-    const res = await fetch(url("/api/tasks"), {
+    // Under MCP auth use the self-authenticating /api/cursor/tasks route; the
+    // legacy /api/tasks is session-gated and would 302 to the sign-in HTML page
+    // (the headers carry an API key, not a session cookie).
+    const createPath = useCursorApi ? "/api/cursor/tasks" : "/api/tasks";
+    const res = await fetch(url(createPath), {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -86,7 +90,8 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
     });
     if (!res.ok) throw new Error(`task create failed: HTTP ${res.status}`);
     const json = await res.json();
-    const id = json?.data?.id;
+    // cursor route returns { data: { taskId, task } }; legacy returns { data: { id } }.
+    const id = json?.data?.taskId || json?.data?.task?.id || json?.data?.id;
     if (!id) throw new Error("no task id in create response");
     log(`[compliance-capture] auto-created ${id} (${title})`);
     taskIds = [id];

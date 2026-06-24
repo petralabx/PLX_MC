@@ -19,7 +19,8 @@ export type Screen =
   | "sync"
   | "intake"
   | "task"
-  | "loop-ledgers";
+  | "loop-ledgers"
+  | "governance-sops";
 
 export interface Route {
   screen: Screen;

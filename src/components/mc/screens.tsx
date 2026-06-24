@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 import { AgentFeed } from "./agent-feed";
 import { BucketDetail } from "./bucket-detail";
 import { FilesView } from "./files-view";
+import { GovernanceSopsView } from "./governance-sops";
 import { InboxView } from "./inbox";
 import { InsightsView } from "./insights";
 import { MeetingIntakeView } from "./meeting-intake";
@@ -32,4 +33,5 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   intake: MeetingIntakeView,
   task: TaskDetailView,
   "loop-ledgers": LoopLedgersView,
+  "governance-sops": GovernanceSopsView,
 };

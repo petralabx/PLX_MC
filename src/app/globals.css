@@ -9,6 +9,7 @@
 @import "../styles/mc-authoring.css";
 @import "../styles/mc-auth.css";
 @import "../styles/mc-loop-ledgers.css";
+@import "../styles/mc-governance-sops.css";
 
 * {
   box-sizing: border-box;

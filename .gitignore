@@ -28,5 +28,13 @@ Thumbs.db
 .vercel
 .vercel
 
+# Cursor skill mirrors (bootstrap copies from agentic-swarm; PLX adapters stay in git)
+.cursor/skills/*
+!.cursor/skills/project-hardener/
+!.cursor/skills/project-orchestrator/
+!.cursor/skills/ui-ux-design-loop/
+.cursor/skills.backup-*/
+.agents/
+
 # Project Orchestrator scratch (specs, phase evidence) — promote to artifacts/ if kept
 .orchestrator/

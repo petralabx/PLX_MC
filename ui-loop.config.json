@@ -6,10 +6,21 @@
     "fileGlobs": [
       "src/components/mc/loop-ledgers/*.tsx",
       "src/components/mc/loop-ledgers/*.ts",
-      "src/styles/mc-loop-ledgers.css"
+      "src/styles/mc-loop-ledgers.css",
+      "src/styles/mc-*.css",
+      "src/styles/*.css",
+      "src/components/mc/**/*.tsx"
     ]
   },
-  "componentMap": ["BrandBoundary", "Kicker", "MonoData", "PMark"],
+  "componentMap": [
+    "BrandBoundary",
+    "Kicker",
+    "MonoData",
+    "PMark",
+    "Avatar",
+    "Assignee",
+    "Confidence"
+  ],
   "routesGlob": "e2e/helpers/ui-loop/*.routes.ts",
   "renderGuard": {
     "authHeading": "Sign in",

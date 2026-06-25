@@ -154,6 +154,12 @@ export async function actionComplete(
     verificationCommands?: string[];
     filesChanged?: string[];
     rollback?: string;
+    // High-risk (full-tier) changes — migrations, auth, infra — need
+    // change-appropriate proof: a test run (`testRun`) or screenshots (`shots`).
+    // Without one of these the gate blocks a high-tier PR even with a complete
+    // standard bundle, and there was no MCP path to supply it.
+    testRun?: { suite: string; passed: number; failed: number; total?: number };
+    shots?: { label: string; cap: string }[];
   }
 ) {
   await complete({
@@ -166,9 +172,20 @@ export async function actionComplete(
   const taskId = dispatch?.taskId ?? "";
 
   // Write the structured evidence bundle onto the task entity so the compliance
-  // gate (verifyCompliance → task.evidence: summary + done checklist + rollback)
-  // is satisfiable through the MCP flow — completing a task is the agent's
-  // evidence hand-in, not just an event. Mirrors actionProgress's patchTask path.
+  // gate (verifyCompliance → task.evidence) is satisfiable through the MCP flow —
+  // completing a task is the agent's evidence hand-in, not just an event. Standard
+  // tier needs summary + done checklist + rollback; high/full tier also needs a
+  // test run or screenshots (qa/shots). Mirrors actionProgress's patchTask path.
+  const qa = input.testRun
+    ? {
+        pass: input.testRun.passed,
+        fail: input.testRun.failed,
+        total: input.testRun.total ?? input.testRun.passed + input.testRun.failed,
+        suite: input.testRun.suite,
+        ran: new Date().toISOString(),
+        tests: [],
+      }
+    : undefined;
   if (taskId) {
     const evidence: Evidence = {
       summary: input.summary,
@@ -178,6 +195,8 @@ export async function actionComplete(
         { key: "rollback", label: "Rollback plan", done: !!input.rollback?.trim() },
       ],
       rollback: input.rollback?.trim() || null,
+      ...(qa ? { qa } : {}),
+      ...(input.shots?.length ? { shots: input.shots } : {}),
     };
     await patchTask(taskId, { evidence } as Parameters<typeof patchTask>[1], dispatch?.accountableHuman ?? "agent");
   }
@@ -194,6 +213,8 @@ export async function actionComplete(
       verificationCommands: input.verificationCommands ?? [],
       filesChanged: input.filesChanged ?? [],
       rollback: input.rollback ?? null,
+      qa: qa ?? null,
+      shots: input.shots ?? [],
     },
     sync: taskId ? await syncMetaForTask(taskId) : undefined,
   };

@@ -44,6 +44,12 @@ a checkout minted with either `MC_REPO=PLX_MC` or `MC_REPO=taylorvalton/PLX_MC`
 resolves. The capture hook auto-creates via `/api/cursor/tasks` (not the
 session-gated `/api/tasks`) when `MC_MCP_API_KEY` is set.
 
+**High-risk (full-tier) changes** — migrations (`db/migrations/**`), auth, infra —
+additionally require change-appropriate proof: pass a `testRun`
+(`{ suite, passed, failed }` → written as `evidence.qa`) or `shots` (screenshots) to
+`mc_complete_task`. Without one, the gate blocks a high-tier PR even with a complete
+standard bundle.
+
 ## Dependencies
 
 - `src/lib/compliance/*` — checkout/complete ledger

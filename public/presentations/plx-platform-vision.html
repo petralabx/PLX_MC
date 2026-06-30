@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLX Platform Vision — Where We're Going</title>
+<link href="https://api.fontshare.com/v2/css?f[]=mazius-display@400,401&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════ PLX design tokens (Mission Control / Portal authority) ═══════ */
+:root {
+  --p-paper:#FBFAF6; --p-paper-2:#ECEFE9; --p-rail:#EEEBE3; --p-canvas:#F5F3EC;
+  --p-ink:#1B1A17; --p-ink-2:#3A3833; --p-muted:#807A6F;
+  --p-grid:rgba(27,26,23,0.16); --p-grid-2:rgba(27,26,23,0.08);
+  --p-accent:#244A39; --p-accent-soft:#BCCFBF;
+  --p-ok:#5C7A55; --p-warn:#C99340; --p-info:#5B7B91; --p-hot:#52606E;
+  --mazius:"Mazius Display","Times New Roman",Georgia,serif;
+  --sans:"Inter",-apple-system,system-ui,sans-serif;
+  --mono:"JetBrains Mono","IBM Plex Mono",ui-monospace,monospace;
+  --p-track-tick:0.22em; --p-track-meta:0.18em; --p-track-data:0.04em;
+  --p-radius:4px; --p-radius-lg:6px;
+  --p-ease:cubic-bezier(.2,.8,.2,1);
+  --p-dur:180ms; --p-dur-slow:320ms;
+}
+[data-scheme="dark"] {
+  --p-paper:#22201D; --p-paper-2:#2A3329; --p-rail:#16140F; --p-canvas:#1A1816;
+  --p-ink:#F1ECE0; --p-ink-2:#C9C2B5; --p-muted:#827B6F;
+  --p-grid:rgba(241,236,224,0.12); --p-grid-2:rgba(241,236,224,0.06);
+  --p-accent:#7AB18C; --p-accent-soft:#2D4D3B;
+  --p-ok:#7A9E6F; --p-warn:#D9A85C; --p-info:#7A9DB3; --p-hot:#8FA0B0;
+}
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+html { scroll-behavior:smooth; }
+body {
+  font-family:var(--sans); color:var(--p-ink); background:var(--p-canvas);
+  font-feature-settings:"ss01","ss02"; -webkit-font-smoothing:antialiased;
+  scroll-snap-type:y mandatory; overflow-y:scroll; height:100vh;
+}
+
+/* ── slide chassis ── */
+.slide {
+  scroll-snap-align:start; scroll-snap-stop:always;
+  min-height:100vh; width:100%;
+  display:flex; flex-direction:column; justify-content:center;
+  padding:7vh 9vw; position:relative; background:var(--p-paper);
+  border-bottom:1px solid var(--p-grid);
+}
+.slide:nth-child(even) { background:var(--p-canvas); }
+.slide::before {
+  content:attr(data-tick);
+  position:absolute; top:4vh; left:9vw; right:9vw;
+  display:flex; justify-content:space-between;
+  font-family:var(--mono); font-size:10px; letter-spacing:var(--p-track-tick);
+  text-transform:uppercase; color:var(--p-muted);
+  border-bottom:1px solid var(--p-grid); padding-bottom:10px;
+}
+.foottick {
+  position:absolute; bottom:4vh; left:9vw; right:9vw;
+  display:flex; justify-content:space-between; align-items:center;
+  font-family:var(--mono); font-size:9px; letter-spacing:var(--p-track-meta);
+  text-transform:uppercase; color:var(--p-muted);
+  border-top:1px solid var(--p-grid); padding-top:10px;
+}
+
+h1,h2,h3 { font-family:var(--mazius); font-weight:400; line-height:1.02; text-wrap:balance; }
+em { font-style:italic; color:var(--p-accent); }
+.kicker { font-family:var(--mono); font-size:11px; letter-spacing:var(--p-track-tick); text-transform:uppercase; color:var(--p-muted); }
+.mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.data { font-family:var(--mono); font-variant-numeric:tabular-nums; letter-spacing:var(--p-track-data); }
+p, li { color:var(--p-ink-2); max-width:62ch; line-height:1.55; font-size:clamp(14px,1.35vw,17px); }
+ul.plain { list-style:none; margin-top:2vh; }
+ul.plain li { padding:8px 0; border-bottom:1px solid var(--p-grid-2); display:flex; gap:14px; align-items:flex-start; max-width:68ch; }
+ul.plain li::before { content:"▸"; font-family:var(--mono); color:var(--p-accent); flex:none; margin-top:2px; }
+
+/* reveal animations */
+.reveal {
+  opacity:0; transform:translateY(18px);
+  transition:opacity var(--p-dur-slow) var(--p-ease), transform var(--p-dur-slow) var(--p-ease);
+}
+.slide.in-view .reveal { opacity:1; transform:none; }
+.slide.in-view .reveal.d1 { transition-delay:80ms; }
+.slide.in-view .reveal.d2 { transition-delay:160ms; }
+.slide.in-view .reveal.d3 { transition-delay:240ms; }
+.slide.in-view .reveal.d4 { transition-delay:320ms; }
+.slide.in-view .reveal.d5 { transition-delay:400ms; }
+@media (prefers-reduced-motion:reduce) {
+  .reveal { opacity:1; transform:none; transition:none; }
+}
+
+/* cover */
+.cover .brand { display:flex; align-items:center; gap:16px; margin-bottom:5vh; }
+.cover .mark { width:54px; height:54px; flex:none; position:relative; background:var(--p-paper); border:1.5px solid var(--p-ink); }
+.cover .mark .num { position:absolute; top:5px; left:7px; font-family:var(--mono); font-weight:600; font-size:14px; }
+.cover .mark .sym { position:absolute; bottom:3px; right:7px; font-family:var(--mazius); font-style:italic; font-size:20px; color:var(--p-accent); }
+.cover .wm { font-family:var(--mazius); font-size:34px; letter-spacing:-0.02em; white-space:nowrap; }
+.cover h1 { font-size:clamp(38px,5.8vw,84px); letter-spacing:-0.03em; margin:14px 0 0; max-width:16ch; }
+.cover .sub { margin-top:5vh; display:flex; gap:42px; flex-wrap:wrap;
+  font-family:var(--mono); font-size:11px; letter-spacing:var(--p-track-meta); text-transform:uppercase; color:var(--p-muted); }
+.cover .sub b { display:block; color:var(--p-ink); font-weight:600; margin-top:6px; letter-spacing:0.04em; }
+
+.shead { font-size:clamp(28px,3.8vw,50px); letter-spacing:-0.025em; margin-bottom:3vh; max-width:22ch; }
+.lead { font-size:clamp(16px,1.5vw,20px); max-width:64ch; margin-bottom:1vh; }
+
+/* three pillars */
+.pillars { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--p-grid); border:1px solid var(--p-grid); margin-top:4vh; }
+.pillar { background:var(--p-paper); padding:28px 26px; min-height:280px; display:flex; flex-direction:column; }
+.pillar .tag { font-family:var(--mono); font-size:9px; letter-spacing:var(--p-track-meta); text-transform:uppercase; color:var(--p-muted); margin-bottom:10px; }
+.pillar h3 { font-size:26px; margin-bottom:10px; }
+.pillar .repo { font-family:var(--mono); font-size:11px; color:var(--p-accent); margin-bottom:14px; }
+.pillar p { font-size:13.5px; flex:1; }
+.pillar .status { margin-top:18px; display:flex; flex-wrap:wrap; gap:8px; }
+.pill { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid currentColor; font-family:var(--mono); font-size:9px; letter-spacing:var(--p-track-meta); text-transform:uppercase; border-radius:var(--p-radius); }
+.pill .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+.pill.ok { color:var(--p-ok); } .pill.acc { color:var(--p-accent); } .pill.info { color:var(--p-info); } .pill.warn { color:var(--p-warn); }
+
+/* product detail cards */
+.detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--p-grid); border:1px solid var(--p-grid); margin-top:3vh; }
+.detail-grid .card { background:var(--p-paper); padding:24px 26px; }
+.detail-grid .card .kicker { color:var(--p-accent); font-size:10px; margin-bottom:8px; display:block; }
+.detail-grid .card h3 { font-size:22px; margin-bottom:8px; }
+.detail-grid .card p { font-size:13.5px; max-width:none; }
+
+/* connect diagram */
+.connect { display:grid; grid-template-columns:1fr auto 1fr; gap:3vw; align-items:center; margin-top:3vh; }
+.connect-box { border:1px solid var(--p-grid); padding:22px 24px; background:var(--p-paper); border-radius:var(--p-radius); }
+.connect-box h3 { font-size:20px; margin-bottom:8px; }
+.connect-box p { font-size:13px; max-width:none; }
+.connect-mid { font-family:var(--mono); font-size:11px; letter-spacing:var(--p-track-meta); text-transform:uppercase; color:var(--p-muted); text-align:center; line-height:1.8; }
+.connect-mid .arrow { display:block; font-size:22px; color:var(--p-accent); margin:8px 0; }
+
+/* orchestrator lifecycle */
+.lifecycle { display:flex; gap:0; margin-top:4vh; border:1px solid var(--p-grid); background:var(--p-paper); overflow-x:auto; }
+.lc-step { flex:1; min-width:120px; padding:20px 16px; border-right:1px solid var(--p-grid-2); position:relative; }
+.lc-step:last-child { border-right:0; }
+.lc-step .num { font-family:var(--mono); font-size:10px; color:var(--p-muted); letter-spacing:var(--p-track-meta); }
+.lc-step h4 { font-family:var(--mazius); font-size:18px; margin:8px 0 6px; line-height:1.1; }
+.lc-step p { font-size:12px; max-width:none; color:var(--p-muted); }
+.lc-step.gate { background:var(--p-paper-2); }
+.lc-step.gate::after {
+  content:"HUMAN GATE"; position:absolute; top:8px; right:8px;
+  font-family:var(--mono); font-size:7px; letter-spacing:0.14em; color:var(--p-warn);
+  border:1px solid var(--p-warn); padding:2px 5px; border-radius:var(--p-radius-sm,3px);
+}
+
+/* involvement roles */
+.roles { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; margin-top:3vh; }
+.role { border:1px solid var(--p-grid); border-left:2px solid var(--p-accent); padding:22px 24px; background:var(--p-paper); border-radius:var(--p-radius); }
+.role h3 { font-size:22px; margin:10px 0 8px; }
+.role p { font-size:13.5px; }
+.role .who { font-family:var(--mono); font-size:10px; letter-spacing:var(--p-track-meta); text-transform:uppercase; color:var(--p-accent); }
+
+/* principles row */
+.principles { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--p-grid); border:1px solid var(--p-grid); margin-top:3vh; }
+.principle { background:var(--p-paper); padding:20px 18px; text-align:center; }
+.principle .n { font-family:var(--mazius); font-size:36px; color:var(--p-accent); line-height:1; }
+.principle h4 { font-family:var(--mono); font-size:10px; letter-spacing:var(--p-track-meta); text-transform:uppercase; margin:10px 0 6px; color:var(--p-ink); }
+.principle p { font-size:12px; max-width:none; margin:0 auto; }
+
+/* closing */
+.closing h2 { font-size:clamp(32px,4.5vw,68px); letter-spacing:-0.03em; max-width:18ch; }
+.cta-row { display:flex; flex-wrap:wrap; gap:14px; margin-top:4vh; }
+.cta { font-family:var(--mono); font-size:10px; letter-spacing:var(--p-track-meta); text-transform:uppercase;
+  padding:12px 18px; border:1px solid var(--p-accent); color:var(--p-accent); background:transparent; border-radius:var(--p-radius); }
+.cta.primary { background:var(--p-accent); color:var(--p-paper); }
+
+.slide-org { justify-content:flex-start; padding-top:11vh; padding-bottom:10vh; }
+.slide-org .shead { margin-bottom:1.5vh; font-size:clamp(24px,3.2vw,40px); }
+.slide-org .orgchart { gap:0; }
+.slide-org .org-box { padding:10px 14px; }
+.slide-org .org-box h4 { font-size:clamp(14px,1.6vw,18px); }
+.slide-org .org-box .sub { font-size:8px; }
+.slide-org .org-arrow { padding:3px 0; font-size:12px; }
+.slide-org .org-row { gap:8px; }
+.orgchart { margin-top:1vh; display:flex; flex-direction:column; align-items:stretch; gap:0; }
+.org-layer { position:relative; }
+.org-box {
+  border:1px solid var(--p-grid); background:var(--p-paper); padding:14px 18px;
+  border-radius:var(--p-radius); text-align:center;
+}
+.org-box.wide { width:100%; }
+.org-box.human { background:var(--p-paper-2); border-color:var(--p-accent); padding:16px 20px; }
+.org-box h4 { font-family:var(--mazius); font-size:clamp(17px,2vw,22px); margin-bottom:4px; line-height:1.1; }
+.org-box .sub { font-family:var(--mono); font-size:9px; letter-spacing:var(--p-track-meta); text-transform:uppercase; color:var(--p-muted); line-height:1.5; }
+.org-box .sub strong { color:var(--p-accent); font-weight:600; }
+.org-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.org-row.three { grid-template-columns:repeat(3,1fr); }
+.org-arrow { display:flex; justify-content:center; padding:6px 0; color:var(--p-accent); font-family:var(--mono); font-size:14px; line-height:1; opacity:0.7; }
+.org-layer-label {
+  font-family:var(--mono); font-size:8px; letter-spacing:var(--p-track-meta); text-transform:uppercase;
+  color:var(--p-muted); margin-bottom:6px; text-align:center;
+}
+.org-box.mc { border-left:2px solid var(--p-accent); }
+.org-box.ctx { background:var(--p-accent-soft); border-color:var(--p-accent); }
+.org-box.ctx .sub { color:var(--p-ink-2); }
+.org-box.infra { font-size:12px; }
+.org-box.infra h4 { font-size:15px; font-family:var(--mono); letter-spacing:0.06em; text-transform:uppercase; font-weight:600; }
+
+/* agentic stack + agent vs skill */
+.stack-ladder { display:flex; flex-direction:column; gap:1px; background:var(--p-grid); border:1px solid var(--p-grid); margin-top:2vh; }
+.stack-rung { display:grid; grid-template-columns:140px 1fr; background:var(--p-paper); min-height:72px; }
+.stack-rung .tag {
+  font-family:var(--mono); font-size:9px; letter-spacing:var(--p-track-meta); text-transform:uppercase;
+  color:var(--p-muted); padding:16px 14px; border-right:1px solid var(--p-grid-2);
+  display:flex; align-items:center; justify-content:center; text-align:center;
+}
+.stack-rung .body { padding:14px 20px; display:flex; flex-direction:column; justify-content:center; }
+.stack-rung .body h4 { font-family:var(--mazius); font-size:18px; margin-bottom:4px; }
+.stack-rung .body p { font-size:12.5px; max-width:none; color:var(--p-muted); }
+.stack-rung.required { background:var(--p-paper-2); }
+.stack-rung.required .tag { color:var(--p-warn); border-right-color:var(--p-warn); border-right-width:2px; }
+.vs-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:2vh; }
+.vs-card { border:1px solid var(--p-grid); padding:20px 22px; background:var(--p-paper); border-radius:var(--p-radius); }
+.vs-card .type { font-family:var(--mono); font-size:9px; letter-spacing:var(--p-track-meta); text-transform:uppercase; margin-bottom:8px; }
+.vs-card.agent .type { color:var(--p-accent); }
+.vs-card.skill .type { color:var(--p-info); }
+.vs-card h3 { font-size:20px; margin-bottom:8px; }
+.vs-card p { font-size:13px; max-width:none; }
+.vs-card .ex { margin-top:12px; padding-top:12px; border-top:1px solid var(--p-grid-2); font-family:var(--mono); font-size:11px; color:var(--p-ink-2); line-height:1.55; }
+.homework-box { border:1px solid var(--p-accent); background:var(--p-paper-2); padding:28px 30px; margin-top:3vh; border-radius:var(--p-radius-lg); }
+.homework-box h3 { font-size:24px; margin-bottom:12px; }
+.homework-box ol { margin:16px 0 0 20px; color:var(--p-ink-2); font-size:15px; line-height:1.7; }
+.homework-box li { margin-bottom:8px; max-width:58ch; }
+
+/* fixed UI */
+.rail { position:fixed; right:26px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:12px; z-index:40; }
+.rail button { width:8px; height:8px; border-radius:50%; border:1px solid var(--p-muted); background:transparent; cursor:pointer; padding:0; transition:all var(--p-dur) var(--p-ease); }
+.rail button.on { background:var(--p-accent); border-color:var(--p-accent); transform:scale(1.3); }
+.progress { position:fixed; top:0; left:0; height:3px; background:var(--p-accent); width:0; z-index:50; transition:width .2s var(--p-ease); }
+.counter { position:fixed; left:26px; bottom:22px; font-family:var(--mono); font-size:10px; letter-spacing:var(--p-track-meta); text-transform:uppercase; color:var(--p-muted); z-index:40; }
+.toggle, .notes-toggle { position:fixed; right:26px; bottom:22px; z-index:40;
+  font-family:var(--mono); font-size:9px; letter-spacing:var(--p-track-meta); text-transform:uppercase;
+  background:transparent; color:var(--p-muted); border:1px solid var(--p-grid); padding:7px 11px; cursor:pointer; }
+.notes-toggle { right:110px; }
+.toggle:hover, .notes-toggle:hover { border-color:var(--p-ink); color:var(--p-ink); }
+.hint { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:40;
+  font-family:var(--mono); font-size:9px; letter-spacing:var(--p-track-meta); text-transform:uppercase; color:var(--p-muted); opacity:.75; }
+
+/* speaker notes panel */
+.notes-panel {
+  position:fixed; bottom:0; left:0; right:0; max-height:28vh; overflow-y:auto;
+  background:var(--p-rail); border-top:1px solid var(--p-grid); padding:16px 9vw;
+  font-size:13px; line-height:1.5; color:var(--p-ink-2); z-index:60;
+  transform:translateY(100%); transition:transform var(--p-dur-slow) var(--p-ease);
+}
+.notes-panel.open { transform:none; }
+.notes-panel .label { font-family:var(--mono); font-size:9px; letter-spacing:var(--p-track-meta); text-transform:uppercase; color:var(--p-muted); margin-bottom:8px; }
+
+@media (max-width:900px) {
+  .pillars, .roles, .principles, .detail-grid, .connect, .vs-grid, .org-row { grid-template-columns:1fr; }
+  .connect { gap:16px; }
+  .slide { padding:11vh 7vw; }
+  .rail { display:none; }
+  .lifecycle { flex-direction:column; }
+  .lc-step { border-right:0; border-bottom:1px solid var(--p-grid-2); }
+  .stack-rung { grid-template-columns:1fr; }
+  .stack-rung .tag { border-right:0; border-bottom:1px solid var(--p-grid-2); padding:10px; }
+}
+@media print {
+  .rail,.progress,.counter,.toggle,.notes-toggle,.hint,.notes-panel { display:none; }
+  .slide { min-height:auto; page-break-after:always; }
+  .reveal { opacity:1; transform:none; }
+}
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<nav class="rail" id="rail" aria-label="Slide navigation"></nav>
+<div class="counter" id="counter">01 / 14</div>
+<button class="notes-toggle" id="notesToggle" type="button">Notes</button>
+<button class="toggle" id="toggle" type="button">Dark</button>
+<div class="hint">↑ ↓ · space · scroll</div>
+<div class="notes-panel" id="notesPanel" role="region" aria-label="Speaker notes">
+  <div class="label">Speaker notes · slide <span id="notesNum">1</span></div>
+  <p id="notesText"></p>
+</div>
+
+<!-- 1 · COVER -->
+<section class="slide cover" data-tick="PLX Platform · Internal · June 2026" data-notes="Open with the mission: we're building one coordinated platform, not three disconnected repos. Agents execute; humans own outcomes. This deck is where we're going and how you plug in.">
+  <div class="brand reveal">
+    <div class="mark"><span class="num">14</span><span class="sym">Px</span></div>
+    <div class="wm">Petra Lab<em>-X</em>.</div>
+  </div>
+  <span class="kicker reveal d1">Platform vision · team briefing</span>
+  <h1 class="reveal d2">Where we're <em>going</em> — and how you get involved</h1>
+  <div class="sub reveal d3">
+    <div>Repos<b>MC · Portal · Infra</b></div>
+    <div>Method<b>Spec → build → verify</b></div>
+    <div>Audience<b>PLX engineering &amp; ops</b></div>
+    <div>Issued<b>June 2026</b></div>
+  </div>
+  <div class="foottick"><span>Petra Lab-X</span><span>01 / 11</span></div>
+</section>
+<!-- 2 · THE MOMENT -->
+<section class="slide" data-tick="Context ‖ Why now" data-notes="Frame the shift: background agents can draft code, PRDs, and QA — but without a cockpit and a canonical record, work fragments. We're past the prototype phase on MC; Portal is live on staging; Infra is the glue that keeps all of it honest.">
+  <span class="kicker reveal">The moment we're in</span>
+  <h2 class="shead reveal d1">Agents do the work. Humans <em>direct</em> the work.</h2>
+  <p class="lead reveal d2">We have three active engineering surfaces — Mission Control, the Customer Portal, and shared Infra — that must share one brand, one governance model, and one traceable record. The opportunity is speed with accountability, not speed without it.</p>
+  <ul class="plain reveal d3">
+    <li><span><strong>Everything resolves to a Task</strong> — PRD → task → PR → evidence → merge. No orphan work.</span></li>
+    <li><span><strong>SharePoint is the system of record</strong> — the app is a fast lens; conflicts are resolved by a human, never auto-merged.</span></li>
+    <li><span><strong>One definition of "green"</strong> — <span class="mono">./scripts/preflight.sh</span> locally and in CI; no bypassing the gate.</span></li>
+  </ul>
+  <div class="foottick"><span>Operating principles</span><span>02 / 11</span></div>
+</section>
+<!-- 3 · FUTURE ORG CHART -->
+<section class="slide slide-org" data-tick="Vision ‖ The Future Org Chart" data-notes="Walk top to bottom. Humans stay accountable — MC is the cockpit, not a replacement for judgement. Functional agents are specialized workers; they all read the same context layer. Bottom layer is PLX_Infra + repos — no agent runs without rails.">
+  <span class="kicker reveal">Target operating model</span>
+  <h2 class="shead reveal d1">The Future <em>Org Chart</em></h2>
+  <div class="orgchart reveal d2">
+    <div class="org-layer">
+      <div class="org-box wide human">
+        <h4>Humans — Strategy, Taste, Judgement, Trust &amp; <em>Accountability</em></h4>
+        <div class="sub">Approve specs · resolve conflicts · own outcomes · @petralabx.com / @petrasoap.com only</div>
+      </div>
+    </div>
+    <div class="org-arrow">↓</div>
+    <div class="org-layer">
+      <div class="org-layer-label">Cockpit · PLX_MC</div>
+      <div class="org-box wide mc">
+        <h4>Mission Control — assign, review, trace</h4>
+        <div class="sub">Tasks · SharePoint mirror · sync health · PR ↔ requirement traceability · <strong>mc.plxcustomer.io</strong></div>
+      </div>
+    </div>
+    <div class="org-arrow">↓</div>
+    <div class="org-layer">
+      <div class="org-layer-label">Functional agents</div>
+      <div class="org-row">
+        <div class="org-box">
+          <h4>Product &amp; R&amp;D</h4>
+          <div class="sub">Formulation · samples · spec sheets · QA review</div>
+        </div>
+        <div class="org-box">
+          <h4>Customer &amp; Sales</h4>
+          <div class="sub">Onboarding · portal support · comms · follow-ups</div>
+        </div>
+        <div class="org-box">
+          <h4>Engineering</h4>
+          <div class="sub">Portal features · sync · MCP tools · preflight gates</div>
+        </div>
+        <div class="org-box">
+          <h4>Ops &amp; Finance</h4>
+          <div class="sub">SOP &amp; compliance · sourcing · production · KPIs</div>
+        </div>
+      </div>
+    </div>
+    <div class="org-arrow">↓</div>
+    <div class="org-layer">
+      <div class="org-layer-label">Shared context · Portal + record</div>
+      <div class="org-box wide ctx">
+        <h4>Shared Context Layer</h4>
+        <div class="sub"><strong>PLX Portal</strong> · Mission Control tasks · QMS &amp; SOPs · Permissions · Brand voice · SharePoint SoR · Docs</div>
+      </div>
+    </div>
+    <div class="org-arrow">↓</div>
+    <div class="org-layer">
+      <div class="org-layer-label">Agentic stack · PLX_Infra</div>
+      <div class="org-row">
+        <div class="org-box infra"><h4>PLX-MC MCP</h4><div class="sub">Task lifecycle · audit</div></div>
+        <div class="org-box infra"><h4>Dept MCPs</h4><div class="sub">Graph · SharePoint · GitHub</div></div>
+        <div class="org-box infra"><h4>Postgres + vector</h4><div class="sub">Staging · retrieval</div></div>
+        <div class="org-box infra"><h4>Repos &amp; ledgers</h4><div class="sub">Code · artifacts · evidence</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="foottick"><span>Future org chart</span><span>08 / 14</span></div>
+</section>
+<!-- 4 · THREE PILLARS -->
+<section class="slide" data-tick="Architecture ‖ Three repos" data-notes="Walk the three columns left to right. Emphasize MC is the cockpit for agents + humans; Portal is customer-facing and brand authority; Infra is staging, secrets, compliance gates, deploy — the floor everyone stands on.">
+  <span class="kicker reveal">Three repos · one platform</span>
+  <h2 class="shead reveal d1">The <em>pillars</em> we're building on</h2>
+  <div class="pillars">
+    <div class="pillar reveal d2">
+      <span class="tag">Cockpit</span>
+      <h3>Mission <em>Control</em></h3>
+      <div class="repo mono">PLX_MC · mc.plxcustomer.io</div>
+      <p>Human cockpit over background agents. Two-way SharePoint mirror, task board, sync health, traceability from requirement to merge commit.</p>
+      <div class="status">
+        <span class="pill ok"><span class="dot"></span>Live app</span>
+        <span class="pill acc"><span class="dot"></span>Cycle 2 active</span>
+      </div>
+    </div>
+    <div class="pillar reveal d3">
+      <span class="tag">Product</span>
+      <h3>Customer <em>Portal</em></h3>
+      <div class="repo mono">plx-customer-portal · staging</div>
+      <p>Customer onboarding, manufacturing suite, SharePoint-backed workflows. Brand authority for <span class="mono">--p-*</span> tokens — MC is the fourth surface, not a fork.</p>
+      <div class="status">
+        <span class="pill info"><span class="dot"></span>Brand SoT</span>
+        <span class="pill ok"><span class="dot"></span>Staging deploy</span>
+      </div>
+    </div>
+    <div class="pillar reveal d4">
+      <span class="tag">Foundation</span>
+      <h3>Shared <em>Infra</em></h3>
+      <div class="repo mono">PLX_Infra · ops layer</div>
+      <p>Staging coordinates, AWS Secrets Manager, GitHub compliance gate, Vercel deploy paths, MCP/swarm registration — the rails agents and humans share.</p>
+      <div class="status">
+        <span class="pill warn"><span class="dot"></span>Gate rollout</span>
+        <span class="pill acc"><span class="dot"></span>Secrets unified</span>
+      </div>
+    </div>
+  </div>
+  <div class="foottick"><span>Repo map</span><span>03 / 11</span></div>
+</section>
+<!-- 5 · AGENTIC STACK -->
+<section class="slide" data-tick="Path ‖ How we get there" data-notes="Critical distinction: an AGENT has a role, tools, and accountability in MC. A SKILL is a reusable playbook any agent can invoke — like project-orchestrator. Example agent: Meeting Intake Scribe watches transcripts, drafts proposed tasks, humans triage in MC. Stack builds bottom-up: infra first, then context, then agents, humans on top.">
+  <span class="kicker reveal">Building the stack</span>
+  <h2 class="shead reveal d1">How we get to this org chart — the <em>agentic stack</em></h2>
+  <p class="lead reveal d2">Each layer is required. Skip one and agents hallucinate context, bypass gates, or fork the record.</p>
+  <div class="stack-ladder reveal d3">
+    <div class="stack-rung required"><span class="tag">Required · 1</span><div class="body"><h4>Infra rails</h4><p>Staging-only · Secrets Manager · <span class="mono">preflight.sh</span> · compliance gate · MCP kill switches (PLX_Infra)</p></div></div>
+    <div class="stack-rung required"><span class="tag">Required · 2</span><div class="body"><h4>Canonical context</h4><p>SharePoint SoR · Portal SOPs · AGENTS.md / SOUL.md · design tokens · permissions (PLX Portal + MC)</p></div></div>
+    <div class="stack-rung required"><span class="tag">Required · 3</span><div class="body"><h4>MCP tool surface</h4><p>PLX-MC task checkout · Graph/SharePoint · swarm dispatch (opt-in) · departmental connectors</p></div></div>
+    <div class="stack-rung"><span class="tag">Layer · 4</span><div class="body"><h4>Agents</h4><p>Persistent roles with scoped tools — checkout MC tasks, produce evidence, escalate to humans</p></div></div>
+    <div class="stack-rung"><span class="tag">Layer · 5</span><div class="body"><h4>Skills</h4><p>Reusable playbooks agents invoke — orchestration, QA loops, design pipeline, sync runbooks</p></div></div>
+    <div class="stack-rung required"><span class="tag">Required · 6</span><div class="body"><h4>Human gates</h4><p>Spec approval · conflict resolution · merge approval · accountable owner on every agent run</p></div></div>
+  </div>
+  <div class="vs-grid reveal d4">
+    <div class="vs-card agent">
+      <div class="type">Example · Agent</div>
+      <h3>Meeting Intake <em>Scribe</em></h3>
+      <p>A background agent that ingests Teams transcripts, extracts action items, drafts proposed MC tasks with owner + evidence snippet, and routes them to the Meeting Intake triage queue — humans promote or discard.</p>
+      <div class="ex">Tools: Graph calendar · MC MCP · meeting-intake module<br>Accountable: meeting owner (human)</div>
+    </div>
+    <div class="vs-card skill">
+      <div class="type">Example · Skill</div>
+      <h3>Project <em>Orchestrator</em></h3>
+      <p>A reusable playbook — not a personae. Any engineering agent invokes it to draft SPEC.md, wait for human approval, execute phased worktrees, integrate, and harden. The skill sequences the work; the agent does the work.</p>
+      <div class="ex">Invoke when: 3+ files · migration · cross-module feature<br>Output: approved SPEC → one integration PR</div>
+    </div>
+  </div>
+  <div class="foottick"><span>Agentic stack</span><span>09 / 14</span></div>
+</section>
+<!-- 6 · MISSION CONTROL -->
+<section class="slide" data-tick="PLX_MC ‖ Mission Control" data-notes="If someone asks 'what is MC?': it's not another project tracker — it's the place humans assign agents, review PRs against tasks, and see sync state with SharePoint. Call out Cycle 2: saved views, insights charts, palette actions, sync cadence proof.">
+  <span class="kicker reveal">PLX_MC</span>
+  <h2 class="shead reveal d1">Mission Control — the <em>cockpit</em></h2>
+  <p class="lead reveal d2">Agents write code, draft PRDs, run QA. MC is where staff review, approve, assign, and resolve — with every change mirrored to SharePoint and audited.</p>
+  <div class="detail-grid reveal d3">
+    <div class="card">
+      <span class="kicker">System of record</span>
+      <h3>SharePoint <em>mirror</em></h3>
+      <p>Site <span class="mono">/sites/plx-mission-control</span>. Five lists/libraries, delta sync + webhooks, manual conflict resolution, full audit trail.</p>
+    </div>
+    <div class="card">
+      <span class="kicker">Agent surface</span>
+      <h3>PLX-MC <em>MCP</em></h3>
+      <p>Task checkout, lifecycle tools, swarm dispatch (opt-in). Every tool call appends to <span class="mono">mc_events</span>. Disabled by default in committed config.</p>
+    </div>
+    <div class="card">
+      <span class="kicker">Now shipping</span>
+      <h3>Cycle 2 <em>workspace</em></h3>
+      <p>Saved filter views, native-SVG insights with click-to-filter, timeline due-range, palette task actions, proven 5-minute sync cadence.</p>
+    </div>
+    <div class="card">
+      <span class="kicker">Design</span>
+      <h3>Fourth brand <em>surface</em></h3>
+      <p>Mazius/ledger aesthetic — warm paper, mono data, forest accent. Tokens from Portal; MC owns layout and chrome only (ADR-003).</p>
+    </div>
+  </div>
+  <div class="foottick"><span>Mission Control</span><span>04 / 11</span></div>
+</section>
+<!-- 7 · CUSTOMER PORTAL -->
+<section class="slide" data-tick="Portal ‖ Customer product" data-notes="Portal is what customers touch. It's also where brand decisions originate — if MC drifts from Portal tokens, we fix MC. Mention buckets: WMS, QMS, onboarding, UAT — most tasks attach to plx-customer-portal.">
+  <span class="kicker reveal">plx-customer-portal</span>
+  <h2 class="shead reveal d1">Customer Portal — where the <em>brand</em> lives</h2>
+  <p class="lead reveal d2">The portal is the customer-facing product and the upstream authority for PLX design tokens, ADRs, and component primitives. Mission Control consumes that brand; it doesn't redefine it.</p>
+  <div class="detail-grid reveal d3">
+    <div class="card">
+      <span class="kicker">Customers</span>
+      <h3>Onboarding &amp; <em>suite</em></h3>
+      <p>DocuSign flows, SharePoint lists, manufacturing roadmap, UAT feedback — the operational face of PLX for clients.</p>
+    </div>
+    <div class="card">
+      <span class="kicker">Engineering</span>
+      <h3>Staging-first <em>delivery</em></h3>
+      <p>All agent work targets staging branch and staging Postgres. Production deploy requires explicit human approval.</p>
+    </div>
+    <div class="card">
+      <span class="kicker">Governance</span>
+      <h3>SOPs &amp; <em>evidence</em></h3>
+      <p>Meaningful app changes update Internal/UAT/External SOPs. Post-release automation bumps versions and notifies stakeholders.</p>
+    </div>
+    <div class="card">
+      <span class="kicker">MC linkage</span>
+      <h3>Bucket → <em>repo</em> map</h3>
+      <p>Initiatives (WMS, QMS, Finance, Infra, UAT) attach tasks to <span class="mono">plx-customer-portal</span>. MC tracks them; Portal ships them.</p>
+    </div>
+  </div>
+  <div class="foottick"><span>Customer Portal</span><span>05 / 11</span></div>
+</section>
+<!-- 8 · INFRA -->
+<section class="slide" data-tick="Infra ‖ Shared foundation" data-notes="Infra isn't glamorous — it's what stops us from shipping secrets in PRs or merging without evidence. Compliance gate rollout: dogfood on PLX_MC first, then swarm, then portal. Staging-only policy is non-negotiable.">
+  <span class="kicker reveal">PLX_Infra</span>
+  <h2 class="shead reveal d1">Infra — the <em>floor</em> we all stand on</h2>
+  <p class="lead reveal d2">Shared infrastructure turns agent speed into team-safe speed: one secrets path, one CI definition, one staging environment, one compliance story across repos.</p>
+  <ul class="plain reveal d3">
+    <li><span><strong>Secrets</strong> — AWS Secrets Manager via one accessor; no scattered env lookups or committed keys.</span></li>
+    <li><span><strong>Gates</strong> — <span class="mono">preflight.sh</span> pre-commit / pre-push / CI; GitHub App compliance checkout stamps PRs with <span class="mono">MC-Checkout</span>.</span></li>
+    <li><span><strong>Staging</strong> — <span class="mono">plx-postgres-staging</span>, Vercel staging URL, <span class="mono">~/.secrets-env.staging</span> only.</span></li>
+    <li><span><strong>Integrations</strong> — MCP servers ship disabled; operator enables per session with auditable kill switches.</span></li>
+  </ul>
+  <div class="foottick"><span>Shared Infra</span><span>06 / 11</span></div>
+</section>
+<!-- 9 · WHAT CONNECTS THEM -->
+<section class="slide" data-tick="Glue ‖ What ties it together" data-notes="This is the 'why three repos still feel like one company' slide. Design system sync, governance contract generation, MC tasks as the atom of work across all three.">
+  <span class="kicker reveal">Shared contracts</span>
+  <h2 class="shead reveal d1">What <em>connects</em> the three</h2>
+  <div class="connect reveal d2">
+    <div class="connect-box">
+      <h3>Design <em>system</em></h3>
+      <p><span class="mono">--p-*</span> tokens, Mazius + Inter + JetBrains Mono, hairline rules, ledger aesthetic. Portal authority → MC consumer.</p>
+    </div>
+    <div class="connect-mid">
+      <span>governance-contract.yaml</span>
+      <span class="arrow">↔</span>
+      <span>MC task spine</span>
+      <span class="arrow">↔</span>
+      <span>SharePoint SoR</span>
+    </div>
+    <div class="connect-box">
+      <h3>Agent <em>doctrine</em></h3>
+      <p>AGENTS.md, SOUL.md, preflight gates, evidence bundles in <span class="mono">artifacts/</span> — same rules for Cursor, Claude Code, Codex, swarm.</p>
+    </div>
+  </div>
+  <div class="principles reveal d3">
+    <div class="principle"><div class="n">1</div><h4>Mission first</h4><p>Every change ties to a stated goal</p></div>
+    <div class="principle"><div class="n">2</div><h4>Simplify</h4><p>Smallest correct solution wins</p></div>
+    <div class="principle"><div class="n">3</div><h4>Reuse</h4><p>Extend before inventing</p></div>
+    <div class="principle"><div class="n">5</div><h4>Evidence</h4><p>Proof beats assertion</p></div>
+  </div>
+  <div class="foottick"><span>Platform glue</span><span>07 / 14</span></div>
+</section>
+<!-- 10 · PROJECT ORCHESTRATOR (SKILL) -->
+<section class="slide" data-tick="Method ‖ Skill example" data-notes="Reiterate: orchestrator is a SKILL. Point to artifacts/planner for real SPEC examples. Cycle 1 and 2 already used this pattern.">
+  <span class="kicker reveal">Skill in action</span>
+  <h2 class="shead reveal d1">Project Orchestrator — a <em>skill</em>, not an agent</h2>
+  <p class="lead reveal d2">Multi-file features, migrations, and cross-repo efforts get a written SPEC.md with a phase DAG. A human approves once; an agent invokes this skill to execute phases in isolated worktrees and integrate behind one PR.</p>
+  <div class="lifecycle reveal d3">
+    <div class="lc-step"><span class="num">S0</span><h4>Calibrate</h4><p>Intent, constraints, success criteria</p></div>
+    <div class="lc-step"><span class="num">S1</span><h4>Spec</h4><p>RESEARCH → SPEC.md + validate</p></div>
+    <div class="lc-step gate"><span class="num">S2</span><h4>Approve</h4><p>Human signs the contract</p></div>
+    <div class="lc-step"><span class="num">S3</span><h4>Execute</h4><p>Phases in parallel worktrees</p></div>
+    <div class="lc-step"><span class="num">S4</span><h4>Integrate</h4><p>Merge + full verify</p></div>
+    <div class="lc-step"><span class="num">S5</span><h4>Harden</h4><p>Near-perfect polish loop</p></div>
+    <div class="lc-step"><span class="num">S6</span><h4>Deliver</h4><p>One integration PR</p></div>
+  </div>
+  <div class="foottick"><span>Project Orchestrator skill</span><span>10 / 14</span></div>
+</section>
+<!-- 11 · THE CONTRACT -->
+<section class="slide" data-tick="Contract ‖ SPEC.md" data-notes="Demystify the spec: phases have owns/forbidden globs, acceptance commands that must exit 0, and depends_on for ordering. Scope-check catches drift. Only one mandatory human gate — spec approval.">
+  <span class="kicker reveal">The contract</span>
+  <h2 class="shead reveal d1">Every project gets a <em>SPEC</em> you can read in ten minutes</h2>
+  <div class="detail-grid reveal d2">
+    <div class="card">
+      <span class="kicker">Phase DAG</span>
+      <h3>Ordered <em>dependencies</em></h3>
+      <p>Phases declare <span class="mono">depends_on</span>, <span class="mono">owns</span> globs, and <span class="mono">forbidden</span> paths. Scope-check rejects drift before merge.</p>
+    </div>
+    <div class="card">
+      <span class="kicker">Acceptance</span>
+      <h3>Exit-0 <em>proof</em></h3>
+      <p>Each phase names a command — usually <span class="mono">preflight.sh</span> or targeted tests. "Done" means the command passed, not a chat claim.</p>
+    </div>
+    <div class="card">
+      <span class="kicker">Evidence</span>
+      <h3>Dated <em>bundles</em></h3>
+      <p>Reports land in <span class="mono">artifacts/&lt;domain&gt;/&lt;date&gt;-&lt;slug&gt;/</span> with REPORT.md — never loose files at repo root.</p>
+    </div>
+    <div class="card">
+      <span class="kicker">Delivery</span>
+      <h3>One PR <em>theme</em></h3>
+      <p>Integration branch <span class="mono">proj/&lt;slug&gt;/integration</span> → single PR with rollback plan and linked MC tasks.</p>
+    </div>
+  </div>
+  <div class="foottick"><span>SPEC contract</span><span>11 / 14</span></div>
+</section>
+<!-- 12 · GET INVOLVED -->
+<section class="slide" data-tick="You ‖ How to participate" data-notes="Make this actionable. Three personas — pick yours. Everyone: checkout an MC task before coding, run preflight before push, stamp PR with MC-Checkout. Humans own outcomes even when agents execute.">
+  <span class="kicker reveal">Your seat at the table</span>
+  <h2 class="shead reveal d1">How to <em>get involved</em></h2>
+  <div class="roles">
+    <div class="role reveal d2">
+      <span class="who">Engineers</span>
+      <h3>Build a <em>phase</em></h3>
+      <p>Pick a bucket in MC → checkout task → branch → implement within phase <span class="mono">owns</span> → <span class="mono">preflight --mode pre-push</span> → PR with <span class="mono">MC-Checkout: &lt;id&gt;</span>.</p>
+    </div>
+    <div class="role reveal d3">
+      <span class="who">Leads &amp; PMs</span>
+      <h3>Own a <em>spec</em></h3>
+      <p>Write or review SPEC.md success criteria. Approve at Stage 2. Resolve sync conflicts. Name the human accountable for agent-driven work.</p>
+    </div>
+    <div class="role reveal d4">
+      <span class="who">Ops &amp; infra</span>
+      <h3>Hold the <em>rails</em></h3>
+      <p>Staging secrets, compliance gate rollout, MCP registration runbooks, SharePoint list hygiene — keep the floor solid so builders move fast.</p>
+    </div>
+  </div>
+  <ul class="plain reveal d5" style="margin-top:3vh">
+    <li><span><strong>This week:</strong> skim <span class="mono">SOUL.md</span> + your repo's <span class="mono">AGENTS.md</span> — 15 minutes, high leverage.</span></li>
+    <li><span><strong>Next build:</strong> propose a SPEC for anything touching 3+ files — we'll orchestrate it instead of thrashing in chat.</span></li>
+  </ul>
+  <div class="foottick"><span>Participation</span><span>12 / 14</span></div>
+</section>
+<!-- 13 · CLOSE -->
+<section class="slide closing" data-tick="Next ‖ Let's build" data-notes="Quick recap before homework. One platform, one record, humans accountable. Then tee up the assignment — everyone leaves with a skill idea, not just applause.">
+  <span class="kicker reveal">The ask</span>
+  <h2 class="reveal d1">One platform. One record. <em>You</em> own the outcome.</h2>
+  <p class="lead reveal d2" style="margin-top:2vh">Mission Control gives us visibility. The Portal gives customers value. Infra gives us safety. Agents execute; skills encode how; humans stay accountable.</p>
+  <div class="cta-row reveal d3">
+    <span class="cta primary">Checkout an MC task</span>
+    <span class="cta">Review a SPEC</span>
+    <span class="cta">Run preflight locally</span>
+  </div>
+  <p class="reveal d4" style="margin-top:4vh;font-family:var(--mono);font-size:11px;letter-spacing:var(--p-track-meta);text-transform:uppercase;color:var(--p-muted)">
+    One more slide — your homework for the next meeting
+  </p>
+  <div class="foottick"><span>Petra Lab-X · June 2026</span><span>13 / 14</span></div>
+</section>
+<!-- 14 · HOMEWORK -->
+<section class="slide closing" data-tick="Homework ‖ Next meeting" data-notes="Give them 5 minutes at the end to brainstorm. Skill spec can be a markdown file: name, when to use, inputs, outputs, steps, verification. Use Cursor or Claude to draft — bring the spec, not a built skill. We'll review together and pick 1–2 to implement.">
+  <span class="kicker reveal">Before the next meeting</span>
+  <h2 class="reveal d1">Design a <em>skill</em> your team needs</h2>
+  <p class="lead reveal d2">Think about a repeatable workflow in your domain — something you'd run weekly that an agent could follow with human gates. Not an agent persona; a playbook.</p>
+  <div class="homework-box reveal d3">
+    <h3>Your assignment</h3>
+    <ol>
+      <li><strong>Pick a pain point</strong> — onboarding checklists, UAT triage, formula review prep, sync conflict runbook, anything you repeat.</li>
+      <li><strong>Draft a skill spec</strong> in Cursor or Claude: name, trigger ("when to use"), inputs, step-by-step workflow, success criteria, human gates.</li>
+      <li><strong>Map it to the stack</strong> — which MCP tools, which repo (MC / Portal / Infra), which context layer it reads.</li>
+      <li><strong>Bring the spec</strong> to the next meeting — we'll review, combine, and prioritize 1–2 to build.</li>
+    </ol>
+  </div>
+  <p class="reveal d4" style="margin-top:3vh;font-family:var(--mono);font-size:11px;letter-spacing:var(--p-track-meta);text-transform:uppercase;color:var(--p-muted)">
+    Template hint: see <span class="mono">.cursor/skills/</span> or <span class="mono">SKILL.md</span> format · questions welcome now
+  </p>
+  <div class="foottick"><span>Homework · next meeting</span><span>14 / 14</span></div>
+</section>
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var rail = document.getElementById('rail');
+  var counter = document.getElementById('counter');
+  var progress = document.getElementById('progress');
+  var notesPanel = document.getElementById('notesPanel');
+  var notesText = document.getElementById('notesText');
+  var notesNum = document.getElementById('notesNum');
+  var notesOpen = false;
+  var total = slides.length;
+
+  slides.forEach(function(s,i){
+    var b = document.createElement('button');
+    b.setAttribute('aria-label','Go to slide '+(i+1));
+    b.addEventListener('click', function(){ s.scrollIntoView({behavior:'smooth'}); });
+    rail.appendChild(b);
+  });
+  var dots = Array.prototype.slice.call(rail.children);
+
+  function pad(n){ return (n<10?'0':'')+n; }
+
+  function setActive(i){
+    dots.forEach(function(d,j){ d.classList.toggle('on', j===i); });
+    counter.textContent = pad(i+1)+' / '+pad(total);
+    progress.style.width = ((i+1)/total*100)+'%';
+    slides.forEach(function(s,j){ s.classList.toggle('in-view', j===i); });
+    var note = slides[i].getAttribute('data-notes') || '';
+    notesText.textContent = note;
+    notesNum.textContent = String(i+1);
+    slides[i].querySelectorAll('.foottick span:last-child').forEach(function(el){
+      el.textContent = pad(i+1)+' / '+pad(total);
+    });
+  }
+
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        var idx = slides.indexOf(e.target);
+        setActive(idx);
+        e.target.classList.add('in-view');
+      }
+    });
+  }, {threshold:0.55});
+  slides.forEach(function(s){ io.observe(s); });
+  setActive(0);
+
+  function current(){
+    var best=0, bestD=Infinity;
+    slides.forEach(function(s,i){
+      var d=Math.abs(s.getBoundingClientRect().top);
+      if(d<bestD){ bestD=d; best=i; }
+    });
+    return best;
+  }
+
+  document.addEventListener('keydown', function(e){
+    var i = current();
+    if(e.key==='ArrowDown'||e.key==='PageDown'||e.key===' '){
+      e.preventDefault();
+      if(i<total-1) slides[i+1].scrollIntoView({behavior:'smooth'});
+    } else if(e.key==='ArrowUp'||e.key==='PageUp'){
+      e.preventDefault();
+      if(i>0) slides[i-1].scrollIntoView({behavior:'smooth'});
+    } else if(e.key==='Home'){
+      e.preventDefault();
+      slides[0].scrollIntoView({behavior:'smooth'});
+    } else if(e.key==='End'){
+      e.preventDefault();
+      slides[total-1].scrollIntoView({behavior:'smooth'});
+    } else if(e.key==='n'||e.key==='N'){
+      notesOpen = !notesOpen;
+      notesPanel.classList.toggle('open', notesOpen);
+    }
+  });
+
+  document.getElementById('notesToggle').addEventListener('click', function(){
+    notesOpen = !notesOpen;
+    notesPanel.classList.toggle('open', notesOpen);
+  });
+
+  document.getElementById('toggle').addEventListener('click', function(){
+    var dark = document.documentElement.getAttribute('data-scheme')==='dark';
+    if(dark){
+      document.documentElement.removeAttribute('data-scheme');
+      this.textContent='Dark';
+    } else {
+      document.documentElement.setAttribute('data-scheme','dark');
+      this.textContent='Light';
+    }
+  });
+})();
+</script>
+</body>
+</html>

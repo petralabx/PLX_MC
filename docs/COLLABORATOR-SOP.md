@@ -194,3 +194,69 @@ metadata is captured — never your source code.
   validation / hygiene checks). Green compliance ≠ green CI.
 - **Kill switch (owner only):** a repo can be reverted to soft (`COMPLIANCE_MODE=soft`)
   or the gate removed entirely; the audit log is append-only and retains history.
+
+---
+
+## 9. Personal environment — company skills + PLX-MC MCP
+
+**PLX-MC access and company skills are separate.** Registering the PLX-MC MCP server
+(checkout / progress / complete) does **not** install Cursor or Claude skills on your
+machine. Do both steps below once per laptop (and again after the company catalog
+changes).
+
+### 9.1 Company-approved skills (curated subset)
+
+The full gentic-swarm repo contains operator-only skills (trading loops, VMC
+autopilot, etc.). **Do not** run the all-skills installer unless you are on the
+operator fleet.
+
+Instead, bootstrap from the **	aylorvalton/plx-cursor-skills** content repo
+(company-approved catalog only):
+
+**Windows (Git Bash required):**
+
+`powershell
+cd C:\path\to\PLX_MC   # or plx-customer-portal
+.\scripts\bootstrap-company-skills.ps1
+`
+
+**macOS / Linux:**
+
+`ash
+cd /path/to/PLX_MC
+./scripts/bootstrap-company-skills.sh
+`
+
+What it does:
+
+1. Clone or update ~/plx-cursor-skills (or %USERPROFILE%\plx-cursor-skills on Windows).
+2. Install **published** skills from manifest.json into ~/.cursor/skills and ~/.claude/skills.
+3. Merge any **project-native** skills from this repo (e.g. mc-sync).
+4. Mirror the combined set into the project .cursor/skills/ and .agents/skills/.
+5. Write ~/.agentic/skills.registry.json for runtimes that read the registry.
+
+**After bootstrap:** start a **new** Cursor Agent session — skills load at session
+start, not mid-chat.
+
+Dry run: add --dry-run (bash) or -DryRun (PowerShell).
+
+To refresh after catalog updates: re-run the same command.
+
+### 9.2 PLX-MC MCP (task governance)
+
+Follow docs/runbooks/plx-mc-mcp-team-registration.md:
+
+- Set MC_MCP_API_KEY, MC_OPERATOR_EMAIL, PLX_MC_MCP_ENABLED=1.
+- Register https://mc.plxcustomer.io/api/cursor/mcp (remote) or the stdio client
+  under 	ools/plx-mc-mcp/.
+- Set MC_REPO to the repo you are working in (e.g. 	aylorvalton/PLX_MC or
+  	aylorvalton/plx-customer-portal).
+- Verify with tool mc_self_check.
+
+### 9.3 Sharing a personal skill (future)
+
+A **Skills Directory** module in Mission Control (planned) will let you opt in to
+share a skill you authored locally — see docs/SKILLS-DIRECTORY-ARCHITECTURE.md
+for the target design (separate content repo + MC approval workflow). Until that
+ships, propose additions by PR to 	aylorvalton/plx-cursor-skills.
+

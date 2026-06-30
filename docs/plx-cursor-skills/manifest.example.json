@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "plx-cursor-skills-manifest/v1",
+  "version": "1.0.0",
+  "publishedAt": "2026-06-30T18:00:00Z",
+  "gitRef": "0000000000000000000000000000000000000000",
+  "repo": "taylorvalton/plx-cursor-skills",
+  "defaultBranch": "main",
+  "maintainers": ["ops@petralabx.com"],
+  "packages": [
+    {
+      "id": "plx-engineering-core",
+      "name": "PLX Engineering Core",
+      "description": "Default bundle for PLX_MC and portal contributors.",
+      "skillIds": [
+        "automate",
+        "autonomous-verifier",
+        "babysit",
+        "canvas",
+        "claude-code-context-hygiene",
+        "codebase-investigation",
+        "create-hook",
+        "create-rule",
+        "create-skill",
+        "dead-code-triage",
+        "isomorphic-refactor",
+        "migrate-to-skills",
+        "pre-plan-recalibrator",
+        "project-hardener",
+        "project-orchestrator",
+        "project-research-runner",
+        "project-researcher",
+        "quality-gate",
+        "reliable-tdd-loop",
+        "review-bugbot",
+        "review-security",
+        "root-cause-debugger",
+        "safe-deletion",
+        "split-to-prs",
+        "taste-skill",
+        "uat-runner",
+        "ui-ux-design-loop",
+        "vmc-sync",
+        "wterm-preflight"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "quality-gate",
+      "name": "quality-gate",
+      "description": "Orchestrates engineering quality workflows across debugging, verification, refactoring, safe deletion, TDD, CI, and release readiness.",
+      "status": "published",
+      "tier": "company",
+      "contentPath": "skills/quality-gate/",
+      "runtimes": ["cursor", "claude"],
+      "tags": ["quality", "ci", "merge-readiness"],
+      "owner": "ops@petralabx.com",
+      "sourceProvenance": {
+        "repo": "taylorvalton/agentic-swarm",
+        "ref": "main",
+        "path": ".cursor/skills/quality-gate/",
+        "importedAt": "2026-06-30T18:00:00Z"
+      }
+    },
+    {
+      "id": "wterm-preflight",
+      "name": "wterm-preflight",
+      "description": "Run local pre-commit and pre-push CI gates before commit or push.",
+      "status": "published",
+      "tier": "company",
+      "contentPath": "skills/wterm-preflight/",
+      "runtimes": ["cursor", "claude"],
+      "tags": ["ci", "git"],
+      "owner": "ops@petralabx.com",
+      "sourceProvenance": {
+        "repo": "taylorvalton/agentic-swarm",
+        "ref": "main",
+        "path": ".cursor/skills/wterm-preflight/",
+        "importedAt": "2026-06-30T18:00:00Z"
+      }
+    }
+  ]
+}

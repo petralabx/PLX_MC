@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mc.plxcustomer.io/schemas/plx-cursor-skills-manifest/v1",
+  "title": "PLX Cursor Skills Manifest",
+  "description": "Canonical catalog for the plx-cursor-skills content repository. Indexed by PLX Mission Control Skills Directory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "version", "publishedAt", "skills"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "plx-cursor-skills-manifest/v1"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.]+)?$",
+      "description": "Semver of this manifest release (git tag recommended)."
+    },
+    "publishedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC ISO-8601 when this manifest was published."
+    },
+    "gitRef": {
+      "type": "string",
+      "description": "Git commit SHA or tag this manifest describes."
+    },
+    "repo": {
+      "type": "string",
+      "default": "taylorvalton/plx-cursor-skills",
+      "description": "GitHub repo slug for content."
+    },
+    "defaultBranch": {
+      "type": "string",
+      "default": "main"
+    },
+    "maintainers": {
+      "type": "array",
+      "items": { "type": "string", "format": "email" },
+      "minItems": 1
+    },
+    "packages": {
+      "type": "array",
+      "description": "Optional named bundles for one-shot install.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "skillIds"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "skillIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/skillEntry" }
+    }
+  },
+  "$defs": {
+    "skillEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "status", "contentPath"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Stable skill id; matches skills/<id>/ directory."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name (usually matches SKILL.md frontmatter name)."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Short trigger description for agent runtimes."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "pending_review", "published", "deprecated", "retired"],
+          "description": "Only published skills are installed by default bootstrap."
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["company", "personal_submission"],
+          "default": "company"
+        },
+        "contentPath": {
+          "type": "string",
+          "pattern": "^skills/[a-z][a-z0-9-]*/$",
+          "description": "Path to skill root within repo."
+        },
+        "runtimes": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["cursor", "claude", "codex"] },
+          "default": ["cursor", "claude"],
+          "uniqueItems": true
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "description": "e.g. quality, testing, project-lifecycle, design"
+        },
+        "owner": {
+          "type": "string",
+          "format": "email",
+          "description": "Accountable maintainer for review questions."
+        },
+        "submittedBy": {
+          "type": "string",
+          "format": "email",
+          "description": "Original author when promoted from personal submission."
+        },
+        "sourceProvenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repo": { "type": "string" },
+            "ref": { "type": "string" },
+            "path": { "type": "string" },
+            "importedAt": { "type": "string", "format": "date-time" }
+          },
+          "description": "Lineage when seeded from agentic-swarm or a personal fork."
+        },
+        "minCursorVersion": { "type": "string" },
+        "deprecatedInFavorOf": {
+          "type": "string",
+          "description": "Skill id replacement when status is deprecated."
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

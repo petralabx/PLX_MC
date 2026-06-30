@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   BUCKETS,
   CURRENT_USER,
+  PROJECTS,
   STAGES,
   TASKS,
   bandOf,
@@ -36,6 +37,21 @@ describe("bucket partitioning", () => {
   it("assigns every task to a known bucket (no orphans)", () => {
     const known = new Set(BUCKETS.map((b) => b.id));
     for (const t of TASKS) expect(known.has(t.bucket)).toBe(true);
+  });
+});
+
+describe("project parent (P2)", () => {
+  it("every bucket's project (when set) references a known project — no dangling FK", () => {
+    const known = new Set(PROJECTS.map((p) => p.id));
+    for (const b of BUCKETS) {
+      if (b.project) expect(known.has(b.project)).toBe(true);
+    }
+  });
+
+  it("backfill intent: every seeded go-live bucket rolls up to a project", () => {
+    // The P2 migration backfills every existing bucket to PRJ-PORTAL-GOLIVE; the
+    // fixture must match so a fresh DB and the migration agree (no orphan bucket).
+    for (const b of BUCKETS) expect(b.project).toBeTruthy();
   });
 });
 

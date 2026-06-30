@@ -126,6 +126,21 @@ export interface SyncRef {
   reason?: string;
 }
 
+// Project — the optional parent above Bucket (P2). Operators organize initiatives
+// (buckets) under a Project; the FK is nullable so it is purely additive.
+export interface Project {
+  id: string;
+  name: string;
+  owner: string;
+  health: Health;
+  target: string;
+  started: string;
+  desc: string;
+  repos: string[];
+  sync: SyncRef;
+  prd: string | null;
+}
+
 export interface Bucket {
   id: string;
   name: string;
@@ -137,6 +152,9 @@ export interface Bucket {
   repos: string[];
   sync: SyncRef;
   prd: string | null;
+  // Optional parent Project (P2). Nullable/optional — buckets without a project
+  // are valid; compliance auto-create still targets a bucket, never a project.
+  project?: string | null;
   empty?: boolean;
   // Bucket-level discussion thread (EN-001 / WS-3). Optional + app-only; the
   // runtime authority is the store's bucket-comment map (buckets have no

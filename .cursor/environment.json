@@ -1,0 +1,21 @@
+{
+  "name": "plx-mission-control",
+  "repositoryDependencies": ["github.com/taylorvalton/agentic-swarm"],
+  "install": "(command -v apt-get >/dev/null && sudo apt-get update && sudo apt-get install -y python3-venv python3-dev build-essential libpq-dev || true) && (if [ -d .swarm/.git ]; then git -C .swarm pull --ff-only || true; else git clone --depth=1 https://github.com/taylorvalton/agentic-swarm.git .swarm; fi) && python3 -m venv .swarm/.venv && .swarm/.venv/bin/pip install --upgrade pip && .swarm/.venv/bin/pip install -e ./.swarm && npm ci && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+  "terminals": [
+    {
+      "name": "swarm",
+      "command": "cd .swarm && DATABASE_URL=\"\" CHECKPOINTER_BACKEND=memory AWS_REGION=\"${AWS_REGION:-us-east-1}\" .venv/bin/python -m src.main serve --host 127.0.0.1 --port 8900",
+      "description": "agentic-swarm dispatch API on 127.0.0.1:8900 (cloned to ./.swarm; in-memory checkpointer; secrets hydrated from AWS Secrets Manager prod/ec2-secrets)"
+    },
+    {
+      "name": "mc",
+      "command": "npm run dev",
+      "description": "PLX Mission Control (Next.js) dev server on :3000"
+    }
+  ],
+  "ports": [
+    { "name": "mc", "port": 3000 },
+    { "name": "swarm", "port": 8900 }
+  ]
+}

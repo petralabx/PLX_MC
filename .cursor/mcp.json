@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "PLX-MC": {
+      "command": "node",
+      "args": [
+        "tools/plx-mc-mcp/launch.mjs"
+      ],
+      "env": {
+        "MC_BASE_URL": "https://mc.plxcustomer.io",
+        "MC_MCP_API_KEY": "${env:MC_MCP_API_KEY}",
+        "PLX_MC_MCP_API_KEY": "${env:PLX_MC_MCP_API_KEY}",
+        "MC_OPERATOR_EMAIL": "cos@petrasoap.com",
+        "MC_ACCOUNTABLE": "cos@petrasoap.com",
+        "MC_REPO": "taylorvalton/PLX_MC",
+        "MC_RUNTIME": "cursor",
+        "PLX_MC_MCP_ENABLED": "0",
+        "SWARM_API_URL": "http://127.0.0.1:8900",
+        "SWARM_API_KEY": "${env:SWARM_API_KEY}",
+        "SWARM_KEY_CMD": ".swarm/.venv/bin/python -c \"import sys; sys.path.insert(0, '.swarm'); from src.secrets import get_secret; sys.stdout.write(get_secret('SWARM_API_KEY'))\"",
+        "SWARM_DISPATCH_ENABLED": "0",
+        "CURSOR_MCP_AWS_SECRET_IDS": "prod/ec2-secrets",
+        "AWS_REGION": "us-east-1"
+      }
+    }
+  }
+}

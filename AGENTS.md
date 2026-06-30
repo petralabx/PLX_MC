@@ -47,6 +47,7 @@ DESIGN_TOKENS).
 | meeting-intake | Vince | Medium |
 | loop-ledgers | Vince | Medium |
 | github-app | Vince | Medium |
+| mcp | Vince | Critical |
 
 ## Canonical Operations Docs
 
@@ -66,6 +67,37 @@ All coding agents and humans must run the canonical gate command:
 
 Enforcement surfaces: `.pre-commit-config.yaml` (local hooks) and
 `.github/workflows/ci.yml` (CI re-runs the same script).
+
+## PLX-MC MCP Integration (Runtime)
+
+Team-distributed MCP server **`PLX-MC`** exposes MC task lifecycle tools, audit trail,
+standard `{ data, meta }` envelope, and composed swarm delegation.
+
+| Surface | Location |
+|---------|----------|
+| Stdio client | `tools/plx-mc-mcp/index.ts` |
+| Cursor REST API | `/api/cursor/*` |
+| Streamable HTTP MCP | `/api/cursor/mcp` |
+
+| Attribute | Value |
+|---|---|
+| Owner | Vince (human accountable; agents execute) |
+| Scope | Runtime — stdio client + HTTPS cursor API on `mc.plxcustomer.io`; swarm leg loopback `127.0.0.1:8900` |
+| Auth source | `PLX_MC_MCP_API_KEY` + `PLX_MC_ALLOWED_USERS` operator email (AWS Secrets Manager); swarm via `SWARM_KEY_CMD` / `get_secret` |
+| Default state | **Disabled** — `PLX_MC_MCP_ENABLED=0` in committed `.cursor/mcp.json` |
+| Kill switch | `PLX_MC_MCP_ENABLED=0` and/or remove `PLX-MC` from MCP config; `SWARM_DISPATCH_ENABLED=0` for dispatch only |
+| Health check | `mc_self_check` → `GET /api/cursor/self-check` |
+| Fallback path | `scripts/compliance-checkout.mjs` + `/api/compliance/*`; `bin/swarm ask` for dispatch |
+| Data/audit boundary | All MC tool calls append `mcp.tool.invoked` to `mc_events`; task writes via sync engine only |
+
+To enable: set `PLX_MC_MCP_ENABLED=1`, `MC_MCP_API_KEY`, `MC_OPERATOR_EMAIL`, `MC_REPO`
+in team MCP env ([runbook](docs/runbooks/plx-mc-mcp-team-registration.md)). Swarm:
+`SWARM_DISPATCH_ENABLED=1`. All changes still pass `./scripts/preflight.sh`.
+
+## Agentic Swarm Delegation (composed)
+
+Swarm dispatch is **composed into PLX-MC** (`dispatch_to_swarm`, `list_swarm_teams`,
+`swarm_health`). Standalone `swarm-dispatch` MCP remains as a compatibility shim only.
 
 <!-- governance:auto:start -->
 

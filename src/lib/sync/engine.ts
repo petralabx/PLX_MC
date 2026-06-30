@@ -9,7 +9,7 @@
 // site-user lookup ids. Documents (driveItem content) and the Initiative lookup
 // column land with a later increment (see docs/modules/sync/README.md).
 
-import { ACTORS, BUCKETS, FILES, REPOS, RISKS, SP_CONFLICTS, SP_ERRORS, TASKS } from "@/lib/mc-data/data";
+import { ACTORS, BUCKETS, FILES, PROJECTS, REPOS, RISKS, SP_CONFLICTS, SP_ERRORS, TASKS } from "@/lib/mc-data/data";
 import type { SyncState, Task } from "@/lib/mc-data/types";
 import {
   createListItem,
@@ -158,6 +158,12 @@ export async function ensureReposSeeded(): Promise<void> {
 // user-created/edited buckets persist across boots.
 export async function ensureBucketsSeeded(): Promise<void> {
   await repo.seedBuckets(BUCKETS);
+}
+
+// Idempotent seed of the fixture projects (P2) — the umbrella parent above
+// buckets, from the PROJECTS fixture (single source of truth).
+export async function ensureProjectsSeeded(): Promise<void> {
+  await repo.seedProjects(PROJECTS);
 }
 
 // ─── Outbound (push) ─────────────────────────────────────────────────────────

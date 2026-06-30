@@ -63,7 +63,7 @@ export default defineConfig({
       // webkit, which is not installed in CI; we only need the width for G3).
       name: "tablet",
       use: { ...devices["Desktop Chrome"], viewport: { width: 820, height: 1180 } },
-      testMatch: /ui-(a11y|loop-ledgers-responsive)\.spec\.ts/,
+      testMatch: /ui-(a11y|loop-ledgers-responsive|governance-sops-responsive)\.spec\.ts/,
     },
     {
       // Chromium engine at a phone viewport. G3/G4 test CSS layout width, not
@@ -71,7 +71,7 @@ export default defineConfig({
       // is out of scope for a responsive-width + a11y gate.
       name: "mobile-chrome",
       use: { ...devices["Desktop Chrome"], viewport: { width: 393, height: 851 } },
-      testMatch: /ui-(a11y|loop-ledgers-responsive)\.spec\.ts/,
+      testMatch: /ui-(a11y|loop-ledgers-responsive|governance-sops-responsive)\.spec\.ts/,
     },
   ],
   webServer: {

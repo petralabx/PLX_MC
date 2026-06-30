@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // EN-007 capture hook (P3). At an agent run's start, resolve the work to MC
 // task(s) — check out the given task(s), or AUTO-CREATE one when none is supplied
 // — and emit one PR-body stamp line per task ("MC-Checkout: <id>") that the gate
@@ -20,11 +19,13 @@
 //   MC_BUCKET              bucket id for an auto-created task
 //   MC_REPORTER            reporter for an auto-created task (default: MC_ACCOUNTABLE)
 //   MC_RUNTIME             runtime label (default: cursor)
-//   MC_BASIC_AUTH          optional "user:pass" for the staging access gate
+//   MC_BASIC_AUTH          optional "user:pass" for the staging access gate (legacy path)
+//   MC_MCP_API_KEY         when set, uses /api/cursor/checkout (MCP API key auth - preferred)
+//   MC_OPERATOR_EMAIL      operator email for MCP headers (defaults to MC_ACCOUNTABLE)
 //
 // checkout + tasks are session-gated (src/middleware.ts) — they do not
-// self-authenticate. Against a gated instance set MC_BASIC_AUTH (break-glass);
-// local/open dev needs none.
+// self-authenticate. Prefer MC_MCP_API_KEY (cursor routes); otherwise set
+// MC_BASIC_AUTH (break-glass); local/open dev needs none.
 
 import { pathToFileURL } from "node:url";
 
@@ -50,8 +51,18 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
   if (!repo) throw new Error("MC_REPO not set");
 
   const url = (p) => `${base.replace(/\/$/, "")}${p}`;
+  const mcpKey = (env.MC_MCP_API_KEY || "").replace(/\$\{.*\}/, "").trim();
+  const operatorEmail = (env.MC_OPERATOR_EMAIL || accountableHuman).trim().toLowerCase();
+  const useCursorApi = !!mcpKey;
+
   const headers = { "content-type": "application/json" };
-  if (env.MC_BASIC_AUTH) {
+  if (mcpKey) {
+    headers["x-api-key"] = mcpKey;
+    headers["x-mc-operator-email"] = operatorEmail;
+    headers["x-mc-runtime"] = runtime;
+    headers["x-mc-worker-id"] = `capture-${process.pid}`;
+    headers["x-mc-repo"] = repo;
+  } else if (env.MC_BASIC_AUTH) {
     headers.authorization = `Basic ${Buffer.from(env.MC_BASIC_AUTH).toString("base64")}`;
   }
 
@@ -63,7 +74,11 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
     const bucket = env.MC_BUCKET;
     if (!title) throw new Error("no MC_TASK_ID and no MC_TASK_TITLE to auto-create a task");
     if (!bucket) throw new Error("auto-create needs MC_BUCKET");
-    const res = await fetch(url("/api/tasks"), {
+    // Under MCP auth use the self-authenticating /api/cursor/tasks route; the
+    // legacy /api/tasks is session-gated and would 302 to the sign-in HTML page
+    // (the headers carry an API key, not a session cookie).
+    const createPath = useCursorApi ? "/api/cursor/tasks" : "/api/tasks";
+    const res = await fetch(url(createPath), {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -75,7 +90,8 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
     });
     if (!res.ok) throw new Error(`task create failed: HTTP ${res.status}`);
     const json = await res.json();
-    const id = json?.data?.id;
+    // cursor route returns { data: { taskId, task } }; legacy returns { data: { id } }.
+    const id = json?.data?.taskId || json?.data?.task?.id || json?.data?.id;
     if (!id) throw new Error("no task id in create response");
     log(`[compliance-capture] auto-created ${id} (${title})`);
     taskIds = [id];
@@ -86,16 +102,20 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
   // PR body; the gate + webhook read every one (multi-task verify).
   const stamps = [];
   for (const taskId of taskIds) {
-    const res = await fetch(url("/api/compliance/checkout"), {
+    const checkoutPath = useCursorApi ? "/api/cursor/checkout" : "/api/compliance/checkout";
+    const checkoutBody = useCursorApi
+      ? { taskId }
+      : { taskId, runtime, accountableHuman, repo };
+    const res = await fetch(url(checkoutPath), {
       method: "POST",
       headers,
-      body: JSON.stringify({ taskId, runtime, accountableHuman, repo }),
+      body: JSON.stringify(checkoutBody),
     });
     if (!res.ok) throw new Error(`checkout failed for ${taskId}: HTTP ${res.status}`);
     const json = await res.json();
     const checkoutId = json?.data?.checkoutId;
     if (!checkoutId) throw new Error(`no checkoutId for ${taskId}`);
-    log(`[compliance-capture] checked out ${taskId} → ${checkoutId}`);
+    log(`[compliance-capture] checked out ${taskId} -> ${checkoutId}`);
     log(`MC-Checkout: ${checkoutId}`);
     stamps.push(checkoutId);
   }

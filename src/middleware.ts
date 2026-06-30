@@ -24,7 +24,9 @@ export const config = {
   // (checkout/complete/reconcile) and `/api/events` do NOT self-authenticate, so
   // they stay behind the gate — exempting `api/compliance` broadly would make the
   // control plane world-callable (EN-007 runbook, review #3).
+  // `/api/cursor/*` is exempt because every handler verifies PLX_MC_MCP_API_KEY
+  // + operator allowlist server-side (same pattern as VMC cursor routes).
   matcher: [
-    "/((?!api/auth|api/cron|api/compliance/webhook|api/compliance/verify|_next/static|_next/image|favicon.ico|signin|brand|fonts).*)",
+    "/((?!api/auth|api/cron|api/compliance/webhook|api/compliance/verify|api/cursor|_next/static|_next/image|favicon.ico|signin|brand|fonts).*)",
   ],
 };

@@ -11,9 +11,14 @@ rerun, or source-ledger edit affordances exist anywhere in the stack.
 The registry seeds three repos: `taylorvalton/agentic-swarm` (main,
 `docs/vmc/quality-ledger/*.artifacts.json`), `taylorvalton/PLX_MC` (main,
 `docs/plx-mc/quality-ledger/*.artifacts.json`), and `taylorvalton/plx-customer-portal`
-(master, `docs/portal/quality-ledger/*.artifacts.json`). Missing, stale, invalid,
+(staging, `docs/portal/quality-ledger/*.artifacts.json`). Missing, stale, invalid,
 or unreachable sources render as loud degraded rows — they are never hidden or
 filtered out.
+
+New repos and modules adopt the **one canonical, versioned template** at
+`docs/templates/quality-ledger/` (`TEMPLATE.md` + `example.artifacts.json`) so every
+consumer publishes the same `vmc-quality-ledger/v1` shape with no schema drift. That
+template is the cross-repo contract this module reads.
 
 ## Why
 

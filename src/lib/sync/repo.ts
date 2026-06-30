@@ -8,6 +8,7 @@ import type {
   AuditRow,
   Bucket,
   Comment,
+  Project,
   Repo,
   RepoRequest,
   RepoRequestStatus,
@@ -560,4 +561,28 @@ export async function upsertBucket(b: Bucket): Promise<void> {
      ON CONFLICT (id) DO UPDATE SET data = $2, sync_state = 'pending', updated_at = now()`,
     [b.id, JSON.stringify(b)]
   );
+}
+
+// ─── Projects (P2 — the optional parent above buckets) ───────────────────────
+
+interface ProjectRow {
+  id: string;
+  data: Project;
+}
+
+export async function getProjects(): Promise<Project[]> {
+  const rows = await query<ProjectRow>("SELECT id, data FROM projects ORDER BY created_at, id");
+  return rows.map((r) => r.data);
+}
+
+// Idempotent seed of the fixture projects — mirrors seedBuckets (never disturbs an
+// existing/edited row), so a fresh DB gets the umbrella project and edits persist.
+export async function seedProjects(projects: Project[]): Promise<void> {
+  for (const p of projects) {
+    await query(
+      `INSERT INTO projects (id, data, sync_state) VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO NOTHING`,
+      [p.id, JSON.stringify(p), p.sync?.state ?? "pending"]
+    );
+  }
 }

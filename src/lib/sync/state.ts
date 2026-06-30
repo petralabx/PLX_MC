@@ -19,7 +19,7 @@ import type {
   SpError,
   Task,
 } from "@/lib/mc-data/types";
-import { ensureBucketsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
+import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import type { EntityData } from "./mapping";
 import * as repo from "./repo";
 
@@ -46,6 +46,7 @@ export interface StateSnapshot {
 export async function snapshot(): Promise<StateSnapshot> {
   await ensureSeeded();
   await ensureReposSeeded();
+  await ensureProjectsSeeded();
   await ensureBucketsSeeded();
   const [tasks, risks, files, conflicts, errors, audit, counts, repos, repoRequests, bucketComments, buckets, lastSweptAt] = await Promise.all([
     repo.getEntities("task"),
@@ -134,6 +135,7 @@ export interface CreateBucketInput {
 export async function createBucket(input: CreateBucketInput): Promise<Bucket> {
   await ensureSeeded();
   await ensureReposSeeded();
+  await ensureProjectsSeeded();
   await ensureBucketsSeeded();
   const name = input.name.trim();
   if (!name) throw new ApiError("invalid_request", "A bucket needs a name.", 422);

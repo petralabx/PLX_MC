@@ -1,0 +1,34 @@
+---
+description: How to delegate work to the agentic-swarm (41 agents / 7 teams) from this repo, via the dispatch_to_swarm MCP tool or the swarm CLI
+alwaysApply: true
+---
+
+# Delegating to the Agentic Swarm
+
+This repo can offload work to the **agentic-swarm** — 41 agents across 7 teams
+(`rr`, `dev`, `qa`, `plx`, `trading`, `oversight`, `router`) — running locally on
+`127.0.0.1:8900` (cloned to `./.swarm`, started by `.cursor/environment.json`).
+
+> **Opt-in by governance:** per this repo's External Integrations contract,
+> dispatch ships **disabled** (`SWARM_DISPATCH_ENABLED=0` in `.cursor/mcp.json`).
+> Enable it per session/operator before use. See `AGENTS.md` →
+> "Agentic Swarm Delegation".
+
+## Preferred: the `dispatch_to_swarm` MCP tool
+- Call `dispatch_to_swarm` with a clear `message`. Default route `team="ceo"`
+  (COS orchestration); steer a team in the message, e.g. *"Route to the rr team. <task>"*.
+- `list_swarm_teams` shows routes; `swarm_health` confirms the API is up.
+- Long-running — expect multi-minute responses for real tasks.
+
+## When to delegate
+- Deep research (`rr`), implementation (`dev`), independent QA (`qa`),
+  business/ops (`plx`), or trading research (`trading`). One task per dispatch.
+
+## Fallbacks (if the MCP tool is unavailable)
+- CLI: `bin/swarm ask "Route to the rr team. <task>"`
+- HTTP: `curl -s -X POST http://127.0.0.1:8900/dispatch -H "X-API-Key: $SWARM_API_KEY" -H "Content-Type: application/json" -d '{"team":"ceo","message":"<task>"}'`
+
+## Safety / governance
+- The swarm drafts only (no autonomous send) and escalates plan deviations to the CEO.
+- Never put secrets in the dispatch message — the swarm hydrates keys from AWS Secrets Manager.
+- All swarm-produced changes still pass `./scripts/preflight.sh` before commit/PR.

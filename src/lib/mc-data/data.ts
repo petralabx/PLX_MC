@@ -7,6 +7,7 @@ import type {
   Agent,
   AgentMode,
   Bucket,
+  Project,
   Cycle,
   FileEntry,
   Human,
@@ -117,7 +118,7 @@ export const PETRA_DOMAINS = ["petralabx.com", "petrasoap.com"];
 export const REPO_ORG = "taylorvalton";
 
 export const REPOS: Record<string, Repo> = {
-  "portal-web": { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript · Next.js", def: "master", owner: REPO_ORG, visibility: "private", scope: "Customer portal web application — the go-live codebase." },
+  "portal-web": { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript · Next.js", def: "staging", owner: REPO_ORG, visibility: "private", scope: "Customer portal web application — the go-live codebase." },
   "agentic-swarm": { id: "agentic-swarm", name: "agentic-swarm", lang: "TypeScript", def: "main", owner: REPO_ORG, visibility: "private", scope: "Background agent swarm that does the work." },
   "plx-mc": { id: "plx-mc", name: "PLX_MC", lang: "TypeScript", def: "main", owner: REPO_ORG, visibility: "public", scope: "Mission Control — the human cockpit over the agents." },
 };
@@ -125,20 +126,26 @@ export const REPOS: Record<string, Repo> = {
 // Demo/prototype buckets purged 2026-06-11 — only the PLX Portal go-live plan
 // remains (operator request; the prototype look/behavior spec lives in
 // docs/product/prototype/ if reference data is ever needed again).
+// Projects (P2) — the parent layer above buckets. All current go-live buckets
+// roll up to one umbrella project; the FK is optional so this stays additive.
+export const PROJECTS: Project[] = [
+  { id: "PRJ-PORTAL-GOLIVE", name: "PLX Portal Go-Live", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Umbrella project for all PLX Portal go-live initiatives.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+];
+
 export const BUCKETS: Bucket[] = [
   // ─── PLX Portal go-live plan (seeded 2026-06-11) — one bucket per workstream.
   // All pending with "unprovisioned" refs until /sites/plx-mission-control is
   // provisioned and the engine points at it (no fabricated sync evidence).
   // EN-002 backfill (2026-06-17): every bucket attaches plx-customer-portal
   // (id "portal-web") — all current workstreams are PLX Portal go-live work.
-  { id: "BKT-WMS", name: "WMS Integration", owner: "vince", health: "track", target: "Jun 15", started: "2026.06.11", desc: "Warehouse management system integration for the portal go-live.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-DAPI", name: "Decoupling API", owner: "vince", health: "track", target: "Jun 15", started: "2026.06.11", desc: "Decouple the portal from backend services — the Swagger-first contract is the deliverable.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-PROD", name: "Product Development", owner: "vince", health: "track", target: "Jun 29", started: "2026.06.11", desc: "Portal product development through the Jun 29 test gate; Account Management is stretch scope.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-FIN", name: "Finance", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Finance workstream — build Jun 29–Jul 13, test complete Jul 20.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-QMS", name: "QMS", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Quality management system — forms + DocuSign.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-SHOP", name: "Shopify → Business Central", owner: "vince", health: "track", target: "Aug 31", started: "2026.06.11", desc: "Shopify to Business Central migration — owned by Greg and Stephen (directory entries pending).", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-INFRA", name: "Backend Infra", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Cross-cutting platform/infra work supporting go-live.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
-  { id: "BKT-UAT", name: "UAT", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Owns parallel testing and the go-live milestones.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+  { id: "BKT-WMS", name: "WMS Integration", owner: "vince", health: "track", target: "Jun 15", started: "2026.06.11", desc: "Warehouse management system integration for the portal go-live.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
+  { id: "BKT-DAPI", name: "Decoupling API", owner: "vince", health: "track", target: "Jun 15", started: "2026.06.11", desc: "Decouple the portal from backend services — the Swagger-first contract is the deliverable.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
+  { id: "BKT-PROD", name: "Product Development", owner: "vince", health: "track", target: "Jun 29", started: "2026.06.11", desc: "Portal product development through the Jun 29 test gate; Account Management is stretch scope.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
+  { id: "BKT-FIN", name: "Finance", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Finance workstream — build Jun 29–Jul 13, test complete Jul 20.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
+  { id: "BKT-QMS", name: "QMS", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Quality management system — forms + DocuSign.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
+  { id: "BKT-SHOP", name: "Shopify → Business Central", owner: "vince", health: "track", target: "Aug 31", started: "2026.06.11", desc: "Shopify to Business Central migration — owned by Greg and Stephen (directory entries pending).", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
+  { id: "BKT-INFRA", name: "Backend Infra", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Cross-cutting platform/infra work supporting go-live.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
+  { id: "BKT-UAT", name: "UAT", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Owns parallel testing and the go-live milestones. UAT posture is the portal-published uat quality-ledger surfaced via Loop Ledgers; see docs/modules/uat.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
 ];
 
 export const BUCKET_IDX: Record<string, Bucket> = Object.fromEntries(

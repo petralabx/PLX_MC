@@ -20,7 +20,8 @@ export type Screen =
   | "intake"
   | "task"
   | "loop-ledgers"
-  | "governance-sops";
+  | "governance-sops"
+  | "ai-spend";
 
 export interface Route {
   screen: Screen;

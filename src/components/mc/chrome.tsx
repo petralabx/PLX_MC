@@ -164,6 +164,7 @@ export function Sidebar({
         )}
         {item("loop-ledgers", "◰", "Loop ledgers")}
         {item("governance-sops", "§", "SOP guide")}
+        {item("ai-spend", "◎", "AI Spend")}
         {/* Meeting bridge nav appears only when the WS-4 flag is on (off by default). */}
         {meetingIntakeEnabled() ? item("intake", "🗒", "Meeting intake") : null}
       </div>

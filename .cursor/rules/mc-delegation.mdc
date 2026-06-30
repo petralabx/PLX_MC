@@ -14,7 +14,10 @@ Prefer the **PLX-MC** MCP server for task lifecycle + optional swarm delegation.
 
 ## Default state
 
-Ships **disabled**: `PLX_MC_MCP_ENABLED=0` in committed `.cursor/mcp.json`.
+Ships **disabled** (`PLX_MC_MCP_ENABLED=0` in committed `.cursor/mcp.json`). Linux/macOS use
+`tools/plx-mc-mcp/launch.mjs` (AWS key fallback). Windows: run
+`python scripts/bootstrap-windows-secrets.py`, then point the local MCP block at
+`scripts/run-plx-mc-mcp.ps1` (see runbook). Team MCP: set `PLX_MC_MCP_ENABLED=1` in the console.
 
 ## Governance
 

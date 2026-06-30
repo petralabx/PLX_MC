@@ -61,8 +61,15 @@ else
   exit 2
 fi
 
-read -r SOURCE_REPO SOURCE_BRANCH PIN_SHA PIN_TAG MANIFEST_PATH PACKAGE_ID SKILLS_CSV <<EOF
-$("${PYTHON[@]}" - "$ALLOWLIST" <<'PY'
+{
+  read -r SOURCE_REPO
+  read -r SOURCE_BRANCH
+  read -r PIN_SHA
+  read -r PIN_TAG
+  read -r MANIFEST_PATH
+  read -r PACKAGE_ID
+  read -r SKILLS_CSV
+} < <("${PYTHON[@]}" - "$ALLOWLIST" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))
 skills = data.get("skills") or []
@@ -77,7 +84,15 @@ print(data.get("packageId") or "")
 print(",".join(skills))
 PY
 )
-EOF
+
+trim_var() { printf '%s' "$1" | tr -d '\r\n'; }
+SOURCE_REPO="$(trim_var "$SOURCE_REPO")"
+SOURCE_BRANCH="$(trim_var "$SOURCE_BRANCH")"
+PIN_SHA="$(trim_var "$PIN_SHA")"
+PIN_TAG="$(trim_var "$PIN_TAG")"
+MANIFEST_PATH="$(trim_var "$MANIFEST_PATH")"
+PACKAGE_ID="$(trim_var "$PACKAGE_ID")"
+SKILLS_CSV="$(trim_var "$SKILLS_CSV")"
 
 if [[ -z "$SOURCE_REPO" || -z "$SKILLS_CSV" ]]; then
   echo "error: failed to parse allowlist (is Python installed?)" >&2
@@ -119,8 +134,7 @@ if [[ ! -f "$MANIFEST_FILE" && "$DRY_RUN" -eq 0 ]]; then
   exit 2
 fi
 
-read -r -a INSTALL_IDS <<EOF
-$("${PYTHON[@]}" - "$MANIFEST_FILE" "$PACKAGE_ID" "$SKILLS_CSV" <<'PY'
+INSTALL_CSV="$("${PYTHON[@]}" - "$MANIFEST_FILE" "$PACKAGE_ID" "$SKILLS_CSV" <<'PY'
 import json, sys
 from pathlib import Path
 
@@ -128,7 +142,6 @@ manifest_path, package_id, allow_csv = sys.argv[1:4]
 allow = {s.strip() for s in allow_csv.split(",") if s.strip()}
 path = Path(manifest_path)
 if not path.is_file():
-    # dry-run before clone
     print(",".join(sorted(allow)))
     raise SystemExit(0)
 data = json.loads(path.read_text(encoding="utf-8"))
@@ -147,8 +160,8 @@ if not ids:
     ids = sorted(allow)
 print(",".join(ids))
 PY
-)
-EOF
+)"
+IFS=',' read -r -a INSTALL_IDS <<< "$INSTALL_CSV"
 
 CURSOR_DEST="${HOME}/.cursor/skills"
 CLAUDE_DEST="${HOME}/.claude/skills"

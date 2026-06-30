@@ -6,7 +6,7 @@
   "manifestPath": "manifest.json",
   "packageId": "plx-engineering-core",
   "pinTag": "v1.0.0",
-  "pinSha": null,
+  "pinSha": "f5013b3",
   "skills": [
     "automate",
     "autonomous-verifier",

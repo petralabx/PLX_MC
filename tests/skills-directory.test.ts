@@ -499,4 +499,36 @@ describe("skills-directory publish", () => {
     const stored = await listSkillSubmissions("pending");
     expect(stored.some((item) => item.id === created.id)).toBe(true);
   });
+
+  it("approval PATCH does not trust actor body when OIDC is configured", async () => {
+    vi.stubEnv("PLX_MC_DATABASE_URL", "");
+    vi.stubEnv("SKILLS_SUBMIT_GITHUB_WRITE_ENABLED", "0");
+    vi.stubEnv("PLX_MC_AUTH_CLIENT_ID", "test-client");
+    vi.stubEnv("PLX_MC_AUTH_CLIENT_SECRET", "test-secret");
+    vi.stubEnv("PLX_MC_AUTH_TENANT_ID", "test-tenant");
+    vi.stubEnv("PLX_MC_AUTH_SECRET", "test-auth-secret");
+    const created = await createSkillSubmission({
+      skillId: "spoof-skill",
+      title: "Spoof Skill",
+      submitterEmail: "vince@petrasoap.com",
+      description: "Actor spoof should fail under OIDC.",
+      skillMd: "# Spoof Skill\n",
+    });
+
+    const res = await patchSubmission(
+      new Request(`http://localhost/api/skills-directory/submissions/${created.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "approved",
+          actor: "vince",
+          reviewComment: "Spoofed actor.",
+        }),
+      }),
+      { params: Promise.resolve({ id: created.id }) }
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(body.error.code).toBe("not_authenticated");
+  });
 });

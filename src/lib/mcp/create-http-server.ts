@@ -2,6 +2,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { SKILL_ID_PATTERN } from "@/lib/skills-directory";
 import type { McpIdentity } from "./auth";
 import {
   actionCheckout,
@@ -130,7 +131,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     "mc_install_skills",
     "Build local install/sync scripts for PLX company skills.",
     {
-      ids: z.array(z.string().min(1)).optional(),
+      ids: z.array(z.string().regex(SKILL_ID_PATTERN)).optional(),
       mode: z.enum(["install", "sync"]).optional(),
       runtimes: z.array(z.enum(["cursor", "claude"])).optional(),
       projectRoot: z.string().min(1).optional(),
@@ -154,7 +155,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     "mc_submit_skill",
     "Submit a proposed skill to the PLX skills directory review queue.",
     {
-      id: z.string().min(1),
+      id: z.string().regex(SKILL_ID_PATTERN),
       name: z.string().min(1),
       description: z.string().min(1),
       skillMd: z.string().min(1),

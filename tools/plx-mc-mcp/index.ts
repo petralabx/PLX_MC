@@ -22,6 +22,7 @@ const MC_OPERATOR_EMAIL = (process.env.MC_OPERATOR_EMAIL || process.env.MC_ACCOU
 const MC_REPO = (process.env.MC_REPO || "").trim();
 const MCP_ENABLED = (process.env.PLX_MC_MCP_ENABLED || "0").trim() !== "0";
 const REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.MC_MCP_TIMEOUT_MS || "15000") || 15000);
+const SKILL_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 const BOX_ID =
   process.env.SWARM_BOX_ID?.trim() ||
@@ -209,7 +210,7 @@ server.tool(
   "mc_install_skills",
   "Build local install/sync scripts for PLX company skills.",
   {
-    ids: z.array(z.string().min(1)).optional(),
+    ids: z.array(z.string().regex(SKILL_ID_PATTERN)).optional(),
     mode: z.enum(["install", "sync"]).optional(),
     runtimes: z.array(z.enum(["cursor", "claude"])).optional(),
     projectRoot: z.string().min(1).optional(),
@@ -239,7 +240,7 @@ server.tool(
   "mc_submit_skill",
   "Submit a proposed skill to the PLX skills directory review queue.",
   {
-    id: z.string().min(1),
+    id: z.string().regex(SKILL_ID_PATTERN),
     name: z.string().min(1),
     description: z.string().min(1),
     skillMd: z.string().min(1),

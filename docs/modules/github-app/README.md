@@ -42,8 +42,11 @@ retiring the broad PAT entirely.
 
 - `node:crypto` (RS256 signing) — no new package.
 - `@/lib/secrets` — `githubAppConfigured()` / `githubAppCredentials()`.
-- Depended on by: `loop-ledgers` (github-api source adapter) and `sync`
-  (`validateRepoInOrg`). Both import `resolveGithubToken` through this barrel.
+- Depended on by: `loop-ledgers` (github-api source adapter), `sync`
+  (`validateRepoInOrg`), and **`skills-directory`** (`GithubSkillsSource` reads
+  `taylorvalton/plx-cursor-skills` — the repo must be on App installation
+  `142149327`; see `docs/runbooks/github-app-provisioning.md` Step 2a). All
+  import `resolveGithubToken` through this barrel.
 
 ### Key Files
 

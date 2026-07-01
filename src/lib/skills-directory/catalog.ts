@@ -3,6 +3,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { ApiError } from "@/lib/api/route";
+
 import { parseAllowlistJson } from "./allowlist";
 import { packageSkillIds } from "./manifest";
 import type { AllowlistConfig, SkillsManifest } from "./types";
@@ -42,6 +44,19 @@ export function loadCatalogConfig(cwd = process.cwd()):
       error: err instanceof Error ? err.message : "catalog config missing",
     };
   }
+}
+
+/** Throws ApiError when catalog config is invalid (route helper). */
+export function readCompanySkillsAllowlist(): AllowlistConfig {
+  const parsed = loadCatalogConfig();
+  if (!parsed.ok) {
+    throw new ApiError(
+      "invalid_catalog",
+      `Company skills catalog config is invalid: ${parsed.error}`,
+      500
+    );
+  }
+  return parsed.config;
 }
 
 /** Skill ids for filtering: legacy v2 skills[] or manifest package when v3. */

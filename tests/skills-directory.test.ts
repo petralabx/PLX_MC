@@ -4,17 +4,23 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildSkillsInstallPlan,
+  createSkillSubmission,
+  detectRegistryDrift,
+  listSkillSubmissions,
   getSkillDetail,
   listSkillCatalog,
   loadCatalogConfig,
   packageSkillIds,
   parseAllowlistJson,
   parseManifestJson,
+  parseSkillsRegistryJson,
   publishedSkills,
   resolveAllowIds,
+  updateSkillSubmission,
 } from "@/lib/skills-directory";
 import type {
   AllowlistConfig,
@@ -203,5 +209,91 @@ describe("skills-directory loader", () => {
     const detail = await getSkillDetail(TEST_ALLOWLIST, fakeSource({}), "wterm-preflight");
     expect(detail.ok).toBe(false);
     if (!detail.ok) expect(detail.reason).toBe("not_found");
+  });
+});
+
+describe("skills-directory registry + installer", () => {
+  it("detects missing and stale local registry entries", () => {
+    const registry = parseSkillsRegistryJson(
+      JSON.stringify({
+        schemaVersion: "agentic-skills-registry.v1",
+        catalogVersion: "old",
+        gitRef: "old-ref",
+        packageId: "plx-engineering-core",
+        syncedAt: "2026-06-30T12:00:00.000Z",
+        skills: [{ id: "create-skill", contentSha: "" }],
+      })
+    );
+    if (!registry.ok) throw new Error(registry.error);
+    const expected = publishedSkills(
+      FIXTURE_MANIFEST_OBJ,
+      "plx-engineering-core",
+      new Set(TEST_ALLOWLIST.skills)
+    );
+    const drift = detectRegistryDrift(
+      registry.registry,
+      FIXTURE_MANIFEST_OBJ,
+      "plx-engineering-core",
+      expected
+    );
+    expect(drift.ok).toBe(false);
+    expect(drift.catalogVersionChanged).toBe(true);
+    expect(drift.gitRefChanged).toBe(true);
+    expect(drift.missingSkillIds).toEqual(["wterm-preflight"]);
+    expect(drift.staleSkillIds).toEqual(["create-skill"]);
+  });
+
+  it("builds install and sync scripts without executing them", () => {
+    const plan = buildSkillsInstallPlan({
+      mode: "install",
+      allowlist: TEST_ALLOWLIST,
+      manifest: FIXTURE_MANIFEST_OBJ,
+    });
+    expect(plan.installSkillIds).toEqual(["create-skill", "wterm-preflight"]);
+    expect(plan.scripts.bash).toContain("git -C");
+    expect(plan.scripts.bash).toContain("Registry:");
+    expect(plan.scripts.powershell).toContain("Get-FileHash");
+
+    const synced = buildSkillsInstallPlan({
+      mode: "sync",
+      allowlist: TEST_ALLOWLIST,
+      manifest: FIXTURE_MANIFEST_OBJ,
+      localRegistry: {
+        schemaVersion: "agentic-skills-registry.v1",
+        catalogVersion: FIXTURE_MANIFEST_OBJ.version,
+        gitRef: FIXTURE_MANIFEST_OBJ.gitRef,
+        packageId: "plx-engineering-core",
+        syncedAt: "2026-06-30T12:00:00.000Z",
+        skills: [
+          { id: "create-skill", contentSha: "x" },
+          { id: "wterm-preflight", contentSha: "x" },
+        ],
+      },
+    });
+    expect(synced.installSkillIds).toEqual([]);
+  });
+});
+
+describe("skills-directory submissions store", () => {
+  it("falls back to memory when PLX_MC_DATABASE_URL is unset", async () => {
+    vi.stubEnv("PLX_MC_DATABASE_URL", "");
+    const created = await createSkillSubmission({
+      skillId: "create-skill",
+      title: "Improve skill",
+      submitterEmail: "vince@petrasoap.com",
+      description: "Add clearer examples.",
+    });
+    expect(created.id).toMatch(/^skill-sub-/);
+    expect(created.status).toBe("pending");
+
+    const listed = await listSkillSubmissions("pending");
+    expect(listed.some((s) => s.id === created.id)).toBe(true);
+
+    const updated = await updateSkillSubmission(created.id, {
+      status: "approved",
+      reviewComment: "Ship it.",
+    });
+    expect(updated?.status).toBe("approved");
+    expect(updated?.reviewComment).toBe("Ship it.");
   });
 });

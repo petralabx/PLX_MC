@@ -16,6 +16,10 @@
 .PARAMETER DryRun
   Print actions without mutating disk.
 
+.PARAMETER Sync
+  Use sync mode. When a skills registry exists, the bash installer can use it to
+  decide whether a narrower refresh is enough.
+
 .EXAMPLE
   cd C:\Users\you\PLX_MC
   .\scripts\bootstrap-company-skills.ps1
@@ -27,7 +31,8 @@
 param(
     [string]$ProjectRoot = (Split-Path $PSScriptRoot -Parent),
     [string]$SkillsRepo = (Join-Path $env:USERPROFILE "plx-cursor-skills"),
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$Sync
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,7 +54,8 @@ $posixSkills = ($SkillsRepo -replace '\\', '/').Replace('C:', '/c')
 $posixScript = ($BashScript -replace '\\', '/').Replace('C:', '/c')
 
 $dryFlag = if ($DryRun) { "--dry-run" } else { "" }
-$cmd = "cd `"$(Split-Path $posixScript -Parent)`" && bash `"$posixScript`" --project-root `"$posixProject`" --skills-repo `"$posixSkills`" $dryFlag"
+$syncFlag = if ($Sync) { "--sync" } else { "" }
+$cmd = "cd `"$(Split-Path $posixScript -Parent)`" && bash `"$posixScript`" --project-root `"$posixProject`" --skills-repo `"$posixSkills`" $dryFlag $syncFlag"
 
 Write-Host "=== PLX company skills bootstrap (Windows) ==="
 & $GitBash -lc $cmd

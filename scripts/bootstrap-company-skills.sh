@@ -10,7 +10,7 @@
 # catalog updates). Restart Cursor after completion.
 #
 # Usage:
-#   ./scripts/bootstrap-company-skills.sh [--dry-run] [--project-root DIR]
+#   ./scripts/bootstrap-company-skills.sh [--dry-run] [--sync] [--project-root DIR]
 #                                       [--skills-repo DIR] [--allowlist FILE]
 #
 set -euo pipefail
@@ -24,10 +24,12 @@ if [[ ! -f "$ALLOWLIST" ]]; then
   ALLOWLIST="${REPO_ROOT}/config/company-skills-allowlist.json"
 fi
 DRY_RUN=0
+SYNC_MODE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
+    --sync) SYNC_MODE=1; shift ;;
     --project-root) PROJECT_ROOT="$2"; shift 2 ;;
     --skills-repo|--swarm-repo) SKILLS_REPO="$2"; shift 2 ;;
     --allowlist) ALLOWLIST="$2"; shift 2 ;;
@@ -169,6 +171,14 @@ CURSOR_DEST="${HOME}/.cursor/skills"
 CLAUDE_DEST="${HOME}/.claude/skills"
 REGISTRY_PATH="${HOME}/.agentic/skills.registry.json"
 SKILLS_SRC="${SKILLS_REPO}/skills"
+
+if [[ "$SYNC_MODE" -eq 1 ]]; then
+  if [[ -f "$REGISTRY_PATH" ]]; then
+    echo "=== Sync mode: using existing registry ${REGISTRY_PATH} ==="
+  else
+    echo "=== Sync mode: no registry found; falling back to full install ==="
+  fi
+fi
 
 run mkdir -p "$CURSOR_DEST" "$CLAUDE_DEST" "$(dirname "$REGISTRY_PATH")"
 

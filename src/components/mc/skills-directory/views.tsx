@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { api } from "@/lib/api";
 import { ACTORS, CURRENT_USER, isApprover } from "@/lib/mc-data";
@@ -99,24 +99,26 @@ export function IndexView({
   const approver = isApprover(ACTORS[CURRENT_USER]);
   const canSubmit = skillId.trim() && skillMarkdown.trim() && currentSubmitterEmail();
 
-  useEffect(() => {
-    if (tab !== "review" || !approver) return;
-    let cancelled = false;
+  async function loadReviewQueue() {
     setQueueState({ kind: "loading" });
-    api<SkillSubmission[]>("/skills-directory/submissions")
-      .then((rows) => {
-        if (cancelled) return;
-        setSubmissions(rows);
-        setQueueState({ kind: "idle" });
-      })
-      .catch((err: Error) => {
-        if (cancelled) return;
-        setQueueState({ kind: "error", message: err.message });
+    try {
+      const rows = await api<SkillSubmission[]>("/skills-directory/submissions");
+      setSubmissions(rows);
+      setQueueState({ kind: "idle" });
+    } catch (err) {
+      setQueueState({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Failed to load submissions",
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [tab, approver]);
+    }
+  }
+
+  function selectReviewTab(next: ReviewTab) {
+    setTab(next);
+    if (next === "review" && approver) {
+      void loadReviewQueue();
+    }
+  }
 
   function toggleTag(tag: string) {
     const cur = filter.tags ?? [];
@@ -225,8 +227,8 @@ export function IndexView({
           <button
             type="button"
             className={`sk-tab${tab === "submit" ? " on" : ""}`}
-            aria-selected={tab === "submit"}
-            onClick={() => setTab("submit")}
+            aria-pressed={tab === "submit"}
+            onClick={() => selectReviewTab("submit")}
           >
             Submit for review
           </button>
@@ -234,8 +236,8 @@ export function IndexView({
             <button
               type="button"
               className={`sk-tab${tab === "review" ? " on" : ""}`}
-              aria-selected={tab === "review"}
-              onClick={() => setTab("review")}
+              aria-pressed={tab === "review"}
+              onClick={() => selectReviewTab("review")}
               data-testid="sk-review-tab"
             >
               Review queue

@@ -45,7 +45,8 @@ allowlist.json → GithubSkillsSource → manifest + SKILL.md → loader
 ## Dependencies
 
 Depends on: **web** (MC shell, `api()` + `route()`), **github-app**
-(`resolveGithubToken`), **governance-sops** (markdown parser + reader UI),
+(`resolveGithubToken` — **`plx-cursor-skills` must be on the App installation**;
+runbook Step 2a), **governance-sops** (markdown parser + reader UI),
 **design-system** (`--p-*` tokens). Depended on by: Company Skills SOP
 (`docs/SKILLS-SOP.md`), bootstrap scripts.
 

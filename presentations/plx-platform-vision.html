@@ -165,12 +165,40 @@ ul.plain li::before { content:"▸"; font-family:var(--mono); color:var(--p-acce
 
 .slide-org { justify-content:flex-start; padding-top:11vh; padding-bottom:10vh; }
 .slide-org .shead { margin-bottom:1.5vh; font-size:clamp(24px,3.2vw,40px); }
-.slide-org .orgchart { gap:0; }
-.slide-org .org-box { padding:10px 14px; }
-.slide-org .org-box h4 { font-size:clamp(14px,1.6vw,18px); }
-.slide-org .org-box .sub { font-size:8px; }
-.slide-org .org-arrow { padding:3px 0; font-size:12px; }
-.slide-org .org-row { gap:8px; }
+
+/* org chart — ledger spine (revision A) */
+.org-spine{display:grid;grid-template-columns:52px 1fr;gap:0;margin-top:1vh;border:1px solid var(--p-grid)}
+.org-spine .rail{background:var(--p-rail);border-right:1px solid var(--p-grid);display:flex;flex-direction:column}
+.org-spine .rail .lv{flex:1;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;letter-spacing:0.12em;color:var(--p-muted);border-bottom:1px solid var(--p-grid-2);writing-mode:vertical-rl;transform:rotate(180deg);padding:8px 0}
+.org-spine .rail .lv:last-child{border-bottom:0}
+.org-spine .rail .lv.hot{color:var(--p-accent);font-weight:600}
+.org-spine .stack{display:flex;flex-direction:column}
+.org-spine .row{flex:1;border-bottom:1px solid var(--p-grid-2);padding:10px 16px;display:flex;flex-direction:column;justify-content:center;min-height:56px;background:var(--p-paper)}
+.org-spine .row:last-child{border-bottom:0}
+.org-spine .row.human{background:var(--p-paper-2);border-left:2px solid var(--p-accent)}
+.org-spine .row.ctx{background:var(--p-accent-soft)}
+.org-spine .row h4{font-family:var(--mazius);font-size:clamp(15px,1.8vw,19px);margin-bottom:3px;line-height:1.1}
+.org-spine .row .sub{font-family:var(--mono);font-size:8px;letter-spacing:var(--p-track-meta);text-transform:uppercase;color:var(--p-muted);line-height:1.45}
+.org-spine .agents{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px}
+.org-spine .agents .a{font-family:var(--mono);font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--p-ink-2);padding:6px 8px;border:1px solid var(--p-grid-2);background:var(--p-paper);text-align:center;line-height:1.35}
+.org-spine .infra-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px}
+.org-spine .infra-row span{font-family:var(--mono);font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--p-accent);text-align:center}
+
+/* pillars — enhanced columns (revision A) */
+.pillars-v2{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--p-grid);border:1px solid var(--p-grid);margin-top:3vh;position:relative}
+.pillars-v2::before{content:"Shared: governance-contract · SharePoint SoR · --p-* tokens";position:absolute;top:-22px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:8px;letter-spacing:var(--p-track-meta);text-transform:uppercase;color:var(--p-muted)}
+.pillar-v2{background:var(--p-paper);padding:24px 22px;display:flex;flex-direction:column;min-height:320px}
+.pillar-v2 .glyph{font-family:var(--mono);font-size:22px;color:var(--p-accent);margin-bottom:8px;line-height:1}
+.pillar-v2 .tag{font-family:var(--mono);font-size:9px;letter-spacing:var(--p-track-meta);text-transform:uppercase;color:var(--p-muted)}
+.pillar-v2 h3{font-family:var(--mazius);font-size:24px;margin:8px 0 6px;font-weight:400}
+.pillar-v2 .repo{font-family:var(--mono);font-size:10px;color:var(--p-accent);margin-bottom:12px}
+.pillar-v2 ul{list-style:none;flex:1}
+.pillar-v2 li{font-size:12.5px;color:var(--p-ink-2);padding:5px 0;border-bottom:1px solid var(--p-grid-2);display:flex;gap:8px;line-height:1.4;max-width:none}
+.pillar-v2 li::before{content:"▸";font-family:var(--mono);color:var(--p-accent);flex:none}
+.pillar-v2 .foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--p-grid);font-family:var(--mono);font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:var(--p-muted);line-height:1.5}
+.pillar-v2 .status{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+
+/* legacy org (unused — kept for reference) */
 .orgchart { margin-top:1vh; display:flex; flex-direction:column; align-items:stretch; gap:0; }
 .org-layer { position:relative; }
 .org-box {
@@ -246,7 +274,7 @@ ul.plain li::before { content:"▸"; font-family:var(--mono); color:var(--p-acce
 .notes-panel .label { font-family:var(--mono); font-size:9px; letter-spacing:var(--p-track-meta); text-transform:uppercase; color:var(--p-muted); margin-bottom:8px; }
 
 @media (max-width:900px) {
-  .pillars, .roles, .principles, .detail-grid, .connect, .vs-grid, .org-row { grid-template-columns:1fr; }
+  .pillars, .roles, .principles, .detail-grid, .connect, .vs-grid, .org-row, .org-spine .agents, .org-spine .infra-row, .pillars-v2 { grid-template-columns:1fr; }
   .connect { gap:16px; }
   .slide { padding:11vh 7vw; }
   .rail { display:none; }
@@ -304,104 +332,103 @@ ul.plain li::before { content:"▸"; font-family:var(--mono); color:var(--p-acce
   <div class="foottick"><span>Operating principles</span><span>02 / 11</span></div>
 </section>
 <!-- 3 · FUTURE ORG CHART -->
-<section class="slide slide-org" data-tick="Vision ‖ The Future Org Chart" data-notes="Walk top to bottom. Humans stay accountable — MC is the cockpit, not a replacement for judgement. Functional agents are specialized workers; they all read the same context layer. Bottom layer is PLX_Infra + repos — no agent runs without rails.">
-  <span class="kicker reveal">Target operating model</span>
-  <h2 class="shead reveal d1">The Future <em>Org Chart</em></h2>
-  <div class="orgchart reveal d2">
-    <div class="org-layer">
-      <div class="org-box wide human">
+<section class="slide slide-org" data-tick="Vision ‖ The Future Org Chart" data-notes="Walk L5→L1 on the spine. Humans stay accountable — MC is the cockpit. Functional agents are scoped workers with example roles. Context layer is shared — agents never fork it. Bottom is Infra — no agent runs without rails.">
+  <span class="kicker reveal">Target operating model · Rev A</span>
+  <h2 class="shead reveal d1">Accountability flows <em>down</em> — context flows up</h2>
+  <div class="org-spine reveal d2">
+    <div class="rail">
+      <div class="lv hot">L5</div><div class="lv hot">L4</div><div class="lv">L3</div><div class="lv">L2</div><div class="lv">L1</div>
+    </div>
+    <div class="stack">
+      <div class="row human">
         <h4>Humans — Strategy, Taste, Judgement, Trust &amp; <em>Accountability</em></h4>
-        <div class="sub">Approve specs · resolve conflicts · own outcomes · @petralabx.com / @petrasoap.com only</div>
+        <div class="sub">Spec approval · conflict resolution · merge sign-off · @petralabx.com / @petrasoap.com only</div>
       </div>
-    </div>
-    <div class="org-arrow">↓</div>
-    <div class="org-layer">
-      <div class="org-layer-label">Cockpit · PLX_MC</div>
-      <div class="org-box wide mc">
-        <h4>Mission Control — assign, review, trace</h4>
-        <div class="sub">Tasks · SharePoint mirror · sync health · PR ↔ requirement traceability · <strong>mc.plxcustomer.io</strong></div>
+      <div class="row">
+        <h4>Mission Control <span class="mono" style="font-size:11px;color:var(--p-accent)">PLX_MC</span></h4>
+        <div class="sub">Assign · review · trace · mc.plxcustomer.io · SharePoint mirror · PR ↔ requirement</div>
       </div>
-    </div>
-    <div class="org-arrow">↓</div>
-    <div class="org-layer">
-      <div class="org-layer-label">Functional agents</div>
-      <div class="org-row">
-        <div class="org-box">
-          <h4>Product &amp; R&amp;D</h4>
-          <div class="sub">Formulation · samples · spec sheets · QA review</div>
-        </div>
-        <div class="org-box">
-          <h4>Customer &amp; Sales</h4>
-          <div class="sub">Onboarding · portal support · comms · follow-ups</div>
-        </div>
-        <div class="org-box">
-          <h4>Engineering</h4>
-          <div class="sub">Portal features · sync · MCP tools · preflight gates</div>
-        </div>
-        <div class="org-box">
-          <h4>Ops &amp; Finance</h4>
-          <div class="sub">SOP &amp; compliance · sourcing · production · KPIs</div>
+      <div class="row">
+        <h4>Functional <em>agents</em></h4>
+        <div class="agents">
+          <div class="a">Product &amp; R&amp;D<br><span style="color:var(--p-muted)">Formula · samples · QA</span></div>
+          <div class="a">Customer &amp; Sales<br><span style="color:var(--p-muted)">Onboarding · comms</span></div>
+          <div class="a">Engineering<br><span style="color:var(--p-muted)">Portal · sync · MCP</span></div>
+          <div class="a">Ops &amp; Finance<br><span style="color:var(--p-muted)">SOP · sourcing · KPIs</span></div>
         </div>
       </div>
-    </div>
-    <div class="org-arrow">↓</div>
-    <div class="org-layer">
-      <div class="org-layer-label">Shared context · Portal + record</div>
-      <div class="org-box wide ctx">
+      <div class="row ctx">
         <h4>Shared Context Layer</h4>
-        <div class="sub"><strong>PLX Portal</strong> · Mission Control tasks · QMS &amp; SOPs · Permissions · Brand voice · SharePoint SoR · Docs</div>
+        <div class="sub">PLX Portal · MC tasks · QMS &amp; SOPs · permissions · brand voice · SharePoint SoR · docs</div>
       </div>
-    </div>
-    <div class="org-arrow">↓</div>
-    <div class="org-layer">
-      <div class="org-layer-label">Agentic stack · PLX_Infra</div>
-      <div class="org-row">
-        <div class="org-box infra"><h4>PLX-MC MCP</h4><div class="sub">Task lifecycle · audit</div></div>
-        <div class="org-box infra"><h4>Dept MCPs</h4><div class="sub">Graph · SharePoint · GitHub</div></div>
-        <div class="org-box infra"><h4>Postgres + vector</h4><div class="sub">Staging · retrieval</div></div>
-        <div class="org-box infra"><h4>Repos &amp; ledgers</h4><div class="sub">Code · artifacts · evidence</div></div>
+      <div class="row">
+        <h4>Agentic stack <span class="mono" style="font-size:11px;color:var(--p-accent)">PLX_Infra</span></h4>
+        <div class="infra-row">
+          <span>PLX-MC MCP</span><span>Dept MCPs</span><span>Postgres + vector</span><span>Repos &amp; ledgers</span>
+        </div>
       </div>
     </div>
   </div>
-  <div class="foottick"><span>Future org chart</span><span>08 / 14</span></div>
+  <div class="foottick"><span>Future org chart</span><span>03 / 14</span></div>
 </section>
 <!-- 4 · THREE PILLARS -->
-<section class="slide" data-tick="Architecture ‖ Three repos" data-notes="Walk the three columns left to right. Emphasize MC is the cockpit for agents + humans; Portal is customer-facing and brand authority; Infra is staging, secrets, compliance gates, deploy — the floor everyone stands on.">
-  <span class="kicker reveal">Three repos · one platform</span>
+<section class="slide" data-tick="Architecture ‖ Three repos" data-notes="Walk left to right. Top hairline shows shared glue. Each pillar: what it owns, what you interact with. MC directs, Portal delivers, Infra enables.">
+  <span class="kicker reveal">Three repos · one platform · Rev A</span>
   <h2 class="shead reveal d1">The <em>pillars</em> we're building on</h2>
-  <div class="pillars">
-    <div class="pillar reveal d2">
-      <span class="tag">Cockpit</span>
+  <div class="pillars-v2 reveal d2">
+    <div class="pillar-v2">
+      <div class="glyph">◷</div>
+      <span class="tag">Cockpit · directs work</span>
       <h3>Mission <em>Control</em></h3>
       <div class="repo mono">PLX_MC · mc.plxcustomer.io</div>
-      <p>Human cockpit over background agents. Two-way SharePoint mirror, task board, sync health, traceability from requirement to merge commit.</p>
+      <ul>
+        <li>Two-way SharePoint mirror + audit trail</li>
+        <li>Task board, insights, saved views (Cycle 2)</li>
+        <li>PLX-MC MCP + optional swarm dispatch</li>
+        <li>PR ↔ requirement traceability</li>
+      </ul>
+      <div class="foot">You interact: checkout tasks · review PRs · resolve conflicts</div>
       <div class="status">
         <span class="pill ok"><span class="dot"></span>Live app</span>
         <span class="pill acc"><span class="dot"></span>Cycle 2 active</span>
       </div>
     </div>
-    <div class="pillar reveal d3">
-      <span class="tag">Product</span>
+    <div class="pillar-v2">
+      <div class="glyph">❒</div>
+      <span class="tag">Product · customer value</span>
       <h3>Customer <em>Portal</em></h3>
       <div class="repo mono">plx-customer-portal · staging</div>
-      <p>Customer onboarding, manufacturing suite, SharePoint-backed workflows. Brand authority for <span class="mono">--p-*</span> tokens — MC is the fourth surface, not a fork.</p>
+      <ul>
+        <li>Onboarding, DocuSign, manufacturing suite</li>
+        <li>Brand authority — <span class="mono">--p-*</span> tokens (ADR-003)</li>
+        <li>SharePoint-backed workflows + UAT feedback</li>
+        <li>Most MC buckets ship here</li>
+      </ul>
+      <div class="foot">You interact: feature work · SOP updates · staging deploy</div>
       <div class="status">
         <span class="pill info"><span class="dot"></span>Brand SoT</span>
         <span class="pill ok"><span class="dot"></span>Staging deploy</span>
       </div>
     </div>
-    <div class="pillar reveal d4">
-      <span class="tag">Foundation</span>
+    <div class="pillar-v2">
+      <div class="glyph">↔</div>
+      <span class="tag">Foundation · shared rails</span>
       <h3>Shared <em>Infra</em></h3>
       <div class="repo mono">PLX_Infra · ops layer</div>
-      <p>Staging coordinates, AWS Secrets Manager, GitHub compliance gate, Vercel deploy paths, MCP/swarm registration — the rails agents and humans share.</p>
+      <ul>
+        <li>AWS Secrets Manager · one accessor</li>
+        <li><span class="mono">preflight.sh</span> + compliance gate rollout</li>
+        <li>Staging-only Postgres + Vercel paths</li>
+        <li>MCP kill switches · GitHub App provisioning</li>
+      </ul>
+      <div class="foot">You interact: secrets · runbooks · gate enablement</div>
       <div class="status">
         <span class="pill warn"><span class="dot"></span>Gate rollout</span>
         <span class="pill acc"><span class="dot"></span>Secrets unified</span>
       </div>
     </div>
   </div>
-  <div class="foottick"><span>Repo map</span><span>03 / 11</span></div>
+  <div class="foottick"><span>Repo map</span><span>04 / 14</span></div>
 </section>
 <!-- 5 · AGENTIC STACK -->
 <section class="slide" data-tick="Path ‖ How we get there" data-notes="Critical distinction: an AGENT has a role, tools, and accountability in MC. A SKILL is a reusable playbook any agent can invoke — like project-orchestrator. Example agent: Meeting Intake Scribe watches transcripts, drafts proposed tasks, humans triage in MC. Stack builds bottom-up: infra first, then context, then agents, humans on top.">

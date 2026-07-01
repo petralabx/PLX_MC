@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLX Deck — Org Chart &amp; Pillars Revisions</title>
+<link href="https://api.fontshare.com/v2/css?f[]=mazius-display@400,401&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --p-paper:#FBFAF6; --p-paper-2:#ECEFE9; --p-rail:#EEEBE3; --p-canvas:#F5F3EC;
+  --p-ink:#1B1A17; --p-ink-2:#3A3833; --p-muted:#807A6F;
+  --p-grid:rgba(27,26,23,0.16); --p-grid-2:rgba(27,26,23,0.08);
+  --p-accent:#244A39; --p-accent-soft:#BCCFBF;
+  --p-ok:#5C7A55; --p-warn:#C99340; --p-info:#5B7B91;
+  --mazius:"Mazius Display",Georgia,serif;
+  --sans:"Inter",system-ui,sans-serif;
+  --mono:"JetBrains Mono",monospace;
+  --p-track-tick:0.22em; --p-track-meta:0.18em;
+  --p-radius:4px; --p-ease:cubic-bezier(.2,.8,.2,1);
+  --p-dur-slow:320ms;
+}
+[data-scheme="dark"] {
+  --p-paper:#22201D; --p-paper-2:#2A3329; --p-rail:#16140F; --p-canvas:#1A1816;
+  --p-ink:#F1ECE0; --p-ink-2:#C9C2B5; --p-muted:#827B6F;
+  --p-grid:rgba(241,236,224,0.12); --p-grid-2:rgba(241,236,224,0.06);
+  --p-accent:#7AB18C; --p-accent-soft:#2D4D3B;
+  --p-ok:#7A9E6F; --p-warn:#D9A85C; --p-info:#7A9DB3;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);color:var(--p-ink);background:var(--p-canvas);scroll-snap-type:y mandatory;overflow-y:scroll;height:100vh}
+.slide{scroll-snap-align:start;min-height:100vh;padding:8vh 8vw;display:flex;flex-direction:column;justify-content:center;background:var(--p-paper);border-bottom:1px solid var(--p-grid);position:relative}
+.slide:nth-child(even){background:var(--p-canvas)}
+.slide::before{content:attr(data-tick);position:absolute;top:4vh;left:8vw;right:8vw;font-family:var(--mono);font-size:10px;letter-spacing:var(--p-track-tick);text-transform:uppercase;color:var(--p-muted);border-bottom:1px solid var(--p-grid);padding-bottom:10px}
+.variant-badge{position:absolute;top:4vh;right:8vw;font-family:var(--mono);font-size:9px;letter-spacing:var(--p-track-meta);text-transform:uppercase;color:var(--p-accent);border:1px solid var(--p-accent);padding:4px 8px;border-radius:var(--p-radius)}
+h1,h2,h3,h4{font-family:var(--mazius);font-weight:400;line-height:1.05}
+em{font-style:italic;color:var(--p-accent)}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:var(--p-track-tick);text-transform:uppercase;color:var(--p-muted)}
+.shead{font-size:clamp(26px,3.5vw,44px);letter-spacing:-0.025em;margin:8px 0 2vh;max-width:24ch}
+.lead{font-size:15px;color:var(--p-ink-2);max-width:58ch;line-height:1.5;margin-bottom:2vh}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.reveal{opacity:0;transform:translateY(14px);transition:opacity var(--p-dur-slow) var(--p-ease),transform var(--p-dur-slow) var(--p-ease)}
+.slide.in-view .reveal{opacity:1;transform:none}
+.slide.in-view .reveal.d1{transition-delay:70ms}
+.slide.in-view .reveal.d2{transition-delay:140ms}
+.slide.in-view .reveal.d3{transition-delay:210ms}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid currentColor;font-family:var(--mono);font-size:8px;letter-spacing:var(--p-track-meta);text-transform:uppercase;border-radius:var(--p-radius)}
+.pill .dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.pill.ok{color:var(--p-ok)}.pill.acc{color:var(--p-accent)}.pill.info{color:var(--p-info)}.pill.warn{color:var(--p-warn)}
+
+/* ── ORG REV A: Ledger spine ── */
+.org-spine{display:grid;grid-template-columns:52px 1fr;gap:0;margin-top:1vh;border:1px solid var(--p-grid)}
+.org-spine .rail{background:var(--p-rail);border-right:1px solid var(--p-grid);display:flex;flex-direction:column}
+.org-spine .rail .lv{flex:1;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;letter-spacing:0.12em;color:var(--p-muted);border-bottom:1px solid var(--p-grid-2);writing-mode:vertical-rl;transform:rotate(180deg);padding:8px 0}
+.org-spine .rail .lv:last-child{border-bottom:0}
+.org-spine .rail .lv.hot{color:var(--p-accent);font-weight:600}
+.org-spine .stack{display:flex;flex-direction:column}
+.org-spine .row{flex:1;border-bottom:1px solid var(--p-grid-2);padding:10px 16px;display:flex;flex-direction:column;justify-content:center;min-height:56px;background:var(--p-paper)}
+.org-spine .row:last-child{border-bottom:0}
+.org-spine .row.human{background:var(--p-paper-2);border-left:2px solid var(--p-accent)}
+.org-spine .row.ctx{background:var(--p-accent-soft)}
+.org-spine .row h4{font-size:clamp(15px,1.8vw,19px);margin-bottom:3px}
+.org-spine .row .sub{font-family:var(--mono);font-size:8px;letter-spacing:var(--p-track-meta);text-transform:uppercase;color:var(--p-muted);line-height:1.45}
+.org-spine .agents{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px}
+.org-spine .agents .a{font-family:var(--mono);font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--p-ink-2);padding:6px 8px;border:1px solid var(--p-grid-2);background:var(--p-paper);text-align:center;line-height:1.35}
+.org-spine .infra-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px}
+.org-spine .infra-row span{font-family:var(--mono);font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--p-accent);text-align:center}
+
+/* ── ORG REV B: Flow bands ── */
+.org-flow{display:flex;flex-direction:column;gap:10px;margin-top:1vh}
+.org-band{border:1px solid var(--p-grid);background:var(--p-paper);padding:14px 18px;border-radius:var(--p-radius);position:relative}
+.org-band::before{content:attr(data-layer);position:absolute;top:-8px;left:14px;font-family:var(--mono);font-size:8px;letter-spacing:var(--p-track-meta);text-transform:uppercase;background:var(--p-paper);padding:0 6px;color:var(--p-muted)}
+.org-band.human{border-color:var(--p-accent);background:var(--p-paper-2)}
+.org-band.ctx{background:linear-gradient(90deg,var(--p-accent-soft),var(--p-paper))}
+.org-band h4{font-size:18px;margin-bottom:4px}
+.org-band p{font-size:12px;color:var(--p-muted);line-height:1.45;max-width:none}
+.org-band .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.org-band .chip{font-family:var(--mono);font-size:8px;letter-spacing:0.12em;text-transform:uppercase;padding:4px 8px;border:1px solid var(--p-grid);color:var(--p-ink-2)}
+.org-flow-arrow{text-align:center;font-family:var(--mono);font-size:11px;color:var(--p-accent);opacity:0.65;letter-spacing:0.2em}
+
+/* ── ORG REV C: Instrument grid ── */
+.org-instrument{position:relative;margin-top:1vh;border:1px solid var(--p-grid);background:var(--p-paper);padding:20px 22px 16px}
+.org-instrument .grid-bg{position:absolute;inset:0;pointer-events:none;opacity:0.35;background:
+  linear-gradient(var(--p-grid-2) 1px,transparent 1px) 0 0/48px 48px,
+  linear-gradient(90deg,var(--p-grid-2) 1px,transparent 1px) 0 0/48px 48px}
+.org-instrument .inner{position:relative;z-index:1;display:grid;grid-template-rows:auto auto auto auto auto;gap:12px}
+.org-instrument .tier{display:grid;grid-template-columns:72px 1fr;gap:14px;align-items:center}
+.org-instrument .depth{font-family:var(--mono);font-size:10px;letter-spacing:0.16em;color:var(--p-muted);text-align:right;border-right:1px solid var(--p-grid);padding-right:12px}
+.org-instrument .depth em{display:block;font-family:var(--mazius);font-style:italic;font-size:16px;color:var(--p-accent);letter-spacing:0;margin-top:2px}
+.org-instrument .panel{border:1px solid var(--p-grid);padding:12px 14px;background:rgba(251,250,246,0.92)}
+.org-instrument .panel h4{font-size:16px;margin-bottom:3px}
+.org-instrument .panel .readout{font-family:var(--mono);font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:var(--p-muted);line-height:1.5}
+.org-instrument .quad{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.org-instrument .quad .panel{padding:10px 12px}
+.org-instrument .quad h4{font-size:14px}
+
+/* ── PILLARS REV A: Enhanced columns ── */
+.pillars-v2{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--p-grid);border:1px solid var(--p-grid);margin-top:2vh;position:relative}
+.pillars-v2::before{content:"Shared: governance-contract · SharePoint SoR · --p-* tokens";position:absolute;top:-22px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:8px;letter-spacing:var(--p-track-meta);text-transform:uppercase;color:var(--p-muted)}
+.pillar-v2{background:var(--p-paper);padding:24px 22px;display:flex;flex-direction:column;min-height:340px}
+.pillar-v2 .glyph{font-family:var(--mono);font-size:22px;color:var(--p-accent);margin-bottom:8px;line-height:1}
+.pillar-v2 .tag{font-family:var(--mono);font-size:9px;letter-spacing:var(--p-track-meta);text-transform:uppercase;color:var(--p-muted)}
+.pillar-v2 h3{font-size:24px;margin:8px 0 6px}
+.pillar-v2 .repo{font-family:var(--mono);font-size:10px;color:var(--p-accent);margin-bottom:12px}
+.pillar-v2 ul{list-style:none;flex:1}
+.pillar-v2 li{font-size:12.5px;color:var(--p-ink-2);padding:5px 0;border-bottom:1px solid var(--p-grid-2);display:flex;gap:8px;line-height:1.4}
+.pillar-v2 li::before{content:"▸";font-family:var(--mono);color:var(--p-accent);flex:none}
+.pillar-v2 .foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--p-grid);font-family:var(--mono);font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:var(--p-muted);line-height:1.5}
+.pillar-v2 .status{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+
+/* ── PILLARS REV B: Foundation arch ── */
+.pillar-arch{margin-top:3vh;display:flex;flex-direction:column;align-items:center;gap:0}
+.pillar-arch svg{width:100%;max-width:820px;height:auto}
+.pillar-arch .arch-labels{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;width:100%;max-width:820px;margin-top:16px}
+.pillar-arch .arch-card{border:1px solid var(--p-grid);padding:16px 18px;background:var(--p-paper)}
+.pillar-arch .arch-card h3{font-size:20px;margin-bottom:6px}
+.pillar-arch .arch-card p{font-size:12px;color:var(--p-ink-2);line-height:1.45}
+
+/* ── PILLARS REV C: Ledger table ── */
+.pillar-table{width:100%;border-collapse:collapse;border:1px solid var(--p-grid);margin-top:2vh;font-size:13px}
+.pillar-table thead th{background:var(--p-paper-2);font-family:var(--mono);font-size:9px;letter-spacing:var(--p-track-meta);text-transform:uppercase;font-weight:600;padding:12px 14px;text-align:left;border-bottom:1px solid var(--p-grid)}
+.pillar-table td{padding:14px;border-bottom:1px solid var(--p-grid-2);vertical-align:top;color:var(--p-ink-2)}
+.pillar-table tr:last-child td{border-bottom:0}
+.pillar-table .name{font-family:var(--mazius);font-size:18px;color:var(--p-ink);white-space:nowrap}
+.pillar-table .repo{font-family:var(--mono);font-size:10px;color:var(--p-accent)}
+
+.nav-hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:9px;letter-spacing:var(--p-track-meta);text-transform:uppercase;color:var(--p-muted);z-index:10}
+.toggle{position:fixed;right:20px;bottom:18px;font-family:var(--mono);font-size:9px;border:1px solid var(--p-grid);background:transparent;padding:6px 10px;cursor:pointer;color:var(--p-muted);z-index:10}
+@media(max-width:860px){.pillars-v2,.pillar-arch .arch-labels,.org-spine .agents,.org-spine .infra-row{grid-template-columns:1fr}.org-instrument .quad{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="nav-hint">↑ ↓ scroll · 7 revision slides</div>
+<button class="toggle" id="toggle" type="button">Dark</button>
+
+<section class="slide" data-tick="Revisions · Pick a direction">
+  <span class="kicker">Design exploration</span>
+  <h1 class="shead">Org chart &amp; pillars — <em>three</em> each</h1>
+  <p class="lead">Three enhanced layouts per slide. Revision A is applied to the live deck at mc.plxcustomer.io. Tell us A / B / C (or a blend) and we'll merge into the main presentation.</p>
+  <p class="lead" style="margin-top:2vh"><span class="mono">Org:</span> A Ledger spine · B Flow bands · C Instrument grid<br><span class="mono">Pillars:</span> A Enhanced columns · B Foundation arch · C Ledger table</p>
+</section>
+
+<!-- ORG A -->
+<section class="slide" data-tick="Org chart · Revision A">
+  <span class="variant-badge">Org · A · Ledger spine</span>
+  <span class="kicker reveal">The Future Org Chart</span>
+  <h2 class="shead reveal d1">Accountability flows <em>down</em> — context flows up</h2>
+  <div class="org-spine reveal d2">
+    <div class="rail">
+      <div class="lv hot">L5</div><div class="lv hot">L4</div><div class="lv">L3</div><div class="lv">L2</div><div class="lv">L1</div>
+    </div>
+    <div class="stack">
+      <div class="row human"><h4>Humans — Strategy, Taste, Judgement, Trust &amp; <em>Accountability</em></h4><div class="sub">Spec approval · conflict resolution · merge sign-off · domain gate</div></div>
+      <div class="row"><h4>Mission Control <span class="mono" style="font-size:11px;color:var(--p-accent)">PLX_MC</span></h4><div class="sub">Assign · review · trace · mc.plxcustomer.io · SharePoint mirror</div></div>
+      <div class="row">
+        <h4>Functional <em>agents</em></h4>
+        <div class="agents">
+          <div class="a">Product &amp; R&amp;D<br><span style="color:var(--p-muted)">Formula · QA</span></div>
+          <div class="a">Customer &amp; Sales<br><span style="color:var(--p-muted)">Onboarding · comms</span></div>
+          <div class="a">Engineering<br><span style="color:var(--p-muted)">Portal · sync · MCP</span></div>
+          <div class="a">Ops &amp; Finance<br><span style="color:var(--p-muted)">SOP · KPIs</span></div>
+        </div>
+      </div>
+      <div class="row ctx"><h4>Shared Context Layer</h4><div class="sub">PLX Portal · MC tasks · QMS &amp; SOPs · permissions · brand voice · SharePoint SoR</div></div>
+      <div class="row">
+        <h4>Agentic stack <span class="mono" style="font-size:11px;color:var(--p-accent)">PLX_Infra</span></h4>
+        <div class="infra-row"><span>PLX-MC MCP</span><span>Dept MCPs</span><span>Postgres + vector</span><span>Repos &amp; ledgers</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ORG B -->
+<section class="slide" data-tick="Org chart · Revision B">
+  <span class="variant-badge">Org · B · Flow bands</span>
+  <span class="kicker reveal">The Future Org Chart</span>
+  <h2 class="shead reveal d1">Five bands, one <em>operating model</em></h2>
+  <div class="org-flow reveal d2">
+    <div class="org-band human" data-layer="Band 05 · Human gate">
+      <h4>Strategy, taste, judgement, trust</h4>
+      <p>Every agent run names a human owner. No silent automation of judgement calls.</p>
+      <div class="chips"><span class="chip">Approve SPEC</span><span class="chip">Resolve sync conflict</span><span class="chip">Own outcome</span></div>
+    </div>
+    <div class="org-flow-arrow">▼ directs ▼</div>
+    <div class="org-band" data-layer="Band 04 · Cockpit">
+      <h4>Mission Control — the lens over the record</h4>
+      <p>Tasks, buckets, traceability, sync health. Humans and agents checkout work here.</p>
+    </div>
+    <div class="org-flow-arrow">▼ executes ▼</div>
+    <div class="org-band" data-layer="Band 03 · Agents">
+      <h4>Departmental agents (scoped roles + tools)</h4>
+      <div class="chips"><span class="chip">Meeting Intake Scribe</span><span class="chip">Compliance reviewer</span><span class="chip">Portal builder</span><span class="chip">Ops reconciler</span></div>
+    </div>
+    <div class="org-flow-arrow">▼ reads / writes ▼</div>
+    <div class="org-band ctx" data-layer="Band 02 · Context">
+      <h4>Shared context — one truth, many surfaces</h4>
+      <p>Portal SOPs, SharePoint lists, AGENTS.md, design tokens, permissions. Agents never fork context.</p>
+    </div>
+    <div class="org-flow-arrow">▼ runs on ▼</div>
+    <div class="org-band" data-layer="Band 01 · Stack">
+      <h4>Infra rails — staging, secrets, gates, MCP</h4>
+      <div class="chips"><span class="chip">preflight.sh</span><span class="chip">Secrets Manager</span><span class="chip">MC MCP</span><span class="chip">Evidence bundles</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ORG C -->
+<section class="slide slide-org" data-tick="Org chart · Revision C">
+  <span class="variant-badge">Org · C · Instrument</span>
+  <span class="kicker reveal">The Future Org Chart</span>
+  <h2 class="shead reveal d1">Precision <em>instrument</em> view</h2>
+  <div class="org-instrument reveal d2">
+    <div class="grid-bg"></div>
+    <div class="inner">
+      <div class="tier"><div class="depth">05<em>Human</em></div><div class="panel"><h4>Accountability layer</h4><div class="readout">Strategy · taste · judgement · trust · @petralabx.com only</div></div></div>
+      <div class="tier"><div class="depth">04<em>MC</em></div><div class="panel"><h4>Mission Control cockpit</h4><div class="readout">Task spine · sync · PR trace · mc.plxcustomer.io</div></div></div>
+      <div class="tier"><div class="depth">03<em>Agents</em></div><div class="quad">
+        <div class="panel"><h4>R&amp;D</h4><div class="readout">Samples · specs · QA</div></div>
+        <div class="panel"><h4>Customer</h4><div class="readout">Onboarding · portal</div></div>
+        <div class="panel"><h4>Engineering</h4><div class="readout">Features · MCP · gates</div></div>
+        <div class="panel"><h4>Ops</h4><div class="readout">SOP · finance · KPIs</div></div>
+      </div></div>
+      <div class="tier"><div class="depth">02<em>Ctx</em></div><div class="panel"><h4>Shared context layer</h4><div class="readout">Portal · QMS · permissions · brand · SharePoint SoR · docs</div></div></div>
+      <div class="tier"><div class="depth">01<em>Infra</em></div><div class="panel"><h4>Agentic stack</h4><div class="readout">MCP · postgres/vector · repos · ledgers · wiki-graph</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PILLARS A -->
+<section class="slide" data-tick="Pillars · Revision A">
+  <span class="variant-badge">Pillars · A · Enhanced columns</span>
+  <span class="kicker reveal">Three repos · one platform</span>
+  <h2 class="shead reveal d1">The <em>pillars</em> we're building on</h2>
+  <div class="pillars-v2 reveal d2">
+    <div class="pillar-v2">
+      <div class="glyph">◷</div><span class="tag">Cockpit · directs work</span>
+      <h3>Mission <em>Control</em></h3>
+      <div class="repo mono">PLX_MC · mc.plxcustomer.io</div>
+      <ul>
+        <li>Two-way SharePoint mirror + audit trail</li>
+        <li>Task board, insights, saved views (Cycle 2)</li>
+        <li>PLX-MC MCP + optional swarm dispatch</li>
+        <li>PR ↔ requirement traceability</li>
+      </ul>
+      <div class="foot">You interact: checkout tasks · review PRs · resolve conflicts</div>
+      <div class="status"><span class="pill ok"><span class="dot"></span>Live</span><span class="pill acc"><span class="dot"></span>Cycle 2</span></div>
+    </div>
+    <div class="pillar-v2">
+      <div class="glyph">❒</div><span class="tag">Product · customer value</span>
+      <h3>Customer <em>Portal</em></h3>
+      <div class="repo mono">plx-customer-portal · staging</div>
+      <ul>
+        <li>Onboarding, DocuSign, manufacturing suite</li>
+        <li>Brand authority — <span class="mono">--p-*</span> tokens (ADR-003)</li>
+        <li>SharePoint-backed workflows + UAT</li>
+        <li>Most MC buckets ship here</li>
+      </ul>
+      <div class="foot">You interact: feature work · SOP updates · staging deploy</div>
+      <div class="status"><span class="pill info"><span class="dot"></span>Brand SoT</span><span class="pill ok"><span class="dot"></span>Staging</span></div>
+    </div>
+    <div class="pillar-v2">
+      <div class="glyph">↔</div><span class="tag">Foundation · shared rails</span>
+      <h3>Shared <em>Infra</em></h3>
+      <div class="repo mono">PLX_Infra · ops layer</div>
+      <ul>
+        <li>AWS Secrets Manager · one accessor</li>
+        <li><span class="mono">preflight.sh</span> + compliance gate rollout</li>
+        <li>Staging-only Postgres + Vercel paths</li>
+        <li>MCP kill switches · GitHub App provisioning</li>
+      </ul>
+      <div class="foot">You interact: secrets · runbooks · gate enablement</div>
+      <div class="status"><span class="pill warn"><span class="dot"></span>Gates</span><span class="pill acc"><span class="dot"></span>Secrets</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- PILLARS B -->
+<section class="slide" data-tick="Pillars · Revision B">
+  <span class="variant-badge">Pillars · B · Foundation arch</span>
+  <span class="kicker reveal">Three repos · one platform</span>
+  <h2 class="shead reveal d1">Infra holds Portal holds <em>visibility</em></h2>
+  <div class="pillar-arch reveal d2">
+    <svg viewBox="0 0 820 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M40 160 L410 40 L780 160 Z" fill="none" stroke="var(--p-grid)" stroke-width="1"/>
+      <path d="M120 160 L410 80 L700 160 Z" fill="var(--p-accent-soft)" stroke="var(--p-accent)" stroke-width="1" opacity="0.5"/>
+      <path d="M220 160 L410 110 L600 160 Z" fill="var(--p-paper-2)" stroke="var(--p-accent)" stroke-width="1.5"/>
+      <text x="410" y="175" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="var(--p-accent)" letter-spacing="2">PLX_INFRA — SECRETS · GATES · STAGING</text>
+      <text x="410" y="130" text-anchor="middle" font-family="Mazius Display, Georgia, serif" font-size="16" fill="var(--p-ink)">Customer Portal</text>
+      <text x="410" y="95" text-anchor="middle" font-family="Mazius Display, Georgia, serif" font-size="18" fill="var(--p-accent)" font-style="italic">Mission Control</text>
+    </svg>
+    <div class="arch-labels">
+      <div class="arch-card"><h3>Infra <em>enables</em></h3><p>Without rails, agents bypass gates and fork secrets. Everything runs staging-first.</p></div>
+      <div class="arch-card"><h3>Portal <em>delivers</em></h3><p>Customer value + brand authority. MC consumes tokens; never redefines them.</p></div>
+      <div class="arch-card"><h3>MC <em>directs</em></h3><p>Cockpit over agents and record. Every initiative traces to a task and a human owner.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- PILLARS C -->
+<section class="slide" data-tick="Pillars · Revision C">
+  <span class="variant-badge">Pillars · C · Ledger table</span>
+  <span class="kicker reveal">Three repos · one platform</span>
+  <h2 class="shead reveal d1">Pillar <em>register</em></h2>
+  <table class="pillar-table reveal d2">
+    <thead><tr><th>Pillar</th><th>Repo</th><th>Owns</th><th>Ships</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><div class="name">Mission Control</div><div style="font-size:11px;color:var(--p-muted);margin-top:4px">Human cockpit</div></td>
+        <td class="repo">PLX_MC<br>mc.plxcustomer.io</td>
+        <td>Tasks · sync · trace · MCP · agent feed</td>
+        <td>Visibility · accountability · audit trail</td>
+        <td><span class="pill ok"><span class="dot"></span>Live</span></td>
+      </tr>
+      <tr>
+        <td><div class="name">Customer Portal</div><div style="font-size:11px;color:var(--p-muted);margin-top:4px">Brand + product</div></td>
+        <td class="repo">plx-customer-portal<br>staging branch</td>
+        <td>Tokens · SOPs · onboarding · MRP suite</td>
+        <td>Customer workflows · UAT · releases</td>
+        <td><span class="pill info"><span class="dot"></span>Brand SoT</span></td>
+      </tr>
+      <tr>
+        <td><div class="name">Shared Infra</div><div style="font-size:11px;color:var(--p-muted);margin-top:4px">Ops foundation</div></td>
+        <td class="repo">PLX_Infra<br>cross-repo</td>
+        <td>Secrets · CI gates · MCP config · runbooks</td>
+        <td>Safe agent speed · compliance · deploy paths</td>
+        <td><span class="pill warn"><span class="dot"></span>Rollout</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var io=new IntersectionObserver(function(entries){entries.forEach(function(e){if(e.isIntersecting)e.target.classList.add('in-view');});},{threshold:0.45});
+  slides.forEach(function(s){io.observe(s);});
+  document.addEventListener('keydown',function(e){
+    var i=slides.findIndex(function(s){return Math.abs(s.getBoundingClientRect().top)<80;});
+    if(e.key==='ArrowDown'||e.key===' '){e.preventDefault();if(i<slides.length-1)slides[i+1].scrollIntoView({behavior:'smooth'});}
+    if(e.key==='ArrowUp'){e.preventDefault();if(i>0)slides[i-1].scrollIntoView({behavior:'smooth'});}
+  });
+  document.getElementById('toggle').onclick=function(){
+    var d=document.documentElement.getAttribute('data-scheme')==='dark';
+    if(d){document.documentElement.removeAttribute('data-scheme');this.textContent='Dark';}
+    else{document.documentElement.setAttribute('data-scheme','dark');this.textContent='Light';}
+  };
+})();
+</script>
+</body>
+</html>

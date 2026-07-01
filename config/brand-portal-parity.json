@@ -2,7 +2,7 @@
   "schemaVersion": "plx-brand-parity/v1",
   "portalRepo": "plx-customer-portal",
   "portalCommit": "bdc704295",
-  "syncedAt": "2026-07-01T11:56:34Z",
+  "syncedAt": "2026-07-01T20:56:26Z",
   "owner": "Vince",
   "rationale": "ADR-003 upstream authority; MC must not fork shared brand artifacts.",
   "files": [

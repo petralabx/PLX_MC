@@ -12,6 +12,34 @@ export async function gotoBoard(page: Page): Promise<void> {
   await waitForHydration(page);
   await openSidebar(page, "Board");
   await expect(page.getByText("Group by")).toBeVisible();
+  await expect(page.locator("[data-testid='board-screen']")).toBeVisible();
+}
+
+export async function gotoSyncConsole(page: Page): Promise<void> {
+  await page.goto("/");
+  await waitForHydration(page);
+  await openSidebar(page, "Sync");
+  await expect(page.locator("[data-testid='sync-console-screen']")).toBeVisible();
+}
+
+export async function gotoRepos(page: Page): Promise<void> {
+  await page.goto("/");
+  await waitForHydration(page);
+  await openSidebar(page, "Repos");
+  await expect(page.locator("[data-testid='repos-screen']")).toBeVisible();
+}
+
+export async function gotoSkillsDirectory(page: Page): Promise<void> {
+  await page.goto("/");
+  await waitForHydration(page);
+  await openSidebar(page, "Skills directory");
+  await expect(page.locator("[data-testid='sk-screen']")).toBeVisible();
+}
+
+export async function gotoTaskDetail(page: Page, taskId = "TASK-221"): Promise<void> {
+  await gotoBoard(page);
+  await cardById(page, taskId).click();
+  await expect(page.locator("[data-testid='task-detail-screen']")).toBeVisible();
 }
 
 // Wait for client hydration before driving React-state navigation or keyboard

@@ -7,5 +7,15 @@
   "/signin": ["color-contrast"],
   "/signin__note": "DESIGN-SYSTEM EXCEPTION: --p-muted lede and note copy on --p-paper may fall below AA at body/meta sizes; brand-token property under ADR-003.",
   "/inbox": ["color-contrast"],
-  "/inbox__note": "DESIGN-SYSTEM EXCEPTION: --p-muted meta labels (.age, .ct, .id) on --p-paper/--p-canvas; conforms to portal token layer."
+  "/inbox__note": "DESIGN-SYSTEM EXCEPTION: --p-muted meta labels (.age, .ct, .id) on --p-paper/--p-canvas; conforms to portal token layer.",
+  "/board": ["color-contrast"],
+  "/board__note": "DESIGN-SYSTEM EXCEPTION: --p-muted meta on --p-paper/--p-canvas at card/meta sizes; ADR-003 brand-token property.",
+  "/task-detail": ["color-contrast"],
+  "/task-detail__note": "DESIGN-SYSTEM EXCEPTION: --p-muted secondary copy and chips on --p-paper; ADR-003.",
+  "/sync-console": ["color-contrast"],
+  "/sync-console__note": "DESIGN-SYSTEM EXCEPTION: --p-muted register meta and audit timestamps; ADR-003.",
+  "/repos": ["color-contrast"],
+  "/repos__note": "DESIGN-SYSTEM EXCEPTION: --p-muted repo meta and branch labels; ADR-003.",
+  "/skills-directory": ["color-contrast"],
+  "/skills-directory__note": "DESIGN-SYSTEM EXCEPTION: --p-muted catalog meta and tags; ADR-003."
 }

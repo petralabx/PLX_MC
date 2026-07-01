@@ -19,8 +19,8 @@ export function AiSpendView() {
           </p>
         </div>
       </div>
-      <div className="mc-empty" style={{ marginTop: "var(--p-space-6)" }}>
-        <p style={{ fontSize: "var(--p-text-body)", color: "var(--p-ink-2)" }}>Coming soon.</p>
+      <div className="mc-empty mc-empty-spaced">
+        <p>Coming soon.</p>
       </div>
     </div>
   );

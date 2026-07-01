@@ -53,7 +53,7 @@ export function Topbar({
       </div>
       <div className="r">
         <button type="button" className="search" onClick={onOpenPalette}>
-          <span style={{ fontFamily: "var(--mono)", fontSize: "10px", letterSpacing: "0.1em" }}>
+          <span className="search-hint">
             Search · jump · create…
           </span>
           <span className="key">⌘K</span>

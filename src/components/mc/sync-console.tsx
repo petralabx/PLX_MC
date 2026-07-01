@@ -54,7 +54,7 @@ export function SyncConsole({ nav }: ScreenProps) {
         : "All aligned";
 
   return (
-    <div className="mc-main">
+    <div className="mc-main" data-testid="sync-console-screen">
       <div className="ph">
         <div>
           <span className="kk">System of record · SharePoint mirror</span>

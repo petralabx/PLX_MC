@@ -217,7 +217,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
 
   if (!task) {
     return (
-      <div className="mc-main">
+      <div className="mc-main" data-testid="task-detail-screen">
         <div className="empty">
           <div className="glyph">?</div>
           <h3>Task not found</h3>
@@ -261,7 +261,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
   const resolvedWinner = resolved?.taskId === task.id ? resolved.winner : null;
 
   return (
-    <div className="mc-main">
+    <div className="mc-main" data-testid="task-detail-screen">
       <div className="task-top">
         <button type="button" className="back" onClick={() => nav("board")}>
           ← Back

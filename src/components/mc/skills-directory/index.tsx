@@ -75,7 +75,7 @@ export function SkillsDirectoryView() {
                 with <code className="gs-icode">scripts/bootstrap-company-skills.ps1</code>.
               </p>
             </div>
-            <div className="r" style={{ gap: "var(--p-space-2)", alignItems: "center" }}>
+            <div className="r r-gap-2">
               <span className="sk-pill catalog">company</span>
               <span className="gs-pill ro">READ-ONLY</span>
             </div>

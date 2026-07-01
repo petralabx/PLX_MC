@@ -164,7 +164,7 @@ export function IndexView({
   }
 
   return (
-    <div>
+    <div className="sk-index">
       <DegradedBanner meta={meta} />
 
       <div className="sk-meta-strip">
@@ -226,8 +226,11 @@ export function IndexView({
         <div className="sk-tabs" role="tablist" aria-label="Skills review workflow">
           <button
             type="button"
+            role="tab"
+            id="sk-tab-submit"
             className={`sk-tab${tab === "submit" ? " on" : ""}`}
-            aria-pressed={tab === "submit"}
+            aria-selected={tab === "submit"}
+            aria-controls="sk-panel-submit"
             onClick={() => selectReviewTab("submit")}
           >
             Submit for review
@@ -235,8 +238,11 @@ export function IndexView({
           {approver && (
             <button
               type="button"
+              role="tab"
+              id="sk-tab-review"
               className={`sk-tab${tab === "review" ? " on" : ""}`}
-              aria-pressed={tab === "review"}
+              aria-selected={tab === "review"}
+              aria-controls="sk-panel-review"
               onClick={() => selectReviewTab("review")}
               data-testid="sk-review-tab"
             >
@@ -246,7 +252,13 @@ export function IndexView({
         </div>
 
         {tab === "submit" && (
-          <div className="sk-submit-panel" data-testid="sk-submit-panel">
+          <div
+            className="sk-submit-panel"
+            role="tabpanel"
+            id="sk-panel-submit"
+            aria-labelledby="sk-tab-submit"
+            data-testid="sk-submit-panel"
+          >
             <div>
               <span className="sk-meta-label">Candidate skill</span>
               <input
@@ -303,7 +315,13 @@ export function IndexView({
         )}
 
         {tab === "review" && approver && (
-          <div className="sk-queue-panel" data-testid="sk-review-queue">
+          <div
+            className="sk-queue-panel"
+            role="tabpanel"
+            id="sk-panel-review"
+            aria-labelledby="sk-tab-review"
+            data-testid="sk-review-queue"
+          >
             <div className="sk-queue-head">
               <span className="sk-meta-label">Approver-only queue</span>
               <span className="sk-meta-value">Visible through the MC approver policy.</span>

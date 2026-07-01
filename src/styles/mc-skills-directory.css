@@ -73,6 +73,11 @@
 
 .sk-meta-value { font-size: var(--p-text-small); color: var(--p-ink-2); }
 
+.sk-index {
+  padding: 0 var(--p-space-4) var(--p-space-4);
+  min-width: 0;
+}
+
 .sk-head {
   grid-template-columns: 1fr 160px 100px !important;
 }
@@ -280,11 +285,32 @@
 }
 
 @media (max-width: 640px) {
+  .mc [data-testid="sk-screen"] .ph .sub .gs-icode {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .sk-meta-strip { grid-template-columns: 1fr; }
+  .sk-meta-value.gs-mono { overflow-wrap: anywhere; word-break: break-word; }
   .sk-head { display: none; }
+  .sk-tabs {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  .sk-tab { text-align: left; }
   .sk-submit-panel,
   .sk-code-grid,
   .sk-queue-row {
     grid-template-columns: 1fr;
   }
+
+  .mc [data-testid="sk-screen"] .gs-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .mc [data-testid="sk-screen"] .gs-cell.sk-id::before { content: "ID "; color: var(--p-muted); }
+  .mc [data-testid="sk-screen"] .gs-cell:not(.sk-id)::before { content: "Status "; color: var(--p-muted); }
 }

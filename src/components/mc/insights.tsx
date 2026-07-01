@@ -41,7 +41,7 @@ export function InsightsView({ nav }: ScreenProps) {
 
   return (
     <div className="mc-main">
-      <div className="ph" style={{ paddingBottom: 14 }}>
+      <div className="ph ph-compact">
         <div>
           <span className="kk">Insights</span>
           <h1>

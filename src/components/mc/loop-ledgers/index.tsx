@@ -112,7 +112,7 @@ export function LoopLedgersView() {
             stale, or invalid source is visible and loud.
           </p>
         </div>
-        <div className="r" style={{ gap: "var(--p-space-2)", alignItems: "center" }}>
+        <div className="r r-gap-2">
           <span className="ll-pill source">source</span>
           <span className="ll-pill ro">READ-ONLY</span>
         </div>

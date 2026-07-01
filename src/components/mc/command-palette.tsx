@@ -243,7 +243,7 @@ export function CommandPalette({
           <span className="esc">ESC</span>
         </div>
 
-        <div style={{ maxHeight: "52vh", overflowY: "auto" }}>
+        <div className="cmd-results">
           {flat.length === 0 ? (
             <div className="cgrp">
               <div className="cres" style={{ color: "var(--p-muted)" }}>

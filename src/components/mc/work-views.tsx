@@ -369,10 +369,7 @@ function ListView({
                 <span>
                   <Confidence task={task} />
                 </span>
-                <span
-                  className="duecell"
-                  style={{ fontFamily: "var(--mono)", fontSize: "10px", color: "var(--p-muted)" }}
-                >
+                <span className="duecell">
                   {task.due}
                 </span>
                 <span className="synccell">
@@ -778,8 +775,8 @@ export function WorkViews({ route, nav }: ScreenProps) {
       : { lead: "All", accent: "work" };
 
   return (
-    <div className="mc-main">
-      <div className="ph" style={{ paddingBottom: 14 }}>
+    <div className="mc-main" data-testid="board-screen" data-mc-view={screen}>
+      <div className="ph ph-compact">
         <div>
           <span className="kk">{isMine ? "My Tasks" : `Workspace${bucket ? ` · ${bucket.id}` : ""}`}</span>
           <h1>

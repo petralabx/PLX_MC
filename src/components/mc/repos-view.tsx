@@ -50,7 +50,7 @@ export function ReposView({ nav }: ScreenProps) {
   };
 
   return (
-    <div className="mc-main">
+    <div className="mc-main" data-testid="repos-screen">
       <div className="ph">
         <div>
           <span className="kk">System of record · code</span>

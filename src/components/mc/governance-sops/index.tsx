@@ -75,7 +75,7 @@ export function GovernanceSopsView() {
                 mirrors, repo hygiene. Read-only; the repo markdown is the source of record.
               </p>
             </div>
-            <div className="r" style={{ gap: "var(--p-space-2)", alignItems: "center" }}>
+            <div className="r r-gap-2">
               <span className="gs-pill doctrine">doctrine</span>
               <span className="gs-pill ro">READ-ONLY</span>
             </div>

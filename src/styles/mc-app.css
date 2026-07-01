@@ -243,6 +243,19 @@
 .mc .nrow .age { font-family:var(--mono); font-size:8.5px; color:var(--p-muted); }
 .mc .nrow .id { font-family:var(--mono); font-size:10px; color:var(--p-muted); }
 
+/* ui-loop shared utilities — token-scoped replacements for inline layout styles */
+.mc .ph-compact { padding-bottom:var(--p-space-3); }
+.mc .r-gap-2 { display:flex; align-items:center; gap:var(--p-space-2); }
+.mc .pp-anchor { position:relative; }
+.mc .pp-menu-below { top:calc(100% + 6px); left:0; }
+.mc .pp-menu-flush { top:100%; left:0; margin-top:5px; min-width:100%; }
+.mc .who-inline { display:flex; align-items:center; gap:7px; }
+.mc .search-hint { font-family:var(--mono); font-size:var(--p-text-meta); letter-spacing:var(--p-track-data); }
+.mc .cmd-results { max-height:52vh; overflow-y:auto; }
+.mc .duecell { font-family:var(--mono); font-size:var(--p-text-meta); color:var(--p-muted); }
+.mc .mc-empty-spaced { margin-top:var(--p-space-6); }
+.mc .mc-empty-spaced p { font-size:var(--p-text-body); color:var(--p-ink-2); }
+
 /* ════════ NOTICES (rollback-on-failure toast — Module B) ════════
    A fixed bottom-right stack surfaced by the store's notice channel when a
    mirrored PATCH fails and the optimistic edit is rolled back. Tokens only —

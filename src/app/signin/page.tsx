@@ -47,7 +47,7 @@ export default async function SignInPage({
   const message = errorMessage(error);
 
   return (
-    <BrandBoundary className="mc-auth">
+    <BrandBoundary className="mc-auth" data-testid="signin-screen">
       <section className="card">
         <Image
           src="/brand/logo-horizontal-ink.png"

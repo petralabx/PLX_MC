@@ -12,7 +12,7 @@ export type {
   SkillsManifest,
   SkillsSourceReader,
 } from "./types";
-export type { SkillsInstallMode, SkillsInstallPlan } from "./install";
+export type { SkillsInstallMode, SkillsInstallPlan, SkillsRuntime } from "./install";
 export type { RegistryDrift, SkillsRegistry, SkillsRegistrySkill } from "./registry";
 export type {
   CreateSkillSubmissionInput,

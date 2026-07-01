@@ -42,6 +42,7 @@ export async function listSkillCatalog(
       meta: {
         sourceRepo: pointer.sourceRepo,
         version: "—",
+        catalogVersion: "—",
         gitRef: pointer.pinSha || pointer.pinTag || pointer.sourceBranch,
         pinTag: pointer.pinTag,
         packageId: pointer.packageId,
@@ -64,6 +65,7 @@ export async function listSkillCatalog(
     meta: {
       sourceRepo: pointer.sourceRepo,
       version: fetched.manifest.version,
+      catalogVersion: fetched.manifest.version,
       gitRef: fetched.manifest.gitRef,
       pinTag: pointer.pinTag,
       packageId: pointer.packageId,

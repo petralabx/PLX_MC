@@ -99,6 +99,11 @@
   cursor: not-allowed;
 }
 
+.mc-auth-msbtn:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+
 .mc-auth .note {
   margin: 0;
   font-family: var(--p-font-mono);

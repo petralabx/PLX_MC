@@ -2,6 +2,7 @@
 
 **Provenance (bundle seed):** `plx-customer-portal` repo, branch `staging`, commit `c92f1df5697a4e109dcd0b7d2dc0000f8cb06905` (2026-05-19).
 **Token verification:** `src/styles/brand-tokens.css` verified byte-identical (content; LF-normalized) to `plx-customer-portal@staging` commit `fb8e065` as of 2026-06-17.
+**Parity manifest:** `config/brand-portal-parity.json` — automated SHA-256 gate; last sync portal@`bdc704295` (2026-07-01). Refresh via `bash scripts/sync-brand-from-portal.sh` (see `docs/runbooks/brand-sync-from-portal.md`).
 **Purpose:** Seed a new PLX Mission Control repo with the existing PLX design language so both products share one brand voice.
 
 This bundle is self-contained. Copy it into the new repo and follow the integration steps below.

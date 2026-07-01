@@ -24,7 +24,11 @@ language. See `docs/design-system/decisions/ADR-003-mission-control-surface.md`.
   `config/governance-contract.yaml` → code_standards.typescript).
 - Brand authority lives upstream in `plx-customer-portal`; token value changes
   sync from there with provenance recorded in
-  `docs/design-system/HANDOFF-README.md`. Surface-local ADRs (layout, chrome)
+  `docs/design-system/HANDOFF-README.md`. **Anti-drift:** run
+  `bash scripts/sync-brand-from-portal.sh` after portal brand changes; preflight
+  enforces `config/brand-portal-parity.json` checksums and MC application rules
+  (`scripts/check-brand-portal-parity.py`, `scripts/check-mc-brand-application.py`).
+  Operator runbook: `docs/runbooks/brand-sync-from-portal.md`.
   may be added here without upstream sign-off — e.g. ADR-004 adds the missing
   `--p-rail`/`--p-canvas` surface tokens for the `.mc` shell without changing
   any existing token value.
@@ -42,7 +46,12 @@ Depended on by: web (all screens).
 - `src/components/brand/` — primitives + barrel `index.ts`
 - `public/brand/`, `public/fonts/mazius/` — logos, favicons, webfonts (OFL 1.1)
 - `docs/design-system/` — canonical governance copy (tokens, ADRs, specs)
-- `tests/brand.test.ts` — barrel import canary
+- `config/brand-portal-parity.json` — SHA-256 manifest (portal upstream checksums)
+- `scripts/sync-brand-from-portal.sh` — one-command sync from portal
+- `scripts/check-brand-portal-parity.py` — preflight drift gate
+- `scripts/check-mc-brand-application.py` — BrandBoundary + raw-color gate
+- `docs/runbooks/brand-sync-from-portal.md` — operator sync procedure
+- `tests/test_check_brand_portal_parity.py`, `tests/test_check_mc_brand_application.py`
 
 ## Owner
 

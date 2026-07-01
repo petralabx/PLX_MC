@@ -55,6 +55,13 @@ run_policy() {
     "$PY" scripts/check-brand-repo-structure.py --repo-root "$REPO_ROOT"
   fi
 
+  if [[ -f config/brand-portal-parity.json ]]; then
+    step "Brand portal parity (ADR-003 upstream manifest)"
+    "$PY" scripts/check-brand-portal-parity.py --repo-root "$REPO_ROOT"
+    step "MC brand application (boundary + component colors)"
+    "$PY" scripts/check-mc-brand-application.py --repo-root "$REPO_ROOT"
+  fi
+
   step "Migration numbering (serialized prefixes)"
   "$PY" scripts/check-migrations.py
 }

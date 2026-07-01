@@ -229,6 +229,8 @@
 .mc .inbox .grouphd .ct { font-family:var(--mono); font-size:9.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--p-muted); margin-left:auto; }
 .mc .nrow { display:grid; grid-template-columns:auto 1fr auto; gap:14px; padding:14px 26px; border-bottom:1px solid var(--p-grid-2);
   align-items:center; cursor:pointer; text-decoration:none; color:inherit; width:100%; text-align:left; background:none; border-left:0; border-right:0; border-top:0; font-family:inherit; }
+.mc .nrow .nrow-main { display:flex; align-items:center; gap:11px; min-width:0; }
+.mc .nrow .nrow-meta { display:flex; align-items:center; gap:10px; flex-shrink:0; }
 .mc .nrow:hover { background:var(--p-paper-2); }
 .mc .nrow .dot { width:7px; height:7px; border-radius:50%; background:transparent; flex:0 0 auto; }
 .mc .nrow.unread .dot { background:var(--p-accent); }

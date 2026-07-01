@@ -6,7 +6,7 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
 
-import { Kicker } from "@/components/brand";
+import { BrandBoundary, Kicker } from "@/components/brand";
 import { auth, oidcEnabled, signIn } from "@/lib/auth";
 
 // The Auth.js `?error=` codes this gate can realistically surface, in plain,
@@ -47,7 +47,7 @@ export default async function SignInPage({
   const message = errorMessage(error);
 
   return (
-    <main className="mc-auth">
+    <BrandBoundary className="mc-auth" data-testid="signin-screen">
       <section className="card">
         <Image
           src="/brand/logo-horizontal-ink.png"
@@ -91,6 +91,6 @@ export default async function SignInPage({
           <p className="note">Direct sign-in runs on the deployed environment.</p>
         )}
       </section>
-    </main>
+    </BrandBoundary>
   );
 }

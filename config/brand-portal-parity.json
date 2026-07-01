@@ -1,0 +1,134 @@
+{
+  "schemaVersion": "plx-brand-parity/v1",
+  "portalRepo": "plx-customer-portal",
+  "portalCommit": "bdc704295",
+  "syncedAt": "2026-07-01T11:56:34Z",
+  "owner": "Vince",
+  "rationale": "ADR-003 upstream authority; MC must not fork shared brand artifacts.",
+  "files": [
+    {
+      "path": "docs/design-system/tokens.css",
+      "sha256": "b206c4e289251a47b454d299e592f0d96f46ac47cfa298dbc91f95f337932c35"
+    },
+    {
+      "path": "docs/design-system/tokens.ts",
+      "sha256": "7274b207a2be9301b0b903d5a7c806007e16d976b7fba2782c4184278acde172"
+    },
+    {
+      "path": "src/styles/brand-tokens.css",
+      "sha256": "5f407dc14712f4c46d88048e81fa3441b0c1cf62ba11ad93d5a1dd7325ebaae6"
+    },
+    {
+      "path": "src/components/brand/BrandBoundary.tsx",
+      "sha256": "bc08d1976b96ff0bca86d6cc58429ebbf265fb96968eb4d617fc63eae4d3c67a"
+    },
+    {
+      "path": "src/components/brand/Kicker.tsx",
+      "sha256": "2bf5cfa8d952cb2830dbd5cd2b1ee29dfbc51494e32069c6d70753a3512c9385"
+    },
+    {
+      "path": "src/components/brand/MonoData.tsx",
+      "sha256": "d4b8b86d3bbe75ed15f48422024e8adedf7664e9f3948b21a6fe0631972d17e6"
+    },
+    {
+      "path": "src/components/brand/PMark.tsx",
+      "sha256": "ecf7691687b5c72a915b9532d85585c9f2a2c176792a52040ed7227ad3fcdfcd"
+    },
+    {
+      "path": "src/components/brand/AuthStatusBanner.tsx",
+      "sha256": "d695bca59f576996d262c7d0260faa4dcaf9a854f74835f02cc46aef301ce6e9"
+    },
+    {
+      "path": "src/components/brand/index.ts",
+      "sha256": "7925b2447bd3a0c686ff9be5d7d69fbc84ac8add69066af986862ca9dc877ced"
+    },
+    {
+      "path": "public/fonts/mazius/LICENSE.txt",
+      "sha256": "c6b0b6376b9aa4290f1d4841f3fb12fae229710b3834fc9a77207d3f5ed9381a"
+    },
+    {
+      "path": "public/fonts/mazius/MaziusDisplay-Regular.woff2",
+      "sha256": "2220486909addce8dadf31067c02e6f6e9b2d03f9991d71a3d5c0b3cd44e9a2b"
+    },
+    {
+      "path": "public/fonts/mazius/MaziusDisplay-Italic.otf",
+      "sha256": "d18a599f1b51e14106dcf230b114a2769062e3cfb4c4a478f9a95611adf7cc03"
+    },
+    {
+      "path": "public/brand/favicon-16.png",
+      "sha256": "1ce5cf39167f9285a51aa3d06df7c1be6875fa74c244a94976ceaa8d6b0a3b53"
+    },
+    {
+      "path": "public/brand/favicon-180.png",
+      "sha256": "7922e916c8b9ab2285669b99621ec2bab180fd3f5b726938f1de5571710ea071"
+    },
+    {
+      "path": "public/brand/favicon-32.png",
+      "sha256": "5fabcb76e7cf7b61b3a9524c1b0ad95ac7aae15007d94b93e0a0eaa51e776e63"
+    },
+    {
+      "path": "public/brand/favicon-512.png",
+      "sha256": "588e0247714d1527a471e7f00889a92da0d30748fdb839086279bf5181e4561d"
+    },
+    {
+      "path": "public/brand/favicon-64.png",
+      "sha256": "14fb2f107d757ed5c2ded38f52076e6cfd21001193f9945284838cdc8da7e4ec"
+    },
+    {
+      "path": "public/brand/favicon-dark.svg",
+      "sha256": "05d7f45727a479e154823a622eab34dd5b61056fb171711b52f5374681f4fc45"
+    },
+    {
+      "path": "public/brand/favicon.svg",
+      "sha256": "4d9c132c7e6df18f68779918817f7f57f8ac4a82401c3447ae2a636ed871499c"
+    },
+    {
+      "path": "public/brand/logo-full-cream.png",
+      "sha256": "42eaafc734c3a32e2ac21b48b7bb6301424816d9a2c498d5df9c63d18b575790"
+    },
+    {
+      "path": "public/brand/logo-full-ink.png",
+      "sha256": "905684a4ba3aa86c6d6fb0d24ae4129666bb5a3258514ae22511492510d492ca"
+    },
+    {
+      "path": "public/brand/logo-horizontal-cream.png",
+      "sha256": "60be4777b517fdaa512fc36e76eb05fafd25667a74e6050efb612a17986a3dcb"
+    },
+    {
+      "path": "public/brand/logo-horizontal-ink.png",
+      "sha256": "fd938d0294172ddfd3d7dd2d4f39d030024af5d48fcdf1438520c1d60d7fb0f7"
+    },
+    {
+      "path": "public/brand/logo-stacked-ink.png",
+      "sha256": "c83e4ed3089b3b30117ac41c49b5be9dddfad58d1b92996c53510e3f2e9cdf30"
+    },
+    {
+      "path": "public/brand/mark-ink-128.png",
+      "sha256": "8c7d7f42e4a4e66130592f1033f3027f91e4e031c586bb6a331a055894e513e6"
+    },
+    {
+      "path": "docs/design-system/assets/fonts/mazius/LICENSE.txt",
+      "sha256": "c6b0b6376b9aa4290f1d4841f3fb12fae229710b3834fc9a77207d3f5ed9381a"
+    },
+    {
+      "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-Bold.woff2",
+      "sha256": "6404b8d08d2caa851d720b9326038695c5312cb16879c1bbb1fab8202e5d66ce"
+    },
+    {
+      "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-ExtraItalicBold.woff2",
+      "sha256": "10e81027a7b32d952d24fd6d93b6e8986a0c414dfd8df8b380c0184eaae770a9"
+    },
+    {
+      "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-Extraitalic.woff2",
+      "sha256": "8aa5b435bb134a0e8e1c9dcad4c9e0f1476d1de3795562b0eb0457894491374e"
+    },
+    {
+      "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-Italic.otf",
+      "sha256": "d18a599f1b51e14106dcf230b114a2769062e3cfb4c4a478f9a95611adf7cc03"
+    },
+    {
+      "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-Regular.woff2",
+      "sha256": "2220486909addce8dadf31067c02e6f6e9b2d03f9991d71a3d5c0b3cd44e9a2b"
+    }
+  ]
+}

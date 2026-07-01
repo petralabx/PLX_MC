@@ -440,6 +440,8 @@ describe("skills-directory publish", () => {
 
   it("approval PATCH includes publish fallback metadata", async () => {
     vi.stubEnv("PLX_MC_DATABASE_URL", "");
+    vi.stubEnv("PLX_MC_AUTH_CLIENT_ID", "");
+    vi.stubEnv("PLX_MC_AUTH_CLIENT_SECRET", "");
     vi.stubEnv("SKILLS_SUBMIT_GITHUB_WRITE_ENABLED", "0");
     const created = await createSkillSubmission({
       skillId: "api-skill",
@@ -472,6 +474,8 @@ describe("skills-directory publish", () => {
 
   it("approval PATCH rejects non-approver actors before publishing", async () => {
     vi.stubEnv("PLX_MC_DATABASE_URL", "");
+    vi.stubEnv("PLX_MC_AUTH_CLIENT_ID", "");
+    vi.stubEnv("PLX_MC_AUTH_CLIENT_SECRET", "");
     vi.stubEnv("SKILLS_SUBMIT_GITHUB_WRITE_ENABLED", "0");
     const created = await createSkillSubmission({
       skillId: "blocked-skill",

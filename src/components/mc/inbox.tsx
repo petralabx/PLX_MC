@@ -15,7 +15,7 @@ export function InboxView({ nav, openNewTask }: ScreenProps & { openNewTask?: ()
   const unread = unreadCount();
 
   return (
-    <div className="mc-main">
+    <div className="mc-main" data-testid="inbox-screen">
       <div className="ph">
         <div>
           <span className="kk">Good morning, {firstName}</span>
@@ -53,7 +53,7 @@ export function InboxView({ nav, openNewTask }: ScreenProps & { openNewTask?: ()
             }}
           >
             <span className="dot" />
-            <span style={{ display: "flex", alignItems: "center", gap: 11 }}>
+            <span className="nrow-main">
               <span className={`tag ${n.kind}`}>{n.kind}</span>
               <span className="body">{n.text}</span>
             </span>
@@ -73,11 +73,11 @@ export function InboxView({ nav, openNewTask }: ScreenProps & { openNewTask?: ()
             onClick={() => nav("task", { taskId: t.id })}
           >
             <span className="dot" />
-            <span style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+            <span className="nrow-main">
               <span className="id">{t.id}</span>
               <span className="body">{t.title}</span>
             </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="nrow-meta">
               <Confidence task={t} showLabel={false} />
               <span className="age">{t.due}</span>
             </span>

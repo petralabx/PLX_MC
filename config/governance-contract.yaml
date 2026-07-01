@@ -147,6 +147,7 @@ repo_hygiene:
     - .pre-commit-config.yaml
     - ui-loop.config.json
     - ui-loop.schema.json
+    - plx-brand.json
 
   report_location: "artifacts/<domain>/<yyyy-mm-dd>-<slug>/REPORT.md"
   archive_location: "archive/<yyyy-mm-dd>-<reason>/"

@@ -7,14 +7,18 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   AGENTS,
+  ALLOWED_REPO_ORGS,
   BUCKETS,
+  DEFAULT_NEW_REPO_ORG,
   HUMANS,
   REPOS,
-  REPO_ORG,
+  REPO_ORG_LEGACY,
+  REPO_ORG_PLX,
   TASKS,
   allowedReposOnly,
   disallowedRepos,
   isAllowedRepo,
+  isAllowedRepoOrg,
   isApprover,
   repoFromRequest,
   repoIdFromName,
@@ -36,18 +40,38 @@ import {
 beforeEach(() => resetStore());
 
 describe("registry shape", () => {
-  it("is exactly the three canonical repos", () => {
-    expect(Object.keys(REPOS).sort()).toEqual(["agentic-swarm", "plx-mc", "portal-web"]);
+  it("is exactly the canonical repos", () => {
+    expect(Object.keys(REPOS).sort()).toEqual([
+      "1hr-after",
+      "agentic-swarm",
+      "for-and-against",
+      "furgenics",
+      "local-inference",
+      "plx-mc",
+      "portal-web",
+    ]);
   });
 
   it("carries honest metadata and no fabricated counts", () => {
     for (const repo of Object.values(REPOS)) {
       expect(repo).not.toHaveProperty("openPRs");
       expect(repo).not.toHaveProperty("openTasks");
-      expect(repo.owner).toBe(REPO_ORG);
+      expect(ALLOWED_REPO_ORGS).toContain(repo.owner);
       expect(typeof repo.scope).toBe("string");
       expect(["public", "private"]).toContain(repo.visibility);
       expect(repo.def.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps legacy platform repos on taylorvalton until EN-008 migration", () => {
+    expect(REPOS["portal-web"].owner).toBe(REPO_ORG_LEGACY);
+    expect(REPOS["plx-mc"].owner).toBe(REPO_ORG_LEGACY);
+    expect(REPOS["agentic-swarm"].owner).toBe(REPO_ORG_LEGACY);
+  });
+
+  it("registers new repos on the PLX org slug", () => {
+    for (const id of ["local-inference", "for-and-against", "furgenics", "1hr-after"]) {
+      expect(REPOS[id].owner).toBe(REPO_ORG_PLX);
     }
   });
 
@@ -76,6 +100,12 @@ describe("isApprover", () => {
 });
 
 describe("allow-list helpers", () => {
+  it("permits legacy and PLX org slugs during phased migration", () => {
+    expect(isAllowedRepoOrg(REPO_ORG_LEGACY)).toBe(true);
+    expect(isAllowedRepoOrg(REPO_ORG_PLX)).toBe(true);
+    expect(isAllowedRepoOrg("random-corp")).toBe(false);
+  });
+
   it("recognizes registry repos and rejects unknowns", () => {
     expect(isAllowedRepo("portal-web", REPOS)).toBe(true);
     expect(isAllowedRepo("ghost", REPOS)).toBe(false);
@@ -94,7 +124,7 @@ describe("repoFromRequest", () => {
     const repo = repoFromRequest({
       id: "RR-1",
       name: "My Repo",
-      owner: REPO_ORG,
+      owner: REPO_ORG_PLX,
       visibility: "public",
       def: "trunk",
       lang: "Go",
@@ -166,6 +196,18 @@ describe("self-service request → approve", () => {
     expect(approveRepo(req.id)).toBe(false); // vince is Owner, but the repo is unverified
     expect(repoRequests().find((r) => r.id === req.id)?.status).toBe("pending");
     expect(allRepos()["unverified-repo"]).toBeUndefined();
+  });
+
+  it("rejects a request for a disallowed GitHub org", () => {
+    const req = requestRepo({ name: "evil-corp-tool", owner: "evil-corp" });
+    expect(req.verified).toBe(false);
+    expect(req.note).toContain("not allowed");
+    expect(allRepos()["evil-corp-tool"]).toBeUndefined();
+  });
+
+  it("defaults new repo requests to the PLX org slug", () => {
+    const req = requestRepo({ name: "new-brand-site" });
+    expect(req.owner).toBe(DEFAULT_NEW_REPO_ORG);
   });
 
   it("rejects a request without adding it to the registry", () => {

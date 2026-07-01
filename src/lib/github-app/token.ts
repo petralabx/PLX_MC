@@ -63,6 +63,24 @@ type FetchLike = typeof fetch;
 interface TokenOpts {
   fetchImpl?: FetchLike;
   nowMs?: number;
+  /** GitHub repo owner slug — selects the org App installation when configured. */
+  repoOwner?: string | null;
+}
+
+/** Until `GITHUB_APP_INSTALLATION_ID_PLX` exists, petralabx reads use `GITHUB_TOKEN`. */
+function plxOrgNeedsPatFallback(repoOwner?: string | null): boolean {
+  const owner = (repoOwner ?? "").trim().toLowerCase();
+  const plxOrg = (process.env.REPO_ORG_PLX ?? "petralabx").toLowerCase();
+  if (owner !== plxOrg) return false;
+  return !process.env.GITHUB_APP_INSTALLATION_ID_PLX?.trim();
+}
+
+// Per-installation cache (EN-008: legacy user account + PLX org).
+const cachedByInstallation = new Map<string, InstallationToken>();
+
+/** Reset cached installation tokens. Tests only. */
+export function __resetInstallationTokenCache(): void {
+  cachedByInstallation.clear();
 }
 
 /**
@@ -104,27 +122,21 @@ export async function requestInstallationToken(
   return { token: body.token, expiresAt: Date.parse(body.expires_at) };
 }
 
-// Module-level cache: installation tokens last ~1h, so re-minting per request is
-// wasteful and rate-limit-hungry. Refreshed REFRESH_SKEW_MS before real expiry.
-let cached: InstallationToken | null = null;
-
-/** Reset the cached installation token. Tests only. */
-export function __resetInstallationTokenCache(): void {
-  cached = null;
-}
-
 /**
  * Return a valid installation token, minting (and caching) a fresh one when the
  * cache is empty or within REFRESH_SKEW_MS of expiry. Throws if the App is not
  * configured or the mint fails — callers use `resolveGithubToken` instead.
  */
 export async function getInstallationToken(opts: TokenOpts = {}): Promise<string> {
+  const creds = githubAppCredentials(opts.repoOwner);
   const now = opts.nowMs ?? Date.now();
+  const cached = cachedByInstallation.get(creds.installationId);
   if (cached && cached.expiresAt - REFRESH_SKEW_MS > now) {
     return cached.token;
   }
-  cached = await requestInstallationToken(githubAppCredentials(), opts);
-  return cached.token;
+  const fresh = await requestInstallationToken(creds, opts);
+  cachedByInstallation.set(creds.installationId, fresh);
+  return fresh.token;
 }
 
 /**
@@ -135,7 +147,7 @@ export async function getInstallationToken(opts: TokenOpts = {}): Promise<string
  * so callers emit an honest degraded result instead of throwing.
  */
 export async function resolveGithubToken(opts: TokenOpts = {}): Promise<string | null> {
-  if (githubAppConfigured()) {
+  if (githubAppConfigured() && !plxOrgNeedsPatFallback(opts.repoOwner)) {
     try {
       return await getInstallationToken(opts);
     } catch (err) {

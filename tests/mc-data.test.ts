@@ -79,9 +79,9 @@ describe("evidenceComplete", () => {
 
 describe("syncCounts", () => {
   it("aggregates the unprovisioned go-live plan as all-pending, nothing to resolve", () => {
-    // 28 go-live items (todos 15 + roadmap 8 + milestones 2 + risks 3) + the 3
-    // Repo Registry repos (EN-002 / Item 2), all pending their first push = 31.
-    expect(syncCounts()).toEqual({ pending: 31, conflict: 0, error: 0 });
+    // 28 go-live items (todos 15 + roadmap 8 + milestones 2 + risks 3) + the 7
+    // Repo Registry repos (EN-002 / Item 2), all pending their first push = 35.
+    expect(syncCounts()).toEqual({ pending: 35, conflict: 0, error: 0 });
   });
 
   it("treats conflicts + errors as the 'to resolve' count", () => {

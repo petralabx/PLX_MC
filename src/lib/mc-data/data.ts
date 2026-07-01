@@ -109,18 +109,30 @@ export const MODE: Record<AgentMode, { label: string; short: string }> = {
 
 export const PETRA_DOMAINS = ["petralabx.com", "petrasoap.com"];
 
-// Repo registry = the allow-list (EN-002 / WS-2). Exactly the three canonical
-// repos under the taylorvalton GitHub org; the four demo placeholders were
-// removed. Metadata (visibility, default branch, language) is resolved from the
-// GitHub org — honest values only, no fabricated PR/task counts (the Repos
-// screen derives live counts from task membership and PRs). The org is the
-// validation source for self-service additions (see lib/mc-data/repos.ts).
-export const REPO_ORG = "taylorvalton";
+// Repo registry = the allow-list (EN-002 / WS-2). Canonical repos under approved
+// GitHub orgs. EN-008 phased migration: legacy platform repos remain on
+// REPO_ORG_LEGACY until transferred; new repos (inference, marketing brands) land
+// on REPO_ORG_PLX. Metadata is resolved from GitHub — honest values only.
+// The org allow-list is the validation source for self-service additions
+// (see lib/mc-data/repos.ts).
+/** Legacy personal account — existing platform repos; migrate to REPO_ORG_PLX (EN-008). */
+export const REPO_ORG_LEGACY = "taylorvalton";
+/** Target GitHub org for new PLX + brand repos — https://github.com/petralabx */
+export const REPO_ORG_PLX = "petralabx";
+/** Default owner when a repo request omits `owner` — new registrations land on the PLX org. */
+export const DEFAULT_NEW_REPO_ORG = REPO_ORG_PLX;
+/** @deprecated Prefer REPO_ORG_LEGACY or REPO_ORG_PLX. Kept for tests and legacy call sites. */
+export const REPO_ORG = REPO_ORG_LEGACY;
+export const ALLOWED_REPO_ORGS = [REPO_ORG_LEGACY, REPO_ORG_PLX] as const;
 
 export const REPOS: Record<string, Repo> = {
-  "portal-web": { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript · Next.js", def: "staging", owner: REPO_ORG, visibility: "private", scope: "Customer portal web application — the go-live codebase." },
-  "agentic-swarm": { id: "agentic-swarm", name: "agentic-swarm", lang: "TypeScript", def: "main", owner: REPO_ORG, visibility: "private", scope: "Background agent swarm that does the work." },
-  "plx-mc": { id: "plx-mc", name: "PLX_MC", lang: "TypeScript", def: "main", owner: REPO_ORG, visibility: "public", scope: "Mission Control — the human cockpit over the agents." },
+  "portal-web": { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript · Next.js", def: "staging", owner: REPO_ORG_LEGACY, visibility: "private", scope: "Customer portal web application — the go-live codebase." },
+  "agentic-swarm": { id: "agentic-swarm", name: "agentic-swarm", lang: "TypeScript", def: "main", owner: REPO_ORG_LEGACY, visibility: "private", scope: "Background agent swarm that does the work." },
+  "plx-mc": { id: "plx-mc", name: "PLX_MC", lang: "TypeScript", def: "main", owner: REPO_ORG_LEGACY, visibility: "public", scope: "Mission Control — the human cockpit over the agents." },
+  "local-inference": { id: "local-inference", name: "local-inference", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "private", scope: "Local LLM inference runtime and tooling." },
+  "for-and-against": { id: "for-and-against", name: "for-and-against", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "private", scope: "For & Against consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
+  "furgenics": { id: "furgenics", name: "furgenics", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "private", scope: "Furgenics consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
+  "1hr-after": { id: "1hr-after", name: "1hr-after", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "private", scope: "1HR-After consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
 };
 
 // Demo/prototype buckets purged 2026-06-11 — only the PLX Portal go-live plan
@@ -447,8 +459,8 @@ export const SP_LISTS: SpListDef[] = [
     // EN-002 / Item 2 — push-only mirror of the repo registry/allow-list. MC is
     // authoritative; persistence + approvals live in the plx_mc DB.
     key: "reporegistry", title: "Repo Registry", kind: "list", entity: "Repo", icon: "⎇",
-    maps: "Repo registry / allow-list", itemCount: 3, direction: "push",
-    lastSync: "—", counts: { synced: 0, pending: 3, conflict: 0, error: 0 },
+    maps: "Repo registry / allow-list", itemCount: 7, direction: "push",
+    lastSync: "—", counts: { synced: 0, pending: 7, conflict: 0, error: 0 },
     columns: [
       { name: "Repo ID", type: "Single line of text", mc: "id", dir: "push", required: true, note: "indexed · unique key" },
       { name: "Title", type: "Single line of text", mc: "name", dir: "push", required: true },

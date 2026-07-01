@@ -21,7 +21,8 @@ import {
   FILES,
   INBOX,
   REPOS,
-  REPO_ORG,
+  ALLOWED_REPO_ORGS,
+  DEFAULT_NEW_REPO_ORG,
   RISKS,
   SP_CONFLICTS,
   SP_ERRORS,
@@ -36,7 +37,7 @@ import {
 import { parseMentions } from "./collab";
 import { domainOf, isPetraEmail } from "./helpers";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "./policy";
-import { allowedReposOnly, disallowedRepos, isApprover, repoFromRequest } from "./repos";
+import { allowedReposOnly, disallowedRepos, isAllowedRepoOrg, isApprover, repoFromRequest } from "./repos";
 import type {
   Actor,
   AuditRow,
@@ -552,7 +553,7 @@ export interface NewRepoRequestInput {
 // approver still has to approve it (approveRepo) before it joins the allow-list.
 export function requestRepo(input: NewRepoRequestInput, actorId: string = CURRENT_USER): RepoRequest {
   const name = (input.name ?? "").trim();
-  const owner = (input.owner ?? "").trim() || REPO_ORG;
+  const owner = (input.owner ?? "").trim() || DEFAULT_NEW_REPO_ORG;
   const id = `RR-${++repoRequestSeq}`;
   const request: RepoRequest = {
     id,
@@ -563,13 +564,18 @@ export function requestRepo(input: NewRepoRequestInput, actorId: string = CURREN
     requestedTs: stamp(),
     status: "pending",
     verified: false,
+    note: isAllowedRepoOrg(owner)
+      ? undefined
+      : `Org ${owner} is not allowed — permitted orgs: ${ALLOWED_REPO_ORGS.join(", ")}.`,
   };
   state.repoRequests = [request, ...state.repoRequests];
   pushAudit(actorId, `Requested repo ${name} — pending GitHub-org validation and approval.`, "pending");
   emit();
-  // Persist the pending request immediately so it survives a reload even if
-  // validation never settles; the verified update is mirrored on reconcile.
   mirrorRepoRequest(request);
+
+  if (!isAllowedRepoOrg(owner)) {
+    return request;
+  }
 
   const reconcile = (result: RepoValidationResult) => {
     const r = state.repoRequests.find((x) => x.id === id);

@@ -104,17 +104,25 @@ export function githubAppConfigured(): boolean {
   return !!(
     process.env.GITHUB_APP_ID &&
     process.env.GITHUB_APP_PRIVATE_KEY &&
-    process.env.GITHUB_APP_INSTALLATION_ID
+    (process.env.GITHUB_APP_INSTALLATION_ID || process.env.GITHUB_APP_INSTALLATION_ID_PLX)
   );
 }
 
-export function githubAppCredentials(): GithubAppCredentials {
+/** Pick the App installation for a repo owner (EN-008 dual-org). */
+export function githubAppInstallationIdForOwner(repoOwner?: string | null): string {
+  const owner = (repoOwner ?? "").trim();
+  const plxOrg = (process.env.REPO_ORG_PLX ?? "petralabx").toLowerCase();
+  if (owner.toLowerCase() === plxOrg) {
+    return requireSecret("GITHUB_APP_INSTALLATION_ID_PLX");
+  }
+  return requireSecret("GITHUB_APP_INSTALLATION_ID");
+}
+
+export function githubAppCredentials(repoOwner?: string | null): GithubAppCredentials {
   return {
     appId: requireSecret("GITHUB_APP_ID"),
-    // Support both a literal PEM and a \n-escaped single-line secret (common in
-    // env/secret stores that can't hold real newlines).
     privateKey: requireSecret("GITHUB_APP_PRIVATE_KEY").replace(/\\n/g, "\n"),
-    installationId: requireSecret("GITHUB_APP_INSTALLATION_ID"),
+    installationId: githubAppInstallationIdForOwner(repoOwner),
   };
 }
 

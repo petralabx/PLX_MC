@@ -25,7 +25,7 @@ interface GitHubRepoPayload {
 }
 
 export async function validateRepoInOrg(owner: string, name: string): Promise<RepoValidation> {
-  const token = await resolveGithubToken();
+  const token = await resolveGithubToken({ repoOwner: owner });
   if (!token) {
     return { ok: false, note: "no GitHub auth configured (GitHub App or GITHUB_TOKEN) — repo could not be validated against the org." };
   }

@@ -16,6 +16,10 @@ private key lives only in the secret stores — never here):
 - **App:** `PLX MC Compliance` (slug `plx-mc-compliance`), **App ID `4125227`**
 - **Installation ID `142149327`** (account `taylorvalton`, selected repos:
   `agentic-swarm`, `PLX_MC`, `plx-customer-portal`)
+- **PLX org installation (EN-008):** install the same App on
+  [`petralabx`](https://github.com/petralabx) and store the org installation id as
+  `GITHUB_APP_INSTALLATION_ID_PLX` (see Step 2b). Code routes by repo owner via
+  `resolveGithubToken({ repoOwner })`.
 - **Secrets set** (`GITHUB_APP_ID` / `GITHUB_APP_INSTALLATION_ID` /
   `GITHUB_APP_PRIVATE_KEY`): AWS Secrets Manager `prod/ec2-secrets` +
   `staging/ec2-secrets`, and Vercel project `plx-mission-control`
@@ -37,7 +41,9 @@ the `taylorvalton` account):
 - **Repository permissions:** **Contents → Read-only**. (Metadata → Read-only is
   added automatically.) Leave everything else **No access**.
 - **Account permissions / Org permissions:** none.
-- **Where can this App be installed:** Only on this account.
+- **Where can this App be installed:** **Any account** (required for EN-008 org
+  install on `petralabx`; change from “Only on this account” on the App settings
+  page before Step 2b if the org install link redirects or fails).
 - Create → on the App page, note the **App ID** and **Generate a private key**
   (downloads a `.pem`).
 
@@ -52,7 +58,31 @@ On the App page → **Install App** → install on the `taylorvalton` account �
 `…/settings/installations/{INSTALLATION_ID}` — note the **Installation ID**
 (or `GET /app/installations` with an App JWT returns it).
 
-## Step 3 — Store the three secrets (API-managed from here on)
+## Step 2b — Install the App on `petralabx` (EN-008, one-time)
+
+Org owner opens (sign in as an org owner if prompted):
+
+**https://github.com/apps/plx-mc-compliance/installations/new?target_id=298417875&target_type=Organization**
+
+Select **All repositories** (or the four org repos: `for-and-against`, `furgenics`,
+`1hr-after`, `local-inference`). Note the **Installation ID** from the URL
+(`…/settings/installations/{ID}`) and store it as `GITHUB_APP_INSTALLATION_ID_PLX`
+alongside the existing secrets (Step 3).
+
+Verify:
+
+```bash
+gh api /orgs/petralabx/installations --jq '.installations[] | {id, app_slug, account: .account.login}'
+```
+
+> **Free org limitation:** GitHub does not expose a REST API to install Apps on
+> organizations outside GitHub Enterprise. Until Step 2b is done manually, MC
+> falls back to `GITHUB_TOKEN` for `petralabx` repo reads when
+> `GITHUB_APP_INSTALLATION_ID_PLX` is unset (`resolveGithubToken({ repoOwner })`).
+> Sync a working token with:
+> `python scripts/sync-github-org-read-token.py` (after `source ~/.secrets-env.staging`).
+
+## Step 3 — Store the secrets (API-managed from here on)
 
 Put these in AWS Secrets Manager (`prod/ec2-secrets`, us-east-1) and the Vercel
 project env (`petralabx/plx-mission-control`), exactly these keys:
@@ -61,7 +91,17 @@ project env (`petralabx/plx-mission-control`), exactly these keys:
 |---|---|
 | `GITHUB_APP_ID` | the numeric App ID from Step 1 |
 | `GITHUB_APP_PRIVATE_KEY` | full PEM contents (literal newlines, or `\n`-escaped — the loader handles both) |
-| `GITHUB_APP_INSTALLATION_ID` | the Installation ID from Step 2 |
+| `GITHUB_APP_INSTALLATION_ID` | the Installation ID from Step 2 (legacy `taylorvalton` account) |
+| `GITHUB_APP_INSTALLATION_ID_PLX` | the Installation ID from Step 2b (`petralabx` org) |
+
+After Step 2b, sync the org installation id automatically:
+
+```bash
+source ~/.secrets-env.staging
+python scripts/sync-github-app-plx-installation.py
+# or, if you already have the id from the org settings URL:
+python scripts/sync-github-app-plx-installation.py --installation-id <ORG_INSTALLATION_ID>
+```
 
 No code change is needed — `githubAppConfigured()` flips true once all three are
 present and the module starts minting installation tokens automatically.

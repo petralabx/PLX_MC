@@ -36,6 +36,43 @@ them from the entry. Keep slugs lowercase kebab‑case.
 > Newest entries at the top. Each entry has a stable `EN‑NNN` id. Don't reuse
 > ids even after an item is Done or Wontfix.
 
+### EN‑008 — GitHub org phased migration (legacy → PLX org)
+
+| | |
+|---|---|
+| **Status** | Aligned |
+| **Type** | Enhancement |
+| **Area** | Repo registry (`src/lib/mc-data/data.ts`), GitHub App, loop ledgers, MCP/compliance slugs, consumer repos |
+| **Screenshot** | _none (infra / policy)_ |
+| **Priority** | P2 (platform migration); P0 policy for **new** repos is active now |
+
+**Observed / current behavior**
+
+All MC registry rows defaulted to `owner: taylorvalton`. New brand and inference
+repos should not be created under a personal account; platform repos (`plx-customer-portal`,
+`PLX_MC`, `agentic-swarm`) remain on `taylorvalton` until a scheduled transfer.
+
+**Desired behavior / requirement**
+
+1. **Phased policy:** legacy platform repos stay on `taylorvalton`; **new** repos
+   (inference, marketing brands, future PLX work) use the PLX GitHub org
+   ([`petralabx`](https://github.com/petralabx)).
+2. **MC allow-list:** `ALLOWED_REPO_ORGS` accepts both orgs during transition;
+   `DEFAULT_NEW_REPO_ORG` = PLX org for self-service requests.
+3. **Follow-up migration:** transfer portal, MC, swarm to the PLX org; update DB,
+   loop ledgers, MCP `MC_REPO`, Vercel, GitHub App, compliance, and operator rules.
+
+**Aligned decisions**
+
+- Constants: `REPO_ORG_LEGACY`, `REPO_ORG_PLX`, `ALLOWED_REPO_ORGS`, `DEFAULT_NEW_REPO_ORG`.
+- Seeded owners: platform → legacy; inference + brands → PLX org.
+- Runbook: `docs/runbooks/github-org-phased-migration.md`.
+
+**Deferred (honestly)**
+
+- Actual GitHub org provisioning and repo transfers (operator/infra).
+- Removing `REPO_ORG_LEGACY` from `ALLOWED_REPO_ORGS` after migration completes.
+
 <!-- ENTRY TEMPLATE — copy this block for each new item
 ### EN‑NNN — <short title>
 

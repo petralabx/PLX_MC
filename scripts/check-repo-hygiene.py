@@ -47,6 +47,7 @@ APPROVED_ROOT_FILES = {
     ".pre-commit-config.yaml",
     "ui-loop.config.json",
     "ui-loop.schema.json",
+    "plx-brand.json",
 }
 
 FORBIDDEN_PATTERNS = [

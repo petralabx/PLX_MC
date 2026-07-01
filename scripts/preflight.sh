@@ -50,6 +50,11 @@ run_policy() {
   step "Repo hygiene"
   "$PY" scripts/check-repo-hygiene.py
 
+  if [[ -f plx-brand.json ]]; then
+    step "Brand repo structure (plx-brand.json present)"
+    "$PY" scripts/check-brand-repo-structure.py --repo-root "$REPO_ROOT"
+  fi
+
   step "Migration numbering (serialized prefixes)"
   "$PY" scripts/check-migrations.py
 }

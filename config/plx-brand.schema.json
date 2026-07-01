@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plx.petralabx.com/schemas/plx-brand/v1",
+  "title": "PLX Brand Declaration",
+  "description": "Records a repo's relationship to the PLX portal design-system authority and its brand boundary contract.",
+  "type": "object",
+  "required": ["schemaVersion", "repoKind", "brand", "designSystem", "mc"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "plx-brand/v1"
+    },
+    "repoKind": {
+      "type": "string",
+      "enum": ["operational", "marketing-brand", "platform"]
+    },
+    "brand": {
+      "type": "object",
+      "required": ["slug", "displayName"],
+      "additionalProperties": false,
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "description": "Kebab-case brand id; must match the MC registry id."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "designSystem": {
+      "type": "object",
+      "required": [
+        "adoptsPlxTokens",
+        "tokenPrefix",
+        "boundaryClass",
+        "decidedBy",
+        "decidedAt",
+        "rationale"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "adoptsPlxTokens": {
+          "type": "boolean",
+          "description": "true = consumes PLX --p-* tokens from plx-customer-portal; false = own token namespace."
+        },
+        "authority": {
+          "type": "string",
+          "description": "GitHub repo that owns tokens when adoptsPlxTokens is true."
+        },
+        "tokenPrefix": {
+          "type": "string",
+          "pattern": "^--[a-z][a-z0-9-]*-$",
+          "description": "CSS custom-property prefix for this repo's tokens, e.g. --brand- or --fa-."
+        },
+        "boundaryClass": {
+          "type": "string",
+          "pattern": "^brand-[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "description": "Opt-in DOM boundary class; tokens must not leak outside it."
+        },
+        "decidedBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decidedAt": {
+          "type": "string",
+          "format": "date"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 10
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "adoptsPlxTokens": { "const": true } } },
+          "then": { "required": ["authority"] }
+        }
+      ]
+    },
+    "mc": {
+      "type": "object",
+      "required": ["github", "registryId"],
+      "additionalProperties": false,
+      "properties": {
+        "github": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "registryId": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        }
+      }
+    },
+    "sharedBrandSpine": {
+      "type": "object",
+      "description": "Cross-surface assets marketing brands may share with PLX operational repos.",
+      "additionalProperties": false,
+      "properties": {
+        "wordmark": { "type": "boolean" },
+        "periodicMark": { "type": "boolean" },
+        "favicons": { "type": "boolean" }
+      }
+    }
+  }
+}

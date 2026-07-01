@@ -126,6 +126,18 @@ export function githubAppCredentials(repoOwner?: string | null): GithubAppCreden
   };
 }
 
+// Skills Directory publish writes are intentionally separate from the read-only
+// GitHub App resolver. The write path stays default-off and requires an explicit
+// fine-scoped token for plx-cursor-skills PR creation.
+export function skillsSubmitGithubWriteEnabled(): boolean {
+  const raw = process.env.SKILLS_SUBMIT_GITHUB_WRITE_ENABLED ?? "";
+  return raw === "1" || raw.toLowerCase() === "true";
+}
+
+export function skillsSubmitGithubToken(): string {
+  return requireSecret("SKILLS_SUBMIT_GITHUB_TOKEN");
+}
+
 // EN-007 compliance webhook (git → MC ingestion). The shared secret signs the
 // GitHub webhook delivery (HMAC-SHA256). Absent by default — the webhook route
 // returns 503 until it is configured (the gate ships default-off).

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "plx-skills-catalog/v3",
+  "description": "Catalog pointer for PLX company skills. Skill ids are authoritative in plx-cursor-skills manifest.json (packages[].skillIds).",
+  "sourceRepo": "taylorvalton/plx-cursor-skills",
+  "sourceBranch": "main",
+  "manifestPath": "manifest.json",
+  "packageId": "plx-engineering-core",
+  "pinTag": "v1.0.0",
+  "pinSha": "f5013b3014f024a1828a9d273d93e7bfc8872271"
+}

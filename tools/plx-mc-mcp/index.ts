@@ -22,6 +22,7 @@ const MC_OPERATOR_EMAIL = (process.env.MC_OPERATOR_EMAIL || process.env.MC_ACCOU
 const MC_REPO = (process.env.MC_REPO || "").trim();
 const MCP_ENABLED = (process.env.PLX_MC_MCP_ENABLED || "0").trim() !== "0";
 const REQUEST_TIMEOUT_MS = Math.max(1000, Number(process.env.MC_MCP_TIMEOUT_MS || "15000") || 15000);
+const SKILL_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 const BOX_ID =
   process.env.SWARM_BOX_ID?.trim() ||
@@ -84,7 +85,7 @@ const server = new McpServer(
   {
     instructions:
       "PLX Mission Control — checkout tasks (mc_checkout_task), report progress, complete with evidence, " +
-      "and optionally dispatch_to_swarm. Append MC-Checkout lines from checkout responses to PR bodies.",
+      "manage the PLX skills directory, and optionally dispatch_to_swarm. Append MC-Checkout lines from checkout responses to PR bodies.",
   }
 );
 
@@ -183,6 +184,72 @@ server.tool(
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_complete_task");
     return printResult(await mcFetch("/complete", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_list_skills",
+  "List PLX skills catalog entries, optionally filtered by query, tag, or status.",
+  {
+    q: z.string().optional(),
+    tag: z.string().optional(),
+    status: z.string().optional(),
+  },
+  async (args) => {
+    if (!MCP_ENABLED) return disabledTool("mc_list_skills");
+    const qs = new URLSearchParams();
+    if (args.q) qs.set("q", args.q);
+    if (args.tag) qs.set("tag", args.tag);
+    if (args.status) qs.set("status", args.status);
+    const q = qs.toString();
+    return printResult(await mcFetch(`/skills/list${q ? `?${q}` : ""}`));
+  }
+);
+
+server.tool(
+  "mc_install_skills",
+  "Build local install/sync scripts for PLX company skills.",
+  {
+    ids: z.array(z.string().regex(SKILL_ID_PATTERN)).optional(),
+    mode: z.enum(["install", "sync"]).optional(),
+    runtimes: z.array(z.enum(["cursor", "claude"])).optional(),
+    projectRoot: z.string().min(1).optional(),
+    localRegistry: z.unknown().optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_install_skills");
+    return printResult(await mcFetch("/skills/install", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_sync_skills",
+  "Compare a local PLX skills registry against the approved catalog.",
+  {
+    packageId: z.string().min(1).optional(),
+    localRegistry: z.unknown().optional(),
+    runtimes: z.array(z.enum(["cursor", "claude"])).optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_sync_skills");
+    return printResult(await mcFetch("/skills/sync", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_submit_skill",
+  "Submit a proposed skill to the PLX skills directory review queue.",
+  {
+    id: z.string().regex(SKILL_ID_PATTERN),
+    name: z.string().min(1),
+    description: z.string().min(1),
+    skillMd: z.string().min(1),
+    tags: z.array(z.string().min(1)).optional(),
+    owner: z.string().min(1).optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_submit_skill");
+    return printResult(await mcFetch("/skills/submit", { method: "POST", body }));
   }
 );
 

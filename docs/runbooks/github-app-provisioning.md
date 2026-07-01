@@ -128,6 +128,31 @@ python scripts/sync-github-app-plx-installation.py --installation-id <ORG_INSTAL
 No code change is needed — `githubAppConfigured()` flips true once all three are
 present and the module starts minting installation tokens automatically.
 
+## Step 3a — Skills Directory publish writes (Phase 4 P5, optional)
+
+The GitHub App above remains read-only. Skills Directory submission approval can
+optionally create a publish PR in `taylorvalton/plx-cursor-skills`, but only when
+the separate write gate is explicitly enabled.
+
+Create a fine-scoped token for **only** `taylorvalton/plx-cursor-skills` with:
+
+- Contents: **Read and write** (create `submit/<id>-<ts>` branches and write
+  `skills/<id>/SKILL.md` + `manifest.json`)
+- Pull requests: **Read and write** (open the publish PR)
+- Metadata: **Read-only** (automatic)
+
+Store these keys in the same runtime secret stores used by PLX_MC:
+
+| Key | Value |
+|---|---|
+| `SKILLS_SUBMIT_GITHUB_WRITE_ENABLED` | `1` to enable writes; unset/`0` keeps fallback mode |
+| `SKILLS_SUBMIT_GITHUB_TOKEN` | the fine-scoped token above |
+
+Fallback behavior is intentional: when the write flag is off, approving a
+submission returns `publish-instructions.md` content in the API response and does
+not write to GitHub. This lets reviewers approve and publish manually until the
+write token is provisioned.
+
 ## Step 4 — Verify
 
 ```bash
@@ -145,6 +170,14 @@ directory**. The meta strip should show **`ready`**, pin **`v1.0.0`**, source
 `plx-cursor-skills`, and **29** skills — not **degraded**. Open **create-skill**
 and confirm `SKILL.md` renders. If degraded, re-check Step 2a (repo on the App
 installation) and `resolveGithubToken()` on the Vercel host.
+
+**Skills Directory publish (Phase 4 P5):** with
+`SKILLS_SUBMIT_GITHUB_WRITE_ENABLED=0` or unset, approve a test submission and
+confirm the API response includes
+`publish.instructionsPath: "publish-instructions.md"`. After enabling the write
+token in staging, approve a test submission with a valid `contentUrl` and
+confirm GitHub receives a `submit/<id>-<ts>` branch plus a PR that changes
+`skills/<id>/SKILL.md` and `manifest.json`.
 
 ## Step 5 — Retire the broad PAT
 

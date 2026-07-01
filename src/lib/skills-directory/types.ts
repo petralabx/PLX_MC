@@ -53,6 +53,7 @@ export interface SkillManifestEntry {
 export interface CatalogMeta {
   sourceRepo: string;
   version: string;
+  catalogVersion: string;
   gitRef: string;
   pinTag: string;
   packageId: string;

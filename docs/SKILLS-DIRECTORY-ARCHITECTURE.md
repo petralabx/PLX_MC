@@ -1,12 +1,12 @@
-# PLX Skills Directory — Architecture (draft)
+# PLX Skills Directory — Architecture
 
-**Status:** Phase 1 shipped (allowlist + bootstrap). Phase 2+ below is the target system of record.
+**Status:** Phase 4 shipped (2026-07-01). Browse, MCP install/list/sync/submit, submit-for-review UI, approval workflow, and GitHub publish hook are live. Static allowlist JSON is deprecated — use `config/skills-catalog.json`.
 
 ## Decision summary
 
 | Question | Recommendation |
 |----------|----------------|
-| Separate repo for skills? | **Yes** — dedicated `plx-cursor-skills` (name TBD) for **company-tier** content only |
+| Separate repo for skills? | **Yes** — dedicated `plx-cursor-skills` for **company-tier** content only |
 | One-time extraction from agentic-swarm? | **Yes, for initial seed only** — not ongoing sync of the full operator catalog |
 | Keep agentic-swarm as team upstream? | **No** — team never pulls the full `.cursor/skills` tree; operator/internal skills stay in agentic-swarm |
 
@@ -18,7 +18,7 @@
 | **Company approved** | PLX Skills Directory + git content repo | All PLX contributors | Bootstrap / MCP install from directory |
 | **Personal** | `~/.cursor/skills`, `~/.claude/skills` | Individual | Opt-in **Share to PLX** → review → promote to company |
 
-Do **not** expose all 54+ agentic-swarm skills to the team. The allowlist (`config/company-skills-allowlist.json`) is the interim gate until the directory module replaces it.
+Do **not** expose all 54+ agentic-swarm skills to the team. Skill ids come from the pinned `plx-cursor-skills` manifest (`packages[].skillIds`), not a static allowlist file.
 
 ## Hybrid system of record
 
@@ -29,7 +29,9 @@ PLX Mission Control owns **metadata and workflow**; git owns **versioned skill f
 │  PLX_MC — Skills Directory (system of record)               │
 │  • catalog UI, search, tags, owner, approval state          │
 │  • audit trail (who published, who installed)               │
-│  • MCP: mc_list_skills, mc_install_skills, mc_submit_skill  │
+│  • MCP: mc_list_skills, mc_install_skills, mc_sync_skills,  │
+│         mc_submit_skill                                     │
+│  • Postgres skill_submissions + approval → publish hook       │
 └──────────────────────────┬──────────────────────────────────┘
                            │ approved releases only
                            ▼
@@ -54,28 +56,31 @@ PLX Mission Control owns **metadata and workflow**; git owns **versioned skill f
 
 1. Contributor creates or edits a skill locally (Cursor **create-skill** or Claude equivalent).
 2. Optional prompt (IDE hook or MCP): **“Share with PLX Skills Directory?”**
-3. Submit creates a **pending_review** record + branch/PR in `plx-cursor-skills` (or upload bundle to MC API).
-4. Reviewer (tech lead / ops) approves → status **published**, semver or date tag, notify subscribers.
-5. Teammates run bootstrap refresh or `mc_install_skills --ids foo,bar`.
+3. Submit via Mission Control UI or `mc_submit_skill` → **pending_review** record in Postgres.
+4. Reviewer approves → publish hook opens PR in `plx-cursor-skills` (or returns operator instructions when GitHub writes are disabled).
+5. Teammates run bootstrap refresh, `mc_install_skills`, or `mc_sync_skills`.
 
 Rejected submissions stay private; no automatic pull from personal dirs.
 
 ## Phase roadmap
 
-| Phase | Deliverable |
-|-------|-------------|
-| **1 (now)** | Allowlist, `bootstrap-company-skills.{sh,ps1}`, COLLABORATOR-SOP §9 |
-| **2** | Create `plx-cursor-skills`; one-time seed from allowlist; pin manifest in PLX_MC |
-| **3** | PLX_MC module: browse/install UI + MCP tools |
-| **4** | Submit-for-review + approval workflow; deprecate static allowlist JSON |
+| Phase | Deliverable | Status |
+|-------|-------------|--------|
+| **1** | Allowlist, `bootstrap-company-skills.{sh,ps1}`, COLLABORATOR-SOP §9 | Shipped |
+| **2** | Create `plx-cursor-skills`; one-time seed; pin manifest in PLX_MC | Shipped |
+| **3** | Browse/install UI + MCP list/install/sync | Shipped |
+| **4** | Submit-for-review + approval + publish; deprecate static allowlist JSON | **Shipped** |
 
-## MCP boundary (unchanged)
+## MCP boundary
 
-PLX-MC MCP today is **task governance** (checkout, progress, complete, dispatch). Skills install is a **separate concern** — add explicit tools in Phase 3 rather than overloading repo parity.
+PLX-MC MCP combines **task governance** (checkout, progress, complete, dispatch) with **Skills Directory** tools. Skills install is explicit — use `mc_install_skills` / `mc_sync_skills` rather than assuming MCP registration installs files.
 
 ## Related files
 
-- `config/company-skills-allowlist.json` — interim curated list
-- `scripts/bootstrap-company-skills.sh` — machine install
+- `config/skills-catalog.json` — canonical catalog pointer (v3)
+- `config/company-skills-allowlist.json` — deprecated legacy redirect (empty `skills[]`)
+- `scripts/bootstrap-company-skills.sh` — machine install (defaults to v3 catalog)
 - `docs/COLLABORATOR-SOP.md` §9 — contributor runbook
-- `docs/plx-cursor-skills/` — Phase 2 repo layout, manifest schema, seed plan
+- `docs/SKILLS-SOP.md` — team SOP (install, MCP, submit)
+- `docs/plx-cursor-skills/` — repo layout, manifest schema, seed plan
+- `docs/modules/skills-directory/README.md` — module contract

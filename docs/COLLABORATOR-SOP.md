@@ -231,6 +231,7 @@ Follow `docs/runbooks/plx-mc-mcp-team-registration.md`:
 
 ### 9.3 Sharing a personal skill
 
-See **Company Skills SOP** (SOP guide in Mission Control) — §8 covers the PR workflow
-to `taylorvalton/plx-cursor-skills` until the Skills Directory UI ships.
+See **Company Skills SOP** (SOP guide in Mission Control) — §8 covers submit via
+**Skills directory** / `mc_submit_skill`, reviewer approval, and the direct-PR
+fallback to `taylorvalton/plx-cursor-skills`.
 

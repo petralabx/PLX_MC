@@ -67,6 +67,19 @@ After registration, reload MCP in Cursor and run tool `mc_self_check`.
 
 Call tool `mc_self_check` or `GET /api/cursor/self-check` with the same headers.
 
+## Skills Directory Tools
+
+The same tools are available through Streamable HTTP and the local stdio MCP:
+
+| Tool | Purpose |
+|------|---------|
+| `mc_list_skills` | List approved skills; accepts `q`, `tag`, and `status` filters. The response `meta` includes `catalogVersion`. |
+| `mc_install_skills` | Build local install/sync scripts; accepts `ids`, `mode`, `runtimes`, `projectRoot`, and `localRegistry`. |
+| `mc_sync_skills` | Compare a local registry against the approved package; accepts `packageId`, `localRegistry`, and `runtimes`. |
+| `mc_submit_skill` | Submit a proposed skill for review with `id`, `name`, `description`, `skillMd`, optional `tags`, and optional `owner`. |
+
+Use `mc_install_skills` in dry-run style first: the server returns scripts and drift metadata, then the operator or agent executes the script in the intended local project.
+
 ## Rollback
 
 Set `PLX_MC_MCP_ENABLED=0` in team MCP env and redeploy without the cursor carve-out if needed (revert PR).

@@ -2,6 +2,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { SKILL_ID_PATTERN } from "@/lib/skills-directory";
 import type { McpIdentity } from "./auth";
 import {
   actionCheckout,
@@ -13,6 +14,12 @@ import {
   actionSelfCheck,
 } from "./actions";
 import { taskLink } from "./envelope";
+import {
+  actionInstallSkills,
+  actionListSkills,
+  actionSubmitSkill,
+  actionSyncSkills,
+} from "./skills-actions";
 
 function jsonResult(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -26,7 +33,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     },
     {
       instructions:
-        "PLX Mission Control MCP — task lifecycle (checkout/progress/complete), search, and optional swarm delegation. " +
+        "PLX Mission Control MCP — task lifecycle (checkout/progress/complete), search, skills directory install/sync/submit, and optional swarm delegation. " +
         "Always mc_checkout_task before agent work; append MC-Checkout stamp lines to PR bodies.",
     }
   );
@@ -107,6 +114,55 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
       filesChanged: z.array(z.string()).optional(),
     },
     async (body) => jsonResult(await actionComplete(body))
+  );
+
+  server.tool(
+    "mc_list_skills",
+    "List PLX skills catalog entries, optionally filtered by query, tag, or status.",
+    {
+      q: z.string().optional(),
+      tag: z.string().optional(),
+      status: z.string().optional(),
+    },
+    async (args) => jsonResult(await actionListSkills(args))
+  );
+
+  server.tool(
+    "mc_install_skills",
+    "Build local install/sync scripts for PLX company skills.",
+    {
+      ids: z.array(z.string().regex(SKILL_ID_PATTERN)).optional(),
+      mode: z.enum(["install", "sync"]).optional(),
+      runtimes: z.array(z.enum(["cursor", "claude"])).optional(),
+      projectRoot: z.string().min(1).optional(),
+      localRegistry: z.unknown().optional(),
+    },
+    async (args) => jsonResult(await actionInstallSkills(args))
+  );
+
+  server.tool(
+    "mc_sync_skills",
+    "Compare a local PLX skills registry against the approved catalog.",
+    {
+      packageId: z.string().min(1).optional(),
+      localRegistry: z.unknown().optional(),
+      runtimes: z.array(z.enum(["cursor", "claude"])).optional(),
+    },
+    async (args) => jsonResult(await actionSyncSkills(args))
+  );
+
+  server.tool(
+    "mc_submit_skill",
+    "Submit a proposed skill to the PLX skills directory review queue.",
+    {
+      id: z.string().regex(SKILL_ID_PATTERN),
+      name: z.string().min(1),
+      description: z.string().min(1),
+      skillMd: z.string().min(1),
+      tags: z.array(z.string().min(1)).optional(),
+      owner: z.string().min(1).optional(),
+    },
+    async (body) => jsonResult(await actionSubmitSkill(identity, body))
   );
 
   return server;

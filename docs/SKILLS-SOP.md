@@ -9,7 +9,7 @@ personal laptops against PLX-tracked repos (`PLX_MC`, `plx-customer-portal`, etc
 > task checkout, then run the **company skills bootstrap once per machine**. Skills come
 > from **`taylorvalton/plx-cursor-skills`** (29 published skills) — **not** the full
 > `agentic-swarm` catalog. Start a **new** Cursor session after bootstrap. To share a
-> skill company-wide, open a PR to `plx-cursor-skills` (Skills Directory UI coming later).
+> skill company-wide, use Mission Control **Skills directory** (submit UI) or `mc_submit_skill`.
 
 ---
 
@@ -84,7 +84,7 @@ Optional dry run:
 ### What bootstrap does
 
 1. Clone or update `~/plx-cursor-skills` (Windows: `%USERPROFILE%\plx-cursor-skills`).
-2. Check out catalog pin **`v1.0.0`** (see `config/company-skills-allowlist.json`).
+2. Check out catalog pin **`v1.0.0`** (see `config/skills-catalog.json`).
 3. Install **published** skills from `manifest.json` into:
    - `~/.cursor/skills/<id>/`
    - `~/.claude/skills/<id>/`
@@ -146,12 +146,21 @@ Expect `Installing 29 published skills from plx-cursor-skills`.
 
 When PLX announces a new skills release (new tag in `plx-cursor-skills` or updated pin in PLX_MC):
 
+**Option A — bootstrap (all machines):**
+
 ```bash
 cd /path/to/PLX_MC && git pull origin main
 ./scripts/bootstrap-company-skills.sh
 ```
 
-Then **start a new agent session**.
+**Option B — MCP drift check (PLX-MC registered):**
+
+1. Call `mc_sync_skills` with your local registry (`~/.agentic/skills.registry.json`) to see missing or stale skill ids.
+2. Call `mc_install_skills` to receive bash/PowerShell install scripts for the pinned package (or specific `ids`).
+3. Run the returned script in your project root, then **start a new agent session**.
+
+Bootstrap scripts default to `config/skills-catalog.json` (v3). The legacy
+`config/company-skills-allowlist.json` is deprecated — empty `skills[]`, redirect only.
 
 You do **not** need to re-clone `agentic-swarm` for routine skill updates.
 
@@ -174,28 +183,27 @@ Personal skills are **private by default**. They are **not** uploaded automatica
 
 ---
 
-## 8. Share a skill with the company (today)
+## 8. Share a skill with the company
 
-Mission Control **Skills Directory** (browse + one-click install + submit-for-review UI) is
-planned. **Until that ships**, use this PR workflow:
-
-### Step-by-step
+**Primary path (Mission Control + MCP):**
 
 1. **Author** the skill locally and test it in a fresh agent session.
-2. **Copy** the skill folder to a branch of [`taylorvalton/plx-cursor-skills`](https://github.com/taylorvalton/plx-cursor-skills):
+2. **Submit for review** via either:
+   - Mission Control → **System of record → Skills directory → Submit skill**, or
+   - MCP tool `mc_submit_skill` with `id`, `name`, `description`, `skillMd`, optional `tags` / `owner`.
+3. Submissions persist in Postgres (`skill_submissions`) when `PLX_MC_DATABASE_URL` is set; dev falls back to in-memory store.
+4. **Reviewer** approves in the Skills Directory UI (or `PATCH /api/skills-directory/submissions/[id]`).
+   Approval triggers the publish hook: GitHub PR in `plx-cursor-skills` when writes are enabled, or `publish-instructions.md` for manual operator steps.
+5. After merge + tag, operator bumps `pinTag` / `pinSha` in `config/skills-catalog.json` if needed.
+6. **Team refresh:** bootstrap (§6) or `mc_install_skills` / `mc_sync_skills`.
+
+**Fallback — direct PR to content repo** (when MC is unavailable):
+
+1. Copy the skill folder to a branch of [`taylorvalton/plx-cursor-skills`](https://github.com/taylorvalton/plx-cursor-skills):
    - Path: `skills/<kebab-case-id>/SKILL.md`
    - Match layout in existing skills (see `docs/plx-cursor-skills/REPO-LAYOUT.md` in PLX_MC).
-3. **Update** `manifest.json`:
-   - Add a `skills[]` entry with `status: "pending_review"` or `"published"` per reviewer agreement
-   - Include `name`, `description`, `contentPath`, `owner`, `tags`
-   - Bump `version` semver when publishing
-4. **Open a PR** with:
-   - What the skill does and who requested it
-   - Which runtimes you tested (Cursor / Claude)
-   - Rollback note (revert PR removes skill from next bootstrap)
-5. **Reviewer** (Vince or delegated tech lead) merges → tags release (e.g. `v1.1.0`).
-6. **PLX_MC pin update** (operator): bump `pinTag` / `pinSha` in `config/company-skills-allowlist.json` if needed.
-7. **Team refresh:** everyone re-runs bootstrap (§6).
+2. **Update** `manifest.json` with a `skills[]` entry (`pending_review` or `published`), bump semver, open PR.
+3. Reviewer merges → tags release → operator updates catalog pin → team refresh (§6).
 
 ### What reviewers look for
 
@@ -253,17 +261,23 @@ Full PR/compliance context: **SOP guide → Collaborator SOP** in [Mission Contr
 
 ## 12. Roadmap (Mission Control Skills Directory)
 
-**Browse (Phase 3 MVP — shipped):** In Mission Control, open **System of record → Skills directory**
-to search and read company skills from the pinned `plx-cursor-skills` release. Install still
-uses bootstrap (§3) until one-click install ships.
+**Phase 4 — shipped (2026-07-01):**
 
-Planned next ([architecture draft](docs/SKILLS-DIRECTORY-ARCHITECTURE.md)):
+| Capability | How |
+|------------|-----|
+| Browse catalog | MC → **Skills directory**; `mc_list_skills` |
+| Install / sync | Bootstrap (§3), `mc_install_skills`, `mc_sync_skills` |
+| Submit for review | MC submit UI, `mc_submit_skill` |
+| Approval + publish | MC reviewer UI; Postgres submissions; GitHub publish hook |
+| Catalog pointer | `config/skills-catalog.json` (v3); legacy allowlist deprecated |
 
-- MCP tools: `mc_list_skills`, `mc_install_skills`, `mc_submit_skill`
-- Opt-in prompt when you create a personal skill: **Share with PLX?**
-- Approval workflow before publish
+**Planned next** ([architecture](docs/SKILLS-DIRECTORY-ARCHITECTURE.md)):
 
-Until one-click install lands, **`plx-cursor-skills` + bootstrap** remains the install path.
+- In-app one-click install (MCP returns scripts today; agent/operator runs them locally)
+- Opt-in IDE prompt when you create a personal skill: **Share with PLX?**
+- Subscriber notifications on new published skills
+
+Until in-app install lands, **`mc_install_skills` + bootstrap** remain the install paths.
 
 ---
 
@@ -273,7 +287,7 @@ Until one-click install lands, **`plx-cursor-skills` + bootstrap** remains the i
 |----------|----------|
 | Content repo | https://github.com/taylorvalton/plx-cursor-skills |
 | Bootstrap scripts | `PLX_MC/scripts/bootstrap-company-skills.{sh,ps1}` |
-| Catalog pin | `PLX_MC/config/company-skills-allowlist.json` |
+| Catalog pin | `PLX_MC/config/skills-catalog.json` |
 | MC browse UI | Mission Control → System of record → **Skills directory** |
 | MCP runbook | `PLX_MC/docs/runbooks/plx-mc-mcp-team-registration.md` |
 | Repo layout / manifest schema | `PLX_MC/docs/plx-cursor-skills/` |

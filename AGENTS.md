@@ -234,5 +234,8 @@ Swarm dispatch is **composed into PLX-MC** (`dispatch_to_swarm`, `list_swarm_tea
 - Every new external provider, MCP server, or operator-side tool must declare before merge: owner, scope (runtime vs local-only), auth source, default state, kill switch or feature flag, health check, fallback path, and data/audit boundary
 - Operator-local tools ship disabled by default in committed config and are never represented as deployed runtime capability
 - Integrations that can act autonomously (send, post, join, record) require explicit enablement and auditable state
+- Every agent session that changes code, makes a decision, or produces analysis must leave a structured SessionArtifact v1 (repo tag `PLX_MC`) so it feeds the company-brain knowledge graph — POST to `$VMC_BASE_URL/api/vmc/knowledge/session-artifact` (e.g. https://missioncontrol.tayloralton.com) with `$VMC_API_KEY`; trivial read-only Q&A sessions are exempt
+- Session-artifact capture runtime coverage: the Cursor `sessionEnd` hook (`scripts/compliance-closeout.mjs`) captures automatically; runtimes without hook support use the session-brain skill (see the agentic-swarm repo's `.cursor/skills/session-brain`) to submit manually
+- Session-artifact capture is fail-open and gated by the SESSION_BRAIN_ENABLED kill switch (default enabled) — capture failure must never block a session; failed submissions queue to `artifacts/session-brain/<date>/<session_id>.json` for manual replay
 
 <!-- governance:auto:end -->

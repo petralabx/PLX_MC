@@ -5,6 +5,13 @@
       {
         "command": "node scripts/compliance-checkout.mjs"
       }
+    ],
+    "sessionEnd": [
+      {
+        "command": "node scripts/compliance-closeout.mjs",
+        "failClosed": false,
+        "timeout": 8
+      }
     ]
   }
 }

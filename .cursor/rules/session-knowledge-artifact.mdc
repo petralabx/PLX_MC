@@ -1,0 +1,54 @@
+---
+description: Every meaningful agent session must leave a SessionArtifact for the company brain
+globs:
+alwaysApply: true
+---
+
+# Session Knowledge Artifact
+
+Every agent session that changes code, makes a decision, or produces analysis
+must leave a structured `SessionArtifact v1` behind so it becomes part of the
+company brain (repo -> project -> department -> company knowledge ladder).
+Canonical policy: `config/governance-contract.yaml` (`external_integrations`).
+Wire contract: `POST $VMC_BASE_URL/api/vmc/knowledge/session-artifact` (e.g.
+`https://missioncontrol.tayloralton.com`), schema owned by the agentic-swarm
+repo (`apps/vmc-web/src/lib/vmc/knowledge/session-artifact.ts`). Artifacts
+from this repo are tagged `repo: "PLX_MC"`.
+
+## When this applies
+
+- Code changed, a decision was made, a lesson was learned, or non-trivial
+  research/investigation happened.
+- **Exempt:** trivial read-only Q&A sessions with no code change, no decision,
+  and nothing worth remembering later.
+
+## How capture happens (do not duplicate work the hook already does)
+
+- **Cursor** `sessionEnd` hook (`scripts/compliance-closeout.mjs`) captures
+  this automatically — best-effort assembly from git state (branch, status)
+  plus a POST to the VMC ingestion endpoint. If the hook is configured and
+  ran, do nothing extra.
+- **Runtimes without hook support**, or a session you know ran without the
+  hook firing (e.g. a detached worktree, a manual/background session), submit
+  manually using the `session-brain` skill from the agentic-swarm repo
+  (`.cursor/skills/session-brain`) — same schema, same endpoint, `repo:
+  "PLX_MC"`.
+- If unsure whether the hook fired, submit manually anyway — duplicate
+  artifacts are harmless; a missing artifact is not.
+
+## Fail-open, always
+
+- Capture must **never block or fail a session**. `compliance-closeout.mjs`
+  always exits 0 regardless of ingestion outcome.
+- If `VMC_API_KEY` is missing, VMC is unreachable, or the POST fails, the
+  hook writes the same JSON body to the local offline queue instead of
+  losing it: `artifacts/session-brain/<yyyy-mm-dd>/<session_id>.json`. Do
+  not retry indefinitely or hold up the session waiting on the network.
+- Kill switch: `SESSION_BRAIN_ENABLED=0` disables capture entirely (the hook
+  exits 0 immediately) — respect it, do not work around it.
+
+## Ladder tagging
+
+- Tag every artifact with `repo: "PLX_MC"`, and where applicable
+  `project_slug`, so memory-graph rollups can group sessions by repo and
+  project on the way up to the company-wide view.

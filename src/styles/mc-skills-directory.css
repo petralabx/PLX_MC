@@ -20,7 +20,7 @@
 }
 
 .sk-pill.catalog { color: var(--p-ink-2); }
-.sk-pill.ready { color: var(--p-ok); border-color: color-mix(in srgb, var(--p-ok) 30%, transparent); }
+.sk-pill.ready { color: var(--p-ok-text); border-color: color-mix(in srgb, var(--p-ok) 30%, transparent); }
 .sk-pill.degraded { color: var(--p-hot); border-color: color-mix(in srgb, var(--p-hot) 30%, transparent); }
 
 .sk-banner {

@@ -1,22 +1,22 @@
 {
   "schemaVersion": "plx-brand-parity/v1",
   "portalRepo": "plx-customer-portal",
-  "portalCommit": "bdc704295",
-  "syncedAt": "2026-07-01T20:56:26Z",
+  "portalCommit": "aac879b84",
+  "syncedAt": "2026-07-02T10:33:07Z",
   "owner": "Vince",
   "rationale": "ADR-003 upstream authority; MC must not fork shared brand artifacts.",
   "files": [
     {
       "path": "docs/design-system/tokens.css",
-      "sha256": "b206c4e289251a47b454d299e592f0d96f46ac47cfa298dbc91f95f337932c35"
+      "sha256": "473e8b9651a26f726313c89d5c44384528a09aad95245e028234090ccd967ec9"
     },
     {
       "path": "docs/design-system/tokens.ts",
-      "sha256": "7274b207a2be9301b0b903d5a7c806007e16d976b7fba2782c4184278acde172"
+      "sha256": "1c7b6b1aef69cb6e7fc13a2db24fab3cfb5609959ac5b8a4f9537cf832f74aa4"
     },
     {
       "path": "src/styles/brand-tokens.css",
-      "sha256": "5f407dc14712f4c46d88048e81fa3441b0c1cf62ba11ad93d5a1dd7325ebaae6"
+      "sha256": "d5bc3ba77af0bcfd619c8b55094f94a0ae3aebb0bf82376daa1d7c85469050fc"
     },
     {
       "path": "src/components/brand/BrandBoundary.tsx",

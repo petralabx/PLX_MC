@@ -44,7 +44,7 @@
   /* text — three steps of warm near-black */
   --p-ink:          #1B1A17;          /* primary text */
   --p-ink-2:        #3A3833;          /* secondary text, body */
-  --p-muted:        #807A6F;          /* tertiary, mono labels */
+  --p-muted:        #6B665B;          /* tertiary, mono labels (AA-darkened 2026-07-02) */
 
   /* hairlines — translucent ink for compound borders */
   --p-grid:         rgba(27, 26, 23, 0.16);
@@ -59,6 +59,13 @@
   --p-warn:         #C99340;          /* amber — pending / in review / open flag */
   --p-info:         #5B7B91;          /* steel — informational */
   --p-hot:          #52606E;          /* mineral — destructive ONLY (was rust #B84E32) */
+
+  /* status FOREGROUND shades — the base status tokens double as pill/chip
+     FILLS, so text use gets darker shades holding WCAG AA 4.5:1 on every
+     surface and 12% chip fill (CONTRAST-FINDINGS-2026-06-19 remediation) */
+  --p-ok-text:      #48603F;          /* sage text on ok-tinted chips */
+  --p-warn-text:    #7E5C0F;          /* amber text on warn-tinted chips */
+  --p-info-text:    #476378;          /* steel text on info-tinted chips */
 
   /* type stacks — load fonts in app/layout.tsx, see MIGRATION-PLAN §4
      Mazius Display is loaded via next/font/local; Inter and JetBrains Mono are

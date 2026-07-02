@@ -27,7 +27,10 @@
 
   --p-ink:          #1B1A17;
   --p-ink-2:        #3A3833;
-  --p-muted:        #807A6F;
+  /* Darkened from #807A6F (2026-07-02, design sign-off) so muted text meets
+     WCAG AA 4.5:1 on every brand surface — see
+     docs/design-system/CONTRAST-FINDINGS-2026-06-19.md. */
+  --p-muted:        #6B665B;
 
   --p-grid:         rgba(27, 26, 23, 0.16);
   --p-grid-2:       rgba(27, 26, 23, 0.08);
@@ -39,6 +42,14 @@
   --p-warn:         #C99340;
   --p-info:         #5B7B91;
   --p-hot:          #52606E;
+
+  /* Status FOREGROUND shades (CONTRAST-FINDINGS-2026-06-19 remediation):
+     the base status tokens double as pill/chip FILL colors, so text use gets
+     dedicated darker shades that hold WCAG AA 4.5:1 on every brand surface
+     AND on the 12% color-mix chip fills. Keep the base tokens for fills. */
+  --p-ok-text:      #48603F;
+  --p-warn-text:    #7E5C0F;
+  --p-info-text:    #476378;
 
   /* Mazius Display is loaded via next/font/local; Inter and JetBrains Mono are
      loaded via next/font/google. All are exposed on <html> by app/layout.tsx. */
@@ -96,6 +107,12 @@
   --p-warn:         #D9A85C;
   --p-info:         #7A9DB3;
   --p-hot:          #8FA0B0;
+
+  /* Dark scheme: the base status colors are already light-on-dark text-safe,
+     so the *-text shades collapse to the base tokens. */
+  --p-ok-text:      var(--p-ok);
+  --p-warn-text:    var(--p-warn);
+  --p-info-text:    var(--p-info);
 }
 
 /* ─── 3. shadcn TOKEN REMAP ─────────────────────────────────────────────── */

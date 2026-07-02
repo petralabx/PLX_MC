@@ -22,7 +22,7 @@ export const lightTokens = {
   // text
   ink:          '#1B1A17',
   ink2:         '#3A3833',
-  muted:        '#807A6F',
+  muted:        '#6B665B',
 
   // hairlines
   grid:         'rgba(27, 26, 23, 0.16)',
@@ -37,6 +37,11 @@ export const lightTokens = {
   warn:         '#C99340',
   info:         '#5B7B91',
   hot:          '#52606E',
+
+  // status foreground shades (AA text on surfaces + 12% chip fills)
+  okText:       '#48603F',
+  warnText:     '#7E5C0F',
+  infoText:     '#476378',
 } as const;
 
 export const darkTokens = {

@@ -1,27 +1,3 @@
 {
-  "__doc__": "Route-keyed axe rule allowlist for the ui-ux-design-loop G4 gate. Burn down to empty: fix violations first; only allowlist triaged items with tracking context. Strict mode honors this list and fails on any UN-triaged violation. NEVER allowlist structural rules (roles/names/aria) — only deliberate design-system palette rules.",
-  "/loop-ledgers": ["color-contrast"],
-  "/loop-ledgers__note": "DESIGN-SYSTEM EXCEPTION (not a burn-down item). Every color-contrast failure on this surface is the brand --p-muted token (#807A6F) on --p-paper (#FBF9F5) = 4.04 (AA needs 4.5) at the design system's intentional small/meta sizes. The screen conforms to the design system (G1 token gate passes); the contrast is a brand-token property under ADR-003 authority (brand authority: plx-customer-portal), NOT a loop-ledgers defect. ESCALATED to the design authority to decide whether --p-muted should meet AA (tracked, pending). Structural a11y rules are NOT allowlisted and remain true-zero on this surface.",
-  "/governance-sops": ["color-contrast"],
-  "/governance-sops__note": "DESIGN-SYSTEM EXCEPTION (not a burn-down item), identical basis to /loop-ledgers. Every color-contrast failure on this surface is the brand --p-muted token (#807A6F) on --p-paper/--p-canvas at the design system's intentional small/meta sizes (folio chips, category tags, status badges, TOC links, table headers, row descriptions). The screen conforms to the design system (G1 token gate passes); contrast is a brand-token property under ADR-003 authority (brand authority: plx-customer-portal), NOT a governance-sops defect. ESCALATED with /loop-ledgers to the design authority (tracked, pending). Structural a11y rules are NOT allowlisted and remain true-zero (scrollable code + table regions carry keyboard access via tabindex).",
-  "/signin": ["color-contrast"],
-  "/signin__note": "DESIGN-SYSTEM EXCEPTION: --p-muted lede and note copy on --p-paper may fall below AA at body/meta sizes; brand-token property under ADR-003.",
-  "/inbox": ["color-contrast"],
-  "/inbox__note": "DESIGN-SYSTEM EXCEPTION: --p-muted meta labels (.age, .ct, .id) on --p-paper/--p-canvas; conforms to portal token layer.",
-  "/board": ["color-contrast"],
-  "/board__note": "DESIGN-SYSTEM EXCEPTION: --p-muted meta on --p-paper/--p-canvas at card/meta sizes; ADR-003 brand-token property.",
-  "/task-detail": ["color-contrast"],
-  "/task-detail__note": "DESIGN-SYSTEM EXCEPTION: --p-muted secondary copy and chips on --p-paper; ADR-003.",
-  "/sync-console": ["color-contrast"],
-  "/sync-console__note": "DESIGN-SYSTEM EXCEPTION: --p-muted register meta and audit timestamps; ADR-003.",
-  "/repos": ["color-contrast"],
-  "/repos__note": "DESIGN-SYSTEM EXCEPTION: --p-muted repo meta and branch labels; ADR-003.",
-  "/skills-directory": ["color-contrast"],
-  "/skills-directory__note": "DESIGN-SYSTEM EXCEPTION: --p-muted catalog meta and tags; ADR-003.",
-  "/insights": ["color-contrast"],
-  "/insights__note": "DESIGN-SYSTEM EXCEPTION: --p-muted KPI captions and chart labels on --p-paper/--p-canvas; ADR-003.",
-  "/ai-spend": ["color-contrast"],
-  "/ai-spend__note": "DESIGN-SYSTEM EXCEPTION: --p-muted kicker and placeholder copy; ADR-003.",
-  "/command-palette": ["color-contrast"],
-  "/command-palette__note": "DESIGN-SYSTEM EXCEPTION: --p-muted group headers, hints, and ESC affordance on --p-paper; ADR-003."
+  "__doc__": "Route-keyed axe rule allowlist for the ui-ux-design-loop G4 gate. Burn down to empty: fix violations first; only allowlist triaged items with tracking context. Strict mode honors this list and fails on any UN-triaged violation. NEVER allowlist structural rules (roles/names/aria) — only deliberate design-system palette rules. BURNED DOWN 2026-07-02: every color-contrast entry was resolved by darkening --p-muted #807A6F -> #6B665B in the portal (brand authority, ADR-003) — >=4.5:1 on all brand surfaces. The G4 gates now enforce true zero on every surface."
 }

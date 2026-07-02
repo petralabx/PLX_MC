@@ -379,12 +379,12 @@
 .ll-hpill.valid {
   background: color-mix(in srgb, var(--p-ok) 12%, transparent);
   border-color: color-mix(in srgb, var(--p-ok) 28%, transparent);
-  color: var(--p-ok);
+  color: var(--p-ok-text);
 }
 .ll-hpill.warn {
   background: color-mix(in srgb, var(--p-warn) 12%, transparent);
   border-color: color-mix(in srgb, var(--p-warn) 28%, transparent);
-  color: var(--p-warn);
+  color: var(--p-warn-text);
 }
 .ll-hpill.hot {
   background: color-mix(in srgb, var(--p-hot) 12%, transparent);
@@ -554,15 +554,16 @@
   border: 1px solid var(--p-grid);
   border-left: 3px solid var(--p-grid);
   border-radius: var(--p-radius);
-  background: var(--p-paper);
+  /* Non-live cards recede via a canvas background (not whole-card opacity,
+     which washed text below AA contrast — G4 gate finding 2026-07-02). */
+  background: var(--p-canvas);
   padding: var(--p-space-3);
-  opacity: 0.72;
-  transition: opacity var(--p-dur-fast) var(--p-ease);
+  transition: background var(--p-dur-fast) var(--p-ease);
 }
 
 .ll-gcard.live {
   border-left-color: var(--p-hot);
-  opacity: 1;
+  background: var(--p-paper);
 }
 
 .ll-gcard-code {

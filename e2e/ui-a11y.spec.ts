@@ -80,8 +80,8 @@ test.describe("loop-ledgers a11y (G4)", () => {
 // ─── G4 — governance-sops (MC-SOP-Guide) ──────────────────────────────────────
 // Same gate, the SOP surface. Real API (the dev server reads the committed
 // registry + docs/COLLABORATOR-SOP.md). Scoped to the SOP screen; honors the
-// /governance-sops allowlist. Structural a11y stays true-zero; only the brand
-// --p-muted contrast token is allowlisted (ADR-003), matching loop-ledgers.
+// /governance-sops allowlist (empty since the 2026-07-02 --p-muted/status-text
+// token remediation — the gate now enforces true zero, matching loop-ledgers).
 
 const GS_ROUTE = "/governance-sops";
 

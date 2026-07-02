@@ -335,7 +335,7 @@
 }
 
 .mc .spmap td.spc .req {
-  color: var(--p-warn);
+  color: var(--p-warn-text);
   font-family: var(--mono);
   font-size: 7px;
   letter-spacing: 0.1em;

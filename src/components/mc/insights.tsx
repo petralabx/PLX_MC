@@ -40,7 +40,7 @@ export function InsightsView({ nav }: ScreenProps) {
   };
 
   return (
-    <div className="mc-main">
+    <div className="mc-main" data-testid="insights-screen">
       <div className="ph ph-compact">
         <div>
           <span className="kk">Insights</span>

@@ -87,6 +87,8 @@
   color: var(--p-ink);
 }
 
+.mc-cmdk .cres.empty { color: var(--p-muted); cursor: default; }
+
 .mc-cmdk .cres .ic {
   font-family: var(--mono);
   font-size: var(--p-text-mono);

@@ -49,10 +49,13 @@ export function StatusDonut({
 
   return (
     <div className="donut">
+      {/* role="img" would mark children presentational, which is invalid when the
+          arcs are focusable role="button" filters (axe nested-interactive) — an
+          interactive donut is a labelled GROUP of controls, not a static image. */}
       <svg
         viewBox={`0 0 ${SIZE} ${SIZE}`}
         width="100%"
-        role="img"
+        role={interactive ? "group" : "img"}
         aria-label={summary}
         preserveAspectRatio="xMidYMid meet"
       >

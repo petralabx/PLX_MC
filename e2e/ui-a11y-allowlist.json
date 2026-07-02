@@ -17,5 +17,11 @@
   "/repos": ["color-contrast"],
   "/repos__note": "DESIGN-SYSTEM EXCEPTION: --p-muted repo meta and branch labels; ADR-003.",
   "/skills-directory": ["color-contrast"],
-  "/skills-directory__note": "DESIGN-SYSTEM EXCEPTION: --p-muted catalog meta and tags; ADR-003."
+  "/skills-directory__note": "DESIGN-SYSTEM EXCEPTION: --p-muted catalog meta and tags; ADR-003.",
+  "/insights": ["color-contrast"],
+  "/insights__note": "DESIGN-SYSTEM EXCEPTION: --p-muted KPI captions and chart labels on --p-paper/--p-canvas; ADR-003.",
+  "/ai-spend": ["color-contrast"],
+  "/ai-spend__note": "DESIGN-SYSTEM EXCEPTION: --p-muted kicker and placeholder copy; ADR-003.",
+  "/command-palette": ["color-contrast"],
+  "/command-palette__note": "DESIGN-SYSTEM EXCEPTION: --p-muted group headers, hints, and ESC affordance on --p-paper; ADR-003."
 }

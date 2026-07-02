@@ -32,8 +32,9 @@ test.describe("Insights view", () => {
   }) => {
     await gotoInsights(page);
 
-    // ── Status donut renders (role="img"), with the total in its center. ───────
-    const donut = page.locator(".insights .donut svg[role='img']");
+    // ── Status donut renders (role="group" — arcs are interactive filter
+    //    buttons, so the svg is a labelled group), with the total in its center. ─
+    const donut = page.locator(".insights .donut svg[role='group']");
     await expect(donut).toBeVisible();
     await expect(donut).toHaveAttribute("aria-label", /Status:/);
     // Center KPI text = the total task count (15 in the seed fixture).
@@ -74,7 +75,7 @@ test.describe("Insights view", () => {
     await page.keyboard.press("g");
     await page.keyboard.press("i");
     await expect(page.locator(".mc-main .ph .kk")).toContainText("Insights");
-    await expect(page.locator(".insights .donut svg[role='img']")).toBeVisible();
+    await expect(page.locator(".insights .donut svg[role='group']")).toBeVisible();
   });
 
   test("reachable via the ⌘K command palette", async ({ page }) => {
@@ -86,7 +87,7 @@ test.describe("Insights view", () => {
     await palette.locator("input").fill("Insights");
     await palette.getByText("Go to Insights").click();
     await expect(page.locator(".mc-main .ph .kk")).toContainText("Insights");
-    await expect(page.locator(".insights .donut svg[role='img']")).toBeVisible();
+    await expect(page.locator(".insights .donut svg[role='group']")).toBeVisible();
   });
 
   test("a PRIORITY segment click navigates to the board AND applies the matching filter", async ({
@@ -200,7 +201,7 @@ test.describe("Insights view", () => {
     // full chart instantly. Smoke only — assert the chart renders, no tween check.
     await page.emulateMedia({ reducedMotion: "reduce" });
     await gotoInsights(page);
-    await expect(page.locator(".insights .donut svg[role='img']")).toBeVisible();
+    await expect(page.locator(".insights .donut svg[role='group']")).toBeVisible();
     await expect(page.locator(".insights .donut .total")).toHaveText("15");
     // At least one arc segment is painted (a non-zero band) and is interactive.
     await expect(page.locator(".insights .donut .arc[role='button']").first()).toBeVisible();

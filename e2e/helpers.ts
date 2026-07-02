@@ -36,6 +36,27 @@ export async function gotoSkillsDirectory(page: Page): Promise<void> {
   await expect(page.locator("[data-testid='sk-screen']")).toBeVisible();
 }
 
+export async function gotoInsights(page: Page): Promise<void> {
+  await page.goto("/");
+  await waitForHydration(page);
+  await openSidebar(page, "Insights");
+  await expect(page.locator("[data-testid='insights-screen']")).toBeVisible();
+}
+
+export async function gotoAiSpend(page: Page): Promise<void> {
+  await page.goto("/");
+  await waitForHydration(page);
+  await openSidebar(page, "AI Spend");
+  await expect(page.locator("[data-testid='ai-spend-screen']")).toBeVisible();
+}
+
+export async function openCommandPalette(page: Page): Promise<void> {
+  await page.goto("/");
+  await waitForHydration(page);
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(page.locator("[data-testid='cmdk']")).toBeVisible();
+}
+
 export async function gotoTaskDetail(page: Page, taskId = "TASK-221"): Promise<void> {
   await gotoBoard(page);
   await cardById(page, taskId).click();

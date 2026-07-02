@@ -228,7 +228,7 @@ export function CommandPalette({
 
   return (
     <div className="mc-cmdk-overlay" onClick={onClose}>
-      <div className="mc-cmdk" onClick={(event) => event.stopPropagation()}>
+      <div className="mc-cmdk" data-testid="cmdk" onClick={(event) => event.stopPropagation()}>
         <div className="cin">
           <span className="pre">⌘</span>
           <input
@@ -239,16 +239,17 @@ export function CommandPalette({
               setSelected(0);
             }}
             placeholder="Create a task, jump to a bucket, assign an agent..."
+            aria-label="Command palette search"
           />
           <span className="esc">ESC</span>
         </div>
 
-        <div className="cmd-results">
+        {/* Scrollable results need keyboard reachability (axe
+            scrollable-region-focusable) — same tabindex idiom as gs-pre. */}
+        <div className="cmd-results" tabIndex={0} role="group" aria-label="Command results">
           {flat.length === 0 ? (
             <div className="cgrp">
-              <div className="cres" style={{ color: "var(--p-muted)" }}>
-                No matches
-              </div>
+              <div className="cres empty">No matches</div>
             </div>
           ) : null}
 

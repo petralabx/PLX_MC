@@ -46,6 +46,19 @@
   font-feature-settings: "ss01", "ss02";
 }
 
+/* Form elements do NOT inherit fonts per the UA stylesheet — without this
+   reset any <button>/<input> that doesn't set font-family explicitly renders
+   in the browser default (Arial/Times), off-brand. The portal gets this from
+   Tailwind preflight; MC's hand-ported skin needs it stated. family-only on
+   purpose: inheriting the full `font` shorthand would shift sizes on controls
+   that rely on their own explicit font-size. */
+.mc button,
+.mc input,
+.mc textarea,
+.mc select {
+  font-family: inherit;
+}
+
 .mc.dark,
 .dark .mc {
   --p-rail: #16140f;

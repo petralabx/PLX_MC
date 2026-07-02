@@ -16,6 +16,28 @@
 
 ## Lessons
 
+### 2026-07-02 (ET) — Six agent PRs merged without MC task checkout; work was invisible in Mission Control
+
+- **What happened:** PRs #89–#95 (brand parity, ui-ux loops, token migration,
+  AA contrast, font fix) merged with no MC tasks, no `MC-Checkout` stamps, and
+  nothing visible in the Mission Control buckets. The operator had to ask
+  where the work went. Retro-captured as TASK-249…254 (created, checked out,
+  completed with evidence, PR bodies stamped after the fact).
+- **Root cause:** The PLX-MC MCP server and capture hook ship disabled by
+  default per the External Integrations contract (`PLX_MC_MCP_ENABLED=0`,
+  `COMPLIANCE_CAPTURE` unset), and the agent treated "integration disabled"
+  as "workflow does not apply" instead of running the documented manual
+  fallback (`scripts/compliance-checkout.mjs` with `MC_MCP_API_KEY` from
+  `prod/ec2-secrets` — key and API were available and working the whole time).
+- **Rule going forward:** Disabled tooling never waives the task discipline.
+  Before the first commit of any session that will change this repo, resolve
+  the work to an MC task: run the capture hook manually
+  (`COMPLIANCE_CAPTURE=1 node scripts/compliance-checkout.mjs` with
+  `MC_MCP_API_KEY` from `prod/ec2-secrets`, bucket
+  `BKT-MISSION-CONTROL-OPS` unless the work belongs elsewhere), carry the
+  `MC-Checkout` stamp in the PR body, and complete the task with evidence at
+  merge. If MC is unreachable, say so in the PR body instead of skipping.
+
 ### 2026-06-24 (ET) — A PowerShell helper named its parameter `$Args`, silently dropping every splatted argument
 
 - **What happened:** A cross-repo worktree-bootstrap helper (`Invoke-Native`)

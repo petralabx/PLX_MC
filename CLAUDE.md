@@ -25,9 +25,26 @@ npm run dev                                # Next.js dev server
 
 Always verify work before declaring it done:
 
+- Bug fixes: write the failing test first and watch it fail — that is the only
+  proof you fixed the cause and not the symptom. If something is hard to test,
+  that is information about the design, not permission to skip it.
 - Code changes: run the relevant test command and show exit-0 output.
 - API changes: hit the endpoint and confirm the response envelope.
 - After every fix: re-run the failing command that surfaced the bug.
+
+## Debugging Discipline
+
+When something breaks, investigate — do not guess. Read the whole error and
+stack trace, reproduce the problem before changing anything, and change one
+thing at a time. Never paper over an unexpected null with a defensive check —
+find out why it is null; the guard just moves the bug somewhere quieter.
+
+## Surgical Diffs
+
+Keep the diff as small as the task allows. Do not touch what you were not asked
+to touch, match the existing style, and do not reformat. The test: can you
+justify every changed line by the task? If a line is there because "while I was
+in there," revert it.
 
 ## Learning Loop
 
@@ -39,7 +56,25 @@ repeat mistakes already documented there.
 
 For complex tasks (3+ files or architectural changes), produce a written plan
 before writing any code: files to change, approach, trade-offs, verification
-steps.
+steps. Every task needs a success criterion before code is written — "add
+validation" becomes "reject a malformed email, return 400 with a clear message,
+and test both cases."
+
+## Communication and Uncertainty
+
+Say what you did and why, not just a block of code. Flag concerns even when you
+did exactly what was asked. Be precise about uncertainty: "I am not sure this
+library supports streaming" tells the operator what to verify; "I think this
+should work" does not.
+
+## Common Failure Modes (catch yourself)
+
+If you notice yourself in any of these, stop — do not push through:
+
+- **Kitchen Sink** — restructuring half the codebase while you are at it.
+- **Wrong Abstraction** — abstracting before the second copy-paste exists.
+- **Optimistic Path** — happy path handled, the 500 ignored.
+- **Runaway Refactor** — a "fix" that cascades across files.
 
 <!-- governance:auto:start -->
 

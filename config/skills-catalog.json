@@ -7,6 +7,6 @@
   "manifestPath": "manifest.json",
   "packageId": "plx-engineering-core",
   "pinTag": "",
-  "pinSha": "672982324fef9e618afbaeb41e0f561e877033b9",
-  "notes": "petralabx/skills does not yet carry manifest.json/schemas — migrate them from the legacy repo (plx-cursor-skills v1.1.0) as part of skills-repo adoption before running bootstrap-company-skills.sh against this pointer."
+  "pinSha": "a735e2c2f6cbd66770f7f6cf0f6ce2198e765e89",
+  "notes": "petralabx/skills is the canonical company skill content repo; legacySourceRepo documents the pre-migration source."
 }

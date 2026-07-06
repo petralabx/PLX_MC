@@ -74,7 +74,7 @@
       "quality_ledger": {
         "enabled": false
       },
-      "status": "pending_adoption",
+      "status": "active",
       "contributing_path": "CONTRIBUTING.md",
       "notes": "Company skill content repo (formerly planned as taylorvalton/plx-cursor-skills). Catalog pointer: config/skills-catalog.json."
     },
@@ -89,7 +89,7 @@
       "quality_ledger": {
         "enabled": false
       },
-      "status": "pending_adoption",
+      "status": "active",
       "contributing_path": "CONTRIBUTING.md"
     },
     {
@@ -103,7 +103,7 @@
       "quality_ledger": {
         "enabled": false
       },
-      "status": "pending_adoption",
+      "status": "active",
       "contributing_path": "CONTRIBUTING.md"
     },
     {
@@ -117,7 +117,7 @@
       "quality_ledger": {
         "enabled": false
       },
-      "status": "pending_adoption",
+      "status": "active",
       "contributing_path": "CONTRIBUTING.md"
     },
     {
@@ -131,7 +131,7 @@
       "quality_ledger": {
         "enabled": false
       },
-      "status": "pending_adoption",
+      "status": "active",
       "contributing_path": "CONTRIBUTING.md"
     },
     {

@@ -49,3 +49,28 @@ tokens**, scoped to the `.mc` shell in `src/styles/mc-surface.css`.
 - This is a surface-local decision under ADR-003 (no shared-token value change),
   so it does not require upstream brand sign-off — but it is recorded here so
   the two repos do not silently diverge.
+
+## Addendum — 2026-07-06 design-system alignment pass
+
+The same mechanism (MC-local tokens in `mc-surface.css`, no Portal value
+changes) now also carries:
+
+- **`--p-shadow-sm`** — completes the `--p-shadow-md`/`--p-shadow-lg` elevation
+  family. It was already *referenced* by `mc-skills-directory.css` but never
+  defined, so the `.sk-tab.on` lift silently resolved to no shadow.
+- **MC type-scale additions** — `--p-text-page` (38px), `--p-text-page-tablet`
+  (28px), `--p-text-stat` (22px), `--p-text-lede` (13px), `--p-text-ui`
+  (12.5px), `--p-text-cap` (8.5px), `--p-text-cap-2` (8px). These capture the
+  instrument-panel sizes spec'd in `docs/product/DESIGN_TOKENS.md` §Type that
+  the Portal scale does not carry; the ported skin previously hard-coded them
+  ~150 times across `mc-*.css`. Values are verbatim from the spec — no visual
+  change, one source of truth.
+- **`--p-gutter`** (26px → 14px at ≤640px) — the screen gutter from
+  `DESIGN_TOKENS.md` §Layout, made a token so the phone tier
+  (`RESPONSIVE.md` §2: 12–14px page padding) is one override instead of a
+  per-screen hunt.
+
+**Proposed for upstream promotion** (brand authority `plx-customer-portal`):
+`--p-shadow-sm/md/lg` and `--p-gutter` are surface-agnostic and could join
+`docs/design-system/tokens.css`; the type-scale additions are MC-specific and
+should stay surface-local unless another surface adopts the cockpit density.

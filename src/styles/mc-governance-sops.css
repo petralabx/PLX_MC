@@ -77,7 +77,7 @@
 
 .gs-stat-n {
   display: block;
-  font-size: 22px;
+  font-size: var(--p-text-stat);
   font-weight: 700;
   line-height: 1;
   margin-bottom: 4px;
@@ -116,7 +116,7 @@
   max-width: 320px;
 }
 
-.gs-search-mag { color: var(--p-muted); font-size: 13px; flex-shrink: 0; }
+.gs-search-mag { color: var(--p-muted); font-size: var(--p-text-lede); flex-shrink: 0; }
 
 .gs-search-input {
   border: none;

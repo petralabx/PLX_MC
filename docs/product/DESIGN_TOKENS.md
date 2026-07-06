@@ -38,7 +38,7 @@ The visual language is the **Petra Lab‑X "Mazius / ledger" system** — warm p
 | **JetBrains Mono** (400–700) | `--mono` | kickers, labels, ids, counts, data, tabular numbers |
 
 Recipes:
-- **Page `h1`:** Mazius 38px, `line-height:.95`, `letter-spacing:-.022em`, weight 400; one word wrapped in `<em>` → italic + `--p-accent`. (28px ≤1100px.)
+- **Page `h1`:** Mazius 38px, `line-height:.95`, `letter-spacing:-.022em`, weight 400; one word wrapped in `<em>` → italic + `--p-accent`. (28px ≤1024px.)
 - **Kicker (`.kk`/`.kicker`):** mono 9.5px, `letter-spacing:.22em`, uppercase, `--p-muted`.
 - **Section header (`.grouphd`, `.bh.sec`):** mono 9.5px, `letter-spacing:.18em`, uppercase; label `--p-ink`, trailing count `--p-muted` pushed right with `margin-left:auto`.
 - **Body:** Inter 13px, `line-height:1.5`; subtitle `--p-muted`, `max-width:66ch`.
@@ -57,7 +57,7 @@ Recipes:
 - **Topbar:** sticky, `~52px`, `--p-paper`, bottom hairline. Brand left (nowrap), tools right.
 - **Sidebar:** fixed `232px`, `--p-rail`, sectioned (Inbox · Views · Buckets · System of record).
 - **Main:** `.mc-main` flex column, `min-width:0`, fluid. Each screen = page header + content.
-- Layout is **desktop‑first** (internal cockpit). Responsive breakpoint ≤1100px trims list columns + shrinks `h1`.
+- Layout is **desktop‑first** (internal cockpit). Responsive tiers follow the canonical pair in `docs/design-system/RESPONSIVE.md`: tablet ≤1024px (single-column shell, h1 28px, touch targets ≥44px) and phone ≤640px (14px gutter, stacked grids).
 
 ## 6. Components (recipes in `mc-styles.css` / `mc-atoms.jsx`)
 

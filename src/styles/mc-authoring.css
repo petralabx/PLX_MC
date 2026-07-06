@@ -52,7 +52,7 @@
 
 .mc-cmdk .cin .esc {
   font-family: var(--mono);
-  font-size: 8.5px;
+  font-size: var(--p-text-cap);
   padding: 2px 6px;
   border: 1px solid var(--p-grid);
   color: var(--p-muted);
@@ -64,7 +64,7 @@
 
 .mc-cmdk .cgrp .gh {
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: var(--p-text-cap-2);
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--p-muted);
@@ -77,7 +77,7 @@
   gap: 11px;
   padding: 9px 16px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--p-text-lede);
   color: var(--p-ink-2);
 }
 
@@ -100,7 +100,7 @@
 .mc-cmdk .cres .hint {
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 8.5px;
+  font-size: var(--p-text-cap);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--p-muted);
@@ -124,7 +124,7 @@
 
 .mc .picker .pg {
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: var(--p-text-cap-2);
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--p-muted);
@@ -137,7 +137,7 @@
   gap: 9px;
   padding: 7px 13px;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--p-text-ui);
   color: var(--p-ink-2);
   /* Rows are <button>s (keyboard-accessible) — neutralize UA button styling. */
   width: 100%;
@@ -215,7 +215,7 @@
 .ntm .ntm-head .kk {
   font-family: var(--mono);
   font-size: var(--p-text-tick);
-  letter-spacing: 0.22em;
+  letter-spacing: var(--p-track-tick);
   text-transform: uppercase;
   color: var(--p-muted);
   display: block;
@@ -286,7 +286,7 @@
   padding: 10px 12px;
   border-radius: var(--p-radius);
   color: var(--p-ink);
-  font-size: 13px;
+  font-size: var(--p-text-lede);
   line-height: 1.5;
   resize: vertical;
   min-height: 74px;
@@ -315,7 +315,7 @@
 
 .ntm .ntm-fact .k {
   font-family: var(--mono);
-  font-size: 8.5px;
+  font-size: var(--p-text-cap);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--p-muted);
@@ -371,7 +371,7 @@
 .ntm .ntm-select-wrap input[type="date"] {
   padding-right: 10px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: var(--p-text-small);
 }
 
 .ntm .ntm-select-wrap select:focus,
@@ -417,7 +417,7 @@
 
 .ntm .ntm-chips .k {
   font-family: var(--mono);
-  font-size: 8.5px;
+  font-size: var(--p-text-cap);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--p-muted);
@@ -471,7 +471,7 @@
 
 .ntm .ntm-chip .rm {
   color: var(--p-muted);
-  font-size: 8px;
+  font-size: var(--p-text-cap-2);
   margin-left: 2px;
 }
 
@@ -526,9 +526,38 @@
   margin-left: auto;
 }
 
-@media (max-width: 840px) {
+/* Canonical tablet tier (RESPONSIVE.md §1) — was a bespoke 840px pivot. */
+@media (max-width: 1024px) {
   .ntm .ntm-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Phone: modals go full-screen, top-anchored, square-cornered
+   (RESPONSIVE.md §2 + §4 Modals). Body scrolls internally. */
+@media (max-width: 640px) {
+  .ntm-overlay {
+    padding: 0;
+  }
+
+  .ntm {
+    width: 100%;
+    min-height: 100%;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  .mc-cmdk-overlay {
+    padding-top: 0;
+  }
+
+  .mc-cmdk {
+    max-width: 100vw;
+    width: 100%;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
   }
 }
 
@@ -548,7 +577,7 @@
 
 .mc .ppick-search .mag {
   color: var(--p-muted);
-  font-size: 13px;
+  font-size: var(--p-text-lede);
 }
 
 .mc .ppick-search input {
@@ -557,7 +586,7 @@
   background: transparent;
   outline: none;
   font-family: var(--sans);
-  font-size: 12.5px;
+  font-size: var(--p-text-ui);
   color: var(--p-ink);
 }
 
@@ -577,8 +606,8 @@
 
 .mc .ppick .pp-meta {
   font-family: var(--mono);
-  font-size: 8px;
-  letter-spacing: 0.04em;
+  font-size: var(--p-text-cap-2);
+  letter-spacing: var(--p-track-data);
   color: var(--p-muted);
   text-transform: none;
   flex: 0 0 auto;
@@ -643,7 +672,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: var(--p-text-cap-2);
   letter-spacing: 0.06em;
   color: var(--p-ok);
   margin-top: 7px;

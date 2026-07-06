@@ -19,8 +19,16 @@ export function AiSpendView() {
           </p>
         </div>
       </div>
-      <div className="mc-empty mc-empty-spaced">
-        <p>Coming soon.</p>
+      {/* Standard .empty chassis (glyph + h3 + p) — the previous `mc-empty`
+          class was never defined, so this rendered as a bare unstyled
+          paragraph (2026-07-06 design-system alignment pass). */}
+      <div className="empty">
+        <div className="glyph">◎</div>
+        <h3>Coming soon</h3>
+        <p>
+          The vendor spend observatory is on the roadmap. Until it lands, budgets and
+          invoices stay with each vendor console.
+        </p>
       </div>
     </div>
   );

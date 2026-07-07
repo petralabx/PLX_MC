@@ -91,7 +91,7 @@
 .mc .insights .catbar-title {
   font-family: var(--mono);
   font-size: var(--p-text-kicker);
-  letter-spacing: 0.16em;
+  letter-spacing: var(--p-track-meta);
   text-transform: uppercase;
   color: var(--p-ink);
   margin-bottom: 12px;

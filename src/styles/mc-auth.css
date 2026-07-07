@@ -112,3 +112,15 @@
   text-transform: uppercase;
   color: var(--p-muted);
 }
+
+/* Phone tier (RESPONSIVE.md §2): tighter page padding so the card keeps a
+   comfortable measure at 393px-wide viewports. */
+@media (max-width: 640px) {
+  .mc-auth {
+    padding: var(--p-space-3);
+  }
+
+  .mc-auth .card {
+    padding: var(--p-space-4);
+  }
+}

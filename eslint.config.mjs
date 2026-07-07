@@ -11,5 +11,9 @@ export default defineConfig([
     ".venv/**",
     "docs/**",
     "starter-kit/**",
+    // Vendored agentic-swarm checkout (gitignored; cloned by
+    // .cursor/environment.json). Linting it breaks the preflight gate on any
+    // machine with the swarm bootstrapped — CI never sees this directory.
+    ".swarm/**",
   ]),
 ]);

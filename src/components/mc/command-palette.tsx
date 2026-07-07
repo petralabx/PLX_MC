@@ -90,6 +90,10 @@ export function CommandPalette({
       { key: "nav:repos", icon: "❮❯", label: "Go to Repos", run: () => nav("repos") },
       { key: "nav:files", icon: "❒", label: "Go to Files", run: () => nav("files") },
       { key: "nav:sync", icon: "⇄", label: "Go to Sync console", run: () => nav("sync") },
+      { key: "nav:loop-ledgers", icon: "◰", label: "Go to Loop ledgers", run: () => nav("loop-ledgers") },
+      { key: "nav:governance-sops", icon: "§", label: "Go to SOP guide", run: () => nav("governance-sops") },
+      { key: "nav:skills-directory", icon: "◈", label: "Go to Skills directory", run: () => nav("skills-directory") },
+      { key: "nav:ai-spend", icon: "◎", label: "Go to AI Spend", run: () => nav("ai-spend") },
       {
         key: "nav:task",
         icon: "▸",

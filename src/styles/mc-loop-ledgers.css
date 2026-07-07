@@ -73,7 +73,8 @@
   margin-bottom: var(--p-space-4);
 }
 
-@media (max-width: 960px) {
+/* Canonical tablet tier (RESPONSIVE.md §1) — was a bespoke 960px pivot. */
+@media (max-width: 1024px) {
   .ll-stats { grid-template-columns: repeat(3, 1fr); }
 }
 
@@ -86,7 +87,7 @@
 
 .ll-stat-n {
   display: block;
-  font-size: 22px;
+  font-size: var(--p-text-stat);
   font-weight: 700;
   line-height: 1;
   margin-bottom: 4px;
@@ -161,7 +162,7 @@
 
 .ll-search-mag {
   color: var(--p-muted);
-  font-size: 13px;
+  font-size: var(--p-text-lede);
   flex-shrink: 0;
 }
 
@@ -657,11 +658,13 @@
 }
 
 /* ─── Responsive: narrow viewports ────────────────────────────────────────── */
-/* The dense hairline tables have fixed column tracks (~600px). Below the tablet
-   breakpoint, let each table scroll horizontally WITHIN its own container so the
+/* The dense hairline tables have fixed column tracks (~600px). From the tablet
+   tier down, let each table scroll horizontally WITHIN its own container so the
    loop-ledgers surface never forces a page-level horizontal scroll, while the
-   columns stay readable rather than crushing. */
-@media (max-width: 760px) {
+   columns stay readable rather than crushing. overflow-x:auto is inert whenever
+   the table already fits, so this is safe for the whole ≤1024 range
+   (canonical tier — was a bespoke 760px pivot). */
+@media (max-width: 1024px) {
   .ll-table,
   .ll-artifacts {
     overflow-x: auto;

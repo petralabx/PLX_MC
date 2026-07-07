@@ -5,6 +5,11 @@
  * at tmp/petra-design/bundle/mrp/. Class names match the design 1:1 so the
  * design's React components can be lifted with minimal rewriting.
  *
+ * Relocated from src/styles/ on 2026-07-06: no runtime code imports it (the
+ * MRP surface is not built in this app), so it lives with the frozen MRP
+ * handoff source instead of the production styles tree. Move it back to
+ * src/styles/ and add it to src/app/globals.css if MRP chrome is adopted.
+ *
  * Scoping discipline:
  *   - All custom selectors are prefixed with `.mrp-shell` so the styles
  *     never leak outside MRP routes.

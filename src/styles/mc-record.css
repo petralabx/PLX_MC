@@ -3,7 +3,7 @@
 
 .mc .sync-page {
   flex: 1;
-  padding: 22px 26px 80px;
+  padding: 22px var(--p-gutter) 80px;
 }
 
 .mc .regs {
@@ -24,14 +24,14 @@
   color: var(--p-ink);
   font-family: var(--mono);
   font-size: var(--p-text-tick);
-  letter-spacing: 0.16em;
+  letter-spacing: var(--p-track-meta);
   text-transform: uppercase;
 }
 
 .mc .reg .maps {
   color: var(--p-muted);
   font-family: var(--mono);
-  font-size: 8.5px;
+  font-size: var(--p-text-cap);
   letter-spacing: 0.08em;
   margin: 5px 0 13px;
 }
@@ -57,7 +57,7 @@
 .mc .reg .stat .lb {
   color: var(--p-muted);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: var(--p-text-cap-2);
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -141,8 +141,8 @@
 .mc .spsite .f .k {
   color: var(--p-muted);
   font-family: var(--mono);
-  font-size: 8px;
-  letter-spacing: 0.16em;
+  font-size: var(--p-text-cap-2);
+  letter-spacing: var(--p-track-meta);
   text-transform: uppercase;
 }
 
@@ -198,7 +198,7 @@
   align-items: center;
   color: var(--p-ink);
   display: flex;
-  font-size: 13px;
+  font-size: var(--p-text-lede);
   font-weight: 500;
   gap: 8px;
 }
@@ -217,7 +217,7 @@
   color: var(--p-muted);
   font-family: var(--mono);
   font-size: var(--p-text-tick);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--p-track-data);
   margin-top: 3px;
 }
 
@@ -230,7 +230,7 @@
 .mc .spreg-head .ct {
   color: var(--p-muted);
   font-family: var(--mono);
-  font-size: 8.5px;
+  font-size: var(--p-text-cap);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -279,7 +279,7 @@
   font-family: var(--mono);
   font-size: var(--p-text-tick);
   gap: 18px;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--p-track-data);
   margin-bottom: 12px;
 }
 
@@ -296,9 +296,9 @@
   border-bottom: 1px solid var(--p-grid-2);
   color: var(--p-muted);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: var(--p-text-cap-2);
   font-weight: 400;
-  letter-spacing: 0.16em;
+  letter-spacing: var(--p-track-meta);
   padding: 0 10px 7px;
   text-align: left;
   text-transform: uppercase;
@@ -307,7 +307,7 @@
 .mc .spmap td {
   border-bottom: 1px solid var(--p-grid-2);
   color: var(--p-ink-2);
-  font-size: 11.5px;
+  font-size: var(--p-text-small);
   padding: 6px 10px;
   vertical-align: top;
 }
@@ -370,7 +370,7 @@
   color: var(--p-warn);
   font-family: var(--mono);
   font-size: var(--p-text-tick);
-  letter-spacing: 0.16em;
+  letter-spacing: var(--p-track-meta);
   text-transform: uppercase;
 }
 
@@ -396,7 +396,7 @@
 .mc .conflict-row .side .k {
   color: var(--p-muted);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: var(--p-text-cap-2);
   letter-spacing: 0.18em;
   margin-bottom: 6px;
   text-transform: uppercase;
@@ -405,13 +405,13 @@
 .mc .conflict-row .side .v {
   color: var(--p-ink);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: var(--p-text-lede);
 }
 
 .mc .conflict-row .side .v.reason {
   color: var(--p-ink-2);
   font-family: var(--sans);
-  font-size: 12.5px;
+  font-size: var(--p-text-ui);
 }
 
 .mc .conflict-row .cf {
@@ -464,7 +464,7 @@
 .mc .auditlog .arow .ts {
   color: var(--p-muted);
   font-family: var(--mono);
-  font-size: 8.5px;
+  font-size: var(--p-text-cap);
 }
 
 .mc .auditlog .arow .body {
@@ -479,7 +479,7 @@
 
 .mc .files {
   flex: 1;
-  padding: 18px 26px 80px;
+  padding: 18px var(--p-gutter) 80px;
 }
 
 .mc .fcrumbs {
@@ -549,8 +549,8 @@
 .mc .ftable .frow.head .h {
   color: var(--p-muted);
   font-family: var(--mono);
-  font-size: 8px;
-  letter-spacing: 0.16em;
+  font-size: var(--p-text-cap-2);
+  letter-spacing: var(--p-track-meta);
   text-transform: uppercase;
 }
 
@@ -584,7 +584,7 @@
 
 .mc .ftable .frow .nm .t {
   color: var(--p-ink);
-  font-size: 12.5px;
+  font-size: var(--p-text-ui);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -630,7 +630,7 @@
   color: var(--p-muted);
   font-family: var(--mono);
   font-size: var(--p-text-kicker);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--p-track-data);
 }
 
 .mc .ftable .frow .md {
@@ -643,7 +643,7 @@
 .mc .ftable .frow .fmuted {
   color: var(--p-muted);
   font-family: var(--mono);
-  font-size: 8.5px;
+  font-size: var(--p-text-cap);
 }
 
 .mc .repos {
@@ -663,7 +663,7 @@
   display: grid;
   gap: 16px;
   grid-template-columns: auto 1fr auto auto;
-  padding: 15px 26px;
+  padding: 15px var(--p-gutter);
   text-align: left;
   width: 100%;
 }
@@ -688,7 +688,7 @@
   color: var(--p-ink);
   display: block;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: var(--p-text-lede);
   letter-spacing: 0.02em;
 }
 
@@ -721,7 +721,7 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
-  padding: 0 26px 16px 72px;
+  padding: 0 var(--p-gutter) 16px 72px;
 }
 
 .mc .repo-row .ritem {
@@ -732,7 +732,7 @@
   color: var(--p-ink-2);
   cursor: pointer;
   display: flex;
-  font-size: 12.5px;
+  font-size: var(--p-text-ui);
   gap: 11px;
   padding: 7px 0;
   text-align: left;
@@ -756,7 +756,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 14px 26px;
+  padding: 14px var(--p-gutter);
 }
 
 .mc .repo-req-input {
@@ -780,7 +780,7 @@
 
 .mc .repo-reqs {
   border-bottom: 1px solid var(--p-grid-2);
-  padding: 0 26px 16px;
+  padding: 0 var(--p-gutter) 16px;
 }
 
 .mc .repo-req-row {
@@ -803,7 +803,7 @@
   flex: 1 1 220px;
   font-family: var(--mono);
   font-size: var(--p-text-kicker);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--p-track-data);
 }
 
 .mc .repo-req-acts {
@@ -826,7 +826,7 @@
 .mc .intake-queue {
   display: flex;
   flex-direction: column;
-  padding: 8px 26px 80px;
+  padding: 8px var(--p-gutter) 80px;
 }
 
 .mc .intake-row {
@@ -854,7 +854,7 @@
 .mc .intake-head .body {
   color: var(--p-ink);
   flex: 1 1 240px;
-  font-size: 13px;
+  font-size: var(--p-text-lede);
 }
 
 .mc .intake-meta {
@@ -864,13 +864,13 @@
   font-family: var(--mono);
   font-size: var(--p-text-kicker);
   gap: 14px;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--p-track-data);
 }
 
 .mc .intake-snippet {
   border-left: 2px solid var(--p-grid-2);
   color: var(--p-muted);
-  font-size: 11.5px;
+  font-size: var(--p-text-small);
   font-style: italic;
   padding-left: 11px;
 }
@@ -885,7 +885,7 @@
 .mc .intake-bucket {
   background: var(--p-paper);
   border: 1px solid var(--p-grid);
-  border-radius: 4px;
+  border-radius: var(--p-radius);
   color: var(--p-ink);
   font-family: var(--mono);
   font-size: var(--p-text-meta);
@@ -895,4 +895,42 @@
 .mc .intake-acts .btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+/* ─── Responsive (canonical tiers, RESPONSIVE.md §1–2) ──────────────────────
+   The system-of-record lane previously had NO breakpoints: the 4-up registry
+   grid, the 5-column files table, and the two-sided conflict rows all crushed
+   or overflowed the page below desktop widths. Tables are the only allowed
+   horizontal-scroll surface — never the page. */
+@media (max-width: 1024px) {
+  .mc .regs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .mc .ftable {
+    overflow-x: auto;
+  }
+
+  .mc .ftable .frow {
+    min-width: 680px;
+  }
+}
+
+@media (max-width: 640px) {
+  .mc .regs {
+    grid-template-columns: 1fr;
+  }
+
+  .mc .conflict-row .cb {
+    grid-template-columns: 1fr;
+  }
+
+  .mc .conflict-row .side + .side {
+    border-left: 0;
+    border-top: 1px solid var(--p-grid-2);
+  }
+
+  .mc .repo-row .rbody {
+    padding-left: var(--p-gutter);
+  }
 }

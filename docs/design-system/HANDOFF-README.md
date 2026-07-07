@@ -28,7 +28,9 @@ plx-mission-control-design-handoff/
 └── runtime/                     ← the production implementation files from the portal app
     ├── styles/
     │   ├── brand-tokens.css     ← runtime token mirror (import this in your global CSS)
-    │   └── mrp-design.css       ← MRP surface styles (only needed if you reuse MRP chrome)
+    │   └── mrp-design.css       ← MRP surface styles (only needed if you reuse MRP chrome;
+    │                              parked at docs/design-system/source-snapshot/mrp/ in this
+    │                              repo since the MRP surface is not built here)
     ├── components-brand/        ← React brand primitives: BrandBoundary, Kicker, MonoData,
     │                              PMark, AuthStatusBanner (+ README)
     ├── public-brand/            ← runtime-safe assets → copy to public/brand/

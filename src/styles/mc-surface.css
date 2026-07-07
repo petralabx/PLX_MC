@@ -11,7 +11,8 @@
    This layer ADDS the MC-only surface tokens — it does NOT alter any existing
    --p-* value (those stay the Portal's verbatim). --p-rail / --p-canvas values
    are taken from DESIGN_TOKENS.md and match the precedent already in the bundle
-   (src/styles/mrp-design.css `.mrp-shell`); the --p-shadow-* elevation tokens
+   (docs/design-system/source-snapshot/mrp/mrp-design.css `.mrp-shell`); the
+   --p-shadow-* elevation tokens
    are MC-local too (the Portal mirror at fb8e065 defines no shadow tokens) and
    match the hairline-soft shadows used inline elsewhere in the MC skin.
    Decision recorded in
@@ -30,9 +31,30 @@
      modal, pickers). Referenced by mc-authoring.css; previously undefined. They
      are ink-tinted via color-mix(... var(--p-ink) ...), so they adapt to dark
      mode automatically (no separate .dark values needed) — matching the inline
-     shadows already in mc-app.css / mc-views.css. Never a pure-black shadow. */
+     shadows already in mc-app.css / mc-views.css. Never a pure-black shadow.
+     --p-shadow-sm completes the family (it was referenced by
+     mc-skills-directory.css but never defined — the .sk-tab.on lift silently
+     no-oped until the 2026-07-06 alignment pass). */
+  --p-shadow-sm: 0 1px 4px color-mix(in srgb, var(--p-ink) 8%, transparent);
   --p-shadow-md: 0 4px 12px color-mix(in srgb, var(--p-ink) 10%, transparent);
   --p-shadow-lg: 0 8px 28px color-mix(in srgb, var(--p-ink) 14%, transparent);
+
+  /* MC-local type-scale additions (ADR-004 addendum, 2026-07-06). The ported
+     prototype skin (docs/product/DESIGN_TOKENS.md §Type) uses instrument-panel
+     sizes that the Portal scale does not carry. These tokens capture those
+     spec'd values VERBATIM (no visual change) so mc-*.css never hard-codes a
+     recurring font-size. Portal --p-text-* values stay untouched. */
+  --p-text-page: 38px;        /* page H1 (Mazius) — DESIGN_TOKENS.md */
+  --p-text-page-tablet: 28px; /* page H1 ≤1024px — DESIGN_TOKENS.md */
+  --p-text-stat: 22px;        /* stat-card numbers, empty-state serif */
+  --p-text-lede: 13px;        /* MC body/lede — "Body: Inter 13px" */
+  --p-text-ui: 12.5px;        /* dense row/UI text */
+  --p-text-cap: 8.5px;        /* micro caption / mono chrome label */
+  --p-text-cap-2: 8px;        /* densest micro caption (table heads, tags) */
+
+  /* Screen gutter (DESIGN_TOKENS.md §Layout: "keep 26px as the screen
+     gutter"). Narrows on phone per RESPONSIVE.md §2 (12–14px page padding). */
+  --p-gutter: 26px;
 
   /* Font-name bridge to the canonical tokens loaded by app/layout.tsx. */
   --mazius: var(--p-font-serif);
@@ -63,4 +85,12 @@
 .dark .mc {
   --p-rail: #16140f;
   --p-canvas: #1a1816;
+}
+
+/* Phone tier (RESPONSIVE.md §2): page horizontal padding drops to 12–14px.
+   Every screen gutter reads var(--p-gutter), so one override retunes them all. */
+@media (max-width: 640px) {
+  .mc {
+    --p-gutter: 14px;
+  }
 }

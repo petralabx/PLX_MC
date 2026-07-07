@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "runtime": "cursor",
+  "session_id": "cloud-agent-ai-spend-0385",
+  "started_at": "2026-07-07T08:20:00.000Z",
+  "ended_at": "2026-07-07T09:20:00.000Z",
+  "repo": "PLX_MC",
+  "branch": "cursor/ai-spend-observatory-0385",
+  "project_slug": "vendor-spend",
+  "department": "dev",
+  "title": "Built the AI Spend (vendor-spend) module end-to-end",
+  "summary": "Executed the vendor-spend plan (artifacts/platform/2026-06-30-vendor-spend-plan/SPEC.md): committed ten-vendor registry, migration 014 (budgets / cost snapshots with idempotent api-daily upserts / refresh audit log), src/lib/vendor-spend domain (UTC period math with monthly budget-cap proration, warn 80% / critical 95% / over alert evaluator, Postgres store with memory fallback), AWS Cost Explorer + Anthropic Admin cost_report + Cursor Admin /teams/spend adapters that degrade visibly instead of throwing or fabricating spend, /api/vendor-spend routes plus CRON_SECRET-gated cron refresh, the full AI Spend screen (scariest-first table, period filter, budget editor, manual entry, degraded panels, sidebar alert badge), integrations.yaml declaration, and the v2 alerts follow-up bundle. ./scripts/preflight.sh --mode pre-push exits 0 (786 unit tests, 162 e2e).",
+  "decisions": [
+    "Migration landed as 014_vendor_spend.sql — the drafted 011 prefix was already taken by 011_projects.sql",
+    "Store falls back to process-local memory without PLX_MC_DATABASE_URL (same contract as the skills submissions store) so tests and the e2e dev server need no database",
+    "Cursor adapter records ONE billing-cycle observation keyed on the cycle start (the Admin API only reports the current cycle), always flagged estimated / usage-reported",
+    "Monthly budgets are caps: calendar-anchored periods count each touched month as a full month of budget; only weekly windows prorate by days",
+    "Client components import only types from the vendor-spend barrel — the barrel is server-only because the loader pulls node:fs"
+  ],
+  "lessons": [
+    "Next 16 build fails when a client component imports a runtime value from a barrel that transitively reaches node:fs — keep display-order constants in the UI helpers",
+    "The repo's react-hooks/set-state-in-effect rule forbids sync setState in effect bodies; fetch-on-mount must set state only in promise continuations",
+    "vi.restoreAllMocks does not clear vi.fn call history — use vi.clearAllMocks in beforeEach when asserting not.toHaveBeenCalled"
+  ],
+  "files_touched": [
+    "config/vendor-costs-registry.json",
+    "config/integrations.yaml",
+    "db/migrations/014_vendor_spend.sql",
+    "db/rollback/014_vendor_spend_rollback.sql",
+    "src/lib/vendor-spend/",
+    "src/lib/secrets.ts",
+    "src/app/api/vendor-spend/",
+    "src/app/api/cron/vendor-spend-refresh/route.ts",
+    "src/components/mc/vendor-spend/",
+    "src/components/mc/chrome.tsx",
+    "src/components/mc/screens.tsx",
+    "src/styles/mc-vendor-spend.css",
+    "scripts/seed-vendor-spend.mjs",
+    "docs/modules/vendor-spend/README.md",
+    "e2e/vendor-spend.spec.ts",
+    "tests/vendor-spend-*.test.ts",
+    "vercel.json"
+  ],
+  "evidence": [
+    { "kind": "command", "ref": "./scripts/preflight.sh --mode pre-push (exit 0; 786 vitest, 162 playwright)" }
+  ],
+  "tags": ["vendor-spend", "ai-spend", "cloud-agent"]
+}

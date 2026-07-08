@@ -23,6 +23,8 @@ vi.mock("@/lib/sync/graph", () => {
     createListItem: async () => "new-item",
     findItemByField: async () => null,
     REPO_REGISTRY_KEY: "reporegistry",
+    PROJECTS_KEY: "projects",
+    ROADMAP_KEY: "roadmap",
     resolveSiteUserLookupId: async () => null,
     resolveEmailByLookupId: async () => null,
   };
@@ -41,6 +43,8 @@ vi.mock("@/lib/sync/mapping", () => ({
   planTaskPersons: () => ({ clear: [], resolve: [] }),
   actorIdByEmail: () => null,
   repoOutboundFields: () => ({}),
+  projectOutboundFields: () => ({}),
+  bucketOutboundFields: () => ({}),
   TASK_PERSON_FIELDS: [],
 }));
 
@@ -66,6 +70,8 @@ vi.mock("@/lib/sync/repo", () => ({
   // registry makes that a no-op so the "idle" sweep is genuinely idle.
   seedRepos: async () => {},
   getRepos: async () => [],
+  getProjectRows: async () => [],
+  getBucketRows: async () => [],
 }));
 
 // Imported AFTER the mocks so engine's repo/graph/mapping imports resolve to them.

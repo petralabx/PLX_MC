@@ -1,9 +1,8 @@
 // EN-007 P1b — the compliance server service. Orchestrates the dispatch ledger,
 // the pure verifier (verify.ts), and the event log (repo.ts); the
 // /api/compliance/* routes are thin wrappers over these. DB access is via ./repo
-// (mocked in tests/compliance-server.test.ts). Buckets have no server-side store
-// yet, so the per-bucket PRD requirement is reported "unknown" (advisory) until
-// one lands (EN-005/006) — see verifyPr.
+// (mocked in tests/compliance-server.test.ts). Bucket PRD is resolved from the
+// persisted buckets table (bucket-prd.ts).
 
 import { ApiError } from "@/lib/api/route";
 import type { Task } from "@/lib/mc-data";
@@ -14,6 +13,8 @@ import * as repo from "./repo";
 import type { EventsQuery } from "./events";
 import type { PrEvent } from "./webhook";
 import type { ActorKind, RiskTier, VerifyResult } from "./types";
+import { projectPullRequest, projectionEnabled } from "./projection";
+import { bucketPrdForTask } from "./bucket-prd";
 
 // Checkout credentials are short-lived (decision 14).
 const CHECKOUT_TTL_MIN = 8 * 60;
@@ -198,8 +199,7 @@ export async function verifyPr(input: VerifyPrInput): Promise<VerifyPrResult> {
     )
   ) as string[];
 
-  // Operator PR: one verdict, recorded ungated (decision 5). PRD presence is
-  // "unknown" (no server bucket store yet, EN-005/006) → advisory (review S1).
+  // Operator PR: one verdict, recorded ungated (decision 5).
   if (ids.length === 0) {
     const result = verifyCompliance({ task: null, actor: "operator", tier, bucketPrd: "unknown" });
     await recordVerdict(input, tier, "operator", null, "operator", result, null);
@@ -215,7 +215,8 @@ export async function verifyPr(input: VerifyPrInput): Promise<VerifyPrResult> {
     const taskId = d?.taskId ?? null;
     const actorIdentity = d?.runtime ?? "agent";
     const task = await loadTask(taskId);
-    const result = verifyCompliance({ task, actor: "agent", tier, bucketPrd: "unknown" });
+    const bucketPrd = await bucketPrdForTask(task);
+    const result = verifyCompliance({ task, actor: "agent", tier, bucketPrd });
     await recordVerdict(input, tier, "agent", taskId, actorIdentity, result, taskId ?? cid);
     tasks.push({ checkoutId: cid, taskId, verdict: result.verdict, reasons: result.reasons });
   }
@@ -240,12 +241,8 @@ export interface IngestResult {
   recorded: boolean;
 }
 
-// Maintain the system-of-record from the PR lifecycle. This records the PR as
-// typed events (the event log IS the record, decision 13); it does NOT mutate
-// the sync Task entity — that projection is owned by the sync/task layer and is
-// emitted here as a `task.promotion.requested` seam (kept out of scope so this
-// phase never writes src/lib/sync/**). The verdict gate is the verify route, not
-// this path. Actor + task come from the checkout credential, never git metadata.
+// Maintain the system-of-record from the PR lifecycle. Appends typed events to
+// mc_events, then projects task state via projectPullRequest (P1).
 const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "closed"]);
 
 export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
@@ -284,9 +281,6 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
         payload: { actorKind, sha: evt.headSha, branch: evt.branch, title: evt.title, taskIds },
         dedupKey: `pr.merged:${evt.repo}:${evt.prNumber}:${evt.headSha}`,
       });
-      // One promotion seam PER task — a multi-task PR promotes every task it
-      // completed, not just the first (keyed per task so replays dedup). An
-      // operator merge (no tasks) emits a single sparse seam, as before.
       const promote = taskIds.length > 0 ? taskIds : [null];
       for (const tid of promote) {
         await repo.appendEvent({
@@ -296,20 +290,20 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
         });
       }
     } else {
-      // Closed WITHOUT merging is its own kind — NOT pr.opened (review B1).
       await repo.appendEvent({
         kind: "pr.closed", actor: actorIdentity, repo: evt.repo, taskId, pr: String(evt.prNumber),
         payload: { actorKind, sha: evt.headSha, branch: evt.branch, title: evt.title },
         dedupKey: `pr.closed:${idBase}`,
       });
     }
+    if (projectionEnabled()) {
+      await projectPullRequest(evt, { actorKind, actorIdentity, taskIds, sparse: actorKind === "operator" && taskIds.length === 0 });
+    }
     return { action: evt.action, actorKind, taskId, recorded: true };
   }
 
-  // opened / reopened / synchronize → record the PR. An operator PR with no
-  // checkout is still recorded (decision 5), attributed to its author, sparse.
   const kind = evt.action === "synchronize" ? "pr.synchronized" : "pr.opened";
-  const sparse = actorKind === "operator" && !taskId;
+  const sparse = actorKind === "operator" && taskIds.length === 0;
   await repo.appendEvent({
     kind,
     actor: actorIdentity,
@@ -319,6 +313,9 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
     payload: { actorKind, branch: evt.branch, title: evt.title, author: evt.author, headSha: evt.headSha, sparse, taskIds },
     dedupKey: `${kind}:${idBase}`,
   });
+  if (projectionEnabled()) {
+    await projectPullRequest(evt, { actorKind, actorIdentity, taskIds, sparse });
+  }
   return { action: evt.action, actorKind, taskId, recorded: true };
 }
 

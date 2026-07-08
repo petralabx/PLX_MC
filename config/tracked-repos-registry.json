@@ -22,6 +22,7 @@
       "integration_branch": "main",
       "release_branch": null,
       "compliance_mode": "hard",
+      "default_bucket": "BKT-INFRA",
       "quality_ledger": {
         "enabled": true,
         "glob": "docs/plx-mc/quality-ledger/*.artifacts.json",
@@ -37,7 +38,8 @@
       "tier": "product_app",
       "integration_branch": "staging",
       "release_branch": "master",
-      "compliance_mode": "soft",
+      "compliance_mode": "hard",
+      "default_bucket": "BKT-PROD",
       "quality_ledger": {
         "enabled": true,
         "glob": "docs/portal/quality-ledger/*.artifacts.json",
@@ -53,7 +55,8 @@
       "tier": "product_platform",
       "integration_branch": "main",
       "release_branch": null,
-      "compliance_mode": "soft",
+      "compliance_mode": "hard",
+      "default_bucket": "BKT-INFRA",
       "quality_ledger": {
         "enabled": true,
         "glob": "docs/vmc/quality-ledger/*.artifacts.json",
@@ -70,7 +73,8 @@
       "tier": "skills",
       "integration_branch": "main",
       "release_branch": null,
-      "compliance_mode": "soft",
+      "compliance_mode": "hard",
+      "default_bucket": "BKT-INFRA",
       "quality_ledger": {
         "enabled": false
       },
@@ -85,7 +89,8 @@
       "tier": "tooling",
       "integration_branch": "main",
       "release_branch": null,
-      "compliance_mode": "soft",
+      "compliance_mode": "hard",
+      "default_bucket": "BKT-INFRA",
       "quality_ledger": {
         "enabled": false
       },
@@ -99,7 +104,8 @@
       "tier": "tooling",
       "integration_branch": "main",
       "release_branch": null,
-      "compliance_mode": "soft",
+      "compliance_mode": "hard",
+      "default_bucket": "BKT-INFRA",
       "quality_ledger": {
         "enabled": false
       },
@@ -113,7 +119,8 @@
       "tier": "tooling",
       "integration_branch": "main",
       "release_branch": null,
-      "compliance_mode": "soft",
+      "compliance_mode": "hard",
+      "default_bucket": "BKT-INFRA",
       "quality_ledger": {
         "enabled": false
       },
@@ -127,7 +134,8 @@
       "tier": "tooling",
       "integration_branch": "main",
       "release_branch": null,
-      "compliance_mode": "soft",
+      "compliance_mode": "hard",
+      "default_bucket": "BKT-INFRA",
       "quality_ledger": {
         "enabled": false
       },
@@ -142,6 +150,7 @@
       "integration_branch": "main",
       "release_branch": null,
       "compliance_mode": "soft",
+      "default_bucket": "BKT-UAT",
       "quality_ledger": {
         "enabled": false
       },

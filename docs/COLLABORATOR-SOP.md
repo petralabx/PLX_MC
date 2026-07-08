@@ -4,7 +4,7 @@
 (`PLX_MC`, `agentic-swarm`, `plx-customer-portal`), whether you work by hand or
 drive an AI agent (Cursor, Claude Code, ChatGPT/Codex, etc.).
 
-**Owner:** Vince · **Status:** active · **Effective:** 2026-06-23
+**Owner:** Vince · **Status:** active · **Effective:** 2026-07-08
 
 > **TL;DR** — Every PR now runs a **compliance check** and every PR event is
 > mirrored into Mission Control's audit log. **Humans are recorded but not
@@ -28,20 +28,20 @@ Two things now happen automatically on PRs to a tracked repo:
 
 The authoritative fleet list is `config/tracked-repos-registry.json`. Snapshot:
 
-| Repo | Tier | Gate mode today | Status |
+| Repo | Tier | Gate | Status |
 |---|---|---|---|
-| `taylorvalton/PLX_MC` | hub | **hard (required)** — a PR **cannot merge** until `compliance` passes | active |
-| `taylorvalton/plx-customer-portal` | product_app | soft (warn-only) | active |
-| `taylorvalton/agentic-swarm` | product_platform | soft (warn-only) | active |
-| `petralabx/skills` | skills | soft | pending adoption |
-| `petralabx/local-inference` | tooling | soft | pending adoption |
-| `petralabx/1hr-after` | tooling | soft | pending adoption |
-| `petralabx/furgenics` | tooling | soft | pending adoption |
-| `petralabx/for-and-against` | tooling | soft | pending adoption |
+| `taylorvalton/PLX_MC` | hub | hard | active |
+| `taylorvalton/plx-customer-portal` | product_app | hard | active |
+| `taylorvalton/agentic-swarm` | product_platform | hard | active |
+| `petralabx/skills` | skills | hard | active |
+| `petralabx/local-inference` | tooling | hard | active |
+| `petralabx/1hr-after` | tooling | hard | active |
+| `petralabx/furgenics` | tooling | hard | active |
+| `petralabx/for-and-against` | tooling | hard | active |
 | `petralabx/test-perms-check` | sandbox | soft | pending adoption |
 
-> Soft repos will move to **hard** later, once they've run clean for a while. Treat
-> a soft warning as a real signal now so the cutover is a non-event.
+> Hard cutover 2026-07-08: active repos block merge on `compliance` fail.
+> `test-perms-check` stays soft. Rollback: fleet-compliance-hard-cutover runbook.
 > New repos join the fleet via `docs/runbooks/REPO-ONBOARDING.md` +
 > `scripts/scaffold-tracked-repo.sh` — never by copying governance files by hand.
 

@@ -7,6 +7,8 @@
    Breakpoints: ≥1025 desktop · 641–1024 tablet · ≤640 phone.
    ────────────────────────────────────────────────────────────────────────── */
 
+[data-testid='gs-screen'] { overflow-x: clip; }
+
 /* ─── Header pills ────────────────────────────────────────────────────────── */
 
 .gs-pill {
@@ -450,6 +452,8 @@
 
 .gs-reader {
   max-width: 72ch;
+  min-width: 0;
+  width: 100%;
   font-family: var(--mazius);
   font-size: 15.5px;
   line-height: 1.72;
@@ -556,7 +560,7 @@
 .gs-reader .gs-hr { border: 0; border-top: 1px solid var(--p-grid); margin: var(--p-space-4) 0; }
 
 /* Reader tables are the one horizontal-scroll surface */
-.gs-reader .gs-table-wrap { overflow-x: auto; margin: 0 0 var(--p-space-3); border: 1px solid var(--p-grid); border-radius: var(--p-radius); }
+.gs-reader .gs-table-wrap { overflow-x: auto; max-width: 100%; margin: 0 0 var(--p-space-3); border: 1px solid var(--p-grid); border-radius: var(--p-radius); }
 
 .gs-reader .gs-table {
   border-collapse: collapse;

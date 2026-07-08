@@ -11,6 +11,11 @@ const db = vi.hoisted(() => ({
   events: [] as { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown> }[],
 }));
 
+vi.mock("@/lib/compliance/projection", () => ({
+  projectionEnabled: () => false,
+  projectPullRequest: vi.fn(async () => {}),
+}));
+
 vi.mock("@/lib/compliance/repo", () => ({
   async getDispatch(id: string) {
     return db.dispatches.get(id) ?? null;

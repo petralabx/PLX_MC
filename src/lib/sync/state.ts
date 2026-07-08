@@ -8,11 +8,13 @@ import { CURRENT_USER, SP_LISTS } from "@/lib/mc-data/data";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
 import { disallowedRepos } from "@/lib/mc-data/repos";
 import type {
+  ActivityEntry,
   AuditRow,
   Bucket,
   Comment,
   FileEntry,
   Project,
+  PullRequest,
   Repo,
   RepoRequest,
   Risk,
@@ -416,6 +418,14 @@ export interface PatchTaskInput {
   repos?: string[]; // EN-005 — pushed, allow-list enforced
   targetEnv?: Task["targetEnv"]; // pushed Target Environment column
   agentRunApproved?: boolean; // EN-005 — DB-only operator approval of an approve-mode agent run
+  prs?: PullRequest[]; // DB-only — PR links (compliance projection)
+  merge?: { sha: string; on: string }; // DB-only — merge metadata (compliance projection)
+  activityLine?: Pick<ActivityEntry, "who" | "what" | "kind">; // DB-only append
+}
+
+export interface PatchTaskOptions {
+  /** Compliance PR projection may promote to merged without a complete evidence bundle. */
+  complianceProjection?: boolean;
 }
 
 // Persistence tiers:
@@ -441,13 +451,19 @@ const PUSHED_FIELDS = [
   "targetEnv",
 ];
 
-export async function patchTask(id: string, patch: PatchTaskInput, actor: string): Promise<Task | null> {
+export async function patchTask(
+  id: string,
+  patch: PatchTaskInput,
+  actor: string,
+  opts: PatchTaskOptions = {}
+): Promise<Task | null> {
   await ensureSeeded();
   const row = await repo.getEntity("task", id);
   if (!row) return null;
 
-  const entries = Object.entries(patch).filter(([, v]) => v !== undefined);
-  if (entries.length === 0) return row.data as unknown as Task;
+  const { activityLine, ...taskPatch } = patch;
+  const entries = Object.entries(taskPatch).filter(([, v]) => v !== undefined);
+  if (entries.length === 0 && !activityLine) return row.data as unknown as Task;
 
   // Accountability policy (EN-003), enforced server-side in lockstep with the
   // client store: reject an agent executor on a human-only task, and reject a
@@ -455,22 +471,27 @@ export async function patchTask(id: string, patch: PatchTaskInput, actor: string
   // incomplete evidence). The effective task folds the incoming patch so a
   // patch that sets both owner and stage is evaluated against the new owner.
   const current = row.data as unknown as Task;
-  const effective = { ...current, ...patch } as Task;
-  if ("assignee" in patch) {
-    const violation = assignmentViolation(effective, patch.assignee ?? null);
+  const effective = { ...current, ...taskPatch } as Task;
+  if ("assignee" in taskPatch) {
+    const violation = assignmentViolation(effective, taskPatch.assignee ?? null);
     if (violation) throw new ApiError("human_only_violation", violation, 409);
   }
-  if ("stage" in patch && patch.stage) {
-    const violation = stageAdvanceViolation(effective, patch.stage);
-    if (violation) throw new ApiError("stage_blocked", violation, 409);
+  if ("stage" in taskPatch && taskPatch.stage) {
+    const skipEvidenceGate =
+      opts.complianceProjection &&
+      (taskPatch.stage === "merged" || taskPatch.stage === "verified" || taskPatch.stage === "progress");
+    if (!skipEvidenceGate) {
+      const violation = stageAdvanceViolation(effective, taskPatch.stage);
+      if (violation) throw new ApiError("stage_blocked", violation, 409);
+    }
   }
   // Allow-list enforcement on edit (EN-005): a task's repos may only be set to
   // registry members — the SAME persisted allow-list createTask validates against.
-  if (patch.repos) {
+  if (taskPatch.repos) {
     await ensureReposSeeded();
     const registry = await repo.getRepos();
     const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
-    const offlist = disallowedRepos(patch.repos, registryMap);
+    const offlist = disallowedRepos(taskPatch.repos, registryMap);
     if (offlist.length > 0) {
       throw new ApiError(
         "repo_not_allowed",
@@ -483,18 +504,32 @@ export async function patchTask(id: string, patch: PatchTaskInput, actor: string
   const pushedDirty = entries.map(([k]) => k).filter((k) => PUSHED_FIELDS.includes(k));
   const dirty = Array.from(new Set([...row.dirty_fields, ...pushedDirty]));
 
+  const dataPatch: EntityData = Object.fromEntries(entries);
+  if (activityLine) {
+    const prev = (current.activity ?? []) as ActivityEntry[];
+    dataPatch.activity = [
+      ...prev,
+      {
+        age: "now",
+        who: activityLine.who,
+        what: activityLine.what,
+        kind: activityLine.kind ?? "move",
+      },
+    ];
+  }
+
   await repo.updateEntity("task", id, {
-    patch: Object.fromEntries(entries),
+    patch: dataPatch,
     // Person columns are pushed now (Item 1), so a person-only patch re-queues
     // the entity for the next outbound sweep.
     syncState: pushedDirty.length > 0 ? "pending" : undefined,
     dirtyFields: dirty,
   });
 
-  if ("assignee" in patch) {
+  if ("assignee" in taskPatch) {
     await repo.appendAudit(
       actor,
-      patch.assignee === null
+      taskPatch.assignee === null
         ? `Unassigned ${id} — clearing Assigned To on the next SharePoint sync.`
         : `Reassigned ${id} — Assigned To mirrors to SharePoint on the next sync.`,
       "pending"

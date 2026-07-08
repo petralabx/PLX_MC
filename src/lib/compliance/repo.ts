@@ -46,6 +46,14 @@ export interface EventRow {
 
 // Keyset pagination on the monotonic `seq` — the clean export cursor. Optional
 // `kind` filter for a typed consumer (e.g. only gate.* or pr.* events).
+export async function eventTaskIdByDedupKey(dedupKey: string): Promise<string | null> {
+  const rows = await query<{ task_id: string | null }>(
+    `SELECT task_id FROM mc_events WHERE dedup_key = $1 LIMIT 1`,
+    [dedupKey]
+  );
+  return rows[0]?.task_id ?? null;
+}
+
 export async function eventsAfter(afterSeq = 0, limit = 100, kind: string | null = null): Promise<EventRow[]> {
   const rows = await query<{
     seq: string;

@@ -12,6 +12,10 @@ const db = vi.hoisted(() => ({
   checks: [] as { id: string; verdict: string; reasons: string[]; actorKind: string; taskId: string | null }[],
   tasks: new Map<string, Task>(),
   dedupKeys: new Set<string>(),
+  buckets: [
+    { id: "BKT-WMS", name: "WMS", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: null as string | null, project: null },
+    { id: "BKT-PRD", name: "With PRD", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: "PRD-001", project: null },
+  ],
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
@@ -42,6 +46,9 @@ vi.mock("@/lib/sync/repo", () => ({
   async getEntity(type: string, id: string) {
     const t = db.tasks.get(id);
     return t ? { entity_type: type, id, data: t, sync_state: "synced", sp_item_id: null, dirty_fields: [] } : null;
+  },
+  async getBuckets() {
+    return db.buckets;
   },
 }));
 
@@ -127,14 +134,23 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
     expect(r.verdict).toBe("pass");
   });
 
-  it("classifies a migration change as high-risk; PRD is advisory (no bucket store) so a full bundle passes (S1)", async () => {
+  it("blocks a high-risk agent PR when the task bucket has no PRD", async () => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert", shots: [{ label: "ui", cap: "x" }] } }));
     const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
 
     const r = await verifyPr({ repo: "PLX_MC", prNumber: 9, headSha: "ghi", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
     expect(r.tier).toBe("high");
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.some((x) => /bucket PRD/.test(x))).toBe(true);
+  });
+
+  it("passes a high-risk agent PR when the bucket has a PRD and bundle is complete", async () => {
+    db.tasks.set("TASK-900", taskish({ bucket: "BKT-PRD", accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert", shots: [{ label: "ui", cap: "x" }] } }));
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
+
+    const r = await verifyPr({ repo: "PLX_MC", prNumber: 91, headSha: "ghi2", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
+    expect(r.tier).toBe("high");
     expect(r.verdict).toBe("pass");
-    expect(r.reasons.some((x) => /advisory/.test(x))).toBe(true);
   });
 
   it("is idempotent on replay — same (repo, pr, sha) yields one check + one gate event (S3)", async () => {

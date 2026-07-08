@@ -12,6 +12,10 @@ const db = vi.hoisted(() => ({
   checks: [] as { id: string; verdict: string; reasons: string[]; actorKind: string; taskId: string | null }[],
   tasks: new Map<string, Task>(),
   dedupKeys: new Set<string>(),
+  buckets: [
+    { id: "BKT-WMS", name: "WMS", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: null as string | null, project: null },
+    { id: "BKT-PRD", name: "With PRD", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: "PRD-001", project: null },
+  ],
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
@@ -43,6 +47,9 @@ vi.mock("@/lib/sync/repo", () => ({
     const t = db.tasks.get(id);
     return t ? { entity_type: type, id, data: t, sync_state: "synced", sp_item_id: null, dirty_fields: [] } : null;
   },
+  async getBuckets() {
+    return db.buckets;
+  },
 }));
 
 import { checkout, verifyPr } from "@/lib/compliance/service";
@@ -70,6 +77,12 @@ const taskish = (over: Partial<Task>): Task => ({
 });
 
 const complete = { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" };
+const highComplete = {
+  summary: "ok",
+  items: [{ key: "a", label: "a", done: true }],
+  rollback: "revert the PR",
+  shots: [{ label: "ui", cap: "after" }],
+};
 const incomplete = { summary: "wip", items: [{ key: "a", label: "a", done: false }] };
 
 beforeEach(() => {
@@ -173,5 +186,37 @@ describe("verifyPr — multi-task PRs (checkoutIds)", () => {
     // Two distinct block rows (would be 1 if the null-task keys collided).
     expect(db.checks.filter((c) => c.id.includes("_35_") && c.verdict === "block").length).toBe(2);
     expect(db.events.filter((e) => e.kind === "gate.blocked").length).toBe(2);
+  });
+
+  it("blocks a high-risk agent PR when the task bucket has no PRD", async () => {
+    db.tasks.set("TASK-1", taskish({ id: "TASK-1", bucket: "BKT-WMS", accountableOwner: "greg", evidence: highComplete }));
+    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
+
+    const r = await verifyPr({
+      repo: "PLX_MC",
+      prNumber: 36,
+      headSha: "sha36",
+      changedPaths: ["db/migrations/006.sql"],
+      checkoutId: a.checkoutId,
+    });
+
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.some((x) => /bucket PRD/.test(x))).toBe(true);
+  });
+
+  it("passes a high-risk agent PR when the task bucket has a PRD", async () => {
+    db.tasks.set("TASK-1", taskish({ id: "TASK-1", bucket: "BKT-PRD", accountableOwner: "greg", evidence: highComplete }));
+    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
+
+    const r = await verifyPr({
+      repo: "PLX_MC",
+      prNumber: 37,
+      headSha: "sha37",
+      changedPaths: ["db/migrations/006.sql"],
+      checkoutId: a.checkoutId,
+    });
+
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.some((x) => /advisory/.test(x))).toBe(false);
   });
 });

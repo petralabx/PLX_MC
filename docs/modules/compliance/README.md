@@ -38,7 +38,13 @@ truth table is proven before any plumbing exists.
   `MC-Checkout` stamp, verifies each checked-out task, and passes only if **all**
   pass — one incomplete task blocks the PR (a PR may complete N related tasks).
   Each task's verdict is recorded as its own check + `gate.passed/blocked` event;
-  a single stamp is the back-compat subset.
+  a single stamp is the back-compat subset. Bucket PRD is resolved from the
+  persisted `buckets` table (`bucket-prd.ts`) — high-risk agent PRs block when
+  the task's bucket has no PRD link.
+- `projectPullRequest` (projection, EN-007 P1) — after `mc_events` are appended,
+  mutates sync tasks: open/sync → `progress`, merge → `merged` + `prs[]` +
+  `task.promoted` event; operator PRs with no checkout auto-create a sparse task.
+  Kill switch: `COMPLIANCE_PROJECTION_ENABLED=0`.
 
 Landed in P1b: the checkout/complete/verify handshake (`service.ts` + `repo.ts` +
 `/api/compliance/*`), the dispatch ledger + compliance-check ledger, and the
@@ -68,7 +74,8 @@ GitHub status-check workflow.
 - `src/lib/compliance/index.ts` — pure-core barrel (import through here)
 - `src/lib/compliance/service.ts` — server service: checkout / complete / verifyPr / listEvents (subpath import, like `mc-data/store`)
 - `src/lib/compliance/repo.ts` — Postgres accessors (dispatch ledger, mc_events, check ledger)
-- `src/lib/compliance/webhook.ts` — GitHub HMAC verify + PR-event parse (git→MC ingestion); parses **all** MC-Checkout stamps so a multi-task PR attributes every task
+- `src/lib/compliance/projection.ts` — PR lifecycle → sync task projection
+- `src/lib/compliance/bucket-prd.ts` — bucket PRD resolution for verifyPr
 - `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts` — the API surface
 - `.github/workflows/compliance-gate.yml` — the required PR status check (default-off; soft→hard)
 - `scripts/compliance-checkout.mjs` + `.cursor/compliance-hooks.json` — the capture hook: checks out N tasks (or auto-creates one), emits one MC-Checkout stamp per task (disabled by default)
@@ -82,7 +89,10 @@ GitHub status-check workflow.
 - `tests/compliance-server.test.ts` — service orchestration (mocked DB seam)
 - `tests/compliance-multitask.test.ts` — multi-task PRs: verify N tasks, pass iff all pass
 - `tests/compliance-capture.test.ts` — capture hook: default-off, multi-task, auto-create
+- `tests/compliance-projection.test.ts` — projection: progress, merge, sparse-create
+- `tests/sync-projection.test.ts` — projection leaves tasks pending; sweep pushes stage
 - `tests/compliance-ingest.test.ts` — webhook signature/parse + ingestion (mocked seam)
+- `src/lib/compliance/webhook.ts` — GitHub HMAC verify + PR-event parse (git→MC ingestion); parses **all** MC-Checkout stamps so a multi-task PR attributes every task
 - `docs/product/SYSTEM_OF_RECORD.md` — the governing spec (EN-007)
 
 ## Owner

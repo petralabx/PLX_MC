@@ -237,4 +237,26 @@ describe("seed registry + Collaborator SOP (integration)", () => {
       expect(detail.toc.some((h) => /install/i.test(h.text))).toBe(true);
     }
   });
+
+  it("activates agent-PR, hygiene, and rollback SOPs with readable sources", async () => {
+    const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
+    const r = parseSopRegistryJson(raw);
+    if (!r.ok) throw new Error("seed registry invalid");
+    const expected: Record<string, string> = {
+      "mc-sop-agent-pr": "docs/AGENT-PR-SOP.md",
+      "mc-sop-repo-hygiene": "docs/REPO_HYGIENE_SOP.md",
+      "mc-sop-rollback": "docs/ROLLBACK-PLAN-SOP.md",
+    };
+    for (const [slug, path] of Object.entries(expected)) {
+      const entry = r.config.sops.find((s) => s.slug === slug)!;
+      expect(entry.status).toBe("active");
+      expect(entry.source?.repo_path).toBe(path);
+      const detail = await getSopDetail(entry, createSopSource());
+      expect(detail.ok).toBe(true);
+      if (detail.ok) {
+        expect(detail.nodes.length).toBeGreaterThan(5);
+        expect(detail.toc.length).toBeGreaterThan(0);
+      }
+    }
+  });
 });

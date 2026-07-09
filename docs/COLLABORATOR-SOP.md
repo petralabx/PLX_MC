@@ -4,7 +4,7 @@
 (`PLX_MC`, `agentic-swarm`, `plx-customer-portal`), whether you work by hand or
 drive an AI agent (Cursor, Claude Code, ChatGPT/Codex, etc.).
 
-**Owner:** Vince · **Status:** active · **Effective:** 2026-07-08
+**Owner:** Vince · **Status:** active · **Effective:** 2026-07-09
 
 > **TL;DR** — Every PR now runs a **compliance check** and every PR event is
 > mirrored into Mission Control's audit log. **Humans are recorded but not
@@ -112,7 +112,7 @@ the work and pass it, and it's how autonomous changes stay accountable.
      export COMPLIANCE_CAPTURE=1
      export MC_BASE_URL=https://mc.plxcustomer.io
      export MC_ACCOUNTABLE=you@petrasoap.com
-     export MC_REPO=PLX_MC
+     export MC_REPO=petralabx/PLX_MC
      # either: an existing task (or several — comma/space-separated, one PR)
      export MC_TASK_ID="TASK-123, TASK-124"
      # or: let it auto-create a task when you don't have one
@@ -124,7 +124,7 @@ the work and pass it, and it's how autonomous changes stay accountable.
      ```bash
      curl -sS -X POST https://mc.plxcustomer.io/api/compliance/checkout \
        -H 'content-type: application/json' \
-       -d '{"taskId":"TASK-123","runtime":"cursor","accountableHuman":"you@petrasoap.com","repo":"PLX_MC"}'
+       -d '{"taskId":"TASK-123","runtime":"cursor","accountableHuman":"you@petrasoap.com","repo":"petralabx/PLX_MC"}'
      # → {"data":{"checkoutId":"dsp_..."}}
      ```
 3. **Stamp the PR body** with the checkout id — **one line per task** (the capture
@@ -135,6 +135,9 @@ the work and pass it, and it's how autonomous changes stay accountable.
    ```
 4. Make sure the PR meets the **tier bundle** (rollback note, evidence, PRD as
    required) and names the **human accountable owner**.
+
+> **Full agent provisioning guide:** Mission Control → **SOP guide** →
+> **Agent PR & MC-Checkout discipline** (`docs/AGENT-PR-SOP.md`).
 
 ### Rules for agent-driven work
 
@@ -235,7 +238,7 @@ Follow `docs/runbooks/plx-mc-mcp-team-registration.md`:
 - Set `MC_MCP_API_KEY`, `MC_OPERATOR_EMAIL`, `PLX_MC_MCP_ENABLED=1`.
 - Register `https://mc.plxcustomer.io/api/cursor/mcp` (remote) or the stdio client
   under `tools/plx-mc-mcp/`.
-- Set `MC_REPO` to the repo you are working in (e.g. `taylorvalton/PLX_MC` or
+- Set `MC_REPO` to the full slug you are working in (e.g. `petralabx/PLX_MC` or
   `petralabx/plx-customer-portal`).
 - Verify with tool `mc_self_check`.
 
@@ -243,5 +246,6 @@ Follow `docs/runbooks/plx-mc-mcp-team-registration.md`:
 
 See **Company Skills SOP** (SOP guide in Mission Control) — §8 covers submit via
 **Skills directory** / `mc_submit_skill`, reviewer approval, and the direct-PR
-fallback to `taylorvalton/plx-cursor-skills`.
+fallback to `taylorvalton/plx-cursor-skills` (skills catalog; platform repos live
+under `petralabx/*`).
 

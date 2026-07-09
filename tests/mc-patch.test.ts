@@ -155,7 +155,7 @@ describe("patchTask — comments round-trip DB-only (EN-001 / WS-3)", () => {
 describe("patchTask — per-field tier at the server boundary", () => {
   it("DB-only fields do NOT flip sync_state to pending or add dirty fields", async () => {
     seedTask();
-    await patchTask("TASK-900", { bucket: "BKT-DAPI", labels: ["x"] }, "vince");
+    await patchTask("TASK-900", { labels: ["x"], coassignees: ["ricardo"] }, "vince");
     const row = store.rows.get("task:TASK-900")!;
     expect(row.sync_state).toBe("synced"); // unchanged — never re-queued for push
     expect(row.dirty_fields).toEqual([]);
@@ -171,12 +171,22 @@ describe("patchTask — per-field tier at the server boundary", () => {
     expect(row.dirty_fields).toEqual(expect.arrayContaining(["stage", "priority"]));
   });
 
+  it("bucket (Initiative lookup) re-queues a push", async () => {
+    seedTask();
+    await patchTask("TASK-900", { bucket: "BKT-DAPI" }, "vince");
+    const row = store.rows.get("task:TASK-900")!;
+    expect(row.sync_state).toBe("pending");
+    expect(row.dirty_fields).toEqual(["bucket"]);
+    expect(row.data.bucket).toBe("BKT-DAPI");
+  });
+
   it("a mixed SP + DB-only patch flips pending but only dirties the SP fields", async () => {
     seedTask();
     await patchTask("TASK-900", { stage: "qa", labels: ["x"], bucket: "BKT-DAPI" }, "vince");
     const row = store.rows.get("task:TASK-900")!;
     expect(row.sync_state).toBe("pending");
-    expect(row.dirty_fields).toEqual(["stage"]); // labels/bucket are DB-only, not dirtied
+    expect(row.dirty_fields).toEqual(expect.arrayContaining(["stage", "bucket"]));
+    expect(row.dirty_fields).not.toContain("labels");
     // ...but the DB-only fields still persisted.
     expect(row.data.labels).toEqual(["x"]);
     expect(row.data.bucket).toBe("BKT-DAPI");

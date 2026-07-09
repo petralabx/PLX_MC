@@ -16,6 +16,19 @@
 
 ## Lessons
 
+### 2026-07-09 (ET) — OIDC cutover follow-ups lived only in chat until asked
+
+- **What happened:** Path B OIDC dual-auth shipped (PR #112) with explicit
+  deferred work (retire `COMPLIANCE_CI_TOKEN` happy-path; fleet Phase 2 for
+  swarm/portal), but those follow-ups were not MC tasks until the operator
+  asked.
+- **Root cause:** Agents treated “document in PR / evidence bundle” as enough
+  for deferred work and skipped creating bucket-scoped MC tasks.
+- **Rule going forward:** On every PR commit, review project/bucket/tasks and
+  **add follow-up MC tasks** for deferred work in the right bucket before
+  calling the primary task done. Enforced by
+  `.cursor/rules/mc-plan-hygiene-on-pr.mdc`.
+
 ### 2026-07-09 (ET) — Vendor-spend migration collided with main's 014 after a clean rebase
 
 - **What happened:** `feat/ai-spend-observatory` rebased cleanly onto `origin/main`

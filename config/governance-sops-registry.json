@@ -7,7 +7,7 @@
       "description": "How humans and agents open compliant PRs against a PLX-tracked repo: the compliance gate, MC-Checkout discipline, audit mirror, and risk-tier bundles.",
       "audience": "Anyone who opens PRs against a PLX-tracked repo (by hand or via an agent)",
       "owner": "Vince",
-      "effective_date": "2026-06-23",
+      "effective_date": "2026-07-09",
       "status": "active",
       "tags": ["Collaborator", "Compliance gate", "Agent workflow"],
       "source": { "repo_path": "docs/COLLABORATOR-SOP.md" }
@@ -37,12 +37,13 @@
     {
       "slug": "mc-sop-agent-pr",
       "title": "Agent PR & MC-Checkout discipline",
-      "description": "Linking agent work to a Mission Control task: checkout, the MC-Checkout stamp (one per task), the human accountable owner, and the tier bundle the gate expects.",
+      "description": "Linking agent work to a Mission Control task: checkout, the MC-Checkout stamp (one per task), the human accountable owner, PLX-MC MCP / capture-hook provisioning, and the tier bundle the gate expects.",
       "audience": "Anyone driving an AI agent (Cursor, Claude Code, ChatGPT/Codex) against a tracked repo",
       "owner": "Vince",
-      "effective_date": "2026-06-24",
-      "status": "planned",
-      "tags": ["Agent workflow", "Compliance gate"]
+      "effective_date": "2026-07-09",
+      "status": "active",
+      "tags": ["Agent workflow", "Compliance gate", "Provisioning"],
+      "source": { "repo_path": "docs/AGENT-PR-SOP.md" }
     },
     {
       "slug": "mc-sop-repo-hygiene",
@@ -50,9 +51,10 @@
       "description": "Where files belong: approved root files, forbidden patterns, dated artifact bundles, and documented archives — derived from the repo hygiene spec.",
       "audience": "Contributors and agents adding files, docs, or evidence to a tracked repo",
       "owner": "Vince",
-      "effective_date": "2026-06-24",
-      "status": "planned",
-      "tags": ["Repo hygiene"]
+      "effective_date": "2026-07-09",
+      "status": "active",
+      "tags": ["Repo hygiene"],
+      "source": { "repo_path": "docs/REPO_HYGIENE_SOP.md" }
     },
     {
       "slug": "mc-sop-rollback",
@@ -60,9 +62,20 @@
       "description": "What a Rollback Plan must contain per risk tier, when it is required, and how the gate checks for it on non-docs changes.",
       "audience": "Anyone opening a PR beyond docs/tests on a tracked repo",
       "owner": "Vince",
-      "effective_date": "2026-06-24",
+      "effective_date": "2026-07-09",
+      "status": "active",
+      "tags": ["Rollback", "Compliance gate"],
+      "source": { "repo_path": "docs/ROLLBACK-PLAN-SOP.md" }
+    },
+    {
+      "slug": "mc-sop-fleet-secrets",
+      "title": "Fleet secrets & CI tokens",
+      "description": "How COMPLIANCE_CI_TOKEN, PLX_MC_BASE_URL, and related fleet secrets are provisioned on GitHub Actions and the MC deployment — planned companion to the compliance-gate rollout runbook.",
+      "audience": "Org admins wiring compliance on a tracked repo",
+      "owner": "Vince",
+      "effective_date": "2026-07-09",
       "status": "planned",
-      "tags": ["Rollback", "Compliance gate"]
+      "tags": ["Compliance gate", "Secrets"]
     }
   ]
 }

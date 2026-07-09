@@ -26,7 +26,7 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
 
   test("index lists the seed catalog; active SOPs are ready", async ({ page }) => {
     const rows = page.locator("[data-testid='gs-row']");
-    await expect(rows).toHaveCount(6);
+    await expect(rows).toHaveCount(7);
 
     const collab = page.locator("[data-testid='gs-row'][data-slug='mc-sop-collaborator']");
     await expect(collab).toBeVisible();
@@ -39,6 +39,10 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
     await expect(skills).toHaveAttribute("data-state", "ready");
     await expect(skills).toContainText("Company Skills SOP");
     await expect(skills).toContainText("Active");
+
+    const agentPr = page.locator("[data-testid='gs-row'][data-slug='mc-sop-agent-pr']");
+    await expect(agentPr).toBeVisible();
+    await expect(agentPr).toHaveAttribute("data-state", "ready");
 
     // A planned entry renders as a calm "coming soon" row (visible, not hidden).
     const planned = page.locator("[data-testid='gs-row'][data-state='planned']").first();
@@ -89,6 +93,18 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
 
     const reader = page.locator("[data-testid='gs-reader']");
     await expect(reader).toContainText("plx-cursor-skills");
+    await expect(reader.locator("table.gs-table").first()).toBeVisible();
+  });
+
+  test("opens the Agent PR SOP and renders checkout guidance", async ({ page }) => {
+    await page.locator("[data-testid='gs-row'][data-slug='mc-sop-agent-pr']").click();
+
+    const detail = page.locator("[data-testid='gs-detail-view']");
+    await expect(detail).toBeVisible();
+    await expect(detail.locator(".gs-doc-title")).toContainText("Agent PR");
+
+    const reader = page.locator("[data-testid='gs-reader']");
+    await expect(reader).toContainText("MC-Checkout");
     await expect(reader.locator("table.gs-table").first()).toBeVisible();
   });
 

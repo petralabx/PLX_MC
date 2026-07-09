@@ -187,6 +187,39 @@ export function complianceCiToken(): string {
   return requireSecret("COMPLIANCE_CI_TOKEN");
 }
 
+// GitHub Actions OIDC for POST /api/compliance/verify. These are config
+// (flags / audience / allowlist), not secrets — they still live here as the
+// single env-accessor surface so callers never scatter process.env reads.
+// Fail-closed: when OIDC is enabled but audience or allowlist is empty,
+// complianceOidcConfigured() is false and the OIDC path must reject.
+const DEFAULT_COMPLIANCE_OIDC_AUDIENCE = "plx-mc-compliance-verify";
+
+export function complianceOidcEnabled(): boolean {
+  return process.env.COMPLIANCE_OIDC_ENABLED === "1";
+}
+
+export function complianceOidcAudience(): string {
+  const raw = process.env.COMPLIANCE_OIDC_AUDIENCE;
+  if (raw === undefined || raw === "") return DEFAULT_COMPLIANCE_OIDC_AUDIENCE;
+  return raw;
+}
+
+export function complianceOidcRepoAllowlist(): string[] {
+  const raw = process.env.COMPLIANCE_OIDC_REPO_ALLOWLIST ?? "";
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+export function complianceOidcConfigured(): boolean {
+  return (
+    complianceOidcEnabled() &&
+    complianceOidcAudience().length > 0 &&
+    complianceOidcRepoAllowlist().length > 0
+  );
+}
+
 // Vendor spend (AI Spend) adapter credentials. Each automated adapter is
 // default-off: when its key is absent the adapter returns a visible degraded
 // result and the vendor stays manual-entry — never fabricated spend.

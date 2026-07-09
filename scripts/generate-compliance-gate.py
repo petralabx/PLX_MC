@@ -77,6 +77,7 @@ BODY = r"""
 permissions:
   contents: read
   pull-requests: read
+  id-token: write
 
 jobs:
   compliance:
@@ -101,6 +102,20 @@ jobs:
           if [ -z "${MC_BASE_URL:-}" ]; then
             echo "PLX_MC_BASE_URL not configured — compliance gate skipped (pre-rollout)."
             exit 0
+          fi
+          AUTH_TOKEN=""
+          OIDC_TOKEN=""
+          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] && [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=plx-mc-compliance-verify" \
+              | jq -r '.value // ""' || true)
+          fi
+          if [ -n "${OIDC_TOKEN:-}" ]; then
+            AUTH_TOKEN="$OIDC_TOKEN"
+            echo "auth=oidc"
+          elif [ -n "${MC_CI_TOKEN:-}" ]; then
+            AUTH_TOKEN="$MC_CI_TOKEN"
+            echo "auth=bearer-fallback"
           fi
           git fetch --no-tags --depth=1 origin "$PR_BASE_REF" || true
           # Capture the diff separately from jq. Piping `git diff | jq ... || echo '[]'`
@@ -133,7 +148,7 @@ jobs:
              + (if $checkoutId != "" then {checkoutId:$checkoutId} else {} end)')
           resp=$(curl -sS --max-time 20 -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
             -H 'content-type: application/json' \
-            -H "authorization: Bearer ${MC_CI_TOKEN:-}" \
+            -H "authorization: Bearer ${AUTH_TOKEN:-}" \
             -d "$body" || true)
           echo "verify response: $resp"
           if [ -z "$resp" ]; then

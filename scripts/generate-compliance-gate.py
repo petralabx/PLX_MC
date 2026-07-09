@@ -103,19 +103,11 @@ jobs:
             echo "PLX_MC_BASE_URL not configured — compliance gate skipped (pre-rollout)."
             exit 0
           fi
-          AUTH_TOKEN=""
           OIDC_TOKEN=""
           if [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] && [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
             OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
               "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=plx-mc-compliance-verify" \
               | jq -r '.value // ""' || true)
-          fi
-          if [ -n "${OIDC_TOKEN:-}" ]; then
-            AUTH_TOKEN="$OIDC_TOKEN"
-            echo "auth=oidc"
-          elif [ -n "${MC_CI_TOKEN:-}" ]; then
-            AUTH_TOKEN="$MC_CI_TOKEN"
-            echo "auth=bearer-fallback"
           fi
           git fetch --no-tags --depth=1 origin "$PR_BASE_REF" || true
           # Capture the diff separately from jq. Piping `git diff | jq ... || echo '[]'`
@@ -146,10 +138,34 @@ jobs:
             --arg checkoutId "${checkout:-}" \
             '{repo:$repo, prNumber:$prNumber, headSha:$headSha, changedPaths:$changedPaths, labels:$labels, checkoutIds:$checkoutIds}
              + (if $checkoutId != "" then {checkoutId:$checkoutId} else {} end)')
-          resp=$(curl -sS --max-time 20 -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
-            -H 'content-type: application/json' \
-            -H "authorization: Bearer ${AUTH_TOKEN:-}" \
-            -d "$body" || true)
+          # Prefer OIDC; on unauthorized/verify_disabled (pre-deploy cutover when MC
+          # is still bearer-only) retry once with COMPLIANCE_CI_TOKEN.
+          AUTH_PATH=""
+          resp=""
+          if [ -n "${OIDC_TOKEN:-}" ]; then
+            resp=$(curl -sS --max-time 20 -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
+              -H 'content-type: application/json' \
+              -H "authorization: Bearer ${OIDC_TOKEN}" \
+              -d "$body" || true)
+            err=$(printf '%s' "$resp" | jq -r '.error.code // empty' 2>/dev/null || true)
+            if [ -n "$resp" ] && [ "$err" != "unauthorized" ] && [ "$err" != "verify_disabled" ]; then
+              AUTH_PATH="oidc"
+              echo "auth=oidc"
+            fi
+          fi
+          if [ -z "$AUTH_PATH" ] && [ -n "${MC_CI_TOKEN:-}" ]; then
+            resp=$(curl -sS --max-time 20 -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
+              -H 'content-type: application/json' \
+              -H "authorization: Bearer ${MC_CI_TOKEN}" \
+              -d "$body" || true)
+            if [ -n "${OIDC_TOKEN:-}" ]; then
+              AUTH_PATH="bearer-fallback"
+              echo "auth=bearer-fallback"
+            else
+              AUTH_PATH="bearer"
+              echo "auth=bearer"
+            fi
+          fi
           echo "verify response: $resp"
           if [ -z "$resp" ]; then
             echo "Compliance gate: MC unreachable (network/timeout)."

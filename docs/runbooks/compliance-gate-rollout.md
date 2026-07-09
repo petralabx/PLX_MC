@@ -37,13 +37,18 @@ Repeat against production only after staging is verified.
 Deploy the app and set, via the secrets manager (no hardcoded keys):
 
 - `COMPLIANCE_WEBHOOK_SECRET` — HMAC secret for the GitHub webhook (shared with Step 3).
-- `COMPLIANCE_CI_TOKEN` — bearer token the status-check workflow sends to `POST /api/compliance/verify` (shared with the `COMPLIANCE_CI_TOKEN` repo secret in Step 4).
+- `COMPLIANCE_OIDC_ENABLED=1` — enables GitHub Actions OIDC as the preferred auth path for `POST /api/compliance/verify`.
+- `COMPLIANCE_OIDC_AUDIENCE=plx-mc-compliance-verify` — audience requested by the workflow and verified by MC.
+- `COMPLIANCE_OIDC_REPO_ALLOWLIST=petralabx/PLX_MC` — dogfood allowlist for the first rollout. Add fleet repos only in the follow-up phase.
+- `COMPLIANCE_CI_TOKEN` — bearer break-glass fallback the status-check workflow can send to `POST /api/compliance/verify` if OIDC token minting is unavailable (shared with the `COMPLIANCE_CI_TOKEN` repo secret in Step 4).
 - `PLX_MC_DATABASE_URL` — already set for the app.
 
 Confirm the endpoints answer: `POST {MC}/api/compliance/webhook` returns `503`
 (default-off) until the secret is set, then `401` for an unsigned body;
-`POST {MC}/api/compliance/verify` returns `503` until `COMPLIANCE_CI_TOKEN` is
-set, then `401` without the `Authorization: Bearer` token.
+`POST {MC}/api/compliance/verify` returns `503` until OIDC or bearer auth is
+configured, then `401` without an `Authorization: Bearer` token. With
+`COMPLIANCE_OIDC_ENABLED=1`, MC verifies GitHub Actions OIDC tokens first and
+falls back to `COMPLIANCE_CI_TOKEN` only when bearer is still configured.
 
 ## Step 3 — Register + install the GitHub App
 
@@ -58,13 +63,23 @@ set, then `401` without the `Authorization: Bearer` token.
 The workflow `.github/workflows/compliance-gate.yml` is already in `PLX_MC` and is
 **safe**: it skips while `PLX_MC_BASE_URL` is unset.
 
-1. Set repo secrets `PLX_MC_BASE_URL = {MC}` and `COMPLIANCE_CI_TOKEN` (matching
-   the deployment's value so the workflow can authenticate to `verify`), and
-   variable `COMPLIANCE_MODE = soft`.
+1. Set repo secret `PLX_MC_BASE_URL = {MC}` and variable
+   `COMPLIANCE_MODE = soft`. Keep repo secret `COMPLIANCE_CI_TOKEN` during
+   dogfood as the bearer fallback/break-glass path.
 2. Open a test PR; confirm the check runs and records (soft = warn only).
 3. When clean, set `COMPLIANCE_MODE = hard` and add the check to **branch
    protection** as a required status on the protected branches (`master` keeps its
    existing explicit-approval rule; the gate is additive).
+
+Mandatory dual-auth cutover order:
+
+1. Merge the dual-auth verify route + OIDC-capable workflow.
+2. Deploy MC with `COMPLIANCE_OIDC_ENABLED=1`,
+   `COMPLIANCE_OIDC_AUDIENCE=plx-mc-compliance-verify`, and
+   `COMPLIANCE_OIDC_REPO_ALLOWLIST=petralabx/PLX_MC`.
+3. Dogfood a PLX_MC PR that authenticates via OIDC.
+4. Retire bearer in a follow-up only after dogfood evidence exists. Do not remove
+   `COMPLIANCE_CI_TOKEN` in this PR.
 
 ## Step 5 — (Optional) enable zero-friction capture
 
@@ -73,13 +88,15 @@ into `.cursor/hooks.json` and set in the run env: `COMPLIANCE_CAPTURE=1`,
 `MC_BASE_URL`, `MC_TASK_ID`, `MC_ACCOUNTABLE`, `MC_REPO`. The hook checks out the
 task and stamps the PR body with `MC-Checkout: <id>`. Default-off; opt-in per runtime.
 
-## Step 6 — Roll out to the other repos
+## Step 6 — Roll out to the other repos (Phase 2 follow-up)
 
 For `agentic-swarm`, then `plx-customer-portal`: add a 3-line caller workflow that
 `uses:` the reusable `compliance-gate.yml` (or copy it), set `PLX_MC_BASE_URL` +
-`COMPLIANCE_MODE=soft`, install the App, observe, then flip to `hard` + required.
-Do **not** flip the live `plx-customer-portal` to hard until its team's in-flight
-work is enrolled.
+`COMPLIANCE_MODE=soft`, install the App, extend
+`COMPLIANCE_OIDC_REPO_ALLOWLIST`, observe, then flip to `hard` + required. This
+fleet rollout is **not** part of the OIDC dogfood PR; leave it for Phase 2 /
+follow-up after PLX_MC proves OIDC end to end. Do **not** flip the live
+`plx-customer-portal` to hard until its team's in-flight work is enrolled.
 
 ## Step 7 — Schedule reconciliation
 
@@ -101,19 +118,23 @@ code-level findings are already fixed on the branch):
   default-branch ref** (or a caller that only `uses:` the reusable workflow at an
   immutable ref). Never rely on the PR-head copy as the required check.
 - **Authenticate the verify endpoint + carve out middleware (review #3).** Put
-  `POST /api/compliance/verify` behind **GitHub OIDC** (or a shared CI token) and
-  exempt `/api/compliance/webhook` (HMAC) + `/api/compliance/verify` from the UI
-  auth middleware; keep `checkout` / `complete` / `reconcile` / `events` behind
-  operator credentials. **Do not deploy with auth dormant** — that makes the
-  control plane world-callable.
+  `POST /api/compliance/verify` behind **GitHub Actions OIDC** as the preferred
+  path and keep the shared CI bearer token only as fallback/break-glass through
+  dogfood. Exempt `/api/compliance/webhook` (HMAC) + `/api/compliance/verify`
+  from the UI auth middleware; keep `checkout` / `complete` / `reconcile` /
+  `events` behind operator credentials. **Do not deploy with auth dormant** —
+  that makes the control plane world-callable.
   - **Status:** both carve-outs are **implemented** in `src/middleware.ts`:
     `/api/compliance/webhook` (HMAC self-auth) and `/api/compliance/verify`
-    (CI bearer token — `COMPLIANCE_CI_TOKEN`, enforced in the route: 503 when
-    unset, 401 on a bad/missing token, runs on a match). `checkout` / `complete`
-    / `reconcile` / `events` have no self-auth and remain behind the session gate
-    (operator credentials). To activate `verify` set `COMPLIANCE_CI_TOKEN` on the
-    deployment (Step 2) **and** as the matching `COMPLIANCE_CI_TOKEN` repo secret
-    so the workflow can authenticate (Step 4).
+    (dual-auth — GitHub Actions OIDC first when
+    `COMPLIANCE_OIDC_ENABLED=1` plus audience/allowlist are configured, then
+    `COMPLIANCE_CI_TOKEN` bearer fallback when present; 503 when neither path is
+    configured, 401 on a bad/missing token, runs on a match). `checkout` /
+    `complete` / `reconcile` / `events` have no self-auth and remain behind the
+    session gate (operator credentials). To activate OIDC set the three OIDC env
+    vars on the MC deployment (Step 2). Keep `COMPLIANCE_CI_TOKEN` on both MC and
+    the repo secret until the dogfood PR proves OIDC and a separate bearer
+    retirement follow-up removes it.
 - **Enrolled-repo strict policy (review #2).** A PR with no valid agent dispatch is
   treated as operator work and passes (recorded, ungated) by design (decision 5).
   Telling a real human operator apart from an agent that skipped checkout needs the
@@ -126,6 +147,8 @@ code-level findings are already fixed on the branch):
 
 - **Per repo:** set `COMPLIANCE_MODE=soft` (warn only) or remove the required-check
   from branch protection.
+- **Verify auth:** set `COMPLIANCE_OIDC_ENABLED=0` on MC to disable OIDC and run
+  bearer-only while `COMPLIANCE_CI_TOKEN` remains configured.
 - **Global:** unset `PLX_MC_BASE_URL` in a repo → the gate skips (exit 0).
 - Uninstall the GitHub App to stop ingestion. Nothing about the gate changes repo
   behavior while it is off; the event log is append-only and retains history.

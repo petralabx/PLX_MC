@@ -41,6 +41,11 @@ truth table is proven before any plumbing exists.
   a single stamp is the back-compat subset. Bucket PRD is resolved from the
   persisted `buckets` table (`bucket-prd.ts`) — high-risk agent PRs block when
   the task's bucket has no PRD link.
+- `verify` route auth is dual-path: GitHub Actions OIDC is the preferred
+  first-class auth for `POST /api/compliance/verify`, with
+  `COMPLIANCE_CI_TOKEN` bearer as fallback/break-glass during dogfood. The route
+  stays fail-closed (503 when neither path is configured; 401 on bad/missing
+  bearer) while remaining carved out from the UI session middleware.
 - `projectPullRequest` (projection, EN-007 P1) — after `mc_events` are appended,
   mutates sync tasks: open/sync → `progress`, merge → `merged` + `prs[]` +
   `task.promoted` event; operator PRs with no checkout auto-create a sparse task.
@@ -55,16 +60,21 @@ event. Server logic is proven hermetically (mocked DB seam,
 `tests/compliance-server.test.ts`); applying the migration + live integration on
 staging is the deploy step.
 
-Deferred to later phases (see `docs/product/SYSTEM_OF_RECORD.md`): the GitHub App +
-branch protection + git→MC ingestion + reconciliation queue (P3), Cursor/Claude
-auto-checkout hooks (P2), and the embedding/index feed over the event log (P5).
+Landed after P1b: Cursor/Claude auto-checkout hooks (P2), GitHub App +
+branch protection + git→MC ingestion + reconciliation queue (P3), and
+OIDC-first verify auth with bearer fallback for the compliance gate dogfood path.
+Deferred to later phases (see `docs/product/SYSTEM_OF_RECORD.md`): fleet rollout
+to `agentic-swarm` / `plx-customer-portal` and the embedding/index feed over the
+event log (P5).
 
 ## Dependencies
 
 `@/lib/mc-data` (the `Task`/`Evidence` types, `evidenceComplete`,
-`hasHumanAccountableOwner` from EN-003 `policy.ts`). No external services, no DB
-in the pure core. Depended on by: the (planned) `/api/compliance/*` routes and the
-GitHub status-check workflow.
+`hasHumanAccountableOwner` from EN-003 `policy.ts`). The pure core has no
+external services and no DB. The server wrapper uses Postgres repositories,
+GitHub webhook HMAC, and GitHub Actions OIDC verification (`jose` JWKS) for the
+runtime gate. Depended on by: the `/api/compliance/*` routes and the GitHub
+status-check workflow.
 
 ### Key Files
 
@@ -74,9 +84,10 @@ GitHub status-check workflow.
 - `src/lib/compliance/index.ts` — pure-core barrel (import through here)
 - `src/lib/compliance/service.ts` — server service: checkout / complete / verifyPr / listEvents (subpath import, like `mc-data/store`)
 - `src/lib/compliance/repo.ts` — Postgres accessors (dispatch ledger, mc_events, check ledger)
+- `src/lib/compliance/github-oidc.ts` — GitHub Actions OIDC verifier for the compliance gate allowlist/audience
 - `src/lib/compliance/projection.ts` — PR lifecycle → sync task projection
 - `src/lib/compliance/bucket-prd.ts` — bucket PRD resolution for verifyPr
-- `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts` — the API surface
+- `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts` — the API surface (`verify` is dual-auth OIDC + bearer fallback)
 - `.github/workflows/compliance-gate.yml` — the required PR status check (default-off; soft→hard)
 - `scripts/compliance-checkout.mjs` + `.cursor/compliance-hooks.json` — the capture hook: checks out N tasks (or auto-creates one), emits one MC-Checkout stamp per task (disabled by default)
 - `scripts/compliance-ci-check.sh` — workflow/hook validator (P3 acceptance)

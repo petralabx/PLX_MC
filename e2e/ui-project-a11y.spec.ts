@@ -36,4 +36,16 @@ test.describe("project a11y (G4)", () => {
     const violations = results.violations.filter((v) => !allowed.has(v.id));
     expect(violations).toEqual([]);
   });
+
+  test("initiatives lens has no axe violations", async ({ page }) => {
+    await page.locator(".mc .ph .pv-seg button", { hasText: "Initiatives" }).click();
+    await page.locator(".mc .init-grid .init-card").first().waitFor();
+    const allowed = allowedRuleIds();
+    const results = await new AxeBuilder({ page })
+      .include('[data-testid="project-screen"]')
+      .withTags(TAGS)
+      .analyze();
+    const violations = results.violations.filter((v) => !allowed.has(v.id));
+    expect(violations).toEqual([]);
+  });
 });

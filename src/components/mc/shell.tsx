@@ -16,6 +16,7 @@ import { NewInitiativeModal } from "./new-initiative-modal";
 import { NewProjectModal } from "./new-project-modal";
 import { NewTaskModal } from "./new-task-modal";
 import type { Nav, Route, Screen } from "./route";
+import { routeToUrl, urlToRoute } from "./route";
 import { SCREENS } from "./screens";
 
 export function MissionControlShell() {
@@ -38,8 +39,38 @@ export function MissionControlShell() {
     hydrate();
   }, []);
 
+  // P3 deep links — route state ⇄ URL. The URL is adopted AFTER mount (not in
+  // the useState initializer) so the SSR HTML and the first client render stay
+  // identical ("home") and hydration never mismatches; browser back/forward
+  // then replay screens via popstate. `filter` is intentionally not in the URL
+  // (transient hand-off state — see routeToUrl in route.ts).
+  useEffect(() => {
+    // Deferred one tick (same pattern as the `ready` flag below) so the
+    // adoption is not a synchronous setState inside the effect body; effects
+    // run in declaration order, so this timer is scheduled — and fires —
+    // before the readiness timer, i.e. data-mc-ready still implies the deep
+    // link has been adopted.
+    const timer = window.setTimeout(() => setRoute(urlToRoute(window.location.search)), 0);
+    const onPopState = () => setRoute(urlToRoute(window.location.search));
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, []);
+
   const nav = useCallback<Nav>((screen: Screen, extra) => {
-    setRoute({ screen, ...extra });
+    const next: Route = { screen, ...extra };
+    setRoute(next);
+    // Shallow history update via the native History API: Next 14+ syncs its
+    // router state from pushState without re-rendering server components or
+    // refetching, so every nav stays a pure client-state transition. Skip the
+    // push when the URL wouldn't change (e.g. re-clicking the current screen)
+    // so history doesn't fill with duplicates.
+    const url = routeToUrl(next);
+    if (url !== window.location.pathname + window.location.search) {
+      window.history.pushState(null, "", url);
+    }
   }, []);
 
   const openPalette = useCallback(() => {

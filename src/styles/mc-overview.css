@@ -390,6 +390,40 @@
   white-space: nowrap;
 }
 
+/* Project detail — inline edit parity (P2). The owner cell reuses the New-Task
+   modal's field-button recipe (ntm-field-btn), which is scoped under .ntm —
+   restate it for the facts strip. The health select and target input reuse the
+   global .rfact-select / .le-input skins as-is. */
+.mc .bkfacts .ntm-field-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  max-width: 100%;
+  border: 1px dashed var(--p-grid);
+  background: transparent;
+  padding: 4px 8px;
+  color: var(--p-ink);
+  cursor: pointer;
+}
+
+.mc .bkfacts .ntm-field-btn:hover {
+  border-color: var(--p-ink-2);
+}
+
+.mc .bkfacts .ntm-field-btn .caret {
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  color: var(--p-muted);
+  flex: 0 0 auto;
+}
+
+/* Header description edit: constrain the textarea to the .sub column width. */
+.mc .ph .ph-desc-edit {
+  margin-top: 9px;
+  max-width: 66ch;
+}
+
 .mc .overview-trace-block {
   margin-bottom: 0;
 }

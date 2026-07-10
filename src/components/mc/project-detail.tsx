@@ -1,6 +1,8 @@
 "use client";
 
-import { ACTORS, PROJECTS } from "@/lib/mc-data";
+import type { CSSProperties } from "react";
+
+import { ACTORS, PROJECTS, STAGES, STAGE_IDX } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import { allTasks, bucketsForProject, projectById } from "@/lib/mc-data/store";
 
@@ -17,7 +19,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
   const tasks = allTasks().filter((t) => buckets.some((b) => b.id === t.bucket));
 
   return (
-    <div className="mc-main">
+    <div className="mc-main" data-testid="project-screen">
       <div className="ph">
         <div>
           <button type="button" className="back" onClick={() => nav("home")}>
@@ -77,20 +79,42 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
               {buckets.length === 0 ? (
                 <p className="sub">No initiatives under this project yet.</p>
               ) : (
-                <div className="init-list">
-                  {buckets.map((bucket) => (
-                    <button
-                      type="button"
-                      key={bucket.id}
-                      className="init-row"
-                      onClick={() => nav("bucket", { bucketId: bucket.id, projectId: project.id })}
-                    >
-                      <span className={`hl ${bucket.health}`} />
-                      <span className="nm">{bucket.name}</span>
-                      <span className="meta">{bucket.id}</span>
-                      <HealthPill h={bucket.health} />
-                    </button>
-                  ))}
+                <div className="init-grid">
+                  {buckets.map((bucket) => {
+                    const bucketTasks = tasks.filter((t) => t.bucket === bucket.id);
+                    const done = bucketTasks.filter(
+                      (t) => STAGES[STAGE_IDX[t.stage]].band === "done"
+                    ).length;
+                    const pct =
+                      bucketTasks.length > 0 ? Math.round((done / bucketTasks.length) * 100) : 0;
+                    const barStyle = { "--pct": `${pct}%` } as CSSProperties;
+                    return (
+                      <button
+                        type="button"
+                        key={bucket.id}
+                        className={`init-card ${bucket.health}`}
+                        onClick={() =>
+                          nav("bucket", { bucketId: bucket.id, projectId: project.id })
+                        }
+                      >
+                        <span className="ih">
+                          <span className="id">{bucket.id}</span>
+                          <HealthPill h={bucket.health} />
+                        </span>
+                        <span className="nm">{bucket.name}</span>
+                        <span className="prog">
+                          <span className="bar" style={barStyle}>
+                            <span className="fill" />
+                          </span>
+                          <span className="ct">
+                            {bucketTasks.length === 0
+                              ? "No tasks yet"
+                              : `${done}/${bucketTasks.length} tasks done`}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

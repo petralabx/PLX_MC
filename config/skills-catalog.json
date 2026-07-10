@@ -7,6 +7,6 @@
   "manifestPath": "manifest.json",
   "packageId": "plx-engineering-core",
   "pinTag": "",
-  "pinSha": "a735e2c2f6cbd66770f7f6cf0f6ce2198e765e89",
-  "notes": "petralabx/skills is the canonical company skill content repo; legacySourceRepo documents the pre-migration source."
+  "pinSha": "805c514bcd91f68172d45cee915c04d01f33ff8b",
+  "notes": "petralabx/skills is the canonical company skill content repo; pinSha tracks catalog v1.2.0 (5 operator skills: uat-feedback-batch-fix, uat-weekly-batch-loop, staging-dual-db-migrate, plx-graph-mail, worktree-open-session). legacySourceRepo documents the pre-migration source."
 }

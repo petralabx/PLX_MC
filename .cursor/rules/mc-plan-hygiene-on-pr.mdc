@@ -1,0 +1,44 @@
+---
+description: Review/update/add MC project, bucket, and tasks (incl. follow-ups) whenever committing a PR
+alwaysApply: true
+---
+
+# MC Plan Hygiene On Every PR
+
+Whenever you commit work that will become (or update) a pull request, treat
+Mission Control as part of the delivery — not an afterthought.
+
+## Required before commit / PR open
+
+1. **Project + bucket** — Confirm the work sits in the correct MC project and
+   bucket (e.g. `BKT-MISSION-CONTROL-OPS`). Create or re-home the task if wrong.
+2. **Task** — Checkout or create an MC task; stamp the PR body with
+   `MC-Checkout: dsp_*` (one line per task).
+3. **Update** — Progress notes, evidence, accountable owner, and stage must
+   match reality before you claim the PR is ready.
+4. **Follow-ups** — Before marking the primary task done / opening the PR,
+   file explicit MC tasks for deferred work (fleet rollout, secret retirement,
+   Phase 2, docs debt). Do not leave follow-ups only in chat or PR prose.
+
+## Required at PR merge / cutover complete
+
+- Complete the checked-out task with evidence (summary, PR URL, verification).
+- Ensure every follow-up named in the PR / evidence bundle exists as an MC
+  task in the right bucket with owner + done-when criteria.
+
+## Anti-patterns
+
+```text
+❌ Ship PR #112, mention “fleet Phase 2 / retire bearer later” only in the PR body
+✅ Create TASK-300 (fleet) + TASK-299 (bearer retirement) in BKT-MISSION-CONTROL-OPS
+
+❌ Commit without checking bucket / accountable owner
+✅ Search MC first; fix owner/bucket; then commit
+```
+
+## How
+
+Prefer PLX-MC MCP / `scripts/compliance-checkout.mjs` (`mc_create_task`,
+`mc_checkout_task`, `mc_complete_task`). Bucket must be a real MC bucket id.
+Omit `repos` on create if the registry rejects unregistered names — put repo
+scope in the description instead.

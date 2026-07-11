@@ -8,9 +8,15 @@ import { allTasks, bucketsForProject, projectById, pushNotice, updateProject } f
 
 import { Avatar, HealthPill, SyncTick } from "./atoms";
 import { PeoplePicker } from "./people-picker";
+import { ProjectOverview } from "./project-overview";
+import { projectProgress, rollupForProject } from "./project-overview.helpers";
 import type { ScreenProps } from "./route";
 
 const FALLBACK_PROJECT = PROJECTS[0];
+
+// The two project lenses: Overview (initiative sections + task tables — the
+// default whole-project read) and Initiatives (the P1 card grid).
+type ProjectLens = "overview" | "initiatives";
 
 // Same labels the New Initiative / New Project modals use for the health seg.
 const HEALTH_OPTIONS: Array<{ value: Project["health"]; label: string }> = [
@@ -29,6 +35,10 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState("");
+  const [lens, setLens] = useState<ProjectLens>("overview");
+
+  const rollups = rollupForProject(buckets, tasks);
+  const progress = projectProgress(tasks);
 
   // All edits route through updateProject (store) → PATCH /api/projects/{id}:
   // optimistic local apply, reconcile to server truth on success, rollback +
@@ -93,6 +103,22 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
         <div className="r">
           <HealthPill h={project.health} />
           <SyncTick sync={project.sync} />
+          <nav className="pv-seg" aria-label="Project lens">
+            <button
+              type="button"
+              className={lens === "overview" ? "on" : ""}
+              onClick={() => setLens("overview")}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              className={lens === "initiatives" ? "on" : ""}
+              onClick={() => setLens("initiatives")}
+            >
+              Initiatives
+            </button>
+          </nav>
         </div>
       </div>
 
@@ -191,17 +217,42 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
             <span className="k">Tasks</span>
             <span className="v">{tasks.length}</span>
           </div>
+          {/* Whole-project progress — one spine segment per task (the .spine
+              skin), done = ink, in-flight = accent; counts from projectProgress
+              so this cell and the section bars always agree. */}
+          <div className="f">
+            <span className="k">Progress</span>
+            <span className="v">
+              {progress.pct}% <small className="pv-progress-ct">{progress.done} / {progress.total} done</small>
+            </span>
+            {progress.total > 0 && (
+              <span className="spine pv-progress-spine" aria-hidden="true">
+                {Array.from({ length: progress.total }, (_, i) => (
+                  <span
+                    key={i}
+                    className={i < progress.done ? "done" : i < progress.done + progress.doing ? "now" : ""}
+                  />
+                ))}
+              </span>
+            )}
+          </div>
         </div>
 
-        <div className="bkbody">
+        {/* pv-wide: the overview table needs the full row — .bkbody's 1.6fr/1fr
+            split is for bucket detail's two-column body, and this screen has a
+            single column. */}
+        <div className={`bkbody${lens === "overview" ? " pv-wide" : ""}`}>
           <div className="c">
             <div className="blk">
               <div className="bh">
                 <span className="kk">
-                  / Initiatives · <b>{buckets.length}</b>
+                  {lens === "overview" ? "/ Overview · " : "/ Initiatives · "}
+                  <b>{buckets.length}</b>
                 </span>
               </div>
-              {buckets.length === 0 ? (
+              {lens === "overview" ? (
+                <ProjectOverview projectId={project.id} rollups={rollups} nav={nav} />
+              ) : buckets.length === 0 ? (
                 <p className="sub">No initiatives under this project yet.</p>
               ) : (
                 <div className="init-grid">

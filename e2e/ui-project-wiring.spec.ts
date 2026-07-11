@@ -28,17 +28,51 @@ test.describe("project wiring (G2)", () => {
     await page.getByLabel("Set target").press("Enter");
     await expect(page.getByLabel("Set target")).toHaveValue("—");
 
+    // Description save: the e2e server runs DB-less, so the PATCH mirror fails
+    // by design — the contract under test is optimistic apply → visible
+    // (never silent) rollback notice → reverted text. Asserting persistence
+    // here was a race against the rollback (flaked once the screen grew).
     await page.locator(".mc .ph .tl-link", { hasText: "Edit" }).click();
     await page.getByLabel("Edit project description").fill("Hardening updated this project description.");
     await page.locator(".mc .ph .desc-edit-acts .btn", { hasText: "Save" }).click();
-    await expect(page.locator(".mc .ph .sub")).toContainText("Hardening updated this project description.");
+    await expect(
+      page.locator(".mc .mc-notice .body", { hasText: "rolled back" }).first()
+    ).toBeVisible();
+    await expect(page.locator(".mc .ph .sub")).toContainText(
+      "Umbrella project for all PLX Portal go-live initiatives."
+    );
 
+    // Cancel discards the draft without touching the description.
     await page.locator(".mc .ph .tl-link", { hasText: "Edit" }).click();
     await page.getByLabel("Edit project description").fill("Discard this draft.");
     await page.locator(".mc .ph .desc-edit-acts .btn", { hasText: "Cancel" }).click();
-    await expect(page.locator(".mc .ph .sub")).toContainText("Hardening updated this project description.");
+    await expect(page.locator(".mc .ph .sub")).toContainText(
+      "Umbrella project for all PLX Portal go-live initiatives."
+    );
 
+    // Overview lens (default): section collapse toggles, "Open →" reaches
+    // bucket detail, and the lens switcher swaps to the card grid.
+    const firstToggle = page.locator(".mc .pv-sec-toggle").first();
+    await expect(firstToggle).toHaveAttribute("aria-expanded", "true");
+    await firstToggle.click();
+    await expect(firstToggle).toHaveAttribute("aria-expanded", "false");
+    await firstToggle.click();
+    await expect(firstToggle).toHaveAttribute("aria-expanded", "true");
+
+    await page.locator(".mc .ph .pv-seg button", { hasText: "Initiatives" }).click();
     await page.locator(".mc .init-grid .init-card").first().click();
+    await expect(page.locator(".mc .ph .kk", { hasText: "Initiative ·" })).toBeVisible();
+
+    // Back on the project, the Overview "Open →" link reaches bucket detail too.
+    await page.locator(".mc .ph .back").click();
+    await page.locator(".mc .mc-side .grp button", { hasText: "PLX Portal Go-Live" }).click();
+    // Dismiss any queued rollback toasts first — the notice host floats over
+    // the section header rail and would intercept the click. Re-query each
+    // pass: dismissing one removes it from the DOM, so a snapshot goes stale.
+    while ((await page.locator(".mc .mc-notice .x").count()) > 0) {
+      await page.locator(".mc .mc-notice .x").first().click();
+    }
+    await page.locator(".mc .pv-open").first().click();
     await expect(page.locator(".mc .ph .kk", { hasText: "Initiative ·" })).toBeVisible();
   });
 });

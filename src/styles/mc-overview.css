@@ -399,6 +399,357 @@
   }
 }
 
+/* ─── Project Overview lens ──────────────────────────────────────────────────
+   The whole project tree on one page: collapsible initiative sections (health
+   left-rule, progress bar + count in the header) over dense bordered task
+   tables. Mock: .orchestrator/design-projects/rollup-mock/index.html. */
+
+/* Lens switcher in the page header — restates the .tb .seg recipe (scoped to
+   the toolbar) for the .ph right rail, same move as .bkfacts .ntm-field-btn. */
+.mc .ph .pv-seg {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--p-grid);
+}
+
+.mc .ph .pv-seg button {
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--p-grid);
+  padding: 6px 11px;
+  cursor: pointer;
+}
+
+.mc .ph .pv-seg button:first-child {
+  border-left: 0;
+}
+
+.mc .ph .pv-seg button.on {
+  color: var(--p-paper);
+  background: var(--p-ink);
+}
+
+/* Overview lens body spans the full row — the 1.6fr/1fr .bkbody split exists
+   for bucket detail's two columns; this screen renders a single column. */
+.mc .bk .bkbody.pv-wide {
+  grid-template-columns: 1fr;
+}
+
+/* Facts-strip progress cell */
+.mc .bkfacts .pv-progress-ct {
+  font-family: var(--mono);
+  font-size: var(--p-text-mono);
+  letter-spacing: var(--p-track-data);
+  color: var(--p-muted);
+}
+
+.mc .bkfacts .pv-progress-spine {
+  margin-top: 6px;
+}
+
+/* Initiative sections */
+.mc .pv-sec {
+  border: 1px solid var(--p-grid);
+  border-left: 3px solid var(--p-grid);
+  border-radius: var(--p-radius);
+  background: var(--p-paper);
+  margin-top: 14px;
+  overflow: hidden;
+}
+
+.mc .pv-sec:first-child {
+  margin-top: 0;
+}
+
+.mc .pv-sec.track {
+  border-left-color: var(--p-ok);
+}
+
+.mc .pv-sec.risk {
+  border-left-color: var(--p-warn);
+}
+
+.mc .pv-sec.off {
+  border-left-color: var(--p-hot);
+}
+
+.mc .pv-sec-h {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 16px;
+}
+
+.mc .pv-sec-toggle {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 16px minmax(160px, 1.2fr) auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px 11px 16px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  transition: background var(--p-dur-fast) var(--p-ease);
+}
+
+.mc .pv-sec-toggle:hover {
+  background: var(--p-paper-2);
+}
+
+.mc .pv-sec-toggle .chev {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  color: var(--p-muted);
+  transition: transform var(--p-dur) var(--p-ease);
+}
+
+.mc .pv-sec.closed .pv-sec-toggle .chev {
+  transform: rotate(-90deg);
+}
+
+.mc .pv-sec-toggle .nm {
+  font-size: var(--p-text-lede);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--p-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mc .pv-sec-toggle .id {
+  font-family: var(--mono);
+  font-size: var(--p-text-kicker);
+  letter-spacing: var(--p-track-data);
+  color: var(--p-muted);
+}
+
+.mc .pv-sec-toggle .track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mc .pv-sec-toggle .track .bar {
+  flex: 1;
+  max-width: 220px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--p-grid-2);
+  overflow: hidden;
+}
+
+.mc .pv-sec-toggle .track .bar .fill {
+  display: block;
+  width: var(--pct, 0%);
+  height: 100%;
+  background: var(--p-accent);
+}
+
+.mc .pv-sec-toggle .track .ct {
+  font-family: var(--mono);
+  font-size: var(--p-text-cap);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+
+.mc .pv-open {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Task table — list-row language (borders, not cards) */
+.mc .pv-tt {
+  border-top: 1px solid var(--p-grid-2);
+}
+
+.mc .pv-thead,
+.mc .pv-trow {
+  display: grid;
+  grid-template-columns: 74px 1fr 96px 56px 170px 64px;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 16px 8px 44px;
+}
+
+.mc .pv-thead {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.mc .pv-thead span {
+  font-family: var(--mono);
+  font-size: var(--p-text-cap-2);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .pv-thead span:last-child {
+  text-align: right;
+}
+
+.mc .pv-trow {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--p-grid-2);
+  background: transparent;
+  text-align: left;
+  font-size: var(--p-text-ui);
+  cursor: pointer;
+  transition: background var(--p-dur-fast) var(--p-ease);
+}
+
+.mc .pv-trow:hover {
+  background: var(--p-paper-2);
+}
+
+.mc .pv-trow .tid {
+  font-family: var(--mono);
+  font-size: var(--p-text-mono);
+  letter-spacing: var(--p-track-data);
+  color: var(--p-muted);
+}
+
+.mc .pv-trow .ttl {
+  color: var(--p-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mc .pv-trow:hover .ttl {
+  color: var(--p-accent);
+}
+
+/* Stage chip — 12% color-mix fill + the dedicated status TEXT tokens (the
+   contrast-remediation pairing brand-tokens.css documents for chip fills). */
+.mc .pv-chip {
+  font-family: var(--mono);
+  font-size: var(--p-text-cap);
+  letter-spacing: var(--p-track-meta);
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+  justify-self: start;
+  white-space: nowrap;
+}
+
+.mc .pv-chip.muted {
+  color: var(--p-muted);
+  background: var(--p-grid-2);
+}
+
+.mc .pv-chip.info {
+  color: var(--p-info-text);
+  background: color-mix(in srgb, var(--p-info) 12%, transparent);
+}
+
+.mc .pv-chip.acc {
+  color: var(--p-accent);
+  background: color-mix(in srgb, var(--p-accent) 12%, transparent);
+}
+
+.mc .pv-chip.warn {
+  color: var(--p-warn-text);
+  background: color-mix(in srgb, var(--p-warn) 12%, transparent);
+}
+
+.mc .pv-chip.ok {
+  color: var(--p-ok-text);
+  background: color-mix(in srgb, var(--p-ok) 12%, transparent);
+}
+
+.mc .pv-trow .pv-who {
+  min-width: 0;
+}
+
+.mc .pv-trow .pv-who .who .nm {
+  font-size: var(--p-text-small);
+  color: var(--p-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mc .pv-due {
+  font-family: var(--mono);
+  font-size: var(--p-text-mono);
+  color: var(--p-muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mc .pv-due.hot {
+  color: var(--p-warn-text);
+}
+
+.mc .pv-empty {
+  padding: 12px 16px 14px 44px;
+  border-top: 1px solid var(--p-grid-2);
+  font-size: var(--p-text-ui);
+  color: var(--p-muted);
+  margin: 0;
+}
+
+/* Responsive: shed columns down the tiers (pri/due at ≤1024, id/executor at
+   ≤640), same pivots as the rest of MC. Media blocks sit AFTER the base rules
+   they override (equal specificity — source order decides). */
+@media (max-width: 1024px) {
+  .mc .pv-thead,
+  .mc .pv-trow {
+    grid-template-columns: 74px 1fr 96px 170px;
+  }
+
+  .mc .pv-thead .h-pri,
+  .mc .pv-thead .h-due,
+  .mc .pv-trow .pv-pri,
+  .mc .pv-trow .pv-due {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .mc .pv-sec-toggle {
+    grid-template-columns: 16px 1fr auto;
+    grid-template-rows: auto auto;
+    row-gap: 6px;
+  }
+
+  .mc .pv-sec-toggle .id {
+    display: none;
+  }
+
+  .mc .pv-sec-toggle .track {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+
+  .mc .pv-thead,
+  .mc .pv-trow {
+    grid-template-columns: 1fr 96px;
+    padding-left: 30px;
+  }
+
+  .mc .pv-thead .h-id,
+  .mc .pv-thead .h-who,
+  .mc .pv-trow .tid,
+  .mc .pv-trow .pv-who {
+    display: none;
+  }
+}
+
 /* Project detail — inline edit parity (P2). The owner cell reuses the New-Task
    modal's field-button recipe (ntm-field-btn), which is scoped under .ntm —
    restate it for the facts strip. The health select and target input reuse the

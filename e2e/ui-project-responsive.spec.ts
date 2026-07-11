@@ -17,10 +17,30 @@ const VIEWPORTS = [
 
 test.describe("project responsive (G3)", () => {
   for (const vp of VIEWPORTS) {
+    test(`overview rollup renders and is usable at ${vp.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await gotoProject(page);
+
+      // Default lens: Overview — initiative sections with task tables.
+      const sections = page.locator(".mc .pv-sec");
+      await expect(sections.first()).toBeVisible();
+      expect(await sections.count()).toBeGreaterThan(0);
+      await expect(page.locator(".mc .pv-trow").first()).toBeVisible();
+
+      await page.screenshot({ path: `${SHOT_DIR}/overview-${vp.name}.png`, fullPage: true });
+      await expectSurfaceNoHorizontalOverflow(page, "project-screen", `project-overview/${vp.name}`);
+
+      // A task row navigates to task detail (the "/ TaskRecord" kicker).
+      await page.locator(".mc .pv-trow").first().click();
+      await expect(page.locator(".mc .kk", { hasText: "TaskRecord" }).first()).toBeVisible();
+    });
+
     test(`initiative card grid renders and is usable at ${vp.name}`, async ({ page }) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await gotoProject(page);
 
+      // Switch to the Initiatives lens (the P1 card grid).
+      await page.locator(".mc .ph .pv-seg button", { hasText: "Initiatives" }).click();
       const cards = page.locator(".mc .init-grid .init-card");
       await expect(cards.first()).toBeVisible();
       expect(await cards.count()).toBeGreaterThan(0);

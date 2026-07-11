@@ -179,32 +179,6 @@
   }
 }
 
-/* Bucket facts strip: 5-up → 2-up → 1-up down the tiers (RESPONSIVE.md §2). */
-@media (max-width: 1024px) {
-  .mc .bk .bkfacts {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .mc .bk .bkfacts .f {
-    border-bottom: 1px solid var(--p-grid-2);
-  }
-
-  .mc .bk .bkbody {
-    grid-template-columns: 1fr;
-  }
-
-  .mc .bk .bkbody .c + .c {
-    border-left: 0;
-    border-top: 1px solid var(--p-grid);
-  }
-}
-
-@media (max-width: 640px) {
-  .mc .bk .bkfacts {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* Bucket detail */
 .mc .bk {
   padding: 0 0 80px;
@@ -272,6 +246,191 @@
 .mc .bk .bkbody .c + .c {
   border-left: 1px solid var(--p-grid);
   background: var(--p-paper);
+}
+
+/* Bucket facts strip: 5-up → 2-up → 1-up down the tiers (RESPONSIVE.md §2).
+   These blocks must come AFTER the base .bk rules above: the overrides share
+   the base selectors' specificity, so source order is what makes them win
+   inside the media ranges. */
+@media (max-width: 1024px) {
+  .mc .bk .bkfacts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .mc .bk .bkfacts .f {
+    border-bottom: 1px solid var(--p-grid-2);
+  }
+
+  .mc .bk .bkbody {
+    grid-template-columns: 1fr;
+  }
+
+  .mc .bk .bkbody .c + .c {
+    border-left: 0;
+    border-top: 1px solid var(--p-grid);
+  }
+}
+
+@media (max-width: 640px) {
+  .mc .bk .bkfacts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Project detail — initiative card grid. One card per bucket: mono id +
+   health pill header, name, and a task-progress footer. Health repeats as a
+   left rule (the .ll-gcard / sidebar .hl cue) so state scans without reading
+   the pill. */
+.mc .init-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.mc .init-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 13px 15px;
+  border: 1px solid var(--p-grid);
+  border-left: 3px solid var(--p-grid);
+  border-radius: var(--p-radius);
+  background: var(--p-paper);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background var(--p-dur-fast) var(--p-ease),
+    border-color var(--p-dur-fast) var(--p-ease);
+}
+
+.mc .init-card:hover {
+  background: var(--p-paper-2);
+  border-color: var(--p-ink-2);
+}
+
+.mc .init-card:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 1px;
+}
+
+.mc .init-card.track {
+  border-left-color: var(--p-ok);
+}
+
+.mc .init-card.risk {
+  border-left-color: var(--p-warn);
+}
+
+.mc .init-card.off {
+  border-left-color: var(--p-hot);
+}
+
+.mc .init-card .ih {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mc .init-card .id {
+  font-family: var(--mono);
+  font-size: var(--p-text-kicker);
+  letter-spacing: var(--p-track-data);
+  color: var(--p-muted);
+}
+
+.mc .init-card .nm {
+  font-size: var(--p-text-lede);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--p-ink);
+}
+
+.mc .init-card:hover .nm {
+  color: var(--p-accent);
+}
+
+.mc .init-card .prog {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: auto;
+}
+
+/* Fill width comes from the card's --pct custom property (Confidence-ring
+   pattern) so color stays token-only in CSS. */
+.mc .init-card .prog .bar {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--p-grid-2);
+  overflow: hidden;
+}
+
+.mc .init-card .prog .bar .fill {
+  display: block;
+  width: var(--pct, 0%);
+  height: 100%;
+  background: var(--p-accent);
+}
+
+.mc .init-card .prog .ct {
+  font-family: var(--mono);
+  font-size: var(--p-text-cap);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+
+/* Initiative card grid rides the same tiers as the facts strip: 3-up → 2-up →
+   1-up. Must sit AFTER the base .init-grid rule — equal specificity, so source
+   order is what lets the media override win. */
+@media (max-width: 1024px) {
+  .mc .init-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .mc .init-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Project detail — inline edit parity (P2). The owner cell reuses the New-Task
+   modal's field-button recipe (ntm-field-btn), which is scoped under .ntm —
+   restate it for the facts strip. The health select and target input reuse the
+   global .rfact-select / .le-input skins as-is. */
+.mc .bkfacts .ntm-field-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  max-width: 100%;
+  border: 1px dashed var(--p-grid);
+  background: transparent;
+  padding: 4px 8px;
+  color: var(--p-ink);
+  cursor: pointer;
+}
+
+.mc .bkfacts .ntm-field-btn:hover {
+  border-color: var(--p-ink-2);
+}
+
+.mc .bkfacts .ntm-field-btn .caret {
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  color: var(--p-muted);
+  flex: 0 0 auto;
+}
+
+/* Header description edit: constrain the textarea to the .sub column width. */
+.mc .ph .ph-desc-edit {
+  margin-top: 9px;
+  max-width: 66ch;
 }
 
 .mc .overview-trace-block {

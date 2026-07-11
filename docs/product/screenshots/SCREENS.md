@@ -20,5 +20,6 @@ Numbered callouts on each screenshot key to the legend panel on the right of eve
 | 14 | `14-files-folder.png` | **Files — Inside a Folder** | File rows with type chip, author, per‑file sync |
 | 15 | `15-newtask.png` | **New Task Modal** | Title, initiative, owner, priority/stage/due/estimate, PRD req chips |
 | 16 | `16-peoplepicker.png` | **People Picker** | Directory typeahead across both Petra domains, invite + domain‑block |
+| 17 | `.orchestrator/design-projects/after-project-detail.png` | **Project Detail** | Initiative card grid (mono ID, health pill, task progress bar; 3/2/1 columns at desktop/tablet/mobile); facts rail + inline edit for health, accountable owner, target, and description — screenshot captured at integration |
 
 **Note:** the Initiative and Task detail screens are taller than one viewport, so each is split into two frames (overview + records/record). Several frames are scrolled to the relevant section; the legend names what's shown.

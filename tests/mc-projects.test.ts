@@ -72,4 +72,61 @@ describe("updateProject (P2)", () => {
     await __projectUpdateSettled();
     expect(projectById(p.id)?.name).toBe("Beta");
   });
+
+  // The ProjectDetail edit spine (P2 edit parity): each field the screen edits
+  // inline must mutate store state optimistically.
+  it("applies each editable field optimistically (health, owner, target, desc)", () => {
+    const p = addProject({ name: "Gamma" });
+    updateProject(p.id, { health: "risk" });
+    updateProject(p.id, { owner: "stephen" });
+    updateProject(p.id, { target: "Sep 15" });
+    updateProject(p.id, { desc: "Edited from ProjectDetail" });
+    const after = projectById(p.id)!;
+    expect(after.health).toBe("risk");
+    expect(after.owner).toBe("stephen");
+    expect(after.target).toBe("Sep 15");
+    expect(after.desc).toBe("Edited from ProjectDetail");
+  });
+
+  it("adopts the server's project on a resolved mirror (no notice on success)", async () => {
+    const p = addProject({ name: "Delta" });
+    __setProjectUpdateMirrorForTests(async (id, patch) => ({
+      ...projectById(id)!,
+      ...patch,
+      desc: "server-canonical",
+    }));
+    await updateProject(p.id, { health: "off" });
+    await __projectUpdateSettled();
+    expect(projectById(p.id)?.health).toBe("off");
+    expect(projectById(p.id)?.desc).toBe("server-canonical"); // reconciled to DB truth
+    expect(activeNotices()).toHaveLength(0);
+  });
+
+  it("rolls back + surfaces a notice when the mirror rejects", async () => {
+    const p = addProject({ name: "Epsilon", target: "Jul 30", desc: "original" });
+    const before = projectById(p.id)!;
+    __setProjectUpdateMirrorForTests(async () => {
+      throw new Error("PATCH 500");
+    });
+    await updateProject(p.id, { health: "off", owner: "stephen", target: "Dec 01", desc: "doomed" });
+    await __projectUpdateSettled();
+    const after = projectById(p.id)!;
+    expect(after.health).toBe(before.health); // rolled back
+    expect(after.owner).toBe(before.owner);
+    expect(after.target).toBe(before.target);
+    expect(after.desc).toBe(before.desc);
+    expect(activeNotices().some((n) => /rolled back/i.test(n.body))).toBe(true);
+  });
+
+  it("treats an empty patch as a no-op (no mirror call)", async () => {
+    const p = addProject({ name: "Zeta" });
+    let called = 0;
+    __setProjectUpdateMirrorForTests(async (id) => {
+      called += 1;
+      return projectById(id)!;
+    });
+    updateProject(p.id, {});
+    await __projectUpdateSettled();
+    expect(called).toBe(0);
+  });
 });

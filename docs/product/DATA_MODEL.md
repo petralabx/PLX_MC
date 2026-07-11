@@ -53,6 +53,26 @@ Bands (`MC_BANDS`): `todo` "To do" · `doing` "In progress" · `done` "Done". Th
 ## Priority  (`MC_PRIORITY`)
 `urgent` (hot) · `high` (warn) · `medium` (info) · `low` (muted). Each has a 4‑segment `tick` glyph for compact display.
 
+## Project  (`projects` table / SharePoint `Projects` list)
+```jsonc
+{
+  "id": "PRJ-PORTAL-GOLIVE",
+  "name": "PLX Portal Go-Live",
+  "owner": "vince",                // FK → Person id (accountable human)
+  "health": "track",               // track | risk | off  → On track | At risk | Off track
+  "target": "Oct 01",             // date
+  "started": "2026.06.11",        // date
+  "desc": "…",
+  "repos": ["portal-web"],
+  "sync": { "state": "pending", "ts": "—", "sp": "Projects · unprovisioned" },
+  "prd": null                      // FK → PRD id, nullable
+}
+```
+- Optional parent above Bucket (P2): operators organize initiatives under a Project; buckets without a parent are valid (`project` unset / `NULL`).
+- Persisted in `projects` (`id`, jsonb `data`, `sync_state`, `sp_item_id`) — same pattern as `buckets` (`db/migrations/011_projects.sql`).
+- **Sync posture:** push-only mirror to the SharePoint `Projects` list (`SHAREPOINT_INTEGRATION.md §3.2`); Mission Control is authoritative and the list is never read back (`pushProjectsMirror` in `src/lib/sync/engine.ts`). The list is **not yet provisioned** on the site — pending rows are skipped with an audit note until `scripts/provision-sharepoint.py` creates the register; `sync.state` stays `pending` and `sync.sp` reads `Projects · unprovisioned`. Projects must push before buckets so Roadmap can resolve the Project lookup column.
+- Decision record: `docs/product/PRD-project-entity.md`.
+
 ## Initiative / Bucket  (`MC_BUCKETS`, indexed by `MC_BUCKET_IDX`)
 ```jsonc
 {
@@ -65,9 +85,11 @@ Bands (`MC_BANDS`): `todo` "To do" · `doing` "In progress" · `done` "Done". Th
   "desc": "…",
   "repos": ["portal-web","portal-api","design-sys"],
   "sync": { "state": "synced", "ts": "…", "sp": "Roadmap · row 12" },
-  "prd": "PRD-CPV2"                // FK → PRD id
+  "prd": "PRD-CPV2",               // FK → PRD id
+  "project": "PRJ-PORTAL-GOLIVE"   // FK → Project.id, nullable/optional
 }
 ```
+- `project` maps to `buckets.project_id` (`REFERENCES projects(id) ON DELETE SET NULL`). Nullable so the column is additive — existing buckets stay valid with `NULL` until backfilled; removing a project never cascades into initiatives or tasks.
 
 ## Person & Agent  (`MC_HUMANS`, `MC_AGENTS`, merged into `MC_ACTORS`)
 ```jsonc
@@ -107,7 +129,7 @@ Risk: `{ title, bucket, like(High|Medium|Low), impact(High|Medium|Low), owner, s
 - Helpers: `MC_filesIn(parentId)`, `MC_fileById(id)`.
 
 ## Sync schema objects  (see SHAREPOINT_INTEGRATION.md)
-`MC_SP` (site + 5 lists w/ columns), `MC_SP_LIST` (keyed), `MC_SP_CONFLICTS`, `MC_SP_ERRORS`. Engine helpers: `MC_syncCounts()`, `MC_pendingTasks()`, `MC_markAllSynced(stamp)`, `MC_applyInbound(stamp)`, `MC_addTask(input)`, `MC_clearUserTasks()`.
+`MC_SP` (site + 6 lists w/ columns), `MC_SP_LIST` (keyed), `MC_SP_CONFLICTS`, `MC_SP_ERRORS`. Engine helpers: `MC_syncCounts()`, `MC_pendingTasks()`, `MC_markAllSynced(stamp)`, `MC_applyInbound(stamp)`, `MC_addTask(input)`, `MC_clearUserTasks()`.
 
 ## Notifications / Inbox  (`MC_INBOX`)
 ```jsonc

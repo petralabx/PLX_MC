@@ -2,12 +2,16 @@
 
 ## What
 
-The Next.js (App Router) application shell — the Mission Control UI. All
-eleven screens from the design handoff are built: Inbox, Board/List/Timeline,
-Traceability, Agent activity, Bucket detail, Task detail (evidence bundle +
-TaskRecord), Sync console (registers, review queue, audit log), Files, and
-Repos — plus the ⌘K command palette, New Task modal, and PeoplePicker (Petra
-domain rule enforced in the UI). State flows through the runtime store
+The Next.js (App Router) application shell — the Mission Control UI. Screens
+from the design handoff are built (Inbox, Board/List/Timeline, Traceability,
+Agent activity, Initiative/Bucket detail, Task detail, Sync console, Files,
+Repos) plus surfaces added since the handoff: **Project detail**, **My Tasks**,
+**Insights**, **Meeting Intake**, **Loop Ledgers**, **Governance SOPs**,
+**Skills Directory**, and **AI Spend** — along with the ⌘K command palette,
+New Task / New Initiative / New Project modals, and PeoplePicker (Petra domain
+rule enforced in the UI). The screen registry (`src/components/mc/screens.tsx`)
+maps nineteen `Screen` keys to components; Board, List, Timeline, and My Tasks
+share `WorkViews`. State flows through the runtime store
 (`src/lib/mc-data/store.ts`) — since 2026-06-11 a client cache over the sync
 module's API: it hydrates from `GET /api/state` after mount and mirrors every
 mutation through the shared fetch wrapper (`src/lib/api`), staying
@@ -15,6 +19,12 @@ optimistic-local-first so the UI degrades to the last-synced view offline.
 The getter/action surface is unchanged from the prototype port. It owns
 routing, screens, and client state only — it is NOT the system of record
 (SharePoint is) and NOT the sync engine (the `sync` module is).
+
+**Project detail** (`project` screen): rolls up initiatives (buckets) under a
+Project with an initiative card grid; inline edit for health, accountable
+owner, target, and description via `updateProject` → optimistic
+`PATCH /api/projects/{id}` (same contract as `updateBucket` on initiative
+detail).
 
 ## Why
 
@@ -30,6 +40,15 @@ pixel-precisely in `docs/product/README.md` §6 and
   `docs/design-system/HANDOFF-README.md` §5 (three font families as CSS
   variables on `<html>`, tokens imported in `globals.css`, branded routes
   wrapped in `<BrandBoundary>`).
+- Routing is in-client: `MissionControlShell` (`shell.tsx`) holds a `Route`
+  (`src/components/mc/route.ts`) and navigates with `nav(screen, extra?)` where
+  `extra` may carry `projectId`, `bucketId`, `taskId`, or an Insights
+  `filter`. The shell renders `SCREENS[route.screen]` from the registry.
+- Screens are URL-addressable: `nav()` mirrors the route to query params on `/`
+  (`/?screen=task&taskId=…`) via shallow `history.pushState`; a `popstate`
+  listener replays back/forward and the shell adopts the URL post-mount, so
+  reloads and deep links restore the screen. The transient Insights `filter`
+  is deliberately not serialized (see `routeToUrl`/`urlToRoute` in `route.ts`).
 - The screens live in `src/components/mc/`; they read the typed data layer in
   `src/lib/mc-data/` (faithful to `docs/product/DATA_MODEL.md`) whose store is
   now API-backed; fixtures remain the SSR/offline baseline. Each new screen is rebuilt
@@ -51,8 +70,11 @@ wrapper in `src/lib/api`).
 - `src/app/layout.tsx` — root layout: fonts, metadata, global CSS
 - `src/app/page.tsx` — renders the Mission Control shell
 - `src/app/globals.css` — imports brand tokens + the `.mc` surface/skin
-- `src/components/mc/shell.tsx` — client shell: brand boundary, dark toggle, screen state
-- `src/components/mc/chrome.tsx` — Topbar + Sidebar
+- `src/components/mc/shell.tsx` — client shell: brand boundary, dark toggle, route state
+- `src/components/mc/route.ts` — `Screen` union + `Route` / `nav` contract
+- `src/components/mc/screens.tsx` — screen registry (`SCREENS`)
+- `src/components/mc/chrome.tsx` — Topbar + Sidebar (Projects group)
+- `src/components/mc/project-detail.tsx` — Project detail + initiative card grid
 - `src/components/mc/inbox.tsx` — the Inbox/home screen
 - `src/components/mc/atoms.tsx` — Avatar, Confidence, PMark
 - `src/lib/mc-data/` — typed prototype data layer (types, fixtures, helpers)

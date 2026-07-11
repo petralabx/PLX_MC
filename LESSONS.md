@@ -16,6 +16,21 @@
 
 ## Lessons
 
+### 2026-07-11 (ET) — Merged redesign was mistaken for a production deployment
+
+- **What happened:** PRs #116 and #117 merged with green PR and `main` CI, but
+  `mc.plxcustomer.io` still served an older Vercel deployment from before the
+  redesign. The stale UI was discovered only after the operator checked the
+  live custom domain.
+- **Root cause:** Merge/CI evidence was treated as deployment evidence without
+  checking the Vercel project link, production deployment SHA/ref, alias, or
+  hydrated live DOM. The Vercel Git link was null, so `main` could not
+  auto-deploy.
+- **Rule going forward:** Never claim production delivery from GitHub state
+  alone. Verify and record the provider deployment ID, Ready state, deployed
+  SHA/ref, custom-domain alias, live smoke result, and rollback deployment.
+  Promoted to `.cursor/rules/deployment-verification.mdc`.
+
 ### 2026-07-09 (ET) — OIDC cutover follow-ups lived only in chat until asked
 
 - **What happened:** Path B OIDC dual-auth shipped (PR #112) with explicit

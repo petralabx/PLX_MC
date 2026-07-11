@@ -1,0 +1,22 @@
+---
+description: Require deployed-SHA, alias, and live-domain evidence before production closeout
+alwaysApply: true
+---
+
+# Deployment Verification
+
+Green PR checks and target-branch CI prove the code, not the deployment.
+
+Before claiming a production or staging deployment is complete:
+
+1. Name the expected repository, branch/ref, commit SHA, environment, and custom domain.
+2. Verify the provider deployment ID is Ready and its metadata matches that SHA/ref.
+3. Verify the custom domain resolves to that deployment, not an older or preview build.
+4. Smoke the live URL and confirm the intended UI/API behavior after hydration.
+5. Record the deployment ID, SHA/ref, URL, timestamp, and previous deployment for rollback.
+
+For Vercel, inspect both the project link/production branch and the domain's active
+deployment. A null Git link means merges cannot auto-deploy. Do not collapse Preview
+and Production branch/environment scopes merely to clear a Vercel configuration error.
+
+Never report “deployed” using only a merge result, GitHub CI, or a successful build.

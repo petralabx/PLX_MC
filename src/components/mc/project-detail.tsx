@@ -238,10 +238,11 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
           </div>
         </div>
 
-        {/* pv-wide: the overview table needs the full row — .bkbody's 1.6fr/1fr
-            split is for bucket detail's two-column body, and this screen has a
-            single column. */}
-        <div className={`bkbody${lens === "overview" ? " pv-wide" : ""}`}>
+        {/* pv-wide: both lenses are single-column. .bkbody's default 1.6fr/1fr
+            split is for bucket detail's two-column body — without pv-wide the
+            Initiatives card grid collapses into the left track and looks like
+            the pre-P1 unstyled pile (name/ID/status colliding). */}
+        <div className="bkbody pv-wide">
           <div className="c">
             <div className="blk">
               <div className="bh">

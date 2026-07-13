@@ -7,9 +7,10 @@ import { graphCredentials } from "@/lib/secrets";
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const SITE_HOSTNAME = "petrasoap.sharepoint.com";
 
-// Staging until the production site is provisioned; overridable per env.
+// Production SoR is the default (provisioned 2026-07-13). Override for the
+// staging sandbox with PLX_MC_SHAREPOINT_SITE_PATH=/sites/plx-mission-control-dev.
 export function sitePath(): string {
-  return process.env.PLX_MC_SHAREPOINT_SITE_PATH ?? "/sites/plx-mission-control-dev";
+  return process.env.PLX_MC_SHAREPOINT_SITE_PATH ?? "/sites/plx-mission-control";
 }
 
 export class GraphError extends Error {

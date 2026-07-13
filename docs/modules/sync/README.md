@@ -26,8 +26,18 @@ tenant against the committed schema with exit codes.
 - Auth: Graph client credentials from `MICROSOFT_GRAPH_*` env (AWS Secrets
   Manager via the loader). Site creation uses the Graph beta create-site API
   (`Sites.Create.All`); lists/columns/folders are Graph v1.0.
-- Environments: `--env staging` (default, `/sites/plx-mission-control-dev`)
-  and `--env production` (`/sites/plx-mission-control`, not yet provisioned).
+- Environments: `--env staging` (`/sites/plx-mission-control-dev`, sandbox) and
+  `--env production` (default SoR, `/sites/plx-mission-control`, provisioned
+  2026-07-13 — verify with `python scripts/provision-sharepoint.py --env
+  production --verify`). Runtime site selection:
+  `PLX_MC_SHAREPOINT_SITE_PATH` (default `/sites/plx-mission-control`; set the
+  staging path only when intentionally pointing a host at the sandbox).
+- Cutover from staging → production: (1) provision + verify the production
+  site, (2) set `PLX_MC_SHAREPOINT_SITE_PATH` (or ship the production default),
+  (3) `node scripts/cutover-sharepoint-site.mjs --apply` to clear staging
+  `sp_item_id` + `delta_links` so the next sweep re-mirrors by TaskID/Risk key,
+  (4) trigger `POST /api/sync/sweep` or wait for the cron. Evidence:
+  `artifacts/sync/2026-07-13-prod-site-cutover/`.
 - Known constraints (verified 2026-06-11): Graph cannot create
   hyperlinkOrPicture columns app-only → `PRD Link` is a text column; Risk
   `Likelihood` choices are `High/Med/Low` BY DESIGN (spec §5.2) — the engine's
@@ -43,7 +53,8 @@ tenant against the committed schema with exit codes.
   (Item 2) `repos` / `repo_requests`, (Item 4) `bucket_comments`, and
   (EN-005) `buckets`.
 - Engine v1 (landed 2026-06-11, `src/lib/sync/`): outbound push + inbound
-  Graph delta poll for ToDos and Risk Register against the staging site.
+  Graph delta poll for ToDos and Risk Register against the configured site
+  (production SoR as of 2026-07-13; staging sandbox retained).
   Inbound runs BEFORE outbound in every sweep so dirty-field edits raise
   conflicts (§5.1) instead of last-write-wins. Mapping layer (`mapping.ts`)
   enforces §3 directions and the §5.2 `Medium` → `Med` Likelihood
@@ -106,6 +117,8 @@ by: web (its store becomes a client of this module's API).
 
 - `config/sharepoint-schema.json` — canonical tenant schema
 - `scripts/provision-sharepoint.py` — idempotent provisioner + verifier
+- `scripts/cutover-sharepoint-site.mjs` — clear staging SP item IDs + delta
+  cursors when flipping `PLX_MC_SHAREPOINT_SITE_PATH` to production
 - `docs/product/SHAREPOINT_INTEGRATION.md` — the governing spec
 
 ## Owner

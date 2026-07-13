@@ -275,6 +275,22 @@ describe("seed registry + Collaborator SOP (integration)", () => {
     }
   });
 
+  it("activates fleet-secrets SOP with docs/FLEET-SECRETS-SOP.md", async () => {
+    const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
+    const r = parseSopRegistryJson(raw);
+    if (!r.ok) throw new Error("seed registry invalid");
+    const fleet = r.config.sops.find((s) => s.slug === "mc-sop-fleet-secrets")!;
+    expect(fleet.status).toBe("active");
+    expect(fleet.source?.repo_path).toBe("docs/FLEET-SECRETS-SOP.md");
+    const detail = await getSopDetail(fleet, createSopSource());
+    expect(detail.ok).toBe(true);
+    if (detail.ok) {
+      expect(detail.nodes.length).toBeGreaterThan(5);
+      expect(detail.toc.length).toBeGreaterThan(0);
+      expect(detail.nodes.some((n) => n.type === "table")).toBe(true);
+    }
+  });
+
   it("renders agent, human, skills, rollback, and collaborator SOP sources", async () => {
     const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
     const r = parseSopRegistryJson(raw);

@@ -15,9 +15,20 @@ MANIFEST = REPO_ROOT / "config" / "brand-portal-parity.json"
 
 
 def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    digest.update(path.read_bytes())
-    return digest.hexdigest()
+    data = path.read_bytes()
+    if path.suffix.lower() in {
+        ".css",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".json",
+        ".md",
+        ".txt",
+        ".svg",
+    }:
+        data = data.replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()
 
 
 def _run_gate(repo_root: Path, manifest: Path) -> subprocess.CompletedProcess[str]:
@@ -40,7 +51,8 @@ def test_exit_0_when_manifest_matches(tmp_path):
     repo.mkdir()
     artifact = repo / "docs/design-system/tokens.css"
     artifact.parent.mkdir(parents=True)
-    artifact.write_text(":root { --p-paper: #FBF9F5; }\n", encoding="utf-8")
+    # Explicit LF bytes — Path.write_text may emit CRLF on Windows.
+    artifact.write_bytes(b":root { --p-paper: #FBF9F5; }\n")
     manifest = repo / "config/brand-portal-parity.json"
     manifest.parent.mkdir(parents=True)
     manifest.write_text(
@@ -70,7 +82,7 @@ def test_exit_1_on_checksum_mismatch(tmp_path):
     repo.mkdir()
     artifact = repo / "src/styles/brand-tokens.css"
     artifact.parent.mkdir(parents=True)
-    artifact.write_text("drifted\n", encoding="utf-8")
+    artifact.write_bytes(b"drifted\n")
     manifest = repo / "config/brand-portal-parity.json"
     manifest.parent.mkdir(parents=True)
     manifest.write_text(
@@ -98,4 +110,6 @@ def test_committed_manifest_passes_in_repo():
 
 def test_sync_script_exists_and_executable():
     assert SYNC.is_file()
-    assert oct(SYNC.stat().st_mode)[-3:] in {"755", "775", "777"}
+    # Windows checkout has no Unix exec bit; require it only on POSIX.
+    if sys.platform != "win32":
+        assert oct(SYNC.stat().st_mode)[-3:] in {"755", "775", "777"}

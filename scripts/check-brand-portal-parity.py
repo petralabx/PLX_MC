@@ -25,12 +25,17 @@ from pathlib import Path
 DEFAULT_MANIFEST = Path("config/brand-portal-parity.json")
 
 
+TEXT_SUFFIXES = {".css", ".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".txt", ".svg"}
+
+
 def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    data = path.read_bytes()
+    # Manifest hashes are LF-normalized (git blob / Linux CI). Windows checkouts
+    # with core.autocrlf=true would otherwise false-fail text artifacts. Never
+    # rewrite binaries — PNG/OTF/WOFF2 may contain incidental 0x0D0A bytes.
+    if path.suffix.lower() in TEXT_SUFFIXES:
+        data = data.replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()
 
 
 def load_manifest(path: Path) -> dict:

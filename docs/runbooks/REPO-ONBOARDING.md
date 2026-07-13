@@ -3,6 +3,14 @@
 **Audience:** maintainers / org admins adding a repository to the PLX-tracked fleet.  
 **Owner:** Vince · **Effective:** 2026-07-13
 
+**Who uses which doc**
+
+| Role | Start here |
+|------|------------|
+| Org maintainers onboarding or auditing a repo | **This runbook** (tier checklist, folder map, gap audit) |
+| Day-to-day PR authors (human) | [`docs/COLLABORATOR-SOP.md`](../COLLABORATOR-SOP.md) |
+| Agents opening PRs | [`docs/AGENT-PR-SOP.md`](../AGENT-PR-SOP.md) |
+
 Canonical inputs (all in this repo — the SSOT):
 
 | Artifact | Path |
@@ -127,8 +135,8 @@ the existing root and align only the control-plane surfaces around it.
 |------------|------|-------|
 | `agentic-swarm` | `product_platform` | Structurally aligned; local governance must remain a pointer to PLX_MC |
 | `PLX_MC` | `hub` | Governance SSOT; optional `.claude/` absence is not a gap |
-| `plx-customer-portal` | `product_app` | **INFERRED** until verified in that checkout |
-| `local-inference` | `tooling` | Close gaps (`docs/GOVERNANCE.md`, `CLAUDE.md`, safety/compliance checks) via consumer onboarding |
+| `plx-customer-portal` | `product_app` | **Verified** on `staging` (2026-07-13): app root `portal/` (+ `src/` present); `AGENTS.md`, `CLAUDE.md`, `docs/GOVERNANCE.md`, `docs/runbooks/CONTRIBUTING.md`, `.cursor/`, compliance workflows present |
+| `local-inference` | `tooling` | Roots `scripts/` + `litellm/`; compliance workflows + `docs/GOVERNANCE.md` present. Residual closed via https://github.com/petralabx/local-inference/pull/7 (`CLAUDE.md` + `petralabx/PLX_MC` governance links) |
 
 ---
 

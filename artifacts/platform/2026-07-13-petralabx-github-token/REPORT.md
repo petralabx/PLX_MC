@@ -34,9 +34,14 @@ Gaps: none (`SUMMARY_PAT_FAIL` / `SUMMARY_NO_PUSH` / `SUMMARY_MISSING_FROM_APP` 
 
 ## Operator follow-through
 1. Re-run `python scripts/bootstrap-windows-secrets.py` on agent boxes.
-2. If `~/.aws/Secret_Github.txt` still holds the old limited PAT, remove or replace it so local `GITHUB_TOKEN` can inherit the org PAT (or rely on `PETRALABX_GITHUB_TOKEN`).
+2. ~~If `~/.aws/Secret_Github.txt` still holds the old limited PAT…~~ **Done (2026-07-13):** replaced local `Secret_Github.txt` with `PETRALABX_GITHUB_TOKEN`; re-bootstrapped; `GITHUB_TOKEN` == org PAT; portal probe `push=True`. Meta: `~/.aws/Secret_Github.txt.replaced-2026-07-13.meta` (no prior token retained).
 3. Ensure MC/Vercel env eventually includes `PETRALABX_GITHUB_TOKEN` for PAT-fallback hosts (App-only Vercel already covers reads via install).
 4. New org repos: App “all repositories” auto-includes; confirm PAT still org-wide.
+5. Other agent machines (infra-ops break-glass, 2026-07-13):
+   - **dell-vta** (`agentic-winrm`): `Secret_Github.txt` + `.secrets-env.github.ps1` — portal `push=True`
+   - **dgx-spark** (`vinnysachet`, `AWS_PROFILE=plx-prod`): `Secret_Github.txt` + `.secrets-env.github` — portal `push=True`
+   - VTA `C:\\Users\\vince` profile: not writable from WinRM agent account (Access Denied) — re-run as Vince interactively if that profile needs it
+   - EC2 targets (`vmc-prod` / `swarm-prod` / `tradingbox`): not Secret_Github workstation boxes; use App / injected env there
 
 ## Rollback
 Revert Secrets Manager `prod/ec2-secrets` to prior version stage; revert this PR.

@@ -47,6 +47,8 @@ private key lives only in the secret stores — never here):
   created (App “all repos” auto-includes; if the App is ever switched to selected
   repos, add the new repo to the install and confirm the PAT still has org-wide
   access).
+  Workstation auto-load: `docs/runbooks/petralabx-github-token-workstation.md`
+  + always-on rule `.cursor/rules/petralabx-github-token.mdc`.
 
 ## Step 1 — Create the App (one-time, interactive)
 

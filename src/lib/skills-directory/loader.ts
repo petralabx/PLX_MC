@@ -4,7 +4,7 @@ import { extractToc, parseMarkdown } from "@/lib/governance-sops";
 
 import { degradedFallbackIds, resolveAllowIds } from "./catalog";
 import { pointerFromAllowlist } from "./allowlist";
-import { publishedSkills } from "./manifest";
+import { publishedSkills, resolveEffectiveGitRef } from "./manifest";
 import type {
   AllowlistConfig,
   CatalogListResult,
@@ -43,7 +43,11 @@ export async function listSkillCatalog(
         sourceRepo: pointer.sourceRepo,
         version: "—",
         catalogVersion: "—",
-        gitRef: pointer.pinSha || pointer.pinTag || pointer.sourceBranch,
+        gitRef: resolveEffectiveGitRef(
+          pointer.pinSha,
+          pointer.pinTag,
+          pointer.sourceBranch
+        ),
         pinTag: pointer.pinTag,
         packageId: pointer.packageId,
         state: "degraded",
@@ -66,7 +70,13 @@ export async function listSkillCatalog(
       sourceRepo: pointer.sourceRepo,
       version: fetched.manifest.version,
       catalogVersion: fetched.manifest.version,
-      gitRef: fetched.manifest.gitRef,
+      gitRef: resolveEffectiveGitRef(
+        fetched.manifest.gitRef,
+        fetched.ref,
+        pointer.pinSha,
+        pointer.pinTag,
+        pointer.sourceBranch
+      ),
       pinTag: pointer.pinTag,
       packageId: pointer.packageId,
       state: "ready",

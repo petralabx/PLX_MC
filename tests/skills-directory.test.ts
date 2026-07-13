@@ -148,6 +148,25 @@ describe("skills-directory manifest", () => {
     if (r.ok) expect(r.manifest.skills).toHaveLength(3);
   });
 
+  it("accepts manifests without gitRef and fills from fallback", () => {
+    const raw = JSON.parse(FIXTURE_MANIFEST) as Record<string, unknown>;
+    delete raw.gitRef;
+    const r = parseManifestJson(JSON.stringify(raw), {
+      fallbackGitRef: "805c514bcd91f68172d45cee915c04d01f33ff8b",
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.manifest.gitRef).toBe("805c514bcd91f68172d45cee915c04d01f33ff8b");
+      expect(r.manifest.version).toBe("1.0.0-test");
+    }
+  });
+
+  it("prefers publisher gitRef over fallback", () => {
+    const r = parseManifestJson(FIXTURE_MANIFEST, { fallbackGitRef: "other-ref" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.manifest.gitRef).toBe("v1.0.0-test");
+  });
+
   it("filters published skills by package + allowlist", () => {
     const manifest = parseManifestJson(FIXTURE_MANIFEST);
     if (!manifest.ok) throw new Error("bad fixture");
@@ -161,6 +180,22 @@ describe("skills-directory loader", () => {
   it("lists ready catalog from manifest (v3, no skills[])", async () => {
     const result = await listSkillCatalog(TEST_CATALOG_V3, fakeSource({}));
     expect(result.meta.state).toBe("ready");
+    expect(result.skills.map((s) => s.id)).toEqual(["create-skill", "wterm-preflight"]);
+  });
+
+  it("lists ready catalog when publisher omits gitRef (uses fetch ref / pin)", async () => {
+    const withoutGitRef = {
+      ...FIXTURE_MANIFEST_OBJ,
+      gitRef: "",
+    };
+    const result = await listSkillCatalog(
+      TEST_CATALOG_V3,
+      fakeSource({
+        manifest: { ok: true, manifest: withoutGitRef, ref: "abc123" },
+      })
+    );
+    expect(result.meta.state).toBe("ready");
+    expect(result.meta.gitRef).toBe("abc123");
     expect(result.skills.map((s) => s.id)).toEqual(["create-skill", "wterm-preflight"]);
   });
 

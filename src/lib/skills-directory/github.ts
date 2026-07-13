@@ -2,7 +2,7 @@
 
 import { resolveGithubToken } from "@/lib/github-app";
 
-import { parseManifestJson } from "./manifest";
+import { parseManifestJson, resolveEffectiveGitRef } from "./manifest";
 import type {
   CatalogPointer,
   ContentFetchResult,
@@ -111,7 +111,7 @@ export class GithubSkillsSource implements SkillsSourceReader {
     if (!raw.ok) {
       return { ok: false, reason: raw.reason, note: raw.note };
     }
-    const manifest = parseManifestJson(raw.content);
+    const manifest = parseManifestJson(raw.content, { fallbackGitRef: ref });
     if (!manifest.ok) {
       return {
         ok: false,
@@ -121,7 +121,11 @@ export class GithubSkillsSource implements SkillsSourceReader {
     }
     return {
       ok: true,
-      manifest: manifest.manifest,
+      manifest: {
+        ...manifest.manifest,
+        // Prefer publisher stamp, else the ref we actually fetched.
+        gitRef: resolveEffectiveGitRef(manifest.manifest.gitRef, ref),
+      },
       ref,
     };
   }

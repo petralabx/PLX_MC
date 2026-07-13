@@ -1,4 +1,4 @@
-// Validate plx-cursor-skills manifest.json payloads.
+// Validate company skills manifest.json payloads (petralabx/skills).
 
 import { z } from "zod";
 
@@ -19,7 +19,9 @@ const ManifestSchema = z.object({
   schemaVersion: z.string(),
   version: z.string(),
   publishedAt: z.string(),
-  gitRef: z.string(),
+  // Optional publisher provenance stamp. Consumers pin via catalog pinSha/pinTag;
+  // missing gitRef must not blank the catalog (normalize from fetch ref / pin).
+  gitRef: z.string().optional(),
   repo: z.string(),
   defaultBranch: z.string().default("main"),
   packages: z
@@ -34,15 +36,35 @@ const ManifestSchema = z.object({
   skills: z.array(SkillEntrySchema).min(1),
 });
 
-export function parseManifestJson(raw: string):
-  | { ok: true; manifest: SkillsManifest }
-  | { ok: false; error: string } {
+/** First non-empty string among publisher stamp, fetch ref, and catalog pin. */
+export function resolveEffectiveGitRef(
+  ...candidates: Array<string | null | undefined>
+): string {
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return "";
+}
+
+export function parseManifestJson(
+  raw: string,
+  opts: { fallbackGitRef?: string } = {}
+): { ok: true; manifest: SkillsManifest } | { ok: false; error: string } {
   try {
     const parsed = ManifestSchema.safeParse(JSON.parse(raw));
     if (!parsed.success) {
       return { ok: false, error: parsed.error.message };
     }
-    return { ok: true, manifest: parsed.data as SkillsManifest };
+    const data = parsed.data;
+    return {
+      ok: true,
+      manifest: {
+        ...data,
+        gitRef: resolveEffectiveGitRef(data.gitRef, opts.fallbackGitRef),
+      } as SkillsManifest,
+    };
   } catch (err) {
     return {
       ok: false,

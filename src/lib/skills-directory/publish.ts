@@ -150,7 +150,8 @@ export function buildPublishedManifest(
   manifest: SkillsManifest,
   submission: SkillSubmission,
   packageId: string,
-  now: Date
+  now: Date,
+  opts: { gitRef?: string } = {}
 ): SkillsManifest {
   const skillId = assertValidSkillId(submission.skillId);
   const existing = manifest.skills.find((entry) => entry.id === skillId);
@@ -171,6 +172,8 @@ export function buildPublishedManifest(
   return {
     ...manifest,
     publishedAt: now.toISOString(),
+    // Prefer explicit stamp (usually base branch HEAD), else keep existing publisher stamp.
+    gitRef: opts.gitRef?.trim() || manifest.gitRef || "",
     packages: upsertPackageSkill(manifest, packageId, skillId),
     skills,
   };
@@ -302,7 +305,9 @@ export async function publishApprovedSkillSubmission(
   if (!manifestFile) {
     throw new Error(`${manifestPath} not found in ${targetRepo}@${baseBranch}`);
   }
-  const parsedManifest = parseManifestJson(manifestFile.content);
+  const parsedManifest = parseManifestJson(manifestFile.content, {
+    fallbackGitRef: baseSha,
+  });
   if (!parsedManifest.ok) {
     throw new Error(`invalid ${manifestPath}: ${parsedManifest.error}`);
   }
@@ -310,7 +315,8 @@ export async function publishApprovedSkillSubmission(
     parsedManifest.manifest,
     submission,
     packageId,
-    now
+    now,
+    { gitRef: baseSha }
   );
   const path = skillPath(submission.skillId);
   const existingSkill = await github.getFile({ owner, repo, ref: baseBranch, path });

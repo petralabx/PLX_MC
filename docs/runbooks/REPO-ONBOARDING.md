@@ -8,6 +8,7 @@
 | Role | Start here |
 |------|------------|
 | Org maintainers onboarding or auditing a repo | **This runbook** (tier checklist, folder map, gap audit) |
+| Humans using MC UI (request/approve repos, review evidence) | [`docs/HUMAN-MC-SOP.md`](../HUMAN-MC-SOP.md) |
 | Day-to-day PR authors (human) | [`docs/COLLABORATOR-SOP.md`](../COLLABORATOR-SOP.md) |
 | Agents opening PRs | [`docs/AGENT-PR-SOP.md`](../AGENT-PR-SOP.md) |
 
@@ -142,6 +143,15 @@ the existing root and align only the control-plane surfaces around it.
 
 ## 1. Register the repo
 
+**Prerequisite — GitHub (org owner/admin only):** create the repository under
+**`petralabx/<name>`** first. Standard org members **cannot** create repos.
+
+**Prerequisite — MC allow-list:** collaborator submits **Request repo** in MC UI;
+Owner/Admin **approves** after org validation. This is separate from fleet registry
+enrollment — see [`docs/HUMAN-MC-SOP.md`](../HUMAN-MC-SOP.md) §5.
+
+Then:
+
 1. Add an entry to `config/tracked-repos-registry.json` with
    `status: "pending_adoption"`. Pick a tier (see
    [Repository control-plane tier](#repository-control-plane-tier) for
@@ -187,8 +197,10 @@ repo-owned.
 
 1. **Secrets:** `PLX_MC_BASE_URL` (`https://mc.plxcustomer.io`),
    `COMPLIANCE_CI_TOKEN`.
-2. **Variable:** `COMPLIANCE_MODE` — start `soft` (warn-only). Flip to `hard`
-   only after the gate has run clean for a while.
+2. **Variable:** `COMPLIANCE_MODE` — active fleet repos are **`hard`** (merge-blocking)
+   per [`fleet-compliance-hard-cutover.md`](fleet-compliance-hard-cutover.md).
+   New enrollments may start `soft` during adoption; only `petralabx/test-perms-check`
+   stays soft by policy.
 3. **Branch protection** on the integration branch: require PR + status checks
    `compliance` (and the repo's CI contexts).
 

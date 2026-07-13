@@ -75,7 +75,12 @@ function setToken(token: string | undefined): void {
 // GITHUB_APP_* env is present. On a box where the App is provisioned that env
 // would hijack the fetch stubs (a real token mint), so neutralize it per test
 // and restore afterwards.
-const APP_KEYS = ["GITHUB_APP_ID", "GITHUB_APP_INSTALLATION_ID", "GITHUB_APP_PRIVATE_KEY"] as const;
+const APP_KEYS = [
+  "GITHUB_APP_ID",
+  "GITHUB_APP_INSTALLATION_ID",
+  "GITHUB_APP_INSTALLATION_ID_PLX",
+  "GITHUB_APP_PRIVATE_KEY",
+] as const;
 const savedAppEnv: Record<string, string | undefined> = {};
 
 beforeEach(() => {

@@ -6,7 +6,7 @@
 
 | Question | Recommendation |
 |----------|----------------|
-| Separate repo for skills? | **Yes** — dedicated `plx-cursor-skills` for **company-tier** content only |
+| Separate repo for skills? | **Yes** — dedicated **`petralabx/skills`** for **company-tier** content (legacy: `taylorvalton/plx-cursor-skills`) |
 | One-time extraction from agentic-swarm? | **Yes, for initial seed only** — not ongoing sync of the full operator catalog |
 | Keep agentic-swarm as team upstream? | **No** — team never pulls the full `.cursor/skills` tree; operator/internal skills stay in agentic-swarm |
 
@@ -18,7 +18,7 @@
 | **Company approved** | PLX Skills Directory + git content repo | All PLX contributors | Bootstrap / MCP install from directory |
 | **Personal** | `~/.cursor/skills`, `~/.claude/skills` | Individual | Opt-in **Share to PLX** → review → promote to company |
 
-Do **not** expose all 54+ agentic-swarm skills to the team. Skill ids come from the pinned `plx-cursor-skills` manifest (`packages[].skillIds`), not a static allowlist file.
+Do **not** expose all 54+ agentic-swarm skills to the team. Skill ids come from the pinned **`petralabx/skills`** manifest (`packages[].skillIds`), not a static allowlist file.
 
 ## Hybrid system of record
 
@@ -36,7 +36,7 @@ PLX Mission Control owns **metadata and workflow**; git owns **versioned skill f
                            │ approved releases only
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  plx-cursor-skills (git) — content store                    │
+│  petralabx/skills (git) — content store                     │
 │  skills/<id>/SKILL.md  +  manifest.json                     │
 │  Compatible with ~/.cursor/skills layout                    │
 └──────────────────────────┬──────────────────────────────────┘
@@ -57,7 +57,7 @@ PLX Mission Control owns **metadata and workflow**; git owns **versioned skill f
 1. Contributor creates or edits a skill locally (Cursor **create-skill** or Claude equivalent).
 2. Optional prompt (IDE hook or MCP): **“Share with PLX Skills Directory?”**
 3. Submit via Mission Control UI or `mc_submit_skill` → **pending_review** record in Postgres.
-4. Reviewer approves → publish hook opens PR in `plx-cursor-skills` (or returns operator instructions when GitHub writes are disabled).
+4. Reviewer approves → publish hook opens PR in the skills content repo (`petralabx/skills`; legacy automated writes may still target `taylorvalton/plx-cursor-skills`) or returns operator instructions when GitHub writes are disabled.
 5. Teammates run bootstrap refresh, `mc_install_skills`, or `mc_sync_skills`.
 
 Rejected submissions stay private; no automatic pull from personal dirs.
@@ -67,7 +67,7 @@ Rejected submissions stay private; no automatic pull from personal dirs.
 | Phase | Deliverable | Status |
 |-------|-------------|--------|
 | **1** | Allowlist, `bootstrap-company-skills.{sh,ps1}`, COLLABORATOR-SOP §9 | Shipped |
-| **2** | Create `plx-cursor-skills`; one-time seed; pin manifest in PLX_MC | Shipped |
+| **2** | Create skills content repo; one-time seed; pin manifest in PLX_MC (`petralabx/skills`) | Shipped |
 | **3** | Browse/install UI + MCP list/install/sync | Shipped |
 | **4** | Submit-for-review + approval + publish; deprecate static allowlist JSON | **Shipped** |
 

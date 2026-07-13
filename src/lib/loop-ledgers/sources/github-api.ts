@@ -281,35 +281,29 @@ async function discoverRepo(
 /** Production-default source adapter that reads ledgers via the GitHub API. */
 export class GithubApiSource implements LedgerSource {
   async listLedgers(registry: RegistryConfig): Promise<LedgerSourceResult[]> {
-    const token = await resolveGithubToken();
-    if (!token) {
-      // One degraded result per repo — every repo is unreachable without auth
-      return registry.repos.map((entry) => ({
-        ok: false as const,
-        repo: entry.repo,
-        reason: "token_missing" as SourceDegradedReason,
-        note: "no GitHub auth configured (GitHub App or GITHUB_TOKEN) — ledgers cannot be fetched",
-      }));
-    }
-
-    // Discover repos independently — one failing must NOT kill the batch
+    // Resolve credentials per repo owner so dual-org App installations
+    // (legacy + petralabx) are selected correctly for mixed registries.
     const results = await Promise.all(
-      registry.repos.map((entry) => discoverRepo(entry, token))
+      registry.repos.map(async (entry) => {
+        const parsed = parseRepo(entry.repo);
+        const token = await resolveGithubToken({
+          repoOwner: parsed?.owner ?? null,
+        });
+        if (!token) {
+          return {
+            ok: false as const,
+            repo: entry.repo,
+            reason: "token_missing" as SourceDegradedReason,
+            note: "no GitHub auth configured (GitHub App or GITHUB_TOKEN) — ledgers cannot be fetched",
+          };
+        }
+        return discoverRepo(entry, token);
+      })
     );
     return results;
   }
 
   async getLedger(ref: LedgerRef): Promise<LedgerDetailResult> {
-    const token = await resolveGithubToken();
-    if (!token) {
-      return {
-        ok: false,
-        ref,
-        reason: "token_missing",
-        note: "no GitHub auth configured (GitHub App or GITHUB_TOKEN) — ledger cannot be fetched",
-      };
-    }
-
     const parsed = parseRepo(ref.repo);
     if (!parsed) {
       return {
@@ -317,6 +311,16 @@ export class GithubApiSource implements LedgerSource {
         ref,
         reason: "not_found",
         note: `ref.repo "${ref.repo}" is not in "owner/name" format`,
+      };
+    }
+
+    const token = await resolveGithubToken({ repoOwner: parsed.owner });
+    if (!token) {
+      return {
+        ok: false,
+        ref,
+        reason: "token_missing",
+        note: "no GitHub auth configured (GitHub App or GITHUB_TOKEN) — ledger cannot be fetched",
       };
     }
 

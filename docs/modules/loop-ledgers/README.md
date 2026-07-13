@@ -8,9 +8,9 @@ validates them, and exposes a scariest-first index, per-module detail view, and
 degraded-state gallery. It is **not** a writer or mutator — no sync, repair,
 rerun, or source-ledger edit affordances exist anywhere in the stack.
 
-The registry seeds three repos: `taylorvalton/agentic-swarm` (main,
+The registry seeds three repos: `petralabx/agentic-swarm` (main,
 `docs/vmc/quality-ledger/*.artifacts.json`), `petralabx/PLX_MC` (main,
-`docs/plx-mc/quality-ledger/*.artifacts.json`), and `taylorvalton/plx-customer-portal`
+`docs/plx-mc/quality-ledger/*.artifacts.json`), and `petralabx/plx-customer-portal`
 (staging, `docs/portal/quality-ledger/*.artifacts.json`). Missing, stale, invalid,
 or unreachable sources render as loud degraded rows — they are never hidden or
 filtered out.
@@ -33,9 +33,9 @@ worst problems surface first.
 1. **Registry** — `config/loop-ledgers-registry.json` (`plx-loop-ledger-registry/v1`)
    lists repo entries (glob, branch, evidence dir). Parsed by `parseRegistryConfig`.
 2. **LedgerSource** — `createSource()` returns `GithubApiSource` in all environments
-   (GitHub Trees + Contents API, reuses `GITHUB_TOKEN` from `src/lib/sync/github.ts`).
-   `LocalFsSource` is dev/test-only (allowlisted roots, traversal rejection, disabled
-   in production).
+   (GitHub Trees + Contents API via `resolveGithubToken({ repoOwner })` from
+   **github-app**). `LocalFsSource` is dev/test-only (allowlisted roots, traversal
+   rejection, disabled in production).
 3. **Validator** — `validateLedgerRaw` enforces `vmc-quality-ledger/v1` invariants:
    schema version match, count reconciliation, unique `artifact_id`, enum/range
    checks, `verified` requires evidence, freshness ≤7d/≤30d/stale. Never throws.
@@ -58,8 +58,8 @@ registry.json → LedgerSource (github-api | local-fs) → validator → loader
 ## Dependencies
 
 Depends on: **web** (MC shell, shared `api()` + `route()` wrappers, middleware auth),
-**design-system** (`--p-*` tokens behind `.brand-plx`). Reuses `GITHUB_TOKEN`
-convention from **sync**'s GitHub client. Depended on by: nothing yet — read-only
+**design-system** (`--p-*` tokens behind `.brand-plx`), **github-app**
+(`resolveGithubToken({ repoOwner })`). Depended on by: nothing yet — read-only
 observability only.
 
 ### Key Files

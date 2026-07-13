@@ -14,20 +14,24 @@ The App is **live**. Non-secret coordinates for operational traceability (the
 private key lives only in the secret stores — never here):
 
 - **App:** `PLX MC Compliance` (slug `plx-mc-compliance`), **App ID `4125227`**
-- **Installation ID `142149327`** (account `taylorvalton`, selected repos:
-  `agentic-swarm`, `PLX_MC`, `plx-customer-portal`, **`plx-cursor-skills`**
-  — required for Skills Directory; see Step 2a)
-- **PLX org installation (EN-008):** install the same App on
-  [`petralabx`](https://github.com/petralabx) and store the org installation id as
-  `GITHUB_APP_INSTALLATION_ID_PLX` (see Step 2b). Code routes by repo owner via
-  `resolveGithubToken({ repoOwner })`.
+- **Installation ID `142149327`** — legacy account `taylorvalton` (`GITHUB_APP_INSTALLATION_ID`):
+  selected repos on the personal account (historical; platform repos migrated to org).
+- **PLX org installation** — `GITHUB_APP_INSTALLATION_ID_PLX`: App installed on
+  [`petralabx`](https://github.com/petralabx) with **All repositories** (or the
+  fleet set). This is the **primary** path for loop-ledgers, repo validation, and
+  Skills Directory reads on `petralabx/skills`.
+- **Owner-aware routing:** `resolveGithubToken({ repoOwner })` picks the installation
+  by repo owner — Loop Ledgers **must** pass `repoOwner` from each registry row.
+  Mixed legacy `taylorvalton` reads still use `GITHUB_APP_INSTALLATION_ID` when present.
 - **Secrets set** (`GITHUB_APP_ID` / `GITHUB_APP_INSTALLATION_ID` /
   `GITHUB_APP_PRIVATE_KEY`): AWS Secrets Manager `prod/ec2-secrets` +
   `staging/ec2-secrets`, and Vercel project `plx-mission-control`
   (production + preview). Production was redeployed to pick them up.
 - **Verified:** installation token mints with `contents:read, metadata:read` and
-  resolves loop-ledger repos; Skills Directory additionally requires
-  `plx-cursor-skills` on the same installation (Step 2a + Step 4).
+  resolves loop-ledger + Skills Directory reads for `petralabx/*` via
+  `GITHUB_APP_INSTALLATION_ID_PLX` + owner-aware `resolveGithubToken({ repoOwner })`.
+  Legacy `plx-cursor-skills` on installation `142149327` remains relevant only for
+  the optional write/publish path (Step 2a historical + Step 4), not the primary catalog read.
 - **PAT note:** Vercel never had a `GITHUB_TOKEN` (the deployed app is App-only).
   The AWS `GITHUB_TOKEN` is a **shared** dev-box credential used by other tooling
   and was intentionally left in place — do not remove it as part of this module.
@@ -113,8 +117,8 @@ project env (`petralabx/plx-mission-control`), exactly these keys:
 |---|---|
 | `GITHUB_APP_ID` | the numeric App ID from Step 1 |
 | `GITHUB_APP_PRIVATE_KEY` | full PEM contents (literal newlines, or `\n`-escaped — the loader handles both) |
-| `GITHUB_APP_INSTALLATION_ID` | the Installation ID from Step 2 (legacy `taylorvalton` account) |
-| `GITHUB_APP_INSTALLATION_ID_PLX` | the Installation ID from Step 2b (`petralabx` org) |
+| `GITHUB_APP_INSTALLATION_ID` | Installation ID from Step 2 (legacy `taylorvalton` account) |
+| `GITHUB_APP_INSTALLATION_ID_PLX` | Installation ID from Step 2b (`petralabx` org — **primary** for fleet reads) |
 
 After Step 2b, sync the org installation id automatically:
 
@@ -131,10 +135,14 @@ present and the module starts minting installation tokens automatically.
 ## Step 3a — Skills Directory publish writes (Phase 4 P5, optional)
 
 The GitHub App above remains read-only. Skills Directory submission approval can
-optionally create a publish PR in `taylorvalton/plx-cursor-skills`, but only when
-the separate write gate is explicitly enabled.
+optionally create a publish PR — **read catalog** from `petralabx/skills` via
+`config/skills-catalog.json`; **automated write** in
+`src/lib/skills-directory/publish.ts` may still target legacy
+`taylorvalton/plx-cursor-skills` until migrated. Enable writes only when the
+separate write gate is explicitly enabled.
 
-Create a fine-scoped token for **only** `taylorvalton/plx-cursor-skills` with:
+Create a fine-scoped token for the **publish target repo** (legacy default:
+`taylorvalton/plx-cursor-skills`; prefer `petralabx/skills` when write path migrates) with:
 
 - Contents: **Read and write** (create `submit/<id>-<ts>` branches and write
   `skills/<id>/SKILL.md` + `manifest.json`)
@@ -166,10 +174,12 @@ plx-customer-portal `no_ledgers` until it commits one) — and that none report
 `token_missing` or `permission_denied`.
 
 **Skills Directory (Phase 3):** sign in to MC → **System of record → Skills
-directory**. The meta strip should show **`ready`**, pin **`v1.0.0`**, source
-`plx-cursor-skills`, and **29** skills — not **degraded**. Open **create-skill**
-and confirm `SKILL.md` renders. If degraded, re-check Step 2a (repo on the App
-installation) and `resolveGithubToken()` on the Vercel host.
+directory**. The meta strip should show **`ready`**, source **`petralabx/skills`**
+(pin from `config/skills-catalog.json`) — not **degraded**. Open a skill and
+confirm `SKILL.md` renders. If degraded, re-check Step 2b (org App install covers
+`petralabx/skills`) and `resolveGithubToken({ repoOwner: "petralabx" })` on the
+Vercel host. Legacy `taylorvalton/plx-cursor-skills` on installation `142149327`
+is historical only.
 
 **Skills Directory publish (Phase 4 P5):** with
 `SKILLS_SUBMIT_GITHUB_WRITE_ENABLED=0` or unset, approve a test submission and

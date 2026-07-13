@@ -26,7 +26,7 @@
     {
       "slug": "mc-sop-skills",
       "title": "Company Skills SOP",
-      "description": "Install company-approved Cursor/Claude skills on your machine, refresh when the catalog changes, create personal skills, and propose new skills for the team via plx-cursor-skills.",
+      "description": "Install company-approved Cursor/Claude skills on your machine, refresh when the catalog changes, create personal skills, and propose new skills for the team via petralabx/skills.",
       "audience": "PLX contributors using Cursor, Claude Code, or other agents on personal laptops",
       "owner": "Vince",
       "effective_date": "2026-06-30",
@@ -36,14 +36,25 @@
     },
     {
       "slug": "mc-sop-agent-pr",
-      "title": "Agent PR & MC-Checkout discipline",
-      "description": "Linking agent work to a Mission Control task: checkout, the MC-Checkout stamp (one per task), the human accountable owner, PLX-MC MCP / capture-hook provisioning, and the tier bundle the gate expects.",
-      "audience": "Anyone driving an AI agent (Cursor, Claude Code, ChatGPT/Codex) against a tracked repo",
+      "title": "Agent — How to Use Mission Control",
+      "description": "End-to-end agent guide: MC hierarchy, dual registries, MCP checkout/progress/complete, MC-Checkout stamps, task.evidence vs PR-body rollback, Loop Ledgers owner-aware reads, and risk-tier bundles.",
+      "audience": "Anyone driving an AI agent (Cursor, Claude Code, ChatGPT/Codex, swarm) against a tracked repo",
       "owner": "Vince",
-      "effective_date": "2026-07-09",
+      "effective_date": "2026-07-13",
       "status": "active",
-      "tags": ["Agent workflow", "Compliance gate", "Provisioning"],
+      "tags": ["Agent workflow", "Compliance gate", "Provisioning", "Loop Ledgers"],
       "source": { "repo_path": "docs/AGENT-PR-SOP.md" }
+    },
+    {
+      "slug": "mc-sop-human-mc",
+      "title": "Human — How to Use Mission Control",
+      "description": "Human UI workflows: projects, buckets, tasks, accountable owners, Request/Approve repos, reviewing agent evidence, Loop Ledgers observatory, and when humans can skip checkout.",
+      "audience": "Human collaborators working in Mission Control directly",
+      "owner": "Vince",
+      "effective_date": "2026-07-13",
+      "status": "active",
+      "tags": ["Human workflow", "Projects", "Repos", "Loop Ledgers"],
+      "source": { "repo_path": "docs/HUMAN-MC-SOP.md" }
     },
     {
       "slug": "mc-sop-repo-hygiene",

@@ -7,9 +7,11 @@ personal laptops against PLX-tracked repos (`PLX_MC`, `plx-customer-portal`, etc
 
 > **TL;DR** — **PLX-MC access ≠ skills installed.** Register the PLX-MC MCP server for
 > task checkout, then run the **company skills bootstrap once per machine**. Skills come
-> from **`taylorvalton/plx-cursor-skills`** (29 published skills) — **not** the full
-> `agentic-swarm` catalog. Start a **new** Cursor session after bootstrap. To share a
-> skill company-wide, use Mission Control **Skills directory** (submit UI) or `mc_submit_skill`.
+> from **`petralabx/skills`** (catalog pin ~v1.2.0 / `pinSha` in
+> `config/skills-catalog.json`) — **not** the full `agentic-swarm` catalog. Legacy
+> `taylorvalton/plx-cursor-skills` v1.0.0 is historical only. Start a **new** Cursor
+> session after bootstrap. To share a skill company-wide, use Mission Control **Skills
+> directory** (submit UI) or `mc_submit_skill`.
 
 ---
 
@@ -35,11 +37,15 @@ appear automatically — they do not.
 | Tier | Where it lives | Who | How you get it |
 |------|----------------|-----|----------------|
 | **Personal** | `~/.cursor/skills`, `~/.claude/skills` | You only | Create locally; stays private until you opt to share |
-| **Company approved** | [`taylorvalton/plx-cursor-skills`](https://github.com/taylorvalton/plx-cursor-skills) | All PLX contributors | Bootstrap script (below) |
+| **Company approved** | [`petralabx/skills`](https://github.com/petralabx/skills) | All PLX contributors | Bootstrap script (below) |
 | **Operator / internal** | `agentic-swarm` full catalog | Operator fleet only | **Do not use** on personal laptops |
 
 The company catalog is intentionally **not** the full ~54-skill operator set. Trading
 loops, VMC autopilot, fleet internals, and similar tools stay in `agentic-swarm`.
+
+**Legacy (historical):** pre-migration content lived in
+`taylorvalton/plx-cursor-skills` v1.0.0 — do not install from that repo as primary
+source; `config/skills-catalog.json` `legacySourceRepo` documents the migration only.
 
 ---
 
@@ -83,8 +89,10 @@ Optional dry run:
 
 ### What bootstrap does
 
-1. Clone or update `~/plx-cursor-skills` (Windows: `%USERPROFILE%\plx-cursor-skills`).
-2. Check out catalog pin **`v1.0.0`** (see `config/skills-catalog.json`).
+1. Clone or update `~/plx-cursor-skills` (Windows: `%USERPROFILE%\plx-cursor-skills`) —
+   local directory name unchanged; **remote** is `petralabx/skills` per catalog.
+2. Check out catalog **`pinSha`** (or `pinTag` when set) from `config/skills-catalog.json`
+   (~v1.2.0 as of 2026-07-13).
 3. Install **published** skills from `manifest.json` into:
    - `~/.cursor/skills/<id>/`
    - `~/.claude/skills/<id>/`
@@ -99,25 +107,24 @@ Restart Claude Code similarly if you rely on global Claude skills.
 
 ---
 
-## 4. What you get (company catalog v1.0.0)
+## 4. What you get (company catalog ~v1.2.0)
 
-The default bundle is **`plx-engineering-core`** — **29 skills**, including:
+The default bundle is **`plx-engineering-core`** pinned via `config/skills-catalog.json`.
+Skill ids are authoritative in `manifest.json` `packages[].skillIds` — not a static
+list in PLX_MC.
 
-| Category | Skills |
-|----------|--------|
-| Workflow | `automate`, `babysit`, `canvas` |
-| Quality & verification | `autonomous-verifier`, `quality-gate`, `reliable-tdd-loop`, `review-bugbot`, `review-security`, `uat-runner`, `wterm-preflight` |
-| Debugging | `codebase-investigation`, `root-cause-debugger`, `dead-code-triage` |
-| Project lifecycle | `project-orchestrator`, `project-hardener`, `project-researcher`, `project-research-runner`, `pre-plan-recalibrator` |
-| Refactoring & git | `isomorphic-refactor`, `safe-deletion`, `split-to-prs` |
-| Meta / tooling | `create-hook`, `create-rule`, `create-skill`, `migrate-to-skills`, `claude-code-context-hygiene` |
-| Design | `taste-skill`, `ui-ux-design-loop` |
-| VMC integration | `vmc-sync` |
+Current pin (2026-07-13) includes operator skills such as:
+
+| Category | Examples (see manifest for full set) |
+|----------|-------------------------------------|
+| UAT / portal | `uat-feedback-batch-fix`, `uat-weekly-batch-loop` |
+| Data / env | `staging-dual-db-migrate` |
+| Integrations | `plx-graph-mail`, `worktree-open-session` |
 
 **Plus** any skills shipped natively in the repo you bootstrap from (PLX_MC adds `mc-sync`
 and may add others under `.cursor/skills/`).
 
-Authoritative list: `manifest.json` in [plx-cursor-skills](https://github.com/taylorvalton/plx-cursor-skills).
+Authoritative list: `manifest.json` in [petralabx/skills](https://github.com/petralabx/skills).
 
 ---
 
@@ -130,7 +137,7 @@ ls ~/.cursor/skills | wc -l
 cat ~/.agentic/skills.registry.json | head -20
 ```
 
-You should see **at least 29** company skills (more if project-native skills merged).
+You should see the published skills from the pinned package (count varies by release).
 
 **Dry run after catalog update:**
 
@@ -138,13 +145,13 @@ You should see **at least 29** company skills (more if project-native skills mer
 ./scripts/bootstrap-company-skills.sh --dry-run
 ```
 
-Expect `Installing 29 published skills from plx-cursor-skills`.
+Expect `Catalog: petralabx/skills` and published skills from the pinned manifest.
 
 ---
 
 ## 6. Refresh when the catalog changes
 
-When PLX announces a new skills release (new tag in `plx-cursor-skills` or updated pin in PLX_MC):
+When PLX announces a new skills release (updated `pinSha` / tag in `config/skills-catalog.json`):
 
 **Option A — bootstrap (all machines):**
 
@@ -193,17 +200,21 @@ Personal skills are **private by default**. They are **not** uploaded automatica
    - MCP tool `mc_submit_skill` with `id`, `name`, `description`, `skillMd`, optional `tags` / `owner`.
 3. Submissions persist in Postgres (`skill_submissions`) when `PLX_MC_DATABASE_URL` is set; dev falls back to in-memory store.
 4. **Reviewer** approves in the Skills Directory UI (or `PATCH /api/skills-directory/submissions/[id]`).
-   Approval triggers the publish hook: GitHub PR in `plx-cursor-skills` when writes are enabled, or `publish-instructions.md` for manual operator steps.
-5. After merge + tag, operator bumps `pinTag` / `pinSha` in `config/skills-catalog.json` if needed.
+   Approval triggers the publish hook: GitHub PR when writes are enabled (see runbook), or `publish-instructions.md` for manual operator steps.
+5. After merge + tag, operator bumps `pinSha` in `config/skills-catalog.json` if needed.
 6. **Team refresh:** bootstrap (§6) or `mc_install_skills` / `mc_sync_skills`.
 
 **Fallback — direct PR to content repo** (when MC is unavailable):
 
-1. Copy the skill folder to a branch of [`taylorvalton/plx-cursor-skills`](https://github.com/taylorvalton/plx-cursor-skills):
+1. Copy the skill folder to a branch of [`petralabx/skills`](https://github.com/petralabx/skills):
    - Path: `skills/<kebab-case-id>/SKILL.md`
    - Match layout in existing skills (see `docs/plx-cursor-skills/REPO-LAYOUT.md` in PLX_MC).
 2. **Update** `manifest.json` with a `skills[]` entry (`pending_review` or `published`), bump semver, open PR.
 3. Reviewer merges → tags release → operator updates catalog pin → team refresh (§6).
+
+> **Legacy publish path:** `src/lib/skills-directory/publish.ts` may still target
+> `taylorvalton/plx-cursor-skills` for automated write PRs until migrated — prefer
+> `petralabx/skills` for manual fallback PRs.
 
 ### What reviewers look for
 
@@ -214,7 +225,7 @@ Personal skills are **private by default**. They are **not** uploaded automatica
 
 ### Rejected submissions
 
-Stay on your machine only. Nothing is pulled from personal dirs without an approved merge to `plx-cursor-skills`.
+Stay on your machine only. Nothing is pulled from personal dirs without an approved merge to `petralabx/skills`.
 
 ---
 
@@ -227,7 +238,7 @@ Follow `docs/runbooks/plx-mc-mcp-team-registration.md`:
 - Set `MC_MCP_API_KEY`, `MC_OPERATOR_EMAIL`, `PLX_MC_MCP_ENABLED=1`
 - Register `https://mc.plxcustomer.io/api/cursor/mcp` (remote) or stdio via `tools/plx-mc-mcp/`
 - Windows helper: `scripts/run-plx-mc-mcp.ps1`
-- Set `MC_REPO` to the repo you work in (`taylorvalton/PLX_MC`, etc.)
+- Set `MC_REPO` to the repo you work in (`petralabx/PLX_MC`, `petralabx/plx-customer-portal`, etc.)
 - Verify with MCP tool `mc_self_check`
 
 Full PR/compliance context: **SOP guide → Collaborator SOP** in [Mission Control](https://mc.plxcustomer.io/).
@@ -240,6 +251,7 @@ Full PR/compliance context: **SOP guide → Collaborator SOP** in [Mission Contr
 |-------|-----|
 | Run `agentic-swarm` full `.cursor/install-skills.sh` on a team laptop | Installs operator/trading/VMC-internal skills |
 | Assume PLX-MC login installs skills | MCP is task governance only |
+| Bootstrap from `taylorvalton/plx-cursor-skills` as primary source | Superseded by `petralabx/skills` |
 | Edit skills only in a project folder without bootstrap | Global agents won't see them; peers won't either |
 | Commit secrets into skill files | Skills sync via git — treat like code |
 | Skip a new Cursor session after bootstrap | Skills load at session start only |
@@ -285,7 +297,8 @@ Until in-app install lands, **`mc_install_skills` + bootstrap** remain the insta
 
 | Resource | Location |
 |----------|----------|
-| Content repo | https://github.com/taylorvalton/plx-cursor-skills |
+| Content repo | https://github.com/petralabx/skills |
+| Legacy content (historical) | https://github.com/taylorvalton/plx-cursor-skills |
 | Bootstrap scripts | `PLX_MC/scripts/bootstrap-company-skills.{sh,ps1}` |
 | Catalog pin | `PLX_MC/config/skills-catalog.json` |
 | MC browse UI | Mission Control → System of record → **Skills directory** |

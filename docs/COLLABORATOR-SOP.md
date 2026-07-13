@@ -61,8 +61,8 @@ The gate classifies each PR into a **risk tier** and resolves **who** made it.
 | Tier | Triggered by | Bundle the gate expects |
 |---|---|---|
 | **low** | docs-only / test-only changes | a short summary |
-| **standard** | normal product code | a complete description **+ a rollback note** |
-| **high** | DB migrations, auth/permissions, infra, `.github/workflows`, deploy | full evidence (tests/screenshots) **+ rollback plan + a linked PRD** |
+| **standard** | normal product code | complete description; agent PRs need **`task.evidence`** with summary + rollback |
+| **high** | DB migrations, auth/permissions, infra, `.github/workflows`, deploy | **`task.evidence`** with tests/screenshots + rollback + linked bucket PRD |
 
 You can override the tier with a PR label: **`risk:high`** or **`risk:low`**.
 
@@ -72,7 +72,8 @@ You can override the tier with a PR label: **`risk:high`** or **`risk:low`**.
   trusted, audited, not gated).
 - **Agent PR** → **must be linked to a checked-out MC task** (see §4). An agent PR
   with no valid checkout is **blocked**, and it must carry a **human accountable
-  owner** plus the tier bundle above.
+  owner** plus complete **`task.evidence`** on each stamped task (`mc_complete_task`
+  writes summary, rollback, verification, and high-tier test shots as required).
 
 ---
 
@@ -82,17 +83,18 @@ You're treated as an operator — your PR will **pass and be recorded**. Just ke
 PRs clean so they sail through (and survive the future hard cutover):
 
 1. Write a clear PR description of **what** changed and **why**.
-2. For anything beyond docs/tests, add a **Rollback Plan** section — what to do to
-   undo it (revert, disable, feature-flag, restore). Example:
+2. For anything beyond docs/tests, add a **`## Rollback Plan`** section in the PR
+   body — what to do to undo it (revert, disable, feature-flag, restore). Example:
 
    ```markdown
    ## Rollback Plan
    Revert this PR. No schema/data changes; reverting fully restores prior behavior.
    ```
 
-   > `agentic-swarm` **requires** this `## Rollback Plan` section on non-docs PRs
-   > (its "Agentic PR Evidence" check fails without it). It's good practice
-   > everywhere.
+   > Human PRs are not gated on `task.evidence`. The MC gate still reads
+   > **`task.evidence`** for agent PRs (`mc_complete_task`). PR-body rollback is
+   > also **required** by `petralabx/agentic-swarm` on non-docs PRs (its evidence
+   > check) — keep both where applicable.
 3. Use a `risk:low` / `risk:high` label if the auto-classification is wrong.
 4. Don't worry about MC checkout — that's for agents.
 
@@ -138,11 +140,14 @@ the work and pass it, and it's how autonomous changes stay accountable.
    MC-Checkout: dsp_xxxxxxxx
    MC-Checkout: dsp_yyyyyyyy   # one per task on a multi-task PR
    ```
-4. Make sure the PR meets the **tier bundle** (rollback note, evidence, PRD as
-   required) and names the **human accountable owner**.
+4. Call **`mc_complete_task`** (or equivalent) so **`task.evidence`** is complete
+   before the gate runs — summary, rollback, verification commands, test shots/PRD
+   as tier requires. Also add PR-body **`## Rollback Plan`** when repo CI expects
+   it (e.g. `agentic-swarm`). Name the **human accountable owner**.
 
 > **Full agent provisioning guide:** Mission Control → **SOP guide** →
-> **Agent PR & MC-Checkout discipline** (`docs/AGENT-PR-SOP.md`).
+> **Agent — How to Use Mission Control** (`docs/AGENT-PR-SOP.md`).
+> Humans working in the UI: **Human — How to Use Mission Control** (`docs/HUMAN-MC-SOP.md`).
 
 ### Rules for agent-driven work
 
@@ -170,8 +175,9 @@ the work and pass it, and it's how autonomous changes stay accountable.
 | Reason | Fix |
 |---|---|
 | Agent PR with no valid checkout | Check out the task and add `MC-Checkout: <id>` (see §4). |
-| Missing rollback plan | Add a `## Rollback Plan` section to the PR body. |
-| Missing evidence/PRD on a high-risk change | Attach tests/screenshots; link the bucket PRD; or relabel `risk:low` if mis-tiered. |
+| Missing rollback on task | `mc_complete_task` with `rollback` in **`task.evidence`** (MC gate). |
+| Missing PR-body rollback (repo CI) | Add `## Rollback Plan` to the PR body (e.g. `agentic-swarm`). |
+| Missing evidence/PRD on a high-risk change | Complete **`task.evidence`** (testRun/shots); link bucket PRD in MC; or relabel `risk:low` if mis-tiered. |
 | "MC unreachable" | MC is temporarily down (fail-closed). Re-run the check once it's back; it auto-recovers via the reconcile sweep. |
 
 If you're stuck or believe the verdict is wrong, ping the owner (Vince) — don't
@@ -230,7 +236,8 @@ changes).
 The full `agentic-swarm` repo contains operator-only skills. **Do not** run the
 all-skills installer on a team laptop.
 
-Instead, bootstrap from **`taylorvalton/plx-cursor-skills`** (29 published skills):
+Instead, bootstrap from **`petralabx/skills`** (catalog pin ~v1.2.0 in
+`config/skills-catalog.json`):
 
 **Windows:** `.\scripts\bootstrap-company-skills.ps1` · **macOS/Linux:** `./scripts/bootstrap-company-skills.sh`
 
@@ -251,6 +258,6 @@ Follow `docs/runbooks/plx-mc-mcp-team-registration.md`:
 
 See **Company Skills SOP** (SOP guide in Mission Control) — §8 covers submit via
 **Skills directory** / `mc_submit_skill`, reviewer approval, and the direct-PR
-fallback to `taylorvalton/plx-cursor-skills` (skills catalog; platform repos live
-under `petralabx/*`).
+fallback PR to **`petralabx/skills`** (canonical catalog; legacy
+`taylorvalton/plx-cursor-skills` is pre-migration only).
 

@@ -1,16 +1,21 @@
 # Runbook: GitHub Org — Phased Migration (EN-008)
 
-> **Status:** Active policy · legacy repos stay on `taylorvalton` until transferred;
-> **new** repos (inference, marketing brands, …) are created under the PLX org slug.
-> Full migration of platform repos is a **follow-up** tracked as EN-008.
+> **CURRENT STATE (post EN-008, 2026-07-09):** Platform repos **`PLX_MC`**,
+> **`plx-customer-portal`**, and **`agentic-swarm`** live under **`petralabx/*`**.
+> New repos are created on `petralabx`. Legacy `taylorvalton/*` slugs are historical
+> only — do not treat them as the live operator path.
+>
+> **Below:** superseded migration checklist preserved for audit trail. Use current
+> slugs (`petralabx/...`) and [`docs/runbooks/REPO-ONBOARDING.md`](REPO-ONBOARDING.md)
+> for onboarding.
 
-## Policy (decided 2026-06-30)
+## Policy (decided 2026-06-30) — historical
 
 | Phase | Repos | GitHub owner | MC registry |
 |---|---|---|---|
-| **Now — legacy (unchanged)** | `plx-customer-portal`, `PLX_MC`, `agentic-swarm` | `taylorvalton` | `owner: taylorvalton` |
-| **Now — new registrations** | `local-inference`, `for-and-against`, `furgenics`, `1hr-after`, future brands | [`petralabx`](https://github.com/petralabx) | `owner: petralabx` |
-| **Later — migration (EN-008)** | Transfer legacy platform repos to the PLX org | `petralabx` | Update `owner` + all full slugs |
+| **Legacy (pre-migration)** | `plx-customer-portal`, `PLX_MC`, `agentic-swarm` | `taylorvalton` | `owner: taylorvalton` |
+| **New registrations** | `local-inference`, brands, tooling, … | [`petralabx`](https://github.com/petralabx) | `owner: petralabx` |
+| **Migration (EN-008) — DONE** | Platform trio transferred | `petralabx` | `owner: petralabx` |
 
 MC registry **ids** (`portal-web`, `plx-mc`, …) do **not** change — only `owner` and
 `owner/repo` slugs change at migration time.
@@ -26,17 +31,22 @@ Canonical constants (`src/lib/mc-data/data.ts`):
 
 ## What new repos must do today
 
-1. Create the GitHub repo under **`petralabx/<repo-name>`** (not `taylorvalton/`).
-2. Register in MC (seed or request → approve) with `owner: petralabx`.
-3. Set `plx-brand.json` → `mc.github` = `petralabx/<repo-name>`.
-4. Follow [`marketing-brand-repo-setup.md`](marketing-brand-repo-setup.md) for brand repos.
+1. **Org owner/admin** creates the GitHub repo under **`petralabx/<repo-name>`**.
+2. **Request repo** in MC → Owner/Admin **approves** (MC allow-list).
+3. Register in fleet via [`REPO-ONBOARDING.md`](REPO-ONBOARDING.md) (`tracked-repos-registry.json`).
+4. Set `plx-brand.json` → `mc.github` = `petralabx/<repo-name>` (brand repos).
+5. Follow [`marketing-brand-repo-setup.md`](marketing-brand-repo-setup.md) for brand repos.
 
 GitHub App / token used by MC must be granted access to **`petralabx`** before
 validation and loop-ledgers will succeed for new repos.
 
 ---
 
-## Follow-up: migrate legacy platform repos (EN-008)
+## Follow-up: migrate legacy platform repos (EN-008) — COMPLETED
+
+> **Superseded procedure.** Platform trio is on `petralabx`. Keep this checklist
+> as historical evidence only. Residual: org required-workflow rulesets still need
+> GitHub Team (API currently reports plan `free`).
 
 **Status (2026-07-09):** Platform trio transferred to `petralabx` (`PLX_MC`, `plx-customer-portal`, `agentic-swarm`). Registry/MCP/GEN_REPO updates land in the leftovers PR. Org required-workflow rulesets still need GitHub Team (API currently reports plan `free`).
 
@@ -87,11 +97,12 @@ When the [`petralabx`](https://github.com/petralabx) org is ready and the operat
 
 ---
 
-## Why phased (not big-bang)
+## Why phased (not big-bang) — historical context
 
-- Portal, MC, and swarm are live on `taylorvalton` with Vercel, compliance, and MCP wired to those slugs.
-- Brand and inference repos **do not exist yet** on GitHub — no migration cost to start on the PLX org.
-- MC already supports **two allowed orgs** so both coexist during the transition.
+- Platform repos **were** live on `taylorvalton` with Vercel, compliance, and MCP
+  wired to those slugs before EN-008 transfer (2026-07-09).
+- Brand and inference repos started on `petralabx` with no migration cost.
+- MC supported **two allowed orgs** during the transition window.
 
 ---
 

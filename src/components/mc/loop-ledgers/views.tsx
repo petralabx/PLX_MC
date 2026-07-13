@@ -546,22 +546,22 @@ const GALLERY_CARDS: GalleryCard[] = [
     code: "permission_denied",
     title: "Permission denied",
     description:
-      "HTTP 403 — the configured GITHUB_TOKEN lacks read access to this repo. Most common for private repos. Upgrade the token scope or add the repo's installation access.",
-    example: "taylorvalton/plx-customer-portal → 403 Forbidden",
+      "HTTP 403 — the GitHub App installation (or PAT fallback) lacks read access to this repo. Most common when the wrong org installation is selected or the App is not installed on the private repo.",
+    example: "petralabx/plx-customer-portal → 403 Forbidden",
   },
   {
     code: "token_missing",
     title: "Token missing",
     description:
-      "GITHUB_TOKEN environment variable is not set. All GitHub API reads produce this degraded result instead of crashing. Set the token and restart.",
-    example: "All repos → degraded (GITHUB_TOKEN absent)",
+      "No GitHub auth configured (GitHub App credentials or GITHUB_TOKEN). All GitHub API reads produce this degraded result instead of crashing. Configure the App (preferred) or a PAT and restart.",
+    example: "All repos → degraded (GitHub auth absent)",
   },
   {
     code: "not_found",
     title: "Not found",
     description:
-      "HTTP 404 — the repo, branch, or ledger path does not exist. Check the registry config's repo slug and default_branch.",
-    example: "taylorvalton/wrong-repo → 404 Not Found",
+      "HTTP 404 — the repo, branch, or ledger path does not exist, or the selected App installation cannot see a private repo. Check the registry repo slug/default_branch and owner-aware installation routing.",
+    example: "petralabx/wrong-repo → 404 Not Found",
   },
   {
     code: "rate_limit",

@@ -7,8 +7,8 @@
 > token namespace.
 >
 > **GitHub org:** create brand repos under **`petralabx/<slug>`**, not `taylorvalton/`.
-> Legacy platform repos remain on `taylorvalton` until EN-008 migration — see
-> [`github-org-phased-migration.md`](github-org-phased-migration.md).
+> Platform repos (`PLX_MC`, `plx-customer-portal`, `agentic-swarm`) are on **`petralabx`**
+> post EN-008 — see [`github-org-phased-migration.md`](github-org-phased-migration.md).
 >
 > Canonical references: `docs/design-system/HOMEPAGE-SCOPE.md` (sibling-track
 > decision), `artifacts/design-system/2026-06-17-authority-and-propagation/REPORT.md`

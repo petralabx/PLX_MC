@@ -259,4 +259,75 @@ describe("seed registry + Collaborator SOP (integration)", () => {
       }
     }
   });
+
+  it("activates human-mc SOP with docs/HUMAN-MC-SOP.md", async () => {
+    const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
+    const r = parseSopRegistryJson(raw);
+    if (!r.ok) throw new Error("seed registry invalid");
+    const human = r.config.sops.find((s) => s.slug === "mc-sop-human-mc")!;
+    expect(human.status).toBe("active");
+    expect(human.source?.repo_path).toBe("docs/HUMAN-MC-SOP.md");
+    const detail = await getSopDetail(human, createSopSource());
+    expect(detail.ok).toBe(true);
+    if (detail.ok) {
+      expect(detail.nodes.length).toBeGreaterThan(5);
+      expect(detail.toc.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders agent, human, skills, rollback, and collaborator SOP sources", async () => {
+    const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
+    const r = parseSopRegistryJson(raw);
+    if (!r.ok) throw new Error("seed registry invalid");
+    const slugs = [
+      "mc-sop-agent-pr",
+      "mc-sop-human-mc",
+      "mc-sop-skills",
+      "mc-sop-rollback",
+      "mc-sop-collaborator",
+    ] as const;
+    for (const slug of slugs) {
+      const entry = r.config.sops.find((s) => s.slug === slug)!;
+      expect(entry.status).toBe("active");
+      expect(entry.source?.repo_path).toBeTruthy();
+      const detail = await getSopDetail(entry, createSopSource());
+      expect(detail.ok).toBe(true);
+      if (detail.ok) {
+        expect(detail.nodes.length).toBeGreaterThan(5);
+        expect(detail.toc.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("active SOPs contain petralabx, task.evidence, and petralabx/skills doctrine", () => {
+    const checks: Record<string, { required: string[]; forbidden?: RegExp }> = {
+      "docs/AGENT-PR-SOP.md": {
+        required: ["petralabx", "task.evidence", "petralabx/skills"],
+      },
+      "docs/HUMAN-MC-SOP.md": {
+        required: ["petralabx", "task.evidence"],
+      },
+      "docs/ROLLBACK-PLAN-SOP.md": {
+        required: ["task.evidence"],
+      },
+      "docs/SKILLS-SOP.md": {
+        required: ["petralabx/skills", "petralabx"],
+        forbidden: /from \*\*`taylorvalton\/plx-cursor-skills`\*\*/i,
+      },
+    };
+    for (const [path, { required, forbidden }] of Object.entries(checks)) {
+      const content = readFileSync(join(process.cwd(), path), "utf8");
+      for (const needle of required) {
+        expect(content, `${path} missing ${needle}`).toContain(needle);
+      }
+      if (forbidden) {
+        expect(content, `${path} presents legacy skills repo as primary install`).not.toMatch(forbidden);
+      }
+    }
+    const skills = readFileSync(join(process.cwd(), "docs/SKILLS-SOP.md"), "utf8");
+    const taylorPrimary = skills.match(
+      /skills come\s+from\s+\*\*`taylorvalton\/plx-cursor-skills`\*\*/i,
+    );
+    expect(taylorPrimary).toBeNull();
+  });
 });

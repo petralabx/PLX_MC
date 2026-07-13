@@ -1,4 +1,4 @@
-// GitHub content fetch for plx-cursor-skills manifest and SKILL.md files.
+// GitHub content fetch for skills catalog (canonical: petralabx/skills).
 
 import { resolveGithubToken } from "@/lib/github-app";
 
@@ -84,20 +84,20 @@ async function fetchRaw(
 
 export class GithubSkillsSource implements SkillsSourceReader {
   async fetchManifest(pointer: CatalogPointer): Promise<ManifestFetchResult> {
-    const token = await resolveGithubToken();
-    if (!token) {
-      return {
-        ok: false,
-        reason: "token_missing",
-        note: "no GitHub auth configured — skills catalog cannot be fetched",
-      };
-    }
     const parsed = parseRepo(pointer.sourceRepo);
     if (!parsed) {
       return {
         ok: false,
         reason: "not_found",
         note: `sourceRepo "${pointer.sourceRepo}" is not owner/name`,
+      };
+    }
+    const token = await resolveGithubToken({ repoOwner: parsed.owner });
+    if (!token) {
+      return {
+        ok: false,
+        reason: "token_missing",
+        note: "no GitHub auth configured — skills catalog cannot be fetched",
       };
     }
     const ref = refForPointer(pointer);
@@ -130,20 +130,20 @@ export class GithubSkillsSource implements SkillsSourceReader {
     pointer: CatalogPointer,
     contentPath: string
   ): Promise<ContentFetchResult> {
-    const token = await resolveGithubToken();
-    if (!token) {
-      return {
-        ok: false,
-        reason: "token_missing",
-        note: "no GitHub auth configured — skill content cannot be fetched",
-      };
-    }
     const parsed = parseRepo(pointer.sourceRepo);
     if (!parsed) {
       return {
         ok: false,
         reason: "not_found",
         note: `sourceRepo "${pointer.sourceRepo}" is not owner/name`,
+      };
+    }
+    const token = await resolveGithubToken({ repoOwner: parsed.owner });
+    if (!token) {
+      return {
+        ok: false,
+        reason: "token_missing",
+        note: "no GitHub auth configured — skill content cannot be fetched",
       };
     }
     const ref = refForPointer(pointer);

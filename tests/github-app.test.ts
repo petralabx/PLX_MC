@@ -177,4 +177,37 @@ describe("resolveGithubToken fallback contract", () => {
     expect(token).toBe("ghp_org_fallback");
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it("mints against the PLX installation when repoOwner is petralabx and PLX id is set", async () => {
+    configureApp();
+    process.env.GITHUB_APP_INSTALLATION_ID_PLX = "143714328";
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const href = String(url);
+      expect(href).toContain("/app/installations/143714328/access_tokens");
+      return tokenResponse("ghs_plx", Date.now() + 3_600_000);
+    });
+    const token = await resolveGithubToken({
+      repoOwner: "petralabx",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(token).toBe("ghs_plx");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the legacy installation for non-PLX owners when both ids are set", async () => {
+    configureApp();
+    process.env.GITHUB_APP_INSTALLATION_ID_PLX = "143714328";
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const href = String(url);
+      expect(href).toContain("/app/installations/789/access_tokens");
+      expect(href).not.toContain("143714328");
+      return tokenResponse("ghs_legacy", Date.now() + 3_600_000);
+    });
+    const token = await resolveGithubToken({
+      repoOwner: "taylorvalton",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(token).toBe("ghs_legacy");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });

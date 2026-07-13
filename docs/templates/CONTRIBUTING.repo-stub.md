@@ -29,7 +29,9 @@ Owner: PLX Repo Maintainers
 1. **Never push directly to the integration branch.** Open a PR.
 2. Every PR runs the **PLX MC Compliance Gate** (`.github/workflows/plx-mc-compliance.yml`).
 3. Agent-driven PRs must include `MC-Checkout: dsp_…` in the body (see COLLABORATOR-SOP).
-4. Non-docs PRs need a `## Rollback Plan` section.
+4. Non-docs PRs: add PR-body `## Rollback Plan` (human-readable; may be required by
+   repo CI). Agent PRs must also complete **`task.evidence`** via `mc_complete_task`
+   — the MC compliance gate reads `task.evidence`, not PR-body prose.
 
 ---
 
@@ -61,12 +63,13 @@ Mission Control milestone IDs when applicable (`MRP-M-*`, `ERP-M-*`, etc.).
 ## Mission Control
 - Milestone: … / n/a
 - MC-Checkout: dsp_…   ← required for agent/task work
+- task.evidence: complete via mc_complete_task before gate (summary, rollback, verification)
 
 ## Test plan
 - [ ] (repo validation commands)
 
 ## Rollback Plan
-(how to revert)
+(how to revert — PR-body section; MC gate also checks task.evidence.rollback for agents)
 ```
 
 ---

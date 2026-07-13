@@ -47,8 +47,9 @@ Writes stay default-off behind:
 - `SKILLS_SUBMIT_GITHUB_WRITE_ENABLED` — must be `1` or `true`; absent/anything
   else returns `publish-instructions.md` content in the API response instead of
   writing to GitHub.
-- `SKILLS_SUBMIT_GITHUB_TOKEN` — fine-scoped token with write access only to
-  `taylorvalton/plx-cursor-skills`, used to create `submit/<id>-<ts>` branches,
+- `SKILLS_SUBMIT_GITHUB_TOKEN` — fine-scoped token with write access to the publish
+  target repo (legacy default `taylorvalton/plx-cursor-skills` in `publish.ts`;
+  catalog reads use `petralabx/skills`), used to create `submit/<id>-<ts>` branches,
   write `skills/<id>/SKILL.md` + `manifest.json`, and open a PR.
 
 The reader module remains least-privilege read-only; the writer lives in
@@ -58,11 +59,11 @@ The reader module remains least-privilege read-only; the writer lives in
 
 - `node:crypto` (RS256 signing) — no new package.
 - `@/lib/secrets` — `githubAppConfigured()` / `githubAppCredentials()`.
-- Depended on by: `loop-ledgers` (github-api source adapter), `sync`
-  (`validateRepoInOrg`), and **`skills-directory`** (`GithubSkillsSource` reads
-  `taylorvalton/plx-cursor-skills` — the repo must be on App installation
-  `142149327`; see `docs/runbooks/github-app-provisioning.md` Step 2a). All
-  import `resolveGithubToken` through this barrel.
+- Depended on by: `loop-ledgers` (github-api source adapter, **owner-aware** token
+  routing), `sync` (`validateRepoInOrg`), and **`skills-directory`** (`GithubSkillsSource`
+  reads `petralabx/skills` per `config/skills-catalog.json`; org App install must
+  cover the catalog repo — see `docs/runbooks/github-app-provisioning.md` Step 2b).
+  All import `resolveGithubToken` through this barrel.
 
 ### Key Files
 

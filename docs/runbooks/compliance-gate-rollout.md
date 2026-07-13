@@ -1,14 +1,12 @@
 # Runbook: Activate the PLX MC Compliance Gate (EN-007)
 
-> The EN-007 code is **built, tested, and merge-ready** (verifier, checkout/verify
-> API, dispatch ledger, `mc_events` log + export, git→MC webhook + ingestion,
-> fail-closed reconciliation queue, the status-check workflow, and the capture
-> hook). The gate is **inert until the steps below run** — every piece ships
-> **default-off**, so merging the code changes no repo's behavior. This runbook is
-> the operator/infra activation that a coding session cannot perform (it needs
-> GitHub admin, a public deployment, and shared-env credentials).
+> **Fleet status (2026-07-08):** Active repos are on **hard** mode per
+> [`fleet-compliance-hard-cutover.md`](fleet-compliance-hard-cutover.md). The
+> soft→hard flip steps below are **historical activation procedure** for repos
+> already live — except `petralabx/test-perms-check`, which stays `soft`.
 >
-> Design + decisions: `docs/product/SYSTEM_OF_RECORD.md`. Module: `docs/modules/compliance/`.
+> The EN-007 code is **built, tested, and deployed**. This runbook remains the
+> operator/infra reference for initial activation, OIDC dogfood, and kill switches.
 
 ## Prerequisites
 
@@ -58,7 +56,10 @@ falls back to `COMPLIANCE_CI_TOKEN` only when bearer is still configured.
 - Generate a private key → store in the secrets manager (never commit).
 - Install on **`PLX_MC` first** (dogfood), then `agentic-swarm`, then `plx-customer-portal`.
 
-## Step 4 — Turn on the gate, soft → hard (dogfood PLX_MC)
+## Step 4 — Turn on the gate, soft → hard (historical dogfood)
+
+> **Current fleet:** hard mode is live on active repos. Use this section only when
+> onboarding a **new** repo (may start `soft`) or auditing the original PLX_MC dogfood.
 
 The workflow `.github/workflows/compliance-gate.yml` is already in `PLX_MC` and is
 **safe**: it skips while `PLX_MC_BASE_URL` is unset.
@@ -88,7 +89,10 @@ into `.cursor/hooks.json` and set in the run env: `COMPLIANCE_CAPTURE=1`,
 `MC_BASE_URL`, `MC_TASK_ID`, `MC_ACCOUNTABLE`, `MC_REPO`. The hook checks out the
 task and stamps the PR body with `MC-Checkout: <id>`. Default-off; opt-in per runtime.
 
-## Step 6 — Roll out to the other repos (Phase 2 follow-up)
+## Step 6 — Roll out to the other repos (Phase 2 — completed)
+
+> **Historical.** Fleet hard cutover completed 2026-07-08. Active repos listed in
+> `fleet-compliance-hard-cutover.md`. Only `petralabx/test-perms-check` remains soft.
 
 For `agentic-swarm`, then `plx-customer-portal`: add a 3-line caller workflow that
 `uses:` the reusable `compliance-gate.yml` (or copy it), set `PLX_MC_BASE_URL` +

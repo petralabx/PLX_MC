@@ -4,8 +4,8 @@
 
 Company-skills catalog and workflow in the Mission Control shell (Screen
 `skills-directory`, **System of record** sidebar group, label "Skills directory").
-It browses approved Cursor/Claude skills from the `plx-cursor-skills` git repo
-via `config/skills-catalog.json` (v3 catalog pointer + pin). Operators and
+It browses approved Cursor/Claude skills from **`petralabx/skills`** via
+`config/skills-catalog.json` (v3 catalog pointer + `pinSha`). Operators and
 contributors search skill metadata, read rendered `SKILL.md`, submit proposals,
 and reviewers approve → publish. Local install uses bootstrap scripts or MCP
 install/sync tools (scripts returned for operator/agent execution).
@@ -27,7 +27,7 @@ PLX_MC owns metadata, submissions, and workflow; git owns versioned skill files.
 2. **GitHub source** — `GithubSkillsSource` fetches `manifest.json` and
    `skills/<id>/SKILL.md` via GitHub Contents API using `resolveGithubToken`.
    Injected into the loader for unit tests.
-3. **Manifest** — `parseManifestJson` validates `plx-cursor-skills` manifest;
+3. **Manifest** — `parseManifestJson` validates the skills-repo manifest;
    `publishedSkills` filters by package and `status: published`.
 4. **Loader** — `listSkillCatalog` / `getSkillDetail` return `ready` or
    `degraded` catalog meta.
@@ -51,14 +51,15 @@ PLX_MC owns metadata, submissions, and workflow; git owns versioned skill files.
 skills-catalog.json → GithubSkillsSource → manifest + SKILL.md → loader
     → GET /api/skills-directory[*] → SkillsDirectoryView
     → MCP mc_*_skills → install scripts / submissions API
-    → approval PATCH → publish.ts → plx-cursor-skills PR
+    → approval PATCH → publish.ts → skills content repo PR (legacy write target may
+    still be `taylorvalton/plx-cursor-skills`; catalog reads `petralabx/skills`)
 ```
 
 ## Dependencies
 
 Depends on: **web** (MC shell, `api()` + `route()`), **github-app**
-(`resolveGithubToken` — **`plx-cursor-skills` must be on the App installation**;
-runbook Step 2a), **governance-sops** (markdown parser + reader UI),
+(`resolveGithubToken` — **`petralabx/skills` must be on the org App installation**;
+runbook Step 2b), **governance-sops** (markdown parser + reader UI),
 **design-system** (`--p-*` tokens), **Postgres** (submissions, optional dev
 memory fallback). Depended on by: Company Skills SOP (`docs/SKILLS-SOP.md`),
 bootstrap scripts, PLX-MC MCP (`tools/plx-mc-mcp/`, `src/lib/mcp/skills-actions.ts`).

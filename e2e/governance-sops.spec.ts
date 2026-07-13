@@ -26,7 +26,7 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
 
   test("index lists the seed catalog; active SOPs are ready", async ({ page }) => {
     const rows = page.locator("[data-testid='gs-row']");
-    await expect(rows).toHaveCount(7);
+    await expect(rows).toHaveCount(8);
 
     const collab = page.locator("[data-testid='gs-row'][data-slug='mc-sop-collaborator']");
     await expect(collab).toBeVisible();
@@ -43,6 +43,12 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
     const agentPr = page.locator("[data-testid='gs-row'][data-slug='mc-sop-agent-pr']");
     await expect(agentPr).toBeVisible();
     await expect(agentPr).toHaveAttribute("data-state", "ready");
+    await expect(agentPr).toContainText("Agent — How to Use Mission Control");
+
+    const humanMc = page.locator("[data-testid='gs-row'][data-slug='mc-sop-human-mc']");
+    await expect(humanMc).toBeVisible();
+    await expect(humanMc).toHaveAttribute("data-state", "ready");
+    await expect(humanMc).toContainText("Human — How to Use Mission Control");
 
     // A planned entry renders as a calm "coming soon" row (visible, not hidden).
     const planned = page.locator("[data-testid='gs-row'][data-state='planned']").first();
@@ -53,7 +59,7 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
   });
 
   test("search filters the catalog", async ({ page }) => {
-    await page.locator(".gs-search-input").fill("rollback");
+    await page.locator(".gs-search-input").fill("rollback plan requirements");
     const rows = page.locator("[data-testid='gs-row']");
     await expect(rows).toHaveCount(1);
     await expect(rows.first()).toContainText("Rollback");
@@ -92,19 +98,31 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
     await expect(detail.locator(".gs-doc-title")).toContainText("Company Skills SOP");
 
     const reader = page.locator("[data-testid='gs-reader']");
-    await expect(reader).toContainText("plx-cursor-skills");
+    await expect(reader).toContainText("petralabx/skills");
     await expect(reader.locator("table.gs-table").first()).toBeVisible();
   });
 
-  test("opens the Agent PR SOP and renders checkout guidance", async ({ page }) => {
+  test("opens the Agent MC SOP and renders checkout guidance", async ({ page }) => {
     await page.locator("[data-testid='gs-row'][data-slug='mc-sop-agent-pr']").click();
 
     const detail = page.locator("[data-testid='gs-detail-view']");
     await expect(detail).toBeVisible();
-    await expect(detail.locator(".gs-doc-title")).toContainText("Agent PR");
+    await expect(detail.locator(".gs-doc-title")).toContainText("Agent — How to Use Mission Control");
 
     const reader = page.locator("[data-testid='gs-reader']");
     await expect(reader).toContainText("MC-Checkout");
+    await expect(reader.locator("table.gs-table").first()).toBeVisible();
+  });
+
+  test("opens the Human MC SOP and renders project/bucket guidance", async ({ page }) => {
+    await page.locator("[data-testid='gs-row'][data-slug='mc-sop-human-mc']").click();
+
+    const detail = page.locator("[data-testid='gs-detail-view']");
+    await expect(detail).toBeVisible();
+    await expect(detail.locator(".gs-doc-title")).toContainText("Human — How to Use Mission Control");
+
+    const reader = page.locator("[data-testid='gs-reader']");
+    await expect(reader).toContainText("accountable owner");
     await expect(reader.locator("table.gs-table").first()).toBeVisible();
   });
 

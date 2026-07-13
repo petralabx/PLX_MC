@@ -4,10 +4,11 @@
 
 **Owner:** Vince · **Status:** active · **Effective:** 2026-07-09
 
-> **TL;DR** — If the change is not docs/tests-only, the PR body needs a
-> **`## Rollback Plan`** section that says how to undo it safely. High-risk
-> changes also need evidence and a linked PRD. The compliance gate checks this
-> for agent PRs; `agentic-swarm` also enforces it in its own evidence check.
+> **TL;DR** — Agent PRs: the MC compliance gate checks **`task.evidence`** (via
+> `mc_complete_task` / `actionComplete`) — include a credible **`rollback`** field
+> for standard/high tiers. PR body **`## Rollback Plan`** stays human-readable and
+> may be required by repo-specific checks (e.g. `petralabx/agentic-swarm`). High-risk
+> changes also need test evidence and a linked bucket PRD on the task.
 
 Companion to [`docs/COLLABORATOR-SOP.md`](COLLABORATOR-SOP.md) §2 and
 [`docs/AGENT-PR-SOP.md`](AGENT-PR-SOP.md).
@@ -28,13 +29,18 @@ is wrong — do not use `risk:low` to dodge a real rollback need.
 
 ---
 
-## 2. What the section must contain
+## 2. What the PR-body section must contain
 
-Use this exact heading (gate / evidence parsers look for it):
+For human-readable PRs and **repo-specific** evidence parsers (e.g. agentic-swarm),
+use this exact heading:
 
 ```markdown
 ## Rollback Plan
 ```
+
+The MC compliance gate itself does **not** primarily parse this section — agents
+must put the rollback text into **`task.evidence.rollback`** via `mc_complete_task`.
+Still include the PR section when the target repo's own checks require it.
 
 The body should answer, in plain language:
 
@@ -89,8 +95,14 @@ Missing either is a common hard-gate block for agent PRs.
 
 ## 4. Relationship to other gates
 
-- **Compliance gate** — verifies rollback (and high-tier extras) on agent PRs
-  with `MC-Checkout`.
+- **MC compliance gate** — for agent PRs with `MC-Checkout`, verifies
+  **`task.evidence`** (`verifyCompliance` → `evidenceCompleteForTier`) — summary,
+  checklist, `rollback`, and high-tier test shots/PRD. It does **not** primarily
+  parse PR-body prose.
+- **PR body `## Rollback Plan`** — still required practice for humans and may be
+  enforced by **repo-specific** workflows (e.g. `petralabx/agentic-swarm` evidence
+  check). Keep both: evidence on the task for MC, rollback section in the PR for
+  reviewers and downstream CI.
 - **Repo CI** — still must pass; green compliance ≠ green CI.
 - **Portal** — staging-first; never push `master` without operator approval
   (`docs/runbooks/CONTRIBUTING.md`).

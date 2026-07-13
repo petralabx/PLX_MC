@@ -81,12 +81,13 @@
     {
       "slug": "mc-sop-fleet-secrets",
       "title": "Fleet secrets & CI tokens",
-      "description": "How COMPLIANCE_CI_TOKEN, PLX_MC_BASE_URL, and related fleet secrets are provisioned on GitHub Actions and the MC deployment — planned companion to the compliance-gate rollout runbook.",
+      "description": "How COMPLIANCE_CI_TOKEN, PLX_MC_BASE_URL, allowlists, and MCP keys are provisioned on GitHub Actions and the MC deployment — companion to the compliance-gate rollout and repo-onboarding runbooks.",
       "audience": "Org admins wiring compliance on a tracked repo",
       "owner": "Vince",
-      "effective_date": "2026-07-09",
-      "status": "planned",
-      "tags": ["Compliance gate", "Secrets"]
+      "effective_date": "2026-07-13",
+      "status": "active",
+      "tags": ["Compliance gate", "Secrets"],
+      "source": { "repo_path": "docs/FLEET-SECRETS-SOP.md" }
     }
   ]
 }

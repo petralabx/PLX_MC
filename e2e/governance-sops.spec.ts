@@ -50,10 +50,11 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
     await expect(humanMc).toHaveAttribute("data-state", "ready");
     await expect(humanMc).toContainText("Human — How to Use Mission Control");
 
-    // A planned entry renders as a calm "coming soon" row (visible, not hidden).
-    const planned = page.locator("[data-testid='gs-row'][data-state='planned']").first();
-    await expect(planned).toBeVisible();
-    await expect(planned).toContainText("Coming soon");
+    const fleetSecrets = page.locator("[data-testid='gs-row'][data-slug='mc-sop-fleet-secrets']");
+    await expect(fleetSecrets).toBeVisible();
+    await expect(fleetSecrets).toHaveAttribute("data-state", "ready");
+    await expect(fleetSecrets).toContainText("Fleet secrets");
+    await expect(fleetSecrets).toContainText("Active");
 
     await page.screenshot({ path: `${EVID}/index.png`, fullPage: true });
   });
@@ -127,7 +128,12 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
   });
 
   test("a planned SOP opens a calm no-content panel (loud-but-not-error)", async ({ page }) => {
-    await page.locator("[data-testid='gs-row'][data-state='planned']").first().click();
+    const planned = page.locator("[data-testid='gs-row'][data-state='planned']");
+    if ((await planned.count()) === 0) {
+      test.skip(true, "no planned SOPs in registry — fleet-secrets is active");
+      return;
+    }
+    await planned.first().click();
     const panel = page.locator("[data-testid='gs-nocontent']");
     await expect(panel).toBeVisible();
     await expect(panel).toHaveClass(/planned/);

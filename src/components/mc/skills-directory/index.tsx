@@ -71,7 +71,7 @@ export function SkillsDirectoryView() {
               <h1>Skills directory</h1>
               <p className="sub">
                 Company-approved Cursor and Claude skills from{" "}
-                <code className="gs-icode">plx-cursor-skills</code>. Browse here; install
+                <code className="gs-icode">petralabx/skills</code>. Browse here; install
                 with <code className="gs-icode">scripts/bootstrap-company-skills.ps1</code>.
               </p>
             </div>

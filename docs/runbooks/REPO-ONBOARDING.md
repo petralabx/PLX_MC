@@ -136,7 +136,7 @@ the existing root and align only the control-plane surfaces around it.
 | `agentic-swarm` | `product_platform` | Structurally aligned; local governance must remain a pointer to PLX_MC |
 | `PLX_MC` | `hub` | Governance SSOT; optional `.claude/` absence is not a gap |
 | `plx-customer-portal` | `product_app` | **Verified** on `staging` (2026-07-13): app root `portal/` (+ `src/` present); `AGENTS.md`, `CLAUDE.md`, `docs/GOVERNANCE.md`, `docs/runbooks/CONTRIBUTING.md`, `.cursor/`, compliance workflows present |
-| `local-inference` | `tooling` | Roots `scripts/` + `litellm/`; compliance workflows + `docs/GOVERNANCE.md` present. Residual: ensure thin `CLAUDE.md` and `petralabx/PLX_MC` governance links (consumer PR) |
+| `local-inference` | `tooling` | Roots `scripts/` + `litellm/`; compliance workflows + `docs/GOVERNANCE.md` present. Residual closed via https://github.com/petralabx/local-inference/pull/7 (`CLAUDE.md` + `petralabx/PLX_MC` governance links) |
 
 ---
 

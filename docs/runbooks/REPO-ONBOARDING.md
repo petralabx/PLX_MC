@@ -1,7 +1,7 @@
 # Runbook: Onboarding a repo into PLX governance
 
 **Audience:** maintainers / org admins adding a repository to the PLX-tracked fleet.  
-**Owner:** Vince · **Effective:** 2026-07-06
+**Owner:** Vince · **Effective:** 2026-07-13
 
 Canonical inputs (all in this repo — the SSOT):
 
@@ -25,10 +25,119 @@ Consumer repos get thin layers only — **never copy the contract**:
 
 ---
 
+## Repository control-plane tier
+
+This taxonomy is **descriptive onboarding metadata**: it answers what control-plane
+shape a repository of a given kind should expose. It does **not** redefine
+pillars, evidence policy, risk tiers, checkout discipline, or compliance modes.
+
+Canonical governance remains `config/governance-contract.yaml`. Collaborator /
+Mission Control checkout and PR evidence rules remain `docs/COLLABORATOR-SOP.md`.
+Do not treat this section as superseding either document.
+
+Descriptive seed (fleet parity write-up): 
+[agentic-swarm `docs/runbooks/agent-control-plane-tiers.md`](https://github.com/petralabx/agentic-swarm/blob/main/docs/runbooks/agent-control-plane-tiers.md).
+After adoption, **this runbook and the tracked-repo registry own onboarding
+status and evidence**.
+
+### Allowed control-plane tier values
+
+| Tier | Meaning | Examples |
+|------|---------|----------|
+| `hub` | Fleet governance SSOT | `petralabx/PLX_MC` |
+| `product_platform` | Internal platform / multi-runtime | `petralabx/agentic-swarm` |
+| `product_app` | Customer-facing application | `plx-customer-portal` |
+| `skills` | Skill content / registry | `petralabx/skills` |
+| `tooling` | Scripts / research / utilities | `petralabx/local-inference` |
+
+Registry-only (not a control-plane taxonomy value for gap audits): `sandbox`
+(temporary / experimental entries such as `petralabx/test-perms-check`).
+
+### Common baseline
+
+Every tracked control-plane repository should provide:
+
+- an `AGENTS.md` entry point for agents;
+- a human `README.md` and a repo-specific contribution path;
+- a `docs/GOVERNANCE.md` pointer to this repo's governance contract (consumers
+  must not copy pillars into local prose);
+- committed `.cursor/` rules or configuration appropriate to the repo;
+- deterministic local checks with matching CI enforcement;
+- an explicit skills source, or an explicit statement that no repo-local skills
+  are required; and
+- compliance evidence that identifies the integration branch, required checks,
+  Mission Control checkout policy, and rollback expectations (see
+  `docs/COLLABORATOR-SOP.md` — do not restate those rules here).
+
+`CLAUDE.md` is the standard Claude adapter. A thin `.claude/` directory is
+useful when a repository owns Claude-specific commands, hooks, or skills, but
+its **absence is not itself a gap** when `AGENTS.md`, `CLAUDE.md`, and the
+compliance path already cover the runtime. Do not make `.claude/` mandatory.
+
+### Per-tier minimums
+
+| Tier | Files | Hooks and checks | Skills | Compliance |
+|------|-------|------------------|--------|------------|
+| `hub` | Common baseline plus the fleet registry, governance/onboarding docs, and control-plane configuration | Checkout/evidence enforcement, governance alignment, registry validation, and CI parity checks | Fleet-wide skill registry or installation contract with precedence and collision rules | Owns or directly links the governance SSOT; defines tracked-repo onboarding and compliance mode |
+| `product_platform` | Common baseline plus architecture and operations runbooks for each runtime surface | Language checks for every engineering root, preflight gate, API/security checks where applicable, and CI equivalents | Repo/domain skills and a documented path to the fleet skill source; adapters stay thin | Consumes PLX_MC governance, records Mission Control evidence, and requires rollback/deployment evidence for product changes |
+| `product_app` | Common baseline plus product, deployment, and operator documentation for the application root | App lint, typecheck, tests, build/smoke checks, and compliance gate | Product workflow skills only where they add domain knowledge; do not duplicate fleet governance as a skill | Consumes PLX_MC governance and requires product acceptance, rollback, and deploy evidence |
+| `skills` | Common baseline plus skill registry/lock data, provenance, and authoring guidance | Schema, metadata, hash, collision, and install verification | Canonical skill bodies and deterministic export/install behavior | Records ownership, license/provenance, allowed consumers, versioning, and deprecation policy |
+| `tooling` | Common baseline plus operator runbooks, configuration examples, and safety boundaries | Unit/integration checks, config validation, smoke/health checks, and compliance gate | An operating skill when agents invoke the tool; otherwise document that no skill is needed | Documents owner, auth source, default state, kill switch, health check, fallback, and audit/data boundary |
+
+These are minimums, not a requirement to copy every hub file into every repo.
+
+### Standard top-level folder map
+
+Maps describe recognizable control-plane locations while **preserving each
+repository's established engineering roots** (`src/`, `apps/`, `portal/`,
+`scripts/`, domain roots such as `litellm/`, etc.).
+
+| Tier | Standard map |
+|------|--------------|
+| `hub` | `src/` engineering root; `config/` fleet and governance data; `docs/` onboarding/runbooks; `scripts/` checks and automation; `.cursor/` agent rules/hooks; optional thin `.claude/` adapters |
+| `product_platform` | `src/` shared/runtime code plus `apps/` product surfaces; `config/`, `docs/`, `scripts/`, `.cursor/`; optional thin `.claude/` adapters |
+| `product_app` | Established application root such as `portal/`; root-level agent/governance pointers; `docs/`, `scripts/`, and `.cursor/` where present |
+| `skills` | `skills/` canonical skill bodies; registry/lock configuration; `docs/` authoring guidance; `scripts/` validators/installers; `.cursor/` agent controls |
+| `tooling` | `scripts/` automation plus the established domain root, for example `litellm/`; `docs/` runbooks; configuration; `.cursor/` agent controls |
+
+#### Engineering-root stability
+
+Do **not** rename an engineering directory merely to match this map. A proposed
+rename must include a **costed migration note** covering affected imports,
+build and deploy paths, CI, secrets/config references, documentation, external
+consumers, rollback, owner, and estimated effort. Without that note, preserve
+the existing root and align only the control-plane surfaces around it.
+
+### Onboarding checklist (tier gap audit)
+
+1. Select the repository's primary control-plane tier.
+2. Record its existing engineering root or roots (registry `notes` or PR body —
+   no schema migration required for this metadata).
+3. Check files, hooks/checks, skills, and compliance against the tier minimum.
+4. Record each unmet minimum as an onboarding gap with an owner and evidence
+   requirement.
+5. If an engineering-root rename is proposed, require a costed migration note
+   before approval.
+6. Keep `config/tracked-repos-registry.json` aligned with the chosen `tier`
+   and onboarding status (`pending_adoption` → `active`).
+
+### Initial fleet application
+
+| Repository | Tier | Notes |
+|------------|------|-------|
+| `agentic-swarm` | `product_platform` | Structurally aligned; local governance must remain a pointer to PLX_MC |
+| `PLX_MC` | `hub` | Governance SSOT; optional `.claude/` absence is not a gap |
+| `plx-customer-portal` | `product_app` | **INFERRED** until verified in that checkout |
+| `local-inference` | `tooling` | Close gaps (`docs/GOVERNANCE.md`, `CLAUDE.md`, safety/compliance checks) via consumer onboarding |
+
+---
+
 ## 1. Register the repo
 
 1. Add an entry to `config/tracked-repos-registry.json` with
-   `status: "pending_adoption"`. Pick a tier:
+   `status: "pending_adoption"`. Pick a tier (see
+   [Repository control-plane tier](#repository-control-plane-tier) for
+   minimums and folder map):
 
    | Tier | Meaning | Examples |
    |------|---------|----------|

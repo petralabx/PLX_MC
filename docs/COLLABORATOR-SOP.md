@@ -44,6 +44,11 @@ The authoritative fleet list is `config/tracked-repos-registry.json`. Snapshot:
 > `test-perms-check` stays soft. Rollback: fleet-compliance-hard-cutover runbook.
 > New repos join the fleet via `docs/runbooks/REPO-ONBOARDING.md` +
 > `scripts/scaffold-tracked-repo.sh` — never by copying governance files by hand.
+> For control-plane shape (baseline files, per-tier minimums, folder map, and
+> engineering-root stability), see **Repository control-plane tier** in that
+> onboarding runbook — descriptive metadata only; this SOP and
+> `config/governance-contract.yaml` remain authoritative for checkout, evidence,
+> and compliance modes.
 
 ---
 

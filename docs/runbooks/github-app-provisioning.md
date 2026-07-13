@@ -35,6 +35,20 @@ private key lives only in the secret stores — never here):
 - **PAT note:** Vercel never had a `GITHUB_TOKEN` (the deployed app is App-only).
   The AWS `GITHUB_TOKEN` is a **shared** dev-box credential used by other tooling
   and was intentionally left in place — do not remove it as part of this module.
+- **Org-wide PAT (2026-07-13):** `PETRALABX_GITHUB` / `PETRALABX_GITHUB_TOKEN` in
+  `staging/ec2-secrets` + `prod/ec2-secrets` is a fine-grained PAT with access to
+  **all** `petralabx` repositories (verified: 9/9 org repos, `push`+`pull`).
+  `resolveGithubToken({ repoOwner: "petralabx" })` prefers this over legacy
+  `GITHUB_TOKEN` when the App mint is skipped or fails. Workstation bootstrap
+  (`scripts/bootstrap-windows-secrets.py`) exports `PETRALABX_GITHUB_TOKEN` and
+  uses it for `GITHUB_TOKEN` when `~/.aws/Secret_Github.txt` is absent.
+  **GitHub App** installation on `petralabx` is also **All repositories** (9/9
+  match) — keep both App install and PAT in sync whenever a new org repo is
+  created (App “all repos” auto-includes; if the App is ever switched to selected
+  repos, add the new repo to the install and confirm the PAT still has org-wide
+  access).
+  Workstation auto-load: `docs/runbooks/petralabx-github-token-workstation.md`
+  + always-on rule `.cursor/rules/petralabx-github-token.mdc`.
 
 ## Step 1 — Create the App (one-time, interactive)
 

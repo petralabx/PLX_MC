@@ -1,0 +1,36 @@
+---
+description: Load petralabx GitHub org PAT before GitHub org automation
+alwaysApply: true
+---
+
+# Petralabx GitHub org PAT (workstation)
+
+Before any agent action that talks to **`petralabx/*` GitHub** outside the
+already-configured GitHub App path (opening PRs, `gh`/`git` push as a PAT,
+Loop Ledgers PAT fallback debugging, skills publish, etc.):
+
+1. Ensure `PETRALABX_GITHUB_TOKEN` (and usually `GITHUB_TOKEN`) is in the
+   process env.
+2. Prefer loading the generated fragment (never commit these files):
+
+```powershell
+. $HOME\.secrets-env.github.ps1
+# or full hydrate:
+. $HOME\load-secrets.ps1
+# or:
+python scripts/bootstrap-windows-secrets.py; . $HOME\.secrets-env.staging.ps1
+```
+
+```bash
+source ~/.secrets-env.github
+# or:
+python scripts/bootstrap-windows-secrets.py && source ~/.secrets-env.github
+```
+
+3. Do **not** leave a weak/limited PAT in `~/.aws/Secret_Github.txt` — it must
+   be the org fine-grained PAT (or absent so bootstrap uses
+   `PETRALABX_GITHUB_TOKEN` from `prod/ec2-secrets`).
+
+Canonical runbook: `docs/runbooks/petralabx-github-token-workstation.md`.
+Resolver contract: `resolveGithubToken({ repoOwner: "petralabx" })` prefers
+`PETRALABX_GITHUB_TOKEN` over legacy `GITHUB_TOKEN`.

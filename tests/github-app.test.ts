@@ -25,6 +25,8 @@ const APP_ENV = [
   "GITHUB_APP_INSTALLATION_ID",
   "GITHUB_APP_INSTALLATION_ID_PLX",
   "GITHUB_TOKEN",
+  "PETRALABX_GITHUB_TOKEN",
+  "PETRALABX_GITHUB",
 ] as const;
 const saved: Record<string, string | undefined> = {};
 
@@ -149,6 +151,20 @@ describe("resolveGithubToken fallback contract", () => {
     process.env.GITHUB_TOKEN = "ghp_static";
     const token = await resolveGithubToken();
     expect(token).toBe("ghp_static");
+  });
+
+  it("prefers PETRALABX_GITHUB_TOKEN over legacy GITHUB_TOKEN for petralabx PAT fallback", async () => {
+    process.env.GITHUB_TOKEN = "ghp_legacy";
+    process.env.PETRALABX_GITHUB_TOKEN = "github_pat_petra";
+    const token = await resolveGithubToken({ repoOwner: "petralabx" });
+    expect(token).toBe("github_pat_petra");
+  });
+
+  it("keeps legacy GITHUB_TOKEN for non-petralabx owners when both PATs are set", async () => {
+    process.env.GITHUB_TOKEN = "ghp_legacy";
+    process.env.PETRALABX_GITHUB_TOKEN = "github_pat_petra";
+    const token = await resolveGithubToken({ repoOwner: "taylorvalton" });
+    expect(token).toBe("ghp_legacy");
   });
 
   it("returns null when neither the App nor a PAT is configured", async () => {

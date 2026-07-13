@@ -140,11 +140,32 @@ export async function getInstallationToken(opts: TokenOpts = {}): Promise<string
 }
 
 /**
+ * Static PAT fallback after App mint is skipped/fails.
+ * petralabx owners prefer the org fine-grained PAT (covers every org repo,
+ * including plx-customer-portal). Other owners keep legacy GITHUB_TOKEN so a
+ * petralabx-only token cannot mask taylorvalton access.
+ */
+function resolveStaticPat(repoOwner?: string | null): string | null {
+  const owner = (repoOwner ?? "").trim().toLowerCase();
+  const plxOrg = (process.env.REPO_ORG_PLX ?? "petralabx").toLowerCase();
+  const petra =
+    process.env.PETRALABX_GITHUB_TOKEN?.trim() ||
+    process.env.PETRALABX_GITHUB?.trim() ||
+    "";
+  const legacy = process.env.GITHUB_TOKEN?.trim() || "";
+  if (owner === plxOrg) return petra || legacy || null;
+  if (owner) return legacy || null;
+  // No owner hint: prefer petralabx PAT (PLX control-plane default), else legacy.
+  return petra || legacy || null;
+}
+
+/**
  * The one shared GitHub auth resolver every server-side GitHub read goes through.
  * Prefers a short-lived App installation token; falls back to the static
- * GITHUB_TOKEN (so the surface keeps working before the App is provisioned, and
- * if a token mint transiently fails); returns null when neither is configured,
- * so callers emit an honest degraded result instead of throwing.
+ * PETRALABX_GITHUB_TOKEN (petralabx) / GITHUB_TOKEN (legacy) so the surface
+ * keeps working before the App is provisioned or if a token mint transiently
+ * fails; returns null when neither is configured, so callers emit an honest
+ * degraded result instead of throwing.
  */
 export async function resolveGithubToken(opts: TokenOpts = {}): Promise<string | null> {
   if (githubAppConfigured() && !plxOrgNeedsPatFallback(opts.repoOwner)) {
@@ -153,10 +174,10 @@ export async function resolveGithubToken(opts: TokenOpts = {}): Promise<string |
     } catch (err) {
       // Never mask the failure silently, but stay up: fall back to the PAT/null.
       console.warn(
-        "[github-app] installation token mint failed; falling back to GITHUB_TOKEN: %s",
+        "[github-app] installation token mint failed; falling back to static PAT: %s",
         err instanceof Error ? err.message : "unknown error"
       );
     }
   }
-  return process.env.GITHUB_TOKEN ?? null;
+  return resolveStaticPat(opts.repoOwner);
 }

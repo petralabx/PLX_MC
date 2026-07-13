@@ -31,12 +31,17 @@ retiring the broad PAT entirely.
   expiry to avoid boundary races.
 - `resolveGithubToken(opts?)` — the one accessor consumers use:
   App installation token when `githubAppConfigured()` (all three `GITHUB_APP_*`
-  secrets present), else the static `GITHUB_TOKEN`, else `null` (callers then
-  emit an honest degraded result — never a throw at the call site). If the App is
-  configured but a mint transiently fails, it warns and falls back to the PAT so
-  the surface stays up.
-- Default-off: with no App secrets, behavior is identical to the prior PAT path,
-  so this ships dormant and is safe to merge before the App is provisioned.
+  secrets present), else a static PAT, else `null` (callers then emit an honest
+  degraded result — never a throw at the call site). If the App is configured but
+  a mint transiently fails, it warns and falls back to the PAT so the surface
+  stays up.
+  - **petralabx** owners: prefer `PETRALABX_GITHUB_TOKEN` (alias
+    `PETRALABX_GITHUB`) over legacy `GITHUB_TOKEN` — the org fine-grained PAT
+    must cover **all** `petralabx/*` repos (portal, PLX_MC, skills, …).
+  - **other owners** (e.g. `taylorvalton`): legacy `GITHUB_TOKEN` only, so an
+    org-scoped PAT cannot mask personal-account access.
+- Default-off: with no App secrets, behavior is the PAT path above, so this ships
+  dormant and is safe to merge before the App is provisioned.
 
 ### Skills Directory Write Scope Addendum
 

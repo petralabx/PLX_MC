@@ -113,3 +113,26 @@ def test_sync_script_exists_and_executable():
     # Windows checkout has no Unix exec bit; require it only on POSIX.
     if sys.platform != "win32":
         assert oct(SYNC.stat().st_mode)[-3:] in {"755", "775", "777"}
+
+
+def test_default_repo_root_self_resolves_independent_of_cwd(tmp_path):
+    """Default --repo-root uses __file__, so a foreign cwd still finds the manifest."""
+    result = subprocess.run(
+        [sys.executable, str(GATE)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "brand portal parity clean" in result.stdout
+
+
+def test_repo_root_default_is_not_cwd():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("check_brand_portal_parity", GATE)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    assert module.DEFAULT_REPO_ROOT == REPO_ROOT

@@ -10,6 +10,15 @@ import type { McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
 import { syncMetaForTask } from "./sync-meta";
 
+export {
+  actionSuggestWork,
+  mintRoutingSessionId,
+  registerRoutingSuggestTools,
+  routingSuggestEnabled,
+  type SuggestWorkInput,
+  type SuggestWorkResult,
+} from "./routing-suggest-actions";
+
 export async function actionSelfCheck(identity: McpIdentity) {
   const snap = await snapshot();
   return {

@@ -14,10 +14,7 @@ export default defineConfig({
     },
   },
   test: {
-    include:
-      process.platform === "win32"
-        ? ["tests/**/*.test.ts", "!tests/compliance-capture.test.ts"]
-        : ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts"],
     // Process next-auth through the vite pipeline so the alias above applies
     // to its extensionless "next/server" import.
     server: { deps: { inline: ["next-auth", "@auth/core"] } },

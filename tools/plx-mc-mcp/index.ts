@@ -14,6 +14,7 @@ import { randomBytes } from "node:crypto";
 import os from "node:os";
 import { z } from "zod";
 import { callSwarmTool } from "./lib/swarm-client.mjs";
+import { registerRoutingTools } from "./routing-suggest-tools";
 
 const DEFAULT_MC_BASE = "https://mc.plxcustomer.io";
 const MC_BASE_URL = (process.env.MC_BASE_URL?.trim() || DEFAULT_MC_BASE).replace(/\/+$/, "");
@@ -84,8 +85,8 @@ const server = new McpServer(
   { name: "PLX-MC", version: "1.0.0" },
   {
     instructions:
-      "PLX Mission Control — checkout tasks (mc_checkout_task), report progress, complete with evidence, " +
-      "manage the PLX skills directory, and optionally dispatch_to_swarm. Append MC-Checkout lines from checkout responses to PR bodies.",
+      "PLX Mission Control — checkout tasks (mc_checkout_task), suggest work (mc_suggest_work), report progress, complete with evidence, " +
+      "manage the PLX skills directory, and optionally dispatch_to_swarm. Prefer mc_suggest_work when Task ID is unknown. Append MC-Checkout lines from checkout responses to PR bodies.",
   }
 );
 
@@ -252,6 +253,14 @@ server.tool(
     return printResult(await mcFetch("/skills/submit", { method: "POST", body }));
   }
 );
+
+registerRoutingTools({
+  server,
+  mcpEnabled: MCP_ENABLED,
+  mcFetch,
+  printResult,
+  disabledTool,
+});
 
 server.tool(
   "dispatch_to_swarm",

@@ -20,9 +20,20 @@ import {
   actionSubmitSkill,
   actionSyncSkills,
 } from "./skills-actions";
+import { registerRoutingSuggestTools } from "./routing-suggest-actions";
 
 function jsonResult(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
+}
+
+/**
+ * Modular routing tool registration seam.
+ * P5 registers suggestion-only tools; P8 will add mutation tools here without
+ * rewriting the HTTP MCP server bootstrap.
+ */
+export function registerRoutingTools(server: McpServer, identity: McpIdentity): void {
+  registerRoutingSuggestTools(server, identity);
+  // P8: registerRoutingMutationTools(server, identity);
 }
 
 export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
@@ -33,8 +44,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     },
     {
       instructions:
-        "PLX Mission Control MCP — task lifecycle (checkout/progress/complete), search, skills directory install/sync/submit, and optional swarm delegation. " +
-        "Always mc_checkout_task before agent work; append MC-Checkout stamp lines to PR bodies.",
+        "PLX Mission Control MCP — task lifecycle (checkout/progress/complete), routing suggestions (mc_suggest_work), skills directory install/sync/submit, and optional swarm delegation. " +
+        "Prefer mc_suggest_work when the Task is unknown; always mc_checkout_task before agent work; append MC-Checkout stamp lines to PR bodies.",
     }
   );
 
@@ -164,6 +175,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     },
     async (body) => jsonResult(await actionSubmitSkill(identity, body))
   );
+
+  registerRoutingTools(server, identity);
 
   return server;
 }

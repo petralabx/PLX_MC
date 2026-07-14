@@ -121,6 +121,44 @@ describe("async cursor route wrapper", () => {
   });
 });
 
+describe("routing suggest cursor route", () => {
+  it("registers POST /api/cursor/routing/suggest behind cursorRoute auth", async () => {
+    vi.stubEnv("PLX_MC_ROUTING_SUGGEST_ENABLED", "1");
+    const { POST } = await import("@/app/api/cursor/routing/suggest/route");
+    // Without API key the shared wrapper rejects before the handler runs.
+    const denied = await POST(
+      req(
+        {
+          "x-mc-operator-email": "vince@petrasoap.com",
+          "x-mc-repo": "petralabx/PLX_MC",
+        },
+        { method: "POST", body: JSON.stringify({ title: "x" }) }
+      ),
+      { params: Promise.resolve({}) }
+    );
+    expect(denied.status).toBe(401);
+
+    // Valid MCP key reaches the suggest handler path (may 503 without full
+    // sync/DB mocks — auth admission is the contract under test here).
+    const admitted = await POST(
+      req(
+        {
+          "x-api-key": "test-mcp-key",
+          "x-mc-operator-email": "vince@petrasoap.com",
+          "x-mc-repo": "petralabx/PLX_MC",
+          "x-mc-runtime": "cursor",
+          "x-mc-worker-id": "w1",
+        },
+        { method: "POST", body: JSON.stringify({ title: "routing suggest" }) }
+      ),
+      { params: Promise.resolve({}) }
+    );
+    // Handler may succeed or fail on mocked deps; must not be an auth failure.
+    expect([200, 403, 500, 503]).toContain(admitted.status);
+    expect(admitted.status).not.toBe(401);
+  });
+});
+
 describe("mcp envelope", () => {
   it("uses configured public base URL", () => {
     expect(publicMcBaseUrl()).toBe("https://mc.plxcustomer.io");

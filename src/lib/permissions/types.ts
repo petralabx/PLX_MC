@@ -112,6 +112,14 @@ export const SYNC_INBOUND_SERVICE_PRINCIPAL_ID = "sp_sync_inbound" as const;
 /** Durable routing maintenance principal used by later phases. */
 export const ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID = "sp_routing_maintenance" as const;
 
+/** Durable GitHub Actions OIDC principal for metadata-only routing.propose. */
+export const GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID =
+  "sp_github_actions_routing" as const;
+
+/** Durable compliance projection principal for PR→Task progress/merge. */
+export const COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID =
+  "sp_compliance_projection" as const;
+
 export interface McUserRecord {
   id: string;
   entraOid: string;

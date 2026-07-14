@@ -5,6 +5,10 @@
 // (phases P1b onward).
 
 import type { Task } from "@/lib/mc-data";
+import {
+  COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
+  GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
+} from "@/lib/permissions";
 
 // Risk tier of a change — decides how much of the bundle is required (EN-007
 // decision 12). Derived from the changed paths + labels at PR time.
@@ -38,4 +42,15 @@ export interface VerifyInput {
 export interface VerifyResult {
   verdict: "pass" | "block";
   reasons: string[];
+}
+
+/** Re-export durable SPs used by the propose + projection paths. */
+export {
+  GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
+  COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
+};
+
+/** Kill switch for operator routing proposals (never restores silent sparse Tasks). */
+export function routingProposalsEnabled(): boolean {
+  return (process.env.PLX_MC_ROUTING_PROPOSALS_ENABLED ?? "1").trim() !== "0";
 }

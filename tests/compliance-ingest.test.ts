@@ -100,13 +100,15 @@ describe("ingestPullRequest", () => {
     expect(e.payload).toMatchObject({ sparse: false, actorKind: "agent" });
   });
 
-  it("records an operator PR (no checkout) as a sparse, ungated entry attributed to the author", async () => {
+  it("records an operator PR (no checkout) as unrouted/action_required — not a sparse Task", async () => {
     const evt = parsePullRequestEvent(prPayload())!; // no MC-Checkout marker
     const r = await ingestPullRequest(evt);
     expect(r).toMatchObject({ actorKind: "operator", taskId: null });
     const e = db.events.find((x) => x.kind === "pr.opened")!;
     expect(e.actor).toBe("greg");
-    expect(e.payload).toMatchObject({ sparse: true });
+    expect(e.payload).toMatchObject({ sparse: true, actionRequired: true });
+    expect(db.events.some((x) => x.kind === "task.sparse_created")).toBe(false);
+    expect(db.events.some((x) => x.kind === "routing.proposal.triage")).toBe(true);
   });
 
   it("emits pr.merged + a task.promotion.requested seam on merge", async () => {

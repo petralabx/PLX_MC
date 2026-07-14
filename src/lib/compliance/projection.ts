@@ -1,10 +1,18 @@
 // PR lifecycle → sync Task projection (EN-007 P1). Consumes normalized PR events
 // after mc_events are appended; mutates tasks via the sync state layer only.
+// Operator sparse-Task creation is retired — unrouted operator PRs become
+// action_required routing proposals (see proposeRoutingFromPr in service.ts).
 
-import trackedRepos from "../../../config/tracked-repos-registry.json";
-import type { PullRequest, StageKey, Task } from "@/lib/mc-data/types";
-import { repoIdFromName } from "@/lib/mc-data/repos";
-import { createTask, patchTask } from "@/lib/sync/state";
+import { ApiError } from "@/lib/api/route";
+import { permissionsEnforcementEnabled } from "@/lib/auth";
+import type { PullRequest, StageKey, Task } from "@/lib/mc-data";
+import {
+  authorize,
+  COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
+  findServicePrincipalById,
+  type PermissionActor,
+} from "@/lib/permissions";
+import { patchTask } from "@/lib/sync/state";
 import { getEntity } from "@/lib/sync/repo";
 import * as complianceRepo from "./repo";
 import type { ActorKind } from "./types";
@@ -15,46 +23,6 @@ const DONE_STAGES: StageKey[] = ["merged", "verified"];
 
 export function projectionEnabled(): boolean {
   return process.env.COMPLIANCE_PROJECTION_ENABLED !== "0";
-}
-
-type RegistryEntry = {
-  repo: string;
-  tier: string;
-  default_bucket?: string;
-};
-
-function bareRepoName(repo: string): string {
-  return repo.includes("/") ? repo.slice(repo.lastIndexOf("/") + 1) : repo;
-}
-
-function registryEntry(githubRepoName: string): RegistryEntry | undefined {
-  const bare = bareRepoName(githubRepoName);
-  return (trackedRepos.repos as RegistryEntry[]).find((r) => {
-    const slug = r.repo.includes("/") ? r.repo.split("/")[1] : r.repo;
-    return slug === bare || r.repo === bare;
-  });
-}
-
-function defaultBucketForRepo(githubRepoName: string): string {
-  const entry = registryEntry(githubRepoName);
-  if (entry?.default_bucket) return entry.default_bucket;
-  switch (entry?.tier) {
-    case "product_app":
-      return "BKT-PROD";
-    case "sandbox":
-      return "BKT-UAT";
-    default:
-      return "BKT-INFRA";
-  }
-}
-
-function repoIdsForGithubRepo(githubRepoName: string): string[] {
-  const bare = bareRepoName(githubRepoName);
-  return [repoIdFromName(bare)];
-}
-
-function sparseDedupKey(repo: string, prNumber: number): string {
-  return `sparse-task:${bareRepoName(repo)}:${prNumber}`;
 }
 
 async function loadTask(taskId: string): Promise<Task | null> {
@@ -72,39 +40,60 @@ function appendPr(existing: PullRequest[], pr: PullRequest): PullRequest[] {
   return [...existing, pr];
 }
 
-async function ensureSparseTask(evt: PrEvent): Promise<string> {
-  const dedupKey = sparseDedupKey(evt.repo, evt.prNumber);
-  const existing = await complianceRepo.eventTaskIdByDedupKey(dedupKey);
-  if (existing) return existing;
-
-  const created = await createTask({
-    title: evt.title.trim() || `PR #${evt.prNumber} (${evt.repo})`,
-    description: `Sparse task auto-created from operator PR #${evt.prNumber}.`,
-    bucket: defaultBucketForRepo(evt.repo),
-    reporter: evt.author || "operator",
-    accountableOwner: evt.author || "operator",
-    repos: repoIdsForGithubRepo(evt.repo),
-    labels: ["sparse-pr"],
-    stage: "backlog",
+/**
+ * Resolve the durable compliance-projection service principal and require
+ * authorize(...) before any projection-driven Task mutation.
+ */
+export async function requireProjectionAuthorized(
+  capability: "task.progress" | "task.link",
+  resource: { type: "task"; id: string; repos?: string[]; stage?: string },
+  context?: { repositoryId?: string }
+): Promise<PermissionActor> {
+  let status: "active" | "revoked" = "active";
+  if (permissionsEnforcementEnabled()) {
+    const persisted = await findServicePrincipalById(
+      COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID
+    );
+    if (!persisted) {
+      throw new ApiError(
+        "forbidden",
+        "Durable sp_compliance_projection service principal is missing.",
+        403
+      );
+    }
+    status = persisted.status;
+  }
+  const actor: PermissionActor = {
+    kind: "service",
+    id: COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
+    status,
+  };
+  const decision = authorize({
+    actor,
+    capability,
+    resource,
+    context,
   });
-
-  await complianceRepo.appendEvent({
-    kind: "task.sparse_created",
-    actor: PROJECTION_ACTOR,
-    repo: evt.repo,
-    taskId: created.id,
-    pr: String(evt.prNumber),
-    payload: { author: evt.author, title: evt.title, dedupKey },
-    dedupKey,
-  });
-
-  return created.id;
+  if (!decision.allowed) {
+    throw new ApiError(
+      "forbidden",
+      `compliance projection ${capability} denied (${decision.reasonCode}).`,
+      403
+    );
+  }
+  return actor;
 }
 
 async function setProgress(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task || DONE_STAGES.includes(task.stage)) return;
   if (task.stage === "progress") return;
+
+  await requireProjectionAuthorized(
+    "task.progress",
+    { type: "task", id: taskId, repos: task.repos, stage: task.stage }
+  );
+
   await patchTask(
     taskId,
     {
@@ -124,6 +113,11 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task) return;
 
+  await requireProjectionAuthorized(
+    "task.link",
+    { type: "task", id: taskId, repos: task.repos, stage: task.stage }
+  );
+
   const pr: PullRequest = {
     repo: evt.repo,
     num: evt.prNumber,
@@ -132,13 +126,14 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
   };
   const prs = appendPr(task.prs ?? [], pr);
   const mergeOn = new Date().toISOString().slice(0, 10);
+  const mergeSha = evt.mergeSha || evt.headSha;
 
   await patchTask(
     taskId,
     {
       stage: "merged",
       prs,
-      merge: { sha: evt.headSha, on: mergeOn },
+      merge: { sha: mergeSha, on: mergeOn },
       activityLine: {
         who: PROJECTION_ACTOR,
         what: `PR #${evt.prNumber} merged — promoted to Merged (compliance projection)`,
@@ -155,8 +150,8 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
     repo: evt.repo,
     taskId,
     pr: String(evt.prNumber),
-    payload: { sha: evt.headSha, stage: "merged" },
-    dedupKey: `task.promoted:${evt.repo}:${evt.prNumber}:${evt.headSha}:${taskId}`,
+    payload: { sha: mergeSha, stage: "merged" },
+    dedupKey: `task.promoted:${evt.repo}:${evt.prNumber}:${mergeSha}:${taskId}`,
   });
 }
 
@@ -164,24 +159,26 @@ export interface ProjectionInput {
   actorKind: ActorKind;
   actorIdentity: string;
   taskIds: string[];
+  /**
+   * Legacy flag: previously triggered sparse Task creation for operator PRs.
+   * Sparse creation is retired — when true with empty taskIds, projection is a
+   * no-op (routing proposal + action_required deep link owns that path).
+   */
   sparse: boolean;
 }
 
 export async function projectPullRequest(evt: PrEvent, input: ProjectionInput): Promise<void> {
   if (!projectionEnabled()) return;
 
-  let taskIds = [...input.taskIds];
+  const taskIds = [...input.taskIds];
 
-  if (input.sparse && taskIds.length === 0 && ["opened", "reopened", "synchronize"].includes(evt.action)) {
-    const sparseId = await ensureSparseTask(evt);
-    taskIds = [sparseId];
+  // Sparse-task retirement: never auto-create Tasks for operator PRs.
+  if (input.sparse && taskIds.length === 0) {
+    return;
   }
 
   if (evt.action === "closed") {
     if (!evt.merged) return;
-    if (input.sparse && taskIds.length === 0) {
-      taskIds = [await ensureSparseTask(evt)];
-    }
     for (const tid of taskIds) {
       await promoteMerged(tid, evt);
     }

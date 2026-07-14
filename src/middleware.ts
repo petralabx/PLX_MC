@@ -13,11 +13,12 @@ export const config = {
   // Never gate endpoints that carry their OWN authentication and are invoked
   // with no user session: the auth endpoints, the Vercel Cron sweep
   // (`src/app/api/cron/sweep` — CRON_SECRET bearer), the GitHub compliance
-  // webhook (`src/app/api/compliance/webhook` — HMAC signature), and the
+  // webhook (`src/app/api/compliance/webhook` — HMAC signature), the
   // compliance verify endpoint (`src/app/api/compliance/verify` — CI bearer
-  // token). Also exempt framework static assets, the branded sign-in page, and
-  // the brand/font assets it renders (those load pre-auth; `authorized` also
-  // allow-lists them via isPublicAsset).
+  // / OIDC), and the routing propose endpoint (`src/app/api/routing/propose`
+  // — GitHub Actions OIDC). Also exempt framework static assets, the branded
+  // sign-in page, and the brand/font assets it renders (those load pre-auth;
+  // `authorized` also allow-lists them via isPublicAsset).
   //
   // SECURITY: each carve-out is path-EXACT and only for a route that
   // self-authenticates. The remaining compliance routes
@@ -26,7 +27,8 @@ export const config = {
   // control plane world-callable (EN-007 runbook, review #3).
   // `/api/cursor/*` is exempt because every handler verifies PLX_MC_MCP_API_KEY
   // + operator allowlist server-side (same pattern as VMC cursor routes).
+  // `/api/routing/propose` is exact — do not broaden to `/api/routing/*`.
   matcher: [
-    "/((?!api/auth|api/cron|api/compliance/webhook|api/compliance/verify|api/cursor|_next/static|_next/image|favicon.ico|signin|brand|fonts|presentations).*)",
+    "/((?!api/auth|api/cron|api/compliance/webhook|api/compliance/verify|api/routing/propose|api/cursor|_next/static|_next/image|favicon.ico|signin|brand|fonts|presentations).*)",
   ],
 };

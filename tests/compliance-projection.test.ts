@@ -1,7 +1,9 @@
-// EN-007 P1 — PR lifecycle → sync Task projection. Proven against mocked sync +
-// compliance repo seams (no DB), same pattern as tests/mc-patch.test.ts.
+// P6 — PR lifecycle projection: progress/merge + sparse-task retirement +
+// compliance-projection authorize gate.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
+import { ApiError } from "@/lib/api/route";
+import { COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID } from "@/lib/permissions";
 
 const store = vi.hoisted(() => {
   const rows = new Map<
@@ -10,7 +12,49 @@ const store = vi.hoisted(() => {
   >();
   const events: { kind: string; taskId?: string | null; dedupKey?: string | null; payload?: Record<string, unknown> }[] = [];
   const dedupTaskIds = new Map<string, string>();
-  return { rows, events, dedupTaskIds, taskSeq: 0 };
+  return {
+    rows,
+    events,
+    dedupTaskIds,
+    taskSeq: 0,
+    enforcement: false,
+    principalStatus: "active" as "active" | "revoked",
+    principalPresent: true,
+    authorizeAllowed: true,
+    authorizeReason: "allowed" as string,
+    authorizeCalls: [] as { capability: string; actorId: string }[],
+  };
+});
+
+vi.mock("@/lib/auth", () => ({
+  permissionsEnforcementEnabled: () => store.enforcement,
+}));
+
+vi.mock("@/lib/permissions", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/permissions")>();
+  return {
+    ...actual,
+    findServicePrincipalById: async (id: string) => {
+      if (!store.principalPresent) return null;
+      if (id !== COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID) return null;
+      return {
+        id: COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
+        name: "PLX MC Compliance Projection",
+        status: store.principalStatus,
+      };
+    },
+    authorize: (input: { actor: { id: string }; capability: string }) => {
+      store.authorizeCalls.push({
+        capability: input.capability,
+        actorId: input.actor.id,
+      });
+      return {
+        allowed: store.authorizeAllowed,
+        reasonCode: store.authorizeAllowed ? "allowed" : store.authorizeReason,
+        policyVersion: "permissions.v1",
+      };
+    },
+  };
 });
 
 vi.mock("@/lib/sync/engine", () => ({
@@ -65,7 +109,7 @@ vi.mock("@/lib/compliance/repo", () => ({
   },
 }));
 
-import { projectPullRequest, projectionEnabled } from "@/lib/compliance/projection";
+import { projectPullRequest, projectionEnabled, requireProjectionAuthorized } from "@/lib/compliance/projection";
 import type { PrEvent } from "@/lib/compliance/webhook";
 
 function seedTask(over: Partial<Task> = {}): Task {
@@ -107,14 +151,20 @@ function prEvt(over: Partial<PrEvent> = {}): PrEvent {
     action: "opened",
     merged: false,
     repo: "PLX_MC",
+    repoFullName: "petralabx/PLX_MC",
+    repositoryId: "12345",
     prNumber: 42,
     headSha: "abc123",
+    mergeSha: null,
     branch: "feat/x",
+    baseBranch: "main",
     title: "Add the thing",
     author: "greg",
     labels: [],
     checkoutId: null,
     checkoutIds: [],
+    body: "",
+    changedPaths: [],
     ...over,
   };
 }
@@ -124,6 +174,12 @@ beforeEach(() => {
   store.events.length = 0;
   store.dedupTaskIds.clear();
   store.taskSeq = 0;
+  store.enforcement = false;
+  store.principalStatus = "active";
+  store.principalPresent = true;
+  store.authorizeAllowed = true;
+  store.authorizeReason = "allowed";
+  store.authorizeCalls.length = 0;
   delete process.env.COMPLIANCE_PROJECTION_ENABLED;
 });
 
@@ -139,6 +195,33 @@ describe("projectionEnabled", () => {
   });
 });
 
+describe("requireProjectionAuthorized", () => {
+  it("allows task.progress for the durable compliance-projection SP", async () => {
+    const actor = await requireProjectionAuthorized("task.progress", {
+      type: "task",
+      id: "TASK-1",
+    });
+    expect(actor.id).toBe(COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID);
+    expect(store.authorizeCalls.some((c) => c.capability === "task.progress")).toBe(true);
+  });
+
+  it("denies when authorize rejects the projection principal", async () => {
+    store.authorizeAllowed = false;
+    store.authorizeReason = "capability_not_granted";
+    await expect(
+      requireProjectionAuthorized("task.link", { type: "task", id: "TASK-1" })
+    ).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("denies when enforcement is on and the principal row is missing", async () => {
+    store.enforcement = true;
+    store.principalPresent = false;
+    await expect(
+      requireProjectionAuthorized("task.progress", { type: "task", id: "TASK-1" })
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+  });
+});
+
 describe("projectPullRequest", () => {
   it("moves a checked-out task to progress on open", async () => {
     seedTask({ id: "TASK-100", stage: "planned" });
@@ -150,12 +233,13 @@ describe("projectPullRequest", () => {
     });
     const row = store.rows.get("task:TASK-100")!;
     expect((row.data as unknown as Task).stage).toBe("progress");
+    expect(store.authorizeCalls.some((c) => c.capability === "task.progress")).toBe(true);
   });
 
   it("promotes merged tasks with pr + merge metadata", async () => {
     seedTask({ id: "TASK-200", stage: "progress" });
     await projectPullRequest(
-      prEvt({ action: "closed", merged: true, headSha: "deadbeef" }),
+      prEvt({ action: "closed", merged: true, headSha: "deadbeef", mergeSha: "deadbeef" }),
       { actorKind: "agent", actorIdentity: "dsp_abc", taskIds: ["TASK-200"], sparse: false }
     );
     const task = store.rows.get("task:TASK-200")!.data as unknown as Task;
@@ -163,21 +247,33 @@ describe("projectPullRequest", () => {
     expect(task.prs).toMatchObject([{ repo: "PLX_MC", num: 42, status: "merged", title: "Add the thing" }]);
     expect(task.merge).toMatchObject({ sha: "deadbeef" });
     expect(store.events.some((e) => e.kind === "task.promoted" && e.taskId === "TASK-200")).toBe(true);
+    expect(store.authorizeCalls.some((c) => c.capability === "task.link")).toBe(true);
   });
 
-  it("creates a sparse task for operator PRs with no checkout", async () => {
+  it("does NOT create a sparse task for operator PRs with no checkout (retired)", async () => {
     await projectPullRequest(prEvt({ action: "opened" }), {
       actorKind: "operator",
       actorIdentity: "greg",
       taskIds: [],
       sparse: true,
     });
-    const sparseEvent = store.events.find((e) => e.kind === "task.sparse_created");
-    expect(sparseEvent?.taskId).toMatch(/^TASK-/);
-    const task = store.rows.get(`task:${sparseEvent!.taskId}`)!.data as unknown as Task;
-    expect(task.labels).toContain("sparse-pr");
-    expect(task.bucket).toBe("BKT-INFRA");
-    expect(task.stage).toBe("progress");
+    expect(store.events.some((e) => e.kind === "task.sparse_created")).toBe(false);
+    expect([...store.rows.keys()].filter((k) => k.startsWith("task:")).length).toBe(0);
+  });
+
+  it("skips Task mutation when projection authorize denies", async () => {
+    seedTask({ id: "TASK-100", stage: "planned" });
+    store.authorizeAllowed = false;
+    store.authorizeReason = "actor_revoked";
+    await expect(
+      projectPullRequest(prEvt({ action: "opened" }), {
+        actorKind: "agent",
+        actorIdentity: "dsp_abc",
+        taskIds: ["TASK-100"],
+        sparse: false,
+      })
+    ).rejects.toBeInstanceOf(ApiError);
+    expect((store.rows.get("task:TASK-100")!.data as unknown as Task).stage).toBe("planned");
   });
 
   it("is a no-op when projection is disabled", async () => {

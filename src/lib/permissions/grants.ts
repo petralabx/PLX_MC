@@ -2,6 +2,8 @@
 
 import type { AccessRole, Capability } from "./types";
 import {
+  COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
+  GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
   MCP_SERVICE_PRINCIPAL_ID,
   ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
   SYNC_INBOUND_SERVICE_PRINCIPAL_ID,
@@ -52,6 +54,12 @@ const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
   ],
   [SYNC_INBOUND_SERVICE_PRINCIPAL_ID]: ["sync.service.write", "task.read"],
   [ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID]: ["routing.maintain", "task.read"],
+  [GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID]: ["routing.propose", "task.read"],
+  [COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID]: [
+    "task.progress",
+    "task.link",
+    "task.read",
+  ],
 };
 
 export function capabilitiesForRole(role: AccessRole): readonly Capability[] {

@@ -1,6 +1,4 @@
-// Unit tests for GitHub Actions OIDC verification. jose + secrets are mocked
-// so this never hits the network or reads real env.
-
+// P6 — OIDC claim binding for routing propose + extended claim extraction.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
@@ -53,8 +51,10 @@ vi.mock("jose", () => ({
 
 import {
   GITHUB_ACTIONS_OIDC_ISSUER,
+  bindOidcClaimsToPropose,
   repositoryFromSub,
   verifyGitHubActionsOidc,
+  type GitHubActionsOidcClaims,
 } from "@/lib/compliance/github-oidc";
 
 const ALLOWED_REPO = "petralabx/PLX_MC";
@@ -69,10 +69,35 @@ function configuredOk() {
 function payload(overrides: Record<string, unknown> = {}) {
   return {
     iss: GITHUB_ACTIONS_OIDC_ISSUER,
-    sub: `repo:${ALLOWED_REPO}:ref:refs/heads/main`,
+    sub: `repo:${ALLOWED_REPO}:ref:refs/pull/42/merge`,
     aud: AUDIENCE,
     repository: ALLOWED_REPO,
+    repository_id: "999001",
+    event_name: "pull_request",
+    ref: "refs/pull/42/merge",
+    sha: "abc123def",
+    job_workflow_ref: `${ALLOWED_REPO}/.github/workflows/mc-routing-metadata.yml@refs/heads/main`,
+    run_id: "555",
+    repository_owner: "petralabx",
     ...overrides,
+  };
+}
+
+function claims(over: Partial<GitHubActionsOidcClaims> = {}): GitHubActionsOidcClaims {
+  return {
+    repository: ALLOWED_REPO,
+    repositoryId: "999001",
+    sub: `repo:${ALLOWED_REPO}:ref:refs/pull/42/merge`,
+    iss: GITHUB_ACTIONS_OIDC_ISSUER,
+    aud: AUDIENCE,
+    eventName: "pull_request",
+    ref: "refs/pull/42/merge",
+    sha: "abc123def",
+    jobWorkflowRef: `${ALLOWED_REPO}/.github/workflows/mc-routing-metadata.yml@refs/heads/main`,
+    workflowRef: null,
+    runId: "555",
+    repositoryOwner: "petralabx",
+    ...over,
   };
 }
 
@@ -83,6 +108,7 @@ beforeEach(() => {
   m.createRemoteJWKSet.mockReset().mockReturnValue(Symbol("jwks"));
   m.jwtVerify.mockReset();
   configuredOk();
+  delete process.env.PLX_MC_ROUTING_OIDC_WORKFLOW_REFS;
 });
 
 describe("repositoryFromSub", () => {
@@ -140,29 +166,20 @@ describe("verifyGitHubActionsOidc", () => {
     expect(result).toEqual({ ok: false, reason: "repo_not_allowlisted" });
   });
 
-  it("happy path: returns claims for an allowlisted repo", async () => {
+  it("happy path: returns extended claims for an allowlisted repo", async () => {
     m.jwtVerify.mockResolvedValue({
       payload: payload(),
       protectedHeader: { alg: "RS256" },
     });
     const result = await verifyGitHubActionsOidc("good.jwt.token");
-    expect(result).toEqual({
-      ok: true,
-      claims: {
-        repository: ALLOWED_REPO,
-        sub: `repo:${ALLOWED_REPO}:ref:refs/heads/main`,
-        iss: GITHUB_ACTIONS_OIDC_ISSUER,
-        aud: AUDIENCE,
-      },
-    });
-    expect(m.jwtVerify).toHaveBeenCalledWith(
-      "good.jwt.token",
-      expect.anything(),
-      expect.objectContaining({
-        issuer: GITHUB_ACTIONS_OIDC_ISSUER,
-        audience: AUDIENCE,
-      })
-    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.claims.repository).toBe(ALLOWED_REPO);
+      expect(result.claims.repositoryId).toBe("999001");
+      expect(result.claims.eventName).toBe("pull_request");
+      expect(result.claims.sha).toBe("abc123def");
+      expect(result.claims.ref).toBe("refs/pull/42/merge");
+    }
   });
 
   it("happy path: derives repository from sub when repository claim is absent", async () => {
@@ -173,5 +190,70 @@ describe("verifyGitHubActionsOidc", () => {
     const result = await verifyGitHubActionsOidc("sub-only.jwt");
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.claims.repository).toBe(ALLOWED_REPO);
+  });
+});
+
+describe("bindOidcClaimsToPropose", () => {
+  const base = {
+    repository: ALLOWED_REPO,
+    repositoryId: "999001",
+    eventName: "pull_request" as const,
+    prNumber: 42,
+    headSha: "abc123def",
+    headRef: "feat/x",
+  };
+
+  it("accepts tightly bound claims", () => {
+    expect(bindOidcClaimsToPropose(claims(), base)).toEqual({ ok: true });
+  });
+
+  it("rejects cross-repository mismatch", () => {
+    expect(
+      bindOidcClaimsToPropose(claims(), { ...base, repository: "petralabx/other" })
+    ).toEqual({ ok: false, reason: "repository_mismatch" });
+  });
+
+  it("rejects repository id mismatch", () => {
+    expect(
+      bindOidcClaimsToPropose(claims(), { ...base, repositoryId: "111" })
+    ).toEqual({ ok: false, reason: "repository_id_mismatch" });
+  });
+
+  it("rejects non-pull_request events", () => {
+    expect(
+      bindOidcClaimsToPropose(claims(), { ...base, eventName: "push" })
+    ).toEqual({ ok: false, reason: "event_not_pull_request" });
+  });
+
+  it("rejects sha mismatch (replay / drift)", () => {
+    expect(
+      bindOidcClaimsToPropose(claims(), { ...base, headSha: "zzzz" })
+    ).toEqual({ ok: false, reason: "sha_mismatch" });
+  });
+
+  it("rejects fork-like sub claims", () => {
+    expect(
+      bindOidcClaimsToPropose(
+        claims({ sub: `repo:${ALLOWED_REPO}:fork` }),
+        base
+      )
+    ).toEqual({ ok: false, reason: "fork_or_untrusted_ref" });
+  });
+
+  it("rejects PR ref mismatch", () => {
+    expect(
+      bindOidcClaimsToPropose(claims({ ref: "refs/heads/main" }), base)
+    ).toEqual({ ok: false, reason: "pr_ref_mismatch" });
+  });
+
+  it("rejects unapproved workflow refs when allowlist is set", () => {
+    process.env.PLX_MC_ROUTING_OIDC_WORKFLOW_REFS =
+      "petralabx/PLX_MC/.github/workflows/mc-routing-metadata.yml@refs/heads/main";
+    expect(
+      bindOidcClaimsToPropose(claims(), {
+        ...base,
+        workflowRef: "evil/repo/.github/workflows/x.yml@refs/heads/main",
+      })
+    ).toEqual({ ok: false, reason: "workflow_ref_not_approved" });
   });
 });

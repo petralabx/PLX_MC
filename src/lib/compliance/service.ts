@@ -4,17 +4,45 @@
 // (mocked in tests/compliance-server.test.ts). Bucket PRD is resolved from the
 // persisted buckets table (bucket-prd.ts).
 
+import { randomBytes } from "node:crypto";
 import { ApiError } from "@/lib/api/route";
+import { permissionsEnforcementEnabled } from "@/lib/auth";
 import type { Task } from "@/lib/mc-data";
-import { getEntity } from "@/lib/sync/repo";
-import { classifyRiskTier } from "./risk";
-import { verifyCompliance } from "./verify";
-import * as repo from "./repo";
-import type { EventsQuery } from "./events";
-import type { PrEvent } from "./webhook";
-import type { ActorKind, RiskTier, VerifyResult } from "./types";
-import { projectPullRequest, projectionEnabled } from "./projection";
+import { publicMcBaseUrl } from "@/lib/mcp/envelope";
+import {
+  authorize,
+  findServicePrincipalById,
+  GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
+  type PermissionActor,
+} from "@/lib/permissions";
+import { normalizeRoutingEvidence } from "@/lib/routing/evidence";
+import {
+  runShadowRouting,
+  type RoutingBucketView,
+  type RoutingTaskView,
+} from "@/lib/routing/engine";
+import { ROUTING_POLICY_VERSION } from "@/lib/routing/persistence";
+import {
+  upsertProposalRevision,
+  upsertRoutingProposal,
+  upsertRoutingSession,
+} from "@/lib/routing/repo";
+import { snapshot } from "@/lib/sync";
+import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
+import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import { bucketPrdForTask } from "./bucket-prd";
+import type { EventsQuery } from "./events";
+import { projectPullRequest, projectionEnabled } from "./projection";
+import * as repo from "./repo";
+import { classifyRiskTier } from "./risk";
+import {
+  routingProposalsEnabled,
+  type ActorKind,
+  type RiskTier,
+  type VerifyResult,
+} from "./types";
+import { verifyCompliance } from "./verify";
+import type { PrEvent } from "./webhook";
 
 // Checkout credentials are short-lived (decision 14).
 const CHECKOUT_TTL_MIN = 8 * 60;
@@ -239,19 +267,311 @@ export interface IngestResult {
   actorKind: ActorKind;
   taskId: string | null;
   recorded: boolean;
+  proposalId?: string | null;
+  deepLink?: string | null;
+}
+
+const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "closed"]);
+const IDLE_TTL_MS = 24 * 60 * 60 * 1000;
+const ABSOLUTE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export interface ProposeRoutingInput {
+  /** Full owner/repo. */
+  repository: string;
+  repositoryId: string | number;
+  prNumber: number;
+  action: string;
+  headSha: string;
+  mergeSha?: string | null;
+  baseBranch?: string;
+  sourceBranch?: string;
+  title?: string;
+  /** In-memory only — never persisted. */
+  body?: string;
+  labels?: string[];
+  changedPaths?: string[];
+  author?: string;
+  actorKind?: ActorKind;
+  /** Durable GitHub Actions run id for replay binding (optional). */
+  runId?: string | null;
+  eventSource?: "oidc.propose" | "hmac.webhook";
+}
+
+export interface ProposeRoutingResult {
+  proposalId: string;
+  revisionId: string;
+  state: "action_required" | "resolved" | "degraded";
+  deepLink: string;
+  sessionId: string | null;
+  candidates: Array<{ taskId: string; matchScore: number; reasons: string[] }>;
+  bodyContentHash: string;
+  policyVersion: string;
+}
+
+function proposalDeepLink(proposalId: string): string {
+  return `${publicMcBaseUrl()}/routing?proposal=${encodeURIComponent(proposalId)}`;
+}
+
+function stableProposalId(repoId: string, changeId: string): string {
+  const safe = `${repoId}:${changeId}`.replace(/[^A-Za-z0-9._:-]/g, "_");
+  return `rpp_${safe}`;
+}
+
+function mintRevisionId(): string {
+  return `rpr_${randomBytes(10).toString("hex")}`;
+}
+
+function toTaskViews(tasks: Awaited<ReturnType<typeof snapshot>>["tasks"]): RoutingTaskView[] {
+  return tasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    description: t.description,
+    bucket: t.bucket,
+    stage: t.stage,
+    repos: t.repos ?? [],
+    labels: t.labels ?? [],
+    prs: t.prs,
+    due: t.due,
+  }));
+}
+
+function toBucketViews(
+  buckets: Awaited<ReturnType<typeof snapshot>>["buckets"]
+): RoutingBucketView[] {
+  return buckets.map((b) => ({
+    id: b.id,
+    repos: b.repos ?? [],
+    project: b.project ?? null,
+  }));
+}
+
+/**
+ * Resolve + authorize the durable GitHub Actions routing service principal for
+ * routing.propose. Callers must have already authenticated (OIDC or optional HMAC).
+ */
+export async function requireGithubActionsProposeAuthorized(
+  repositoryId: string
+): Promise<PermissionActor> {
+  let status: "active" | "revoked" = "active";
+  if (permissionsEnforcementEnabled()) {
+    const persisted = await findServicePrincipalById(
+      GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID
+    );
+    if (!persisted) {
+      throw new ApiError(
+        "forbidden",
+        "Durable sp_github_actions_routing service principal is missing.",
+        403
+      );
+    }
+    status = persisted.status;
+  }
+  const actor: PermissionActor = {
+    kind: "service",
+    id: GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
+    status,
+  };
+  const decision = authorize({
+    actor,
+    capability: "routing.propose",
+    resource: { type: "routing", id: repositoryId },
+    context: { repositoryId },
+  });
+  if (!decision.allowed) {
+    throw new ApiError(
+      "forbidden",
+      `routing.propose denied (${decision.reasonCode}).`,
+      403
+    );
+  }
+  return actor;
+}
+
+/**
+ * Authoritative proposal upsert for PR opened/reopened/synchronize/closed.
+ * Processes PR body only in memory (markers + hash). Replay-safe on
+ * (proposalId, headSha) revisions. Never persists raw body text.
+ */
+export async function proposeRoutingFromPr(
+  input: ProposeRoutingInput
+): Promise<ProposeRoutingResult> {
+  if (!routingProposalsEnabled()) {
+    throw new ApiError(
+      "routing_proposals_disabled",
+      "Routing proposals are disabled (PLX_MC_ROUTING_PROPOSALS_ENABLED=0); sparse Task creation stays retired.",
+      503
+    );
+  }
+
+  const repoId = input.repository.trim();
+  const changeId = String(input.prNumber);
+  await requireGithubActionsProposeAuthorized(repoId);
+
+  const body = typeof input.body === "string" ? input.body : "";
+  const normalized = normalizeRoutingEvidence({
+    repoId: String(input.repositoryId),
+    repoFullName: repoId,
+    changeId,
+    headSha: input.headSha,
+    baseBranch: input.baseBranch ?? "main",
+    sourceBranch: input.sourceBranch,
+    branch: input.sourceBranch,
+    title: input.title,
+    body,
+    changedPaths: input.changedPaths,
+    labels: input.labels,
+    actorId: GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
+    actorKind: "service",
+    eventSource: input.eventSource ?? "oidc.propose",
+    eventAction: input.action,
+    eventAt: new Date().toISOString(),
+  });
+
+  // Body stays local — only hash/markers go to persistence.
+  const markers = normalized.markers;
+  const sessionFromMarker = markers.routingSessionIds[0] ?? null;
+  let sessionId = sessionFromMarker;
+
+  if (sessionId?.startsWith("rtx_")) {
+    const now = Date.now();
+    try {
+      await upsertRoutingSession({
+        id: sessionId,
+        repoId,
+        actorId: GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
+        actorKind: "service",
+        baseBranch: normalized.evidence.baseBranch ?? "main",
+        sourceBranch:
+          normalized.evidence.sourceBranch ?? normalized.evidence.branch ?? "HEAD",
+        headSha: input.headSha,
+        status: "active",
+        absoluteExpiresAt: new Date(now + ABSOLUTE_TTL_MS).toISOString(),
+        idleExpiresAt: new Date(now + IDLE_TTL_MS).toISOString(),
+      });
+    } catch {
+      // Session reconcile is best-effort; proposal still proceeds.
+      sessionId = sessionFromMarker;
+    }
+  }
+
+  let candidates: ProposeRoutingResult["candidates"] = [];
+  let revisionCandidates: import("@/lib/routing/types").RoutingCandidateRecord[] = [];
+  let derivedProjectId: string | null = null;
+  let failureReason: import("@/lib/routing/types").RoutingFailureReason = null;
+  let state: ProposeRoutingResult["state"] = "action_required";
+
+  try {
+    const snap = await snapshot();
+    const trackedRepos = (
+      (trackedReposRegistry as { repos?: Array<Record<string, unknown>> }).repos ?? []
+    ).map((entry) => ({
+      repo: String(entry.repo ?? ""),
+      status: typeof entry.status === "string" ? entry.status : undefined,
+      default_bucket:
+        typeof entry.default_bucket === "string" ? entry.default_bucket : undefined,
+      tier: typeof entry.tier === "string" ? entry.tier : undefined,
+    }));
+    const operationalRepos = Object.fromEntries(
+      snap.repos.map((r) => [r.id, { id: r.id, name: r.name }])
+    );
+    const shadow = await runShadowRouting({
+      evidence: normalized.evidence,
+      markers,
+      branchTaskIds: normalized.branchTaskIds,
+      tasks: toTaskViews(snap.tasks),
+      buckets: toBucketViews(snap.buckets),
+      trackedRepos,
+      operationalRepos,
+      loadRegisterTimestamps: () => getRegisterInboundCompletions(),
+    });
+    revisionCandidates = shadow.candidates.slice(0, 3);
+    candidates = revisionCandidates.map((c) => ({
+      taskId: c.taskId,
+      matchScore: c.matchScore,
+      reasons: c.reasons,
+    }));
+    derivedProjectId = shadow.derivedProjectId;
+    failureReason = shadow.failureReason;
+    if (!shadow.ok && shadow.failureReason) {
+      state = "degraded";
+    }
+  } catch {
+    state = "degraded";
+    failureReason = "unknown";
+  }
+
+  // Agent hard-gate is unchanged: credentialed checkouts still project Tasks.
+  // Operator proposals stay non-blocking action_required.
+  if (input.actorKind === "agent") {
+    state = state === "degraded" ? "degraded" : "action_required";
+  }
+
+  const proposalId = stableProposalId(repoId, changeId);
+  const proposal = await upsertRoutingProposal({
+    id: proposalId,
+    repoId,
+    changeId,
+    sessionId,
+    state,
+    title: normalized.evidence.title ?? null,
+    bodyContentHash: markers.bodyContentHash,
+    markers: markers.markers,
+    derivedProjectId,
+    failureReason,
+  });
+
+  const revision = await upsertProposalRevision({
+    id: mintRevisionId(),
+    proposalId: proposal.id,
+    headSha: input.headSha,
+    policyVersion: ROUTING_POLICY_VERSION,
+    evidenceMeta: {
+      ...normalized.evidence,
+    },
+    candidates: revisionCandidates,
+  });
+
+  const deepLink = proposalDeepLink(proposal.id);
+  await repo.appendEvent({
+    kind: "routing.proposal.upserted",
+    actor: GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
+    repo: repoId,
+    pr: changeId,
+    payload: {
+      proposalId: proposal.id,
+      revisionId: revision.id,
+      state,
+      headSha: input.headSha,
+      bodyContentHash: markers.bodyContentHash,
+      deepLink,
+      runId: input.runId ?? null,
+      eventSource: input.eventSource ?? "oidc.propose",
+      action: input.action,
+    },
+    dedupKey: `routing.proposal:${proposal.id}:${input.headSha}:${input.action}`,
+  });
+
+  return {
+    proposalId: proposal.id,
+    revisionId: revision.id,
+    state,
+    deepLink,
+    sessionId,
+    candidates,
+    bodyContentHash: markers.bodyContentHash,
+    policyVersion: ROUTING_POLICY_VERSION,
+  };
 }
 
 // Maintain the system-of-record from the PR lifecycle. Appends typed events to
 // mc_events, then projects task state via projectPullRequest (P1).
-const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "closed"]);
+// Operator PRs without checkout no longer create sparse Tasks — optional
+// HMAC compatibility may call proposeRoutingFromPr when separately configured.
 
 export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
   let actorKind: ActorKind = "operator";
   let taskId: string | null = null;
   let actorIdentity = evt.author || "operator";
-  // Resolve EVERY stamped checkout (multi-task PRs complete N tasks) so the record
-  // attributes them all, not just the first. Prefer the full list; fall back to
-  // the single id (back-compat). The primary taskId stays the first resolved one.
   const ids = evt.checkoutIds?.length ? evt.checkoutIds : evt.checkoutId ? [evt.checkoutId] : [];
   let taskIds: string[] = [];
   if (ids.length > 0) {
@@ -265,14 +585,19 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
     taskId = taskIds[0] ?? null;
   }
 
-  // Only record the lifecycle actions we model; ignore the rest (edited, labeled,
-  // assigned, ready_for_review, …) so we never append a spurious pr.opened to the
-  // record (review B1). dedupKey keys every append on its logical identity so a
-  // reconciliation replay is a no-op (review S3).
   if (!HANDLED_ACTIONS.has(evt.action)) {
     return { action: evt.action, actorKind, taskId, recorded: false };
   }
   const idBase = `${evt.repo}:${evt.prNumber}:${evt.headSha}:${evt.action}`;
+  const needsProposal = actorKind === "operator" && taskIds.length === 0;
+  let proposalId: string | null = null;
+  let deepLink: string | null = null;
+
+  // Optional HMAC → same proposal service (compatibility; not a phase-one prerequisite).
+  const hmacPropose =
+    (process.env.PLX_MC_ROUTING_HMAC_PROPOSE ?? "0").trim() === "1" &&
+    needsProposal &&
+    routingProposalsEnabled();
 
   if (evt.action === "closed") {
     if (evt.merged) {
@@ -296,27 +621,122 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
         dedupKey: `pr.closed:${idBase}`,
       });
     }
-    if (projectionEnabled()) {
-      await projectPullRequest(evt, { actorKind, actorIdentity, taskIds, sparse: actorKind === "operator" && taskIds.length === 0 });
+    if (hmacPropose) {
+      try {
+        const proposed = await proposeRoutingFromPr({
+          repository: evt.repoFullName || evt.repo,
+          repositoryId: evt.repositoryId ?? evt.repo,
+          prNumber: evt.prNumber,
+          action: evt.action,
+          headSha: evt.headSha,
+          mergeSha: evt.mergeSha,
+          baseBranch: evt.baseBranch,
+          sourceBranch: evt.branch,
+          title: evt.title,
+          body: evt.body ?? "",
+          labels: evt.labels,
+          changedPaths: evt.changedPaths ?? [],
+          author: evt.author,
+          actorKind,
+          eventSource: "hmac.webhook",
+        });
+        proposalId = proposed.proposalId;
+        deepLink = proposed.deepLink;
+      } catch (err) {
+        console.error("[compliance] optional HMAC propose failed:", err);
+      }
+    } else if (needsProposal) {
+      await repo.appendEvent({
+        kind: "routing.proposal.triage",
+        actor: actorIdentity,
+        repo: evt.repo,
+        pr: String(evt.prNumber),
+        payload: {
+          reason: "operator_pr_unrouted",
+          note: "Sparse Task creation retired; use OIDC /api/routing/propose or enable PLX_MC_ROUTING_HMAC_PROPOSE=1",
+        },
+        dedupKey: `routing.triage:${evt.repo}:${evt.prNumber}:${evt.headSha}:${evt.action}`,
+      });
     }
-    return { action: evt.action, actorKind, taskId, recorded: true };
+    if (projectionEnabled()) {
+      await projectPullRequest(evt, {
+        actorKind,
+        actorIdentity,
+        taskIds,
+        sparse: needsProposal,
+      });
+    }
+    return { action: evt.action, actorKind, taskId, recorded: true, proposalId, deepLink };
   }
 
   const kind = evt.action === "synchronize" ? "pr.synchronized" : "pr.opened";
-  const sparse = actorKind === "operator" && taskIds.length === 0;
   await repo.appendEvent({
     kind,
     actor: actorIdentity,
     repo: evt.repo,
     taskId,
     pr: String(evt.prNumber),
-    payload: { actorKind, branch: evt.branch, title: evt.title, author: evt.author, headSha: evt.headSha, sparse, taskIds },
+    payload: {
+      actorKind,
+      branch: evt.branch,
+      title: evt.title,
+      author: evt.author,
+      headSha: evt.headSha,
+      // sparse flag retained as "unrouted operator" signal — no Task is created.
+      sparse: needsProposal,
+      actionRequired: needsProposal,
+      taskIds,
+    },
     dedupKey: `${kind}:${idBase}`,
   });
-  if (projectionEnabled()) {
-    await projectPullRequest(evt, { actorKind, actorIdentity, taskIds, sparse });
+
+  if (hmacPropose) {
+    try {
+      const proposed = await proposeRoutingFromPr({
+        repository: evt.repoFullName || evt.repo,
+        repositoryId: evt.repositoryId ?? evt.repo,
+        prNumber: evt.prNumber,
+        action: evt.action,
+        headSha: evt.headSha,
+        mergeSha: evt.mergeSha,
+        baseBranch: evt.baseBranch,
+        sourceBranch: evt.branch,
+        title: evt.title,
+        body: evt.body ?? "",
+        labels: evt.labels,
+        changedPaths: evt.changedPaths ?? [],
+        author: evt.author,
+        actorKind,
+        eventSource: "hmac.webhook",
+      });
+      proposalId = proposed.proposalId;
+      deepLink = proposed.deepLink;
+    } catch (err) {
+      console.error("[compliance] optional HMAC propose failed:", err);
+    }
+  } else if (needsProposal) {
+    await repo.appendEvent({
+      kind: "routing.proposal.triage",
+      actor: actorIdentity,
+      repo: evt.repo,
+      pr: String(evt.prNumber),
+      payload: {
+        reason: "operator_pr_unrouted",
+        note: "Sparse Task creation retired; use OIDC /api/routing/propose or enable PLX_MC_ROUTING_HMAC_PROPOSE=1",
+      },
+      dedupKey: `routing.triage:${evt.repo}:${evt.prNumber}:${evt.headSha}:${evt.action}`,
+    });
   }
-  return { action: evt.action, actorKind, taskId, recorded: true };
+
+  if (projectionEnabled()) {
+    await projectPullRequest(evt, {
+      actorKind,
+      actorIdentity,
+      taskIds,
+      sparse: needsProposal,
+    });
+  }
+  return { action: evt.action, actorKind, taskId, recorded: true, proposalId, deepLink };
 }
 
 // ─── Fail-closed reconciliation (decision 10) ────────────────────────────────

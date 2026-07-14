@@ -54,3 +54,11 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO service_principals (id, name, status)
 VALUES ('sp_routing_maintenance', 'PLX MC Routing Maintenance', 'active')
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO service_principals (id, name, status)
+VALUES ('sp_github_actions_routing', 'PLX MC GitHub Actions Routing', 'active')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO service_principals (id, name, status)
+VALUES ('sp_compliance_projection', 'PLX MC Compliance Projection', 'active')
+ON CONFLICT (id) DO NOTHING;

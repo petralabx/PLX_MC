@@ -7,7 +7,8 @@ whether a pull request against a tracked repo is compliant: what **risk tier** a
 change is, what **bundle** that tier requires (rollback plan, PRD, evidence), and
 the final **pass/block verdict** for an agent vs operator PR. It is pure logic —
 no I/O, no GitHub, no DB. The GitHub status check, checkout/dispatch ledger,
-`mc_events` log, and git→MC ingestion wrap this core in later phases.
+`mc_events` log, git→MC ingestion, and metadata-only routing propose wrap this
+core.
 
 ## Why
 
@@ -46,10 +47,25 @@ truth table is proven before any plumbing exists.
   `COMPLIANCE_CI_TOKEN` bearer as fallback/break-glass during dogfood. The route
   stays fail-closed (503 when neither path is configured; 401 on bad/missing
   bearer) while remaining carved out from the UI session middleware.
-- `projectPullRequest` (projection, EN-007 P1) — after `mc_events` are appended,
-  mutates sync tasks: open/sync → `progress`, merge → `merged` + `prs[]` +
-  `task.promoted` event; operator PRs with no checkout auto-create a sparse task.
-  Kill switch: `COMPLIANCE_PROJECTION_ENABLED=0`.
+- `POST /api/routing/propose` (P6) is the **authoritative** metadata-only proposal
+  path for PR opened/reopened/synchronize/closed. Auth is GitHub Actions OIDC
+  only. Verified claims bind to submitted full/numeric repository identity,
+  `pull_request` event, PR ref/number, approved workflow ref, and merge/head SHA;
+  fork/cross-repository/replay mismatches are rejected. The durable
+  `sp_github_actions_routing` principal must pass `authorize(routing.propose)`.
+  PR body is processed in memory for markers/hash only — never persisted raw.
+  Operator PRs land in non-blocking `action_required` proposal state with an
+  authenticated MC deep link. Agent hard-gate remains unchanged.
+- `projectPullRequest` (projection) — after `mc_events` are appended, mutates sync
+  tasks for **checked-out** work: open/sync → `progress`, merge → `merged` +
+  `prs[]` + `task.promoted`. Every mutation requires
+  `authorize(...)` for durable `sp_compliance_projection` (`task.progress` /
+  `task.link`). **Sparse operator Task creation is retired** — unrouted operator
+  PRs do not create Tasks. Kill switch: `COMPLIANCE_PROJECTION_ENABLED=0`.
+  Proposal kill switch: `PLX_MC_ROUTING_PROPOSALS_ENABLED=0` (never restores
+  silent sparse creation). Optional HMAC compatibility:
+  `PLX_MC_ROUTING_HMAC_PROPOSE=1` may call the same propose service from the
+  webhook (not a phase-one prerequisite).
 
 Landed in P1b: the checkout/complete/verify handshake (`service.ts` + `repo.ts` +
 `/api/compliance/*`), the dispatch ledger + compliance-check ledger, and the
@@ -63,18 +79,18 @@ staging is the deploy step.
 Landed after P1b: Cursor/Claude auto-checkout hooks (P2), GitHub App +
 branch protection + git→MC ingestion + reconciliation queue (P3), and
 OIDC-first verify auth with bearer fallback for the compliance gate dogfood path.
-Deferred to later phases (see `docs/product/SYSTEM_OF_RECORD.md`): fleet rollout
-to `agentic-swarm` / `plx-customer-portal` and the embedding/index feed over the
-event log (P5).
+P6 adds OIDC propose + sparse-task retirement. Deferred: fleet rollout and the
+embedding/index feed over the event log.
 
 ## Dependencies
 
 `@/lib/mc-data` (the `Task`/`Evidence` types, `evidenceComplete`,
 `hasHumanAccountableOwner` from EN-003 `policy.ts`). The pure core has no
 external services and no DB. The server wrapper uses Postgres repositories,
-GitHub webhook HMAC, and GitHub Actions OIDC verification (`jose` JWKS) for the
-runtime gate. Depended on by: the `/api/compliance/*` routes and the GitHub
-status-check workflow.
+GitHub webhook HMAC, GitHub Actions OIDC verification (`jose` JWKS), the
+permissions kernel (`authorize`), and the routing control-plane repo for
+proposals/revisions. Depended on by: the `/api/compliance/*` routes,
+`/api/routing/propose`, and the GitHub status-check / routing metadata workflows.
 
 ### Key Files
 
@@ -82,28 +98,19 @@ status-check workflow.
 - `src/lib/compliance/verify.ts` — `evidenceCompleteForTier` + `verifyCompliance`
 - `src/lib/compliance/types.ts` — `RiskTier`, `ActorKind`, `VerifyInput/Result`
 - `src/lib/compliance/index.ts` — pure-core barrel (import through here)
-- `src/lib/compliance/service.ts` — server service: checkout / complete / verifyPr / listEvents (subpath import, like `mc-data/store`)
+- `src/lib/compliance/service.ts` — server service: checkout / complete / verifyPr /
+  ingest / `proposeRoutingFromPr` / listEvents
 - `src/lib/compliance/repo.ts` — Postgres accessors (dispatch ledger, mc_events, check ledger)
-- `src/lib/compliance/github-oidc.ts` — GitHub Actions OIDC verifier for the compliance gate allowlist/audience
-- `src/lib/compliance/projection.ts` — PR lifecycle → sync task projection
+- `src/lib/compliance/github-oidc.ts` — GitHub Actions OIDC verify + propose claim binding
+- `src/lib/compliance/projection.ts` — PR lifecycle → sync task projection (authorize-gated)
 - `src/lib/compliance/bucket-prd.ts` — bucket PRD resolution for verifyPr
-- `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts` — the API surface (`verify` is dual-auth OIDC + bearer fallback)
+- `src/lib/compliance/webhook.ts` — HMAC verify + PR-event parse (in-memory body)
+- `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts`
+- `src/app/api/routing/propose/route.ts` — OIDC propose (middleware carve-out exact)
+- `src/middleware.ts` — exact self-auth carve-outs including `api/routing/propose`
 - `.github/workflows/compliance-gate.yml` — the required PR status check (default-off; soft→hard)
-- `scripts/compliance-checkout.mjs` + `.cursor/compliance-hooks.json` — the capture hook: checks out N tasks (or auto-creates one), emits one MC-Checkout stamp per task (disabled by default)
-- `scripts/compliance-ci-check.sh` — workflow/hook validator (P3 acceptance)
+- `scripts/compliance-checkout.mjs` + `.cursor/compliance-hooks.json` — the capture hook
 - `db/migrations/005_compliance.sql` — `mc_events`, `mc_dispatch`, `mc_compliance_check`
-- `db/migrations/006_compliance_reconcile.sql` — `mc_reconcile_queue` (fail-closed replay)
-- `db/migrations/007_compliance_event_dedup.sql` — event idempotency (`dedup_key`) + the `(kind, seq)` export index
-- `src/app/api/compliance/reconcile/route.ts` — reconciliation sweep entrypoint
-- `docs/runbooks/compliance-gate-rollout.md` — operator activation + External Integrations declaration
-- `tests/compliance.test.ts` — risk truth table + verifier verdicts (pure)
-- `tests/compliance-server.test.ts` — service orchestration (mocked DB seam)
-- `tests/compliance-multitask.test.ts` — multi-task PRs: verify N tasks, pass iff all pass
-- `tests/compliance-capture.test.ts` — capture hook: default-off, multi-task, auto-create
-- `tests/compliance-projection.test.ts` — projection: progress, merge, sparse-create
-- `tests/sync-projection.test.ts` — projection leaves tasks pending; sweep pushes stage
-- `tests/compliance-ingest.test.ts` — webhook signature/parse + ingestion (mocked seam)
-- `src/lib/compliance/webhook.ts` — GitHub HMAC verify + PR-event parse (git→MC ingestion); parses **all** MC-Checkout stamps so a multi-task PR attributes every task
 - `docs/product/SYSTEM_OF_RECORD.md` — the governing spec (EN-007)
 
 ## Owner

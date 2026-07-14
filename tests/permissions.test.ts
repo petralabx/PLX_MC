@@ -221,6 +221,37 @@ describe("service-principal separation", () => {
     expect(authorize({ actor: spoofed, capability: "permissions.manage" }).allowed).toBe(false);
     expect(authorize({ actor: spoofed, capability: "routing.suggest" }).allowed).toBe(true);
   });
+
+  it("grants GitHub Actions propose and compliance projection capabilities", () => {
+    const ga = capabilitiesForServicePrincipal("sp_github_actions_routing");
+    expect(ga).toEqual(expect.arrayContaining(["routing.propose", "task.read"]));
+    expect(ga).not.toContain("task.create");
+
+    const proj = capabilitiesForServicePrincipal("sp_compliance_projection");
+    expect(proj).toEqual(
+      expect.arrayContaining(["task.progress", "task.link", "task.read"])
+    );
+    expect(proj).not.toContain("routing.propose");
+
+    expect(
+      authorize({
+        actor: service("sp_github_actions_routing"),
+        capability: "routing.propose",
+      }).allowed
+    ).toBe(true);
+    expect(
+      authorize({
+        actor: service("sp_compliance_projection"),
+        capability: "task.progress",
+      }).allowed
+    ).toBe(true);
+    expect(
+      authorize({
+        actor: service("sp_compliance_projection"),
+        capability: "routing.propose",
+      }).allowed
+    ).toBe(false);
+  });
 });
 
 describe("contextual denial", () => {

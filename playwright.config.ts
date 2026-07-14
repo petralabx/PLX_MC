@@ -64,7 +64,7 @@ export default defineConfig({
       // webkit, which is not installed in CI; we only need the width for G3).
       name: "tablet",
       use: { ...devices["Desktop Chrome"], viewport: { width: 820, height: 1180 } },
-      testMatch: /ui-(a11y|signin-responsive|inbox-responsive|signin-a11y|inbox-a11y|loop-ledgers-responsive|governance-sops-responsive|board-responsive|board-a11y|task-detail-responsive|task-detail-a11y|sync-console-responsive|sync-console-a11y|repos-responsive|repos-a11y|skills-responsive|skills-a11y|insights-responsive|insights-a11y|ai-spend-responsive|ai-spend-a11y|cmdk-responsive|cmdk-a11y|project-responsive|project-a11y)\.spec\.ts/,
+      testMatch: /ui-(a11y|signin-responsive|inbox-responsive|signin-a11y|inbox-a11y|loop-ledgers-responsive|governance-sops-responsive|board-responsive|board-a11y|task-detail-responsive|task-detail-a11y|sync-console-responsive|sync-console-a11y|repos-responsive|repos-a11y|skills-responsive|skills-a11y|insights-responsive|insights-a11y|ai-spend-responsive|ai-spend-a11y|cmdk-responsive|cmdk-a11y|project-responsive|project-a11y|routing-inbox)\.spec\.ts/,
     },
     {
       // Chromium engine at a phone viewport. G3/G4 test CSS layout width, not
@@ -72,18 +72,22 @@ export default defineConfig({
       // is out of scope for a responsive-width + a11y gate.
       name: "mobile-chrome",
       use: { ...devices["Desktop Chrome"], viewport: { width: 393, height: 851 } },
-      testMatch: /ui-(a11y|signin-responsive|inbox-responsive|signin-a11y|inbox-a11y|loop-ledgers-responsive|governance-sops-responsive|board-responsive|board-a11y|task-detail-responsive|task-detail-a11y|sync-console-responsive|sync-console-a11y|repos-responsive|repos-a11y|skills-responsive|skills-a11y|insights-responsive|insights-a11y|ai-spend-responsive|ai-spend-a11y|cmdk-responsive|cmdk-a11y|project-responsive|project-a11y)\.spec\.ts/,
+      testMatch: /ui-(a11y|signin-responsive|inbox-responsive|signin-a11y|inbox-a11y|loop-ledgers-responsive|governance-sops-responsive|board-responsive|board-a11y|task-detail-responsive|task-detail-a11y|sync-console-responsive|sync-console-a11y|repos-responsive|repos-a11y|skills-responsive|skills-a11y|insights-responsive|insights-a11y|ai-spend-responsive|ai-spend-a11y|cmdk-responsive|cmdk-a11y|project-responsive|project-a11y|routing-inbox)\.spec\.ts/,
     },
   ],
   webServer: EXTERNAL_SERVER
     ? undefined
     : {
-        command: "node ./node_modules/next/dist/bin/next dev",
+        // Production server: Next 16 `dev` fails to externalize `pg` through the
+        // client permissions→db import graph (pre-existing on this branch).
+        // Build with inbox NEXT_PUBLIC baked, then `next start`.
+        // On Windows, prefer PLX_MC_E2E_EXTERNAL_SERVER=1 + pre-started
+        // `next start` if webServer teardown hangs.
+        command:
+          "npm run build && node ./node_modules/next/dist/bin/next start",
         url: BASE_URL,
         reuseExistingServer: false,
-        // Next dev cold start + first-route compile can exceed the default 60s
-        // on a cold cache; give it room without masking a genuine boot failure.
-        timeout: 180_000,
+        timeout: 300_000,
         stdout: "pipe",
         stderr: "pipe",
         env: {
@@ -93,6 +97,8 @@ export default defineConfig({
           PLX_MC_AUTH_CLIENT_SECRET: "",
           PLX_MC_STAGING_PASSWORD: "",
           PLX_MC_DATABASE_URL: "",
+          PLX_MC_ROUTING_INBOX_ENABLED: "1",
+          NEXT_PUBLIC_PLX_MC_ROUTING_INBOX_ENABLED: "1",
         },
       },
 });

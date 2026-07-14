@@ -27,6 +27,7 @@ export const SCREEN_VALUES = [
   "governance-sops",
   "skills-directory",
   "ai-spend",
+  "routing-inbox",
 ] as const;
 
 export type Screen = (typeof SCREEN_VALUES)[number];

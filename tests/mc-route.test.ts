@@ -90,4 +90,10 @@ describe("SCREEN_VALUES stays in lockstep with the Screen type", () => {
     const values: readonly Screen[] = SCREEN_VALUES;
     expect(values).toContain("home");
   });
+
+  it("includes routing-inbox (P9)", () => {
+    expect(SCREEN_VALUES).toContain("routing-inbox");
+    expect(routeToUrl({ screen: "routing-inbox" })).toBe("/?screen=routing-inbox");
+    expect(urlToRoute("/?screen=routing-inbox")).toEqual({ screen: "routing-inbox" });
+  });
 });

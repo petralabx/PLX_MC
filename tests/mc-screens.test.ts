@@ -30,6 +30,7 @@ const EXPECTED_SCREENS = {
   "governance-sops": true,
   "skills-directory": true,
   "ai-spend": true,
+  "routing-inbox": true,
 } satisfies Record<Screen, true>;
 
 describe("SCREENS registry (PR-D1)", () => {

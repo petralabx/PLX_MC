@@ -50,6 +50,89 @@ export async function gotoAiSpend(page: Page): Promise<void> {
   await expect(page.locator("[data-testid='ai-spend-screen']")).toBeVisible();
 }
 
+export async function gotoRoutingInbox(page: Page): Promise<void> {
+  await page.goto("/?screen=routing-inbox");
+  await waitForHydration(page);
+  await expect(page.locator("[data-testid='routing-inbox-screen']")).toBeVisible();
+}
+
+const ROUTING_INBOX_FIXTURE = {
+  proposals: [
+    {
+      id: "rp_demo",
+      repoId: "petralabx/PLX_MC",
+      changeId: "pr:99",
+      title: "Wire routing inbox",
+      state: "action_required",
+      failureReason: "sync_stale",
+      sessionId: "rtx_demo",
+      accountableActorId: "oid-demo",
+      accountableActorKind: "human",
+      derivedProjectId: "PRJ-1",
+      selectedBucketId: "BKT-OPS",
+      selectedTaskId: null,
+      topCandidate: {
+        rank: 1,
+        taskId: "TASK-445",
+        bucketId: "BKT-OPS",
+        projectId: "PRJ-1",
+        matchScore: 92,
+        authorizationTrust: "author_declaration",
+        reasons: ["Explicit MC-Task marker", "Same repository"],
+      },
+      slaAgeHours: 26,
+      slaBreach: "alert_24h",
+      createdAt: new Date(Date.now() - 26 * 3600_000).toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  ],
+  counts: { personal: 1, project: 1, bucket: 1, unrouted: 0 },
+};
+
+const ROUTING_DETAIL_FIXTURE = {
+  ...ROUTING_INBOX_FIXTURE.proposals[0],
+  markers: [],
+  hierarchy: { projectId: "PRJ-1", bucketId: "BKT-OPS", taskId: "TASK-445" },
+  candidates: [
+    ROUTING_INBOX_FIXTURE.proposals[0].topCandidate,
+    {
+      rank: 2,
+      taskId: "TASK-400",
+      bucketId: "BKT-OPS",
+      projectId: "PRJ-1",
+      matchScore: 71,
+      authorizationTrust: "fuzzy",
+      reasons: ["Path overlap"],
+    },
+  ],
+  revisionId: "rr_demo",
+  headSha: "deadbeef",
+  policyVersion: "routing.v1",
+  overrideAvailable: true,
+};
+
+export async function mockRoutingInboxApi(page: Page): Promise<void> {
+  await page.route(/\/api\/routing\/inbox(\/|\?|$)/, async (route) => {
+    if (route.request().method() !== "GET") {
+      return route.fulfill({ status: 405, body: "Method Not Allowed" });
+    }
+    const url = new URL(route.request().url());
+    const idMatch = url.pathname.match(/\/api\/routing\/inbox\/([^/]+)$/);
+    if (idMatch) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: ROUTING_DETAIL_FIXTURE }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: ROUTING_INBOX_FIXTURE }),
+    });
+  });
+}
+
 export async function openCommandPalette(page: Page): Promise<void> {
   await page.goto("/");
   await waitForHydration(page);

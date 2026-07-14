@@ -14,6 +14,7 @@ import { MeetingIntakeView } from "./meeting-intake";
 import { LoopLedgersView } from "./loop-ledgers";
 import { ReposView } from "./repos-view";
 import type { Screen, ScreenProps } from "./route";
+import { RoutingInboxView } from "./routing-inbox";
 import { SyncConsole } from "./sync-console";
 import { TaskDetailView } from "./task-detail";
 import { TraceabilityMatrix } from "./traceability";
@@ -40,4 +41,5 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   "governance-sops": GovernanceSopsView,
   "skills-directory": SkillsDirectoryView,
   "ai-spend": AiSpendView,
+  "routing-inbox": RoutingInboxView,
 };

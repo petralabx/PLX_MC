@@ -9,6 +9,7 @@ import { ACTORS, CURRENT_USER, liveAgentCount } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion } from "@/lib/mc-data/hooks";
 import { allBuckets, allProjects, allTasks, dismissNotice, storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
 import { meetingIntakeEnabled } from "@/lib/meeting-intake";
+import { routingInboxEnabled } from "@/components/mc/routing-inbox/flag";
 
 import { Avatar, PMark } from "./atoms";
 import type { Nav, Route, Screen } from "./route";
@@ -196,6 +197,9 @@ export function Sidebar({
         )}
         {/* Meeting bridge nav appears only when the WS-4 flag is on (off by default). */}
         {meetingIntakeEnabled() ? item("intake", "🗒", "Meeting intake") : null}
+        {routingInboxEnabled()
+          ? item("routing-inbox", "»", "Routing inbox")
+          : null}
       </div>
     </nav>
   );

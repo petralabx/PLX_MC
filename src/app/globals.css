@@ -12,6 +12,7 @@
 @import "../styles/mc-governance-sops.css";
 @import "../styles/mc-skills-directory.css";
 @import "../styles/mc-vendor-spend.css";
+@import "../styles/mc-routing-inbox.css";
 
 * {
   box-sizing: border-box;

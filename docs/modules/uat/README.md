@@ -46,7 +46,9 @@ plx-customer-portal                 agentic-swarm                 PLX_MC
 
 Invariant: UAT results have **one** system of record (the portal ledger / its
 SharePoint UAT Feedback list); MC and swarm are a read lens and a runner, never a
-second source of truth.
+second source of truth. The same pull-based pattern is generalized for other
+initiative buckets via **bucket projection** — see `docs/modules/loop-ledgers/README.md`
+§ Bucket projection.
 
 ## Dependencies
 

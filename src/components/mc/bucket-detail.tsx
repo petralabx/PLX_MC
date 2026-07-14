@@ -1,5 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
+import { api } from "@/lib/api";
+// Type-only import — keeps node-only loader/source code out of the client bundle.
+import type { BucketProjection } from "@/lib/loop-ledgers";
 import {
   ACTORS,
   BUCKETS,
@@ -70,14 +75,59 @@ export function summarizeTrace(trace: Trace | null): TraceSummary {
   return { satisfied, gaps, inFlight: trace.rows.length - satisfied - gaps };
 }
 
+/**
+ * Merge fixture rollup milestones with ledger-projected milestones. Fixture
+ * rows render first; ledger rows (col=0, list-only) follow. No dedupe — the
+ * id namespaces differ (fixture M-*, ledger LM-*).
+ */
+export function mergeMilestones(fixture: Milestone[], ledger: Milestone[]): Milestone[] {
+  return [...fixture, ...ledger];
+}
+
 export function BucketDetail({ route, nav }: ScreenProps) {
   useMcVersion();
 
   const bucket = bucketById(route.bucketId ?? FALLBACK_BUCKET.id) ?? FALLBACK_BUCKET;
+
+  // Ledger projection for bound buckets (read-only; null until fetched).
+  // The result is keyed by bucket id so a stale response never renders under
+  // another bucket. Unbound buckets get { bound: false } and render exactly as
+  // before; a failed fetch leaves null — same rendering, never a crash.
+  const [projectionState, setProjectionState] = useState<{
+    bucketId: string;
+    data: BucketProjection;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api<BucketProjection>(`/loop-ledgers/bucket/${encodeURIComponent(bucket.id)}`)
+      .then((data) => {
+        if (!cancelled) setProjectionState({ bucketId: bucket.id, data });
+      })
+      .catch(() => {
+        /* projection unavailable — render without ledger rows */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bucket.id]);
+  const projection = projectionState?.bucketId === bucket.id ? projectionState.data : null;
+
   const parentProject = bucket.project ? projectById(bucket.project) : undefined;
   const rollups = rollupsForBucket(bucket.id, allTasks(), MILESTONES, allRisks());
   const prd = bucket.prd ? PRDS[bucket.prd] : null;
-  const trace = TRACE.bucket === bucket.id ? TRACE : null;
+
+  const ledgerMilestones = projection?.bound ? projection.milestones : [];
+  const ledgerTrace = projection?.bound ? projection.trace : null;
+  const degradedSources = projection?.bound
+    ? projection.sources.filter((s) => s.degraded)
+    : [];
+  const milestones = mergeMilestones(rollups.milestones, ledgerMilestones);
+
+  // Fixture TRACE still wins for buckets that have it; the ledger projection
+  // fills in for bound buckets without a fixture matrix.
+  const fixtureTrace = TRACE.bucket === bucket.id ? TRACE : null;
+  const trace = fixtureTrace ?? ledgerTrace;
+  const traceFromLedger = !fixtureTrace && ledgerTrace !== null;
   const traceSummary = summarizeTrace(trace);
   const reqStatus = new Map(trace?.rows.map((row) => [row.req, row.status]) ?? []);
 
@@ -395,8 +445,8 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                 <span className="kk">/ Milestones</span>
               </div>
               <div className="mlist">
-                {rollups.milestones.length > 0 ? (
-                  rollups.milestones.map((milestone) => (
+                {milestones.length > 0 ? (
+                  milestones.map((milestone) => (
                     <div className="risk milestone" key={milestone.id}>
                       <div>
                         <div className="t">{milestone.name}</div>
@@ -423,6 +473,11 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                 ) : (
                   <div className="colempty">No milestones</div>
                 )}
+                {degradedSources.map((s) => (
+                  <div className="colempty" key={`${s.repo}/${s.module}`}>
+                    ledger unavailable: {s.degraded}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -466,14 +521,17 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                 </button>
               </div>
               {trace ? (
-                <div className="trace-summary">
-                  <span className="okflag">{traceSummary.satisfied} satisfied</span>
-                  <span className="pill info">
-                    <span className="dot" />
-                    {traceSummary.inFlight} in flight
-                  </span>
-                  {traceSummary.gaps > 0 && <span className="gapflag">{traceSummary.gaps} gap</span>}
-                </div>
+                <>
+                  <div className="trace-summary">
+                    <span className="okflag">{traceSummary.satisfied} satisfied</span>
+                    <span className="pill info">
+                      <span className="dot" />
+                      {traceSummary.inFlight} in flight
+                    </span>
+                    {traceSummary.gaps > 0 && <span className="gapflag">{traceSummary.gaps} gap</span>}
+                  </div>
+                  {traceFromLedger && <span className="kk">Quality Ledger · read-only</span>}
+                </>
               ) : (
                 <p className="trace-empty">No traceability rows are mapped for this initiative yet.</p>
               )}

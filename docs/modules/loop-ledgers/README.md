@@ -55,19 +55,96 @@ registry.json → LedgerSource (github-api | local-fs) → validator → loader
     → GET /api/loop-ledgers[*] → LoopLedgersView (index | detail | degraded)
 ```
 
+### Bucket projection
+
+Initiative buckets can bind to one or more quality-ledger modules so the bucket
+detail screen shows ledger-derived **Milestone** and **Trace** rows without a
+second system of record. The quality ledger stays authoritative; MC is a read
+lens; projection is **ephemeral read-time derivation** — nothing is written to
+the database, SharePoint, or the source ledger.
+
+1. **Binding config** — `config/bucket-ledger-map.json` (`plx-bucket-ledger-map/v1`)
+   lists `{ bucket, repo, module }` tuples. Parsed by `parseBucketLedgerMapJson`;
+   `bindingsForBucket(config, bucketId)` returns all bindings for one initiative.
+   Example (seeded):
+
+   ```json
+   {
+     "schema_version": "plx-bucket-ledger-map/v1",
+     "bindings": [
+       {
+         "bucket": "BKT-FIN",
+         "repo": "petralabx/plx-customer-portal",
+         "module": "finance-business-central"
+       },
+       {
+         "bucket": "BKT-WMS",
+         "repo": "petralabx/plx-customer-portal",
+         "module": "mrp-wms"
+       }
+     ]
+   }
+   ```
+
+2. **Loader + merge** — `GET /api/loop-ledgers/bucket/[bucketId]` reads the map,
+   loads only bound repos via `listLedgerSummaries`, and merges per-binding output
+   with `projectBucketFromRows`. Unbound buckets return `{ bound: false }`. Multi-binding
+   buckets merge milestones and trace rows; each binding contributes a `sources` entry.
+
+3. **Milestone projection** (`projectMilestones`) — one row per artifact with a
+   non-empty `next_action` whose status is not terminal (`verified`, `covered`,
+   `waived`). Sorted scariest-first (same ranking as the Loop Ledgers index).
+   Ledger milestones are list-only (`col: 0`), provenance `sp: "Quality Ledger · <module>"`,
+   id `LM-<module>-<artifact_id>`. State is `risk` when `safety_class === "red"` or
+   status is `broken` / `partially_broken` / `blocked`; otherwise `now`.
+
+4. **Trace projection** (`projectTrace`) — one `TraceRow` per artifact (`req =
+   artifact_id`; `tasks`, `prs`, `merge` stay empty — the ledger carries no MC
+   linkage). Evidence is `complete` when the artifact has evidence entries,
+   else `incomplete`; `test` is the first `tests_existing` entry or `—`.
+
+   | Artifact status | Trace `status` |
+   |---|---|
+   | `verified`, `covered`, `waived` | `satisfied` |
+   | `fixed_pending_regression`, `works_observed` | `in-review` |
+   | `missing_test`, `deferred` | `in-progress` |
+   | `broken`, `partially_broken`, `blocked`, `unknown` | `gap` |
+
+5. **Degraded behavior** — a binding whose repo is unreachable, whose ledger fails
+   validation, or whose module is missing **never fabricates rows**. Instead
+   `sources[]` carries `{ repo, module, degraded: "<reason>" }` at HTTP 200.
+   Valid bindings still contribute rows; the initiative UI renders degraded notes
+   as muted provenance alongside ledger milestones/trace (`Quality Ledger · read-only`).
+
+6. **Initiative UI** — `bucket-detail.tsx` fetches the projection, merges ledger
+   milestones with fixture milestones, and uses ledger trace when no fixture matrix
+   exists for that bucket. Unbound buckets are unchanged.
+
+7. **Rollback** — set `bindings` to `[]` in `config/bucket-ledger-map.json` to
+   disable projection instantly (all buckets behave as unbound).
+
+```
+bucket-ledger-map.json → bindingsForBucket → listLedgerSummaries (bound repos only)
+    → projectMilestones + projectTrace → projectBucketFromRows
+    → GET /api/loop-ledgers/bucket/[bucketId] → bucket-detail (merge + degraded notes)
+```
+
 ## Dependencies
 
 Depends on: **web** (MC shell, shared `api()` + `route()` wrappers, middleware auth),
 **design-system** (`--p-*` tokens behind `.brand-plx`), **github-app**
-(`resolveGithubToken({ repoOwner })`). Depended on by: nothing yet — read-only
-observability only.
+(`resolveGithubToken({ repoOwner })`), **mc-data** (Milestone / Trace shapes for
+projection). Depended on by: initiative bucket detail (ledger projection merge).
 
 ### Key Files
 
-- `src/lib/loop-ledgers/` — domain module (types, validator, registry, sources, loader, barrel `index.ts`)
+- `src/lib/loop-ledgers/` — domain module (types, validator, registry, sources, loader, projection, barrel `index.ts`)
 - `config/loop-ledgers-registry.json` — seeded three-repo registry (no secrets)
-- `src/app/api/loop-ledgers/` — read-only list + detail API routes
+- `config/bucket-ledger-map.json` — bucket→ledger bindings (`plx-bucket-ledger-map/v1`)
+- `src/app/api/loop-ledgers/` — read-only list, detail, and bucket projection routes
+- `src/app/api/loop-ledgers/bucket/[bucketId]/` — bucket projection endpoint
 - `src/components/mc/loop-ledgers/` — index, detail, and degraded gallery views
+- `src/components/mc/bucket-detail.tsx` — merges ledger milestones/trace on initiative pages
 - `src/styles/mc-loop-ledgers.css` — screen styles (`--p-*` tokens only)
 
 ## Owner

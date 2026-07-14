@@ -111,8 +111,22 @@ Bands (`MC_BANDS`): `todo` "To do" · `doing` "In progress" · `done` "Done". Th
 ```
 
 ## Milestone / Risk
-Milestone: `{ name, bucket, state(Upcoming|Active|At risk|Met), col(date), sp }`.
+Milestone: `{ id, name, bucket, state(now|upcoming|risk), col(date), sp }`.
 Risk: `{ title, bucket, like(High|Medium|Low), impact(High|Medium|Low), owner, status(Open|Mitigating|Closed), mit }`.
+
+**Ledger-derived milestones** (bound buckets only) are ephemeral read-time
+projections from quality-ledger artifacts — not SharePoint Milestone Register
+rows and never synced entities. Provenance is `sp: "Quality Ledger · <module>"`;
+they merge with fixture/register milestones on the initiative page. See
+`docs/modules/loop-ledgers/README.md` § Bucket projection.
+
+## Traceability
+Trace: `{ bucket, rows[] }` where each row is `{ req, tasks[], prs[], evidence(complete|incomplete), test, merge, status(satisfied|in-review|in-progress|gap) }`.
+
+**Ledger-derived trace rows** (bound buckets without a fixture matrix) are the
+same ephemeral projection: one row per ledger artifact, attributed via the bucket
+projection API, never pushed to SharePoint registers. Fixture trace (e.g. PRD req
+chains) still wins when present for a bucket.
 
 ## File / Folder  (`MC_FILES`, flat list w/ `parent` pointers)
 ```jsonc

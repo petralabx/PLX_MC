@@ -34,6 +34,21 @@ export {
 export type { RegistryParseResult } from "./registry";
 export { parseRegistryConfig, parseRegistryJson } from "./registry";
 
+export type {
+  BucketLedgerBinding,
+  BucketLedgerMapConfig,
+  BucketLedgerMapParseResult,
+  BucketProjection,
+  BucketProjectionSource,
+} from "./projection";
+export {
+  bindingsForBucket,
+  parseBucketLedgerMapJson,
+  projectBucketFromRows,
+  projectMilestones,
+  projectTrace,
+} from "./projection";
+
 // ─── P2: Source adapters + loader ─────────────────────────────────────────────
 
 export type {

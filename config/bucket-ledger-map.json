@@ -1,0 +1,15 @@
+{
+  "schema_version": "plx-bucket-ledger-map/v1",
+  "bindings": [
+    {
+      "bucket": "BKT-FIN",
+      "repo": "petralabx/plx-customer-portal",
+      "module": "finance-business-central"
+    },
+    {
+      "bucket": "BKT-WMS",
+      "repo": "petralabx/plx-customer-portal",
+      "module": "mrp-wms"
+    }
+  ]
+}

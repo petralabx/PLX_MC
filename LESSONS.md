@@ -16,6 +16,19 @@
 
 ## Lessons
 
+### 2026-07-14 (ET) — Playwright finished every test but never released Next on Windows
+
+- **What happened:** The pre-push gate reached all 195 Playwright cases twice,
+  but `playwright test` never emitted its summary or exited until the stale
+  Next listener was terminated manually.
+- **Root cause:** Playwright owned a Windows `npm`/shell/Next web-server process
+  tree that it did not tear down after the final test. Per-test success did not
+  imply runner/process success.
+- **Rule going forward:** The canonical E2E command uses a bounded Node runner
+  that owns Next directly, runs Playwright against the existing server, and
+  terminates Next in `finally`. A test gate is green only when the runner exits
+  0; reaching the final test is not completion evidence.
+
 ### 2026-07-11 (ET) — Merged redesign was mistaken for a production deployment
 
 - **What happened:** PRs #116 and #117 merged with green PR and `main` CI, but

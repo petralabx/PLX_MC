@@ -28,12 +28,9 @@ Thumbs.db
 .vercel
 .vercel
 
-# Cursor skill mirrors (bootstrap copies from agentic-swarm; PLX adapters stay in git)
-.cursor/skills/*
-!.cursor/skills/project-hardener/
-!.cursor/skills/project-orchestrator/
-!.cursor/skills/ui-ux-design-loop/
-.cursor/skills.backup-*/
+# Project-scoped skills for Cursor Cloud / picker (seeded from petralabx/skills).
+# Source of truth: https://github.com/petralabx/skills — do not treat this tree as SoT.
+# (Previously ignored all but three PLX adapters; that hid the pack from / .)
 .agents/
 
 # Project Orchestrator scratch (specs, phase evidence) — promote to artifacts/ if kept

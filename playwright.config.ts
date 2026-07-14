@@ -29,6 +29,7 @@ const PORT = Number(process.env.PLX_MC_E2E_PORT ?? 3931);
 // no app-side `allowedDevOrigins` change is needed and no overlay intercepts.
 const HOST = process.env.PLX_MC_E2E_HOST ?? "localhost";
 const BASE_URL = `http://${HOST}:${PORT}`;
+const EXTERNAL_SERVER = process.env.PLX_MC_E2E_EXTERNAL_SERVER === "1";
 
 export default defineConfig({
   testDir: "e2e",
@@ -74,29 +75,24 @@ export default defineConfig({
       testMatch: /ui-(a11y|signin-responsive|inbox-responsive|signin-a11y|inbox-a11y|loop-ledgers-responsive|governance-sops-responsive|board-responsive|board-a11y|task-detail-responsive|task-detail-a11y|sync-console-responsive|sync-console-a11y|repos-responsive|repos-a11y|skills-responsive|skills-a11y|insights-responsive|insights-a11y|ai-spend-responsive|ai-spend-a11y|cmdk-responsive|cmdk-a11y|project-responsive|project-a11y)\.spec\.ts/,
     },
   ],
-  webServer: {
-    command: "npm run dev",
-    url: BASE_URL,
-    reuseExistingServer: true,
-    // Next dev cold start + first-route compile can exceed the default 60s on
-    // a cold cache; give it room without masking a genuine boot failure.
-    timeout: 180_000,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: {
-      // Bind the dev server to the same port the specs target.
-      PORT: String(PORT),
-      // Keep the in-app sync scheduler OFF (instrumentation.ts kill switch) —
-      // no background sweeps during E2E.
-      PLX_MC_SYNC_ENABLED: "",
-      // Defensive: ensure the auth + DB secrets are absent for THIS server even
-      // if the surrounding shell happened to export them, so the open local-dev
-      // path + offline fixtures stay deterministic. (Production sets these via
-      // the AWS secrets loader; this only scopes the test server.)
-      PLX_MC_AUTH_CLIENT_ID: "",
-      PLX_MC_AUTH_CLIENT_SECRET: "",
-      PLX_MC_STAGING_PASSWORD: "",
-      PLX_MC_DATABASE_URL: "",
-    },
-  },
+  webServer: EXTERNAL_SERVER
+    ? undefined
+    : {
+        command: "node ./node_modules/next/dist/bin/next dev",
+        url: BASE_URL,
+        reuseExistingServer: false,
+        // Next dev cold start + first-route compile can exceed the default 60s
+        // on a cold cache; give it room without masking a genuine boot failure.
+        timeout: 180_000,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: {
+          PORT: String(PORT),
+          PLX_MC_SYNC_ENABLED: "",
+          PLX_MC_AUTH_CLIENT_ID: "",
+          PLX_MC_AUTH_CLIENT_SECRET: "",
+          PLX_MC_STAGING_PASSWORD: "",
+          PLX_MC_DATABASE_URL: "",
+        },
+      },
 });

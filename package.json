@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-playwright.mjs",
     "migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {

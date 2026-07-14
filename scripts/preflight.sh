@@ -110,7 +110,7 @@ run_full() {
     step "Playwright browser runtime"
     npx playwright install chromium
     step "Playwright E2E (Cycle-1 Planner)"
-    npx playwright test
+    npm run test:e2e
   fi
 }
 

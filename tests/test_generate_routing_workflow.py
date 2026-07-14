@@ -90,9 +90,8 @@ def test_security_contract_rejects_checkout():
 
 def test_routing_manifest_metadata_matches_template_digest():
     # Digest is LF-normalized so Windows CRLF checkouts match Linux CI/git blobs.
-    expected_digest = (
-        f"sha256:{hashlib.sha256(MANIFEST.read_bytes().replace(b'\r\n', b'\n')).hexdigest()}"
-    )
+    normalized_manifest = MANIFEST.read_bytes().replace(b"\r\n", b"\n")
+    expected_digest = f"sha256:{hashlib.sha256(normalized_manifest).hexdigest()}"
     registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
 
     assert registry["repos"]

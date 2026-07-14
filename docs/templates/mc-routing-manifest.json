@@ -1,0 +1,11 @@
+{
+  "schema_version": "plx-mc-routing-manifest/v1",
+  "workflow": {
+    "path": ".github/workflows/mc-routing-metadata.yml",
+    "mode": "metadata-only"
+  },
+  "proposal": {
+    "endpoint": "/api/routing/propose",
+    "auth": "github-actions-oidc"
+  }
+}

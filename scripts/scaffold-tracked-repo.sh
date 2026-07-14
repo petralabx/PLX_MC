@@ -67,6 +67,10 @@ echo "==> Emitting plx-mc-compliance.yml (GEN_SHA=$GEN_SHA)"
 "${PYTHON[@]}" "$ROOT_NATIVE/scripts/generate-compliance-gate.py" --emit downstream \
   > "$WF_DIR/plx-mc-compliance.yml"
 
+echo "==> Emitting mc-routing-metadata.yml"
+"${PYTHON[@]}" "$ROOT_NATIVE/scripts/generate-routing-workflow.py" --emit \
+  > "$WF_DIR/mc-routing-metadata.yml"
+
 echo "==> Writing compliance-gate-drift.yml"
 sed "s/{{GEN_SHA}}/$GEN_SHA/g" \
   "$ROOT_NATIVE/docs/templates/compliance-gate-drift.yml.tpl" \
@@ -79,6 +83,8 @@ fi
 
 GOV_DIR="$TARGET/docs"
 mkdir -p "$GOV_DIR"
+ROUTING_MANIFEST="$TARGET/.github/plx-mc-routing-manifest.json"
+cp "$ROOT/docs/templates/mc-routing-manifest.json" "$ROUTING_MANIFEST"
 
 cat > "$GOV_DIR/GOVERNANCE.md" <<EOF
 # Governance pointer
@@ -160,7 +166,9 @@ PY
 echo "==> Wrote $CONTRIB_PATH"
 echo "==> Wrote $GOV_DIR/GOVERNANCE.md"
 echo "==> Wrote $WF_DIR/plx-mc-compliance.yml"
+echo "==> Wrote $WF_DIR/mc-routing-metadata.yml"
 echo "==> Wrote $WF_DIR/compliance-gate-drift.yml"
+echo "==> Wrote $ROUTING_MANIFEST"
 echo ""
 echo "Next: set repo secrets PLX_MC_BASE_URL + COMPLIANCE_CI_TOKEN;"
 echo "      enable branch protection on $BRANCH; open PR."

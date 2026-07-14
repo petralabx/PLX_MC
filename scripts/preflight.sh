@@ -47,6 +47,9 @@ run_policy() {
   step "Compliance gate alignment (source -> workflow)"
   "$PY" scripts/generate-compliance-gate.py --check
 
+  step "Routing workflow alignment (source -> workflow)"
+  "$PY" scripts/generate-routing-workflow.py --check
+
   step "Repo hygiene"
   "$PY" scripts/check-repo-hygiene.py
 

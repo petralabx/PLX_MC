@@ -22,6 +22,7 @@ import json
 import sys
 from pathlib import Path
 
+DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = Path("config/brand-portal-parity.json")
 
 
@@ -83,8 +84,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--repo-root",
         type=Path,
-        default=Path.cwd(),
-        help="Mission Control repo root (default: cwd)",
+        default=DEFAULT_REPO_ROOT,
+        help="Mission Control repo root (default: this script's own repo root)",
     )
     parser.add_argument(
         "--manifest",

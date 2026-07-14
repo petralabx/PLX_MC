@@ -21,6 +21,8 @@ const server = spawn(
       PLX_MC_AUTH_CLIENT_SECRET: "",
       PLX_MC_STAGING_PASSWORD: "",
       PLX_MC_DATABASE_URL: "",
+      PLX_MC_ROUTING_INBOX_ENABLED: "1",
+      NEXT_PUBLIC_PLX_MC_ROUTING_INBOX_ENABLED: "1",
     },
     stdio: "inherit",
   }

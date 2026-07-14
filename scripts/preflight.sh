@@ -60,9 +60,12 @@ run_policy() {
 
   if [[ -f config/brand-portal-parity.json ]]; then
     step "Brand portal parity (ADR-003 upstream manifest)"
-    "$PY" scripts/check-brand-portal-parity.py --repo-root "$REPO_ROOT"
+    # Self-resolve repo root from __file__ rather than passing bash's $REPO_ROOT:
+    # under WSL bash + a native Windows python, a POSIX /mnt/c/... string is not
+    # translated for plain CLI args and pathlib mis-anchors it as C:\mnt\c\...
+    "$PY" scripts/check-brand-portal-parity.py
     step "MC brand application (boundary + component colors)"
-    "$PY" scripts/check-mc-brand-application.py --repo-root "$REPO_ROOT"
+    "$PY" scripts/check-mc-brand-application.py
   fi
 
   step "Migration numbering (serialized prefixes)"

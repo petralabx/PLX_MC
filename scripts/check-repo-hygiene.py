@@ -10,6 +10,11 @@ Checks:
      (or artifacts.json).
   5. Every archive bundle has a README.md explaining why it was archived.
 
+`artifacts/session-brain/` is exempt from the bundle-shape checks (3-4): it is
+the gitignored session-artifact offline queue documented in
+`.cursor/rules/session-knowledge-artifact.mdc` (`<date>/<session_id>.json`),
+not an evidence bundle.
+
 Run from repo root:
     python scripts/check-repo-hygiene.py
 
@@ -64,6 +69,9 @@ FORBIDDEN_PATTERNS = [
 
 BUNDLE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*$")
 
+# Session-artifact offline queue (fail-open capture path); see module docstring.
+EXEMPT_ARTIFACT_DOMAINS = {"session-brain"}
+
 
 def check_root(violations: list[str]) -> None:
     for entry in sorted(REPO_ROOT.iterdir()):
@@ -89,6 +97,8 @@ def check_artifacts(violations: list[str]) -> None:
     for entry in artifacts.iterdir():
         if entry.is_file():
             violations.append(f"loose file directly under artifacts/: {entry.name}")
+            continue
+        if entry.name in EXEMPT_ARTIFACT_DOMAINS:
             continue
         # entry is a domain dir; its children must be dated bundles
         for child in entry.iterdir():

@@ -74,6 +74,17 @@ def test_exit_0_on_valid_marketing_fixture(tmp_path):
     assert "brand repo structure clean" in result.stdout
 
 
+def test_exit_0_on_digit_leading_prefix(tmp_path):
+    # Digit-leading brands (e.g. "1HR-After" -> --1hr-) are valid: --1hr- is
+    # legal CSS and boundaryClass already permits digits.
+    _write_marketing_fixture(
+        tmp_path, slug="1hr-after", prefix="--1hr-", boundary="brand-1hr-after"
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 0
+    assert "brand repo structure clean" in result.stdout
+
+
 def test_exit_1_when_plx_tokens_defined(tmp_path):
     _write_marketing_fixture(
         tmp_path, slug="furgenics", prefix="--fg-", boundary="brand-furgenics"

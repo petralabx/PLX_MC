@@ -105,7 +105,10 @@ def _validate_manifest_shape(manifest: dict, violations: list[str]) -> str:
         )
 
     prefix = ds.get("tokenPrefix", "")
-    if prefix and not re.match(r"^--[a-z][a-z0-9-]*-$", str(prefix)):
+    # Allow a digit as the first character so digit-leading brands (e.g. the
+    # "1HR-After" brand's --1hr- prefix) validate; --1hr- is valid CSS and this
+    # mirrors the boundaryClass regex below, which already permits digits.
+    if prefix and not re.match(r"^--[a-z0-9][a-z0-9-]*-$", str(prefix)):
         violations.append(
             f"designSystem.tokenPrefix must look like --brand- (got {prefix!r})"
         )

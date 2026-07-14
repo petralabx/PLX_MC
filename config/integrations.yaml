@@ -127,3 +127,55 @@ integrations:
       language, scope) — no secrets, no PII. Approvals are gated by the
       Owner/Admin role (lib/mc-data/repos.ts isApprover); the request queue
       records who requested/decided each repo with timestamps.
+
+  - id: mc-routing
+    name: Commit/PR → Mission Control routing (shadow → suggestion → confirmation)
+    owner: Vince (vince@petrasoap.com)
+    criticality: High
+    scope: runtime (gated; pilots start in shadow)
+    autonomous: false # recommendations only until authorized human confirmation; no fuzzy auto-link
+    default_state: off (shadow/suggest/confirm flags default 0; proposals default on once deployed)
+    feature_flag: >-
+      PLX_MC_ROUTING_SHADOW_ENABLED, PLX_MC_ROUTING_SUGGEST_ENABLED,
+      PLX_MC_ROUTING_CONFIRM_ENABLED, PLX_MC_ROUTING_PROPOSALS_ENABLED,
+      PLX_MC_ROUTING_METADATA_ENABLED, PLX_MC_ROUTING_INBOX_ENABLED,
+      PLX_MC_ROUTING_MAINTENANCE_ENABLED; fuzzy PLX_MC_ROUTING_FUZZY_AUTOLINK_ENABLED
+      remains forced off for every pilot (config/mc-routing-rollout.json +
+      src/lib/routing/rollout.ts).
+    kill_switch: >-
+      Flip the relevant PLX_MC_ROUTING_* flag to 0 (or unset). Disabling proposals
+      records explicit triage/audit and never restores silent sparse Task creation.
+      Maintenance: PLX_MC_ROUTING_MAINTENANCE_ENABLED=0 or remove the
+      /api/cron/routing-maintenance vercel.json entry / unset CRON_SECRET.
+      Graph webhook: PLX_MC_GRAPH_WEBHOOK_ENABLED=0 retains five-minute delta recovery.
+    auth_source:
+      - Entra OIDC sessions (human Routing Inbox / decide APIs) — durable oid
+      - MCP service principal sp_mcp_cursor (suggest/confirm) via PLX_MC_MCP_API_KEY
+      - GitHub Actions OIDC principal sp_github_actions_routing (propose)
+      - Routing maintenance principal sp_routing_maintenance (cron retention/demotion)
+      - Compliance projection principal sp_compliance_projection (merge/link projection)
+    health_check: >-
+      rolloutHealth() in src/lib/routing/rollout.ts (five pilots, fuzzy off,
+      kill-switch snapshot); mc_self_check for MCP; Routing Inbox flag probe;
+      cron /api/cron/routing-maintenance returns enabled + demotion counts when
+      CRON_SECRET + sp_routing_maintenance are configured.
+    fallback_path: >-
+      Shadow-only or suggestion-only per cohort; breached confirmation cohorts
+      auto-demote to suggestion. Metadata workflow can be skipped via
+      PLX_MC_ROUTING_METADATA_ENABLED without affecting compliance. Sparse
+      operator-PR Task creation stays retired — unresolved work goes to Routing
+      Inbox / explicit triage, never silent Task invent. Downstream pilot
+      activation is follow-up MC tasks/PRs (not claimed by the central runtime PR).
+    data_audit_boundary: >-
+      Raw PR bodies never persisted (hash + markers only). Proposal/candidate
+      detail retained 90 days after resolution; final typed links + audit for
+      Task lifetime + 1 year. Maintenance expires provisional sessions and
+      detail only — never final links or append-only mc_events.
+    deferred:
+      - GitHub App checks:write / check_run.requested_action (phase-one App scope
+        stays read-only Contents/Metadata — new approved spec required)
+      - Fuzzy auto-link promotion (forbidden for this project; separate precision
+        gate: 300/30d/5 repos/20 per cohort/≥98% top-1/≥95% CI LB/≤0.5% dup/≤1%
+        bucket correction/zero auth incidents)
+      - Downstream activation PRs for plx-customer-portal, agentic-swarm, skills,
+        local-inference

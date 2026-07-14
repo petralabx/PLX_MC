@@ -23,6 +23,7 @@ import type {
   PermissionResource,
   ReasonCode,
   ServicePrincipalRecord,
+  IdentityQuery,
 } from "./types";
 
 export type {
@@ -39,6 +40,7 @@ export type {
   PermissionResource,
   ReasonCode,
   ServicePrincipalRecord,
+  IdentityQuery,
 };
 
 export { authorize, isCapability } from "./authorize";
@@ -55,12 +57,9 @@ export {
   isMcUserActive,
   isServicePrincipalActive,
 } from "./identities";
-export {
-  findGithubIdentityByUserId,
-  findMcUserByEntraOid,
-  findServicePrincipalById,
-} from "./repository";
-export type { IdentityQuery } from "./repository";
+// Persistence finders live in ./repository (server-only / Node). Do not
+// re-export them from this barrel — client code imports authorize/grants here
+// and must not pull `pg` into the browser bundle.
 
 /** Map directory/job-title strings onto access roles for compatibility callers. */
 export function directoryRoleToAccessRole(role: string | undefined | null): AccessRole | null {

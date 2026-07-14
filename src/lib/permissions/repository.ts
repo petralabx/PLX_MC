@@ -6,14 +6,12 @@ import type {
   AccessRole,
   ActorStatus,
   GithubIdentityRecord,
+  IdentityQuery,
   McUserRecord,
   ServicePrincipalRecord,
 } from "./types";
 
-export type IdentityQuery = (
-  text: string,
-  params?: unknown[]
-) => Promise<Record<string, unknown>[]>;
+export type { IdentityQuery } from "./types";
 
 async function defaultIdentityQuery(
   text: string,

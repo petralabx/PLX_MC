@@ -62,9 +62,10 @@ function slaLabel(p: InboxProposalSummary): string {
 
 export function RoutingInboxView({ route }: ScreenProps) {
   const tabsId = useId();
+  const enabled = routingInboxEnabled();
   const [scope, setScope] = useState<InboxScope>("personal");
   const [list, setList] = useState<InboxListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<InboxDetail | null>(null);
@@ -72,8 +73,6 @@ export function RoutingInboxView({ route }: ScreenProps) {
   const [actionNote, setActionNote] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
   const [busy, setBusy] = useState(false);
-
-  const enabled = routingInboxEnabled();
 
   const loadList = useCallback((nextScope: InboxScope): Promise<void> => {
     const params = new URLSearchParams({ scope: nextScope });
@@ -104,10 +103,7 @@ export function RoutingInboxView({ route }: ScreenProps) {
   }, []);
 
   useEffect(() => {
-    if (!enabled) {
-      setLoading(false);
-      return;
-    }
+    if (!enabled) return;
     void loadList("personal");
   }, [enabled, loadList]);
 

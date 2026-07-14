@@ -22,10 +22,6 @@ vi.mock("@/lib/permissions", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/permissions")>();
   return {
     ...actual,
-    findServicePrincipalById: async (id: string) =>
-      id === GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID
-        ? { id, name: "GA Routing", status: "active" as const }
-        : null,
     authorize: (input: { capability: string; actor: { id: string } }) => {
       db.authorizeCalls.push(input.capability);
       return {
@@ -36,6 +32,13 @@ vi.mock("@/lib/permissions", async (importOriginal) => {
     },
   };
 });
+
+vi.mock("@/lib/permissions/repository", () => ({
+  findServicePrincipalById: async (id: string) =>
+    id === GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID
+      ? { id, name: "GA Routing", status: "active" as const }
+      : null,
+}));
 
 vi.mock("@/lib/compliance/repo", () => ({
   async appendEvent(e: { kind: string; payload?: Record<string, unknown>; dedupKey?: string | null }) {

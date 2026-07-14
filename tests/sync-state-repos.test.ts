@@ -15,12 +15,32 @@ const store = vi.hoisted(() => ({
 vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
   ensureReposSeeded: vi.fn(async () => {}),
+  ensureBucketsSeeded: vi.fn(async () => {}),
+}));
+
+vi.mock("@/lib/db", () => ({
+  withTransaction: async <T>(fn: (q: unknown) => Promise<T>) => {
+    const q = async (text: string, _params: unknown[] = []) => {
+      if (text.includes("INSERT INTO entities")) {
+        return [{ id: "TASK-9001" }];
+      }
+      return [];
+    };
+    return fn(q);
+  },
+}));
+
+vi.mock("@/lib/routing/repo", () => ({
+  allocateNextTaskId: vi.fn(async () => "TASK-9001"),
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
   stamp: () => "2026.06.18 · 00:00",
   async getRepos() {
     return store.repos;
+  },
+  async getBuckets() {
+    return [{ id: "BKT-WMS", name: "WMS", owner: "vince" }];
   },
   async getEntities() {
     return store.entities;

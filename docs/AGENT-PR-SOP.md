@@ -221,6 +221,28 @@ Compliance is a **backstop**, not a substitute for repo CI.
 
 ---
 
+## 11a. Routing suggestions (pre-checkout)
+
+When `PLX_MC_ROUTING_SUGGEST_ENABLED=1`, missing Task IDs should call
+`mc_suggest_work` (or the checkout adapter) and stop for **explicit** selection
+or creation intent — do **not** invent a sparse Task.
+
+| Marker | Authority |
+|--------|-----------|
+| `MC-Task: TASK-*` | Author declaration — ranks candidates; does **not** mutate alone |
+| `MC-Routing: rtx_*` | Correlation only — never mutation authority |
+| `MC-Checkout: dsp_*` | Credential stamp after authenticated checkout |
+
+Fuzzy matches stay advisory. Confirmation (`PLX_MC_ROUTING_CONFIRM_ENABLED`) is
+a separate kill switch. Fuzzy auto-link remains **disabled** for every pilot
+(`PLX_MC_ROUTING_FUZZY_AUTOLINK_ENABLED` forced off). Rollout / kill switches:
+[`docs/runbooks/mc-routing-rollout.md`](runbooks/mc-routing-rollout.md).
+
+Operator PRs without a confirmed link create/update a routing **proposal**
+(`action_required`) instead of a silent sparse Task. Sparse creation is retired.
+
+---
+
 ## 12. Do's and don'ts
 
 **Do**
@@ -229,6 +251,7 @@ Compliance is a **backstop**, not a substitute for repo CI.
 - Report progress and complete with evidence when work is ready for gate/merge.
 - Install company skills separately from MCP ([`SKILLS-SOP.md`](SKILLS-SOP.md)).
 - Keep `MC_REPO` set to the full `petralabx/<name>` slug you are pushing to.
+- Prefer `mc_suggest_work` before creating a Task when the Task ID is unknown.
 
 **Don't**
 
@@ -237,6 +260,9 @@ Compliance is a **backstop**, not a substitute for repo CI.
 - Don't put secrets in dispatch messages or PR bodies.
 - Don't treat soft-mode warnings as optional forever on repos slated for hard cutover.
 - Don't use `/api/sync/sweep` to refresh Loop Ledgers.
+- Don't treat fuzzy routing suggestions as auto-link authority.
+- Don't restore sparse operator-PR Task creation when proposals are disabled —
+  fall back to explicit triage/audit only.
 
 ---
 

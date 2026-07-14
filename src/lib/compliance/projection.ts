@@ -9,9 +9,9 @@ import type { PullRequest, StageKey, Task } from "@/lib/mc-data";
 import {
   authorize,
   COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
-  findServicePrincipalById,
   type PermissionActor,
 } from "@/lib/permissions";
+import { findServicePrincipalById } from "@/lib/permissions/repository";
 import { patchTask } from "@/lib/sync/state";
 import { getEntity } from "@/lib/sync/repo";
 import * as complianceRepo from "./repo";

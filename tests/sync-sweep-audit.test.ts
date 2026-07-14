@@ -76,6 +76,7 @@ vi.mock("@/lib/sync/repo", () => ({
   getBucketBySpItemId: async () => null,
   seedBuckets: async () => {},
   seedProjects: async () => {},
+  markRegisterInboundComplete: async () => {},
 }));
 
 // Imported AFTER the mocks so engine's repo/graph/mapping imports resolve to them.

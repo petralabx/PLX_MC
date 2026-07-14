@@ -34,15 +34,6 @@ vi.mock("@/lib/permissions", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/permissions")>();
   return {
     ...actual,
-    findServicePrincipalById: async (id: string) => {
-      if (!store.principalPresent) return null;
-      if (id !== COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID) return null;
-      return {
-        id: COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
-        name: "PLX MC Compliance Projection",
-        status: store.principalStatus,
-      };
-    },
     authorize: (input: { actor: { id: string }; capability: string }) => {
       store.authorizeCalls.push({
         capability: input.capability,
@@ -56,6 +47,18 @@ vi.mock("@/lib/permissions", async (importOriginal) => {
     },
   };
 });
+
+vi.mock("@/lib/permissions/repository", () => ({
+  findServicePrincipalById: async (id: string) => {
+    if (!store.principalPresent) return null;
+    if (id !== COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID) return null;
+    return {
+      id: COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
+      name: "PLX MC Compliance Projection",
+      status: store.principalStatus,
+    };
+  },
+}));
 
 vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),

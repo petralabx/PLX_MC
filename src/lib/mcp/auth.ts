@@ -6,12 +6,12 @@ import { ApiError } from "@/lib/api/route";
 import { isAllowedUser } from "@/lib/auth/gate";
 import { permissionsEnforcementEnabled } from "@/lib/auth/identity";
 import {
-  findServicePrincipalById,
   isServicePrincipalActive,
   MCP_SERVICE_PRINCIPAL_ID,
   type IdentityQuery,
   type PermissionActor,
 } from "@/lib/permissions";
+import { findServicePrincipalById } from "@/lib/permissions/repository";
 
 export { MCP_SERVICE_PRINCIPAL_ID };
 

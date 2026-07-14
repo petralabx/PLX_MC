@@ -1,0 +1,18 @@
+{
+  "cohortId": "plx-mc",
+  "repo": "petralabx/PLX_MC",
+  "displayName": "PLX Mission Control",
+  "tier": "hub",
+  "enabled": true,
+  "mode": "shadow",
+  "policyVersion": "routing.v1",
+  "fuzzyAutoLinkEnabled": false,
+  "activation": {
+    "status": "central_ready",
+    "localManifest": ".plx/mc-routing.json",
+    "workflowManifest": ".github/plx-mc-routing-manifest.json",
+    "notes": "PLX_MC is the central runtime. Local path-routing manifest and generated workflow artifacts ship in this project."
+  },
+  "defaultBucket": "BKT-INFRA",
+  "owner": "Vince"
+}

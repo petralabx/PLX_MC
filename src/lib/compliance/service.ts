@@ -11,10 +11,10 @@ import type { Task } from "@/lib/mc-data";
 import { publicMcBaseUrl } from "@/lib/mcp/envelope";
 import {
   authorize,
-  findServicePrincipalById,
   GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
   type PermissionActor,
 } from "@/lib/permissions";
+import { findServicePrincipalById } from "@/lib/permissions/repository";
 import { normalizeRoutingEvidence } from "@/lib/routing/evidence";
 import {
   runShadowRouting,

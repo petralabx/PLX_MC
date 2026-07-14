@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "mc-routing-rollout/v1",
+  "policyVersion": "routing.rollout.v1",
+  "fuzzyAutoLinkEnabled": false,
+  "fuzzyAutoLinkPromotionForbidden": true,
+  "modes": ["shadow", "suggestion", "confirmation"],
+  "defaultMode": "shadow",
+  "breachDemotionMode": "suggestion",
+  "thresholds": {
+    "minReviewedProposals": 300,
+    "minWindowDays": 30,
+    "minRepos": 5,
+    "minPerCohort": 20,
+    "minTop1Precision": 0.98,
+    "minPrecisionCiLowerBound": 0.95,
+    "ciConfidence": 0.95,
+    "maxDuplicateRate": 0.005,
+    "maxBucketCorrectionRate": 0.01,
+    "maxAuthIncidents": 0,
+    "rollingWindowSize": 100
+  },
+  "sla": {
+    "alertUnresolvedHours": 24,
+    "expireUnresolvedUiDays": 7,
+    "maxUnresolvedRateAfter24h": 0.1,
+    "maxUnresolvedRateAfter7d": 0.02
+  },
+  "retention": {
+    "proposalDetailDaysAfterResolution": 90,
+    "finalLinkYearsAfterTaskLifetime": 1,
+    "neverDeleteFinalLinks": true,
+    "neverDeleteAuditEvents": true,
+    "neverPersistRawPrBodies": true
+  },
+  "killSwitches": {
+    "permissions": "PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED",
+    "shadow": "PLX_MC_ROUTING_SHADOW_ENABLED",
+    "suggest": "PLX_MC_ROUTING_SUGGEST_ENABLED",
+    "confirm": "PLX_MC_ROUTING_CONFIRM_ENABLED",
+    "fuzzyAutoLink": "PLX_MC_ROUTING_FUZZY_AUTOLINK_ENABLED",
+    "proposals": "PLX_MC_ROUTING_PROPOSALS_ENABLED",
+    "metadata": "PLX_MC_ROUTING_METADATA_ENABLED",
+    "inbox": "PLX_MC_ROUTING_INBOX_ENABLED",
+    "graphWebhook": "PLX_MC_GRAPH_WEBHOOK_ENABLED",
+    "maintenance": "PLX_MC_ROUTING_MAINTENANCE_ENABLED"
+  },
+  "maintenance": {
+    "servicePrincipalId": "sp_routing_maintenance",
+    "capability": "routing.maintain",
+    "cronPath": "/api/cron/routing-maintenance",
+    "preserveFinalLinks": true,
+    "preserveAudit": true
+  },
+  "deferred": {
+    "githubAppChecks": "Phase one does not request checks:write or check_run.requested_action. Any Checks expansion requires a new approved spec.",
+    "downstreamActivation": "Central runtime + generated artifacts only. Downstream activation is follow-up MC tasks/PRs."
+  }
+}

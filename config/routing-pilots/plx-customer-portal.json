@@ -1,0 +1,18 @@
+{
+  "cohortId": "plx-customer-portal",
+  "repo": "petralabx/plx-customer-portal",
+  "displayName": "PLX Customer Portal",
+  "tier": "product_app",
+  "enabled": true,
+  "mode": "shadow",
+  "policyVersion": "routing.v1",
+  "fuzzyAutoLinkEnabled": false,
+  "activation": {
+    "status": "pending_downstream_pr",
+    "localManifest": ".plx/mc-routing.json",
+    "workflowManifest": ".github/plx-mc-routing-manifest.json",
+    "notes": "Central descriptor only. Activation PR in plx-customer-portal is a follow-up MC task — this project does not claim downstream activation."
+  },
+  "defaultBucket": "BKT-PROD",
+  "owner": "Vince"
+}

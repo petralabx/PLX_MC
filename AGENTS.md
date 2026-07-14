@@ -20,9 +20,12 @@ DESIGN_TOKENS).
 - `npm run dev` â€” Next.js dev server (App Router, `app/`).
 - `npm run build` / `npm run start` â€” production build and serve.
 - `./scripts/preflight.sh --mode pre-commit|pre-push|ci` â€” the one gate command.
-- No cron jobs, webhooks, or services yet; the SharePoint sync service (delta
-  poll every 5 min + Graph change webhooks) is specified in
-  `docs/product/SHAREPOINT_INTEGRATION.md` and lands as the `sync` module.
+- SharePoint sync: five-minute delta sweep + Graph subscription renewal /
+  notification queue (see `docs/modules/sync/README.md`).
+- Routing maintenance cron: `GET /api/cron/routing-maintenance` (hourly) —
+  retention expiry + rolling-breach cohort demotion; authorized only for
+  `sp_routing_maintenance`. Rollout runbook:
+  `docs/runbooks/mc-routing-rollout.md`.
 
 ## Architecture
 
@@ -44,11 +47,14 @@ DESIGN_TOKENS).
 | design-system | Vince | High |
 | web | Vince | Critical |
 | sync | Vince | Critical |
+| routing | Vince | Critical |
+| permissions | Vince | Critical |
 | meeting-intake | Vince | Medium |
 | loop-ledgers | Vince | Medium |
 | github-app | Vince | Medium |
 | mcp | Vince | Critical |
 | vendor-spend | Vince | Medium |
+| compliance | Vince | Critical |
 
 ## Canonical Operations Docs
 

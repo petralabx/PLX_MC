@@ -10,12 +10,14 @@ import {
   buildGithubIdentityRecord,
   buildMcUserRecord,
   buildServicePrincipalRecord,
-  findGithubIdentityByUserId,
-  findServicePrincipalById,
   isGithubIdentityActive,
   isMcUserActive,
   isServicePrincipalActive,
 } from "@/lib/permissions";
+import {
+  findGithubIdentityByUserId,
+  findServicePrincipalById,
+} from "@/lib/permissions/repository";
 
 const MIGRATION = resolve(process.cwd(), "db/migrations/016_permissions_identities.sql");
 

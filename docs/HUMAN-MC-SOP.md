@@ -151,10 +151,26 @@ The compliance gate reads **`task.evidence`**, not PR-body prose. PR `## Rollbac
 
 | Author | Checkout required? | Gate behavior |
 |--------|-------------------|---------------|
-| **Human operator PR** | No | Pass — recorded, sparse task auto-created if none linked |
+| **Human operator PR** | No | Pass — recorded; **routing proposal** / Routing Inbox when unlinked (sparse Task auto-create is **retired**) |
 | **Agent PR** | Yes — `MC-Checkout: dsp_*` per task | Block without valid checkout + complete evidence |
 
 You do **not** need `MC-Checkout` stamps on your own PRs. Agents **must** have them. See [`AGENT-PR-SOP.md`](AGENT-PR-SOP.md).
+
+### Routing Inbox (human confirmation)
+
+When `PLX_MC_ROUTING_INBOX_ENABLED=1`, open **Routing** in the MC chrome for:
+
+- Personal “Needs your decision” queue
+- Project/Bucket-scoped queues
+- Global Unrouted queue
+
+Accept / change / transfer / explicitly confirm Task creation. SLA: alert at 24h,
+expire unresolved UI detail after 7 days. Rolling metric breaches demote a
+cohort from confirmation to **suggestion-only**. Fuzzy auto-link stays off.
+Kill switches and pilot status: [`docs/runbooks/mc-routing-rollout.md`](runbooks/mc-routing-rollout.md).
+
+GitHub App **Checks requested actions** are deferred (phase one uses workflow
+summary + authenticated MC deep link only).
 
 ---
 
@@ -246,6 +262,7 @@ Details: [`ROLLBACK-PLAN-SOP.md`](ROLLBACK-PLAN-SOP.md), [`COLLABORATOR-SOP.md`]
 | Agent / operator MCP discipline | [`docs/AGENT-PR-SOP.md`](AGENT-PR-SOP.md) |
 | All PR authors (gate rules) | [`docs/COLLABORATOR-SOP.md`](COLLABORATOR-SOP.md) |
 | Fleet repo onboarding | [`docs/runbooks/REPO-ONBOARDING.md`](runbooks/REPO-ONBOARDING.md) |
+| MC routing rollout / kill switches | [`docs/runbooks/mc-routing-rollout.md`](runbooks/mc-routing-rollout.md) |
 | Rollback requirements | [`docs/ROLLBACK-PLAN-SOP.md`](ROLLBACK-PLAN-SOP.md) |
 | MCP team setup | [`docs/runbooks/plx-mc-mcp-team-registration.md`](runbooks/plx-mc-mcp-team-registration.md) |
 | Loop Ledgers module | [`docs/modules/loop-ledgers/README.md`](modules/loop-ledgers/README.md) |

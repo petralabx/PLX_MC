@@ -1,0 +1,26 @@
+# index — 2026-07-14-commit-pr-mc-routing
+
+- domain: platform
+- slug: 2026-07-14-commit-pr-mc-routing
+- project: commit-pr-mc-routing
+- phase: P10 (rollout / SOPs / pilots / maintenance)
+- mc_task: TASK-446
+- checkout: dsp_mrl609cknmvxqu
+- claim: central_runtime_ready
+- not_claimed: downstream_pilot_activation
+- follow_up_tasks:
+  - TASK-447 (plx-customer-portal activation)
+  - TASK-448 (agentic-swarm activation)
+  - TASK-449 (skills activation)
+  - TASK-450 (local-inference activation)
+- pilots:
+  - petralabx/PLX_MC (central_ready)
+  - petralabx/plx-customer-portal (pending_downstream_pr)
+  - petralabx/agentic-swarm (pending_downstream_pr)
+  - petralabx/skills (pending_downstream_pr)
+  - petralabx/local-inference (pending_downstream_pr)
+- fuzzy_auto_link: disabled
+- deferred: github_app_checks
+- artifacts:
+  - REPORT.md
+  - index.md

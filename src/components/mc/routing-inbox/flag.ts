@@ -6,9 +6,11 @@
 const ENV_FLAG = "PLX_MC_ROUTING_INBOX_ENABLED";
 
 function envEnabled(): boolean {
+  // Static property access so Next can inline NEXT_PUBLIC_* at build time.
+  // Dynamic `process.env[key]` is not replaced and stays undefined in the browser.
   return (
-    process.env[ENV_FLAG] === "1" ||
-    process.env[`NEXT_PUBLIC_${ENV_FLAG}`] === "1"
+    process.env.PLX_MC_ROUTING_INBOX_ENABLED === "1" ||
+    process.env.NEXT_PUBLIC_PLX_MC_ROUTING_INBOX_ENABLED === "1"
   );
 }
 

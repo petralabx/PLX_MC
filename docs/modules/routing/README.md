@@ -5,12 +5,13 @@
 Deterministic Mission Control **control-plane** for associating commits and pull
 requests with existing Tasks/Buckets (and creating a Task only after explicit
 authorized confirmation). Owns typed evidence/trust/candidate/session/proposal/
-revision/decision/link contracts, PR-body marker parsing, and Postgres
-persistence for proposals and Task-ID allocation seams.
+revision/decision/link contracts, PR-body marker parsing, Postgres persistence,
+the shadow scoring engine, confirmed mutations, and **rollout / retention /
+maintenance** (P10).
 
-This module does **not** authorize mutations, call LLMs for control decisions,
-or write SharePoint business entities. Authorization stays in `permissions`;
-confirmed Task mutation lands in later phases (`routing/service`, MCP, APIs).
+This module does **not** call LLMs for control decisions or write SharePoint
+business entities directly. Authorization stays in `permissions`. Fuzzy
+auto-link remains disabled for every pilot.
 
 ## Why
 
@@ -37,9 +38,18 @@ without persisting raw PR bodies.
   `FOR UPDATE` lock, allocate, insert Task/link/decision, and resolve.
 - **Harness** (`scripts/test-routing-postgres.mjs`): disposable Docker Postgres
   only; refuses staging/production URLs; always removes the container.
+- **Rollout** (`rollout.ts` + `config/mc-routing-rollout.json` +
+  `config/routing-pilots/*`): shadow/suggestion/confirmation modes, research
+  thresholds, Wilson CI lower bound, per-cohort + rolling-window evaluation,
+  automatic demotion to suggestion-only, kill-switch snapshot, `rolloutHealth()`.
+  Fuzzy auto-link forced off.
+- **Retention** (`retention.ts`): expire provisional sessions and proposal
+  detail; never delete final typed links or append-only audit events.
+- **Maintenance cron** (`/api/cron/routing-maintenance`): `CRON_SECRET` +
+  durable `sp_routing_maintenance` + `routing.maintain` only.
 
 ```ts
-import { parseRoutingMarkers, upsertRoutingProposal } from "@/lib/routing";
+import { parseRoutingMarkers, upsertRoutingProposal, rolloutHealth } from "@/lib/routing";
 import { withTransaction } from "@/lib/db";
 
 const parsed = parseRoutingMarkers(prBody); // in-memory only
@@ -47,6 +57,7 @@ await withTransaction(async (q) => {
   await upsertRoutingProposal(input, q);
   // P8: lockProposalForUpdate → allocateNextTaskId → insertCreationIntent …
 });
+rolloutHealth(); // pilots + fuzzy-off invariant
 ```
 
 ### Key Files
@@ -54,7 +65,13 @@ await withTransaction(async (q) => {
 - `src/lib/routing/types.ts` — contracts
 - `src/lib/routing/markers.ts` — marker parser + body hash
 - `src/lib/routing/repo.ts` — transaction-aware repository
+- `src/lib/routing/rollout.ts` — modes, metrics, demotion
+- `src/lib/routing/retention.ts` — expiry planning
 - `src/lib/routing/persistence/` — SQL helpers / constants
+- `src/app/api/cron/routing-maintenance/route.ts`
+- `config/mc-routing-rollout.json`, `config/routing-pilots/`
+- `.plx/mc-routing.json` — PLX_MC path-routing manifest
+- `docs/runbooks/mc-routing-rollout.md`
 - `db/migrations/017_routing_proposals.sql`
 - `db/migrations/018_routing_links_and_task_sequence.sql`
 - `scripts/test-routing-postgres.mjs`
@@ -62,9 +79,9 @@ await withTransaction(async (q) => {
 ## Dependencies
 
 - Depends on: `src/lib/db` (`query`, `TxQuery`, `withTransaction`); Postgres
-  via numbered migrations.
-- Depended on by: future routing engine (P3), sync freshness consumers (P4),
-  MCP suggest (P5), proposal lifecycle (P6), confirmed mutations (P8), inbox (P9).
+  via numbered migrations; `src/lib/permissions` for maintenance authorization.
+- Depended on by: MCP suggest/confirm, compliance propose/projection, Routing
+  Inbox, metadata workflow, maintenance cron.
 
 ## Owner
 
@@ -72,4 +89,4 @@ Vince
 
 ## Criticality
 
-High
+Critical

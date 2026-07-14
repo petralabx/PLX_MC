@@ -18,6 +18,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/routing-maintenance",
+      "schedule": "15 * * * *"
+    },
+    {
       "path": "/api/cron/vendor-spend-refresh",
       "schedule": "0 */6 * * *"
     }

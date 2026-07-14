@@ -108,6 +108,7 @@ vi.mock("@/lib/sync/repo", () => ({
   seedRepos: async () => {},
   getProjectRows: async () => [],
   getBucketRows: async () => [],
+  markRegisterInboundComplete: async () => {},
 }));
 
 import { projectPullRequest } from "@/lib/compliance/projection";

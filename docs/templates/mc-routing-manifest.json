@@ -2,10 +2,36 @@
   "schema_version": "plx-mc-routing-manifest/v1",
   "workflow": {
     "path": ".github/workflows/mc-routing-metadata.yml",
-    "mode": "metadata-only"
+    "mode": "metadata-only",
+    "constraints": [
+      "no_actions_checkout",
+      "no_pr_code_execution",
+      "no_pr_dependency_install",
+      "no_pr_controlled_cache",
+      "oidc_only"
+    ]
   },
   "proposal": {
     "endpoint": "/api/routing/propose",
     "auth": "github-actions-oidc"
+  },
+  "local_path_manifest": {
+    "path": ".plx/mc-routing.json",
+    "schema_version": "plx-mc-routing-local/v1"
+  },
+  "rollout": {
+    "fuzzy_auto_link_enabled": false,
+    "default_mode": "shadow",
+    "breach_demotion_mode": "suggestion",
+    "central_config": "config/mc-routing-rollout.json"
+  },
+  "kill_switches": {
+    "metadata": "PLX_MC_ROUTING_METADATA_ENABLED",
+    "suggest": "PLX_MC_ROUTING_SUGGEST_ENABLED",
+    "confirm": "PLX_MC_ROUTING_CONFIRM_ENABLED",
+    "fuzzy_auto_link": "PLX_MC_ROUTING_FUZZY_AUTOLINK_ENABLED"
+  },
+  "deferred": {
+    "github_app_checks": "checks:write and check_run.requested_action require a new approved spec"
   }
 }

@@ -1,0 +1,60 @@
+{
+  "schema_version": "plx-mc-routing-local/v1",
+  "repo": "petralabx/PLX_MC",
+  "policy_version": "routing.v1",
+  "fuzzy_auto_link_enabled": false,
+  "default_bucket": "BKT-INFRA",
+  "path_rules": [
+    {
+      "glob": "src/lib/routing/**",
+      "module": "routing",
+      "bucket": "BKT-MISSION-CONTROL-OPS"
+    },
+    {
+      "glob": "src/lib/permissions/**",
+      "module": "permissions",
+      "bucket": "BKT-MISSION-CONTROL-OPS"
+    },
+    {
+      "glob": "src/lib/sync/**",
+      "module": "sync",
+      "bucket": "BKT-MISSION-CONTROL-OPS"
+    },
+    {
+      "glob": "src/lib/mcp/**",
+      "module": "mcp",
+      "bucket": "BKT-MISSION-CONTROL-OPS"
+    },
+    {
+      "glob": "src/lib/compliance/**",
+      "module": "compliance",
+      "bucket": "BKT-MISSION-CONTROL-OPS"
+    },
+    {
+      "glob": "src/components/mc/**",
+      "module": "web",
+      "bucket": "BKT-MISSION-CONTROL-OPS"
+    },
+    {
+      "glob": "db/migrations/**",
+      "module": "web",
+      "bucket": "BKT-MISSION-CONTROL-OPS"
+    },
+    {
+      "glob": "config/**",
+      "module": "governance",
+      "bucket": "BKT-MISSION-CONTROL-OPS"
+    },
+    {
+      "glob": "scripts/**",
+      "module": "governance",
+      "bucket": "BKT-MISSION-CONTROL-OPS"
+    },
+    {
+      "glob": "docs/**",
+      "module": "governance",
+      "bucket": "BKT-MISSION-CONTROL-OPS"
+    }
+  ],
+  "notes": "Path ownership for PLX_MC. Fuzzy auto-link remains disabled. Downstream pilots copy scaffold artifacts via activation PRs — not claimed by this project."
+}

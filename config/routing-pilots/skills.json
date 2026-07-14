@@ -1,0 +1,18 @@
+{
+  "cohortId": "skills",
+  "repo": "petralabx/skills",
+  "displayName": "Skills Catalog",
+  "tier": "skills",
+  "enabled": true,
+  "mode": "shadow",
+  "policyVersion": "routing.v1",
+  "fuzzyAutoLinkEnabled": false,
+  "activation": {
+    "status": "pending_downstream_pr",
+    "localManifest": ".plx/mc-routing.json",
+    "workflowManifest": ".github/plx-mc-routing-manifest.json",
+    "notes": "Central descriptor only. Activation PR in skills is a follow-up MC task — this project does not claim downstream activation."
+  },
+  "defaultBucket": "BKT-INFRA",
+  "owner": "Vince"
+}

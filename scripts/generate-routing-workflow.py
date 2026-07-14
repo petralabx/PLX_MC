@@ -126,7 +126,11 @@ def main() -> int:
         return 0
 
     if "--check" in sys.argv[1:]:
-        current = CANONICAL_PATH.read_text(encoding="utf-8") if CANONICAL_PATH.exists() else ""
+        current = (
+            CANONICAL_PATH.read_text(encoding="utf-8")
+            if CANONICAL_PATH.exists()
+            else ""
+        )
         if current != expected:
             print(
                 "ROUTING WORKFLOW DRIFT — .github/workflows/mc-routing-metadata.yml "

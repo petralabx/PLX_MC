@@ -211,6 +211,36 @@ the repo's `status` to `"active"` in `config/tracked-repos-registry.json`.
 
 ---
 
+## Routing metadata enrollment (pilots)
+
+Central descriptors live in `config/routing-pilots/<cohort>.json`. PLX_MC ships
+the local path-routing manifest at `.plx/mc-routing.json` and the workflow
+manifest template at `docs/templates/mc-routing-manifest.json` (copied to
+`.github/plx-mc-routing-manifest.json` by the scaffold).
+
+For a **downstream** pilot (`plx-customer-portal`, `agentic-swarm`, `skills`,
+`local-inference`):
+
+1. Confirm the central descriptor exists and `fuzzyAutoLinkEnabled` is `false`.
+2. Open a **separate activation PR** in that repo (follow-up MC task — not part
+   of the central runtime delivery PR).
+3. Install `.github/workflows/mc-routing-metadata.yml` via
+   `scripts/scaffold-tracked-repo.sh` (or `--workflows-only` refresh).
+4. Copy the routing manifest; keep OIDC allowlist +
+   `PLX_MC_ROUTING_METADATA_ENABLED` documented.
+5. Prove live health before calling the pilot “active.”
+
+Full kill switches, thresholds, retention, and demotion:
+[`docs/runbooks/mc-routing-rollout.md`](mc-routing-rollout.md).
+
+**Sparse retirement:** operator PRs without confirmed work must not recreate
+silent sparse Tasks — proposals + Routing Inbox only.
+
+**App Checks deferral:** do not add `checks:write` during onboarding; phase one
+uses metadata workflow summary + MC deep link.
+
+---
+
 ## Deactivating / archiving
 
 Set `status` to `"archived"` (or remove the entry) via PLX_MC PR; remove the

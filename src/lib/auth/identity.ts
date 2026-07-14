@@ -9,7 +9,8 @@ import type {
   McUserRecord,
   PermissionActor,
 } from "@/lib/permissions";
-import { directoryRoleToAccessRole, findMcUserByEntraOid } from "@/lib/permissions";
+import { directoryRoleToAccessRole } from "@/lib/permissions";
+import { findMcUserByEntraOid } from "@/lib/permissions/repository";
 
 export interface EntraProfileClaims {
   oid?: string;

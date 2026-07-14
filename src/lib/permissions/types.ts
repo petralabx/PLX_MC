@@ -103,6 +103,12 @@ export interface AuthorizeInput {
   context?: PermissionContext;
 }
 
+/** Injectable identity SQL seam (tests pass fakes; production uses db.query). */
+export type IdentityQuery = (
+  text: string,
+  params?: unknown[]
+) => Promise<Record<string, unknown>[]>;
+
 /** Durable MCP cursor API service principal (shared API key authenticates this). */
 export const MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_cursor" as const;
 

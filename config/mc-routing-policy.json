@@ -1,0 +1,20 @@
+{
+  "policyVersion": "routing.v1",
+  "scoringVersion": "routing.score.v1",
+  "suggestionLimit": 3,
+  "detailLimit": 10,
+  "fuzzyAutoLinkEnabled": false,
+  "completedStages": ["merged", "verified"],
+  "weights": {
+    "exactReference": 100,
+    "repoMatch": 25,
+    "pathOverlap": 20,
+    "titleOverlap": 15,
+    "labelOverlap": 10,
+    "descriptionOverlap": 8,
+    "relatedPr": 12,
+    "activeStage": 6,
+    "defaultBucketPrior": 4,
+    "recency": 5
+  }
+}

@@ -123,6 +123,16 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
       prUrl: z.string().optional(),
       verificationCommands: z.array(z.string()).optional(),
       filesChanged: z.array(z.string()).optional(),
+      rollback: z.string().optional(),
+      testRun: z
+        .object({
+          suite: z.string().min(1),
+          passed: z.number().int().nonnegative(),
+          failed: z.number().int().nonnegative(),
+          total: z.number().int().nonnegative().optional(),
+        })
+        .optional(),
+      shots: z.array(z.object({ label: z.string(), cap: z.string() })).optional(),
     },
     async (body) => jsonResult(await actionComplete(identity, body))
   );

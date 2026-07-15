@@ -111,8 +111,8 @@ describe("actionComplete evidence (P0d)", () => {
   });
 });
 
-describe("stdio mc_complete_task contract", () => {
-  it("exposes and forwards the REST completion evidence fields", () => {
+describe("mc_complete_task transport contracts", () => {
+  it("exposes and forwards the REST completion evidence fields over stdio", () => {
     const source = readFileSync(
       join(process.cwd(), "tools/plx-mc-mcp/index.ts"),
       "utf8"
@@ -125,5 +125,20 @@ describe("stdio mc_complete_task contract", () => {
     expect(block).toContain("testRun: z");
     expect(block).toContain("shots: z.array");
     expect(block).toContain('mcFetch("/complete", { method: "POST", body })');
+  });
+
+  it("exposes and forwards the REST completion evidence fields over HTTP", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/lib/mcp/create-http-server.ts"),
+      "utf8"
+    );
+    const start = source.indexOf('"mc_complete_task"');
+    const end = source.indexOf("\n  server.tool(", start + 1);
+    const block = source.slice(start, end);
+
+    expect(block).toContain("rollback: z.string().optional()");
+    expect(block).toContain("testRun: z");
+    expect(block).toContain("shots: z.array");
+    expect(block).toContain("actionComplete(identity, body)");
   });
 });

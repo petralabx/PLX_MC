@@ -8,10 +8,10 @@
   "policyVersion": "routing.v1",
   "fuzzyAutoLinkEnabled": false,
   "activation": {
-    "status": "pending_downstream_pr",
+    "status": "active",
     "localManifest": ".plx/mc-routing.json",
     "workflowManifest": ".github/plx-mc-routing-manifest.json",
-    "notes": "Central descriptor only. Downstream activation remains pending."
+    "notes": "Downstream shadow metadata workflow activation merged in petralabx/for-and-against PR #3 with successful routing runs."
   },
   "defaultBucket": "BKT-INFRA",
   "owner": "Vince"

@@ -5,9 +5,9 @@ or killing a routing surface.
 **Owner:** Vince · **Effective:** 2026-07-14  
 **Module:** `docs/modules/routing/README.md` · **Declaration:** `config/integrations.yaml` → `mc-routing`
 
-> The central runtime is ready and `plx-customer-portal` is the only active
-> downstream metadata workflow. Every other downstream repo remains pending its
-> own activation PR, task, and live proof.
+> TASK-456 completed the central production cutover. `PLX_MC`,
+> `plx-customer-portal`, `skills`, and `for-and-against` are active; every other
+> downstream repo remains pending its own activation PR, task, and live proof.
 
 ---
 
@@ -27,6 +27,27 @@ rollout ever enables it.
 **Fuzzy auto-link is disabled for every pilot** and cannot be promoted by this
 project (`src/lib/routing/rollout.ts` + `FUZZY_AUTOLINK_ENABLED=false`).
 
+### Production cutover baseline
+
+TASK-456 completed against central `main`
+`4b8a0f185cc8c0e8902711795f0d85af5382cc80`: production deployment
+`dpl_2s42C7kwHPYdwG7jw7LVeWSbbxSY` was Ready on
+`https://mc.plxcustomer.io`; rollback was
+`dpl_CvqG6WEpjrU9TCceeumNkw21dfXX`.
+
+- Exact OIDC allowlist: `PLX_MC`, `plx-customer-portal`, `agentic-swarm`,
+  `skills`, `local-inference`, `1hr-after`, `furgenics`,
+  `for-and-against`.
+- Production flags:
+  shadow/suggest/Inbox/proposals/metadata/maintenance=`1`;
+  confirmation/fuzzy auto-link=`0`.
+- Selected-repository organization Actions variables
+  `PLX_MC_BASE_URL` and `PLX_MC_ROUTING_METADATA_ENABLED` are provisioned.
+- The GitHub organization plan is `free`. Public selected repositories consume
+  the organization variables in Actions; the private portal required
+  equivalent repository-level variables for runtime consumption.
+- The cutover did not enable confirmation or fuzzy auto-link.
+
 Enable and health-check the Routing Inbox before setting
 `PLX_MC_ROUTING_SUGGEST_ENABLED=1`. In suggestion mode, GitHub shows only
 “An MC suggestion is ready” and an authenticated MC link. Shadow mode returns
@@ -39,14 +60,14 @@ agent checkout/evidence compliance remains unchanged.
 
 | Cohort / repo | Tier | Branch | Default Bucket | Mode | Activation | MC task | Accountable owner |
 |---------------|------|--------|----------------|------|------------|---------|-------------------|
-| `petralabx/PLX_MC` | hub | `main` | `BKT-INFRA` | suggestion | `central_ready` | `TASK-452` | `vince@petrasoap.com` |
+| `petralabx/PLX_MC` | hub | `main` | `BKT-INFRA` | suggestion | **active** | `TASK-452` | `vince@petrasoap.com` |
 | `petralabx/plx-customer-portal` | product_app | `staging` | `BKT-PROD` | suggestion | **active** | `TASK-447` | `vince@petrasoap.com` |
 | `petralabx/agentic-swarm` | product_platform | `main` | `BKT-INFRA` | suggestion | `pending_downstream_pr` | `TASK-448` | `vince@petrasoap.com` |
-| `petralabx/skills` | skills | `main` | `BKT-INFRA` | shadow | `pending_downstream_pr` | `TASK-449` | `vince@petrasoap.com` |
+| `petralabx/skills` | skills | `main` | `BKT-INFRA` | shadow | **active** | `TASK-449` | `vince@petrasoap.com` |
 | `petralabx/local-inference` | tooling | `main` | `BKT-INFRA` | shadow | `pending_downstream_pr` | `TASK-450` | `vince@petrasoap.com` |
 | `petralabx/1hr-after` | tooling | `main` | `BKT-INFRA` | shadow | `pending_downstream_pr` | `TASK-453` | `vince@petrasoap.com` |
 | `petralabx/furgenics` | tooling | `main` | `BKT-INFRA` | shadow | `pending_downstream_pr` | `TASK-454` | `vince@petrasoap.com` |
-| `petralabx/for-and-against` | tooling | `main` | `BKT-INFRA` | shadow | `pending_downstream_pr` | `TASK-455` | `vince@petrasoap.com` |
+| `petralabx/for-and-against` | tooling | `main` | `BKT-INFRA` | shadow | **active** | `TASK-455` | `vince@petrasoap.com` |
 
 Central config: `config/mc-routing-rollout.json`.  
 Workflow template: `docs/templates/mc-routing-manifest.json` →
@@ -90,6 +111,11 @@ Use organization Actions variables with **selected-repository** visibility:
 
 - `PLX_MC_BASE_URL=https://mc.plxcustomer.io`
 - `PLX_MC_ROUTING_METADATA_ENABLED=1` only for a repo being activated
+
+Both selected organization variables are live. On the current GitHub `free`
+organization plan, public selected repositories consume them in Actions. The
+private `plx-customer-portal` runtime uses repository-level equivalents; retain
+that fallback instead of interpreting selected membership as consumption proof.
 
 Probe the current `gh` credential before mutation:
 
@@ -397,7 +423,9 @@ For each pending pilot:
 7. Only then update activation status; confirmation and fuzzy remain off
 
 Generated evidence for the central delivery:
-`artifacts/platform/2026-07-14-commit-pr-mc-routing/`.
+`artifacts/platform/2026-07-14-commit-pr-mc-routing/`. TASK-456 production
+cutover evidence:
+`artifacts/platform/2026-07-15-task-456-routing-cutover/`.
 
 ---
 

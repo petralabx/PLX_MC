@@ -8,10 +8,10 @@
   "policyVersion": "routing.v1",
   "fuzzyAutoLinkEnabled": false,
   "activation": {
-    "status": "pending_downstream_pr",
+    "status": "active",
     "localManifest": ".plx/mc-routing.json",
     "workflowManifest": ".github/plx-mc-routing-manifest.json",
-    "notes": "Central descriptor only. Activation PR in skills is a follow-up MC task — this project does not claim downstream activation."
+    "notes": "Downstream shadow metadata workflow activation merged in petralabx/skills PR #7 with successful routing runs."
   },
   "defaultBucket": "BKT-INFRA",
   "owner": "Vince"

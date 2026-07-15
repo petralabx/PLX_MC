@@ -74,27 +74,26 @@ export function WelcomeClient() {
         </section>
 
         <section className="mc-welcome-card" aria-labelledby="skills-heading">
-          <h2 id="skills-heading">Company skills (optional)</h2>
+          <h2 id="skills-heading">Company skills</h2>
           <p>
-            Skills are files agents use on your laptop. If you only browse Mission
-            Control, skip this.
+            Skills are files Cursor agents use on your laptop. Easiest path on
+            Windows: download the installer and double-click it — it clones what
+            it needs and runs the install. No API keys, no folder hunting.
           </p>
-          <p>
-            <strong>Easiest:</strong> book 10 minutes with Vince — they run the
-            one-time install with you. You do not need to choose folders or learn
-            the terminal.
+          <a
+            className="mc-welcome-cta"
+            href="https://github.com/petralabx/PLX_MC/blob/main/scripts/Install-Company-Skills.cmd"
+            rel="noreferrer"
+          >
+            Open Install-Company-Skills.cmd
+          </a>
+          <p className="mc-welcome-hint">
+            On GitHub: click the raw/download control (or “Download raw file”),
+            save the <code>.cmd</code>, then double-click. Needs Git for Windows
+            once. After it finishes, fully quit Cursor and reopen.
           </p>
-          <p>
-            Technical self-serve (after PLX_MC is already cloned): Windows PowerShell
-            in that repo folder →{" "}
-            <code>.\scripts\bootstrap-company-skills.ps1</code>. Details:{" "}
-            <a
-              href="https://github.com/petralabx/PLX_MC/blob/main/docs/runbooks/mc-for-colleagues.md"
-              rel="noreferrer"
-            >
-              colleague guide
-            </a>
-            .
+          <p className="mc-welcome-hint">
+            Prefer Vince to run it with you? Book 10 minutes — same outcome.
           </p>
         </section>
       </details>

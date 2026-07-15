@@ -36,17 +36,23 @@ Details: [plx-mc-mcp-team-registration.md](./plx-mc-mcp-team-registration.md)
 
 ### Company skills
 
-Skills are files on your laptop for agents. Browser-only users: skip.
+Skills are files on your laptop for Cursor agents.
 
-**Easiest:** 10 minutes with Vince — they run the one-time install. You do not pick folders.
+**Easiest (Windows):** download and double-click
+[`scripts/Install-Company-Skills.cmd`](../../scripts/Install-Company-Skills.cmd)
+from this repo (GitHub → file → Download raw file). It finds or clones `PLX_MC`,
+runs the bootstrap, and installs into `~/.cursor/skills`. No secrets. Then fully
+quit and reopen Cursor.
 
-**Self-serve (technical):** clone `petralabx/PLX_MC`, open a terminal **in that repo folder**, then:
+**Still stuck:** 10 minutes with Vince — same installer.
+
+**Technical self-serve:** clone `petralabx/PLX_MC`, then:
 
 ```powershell
 .\scripts\bootstrap-company-skills.ps1
 ```
 
-Full SOP: [SKILLS-SOP.md](../SKILLS-SOP.md). MCP ≠ skills — do both only if you use Cursor agents.
+Full SOP: [SKILLS-SOP.md](../SKILLS-SOP.md). MCP ≠ skills — do both if you use Cursor agents.
 
 Do **not** download env/secret zip files. Secrets stay in AWS / team Cursor MCP.
 

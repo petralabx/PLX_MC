@@ -23,15 +23,19 @@ const m = vi.hoisted(() => ({
     reason: "" as string,
   },
   bindResult: { ok: true as boolean, reason: "" as string },
+  bindInputs: [] as Array<Record<string, unknown>>,
+  proposeInputs: [] as Array<Record<string, unknown>>,
   proposeResult: {
     proposalId: "rpp_petralabx_PLX_MC:42",
     revisionId: "rpr_x",
     state: "action_required" as const,
-    deepLink: "https://mc.plxcustomer.io/routing?proposal=rpp_x",
+    deepLink: "https://mc.plxcustomer.io/routing?proposal=rpp_x" as string | null,
     sessionId: null as string | null,
     candidates: [] as unknown[],
     bodyContentHash: "deadbeef",
     policyVersion: "routing.v1",
+    configuredMode: "suggestion" as "shadow" | "suggestion" | "confirmation",
+    effectiveMode: "suggestion" as "shadow" | "suggestion" | "confirmation",
   },
 }));
 
@@ -45,14 +49,20 @@ vi.mock("@/lib/compliance/github-oidc", () => ({
     m.verifyResult.ok
       ? { ok: true, claims: m.verifyResult.claims }
       : { ok: false, reason: m.verifyResult.reason },
-  bindOidcClaimsToPropose: () =>
-    m.bindResult.ok ? { ok: true } : { ok: false, reason: m.bindResult.reason },
+  bindOidcClaimsToPropose: (
+    _claims: Record<string, unknown>,
+    input: Record<string, unknown>
+  ) => {
+    m.bindInputs.push(input);
+    return m.bindResult.ok ? { ok: true } : { ok: false, reason: m.bindResult.reason };
+  },
 }));
 
 vi.mock("@/lib/compliance/service", () => ({
-  proposeRoutingFromPr: async (input: { body?: string }) => {
+  proposeRoutingFromPr: async (input: Record<string, unknown>) => {
     // Prove route never requires callers to persist body; service receives it in-memory.
     expect(typeof input.body === "string" || input.body === undefined).toBe(true);
+    m.proposeInputs.push(input);
     return m.proposeResult;
   },
 }));
@@ -81,6 +91,7 @@ const goodBody = {
   headSha: "abc123",
   title: "x",
   body: "in-memory only",
+  merged: false,
 };
 
 beforeEach(() => {
@@ -90,6 +101,11 @@ beforeEach(() => {
   m.verifyResult.reason = "";
   m.bindResult.ok = true;
   m.bindResult.reason = "";
+  m.bindInputs.length = 0;
+  m.proposeInputs.length = 0;
+  m.proposeResult.deepLink = "https://mc.plxcustomer.io/routing?proposal=rpp_x";
+  m.proposeResult.configuredMode = "suggestion";
+  m.proposeResult.effectiveMode = "suggestion";
 });
 
 describe("POST /api/routing/propose", () => {
@@ -125,6 +141,48 @@ describe("POST /api/routing/propose", () => {
     expect(json.data.proposalId).toBe(m.proposeResult.proposalId);
     expect(json.data.state).toBe("action_required");
     expect(json.data.deepLink).toMatch(/routing\?proposal=/);
+    expect(json.data.configuredMode).toBe("suggestion");
+    expect(json.data.effectiveMode).toBe("suggestion");
+    expect(m.proposeInputs[0]).toMatchObject({
+      action: "opened",
+      merged: false,
+    });
     expect(JSON.stringify(json)).not.toMatch(/in-memory only/);
+  });
+
+  it("forwards merged closed metadata without returning it in the response", async () => {
+    const res = await POST(
+      req(
+        {
+          ...goodBody,
+          action: "closed",
+          merged: true,
+          mergeSha: "github-event-sha",
+        },
+        "Bearer good"
+      ),
+      emptyCtx
+    );
+    expect(res.status).toBe(200);
+    expect(m.proposeInputs[0]).toMatchObject({
+      action: "closed",
+      merged: true,
+      mergeSha: "github-event-sha",
+    });
+    expect(m.bindInputs[0]).not.toHaveProperty("merged");
+    const json = await res.json();
+    expect(json).not.toHaveProperty("data.merged");
+    expect(json).not.toHaveProperty("data.mergeSha");
+  });
+
+  it("preserves a nullable deep link for shadow responses", async () => {
+    m.proposeResult.deepLink = null;
+    m.proposeResult.configuredMode = "shadow";
+    m.proposeResult.effectiveMode = "shadow";
+    const res = await POST(req(goodBody, "Bearer good"), emptyCtx);
+    const json = (await res.json()) as { data: Record<string, unknown> };
+    expect(json.data.deepLink).toBeNull();
+    expect(json.data.configuredMode).toBe("shadow");
+    expect(json.data.effectiveMode).toBe("shadow");
   });
 });

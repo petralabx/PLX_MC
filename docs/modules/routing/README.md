@@ -15,11 +15,14 @@ auto-link remains disabled for every pilot.
 
 ## Why
 
-Operator PRs without a checkout currently create sparse Tasks. Agents need
-pre-checkout suggestions without inventing work. A shared typed persistence and
-marker layer lets MCP, metadata workflows, webhooks, and the Routing Inbox share
-one replay-safe proposal identity (`{repoId, changeId}`) and `rtx_*` sessions
-without persisting raw PR bodies.
+Sparse operator-PR Task creation is retired. When an agent does not know the
+Task, it must stop before editing. Suggestion cohorts may call
+`mc_suggest_work`; shadow/unknown/unavailable suggestion paths require the
+accountable human to search MC and create/assign work in the registry default
+Bucket. A shared typed persistence and marker layer lets MCP, metadata
+workflows, webhooks, and the Routing Inbox share one replay-safe proposal
+identity (`{repoId, changeId}`) and `rtx_*` sessions without persisting raw PR
+bodies. Human PRs remain normal and non-blocking.
 
 ## How
 
@@ -42,11 +45,29 @@ without persisting raw PR bodies.
   `config/routing-pilots/*`): shadow/suggestion/confirmation modes, research
   thresholds, Wilson CI lower bound, per-cohort + rolling-window evaluation,
   automatic demotion to suggestion-only, kill-switch snapshot, `rolloutHealth()`.
-  Fuzzy auto-link forced off.
+  Eight enabled cohorts are descriptor-valid/config healthy; three are suggestion
+  (`PLX_MC`, portal, swarm) and five are shadow (skills, local-inference,
+  `1hr-after`, Furgenics, For & Against). `minRepos` remains the independent
+  research threshold of five. Confirmation and fuzzy auto-link are off.
+- **Visibility contract**: Inbox must be enabled and verified before suggestion.
+  Suggestion-mode GitHub output is a generic authenticated MC link only;
+  candidate IDs/reasons remain in MC. Shadow output contains no link or visible
+  candidates.
+- **Authority split**: MC owns planning records and explicit decisions; GitHub
+  owns PR identity/lifecycle metadata; repository governance owns team
+  assignment through `AGENTS.md`, module contracts, and `CODEOWNERS` plus local
+  declarations/CI; fleet governance owns cohort enrollment and priors. Routing
+  never overrides repository team ownership.
 - **Retention** (`retention.ts`): expire provisional sessions and proposal
   detail; never delete final typed links or append-only audit events.
 - **Maintenance cron** (`/api/cron/routing-maintenance`): `CRON_SECRET` +
   durable `sp_routing_maintenance` + `routing.maintain` only.
+- **Health semantics**: `rolloutHealth()` proves descriptor/config health only
+  (`scope: "descriptor_config"`; registry intersection, 3/5/0 modes,
+  tier/default-Bucket parity, fuzzy off). Its `reasons[]` reports configuration
+  mismatches. Live activation additionally requires selected variables,
+  full-slug OIDC binding, the copied workflow, and recorded run/proposal/audit
+  evidence.
 
 ```ts
 import { parseRoutingMarkers, upsertRoutingProposal, rolloutHealth } from "@/lib/routing";
@@ -70,7 +91,9 @@ rolloutHealth(); // pilots + fuzzy-off invariant
 - `src/lib/routing/persistence/` — SQL helpers / constants
 - `src/app/api/cron/routing-maintenance/route.ts`
 - `config/mc-routing-rollout.json`, `config/routing-pilots/`
-- `.plx/mc-routing.json` — PLX_MC path-routing manifest
+- `.github/plx-mc-routing-manifest.json` — copied generated declaration
+- `.plx/mc-routing.json` — optional path-rule declaration; **not consumed by the
+  current runtime**
 - `docs/runbooks/mc-routing-rollout.md`
 - `db/migrations/017_routing_proposals.sql`
 - `db/migrations/018_routing_links_and_task_sequence.sql`
@@ -82,6 +105,12 @@ rolloutHealth(); // pilots + fuzzy-off invariant
   via numbered migrations; `src/lib/permissions` for maintenance authorization.
 - Depended on by: MCP suggest/confirm, compliance propose/projection, Routing
   Inbox, metadata workflow, maintenance cron.
+- Metadata workflow boundary: exact `https://mc.plxcustomer.io` validation
+  precedes OIDC audience `plx-mc-compliance-verify`; same-repo metadata only,
+  20-second warn-only delivery, no checkout/code/dependency/cache execution.
+  Fork/Dependabot paths are skips, not activation proof. Distribution remains
+  copied/generated; reusable workflows, Checks writes, and ruleset expansion
+  are deferred.
 
 ## Owner
 

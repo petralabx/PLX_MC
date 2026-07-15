@@ -132,50 +132,86 @@ integrations:
     name: Commit/PR → Mission Control routing (shadow → suggestion → confirmation)
     owner: Vince (vince@petrasoap.com)
     criticality: High
-    scope: runtime (gated; pilots start in shadow)
-    autonomous: false # recommendations only until authorized human confirmation; no fuzzy auto-link
-    default_state: off (shadow/suggest/confirm flags default 0; proposals default on once deployed)
+    scope: >-
+      Runtime control plane plus copied generated metadata workflows. Eight
+      active fleet cohorts are declared; PLX_MC is central-ready,
+      plx-customer-portal is the only active downstream workflow, and every
+      other downstream activation remains a separate task/PR.
+    autonomous: false # advisory routing only; humans explicitly select/create and their PRs remain non-blocking
+    default_state: >-
+      Code defaults are mixed: proposals, metadata, and maintenance are on unless
+      explicitly set to 0; shadow, suggest, confirm, and Inbox are off unless set
+      to 1; fuzzy auto-link is forced off. Committed pilot descriptors declare
+      suggestion for PLX_MC/portal/agentic-swarm and shadow for skills/
+      local-inference/1hr-after/furgenics/for-and-against. Operator rollout
+      enables Inbox before suggestions and uses selected-repo metadata variables.
+      Compliance full-repo binding defaults on unless explicitly set to 0.
     feature_flag: >-
       PLX_MC_ROUTING_SHADOW_ENABLED, PLX_MC_ROUTING_SUGGEST_ENABLED,
       PLX_MC_ROUTING_CONFIRM_ENABLED, PLX_MC_ROUTING_PROPOSALS_ENABLED,
       PLX_MC_ROUTING_METADATA_ENABLED, PLX_MC_ROUTING_INBOX_ENABLED,
       PLX_MC_ROUTING_MAINTENANCE_ENABLED; fuzzy PLX_MC_ROUTING_FUZZY_AUTOLINK_ENABLED
       remains forced off for every pilot (config/mc-routing-rollout.json +
-      src/lib/routing/rollout.ts).
+      src/lib/routing/rollout.ts). Inbox must be enabled/healthy before
+      suggestions. Consumer workflows use selected-repo Actions variables
+      PLX_MC_BASE_URL and PLX_MC_ROUTING_METADATA_ENABLED.
+      PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED defaults to 1.
     kill_switch: >-
       Flip the relevant PLX_MC_ROUTING_* flag to 0 (or unset). Disabling proposals
       records explicit triage/audit and never restores silent sparse Task creation.
+      A repo-level PLX_MC_ROUTING_METADATA_ENABLED=0 overrides an org variable.
       Maintenance: PLX_MC_ROUTING_MAINTENANCE_ENABLED=0 or remove the
       /api/cron/routing-maintenance vercel.json entry / unset CRON_SECRET.
       Graph webhook: PLX_MC_GRAPH_WEBHOOK_ENABLED=0 retains five-minute delta recovery.
+      PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED=0 is a temporary emergency
+      migration downgrade to bare-name checkout matching, not normal rollback.
     auth_source:
       - Entra OIDC sessions (human Routing Inbox / decide APIs) — durable oid
       - MCP service principal sp_mcp_cursor (suggest/confirm) via PLX_MC_MCP_API_KEY
-      - GitHub Actions OIDC principal sp_github_actions_routing (propose)
+      - GitHub Actions OIDC principal sp_github_actions_routing (metadata propose) — exact https://mc.plxcustomer.io destination validated before audience plx-mc-compliance-verify
+      - Compliance OIDC binds repoFullName to the signed repository claim; new generated callers send full + legacy bare names during the dated shim
+      - GitHub Actions selected-repo org variables managed by org-admin keyring OAuth; a fine-grained repo PAT may lack org-variable administration; secrets.PLX_MC_BASE_URL is legacy URL fallback only
       - Routing maintenance principal sp_routing_maintenance (cron retention/demotion)
       - Compliance projection principal sp_compliance_projection (merge/link projection)
     health_check: >-
-      rolloutHealth() in src/lib/routing/rollout.ts (five pilots, fuzzy off,
-      kill-switch snapshot); mc_self_check for MCP; Routing Inbox flag probe;
+      rolloutHealth() is descriptor/config health only (eight enabled pilots,
+      fuzzy off, kill-switch snapshot; thresholds.minRepos remains five), not
+      proof of live activation. Live health additionally requires selected
+      variables, full-slug OIDC/repository binding, the copied workflow, and a
+      recorded proposal/run ID plus matching audit evidence. mc_self_check covers MCP; Routing Inbox flag probe before suggestion;
       cron /api/cron/routing-maintenance returns enabled + demotion counts when
-      CRON_SECRET + sp_routing_maintenance are configured.
+      CRON_SECRET + sp_routing_maintenance are configured. Activation health
+      uses a same-repo, non-Dependabot PR; fork/Dependabot skip paths do not count.
     fallback_path: >-
       Shadow-only or suggestion-only per cohort; breached confirmation cohorts
-      auto-demote to suggestion. Metadata workflow can be skipped via
-      PLX_MC_ROUTING_METADATA_ENABLED without affecting compliance. Sparse
-      operator-PR Task creation stays retired — unresolved work goes to Routing
-      Inbox / explicit triage, never silent Task invent. Downstream pilot
-      activation is follow-up MC tasks/PRs (not claimed by the central runtime PR).
+      auto-demote to suggestion. Suggestion GitHub output is a generic
+      authenticated MC link only; shadow returns no link/candidates. Metadata
+      delivery is metadata-only, bounded to 20 seconds, warning-only, and can
+      be skipped via PLX_MC_ROUTING_METADATA_ENABLED without affecting
+      compliance. Sparse Task creation stays retired. Suggestion-enabled agents
+      use mc_suggest_work; shadow/unknown/unavailable paths stop before edit for
+      the accountable human to search/create/assign in the registry default Bucket.
     data_audit_boundary: >-
       Raw PR bodies never persisted (hash + markers only). Proposal/candidate
       detail retained 90 days after resolution; final typed links + audit for
       Task lifetime + 1 year. Maintenance expires provisional sessions and
-      detail only — never final links or append-only mc_events.
+      detail only — never final links or append-only mc_events. GitHub summaries
+      never expose candidate IDs/reasons; candidates remain inside authenticated
+      MC. The workflow reads metadata only and does not check out or execute PR code.
+      Routing never overrides team ownership in repo AGENTS.md, module contracts,
+      or CODEOWNERS.
     deferred:
       - GitHub App checks:write / check_run.requested_action (phase-one App scope
         stays read-only Contents/Metadata — new approved spec required)
+      - Reusable-workflow, required-workflow, and org-ruleset expansion (consumer
+        repos keep copied generated workflows)
       - Fuzzy auto-link promotion (forbidden for this project; separate precision
-        gate: 300/30d/5 repos/20 per cohort/≥98% top-1/≥95% CI LB/≤0.5% dup/≤1%
+        gate — 300/30d/5 repos/20 per cohort/≥98% top-1/≥95% CI LB/≤0.5% dup/≤1%
         bucket correction/zero auth incidents)
-      - Downstream activation PRs for plx-customer-portal, agentic-swarm, skills,
-        local-inference
+      - Central fleet activation is TASK-452; downstream activation PRs/tasks
+        for agentic-swarm (TASK-448), skills
+        (TASK-449), local-inference (TASK-450), 1hr-after (TASK-453), furgenics
+        (TASK-454), and for-and-against (TASK-455); portal TASK-447 is complete
+      - Bare-name compliance shim removal after 2026-10-15, only after all fleet
+        gates refresh and old checkout dispatches expire
+      - Runtime consumption/enforcement of optional .plx/mc-routing.json path rules

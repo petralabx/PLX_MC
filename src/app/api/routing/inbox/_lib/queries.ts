@@ -2,6 +2,7 @@
 // does not extend src/lib/routing/repo.ts (owned by earlier phases).
 
 import { query } from "@/lib/db";
+import { listSuggestionVisibleRepos } from "@/lib/routing";
 import type {
   InboxCandidateDto,
   InboxProposalDetail,
@@ -95,6 +96,7 @@ export async function listInboxProposals(
   input: ListInboxInput
 ): Promise<{ proposals: InboxProposalSummary[]; counts: Record<InboxScope, number> }> {
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const visibleRepos = listSuggestionVisibleRepos();
 
   const baseSelect = `
     SELECT p.id, p.repo_id, p.change_id, p.title, p.state, p.failure_reason,
@@ -116,17 +118,21 @@ export async function listInboxProposals(
          LIMIT 1
       ) c ON true
      WHERE p.state = ANY($1::text[])
+       AND p.repo_id = ANY($2::text[])
   `;
 
   let whereExtra = "";
-  const params: unknown[] = [[...OPEN_STATES]];
+  const params: unknown[] = [[...OPEN_STATES], visibleRepos];
 
   if (input.scope === "personal") {
     params.push(input.actorId);
     whereExtra = ` AND s.actor_id = $${params.length} AND s.status = 'active'`;
   } else if (input.scope === "project") {
     if (!input.projectId) {
-      return { proposals: [], counts: await countByScope(input.actorId) };
+      return {
+        proposals: [],
+        counts: await countByScope(input.actorId, visibleRepos),
+      };
     }
     params.push(input.projectId);
     whereExtra = ` AND (
@@ -135,7 +141,10 @@ export async function listInboxProposals(
     )`;
   } else if (input.scope === "bucket") {
     if (!input.bucketId) {
-      return { proposals: [], counts: await countByScope(input.actorId) };
+      return {
+        proposals: [],
+        counts: await countByScope(input.actorId, visibleRepos),
+      };
     }
     params.push(input.bucketId);
     whereExtra = ` AND (
@@ -160,11 +169,14 @@ export async function listInboxProposals(
 
   return {
     proposals: rows.map(mapSummary),
-    counts: await countByScope(input.actorId),
+    counts: await countByScope(input.actorId, visibleRepos),
   };
 }
 
-async function countByScope(actorId: string): Promise<Record<InboxScope, number>> {
+async function countByScope(
+  actorId: string,
+  visibleRepos: string[]
+): Promise<Record<InboxScope, number>> {
   const rows = await query<{ scope: string; n: string | number }>(
     `WITH open_p AS (
        SELECT p.id, p.derived_project_id, p.selected_bucket_id, p.session_id,
@@ -181,9 +193,10 @@ async function countByScope(actorId: string): Promise<Record<InboxScope, number>
             LIMIT 1
          ) c ON true
         WHERE p.state = ANY($1::text[])
+          AND p.repo_id = ANY($2::text[])
      )
      SELECT 'personal'::text AS scope, COUNT(*)::int AS n FROM open_p
-      WHERE actor_id = $2 AND session_status = 'active'
+      WHERE actor_id = $3 AND session_status = 'active'
      UNION ALL
      SELECT 'project', COUNT(*)::int FROM open_p
       WHERE derived_project_id IS NOT NULL OR top_project_id IS NOT NULL
@@ -194,7 +207,7 @@ async function countByScope(actorId: string): Promise<Record<InboxScope, number>
      SELECT 'unrouted', COUNT(*)::int FROM open_p
       WHERE derived_project_id IS NULL AND selected_bucket_id IS NULL
         AND top_project_id IS NULL AND top_bucket_id IS NULL`,
-    [[...OPEN_STATES], actorId]
+    [[...OPEN_STATES], visibleRepos, actorId]
   );
 
   const counts: Record<InboxScope, number> = {
@@ -213,6 +226,7 @@ async function countByScope(actorId: string): Promise<Record<InboxScope, number>
 export async function getInboxProposalDetail(
   proposalId: string
 ): Promise<InboxProposalDetail | null> {
+  const visibleRepos = listSuggestionVisibleRepos();
   const rows = await query<Record<string, unknown>>(
     `SELECT p.id, p.repo_id, p.change_id, p.title, p.state, p.failure_reason,
             p.derived_project_id, p.selected_bucket_id, p.selected_task_id,
@@ -229,8 +243,9 @@ export async function getInboxProposalDetail(
           LIMIT 1
        ) r ON true
       WHERE p.id = $1
+        AND p.repo_id = ANY($2::text[])
       LIMIT 1`,
-    [proposalId]
+    [proposalId, visibleRepos]
   );
   const row = rows[0];
   if (!row) return null;

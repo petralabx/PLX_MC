@@ -8,6 +8,7 @@ import {
   evaluateCohortMetrics,
   evaluateRollingWindow,
   resolveCohortRuntimeState,
+  resolveRepoCohortRuntimeState,
   demoteBreachedCohorts,
   isFuzzyAutoLinkAllowedForRollout,
   wilsonLowerBound,
@@ -16,6 +17,7 @@ import {
   type CohortMetrics,
   type RollingDecision,
   type PilotDescriptor,
+  type TrackedRepoEntry,
 } from "@/lib/routing/rollout";
 import { FUZZY_AUTOLINK_ENABLED } from "@/lib/routing/config";
 
@@ -71,29 +73,138 @@ describe("rollout config invariants", () => {
 });
 
 describe("pilot enrollment", () => {
-  it("enrolls exactly the five intended pilots with fuzzy off", () => {
+  it("enrolls exactly eight enabled cohorts with the intended modes and fuzzy off", () => {
     const pilots = listPilotDescriptors();
-    expect(pilots).toHaveLength(5);
-    expect(pilots.map((p) => p.cohortId).sort()).toEqual(
-      [
-        "agentic-swarm",
-        "local-inference",
-        "plx-customer-portal",
-        "plx-mc",
-        "skills",
-      ].sort()
-    );
+    expect(pilots).toHaveLength(8);
+    expect(
+      Object.fromEntries(pilots.map((p) => [p.repo, p.mode]))
+    ).toEqual({
+      "petralabx/PLX_MC": "suggestion",
+      "petralabx/plx-customer-portal": "suggestion",
+      "petralabx/agentic-swarm": "suggestion",
+      "petralabx/skills": "shadow",
+      "petralabx/local-inference": "shadow",
+      "petralabx/1hr-after": "shadow",
+      "petralabx/furgenics": "shadow",
+      "petralabx/for-and-against": "shadow",
+    });
     for (const pilot of pilots) {
       expect(pilot.fuzzyAutoLinkEnabled).toBe(false);
       expect(pilot.enabled).toBe(true);
-      expect(pilot.mode).toBe("shadow");
     }
     expect(getPilotByRepo("petralabx/PLX_MC")?.activation.status).toBe("central_ready");
+    expect(getPilotByRepo("petralabx/plx-customer-portal")?.activation.status).toBe(
+      "active"
+    );
     expect(getPilotByRepo("petralabx/skills")?.activation.status).toBe(
       "pending_downstream_pr"
     );
     expect(rolloutHealth().ok).toBe(true);
+    expect(rolloutHealth().pilots).toBe(8);
+    expect(rolloutHealth().reasons).toEqual([]);
+    expect(rolloutHealth().configuredModes).toEqual({
+      suggestion: 3,
+      shadow: 5,
+      confirmation: 0,
+    });
+    expect(rolloutHealth().scope).toBe("descriptor_config");
+    expect(loadRolloutConfig().thresholds.minRepos).toBe(5);
     expect(rolloutHealth().deferredChecksApi).toBe(true);
+  });
+
+  it("fails closed for unknown and disabled repo cohorts", () => {
+    expect(resolveRepoCohortRuntimeState("petralabx/unknown")).toBeNull();
+
+    const plx = getPilotByRepo("petralabx/PLX_MC")!;
+    expect(
+      resolveRepoCohortRuntimeState(
+        plx.repo,
+        {},
+        [{ ...plx, enabled: false }]
+      )
+    ).toBeNull();
+  });
+
+  it("requires active non-sandbox tracked registry membership", () => {
+    const previousShadow = process.env.PLX_MC_ROUTING_SHADOW_ENABLED;
+    process.env.PLX_MC_ROUTING_SHADOW_ENABLED = "1";
+    const pilot = getPilotByRepo("petralabx/PLX_MC")!;
+    const active: TrackedRepoEntry[] = [
+      { repo: pilot.repo, status: "active", tier: "hub" },
+    ];
+    expect(
+      resolveRepoCohortRuntimeState(pilot.repo, {}, [pilot], active)
+    ).not.toBeNull();
+    expect(
+      resolveRepoCohortRuntimeState(
+        pilot.repo,
+        {},
+        [pilot],
+        [{ ...active[0], status: "inactive" }]
+      )
+    ).toBeNull();
+    expect(
+      resolveRepoCohortRuntimeState(pilot.repo, {}, [pilot], [])
+    ).toBeNull();
+    expect(
+      resolveRepoCohortRuntimeState(
+        pilot.repo,
+        {},
+        [pilot],
+        [{ ...active[0], tier: "sandbox" }]
+      )
+    ).toBeNull();
+    if (previousShadow === undefined) delete process.env.PLX_MC_ROUTING_SHADOW_ENABLED;
+    else process.env.PLX_MC_ROUTING_SHADOW_ENABLED = previousShadow;
+  });
+});
+
+describe("rollout descriptor health reasons", () => {
+  const registryFor = (pilots: PilotDescriptor[]): TrackedRepoEntry[] =>
+    pilots.map((pilot) => ({
+      repo: pilot.repo,
+      status: "active",
+      tier: pilot.tier,
+      default_bucket: pilot.defaultBucket,
+    }));
+
+  it("reports duplicate/count, registry, modes, tier, bucket, and fuzzy failures", () => {
+    const pilots = listPilotDescriptors();
+    const duplicate = [...pilots, { ...pilots[0], cohortId: "duplicate" }];
+    const duplicateHealth = rolloutHealth(duplicate, registryFor(pilots));
+    expect(duplicateHealth.reasons).toContain("enabled_pilot_count_not_8");
+    expect(duplicateHealth.reasons).toContain("duplicate_enabled_pilot_repo");
+
+    const registryMismatch = registryFor(pilots).slice(1);
+    expect(rolloutHealth(pilots, registryMismatch).reasons).toContain(
+      "active_registry_intersection_mismatch"
+    );
+
+    const wrongMode = [{ ...pilots[0], mode: "shadow" as const }, ...pilots.slice(1)];
+    expect(rolloutHealth(wrongMode, registryFor(wrongMode)).reasons).toContain(
+      "configured_mode_distribution_mismatch"
+    );
+
+    const wrongTier = [{ ...pilots[0], tier: "wrong" }, ...pilots.slice(1)];
+    expect(rolloutHealth(wrongTier, registryFor(pilots)).reasons).toContain(
+      `tier_mismatch:${pilots[0].repo}`
+    );
+
+    const wrongBucket = [
+      { ...pilots[0], defaultBucket: "BKT-WRONG" },
+      ...pilots.slice(1),
+    ];
+    expect(rolloutHealth(wrongBucket, registryFor(pilots)).reasons).toContain(
+      `default_bucket_mismatch:${pilots[0].repo}`
+    );
+
+    const fuzzy = [
+      { ...pilots[0], fuzzyAutoLinkEnabled: true },
+      ...pilots.slice(1),
+    ];
+    expect(rolloutHealth(fuzzy, registryFor(fuzzy)).reasons).toContain(
+      `fuzzy_enabled:${pilots[0].repo}`
+    );
   });
 });
 
@@ -141,10 +252,14 @@ describe("metric gates", () => {
 describe("rolling-window breach demotion", () => {
   const prevConfirm = process.env.PLX_MC_ROUTING_CONFIRM_ENABLED;
   const prevSuggest = process.env.PLX_MC_ROUTING_SUGGEST_ENABLED;
+  const prevShadow = process.env.PLX_MC_ROUTING_SHADOW_ENABLED;
+  const prevInbox = process.env.PLX_MC_ROUTING_INBOX_ENABLED;
 
   beforeEach(() => {
+    process.env.PLX_MC_ROUTING_SHADOW_ENABLED = "1";
     process.env.PLX_MC_ROUTING_CONFIRM_ENABLED = "1";
     process.env.PLX_MC_ROUTING_SUGGEST_ENABLED = "1";
+    process.env.PLX_MC_ROUTING_INBOX_ENABLED = "1";
   });
 
   afterEach(() => {
@@ -152,6 +267,10 @@ describe("rolling-window breach demotion", () => {
     else process.env.PLX_MC_ROUTING_CONFIRM_ENABLED = prevConfirm;
     if (prevSuggest === undefined) delete process.env.PLX_MC_ROUTING_SUGGEST_ENABLED;
     else process.env.PLX_MC_ROUTING_SUGGEST_ENABLED = prevSuggest;
+    if (prevShadow === undefined) delete process.env.PLX_MC_ROUTING_SHADOW_ENABLED;
+    else process.env.PLX_MC_ROUTING_SHADOW_ENABLED = prevShadow;
+    if (prevInbox === undefined) delete process.env.PLX_MC_ROUTING_INBOX_ENABLED;
+    else process.env.PLX_MC_ROUTING_INBOX_ENABLED = prevInbox;
   });
 
   it("demotes confirmation cohorts to suggestion-only on rolling breach", () => {
@@ -206,6 +325,7 @@ describe("kill switches", () => {
   const keys = [
     "PLX_MC_ROUTING_SHADOW_ENABLED",
     "PLX_MC_ROUTING_SUGGEST_ENABLED",
+    "PLX_MC_ROUTING_INBOX_ENABLED",
     "PLX_MC_ROUTING_CONFIRM_ENABLED",
   ] as const;
   const prev: Record<string, string | undefined> = {};
@@ -213,7 +333,7 @@ describe("kill switches", () => {
   beforeEach(() => {
     for (const key of keys) {
       prev[key] = process.env[key];
-      delete process.env[key];
+      process.env[key] = "1";
     }
   });
 
@@ -229,9 +349,46 @@ describe("kill switches", () => {
       ...getPilotByRepo("petralabx/PLX_MC")!,
       mode: "confirmation",
     };
-    process.env.PLX_MC_ROUTING_SUGGEST_ENABLED = "1";
+    process.env.PLX_MC_ROUTING_CONFIRM_ENABLED = "0";
     const state = resolveCohortRuntimeState(pilot);
     expect(state.effectiveMode).toBe("suggestion");
     expect(state.demotionReasons).toContain("confirm_kill_switch");
+  });
+
+  it("clamps configured suggestion cohorts to shadow when suggest is off", () => {
+    process.env.PLX_MC_ROUTING_SUGGEST_ENABLED = "0";
+    const runtime = resolveRepoCohortRuntimeState("petralabx/PLX_MC");
+    expect(runtime?.state.configuredMode).toBe("suggestion");
+    expect(runtime?.state.effectiveMode).toBe("shadow");
+    expect(runtime?.state.demotionReasons).toContain("suggest_kill_switch");
+  });
+
+  it("makes every repo cohort unavailable when shadow is off", () => {
+    process.env.PLX_MC_ROUTING_SHADOW_ENABLED = "0";
+    for (const pilot of listPilotDescriptors()) {
+      expect(resolveRepoCohortRuntimeState(pilot.repo)).toBeNull();
+    }
+  });
+
+  it("clamps suggestion to shadow when Inbox is off", () => {
+    process.env.PLX_MC_ROUTING_INBOX_ENABLED = "0";
+    const runtime = resolveRepoCohortRuntimeState("petralabx/PLX_MC");
+    expect(runtime?.state.configuredMode).toBe("suggestion");
+    expect(runtime?.state.effectiveMode).toBe("shadow");
+    expect(runtime?.state.demotionReasons).toContain("inbox_kill_switch");
+  });
+
+  it("keeps confirmation visible only when every capability flag is on", () => {
+    const pilot: PilotDescriptor = {
+      ...getPilotByRepo("petralabx/PLX_MC")!,
+      mode: "confirmation",
+    };
+    expect(resolveCohortRuntimeState(pilot).effectiveMode).toBe("confirmation");
+
+    process.env.PLX_MC_ROUTING_SUGGEST_ENABLED = "0";
+    const clamped = resolveCohortRuntimeState(pilot);
+    expect(clamped.configuredMode).toBe("confirmation");
+    expect(clamped.effectiveMode).toBe("shadow");
+    expect(clamped.demotionReasons).toContain("suggest_kill_switch");
   });
 });

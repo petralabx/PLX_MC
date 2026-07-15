@@ -42,6 +42,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_REF: ${{ github.base_ref }}
           REPO_NAME: ${{ github.event.repository.name }}
+          REPO_FULL_NAME: ${{ github.repository }}
         run: |
           set -euo pipefail
           if [ -z "${MC_BASE_URL:-}" ]; then
@@ -73,15 +74,18 @@ jobs:
           # verify still gates the PR during the deploy window (back-compat); the
           # multi-task verify prefers checkoutIds and ignores it.
           checkout=$(printf '%s' "$checkoutIds" | jq -r '.[0] // ""')
+          # module-shim — remove after 2026-10-15: keep bare repo until all
+          # fleet workflows and verify callers send repoFullName.
           body=$(jq -n \
             --arg repo "$REPO_NAME" \
+            --arg repoFullName "$REPO_FULL_NAME" \
             --argjson prNumber "$PR_NUMBER" \
             --arg headSha "$PR_HEAD_SHA" \
             --argjson changedPaths "$changed" \
             --argjson labels "${PR_LABELS:-[]}" \
             --argjson checkoutIds "${checkoutIds:-[]}" \
             --arg checkoutId "${checkout:-}" \
-            '{repo:$repo, prNumber:$prNumber, headSha:$headSha, changedPaths:$changedPaths, labels:$labels, checkoutIds:$checkoutIds}
+            '{repo:$repo, repoFullName:$repoFullName, prNumber:$prNumber, headSha:$headSha, changedPaths:$changedPaths, labels:$labels, checkoutIds:$checkoutIds}
              + (if $checkoutId != "" then {checkoutId:$checkoutId} else {} end)')
           # Prefer OIDC; on unauthorized/verify_disabled (pre-deploy cutover when MC
           # is still bearer-only) retry once with COMPLIANCE_CI_TOKEN.

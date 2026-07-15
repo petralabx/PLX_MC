@@ -47,6 +47,7 @@ function parseArgs(argv) {
     idempotency: false,
     sequence: false,
     concurrency: false,
+    revisionAtomicity: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -56,8 +57,9 @@ function parseArgs(argv) {
     else if (arg === "--idempotency") out.idempotency = true;
     else if (arg === "--sequence") out.sequence = true;
     else if (arg === "--concurrency") out.concurrency = true;
+    else if (arg === "--revision-atomicity") out.revisionAtomicity = true;
     else if (arg === "--help" || arg === "-h") {
-      console.log(`Usage: node scripts/test-routing-postgres.mjs --through NNN [--schema] [--idempotency] [--sequence] [--concurrency]`);
+      console.log(`Usage: node scripts/test-routing-postgres.mjs --through NNN [--schema] [--idempotency] [--sequence] [--concurrency] [--revision-atomicity]`);
       process.exit(0);
     } else {
       throw new Error(`unknown argument: ${arg}`);
@@ -67,12 +69,72 @@ function parseArgs(argv) {
     throw new Error("--through NNN is required (e.g. --through 018)");
   }
   // Default: run all core assertion groups when none specified.
-  if (!out.schema && !out.idempotency && !out.sequence && !out.concurrency) {
+  if (
+    !out.schema &&
+    !out.idempotency &&
+    !out.sequence &&
+    !out.concurrency &&
+    !out.revisionAtomicity
+  ) {
     out.schema = true;
     out.idempotency = true;
     out.sequence = true;
   }
   return out;
+}
+
+const REVISION_UPSERT_SQL = `WITH persisted_revision AS (
+  INSERT INTO routing_proposal_revisions (
+    id, proposal_id, head_sha, policy_version, evidence_meta
+  ) VALUES ($1,$2,$3,$4,$5::jsonb)
+  ON CONFLICT (proposal_id, head_sha) DO UPDATE
+    SET proposal_id = routing_proposal_revisions.proposal_id
+  RETURNING id, proposal_id, head_sha, policy_version, evidence_meta, created_at
+),
+candidate_input AS (
+  SELECT *
+    FROM jsonb_to_recordset($6::jsonb) AS candidate(
+      rank integer,
+      task_id text,
+      bucket_id text,
+      project_id text,
+      match_score double precision,
+      authorization_trust text,
+      reasons jsonb
+    )
+),
+inserted_candidates AS (
+  INSERT INTO routing_revision_candidates (
+    id, revision_id, rank, task_id, bucket_id, project_id,
+    match_score, authorization_trust, reasons
+  )
+  SELECT
+    persisted_revision.id || '_c' || candidate_input.rank::text,
+    persisted_revision.id,
+    candidate_input.rank,
+    candidate_input.task_id,
+    candidate_input.bucket_id,
+    candidate_input.project_id,
+    candidate_input.match_score,
+    candidate_input.authorization_trust,
+    candidate_input.reasons
+  FROM persisted_revision
+  CROSS JOIN candidate_input
+  ON CONFLICT (revision_id, rank) DO NOTHING
+  RETURNING id
+)
+SELECT id, proposal_id, head_sha, policy_version, evidence_meta, created_at
+  FROM persisted_revision`;
+
+async function atomicUpsertRevision(client, input) {
+  return client.query(REVISION_UPSERT_SQL, [
+    input.id,
+    input.proposalId,
+    input.headSha,
+    input.policyVersion,
+    JSON.stringify(input.evidenceMeta),
+    JSON.stringify(input.candidates),
+  ]);
 }
 
 function refuseConfiguredUrls() {
@@ -406,6 +468,147 @@ async function assertConcurrency(url) {
   }
 }
 
+async function assertRevisionAtomicity(client, url) {
+  await client.query(
+    `INSERT INTO routing_proposals (id, repo_id, change_id, state)
+     VALUES ('rp_revision_atomic', 'repo-atomic', '1', 'action_required')`
+  );
+
+  let interrupted = false;
+  try {
+    await atomicUpsertRevision(client, {
+      id: "rr_interrupted",
+      proposalId: "rp_revision_atomic",
+      headSha: "interrupted-sha",
+      policyVersion: "routing.v1",
+      evidenceMeta: { title: "must roll back" },
+      candidates: [
+        {
+          rank: null,
+          task_id: "TASK-X",
+          bucket_id: "BKT-X",
+          project_id: null,
+          match_score: 1,
+          authorization_trust: "none",
+          reasons: [],
+        },
+      ],
+    });
+  } catch {
+    interrupted = true;
+  }
+  if (!interrupted) throw new Error("expected interrupted atomic revision insert to fail");
+  const interruptedCount = await client.query(
+    `SELECT count(*)::integer AS count
+       FROM routing_proposal_revisions
+      WHERE proposal_id = 'rp_revision_atomic' AND head_sha = 'interrupted-sha'`
+  );
+  if (interruptedCount.rows[0]?.count !== 0) {
+    throw new Error("partial revision survived interrupted candidate insertion");
+  }
+
+  const firstCandidates = [
+    {
+      rank: 1,
+      task_id: "TASK-1",
+      bucket_id: "BKT-A",
+      project_id: null,
+      match_score: 100,
+      authorization_trust: "none",
+      reasons: ["first"],
+    },
+    {
+      rank: 2,
+      task_id: "TASK-2",
+      bucket_id: "BKT-B",
+      project_id: null,
+      match_score: 80,
+      authorization_trust: "none",
+      reasons: ["second"],
+    },
+  ];
+  await atomicUpsertRevision(client, {
+    id: "rr_atomic",
+    proposalId: "rp_revision_atomic",
+    headSha: "atomic-sha",
+    policyVersion: "routing.v1",
+    evidenceMeta: { title: "first" },
+    candidates: firstCandidates,
+  });
+  await client.query(
+    `DELETE FROM routing_revision_candidates
+      WHERE revision_id = 'rr_atomic' AND rank = 2`
+  );
+  await atomicUpsertRevision(client, {
+    id: "rr_replay",
+    proposalId: "rp_revision_atomic",
+    headSha: "atomic-sha",
+    policyVersion: "routing.v2",
+    evidenceMeta: { title: "changed replay" },
+    candidates: [
+      { ...firstCandidates[0], task_id: "TASK-CHANGED" },
+      firstCandidates[1],
+    ],
+  });
+  const recovered = await client.query(
+    `SELECT r.policy_version, r.evidence_meta, c.rank, c.task_id
+       FROM routing_proposal_revisions r
+       JOIN routing_revision_candidates c ON c.revision_id = r.id
+      WHERE r.proposal_id = 'rp_revision_atomic' AND r.head_sha = 'atomic-sha'
+      ORDER BY c.rank`
+  );
+  if (
+    recovered.rows.length !== 2 ||
+    recovered.rows[0].policy_version !== "routing.v1" ||
+    recovered.rows[0].evidence_meta?.title !== "first" ||
+    recovered.rows[0].task_id !== "TASK-1" ||
+    recovered.rows[1].task_id !== "TASK-2"
+  ) {
+    throw new Error(`same-head recovery mismatch: ${JSON.stringify(recovered.rows)}`);
+  }
+
+  const first = new Client({ connectionString: url });
+  const second = new Client({ connectionString: url });
+  await Promise.all([first.connect(), second.connect()]);
+  try {
+    await Promise.all([
+      atomicUpsertRevision(first, {
+        id: "rr_concurrent_a",
+        proposalId: "rp_revision_atomic",
+        headSha: "concurrent-sha",
+        policyVersion: "routing.v1",
+        evidenceMeta: { title: "concurrent" },
+        candidates: firstCandidates,
+      }),
+      atomicUpsertRevision(second, {
+        id: "rr_concurrent_b",
+        proposalId: "rp_revision_atomic",
+        headSha: "concurrent-sha",
+        policyVersion: "routing.v1",
+        evidenceMeta: { title: "concurrent" },
+        candidates: firstCandidates,
+      }),
+    ]);
+  } finally {
+    await Promise.allSettled([first.end(), second.end()]);
+  }
+  const concurrent = await client.query(
+    `SELECT
+       count(DISTINCT r.id)::integer AS revisions,
+       count(c.id)::integer AS candidates
+     FROM routing_proposal_revisions r
+     LEFT JOIN routing_revision_candidates c ON c.revision_id = r.id
+     WHERE r.proposal_id = 'rp_revision_atomic' AND r.head_sha = 'concurrent-sha'`
+  );
+  if (
+    concurrent.rows[0]?.revisions !== 1 ||
+    concurrent.rows[0]?.candidates !== 2
+  ) {
+    throw new Error(`concurrent replay mismatch: ${JSON.stringify(concurrent.rows[0])}`);
+  }
+  console.log("revision atomicity assertions passed");
+}
+
 async function main() {
   refuseConfiguredUrls();
   const args = parseArgs(process.argv.slice(2));
@@ -449,6 +652,7 @@ async function main() {
     if (args.idempotency) await assertIdempotency(client, files);
     if (args.sequence) await assertSequence(client);
     if (args.concurrency) await assertConcurrency(url);
+    if (args.revisionAtomicity) await assertRevisionAtomicity(client, url);
 
     console.log("routing postgres harness OK");
     return 0;

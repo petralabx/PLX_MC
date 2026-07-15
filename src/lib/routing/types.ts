@@ -176,6 +176,7 @@ export interface RoutingRevisionRecord {
   headSha: string;
   policyVersion: string;
   evidenceMeta: RoutingEvidenceMeta;
+  candidates: RoutingCandidateRecord[];
   createdAt?: string;
 }
 

@@ -129,10 +129,11 @@ export const REPOS: Record<string, Repo> = {
   "portal-web": { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript · Next.js", def: "staging", owner: REPO_ORG_PLX, visibility: "private", scope: "Customer portal web application — the go-live codebase." },
   "agentic-swarm": { id: "agentic-swarm", name: "agentic-swarm", lang: "TypeScript", def: "main", owner: REPO_ORG_PLX, visibility: "private", scope: "Background agent swarm that does the work." },
   "plx-mc": { id: "plx-mc", name: "PLX_MC", lang: "TypeScript", def: "main", owner: REPO_ORG_PLX, visibility: "public", scope: "Mission Control — the human cockpit over the agents." },
-  "local-inference": { id: "local-inference", name: "local-inference", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "private", scope: "Local LLM inference runtime and tooling." },
-  "for-and-against": { id: "for-and-against", name: "for-and-against", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "private", scope: "For & Against consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
-  "furgenics": { id: "furgenics", name: "furgenics", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "private", scope: "Furgenics consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
-  "1hr-after": { id: "1hr-after", name: "1hr-after", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "private", scope: "1HR-After consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
+  "skills": { id: "skills", name: "skills", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "public", scope: "Shared agent skills catalog and distribution source." },
+  "local-inference": { id: "local-inference", name: "local-inference", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "public", scope: "Local LLM inference runtime and tooling." },
+  "for-and-against": { id: "for-and-against", name: "for-and-against", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "public", scope: "For & Against consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
+  "furgenics": { id: "furgenics", name: "furgenics", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "public", scope: "Furgenics consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
+  "1hr-after": { id: "1hr-after", name: "1hr-after", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "public", scope: "1HR-After consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
 };
 
 // Demo/prototype buckets purged 2026-06-11 — only the PLX Portal go-live plan
@@ -475,8 +476,8 @@ export const SP_LISTS: SpListDef[] = [
     // EN-002 / Item 2 — push-only mirror of the repo registry/allow-list. MC is
     // authoritative; persistence + approvals live in the plx_mc DB.
     key: "reporegistry", title: "Repo Registry", kind: "list", entity: "Repo", icon: "⎇",
-    maps: "Repo registry / allow-list", itemCount: 7, direction: "push",
-    lastSync: "—", counts: { synced: 0, pending: 7, conflict: 0, error: 0 },
+    maps: "Repo registry / allow-list", itemCount: 8, direction: "push",
+    lastSync: "—", counts: { synced: 0, pending: 8, conflict: 0, error: 0 },
     columns: [
       { name: "Repo ID", type: "Single line of text", mc: "id", dir: "push", required: true, note: "indexed · unique key" },
       { name: "Title", type: "Single line of text", mc: "name", dir: "push", required: true },

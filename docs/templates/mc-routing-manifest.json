@@ -20,16 +20,13 @@
     "schema_version": "plx-mc-routing-local/v1"
   },
   "rollout": {
-    "fuzzy_auto_link_enabled": false,
-    "default_mode": "shadow",
-    "breach_demotion_mode": "suggestion",
-    "central_config": "config/mc-routing-rollout.json"
+    "authoritative": false,
+    "authority": "central-pilot-descriptor",
+    "descriptor_reference": "config/routing-pilots/<repo>.json"
   },
   "kill_switches": {
-    "metadata": "PLX_MC_ROUTING_METADATA_ENABLED",
-    "suggest": "PLX_MC_ROUTING_SUGGEST_ENABLED",
-    "confirm": "PLX_MC_ROUTING_CONFIRM_ENABLED",
-    "fuzzy_auto_link": "PLX_MC_ROUTING_FUZZY_AUTOLINK_ENABLED"
+    "authoritative": false,
+    "authority": "central-runtime-and-repository-configuration"
   },
   "deferred": {
     "github_app_checks": "checks:write and check_run.requested_action require a new approved spec"

@@ -59,6 +59,8 @@ import {
 
 const ALLOWED_REPO = "petralabx/PLX_MC";
 const AUDIENCE = "plx-mc-compliance-verify";
+const CANONICAL_WORKFLOW_REF =
+  `${ALLOWED_REPO}/.github/workflows/mc-routing-metadata.yml@refs/heads/main`;
 
 function configuredOk() {
   m.complianceOidcConfigured.mockReturnValue(true);
@@ -76,7 +78,7 @@ function payload(overrides: Record<string, unknown> = {}) {
     event_name: "pull_request",
     ref: "refs/pull/42/merge",
     sha: "abc123def",
-    job_workflow_ref: `${ALLOWED_REPO}/.github/workflows/mc-routing-metadata.yml@refs/heads/main`,
+    job_workflow_ref: CANONICAL_WORKFLOW_REF,
     run_id: "555",
     repository_owner: "petralabx",
     ...overrides,
@@ -93,7 +95,7 @@ function claims(over: Partial<GitHubActionsOidcClaims> = {}): GitHubActionsOidcC
     eventName: "pull_request",
     ref: "refs/pull/42/merge",
     sha: "abc123def",
-    jobWorkflowRef: `${ALLOWED_REPO}/.github/workflows/mc-routing-metadata.yml@refs/heads/main`,
+    jobWorkflowRef: CANONICAL_WORKFLOW_REF,
     workflowRef: null,
     runId: "555",
     repositoryOwner: "petralabx",
@@ -182,6 +184,17 @@ describe("verifyGitHubActionsOidc", () => {
     }
   });
 
+  it("rejects a signed token without repository_id", async () => {
+    m.jwtVerify.mockResolvedValue({
+      payload: payload({ repository_id: undefined }),
+      protectedHeader: { alg: "RS256" },
+    });
+    await expect(verifyGitHubActionsOidc("missing-repo-id.jwt")).resolves.toEqual({
+      ok: false,
+      reason: "missing_repository_id",
+    });
+  });
+
   it("happy path: derives repository from sub when repository claim is absent", async () => {
     m.jwtVerify.mockResolvedValue({
       payload: payload({ repository: undefined }),
@@ -201,6 +214,7 @@ describe("bindOidcClaimsToPropose", () => {
     prNumber: 42,
     headSha: "abc123def",
     headRef: "feat/x",
+    workflowRef: CANONICAL_WORKFLOW_REF,
   };
 
   it("accepts tightly bound claims", () => {
@@ -217,6 +231,12 @@ describe("bindOidcClaimsToPropose", () => {
     expect(
       bindOidcClaimsToPropose(claims(), { ...base, repositoryId: "111" })
     ).toEqual({ ok: false, reason: "repository_id_mismatch" });
+  });
+
+  it("rejects a missing signed repository id", () => {
+    expect(
+      bindOidcClaimsToPropose(claims({ repositoryId: null }), base)
+    ).toEqual({ ok: false, reason: "missing_signed_repository_id" });
   });
 
   it("rejects non-pull_request events", () => {
@@ -246,14 +266,50 @@ describe("bindOidcClaimsToPropose", () => {
     ).toEqual({ ok: false, reason: "pr_ref_mismatch" });
   });
 
-  it("rejects unapproved workflow refs when allowlist is set", () => {
-    process.env.PLX_MC_ROUTING_OIDC_WORKFLOW_REFS =
-      "petralabx/PLX_MC/.github/workflows/mc-routing-metadata.yml@refs/heads/main";
+  it("rejects spoofed caller-submitted workflow refs", () => {
     expect(
       bindOidcClaimsToPropose(claims(), {
         ...base,
         workflowRef: "evil/repo/.github/workflows/x.yml@refs/heads/main",
       })
-    ).toEqual({ ok: false, reason: "workflow_ref_not_approved" });
+    ).toEqual({ ok: false, reason: "submitted_workflow_ref_mismatch" });
+  });
+
+  it("rejects a missing signed workflow ref", () => {
+    expect(
+      bindOidcClaimsToPropose(
+        claims({ jobWorkflowRef: null, workflowRef: null }),
+        base
+      )
+    ).toEqual({ ok: false, reason: "missing_signed_workflow_ref" });
+  });
+
+  it.each([
+    `${ALLOWED_REPO}/.github/workflows/other.yml@refs/heads/main`,
+    "evil/repo/.github/workflows/mc-routing-metadata.yml@refs/heads/main",
+  ])("rejects non-canonical signed workflow ref %s", (signedRef) => {
+    expect(
+      bindOidcClaimsToPropose(
+        claims({ jobWorkflowRef: signedRef }),
+        { ...base, workflowRef: signedRef }
+      )
+    ).toEqual({ ok: false, reason: "signed_workflow_ref_not_canonical" });
+  });
+
+  it("accepts the signed canonical repo/path with an empty optional allowlist", () => {
+    expect(process.env.PLX_MC_ROUTING_OIDC_WORKFLOW_REFS).toBeUndefined();
+    expect(bindOidcClaimsToPropose(claims(), base)).toEqual({ ok: true });
+  });
+
+  it("applies the optional exact workflow ref allowlist to the signed ref", () => {
+    process.env.PLX_MC_ROUTING_OIDC_WORKFLOW_REFS =
+      `${CANONICAL_WORKFLOW_REF},${ALLOWED_REPO}/.github/workflows/mc-routing-metadata.yml@refs/heads/staging`;
+    expect(bindOidcClaimsToPropose(claims(), base)).toEqual({ ok: true });
+    process.env.PLX_MC_ROUTING_OIDC_WORKFLOW_REFS =
+      `${ALLOWED_REPO}/.github/workflows/mc-routing-metadata.yml@refs/heads/staging`;
+    expect(bindOidcClaimsToPropose(claims(), base)).toEqual({
+      ok: false,
+      reason: "workflow_ref_not_approved",
+    });
   });
 });

@@ -93,6 +93,8 @@ Required GitHub checks: **CI**, **PLX MC Compliance Gate**.
 
 ## 7. Operator setup
 
-Repo secrets: `PLX_MC_BASE_URL`, `COMPLIANCE_CI_TOKEN`.  
+Public config: `PLX_MC_BASE_URL` (routing Actions variable; legacy compliance
+secret lookup remains during migration).
+Repo secret: `COMPLIANCE_CI_TOKEN` (never print its value).
 Repo variable: `COMPLIANCE_MODE` (`soft` → `hard` when ready).  
 Enable branch protection on `{{INTEGRATION_BRANCH}}` — require PR + checks.

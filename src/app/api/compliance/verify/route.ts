@@ -6,7 +6,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { ApiError, parseBody, route } from "@/lib/api/route";
-import { verifyGitHubActionsOidc } from "@/lib/compliance/github-oidc";
+import {
+  verifyGitHubActionsOidc,
+  type GitHubActionsOidcClaims,
+} from "@/lib/compliance/github-oidc";
 import { verifyPrOrQueue } from "@/lib/compliance/service";
 import {
   complianceCiToken,
@@ -20,6 +23,7 @@ import {
 // MC-Checkout per task for a multi-task PR; checkoutId stays for back-compat.
 const verifySchema = z.object({
   repo: z.string().min(1),
+  repoFullName: z.string().min(3).optional(),
   prNumber: z.number().int().nonnegative(),
   headSha: z.string().min(1),
   changedPaths: z.array(z.string()).default([]),
@@ -29,6 +33,7 @@ const verifySchema = z.object({
 });
 
 const UNAUTHORIZED = new ApiError("unauthorized", "Invalid or missing CI authorization.", 401);
+type VerifyBody = z.infer<typeof verifySchema>;
 
 function extractBearerToken(authorization: string | null): string | null {
   if (!authorization) return null;
@@ -41,6 +46,59 @@ function bearerTokenMatches(token: string, expected: string): boolean {
   const exp = Buffer.from(expected);
   if (got.length !== exp.length) return false;
   return timingSafeEqual(got, exp);
+}
+
+function signedComplianceWorkflowAllowed(
+  workflowRef: string,
+  signedRepository: string
+): boolean {
+  const workflow = workflowRef.split("@", 1)[0];
+  return (
+    workflow ===
+      `${signedRepository}/.github/workflows/plx-mc-compliance.yml` ||
+    workflow ===
+      `${signedRepository}/.github/workflows/compliance-gate.yml` ||
+    workflow ===
+      "petralabx/PLX_MC/.github/workflows/compliance-gate.yml"
+  );
+}
+
+function bindOidcVerifyBody(
+  body: VerifyBody,
+  claims: GitHubActionsOidcClaims
+): VerifyBody | null {
+  const signedRepoParts = claims.repository.split("/");
+  const signedBareRepo = signedRepoParts[1] ?? "";
+  if (!signedBareRepo || body.repo !== signedBareRepo) return null;
+  if (body.repoFullName && body.repoFullName !== claims.repository) return null;
+
+  const workflowRefs = [claims.workflowRef, claims.jobWorkflowRef].filter(
+    (value): value is string => value != null
+  );
+  if (
+    workflowRefs.length === 0 ||
+    workflowRefs.some(
+      (workflowRef) =>
+        !signedComplianceWorkflowAllowed(workflowRef, claims.repository)
+    )
+  ) {
+    return null;
+  }
+
+  if (claims.eventName != null && claims.eventName !== "pull_request") {
+    return null;
+  }
+  const prRef = /^refs\/pull\/(\d+)\/(head|merge)$/.exec(claims.ref ?? "");
+  if (prRef && Number(prRef[1]) !== body.prNumber) return null;
+  if (
+    prRef?.[2] === "head" &&
+    claims.sha != null &&
+    claims.sha.toLowerCase() !== body.headSha.toLowerCase()
+  ) {
+    return null;
+  }
+
+  return { ...body, repoFullName: claims.repository };
 }
 
 export const POST = route(async (req) => {
@@ -58,24 +116,33 @@ export const POST = route(async (req) => {
     );
   }
 
+  const body = await parseBody(req, verifySchema);
   const token = extractBearerToken(req.headers.get("authorization"));
   if (!token) {
     throw UNAUTHORIZED;
   }
 
   let authorized = false;
+  let verifiedBody = body;
   if (oidcAvailable) {
     const oidc = await verifyGitHubActionsOidc(token);
-    if (oidc.ok) authorized = true;
+    if (oidc.ok) {
+      const bound = bindOidcVerifyBody(body, oidc.claims);
+      if (bound) {
+        authorized = true;
+        verifiedBody = bound;
+      }
+    }
   }
   if (!authorized && bearerAvailable) {
     if (bearerTokenMatches(token, complianceCiToken())) {
       authorized = true;
+      verifiedBody = body;
     }
   }
   if (!authorized) {
     throw UNAUTHORIZED;
   }
 
-  return verifyPrOrQueue(await parseBody(req, verifySchema));
+  return verifyPrOrQueue(verifiedBody);
 });

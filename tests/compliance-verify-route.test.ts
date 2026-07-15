@@ -31,12 +31,28 @@ import { POST } from "@/app/api/compliance/verify/route";
 
 const ctx = { params: Promise.resolve({}) };
 const reqBody = { repo: "PLX_MC", prNumber: 1, headSha: "abc123", changedPaths: [] };
-const call = (authHeader?: string) =>
+const signedClaims = {
+  repository: "petralabx/PLX_MC",
+  repositoryId: "999",
+  sub: "repo:petralabx/PLX_MC:pull_request",
+  iss: "https://token.actions.githubusercontent.com",
+  aud: "aud",
+  eventName: "pull_request",
+  ref: "refs/pull/1/merge",
+  sha: "merge-ref-sha",
+  jobWorkflowRef:
+    "petralabx/PLX_MC/.github/workflows/compliance-gate.yml@refs/heads/main",
+  workflowRef:
+    "petralabx/PLX_MC/.github/workflows/plx-mc-compliance.yml@refs/heads/main",
+  runId: "77",
+  repositoryOwner: "petralabx",
+};
+const call = (authHeader?: string, body: Record<string, unknown> = reqBody) =>
   POST(
     new Request("http://test/api/compliance/verify", {
       method: "POST",
       headers: { "content-type": "application/json", ...(authHeader ? { authorization: authHeader } : {}) },
-      body: JSON.stringify(reqBody),
+      body: JSON.stringify(body),
     }),
     ctx
   );
@@ -86,13 +102,16 @@ describe("POST /api/compliance/verify — CI auth boundary", () => {
     m.complianceOidcConfigured.mockReturnValue(true);
     m.verifyGitHubActionsOidc.mockResolvedValue({
       ok: true,
-      claims: { repository: "org/repo", sub: "repo:org/repo:ref:refs/heads/main", iss: "https://token.actions.githubusercontent.com", aud: "aud" },
+      claims: signedClaims,
     });
     const resp = await call("Bearer oidc-jwt");
     expect(resp.status).toBe(200);
     expect(await resp.json()).toMatchObject({ data: { verdict: "pass" } });
     expect(m.verifyGitHubActionsOidc).toHaveBeenCalledWith("oidc-jwt");
-    expect(m.verifyPrOrQueue).toHaveBeenCalledTimes(1);
+    expect(m.verifyPrOrQueue).toHaveBeenCalledWith({
+      ...reqBody,
+      repoFullName: "petralabx/PLX_MC",
+    });
     expect(m.complianceCiToken).not.toHaveBeenCalled();
   });
 
@@ -101,11 +120,64 @@ describe("POST /api/compliance/verify — CI auth boundary", () => {
     m.complianceOidcConfigured.mockReturnValue(true);
     m.verifyGitHubActionsOidc.mockResolvedValue({
       ok: true,
-      claims: { repository: "org/repo", sub: "repo:org/repo:ref:refs/heads/main", iss: "https://token.actions.githubusercontent.com", aud: "aud" },
+      claims: signedClaims,
     });
     const resp = await call("Bearer wrong-bearer");
     expect(resp.status).toBe(200);
     expect(m.verifyPrOrQueue).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an OIDC caller that spoofs repoFullName", async () => {
+    m.complianceCiTokenConfigured.mockReturnValue(false);
+    m.complianceOidcEnabled.mockReturnValue(true);
+    m.complianceOidcConfigured.mockReturnValue(true);
+    m.verifyGitHubActionsOidc.mockResolvedValue({ ok: true, claims: signedClaims });
+    const resp = await call("Bearer oidc-jwt", {
+      ...reqBody,
+      repoFullName: "evil/PLX_MC",
+    });
+    expect(resp.status).toBe(401);
+    expect(m.verifyPrOrQueue).not.toHaveBeenCalled();
+  });
+
+  it("rejects an OIDC caller whose bare repo differs from signed claims", async () => {
+    m.complianceCiTokenConfigured.mockReturnValue(false);
+    m.complianceOidcEnabled.mockReturnValue(true);
+    m.complianceOidcConfigured.mockReturnValue(true);
+    m.verifyGitHubActionsOidc.mockResolvedValue({ ok: true, claims: signedClaims });
+    const resp = await call("Bearer oidc-jwt", {
+      ...reqBody,
+      repo: "other",
+    });
+    expect(resp.status).toBe(401);
+    expect(m.verifyPrOrQueue).not.toHaveBeenCalled();
+  });
+
+  it("rejects OIDC from a non-compliance workflow path", async () => {
+    m.complianceCiTokenConfigured.mockReturnValue(false);
+    m.complianceOidcEnabled.mockReturnValue(true);
+    m.complianceOidcConfigured.mockReturnValue(true);
+    m.verifyGitHubActionsOidc.mockResolvedValue({
+      ok: true,
+      claims: {
+        ...signedClaims,
+        workflowRef:
+          "petralabx/PLX_MC/.github/workflows/untrusted.yml@refs/heads/main",
+      },
+    });
+    const resp = await call("Bearer oidc-jwt");
+    expect(resp.status).toBe(401);
+    expect(m.verifyPrOrQueue).not.toHaveBeenCalled();
+  });
+
+  it("keeps bearer fallback body unchanged for migration compatibility", async () => {
+    const submitted = {
+      ...reqBody,
+      repoFullName: "legacy/PLX_MC",
+    };
+    const resp = await call("Bearer ci-token", submitted);
+    expect(resp.status).toBe(200);
+    expect(m.verifyPrOrQueue).toHaveBeenCalledWith(submitted);
   });
 
   it("falls back to bearer when OIDC fails", async () => {

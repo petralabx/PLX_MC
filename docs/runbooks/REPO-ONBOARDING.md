@@ -31,6 +31,14 @@ Consumer repos get thin layers only — **never copy the contract**:
   `scripts/generate-compliance-gate.py --emit downstream`
 - `.github/workflows/compliance-gate-drift.yml` — pins the generator SHA and
   fails CI if the committed gate drifts from the PLX_MC source
+- `.github/workflows/mc-routing-metadata.yml` — generated metadata-only routing
+- `.github/plx-mc-routing-manifest.json` — copied routing declaration/digest
+- `.plx/mc-routing.json` — minimal non-authoritative local routing declaration
+
+For non-hub tiers, full normal scaffold writes these seven files.
+`--workflows-only` writes only the three workflow files. `--routing-only` writes
+exactly the routing workflow, workflow manifest, and local manifest; it never
+touches governance, contributing, compliance, or drift files.
 
 ---
 
@@ -137,7 +145,14 @@ the existing root and align only the control-plane surfaces around it.
 | `agentic-swarm` | `product_platform` | Structurally aligned; local governance must remain a pointer to PLX_MC |
 | `PLX_MC` | `hub` | Governance SSOT; optional `.claude/` absence is not a gap |
 | `plx-customer-portal` | `product_app` | **Verified** on `staging` (2026-07-13): app root `portal/` (+ `src/` present); `AGENTS.md`, `CLAUDE.md`, `docs/GOVERNANCE.md`, `docs/runbooks/CONTRIBUTING.md`, `.cursor/`, compliance workflows present |
+| `skills` | `skills` | Active fleet catalog repo |
 | `local-inference` | `tooling` | Roots `scripts/` + `litellm/`; compliance workflows + `docs/GOVERNANCE.md` present. Residual closed via https://github.com/petralabx/local-inference/pull/7 (`CLAUDE.md` + `petralabx/PLX_MC` governance links) |
+| `1hr-after` | `tooling` | Active fleet marketing repo; routing downstream activation pending |
+| `furgenics` | `tooling` | Active fleet marketing repo; routing downstream activation pending |
+| `for-and-against` | `tooling` | Active fleet marketing repo; routing downstream activation pending |
+
+These are the eight active fleet repos. `test-perms-check` remains an excluded
+pending-adoption sandbox.
 
 ---
 
@@ -177,26 +192,45 @@ From a PLX_MC clone root, with the target repo cloned locally:
 ./scripts/scaffold-tracked-repo.sh \
   --repo <owner>/<name> --tier <tier> --branch <integration-branch> \
   --target /path/to/local/clone
+
+# Routing activation/update only (active non-sandbox registry repos):
+./scripts/scaffold-tracked-repo.sh \
+  --repo <owner>/<name> --tier <registry-tier> \
+  --branch <registry-integration-branch> --target /path/to/local/clone \
+  --routing-only
 ```
 
-- `--workflows-only` regenerates just the two workflow files (use when the
-  gate generator changes and you need to re-sync a fleet repo).
+- `--workflows-only` refreshes the copied generated workflow surfaces (use when
+  a generator changes and you need to re-sync a fleet repo).
+- `--routing-only` validates the repo is active/non-sandbox, tier and branch
+  match the registry, and one enabled/fuzzy-off pilot descriptor exists. It is
+  idempotent and writes only the three routing files.
+- Full normal scaffold also writes `.plx/mc-routing.json`. Its empty
+  `path_rules` are non-authoritative and not consumed by the current runtime.
 - The script embeds the current PLX_MC HEAD SHA as `GEN_SHA` in the drift
   check. Commit from a PLX_MC checkout that is on `main` (or the merged hub
   commit) so the pinned SHA is fetchable from GitHub raw.
-- `hub` tier is a no-op by design — PLX_MC uses COLLABORATOR-SOP directly.
+- **Hub warning:** full `--tier hub` is not a no-op. Before its tier switch exits,
+  it overwrites the three generated workflows, both routing manifests, and
+  `docs/GOVERNANCE.md`; it only skips `CONTRIBUTING.md`. Do not use full scaffold
+  against PLX_MC. Hub governance uses the central files directly; for a hub
+  routing-artifact refresh, use validated `--routing-only`.
 
 ## 3. Open the adoption PR on the consumer repo
 
-Commit the four files on a branch (`chore/adopt-plx-governance`), open a PR to
+For a non-hub consumer, commit the seven full-scaffold files on a branch
+(`chore/adopt-plx-governance`), open a PR to
 the integration branch. Review that CONTRIBUTING's validation commands match
 the repo's real test/build entry points — edit them; that section is
 repo-owned.
 
 ## 4. Operator wiring (per repo)
 
-1. **Secrets:** `PLX_MC_BASE_URL` (`https://mc.plxcustomer.io`),
-   `COMPLIANCE_CI_TOKEN`.
+1. **Configuration/auth:** `PLX_MC_BASE_URL=https://mc.plxcustomer.io` is
+   public configuration, not a token (routing prefers an Actions variable;
+   generated compliance retains its legacy secret lookup during migration).
+   `COMPLIANCE_CI_TOKEN` is a secret: list only its name for evidence and never
+   print its value.
 2. **Variable:** `COMPLIANCE_MODE` — active fleet repos are **`hard`** (merge-blocking)
    per [`fleet-compliance-hard-cutover.md`](fleet-compliance-hard-cutover.md).
    New enrollments may start `soft` during adoption; only `petralabx/test-perms-check`
@@ -214,21 +248,54 @@ the repo's `status` to `"active"` in `config/tracked-repos-registry.json`.
 ## Routing metadata enrollment (pilots)
 
 Central descriptors live in `config/routing-pilots/<cohort>.json`. PLX_MC ships
-the local path-routing manifest at `.plx/mc-routing.json` and the workflow
-manifest template at `docs/templates/mc-routing-manifest.json` (copied to
-`.github/plx-mc-routing-manifest.json` by the scaffold).
+the workflow manifest template at `docs/templates/mc-routing-manifest.json`
+(copied to `.github/plx-mc-routing-manifest.json` by the scaffold). Optional
+`.plx/mc-routing.json` path rules are a future repository-local declaration;
+the current runtime does **not** consume them, so onboarding must not claim
+path-rule activation.
 
-For a **downstream** pilot (`plx-customer-portal`, `agentic-swarm`, `skills`,
-`local-inference`):
+The eight routing cohorts are `PLX_MC`, `plx-customer-portal`,
+`agentic-swarm`, `skills`, `local-inference`, `1hr-after`, `furgenics`, and
+`for-and-against`. The sandbox is excluded. `plx-customer-portal` is the only
+active downstream workflow; all other downstream repos are pending.
+
+For a **downstream** pilot:
 
 1. Confirm the central descriptor exists and `fuzzyAutoLinkEnabled` is `false`.
 2. Open a **separate activation PR** in that repo (follow-up MC task — not part
    of the central runtime delivery PR).
-3. Install `.github/workflows/mc-routing-metadata.yml` via
-   `scripts/scaffold-tracked-repo.sh` (or `--workflows-only` refresh).
-4. Copy the routing manifest; keep OIDC allowlist +
-   `PLX_MC_ROUTING_METADATA_ENABLED` documented.
-5. Prove live health before calling the pilot “active.”
+3. Run `scripts/scaffold-tracked-repo.sh --routing-only` with the registry tier
+   and integration branch. Verify its exact three output files. Keep the copied
+   workflow; do not replace it with a reusable workflow or broaden Checks/rulesets.
+4. Use selected-repository organization variables
+   `PLX_MC_BASE_URL=https://mc.plxcustomer.io` and
+   `PLX_MC_ROUTING_METADATA_ENABLED=1`; a repo-level metadata value of `0`
+   overrides the org value for rollback. The legacy
+   `secrets.PLX_MC_BASE_URL` fallback remains URL-only.
+5. Capability-probe the current `gh` credential before changing org variables.
+   A fine-grained repo PAT may lack org Actions-variable administration; if so,
+   unset token env overrides and use the org-admin keyring OAuth identity, or
+   set equivalent per-repo variables and record the fallback.
+6. Verify the exact destination before OIDC, audience
+   `plx-mc-compliance-verify`, 20-second warn-only timeout, metadata-only
+   execution, and fork/Dependabot skip behavior.
+7. Enable and verify Routing Inbox before any suggestion-mode exposure.
+8. Prove live health before calling the pilot “active.” Confirmation and fuzzy
+   auto-link remain off.
+
+Activation task map (owner Vince): `TASK-452` central, `TASK-447` portal
+(complete), `TASK-448` swarm, `TASK-449` skills, `TASK-450` local-inference,
+`TASK-453` 1hr-after, `TASK-454` furgenics, and `TASK-455` for-and-against.
+
+**Repository slug migration:** generated compliance sends preferred
+`repoFullName=petralabx/<repo>` plus the legacy bare `repo` under
+`module-shim — remove after 2026-10-15`.
+`PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` defaults to `1`; OIDC binds
+`repoFullName` to its signed repository claim and exact full-slug matching is
+preferred when dispatches also carry full slugs. Legacy bare dispatch rows
+remain shim-compatible. Setting the flag to `0` is a temporary emergency
+bare-name downgrade. Remove the bare fallback only after every fleet compliance
+gate refreshes and all pre-refresh dispatches expire.
 
 Full kill switches, thresholds, retention, and demotion:
 [`docs/runbooks/mc-routing-rollout.md`](mc-routing-rollout.md).
@@ -244,7 +311,8 @@ uses metadata workflow summary + MC deep link.
 ## Deactivating / archiving
 
 Set `status` to `"archived"` (or remove the entry) via PLX_MC PR; remove the
-two workflows in the consumer repo if the repo lives on outside the fleet.
+generated workflows and routing manifests in the consumer repo if it lives on
+outside the fleet.
 
 ## Troubleshooting
 

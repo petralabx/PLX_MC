@@ -4,6 +4,7 @@
 # Usage:
 #   ./scripts/scaffold-tracked-repo.sh --repo owner/name --tier tooling --branch main --target /path/to/repo
 #   ./scripts/scaffold-tracked-repo.sh --repo petralabx/skills --tier skills --branch main --target ../skills --workflows-only
+#   ./scripts/scaffold-tracked-repo.sh --repo petralabx/skills --tier skills --branch main --target ../skills --routing-only
 #
 # Requires: python (3.x), a PLX_MC clone (run from repo root).
 
@@ -13,6 +14,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # (cd + git rather than `git -C`: native Windows git cannot parse MSYS /c/... paths)
 GEN_SHA="$(cd "$ROOT" && git rev-parse HEAD)"
 WORKFLOWS_ONLY=0
+ROUTING_ONLY=0
 
 usage() {
   sed -n '2,8p' "$0"
@@ -31,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --branch) BRANCH="$2"; shift 2 ;;
     --target) TARGET="$2"; shift 2 ;;
     --workflows-only) WORKFLOWS_ONLY=1; shift ;;
+    --routing-only) ROUTING_ONLY=1; shift ;;
     -h|--help) usage ;;
     *) echo "Unknown arg: $1" >&2; usage ;;
   esac
@@ -38,6 +41,10 @@ done
 
 [[ -n "$REPO" && -n "$TIER" && -n "$TARGET" ]] || usage
 [[ -d "$TARGET" ]] || { echo "target not a directory: $TARGET" >&2; exit 1; }
+if [[ "$WORKFLOWS_ONLY" -eq 1 && "$ROUTING_ONLY" -eq 1 ]]; then
+  echo "--workflows-only and --routing-only are mutually exclusive" >&2
+  exit 1
+fi
 
 # Resolve a python interpreter (mirrors bootstrap-company-skills.sh — Windows
 # hosts often have `py`/`python` but no `python3`).
@@ -59,6 +66,98 @@ to_native() {
   if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi
 }
 ROOT_NATIVE="$(to_native "$ROOT")"
+
+build_local_routing_manifest() {
+  local require_active="$1"
+  "${PYTHON[@]}" - \
+    "$ROOT_NATIVE/config/tracked-repos-registry.json" \
+    "$ROOT_NATIVE/config/routing-pilots" \
+    "$REPO" "$TIER" "$BRANCH" "$require_active" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+registry_path, pilots_path, repo, tier, branch, require_active = sys.argv[1:]
+registry = json.loads(Path(registry_path).read_text(encoding="utf-8"))
+entry = next((item for item in registry.get("repos", []) if item.get("repo") == repo), None)
+if entry is None:
+    raise SystemExit(f"registry repo not found: {repo}")
+if entry.get("tier") != tier:
+    raise SystemExit(
+        f"registry tier mismatch for {repo}: expected {entry.get('tier')}, got {tier}"
+    )
+if entry.get("integration_branch") != branch:
+    raise SystemExit(
+        f"registry branch mismatch for {repo}: "
+        f"expected {entry.get('integration_branch')}, got {branch}"
+    )
+if require_active == "1" and (
+    entry.get("status") != "active" or entry.get("tier") == "sandbox"
+):
+    raise SystemExit(f"routing-only requires an active non-sandbox repo: {repo}")
+
+descriptors = []
+for path in sorted(Path(pilots_path).glob("*.json")):
+    descriptor = json.loads(path.read_text(encoding="utf-8"))
+    if descriptor.get("repo") == repo:
+        descriptors.append((path, descriptor))
+if len(descriptors) != 1:
+    raise SystemExit(
+        f"expected one routing pilot descriptor for {repo}, found {len(descriptors)}"
+    )
+descriptor_path, descriptor = descriptors[0]
+if descriptor.get("enabled") is not True:
+    raise SystemExit(f"routing pilot descriptor is disabled: {descriptor_path.name}")
+if descriptor.get("fuzzyAutoLinkEnabled") is not False:
+    raise SystemExit(
+        f"routing pilot descriptor must keep fuzzy auto-link off: {descriptor_path.name}"
+    )
+policy_version = descriptor.get("policyVersion")
+if not isinstance(policy_version, str) or not policy_version:
+    raise SystemExit(
+        f"routing pilot descriptor lacks policyVersion: {descriptor_path.name}"
+    )
+
+print(
+    json.dumps(
+        {
+            "schema_version": "plx-mc-routing-local/v1",
+            "repo": repo,
+            "policy_version": policy_version,
+            "fuzzy_auto_link_enabled": False,
+            "default_bucket": entry.get("default_bucket"),
+            "path_rules": [],
+            "note": (
+                "Path rules are non-authoritative and are not consumed by "
+                "the current central runtime."
+            ),
+        },
+        indent=2,
+    )
+)
+PY
+}
+
+write_routing_files() {
+  local local_manifest_json="$1"
+  local workflow_dir="$TARGET/.github/workflows"
+  local plx_dir="$TARGET/.plx"
+  mkdir -p "$workflow_dir" "$plx_dir"
+
+  echo "==> Emitting mc-routing-metadata.yml"
+  "${PYTHON[@]}" "$ROOT_NATIVE/scripts/generate-routing-workflow.py" --emit \
+    > "$workflow_dir/mc-routing-metadata.yml"
+  cp "$ROOT_NATIVE/docs/templates/mc-routing-manifest.json" \
+    "$TARGET/.github/plx-mc-routing-manifest.json"
+  printf '%s\n' "$local_manifest_json" > "$plx_dir/mc-routing.json"
+}
+
+if [[ "$ROUTING_ONLY" -eq 1 ]]; then
+  LOCAL_ROUTING_MANIFEST="$(build_local_routing_manifest 1)"
+  write_routing_files "$LOCAL_ROUTING_MANIFEST"
+  echo "Done (routing only)."
+  exit 0
+fi
 
 WF_DIR="$TARGET/.github/workflows"
 mkdir -p "$WF_DIR"
@@ -84,7 +183,10 @@ fi
 GOV_DIR="$TARGET/docs"
 mkdir -p "$GOV_DIR"
 ROUTING_MANIFEST="$TARGET/.github/plx-mc-routing-manifest.json"
-cp "$ROOT/docs/templates/mc-routing-manifest.json" "$ROUTING_MANIFEST"
+LOCAL_ROUTING_MANIFEST="$(build_local_routing_manifest 0)"
+cp "$ROOT_NATIVE/docs/templates/mc-routing-manifest.json" "$ROUTING_MANIFEST"
+mkdir -p "$TARGET/.plx"
+printf '%s\n' "$LOCAL_ROUTING_MANIFEST" > "$TARGET/.plx/mc-routing.json"
 
 cat > "$GOV_DIR/GOVERNANCE.md" <<EOF
 # Governance pointer
@@ -169,6 +271,7 @@ echo "==> Wrote $WF_DIR/plx-mc-compliance.yml"
 echo "==> Wrote $WF_DIR/mc-routing-metadata.yml"
 echo "==> Wrote $WF_DIR/compliance-gate-drift.yml"
 echo "==> Wrote $ROUTING_MANIFEST"
+echo "==> Wrote $TARGET/.plx/mc-routing.json"
 echo ""
-echo "Next: set repo secrets PLX_MC_BASE_URL + COMPLIANCE_CI_TOKEN;"
+echo "Next: set public PLX_MC_BASE_URL config + secret COMPLIANCE_CI_TOKEN;"
 echo "      enable branch protection on $BRANCH; open PR."

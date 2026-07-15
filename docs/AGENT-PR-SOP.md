@@ -55,8 +55,13 @@ Canonical fleet governance list: `config/tracked-repos-registry.json` (org: **`p
 | `petralabx/agentic-swarm` | product_platform | `main` | hard |
 | `petralabx/skills` | skills | `main` | hard |
 | `petralabx/local-inference` | tooling | `main` | hard |
-| (+ other tooling repos) | tooling | `main` | hard |
+| `petralabx/1hr-after` | tooling | `main` | hard |
+| `petralabx/furgenics` | tooling | `main` | hard |
+| `petralabx/for-and-against` | tooling | `main` | hard |
 | `petralabx/test-perms-check` | sandbox | `main` | soft |
+
+The first eight rows are the active fleet. `test-perms-check` is an excluded
+pending-adoption sandbox, not a routing cohort.
 
 Company skills catalog: **`petralabx/skills`** pinned at **~v1.2.0** via `config/skills-catalog.json`. Legacy `taylorvalton/plx-cursor-skills` v1.0.0 is deprecated — bootstrap from `petralabx/skills` per [`SKILLS-SOP.md`](SKILLS-SOP.md).
 
@@ -70,6 +75,21 @@ Company skills catalog: **`petralabx/skills`** pinned at **~v1.2.0** via `config
 | **MC operational allow-list** | Postgres `repos` table + MC UI **Repos** screen | Which repos may be attached to buckets/tasks; Request → Approve flow |
 
 A repo can exist on GitHub and in the fleet registry but still be **off-list** in MC until an approver approves a **Request repo** in the UI. Task mutations clamp repo attachments to the MC allow-list (`src/lib/mc-data/repos.ts`).
+
+### Four authorities
+
+| Authority | Owns | Does not own |
+|-----------|------|--------------|
+| **Mission Control** | Projects, Buckets, Tasks, accountable owners, confirmed routing decisions | GitHub PR identity or repository-local path ownership |
+| **GitHub** | Repository/PR identity and opened/reopened/synchronize/closed metadata | MC planning state or authorization to link/create work |
+| **Repository governance** | Team ownership in repo `AGENTS.md`, module contracts, and `CODEOWNERS`, plus local CI/branch policy and reviewed routing-manifest declarations | Fleet enrollment or an MC Task decision |
+| **Fleet governance** | `tracked-repos-registry.json`, cohort enrollment, tier/default-Bucket priors, central pilot descriptors | Repo-local path semantics or human planning decisions |
+
+The copied `.github/plx-mc-routing-manifest.json` is a governed declaration.
+Optional `.plx/mc-routing.json` path rules are **not runtime-active** in this
+rollout and must not be described as enforced routing behavior. Routing never
+overrides the accountable team/owner declared by `AGENTS.md`, module contracts,
+or `CODEOWNERS`.
 
 **Onboarding sequence:**
 
@@ -125,6 +145,19 @@ curl -sS -X POST https://mc.plxcustomer.io/api/compliance/checkout \
   -d '{"taskId":"TASK-123","runtime":"cursor","accountableHuman":"you@petrasoap.com","repo":"petralabx/PLX_MC"}'
 # → {"data":{"checkoutId":"dsp_..."}}
 ```
+
+### Repository identity migration
+
+Always send the strict full slug (`petralabx/<repo>`) in `MC_REPO` and checkout
+calls. Generated compliance workflows now send both `repoFullName` and a legacy
+bare `repo` under the dated `module-shim — remove after 2026-10-15` contract.
+`PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` defaults to `1`; OIDC binds
+`repoFullName` to its signed repository claim, and checkout matching prefers an
+exact full slug when the dispatch also has one. Legacy bare dispatch rows remain
+shim-compatible. Setting the flag to `0` is a temporary emergency migration
+downgrade to bare-name matching, not normal operation. Retire the bare fallback
+only after every fleet compliance gate is refreshed and all pre-refresh
+dispatches have expired.
 
 ---
 
@@ -223,9 +256,13 @@ Compliance is a **backstop**, not a substitute for repo CI.
 
 ## 11a. Routing suggestions (pre-checkout)
 
-When `PLX_MC_ROUTING_SUGGEST_ENABLED=1`, missing Task IDs should call
-`mc_suggest_work` (or the checkout adapter) and stop for **explicit** selection
-or creation intent — do **not** invent a sparse Task.
+For a suggestion-enabled cohort with a healthy suggestion service, a missing
+Task ID calls `mc_suggest_work` (or the checkout adapter) **before any repo
+edit**, then stops for explicit operator selection or creation intent. For a
+shadow cohort, unknown cohort, or unavailable suggestion service, the agent
+stays stopped while the accountable human searches MC and creates/assigns a
+Task in the fleet registry `default_bucket` if no suitable Task exists. Neither
+path auto-creates work.
 
 | Marker | Authority |
 |--------|-----------|
@@ -233,9 +270,15 @@ or creation intent — do **not** invent a sparse Task.
 | `MC-Routing: rtx_*` | Correlation only — never mutation authority |
 | `MC-Checkout: dsp_*` | Credential stamp after authenticated checkout |
 
-Fuzzy matches stay advisory. Confirmation (`PLX_MC_ROUTING_CONFIRM_ENABLED`) is
-a separate kill switch. Fuzzy auto-link remains **disabled** for every pilot
-(`PLX_MC_ROUTING_FUZZY_AUTOLINK_ENABLED` forced off). Rollout / kill switches:
+Enable the Routing Inbox (`PLX_MC_ROUTING_INBOX_ENABLED=1`) and verify its
+authenticated decision path **before** enabling suggestions. Suggestion-mode
+GitHub summaries are intentionally generic: they show only that an MC suggestion
+is ready plus an authenticated MC link, never candidate IDs or reasons. Shadow
+cohorts return no link and no visible candidates.
+
+Humans keep the normal, non-blocking PR path. Confirmation and fuzzy auto-link
+remain **off** for this rollout (`PLX_MC_ROUTING_CONFIRM_ENABLED=0`;
+`PLX_MC_ROUTING_FUZZY_AUTOLINK_ENABLED` forced off). Rollout / kill switches:
 [`docs/runbooks/mc-routing-rollout.md`](runbooks/mc-routing-rollout.md).
 
 Operator PRs without a confirmed link create/update a routing **proposal**
@@ -251,7 +294,8 @@ Operator PRs without a confirmed link create/update a routing **proposal**
 - Report progress and complete with evidence when work is ready for gate/merge.
 - Install company skills separately from MCP ([`SKILLS-SOP.md`](SKILLS-SOP.md)).
 - Keep `MC_REPO` set to the full `petralabx/<name>` slug you are pushing to.
-- Prefer `mc_suggest_work` before creating a Task when the Task ID is unknown.
+- Use `mc_suggest_work` for suggestion-enabled cohorts; otherwise stop for the
+  accountable human to search/create/assign in the registry default Bucket.
 
 **Don't**
 

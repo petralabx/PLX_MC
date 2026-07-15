@@ -151,6 +151,9 @@ export async function verifyGitHubActionsOidc(
     typeof repositoryIdRaw === "number" || typeof repositoryIdRaw === "string"
       ? String(repositoryIdRaw)
       : null;
+  if (!repositoryId) {
+    return { ok: false, reason: "missing_repository_id" };
+  }
 
   return {
     ok: true,
@@ -204,7 +207,10 @@ export function bindOidcClaimsToPropose(
   if (!submittedId || submittedId === "undefined" || submittedId === "null") {
     return { ok: false, reason: "missing_repository_id" };
   }
-  if (claims.repositoryId != null && claims.repositoryId !== submittedId) {
+  if (claims.repositoryId == null) {
+    return { ok: false, reason: "missing_signed_repository_id" };
+  }
+  if (claims.repositoryId !== submittedId) {
     return { ok: false, reason: "repository_id_mismatch" };
   }
 
@@ -250,16 +256,36 @@ export function bindOidcClaimsToPropose(
     }
   }
 
+  const signedWorkflowRefs = [claims.jobWorkflowRef, claims.workflowRef].filter(
+    (value): value is string => value != null
+  );
+  if (signedWorkflowRefs.length === 0) {
+    return { ok: false, reason: "missing_signed_workflow_ref" };
+  }
+  const uniqueSignedWorkflowRefs = new Set(signedWorkflowRefs);
+  if (uniqueSignedWorkflowRefs.size !== 1) {
+    return { ok: false, reason: "signed_workflow_refs_mismatch" };
+  }
+  const signedWorkflowRef = signedWorkflowRefs[0];
+  const canonicalPrefix =
+    `${claims.repository}/.github/workflows/mc-routing-metadata.yml@`;
+  if (
+    !signedWorkflowRef.startsWith(canonicalPrefix) ||
+    signedWorkflowRef.length === canonicalPrefix.length
+  ) {
+    return { ok: false, reason: "signed_workflow_ref_not_canonical" };
+  }
+  const submittedWorkflowRef = submitted.workflowRef?.trim() ?? "";
+  if (!submittedWorkflowRef) {
+    return { ok: false, reason: "missing_submitted_workflow_ref" };
+  }
+  if (submittedWorkflowRef !== signedWorkflowRef) {
+    return { ok: false, reason: "submitted_workflow_ref_mismatch" };
+  }
+
   const approved = approvedRoutingWorkflowRefs();
-  if (approved.length > 0) {
-    const workflow =
-      submitted.workflowRef?.trim() ||
-      claims.jobWorkflowRef ||
-      claims.workflowRef ||
-      "";
-    if (!workflow || !approved.includes(workflow)) {
-      return { ok: false, reason: "workflow_ref_not_approved" };
-    }
+  if (approved.length > 0 && !approved.includes(signedWorkflowRef)) {
+    return { ok: false, reason: "workflow_ref_not_approved" };
   }
 
   return { ok: true };

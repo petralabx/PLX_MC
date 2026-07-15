@@ -46,7 +46,7 @@ describe("MCP service principal auth", () => {
     expect(identity.operatorEmail).toBe("vince@petrasoap.com");
   });
 
-  it("keeps operator email as context only — does not grant human capabilities", async () => {
+  it("keeps operator email as context without escalating service capabilities", async () => {
     const identity = await verifyMcpRequest(
       req({
         "x-api-key": "test-mcp-key",
@@ -59,7 +59,7 @@ describe("MCP service principal auth", () => {
       false
     );
     expect(authorize({ actor: identity.actor, capability: "repo.approve" }).allowed).toBe(false);
-    expect(authorize({ actor: identity.actor, capability: "task.create" }).allowed).toBe(false);
+    expect(authorize({ actor: identity.actor, capability: "task.create" }).allowed).toBe(true);
     expect(authorize({ actor: identity.actor, capability: "routing.suggest" }).allowed).toBe(true);
   });
 

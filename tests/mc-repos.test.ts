@@ -49,6 +49,7 @@ describe("registry shape", () => {
       "local-inference",
       "plx-mc",
       "portal-web",
+      "skills",
     ]);
   });
 
@@ -77,6 +78,26 @@ describe("registry shape", () => {
 
   it("keeps portal-web as the plx-customer-portal id the seeds reference", () => {
     expect(REPOS["portal-web"].name).toBe("plx-customer-portal");
+  });
+
+  it("registers skills and matches fleet GitHub visibility", () => {
+    expect(REPOS.skills).toMatchObject({
+      name: "skills",
+      owner: REPO_ORG_PLX,
+      visibility: "public",
+    });
+    for (const id of [
+      "plx-mc",
+      "skills",
+      "local-inference",
+      "1hr-after",
+      "furgenics",
+      "for-and-against",
+    ]) {
+      expect(REPOS[id].visibility).toBe("public");
+    }
+    expect(REPOS["portal-web"].visibility).toBe("private");
+    expect(REPOS["agentic-swarm"].visibility).toBe("private");
   });
 });
 

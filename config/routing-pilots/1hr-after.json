@@ -1,17 +1,17 @@
 {
-  "cohortId": "agentic-swarm",
-  "repo": "petralabx/agentic-swarm",
-  "displayName": "Agentic Swarm",
-  "tier": "product_platform",
+  "cohortId": "1hr-after",
+  "repo": "petralabx/1hr-after",
+  "displayName": "1HR After",
+  "tier": "tooling",
   "enabled": true,
-  "mode": "suggestion",
+  "mode": "shadow",
   "policyVersion": "routing.v1",
   "fuzzyAutoLinkEnabled": false,
   "activation": {
     "status": "pending_downstream_pr",
     "localManifest": ".plx/mc-routing.json",
     "workflowManifest": ".github/plx-mc-routing-manifest.json",
-    "notes": "Central descriptor only. Activation PR in agentic-swarm is a follow-up MC task — this project does not claim downstream activation."
+    "notes": "Central descriptor only. Downstream activation remains pending."
   },
   "defaultBucket": "BKT-INFRA",
   "owner": "Vince"

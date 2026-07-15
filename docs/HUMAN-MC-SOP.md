@@ -154,19 +154,30 @@ The compliance gate reads **`task.evidence`**, not PR-body prose. PR `## Rollbac
 | **Human operator PR** | No | Pass — recorded; **routing proposal** / Routing Inbox when unlinked (sparse Task auto-create is **retired**) |
 | **Agent PR** | Yes — `MC-Checkout: dsp_*` per task | Block without valid checkout + complete evidence |
 
-You do **not** need `MC-Checkout` stamps on your own PRs. Agents **must** have them. See [`AGENT-PR-SOP.md`](AGENT-PR-SOP.md).
+You do **not** need `MC-Checkout` stamps on your own PRs. Your normal PR flow
+remains non-blocking even when a routing proposal is unresolved. Agents **must**
+have checkout. See [`AGENT-PR-SOP.md`](AGENT-PR-SOP.md).
 
 ### Routing Inbox (human confirmation)
 
-When `PLX_MC_ROUTING_INBOX_ENABLED=1`, open **Routing** in the MC chrome for:
+The Inbox must be enabled and health-checked
+(`PLX_MC_ROUTING_INBOX_ENABLED=1`) **before** any repository is exposed in
+suggestion mode. Open **Routing** in the MC chrome for:
 
 - Personal “Needs your decision” queue
 - Project/Bucket-scoped queues
 - Global Unrouted queue
 
-Accept / change / transfer / explicitly confirm Task creation. SLA: alert at 24h,
-expire unresolved UI detail after 7 days. Rolling metric breaches demote a
-cohort from confirmation to **suggestion-only**. Fuzzy auto-link stays off.
+Review candidates, then explicitly select existing work or choose normal,
+operator-authorized Task creation. A GitHub suggestion summary is deliberately
+generic: it contains only an authenticated **Open Mission Control** link, not
+candidate IDs or reasons. Shadow cohorts expose neither a link nor candidates.
+SLA: alert at 24h, expire unresolved UI detail after 7 days.
+
+Current fleet rollout has **confirmation off** and fuzzy auto-link off. The
+three suggestion cohorts are `PLX_MC`, `plx-customer-portal`, and
+`agentic-swarm`; `skills`, `local-inference`, `1hr-after`, `furgenics`, and
+`for-and-against` remain shadow.
 Kill switches and pilot status: [`docs/runbooks/mc-routing-rollout.md`](runbooks/mc-routing-rollout.md).
 
 GitHub App **Checks requested actions** are deferred (phase one uses workflow

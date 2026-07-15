@@ -2,11 +2,15 @@
 // Fuzzy auto-link remains disabled for every pilot; breach demotes to suggestion-only.
 
 import rolloutJson from "../../../config/mc-routing-rollout.json";
+import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import plxMcPilot from "../../../config/routing-pilots/plx-mc.json";
 import portalPilot from "../../../config/routing-pilots/plx-customer-portal.json";
 import swarmPilot from "../../../config/routing-pilots/agentic-swarm.json";
 import skillsPilot from "../../../config/routing-pilots/skills.json";
 import localInferencePilot from "../../../config/routing-pilots/local-inference.json";
+import oneHourAfterPilot from "../../../config/routing-pilots/1hr-after.json";
+import furgenicsPilot from "../../../config/routing-pilots/furgenics.json";
+import forAndAgainstPilot from "../../../config/routing-pilots/for-and-against.json";
 import { FUZZY_AUTOLINK_ENABLED } from "./config";
 
 export type RolloutMode = "shadow" | "suggestion" | "confirmation";
@@ -72,7 +76,7 @@ export interface PilotDescriptor {
   policyVersion: string;
   fuzzyAutoLinkEnabled: boolean;
   activation: {
-    status: "central_ready" | "pending_downstream_pr";
+    status: "central_ready" | "active" | "pending_downstream_pr";
     localManifest: string;
     workflowManifest: string;
     notes: string;
@@ -121,13 +125,38 @@ export interface CohortRuntimeState {
   fuzzyAutoLinkEnabled: false;
 }
 
+export interface CohortRuntimeOptions {
+  rollingDecisions?: RollingDecision[];
+  metrics?: CohortMetrics | null;
+  config?: RolloutConfig;
+}
+
+export interface RepoCohortRuntimeState {
+  pilot: PilotDescriptor;
+  state: CohortRuntimeState;
+}
+
+export interface TrackedRepoEntry {
+  repo: string;
+  status?: string;
+  tier?: string;
+  default_bucket?: string;
+}
+
 const PILOT_FILES: PilotDescriptor[] = [
   plxMcPilot as PilotDescriptor,
   portalPilot as PilotDescriptor,
   swarmPilot as PilotDescriptor,
   skillsPilot as PilotDescriptor,
   localInferencePilot as PilotDescriptor,
+  oneHourAfterPilot as PilotDescriptor,
+  furgenicsPilot as PilotDescriptor,
+  forAndAgainstPilot as PilotDescriptor,
 ];
+
+const TRACKED_REPO_ENTRIES: TrackedRepoEntry[] = (
+  (trackedReposRegistry as { repos?: TrackedRepoEntry[] }).repos ?? []
+);
 
 const DEFAULT_THRESHOLDS: RolloutThresholds = {
   minReviewedProposals: 300,
@@ -419,11 +448,7 @@ export function evaluateRollingWindow(
  */
 export function resolveCohortRuntimeState(
   pilot: PilotDescriptor,
-  options: {
-    rollingDecisions?: RollingDecision[];
-    metrics?: CohortMetrics | null;
-    config?: RolloutConfig;
-  } = {}
+  options: CohortRuntimeOptions = {}
 ): CohortRuntimeState {
   const config = options.config ?? loadRolloutConfig();
   const configuredMode = asMode(pilot.mode, config.defaultMode);
@@ -461,18 +486,24 @@ export function resolveCohortRuntimeState(
     effectiveMode = config.breachDemotionMode;
   }
 
-  // Shadow/suggestion kill switches can further clamp visibility, but demotion
-  // never elevates above configured mode.
-  if (!shadowEnabled() && effectiveMode === "shadow") {
-    // shadow off = no scoring surface; keep declared mode for audit
-  }
-  if (!suggestEnabled() && effectiveMode === "suggestion") {
-    effectiveMode = "shadow";
-    demotionReasons.push("suggest_kill_switch");
-  }
+  // Capabilities are monotonic: shadow → suggestion + Inbox → confirmation.
+  // A missing lower capability always clamps higher modes without changing the
+  // configured mode retained for audit.
   if (!confirmEnabled() && effectiveMode === "confirmation") {
     effectiveMode = "suggestion";
     demotionReasons.push("confirm_kill_switch");
+  }
+  if (!suggestEnabled() && effectiveMode !== "shadow") {
+    effectiveMode = "shadow";
+    demotionReasons.push("suggest_kill_switch");
+  }
+  if (!inboxEnabled() && effectiveMode !== "shadow") {
+    effectiveMode = "shadow";
+    demotionReasons.push("inbox_kill_switch");
+  }
+  if (!shadowEnabled()) {
+    effectiveMode = "shadow";
+    demotionReasons.push("shadow_kill_switch");
   }
 
   return {
@@ -483,6 +514,61 @@ export function resolveCohortRuntimeState(
     demotionReasons,
     fuzzyAutoLinkEnabled: false,
   };
+}
+
+/**
+ * Resolve an enabled repository cohort to its current runtime mode.
+ * Unknown and disabled repositories return null so callers fail closed.
+ */
+export function resolveRepoCohortRuntimeState(
+  repo: string,
+  options: CohortRuntimeOptions = {},
+  pilots: PilotDescriptor[] = listPilotDescriptors(),
+  trackedRepos: TrackedRepoEntry[] = TRACKED_REPO_ENTRIES
+): RepoCohortRuntimeState | null {
+  const needle = repo.trim().toLowerCase();
+  const pilot =
+    pilots.find((candidate) => candidate.repo.trim().toLowerCase() === needle) ??
+    null;
+  if (
+    !pilot?.enabled ||
+    !shadowEnabled() ||
+    !trackedRepos.some(
+      (entry) =>
+        entry.repo.trim().toLowerCase() === needle &&
+        entry.status === "active" &&
+        entry.tier !== "sandbox"
+    )
+  ) {
+    return null;
+  }
+  return {
+    pilot,
+    state: resolveCohortRuntimeState(pilot, options),
+  };
+}
+
+/** Repositories whose current mode permits a human-visible suggestion surface. */
+export function listSuggestionVisibleRepos(
+  pilots: PilotDescriptor[] = listPilotDescriptors(),
+  trackedRepos: TrackedRepoEntry[] = TRACKED_REPO_ENTRIES
+): string[] {
+  return pilots.flatMap((pilot) => {
+    const runtime = resolveRepoCohortRuntimeState(
+      pilot.repo,
+      {},
+      pilots,
+      trackedRepos
+    );
+    if (
+      runtime &&
+      (runtime.state.effectiveMode === "suggestion" ||
+        runtime.state.effectiveMode === "confirmation")
+    ) {
+      return [runtime.pilot.repo];
+    }
+    return [];
+  });
 }
 
 /** Apply automatic demotion when a confirmation cohort breaches the rolling window. */
@@ -553,18 +639,83 @@ export function killSwitchSnapshot(): Record<string, { env: string; enabled: boo
   };
 }
 
-export function rolloutHealth(): {
+export interface RolloutHealth {
   ok: boolean;
   pilots: number;
+  reasons: string[];
+  configuredModes: Record<RolloutMode, number>;
+  scope: "descriptor_config";
   fuzzyAutoLinkEnabled: false;
   killSwitches: ReturnType<typeof killSwitchSnapshot>;
   deferredChecksApi: true;
-} {
-  const pilots = listPilotDescriptors();
-  const allFuzzyOff = pilots.every((p) => p.fuzzyAutoLinkEnabled === false);
+}
+
+export function rolloutHealth(
+  pilots: PilotDescriptor[] = listPilotDescriptors(),
+  trackedRepos: TrackedRepoEntry[] = TRACKED_REPO_ENTRIES
+): RolloutHealth {
+  const enrolled = pilots.filter((pilot) => pilot.enabled);
+  const reasons: string[] = [];
+  const enabledRepos = enrolled.map((pilot) => pilot.repo.toLowerCase());
+  const uniqueEnabledRepos = new Set(enabledRepos);
+  if (enrolled.length !== 8) reasons.push("enabled_pilot_count_not_8");
+  if (uniqueEnabledRepos.size !== enabledRepos.length) {
+    reasons.push("duplicate_enabled_pilot_repo");
+  }
+
+  const activeRegistry = trackedRepos.filter(
+    (entry) => entry.status === "active" && entry.tier !== "sandbox"
+  );
+  const activeRegistryRepos = new Set(
+    activeRegistry.map((entry) => entry.repo.toLowerCase())
+  );
+  if (
+    activeRegistryRepos.size !== uniqueEnabledRepos.size ||
+    [...activeRegistryRepos].some((repo) => !uniqueEnabledRepos.has(repo))
+  ) {
+    reasons.push("active_registry_intersection_mismatch");
+  }
+
+  const configuredModes: Record<RolloutMode, number> = {
+    shadow: enrolled.filter((pilot) => pilot.mode === "shadow").length,
+    suggestion: enrolled.filter((pilot) => pilot.mode === "suggestion").length,
+    confirmation: enrolled.filter((pilot) => pilot.mode === "confirmation").length,
+  };
+  if (
+    configuredModes.suggestion !== 3 ||
+    configuredModes.shadow !== 5 ||
+    configuredModes.confirmation !== 0
+  ) {
+    reasons.push("configured_mode_distribution_mismatch");
+  }
+
+  for (const pilot of enrolled) {
+    const registry = activeRegistry.find(
+      (entry) => entry.repo.toLowerCase() === pilot.repo.toLowerCase()
+    );
+    if (!registry) continue;
+    if (registry.tier !== pilot.tier) {
+      reasons.push(`tier_mismatch:${pilot.repo}`);
+    }
+    if (registry.default_bucket !== pilot.defaultBucket) {
+      reasons.push(`default_bucket_mismatch:${pilot.repo}`);
+    }
+  }
+  for (const pilot of pilots) {
+    if (pilot.fuzzyAutoLinkEnabled !== false) {
+      reasons.push(`fuzzy_enabled:${pilot.repo}`);
+    }
+  }
+  if (isFuzzyAutoLinkAllowedForRollout()) {
+    reasons.push("fuzzy_runtime_enabled");
+  }
+
   return {
-    ok: allFuzzyOff && !isFuzzyAutoLinkAllowedForRollout() && pilots.length === 5,
-    pilots: pilots.length,
+    ok: reasons.length === 0,
+    pilots: enrolled.length,
+    reasons,
+    configuredModes,
+    scope: "descriptor_config",
     fuzzyAutoLinkEnabled: false,
     killSwitches: killSwitchSnapshot(),
     deferredChecksApi: true,

@@ -98,6 +98,7 @@ beforeEach(() => {
   db.checks.length = 0;
   db.tasks.clear();
   db.dedupKeys.clear();
+  delete process.env.PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED;
 });
 
 describe("checkout", () => {
@@ -185,6 +186,50 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
     const r = await verifyPr({ repo: "PLX_MC", prNumber: 11, headSha: "slug", changedPaths: ["src/lib/x.ts"], checkoutId });
     expect(r.taskId).toBe("TASK-900");
     expect(r.verdict).toBe("pass");
+  });
+
+  it("prefers an available full slug and rejects a same-bare-name foreign checkout", async () => {
+    process.env.PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED = "1";
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    const { checkoutId } = await checkout({
+      taskId: "TASK-900",
+      runtime: "cursor",
+      accountableHuman: "vince",
+      repo: "evil/PLX_MC",
+    });
+
+    const result = await verifyPr({
+      repo: "PLX_MC",
+      repoFullName: "petralabx/PLX_MC",
+      prNumber: 12,
+      headSha: "full-slug",
+      changedPaths: ["src/lib/x.ts"],
+      checkoutId,
+    });
+    expect(result.taskId).toBeNull();
+    expect(result.verdict).toBe("block");
+  });
+
+  it("keeps legacy bare checkout records valid when a full slug is supplied", async () => {
+    process.env.PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED = "1";
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    const { checkoutId } = await checkout({
+      taskId: "TASK-900",
+      runtime: "cursor",
+      accountableHuman: "vince",
+      repo: "PLX_MC",
+    });
+
+    const result = await verifyPr({
+      repo: "PLX_MC",
+      repoFullName: "petralabx/PLX_MC",
+      prNumber: 13,
+      headSha: "legacy-bare",
+      changedPaths: ["src/lib/x.ts"],
+      checkoutId,
+    });
+    expect(result.taskId).toBe("TASK-900");
+    expect(result.verdict).toBe("pass");
   });
 
   it("blocks a high-risk agent PR when the task bucket has no PRD", async () => {

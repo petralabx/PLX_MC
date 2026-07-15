@@ -14,6 +14,7 @@ import {
   type ShadowRoutingResult,
 } from "@/lib/routing/engine";
 import { upsertRoutingSession } from "@/lib/routing/repo";
+import { resolveRepoCohortRuntimeState } from "@/lib/routing/rollout";
 import type {
   RoutingCandidateRecord,
   RoutingFailureReason,
@@ -136,6 +137,18 @@ export async function actionSuggestWork(
   }
 
   requireSuggestAuthorized(identity);
+  const cohortRuntime = resolveRepoCohortRuntimeState(identity.repo);
+  if (
+    !cohortRuntime ||
+    (cohortRuntime.state.effectiveMode !== "suggestion" &&
+      cohortRuntime.state.effectiveMode !== "confirmation")
+  ) {
+    throw new ApiError(
+      "routing_suggest_unavailable_for_cohort",
+      "Routing suggestions are unavailable for this unknown, disabled, or shadow-only repository cohort.",
+      503
+    );
+  }
 
   const normalized = normalizeRoutingEvidence({
     repoFullName: identity.repo,

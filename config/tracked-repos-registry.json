@@ -25,7 +25,7 @@
       "routing_manifest": {
         "path": ".github/plx-mc-routing-manifest.json",
         "schema_version": "plx-mc-routing-manifest/v1",
-        "digest": "sha256:4fedeec4336a3e895c660470f4e4b1fe05fb8c37b8c9b90c21287733ad2c8901"
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
       },
       "default_bucket": "BKT-INFRA",
       "quality_ledger": {
@@ -47,7 +47,7 @@
       "routing_manifest": {
         "path": ".github/plx-mc-routing-manifest.json",
         "schema_version": "plx-mc-routing-manifest/v1",
-        "digest": "sha256:4fedeec4336a3e895c660470f4e4b1fe05fb8c37b8c9b90c21287733ad2c8901"
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
       },
       "default_bucket": "BKT-PROD",
       "quality_ledger": {
@@ -69,7 +69,7 @@
       "routing_manifest": {
         "path": ".github/plx-mc-routing-manifest.json",
         "schema_version": "plx-mc-routing-manifest/v1",
-        "digest": "sha256:4fedeec4336a3e895c660470f4e4b1fe05fb8c37b8c9b90c21287733ad2c8901"
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
       },
       "default_bucket": "BKT-INFRA",
       "quality_ledger": {
@@ -92,7 +92,7 @@
       "routing_manifest": {
         "path": ".github/plx-mc-routing-manifest.json",
         "schema_version": "plx-mc-routing-manifest/v1",
-        "digest": "sha256:4fedeec4336a3e895c660470f4e4b1fe05fb8c37b8c9b90c21287733ad2c8901"
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
       },
       "default_bucket": "BKT-INFRA",
       "quality_ledger": {
@@ -113,7 +113,7 @@
       "routing_manifest": {
         "path": ".github/plx-mc-routing-manifest.json",
         "schema_version": "plx-mc-routing-manifest/v1",
-        "digest": "sha256:4fedeec4336a3e895c660470f4e4b1fe05fb8c37b8c9b90c21287733ad2c8901"
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
       },
       "default_bucket": "BKT-INFRA",
       "quality_ledger": {
@@ -133,7 +133,7 @@
       "routing_manifest": {
         "path": ".github/plx-mc-routing-manifest.json",
         "schema_version": "plx-mc-routing-manifest/v1",
-        "digest": "sha256:4fedeec4336a3e895c660470f4e4b1fe05fb8c37b8c9b90c21287733ad2c8901"
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
       },
       "default_bucket": "BKT-INFRA",
       "quality_ledger": {
@@ -153,7 +153,7 @@
       "routing_manifest": {
         "path": ".github/plx-mc-routing-manifest.json",
         "schema_version": "plx-mc-routing-manifest/v1",
-        "digest": "sha256:4fedeec4336a3e895c660470f4e4b1fe05fb8c37b8c9b90c21287733ad2c8901"
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
       },
       "default_bucket": "BKT-INFRA",
       "quality_ledger": {
@@ -173,7 +173,7 @@
       "routing_manifest": {
         "path": ".github/plx-mc-routing-manifest.json",
         "schema_version": "plx-mc-routing-manifest/v1",
-        "digest": "sha256:4fedeec4336a3e895c660470f4e4b1fe05fb8c37b8c9b90c21287733ad2c8901"
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
       },
       "default_bucket": "BKT-INFRA",
       "quality_ledger": {
@@ -193,7 +193,7 @@
       "routing_manifest": {
         "path": ".github/plx-mc-routing-manifest.json",
         "schema_version": "plx-mc-routing-manifest/v1",
-        "digest": "sha256:4fedeec4336a3e895c660470f4e4b1fe05fb8c37b8c9b90c21287733ad2c8901"
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
       },
       "default_bucket": "BKT-UAT",
       "quality_ledger": {

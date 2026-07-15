@@ -9,6 +9,7 @@ import type {
   CreationIntentRecord,
   ProposalIdentity,
   RoutingDecisionInput,
+  RoutingCandidateRecord,
   RoutingProposalInput,
   RoutingProposalRecord,
   RoutingRevisionInput,
@@ -30,6 +31,30 @@ async function defaultQuery<R extends object = Record<string, unknown>>(
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function mapCandidate(row: Record<string, unknown>): RoutingCandidateRecord {
+  return {
+    rank: Number(row.rank),
+    taskId: String(row.task_id),
+    bucketId: String(row.bucket_id),
+    projectId: row.project_id == null ? null : String(row.project_id),
+    matchScore: Number(row.match_score),
+    authorizationTrust:
+      row.authorization_trust as RoutingCandidateRecord["authorizationTrust"],
+    reasons: asStringArray(row.reasons),
+  };
 }
 
 function mapProposal(row: Record<string, unknown>): RoutingProposalRecord {
@@ -117,7 +142,11 @@ export async function upsertRoutingProposal(
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10, now())
       ON CONFLICT (repo_id, change_id) DO UPDATE SET
         session_id = COALESCE(EXCLUDED.session_id, routing_proposals.session_id),
-        state = EXCLUDED.state,
+        state = CASE
+          WHEN routing_proposals.state IN ('resolved', 'rejected')
+            THEN routing_proposals.state
+          ELSE EXCLUDED.state
+        END,
         title = EXCLUDED.title,
         body_content_hash = EXCLUDED.body_content_hash,
         markers = EXCLUDED.markers,
@@ -184,61 +213,105 @@ export async function upsertProposalRevision(
   input: RoutingRevisionInput,
   runQuery: RoutingQuery = defaultQuery
 ): Promise<RoutingRevisionRecord> {
+  const candidateInput = input.candidates.map((candidate) => ({
+    rank: candidate.rank,
+    task_id: candidate.taskId,
+    bucket_id: candidate.bucketId,
+    project_id: candidate.projectId,
+    match_score: candidate.matchScore,
+    authorization_trust: candidate.authorizationTrust,
+    reasons: candidate.reasons,
+  }));
   const rows = await runQuery<Record<string, unknown>>(
-    `INSERT INTO routing_proposal_revisions (
-        id, proposal_id, head_sha, policy_version, evidence_meta
-      ) VALUES ($1,$2,$3,$4,$5::jsonb)
-      ON CONFLICT (proposal_id, head_sha) DO NOTHING
-      RETURNING id, proposal_id, head_sha, policy_version, evidence_meta, created_at`,
+    `WITH persisted_revision AS (
+       INSERT INTO routing_proposal_revisions (
+         id, proposal_id, head_sha, policy_version, evidence_meta
+       ) VALUES ($1,$2,$3,$4,$5::jsonb)
+       ON CONFLICT (proposal_id, head_sha) DO UPDATE
+         SET proposal_id = routing_proposal_revisions.proposal_id
+       RETURNING id, proposal_id, head_sha, policy_version, evidence_meta, created_at
+     ),
+     candidate_input AS (
+       SELECT *
+         FROM jsonb_to_recordset($6::jsonb) AS candidate(
+           rank integer,
+           task_id text,
+           bucket_id text,
+           project_id text,
+           match_score double precision,
+           authorization_trust text,
+           reasons jsonb
+         )
+     ),
+     inserted_candidates AS (
+       INSERT INTO routing_revision_candidates (
+         id, revision_id, rank, task_id, bucket_id, project_id,
+         match_score, authorization_trust, reasons
+       )
+       SELECT
+         persisted_revision.id || '_c' || candidate_input.rank::text,
+         persisted_revision.id,
+         candidate_input.rank,
+         candidate_input.task_id,
+         candidate_input.bucket_id,
+         candidate_input.project_id,
+         candidate_input.match_score,
+         candidate_input.authorization_trust,
+         candidate_input.reasons
+       FROM persisted_revision
+       CROSS JOIN candidate_input
+       ON CONFLICT (revision_id, rank) DO NOTHING
+       RETURNING id
+     )
+     SELECT id, proposal_id, head_sha, policy_version, evidence_meta, created_at
+       FROM persisted_revision`,
     [
       input.id,
       input.proposalId,
       input.headSha,
       input.policyVersion,
       JSON.stringify(input.evidenceMeta),
+      JSON.stringify(candidateInput),
     ]
   );
-
-  let row = rows[0];
-  if (!row) {
-    const existing = await runQuery<Record<string, unknown>>(
-      `SELECT id, proposal_id, head_sha, policy_version, evidence_meta, created_at
-         FROM routing_proposal_revisions
-        WHERE proposal_id = $1 AND head_sha = $2
-        LIMIT 1`,
-      [input.proposalId, input.headSha]
-    );
-    row = existing[0];
-    if (!row) throw new Error("upsertProposalRevision could not load revision");
+  const row = rows[0];
+  if (!row) throw new Error("upsertProposalRevision returned no row");
+  const persisted = await getProposalRevision(input.proposalId, input.headSha, runQuery);
+  if (!persisted) {
+    throw new Error("upsertProposalRevision could not reload persisted revision");
   }
+  return persisted;
+}
 
-  for (const candidate of input.candidates) {
-    await runQuery(
-      `INSERT INTO routing_revision_candidates (
-          id, revision_id, rank, task_id, bucket_id, project_id,
-          match_score, authorization_trust, reasons
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
-        ON CONFLICT (revision_id, rank) DO NOTHING`,
-      [
-        `${row.id}_c${candidate.rank}`,
-        row.id,
-        candidate.rank,
-        candidate.taskId,
-        candidate.bucketId,
-        candidate.projectId,
-        candidate.matchScore,
-        candidate.authorizationTrust,
-        JSON.stringify(candidate.reasons),
-      ]
-    );
-  }
-
+export async function getProposalRevision(
+  proposalId: string,
+  headSha: string,
+  runQuery: RoutingQuery = defaultQuery
+): Promise<RoutingRevisionRecord | null> {
+  const rows = await runQuery<Record<string, unknown>>(
+    `SELECT id, proposal_id, head_sha, policy_version, evidence_meta, created_at
+       FROM routing_proposal_revisions
+      WHERE proposal_id = $1 AND head_sha = $2
+      LIMIT 1`,
+    [proposalId, headSha]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const candidateRows = await runQuery<Record<string, unknown>>(
+    `SELECT rank, task_id, bucket_id, project_id, match_score,
+            authorization_trust, reasons
+       FROM routing_revision_candidates
+      WHERE revision_id = $1
+      ORDER BY rank ASC`,
+    [String(row.id)]
+  );
   return {
     id: String(row.id),
     proposalId: String(row.proposal_id),
     headSha: String(row.head_sha),
     policyVersion: String(row.policy_version),
     evidenceMeta: (row.evidence_meta ?? {}) as RoutingRevisionRecord["evidenceMeta"],
+    candidates: candidateRows.map(mapCandidate),
     createdAt: row.created_at ? String(row.created_at) : undefined,
   };
 }

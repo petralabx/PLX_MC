@@ -163,7 +163,9 @@ function mcpIdentity(overrides: Partial<McpIdentity> = {}): McpIdentity {
 describe("routing suggest (P5)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("PLX_MC_ROUTING_SHADOW_ENABLED", "1");
     vi.stubEnv("PLX_MC_ROUTING_SUGGEST_ENABLED", "1");
+    vi.stubEnv("PLX_MC_ROUTING_INBOX_ENABLED", "1");
   });
 
   it("exposes the suggest kill switch", () => {
@@ -238,6 +240,58 @@ describe("routing suggest (P5)", () => {
       ApiError
     );
     expect(createTask).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before session creation when Inbox visibility is disabled", async () => {
+    vi.stubEnv("PLX_MC_ROUTING_INBOX_ENABLED", "0");
+    await expect(
+      actionSuggestWork(mcpIdentity(), { title: "x" })
+    ).rejects.toMatchObject({
+      code: "routing_suggest_unavailable_for_cohort",
+      status: 503,
+    });
+    expect(upsertRoutingSession).not.toHaveBeenCalled();
+    expect(runShadowRouting).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before session creation when shadow processing is disabled", async () => {
+    vi.stubEnv("PLX_MC_ROUTING_SHADOW_ENABLED", "0");
+    await expect(
+      actionSuggestWork(mcpIdentity(), { title: "x" })
+    ).rejects.toMatchObject({
+      code: "routing_suggest_unavailable_for_cohort",
+      status: 503,
+    });
+    expect(upsertRoutingSession).not.toHaveBeenCalled();
+    expect(runShadowRouting).not.toHaveBeenCalled();
+  });
+
+  it("rejects shadow cohorts before minting a session or scoring candidates", async () => {
+    await expect(
+      actionSuggestWork(
+        mcpIdentity({ repo: "petralabx/skills" }),
+        { title: "shadow-only work" }
+      )
+    ).rejects.toMatchObject({
+      code: "routing_suggest_unavailable_for_cohort",
+      status: 503,
+    });
+    expect(upsertRoutingSession).not.toHaveBeenCalled();
+    expect(runShadowRouting).not.toHaveBeenCalled();
+  });
+
+  it("rejects unknown cohorts before minting a session", async () => {
+    await expect(
+      actionSuggestWork(
+        mcpIdentity({ repo: "petralabx/unknown" }),
+        { title: "unknown work" }
+      )
+    ).rejects.toMatchObject({
+      code: "routing_suggest_unavailable_for_cohort",
+      status: 503,
+    });
+    expect(upsertRoutingSession).not.toHaveBeenCalled();
+    expect(runShadowRouting).not.toHaveBeenCalled();
   });
 
   it("reuses a provided routingSessionId", async () => {

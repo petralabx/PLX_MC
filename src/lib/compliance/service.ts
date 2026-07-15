@@ -23,10 +23,16 @@ import {
 } from "@/lib/routing/engine";
 import { ROUTING_POLICY_VERSION } from "@/lib/routing/persistence";
 import {
+  metadataEnabled,
+  resolveRepoCohortRuntimeState,
+  type RolloutMode,
+} from "@/lib/routing/rollout";
+import {
   upsertProposalRevision,
   upsertRoutingProposal,
   upsertRoutingSession,
 } from "@/lib/routing/repo";
+import type { RoutingProposalState } from "@/lib/routing/types";
 import { actorIdByEmail, patchTask, snapshot } from "@/lib/sync";
 import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
@@ -67,18 +73,46 @@ function checkId(repoName: string, prNumber: number, headSha: string, taskId?: s
 // returning the dispatch it points at, or null. A present checkoutId always means
 // an agent run; an invalid one yields null so the gate blocks the agent PR (never
 // a silent downgrade to operator). Hardening: security review CRITICAL #1/#5/#6.
-// The gate sends `repo` as the bare GitHub name (github.event.repository.name,
-// e.g. "PLX_MC"), but a checkout may be minted with the full "owner/name" slug
-// (what .cursor/mcp.json + the team-registration runbook show as MC_REPO). Match
-// on the bare repo name so either form resolves — without this, a slug-minted
-// stamp resolves taskId=null and a valid agent PR is wrongly blocked.
+// Existing gates send the bare GitHub name, while newer callers may also send
+// owner/name. Prefer exact full-slug binding when both sides have it, while
+// retaining bare-name compatibility for old callers and legacy dispatch rows.
 function bareRepo(r: string): string {
   return r.includes("/") ? r.slice(r.lastIndexOf("/") + 1) : r;
 }
 
-async function resolveDispatch(checkoutId: string, repoName: string): Promise<repo.DispatchRow | null> {
+function fullRepoBindingEnabled(): boolean {
+  return (
+    process.env.PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED ?? "1"
+  ).trim() !== "0";
+}
+
+function dispatchRepoMatches(
+  dispatchRepo: string,
+  repoName: string,
+  repoFullName?: string
+): boolean {
+  if (fullRepoBindingEnabled() && repoFullName?.includes("/")) {
+    if (dispatchRepo.includes("/")) {
+      return dispatchRepo.toLowerCase() === repoFullName.toLowerCase();
+    }
+    // module-shim — remove after 2026-10-15: legacy dispatch rows store bare repo names.
+    // Migration compatibility: old dispatch rows stored only the bare name.
+    return (
+      bareRepo(dispatchRepo).toLowerCase() ===
+      bareRepo(repoFullName).toLowerCase()
+    );
+  }
+  return bareRepo(dispatchRepo).toLowerCase() === bareRepo(repoName).toLowerCase();
+}
+
+async function resolveDispatch(
+  checkoutId: string,
+  repoName: string,
+  repoFullName?: string
+): Promise<repo.DispatchRow | null> {
   const d = await repo.getDispatch(checkoutId);
-  const repoMatches = !!d && bareRepo(d.repo) === bareRepo(repoName);
+  const repoMatches =
+    !!d && dispatchRepoMatches(d.repo, repoName, repoFullName);
   const valid = !!d && !d.revoked && new Date(d.expiresAt).getTime() > Date.now() && repoMatches;
   return valid ? d : null;
 }
@@ -223,6 +257,8 @@ export async function complete(input: CompleteInput): Promise<{ ok: true }> {
 
 export interface VerifyPrInput {
   repo: string;
+  /** Full owner/repo when available; preferred for checkout binding. */
+  repoFullName?: string;
   prNumber: number;
   headSha: string;
   changedPaths: string[];
@@ -314,7 +350,7 @@ export async function verifyPr(input: VerifyPrInput): Promise<VerifyPrResult> {
   // task's verdict is its own recorded check + event.
   const tasks: VerifyPrTaskResult[] = [];
   for (const cid of ids) {
-    const d = await resolveDispatch(cid, input.repo);
+    const d = await resolveDispatch(cid, input.repo, input.repoFullName);
     const taskId = d?.taskId ?? null;
     const actorIdentity = d?.runtime ?? "agent";
     const task = await loadTask(taskId);
@@ -358,6 +394,8 @@ export interface ProposeRoutingInput {
   action: string;
   headSha: string;
   mergeSha?: string | null;
+  /** Audit-only PR state; never merge evidence or authorization input. */
+  merged?: boolean;
   baseBranch?: string;
   sourceBranch?: string;
   title?: string;
@@ -375,12 +413,14 @@ export interface ProposeRoutingInput {
 export interface ProposeRoutingResult {
   proposalId: string;
   revisionId: string;
-  state: "action_required" | "resolved" | "degraded";
-  deepLink: string;
+  state: RoutingProposalState;
+  deepLink: string | null;
   sessionId: string | null;
   candidates: Array<{ taskId: string; matchScore: number; reasons: string[] }>;
   bodyContentHash: string;
   policyVersion: string;
+  configuredMode: RolloutMode;
+  effectiveMode: RolloutMode;
 }
 
 function proposalDeepLink(proposalId: string): string {
@@ -481,6 +521,22 @@ export async function proposeRoutingFromPr(
   const repoId = input.repository.trim();
   const changeId = String(input.prNumber);
   await requireGithubActionsProposeAuthorized(repoId);
+  if (!metadataEnabled()) {
+    throw new ApiError(
+      "routing_metadata_disabled",
+      "Routing metadata ingestion is disabled (PLX_MC_ROUTING_METADATA_ENABLED=0).",
+      503
+    );
+  }
+  const cohortRuntime = resolveRepoCohortRuntimeState(repoId);
+  if (!cohortRuntime) {
+    throw new ApiError(
+      "routing_cohort_disabled",
+      "Routing metadata is unavailable for an unknown or disabled repository cohort.",
+      503
+    );
+  }
+  const { configuredMode, effectiveMode } = cohortRuntime.state;
 
   const body = typeof input.body === "string" ? input.body : "";
   const normalized = normalizeRoutingEvidence({
@@ -505,7 +561,7 @@ export async function proposeRoutingFromPr(
   // Body stays local — only hash/markers go to persistence.
   const markers = normalized.markers;
   const sessionFromMarker = markers.routingSessionIds[0] ?? null;
-  let sessionId = sessionFromMarker;
+  let sessionId: string | null = sessionFromMarker;
 
   if (sessionId?.startsWith("rtx_")) {
     const now = Date.now();
@@ -524,8 +580,9 @@ export async function proposeRoutingFromPr(
         idleExpiresAt: new Date(now + IDLE_TTL_MS).toISOString(),
       });
     } catch {
-      // Session reconcile is best-effort; proposal still proceeds.
-      sessionId = sessionFromMarker;
+      // An unchecked foreign/expired/rebound marker cannot be attached to the
+      // proposal. Scoring may proceed without session correlation.
+      sessionId = null;
     }
   }
 
@@ -605,8 +662,17 @@ export async function proposeRoutingFromPr(
     },
     candidates: revisionCandidates,
   });
+  revisionCandidates = revision.candidates;
+  candidates = revisionCandidates.map((candidate) => ({
+    taskId: candidate.taskId,
+    matchScore: candidate.matchScore,
+    reasons: candidate.reasons,
+  }));
+  const persistedBodyContentHash =
+    revision.evidenceMeta.bodyContentHash ?? markers.bodyContentHash;
 
-  const deepLink = proposalDeepLink(proposal.id);
+  const privateDeepLink = proposalDeepLink(proposal.id);
+  const persistedState = proposal.state;
   await repo.appendEvent({
     kind: "routing.proposal.upserted",
     actor: GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
@@ -615,26 +681,32 @@ export async function proposeRoutingFromPr(
     payload: {
       proposalId: proposal.id,
       revisionId: revision.id,
-      state,
+      state: persistedState,
       headSha: input.headSha,
-      bodyContentHash: markers.bodyContentHash,
-      deepLink,
+      bodyContentHash: persistedBodyContentHash,
+      deepLink: privateDeepLink,
+      configuredMode,
+      effectiveMode,
       runId: input.runId ?? null,
       eventSource: input.eventSource ?? "oidc.propose",
       action: input.action,
+      merged: input.merged === true,
     },
     dedupKey: `routing.proposal:${proposal.id}:${input.headSha}:${input.action}`,
   });
 
+  const suggestionsVisible = effectiveMode !== "shadow";
   return {
     proposalId: proposal.id,
     revisionId: revision.id,
-    state,
-    deepLink,
+    state: persistedState,
+    deepLink: suggestionsVisible ? privateDeepLink : null,
     sessionId,
-    candidates,
-    bodyContentHash: markers.bodyContentHash,
-    policyVersion: ROUTING_POLICY_VERSION,
+    candidates: suggestionsVisible ? candidates : [],
+    bodyContentHash: persistedBodyContentHash,
+    policyVersion: revision.policyVersion,
+    configuredMode,
+    effectiveMode,
   };
 }
 
@@ -652,7 +724,7 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
   if (ids.length > 0) {
     actorKind = "agent";
     for (const cid of ids) {
-      const d = await resolveDispatch(cid, evt.repo);
+      const d = await resolveDispatch(cid, evt.repo, evt.repoFullName);
       if (d?.taskId) taskIds.push(d.taskId);
       if (actorIdentity === (evt.author || "operator") && d?.runtime) actorIdentity = d.runtime;
     }

@@ -59,6 +59,17 @@ describe("routing postgres harness", () => {
     expect(routingContainers()).toBe("");
   }, 180_000);
 
+  it("atomically recovers missing candidates and serializes same-head replay", () => {
+    const result = runHarness(["--through", "018", "--revision-atomicity"]);
+    if (result.status !== 0) {
+      console.error(result.stdout);
+      console.error(result.stderr);
+    }
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/revision atomicity assertions passed/i);
+    expect(routingContainers()).toBe("");
+  }, 180_000);
+
   it("refuses configured staging/production database URLs", () => {
     const result = runHarness(["--through", "018"], {
       PLX_MC_DATABASE_URL:

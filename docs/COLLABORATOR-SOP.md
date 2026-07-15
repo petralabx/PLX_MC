@@ -1,8 +1,8 @@
 # PLX Mission Control — Collaborator SOP
 
-**Audience:** anyone who opens pull requests against a PLX-tracked repo
-(`PLX_MC`, `agentic-swarm`, `plx-customer-portal`), whether you work by hand or
-drive an AI agent (Cursor, Claude Code, ChatGPT/Codex, etc.).
+**Audience:** anyone who opens pull requests against one of the eight active
+PLX-tracked repos listed below, whether you work by hand or drive an AI agent
+(Cursor, Claude Code, ChatGPT/Codex, etc.).
 
 **Owner:** Vince · **Status:** active · **Effective:** 2026-07-09
 
@@ -41,7 +41,9 @@ The authoritative fleet list is `config/tracked-repos-registry.json`. Snapshot:
 | `petralabx/test-perms-check` | sandbox | soft | pending adoption |
 
 > Hard cutover 2026-07-08: active repos block merge on `compliance` fail.
-> `test-perms-check` stays soft. Rollback: fleet-compliance-hard-cutover runbook.
+> The fleet has **eight active repos**. `test-perms-check` is a sandbox and is
+> excluded from that count and from routing rollout; it stays soft. Rollback:
+> fleet-compliance-hard-cutover runbook.
 > New repos join the fleet via `docs/runbooks/REPO-ONBOARDING.md` +
 > `scripts/scaffold-tracked-repo.sh` — never by copying governance files by hand.
 > For control-plane shape (baseline files, per-tier minimums, folder map, and
@@ -108,22 +110,26 @@ the work and pass it, and it's how autonomous changes stay accountable.
 
 ### The flow
 
-1. **Pick the MC task(s)** the agent is working on (a PR may complete several
-   related tasks), and a **human accountable owner**. No task yet? The capture
-   hook can **auto-create** one for you (`MC_TASK_TITLE` + `MC_BUCKET`).
+1. **Resolve the MC task(s) before the agent edits the repo** (a PR may complete
+   several related tasks), and name a **human accountable owner**. If the Task
+   ID is unknown, the agent stays stopped:
+   - in a suggestion-enabled cohort, call `mc_suggest_work`, then an operator
+     explicitly selects existing work or approves creation;
+   - in a shadow cohort, unknown cohort, or unavailable suggestion service, the
+     accountable human searches MC and creates/assigns a Task in the registry
+     `default_bucket` when none exists.
+   There is no agent auto-create fallback and no edit begins without the Task.
 2. **Check the task out** — this mints a credential tied to `{task, human, repo}`:
    - **Cursor (PLX_MC):** the capture hook does it automatically at session start
-     when you opt in — it checks out the task(s) (or auto-creates one) and stamps
-     the PR for you. Set these in your run environment and start the session:
+     when you opt in — it checks out known task(s) and stamps the PR for you.
+     Set these in your run environment and start the session:
      ```bash
      export COMPLIANCE_CAPTURE=1
      export MC_BASE_URL=https://mc.plxcustomer.io
      export MC_ACCOUNTABLE=you@petrasoap.com
      export MC_REPO=petralabx/PLX_MC
-     # either: an existing task (or several — comma/space-separated, one PR)
+     # existing task(s), comma/space-separated for one PR
      export MC_TASK_ID="TASK-123, TASK-124"
-     # or: let it auto-create a task when you don't have one
-     # export MC_TASK_TITLE="Short title"; export MC_BUCKET=BKT-WMS
      # against the gated staging app, also: export MC_BASIC_AUTH="user:pass"
      ```
    - **Any agent / repo (manual):** call the checkout endpoint and copy the id
@@ -161,6 +167,18 @@ the work and pass it, and it's how autonomous changes stay accountable.
 - Agents must follow the repo's governance contract (`AGENTS.md` / `CLAUDE.md`)
   and run the repo's preflight/CI before pushing. The gate is a backstop, not a
   substitute for those.
+- Routing suggestions do not change the checkout rule. Suggestion-mode PR jobs
+  show only a generic summary plus an authenticated MC link; candidate IDs and
+  reasons stay in MC. Shadow cohorts expose neither links nor candidates.
+- Humans continue through the normal PR path. An unresolved routing proposal is
+  advisory and non-blocking; autonomous-agent compliance remains merge-blocking.
+- During an MC outage, an agent without a valid checkout and complete evidence
+  does not push. Preserve local work and resume after MC health is restored.
+- Generated compliance callers send preferred `repoFullName` plus a legacy bare
+  name. `PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` defaults to `1`; setting
+  it to `0` is an emergency migration downgrade only. The bare-name
+  `module-shim — remove after 2026-10-15` stays until every fleet gate refreshes
+  and old checkout dispatches expire.
 
 ---
 
@@ -195,8 +213,9 @@ work around the gate.
 
 **Don't**
 - Don't edit or disable the compliance workflow to pass the check.
-- Don't commit secrets — everything comes from the secrets manager. (Tokens like
-  `PLX_MC_BASE_URL` / `COMPLIANCE_CI_TOKEN` are set as repo secrets by the owner.)
+- Don't commit secrets — credentials come from the secrets manager.
+  `PLX_MC_BASE_URL` is public configuration; `COMPLIANCE_CI_TOKEN` remains a
+  repo secret and its value must not appear in logs or evidence.
 - Don't bypass a hard gate with admin merge unless the owner approves it.
 - Don't run an autonomous agent against a tracked repo without a checked-out task.
 

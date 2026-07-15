@@ -23,6 +23,7 @@ const proposeSchema = z.object({
   prNumber: z.number().int().positive(),
   headSha: z.string().min(1),
   mergeSha: z.string().nullable().optional(),
+  merged: z.boolean().default(false),
   headRef: z.string().optional(),
   baseBranch: z.string().optional(),
   sourceBranch: z.string().optional(),
@@ -85,6 +86,7 @@ export const POST = route(async (req) => {
     action: body.action,
     headSha: body.headSha,
     mergeSha: body.mergeSha,
+    merged: body.merged,
     baseBranch: body.baseBranch,
     sourceBranch: body.sourceBranch ?? body.headRef,
     title: body.title,
@@ -107,5 +109,7 @@ export const POST = route(async (req) => {
     candidates: result.candidates,
     bodyContentHash: result.bodyContentHash,
     policyVersion: result.policyVersion,
+    configuredMode: result.configuredMode,
+    effectiveMode: result.effectiveMode,
   };
 });

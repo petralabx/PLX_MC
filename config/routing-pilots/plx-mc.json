@@ -4,7 +4,7 @@
   "displayName": "PLX Mission Control",
   "tier": "hub",
   "enabled": true,
-  "mode": "shadow",
+  "mode": "suggestion",
   "policyVersion": "routing.v1",
   "fuzzyAutoLinkEnabled": false,
   "activation": {

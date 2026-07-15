@@ -5,6 +5,10 @@
 **Owner:** Vince  
 **MC:** TASK-446 (P10 rollout) · project `commit-pr-mc-routing`
 
+> **Historical evidence:** this report records the original five-pilot central
+> delivery as of 2026-07-14. It is not the current eight-repo fleet activation
+> ledger; later fleet evidence must live in a new dated bundle.
+
 ## Verdict
 
 Central PLX_MC routing runtime, pilot descriptors, rollout thresholds, retention

@@ -9,6 +9,7 @@ import {
   allocateNextTaskId,
   appendWorkLink,
   getProposalByIdentity,
+  getProposalRevision,
   insertCreationIntent,
   lockProposalForUpdate,
   recordDecision,
@@ -122,10 +123,15 @@ function memoryDb() {
         (r) => r.repo_id === row.repo_id && r.change_id === row.change_id
       );
       if (byIdentity >= 0) {
+        const current = tables.routing_proposals[byIdentity];
+        const preserveTerminal =
+          sql.includes("routing_proposals.state IN") &&
+          (current.state === "resolved" || current.state === "rejected");
         tables.routing_proposals[byIdentity] = {
-          ...tables.routing_proposals[byIdentity],
+          ...current,
           ...row,
-          id: tables.routing_proposals[byIdentity].id,
+          id: current.id,
+          state: preserveTerminal ? current.state : row.state,
         };
         return [tables.routing_proposals[byIdentity]] as R[];
       }
@@ -139,14 +145,42 @@ function memoryDb() {
         proposal_id: params[1],
         head_sha: params[2],
         policy_version: params[3],
-        evidence_meta: params[4],
+        evidence_meta:
+          typeof params[4] === "string" ? JSON.parse(params[4]) : params[4],
       };
       const existing = tables.routing_proposal_revisions.find(
         (r) => r.proposal_id === row.proposal_id && r.head_sha === row.head_sha
       );
-      if (existing) return [] as R[];
-      tables.routing_proposal_revisions.push(row);
-      return [row] as R[];
+      const persisted = existing ?? row;
+      if (!existing) tables.routing_proposal_revisions.push(row);
+
+      if (sql.includes("jsonb_to_recordset")) {
+        const candidates = JSON.parse(String(params[5] ?? "[]")) as Array<
+          Record<string, unknown>
+        >;
+        for (const candidate of candidates) {
+          const candidateRow = {
+            id: `${persisted.id}_c${candidate.rank}`,
+            revision_id: persisted.id,
+            rank: candidate.rank,
+            task_id: candidate.task_id,
+            bucket_id: candidate.bucket_id,
+            project_id: candidate.project_id,
+            match_score: candidate.match_score,
+            authorization_trust: candidate.authorization_trust,
+            reasons: candidate.reasons,
+          };
+          const candidateExists = tables.routing_revision_candidates.some(
+            (current) =>
+              current.revision_id === candidateRow.revision_id &&
+              current.rank === candidateRow.rank
+          );
+          if (!candidateExists) {
+            tables.routing_revision_candidates.push(candidateRow);
+          }
+        }
+      }
+      return [persisted] as R[];
     }
 
     if (
@@ -158,6 +192,16 @@ function memoryDb() {
         (r) => r.proposal_id === proposalId && r.head_sha === headSha
       );
       return (row ? [row] : []) as R[];
+    }
+
+    if (
+      sql.startsWith("SELECT rank, task_id") &&
+      sql.includes("routing_revision_candidates")
+    ) {
+      const revisionId = String(params[0]);
+      return tables.routing_revision_candidates
+        .filter((candidate) => candidate.revision_id === revisionId)
+        .sort((a, b) => Number(a.rank) - Number(b.rank)) as R[];
     }
 
     if (sql.includes("INSERT INTO routing_revision_candidates")) {
@@ -371,6 +415,80 @@ describe("routing repo — TxQuery seams", () => {
 });
 
 describe("routing repo — proposal identity and revision replay", () => {
+  it("persists revision and candidate inputs in one atomic SQL statement", async () => {
+    const calls: Array<{ text: string; params: unknown[] }> = [];
+    const q = (async <R extends object = Record<string, unknown>>(
+      text: string,
+      params: unknown[] = []
+    ): Promise<R[]> => {
+      calls.push({ text, params });
+      if (text.includes("WITH persisted_revision")) {
+        return [
+          {
+            id: "rr_atomic",
+            proposal_id: "rp_atomic",
+            head_sha: "atomic-sha",
+            policy_version: "routing.v1",
+            evidence_meta: { repoId: "1" },
+          },
+        ] as R[];
+      }
+      if (text.includes("FROM routing_proposal_revisions")) {
+        return [
+          {
+            id: "rr_atomic",
+            proposal_id: "rp_atomic",
+            head_sha: "atomic-sha",
+            policy_version: "routing.v1",
+            evidence_meta: { repoId: "1" },
+          },
+        ] as R[];
+      }
+      if (text.includes("FROM routing_revision_candidates")) {
+        return [
+          {
+            rank: 1,
+            task_id: "TASK-1",
+            bucket_id: "BKT-A",
+            project_id: null,
+            match_score: 90,
+            authorization_trust: "none",
+            reasons: ["persisted"],
+          },
+        ] as R[];
+      }
+      throw new Error(`unexpected SQL: ${text}`);
+    }) as TxQuery;
+
+    const result = await upsertProposalRevision(
+      {
+        id: "rr_atomic",
+        proposalId: "rp_atomic",
+        headSha: "atomic-sha",
+        policyVersion: "routing.v1",
+        evidenceMeta: { repoId: "1" },
+        candidates: [
+          {
+            rank: 1,
+            taskId: "TASK-1",
+            bucketId: "BKT-A",
+            projectId: null,
+            matchScore: 90,
+            authorizationTrust: "none",
+            reasons: ["persisted"],
+          },
+        ],
+      },
+      q
+    );
+
+    expect(calls[0]?.text).toContain("WITH persisted_revision");
+    expect(calls[0]?.text).toContain("jsonb_to_recordset");
+    expect(calls[0]?.text).toContain("INSERT INTO routing_revision_candidates");
+    expect(calls.filter((call) => call.text.includes("INSERT INTO"))).toHaveLength(1);
+    expect(result.candidates[0]?.taskId).toBe("TASK-1");
+  });
+
   it("upserts proposals by stable {repoId, changeId} identity", async () => {
     const { q } = memoryDb();
     const identity: ProposalIdentity = { repoId: "998877", changeId: "175" };
@@ -392,6 +510,29 @@ describe("routing repo — proposal identity and revision replay", () => {
     expect(loaded?.title).toBe("updated");
   });
 
+  it("does not reopen a resolved proposal during metadata replay", async () => {
+    const { q, tables } = memoryDb();
+    const input: RoutingProposalInput = {
+      id: "rp_resolved",
+      repoId: "petralabx/PLX_MC",
+      changeId: "176",
+      sessionId: null,
+      state: "action_required",
+      title: "routing",
+      bodyContentHash: "first",
+      markers: [],
+      derivedProjectId: null,
+      failureReason: null,
+    };
+    await upsertRoutingProposal(input, q);
+    tables.routing_proposals[0].state = "resolved";
+    const replay = await upsertRoutingProposal(
+      { ...input, state: "action_required", bodyContentHash: "second" },
+      q
+    );
+    expect(replay.state).toBe("resolved");
+  });
+
   it("replays the same head-SHA revision idempotently", async () => {
     const { q, tables } = memoryDb();
     tables.routing_proposals.push({
@@ -407,13 +548,6 @@ describe("routing repo — proposal identity and revision replay", () => {
       headSha: "deadbeef",
       policyVersion: "routing.v1",
       evidenceMeta: { repoId: "1", title: "x", pathCount: 2 },
-      candidates: [],
-    };
-
-    const a = await upsertProposalRevision(revision, q);
-    const b = await upsertProposalRevision({
-      ...revision,
-      id: "rr_2",
       candidates: [
         {
           rank: 1,
@@ -422,13 +556,85 @@ describe("routing repo — proposal identity and revision replay", () => {
           projectId: null,
           matchScore: 100,
           authorizationTrust: "author_declaration",
-          reasons: ["MC-Task marker"],
+          reasons: ["first persisted candidate"],
+        },
+      ],
+    };
+
+    const a = await upsertProposalRevision(revision, q);
+    const b = await upsertProposalRevision({
+      ...revision,
+      id: "rr_2",
+      policyVersion: "routing.v2",
+      evidenceMeta: { repoId: "1", title: "changed", pathCount: 9 },
+      candidates: [
+        {
+          rank: 1,
+          taskId: "TASK-2",
+          bucketId: "BKT-B",
+          projectId: null,
+          matchScore: 99,
+          authorizationTrust: "fuzzy",
+          reasons: ["stale replay candidate"],
         },
       ],
     }, q);
     expect(a.id).toBe(b.id);
     expect(tables.routing_proposal_revisions).toHaveLength(1);
     expect(tables.routing_revision_candidates).toHaveLength(1);
+    const persisted = await getProposalRevision("rp_1", "deadbeef", q);
+    expect(persisted?.policyVersion).toBe("routing.v1");
+    expect(persisted?.evidenceMeta.title).toBe("x");
+    expect(persisted?.candidates[0]?.taskId).toBe("TASK-1");
+  });
+
+  it("backfills a missing candidate rank on same-head replay", async () => {
+    const { q, tables } = memoryDb();
+    tables.routing_proposals.push({
+      id: "rp_backfill",
+      repo_id: "1",
+      change_id: "10",
+      state: "action_required",
+    });
+    const input: RoutingRevisionInput = {
+      id: "rr_backfill",
+      proposalId: "rp_backfill",
+      headSha: "backfill-sha",
+      policyVersion: "routing.v1",
+      evidenceMeta: { repoId: "1", title: "first" },
+      candidates: [
+        {
+          rank: 1,
+          taskId: "TASK-1",
+          bucketId: "BKT-A",
+          projectId: null,
+          matchScore: 100,
+          authorizationTrust: "none",
+          reasons: ["one"],
+        },
+        {
+          rank: 2,
+          taskId: "TASK-2",
+          bucketId: "BKT-B",
+          projectId: null,
+          matchScore: 80,
+          authorizationTrust: "none",
+          reasons: ["two"],
+        },
+      ],
+    };
+    await upsertProposalRevision(input, q);
+    tables.routing_revision_candidates.splice(
+      tables.routing_revision_candidates.findIndex((row) => row.rank === 2),
+      1
+    );
+
+    const replay = await upsertProposalRevision(
+      { ...input, id: "rr_replay" },
+      q
+    );
+    expect(replay.candidates.map((candidate) => candidate.rank)).toEqual([1, 2]);
+    expect(tables.routing_proposal_revisions).toHaveLength(1);
   });
 
   it("keeps matchScore separate from authorizationTrust on candidates", async () => {

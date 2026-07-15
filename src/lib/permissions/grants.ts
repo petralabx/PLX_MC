@@ -46,6 +46,7 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
 const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
   [MCP_SERVICE_PRINCIPAL_ID]: [
     "task.read",
+    "task.create",
     "task.checkout",
     "task.progress",
     "task.complete",

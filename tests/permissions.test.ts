@@ -23,6 +23,10 @@ function service(id: string): PermissionActor {
 }
 
 describe("capability typing", () => {
+  it("identifies the reviewed MCP task-create policy revision", () => {
+    expect(POLICY_VERSION).toBe("permissions.v2");
+  });
+
   it("accepts known capabilities and rejects unknowns", () => {
     expect(isCapability("task.read")).toBe(true);
     expect(isCapability("repo.approve")).toBe(true);
@@ -192,6 +196,7 @@ describe("service-principal separation", () => {
     expect(mcpCaps).toEqual(
       expect.arrayContaining([
         "task.read",
+        "task.create",
         "task.checkout",
         "task.progress",
         "task.complete",
@@ -201,15 +206,14 @@ describe("service-principal separation", () => {
         "routing.resolve",
       ])
     );
-    expect(mcpCaps).not.toContain("task.create");
     expect(mcpCaps).not.toContain("repo.approve");
     expect(mcpCaps).not.toContain("permissions.manage");
 
     const actor = service("sp_mcp_cursor");
+    expect(authorize({ actor, capability: "task.create" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "routing.suggest" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "routing.resolve" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "task.link" }).allowed).toBe(true);
-    expect(authorize({ actor, capability: "task.create" }).allowed).toBe(false);
     expect(authorize({ actor, capability: "repo.approve" }).allowed).toBe(false);
   });
 
@@ -283,15 +287,8 @@ describe("contextual denial", () => {
   });
 
   it("denies service principals from human-only contextual actions", () => {
-    // MCP may task.link for routing confirm/attach (P8) but still cannot create
-    // Tasks via task.create or mutate planning hierarchy.
-    expect(
-      authorize({
-        actor: service("sp_mcp_cursor"),
-        capability: "task.create",
-        resource: { type: "task", id: "TASK-1" },
-      })
-    ).toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
+    // MCP may mutate Tasks through its explicit grants but cannot mutate the
+    // planning hierarchy.
     expect(
       authorize({
         actor: service("sp_mcp_cursor"),

@@ -1,7 +1,7 @@
 // Stable capability + actor types for the permissions kernel.
 // Intentionally small — not a generic IAM / policy DSL.
 
-export const POLICY_VERSION = "permissions.v1" as const;
+export const POLICY_VERSION = "permissions.v2" as const;
 
 export type AccessRole = "owner" | "admin" | "member";
 

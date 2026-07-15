@@ -16,6 +16,16 @@
 
 ## Lessons
 
+### 2026-07-15 (ET) — Governed sessions could checkout tasks but could not create them
+
+- **What happened:** The PLX MC MCP authenticated successfully but both its
+  create tool and compliance fallback returned `capability_not_granted`.
+- **Root cause:** `sp_mcp_cursor` exposed `mc_create_task` while its reviewed
+  service grant bundle deliberately omitted `task.create`.
+- **Rule going forward:** Keep exposed MCP mutation tools and reviewed service
+  grants aligned through policy-versioned contract tests before production
+  activation.
+
 ### 2026-07-15 (ET) — Checkout recorded accountability without assigning the task owner
 
 - **What happened:** Agent checkout persisted `accountableHuman` on the dispatch,

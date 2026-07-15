@@ -90,7 +90,7 @@ export async function actionSearchTasks(query: {
 }
 
 export async function actionCreateTask(identity: McpIdentity, input: CreateTaskInput) {
-  // MCP service principal intentionally lacks task.create — enforce here.
+  // Task creation remains gated by the reviewed MCP service-principal registry.
   const authorized = requireMcpActor(identity, "task.create", {
     type: "bucket",
     id: input.bucket,

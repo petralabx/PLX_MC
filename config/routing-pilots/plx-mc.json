@@ -8,10 +8,10 @@
   "policyVersion": "routing.v1",
   "fuzzyAutoLinkEnabled": false,
   "activation": {
-    "status": "central_ready",
+    "status": "active",
     "localManifest": ".plx/mc-routing.json",
     "workflowManifest": ".github/plx-mc-routing-manifest.json",
-    "notes": "PLX_MC is the central runtime. Local path-routing manifest and generated workflow artifacts ship in this project."
+    "notes": "TASK-456 completed the central production cutover. Local path-routing manifest and generated workflow artifacts ship in this project."
   },
   "defaultBucket": "BKT-INFRA",
   "owner": "Vince"

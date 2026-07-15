@@ -113,6 +113,13 @@ Controls who may sign in to MC and invoke MCP as an operator.
 
 Controls which repos may mint OIDC tokens for verify.
 
+TASK-456 provisioned the exact production fleet allowlist:
+`petralabx/PLX_MC`, `petralabx/plx-customer-portal`,
+`petralabx/agentic-swarm`, `petralabx/skills`,
+`petralabx/local-inference`, `petralabx/1hr-after`,
+`petralabx/furgenics`, and `petralabx/for-and-against`. Rotate this set
+deliberately; do not add the excluded `test-perms-check` sandbox.
+
 1. Append `org/repo` (comma-separated, no spaces) for each fleet repo entering
    OIDC.
 2. **Redeploy** MC Production.
@@ -120,6 +127,12 @@ Controls which repos may mint OIDC tokens for verify.
    compliance audit / workflow logs).
 4. Do **not** add repos that are not yet onboarded per
    [REPO-ONBOARDING.md](runbooks/REPO-ONBOARDING.md).
+
+Selected organization Actions variables are separate from the Vercel OIDC
+allowlist. On the GitHub organization `free` plan, public selected repositories
+consume `PLX_MC_BASE_URL` and `PLX_MC_ROUTING_METADATA_ENABLED`; the private
+portal required equivalent repository-level variables for runtime consumption.
+Never treat selected membership alone as consumption evidence.
 
 ---
 

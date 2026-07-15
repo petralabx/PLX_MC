@@ -92,13 +92,18 @@ describe("pilot enrollment", () => {
       expect(pilot.fuzzyAutoLinkEnabled).toBe(false);
       expect(pilot.enabled).toBe(true);
     }
-    expect(getPilotByRepo("petralabx/PLX_MC")?.activation.status).toBe("central_ready");
-    expect(getPilotByRepo("petralabx/plx-customer-portal")?.activation.status).toBe(
-      "active"
-    );
-    expect(getPilotByRepo("petralabx/skills")?.activation.status).toBe(
-      "pending_downstream_pr"
-    );
+    expect(
+      Object.fromEntries(pilots.map((p) => [p.repo, p.activation.status]))
+    ).toEqual({
+      "petralabx/PLX_MC": "active",
+      "petralabx/plx-customer-portal": "active",
+      "petralabx/agentic-swarm": "pending_downstream_pr",
+      "petralabx/skills": "active",
+      "petralabx/local-inference": "pending_downstream_pr",
+      "petralabx/1hr-after": "pending_downstream_pr",
+      "petralabx/furgenics": "pending_downstream_pr",
+      "petralabx/for-and-against": "active",
+    });
     expect(rolloutHealth().ok).toBe(true);
     expect(rolloutHealth().pilots).toBe(8);
     expect(rolloutHealth().reasons).toEqual([]);

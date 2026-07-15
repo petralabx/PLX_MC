@@ -145,11 +145,11 @@ the existing root and align only the control-plane surfaces around it.
 | `agentic-swarm` | `product_platform` | Structurally aligned; local governance must remain a pointer to PLX_MC |
 | `PLX_MC` | `hub` | Governance SSOT; optional `.claude/` absence is not a gap |
 | `plx-customer-portal` | `product_app` | **Verified** on `staging` (2026-07-13): app root `portal/` (+ `src/` present); `AGENTS.md`, `CLAUDE.md`, `docs/GOVERNANCE.md`, `docs/runbooks/CONTRIBUTING.md`, `.cursor/`, compliance workflows present |
-| `skills` | `skills` | Active fleet catalog repo |
+| `skills` | `skills` | Active fleet catalog repo; shadow routing workflow active via PR #7 |
 | `local-inference` | `tooling` | Roots `scripts/` + `litellm/`; compliance workflows + `docs/GOVERNANCE.md` present. Residual closed via https://github.com/petralabx/local-inference/pull/7 (`CLAUDE.md` + `petralabx/PLX_MC` governance links) |
 | `1hr-after` | `tooling` | Active fleet marketing repo; routing downstream activation pending |
 | `furgenics` | `tooling` | Active fleet marketing repo; routing downstream activation pending |
-| `for-and-against` | `tooling` | Active fleet marketing repo; routing downstream activation pending |
+| `for-and-against` | `tooling` | Active fleet marketing repo; shadow routing workflow active via PR #3 |
 
 These are the eight active fleet repos. `test-perms-check` remains an excluded
 pending-adoption sandbox.
@@ -256,8 +256,12 @@ path-rule activation.
 
 The eight routing cohorts are `PLX_MC`, `plx-customer-portal`,
 `agentic-swarm`, `skills`, `local-inference`, `1hr-after`, `furgenics`, and
-`for-and-against`. The sandbox is excluded. `plx-customer-portal` is the only
-active downstream workflow; all other downstream repos are pending.
+`for-and-against`. The sandbox is excluded. Central OIDC and selected
+organization variables are provisioned for the eight-repo fleet, but each
+consumer still requires its own activation PR to install the generated routing
+workflow and prove consumption. `plx-customer-portal`, `skills`, and
+`for-and-against` are active downstream; `agentic-swarm`, `local-inference`,
+`1hr-after`, and `furgenics` remain pending.
 
 For a **downstream** pilot:
 

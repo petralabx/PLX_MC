@@ -134,9 +134,9 @@ integrations:
     criticality: High
     scope: >-
       Runtime control plane plus copied generated metadata workflows. Eight
-      active fleet cohorts are declared; PLX_MC is central-ready,
-      plx-customer-portal is the only active downstream workflow, and every
-      other downstream activation remains a separate task/PR.
+      active fleet cohorts are declared; PLX_MC, plx-customer-portal, skills,
+      and for-and-against are active. Every other downstream activation remains
+      a separate task/PR.
     autonomous: false # advisory routing only; humans explicitly select/create and their PRs remain non-blocking
     default_state: >-
       Code defaults are mixed: proposals, metadata, and maintenance are on unless
@@ -145,7 +145,9 @@ integrations:
       suggestion for PLX_MC/portal/agentic-swarm and shadow for skills/
       local-inference/1hr-after/furgenics/for-and-against. Operator rollout
       enables Inbox before suggestions and uses selected-repo metadata variables.
-      Compliance full-repo binding defaults on unless explicitly set to 0.
+      TASK-456 production has shadow/suggest/Inbox/proposals/metadata/maintenance
+      on, confirmation/fuzzy off. Compliance full-repo binding defaults on unless
+      explicitly set to 0.
     feature_flag: >-
       PLX_MC_ROUTING_SHADOW_ENABLED, PLX_MC_ROUTING_SUGGEST_ENABLED,
       PLX_MC_ROUTING_CONFIRM_ENABLED, PLX_MC_ROUTING_PROPOSALS_ENABLED,
@@ -208,10 +210,10 @@ integrations:
       - Fuzzy auto-link promotion (forbidden for this project; separate precision
         gate — 300/30d/5 repos/20 per cohort/≥98% top-1/≥95% CI LB/≤0.5% dup/≤1%
         bucket correction/zero auth incidents)
-      - Central fleet activation is TASK-452; downstream activation PRs/tasks
-        for agentic-swarm (TASK-448), skills
-        (TASK-449), local-inference (TASK-450), 1hr-after (TASK-453), furgenics
-        (TASK-454), and for-and-against (TASK-455); portal TASK-447 is complete
+      - Remaining downstream activation PRs/tasks are agentic-swarm (TASK-448),
+        local-inference (TASK-450), 1hr-after (TASK-453), and furgenics
+        (TASK-454); central TASK-452, portal TASK-447, skills TASK-449, and
+        for-and-against TASK-455 are complete
       - Bare-name compliance shim removal after 2026-10-15, only after all fleet
         gates refresh and old checkout dispatches expire
       - Runtime consumption/enforcement of optional .plx/mc-routing.json path rules

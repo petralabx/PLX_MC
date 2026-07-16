@@ -37,6 +37,10 @@ of record mirrored two-way and every reconciliation audited.
 - Secrets come from AWS Secrets Manager (`prod/ec2-secrets`) through one shared
   accessor — no hardcoded keys, no scattered env lookups.
 - Timestamps are stored and compared in UTC; rendering localizes.
+- New planes wait on the terminating **mirror is boring** gate: schema-green
+  self-check + AGENTS.md↔TOOLS.md parity in CI + N consecutive green cron
+  ticks (default N=7). Conflict SLO is warning-only until volume exists
+  (full criteria: `AGENTS.md` → "Mirror Is Boring Entry Gate").
 
 ## Canonical Runtime Docs
 

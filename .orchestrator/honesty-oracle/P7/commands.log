@@ -1,0 +1,19 @@
+# P7 commands.log
+
+python scripts/check-arch-parity.py
+# -> arch parity clean (delta current / Graph change-notifications deferred P11)
+
+python -c "from pathlib import Path; t=(Path('AGENTS.md').read_text(encoding='utf-8')+Path('SOUL.md').read_text(encoding='utf-8')); assert 'mirror is boring' in t.lower() or 'mirror-boring' in t.lower() or 'consecutive' in t.lower(); print('P7 gate text ok')"
+# -> P7 gate text ok
+
+git diff --check
+# -> exit 0
+
+python -m pytest tests/test_check_arch_parity.py -q --no-header
+# -> 6 passed
+
+python -m ruff check scripts/check-arch-parity.py tests/test_check_arch_parity.py
+# -> All checks passed
+
+python -m ruff format scripts/check-arch-parity.py tests/test_check_arch_parity.py
+# -> reformatted then clean

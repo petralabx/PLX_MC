@@ -76,7 +76,27 @@ All coding agents and humans must run the canonical gate command:
 - Before push/PR update: `./scripts/preflight.sh --mode pre-push`
 
 Enforcement surfaces: `.pre-commit-config.yaml` (local hooks) and
-`.github/workflows/ci.yml` (CI re-runs the same script).
+`.github/workflows/ci.yml` (CI re-runs the same script). Architecture
+maturity is defended by `scripts/check-arch-parity.py` in that same policy
+path (AGENTS.md ↔ TOOLS.md: delta current / Graph change-notifications
+deferred P11).
+
+## Mirror Is Boring Entry Gate
+
+No new plane (Knowledge Hub UI, OpenFlowKit, new MCP transports, swarm
+expansion) merges until the terminating **mirror is boring** gate is met —
+all of:
+
+1. Self-check schema is green (all honesty fields present and well-formed).
+2. AGENTS.md ↔ TOOLS.md arch-parity passes in CI
+   (`scripts/check-arch-parity.py` via preflight).
+3. Self-check reports `dataSource: live` + fresh for **N consecutive green
+   cron ticks** (default **N=7** ticks, not calendar days — a tick streak
+   cannot be reset by an unrelated flake).
+
+Conflict SLO is **warning-only until conflict volume exists** — a
+low-volume queue with items legitimately awaiting a human must not deadlock
+this gate. See `SOUL.md` for the non-negotiable summary.
 
 ## PLX-MC MCP Integration (Runtime)
 

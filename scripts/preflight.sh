@@ -68,6 +68,9 @@ run_policy() {
     "$PY" scripts/check-mc-brand-application.py
   fi
 
+  step "Architecture maturity parity (AGENTS.md <-> TOOLS.md)"
+  "$PY" scripts/check-arch-parity.py
+
   step "Migration numbering (serialized prefixes)"
   "$PY" scripts/check-migrations.py
 }

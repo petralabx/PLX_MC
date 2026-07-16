@@ -1,0 +1,438 @@
+diff --git a/scripts/compliance-checkout.mjs b/scripts/compliance-checkout.mjs
+index 40d392f..b77f833 100755
+--- a/scripts/compliance-checkout.mjs
++++ b/scripts/compliance-checkout.mjs
+@@ -52,6 +52,8 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
+     };
+   }
+ 
++  log("[compliance-capture] fallback path — prefer MCP checkout");
++
+   const base = env.MC_BASE_URL;
+   const accountableHuman = env.MC_ACCOUNTABLE;
+   const repo = env.MC_REPO;
+diff --git a/src/app/api/compliance/checkout/route.ts b/src/app/api/compliance/checkout/route.ts
+index 9a4c54c..dfc37e8 100644
+--- a/src/app/api/compliance/checkout/route.ts
++++ b/src/app/api/compliance/checkout/route.ts
+@@ -23,5 +23,6 @@ export const POST = route(async (req) => {
+   return checkout({
+     ...body,
+     actor: authorized.actor,
++    door: "compliance",
+   });
+ });
+diff --git a/src/lib/compliance/repo.ts b/src/lib/compliance/repo.ts
+index 7fcaa31..7cc36dd 100644
+--- a/src/lib/compliance/repo.ts
++++ b/src/lib/compliance/repo.ts
+@@ -83,6 +83,19 @@ export async function eventsAfter(afterSeq = 0, limit = 100, kind: string | null
+   }));
+ }
+ 
++/** Most recent checkout audit door (`mcp` | `compliance`), or null if none. */
++export async function latestCheckoutDoor(): Promise<string | null> {
++  const rows = await query<{ door: string | null }>(
++    `SELECT payload->>'door' AS door
++       FROM mc_events
++      WHERE kind = 'checkout'
++      ORDER BY seq DESC
++      LIMIT 1`
++  );
++  const door = (rows[0]?.door ?? "").trim();
++  return door.length > 0 ? door : null;
++}
++
+ // ─── Dispatch ledger ─────────────────────────────────────────────────────────
+ 
+ export interface DispatchRow {
+diff --git a/src/lib/compliance/service.ts b/src/lib/compliance/service.ts
+index e7c40fb..387dc25 100644
+--- a/src/lib/compliance/service.ts
++++ b/src/lib/compliance/service.ts
+@@ -119,6 +119,9 @@ async function resolveDispatch(
+ 
+ // ─── Checkout (the handshake, decision 3) ────────────────────────────────────
+ 
++/** Which HTTP door invoked the shared checkout() core (audit provenance). */
++export type CheckoutDoor = "mcp" | "compliance";
++
+ export interface CheckoutInput {
+   taskId: string;
+   runtime: string;
+@@ -126,6 +129,8 @@ export interface CheckoutInput {
+   repo: string;
+   /** Durable permission actor — never taken from a caller-supplied body field. */
+   actor?: PermissionActor;
++  /** Door that called this core — recorded on the checkout audit event. */
++  door?: CheckoutDoor;
+ }
+ 
+ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: string }> {
+@@ -191,6 +196,7 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
+       accountableHuman: input.accountableHuman,
+       actorKind: "agent",
+       permissionActorId: input.actor?.id ?? null,
++      door: input.door ?? null,
+     },
+   });
+   return { checkoutId };
+diff --git a/src/lib/mcp/actions.ts b/src/lib/mcp/actions.ts
+index beb8cc0..b083155 100644
+--- a/src/lib/mcp/actions.ts
++++ b/src/lib/mcp/actions.ts
+@@ -117,6 +117,7 @@ export async function actionCheckout(identity: McpIdentity, taskId: string) {
+     accountableHuman: identity.operatorEmail,
+     repo: identity.repo,
+     actor: identity.actor,
++    door: "mcp",
+   });
+   const stamp = `MC-Checkout: ${checkoutId}`;
+   return {
+diff --git a/src/lib/mcp/honesty.ts b/src/lib/mcp/honesty.ts
+index 053e74a..442e2cd 100644
+--- a/src/lib/mcp/honesty.ts
++++ b/src/lib/mcp/honesty.ts
+@@ -2,6 +2,7 @@
+ // Local-only: no Graph network probe. dataSource discriminates seed vs live
+ // from recorded inbound deltas on sync_register_freshness.
+ 
++import { latestCheckoutDoor } from "@/lib/compliance/repo";
+ import { cronConfigured, graphWebhookConfigured, graphWebhookEnabled } from "@/lib/secrets";
+ import {
+   ROUTING_REQUIRED_REGISTERS,
+@@ -25,6 +26,8 @@ export interface HonestyFields {
+   webhooksEnabled: boolean;
+   mcpEnabled: boolean;
+   dataSource: DataSource;
++  /** Most recent checkout door from audit (`mcp` | `compliance`), if any. */
++  lastCheckoutDoor: string | null;
+ }
+ 
+ /** Cadence mode: in-app scheduler wins when enabled; else cron if secret present. */
+@@ -71,11 +74,20 @@ export function resolveWebhooksEnabled(opts?: {
+   return enabled && configured;
+ }
+ 
++async function loadLastCheckoutDoorSafe(): Promise<string | null> {
++  try {
++    return await latestCheckoutDoor();
++  } catch {
++    return null;
++  }
++}
++
+ /** Load freshness + honesty flags from local env/DB (no Graph). */
+ export async function buildHonestyFields(opts?: {
+   lastSweep?: string | null;
+   now?: Date;
+   loadRegisterTimestamps?: () => Promise<Partial<Record<string, Date | string | null | undefined>>>;
++  loadLastCheckoutDoor?: () => Promise<string | null>;
+ }): Promise<HonestyFields> {
+   const now = opts?.now ?? new Date();
+   const syncOn = syncEnabled();
+@@ -86,16 +98,23 @@ export async function buildHonestyFields(opts?: {
+     loadRegisterTimestamps:
+       opts?.loadRegisterTimestamps ?? (() => getRegisterInboundCompletions()),
+   });
++  const databaseBound = resolveDatabaseBound();
++  const lastCheckoutDoor = opts?.loadLastCheckoutDoor
++    ? await opts.loadLastCheckoutDoor()
++    : databaseBound
++      ? await loadLastCheckoutDoorSafe()
++      : null;
+ 
+   return {
+     syncMode: resolveSyncMode({ syncEnabled: syncOn, cronConfigured: cronOn }),
+     cronConfigured: cronOn,
+     syncEnabled: syncOn,
+-    databaseBound: resolveDatabaseBound(),
++    databaseBound,
+     lastSweepAgeMs: resolveLastSweepAgeMs(opts?.lastSweep, now),
+     freshness,
+     webhooksEnabled: resolveWebhooksEnabled(),
+     mcpEnabled: mcpEnabled(),
+     dataSource: resolveDataSource(freshness),
++    lastCheckoutDoor,
+   };
+ }
+diff --git a/tests/checkout-shared-core.test.ts b/tests/checkout-shared-core.test.ts
+new file mode 100644
+index 0000000..2f75697
+--- /dev/null
++++ b/tests/checkout-shared-core.test.ts
+@@ -0,0 +1,191 @@
++// P5 — both checkout doors invoke the shared checkout() core with equivalent
++// verification guarantees; fallback script banners prefer MCP checkout.
++import { beforeEach, describe, expect, it, vi } from "vitest";
++import { fileURLToPath } from "node:url";
++import path from "node:path";
++
++const mocks = vi.hoisted(() => ({
++  checkout: vi.fn(async () => ({ checkoutId: "dsp_shared" })),
++  requireSessionActor: vi.fn(),
++  requireMcpActor: vi.fn(),
++  verifyMcpRequest: vi.fn(),
++}));
++
++vi.mock("@/lib/compliance/service", async () => {
++  const actual = await vi.importActual<typeof import("@/lib/compliance/service")>(
++    "@/lib/compliance/service"
++  );
++  return {
++    ...actual,
++    checkout: mocks.checkout,
++  };
++});
++
++vi.mock("@/lib/routing/mutations/actors", () => ({
++  requireSessionActor: mocks.requireSessionActor,
++  requireMcpActor: mocks.requireMcpActor,
++}));
++
++vi.mock("@/lib/mcp/auth", async () => {
++  const actual = await vi.importActual<typeof import("@/lib/mcp/auth")>("@/lib/mcp/auth");
++  return {
++    ...actual,
++    verifyMcpRequest: mocks.verifyMcpRequest,
++  };
++});
++
++vi.mock("@/lib/mcp/audit", () => ({
++  recordMcpToolCall: vi.fn(async () => "1"),
++}));
++
++vi.mock("@/lib/mcp/sync-meta", () => ({
++  syncMetaForTask: vi.fn(async () => ({ status: "queued" })),
++}));
++
++vi.mock("@/lib/api/route", async () => {
++  const actual = await vi.importActual<typeof import("@/lib/api/route")>("@/lib/api/route");
++  return {
++    ...actual,
++    route: (handler: (req: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<unknown>) =>
++      handler,
++  };
++});
++
++const sessionActor = {
++  kind: "human" as const,
++  id: "oid-1",
++  role: "member" as const,
++  status: "active" as const,
++};
++
++const mcpIdentity = {
++  operatorEmail: "vince@petrasoap.com",
++  runtime: "cursor",
++  workerId: "w1",
++  repo: "petralabx/PLX_MC",
++  servicePrincipalId: "sp_mcp_cursor",
++  actor: { kind: "service" as const, id: "sp_mcp_cursor", status: "active" as const },
++};
++
++describe("checkout doors → shared checkout() core", () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++    mocks.checkout.mockResolvedValue({ checkoutId: "dsp_shared" });
++    mocks.requireSessionActor.mockResolvedValue({
++      actor: sessionActor,
++      actorId: "oid-1",
++      actorKind: "human",
++      auditLabel: "vince@petrasoap.com",
++    });
++    mocks.requireMcpActor.mockReturnValue({
++      actor: mcpIdentity.actor,
++      actorId: "sp_mcp_cursor",
++      actorKind: "service",
++      auditLabel: "vince@petrasoap.com",
++    });
++    mocks.verifyMcpRequest.mockResolvedValue(mcpIdentity);
++  });
++
++  it("POST /api/cursor/checkout and POST /api/compliance/checkout both call checkout()", async () => {
++    const { POST: cursorCheckout } = await import("@/app/api/cursor/checkout/route");
++    const { POST: complianceCheckout } = await import("@/app/api/compliance/checkout/route");
++
++    await cursorCheckout(
++      new Request("http://localhost/api/cursor/checkout", {
++        method: "POST",
++        headers: {
++          "content-type": "application/json",
++          "x-api-key": "k",
++          "x-mc-operator-email": "vince@petrasoap.com",
++          "x-mc-repo": "petralabx/PLX_MC",
++        },
++        body: JSON.stringify({ taskId: "TASK-490" }),
++      }),
++      { params: Promise.resolve({}) }
++    );
++
++    await complianceCheckout(
++      new Request("http://localhost/api/compliance/checkout", {
++        method: "POST",
++        headers: { "content-type": "application/json" },
++        body: JSON.stringify({
++          taskId: "TASK-490",
++          runtime: "cursor",
++          accountableHuman: "vince@petrasoap.com",
++          repo: "petralabx/PLX_MC",
++        }),
++      }),
++      { params: Promise.resolve({}) }
++    );
++
++    expect(mocks.checkout).toHaveBeenCalledTimes(2);
++
++    const mcpCall = mocks.checkout.mock.calls[0][0];
++    const complianceCall = mocks.checkout.mock.calls[1][0];
++
++    // Equivalent verification guarantees: same task + repo + authorized actor.
++    expect(mcpCall).toMatchObject({
++      taskId: "TASK-490",
++      repo: "petralabx/PLX_MC",
++      accountableHuman: "vince@petrasoap.com",
++      runtime: "cursor",
++      actor: expect.objectContaining({ id: "sp_mcp_cursor" }),
++      door: "mcp",
++    });
++    expect(complianceCall).toMatchObject({
++      taskId: "TASK-490",
++      repo: "petralabx/PLX_MC",
++      accountableHuman: "vince@petrasoap.com",
++      runtime: "cursor",
++      actor: expect.objectContaining({ id: "oid-1" }),
++      door: "compliance",
++    });
++
++    expect(mocks.requireMcpActor).toHaveBeenCalledWith(
++      mcpIdentity,
++      "task.checkout",
++      expect.objectContaining({ type: "task", id: "TASK-490" }),
++      expect.objectContaining({ repositoryId: "petralabx/PLX_MC" })
++    );
++    expect(mocks.requireSessionActor).toHaveBeenCalledWith(
++      "task.checkout",
++      expect.objectContaining({ type: "task", id: "TASK-490" }),
++      expect.objectContaining({ repositoryId: "petralabx/PLX_MC" })
++    );
++  });
++});
++
++describe("compliance-checkout fallback banner", () => {
++  it("prints prefer-MCP banner when capture is enabled", async () => {
++    const scriptPath = path.join(
++      path.dirname(fileURLToPath(import.meta.url)),
++      "../scripts/compliance-checkout.mjs"
++    );
++    let pathname = path.resolve(scriptPath).replace(/\\/g, "/");
++    if (!pathname.startsWith("/")) pathname = `/${pathname}`;
++    pathname = pathname.replace(/ /g, "%20");
++    const { capture } = await import(`file://${pathname}`);
++
++    const logs: string[] = [];
++    const fetch = (async () =>
++      ({
++        ok: true,
++        status: 200,
++        json: async () => ({ data: { checkoutId: "dsp_banner" } }),
++      }) as unknown as Response) as typeof globalThis.fetch;
++
++    await capture({
++      env: {
++        COMPLIANCE_CAPTURE: "1",
++        MC_BASE_URL: "http://mc",
++        MC_ACCOUNTABLE: "vince",
++        MC_REPO: "petralabx/PLX_MC",
++        MC_TASK_ID: "TASK-1",
++      },
++      fetch,
++      log: (m: string) => logs.push(m),
++    });
++
++    expect(logs[0]).toBe("[compliance-capture] fallback path — prefer MCP checkout");
++  });
++});
+diff --git a/tests/compliance-server.test.ts b/tests/compliance-server.test.ts
+index 5e894b5..bbb7b31 100644
+--- a/tests/compliance-server.test.ts
++++ b/tests/compliance-server.test.ts
+@@ -40,6 +40,11 @@ vi.mock("@/lib/compliance/repo", () => ({
+   async eventsAfter() {
+     return db.events.map((e, i) => ({ seq: String(i + 1), ts: "t", pr: null, repo: null, taskId: null, payload: {}, ...e }));
+   },
++  async latestCheckoutDoor() {
++    const last = [...db.events].reverse().find((e) => e.kind === "checkout");
++    const door = last?.payload?.door;
++    return typeof door === "string" && door.length > 0 ? door : null;
++  },
+ }));
+ 
+ vi.mock("@/lib/sync/repo", () => ({
+@@ -114,6 +119,26 @@ describe("checkout", () => {
+     expect(db.events.some((e) => e.kind === "checkout")).toBe(true);
+   });
+ 
++  it("records door provenance on the checkout audit payload (P5)", async () => {
++    await checkout({
++      taskId: "TASK-900",
++      runtime: "cursor",
++      accountableHuman: "vince",
++      repo: "PLX_MC",
++      door: "mcp",
++    });
++    expect(db.events.at(-1)?.payload).toMatchObject({ door: "mcp", actorKind: "agent" });
++
++    await checkout({
++      taskId: "TASK-900",
++      runtime: "cursor",
++      accountableHuman: "vince",
++      repo: "PLX_MC",
++      door: "compliance",
++    });
++    expect(db.events.at(-1)?.payload).toMatchObject({ door: "compliance" });
++  });
++
+   it("backfills a null accountable owner from the dispatching human", async () => {
+     db.tasks.set("TASK-900", taskish({ accountableOwner: null }));
+ 
+diff --git a/tests/mcp-self-check-honesty.test.ts b/tests/mcp-self-check-honesty.test.ts
+index c682e3a..d138979 100644
+--- a/tests/mcp-self-check-honesty.test.ts
++++ b/tests/mcp-self-check-honesty.test.ts
+@@ -168,6 +168,7 @@ describe("actionSelfCheck honesty oracle (P2)", () => {
+       webhooksEnabled: false,
+       mcpEnabled: false,
+       dataSource: "seed",
++      lastCheckoutDoor: null,
+     });
+     expect(typeof result.lastSweepAgeMs === "number" || result.lastSweepAgeMs === null).toBe(true);
+     expect(result.freshness).toEqual(
+@@ -208,6 +209,7 @@ describe("actionSelfCheck honesty oracle (P2)", () => {
+       lastSweep: "2026-07-16T17:00:00.000Z",
+       now: new Date("2026-07-16T18:00:00.000Z"),
+       loadRegisterTimestamps: async () => ({}),
++      loadLastCheckoutDoor: async () => "mcp",
+     });
+ 
+     expect(honesty.mcpEnabled).toBe(true);
+@@ -217,6 +219,7 @@ describe("actionSelfCheck honesty oracle (P2)", () => {
+     expect(honesty.databaseBound).toBe(true);
+     expect(honesty.lastSweepAgeMs).toBe(3_600_000);
+     expect(honesty.dataSource).toBe("seed");
++    expect(honesty.lastCheckoutDoor).toBe("mcp");
+   });
+ 
+   it("webhooksEnabled true only when both env gates are on", async () => {
+diff --git a/tests/task-authorization-routes.test.ts b/tests/task-authorization-routes.test.ts
+index a34273e..a148690 100644
+--- a/tests/task-authorization-routes.test.ts
++++ b/tests/task-authorization-routes.test.ts
+@@ -112,6 +112,7 @@ describe("task authorization routes", () => {
+     expect(mocks.checkout).toHaveBeenCalledWith(
+       expect.objectContaining({
+         actor: expect.objectContaining({ id: "oid-1" }),
++        door: "compliance",
+       })
+     );
+   });

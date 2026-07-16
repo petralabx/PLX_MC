@@ -40,6 +40,11 @@ vi.mock("@/lib/compliance/repo", () => ({
   async eventsAfter() {
     return db.events.map((e, i) => ({ seq: String(i + 1), ts: "t", pr: null, repo: null, taskId: null, payload: {}, ...e }));
   },
+  async latestCheckoutDoor() {
+    const last = [...db.events].reverse().find((e) => e.kind === "checkout");
+    const door = last?.payload?.door;
+    return typeof door === "string" && door.length > 0 ? door : null;
+  },
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
@@ -112,6 +117,26 @@ describe("checkout", () => {
     expect(checkoutId).toMatch(/^dsp_/);
     expect(db.dispatches.get(checkoutId)).toMatchObject({ taskId: "TASK-900", actorKind: "agent", accountableHuman: "vince" });
     expect(db.events.some((e) => e.kind === "checkout")).toBe(true);
+  });
+
+  it("records door provenance on the checkout audit payload (P5)", async () => {
+    await checkout({
+      taskId: "TASK-900",
+      runtime: "cursor",
+      accountableHuman: "vince",
+      repo: "PLX_MC",
+      door: "mcp",
+    });
+    expect(db.events.at(-1)?.payload).toMatchObject({ door: "mcp", actorKind: "agent" });
+
+    await checkout({
+      taskId: "TASK-900",
+      runtime: "cursor",
+      accountableHuman: "vince",
+      repo: "PLX_MC",
+      door: "compliance",
+    });
+    expect(db.events.at(-1)?.payload).toMatchObject({ door: "compliance" });
   });
 
   it("backfills a null accountable owner from the dispatching human", async () => {

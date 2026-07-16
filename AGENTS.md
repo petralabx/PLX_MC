@@ -101,6 +101,11 @@ To enable: set `PLX_MC_MCP_ENABLED=1`, `MC_MCP_API_KEY`, `MC_OPERATOR_EMAIL`, `M
 in team MCP env ([runbook](docs/runbooks/plx-mc-mcp-team-registration.md)). Swarm:
 `SWARM_DISPATCH_ENABLED=1`. All changes still pass `./scripts/preflight.sh`.
 
+Before first push, accept a checkout only when its returned Task ID and exact
+full repository slug match the intended work; copy its returned
+`MC-Checkout` line unchanged. Use `scripts/compliance-checkout.mjs` when MCP
+metadata is missing or mis-scoped.
+
 ## Agentic Swarm Delegation (composed)
 
 Swarm dispatch is **composed into PLX-MC** (`dispatch_to_swarm`, `list_swarm_teams`,

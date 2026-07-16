@@ -55,7 +55,7 @@ const baseEnv = {
   COMPLIANCE_CAPTURE: "1",
   MC_BASE_URL: "http://mc",
   MC_ACCOUNTABLE: "vince",
-  MC_REPO: "PLX_MC",
+  MC_REPO: "petralabx/PLX_MC",
 };
 
 describe("compliance capture hook", () => {
@@ -81,7 +81,7 @@ describe("compliance capture hook", () => {
     expect(logs).toContain("MC-Checkout: dsp_a");
     expect(calls[0].body).toMatchObject({
       taskId: "TASK-1",
-      repo: "PLX_MC",
+      repo: "petralabx/PLX_MC",
       accountableHuman: "vince",
     });
   });
@@ -175,9 +175,16 @@ describe("compliance capture hook", () => {
   it("uses cursor checkout when MC_MCP_API_KEY is set", async () => {
     const { fetch, calls } = recorder(() => ({
       ok: true,
-      json: { data: { checkoutId: "dsp_mcp" } },
+      json: {
+        data: {
+          checkoutId: "dsp_mcp",
+          taskId: "TASK-1",
+          prBodyLine: "MC-Checkout: dsp_mcp",
+        },
+        meta: { actor: { repo: "petralabx/PLX_MC" } },
+      },
     }));
-    await capture({
+    const result = await capture({
       env: {
         ...baseEnv,
         MC_TASK_ID: "TASK-1",
@@ -190,5 +197,107 @@ describe("compliance capture hook", () => {
     expect(calls[0].url).toContain("/api/cursor/checkout");
     expect(calls[0].headers["x-api-key"]).toBe("sek");
     expect(calls[0].body).toEqual({ taskId: "TASK-1" });
+    expect(result.receipts).toEqual([
+      {
+        taskId: "TASK-1",
+        repo: "petralabx/PLX_MC",
+        checkoutId: "dsp_mcp",
+        prBodyLine: "MC-Checkout: dsp_mcp",
+      },
+    ]);
+  });
+
+  it("rejects a cursor checkout for a different task", async () => {
+    const { fetch } = recorder(() => ({
+      ok: true,
+      json: {
+        data: {
+          checkoutId: "dsp_wrong_task",
+          taskId: "TASK-2",
+          prBodyLine: "MC-Checkout: dsp_wrong_task",
+        },
+        meta: { actor: { repo: "petralabx/PLX_MC" } },
+      },
+    }));
+
+    await expect(
+      capture({
+        env: {
+          ...baseEnv,
+          MC_TASK_ID: "TASK-1",
+          MC_MCP_API_KEY: "sek",
+        },
+        fetch,
+        log: () => {},
+      })
+    ).rejects.toThrow("checkout task mismatch");
+  });
+
+  it("rejects a cursor checkout scoped to a different repository", async () => {
+    const { fetch } = recorder(() => ({
+      ok: true,
+      json: {
+        data: {
+          checkoutId: "dsp_wrong_repo",
+          taskId: "TASK-1",
+          prBodyLine: "MC-Checkout: dsp_wrong_repo",
+        },
+        meta: { actor: { repo: "petralabx/plx-customer-portal" } },
+      },
+    }));
+
+    await expect(
+      capture({
+        env: {
+          ...baseEnv,
+          MC_TASK_ID: "TASK-1",
+          MC_MCP_API_KEY: "sek",
+        },
+        fetch,
+        log: () => {},
+      })
+    ).rejects.toThrow("checkout repo mismatch");
+  });
+
+  it("rejects a checkout whose returned PR stamp was altered", async () => {
+    const { fetch } = recorder(() => ({
+      ok: true,
+      json: {
+        data: {
+          checkoutId: "dsp_expected",
+          taskId: "TASK-1",
+          prBodyLine: "MC-Checkout: dsp_other",
+        },
+        meta: { actor: { repo: "petralabx/PLX_MC" } },
+      },
+    }));
+
+    await expect(
+      capture({
+        env: {
+          ...baseEnv,
+          MC_TASK_ID: "TASK-1",
+          MC_MCP_API_KEY: "sek",
+        },
+        fetch,
+        log: () => {},
+      })
+    ).rejects.toThrow("checkout stamp mismatch");
+  });
+
+  it("requires a full repository slug before checkout", async () => {
+    const { fetch, calls } = recorder(() => ({
+      ok: true,
+      json: { data: { checkoutId: "dsp_unused" } },
+    }));
+
+    await expect(
+      capture({
+        env: { ...baseEnv, MC_REPO: "PLX_MC", MC_TASK_ID: "TASK-1" },
+        fetch,
+        log: () => {},
+      })
+    ).rejects.toThrow("MC_REPO must be a full repository slug");
+    expect(calls).toHaveLength(0);
   });
 });

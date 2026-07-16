@@ -1,6 +1,10 @@
 # PLX-MC MCP — Team Registration
 
-Register **one** MCP server for the team at [cursor.com/agents](https://cursor.com/agents).
+Register one MCP entry **per target repository** at
+[cursor.com/agents](https://cursor.com/agents), or use a repo-local
+`.cursor/mcp.json`. Repository identity is a compliance boundary: never reuse a
+fixed-`x-mc-repo` entry in a different repo. Use distinct names such as
+`PLX-MC-Portal` and `PLX-MC-Hub`.
 
 ## Stdio (local IDE + Cloud Agents)
 
@@ -8,7 +12,7 @@ Register **one** MCP server for the team at [cursor.com/agents](https://cursor.c
 
 | Field | Value |
 |-------|-------|
-| Name | `PLX-MC` |
+| Name | Repo-specific, e.g. `PLX-MC-Portal` |
 | Command | `npx` |
 | Args | `tsx tools/plx-mc-mcp/index.ts` |
 | `MC_BASE_URL` | `https://mc.plxcustomer.io` |
@@ -50,7 +54,7 @@ Register at [cursor.com/agents](https://cursor.com/agents) → MCP servers → A
 
 | Field | Value |
 |-------|-------|
-| Name | `PLX-MC` |
+| Name | Repo-specific, e.g. `PLX-MC-Portal` |
 | URL | `https://mc.plxcustomer.io/api/cursor/mcp` |
 | Header `x-api-key` | `PLX_MC_MCP_API_KEY` from `prod/ec2-secrets` (AWS Secrets Manager) |
 | Header `x-mc-operator-email` | `cos@petrasoap.com` (agents) or `vince@petrasoap.com` (human operator) |
@@ -61,7 +65,8 @@ Requires `PLX_MC_MCP_ENABLED=1` on the Vercel production deployment (already liv
 
 **Verified 2026-06-30:** `GET /api/cursor/self-check` returns `200 { ok: true, mcpEnabled: true }` with the headers above.
 
-After registration, reload MCP in Cursor and run tool `mc_self_check`.
+After registration, reload MCP in Cursor and run `mc_self_check`. Confirm the
+returned `meta.actor.repo` exactly matches the repo being edited before checkout.
 
 ## Health
 

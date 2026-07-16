@@ -20,8 +20,18 @@ that tells a human or agent the truth about its own runtime state** — is sync 
 fixtures, is the mirror fresh, which entry door verified this checkout. Every one of the six is a
 symptom of that missing "honesty oracle." Fix that one surface and four of the six collapse into it.
 
-Bottom line: **keep all six as themes, re-weight the effort. The highest-ROI move is a ~2-day
-observability pass, not the multi-day builds implied by #3 and #5.**
+Bottom line: **keep all six as themes; the peer had the right disease, this report sizes the surgery.**
+The direction the peer set stood up under scrutiny — what changed is effort and framing, not aim. The
+highest-ROI move is a focused observability pass (a thin honesty-oracle v1 in ~2 days; the full,
+probe-and-tests version in 3–4), not the multi-day *rebuilds* implied by #3 and #5, which are largely
+already built.
+
+> **Revision note (2026-07-16).** This version folds in five corrections from an adversarial review of
+> the first draft. They are called out inline with **[rev]** and summarised in §8. Net effect: P1 sized
+> honestly (thin-v1 vs full), P2's checkout half downgraded from "possible redesign" to "proof + audit
+> field" (the doors already share one core — evidenced below), the §6 exit gate replaced with a
+> non-stalling version, the fixture-vs-live check promoted to P1's hard acceptance gate, and the tone
+> corrected to credit the peer's direction.
 
 ---
 
@@ -75,10 +85,16 @@ and nothing surfaces which.
    freshness. They do, however, run on Vercel Cron regardless — `sync-notifications` **every minute**
    (1,440 guaranteed no-op invocations/day) — and nothing labels them deferred.
 
-6. **The fallback checkout is already subordinate.** `compliance-checkout.mjs` is `DEFAULT-OFF`,
-   header-labeled "operator-local tooling," and `AGENTS.md:97,107` positions it as the fallback "when
-   MCP metadata is missing or mis-scoped." Commits #145/#146 are actively hardening the MCP checkout
-   handshake.
+6. **The fallback checkout is already subordinate — and already shares one core. [rev]**
+   `compliance-checkout.mjs` is `DEFAULT-OFF`, header-labeled "operator-local tooling," and
+   `AGENTS.md:97,107` positions it as the fallback "when MCP metadata is missing or mis-scoped." Beyond
+   the doc hierarchy, the two server doors **converge on the same verification function**: the MCP door
+   `/api/cursor/checkout` → `actionCheckout` (`src/lib/mcp/actions.ts:112`) and the fallback door
+   `/api/compliance/checkout` **both call `checkout()` at `src/lib/compliance/service.ts:131`**. The only
+   difference is doorway auth — `requireMcpActor` (API key) vs `requireSessionActor` (Entra oid) — each
+   resolving an `actor` handed to the identical core, which emits the identical `MC-Checkout` stamp
+   verified by the identical downstream gate (`/api/compliance/verify`). So there is **no divergence to
+   unify**; the residual work is proof + provenance, not a redesign.
 
 7. **The architecture table is undefended by governance.** `generate-governance-surfaces.py`
    regenerates the `governance:auto` block, but the architecture table (`AGENTS.md:30-37`) sits *above*
@@ -93,7 +109,7 @@ and nothing surfaces which.
 |---|---|---|---|
 | 1 | Kill the sync maturity lie in AGENTS.md | **VALIDATE + ENHANCE** | Real contradiction. But don't just flip "planned→current" — split the row so the *correctness-critical delta engine* reads current and *webhook notifications* read deferred (P11). Then defend it with a parity check so it can't drift again. |
 | 2 | One cadence, one kill-switch story + ops panel | **SIMPLIFY** | Cadence is *already chosen and documented* (Vercel Cron deployed, in-app dev-only). Drop that half. Keep and sharpen the observability half — it's the real gap and it subsumes #4 and the fixture-vs-live question. |
-| 3 | Collapse agent entry paths to one, deprecate compliance-checkout | **REFRAME** | The hierarchy already exists (MCP primary, compliance-checkout fallback). Don't *deprecate* a break-glass path for offline/mis-scoped cases. Instead guarantee both doors call **one verification core** and self-check records which door ran. |
+| 3 | Collapse agent entry paths to one, deprecate compliance-checkout | **ALREADY SHARES ONE CORE → PROVE + RECORD** [rev] | Verified before scheduling any redesign: both doors already call the same `checkout()` core (`compliance/service.ts:131`; see §3.6). Don't *deprecate* a break-glass path for offline/mis-scoped cases and don't "unify" what is already one. Residual work is a test proving the equivalence + an audit field recording which door ran. |
 | 4 | Delete/quarantine dead webhook theater | **SIMPLIFY** | Not theater — the crons are gated and return `enabled:false`. External research confirms webhooks are genuinely hard and the scaffolding is correct-shaped. Fix the *cadence* (kill the every-minute no-op) and *label* them deferred. Keep the code. |
 | 5 | Make conflict resolution a product surface, not a log | **LARGELY DONE → PROMOTE** | The screen exists and is live-wired. Reframe to: make it discoverable (nav), prove it shows *real* (not seed) conflicts, and add a fail-closed staleness banner driven by the existing freshness API. |
 | 6 | Freeze new planes until the mirror is boring | **ENHANCE** | Sound instinct (aligns with SOUL.md "Simplify Relentlessly"). But a blanket freeze with no unlock condition gets ignored or overstays. Replace with an explicit "mirror is boring" **exit gate** tied to the self-check SLOs from #2. |
@@ -106,6 +122,14 @@ Recommendations #2, #4, #5, and the fixture-vs-live ambiguity are all **the same
 secret configured? Is the DB bound? Can we get a Graph token? How old is the last real inbound delta
 per register? Are we on live data or seed?* Make self-check answer those, and the "trust failure" the
 peer agent worried about is closed at the source rather than in six places.
+
+**The load-bearing one is `dataSource: seed | live`. [rev]** It is the sharpest claim and the easiest
+to under-deliver: if the oracle reports freshness and cadence but cannot distinguish a fixture-seeded DB
+from a Graph-backed mirror, it is still lying — just more politely. The discriminator is concrete and
+already computable: **"has any required register ever recorded a completed inbound delta
+(`sync_register_freshness`), *and* is a real Graph token acquirable at probe time?"** If neither, the
+app is running on `ensureSeeded()` fixtures and self-check must say so in as many words. This is P1's
+hard acceptance gate (§6), not a nice-to-have.
 
 ---
 
@@ -128,7 +152,9 @@ the scaffolding.
 ## 6. Proposed Project Plan
 
 Sequenced by ROI × dependency. Total core effort ≈ **5–8 working days**, front-loaded on trust.
-Each item has a success criterion (per CLAUDE.md: no task without one).
+Each item has a success criterion (per CLAUDE.md: no task without one). Estimates below were corrected
+by the adversarial review **[rev]**: P1 is split into a thin v1 and a full version, and P2's checkout
+half drops sharply now that the shared core is verified rather than assumed.
 
 ### P0 — Correct the architecture table (hours) · Rec #1
 
@@ -139,15 +165,27 @@ Each item has a success criterion (per CLAUDE.md: no task without one).
 - **Success:** the AGENTS.md sync rows and TOOLS.md agree verbatim on maturity; a reviewer reading only
   AGENTS.md cannot conclude the engine is unbuilt.
 
-### P1 — Make self-check the honesty oracle (1–2 days) · Recs #2, #4, and the fixture-vs-live gap
+### P1 — Make self-check the honesty oracle · Recs #2, #4, and the fixture-vs-live gap
 
-- Extend `actionSelfCheck` (and `GET /api/cursor/self-check`) to report, read-only:
-  `syncMode` (`in-app` | `cron` | `off`), `cronConfigured`, `syncEnabled`, `databaseBound`,
-  `graphTokenOk` (from the existing sweep-start probe), `lastSweepAgeMs`, and **per-register freshness**
-  by reusing `evaluateSyncFreshness` (`src/lib/sync/freshness.ts`) — plus `webhooksEnabled:false` so
-  the deferred push path is explicit. Un-hardcode `mcpEnabled`.
-- **Success:** one GET answers "is the mirror live and fresh right now, and by what cadence" without
-  reading logs; a test asserts a stale/seed state flips the relevant fields.
+Split into a thin v1 and a full version so the honesty win lands fast without waiting on the probe. **[rev]**
+
+**P1a — thin v1 (~2 days).** Extend `actionSelfCheck` (and `GET /api/cursor/self-check`) to report,
+read-only, everything computable from local state without a network call: `syncMode`
+(`in-app` | `cron` | `off`), `cronConfigured`, `syncEnabled`, `databaseBound`, `lastSweepAgeMs`,
+**per-register freshness** by reusing `evaluateSyncFreshness` (`src/lib/sync/freshness.ts`),
+`webhooksEnabled:false`, and — the load-bearing field — **`dataSource: seed | live`** derived from
+"has any required register recorded a completed inbound delta." Un-hardcode `mcpEnabled`.
+
+**P1b — full (+1–2 days, total 3–4).** Add the live `graphTokenOk` probe (token acquisition +
+site/list resolution at probe time, reusing the sweep-start health check) and fold it into `dataSource`
+(`live` requires *both* a recorded inbound delta *and* an acquirable token). Add tests that a
+fixture-seeded DB reports `seed` and a real inbound sweep flips it to `live`.
+
+- **Hard acceptance gate (blocks P1 "done"):** on a freshly seeded DB the endpoint returns
+  `dataSource: "seed"`; after a real inbound delta it returns `"live"`. If it cannot tell the two apart,
+  P1 is not done — the oracle is still lying politely.
+- **Success:** one GET answers "is the mirror live-or-seed, fresh, and on what cadence" without reading
+  logs; the seed→live transition is covered by a test.
 
 ### P1 — Cron cadence + labeling cleanup (0.5 day) · Rec #4
 
@@ -157,14 +195,18 @@ Each item has a success criterion (per CLAUDE.md: no task without one).
 - **Success:** no every-minute no-op cron in `vercel.json`; TOOLS.md and self-check both show the push
   path as deferred, not live.
 
-### P2 — One checkout core, two doors (1–2 days) · Rec #3
+### P2 — Prove the shared checkout core + record the door (~0.5–1 day) · Rec #3 [rev]
 
-- Confirm (and, if they diverge, unify) that the MCP checkout path and `compliance-checkout.mjs` call
-  the **same** verification function — one core, two front doors — so the fallback cannot produce a
-  *less-verified* completion. Record which door ran in the audit event and expose it on self-check.
-  Keep the fallback; add a one-line "fallback path — prefer MCP checkout" banner to its output.
-- **Success:** a checkout via either door produces byte-identical verification and an audit row naming
-  the door; no code path can stamp `MC-Checkout` without passing the shared core.
+Verified, not assumed: both doors already call `checkout()` at `compliance/service.ts:131` (§3.6), so
+this is *not* a redesign. Residual work:
+
+- Add a test asserting `/api/cursor/checkout` and `/api/compliance/checkout` reach the identical core
+  with equivalent guarantees (the fallback cannot produce a *less-verified* completion), so a future
+  refactor can't silently fork them. Record which door ran in the audit event and expose it on
+  self-check. Keep the fallback; add a one-line "fallback path — prefer MCP checkout" banner to its
+  output.
+- **Success:** a test pins both routes to the shared core; an audit row names the door; no code path can
+  stamp `MC-Checkout` without passing `checkout()`.
 
 ### P2 — Promote the conflict console to first-class (2–3 days) · Rec #5
 
@@ -178,12 +220,22 @@ Each item has a success criterion (per CLAUDE.md: no task without one).
 
 ### P3 — Replace the freeze with an exit gate (policy, zero build) · Rec #6
 
-- Instead of "freeze all new planes," define a checkable **"mirror is boring" gate**: no new plane
-  (Knowledge Hub UI, OpenFlowKit, new MCP transports, swarm expansion) merges until self-check has been
-  green (fresh, live, cron-configured) for 7 consecutive days **and** zero conflicts sit unattended
-  > 24h **and** the AGENTS.md parity check (below) passes. Record it in `SOUL.md`/`AGENTS.md` as the
-  entry condition.
-- **Success:** the gate is a named, measurable condition tied to self-check output, not a vibe.
+Instead of "freeze all new planes," define a checkable **"mirror is boring" gate** — and design it so it
+*converges* rather than stalling in a small-ops world where conflicts legitimately wait on a human and a
+single staging flake would reset a calendar-day streak. **[rev]** No new plane (Knowledge Hub UI,
+OpenFlowKit, new MCP transports, swarm expansion) merges until **all** of:
+
+- the self-check schema is green (all honesty fields present and well-formed);
+- the AGENTS.md↔TOOLS.md **parity check passes in CI** (below);
+- self-check reports `dataSource: live` + fresh for **N consecutive cron ticks** (e.g. 7 ticks, not 7
+  calendar days — a tick count can't be reset by an unrelated flake).
+
+The **conflict SLO is a warning, not a hard merge block, until conflict volume actually exists** — a
+low-volume queue with items legitimately awaiting a human must not deadlock the gate. Record the gate in
+`SOUL.md`/`AGENTS.md` as the entry condition.
+
+- **Success:** the gate is a named, measurable, *terminating* condition tied to self-check output — it
+  can actually be reached, not just asserted.
 
 ### Enforcement — defend the fix (0.5 day) · Enhancement to #1
 
@@ -201,6 +253,31 @@ compression over features — is correct. This plan delivers it by *reusing what
 API, the conflict console, the parity-check pattern, the chosen cadence) instead of rebuilding it, and
 by concentrating effort on the single missing surface that four of the six recommendations are really
 asking for.
+
+---
+
+## 8. Corrections Folded From Adversarial Review [rev]
+
+The first draft was reviewed adversarially; five corrections were folded in. Recording them (per
+"Evidence Over Assertion" / the learning loop) so the bundle *is* the corrected backlog:
+
+1. **P1 estimate was optimistic.** The draft's "~2-day observability pass" understated a P1 that
+   honestly includes a live Graph token probe, `dataSource` discrimination, and tests. Now split:
+   **P1a thin v1 (~2d)** local-only fields incl. `dataSource: seed|live`; **P1b full (+1–2d)** adds the
+   token probe. (§6 P1)
+2. **The "mirror is boring" gate could stall forever.** A hard "zero conflicts >24h + 7 green calendar
+   days" gate deadlocks in low-volume ops and resets on unrelated flakes. Replaced with a *terminating*
+   gate: schema-green + parity-in-CI + **N consecutive green cron ticks**, with the **conflict SLO as a
+   warning, not a block, until volume exists**. (§6 P3)
+3. **Fixture-vs-live was the easiest claim to under-deliver.** Promoted from a nice-to-have to **P1's
+   hard acceptance gate**, with a concrete discriminator (recorded inbound delta **and** acquirable
+   Graph token → `live`, else `seed`). (§4 unifying insight, §6 P1)
+4. **"One checkout core" assumed a possible redesign — it isn't one.** Verified in code: both doors
+   already call `checkout()` at `compliance/service.ts:131`. Downgraded from "1–2 days, possibly a
+   redesign" to **~0.5–1 day of proof + an audit field**. (§3.6, §4 row 3, §6 P2)
+5. **Tone: "peer refuted" was half-true.** The peer's *direction* was right (right disease); only the
+   *effort estimates and the #2/#5 build-framing* needed correcting. Framing adjusted throughout so the
+   plan is sold as "right disease, corrected surgery," not a refutation.
 
 ### Sources (external)
 

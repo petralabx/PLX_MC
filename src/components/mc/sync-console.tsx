@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { api } from "@/lib/api";
 import { SP_CADENCE, SP_SITE } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
@@ -16,14 +17,22 @@ import {
   spLists,
   storeSyncCounts,
 } from "@/lib/mc-data/store";
+import type { SyncFreshnessResult } from "@/lib/sync/freshness";
 
 import { Avatar } from "./atoms";
 import { directionGlyph, directionLabel } from "./record-logic";
 import type { ScreenProps } from "./route";
+import {
+  SYNC_STALE_BANNER,
+  resolutionsPausedFromFreshness,
+  syncStaleBannerText,
+} from "./sync-console.freshness";
 
 export function SyncConsole({ nav }: ScreenProps) {
   useMcVersion();
   const lists = spLists();
+  // Live queue path: store.openConflicts() hydrates from GET /api/state →
+  // snapshot() → repo.openConflicts() (not seed fixtures — SP_CONFLICTS is []).
   const conflicts = openConflicts();
   const errors = openErrors();
   const audit = auditLog();
@@ -34,6 +43,25 @@ export function SyncConsole({ nav }: ScreenProps) {
     const first = lists[0]?.key;
     return first ? { [first]: true } : {};
   });
+  // Fail-closed: null until freshness confirms ok → resolutions stay paused.
+  const [freshness, setFreshness] = useState<SyncFreshnessResult | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<SyncFreshnessResult>("/sync/freshness")
+      .then((result) => {
+        if (!cancelled) setFreshness(result);
+      })
+      .catch(() => {
+        // Keep null — resolutionsPausedFromFreshness treats unknown as paused.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const resolutionsPaused = resolutionsPausedFromFreshness(freshness);
+  const staleBanner = syncStaleBannerText(freshness);
 
   const listByKey = useMemo(() => {
     return new Map(lists.map((list) => [list.key, list]));
@@ -78,6 +106,15 @@ export function SyncConsole({ nav }: ScreenProps) {
       </div>
 
       <div className="sync-page">
+        {staleBanner ? (
+          <div className="sk-banner" role="alert" data-testid="sync-stale-banner">
+            <span className="dot" />
+            <span className="sk-banner-body">
+              <span className="sk-banner-ct">{staleBanner}</span>
+            </span>
+          </div>
+        ) : null}
+
         <div className="spsite">
           <div className="l">
             <span className={`dotc ${SP_SITE.connected ? "ok" : "off"}`} />
@@ -246,6 +283,8 @@ export function SyncConsole({ nav }: ScreenProps) {
                 <button
                   type="button"
                   className="btn ghost sm"
+                  disabled={resolutionsPaused}
+                  title={resolutionsPaused ? SYNC_STALE_BANNER : undefined}
                   onClick={() => resolveConflict(conflict.id, "mc")}
                 >
                   Keep Mission Control
@@ -253,6 +292,8 @@ export function SyncConsole({ nav }: ScreenProps) {
                 <button
                   type="button"
                   className="btn ghost sm"
+                  disabled={resolutionsPaused}
+                  title={resolutionsPaused ? SYNC_STALE_BANNER : undefined}
                   onClick={() => resolveConflict(conflict.id, "sp")}
                 >
                   Keep SharePoint
@@ -279,7 +320,13 @@ export function SyncConsole({ nav }: ScreenProps) {
                 <button type="button" className="btn ghost sm" title="coming soon">
                   Edit value
                 </button>
-                <button type="button" className="btn ghost sm" onClick={() => retryError(error.id)}>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  disabled={resolutionsPaused}
+                  title={resolutionsPaused ? SYNC_STALE_BANNER : undefined}
+                  onClick={() => retryError(error.id)}
+                >
                   Retry push
                 </button>
               </div>

@@ -1,0 +1,14 @@
+# P6 commands.log — honesty-oracle phase-6 conflict console
+# WORKTREE: C:\Users\vince\.cursor\worktrees\honesty-oracle-p6-4bad37dd
+# BRANCH: proj/honesty-oracle/phase-6-conflict-console
+# BASE: d0ffdc805cd12b66d866100930cb6338922d663e
+
+$ npx vitest run tests/sync-console-staleness.test.ts
+RUN  v4.1.8
+Test Files  1 passed (1)
+Tests  7 passed (7)
+Duration  334ms
+exit 0
+
+$ git diff --check
+(exit 0 — no whitespace errors)

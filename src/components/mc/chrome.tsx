@@ -64,7 +64,8 @@ export function Topbar({
           type="button"
           className={`topsync ${cls}`}
           onClick={() => nav("sync")}
-          title="SharePoint sync"
+          title="Sync / Conflicts · Review queue"
+          data-testid="nav-sync-console"
         >
           <span className="d" />
           <span className="lb">{label}</span>
@@ -183,7 +184,7 @@ export function Sidebar({
         {item(
           "sync",
           "⇄",
-          "Sync",
+          "Sync / Conflicts",
           conflicts ? <span className="badge hot">{conflicts}</span> : null
         )}
         {item("loop-ledgers", "◰", "Loop ledgers")}

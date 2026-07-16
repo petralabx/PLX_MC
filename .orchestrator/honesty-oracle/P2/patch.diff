@@ -1,0 +1,390 @@
+diff --git a/src/lib/mcp/actions.ts b/src/lib/mcp/actions.ts
+index 68ea8a2..beb8cc0 100644
+--- a/src/lib/mcp/actions.ts
++++ b/src/lib/mcp/actions.ts
+@@ -9,6 +9,7 @@ import type { Evidence, Task } from "@/lib/mc-data";
+ import { requireMcpActor } from "@/lib/routing/mutations/actors";
+ import type { McpIdentity } from "./auth";
+ import { taskLink } from "./envelope";
++import { buildHonestyFields } from "./honesty";
+ import { syncMetaForTask } from "./sync-meta";
+ 
+ export {
+@@ -29,13 +30,14 @@ export {
+ 
+ export async function actionSelfCheck(identity: McpIdentity) {
+   const snap = await snapshot();
++  const honesty = await buildHonestyFields({ lastSweep: snap.lastSweep });
+   return {
+     ok: true,
+-    mcpEnabled: true,
+     operator: identity.operatorEmail,
+     taskCount: snap.tasks.length,
+     bucketCount: snap.buckets.length,
+     lastSweep: snap.lastSweep,
++    ...honesty,
+   };
+ }
+ 
+diff --git a/src/lib/mcp/honesty.ts b/src/lib/mcp/honesty.ts
+new file mode 100644
+index 0000000..053e74a
+--- /dev/null
++++ b/src/lib/mcp/honesty.ts
+@@ -0,0 +1,101 @@
++// Honesty-oracle fields for mc_self_check (P2 thin v1).
++// Local-only: no Graph network probe. dataSource discriminates seed vs live
++// from recorded inbound deltas on sync_register_freshness.
++
++import { cronConfigured, graphWebhookConfigured, graphWebhookEnabled } from "@/lib/secrets";
++import {
++  ROUTING_REQUIRED_REGISTERS,
++  evaluateSyncFreshness,
++  type SyncFreshnessResult,
++} from "@/lib/sync/freshness";
++import { getRegisterInboundCompletions } from "@/lib/sync/repo";
++import { syncEnabled } from "@/lib/sync/scheduler";
++import { mcpEnabled } from "./auth";
++
++export type SyncMode = "in-app" | "cron" | "off";
++export type DataSource = "seed" | "live";
++
++export interface HonestyFields {
++  syncMode: SyncMode;
++  cronConfigured: boolean;
++  syncEnabled: boolean;
++  databaseBound: boolean;
++  lastSweepAgeMs: number | null;
++  freshness: SyncFreshnessResult;
++  webhooksEnabled: boolean;
++  mcpEnabled: boolean;
++  dataSource: DataSource;
++}
++
++/** Cadence mode: in-app scheduler wins when enabled; else cron if secret present. */
++export function resolveSyncMode(opts: {
++  syncEnabled: boolean;
++  cronConfigured: boolean;
++}): SyncMode {
++  if (opts.syncEnabled) return "in-app";
++  if (opts.cronConfigured) return "cron";
++  return "off";
++}
++
++export function resolveDatabaseBound(
++  databaseUrl: string | undefined = process.env.PLX_MC_DATABASE_URL
++): boolean {
++  return !!(databaseUrl ?? "").trim();
++}
++
++export function resolveLastSweepAgeMs(
++  lastSweep: string | null | undefined,
++  now: Date = new Date()
++): number | null {
++  if (!lastSweep) return null;
++  const t = new Date(lastSweep).getTime();
++  if (Number.isNaN(t)) return null;
++  return Math.max(0, now.getTime() - t);
++}
++
++/**
++ * live = any required register has a completed inbound delta stamp.
++ * seed = no required register has ever recorded one (fresh ensureSeeded state).
++ */
++export function resolveDataSource(freshness: SyncFreshnessResult): DataSource {
++  const anyCompleted = freshness.registers.some((r) => r.lastCompleteInboundAt != null);
++  return anyCompleted ? "live" : "seed";
++}
++
++export function resolveWebhooksEnabled(opts?: {
++  enabled?: boolean;
++  configured?: boolean;
++}): boolean {
++  const enabled = opts?.enabled ?? graphWebhookEnabled();
++  const configured = opts?.configured ?? graphWebhookConfigured();
++  return enabled && configured;
++}
++
++/** Load freshness + honesty flags from local env/DB (no Graph). */
++export async function buildHonestyFields(opts?: {
++  lastSweep?: string | null;
++  now?: Date;
++  loadRegisterTimestamps?: () => Promise<Partial<Record<string, Date | string | null | undefined>>>;
++}): Promise<HonestyFields> {
++  const now = opts?.now ?? new Date();
++  const syncOn = syncEnabled();
++  const cronOn = cronConfigured();
++  const freshness = await evaluateSyncFreshness({
++    now,
++    requiredRegisters: ROUTING_REQUIRED_REGISTERS,
++    loadRegisterTimestamps:
++      opts?.loadRegisterTimestamps ?? (() => getRegisterInboundCompletions()),
++  });
++
++  return {
++    syncMode: resolveSyncMode({ syncEnabled: syncOn, cronConfigured: cronOn }),
++    cronConfigured: cronOn,
++    syncEnabled: syncOn,
++    databaseBound: resolveDatabaseBound(),
++    lastSweepAgeMs: resolveLastSweepAgeMs(opts?.lastSweep, now),
++    freshness,
++    webhooksEnabled: resolveWebhooksEnabled(),
++    mcpEnabled: mcpEnabled(),
++    dataSource: resolveDataSource(freshness),
++  };
++}
+diff --git a/src/lib/mcp/index.ts b/src/lib/mcp/index.ts
+index 746073c..cd492b4 100644
+--- a/src/lib/mcp/index.ts
++++ b/src/lib/mcp/index.ts
+@@ -2,5 +2,6 @@ export * from "./auth";
+ export * from "./envelope";
+ export * from "./audit";
+ export * from "./sync-meta";
++export * from "./honesty";
+ export * from "./route";
+ export * from "./actions";
+diff --git a/tests/mcp-self-check-honesty.test.ts b/tests/mcp-self-check-honesty.test.ts
+new file mode 100644
+index 0000000..c682e3a
+--- /dev/null
++++ b/tests/mcp-self-check-honesty.test.ts
+@@ -0,0 +1,238 @@
++// P2 honesty-oracle thin v1 — hard gate: freshly seeded / no inbound-delta → dataSource "seed".
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++const env = vi.hoisted(() => ({
++  PLX_MC_MCP_ENABLED: "0",
++  PLX_MC_SYNC_ENABLED: "",
++  CRON_SECRET: "",
++  PLX_MC_DATABASE_URL: "",
++  PLX_MC_GRAPH_WEBHOOK_ENABLED: "",
++  PLX_MC_GRAPH_WEBHOOK_CLIENT_STATE: "",
++  PLX_MC_GRAPH_NOTIFICATION_URL: "",
++}));
++
++vi.stubEnv("PLX_MC_MCP_ENABLED", env.PLX_MC_MCP_ENABLED);
++vi.stubEnv("PLX_MC_SYNC_ENABLED", env.PLX_MC_SYNC_ENABLED);
++vi.stubEnv("CRON_SECRET", env.CRON_SECRET);
++vi.stubEnv("PLX_MC_DATABASE_URL", env.PLX_MC_DATABASE_URL);
++vi.stubEnv("PLX_MC_GRAPH_WEBHOOK_ENABLED", env.PLX_MC_GRAPH_WEBHOOK_ENABLED);
++vi.stubEnv("PLX_MC_GRAPH_WEBHOOK_CLIENT_STATE", env.PLX_MC_GRAPH_WEBHOOK_CLIENT_STATE);
++vi.stubEnv("PLX_MC_GRAPH_NOTIFICATION_URL", env.PLX_MC_GRAPH_NOTIFICATION_URL);
++
++const completions = vi.hoisted(() => ({
++  stamps: {} as Record<string, Date | null>,
++}));
++
++vi.mock("@/lib/sync", () => ({
++  snapshot: vi.fn(async () => ({
++    tasks: [{ id: "TASK-1" }, { id: "TASK-2" }, { id: "TASK-3" }],
++    buckets: [{ id: "BKT-1" }],
++    lastSweep: "2026-07-16T12:00:00.000Z",
++    risks: [],
++    files: [],
++    conflicts: [],
++    errors: [],
++    projects: [],
++    repos: [],
++    repoRequests: [],
++  })),
++  createTask: vi.fn(),
++  patchTask: vi.fn(),
++}));
++
++vi.mock("@/lib/sync/repo", () => ({
++  getEntity: vi.fn(async () => null),
++  getRegisterInboundCompletions: vi.fn(async () => ({ ...completions.stamps })),
++}));
++
++import { actionSelfCheck } from "@/lib/mcp/actions";
++import {
++  resolveDataSource,
++  resolveSyncMode,
++  resolveDatabaseBound,
++  resolveLastSweepAgeMs,
++  resolveWebhooksEnabled,
++  buildHonestyFields,
++} from "@/lib/mcp/honesty";
++import type { McpIdentity } from "@/lib/mcp/auth";
++import type { SyncFreshnessResult } from "@/lib/sync/freshness";
++
++const identity: McpIdentity = {
++  operatorEmail: "vince@petrasoap.com",
++  runtime: "cursor",
++  workerId: "test",
++  repo: "petralabx/PLX_MC",
++  servicePrincipalId: "sp_mcp_cursor",
++  actor: { kind: "service", id: "sp_mcp_cursor", status: "active" },
++};
++
++function emptyFreshness(): SyncFreshnessResult {
++  return {
++    ok: false,
++    code: "sync_stale",
++    maxAgeMs: 360_000,
++    checkedAt: "2026-07-16T18:00:00.000Z",
++    registers: [
++      {
++        listKey: "projects",
++        lastCompleteInboundAt: null,
++        ageMs: null,
++        ok: false,
++        reason: "missing_register",
++      },
++      {
++        listKey: "roadmap",
++        lastCompleteInboundAt: null,
++        ageMs: null,
++        ok: false,
++        reason: "missing_register",
++      },
++      {
++        listKey: "todos",
++        lastCompleteInboundAt: null,
++        ageMs: null,
++        ok: false,
++        reason: "missing_register",
++      },
++    ],
++    reasons: ["missing_register:projects", "missing_register:roadmap", "missing_register:todos"],
++  };
++}
++
++beforeEach(() => {
++  completions.stamps = {};
++  vi.stubEnv("PLX_MC_MCP_ENABLED", "0");
++  vi.stubEnv("PLX_MC_SYNC_ENABLED", "");
++  vi.stubEnv("CRON_SECRET", "");
++  vi.stubEnv("PLX_MC_DATABASE_URL", "");
++  vi.stubEnv("PLX_MC_GRAPH_WEBHOOK_ENABLED", "");
++  vi.stubEnv("PLX_MC_GRAPH_WEBHOOK_CLIENT_STATE", "");
++  vi.stubEnv("PLX_MC_GRAPH_NOTIFICATION_URL", "");
++});
++
++describe("honesty helpers", () => {
++  it("resolveSyncMode prefers in-app over cron", () => {
++    expect(resolveSyncMode({ syncEnabled: true, cronConfigured: true })).toBe("in-app");
++    expect(resolveSyncMode({ syncEnabled: false, cronConfigured: true })).toBe("cron");
++    expect(resolveSyncMode({ syncEnabled: false, cronConfigured: false })).toBe("off");
++  });
++
++  it("resolveDataSource is seed when no register has inbound completion", () => {
++    expect(resolveDataSource(emptyFreshness())).toBe("seed");
++  });
++
++  it("resolveDataSource is live when any required register completed inbound", () => {
++    const fresh = emptyFreshness();
++    fresh.registers[0] = {
++      listKey: "projects",
++      lastCompleteInboundAt: "2026-07-16T17:55:00.000Z",
++      ageMs: 60_000,
++      ok: true,
++      reason: "fresh",
++    };
++    expect(resolveDataSource(fresh)).toBe("live");
++  });
++
++  it("resolveDatabaseBound / lastSweepAgeMs / webhooksEnabled", () => {
++    expect(resolveDatabaseBound("")).toBe(false);
++    expect(resolveDatabaseBound("  ")).toBe(false);
++    expect(resolveDatabaseBound("postgres://x")).toBe(true);
++    const now = new Date("2026-07-16T18:00:00.000Z");
++    expect(resolveLastSweepAgeMs("2026-07-16T17:00:00.000Z", now)).toBe(3_600_000);
++    expect(resolveLastSweepAgeMs(null, now)).toBeNull();
++    expect(resolveWebhooksEnabled({ enabled: false, configured: true })).toBe(false);
++    expect(resolveWebhooksEnabled({ enabled: true, configured: false })).toBe(false);
++    expect(resolveWebhooksEnabled({ enabled: true, configured: true })).toBe(true);
++  });
++});
++
++describe("actionSelfCheck honesty oracle (P2)", () => {
++  it("HARD GATE: freshly seeded / no inbound-delta → dataSource seed + honesty fields", async () => {
++    // No sync_register_freshness rows — same as ensureSeeded-only DB.
++    completions.stamps = {};
++
++    const result = await actionSelfCheck(identity);
++
++    expect(result.dataSource).toBe("seed");
++    expect(result.ok).toBe(true);
++    expect(result.operator).toBe("vince@petrasoap.com");
++    expect(result.taskCount).toBe(3);
++    expect(result.bucketCount).toBe(1);
++
++    // Honesty fields present (shape contract).
++    expect(result).toMatchObject({
++      syncMode: "off",
++      cronConfigured: false,
++      syncEnabled: false,
++      databaseBound: false,
++      webhooksEnabled: false,
++      mcpEnabled: false,
++      dataSource: "seed",
++    });
++    expect(typeof result.lastSweepAgeMs === "number" || result.lastSweepAgeMs === null).toBe(true);
++    expect(result.freshness).toEqual(
++      expect.objectContaining({
++        ok: false,
++        code: "sync_stale",
++        registers: expect.any(Array),
++        reasons: expect.arrayContaining([
++          "missing_register:projects",
++          "missing_register:roadmap",
++          "missing_register:todos",
++        ]),
++      })
++    );
++    expect(result.freshness.registers.every((r) => r.lastCompleteInboundAt === null)).toBe(true);
++
++    // mcpEnabled must NOT be hardcoded true.
++    expect(result.mcpEnabled).toBe(false);
++  });
++
++  it("reports live when a required register has completed inbound delta", async () => {
++    completions.stamps = {
++      projects: new Date("2026-07-16T17:55:00.000Z"),
++    };
++
++    const result = await actionSelfCheck(identity);
++    expect(result.dataSource).toBe("live");
++    expect(result.freshness.registers.find((r) => r.listKey === "projects")?.lastCompleteInboundAt).toBeTruthy();
++  });
++
++  it("reflects real env for mcpEnabled / syncMode / cronConfigured / databaseBound", async () => {
++    vi.stubEnv("PLX_MC_MCP_ENABLED", "1");
++    vi.stubEnv("PLX_MC_SYNC_ENABLED", "1");
++    vi.stubEnv("CRON_SECRET", "cron-secret");
++    vi.stubEnv("PLX_MC_DATABASE_URL", "postgres://plx_mc_app@localhost/plx_mc");
++
++    const honesty = await buildHonestyFields({
++      lastSweep: "2026-07-16T17:00:00.000Z",
++      now: new Date("2026-07-16T18:00:00.000Z"),
++      loadRegisterTimestamps: async () => ({}),
++    });
++
++    expect(honesty.mcpEnabled).toBe(true);
++    expect(honesty.syncEnabled).toBe(true);
++    expect(honesty.syncMode).toBe("in-app");
++    expect(honesty.cronConfigured).toBe(true);
++    expect(honesty.databaseBound).toBe(true);
++    expect(honesty.lastSweepAgeMs).toBe(3_600_000);
++    expect(honesty.dataSource).toBe("seed");
++  });
++
++  it("webhooksEnabled true only when both env gates are on", async () => {
++    vi.stubEnv("PLX_MC_GRAPH_WEBHOOK_ENABLED", "1");
++    vi.stubEnv("PLX_MC_GRAPH_WEBHOOK_CLIENT_STATE", "state");
++    vi.stubEnv("PLX_MC_GRAPH_NOTIFICATION_URL", "https://example.com/hook");
++
++    const on = await buildHonestyFields({
++      loadRegisterTimestamps: async () => ({}),
++    });
++    expect(on.webhooksEnabled).toBe(true);
++
++    vi.stubEnv("PLX_MC_GRAPH_WEBHOOK_ENABLED", "0");
++    const off = await buildHonestyFields({
++      loadRegisterTimestamps: async () => ({}),
++    });
++    expect(off.webhooksEnabled).toBe(false);
++  });
++});

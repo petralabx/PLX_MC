@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/cron/sync-notifications",
-      "schedule": "* * * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/routing-maintenance",

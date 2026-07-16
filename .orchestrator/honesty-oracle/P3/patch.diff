@@ -1,0 +1,40 @@
+diff --git a/TOOLS.md b/TOOLS.md
+index 3d0a329..0e0610c 100644
+--- a/TOOLS.md
++++ b/TOOLS.md
+@@ -91,13 +91,15 @@ the `PLX_MC_SYNC_ENABLED` env var, read as an exact-string compare
+ ## Graph change-notification crons ΓÇö deferred (P11)
+ 
+ Vercel Cron also lists `GET /api/cron/sync-subscriptions` and
+-`GET /api/cron/sync-notifications`. These routes are **gated scaffolding for
+-P11** ΓÇö they return `enabled: false` and do **zero** Graph work unless
+-`graphWebhookEnabled()` and `graphWebhookConfigured()` are both true. They are
+-**not** a live push-freshness path; the five-minute delta sweep
+-(`GET /api/cron/sweep`) remains the correctness backbone. Do not treat webhook
+-cron presence in `vercel.json` as evidence that change-notifications are
+-shipped. Maturity wording must stay aligned with `AGENTS.md`
++`GET /api/cron/sync-notifications` (both **hourly** `0 * * * *` until P11 ΓÇö
++`sync-notifications` is intentionally demoted from every-minute so a gated
++no-op does not burn 1,440 invocations/day). These routes are **gated
++scaffolding for P11** ΓÇö they return `enabled: false` and do **zero** Graph
++work unless `graphWebhookEnabled()` and `graphWebhookConfigured()` are both
++true. They are **not** a live push-freshness path; the five-minute delta
++sweep (`GET /api/cron/sweep`) remains the correctness backbone. Do not treat
++webhook cron presence in `vercel.json` as evidence that change-notifications
++are shipped. Maturity wording must stay aligned with `AGENTS.md`
+ (ΓÇ£Graph change-notifications ΓÇö deferred (P11)ΓÇ¥).
+ 
+ ## Guardrails
+diff --git a/vercel.json b/vercel.json
+index 1d61384..d4caf61 100644
+--- a/vercel.json
++++ b/vercel.json
+@@ -15,7 +15,7 @@
+     },
+     {
+       "path": "/api/cron/sync-notifications",
+-      "schedule": "* * * * *"
++      "schedule": "0 * * * *"
+     },
+     {
+       "path": "/api/cron/routing-maintenance",

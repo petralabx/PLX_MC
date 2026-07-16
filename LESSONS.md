@@ -16,6 +16,19 @@
 
 ## Lessons
 
+### 2026-07-16 (ET) — Checkout success hid the wrong repository scope
+
+- **What happened:** A checkout returned success for `petralabx/PLX_MC` while
+  the work targeted `petralabx/plx-customer-portal`; the portal compliance gate
+  later rejected the stamped PR.
+- **Root cause:** The agent trusted tool success without comparing the returned
+  Task and repository metadata to the intended work.
+- **Rule going forward:** Before first push, validate the expected Task ID,
+  exact full repository slug, and exact returned `MC-Checkout` line. If metadata
+  is missing or mismatched, stop and use the explicit-`MC_REPO` capture/HTTP
+  path. Promoted to `docs/AGENT-PR-SOP.md` and enforced in
+  `scripts/compliance-checkout.mjs`.
+
 ### 2026-07-15 (ET) — Governed sessions could checkout tasks but could not create them
 
 - **What happened:** The PLX MC MCP authenticated successfully but both its

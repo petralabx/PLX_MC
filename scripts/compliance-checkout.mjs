@@ -10,7 +10,7 @@
 //   COMPLIANCE_CAPTURE=1   enable (else no-op)
 //   MC_BASE_URL            PLX MC base URL (required when enabled)
 //   MC_ACCOUNTABLE         accountable human (required)
-//   MC_REPO                repo the work targets (required)
+//   MC_REPO                full repo slug the work targets (required)
 //   MC_TASK_ID             one or more task ids, comma/space separated. If empty,
 //                          requests suggestions and stops unless explicit create
 //                          intent is set (MC_CREATE_TASK=1).
@@ -42,7 +42,14 @@ import { pathToFileURL } from "node:url";
 export async function capture({ env = process.env, fetch = globalThis.fetch, log = console.log } = {}) {
   if (env.COMPLIANCE_CAPTURE !== "1") {
     log("[compliance-capture] disabled (set COMPLIANCE_CAPTURE=1 to enable)");
-    return { enabled: false, created: [], stamps: [], taskIds: [], suggestions: null };
+    return {
+      enabled: false,
+      created: [],
+      stamps: [],
+      receipts: [],
+      taskIds: [],
+      suggestions: null,
+    };
   }
 
   const base = env.MC_BASE_URL;
@@ -52,6 +59,9 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
   if (!base) throw new Error("MC_BASE_URL not set");
   if (!accountableHuman) throw new Error("MC_ACCOUNTABLE not set");
   if (!repo) throw new Error("MC_REPO not set");
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
+    throw new Error("MC_REPO must be a full repository slug (for example petralabx/PLX_MC)");
+  }
 
   const url = (p) => `${base.replace(/\/$/, "")}${p}`;
   const mcpKey = (env.MC_MCP_API_KEY || "").replace(/\$\{.*\}/, "").trim();
@@ -120,6 +130,7 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
         enabled: true,
         created: [],
         stamps: [],
+        receipts: [],
         taskIds: [],
         suggestions,
         routingSessionId,
@@ -158,6 +169,7 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
   // Check out each task and emit its stamp. The caller appends these lines to the
   // PR body; the gate + webhook read every one (multi-task verify).
   const stamps = [];
+  const receipts = [];
   for (const taskId of taskIds) {
     const checkoutPath = useCursorApi ? "/api/cursor/checkout" : "/api/compliance/checkout";
     const checkoutBody = useCursorApi
@@ -170,14 +182,38 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
     });
     if (!res.ok) throw new Error(`checkout failed for ${taskId}: HTTP ${res.status}`);
     const json = await res.json();
-    const checkoutId = json?.data?.checkoutId;
+    const data = json?.data ?? json;
+    const checkoutId = data?.checkoutId;
     if (!checkoutId) throw new Error(`no checkoutId for ${taskId}`);
-    log(`[compliance-capture] checked out ${taskId} -> ${checkoutId}`);
-    log(`MC-Checkout: ${checkoutId}`);
+    const prBodyLine = data?.prBodyLine || `MC-Checkout: ${checkoutId}`;
+    const expectedPrBodyLine = `MC-Checkout: ${checkoutId}`;
+
+    if (useCursorApi) {
+      if (data?.taskId !== taskId) {
+        throw new Error(
+          `checkout task mismatch: expected ${taskId}, received ${data?.taskId || "missing"}`
+        );
+      }
+      const responseRepo = json?.meta?.actor?.repo;
+      if (responseRepo !== repo) {
+        throw new Error(
+          `checkout repo mismatch: expected ${repo}, received ${responseRepo || "missing"}`
+        );
+      }
+    }
+    if (prBodyLine !== expectedPrBodyLine) {
+      throw new Error(
+        `checkout stamp mismatch: expected "${expectedPrBodyLine}", received "${prBodyLine}"`
+      );
+    }
+
+    log(`[compliance-capture] handshake ok task=${taskId} repo=${repo}`);
+    log(prBodyLine);
     stamps.push(checkoutId);
+    receipts.push({ taskId, repo, checkoutId, prBodyLine });
   }
 
-  return { enabled: true, created, stamps, taskIds, suggestions: null };
+  return { enabled: true, created, stamps, receipts, taskIds, suggestions: null };
 }
 
 // Run when invoked as a CLI (the hook), not when imported by a test. pathToFileURL

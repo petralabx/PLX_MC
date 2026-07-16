@@ -126,6 +126,18 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 
 **MCP cannot create projects or buckets.** Operators create those in the MC UI ([`HUMAN-MC-SOP.md`](HUMAN-MC-SOP.md)).
 
+### Checkout handshake (before first push)
+
+A successful tool call is not enough. Validate the returned checkout once:
+
+- `data.taskId` equals the expected Task.
+- `meta.actor.repo` equals the exact full target slug (`petralabx/<repo>`).
+- The PR uses `data.prBodyLine` exactly; never reconstruct the stamp.
+- Missing or mismatched task/repo metadata makes the checkout invalid.
+- Use `COMPLIANCE_CAPTURE=1 node scripts/compliance-checkout.mjs` with explicit
+  `MC_REPO` when the MCP registration is missing or mis-scoped. The script
+  performs this handshake in the checkout call and exits nonzero on mismatch.
+
 ### Fallback: capture hook / HTTP
 
 ```bash

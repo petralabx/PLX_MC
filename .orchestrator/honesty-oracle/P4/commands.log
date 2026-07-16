@@ -1,0 +1,23 @@
+# P4 honesty-oracle commands.log
+date: 2026-07-16
+
+## worktree
+WORKTREE_START_REF=d0ffdc805cd12b66d866100930cb6338922d663e
+git worktree add --detach ... d0ffdc8
+git checkout -b proj/honesty-oracle/phase-4-self-check-full
+
+## verify
+npx vitest run tests/mcp-self-check-honesty.test.ts
+exit: 0
+
+ RUN  v4.1.8 C:/Users/vince/.cursor/worktrees/honesty-oracle-p4-c8ca2a82
+
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  14:03:15
+   Duration  1.21s (transform 629ms, setup 0ms, import 1000ms, tests 48ms, environment 0ms)
+
+
+git diff --check
+exit: 0

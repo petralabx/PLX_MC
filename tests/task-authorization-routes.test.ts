@@ -112,6 +112,7 @@ describe("task authorization routes", () => {
     expect(mocks.checkout).toHaveBeenCalledWith(
       expect.objectContaining({
         actor: expect.objectContaining({ id: "oid-1" }),
+        door: "compliance",
       })
     );
   });

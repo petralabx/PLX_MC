@@ -83,6 +83,19 @@ export async function eventsAfter(afterSeq = 0, limit = 100, kind: string | null
   }));
 }
 
+/** Most recent checkout audit door (`mcp` | `compliance`), or null if none. */
+export async function latestCheckoutDoor(): Promise<string | null> {
+  const rows = await query<{ door: string | null }>(
+    `SELECT payload->>'door' AS door
+       FROM mc_events
+      WHERE kind = 'checkout'
+      ORDER BY seq DESC
+      LIMIT 1`
+  );
+  const door = (rows[0]?.door ?? "").trim();
+  return door.length > 0 ? door : null;
+}
+
 // ─── Dispatch ledger ─────────────────────────────────────────────────────────
 
 export interface DispatchRow {

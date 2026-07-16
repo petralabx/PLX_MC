@@ -119,6 +119,9 @@ async function resolveDispatch(
 
 // ─── Checkout (the handshake, decision 3) ────────────────────────────────────
 
+/** Which HTTP door invoked the shared checkout() core (audit provenance). */
+export type CheckoutDoor = "mcp" | "compliance";
+
 export interface CheckoutInput {
   taskId: string;
   runtime: string;
@@ -126,6 +129,8 @@ export interface CheckoutInput {
   repo: string;
   /** Durable permission actor — never taken from a caller-supplied body field. */
   actor?: PermissionActor;
+  /** Door that called this core — recorded on the checkout audit event. */
+  door?: CheckoutDoor;
 }
 
 export async function checkout(input: CheckoutInput): Promise<{ checkoutId: string }> {
@@ -191,6 +196,7 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
       accountableHuman: input.accountableHuman,
       actorKind: "agent",
       permissionActorId: input.actor?.id ?? null,
+      door: input.door ?? null,
     },
   });
   return { checkoutId };

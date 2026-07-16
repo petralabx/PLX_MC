@@ -1,0 +1,309 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index f2a1e46..079fe34 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -76,7 +76,27 @@ All coding agents and humans must run the canonical gate command:
+ - Before push/PR update: `./scripts/preflight.sh --mode pre-push`
+
+ Enforcement surfaces: `.pre-commit-config.yaml` (local hooks) and
+-`.github/workflows/ci.yml` (CI re-runs the same script).
++`.github/workflows/ci.yml` (CI re-runs the same script). Architecture
++maturity is defended by `scripts/check-arch-parity.py` in that same policy
++path (AGENTS.md Γåö TOOLS.md: delta current / Graph change-notifications
++deferred P11).
++
++## Mirror Is Boring Entry Gate
++
++No new plane (Knowledge Hub UI, OpenFlowKit, new MCP transports, swarm
++expansion) merges until the terminating **mirror is boring** gate is met ΓÇö
++all of:
++
++1. Self-check schema is green (all honesty fields present and well-formed).
++2. AGENTS.md Γåö TOOLS.md arch-parity passes in CI
++   (`scripts/check-arch-parity.py` via preflight).
++3. Self-check reports `dataSource: live` + fresh for **N consecutive green
++   cron ticks** (default **N=7** ticks, not calendar days ΓÇö a tick streak
++   cannot be reset by an unrelated flake).
++
++Conflict SLO is **warning-only until conflict volume exists** ΓÇö a
++low-volume queue with items legitimately awaiting a human must not deadlock
++this gate. See `SOUL.md` for the non-negotiable summary.
+
+ ## PLX-MC MCP Integration (Runtime)
+
+diff --git a/SOUL.md b/SOUL.md
+index 3967c20..1a5104a 100644
+--- a/SOUL.md
++++ b/SOUL.md
+@@ -37,6 +37,10 @@ of record mirrored two-way and every reconciliation audited.
+ - Secrets come from AWS Secrets Manager (`prod/ec2-secrets`) through one shared
+   accessor ΓÇö no hardcoded keys, no scattered env lookups.
+ - Timestamps are stored and compared in UTC; rendering localizes.
++- New planes wait on the terminating **mirror is boring** gate: schema-green
++  self-check + AGENTS.mdΓåöTOOLS.md parity in CI + N consecutive green cron
++  ticks (default N=7). Conflict SLO is warning-only until volume exists
++  (full criteria: `AGENTS.md` ΓåÆ "Mirror Is Boring Entry Gate").
+
+ ## Canonical Runtime Docs
+
+diff --git a/scripts/check-arch-parity.py b/scripts/check-arch-parity.py
+new file mode 100644
+index 0000000..32f1811
+--- /dev/null
++++ b/scripts/check-arch-parity.py
+@@ -0,0 +1,128 @@
++#!/usr/bin/env python3
++"""Architecture maturity parity gate ΓÇö AGENTS.md sync rows must match TOOLS.md.
++
++Defends the honesty-oracle maturity split so the AGENTS.md architecture table
++cannot drift back to "Sync engine (planned)" while TOOLS.md (and the shipped
++engine) say otherwise. Patterned on check-brand-portal-parity.py: cheap,
++deterministic, exit 1 on drift, wired into preflight policy gates.
++
++Maturity facts that must agree:
++  - Sync engine (delta) is current in AGENTS.md; TOOLS.md must describe the
++    live delta path (inbound delta / delta sweep), not a planned engine.
++  - Graph change-notifications are deferred (P11) in both docs.
++
++Usage:
++    python scripts/check-arch-parity.py
++    python scripts/check-arch-parity.py --repo-root path/to/repo
++"""
++
++from __future__ import annotations
++
++import argparse
++import re
++import sys
++from pathlib import Path
++
++DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[1]
++
++# Canonical AGENTS.md architecture-table cells.
++AGENTS_REQUIRED_CELLS = (
++    "Sync engine (delta) ΓÇö current",
++    "Graph change-notifications ΓÇö deferred (P11)",
++)
++
++# Phrase that must appear in BOTH docs (cross-file maturity lock).
++SHARED_DEFERRED_PHRASE = "Graph change-notifications ΓÇö deferred (P11)"
++
++# Historical lie that must never recur in AGENTS.md.
++FORBIDDEN_AGENTS_PHRASES = ("Sync engine (planned)",)
++
++# TOOLS.md signals that the delta engine is the live correctness path.
++TOOLS_DELTA_CURRENT_PATTERNS = (
++    re.compile(r"inbound\s+delta", re.IGNORECASE),
++    re.compile(r"delta\s+sweep", re.IGNORECASE),
++)
++
++
++def _normalize(text: str) -> str:
++    """Collapse fancy dashes so Windows/editor variants still match."""
++    return text.replace("\u2013", "ΓÇö").replace("--", "ΓÇö")
++
++
++def check_arch_parity(repo_root: Path) -> list[str]:
++    violations: list[str] = []
++    agents_path = repo_root / "AGENTS.md"
++    tools_path = repo_root / "TOOLS.md"
++
++    if not agents_path.is_file():
++        violations.append(f"missing {agents_path.name}")
++        return violations
++    if not tools_path.is_file():
++        violations.append(f"missing {tools_path.name}")
++        return violations
++
++    agents = _normalize(agents_path.read_text(encoding="utf-8"))
++    tools = _normalize(tools_path.read_text(encoding="utf-8"))
++
++    for phrase in FORBIDDEN_AGENTS_PHRASES:
++        if phrase in agents:
++            violations.append(
++                f"AGENTS.md still contains forbidden maturity lie: {phrase!r}"
++            )
++
++    for cell in AGENTS_REQUIRED_CELLS:
++        if cell not in agents:
++            violations.append(f"AGENTS.md missing maturity cell: {cell!r}")
++
++    if SHARED_DEFERRED_PHRASE not in tools:
++        violations.append(
++            f"drift: AGENTS.md has {SHARED_DEFERRED_PHRASE!r} but TOOLS.md does not"
++        )
++
++    if not any(pat.search(tools) for pat in TOOLS_DELTA_CURRENT_PATTERNS):
++        violations.append(
++            "drift: TOOLS.md does not describe a live delta path "
++            "(expected 'inbound delta' or 'delta sweep') while AGENTS.md "
++            "marks Sync engine (delta) ΓÇö current"
++        )
++
++    # TOOLS must not re-label the push path as shipped/live.
++    if re.search(
++        r"change-notifications?\s+[ΓÇö\-]\s*(current|shipped|live)",
++        tools,
++        re.IGNORECASE,
++    ):
++        violations.append(
++            "drift: TOOLS.md marks change-notifications as current/shipped/live "
++            "while AGENTS.md marks them deferred (P11)"
++        )
++
++    return violations
++
++
++def main(argv: list[str]) -> int:
++    parser = argparse.ArgumentParser(
++        description="Verify AGENTS.md sync maturity cells match TOOLS.md."
++    )
++    parser.add_argument(
++        "--repo-root",
++        type=Path,
++        default=DEFAULT_REPO_ROOT,
++        help="Mission Control repo root (default: this script's own repo root)",
++    )
++    args = parser.parse_args(argv)
++    repo_root = args.repo_root.resolve()
++
++    violations = check_arch_parity(repo_root)
++    if violations:
++        print("arch parity FAIL:", file=sys.stderr)
++        for line in violations:
++            print(f"  {line}", file=sys.stderr)
++        return 1
++
++    print("arch parity clean (delta current / Graph change-notifications deferred P11)")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv[1:]))
+diff --git a/scripts/preflight.sh b/scripts/preflight.sh
+index ff8b08f..e7f957a 100755
+--- a/scripts/preflight.sh
++++ b/scripts/preflight.sh
+@@ -68,6 +68,9 @@ run_policy() {
+     "$PY" scripts/check-mc-brand-application.py
+   fi
+
++  step "Architecture maturity parity (AGENTS.md <-> TOOLS.md)"
++  "$PY" scripts/check-arch-parity.py
++
+   step "Migration numbering (serialized prefixes)"
+   "$PY" scripts/check-migrations.py
+ }
+diff --git a/tests/test_check_arch_parity.py b/tests/test_check_arch_parity.py
+new file mode 100644
+index 0000000..3efeda5
+--- /dev/null
++++ b/tests/test_check_arch_parity.py
+@@ -0,0 +1,107 @@
++"""Exit-code behavior for the architecture maturity parity gate."""
++
++from __future__ import annotations
++
++import subprocess
++import sys
++from pathlib import Path
++
++REPO_ROOT = Path(__file__).resolve().parents[1]
++GATE = REPO_ROOT / "scripts" / "check-arch-parity.py"
++
++DELTA_CURRENT = "Sync engine (delta) ΓÇö current"
++WEBHOOKS_DEFERRED = "Graph change-notifications ΓÇö deferred (P11)"
++
++
++def _run_gate(repo_root: Path) -> subprocess.CompletedProcess[str]:
++    return subprocess.run(
++        [sys.executable, str(GATE), "--repo-root", str(repo_root)],
++        capture_output=True,
++        text=True,
++    )
++
++
++def _write_aligned_docs(repo: Path) -> None:
++    (repo / "AGENTS.md").write_text(
++        f"| {DELTA_CURRENT} | shipped |\n| {WEBHOOKS_DEFERRED} | scaffolding |\n",
++        encoding="utf-8",
++    )
++    (repo / "TOOLS.md").write_text(
++        "Inbound delta poll on ToDos/Risk Register.\n"
++        f"Maturity wording must stay aligned: ΓÇ£{WEBHOOKS_DEFERRED}ΓÇ¥.\n"
++        "The five-minute delta sweep remains the correctness backbone.\n",
++        encoding="utf-8",
++    )
++
++
++def test_exit_0_when_maturity_cells_agree(tmp_path: Path) -> None:
++    repo = tmp_path / "mc"
++    repo.mkdir()
++    _write_aligned_docs(repo)
++    result = _run_gate(repo)
++    assert result.returncode == 0, result.stderr
++    assert "arch parity clean" in result.stdout
++
++
++def test_exit_1_when_agents_still_says_planned(tmp_path: Path) -> None:
++    repo = tmp_path / "mc"
++    repo.mkdir()
++    _write_aligned_docs(repo)
++    agents = repo / "AGENTS.md"
++    agents.write_text(
++        agents.read_text(encoding="utf-8") + "\n| Sync engine (planned) | not yet |\n",
++        encoding="utf-8",
++    )
++    result = _run_gate(repo)
++    assert result.returncode == 1
++    assert "forbidden" in result.stderr or "planned" in result.stderr
++
++
++def test_exit_1_when_tools_missing_deferred_phrase(tmp_path: Path) -> None:
++    repo = tmp_path / "mc"
++    repo.mkdir()
++    (repo / "AGENTS.md").write_text(
++        f"| {DELTA_CURRENT} |\n| {WEBHOOKS_DEFERRED} |\n",
++        encoding="utf-8",
++    )
++    (repo / "TOOLS.md").write_text(
++        "The five-minute delta sweep is the backbone.\n",
++        encoding="utf-8",
++    )
++    result = _run_gate(repo)
++    assert result.returncode == 1
++    assert "drift" in result.stderr
++
++
++def test_exit_1_when_tools_lacks_delta_current_signal(tmp_path: Path) -> None:
++    repo = tmp_path / "mc"
++    repo.mkdir()
++    (repo / "AGENTS.md").write_text(
++        f"| {DELTA_CURRENT} |\n| {WEBHOOKS_DEFERRED} |\n",
++        encoding="utf-8",
++    )
++    (repo / "TOOLS.md").write_text(
++        f"{WEBHOOKS_DEFERRED}\nNo mention of the live path.\n",
++        encoding="utf-8",
++    )
++    result = _run_gate(repo)
++    assert result.returncode == 1
++    assert "delta" in result.stderr.lower()
++
++
++def test_committed_docs_pass_in_repo() -> None:
++    result = _run_gate(REPO_ROOT)
++    assert result.returncode == 0, result.stderr
++    assert "arch parity clean" in result.stdout
++
++
++def test_default_repo_root_self_resolves_independent_of_cwd(tmp_path: Path) -> None:
++    result = subprocess.run(
++        [sys.executable, str(GATE)],
++        cwd=tmp_path,
++        capture_output=True,
++        text=True,
++        check=False,
++    )
++    assert result.returncode == 0, result.stderr
++    assert "arch parity clean" in result.stdout

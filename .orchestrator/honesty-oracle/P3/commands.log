@@ -1,0 +1,20 @@
+# commands.log — P3 honesty-oracle
+WORKTREE_ID=honesty-oracle-p3-5874ccd8
+WORKTREE_PATH=C:\Users\vince\.cursor\worktrees\honesty-oracle-p3-5874ccd8
+REPO_ROOT=C:/Users/vince/.cursor/worktrees/PLX_MC-fleet-tier-onboarding
+WORKTREE_START_REF=3da2b17
+HEAD_AT_CREATE=3da2b175a79e54607cac93c2192dd40cb89604a4
+BRANCH=proj/honesty-oracle/phase-3-cron-cleanup
+
+## Setup
+Checked REPO_ROOT and WORKTREE_PATH for .cursor/worktrees.json — none found; setup skipped.
+
+## Acceptance
+python -c "import json; from pathlib import Path; c=json.loads(Path('vercel.json').read_text(encoding='utf-8')); bad=[x for x in c.get('crons',[]) if x.get('path')=='/api/cron/sync-notifications' and x.get('schedule')=='* * * * *']; assert not bad, bad; print('P3 cron ok')"
+# → P3 cron ok (exit 0)
+
+git diff --check
+# → exit 0
+
+## Gate confirmation (read-only)
+sync-notifications/route.ts and sync-subscriptions/route.ts both return enabled:false when webhooks not configured.

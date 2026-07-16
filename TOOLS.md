@@ -88,6 +88,20 @@ the `PLX_MC_SYNC_ENABLED` env var, read as an exact-string compare
   "scheduler disabled" and stays dormant. The cadence itself is verified
   deterministically (fake timers, no real clock) in `tests/sync-scheduler.test.ts`.
 
+## Graph change-notification crons — deferred (P11)
+
+Vercel Cron also lists `GET /api/cron/sync-subscriptions` and
+`GET /api/cron/sync-notifications` (both **hourly** `0 * * * *` until P11 —
+`sync-notifications` is intentionally demoted from every-minute so a gated
+no-op does not burn 1,440 invocations/day). These routes are **gated
+scaffolding for P11** — they return `enabled: false` and do **zero** Graph
+work unless `graphWebhookEnabled()` and `graphWebhookConfigured()` are both
+true. They are **not** a live push-freshness path; the five-minute delta
+sweep (`GET /api/cron/sweep`) remains the correctness backbone. Do not treat
+webhook cron presence in `vercel.json` as evidence that change-notifications
+are shipped. Maturity wording must stay aligned with `AGENTS.md`
+(“Graph change-notifications — deferred (P11)”).
+
 ## Guardrails
 
 - The sync engine never deletes SharePoint items; removals are soft (status

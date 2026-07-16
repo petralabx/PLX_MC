@@ -1,0 +1,29 @@
+# P2 honesty-oracle commands.log
+date: 2026-07-16
+
+## worktree
+git worktree add --detach ... 3da2b17
+git checkout -b proj/honesty-oracle/phase-2-self-check-thin
+
+## verify
+npx vitest run tests/mcp-self-check-honesty.test.ts
+exit: 0
+
+ RUN  v4.1.8 C:/Users/vince/.cursor/worktrees/honesty-oracle-p2-86b24e0e
+
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  14:00:17
+   Duration  954ms (transform 503ms, setup 0ms, import 818ms, tests 5ms, environment 0ms)
+
+
+npm run typecheck
+exit: 0
+
+> plx-mission-control@0.1.0 typecheck
+> tsc --noEmit
+
+
+git diff --check
+exit: 0

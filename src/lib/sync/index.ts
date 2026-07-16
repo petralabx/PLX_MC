@@ -35,7 +35,12 @@ export {
   type FieldAttribution,
   type FieldSource,
 } from "./mapping";
-export { normalizeLastModified } from "./graph";
+export {
+  normalizeLastModified,
+  probeGraphTokenOk,
+  GRAPH_TOKEN_PROBE_TIMEOUT_MS,
+  clearSiteContextCache,
+} from "./graph";
 export { validateRepoInOrg, type RepoValidation } from "./github";
 export { startSyncScheduler, syncEnabled } from "./scheduler";
 export {

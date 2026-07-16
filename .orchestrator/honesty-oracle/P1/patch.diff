@@ -1,0 +1,50 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 01f9865..f2a1e46 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -20,8 +20,10 @@ DESIGN_TOKENS).
+ - `npm run dev` ├óΓé¼ΓÇ¥ Next.js dev server (App Router, `app/`).
+ - `npm run build` / `npm run start` ├óΓé¼ΓÇ¥ production build and serve.
+ - `./scripts/preflight.sh --mode pre-commit|pre-push|ci` ├óΓé¼ΓÇ¥ the one gate command.
+-- SharePoint sync: five-minute delta sweep + Graph subscription renewal /
+-  notification queue (see `docs/modules/sync/README.md`).
++- SharePoint sync (current): five-minute inbound delta sweep + outbound push
++  via Vercel Cron / `POST /api/sync/sweep` (see `docs/modules/sync/README.md`).
++  Graph change-notification subscription renewal and notification queue are
++  deferred (P11) ΓÇö gated scaffolding only, not live push freshness.
+ - Routing maintenance cron: `GET /api/cron/routing-maintenance` (hourly) ΓÇö
+   retention expiry + rolling-breach cohort demotion; authorized only for
+   `sp_routing_maintenance`. Rollout runbook:
+@@ -33,7 +35,8 @@ DESIGN_TOKENS).
+ |---|---|---|
+ | Web app | Next.js (App Router) + TypeScript; all screens from the design handoff | `app/`, `src/` |
+ | Brand surface | PLX design system, fourth brand surface per ADR-003; `--p-*` tokens, opt-in `.brand-plx` boundary | `src/styles/`, `src/components/brand/`, `docs/design-system/` |
+-| Sync engine (planned) | Two-way Microsoft Graph mirror: outbound PATCH on mutation, inbound delta + webhooks, conflict queue, audit log | spec: `docs/product/SHAREPOINT_INTEGRATION.md` |
++| Sync engine (delta) ΓÇö current | Two-way Microsoft Graph mirror: outbound PATCH on mutation, inbound delta poll (ToDos/Risk/Projects/Roadmap), conflict queue, audit log, freshness API | `docs/modules/sync/README.md`; product backdrop: `docs/product/SHAREPOINT_INTEGRATION.md` |
++| Graph change-notifications ΓÇö deferred (P11) | Push webhooks / subscription renewal / notification queue ΓÇö gated scaffolding only until P11; delta sweep remains the correctness backbone | `docs/modules/sync/README.md` (P11); cron routes under `src/app/api/cron/sync-*` |
+ | Governance tooling | Contract generator + drift gate, hygiene checker, preflight wrapper (Python 3.12) | `scripts/`, `config/` |
+ 
+ ## Module Ownership
+diff --git a/TOOLS.md b/TOOLS.md
+index f8115cc..3d0a329 100644
+--- a/TOOLS.md
++++ b/TOOLS.md
+@@ -88,6 +88,18 @@ the `PLX_MC_SYNC_ENABLED` env var, read as an exact-string compare
+   "scheduler disabled" and stays dormant. The cadence itself is verified
+   deterministically (fake timers, no real clock) in `tests/sync-scheduler.test.ts`.
+ 
++## Graph change-notification crons ΓÇö deferred (P11)
++
++Vercel Cron also lists `GET /api/cron/sync-subscriptions` and
++`GET /api/cron/sync-notifications`. These routes are **gated scaffolding for
++P11** ΓÇö they return `enabled: false` and do **zero** Graph work unless
++`graphWebhookEnabled()` and `graphWebhookConfigured()` are both true. They are
++**not** a live push-freshness path; the five-minute delta sweep
++(`GET /api/cron/sweep`) remains the correctness backbone. Do not treat webhook
++cron presence in `vercel.json` as evidence that change-notifications are
++shipped. Maturity wording must stay aligned with `AGENTS.md`
++(ΓÇ£Graph change-notifications ΓÇö deferred (P11)ΓÇ¥).
++
+ ## Guardrails
+ 
+ - The sync engine never deletes SharePoint items; removals are soft (status

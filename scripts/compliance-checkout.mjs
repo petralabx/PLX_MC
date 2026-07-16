@@ -52,6 +52,8 @@ export async function capture({ env = process.env, fetch = globalThis.fetch, log
     };
   }
 
+  log("[compliance-capture] fallback path — prefer MCP checkout");
+
   const base = env.MC_BASE_URL;
   const accountableHuman = env.MC_ACCOUNTABLE;
   const repo = env.MC_REPO;

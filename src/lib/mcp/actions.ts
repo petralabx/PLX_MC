@@ -9,6 +9,7 @@ import type { Evidence, Task } from "@/lib/mc-data";
 import { requireMcpActor } from "@/lib/routing/mutations/actors";
 import type { McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
+import { buildHonestyFields } from "./honesty";
 import { syncMetaForTask } from "./sync-meta";
 
 export {
@@ -29,13 +30,14 @@ export {
 
 export async function actionSelfCheck(identity: McpIdentity) {
   const snap = await snapshot();
+  const honesty = await buildHonestyFields({ lastSweep: snap.lastSweep });
   return {
     ok: true,
-    mcpEnabled: true,
     operator: identity.operatorEmail,
     taskCount: snap.tasks.length,
     bucketCount: snap.buckets.length,
     lastSweep: snap.lastSweep,
+    ...honesty,
   };
 }
 
@@ -115,6 +117,7 @@ export async function actionCheckout(identity: McpIdentity, taskId: string) {
     accountableHuman: identity.operatorEmail,
     repo: identity.repo,
     actor: identity.actor,
+    door: "mcp",
   });
   const stamp = `MC-Checkout: ${checkoutId}`;
   return {

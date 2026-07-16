@@ -115,6 +115,37 @@ export async function siteContext(): Promise<SiteContext> {
   return cachedSite;
 }
 
+/** Default self-check Graph probe budget (fail-soft; never block the oracle). */
+export const GRAPH_TOKEN_PROBE_TIMEOUT_MS = 8_000;
+
+/**
+ * Sweep-start health probe for honesty-oracle: acquire a Graph token and
+ * resolve site + required lists (`siteContext`). Fail-soft — never throws.
+ */
+export async function probeGraphTokenOk(opts?: {
+  timeoutMs?: number;
+  resolveSite?: () => Promise<SiteContext>;
+}): Promise<boolean> {
+  const timeoutMs = opts?.timeoutMs ?? GRAPH_TOKEN_PROBE_TIMEOUT_MS;
+  const resolveSite = opts?.resolveSite ?? siteContext;
+  try {
+    await Promise.race([
+      resolveSite(),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("graph_token_probe_timeout")), timeoutMs);
+      }),
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Test/ops seam: drop the site+list cache (long-lived server process). */
+export function clearSiteContextCache(): void {
+  cachedSite = null;
+}
+
 // ─── List item operations used by the engine ─────────────────────────────────
 
 export interface SpLastModifiedBy {

@@ -1662,6 +1662,13 @@ export function retryError(errorId: string) {
   });
 }
 
+// Test-only: inject open conflicts (non-seed). Seed SP_CONFLICTS is []; the
+// console queue is fed by openConflicts() which hydrates from repo.openConflicts.
+export function __setOpenConflictsForTests(conflicts: SpConflict[]) {
+  state.conflicts = clone(conflicts);
+  emit();
+}
+
 // Test-only: reset the store to the seed fixture.
 export function resetStore() {
   state = initialState();

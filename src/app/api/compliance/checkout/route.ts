@@ -23,5 +23,6 @@ export const POST = route(async (req) => {
   return checkout({
     ...body,
     actor: authorized.actor,
+    door: "compliance",
   });
 });

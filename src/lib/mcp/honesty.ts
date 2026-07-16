@@ -1,6 +1,7 @@
-// Honesty-oracle fields for mc_self_check (P4 full Graph probe).
+// Honesty-oracle fields for mc_self_check (P4 Graph probe + P5 checkout door).
 // dataSource: live requires recorded inbound delta AND acquirable Graph token.
 
+import { latestCheckoutDoor } from "@/lib/compliance/repo";
 import { cronConfigured, graphWebhookConfigured, graphWebhookEnabled } from "@/lib/secrets";
 import {
   ROUTING_REQUIRED_REGISTERS,
@@ -26,6 +27,8 @@ export interface HonestyFields {
   mcpEnabled: boolean;
   graphTokenOk: boolean;
   dataSource: DataSource;
+  /** Most recent checkout door from audit (`mcp` | `compliance`), if any. */
+  lastCheckoutDoor: string | null;
 }
 
 /** Cadence mode: in-app scheduler wins when enabled; else cron if secret present. */
@@ -75,12 +78,21 @@ export function resolveWebhooksEnabled(opts?: {
   return enabled && configured;
 }
 
+async function loadLastCheckoutDoorSafe(): Promise<string | null> {
+  try {
+    return await latestCheckoutDoor();
+  } catch {
+    return null;
+  }
+}
+
 /** Load freshness + honesty flags; Graph probe is fail-soft (never throws). */
 export async function buildHonestyFields(opts?: {
   lastSweep?: string | null;
   now?: Date;
   loadRegisterTimestamps?: () => Promise<Partial<Record<string, Date | string | null | undefined>>>;
   probeGraphToken?: () => Promise<boolean>;
+  loadLastCheckoutDoor?: () => Promise<string | null>;
 }): Promise<HonestyFields> {
   const now = opts?.now ?? new Date();
   const syncOn = syncEnabled();
@@ -91,6 +103,12 @@ export async function buildHonestyFields(opts?: {
     loadRegisterTimestamps:
       opts?.loadRegisterTimestamps ?? (() => getRegisterInboundCompletions()),
   });
+  const databaseBound = resolveDatabaseBound();
+  const lastCheckoutDoor = opts?.loadLastCheckoutDoor
+    ? await opts.loadLastCheckoutDoor()
+    : databaseBound
+      ? await loadLastCheckoutDoorSafe()
+      : null;
 
   let graphTokenOk = false;
   try {
@@ -103,12 +121,13 @@ export async function buildHonestyFields(opts?: {
     syncMode: resolveSyncMode({ syncEnabled: syncOn, cronConfigured: cronOn }),
     cronConfigured: cronOn,
     syncEnabled: syncOn,
-    databaseBound: resolveDatabaseBound(),
+    databaseBound,
     lastSweepAgeMs: resolveLastSweepAgeMs(opts?.lastSweep, now),
     freshness,
     webhooksEnabled: resolveWebhooksEnabled(),
     mcpEnabled: mcpEnabled(),
     graphTokenOk,
     dataSource: resolveDataSource(freshness, graphTokenOk),
+    lastCheckoutDoor,
   };
 }

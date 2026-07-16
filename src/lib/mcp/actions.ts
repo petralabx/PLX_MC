@@ -117,6 +117,7 @@ export async function actionCheckout(identity: McpIdentity, taskId: string) {
     accountableHuman: identity.operatorEmail,
     repo: identity.repo,
     actor: identity.actor,
+    door: "mcp",
   });
   const stamp = `MC-Checkout: ${checkoutId}`;
   return {

@@ -236,6 +236,7 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
       mcpEnabled: false,
       graphTokenOk: false,
       dataSource: "seed",
+      lastCheckoutDoor: null,
     });
     expect(typeof result.lastSweepAgeMs === "number" || result.lastSweepAgeMs === null).toBe(true);
     expect(result.freshness).toEqual(
@@ -301,6 +302,7 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
       now: new Date("2026-07-16T18:00:00.000Z"),
       loadRegisterTimestamps: async () => ({}),
       probeGraphToken: async () => false,
+      loadLastCheckoutDoor: async () => "mcp",
     });
 
     expect(honesty.mcpEnabled).toBe(true);
@@ -311,6 +313,7 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
     expect(honesty.lastSweepAgeMs).toBe(3_600_000);
     expect(honesty.graphTokenOk).toBe(false);
     expect(honesty.dataSource).toBe("seed");
+    expect(honesty.lastCheckoutDoor).toBe("mcp");
   });
 
   it("webhooksEnabled true only when both env gates are on", async () => {

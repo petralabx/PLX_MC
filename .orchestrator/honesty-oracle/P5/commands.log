@@ -1,0 +1,16 @@
+# P5 acceptance commands — 2026-07-16
+
+$ npx vitest run tests/checkout-shared-core.test.ts
+ RUN  v4.1.8 C:/Users/vince/.cursor/worktrees/honesty-oracle-p5-e65a4103
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Duration  1.17s
+ exit 0
+
+$ npx vitest run tests/compliance-server.test.ts tests/mcp-self-check-honesty.test.ts tests/task-authorization-routes.test.ts tests/compliance-capture.test.ts
+ Test Files  4 passed (4)
+      Tests  42 passed (42)
+ exit 0
+
+$ git diff --check
+ exit 0

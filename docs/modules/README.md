@@ -27,3 +27,4 @@ key files change, update its contract in the same PR.
 | loop-ledgers | Vince | Medium | `docs/modules/loop-ledgers/README.md` |
 | uat | Vince | Medium | `docs/modules/uat/README.md` |
 | vendor-spend | Vince | Medium | `docs/modules/vendor-spend/README.md` |
+| architecture | Vince | Medium | `docs/modules/architecture/README.md` |

@@ -48,11 +48,23 @@ Routing mutations fail closed when required registers are stale.
 
 - `PLX_MC_SYNC_ENABLED=1` enables the in-app 5-minute scheduler (default OFF).
 - Vercel Cron `GET /api/cron/sweep` (Bearer `CRON_SECRET`) is the deployed
-  cadence; unset secret → 503.
+  cadence on production host **`https://mc.plxcustomer.io`** (Vercel project
+  `plx-mission-control`; schedule in `vercel.json`); unset secret → 503.
 - `PLX_MC_GRAPH_WEBHOOK_ENABLED` (P11) can disable notifications while
   retaining delta recovery — not wired in P4.
 - Fallback: manual `POST /api/sync/sweep` (session `sync.mutate`) or wait for
   the next cron tick.
+
+### Maturity (honesty-oracle)
+
+- **Sync engine (delta) — current:** inbound delta poll + outbound push is the
+  live correctness backbone (five-minute sweep).
+- **Graph change-notifications — deferred (P11):** subscription renewal /
+  notification queue cron routes are gated scaffolding only; do not treat
+  webhook cron presence as shipped push freshness.
+- Production SoR cutover evidence:
+  `artifacts/sync/2026-07-13-prod-site-cutover/` (Vercel Production redeploy
+  aliases include `mc.plxcustomer.io`).
 
 ### Authorization
 

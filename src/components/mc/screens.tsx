@@ -6,6 +6,7 @@ import { AgentFeed } from "./agent-feed";
 import { BucketDetail } from "./bucket-detail";
 import { ProjectDetail } from "./project-detail";
 import { FilesView } from "./files-view";
+import { ArchitectureView } from "./architecture";
 import { GovernanceSopsView } from "./governance-sops";
 import { SkillsDirectoryView } from "./skills-directory";
 import { InboxView } from "./inbox";
@@ -40,6 +41,7 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   "loop-ledgers": LoopLedgersView,
   "governance-sops": GovernanceSopsView,
   "skills-directory": SkillsDirectoryView,
+  architecture: ArchitectureView,
   "ai-spend": AiSpendView,
   "routing-inbox": RoutingInboxView,
 };

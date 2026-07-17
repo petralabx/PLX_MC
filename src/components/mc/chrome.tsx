@@ -190,6 +190,7 @@ export function Sidebar({
         {item("loop-ledgers", "◰", "Loop ledgers")}
         {item("governance-sops", "§", "SOP guide")}
         {item("skills-directory", "◈", "Skills directory")}
+        {item("architecture", "⬡", "Architecture")}
         {item(
           "ai-spend",
           "◎",

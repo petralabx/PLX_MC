@@ -71,6 +71,10 @@ run_policy() {
   step "Architecture maturity parity (AGENTS.md <-> TOOLS.md)"
   "$PY" scripts/check-arch-parity.py
 
+  step "Architecture diagram pack (docs/architecture honesty)"
+  # Self-resolve repo root from __file__ (same WSL/Windows path caveat as brand parity).
+  "$PY" scripts/check-architecture-diagrams.py
+
   step "Migration numbering (serialized prefixes)"
   "$PY" scripts/check-migrations.py
 }

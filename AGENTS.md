@@ -28,16 +28,34 @@ DESIGN_TOKENS).
   retention expiry + rolling-breach cohort demotion; authorized only for
   `sp_routing_maintenance`. Rollout runbook:
   `docs/runbooks/mc-routing-rollout.md`.
+- Architecture screen — in-app C4 diagram catalog at
+  [`/?screen=architecture`](https://mc.plxcustomer.io/?screen=architecture)
+  (maintained pack: [`docs/architecture/`](docs/architecture/); module contract:
+  `docs/modules/architecture/README.md`).
+
+## Production Hosting
+
+Production hosting is known and documented — do not treat it as unknown.
+
+| Surface | Where it runs | Notes |
+|---|---|---|
+| Deployed web app (+ HTTPS APIs, including `/api/cursor/*`) | Vercel project **`plx-mission-control`**, public URL **`https://mc.plxcustomer.io`** | Root `README.md` lists the public app URL; `vercel.json` defines production crons (e.g. `GET /api/cron/sweep` every 5 min). SharePoint SoR cutover + production redeploy evidence: `artifacts/sync/2026-07-13-prod-site-cutover/`. |
+| PLX-MC MCP **stdio** client | Operator workstation (local process) | `tools/plx-mc-mcp/` — **not** part of the Vercel deploy. Calls the deployed HTTPS cursor API. |
+| Agentic swarm | Operator-local loopback `127.0.0.1:8900` | Composed into PLX-MC MCP; **not** part of the Vercel deploy. Default-OFF in committed MCP config. |
+
+Staging fallback hostname `mc-staging.plxcustomer.io` may exist for preview/break-glass; the canonical production URL for colleagues and agents is `https://mc.plxcustomer.io`.
 
 ## Architecture
 
 | Layer | What | Where |
 |---|---|---|
-| Web app | Next.js (App Router) + TypeScript; all screens from the design handoff | `app/`, `src/` |
+| Web app | Next.js (App Router) + TypeScript; all screens from the design handoff; production host Vercel `plx-mission-control` @ `https://mc.plxcustomer.io` | `app/`, `src/`; hosting: see Production Hosting above |
 | Brand surface | PLX design system, fourth brand surface per ADR-003; `--p-*` tokens, opt-in `.brand-plx` boundary | `src/styles/`, `src/components/brand/`, `docs/design-system/` |
 | Sync engine (delta) — current | Two-way Microsoft Graph mirror: outbound PATCH on mutation, inbound delta poll (ToDos/Risk/Projects/Roadmap), conflict queue, audit log, freshness API | `docs/modules/sync/README.md`; product backdrop: `docs/product/SHAREPOINT_INTEGRATION.md` |
 | Graph change-notifications — deferred (P11) | Push webhooks / subscription renewal / notification queue — gated scaffolding only until P11; delta sweep remains the correctness backbone | `docs/modules/sync/README.md` (P11); cron routes under `src/app/api/cron/sync-*` |
 | Governance tooling | Contract generator + drift gate, hygiene checker, preflight wrapper (Python 3.12) | `scripts/`, `config/` |
+| Operator-local MCP / swarm | Stdio MCP client + agentic swarm loopback — not deployed on Vercel | `tools/plx-mc-mcp/`; swarm `127.0.0.1:8900` |
+| Architecture (in-app + diagram pack) | Read-only C4 catalog; diagrams are **generated consumers** of Git authority | In-app: [`/?screen=architecture`](https://mc.plxcustomer.io/?screen=architecture); pack: [`docs/architecture/`](docs/architecture/); contract: `docs/modules/architecture/README.md` |
 
 ## Module Ownership
 

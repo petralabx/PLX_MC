@@ -9,6 +9,11 @@ resolution and a full audit trail. Colleagues across `@petralabx.com` /
 
 **Public app:** https://mc.plxcustomer.io
 
+**Architecture:** https://mc.plxcustomer.io/?screen=architecture — in-app C4
+diagram catalog (context, containers, task lifecycle). Maintained repo pack:
+[`docs/architecture/`](docs/architecture/) (generated consumers of
+[`AGENTS.md`](AGENTS.md); not a second system of record).
+
 **Why:** everything resolves to a Task, every change mirrors to the record,
 and work is traceable end-to-end (PRD requirement → task → PR → evidence →
 test status → merge commit). The full product spec lives in

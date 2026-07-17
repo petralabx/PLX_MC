@@ -7,11 +7,11 @@ from the design handoff are built (Inbox, Board/List/Timeline, Traceability,
 Agent activity, Initiative/Bucket detail, Task detail, Sync console, Files,
 Repos) plus surfaces added since the handoff: **Project detail**, **My Tasks**,
 **Insights**, **Meeting Intake**, **Loop Ledgers**, **Governance SOPs**,
-**Skills Directory**, and **AI Spend** — along with the ⌘K command palette,
-New Task / New Initiative / New Project modals, and PeoplePicker (Petra domain
-rule enforced in the UI). The screen registry (`src/components/mc/screens.tsx`)
-maps nineteen `Screen` keys to components; Board, List, Timeline, and My Tasks
-share `WorkViews`. State flows through the runtime store
+**Skills Directory**, **Architecture**, and **AI Spend** — along with the ⌘K
+command palette, New Task / New Initiative / New Project modals, and
+PeoplePicker (Petra domain rule enforced in the UI). The screen registry
+(`src/components/mc/screens.tsx`) maps twenty `Screen` keys to components;
+Board, List, Timeline, and My Tasks share `WorkViews`. State flows through the runtime store
 (`src/lib/mc-data/store.ts`) — since 2026-06-11 a client cache over the sync
 module's API: it hydrates from `GET /api/state` after mount and mirrors every
 mutation through the shared fetch wrapper (`src/lib/api`), staying
@@ -25,6 +25,15 @@ Project with an initiative card grid; inline edit for health, accountable
 owner, target, and description via `updateProject` → optimistic
 `PATCH /api/projects/{id}` (same contract as `updateBucket` on initiative
 detail).
+
+### Hosting
+
+Production web app deploys on Vercel project **`plx-mission-control`** at
+**`https://mc.plxcustomer.io`** (see root `README.md` and `vercel.json` for
+crons). HTTPS APIs under `/api/*` (including `/api/cursor/*`) ship with that
+deploy. The PLX-MC MCP **stdio** client and the agentic swarm (loopback
+`127.0.0.1:8900`) are **operator-local** and are not part of the Vercel
+deploy — see `AGENTS.md` → Production Hosting and `TOOLS.md`.
 
 ## Why
 

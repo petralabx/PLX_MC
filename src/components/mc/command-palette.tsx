@@ -114,6 +114,7 @@ export function CommandPalette({
       { key: "nav:loop-ledgers", icon: "◰", label: "Go to Loop ledgers", run: () => nav("loop-ledgers") },
       { key: "nav:governance-sops", icon: "§", label: "Go to SOP guide", run: () => nav("governance-sops") },
       { key: "nav:skills-directory", icon: "◈", label: "Go to Skills directory", run: () => nav("skills-directory") },
+      { key: "nav:architecture", icon: "⬡", label: "Go to Architecture", run: () => nav("architecture") },
       { key: "nav:ai-spend", icon: "◎", label: "Go to AI Spend", run: () => nav("ai-spend") },
       {
         key: "nav:task",

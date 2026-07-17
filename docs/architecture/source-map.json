@@ -1,0 +1,2705 @@
+{
+  "schema_version": "plx-architecture-source-map/v3",
+  "notice": "Generated guide — not official. Architecture authority remains in AGENTS.md and docs/modules/*. Production hosting: Vercel web at https://mc.plxcustomer.io; MCP/swarm operator-local.",
+  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a",
+  "views": {
+    "context": {
+      "nodes": [
+        {
+          "mermaid_id": "staff",
+          "display_label": "People",
+          "fact_ids": [
+            "node-staff"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-staff",
+              "canonical_claim": "PLX and Petra Soap staff",
+              "canonical_summary": "Humans review, approve, assign, and resolve work through Mission Control.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 7,
+                  "end_line": 14,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/product/README.md",
+                  "start_line": 31,
+                  "end_line": 39,
+                  "authority_class": "product_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "task",
+          "display_label": "Task — central work item",
+          "fact_ids": [
+            "node-task"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-task",
+              "canonical_claim": "Task",
+              "canonical_summary": "Durable unit connecting planning, execution, completion, audit, delivery, and evidence.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 9,
+                  "end_line": 14,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/product/README.md",
+                  "start_line": 31,
+                  "end_line": 39,
+                  "authority_class": "product_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "web",
+          "display_label": "Web workspace",
+          "fact_ids": [
+            "node-web"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-web",
+              "canonical_claim": "Mission Control web cockpit",
+              "canonical_summary": "Next.js UI and optimistic client cache; production host Vercel plx-mission-control @ https://mc.plxcustomer.io; a lens, not the system of record.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 44,
+                  "end_line": 53,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 32,
+                  "end_line": 42,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 30,
+                  "end_line": 37,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 3,
+                  "end_line": 21,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "api",
+          "display_label": "Shared application interface",
+          "fact_ids": [
+            "node-api"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-api",
+              "canonical_claim": "Shared API surface",
+              "canonical_summary": "Authenticated application routes used by web and operator interfaces for governed mutations.",
+              "sources": [
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 14,
+                  "end_line": 18,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 62,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "sync",
+          "display_label": "Sync — delta engine current; Graph change-notifications deferred (P11)",
+          "fact_ids": [
+            "node-sync",
+            "discrepancy-sync-maturity"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-sync",
+              "canonical_claim": "Sync engine",
+              "canonical_summary": "Two-way Graph sync, freshness, conflicts, attribution, and audit; notification delivery is deferred.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 23,
+                  "end_line": 26,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 50,
+                  "end_line": 51,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            },
+            {
+              "fact_id": "discrepancy-sync-maturity",
+              "canonical_claim": "AGENTS.md splits sync maturity: delta engine current; Graph change-notifications deferred (P11).",
+              "canonical_summary": "Delta inbound/outbound sync is current; Graph change-notification subscription renewal and notification queue remain deferred (P11).",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 23,
+                  "end_line": 26,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 50,
+                  "end_line": 51,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "routing",
+          "display_label": "Rule-based work suggestions",
+          "fact_ids": [
+            "node-routing"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-routing",
+              "canonical_claim": "Deterministic routing control plane",
+              "canonical_summary": "Deterministic suggestions, proposals, confirmed mutations, rollout, and retention; no LLM control decisions.",
+              "sources": [
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 3,
+                  "end_line": 14,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 27,
+                  "end_line": 70,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "mcp",
+          "display_label": "Agent tool interface",
+          "fact_ids": [
+            "node-mcp"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-mcp",
+              "canonical_claim": "PLX-MC MCP",
+              "canonical_summary": "Authenticated and auditable task lifecycle interface; committed default is disabled and enablement is explicit.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 78,
+                  "end_line": 102,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 3,
+                  "end_line": 35,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "audit",
+          "display_label": "Audit and evidence",
+          "fact_ids": [
+            "node-audit-evidence"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-audit-evidence",
+              "canonical_claim": "Audit and evidence trail",
+              "canonical_summary": "Append-only events, sync audit history, checkout references, completion evidence, and test proof.",
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 64,
+                  "end_line": 68,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 51,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "postgres",
+          "display_label": "Operational database",
+          "fact_ids": [
+            "node-postgres"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-postgres",
+              "canonical_claim": "Postgres",
+              "canonical_summary": "Separate fast mirror and store for sync metadata, routing/compliance state, and audit history; never canonical over SharePoint.",
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 21,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 64,
+                  "end_line": 82,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 3,
+                  "end_line": 10,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "swarm",
+          "display_label": "External agent execution",
+          "fact_ids": [
+            "node-swarm"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-swarm",
+              "canonical_claim": "Agentic swarm",
+              "canonical_summary": "Composed execution dependency reached through the MCP client; not part of the Vercel application boundary.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 89,
+                  "end_line": 107,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 24,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 69,
+                  "end_line": 75,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "sharepoint",
+          "display_label": "Official Task record",
+          "fact_ids": [
+            "node-sharepoint"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-sharepoint",
+              "canonical_claim": "SharePoint",
+              "canonical_summary": "Canonical record for human planning data and Task-owned operational records.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 9,
+                  "end_line": 16,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 11,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "github",
+          "display_label": "Code delivery record",
+          "fact_ids": [
+            "node-github-delivery"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-github-delivery",
+              "canonical_claim": "GitHub delivery records",
+              "canonical_summary": "Owns pull-request identity and lifecycle metadata linked to Tasks; it does not own planning authority.",
+              "sources": [
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 56,
+                  "end_line": 60,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "mermaid_id": "staff__web",
+          "display_label": "review, approve, assign, resolve",
+          "fact_ids": [
+            "rel-staff-web"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-staff-web",
+              "canonical_claim": "review, approve, assign, and resolve",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 7,
+                  "end_line": 14,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "staff",
+          "to": "web"
+        },
+        {
+          "mermaid_id": "web__api",
+          "display_label": "use the shared interface",
+          "fact_ids": [
+            "rel-web-api"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-web-api",
+              "canonical_claim": "hydrates and sends governed mutations through shared API",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 14,
+                  "end_line": 21,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "web",
+          "to": "api"
+        },
+        {
+          "mermaid_id": "api__sync",
+          "display_label": "send application changes to sync",
+          "fact_ids": [
+            "rel-api-sync"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-api-sync",
+              "canonical_claim": "uses sync-backed persistence",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 62,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 69,
+                  "end_line": 73,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "api",
+          "to": "sync"
+        },
+        {
+          "mermaid_id": "sync__sharepoint",
+          "display_label": "send changes; receive updates; newer attributable human routing edits beat older pending service edits; ambiguous conflicts need manual review",
+          "fact_ids": [
+            "rel-sync-sharepoint"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-sync-sharepoint",
+              "canonical_claim": "reconciles outbound mutations and inbound deltas while preserving human authority",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 37,
+                  "end_line": 45,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "sync",
+          "to": "sharepoint"
+        },
+        {
+          "mermaid_id": "sync__postgres",
+          "display_label": "persist sync audit records",
+          "fact_ids": [
+            "rel-sync-postgres"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-sync-postgres",
+              "canonical_claim": "stores freshness, conflict, attribution, and audit state",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 19,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 64,
+                  "end_line": 82,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "sync",
+          "to": "postgres"
+        },
+        {
+          "mermaid_id": "routing__sync",
+          "display_label": "require fresh data; stop if stale",
+          "fact_ids": [
+            "rel-routing-sync"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-routing-sync",
+              "canonical_claim": "requires bounded-fresh routing registers and fails closed when stale",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 19,
+                  "end_line": 27,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 78,
+                  "end_line": 82,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "routing",
+          "to": "sync"
+        },
+        {
+          "mermaid_id": "routing__postgres",
+          "display_label": "store proposals and final links",
+          "fact_ids": [
+            "rel-routing-postgres"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-routing-postgres",
+              "canonical_claim": "persists sessions, proposals, revisions, decisions, and final links",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 34,
+                  "end_line": 41,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "routing",
+          "to": "postgres"
+        },
+        {
+          "mermaid_id": "mcp__routing",
+          "display_label": "request rule-based suggestions",
+          "fact_ids": [
+            "rel-mcp-routing"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-mcp-routing",
+              "canonical_claim": "requests deterministic work suggestions",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 44,
+                  "end_line": 49,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "mcp",
+          "to": "routing"
+        },
+        {
+          "mermaid_id": "mcp__task",
+          "display_label": "manage Task checkout, progress, and completion",
+          "fact_ids": [
+            "rel-mcp-task-lifecycle"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-mcp-task-lifecycle",
+              "canonical_claim": "checkout, progress, and completion with audit and evidence",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 3,
+                  "end_line": 7,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 38,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "mcp",
+          "to": "task"
+        },
+        {
+          "mermaid_id": "mcp__swarm",
+          "display_label": "delegate execution",
+          "fact_ids": [
+            "rel-mcp-swarm"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-mcp-swarm",
+              "canonical_claim": "delegates through composed local swarm client",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 104,
+                  "end_line": 107,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 24,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "mcp",
+          "to": "swarm"
+        },
+        {
+          "mermaid_id": "task__sharepoint",
+          "display_label": "official Task record",
+          "fact_ids": [
+            "rel-task-sharepoint"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-task-sharepoint",
+              "canonical_claim": "canonical Task record",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 9,
+                  "end_line": 16,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "task",
+          "to": "sharepoint"
+        },
+        {
+          "mermaid_id": "task__audit",
+          "display_label": "attach audit and evidence",
+          "fact_ids": [
+            "rel-task-trace"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-task-trace",
+              "canonical_claim": "anchors checkout, completion, audit, evidence, and tests",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/product/README.md",
+                  "start_line": 31,
+                  "end_line": 39,
+                  "authority_class": "product_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 51,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "task",
+          "to": "audit"
+        },
+        {
+          "mermaid_id": "task__github",
+          "display_label": "link code delivery records",
+          "fact_ids": [
+            "rel-task-delivery"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-task-delivery",
+              "canonical_claim": "links pull-request identity and delivery lifecycle without transferring planning authority",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 34,
+                  "end_line": 41,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 56,
+                  "end_line": 60,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "task",
+          "to": "github"
+        }
+      ],
+      "boundaries": {
+        "personBoundary": [
+          "staff"
+        ],
+        "missionControlBoundary": [
+          "task",
+          "web",
+          "api",
+          "sync",
+          "routing",
+          "mcp",
+          "audit"
+        ],
+        "dataBoundary": [
+          "postgres"
+        ],
+        "agentBoundary": [
+          "swarm"
+        ],
+        "externalBoundary": [
+          "sharepoint",
+          "github"
+        ]
+      },
+      "annotations": [
+        {
+          "mermaid_id": "footer",
+          "display_label": "Generated guide — not official • Production web on Vercel at https://mc.plxcustomer.io; MCP/swarm operator-local",
+          "fact_ids": [
+            "discrepancy-sync-maturity",
+            "cap-graph-notifications",
+            "cap-production-hosting"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "discrepancy-sync-maturity",
+              "canonical_claim": "AGENTS.md splits sync maturity: delta engine current; Graph change-notifications deferred (P11).",
+              "canonical_summary": "Delta inbound/outbound sync is current; Graph change-notification subscription renewal and notification queue remain deferred (P11).",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 23,
+                  "end_line": 26,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 50,
+                  "end_line": 51,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            },
+            {
+              "fact_id": "cap-graph-notifications",
+              "canonical_claim": "Graph change-notification delivery",
+              "canonical_summary": "Not wired in the current sync phase; five-minute delta recovery remains the current path.",
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 19,
+                  "end_line": 27,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 47,
+                  "end_line": 55,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            },
+            {
+              "fact_id": "cap-production-hosting",
+              "canonical_claim": "Production web hosted on Vercel at https://mc.plxcustomer.io; MCP/swarm operator-local",
+              "canonical_summary": "Deployed Mission Control web (+ HTTPS APIs) runs on Vercel project plx-mission-control at https://mc.plxcustomer.io. PLX-MC MCP stdio and agentic swarm remain operator-local and are not part of the Vercel deploy.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 32,
+                  "end_line": 42,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 44,
+                  "end_line": 53,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "containers": {
+      "nodes": [
+        {
+          "mermaid_id": "staff",
+          "display_label": "People",
+          "fact_ids": [
+            "node-staff"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-staff",
+              "canonical_claim": "PLX and Petra Soap staff",
+              "canonical_summary": "Humans review, approve, assign, and resolve work through Mission Control.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 7,
+                  "end_line": 14,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/product/README.md",
+                  "start_line": 31,
+                  "end_line": 39,
+                  "authority_class": "product_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "task",
+          "display_label": "Task — central work item",
+          "fact_ids": [
+            "node-task"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-task",
+              "canonical_claim": "Task",
+              "canonical_summary": "Durable unit connecting planning, execution, completion, audit, delivery, and evidence.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 9,
+                  "end_line": 14,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/product/README.md",
+                  "start_line": 31,
+                  "end_line": 39,
+                  "authority_class": "product_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "web",
+          "display_label": "Web workspace",
+          "fact_ids": [
+            "node-web"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-web",
+              "canonical_claim": "Mission Control web cockpit",
+              "canonical_summary": "Next.js UI and optimistic client cache; production host Vercel plx-mission-control @ https://mc.plxcustomer.io; a lens, not the system of record.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 44,
+                  "end_line": 53,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 32,
+                  "end_line": 42,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 30,
+                  "end_line": 37,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 3,
+                  "end_line": 21,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "api",
+          "display_label": "Shared application interface",
+          "fact_ids": [
+            "node-api"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-api",
+              "canonical_claim": "Shared API surface",
+              "canonical_summary": "Authenticated application routes used by web and operator interfaces for governed mutations.",
+              "sources": [
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 14,
+                  "end_line": 18,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 62,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "sync",
+          "display_label": "Sync — delta engine current; Graph change-notifications deferred (P11)",
+          "fact_ids": [
+            "node-sync",
+            "discrepancy-sync-maturity"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-sync",
+              "canonical_claim": "Sync engine",
+              "canonical_summary": "Two-way Graph sync, freshness, conflicts, attribution, and audit; notification delivery is deferred.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 23,
+                  "end_line": 26,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 50,
+                  "end_line": 51,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            },
+            {
+              "fact_id": "discrepancy-sync-maturity",
+              "canonical_claim": "AGENTS.md splits sync maturity: delta engine current; Graph change-notifications deferred (P11).",
+              "canonical_summary": "Delta inbound/outbound sync is current; Graph change-notification subscription renewal and notification queue remain deferred (P11).",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 23,
+                  "end_line": 26,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 50,
+                  "end_line": 51,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "routing",
+          "display_label": "Rule-based work suggestions",
+          "fact_ids": [
+            "node-routing"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-routing",
+              "canonical_claim": "Deterministic routing control plane",
+              "canonical_summary": "Deterministic suggestions, proposals, confirmed mutations, rollout, and retention; no LLM control decisions.",
+              "sources": [
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 3,
+                  "end_line": 14,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 27,
+                  "end_line": 70,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "mcp",
+          "display_label": "Agent tool interface",
+          "fact_ids": [
+            "node-mcp"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-mcp",
+              "canonical_claim": "PLX-MC MCP",
+              "canonical_summary": "Authenticated and auditable task lifecycle interface; committed default is disabled and enablement is explicit.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 78,
+                  "end_line": 102,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 3,
+                  "end_line": 35,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "audit",
+          "display_label": "Audit and evidence",
+          "fact_ids": [
+            "node-audit-evidence"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-audit-evidence",
+              "canonical_claim": "Audit and evidence trail",
+              "canonical_summary": "Append-only events, sync audit history, checkout references, completion evidence, and test proof.",
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 64,
+                  "end_line": 68,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 51,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "postgres",
+          "display_label": "Operational database",
+          "fact_ids": [
+            "node-postgres"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-postgres",
+              "canonical_claim": "Postgres",
+              "canonical_summary": "Separate fast mirror and store for sync metadata, routing/compliance state, and audit history; never canonical over SharePoint.",
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 21,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 64,
+                  "end_line": 82,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 3,
+                  "end_line": 10,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "swarm",
+          "display_label": "External agent execution",
+          "fact_ids": [
+            "node-swarm"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-swarm",
+              "canonical_claim": "Agentic swarm",
+              "canonical_summary": "Composed execution dependency reached through the MCP client; not part of the Vercel application boundary.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 89,
+                  "end_line": 107,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 24,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 69,
+                  "end_line": 75,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "sharepoint",
+          "display_label": "Official Task record",
+          "fact_ids": [
+            "node-sharepoint"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-sharepoint",
+              "canonical_claim": "SharePoint",
+              "canonical_summary": "Canonical record for human planning data and Task-owned operational records.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 9,
+                  "end_line": 16,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 11,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "github",
+          "display_label": "Code delivery record",
+          "fact_ids": [
+            "node-github-delivery"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-github-delivery",
+              "canonical_claim": "GitHub delivery records",
+              "canonical_summary": "Owns pull-request identity and lifecycle metadata linked to Tasks; it does not own planning authority.",
+              "sources": [
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 56,
+                  "end_line": 60,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "mermaid_id": "staff__web",
+          "display_label": "review, approve, assign, resolve",
+          "fact_ids": [
+            "rel-staff-web"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-staff-web",
+              "canonical_claim": "review, approve, assign, and resolve",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 7,
+                  "end_line": 14,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "staff",
+          "to": "web"
+        },
+        {
+          "mermaid_id": "web__api",
+          "display_label": "use the shared interface",
+          "fact_ids": [
+            "rel-web-api"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-web-api",
+              "canonical_claim": "hydrates and sends governed mutations through shared API",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 14,
+                  "end_line": 21,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "web",
+          "to": "api"
+        },
+        {
+          "mermaid_id": "api__sync",
+          "display_label": "send application changes to sync",
+          "fact_ids": [
+            "rel-api-sync"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-api-sync",
+              "canonical_claim": "uses sync-backed persistence",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 62,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 69,
+                  "end_line": 73,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "api",
+          "to": "sync"
+        },
+        {
+          "mermaid_id": "sync__sharepoint",
+          "display_label": "send changes; receive updates; newer attributable human routing edits beat older pending service edits; ambiguous conflicts need manual review",
+          "fact_ids": [
+            "rel-sync-sharepoint"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-sync-sharepoint",
+              "canonical_claim": "reconciles outbound mutations and inbound deltas while preserving human authority",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 37,
+                  "end_line": 45,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "sync",
+          "to": "sharepoint"
+        },
+        {
+          "mermaid_id": "sync__postgres",
+          "display_label": "persist sync audit records",
+          "fact_ids": [
+            "rel-sync-postgres"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-sync-postgres",
+              "canonical_claim": "stores freshness, conflict, attribution, and audit state",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 19,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 64,
+                  "end_line": 82,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "sync",
+          "to": "postgres"
+        },
+        {
+          "mermaid_id": "routing__sync",
+          "display_label": "require fresh data; stop if stale",
+          "fact_ids": [
+            "rel-routing-sync"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-routing-sync",
+              "canonical_claim": "requires bounded-fresh routing registers and fails closed when stale",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 19,
+                  "end_line": 27,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 78,
+                  "end_line": 82,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "routing",
+          "to": "sync"
+        },
+        {
+          "mermaid_id": "routing__postgres",
+          "display_label": "store proposals and final links",
+          "fact_ids": [
+            "rel-routing-postgres"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-routing-postgres",
+              "canonical_claim": "persists sessions, proposals, revisions, decisions, and final links",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 34,
+                  "end_line": 41,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "routing",
+          "to": "postgres"
+        },
+        {
+          "mermaid_id": "mcp__routing",
+          "display_label": "request rule-based suggestions",
+          "fact_ids": [
+            "rel-mcp-routing"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-mcp-routing",
+              "canonical_claim": "requests deterministic work suggestions",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 44,
+                  "end_line": 49,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "mcp",
+          "to": "routing"
+        },
+        {
+          "mermaid_id": "mcp__task",
+          "display_label": "manage Task checkout, progress, and completion",
+          "fact_ids": [
+            "rel-mcp-task-lifecycle"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-mcp-task-lifecycle",
+              "canonical_claim": "checkout, progress, and completion with audit and evidence",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 3,
+                  "end_line": 7,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 38,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "mcp",
+          "to": "task"
+        },
+        {
+          "mermaid_id": "mcp__swarm",
+          "display_label": "delegate execution",
+          "fact_ids": [
+            "rel-mcp-swarm"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-mcp-swarm",
+              "canonical_claim": "delegates through composed local swarm client",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 104,
+                  "end_line": 107,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 24,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "mcp",
+          "to": "swarm"
+        },
+        {
+          "mermaid_id": "task__sharepoint",
+          "display_label": "official Task record",
+          "fact_ids": [
+            "rel-task-sharepoint"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-task-sharepoint",
+              "canonical_claim": "canonical Task record",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 9,
+                  "end_line": 16,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "task",
+          "to": "sharepoint"
+        },
+        {
+          "mermaid_id": "task__audit",
+          "display_label": "attach audit and evidence",
+          "fact_ids": [
+            "rel-task-trace"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-task-trace",
+              "canonical_claim": "anchors checkout, completion, audit, evidence, and tests",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/product/README.md",
+                  "start_line": 31,
+                  "end_line": 39,
+                  "authority_class": "product_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 51,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "task",
+          "to": "audit"
+        },
+        {
+          "mermaid_id": "task__github",
+          "display_label": "link code delivery records",
+          "fact_ids": [
+            "rel-task-delivery"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-task-delivery",
+              "canonical_claim": "links pull-request identity and delivery lifecycle without transferring planning authority",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 34,
+                  "end_line": 41,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 56,
+                  "end_line": 60,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "task",
+          "to": "github"
+        }
+      ],
+      "boundaries": {
+        "personBoundary": [
+          "staff"
+        ],
+        "missionControlBoundary": [
+          "task",
+          "web",
+          "api",
+          "sync",
+          "routing",
+          "mcp",
+          "audit"
+        ],
+        "dataBoundary": [
+          "postgres"
+        ],
+        "agentBoundary": [
+          "swarm"
+        ],
+        "externalBoundary": [
+          "sharepoint",
+          "github"
+        ]
+      },
+      "annotations": [
+        {
+          "mermaid_id": "footer",
+          "display_label": "Generated guide — not official • Production web on Vercel at https://mc.plxcustomer.io; MCP/swarm operator-local",
+          "fact_ids": [
+            "discrepancy-sync-maturity",
+            "cap-graph-notifications",
+            "cap-production-hosting"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "discrepancy-sync-maturity",
+              "canonical_claim": "AGENTS.md splits sync maturity: delta engine current; Graph change-notifications deferred (P11).",
+              "canonical_summary": "Delta inbound/outbound sync is current; Graph change-notification subscription renewal and notification queue remain deferred (P11).",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 23,
+                  "end_line": 26,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 50,
+                  "end_line": 51,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            },
+            {
+              "fact_id": "cap-graph-notifications",
+              "canonical_claim": "Graph change-notification delivery",
+              "canonical_summary": "Not wired in the current sync phase; five-minute delta recovery remains the current path.",
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 19,
+                  "end_line": 27,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 47,
+                  "end_line": 55,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            },
+            {
+              "fact_id": "cap-production-hosting",
+              "canonical_claim": "Production web hosted on Vercel at https://mc.plxcustomer.io; MCP/swarm operator-local",
+              "canonical_summary": "Deployed Mission Control web (+ HTTPS APIs) runs on Vercel project plx-mission-control at https://mc.plxcustomer.io. PLX-MC MCP stdio and agentic swarm remain operator-local and are not part of the Vercel deploy.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 32,
+                  "end_line": 42,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 44,
+                  "end_line": 53,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "task-lifecycle": {
+      "nodes": [
+        {
+          "mermaid_id": "staff",
+          "display_label": "People",
+          "fact_ids": [
+            "node-staff"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-staff",
+              "canonical_claim": "PLX and Petra Soap staff",
+              "canonical_summary": "Humans review, approve, assign, and resolve work through Mission Control.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 7,
+                  "end_line": 14,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/product/README.md",
+                  "start_line": 31,
+                  "end_line": 39,
+                  "authority_class": "product_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "web",
+          "display_label": "Web workspace",
+          "fact_ids": [
+            "node-web"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-web",
+              "canonical_claim": "Mission Control web cockpit",
+              "canonical_summary": "Next.js UI and optimistic client cache; production host Vercel plx-mission-control @ https://mc.plxcustomer.io; a lens, not the system of record.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 44,
+                  "end_line": 53,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 32,
+                  "end_line": 42,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 30,
+                  "end_line": 37,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 3,
+                  "end_line": 21,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "api",
+          "display_label": "Shared application interface",
+          "fact_ids": [
+            "node-api"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-api",
+              "canonical_claim": "Shared API surface",
+              "canonical_summary": "Authenticated application routes used by web and operator interfaces for governed mutations.",
+              "sources": [
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 14,
+                  "end_line": 18,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 62,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "sync",
+          "display_label": "Sync — delta engine current; Graph change-notifications deferred (P11)",
+          "fact_ids": [
+            "node-sync",
+            "discrepancy-sync-maturity"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-sync",
+              "canonical_claim": "Sync engine",
+              "canonical_summary": "Two-way Graph sync, freshness, conflicts, attribution, and audit; notification delivery is deferred.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 23,
+                  "end_line": 26,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 50,
+                  "end_line": 51,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            },
+            {
+              "fact_id": "discrepancy-sync-maturity",
+              "canonical_claim": "AGENTS.md splits sync maturity: delta engine current; Graph change-notifications deferred (P11).",
+              "canonical_summary": "Delta inbound/outbound sync is current; Graph change-notification subscription renewal and notification queue remain deferred (P11).",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 23,
+                  "end_line": 26,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 50,
+                  "end_line": 51,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "mcp",
+          "display_label": "Agent tool interface",
+          "fact_ids": [
+            "node-mcp"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-mcp",
+              "canonical_claim": "PLX-MC MCP",
+              "canonical_summary": "Authenticated and auditable task lifecycle interface; committed default is disabled and enablement is explicit.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 78,
+                  "end_line": 102,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 3,
+                  "end_line": 35,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "task",
+          "display_label": "Task — central work item",
+          "fact_ids": [
+            "node-task"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-task",
+              "canonical_claim": "Task",
+              "canonical_summary": "Durable unit connecting planning, execution, completion, audit, delivery, and evidence.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 9,
+                  "end_line": 14,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/product/README.md",
+                  "start_line": 31,
+                  "end_line": 39,
+                  "authority_class": "product_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "audit",
+          "display_label": "Audit and evidence",
+          "fact_ids": [
+            "node-audit-evidence"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-audit-evidence",
+              "canonical_claim": "Audit and evidence trail",
+              "canonical_summary": "Append-only events, sync audit history, checkout references, completion evidence, and test proof.",
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 64,
+                  "end_line": 68,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 25,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 51,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "swarm",
+          "display_label": "External agent execution",
+          "fact_ids": [
+            "node-swarm"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-swarm",
+              "canonical_claim": "Agentic swarm",
+              "canonical_summary": "Composed execution dependency reached through the MCP client; not part of the Vercel application boundary.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 89,
+                  "end_line": 107,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 24,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 69,
+                  "end_line": 75,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "sharepoint",
+          "display_label": "Official Task record",
+          "fact_ids": [
+            "node-sharepoint"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-sharepoint",
+              "canonical_claim": "SharePoint",
+              "canonical_summary": "Canonical record for human planning data and Task-owned operational records.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 9,
+                  "end_line": 16,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 11,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mermaid_id": "github",
+          "display_label": "Code delivery record",
+          "fact_ids": [
+            "node-github-delivery"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "node-github-delivery",
+              "canonical_claim": "GitHub delivery records",
+              "canonical_summary": "Owns pull-request identity and lifecycle metadata linked to Tasks; it does not own planning authority.",
+              "sources": [
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 56,
+                  "end_line": 60,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "mermaid_id": "staff__web",
+          "display_label": "review, approve, assign, resolve",
+          "fact_ids": [
+            "rel-staff-web"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-staff-web",
+              "canonical_claim": "review, approve, assign, and resolve",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 7,
+                  "end_line": 14,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "staff",
+          "to": "web"
+        },
+        {
+          "mermaid_id": "web__api",
+          "display_label": "use the shared interface",
+          "fact_ids": [
+            "rel-web-api"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-web-api",
+              "canonical_claim": "hydrates and sends governed mutations through shared API",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 14,
+                  "end_line": 21,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "web",
+          "to": "api"
+        },
+        {
+          "mermaid_id": "api__sync",
+          "display_label": "send application changes to sync",
+          "fact_ids": [
+            "rel-api-sync"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-api-sync",
+              "canonical_claim": "uses sync-backed persistence",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/web/README.md",
+                  "start_line": 62,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 69,
+                  "end_line": 73,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "api",
+          "to": "sync"
+        },
+        {
+          "mermaid_id": "sync__sharepoint",
+          "display_label": "send changes; receive updates; newer attributable human routing edits beat older pending service edits; ambiguous conflicts need manual review",
+          "fact_ids": [
+            "rel-sync-sharepoint"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-sync-sharepoint",
+              "canonical_claim": "reconciles outbound mutations and inbound deltas while preserving human authority",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 37,
+                  "end_line": 45,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "sync",
+          "to": "sharepoint"
+        },
+        {
+          "mermaid_id": "mcp__task",
+          "display_label": "manage Task checkout, progress, and completion",
+          "fact_ids": [
+            "rel-mcp-task-lifecycle"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-mcp-task-lifecycle",
+              "canonical_claim": "checkout, progress, and completion with audit and evidence",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 3,
+                  "end_line": 7,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 38,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "mcp",
+          "to": "task"
+        },
+        {
+          "mermaid_id": "task__sharepoint",
+          "display_label": "official Task record",
+          "fact_ids": [
+            "rel-task-sharepoint"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-task-sharepoint",
+              "canonical_claim": "canonical Task record",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 9,
+                  "end_line": 16,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "task",
+          "to": "sharepoint"
+        },
+        {
+          "mermaid_id": "mcp__swarm",
+          "display_label": "delegate execution",
+          "fact_ids": [
+            "rel-mcp-swarm"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-mcp-swarm",
+              "canonical_claim": "delegates through composed local swarm client",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 104,
+                  "end_line": 107,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 17,
+                  "end_line": 24,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "mcp",
+          "to": "swarm"
+        },
+        {
+          "mermaid_id": "task__audit",
+          "display_label": "attach audit and evidence",
+          "fact_ids": [
+            "rel-task-trace"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-task-trace",
+              "canonical_claim": "anchors checkout, completion, audit, evidence, and tests",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/product/README.md",
+                  "start_line": 31,
+                  "end_line": 39,
+                  "authority_class": "product_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/mcp/README.md",
+                  "start_line": 51,
+                  "end_line": 66,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "task",
+          "to": "audit"
+        },
+        {
+          "mermaid_id": "task__github",
+          "display_label": "link code delivery records",
+          "fact_ids": [
+            "rel-task-delivery"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "rel-task-delivery",
+              "canonical_claim": "links pull-request identity and delivery lifecycle without transferring planning authority",
+              "canonical_summary": null,
+              "sources": [
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 34,
+                  "end_line": 41,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/routing/README.md",
+                  "start_line": 56,
+                  "end_line": 60,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ],
+          "from": "task",
+          "to": "github"
+        }
+      ],
+      "boundaries": {
+        "personBoundary": [
+          "staff"
+        ],
+        "missionControlBoundary": [
+          "web",
+          "api",
+          "sync",
+          "mcp",
+          "task",
+          "audit"
+        ],
+        "agentBoundary": [
+          "swarm"
+        ],
+        "externalBoundary": [
+          "sharepoint",
+          "github"
+        ]
+      },
+      "annotations": [
+        {
+          "mermaid_id": "footer",
+          "display_label": "Generated guide — not official • Production web on Vercel at https://mc.plxcustomer.io; MCP/swarm operator-local",
+          "fact_ids": [
+            "discrepancy-sync-maturity",
+            "cap-graph-notifications",
+            "cap-production-hosting"
+          ],
+          "status": "current",
+          "claims": [
+            {
+              "fact_id": "discrepancy-sync-maturity",
+              "canonical_claim": "AGENTS.md splits sync maturity: delta engine current; Graph change-notifications deferred (P11).",
+              "canonical_summary": "Delta inbound/outbound sync is current; Graph change-notification subscription renewal and notification queue remain deferred (P11).",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 23,
+                  "end_line": 26,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 50,
+                  "end_line": 51,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 3,
+                  "end_line": 15,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            },
+            {
+              "fact_id": "cap-graph-notifications",
+              "canonical_claim": "Graph change-notification delivery",
+              "canonical_summary": "Not wired in the current sync phase; five-minute delta recovery remains the current path.",
+              "sources": [
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 19,
+                  "end_line": 27,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "docs/modules/sync/README.md",
+                  "start_line": 47,
+                  "end_line": 55,
+                  "authority_class": "module_contract",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            },
+            {
+              "fact_id": "cap-production-hosting",
+              "canonical_claim": "Production web hosted on Vercel at https://mc.plxcustomer.io; MCP/swarm operator-local",
+              "canonical_summary": "Deployed Mission Control web (+ HTTPS APIs) runs on Vercel project plx-mission-control at https://mc.plxcustomer.io. PLX-MC MCP stdio and agentic swarm remain operator-local and are not part of the Vercel deploy.",
+              "sources": [
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 32,
+                  "end_line": 42,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                },
+                {
+                  "path": "AGENTS.md",
+                  "start_line": 44,
+                  "end_line": 53,
+                  "authority_class": "canonical_architecture",
+                  "source_commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "interaction_contract": {
+        "required_relationships": [
+          "rel-staff-web",
+          "rel-web-api",
+          "rel-api-sync",
+          "rel-sync-sharepoint",
+          "rel-mcp-task-lifecycle",
+          "rel-task-sharepoint",
+          "rel-mcp-swarm",
+          "rel-task-trace",
+          "rel-task-delivery"
+        ],
+        "connected": true,
+        "runtime_sequence_claimed": false,
+        "agent_result_return_drawn": false
+      }
+    }
+  },
+  "refreshed_against": {
+    "ref": "proj/first-class-architecture/phase-1-hosting-doc-truth",
+    "commit": "034639ad0d4e1efe27d7eae0ab0d9375c3b6fc0a",
+    "reason": "P2 diagram pack: hosting footers + sync maturity + source-map against P1 AGENTS.md",
+    "date": "2026-07-17"
+  }
+}

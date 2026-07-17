@@ -1,0 +1,46 @@
+%%{init: {"deterministicIds": true, "deterministicIDSeed": "plx-fca-p2-containers-v1", "theme": "base", "fontSize": 12, "flowchart": {"nodeSpacing": 18, "rankSpacing": 22}, "themeVariables": {"primaryColor": "#FBF9F5", "primaryTextColor": "#1B1A17", "primaryBorderColor": "#244A39", "secondaryColor": "#F6F2EA", "secondaryTextColor": "#3A3833", "tertiaryColor": "#BCCFBF", "lineColor": "#6B665B", "textColor": "#1B1A17", "mainBkg": "#FBF9F5", "nodeBorder": "#244A39", "clusterBkg": "#F6F2EA", "clusterBorder": "#244A39", "titleColor": "#1B1A17", "edgeLabelBackground": "#FBF9F5"}}}%%
+flowchart TB
+  title["PLX Mission Control — Responsibilities and ownership"]
+
+  subgraph personBoundary["Person — human actions only"]
+    staff["People"]
+  end
+
+  subgraph missionControlBoundary["Mission Control"]
+    task["Task — central work item"]
+    web["Web workspace"]
+    api["Shared application interface"]
+    sync["Sync — delta engine current;<br/>Graph change-notifications deferred (P11)"]
+    routing["Rule-based work suggestions"]
+    mcp["Agent tool interface<br/>(PLX-MC MCP; opt-in)"]
+    audit["Audit and evidence handling<br/>event processing"]
+  end
+
+  subgraph agentBoundary["Agent — execution only"]
+    swarm["External agent execution"]
+  end
+
+  subgraph externalBoundary["External systems"]
+    sharepoint["Official Task record<br/>(SharePoint)"]
+    github["Code delivery records<br/>(GitHub)"]
+  end
+
+  subgraph dataBoundary["Operational data store"]
+    postgres["Operational database<br/>(Postgres mirror and event history)"]
+  end
+
+  staff -->|"review, approve,<br/>assign, resolve"| web
+  web -->|"use the shared interface"| api
+  api -->|"send application changes to sync"| sync
+  sync <-->|"send changes; receive updates;<br/>newer attributable human routing edits beat older pending service edits;<br/>ambiguous conflicts need manual review"| sharepoint
+  sync -->|"persist sync audit records"| postgres
+  routing -->|"require fresh data; stop if stale"| sync
+  routing -->|"store proposals and final links"| postgres
+  mcp -->|"request rule-based suggestions"| routing
+  mcp -->|"manage Task checkout,<br/>progress, and completion"| task
+  mcp -->|"delegate execution"| swarm
+  task -->|"official Task record"| sharepoint
+  task -->|"attach audit and evidence"| audit
+  task -->|"link code delivery records"| github
+
+  footer["Logical ownership only • Delta sync current • Graph change-notifications deferred (P11) • Production web on Vercel at https://mc.plxcustomer.io; MCP/swarm operator-local<br/>Generated guide — not official • Every arrow is linked to repository documentation"]

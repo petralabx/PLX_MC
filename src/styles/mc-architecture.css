@@ -1,0 +1,204 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   MC Architecture catalog — scoped under .mc (inherits brand tokens).
+   Candidate A: calm editorial guide — generous whitespace, hairline rules,
+   strong type hierarchy. Color via --p-* only (no raw hex).
+   ────────────────────────────────────────────────────────────────────────── */
+
+[data-testid="arch-screen"] {
+  overflow-x: clip;
+}
+
+.arch-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border: 1px solid var(--p-grid);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  letter-spacing: var(--p-track-tick);
+  text-transform: uppercase;
+  color: var(--p-muted);
+  background: transparent;
+}
+
+.arch-pill.guide {
+  color: var(--p-ink-2);
+}
+
+.arch-pill.ro {
+  color: var(--p-hot);
+  border-color: color-mix(in srgb, var(--p-hot) 30%, transparent);
+}
+
+.arch-disclosure {
+  margin: 0 0 var(--p-space-5);
+  padding: var(--p-space-4) var(--p-space-5);
+  border: 1px solid var(--p-grid);
+  border-left: 3px solid var(--p-accent);
+  background: var(--p-canvas);
+}
+
+.arch-disclosure-lead {
+  margin: 0 0 var(--p-space-2);
+  font-family: var(--mazius);
+  font-size: var(--p-text-h3);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--p-ink);
+  line-height: 1.3;
+}
+
+.arch-disclosure-body {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--p-ink-2);
+  font-size: var(--p-text-body);
+  line-height: 1.65;
+}
+
+.arch-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-3);
+  margin: 0 0 var(--p-space-4);
+}
+
+.arch-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--p-space-1);
+  border-bottom: 1px solid var(--p-grid);
+  padding-bottom: var(--p-space-2);
+}
+
+.arch-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: var(--p-space-2) var(--p-space-3);
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--p-text-body);
+  font-weight: 500;
+  color: var(--p-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.arch-tab:hover {
+  color: var(--p-ink);
+}
+
+.arch-tab.on {
+  color: var(--p-ink);
+  border-bottom-color: var(--p-accent);
+  font-weight: 600;
+}
+
+.arch-view-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  max-width: 56ch;
+}
+
+.arch-view-title {
+  font-family: var(--mazius);
+  font-size: var(--p-text-h2);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  color: var(--p-ink);
+  line-height: 1.25;
+}
+
+.arch-view-blurb {
+  color: var(--p-ink-2);
+  font-size: var(--p-text-body);
+  line-height: 1.55;
+}
+
+.arch-rule {
+  border: 0;
+  border-top: 1px solid var(--p-grid);
+  margin: 0 0 var(--p-space-5);
+}
+
+.arch-figure {
+  margin: 0 0 var(--p-space-5);
+  padding: var(--p-space-5);
+  border: 1px solid var(--p-grid);
+  background: var(--p-paper);
+}
+
+.arch-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(72vh, 920px);
+  object-fit: contain;
+  background: var(--p-paper);
+}
+
+.arch-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--p-space-1) var(--p-space-2);
+  margin-top: var(--p-space-4);
+  padding-top: var(--p-space-3);
+  border-top: 1px solid var(--p-grid-2);
+  color: var(--p-muted);
+  font-size: var(--p-text-small);
+  line-height: 1.5;
+}
+
+.arch-caption-sep {
+  color: var(--p-grid);
+}
+
+.arch-footer {
+  margin: 0 0 var(--p-space-6);
+  padding-top: var(--p-space-4);
+  border-top: 1px solid var(--p-grid);
+}
+
+.arch-footer p {
+  margin: 0;
+  color: var(--p-muted);
+  font-size: var(--p-text-small);
+  line-height: 1.6;
+  max-width: 72ch;
+}
+
+.arch-icode {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  color: var(--p-ink-2);
+  background: color-mix(in srgb, var(--p-canvas) 80%, transparent);
+  border: 1px solid var(--p-grid-2);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+
+@media (max-width: 720px) {
+  .arch-disclosure {
+    padding: var(--p-space-3) var(--p-space-3);
+  }
+
+  .arch-figure {
+    padding: var(--p-space-3);
+  }
+
+  .arch-view-title {
+    font-size: var(--p-text-h3);
+  }
+
+  .arch-tab {
+    min-height: 36px;
+  }
+}

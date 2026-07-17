@@ -12,6 +12,7 @@ export const mcShellRoutes = [
   { path: "/", name: "skills-directory", sidebar: "Skills directory", testId: "sk-screen" },
   { path: "/", name: "loop-ledgers", sidebar: "Loop ledgers", testId: "ll-screen" },
   { path: "/", name: "governance-sops", sidebar: "SOP guide", testId: "gs-screen" },
+  { path: "/", name: "architecture", sidebar: "Architecture", testId: "arch-screen" },
   { path: "/", name: "task-detail", sidebar: "Board", testId: "task-detail-screen", note: "Open via board card click" },
   { path: "/", name: "command-palette", sidebar: "", testId: "cmdk", note: "Open via ControlOrMeta+k" },
 ] as const;

@@ -29,6 +29,7 @@ const EXPECTED_SCREENS = {
   "loop-ledgers": true,
   "governance-sops": true,
   "skills-directory": true,
+  architecture: true,
   "ai-spend": true,
   "routing-inbox": true,
 } satisfies Record<Screen, true>;

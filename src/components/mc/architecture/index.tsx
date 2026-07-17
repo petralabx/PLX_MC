@@ -6,6 +6,9 @@
 // (canonical truth remains AGENTS.md + docs/modules/*).
 
 import type { ScreenProps } from "../route";
+import { ProvenancePanel } from "./provenance-panel";
+
+import "./architecture.css";
 
 export type ArchitectureDiagram = "context" | "containers" | "task-lifecycle";
 
@@ -126,6 +129,8 @@ export function ArchitectureView({ route, nav }: ScreenProps) {
         </figcaption>
       </figure>
 
+      <ProvenancePanel view={diagram} />
+
       <footer className="arch-footer">
         <p>
           Authority paths: <code className="arch-icode">AGENTS.md</code>
@@ -137,6 +142,10 @@ export function ArchitectureView({ route, nav }: ScreenProps) {
             ·
           </span>
           <code className="arch-icode">docs/architecture/README.md</code>
+          <span className="arch-caption-sep" aria-hidden>
+            ·
+          </span>
+          Hub seed: <code className="arch-icode">docs/architecture/knowledge-entry.json</code>
         </p>
       </footer>
     </div>

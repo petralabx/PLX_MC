@@ -1,0 +1,101 @@
+{
+  "schema_version": "plx-knowledge-entry/v1",
+  "id": "plx-mc-architecture-pack",
+  "collection": "architecture",
+  "title": "PLX Mission Control architecture diagram pack",
+  "summary": "Hub-compatible discovery seed for the maintained C4 guide pack under docs/architecture/. Derived / generated_consumer only — Git remains canonical (AGENTS.md + docs/modules/*). Does not invent a second system of record.",
+  "owner": "Vince",
+  "audiences": [
+    "technical",
+    "nontechnical",
+    "operator",
+    "agent"
+  ],
+  "tags": [
+    "architecture",
+    "mission-control",
+    "mermaid",
+    "c4",
+    "generated-consumer",
+    "knowledge-hub-seed"
+  ],
+  "source_type": "git",
+  "canonical_sources": [
+    {
+      "system": "git",
+      "uri": "AGENTS.md",
+      "revision": "4951f50d5b7f51331e5d05ac2d165cd0728e53d2",
+      "authority_class": "canonical-technical"
+    },
+    {
+      "system": "git",
+      "uri": "docs/modules/architecture/README.md",
+      "revision": "4951f50d5b7f51331e5d05ac2d165cd0728e53d2",
+      "authority_class": "canonical-technical"
+    },
+    {
+      "system": "git",
+      "uri": "docs/modules/sync/README.md",
+      "revision": "4951f50d5b7f51331e5d05ac2d165cd0728e53d2",
+      "authority_class": "canonical-technical"
+    },
+    {
+      "system": "git",
+      "uri": "docs/modules/web/README.md",
+      "revision": "4951f50d5b7f51331e5d05ac2d165cd0728e53d2",
+      "authority_class": "canonical-technical"
+    },
+    {
+      "system": "git",
+      "uri": "docs/modules/mcp/README.md",
+      "revision": "4951f50d5b7f51331e5d05ac2d165cd0728e53d2",
+      "authority_class": "canonical-technical"
+    },
+    {
+      "system": "git",
+      "uri": "docs/modules/routing/README.md",
+      "revision": "4951f50d5b7f51331e5d05ac2d165cd0728e53d2",
+      "authority_class": "canonical-technical"
+    },
+    {
+      "system": "git",
+      "uri": "docs/architecture/README.md",
+      "revision": "4951f50d5b7f51331e5d05ac2d165cd0728e53d2",
+      "authority_class": "derived-memory"
+    },
+    {
+      "system": "git",
+      "uri": "docs/architecture/source-map.json",
+      "revision": "4951f50d5b7f51331e5d05ac2d165cd0728e53d2",
+      "authority_class": "derived-memory"
+    }
+  ],
+  "source_commit": "4951f50d5b7f51331e5d05ac2d165cd0728e53d2",
+  "generated_at": "2026-07-17T13:50:00Z",
+  "reviewed_at": "2026-07-17T13:50:00Z",
+  "authority": {
+    "canonical_system": "git",
+    "classification": "derived",
+    "hub_role": "read-only-discovery-and-presentation",
+    "authoring_return_path": "git-pull-request"
+  },
+  "staleness": {
+    "review_after_days": 90,
+    "on_missing": "show-missing",
+    "on_stale": "show-stale",
+    "on_contradiction": "show-all-sources-and-escalate"
+  },
+  "degradation": {
+    "canonical_read_path_required": true,
+    "second_brain_optional": true,
+    "on_second_brain_unavailable": "serve-canonical-links-with-visible-degraded-state",
+    "on_canonical_source_unavailable": "show-source-unavailable-never-substitute-derived-content"
+  },
+  "x_generated_consumer": {
+    "classification": "generated_consumer",
+    "pack_path": "docs/architecture/",
+    "presentation_source": "static-svg-from-mermaid",
+    "in_app_screen": "/?screen=architecture",
+    "live_second_brain_ingest": false
+  }
+}

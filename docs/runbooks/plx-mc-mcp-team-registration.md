@@ -68,6 +68,22 @@ Requires `PLX_MC_MCP_ENABLED=1` on the Vercel production deployment (already liv
 After registration, reload MCP in Cursor and run `mc_self_check`. Confirm the
 returned `meta.actor.repo` exactly matches the repo being edited before checkout.
 
+### Workstation pitfall (2026-07-20)
+
+A single user-level `~/.cursor/mcp.json` entry named `PLX-MC` with
+`MC_REPO=petralabx/plx-customer-portal` will mint portal-scoped checkouts even
+when the open worktree is `PLX_MC` (repo-local `.cursor/mcp.json` does not win
+if the user server is enabled). Split into:
+
+| Name | `MC_REPO` / `x-mc-repo` |
+|---|---|
+| `PLX-MC-Hub` | `petralabx/PLX_MC` |
+| `PLX-MC-Portal` | `petralabx/plx-customer-portal` |
+
+Then reload MCP servers. If a stamp was minted under the wrong slug, re-checkout
+with `COMPLIANCE_CAPTURE=1 MC_REPO=petralabx/PLX_MC node scripts/compliance-checkout.mjs`
+and replace the PR body line before re-running compliance.
+
 ## Health
 
 Call tool `mc_self_check` or `GET /api/cursor/self-check` with the same headers.

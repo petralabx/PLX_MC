@@ -16,6 +16,19 @@
 
 ## Lessons
 
+### 2026-07-20 (ET) — User-level PLX-MC MCP pinned portal while editing the hub
+
+- **What happened:** PR #152 compliance blocked because checkout
+  `dsp_mrtfq9vcdskmn8` was minted with `MC_REPO=petralabx/plx-customer-portal`
+  while the PR targeted `petralabx/PLX_MC`.
+- **Root cause:** `~/.cursor/mcp.json` had a single `PLX-MC` server hard-pinned
+  to the portal slug; it overrode the repo-local hub `MC_REPO` for agent tools.
+- **Rule going forward:** Keep distinct MCP entries — `PLX-MC-Hub`
+  (`petralabx/PLX_MC`) and `PLX-MC-Portal` (`petralabx/plx-customer-portal`).
+  Before first checkout, confirm `mc_self_check` / tool `meta.actor.repo` matches
+  the repo under edit; if not, use `scripts/compliance-checkout.mjs` with an
+  explicit `MC_REPO`.
+
 ### 2026-07-16 (ET) — Checkout success hid the wrong repository scope
 
 - **What happened:** A checkout returned success for `petralabx/PLX_MC` while

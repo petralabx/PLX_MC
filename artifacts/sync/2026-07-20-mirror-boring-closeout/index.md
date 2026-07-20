@@ -3,4 +3,6 @@
 | File | Role |
 |---|---|
 | `REPORT.md` | Closeout evidence + verdict |
-| `_query-conflicts.mjs` | Read-only prod conflict/task probe (ops scratch; not runtime) |
+| `self-check-final.json` | Prod self-check snapshot at gate met |
+| `_gate-status.mjs` | Read-only `sync_boring_gate` probe |
+| `_query-conflicts.mjs` | Read-only conflict/task probe (ops scratch) |

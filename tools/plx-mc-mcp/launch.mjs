@@ -27,12 +27,65 @@ function setDefault(name, value) {
   if (!clean(process.env[name])) process.env[name] = value;
 }
 
+function resolveAwsCli() {
+  // Windows operator boxes: Amazon AWSCLIV2 aws.exe hangs before any output.
+  // Prefer urllib shim / aws.cmd when present (same fix as mcp-secrets-launch.ps1).
+  const home = process.env.USERPROFILE || process.env.HOME || "";
+  const candidates = [
+    path.join(home, ".cursor", "bin", "aws-shim", "aws.cmd"),
+    path.join(home, ".cursor", "bin", "aws-shim", "aws.ps1"),
+    "aws",
+  ];
+  for (const c of candidates) {
+    if (c === "aws" || fs.existsSync(c)) return c;
+  }
+  return "aws";
+}
+
 function loadKeyFromAws() {
   const secretId = clean(process.env.CURSOR_MCP_AWS_SECRET_IDS)?.split(",")[0]?.trim() || "prod/ec2-secrets";
   const region = clean(process.env.AWS_REGION) || "us-east-1";
+  const home = process.env.USERPROFILE || process.env.HOME || "";
+  const fetchPy = path.join(home, ".cursor", "bin", "fetch-aws-secret.py");
+  const pythonCandidates = [
+    path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python312", "python.exe"),
+    path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python313", "python.exe"),
+    "python.exe",
+  ];
+
+  // Prefer SigV4 urllib fetch (no hanging aws.exe / botocore Session).
+  if (fs.existsSync(fetchPy)) {
+    for (const python of pythonCandidates) {
+      if (python !== "python.exe" && !fs.existsSync(python)) continue;
+      try {
+        const raw = execFileSync(
+          python,
+          [fetchPy, "--secret-id", secretId, "--region", region],
+          {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+            env: {
+              ...process.env,
+              AWS_EC2_METADATA_DISABLED: "true",
+              AWS_MAX_ATTEMPTS: "1",
+              AWS_PAGER: "",
+            },
+            timeout: 20000,
+          },
+        );
+        const parsed = JSON.parse(raw);
+        const key = clean(parsed.MC_MCP_API_KEY) || clean(parsed.PLX_MC_MCP_API_KEY);
+        if (key) return key;
+      } catch {
+        // try next python / fall through to aws cli
+      }
+    }
+  }
+
   try {
+    const awsBin = resolveAwsCli();
     const raw = execFileSync(
-      "aws",
+      awsBin,
       [
         "secretsmanager",
         "get-secret-value",
@@ -46,7 +99,17 @@ function loadKeyFromAws() {
         "text",
         "--no-cli-pager",
       ],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          AWS_EC2_METADATA_DISABLED: "true",
+          AWS_MAX_ATTEMPTS: "1",
+          AWS_PAGER: "",
+        },
+        timeout: 20000,
+      },
     );
     const parsed = JSON.parse(raw);
     return clean(parsed.MC_MCP_API_KEY) || clean(parsed.PLX_MC_MCP_API_KEY);

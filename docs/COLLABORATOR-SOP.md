@@ -271,6 +271,14 @@ Follow `docs/runbooks/plx-mc-mcp-team-registration.md`:
   under `tools/plx-mc-mcp/`.
 - Set `MC_REPO` to the full slug you are working in (e.g. `petralabx/PLX_MC` or
   `petralabx/plx-customer-portal`).
+- When creating tasks, `repos[]` is a **different** namespace — MC registry ids,
+  not GitHub slugs:
+
+  | Purpose | Portal value |
+  |---|---|
+  | `MC_REPO` / `X-MC-Repo` (checkout, compliance) | `petralabx/plx-customer-portal` |
+  | `task.repos[]` / bucket / project repos (allow-list) | `portal-web` |
+
 - Verify with tool `mc_self_check`.
 
 ### 9.3 Sharing a personal skill

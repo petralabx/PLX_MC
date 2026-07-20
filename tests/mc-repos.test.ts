@@ -20,9 +20,12 @@ import {
   isAllowedRepo,
   isAllowedRepoOrg,
   isApprover,
+  normalizeRepoInputs,
   repoFromRequest,
   repoIdFromName,
+  resolveRepoInput,
 } from "@/lib/mc-data";
+import type { Repo } from "@/lib/mc-data";
 import {
   __repoValidationSettled,
   __setRepoValidatorForTests,
@@ -145,6 +148,71 @@ describe("allow-list helpers", () => {
   it("derives a kebab-case id from a repo name", () => {
     expect(repoIdFromName("PLX_MC")).toBe("plx-mc");
     expect(repoIdFromName("  My New Repo ")).toBe("my-new-repo");
+  });
+});
+
+describe("resolveRepoInput / normalizeRepoInputs", () => {
+  it("resolves registry id, unique name, and owner/name slug to portal-web", () => {
+    expect(resolveRepoInput("portal-web", REPOS)).toEqual({ ok: true, id: "portal-web" });
+    expect(resolveRepoInput("plx-customer-portal", REPOS)).toEqual({ ok: true, id: "portal-web" });
+    expect(resolveRepoInput("petralabx/plx-customer-portal", REPOS)).toEqual({
+      ok: true,
+      id: "portal-web",
+    });
+    expect(resolveRepoInput("  PetraLabX/PLX-Customer-Portal  ", REPOS)).toEqual({
+      ok: true,
+      id: "portal-web",
+    });
+  });
+
+  it("normalizes mixed inputs and de-dupes to registry ids", () => {
+    expect(
+      normalizeRepoInputs(
+        ["portal-web", "plx-customer-portal", "petralabx/plx-customer-portal", "plx-mc"],
+        REPOS
+      )
+    ).toEqual({ ids: ["portal-web", "plx-mc"], rejected: [] });
+  });
+
+  it("keeps unknown slugs fail-closed (no silent invent)", () => {
+    const result = resolveRepoInput("petralabx/not-a-real-repo", REPOS);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("not a registry id");
+      expect(result.message).toContain("petralabx/not-a-real-repo");
+    }
+    expect(disallowedRepos(["petralabx/not-a-real-repo"], REPOS)).toEqual([
+      "petralabx/not-a-real-repo",
+    ]);
+    expect(allowedReposOnly(["petralabx/not-a-real-repo"], REPOS)).toEqual([]);
+  });
+
+  it("rejects ambiguous bare names with a clear message", () => {
+    const twin: Repo = {
+      id: "portal-web-fork",
+      name: "plx-customer-portal",
+      lang: "TypeScript",
+      def: "main",
+      owner: REPO_ORG_LEGACY,
+      visibility: "private",
+      scope: "ambiguous-name fixture",
+    };
+    const registry = { ...REPOS, "portal-web-fork": twin };
+    const result = resolveRepoInput("plx-customer-portal", registry);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("matches multiple registry repos");
+      expect(result.message).toContain("portal-web");
+      expect(result.message).toContain("portal-web-fork");
+    }
+  });
+
+  it("suggests a registry id when a slug name matches but owner does not", () => {
+    const result = resolveRepoInput("wrong-org/plx-customer-portal", REPOS);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("Did you mean `portal-web`?");
+    }
   });
 });
 

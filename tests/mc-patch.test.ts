@@ -32,7 +32,7 @@ vi.mock("@/lib/sync/repo", () => ({
   stamp: () => "2026.06.16 · 00:00",
   // EN-005: patchTask validates a repos edit against the persisted registry.
   async getRepos() {
-    return [{ id: "portal-web", name: "plx-customer-portal", lang: "TypeScript", def: "master", owner: "taylorvalton", visibility: "private", scope: "" }];
+    return [{ id: "portal-web", name: "plx-customer-portal", lang: "TypeScript", def: "staging", owner: "petralabx", visibility: "private", scope: "" }];
   },
   async getEntity(type: string, id: string) {
     return store.rows.get(`${type}:${id}`) ?? null;
@@ -296,6 +296,17 @@ describe("patchTask — repos edit allow-list enforcement (EN-005, pushed)", () 
     await expect(patchTask("TASK-900", { repos: ["ghost"] }, "vince")).rejects.toMatchObject({
       code: "repo_not_allowed",
     });
+    expect(store.rows.get("task:TASK-900")!.data.repos).toEqual(["portal-web"]);
+  });
+
+  it("normalizes a full GitHub slug to the registry id on patch", async () => {
+    seedTask({ repos: [] });
+    const updated = await patchTask(
+      "TASK-900",
+      { repos: ["petralabx/plx-customer-portal"] },
+      "vince"
+    );
+    expect(updated!.repos).toEqual(["portal-web"]);
     expect(store.rows.get("task:TASK-900")!.data.repos).toEqual(["portal-web"]);
   });
 });

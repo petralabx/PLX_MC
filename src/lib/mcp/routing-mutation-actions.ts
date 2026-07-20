@@ -202,7 +202,12 @@ export function registerRoutingMutationTools(
       bucketId: z.string().min(1),
       title: z.string().min(1),
       description: z.string().optional(),
-      repos: z.array(z.string()).optional(),
+      repos: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "MC registry ids only (e.g. portal-web, plx-mc). Not MC_REPO / GitHub slugs."
+        ),
       accountableOwnerId: z.string().min(1),
       revisionId: z.string().optional(),
       headSha: z.string().optional(),

@@ -131,14 +131,19 @@ server.tool(
 
 server.tool(
   "mc_create_task",
-  "Create a new MC task.",
+  "Create a new MC task. repos[] items are MC registry ids (portal-web, plx-mc, agentic-swarm) — not GitHub slugs. MC_REPO / X-MC-Repo stays the full GitHub slug for checkout/compliance and is a different namespace from repos[].",
   {
     title: z.string().min(1),
     bucket: z.string().min(1),
     reporter: z.string().optional(),
     description: z.string().optional(),
     priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
-    repos: z.array(z.string()).optional(),
+    repos: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "MC registry ids only (e.g. portal-web, plx-mc, agentic-swarm). Not MC_REPO / GitHub slugs — those are for checkout/compliance."
+      ),
   },
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_create_task");

@@ -31,9 +31,13 @@ PLX_MC_MCP_ENABLED=1          # server + client kill switch
 PLX_MC_ROUTING_SUGGEST_ENABLED=1  # mc_suggest_work + pre-checkout suggestions
 MC_MCP_API_KEY=...            # AWS Secrets Manager / prod/ec2-secrets
 MC_OPERATOR_EMAIL=vince@...   # allowlisted Petra operator (audit context only)
-MC_REPO=petralabx/PLX_MC   # repo binding for checkout credentials
+MC_REPO=petralabx/PLX_MC   # repo binding for checkout credentials (full GitHub slug)
 MC_BASE_URL=https://mc.plxcustomer.io
 ```
+
+`mc_create_task.repos[]` uses MC registry **ids** (`portal-web`, `plx-mc`,
+`agentic-swarm`) — not the `MC_REPO` GitHub slug. See `docs/AGENT-PR-SOP.md`
+(two repo namespaces).
 
 **PR stamp:** `mc_checkout_task` → `meta.links.checkoutStamp` = `MC-Checkout: dsp_*`.
 Checkout also backfills a missing task `accountableOwner` from the dispatching

@@ -38,7 +38,16 @@ Every one of the 8 buckets and all 15 seeded tasks now attach `["portal-web"]`
 - `isApprover(actor)` — true only for human `Owner`/`Admin` (vince is Owner).
 - `isAllowedRepo` / `disallowedRepos` / `allowedReposOnly` — the allow-list
   predicates, used by both client and server.
+- `resolveRepoInput` / `normalizeRepoInputs` — accept registry id, unique name,
+  or `owner/name` GitHub slug and resolve to the registry **id** before
+  allow-list checks (persisted `repos[]` always store ids). Do not confuse with
+  `MC_REPO` / `X-MC-Repo` (checkout/compliance full slug).
 - `repoIdFromName` / `repoFromRequest` — build a registry repo from an approval.
+
+| Purpose | Portal value |
+|---|---|
+| `MC_REPO` / `X-MC-Repo` (checkout, compliance) | `petralabx/plx-customer-portal` |
+| `task.repos[]` / bucket / project repos (allow-list) | `portal-web` |
 
 ### Self-service request → approve (store, additive)
 `src/lib/mc-data/store.ts`:

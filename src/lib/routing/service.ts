@@ -4,7 +4,10 @@
 
 import { ApiError } from "@/lib/api/route";
 import { withTransaction, type TxQuery } from "@/lib/db";
-import { disallowedRepos } from "@/lib/mc-data/repos";
+import {
+  formatRepoNotAllowedMessage,
+  normalizeRepoInputs,
+} from "@/lib/mc-data/repos";
 import type { Task } from "@/lib/mc-data";
 import { ROUTING_POLICY_VERSION } from "@/lib/routing/persistence";
 import {
@@ -469,16 +472,11 @@ export async function createConfirmedTask(
   }
 
   const bucket = await requireExistingBucket(input.bucketId);
-  const repos = input.repos ?? [];
   const registry = await syncRepo.getRepos();
   const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
-  const offlist = disallowedRepos(repos, registryMap);
-  if (offlist.length > 0) {
-    throw new ApiError(
-      "repo_not_allowed",
-      `These repos are not in the registry: ${offlist.join(", ")}.`,
-      422
-    );
+  const { ids: repos, rejected } = normalizeRepoInputs(input.repos ?? [], registryMap);
+  if (rejected.length > 0) {
+    throw new ApiError("repo_not_allowed", formatRepoNotAllowedMessage(rejected), 422);
   }
 
   const intentHash = creationIntentHash({

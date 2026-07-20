@@ -80,14 +80,19 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_create_task",
-    "Create a new MC task (SharePoint ToDos mirror).",
+    "Create a new MC task (SharePoint ToDos mirror). repos[] = MC registry ids (portal-web, plx-mc, agentic-swarm), not GitHub slugs. MC_REPO / X-MC-Repo remains the full GitHub slug for checkout/compliance — a different namespace from repos[].",
     {
       title: z.string().min(1),
       bucket: z.string().min(1),
       reporter: z.string().min(1),
       description: z.string().optional(),
       priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
-      repos: z.array(z.string()).optional(),
+      repos: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "MC registry ids only (e.g. portal-web, plx-mc, agentic-swarm). Not MC_REPO / GitHub slugs — those are for checkout/compliance."
+        ),
     },
     async (body) => jsonResult(await actionCreateTask(identity, { ...body, reporter: body.reporter || identity.operatorEmail }))
   );

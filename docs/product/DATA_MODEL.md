@@ -110,6 +110,14 @@ Bands (`MC_BANDS`): `todo` "To do" · `doing` "In progress" · `done` "Done". Th
   "lang":"TypeScript · Next.js", "openPRs":4, "openTasks":9, "def":"main" }
 ```
 
+Task / bucket / project `repos[]` store registry **ids** (`portal-web`), not
+GitHub slugs. Checkout/compliance use a separate header namespace:
+
+| Purpose | Portal value |
+|---|---|
+| `MC_REPO` / `X-MC-Repo` (checkout, compliance) | `petralabx/plx-customer-portal` |
+| `task.repos[]` / bucket / project repos (allow-list) | `portal-web` |
+
 ## Milestone / Risk
 Milestone: `{ id, name, bucket, state(now|upcoming|risk), col(date), sp }`.
 Risk: `{ title, bucket, like(High|Medium|Low), impact(High|Medium|Low), owner, status(Open|Mitigating|Closed), mit }`.

@@ -119,8 +119,17 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 | Step | Tool | Notes |
 |------|------|-------|
 | Find work | `mc_search_tasks` | Filter by `q`, `bucket`, `stage`, `limit` |
-| Create task | `mc_create_task` | Requires `title` + `bucket`; optional `description`, `priority`, `repos` |
+| Create task | `mc_create_task` | Requires `title` + `bucket`; optional `description`, `priority`, `repos` (registry **ids**, not GitHub slugs — see table below) |
 | Start | `mc_checkout_task` | Copy `MC-Checkout: dsp_*` from `meta.links.checkoutStamp` |
+
+#### Two repo namespaces (do not mix)
+
+| Purpose | Portal value |
+|---|---|
+| `MC_REPO` / `X-MC-Repo` (checkout, compliance) | `petralabx/plx-customer-portal` |
+| `task.repos[]` / bucket / project repos (allow-list) | `portal-web` |
+
+`MC_REPO` is the full GitHub slug for the repo you are pushing to. `repos[]` on create/patch is the MC registry **id** (`portal-web`, `plx-mc`, `agentic-swarm`). The API also accepts a unique registry `name` or `owner/name` slug and normalizes to the id before persist — prefer the id.
 | Milestones | `mc_report_progress` | Every ~10–15 min on long runs; `stage`, `notes`, `progressPct` |
 | Hand in evidence | `mc_complete_task` | Writes structured `task.evidence` — see §7 |
 

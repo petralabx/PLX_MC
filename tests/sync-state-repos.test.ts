@@ -57,9 +57,11 @@ import { createTask } from "@/lib/sync/state";
 
 beforeEach(() => {
   // The persisted registry holds an APPROVED repo that is NOT in the data.ts
-  // fixture REPOS (portal-web / agentic-swarm / plx-mc).
+  // fixture REPOS (portal-web / agentic-swarm / plx-mc), plus the live portal
+  // registry row used for slug → id normalization.
   store.repos = [
     { id: "approved-svc", name: "approved-svc", lang: "TypeScript", def: "main", owner: "taylorvalton", visibility: "private", scope: "approved via the self-service queue" },
+    { id: "portal-web", name: "plx-customer-portal", lang: "TypeScript", def: "staging", owner: "petralabx", visibility: "private", scope: "Customer portal" },
   ];
   store.entities = [];
   store.audits.length = 0;
@@ -80,5 +82,25 @@ describe("createTask — repo allow-list uses the persisted registry (Item 2)", 
     await expect(
       createTask({ title: "ghost", bucket: "BKT-WMS", reporter: "vince", repos: ["ghost-repo"] })
     ).rejects.toMatchObject({ code: "repo_not_allowed" });
+  });
+
+  it("accepts a full GitHub slug and persists the registry id", async () => {
+    const task = await createTask({
+      title: "portal work via slug",
+      bucket: "BKT-WMS",
+      reporter: "vince",
+      repos: ["petralabx/plx-customer-portal"],
+    });
+    expect(task.repos).toEqual(["portal-web"]);
+  });
+
+  it("accepts a unique registry name and persists the registry id", async () => {
+    const task = await createTask({
+      title: "portal work via name",
+      bucket: "BKT-WMS",
+      reporter: "vince",
+      repos: ["plx-customer-portal"],
+    });
+    expect(task.repos).toEqual(["portal-web"]);
   });
 });

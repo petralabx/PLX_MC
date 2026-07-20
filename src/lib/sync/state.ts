@@ -6,7 +6,10 @@
 import { ApiError } from "@/lib/api/route";
 import { CURRENT_USER, SP_LISTS } from "@/lib/mc-data/data";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
-import { disallowedRepos } from "@/lib/mc-data/repos";
+import {
+  formatRepoNotAllowedMessage,
+  normalizeRepoInputs,
+} from "@/lib/mc-data/repos";
 import type {
   ActivityEntry,
   AuditRow,
@@ -25,6 +28,18 @@ import type {
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import type { EntityData, FieldAttribution } from "./mapping";
 import * as repo from "./repo";
+
+/** Normalize repos[] to registry ids; 422 on unknown/ambiguous (fail-closed). */
+function requireRegistryRepos(
+  inputs: string[] | undefined,
+  registryMap: Record<string, Repo>
+): string[] {
+  const { ids, rejected } = normalizeRepoInputs(inputs ?? [], registryMap);
+  if (rejected.length > 0) {
+    throw new ApiError("repo_not_allowed", formatRepoNotAllowedMessage(rejected), 422);
+  }
+  return ids;
+}
 
 export interface StateSnapshot {
   tasks: Task[];
@@ -165,14 +180,7 @@ export async function createBucket(input: CreateBucketInput): Promise<Bucket> {
   // Allow-list clamp (EN-002): a bucket may only attach registry repos.
   const registry = await repo.getRepos();
   const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
-  const offlist = disallowedRepos(input.repos ?? [], registryMap);
-  if (offlist.length > 0) {
-    throw new ApiError(
-      "repo_not_allowed",
-      `These repos are not in the registry: ${offlist.join(", ")}. Request and get them approved first.`,
-      422
-    );
-  }
+  const repos = requireRegistryRepos(input.repos, registryMap);
   const existing = await repo.getBuckets();
   const id = nextBucketId(name, new Set(existing.map((b) => b.id)));
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, ".");
@@ -192,7 +200,7 @@ export async function createBucket(input: CreateBucketInput): Promise<Bucket> {
     target: input.target?.trim() || "—",
     started: input.started?.trim() || today,
     desc: (input.desc ?? "").trim(),
-    repos: input.repos ?? [],
+    repos,
     sync: { state: "pending", ts: repo.stamp(), sp: "Roadmap · unprovisioned" },
     prd: input.prd ?? null,
     project: projectId,
@@ -228,10 +236,7 @@ export async function patchBucket(id: string, patch: PatchBucketInput, actor: st
     await ensureReposSeeded();
     const registry = await repo.getRepos();
     const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
-    const offlist = disallowedRepos(patch.repos, registryMap);
-    if (offlist.length > 0) {
-      throw new ApiError("repo_not_allowed", `These repos are not in the registry: ${offlist.join(", ")}.`, 422);
-    }
+    patch = { ...patch, repos: requireRegistryRepos(patch.repos, registryMap) };
   }
   if (patch.project) await assertProjectExists(patch.project);
   const defined = definedEntries(patch);
@@ -278,14 +283,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   if (!name) throw new ApiError("invalid_request", "A project needs a name.", 422);
   const registry = await repo.getRepos();
   const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
-  const offlist = disallowedRepos(input.repos ?? [], registryMap);
-  if (offlist.length > 0) {
-    throw new ApiError(
-      "repo_not_allowed",
-      `These repos are not in the registry: ${offlist.join(", ")}. Request and get them approved first.`,
-      422
-    );
-  }
+  const repos = requireRegistryRepos(input.repos, registryMap);
   const existing = await repo.getProjects();
   const id = nextProjectId(name, new Set(existing.map((p) => p.id)));
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, ".");
@@ -297,7 +295,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     target: input.target?.trim() || "—",
     started: input.started?.trim() || today,
     desc: (input.desc ?? "").trim(),
-    repos: input.repos ?? [],
+    repos,
     sync: { state: "pending", ts: repo.stamp(), sp: "Projects · unprovisioned" },
     prd: input.prd ?? null,
   };
@@ -325,10 +323,7 @@ export async function patchProject(id: string, patch: PatchProjectInput, actor: 
     await ensureReposSeeded();
     const registry = await repo.getRepos();
     const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
-    const offlist = disallowedRepos(patch.repos, registryMap);
-    if (offlist.length > 0) {
-      throw new ApiError("repo_not_allowed", `These repos are not in the registry: ${offlist.join(", ")}.`, 422);
-    }
+    patch = { ...patch, repos: requireRegistryRepos(patch.repos, registryMap) };
   }
   const next: Project = { ...existing, ...definedEntries(patch) };
   await repo.upsertProject(next);
@@ -368,16 +363,10 @@ export async function createTask(
   await ensureReposSeeded();
   await ensureBucketsSeeded();
   // Allow-list enforcement (EN-002): a task may only attach registry repos.
+  // Normalize GitHub slugs / names → registry ids before persist.
   const registry = await repo.getRepos();
   const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
-  const offlist = disallowedRepos(input.repos ?? [], registryMap);
-  if (offlist.length > 0) {
-    throw new ApiError(
-      "repo_not_allowed",
-      `These repos are not in the registry: ${offlist.join(", ")}. Request and get them approved first.`,
-      422
-    );
-  }
+  const repos = requireRegistryRepos(input.repos, registryMap);
 
   // Bucket must already exist — never invent hierarchy (P8).
   const buckets = await repo.getBuckets();
@@ -407,7 +396,7 @@ export async function createTask(
       accountableOwner: input.accountableOwner ?? null,
       humanOnly: input.humanOnly,
       reqs: input.reqs ?? [],
-      repos: input.repos ?? [],
+      repos,
       targetEnv: input.targetEnv ?? "staging",
       estimate: input.estimate ?? "M",
       labels: input.labels ?? [],
@@ -522,6 +511,16 @@ export async function patchTask(
   if (!row) return null;
 
   const { activityLine, ...taskPatch } = patch;
+
+  // Allow-list enforcement on edit (EN-005): normalize + validate repos before
+  // building the persisted patch so slugs never land in entities.data.
+  if (taskPatch.repos) {
+    await ensureReposSeeded();
+    const registry = await repo.getRepos();
+    const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
+    taskPatch.repos = requireRegistryRepos(taskPatch.repos, registryMap);
+  }
+
   const entries = Object.entries(taskPatch).filter(([, v]) => v !== undefined);
   if (entries.length === 0 && !activityLine) return row.data as unknown as Task;
 
@@ -543,21 +542,6 @@ export async function patchTask(
     if (!skipEvidenceGate) {
       const violation = stageAdvanceViolation(effective, taskPatch.stage);
       if (violation) throw new ApiError("stage_blocked", violation, 409);
-    }
-  }
-  // Allow-list enforcement on edit (EN-005): a task's repos may only be set to
-  // registry members — the SAME persisted allow-list createTask validates against.
-  if (taskPatch.repos) {
-    await ensureReposSeeded();
-    const registry = await repo.getRepos();
-    const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
-    const offlist = disallowedRepos(taskPatch.repos, registryMap);
-    if (offlist.length > 0) {
-      throw new ApiError(
-        "repo_not_allowed",
-        `These repos are not in the registry: ${offlist.join(", ")}. Request and get them approved first.`,
-        422
-      );
     }
   }
 

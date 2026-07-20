@@ -1,0 +1,53 @@
+{
+  "ok": true,
+  "operator": "vince@petrasoap.com",
+  "taskCount": 300,
+  "bucketCount": 10,
+  "lastSweep": "2026.07.20 · 15:40",
+  "syncMode": "cron",
+  "cronConfigured": true,
+  "syncEnabled": false,
+  "databaseBound": true,
+  "lastSweepAgeMs": null,
+  "freshness": {
+    "ok": true,
+    "code": "ok",
+    "maxAgeMs": 360000,
+    "checkedAt": "2026-07-20T15:40:12.954Z",
+    "registers": [
+      {
+        "listKey": "projects",
+        "lastCompleteInboundAt": "2026-07-20T15:40:12.035Z",
+        "ageMs": 919,
+        "ok": true,
+        "reason": "fresh"
+      },
+      {
+        "listKey": "roadmap",
+        "lastCompleteInboundAt": "2026-07-20T15:40:12.144Z",
+        "ageMs": 810,
+        "ok": true,
+        "reason": "fresh"
+      },
+      {
+        "listKey": "todos",
+        "lastCompleteInboundAt": "2026-07-20T15:40:12.252Z",
+        "ageMs": 702,
+        "ok": true,
+        "reason": "fresh"
+      }
+    ],
+    "reasons": []
+  },
+  "webhooksEnabled": false,
+  "mcpEnabled": true,
+  "graphTokenOk": true,
+  "dataSource": "live",
+  "lastCheckoutDoor": "mcp",
+  "boringTickStreak": 7,
+  "boringGateN": 7,
+  "boringGateMet": true,
+  "lastBoringEvalAt": "2026-07-20T15:40:12.38Z",
+  "lastBoringOutcome": "green",
+  "lastBoringResetReason": null
+}

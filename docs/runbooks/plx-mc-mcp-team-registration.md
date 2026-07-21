@@ -84,6 +84,22 @@ Then reload MCP servers. If a stamp was minted under the wrong slug, re-checkout
 with `COMPLIANCE_CAPTURE=1 MC_REPO=petralabx/PLX_MC node scripts/compliance-checkout.mjs`
 and replace the PR body line before re-running compliance.
 
+### Windows Desktop vs Team/Cloud (2026-07-20)
+
+Desktop HTTP headers with `${env:MC_MCP_API_KEY}` do **not** expand, and
+`launch.mjs` calling Amazon `aws.exe` can hang until Cursor MCP times out
+(`MCP error -32001: Request timed out`). Use two layers:
+
+| Surface | Registration |
+|---|---|
+| **Vince Desktop** | User `~/.cursor/mcp.json` → `pwsh … mcp-plx-mc-run.ps1 -Target hub\|portal` (loads `~/.secrets-env.staging.ps1`, injects a real key so `launch.mjs` skips AWS) |
+| **Team + Cloud Agents** | Team MCP (Integrations → Team MCP Servers) → Streamable HTTP `PLX-MC-Hub` + `PLX-MC-Portal` with stored `x-api-key` headers |
+
+If Desktop lists **two** Hub/Portal rows: keep the stdio entry (**no** Logout
+link); toggle **off** the HTTP duplicate that shows Logout/Error. Cloud Agents
+still receive the Team HTTP servers. `launch.mjs` also prefers
+`~/.cursor/bin/fetch-aws-secret.py` / aws-shim over hanging `aws.exe`.
+
 ## Health
 
 Call tool `mc_self_check` or `GET /api/cursor/self-check` with the same headers.

@@ -7,7 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { ApiError } from "@/lib/api/route";
 import { permissionsEnforcementEnabled } from "@/lib/auth";
-import { CURRENT_USER, HUMANS, type Task } from "@/lib/mc-data";
+import { resolveHumanAccountableOwner, type Task } from "@/lib/mc-data";
 import { publicMcBaseUrl } from "@/lib/mcp/envelope";
 import {
   authorize,
@@ -33,7 +33,7 @@ import {
   upsertRoutingSession,
 } from "@/lib/routing/repo";
 import type { RoutingProposalState } from "@/lib/routing/types";
-import { actorIdByEmail, patchTask, snapshot } from "@/lib/sync";
+import { patchTask, snapshot } from "@/lib/sync";
 import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import { bucketPrdForTask } from "./bucket-prd";
@@ -55,11 +55,6 @@ const CHECKOUT_TTL_MIN = 8 * 60;
 
 function genId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function accountableOwnerForDispatch(accountableHuman: string): string {
-  const normalized = accountableHuman.trim().toLowerCase();
-  return actorIdByEmail(normalized) ?? HUMANS[normalized]?.id ?? CURRENT_USER;
 }
 
 // Deterministic check id so recordCheck's upsert actually dedups across
@@ -161,7 +156,7 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
   if (task && !task.accountableOwner) {
     await patchTask(
       input.taskId,
-      { accountableOwner: accountableOwnerForDispatch(input.accountableHuman) },
+      { accountableOwner: resolveHumanAccountableOwner(input.accountableHuman) },
       input.accountableHuman,
       {
         attribution: {

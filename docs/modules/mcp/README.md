@@ -39,9 +39,16 @@ MC_BASE_URL=https://mc.plxcustomer.io
 `agentic-swarm`) — not the `MC_REPO` GitHub slug. See `docs/AGENT-PR-SOP.md`
 (two repo namespaces).
 
+**Accountable owner defaulting:** `mc_create_task` defaults a missing
+`accountableOwner` to the human operator behind the session — the allowlisted
+`MC_OPERATOR_EMAIL` / `X-MC-Operator-Email` resolved to a directory id via
+`resolveHumanAccountableOwner` (`src/lib/mc-data/policy.ts`) — so agent-created
+tasks are not stranded at the EN-003 Planned gate. An explicit
+`accountableOwner` in the request still wins.
+
 **PR stamp:** `mc_checkout_task` → `meta.links.checkoutStamp` = `MC-Checkout: dsp_*`.
-Checkout also backfills a missing task `accountableOwner` from the dispatching
-human's canonical directory id. Operator/service aliases that are not people
+Checkout also backfills a missing task `accountableOwner` through the same
+resolver. Operator/service aliases that are not people
 (for example `cos@petrasoap.com`) resolve to the PLX default accountable human,
 Vince; an owner already on the task is never replaced.
 

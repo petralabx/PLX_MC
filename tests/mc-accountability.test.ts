@@ -9,6 +9,7 @@ import {
   assignmentViolation,
   hasHumanAccountableOwner,
   isAgentId,
+  resolveHumanAccountableOwner,
   stageAdvanceViolation,
 } from "@/lib/mc-data/policy";
 import type { Task } from "@/lib/mc-data";
@@ -114,6 +115,17 @@ describe("policy predicates", () => {
     expect(stageAdvanceViolation(noOwner, "planned")).toBeNull(); // up to planned is fine
     expect(stageAdvanceViolation(noOwner, "qa")).toMatch(/accountable owner/);
     expect(stageAdvanceViolation(taskish({ accountableOwner: "greg" }), "qa")).toBeNull();
+  });
+
+  it("resolveHumanAccountableOwner maps session emails and ids to directory humans", () => {
+    expect(resolveHumanAccountableOwner("vince@petrasoap.com")).toBe("vince");
+    expect(resolveHumanAccountableOwner("GREG.M@petrasoap.com")).toBe("greg"); // case-insensitive
+    expect(resolveHumanAccountableOwner("greg")).toBe("greg"); // already a directory id
+    // Service aliases and unknowns fall back to the default accountable human —
+    // never a null owner (the gate would strand the task) and never an agent.
+    expect(resolveHumanAccountableOwner("cos@petrasoap.com")).toBe("vince");
+    expect(resolveHumanAccountableOwner("unknown@example.com")).toBe("vince");
+    expect(isAgentId(resolveHumanAccountableOwner("cos@petrasoap.com"))).toBe(false);
   });
 
   it("stageAdvanceViolation enforces the completion gate on done stages", () => {

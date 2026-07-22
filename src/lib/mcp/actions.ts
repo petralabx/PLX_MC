@@ -5,7 +5,7 @@ import { checkout, complete } from "@/lib/compliance/service";
 import * as complianceRepo from "@/lib/compliance/repo";
 import { createTask, patchTask, snapshot, type CreateTaskInput } from "@/lib/sync";
 import { getEntity } from "@/lib/sync/repo";
-import type { Evidence, Task } from "@/lib/mc-data";
+import { resolveHumanAccountableOwner, type Evidence, type Task } from "@/lib/mc-data";
 import { requireMcpActor } from "@/lib/routing/mutations/actors";
 import type { McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
@@ -101,6 +101,12 @@ export async function actionCreateTask(identity: McpIdentity, input: CreateTaskI
     {
       ...input,
       reporter: identity.operatorEmail,
+      // Agent-created tasks default to the human operator behind the session
+      // (Entra email admitted by the allowlist) so the EN-003 gate does not
+      // strand them ownerless in Planned — same resolution as the checkout
+      // backfill. An explicit accountableOwner from the caller still wins.
+      accountableOwner:
+        input.accountableOwner ?? resolveHumanAccountableOwner(identity.operatorEmail),
     },
     { source: "service", actorId: authorized.actorId }
   );

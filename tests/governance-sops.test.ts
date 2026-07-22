@@ -291,6 +291,31 @@ describe("seed registry + Collaborator SOP (integration)", () => {
     }
   });
 
+  it("activates PLX-Brain pointer SOPs with readable sources", async () => {
+    const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
+    const r = parseSopRegistryJson(raw);
+    if (!r.ok) throw new Error("seed registry invalid");
+    const expected: Record<string, string> = {
+      "mc-sop-plx-brain-ask": "docs/PLX-BRAIN-ASK-SOP.md",
+      "mc-sop-plx-brain-dept-key": "docs/PLX-BRAIN-DEPT-KEY-SOP.md",
+      "mc-sop-plx-brain-weekly-health": "docs/PLX-BRAIN-WEEKLY-HEALTH-SOP.md",
+    };
+    for (const [slug, path] of Object.entries(expected)) {
+      const entry = r.config.sops.find((s) => s.slug === slug)!;
+      expect(entry.status).toBe("active");
+      expect(entry.source?.repo_path).toBe(path);
+      const content = readFileSync(join(process.cwd(), path), "utf8");
+      expect(content).toContain("petralabx/agentic-swarm");
+      expect(content).toMatch(/Canonical source/i);
+      const detail = await getSopDetail(entry, createSopSource());
+      expect(detail.ok).toBe(true);
+      if (detail.ok) {
+        expect(detail.nodes.length).toBeGreaterThan(5);
+        expect(detail.toc.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it("renders agent, human, skills, rollback, and collaborator SOP sources", async () => {
     const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
     const r = parseSopRegistryJson(raw);

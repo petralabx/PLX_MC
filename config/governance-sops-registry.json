@@ -88,6 +88,39 @@
       "status": "active",
       "tags": ["Compliance gate", "Secrets"],
       "source": { "repo_path": "docs/FLEET-SECRETS-SOP.md" }
+    },
+    {
+      "slug": "mc-sop-plx-brain-ask",
+      "title": "PLX-Brain — Ask the Brain first",
+      "description": "Daily read-before / write-after loop for PLX-Brain: brain_search (MCP/HTTP/UI), interpret score floors, brain_ingest with provenance + ladder tags, propose relations, and session-artifact capture. Pointer to the canonical SOP in petralabx/agentic-swarm.",
+      "audience": "Operators and agent runtimes consulting the company brain",
+      "owner": "Vince",
+      "effective_date": "2026-07-22",
+      "status": "active",
+      "tags": ["PLX-Brain", "Knowledge OS", "Agent workflow"],
+      "source": { "repo_path": "docs/PLX-BRAIN-ASK-SOP.md" }
+    },
+    {
+      "slug": "mc-sop-plx-brain-dept-key",
+      "title": "PLX-Brain — Department key provisioning",
+      "description": "Provision VMC_SCOPED_API_KEYS dept grants, verify 403 on out-of-grant namespaces, and the critical caveat that dept keys are not isolation until TASK-541 route wiring. Pointer to the canonical SOP in petralabx/agentic-swarm.",
+      "audience": "Operators provisioning department-scoped knowledge API keys",
+      "owner": "Vince",
+      "effective_date": "2026-07-22",
+      "status": "active",
+      "tags": ["PLX-Brain", "Secrets", "Provisioning"],
+      "source": { "repo_path": "docs/PLX-BRAIN-DEPT-KEY-SOP.md" }
+    },
+    {
+      "slug": "mc-sop-plx-brain-weekly-health",
+      "title": "PLX-Brain — Weekly health triage",
+      "description": "Monday ~10-minute ET checklist for Second Brain eval, lint, cron watchdog, and ingest status, plus alert playbooks and monthly quarantine/replay. Pointer to the canonical SOP in petralabx/agentic-swarm.",
+      "audience": "Operators owning Second Brain health",
+      "owner": "Vince",
+      "effective_date": "2026-07-22",
+      "status": "active",
+      "tags": ["PLX-Brain", "Operations", "Eval"],
+      "source": { "repo_path": "docs/PLX-BRAIN-WEEKLY-HEALTH-SOP.md" }
     }
   ]
 }

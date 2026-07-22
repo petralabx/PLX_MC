@@ -28,10 +28,13 @@ DESIGN_TOKENS).
   retention expiry + rolling-breach cohort demotion; authorized only for
   `sp_routing_maintenance`. Rollout runbook:
   `docs/runbooks/mc-routing-rollout.md`.
-- Architecture screen — in-app C4 diagram catalog at
+- Architecture screen — read-only interactive C4 catalog at
   [`/?screen=architecture`](https://mc.plxcustomer.io/?screen=architecture)
-  (maintained pack: [`docs/architecture/`](docs/architecture/); module contract:
-  `docs/modules/architecture/README.md`).
+  (typed model from [`docs/architecture/source-map.json`](docs/architecture/source-map.json);
+  static SVG fallback in `public/architecture/`; maintained pack:
+  [`docs/architecture/`](docs/architecture/); module contract:
+  `docs/modules/architecture/README.md`; gate:
+  `scripts/check-architecture-diagrams.py`).
 
 ## Production Hosting
 
@@ -55,7 +58,7 @@ Staging fallback hostname `mc-staging.plxcustomer.io` may exist for preview/brea
 | Graph change-notifications — deferred (P11) | Push webhooks / subscription renewal / notification queue — gated scaffolding only until P11; delta sweep remains the correctness backbone | `docs/modules/sync/README.md` (P11); cron routes under `src/app/api/cron/sync-*` |
 | Governance tooling | Contract generator + drift gate, hygiene checker, preflight wrapper (Python 3.12) | `scripts/`, `config/` |
 | Operator-local MCP / swarm | Stdio MCP client + agentic swarm loopback — not deployed on Vercel | `tools/plx-mc-mcp/`; swarm `127.0.0.1:8900` |
-| Architecture (in-app + diagram pack) | Read-only C4 catalog; diagrams are **generated consumers** of Git authority | In-app: [`/?screen=architecture`](https://mc.plxcustomer.io/?screen=architecture); pack: [`docs/architecture/`](docs/architecture/); contract: `docs/modules/architecture/README.md` |
+| Architecture (in-app + diagram pack) | Read-only interactive C4 catalog; `source-map.json` + Mermaid/SVG are **generated consumers** of Git authority; validated by `check-architecture-diagrams.py` | In-app: [`/?screen=architecture`](https://mc.plxcustomer.io/?screen=architecture); model API: `GET /api/architecture/model`; pack: [`docs/architecture/`](docs/architecture/); fallback: `public/architecture/*.svg`; contract: `docs/modules/architecture/README.md` |
 
 ## Module Ownership
 

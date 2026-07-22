@@ -1,0 +1,60 @@
+{
+  "capturedAt": "2026-07-22T13:31:00Z",
+  "mcBase": "https://mc.plxcustomer.io",
+  "sharepointSite": {
+    "displayName": "PLX Mission Control",
+    "webUrl": "https://petrasoap.sharepoint.com/sites/plx-mission-control",
+    "id": "petrasoap.sharepoint.com,c4860ce4-f225-437d-8a5a-a140ecf42fc7,5fe9aa28-1440-42f1-b037-2ec7f6189075"
+  },
+  "lists": {
+    "todos": { "id": "a26cd1f0-7f30-49ed-b843-056f6468d6fa", "displayName": "ToDos" },
+    "projects": { "id": "811e3392-3e76-4ea1-b5d2-efae9d48c6a6", "displayName": "Projects" },
+    "roadmap": { "id": "0273ffa7-0773-4f8e-8885-81f3e2b431e6", "displayName": "Roadmap" }
+  },
+  "tasks": {
+    "TASK-495": {
+      "mcStage": "merged",
+      "mcSyncState": "pending",
+      "spItemId": "275",
+      "spStatusAfterPatch": "Merged",
+      "conflictResolution": "keep_mc_merged",
+      "prsMerged": [150, 151]
+    },
+    "TASK-328": {
+      "mcStage": "progress",
+      "mcSyncState": "synced",
+      "spItemId": "108",
+      "verdict": "ready_to_close_pending_parent_integration"
+    }
+  },
+  "bucketSample": {
+    "BKT-MISSION-CONTROL-OPS": {
+      "mcSyncState": "synced",
+      "mcSyncSp": "Roadmap",
+      "spRoadmapItemId": "9"
+    }
+  },
+  "projectSample": {
+    "PRJ-PORTAL-GOLIVE": {
+      "spProjectsItemId": "1",
+      "spProjectId": "PRJ-PORTAL-GOLIVE"
+    }
+  },
+  "selfCheck": {
+    "dataSource": "live",
+    "freshnessOk": true,
+    "boringGateMet": true,
+    "boringTickStreak": 556,
+    "lastSweep": "2026.07.22 · 13:25",
+    "freshnessRegisters": {
+      "projects": "2026-07-22T13:25:40.464Z",
+      "roadmap": "2026-07-22T13:25:40.671Z",
+      "todos": "2026-07-22T13:25:40.832Z"
+    }
+  },
+  "owners": {
+    "TASK-497": "vince",
+    "TASK-498": "vince",
+    "TASK-328": "vince"
+  }
+}

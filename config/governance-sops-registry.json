@@ -121,6 +121,39 @@
       "status": "active",
       "tags": ["PLX-Brain", "Operations", "Eval"],
       "source": { "repo_path": "docs/PLX-BRAIN-WEEKLY-HEALTH-SOP.md" }
+    },
+    {
+      "slug": "mc-sop-portal-internal",
+      "title": "PLX Customer Portal — Internal operations",
+      "description": "Staff and administrator pointer to the canonical portal operating SOP: workflows, APIs, integrations, security, deployment, UAT evidence intake, and clarification delivery.",
+      "audience": "PLX staff and system administrators operating the customer portal",
+      "owner": "Vince",
+      "effective_date": "2026-07-22",
+      "status": "active",
+      "tags": ["Customer Portal", "Internal operations", "UAT", "Evidence"],
+      "source": { "repo_path": "docs/PORTAL-INTERNAL-SOP.md" }
+    },
+    {
+      "slug": "mc-sop-portal-uat",
+      "title": "PLX Customer Portal — UAT",
+      "description": "QA and tester pointer to the canonical customer-portal UAT cases, including path-first Medium+ evidence capture and clarification response.",
+      "audience": "PLX QA/UAT testers and staff",
+      "owner": "Vince",
+      "effective_date": "2026-07-22",
+      "status": "active",
+      "tags": ["Customer Portal", "UAT", "Testing", "Evidence"],
+      "source": { "repo_path": "docs/PORTAL-UAT-SOP.md" }
+    },
+    {
+      "slug": "mc-sop-portal-external",
+      "title": "PLX Customer Portal — Customer testing",
+      "description": "Customer-facing pointer to the canonical external portal testing SOP, guided evidence methods, and clarification-ticket return workflow.",
+      "audience": "Customer testers",
+      "owner": "Vince",
+      "effective_date": "2026-07-22",
+      "status": "active",
+      "tags": ["Customer Portal", "Customer", "UAT", "Evidence"],
+      "source": { "repo_path": "docs/PORTAL-EXTERNAL-SOP.md" }
     }
   ]
 }

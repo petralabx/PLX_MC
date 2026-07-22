@@ -316,6 +316,41 @@ describe("seed registry + Collaborator SOP (integration)", () => {
     }
   });
 
+  it("activates portal pointer SOPs with canonical staging sources", async () => {
+    const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
+    const r = parseSopRegistryJson(raw);
+    if (!r.ok) throw new Error("seed registry invalid");
+    const expected: Record<string, { path: string; canonicalFile: string }> = {
+      "mc-sop-portal-internal": {
+        path: "docs/PORTAL-INTERNAL-SOP.md",
+        canonicalFile: "docs/Internal-SOP.md",
+      },
+      "mc-sop-portal-uat": {
+        path: "docs/PORTAL-UAT-SOP.md",
+        canonicalFile: "docs/UAT-SOP-Customer-Portal.md",
+      },
+      "mc-sop-portal-external": {
+        path: "docs/PORTAL-EXTERNAL-SOP.md",
+        canonicalFile: "docs/External-SOP.md",
+      },
+    };
+    for (const [slug, { path, canonicalFile }] of Object.entries(expected)) {
+      const entry = r.config.sops.find((s) => s.slug === slug)!;
+      expect(entry.status).toBe("active");
+      expect(entry.source?.repo_path).toBe(path);
+      const content = readFileSync(join(process.cwd(), path), "utf8");
+      expect(content).toContain("petralabx/plx-customer-portal");
+      expect(content).toContain(`/blob/staging/${canonicalFile}`);
+      expect(content).toMatch(/Canonical source/i);
+      const detail = await getSopDetail(entry, createSopSource());
+      expect(detail.ok).toBe(true);
+      if (detail.ok) {
+        expect(detail.nodes.length).toBeGreaterThan(5);
+        expect(detail.toc.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it("renders agent, human, skills, rollback, and collaborator SOP sources", async () => {
     const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
     const r = parseSopRegistryJson(raw);

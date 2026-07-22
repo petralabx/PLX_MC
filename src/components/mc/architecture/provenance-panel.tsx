@@ -124,7 +124,12 @@ export function ProvenancePanel({ view }: Props) {
               No source rows for this view (show-missing).
             </p>
           ) : (
-            <ul className="arch-provenance-list" data-testid="arch-provenance-list">
+            <ul
+              className="arch-provenance-list"
+              data-testid="arch-provenance-list"
+              tabIndex={0}
+              aria-label="Provenance source rows"
+            >
               {data.sources.map((row) => (
                 <li
                   key={`${row.path}:${row.start_line ?? ""}:${row.end_line ?? ""}:${row.authority_class}`}

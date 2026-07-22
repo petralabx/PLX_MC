@@ -12,3 +12,16 @@ export {
   isArchitectureViewId,
   loadSourceMapJson,
 } from "./source-map";
+export type {
+  ArchitectureClaim,
+  ArchitectureModel,
+  ArchitectureSourceLink,
+} from "./model";
+export {
+  ArchitectureCategorySchema,
+  ArchitectureClaimSchema,
+  ArchitectureLevelSchema,
+  ArchitectureModelSchema,
+  ArchitectureSourceLinkSchema,
+} from "./model";
+export { buildArchitectureModel } from "./model-adapter";

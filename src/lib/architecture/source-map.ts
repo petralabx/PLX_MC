@@ -10,32 +10,42 @@ import type {
   ProvenanceSourceRow,
 } from "./types";
 
-type RawSource = {
+export type RawArchitectureSource = {
   path?: unknown;
   start_line?: unknown;
   end_line?: unknown;
   authority_class?: unknown;
+  source_commit?: unknown;
 };
 
-type RawClaim = {
-  sources?: RawSource[];
+export type RawArchitectureClaim = {
+  fact_id?: unknown;
+  canonical_claim?: unknown;
+  canonical_summary?: unknown;
+  sources?: RawArchitectureSource[];
 };
 
-type RawEntity = {
-  claims?: RawClaim[];
+export type RawArchitectureEntity = {
+  mermaid_id?: unknown;
+  display_label?: unknown;
+  status?: unknown;
+  claims?: RawArchitectureClaim[];
+  from?: unknown;
+  to?: unknown;
 };
 
-type RawView = {
-  nodes?: RawEntity[];
-  edges?: RawEntity[];
-  annotations?: RawEntity[];
+export type RawArchitectureView = {
+  nodes?: RawArchitectureEntity[];
+  edges?: RawArchitectureEntity[];
+  annotations?: RawArchitectureEntity[];
+  boundaries?: Record<string, unknown>;
 };
 
-type RawSourceMap = {
+export type RawArchitectureSourceMap = {
   schema_version?: unknown;
   notice?: unknown;
   source_commit?: unknown;
-  views?: Partial<Record<ArchitectureViewId, RawView>>;
+  views?: Partial<Record<ArchitectureViewId, RawArchitectureView>>;
 };
 
 const VIEW_IDS: ArchitectureViewId[] = ["context", "containers", "task-lifecycle"];
@@ -52,9 +62,11 @@ function asLine(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function collectClaims(entities: RawEntity[] | undefined): RawClaim[] {
+function collectClaims(
+  entities: RawArchitectureEntity[] | undefined
+): RawArchitectureClaim[] {
   if (!entities) return [];
-  const out: RawClaim[] = [];
+  const out: RawArchitectureClaim[] = [];
   for (const entity of entities) {
     if (Array.isArray(entity.claims)) {
       out.push(...entity.claims);
@@ -63,7 +75,9 @@ function collectClaims(entities: RawEntity[] | undefined): RawClaim[] {
   return out;
 }
 
-function summarizeSources(claims: RawClaim[]): ProvenanceSourceRow[] {
+function summarizeSources(
+  claims: RawArchitectureClaim[]
+): ProvenanceSourceRow[] {
   const keyed = new Map<string, ProvenanceSourceRow>();
 
   for (const claim of claims) {
@@ -99,14 +113,14 @@ function summarizeSources(claims: RawClaim[]): ProvenanceSourceRow[] {
   });
 }
 
-export function loadSourceMapJson(cwd = process.cwd()): RawSourceMap {
+export function loadSourceMapJson(cwd = process.cwd()): RawArchitectureSourceMap {
   const raw = readFileSync(join(cwd, "docs/architecture/source-map.json"), "utf8");
-  return JSON.parse(raw) as RawSourceMap;
+  return JSON.parse(raw) as RawArchitectureSourceMap;
 }
 
 export function buildProvenanceForView(
   view: ArchitectureViewId,
-  map: RawSourceMap = loadSourceMapJson()
+  map: RawArchitectureSourceMap = loadSourceMapJson()
 ): ArchitectureProvenance {
   const viewData = map.views?.[view];
   if (!viewData) {

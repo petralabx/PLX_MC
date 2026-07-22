@@ -1,8 +1,8 @@
 # Elegant architecture closeout — P2 task reconciliation
 
-**Date:** 2026-07-22  
-**MC-Checkout:** `dsp_mrw4agrkm11qib` (TASK-328)  
-**Accountable owner:** Vince  
+**Date:** 2026-07-22
+**MC-Checkout:** `dsp_mrw4agrkm11qib` (TASK-328)
+**Accountable owner:** Vince
 **Branch:** `proj/elegant-architecture-closeout/phase-2-task-reconciliation`
 
 ## Verdict
@@ -10,7 +10,7 @@
 | Track | Status |
 |---|---|
 | TASK-495 stage conflict (Verified vs Merged) | **Resolved keep=MC** — SP Status aligned to Merged |
-| TASK-328 Projects/Roadmap mirror | **Verified operational** — close with evidence |
+| TASK-328 Projects/Roadmap mirror | **Verified operational** — ready to close at parent integration |
 | TASK-497 / TASK-498 / TASK-328 owners | **Vince** on all three (governed API) |
 | Production self-check | **Green** — `dataSource=live`, `freshness.ok`, `boringGateMet=true` |
 
@@ -53,7 +53,7 @@ Cron mode authoritative (`syncMode=cron`, `syncEnabled=false` is in-app schedule
 
 | Entity | MC sync (snapshot) | SharePoint |
 |---|---|---|
-| `PRJ-PORTAL-GOLIVE` | push-only; SP item present | Projects list item **1** — ProjectID `PRJ-PORTAL-GOLIVE` |
+| `PRJ-PORTAL-GOLIVE` | two-way routing fields; SP item present | Projects list item **1** — ProjectID `PRJ-PORTAL-GOLIVE` |
 | `BKT-MISSION-CONTROL-OPS` | `synced` → Roadmap | Roadmap item **9** — InitiativeID `BKT-MISSION-CONTROL-OPS` |
 | All 10 buckets | `sync.state=synced`, `sync.sp=Roadmap` | Roadmap list provisioned on prod site |
 
@@ -64,7 +64,7 @@ Production lists confirmed via Graph: `Projects`, `Roadmap`, `ToDos` on `/sites/
 - Initial provision + mirror: `artifacts/sync/2026-07-13-prod-site-cutover/REPORT.md` (provision APPLY/VERIFY exit 0; post-cutover sweep `pushed=27`).
 - Ongoing operate: production cron sweep stamp `2026.07.22 · 13:25`; self-check `boringTickStreak=556`, `boringGateMet=true`.
 
-### Close verdict
+### Closure readiness
 
 All TASK-328 done-when conditions met:
 
@@ -72,6 +72,7 @@ All TASK-328 done-when conditions met:
 2. Audit / operate trail confirms mirror ran (cutover sweep + continuous cron freshness).
 
 TASK-328 MC sync pill after P2 reads **`synced`** (ToDos item 108).
+Its MC workflow stage remains **`progress`** pending parent integration completion; the operational evidence is sufficient and TASK-328 is ready for the parent to close.
 
 ## Owner verification
 
@@ -90,4 +91,4 @@ No API blocker — `accountableOwner` field populated on all three via governed 
 ## Rollback
 
 - TASK-495: restore SP item 275 Status to prior value only if audit proves MC `merged` was wrong; prefer MC conflict resolve UI with session auth for canonical queue cleanup.
-- TASK-328: reopen if prod site lists removed or project/bucket sync regressions appear; supersede this bundle with a new dated folder.
+- TASK-328: if closed by the parent, reopen if prod site lists are removed or project/bucket sync regressions appear; supersede this bundle with a new dated folder.

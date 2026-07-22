@@ -24,7 +24,7 @@
       "mcStage": "progress",
       "mcSyncState": "synced",
       "spItemId": "108",
-      "verdict": "close_with_evidence"
+      "verdict": "ready_to_close_pending_parent_integration"
     }
   },
   "bucketSample": {

@@ -64,13 +64,13 @@ Bands (`MC_BANDS`): `todo` "To do" · `doing` "In progress" · `done` "Done". Th
   "started": "2026.06.11",        // date
   "desc": "…",
   "repos": ["portal-web"],
-  "sync": { "state": "pending", "ts": "—", "sp": "Projects · unprovisioned" },
+  "sync": { "state": "synced", "ts": "2026.07.22 · 13:25", "sp": "Projects · item 1" },
   "prd": null                      // FK → PRD id, nullable
 }
 ```
 - Optional parent above Bucket (P2): operators organize initiatives under a Project; buckets without a parent are valid (`project` unset / `NULL`).
 - Persisted in `projects` (`id`, jsonb `data`, `sync_state`, `sp_item_id`) — same pattern as `buckets` (`db/migrations/011_projects.sql`).
-- **Sync posture:** push-only mirror to the SharePoint `Projects` list (`SHAREPOINT_INTEGRATION.md §3.2`); Mission Control is authoritative and the list is never read back (`pushProjectsMirror` in `src/lib/sync/engine.ts`). Production site `/sites/plx-mission-control` has the `Projects` list provisioned (cutover evidence: `artifacts/sync/2026-07-13-prod-site-cutover/`; P2 re-verify: `artifacts/sync/2026-07-22-elegant-architecture-hygiene/`). When the list is missing, pending rows are skipped with an audit note and `sync.sp` reads `Projects · unprovisioned`. Projects must push before buckets so Roadmap can resolve the Project lookup column.
+- **Sync posture:** two-way mirror with the SharePoint `Projects` list (`SHAREPOINT_INTEGRATION.md §3.2`): `pullProjects` reads routing-relevant fields inbound, while Owner and PRD remain Mission Control push-only (`docs/modules/sync/README.md`). Production site `/sites/plx-mission-control` has the list provisioned (cutover evidence: `artifacts/sync/2026-07-13-prod-site-cutover/`; P2 re-verify: `artifacts/sync/2026-07-22-elegant-architecture-hygiene/`). When the list is missing, pending rows are skipped with an audit note and `sync.sp` reads `Projects · unprovisioned`. Projects push before buckets so Roadmap can resolve the Project lookup column.
 - Decision record: `docs/product/PRD-project-entity.md`.
 
 ## Initiative / Bucket  (`MC_BUCKETS`, indexed by `MC_BUCKET_IDX`)

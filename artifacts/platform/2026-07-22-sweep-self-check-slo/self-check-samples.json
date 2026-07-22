@@ -1,0 +1,185 @@
+{
+  "endpoint": "/api/cursor/self-check",
+  "samples": [
+    {
+      "timestamp": "2026-07-22T13:58:35.506Z",
+      "offsetMs": 0,
+      "status": 200,
+      "durationMs": 104
+    },
+    {
+      "timestamp": "2026-07-22T14:00:24.861Z",
+      "offsetMs": 113793,
+      "status": 200,
+      "durationMs": 166
+    },
+    {
+      "timestamp": "2026-07-22T14:02:18.630Z",
+      "offsetMs": 227586,
+      "status": 200,
+      "durationMs": 142
+    },
+    {
+      "timestamp": "2026-07-22T14:04:12.473Z",
+      "offsetMs": 341379,
+      "status": 200,
+      "durationMs": 194
+    },
+    {
+      "timestamp": "2026-07-22T14:06:06.311Z",
+      "offsetMs": 455172,
+      "status": 200,
+      "durationMs": 240
+    },
+    {
+      "timestamp": "2026-07-22T14:08:00.495Z",
+      "offsetMs": 568966,
+      "status": 200,
+      "durationMs": 629
+    },
+    {
+      "timestamp": "2026-07-22T14:09:53.939Z",
+      "offsetMs": 682759,
+      "status": 200,
+      "durationMs": 281
+    },
+    {
+      "timestamp": "2026-07-22T14:11:47.608Z",
+      "offsetMs": 796552,
+      "status": 200,
+      "durationMs": 154
+    },
+    {
+      "timestamp": "2026-07-22T14:13:41.389Z",
+      "offsetMs": 910345,
+      "status": 200,
+      "durationMs": 143
+    },
+    {
+      "timestamp": "2026-07-22T14:15:35.168Z",
+      "offsetMs": 1024138,
+      "status": 200,
+      "durationMs": 131
+    },
+    {
+      "timestamp": "2026-07-22T14:17:29.126Z",
+      "offsetMs": 1137931,
+      "status": 200,
+      "durationMs": 287
+    },
+    {
+      "timestamp": "2026-07-22T14:19:22.806Z",
+      "offsetMs": 1251724,
+      "status": 200,
+      "durationMs": 181
+    },
+    {
+      "timestamp": "2026-07-22T14:21:16.714Z",
+      "offsetMs": 1365517,
+      "status": 200,
+      "durationMs": 295
+    },
+    {
+      "timestamp": "2026-07-22T14:23:10.594Z",
+      "offsetMs": 1479310,
+      "status": 200,
+      "durationMs": 383
+    },
+    {
+      "timestamp": "2026-07-22T14:25:04.219Z",
+      "offsetMs": 1593103,
+      "status": 200,
+      "durationMs": 216
+    },
+    {
+      "timestamp": "2026-07-22T14:26:57.955Z",
+      "offsetMs": 1706897,
+      "status": 200,
+      "durationMs": 158
+    },
+    {
+      "timestamp": "2026-07-22T14:28:51.736Z",
+      "offsetMs": 1820690,
+      "status": 200,
+      "durationMs": 144
+    },
+    {
+      "timestamp": "2026-07-22T14:30:45.670Z",
+      "offsetMs": 1934483,
+      "status": 200,
+      "durationMs": 287
+    },
+    {
+      "timestamp": "2026-07-22T14:32:39.383Z",
+      "offsetMs": 2048276,
+      "status": 200,
+      "durationMs": 206
+    },
+    {
+      "timestamp": "2026-07-22T14:34:33.202Z",
+      "offsetMs": 2162069,
+      "status": 200,
+      "durationMs": 226
+    },
+    {
+      "timestamp": "2026-07-22T14:36:29.023Z",
+      "offsetMs": 2275862,
+      "status": 200,
+      "durationMs": 2246
+    },
+    {
+      "timestamp": "2026-07-22T14:38:20.939Z",
+      "offsetMs": 2389655,
+      "status": 200,
+      "durationMs": 372
+    },
+    {
+      "timestamp": "2026-07-22T14:40:14.629Z",
+      "offsetMs": 2503448,
+      "status": 200,
+      "durationMs": 281
+    },
+    {
+      "timestamp": "2026-07-22T14:42:08.345Z",
+      "offsetMs": 2617241,
+      "status": 200,
+      "durationMs": 191
+    },
+    {
+      "timestamp": "2026-07-22T14:44:02.062Z",
+      "offsetMs": 2731034,
+      "status": 200,
+      "durationMs": 118
+    },
+    {
+      "timestamp": "2026-07-22T14:45:56.305Z",
+      "offsetMs": 2844828,
+      "status": 200,
+      "durationMs": 565
+    },
+    {
+      "timestamp": "2026-07-22T14:47:49.761Z",
+      "offsetMs": 2958621,
+      "status": 200,
+      "durationMs": 234
+    },
+    {
+      "timestamp": "2026-07-22T14:49:43.657Z",
+      "offsetMs": 3072414,
+      "status": 200,
+      "durationMs": 331
+    },
+    {
+      "timestamp": "2026-07-22T14:51:37.316Z",
+      "offsetMs": 3186207,
+      "status": 200,
+      "durationMs": 200
+    },
+    {
+      "timestamp": "2026-07-22T14:53:35.791Z",
+      "offsetMs": 3300000,
+      "status": 200,
+      "durationMs": 98
+    }
+  ]
+}

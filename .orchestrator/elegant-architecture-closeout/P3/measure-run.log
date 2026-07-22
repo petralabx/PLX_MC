@@ -1,0 +1,46 @@
+measure_start=2026-07-22T09:58:26.2009074-04:00
+measure: direct sweep bearer unavailable; using vercel trigger + self-check completion
+measure: starting windowMs=3300000 sweepTransport=vercel-trigger-self-check-completion events=42
+measure: endpoint=sweep offsetMs=0 status=200 durationMs=4373
+measure: endpoint=self-check offsetMs=0 status=200 durationMs=104
+measure: endpoint=self-check offsetMs=113793 status=200 durationMs=166
+measure: endpoint=self-check offsetMs=227586 status=200 durationMs=142
+measure: endpoint=sweep offsetMs=300000 status=200 durationMs=4478
+measure: endpoint=self-check offsetMs=341379 status=200 durationMs=194
+measure: endpoint=self-check offsetMs=455172 status=200 durationMs=240
+measure: endpoint=self-check offsetMs=568966 status=200 durationMs=629
+measure: endpoint=sweep offsetMs=600000 status=200 durationMs=4620
+measure: endpoint=self-check offsetMs=682759 status=200 durationMs=281
+measure: endpoint=self-check offsetMs=796552 status=200 durationMs=154
+measure: endpoint=sweep offsetMs=900000 status=200 durationMs=4295
+measure: endpoint=self-check offsetMs=910345 status=200 durationMs=143
+measure: endpoint=self-check offsetMs=1024138 status=200 durationMs=131
+measure: endpoint=self-check offsetMs=1137931 status=200 durationMs=287
+measure: endpoint=sweep offsetMs=1200000 status=200 durationMs=4487
+measure: endpoint=self-check offsetMs=1251724 status=200 durationMs=181
+measure: endpoint=self-check offsetMs=1365517 status=200 durationMs=295
+measure: endpoint=self-check offsetMs=1479310 status=200 durationMs=383
+measure: endpoint=sweep offsetMs=1500000 status=200 durationMs=4410
+measure: endpoint=self-check offsetMs=1593103 status=200 durationMs=216
+measure: endpoint=self-check offsetMs=1706897 status=200 durationMs=158
+measure: endpoint=sweep offsetMs=1800000 status=200 durationMs=5163
+measure: endpoint=self-check offsetMs=1820690 status=200 durationMs=144
+measure: endpoint=self-check offsetMs=1934483 status=200 durationMs=287
+measure: endpoint=self-check offsetMs=2048276 status=200 durationMs=206
+measure: endpoint=sweep offsetMs=2100000 status=200 durationMs=4597
+measure: endpoint=self-check offsetMs=2162069 status=200 durationMs=226
+measure: endpoint=self-check offsetMs=2275862 status=200 durationMs=2246
+measure: endpoint=self-check offsetMs=2389655 status=200 durationMs=372
+measure: endpoint=sweep offsetMs=2400000 status=200 durationMs=4236
+measure: endpoint=self-check offsetMs=2503448 status=200 durationMs=281
+measure: endpoint=self-check offsetMs=2617241 status=200 durationMs=191
+measure: endpoint=sweep offsetMs=2700000 status=200 durationMs=4467
+measure: endpoint=self-check offsetMs=2731034 status=200 durationMs=118
+measure: endpoint=self-check offsetMs=2844828 status=200 durationMs=565
+measure: endpoint=self-check offsetMs=2958621 status=200 durationMs=234
+measure: endpoint=sweep offsetMs=3000000 status=200 durationMs=4329
+measure: endpoint=self-check offsetMs=3072414 status=200 durationMs=331
+measure: endpoint=self-check offsetMs=3186207 status=200 durationMs=200
+measure: endpoint=sweep offsetMs=3300000 status=200 durationMs=4649
+measure: endpoint=self-check offsetMs=3300000 status=200 durationMs=98
+measure: complete sweep p50=4467 p95=5163 self-check p50=206 p95=629

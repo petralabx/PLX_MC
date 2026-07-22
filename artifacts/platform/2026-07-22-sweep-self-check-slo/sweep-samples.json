@@ -1,0 +1,77 @@
+{
+  "endpoint": "/api/cron/sweep",
+  "samples": [
+    {
+      "timestamp": "2026-07-22T13:58:35.401Z",
+      "offsetMs": 0,
+      "status": 200,
+      "durationMs": 4373
+    },
+    {
+      "timestamp": "2026-07-22T14:03:35.601Z",
+      "offsetMs": 300000,
+      "status": 200,
+      "durationMs": 4478
+    },
+    {
+      "timestamp": "2026-07-22T14:08:35.762Z",
+      "offsetMs": 600000,
+      "status": 200,
+      "durationMs": 4620
+    },
+    {
+      "timestamp": "2026-07-22T14:13:35.417Z",
+      "offsetMs": 900000,
+      "status": 200,
+      "durationMs": 4295
+    },
+    {
+      "timestamp": "2026-07-22T14:18:35.702Z",
+      "offsetMs": 1200000,
+      "status": 200,
+      "durationMs": 4487
+    },
+    {
+      "timestamp": "2026-07-22T14:23:35.448Z",
+      "offsetMs": 1500000,
+      "status": 200,
+      "durationMs": 4410
+    },
+    {
+      "timestamp": "2026-07-22T14:28:36.344Z",
+      "offsetMs": 1800000,
+      "status": 200,
+      "durationMs": 5163
+    },
+    {
+      "timestamp": "2026-07-22T14:33:35.719Z",
+      "offsetMs": 2100000,
+      "status": 200,
+      "durationMs": 4597
+    },
+    {
+      "timestamp": "2026-07-22T14:38:35.332Z",
+      "offsetMs": 2400000,
+      "status": 200,
+      "durationMs": 4236
+    },
+    {
+      "timestamp": "2026-07-22T14:43:35.549Z",
+      "offsetMs": 2700000,
+      "status": 200,
+      "durationMs": 4467
+    },
+    {
+      "timestamp": "2026-07-22T14:48:35.436Z",
+      "offsetMs": 3000000,
+      "status": 200,
+      "durationMs": 4329
+    },
+    {
+      "timestamp": "2026-07-22T14:53:35.692Z",
+      "offsetMs": 3300000,
+      "status": 200,
+      "durationMs": 4649
+    }
+  ]
+}

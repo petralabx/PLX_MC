@@ -176,6 +176,23 @@ describe("honesty helpers", () => {
     expect(resolveWebhooksEnabled({ enabled: true, configured: false })).toBe(false);
     expect(resolveWebhooksEnabled({ enabled: true, configured: true })).toBe(true);
   });
+
+  it("resolveLastSweepAgeMs parses UTC display stamp YYYY.MM.DD · HH:mm", () => {
+    const now = new Date("2026-07-20T16:40:00.000Z");
+    expect(resolveLastSweepAgeMs("2026.07.20 · 15:40", now)).toBe(3_600_000);
+  });
+
+  it("resolveLastSweepAgeMs returns null for absent or invalid stamps", () => {
+    const now = new Date("2026-07-16T18:00:00.000Z");
+    expect(resolveLastSweepAgeMs(undefined, now)).toBeNull();
+    expect(resolveLastSweepAgeMs("", now)).toBeNull();
+    expect(resolveLastSweepAgeMs("not-a-date", now)).toBeNull();
+    expect(resolveLastSweepAgeMs("2026.07.20", now)).toBeNull();
+    expect(resolveLastSweepAgeMs("2026.07.20 · 99:99", now)).toBeNull();
+    expect(resolveLastSweepAgeMs("2026.02.31 · 12:00", now)).toBeNull();
+    expect(resolveLastSweepAgeMs("2026-02-31T12:00:00.000Z", now)).toBeNull();
+    expect(resolveLastSweepAgeMs("2026-03-03T12:00:00", now)).toBeNull();
+  });
 });
 
 describe("probeGraphTokenOk fail-soft", () => {
@@ -232,7 +249,7 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
     expect(result).toMatchObject({
       syncMode: "off",
       cronConfigured: false,
-      syncEnabled: false,
+      inAppSchedulerEnabled: false,
       databaseBound: false,
       webhooksEnabled: false,
       mcpEnabled: false,
@@ -245,6 +262,7 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
       lastBoringEvalAt: null,
       lastBoringOutcome: null,
     });
+    expect(result).not.toHaveProperty("syncEnabled");
     expect(typeof result.lastSweepAgeMs === "number" || result.lastSweepAgeMs === null).toBe(true);
     expect(result.freshness).toEqual(
       expect.objectContaining({
@@ -313,7 +331,7 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
     });
 
     expect(honesty.mcpEnabled).toBe(true);
-    expect(honesty.syncEnabled).toBe(true);
+    expect(honesty.inAppSchedulerEnabled).toBe(true);
     expect(honesty.syncMode).toBe("in-app");
     expect(honesty.cronConfigured).toBe(true);
     expect(honesty.databaseBound).toBe(true);
@@ -340,6 +358,24 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
       probeGraphToken: async () => false,
     });
     expect(off.webhooksEnabled).toBe(false);
+  });
+
+  it("cron mode names inAppSchedulerEnabled false while syncMode stays cron", async () => {
+    vi.stubEnv("PLX_MC_SYNC_ENABLED", "");
+    vi.stubEnv("CRON_SECRET", "cron-secret");
+
+    const honesty = await buildHonestyFields({
+      lastSweep: "2026.07.20 · 15:40",
+      now: new Date("2026-07-20T16:40:00.000Z"),
+      loadRegisterTimestamps: async () => ({}),
+      probeGraphToken: async () => false,
+    });
+
+    expect(honesty.inAppSchedulerEnabled).toBe(false);
+    expect(honesty.cronConfigured).toBe(true);
+    expect(honesty.syncMode).toBe("cron");
+    expect(honesty.lastSweepAgeMs).toBe(3_600_000);
+    expect(honesty).not.toHaveProperty("syncEnabled");
   });
 
   it("buildHonestyFields folds injected probe into dataSource live discriminator", async () => {

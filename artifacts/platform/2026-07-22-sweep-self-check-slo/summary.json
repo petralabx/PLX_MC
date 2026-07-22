@@ -1,0 +1,23 @@
+{
+  "window": {
+    "targetMs": 3300000,
+    "actualMs": 3304892,
+    "startedAt": "2026-07-22T13:58:30.898Z",
+    "finishedAt": "2026-07-22T14:53:35.791Z"
+  },
+  "sweep": {
+    "count": 12,
+    "p50Ms": 4467,
+    "p95Ms": 5163,
+    "minMs": 4236,
+    "maxMs": 5163
+  },
+  "selfCheck": {
+    "count": 30,
+    "p50Ms": 206,
+    "p95Ms": 629,
+    "minMs": 98,
+    "maxMs": 2246
+  },
+  "percentileMethod": "nearest-rank on ascending durations"
+}

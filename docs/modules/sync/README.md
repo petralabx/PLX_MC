@@ -57,6 +57,13 @@ Routing mutations fail closed when required registers are stale.
 
 ### Maturity (honesty-oracle)
 
+- **`mc_self_check` cadence fields:** `syncMode` (`in-app` | `cron` | `off`) is
+  authoritative. `inAppSchedulerEnabled` mirrors `PLX_MC_SYNC_ENABLED=1` (in-app
+  scheduler only). `cronConfigured` reflects `CRON_SECRET` presence. Do not
+  infer cadence from `inAppSchedulerEnabled` alone when `syncMode` is `cron`.
+- **`lastSweepAgeMs`:** computed from `lastSweep` when it is canonical ISO or
+  the UTC display stamp `YYYY.MM.DD · HH:mm` (`repo.stamp()`); null when absent
+  or unparseable.
 - **Sync engine (delta) — current:** inbound delta poll + outbound push is the
   live correctness backbone (five-minute sweep).
 - **Graph change-notifications — deferred (P11):** subscription renewal /

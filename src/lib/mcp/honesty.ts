@@ -25,7 +25,7 @@ export type DataSource = "seed" | "live";
 export interface HonestyFields extends BoringGateFields {
   syncMode: SyncMode;
   cronConfigured: boolean;
-  syncEnabled: boolean;
+  inAppSchedulerEnabled: boolean;
   databaseBound: boolean;
   lastSweepAgeMs: number | null;
   freshness: SyncFreshnessResult;
@@ -55,13 +55,39 @@ export function resolveDatabaseBound(
   return !!(databaseUrl ?? "").trim();
 }
 
+/** UTC display stamp from sync repo.stamp(): YYYY.MM.DD · HH:mm */
+const LAST_SWEEP_DISPLAY_RE = /^(\d{4})\.(\d{2})\.(\d{2}) · (\d{2}):(\d{2})$/;
+
+function parseLastSweepInstant(lastSweep: string): number | null {
+  const trimmed = lastSweep.trim();
+  if (!trimmed) return null;
+
+  const display = LAST_SWEEP_DISPLAY_RE.exec(trimmed);
+  if (display) {
+    const [, y, mo, d, h, mi] = display;
+    const month = Number(mo);
+    const day = Number(d);
+    const hour = Number(h);
+    const minute = Number(mi);
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) {
+      return null;
+    }
+    return Date.UTC(Number(y), month - 1, day, hour, minute);
+  }
+
+  if (!trimmed.includes("T") || !trimmed.includes("-")) return null;
+  const iso = new Date(trimmed).getTime();
+  if (Number.isNaN(iso)) return null;
+  return iso;
+}
+
 export function resolveLastSweepAgeMs(
   lastSweep: string | null | undefined,
   now: Date = new Date()
 ): number | null {
-  if (!lastSweep) return null;
-  const t = new Date(lastSweep).getTime();
-  if (Number.isNaN(t)) return null;
+  if (lastSweep == null) return null;
+  const t = parseLastSweepInstant(lastSweep);
+  if (t == null) return null;
   return Math.max(0, now.getTime() - t);
 }
 
@@ -135,7 +161,7 @@ export async function buildHonestyFields(opts?: {
   return {
     syncMode: resolveSyncMode({ syncEnabled: syncOn, cronConfigured: cronOn }),
     cronConfigured: cronOn,
-    syncEnabled: syncOn,
+    inAppSchedulerEnabled: syncOn,
     databaseBound,
     lastSweepAgeMs: resolveLastSweepAgeMs(opts?.lastSweep, now),
     freshness,

@@ -26,8 +26,8 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
 
   test("index lists the seed catalog; active SOPs are ready", async ({ page }) => {
     const rows = page.locator("[data-testid='gs-row']");
-    // Fleet SOPs (8) + PLX-Brain pointer SOPs (3).
-    await expect(rows).toHaveCount(11);
+    // Fleet SOPs (8) + PLX-Brain pointers (3) + Portal pointers (3).
+    await expect(rows).toHaveCount(14);
 
     const collab = page.locator("[data-testid='gs-row'][data-slug='mc-sop-collaborator']");
     await expect(collab).toBeVisible();
@@ -61,6 +61,17 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
     await expect(brainAsk).toBeVisible();
     await expect(brainAsk).toHaveAttribute("data-state", "ready");
     await expect(brainAsk).toContainText("Ask the Brain");
+
+    for (const slug of [
+      "mc-sop-portal-internal",
+      "mc-sop-portal-uat",
+      "mc-sop-portal-external",
+    ]) {
+      const portalSop = page.locator(`[data-testid='gs-row'][data-slug='${slug}']`);
+      await expect(portalSop).toBeVisible();
+      await expect(portalSop).toHaveAttribute("data-state", "ready");
+      await expect(portalSop).toContainText("Active");
+    }
 
     await page.screenshot({ path: `${EVID}/index.png`, fullPage: true });
   });

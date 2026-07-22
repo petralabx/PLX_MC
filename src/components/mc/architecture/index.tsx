@@ -1,12 +1,17 @@
 "use client";
 
-// Architecture catalog — calm editorial lens over the C4 diagram pack.
+// Architecture screen — interactive C4 canvas with static SVG degraded fallback.
 // Wired into the MC shell as Screen "architecture" (System of record group).
-// SVGs under public/architecture/ are generated consumers of docs/architecture/
-// (canonical truth remains AGENTS.md + docs/modules/*).
+
+import { useEffect, useState } from "react";
+
+import { api } from "@/lib/api";
+import type { ArchitectureModel } from "@/lib/architecture";
 
 import type { ScreenProps } from "../route";
+import { ArchitectureCanvas } from "./canvas";
 import { ProvenancePanel } from "./provenance-panel";
+import { StaticFallback } from "./static-fallback";
 
 import "./architecture.css";
 
@@ -46,9 +51,48 @@ export function ArchitectureView({ route, nav }: ScreenProps) {
   const diagram: ArchitectureDiagram = isDiagram(route.diagram) ? route.diagram : "context";
   const meta = DIAGRAMS.find((d) => d.id === diagram) ?? DIAGRAMS[0];
 
+  const [model, setModel] = useState<ArchitectureModel | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const kick = window.setTimeout(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setModelError(null);
+      api<ArchitectureModel>("/architecture/model")
+        .then((payload) => {
+          if (cancelled) return;
+          setModel(payload);
+        })
+        .catch((err: Error) => {
+          if (cancelled) return;
+          setModelError(err.message);
+          setModel(null);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(kick);
+    };
+  }, []);
+
   function select(id: ArchitectureDiagram) {
+    const base = `${window.location.pathname}?screen=architecture&diagram=${id}`;
+    try {
+      history.replaceState(null, "", base);
+    } catch {
+      /* ignore */
+    }
     nav("architecture", { diagram: id });
   }
+
+  const useFallback = !loading && (!model || modelError);
 
   return (
     <div className="mc-main" data-testid="arch-screen">
@@ -57,8 +101,9 @@ export function ArchitectureView({ route, nav }: ScreenProps) {
           <span className="kk">System of record · architecture</span>
           <h1>Architecture</h1>
           <p className="sub">
-            A calm catalog of the maintained C4 guide diagrams — context, containers, and
-            task lifecycle. Read-only; the repo docs remain the authority.
+            Interactive C4 projection of the maintained architecture pack — context,
+            containers, and task lifecycle. Read-only; the repo docs remain the
+            authority.
           </p>
         </div>
         <div className="r r-gap-2">
@@ -72,14 +117,27 @@ export function ArchitectureView({ route, nav }: ScreenProps) {
           Generated consumer — <strong>not canonical</strong>.
         </p>
         <p className="arch-disclosure-body">
-          These SVGs are exported guides linked to repository documentation. If a diagram
-          disagrees with <code className="arch-icode">AGENTS.md</code> or a module
-          contract under <code className="arch-icode">docs/modules/</code>, the docs win.
-          Canonical pack: <code className="arch-icode">docs/architecture/</code>.
+          This renderer projects{" "}
+          <code className="arch-icode">docs/architecture/source-map.json</code>. If
+          a diagram disagrees with <code className="arch-icode">AGENTS.md</code> or a
+          module contract under <code className="arch-icode">docs/modules/</code>, the
+          docs win. Canonical pack:{" "}
+          <code className="arch-icode">docs/architecture/</code>.
         </p>
       </aside>
 
-      <div className="arch-toolbar">
+      {modelError ? (
+        <div
+          className="arch-error-banner"
+          role="alert"
+          data-testid="arch-error-banner"
+        >
+          <strong>Model unavailable</strong> — {modelError}. Showing static SVG
+          fallback.
+        </div>
+      ) : null}
+
+      <div className="arch-toolbar" data-no-print>
         <div className="arch-switcher" role="tablist" aria-label="Architecture diagram">
           {DIAGRAMS.map((d) => {
             const on = d.id === diagram;
@@ -106,28 +164,20 @@ export function ArchitectureView({ route, nav }: ScreenProps) {
 
       <hr className="arch-rule" />
 
-      <figure className="arch-figure" data-testid="arch-figure">
-        {/* eslint-disable-next-line @next/next/no-img-element -- static SVG guide asset */}
-        <img
-          className="arch-svg"
-          src={`/architecture/${diagram}.svg`}
-          alt={`${meta.title} architecture diagram`}
-          data-testid="arch-svg"
+      {loading ? (
+        <p className="arch-loading" data-testid="arch-loading">
+          Loading architecture model…
+        </p>
+      ) : useFallback ? (
+        <StaticFallback diagram={diagram} title={meta.title} />
+      ) : model ? (
+        <ArchitectureCanvas
+          key={diagram}
+          model={model}
+          viewId={diagram}
+          diagramLabel={meta.label}
         />
-        <figcaption className="arch-caption">
-          <span>
-            Source Mermaid:{" "}
-            <code className="arch-icode">docs/architecture/{diagram}.mmd</code>
-          </span>
-          <span className="arch-caption-sep" aria-hidden>
-            ·
-          </span>
-          <span>
-            Served copy:{" "}
-            <code className="arch-icode">public/architecture/{diagram}.svg</code>
-          </span>
-        </figcaption>
-      </figure>
+      ) : null}
 
       <ProvenancePanel view={diagram} />
 

@@ -12,7 +12,7 @@ export const RDS_CA_BUNDLE_PATH = join(
   repoRoot,
   "config",
   "certs",
-  "aws-rds-global-bundle.pem"
+  "aws-rds-global-bundle.json"
 );
 
 export function resolveDbSsl(env = process.env) {
@@ -26,12 +26,11 @@ export function resolveDbSsl(env = process.env) {
   if (inlineCa) {
     return { rejectUnauthorized: true, ca: inlineCa };
   }
-  const caPath = env.PLX_MC_DB_CA_CERT_PATH?.trim() || RDS_CA_BUNDLE_PATH;
   try {
-    return { rejectUnauthorized: true, ca: readFileSync(caPath, "utf8") };
+    return { rejectUnauthorized: true, ca: JSON.parse(readFileSync(RDS_CA_BUNDLE_PATH, "utf8")).pem };
   } catch (err) {
     console.error(
-      `[db] CA bundle unreadable at ${caPath} (${err instanceof Error ? err.message : String(err)}) — verifying against system trust store.`
+      `[db] CA bundle unreadable at ${RDS_CA_BUNDLE_PATH} (${err instanceof Error ? err.message : String(err)}) — verifying against system trust store.`
     );
     return { rejectUnauthorized: true };
   }

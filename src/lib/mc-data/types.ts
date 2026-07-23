@@ -251,6 +251,11 @@ export interface Task {
   // task whose executor is a needs-approval agent can advance into the doing band
   // (see lib/mc-data/policy.ts). DB-only; no SharePoint column.
   agentRunApproved?: boolean;
+  // Runtime approval gates (TASK-629, A2A input-required pattern): an agent hits
+  // a decision point mid-run and raises a gate; the task cannot change stage
+  // while any gate is pending, and a human other than the requester must decide
+  // it (TASK-630 separation of duties). DB-only; no SharePoint column.
+  approvalGates?: ApprovalGate[];
   reqs: string[];
   repos: string[];
   targetEnv?: TargetEnv;
@@ -270,6 +275,27 @@ export interface Task {
   blockedReason?: string;
   merge?: { sha: string; on: string };
   userCreated?: boolean;
+}
+
+// ─── Runtime approval gates (TASK-629/630) ───────────────────────────────────
+
+export type ApprovalGateStatus = "pending" | "approved" | "rejected";
+
+export interface ApprovalGate {
+  /** apg_* id. */
+  id: string;
+  /** What the agent needs a human to decide. */
+  reason: string;
+  /** Audit label of the requesting operator/agent session — never a grant input. */
+  requestedBy: string;
+  /** Agent runtime that raised the gate (mcp context). */
+  requestedRuntime?: string;
+  requestedAt: string;
+  status: ApprovalGateStatus;
+  /** Deciding human's audit label; must differ from requestedBy (TASK-630). */
+  decidedBy?: string;
+  decidedAt?: string;
+  note?: string;
 }
 
 export type InboxKind = "approval" | "review" | "conflict" | "mention" | "assigned";

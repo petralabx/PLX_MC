@@ -130,6 +130,7 @@ export function Sidebar({
           "Inbox",
           unread ? <span className="badge acc">{unread}</span> : null
         )}
+        {item("approvals", "✓", "Approvals")}
       </div>
       <div className="grp">
         <div className="h">Views</div>

@@ -30,6 +30,7 @@ const ADMIN_CAPABILITIES: readonly Capability[] = [
   "repo.approve",
   "routing.policy.write",
   "sync.mutate",
+  "approval.decide",
 ];
 
 const OWNER_CAPABILITIES: readonly Capability[] = [
@@ -55,6 +56,7 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "routing.suggest",
   "routing.propose",
   "routing.resolve",
+  "approval.request",
 ];
 
 const SERVICE_GRANTS: Record<string, readonly Capability[]> = {

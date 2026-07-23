@@ -28,6 +28,8 @@ export const CAPABILITIES = [
   "permissions.manage",
   "sync.mutate",
   "sync.service.write",
+  "approval.request",
+  "approval.decide",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];

@@ -47,6 +47,8 @@ tasks are not stranded at the EN-003 Planned gate. An explicit
 `accountableOwner` in the request still wins.
 
 **PR stamp:** `mc_checkout_task` → `meta.links.checkoutStamp` = `MC-Checkout: dsp_*`.
+
+**Approval gates (TASK-629):** `mc_request_approval` (`POST /api/cursor/request-approval`) raises a runtime approval gate on a task (`approval.request`); the task freezes input-required until a human decides in the Approvals inbox.
 Checkout also backfills a missing task `accountableOwner` through the same
 resolver. Operator/service aliases that are not people
 (for example `cos@petrasoap.com`) resolve to the PLX default accountable human,

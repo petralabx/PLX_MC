@@ -16,6 +16,23 @@
 
 ## Lessons
 
+### 2026-07-23 (UTC) — Edge middleware bundle rejects Node APIs in reachable modules
+
+- **What happened:** Adding an fs-read of the vendored RDS CA bundle to
+  `src/lib/db/tls.ts` broke the production build (CI + Vercel): the Edge
+  Middleware bundle reaches `db/` through
+  `permissions/repository → auth → middleware`, and Turbopack rejects
+  `process.cwd()`/`node:fs` usage anywhere in an edge-bundled module — even
+  inside function bodies the middleware never calls, and even when the module
+  only enters the graph via a lazy `await import`.
+- **Root cause:** Assumed "Node API not invoked at module scope" was enough;
+  the edge compiler checks usage sites, not execution reachability.
+- **Rule going forward:** Assets a server module needs at runtime ship as
+  JSON modules (bundler-native, edge-safe), not fs reads — see
+  `config/certs/aws-rds-global-bundle.json`. Anything importable from
+  `src/lib/auth`, `src/lib/permissions`, or `src/lib/db` must stay free of
+  Node-API usage; verify with `npm run build`, not just typecheck/tests.
+
 ### 2026-07-20 (ET) — User-level PLX-MC MCP pinned portal while editing the hub
 
 - **What happened:** PR #152 compliance blocked because checkout

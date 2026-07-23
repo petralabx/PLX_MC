@@ -1,0 +1,44 @@
+# Sweep cadence redundancy (TASK-624) — a second, independent scheduler for
+# the SharePoint mirror sweep so Vercel Cron is no longer a single point of
+# failure. The sweep endpoint is idempotent and rate-bounded by its own
+# freshness stamps; an extra tick is harmless, a missed Vercel tick is now
+# covered within 15 minutes from different infrastructure.
+#
+# Requires the repo secret PLX_MC_CRON_SECRET (same value as the Vercel
+# CRON_SECRET env). Absent secret → the job no-ops instead of failing, so
+# forks and staging clones stay quiet.
+
+name: sweep-redundancy
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *" # every 15 min, offset from Vercel's */5 ticks
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger sweep (redundant scheduler)
+        env:
+          CRON_SECRET: ${{ secrets.PLX_MC_CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "PLX_MC_CRON_SECRET not configured — redundancy tick skipped."
+            exit 0
+          fi
+          status=$(curl -sS -o /tmp/sweep-body -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 90 \
+            "https://mc.plxcustomer.io/api/cron/sweep") || status=000
+          echo "sweep endpoint returned HTTP $status"
+          cat /tmp/sweep-body || true
+          # 503 = cron intentionally unconfigured on the deployment; not a failure
+          # of the redundancy path itself.
+          case "$status" in
+            200|503) exit 0 ;;
+            *) exit 1 ;;
+          esac

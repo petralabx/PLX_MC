@@ -90,9 +90,11 @@ import {
 import {
   buildReplayKey,
   disableSubscription,
+  ensureAllListSubscriptions,
   ensureListSubscription,
   persistSubscription,
   renewExpiringSubscriptions,
+  SUBSCRIBED_LIST_KEYS,
   verifyClientState,
   verifyNotificationIdentity,
 } from "@/lib/sync/subscriptions";
@@ -235,5 +237,72 @@ describe("clientState + subscription/resource identity", () => {
     expect(a).toBe(
       createHash("sha256").update("sub-1|sites/s/lists/t|updated|9|W/\"1\"").digest("hex")
     );
+  });
+});
+
+describe("ensureAllListSubscriptions — P11 go-live (TASK-626)", () => {
+  const LIST_IDS = { todos: "lt", risks: "lr", projects: "lp", roadmap: "lm" };
+
+  function deps(overrides: Record<string, unknown> = {}) {
+    return {
+      enabled: () => true,
+      configured: () => true,
+      clientState: () => "cs",
+      notificationUrl: () => "https://mc.example/api/sync/webhook",
+      siteContext: async () => ({ siteId: "site-1", listIds: LIST_IDS }),
+      now: () => new Date("2026-07-14T12:00:00.000Z"),
+      ...overrides,
+    };
+  }
+
+  it("creates local placeholders for every subscribed register (idempotent)", async () => {
+    const first = await ensureAllListSubscriptions(deps({ allowLiveGraph: false }));
+    expect(first).toHaveLength(SUBSCRIBED_LIST_KEYS.length);
+    expect(first.every((r) => r.created && !r.createdLive)).toBe(true);
+
+    const second = await ensureAllListSubscriptions(deps({ allowLiveGraph: false }));
+    expect(second.every((r) => !r.created)).toBe(true);
+  });
+
+  it("live mode replaces local placeholders with real Graph subscriptions", async () => {
+    await ensureAllListSubscriptions(deps({ allowLiveGraph: false }));
+    let n = 0;
+    const create = vi.fn(async (input: { resource: string }) => ({
+      id: `sub-live-${(n += 1)}`,
+      resource: input.resource,
+      changeType: "updated",
+      notificationUrl: "https://mc.example/api/sync/webhook",
+      expirationDateTime: "2026-07-16T12:00:00.000Z",
+      clientState: "cs",
+    }));
+    const results = await ensureAllListSubscriptions(deps({ allowLiveGraph: true, create }));
+    expect(create).toHaveBeenCalledTimes(SUBSCRIBED_LIST_KEYS.length);
+    expect(results.every((r) => r.createdLive)).toBe(true);
+    // Placeholders were disabled; live rows are the only active ones.
+    const live = [...db.subscriptions.values()].filter((r) => r.status === "active");
+    expect(live).toHaveLength(SUBSCRIBED_LIST_KEYS.length);
+    expect(live.every((r) => r.id.startsWith("sub-live-"))).toBe(true);
+  });
+
+  it("live mode keeps existing live subscriptions (no churn)", async () => {
+    let n = 0;
+    const create = vi.fn(async (input: { resource: string }) => ({
+      id: `sub-live-${(n += 1)}`,
+      resource: input.resource,
+      changeType: "updated",
+      notificationUrl: "https://mc.example/api/sync/webhook",
+      expirationDateTime: "2026-07-16T12:00:00.000Z",
+      clientState: "cs",
+    }));
+    await ensureAllListSubscriptions(deps({ allowLiveGraph: true, create }));
+    create.mockClear();
+    const again = await ensureAllListSubscriptions(deps({ allowLiveGraph: true, create }));
+    expect(create).not.toHaveBeenCalled();
+    expect(again.every((r) => !r.created)).toBe(true);
+  });
+
+  it("returns empty when the webhook is disabled or unconfigured", async () => {
+    expect(await ensureAllListSubscriptions(deps({ enabled: () => false }))).toEqual([]);
+    expect(await ensureAllListSubscriptions(deps({ configured: () => false }))).toEqual([]);
   });
 });

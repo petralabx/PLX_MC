@@ -46,6 +46,47 @@ export interface EventRow {
 
 // Keyset pagination on the monotonic `seq` — the clean export cursor. Optional
 // `kind` filter for a typed consumer (e.g. only gate.* or pr.* events).
+/** Newest-first events of the given kinds — evaluation-loop source (TASK-632). */
+export async function eventsByKinds(kinds: string[], limit = 5000): Promise<EventRow[]> {
+  const rows = await query<{
+    seq: string;
+    ts: Date;
+    kind: string;
+    actor: string;
+    repo: string | null;
+    task_id: string | null;
+    pr: string | null;
+    payload: Record<string, unknown>;
+  }>(
+    `SELECT seq, ts, kind, actor, repo, task_id, pr, payload
+       FROM mc_events
+      WHERE kind = ANY($1::text[])
+      ORDER BY seq DESC LIMIT $2`,
+    [kinds, limit]
+  );
+  return rows.map((r) => ({
+    seq: String(r.seq),
+    ts: r.ts instanceof Date ? r.ts.toISOString() : String(r.ts),
+    kind: r.kind,
+    actor: r.actor,
+    repo: r.repo,
+    taskId: r.task_id,
+    pr: r.pr,
+    payload: r.payload,
+  }));
+}
+
+/** Timestamp of the newest event of a kind — used for alert deduping. */
+export async function latestEventAt(kind: string): Promise<string | null> {
+  const rows = await query<{ ts: Date | string }>(
+    `SELECT ts FROM mc_events WHERE kind = $1 ORDER BY seq DESC LIMIT 1`,
+    [kind]
+  );
+  const ts = rows[0]?.ts;
+  if (!ts) return null;
+  return ts instanceof Date ? ts.toISOString() : ts;
+}
+
 export async function eventTaskIdByDedupKey(dedupKey: string): Promise<string | null> {
   const rows = await query<{ task_id: string | null }>(
     `SELECT task_id FROM mc_events WHERE dedup_key = $1 LIMIT 1`,

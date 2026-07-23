@@ -99,6 +99,29 @@ rolloutHealth(); // pilots + fuzzy-off invariant
 - `db/migrations/018_routing_links_and_task_sequence.sql`
 - `scripts/test-routing-postgres.mjs`
 
+## Evaluation loop (Phase 5 — TASK-632..635)
+
+- **Outcome metrics** (`src/lib/routing/outcomes.ts`): per-runtime success
+  rate, rework (re-checkout after completion), median checkout→completion
+  cycle time, and session token/cost telemetry — computed from the
+  append-only `mc_events` substrate (kinds `checkout`, `task.completed`,
+  `agent.session_telemetry`). Surfaced at `GET /api/agent-metrics`.
+- **Session telemetry** (TASK-633): agents report tokens/cost at session
+  close via `mc_report_session_telemetry`
+  (`POST /api/cursor/session-telemetry`, `telemetry.report` capability),
+  deduped per sessionId.
+- **Metrics → suggestions** (TASK-634): every `mc_suggest_work` response
+  carries an `evaluation` envelope — the effective autonomy level and the
+  requesting runtime's outcome metrics (fail-open). Scoring weights are
+  unchanged; evaluation context informs the operator/agent, demotion still
+  goes through rollout thresholds.
+- **Autonomy dial** (TASK-635, `src/lib/routing/autonomy.ts` +
+  `config/autonomy-dial.json`): per-repo/per-bucket operator dial that can
+  only LOWER effective autonomy below the pilot cohort mode
+  (shadow < suggestion < confirmation). Enforced at suggest availability and
+  again at confirm/create time for service actors (`autonomy_restricted`
+  403); humans always decide.
+
 ## Dependencies
 
 - Depends on: `src/lib/db` (`query`, `TxQuery`, `withTransaction`); Postgres

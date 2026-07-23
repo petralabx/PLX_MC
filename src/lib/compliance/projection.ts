@@ -4,14 +4,16 @@
 // action_required routing proposals (see proposeRoutingFromPr in service.ts).
 
 import { ApiError } from "@/lib/api/route";
-import { permissionsEnforcementEnabled } from "@/lib/auth";
 import type { PullRequest, StageKey, Task } from "@/lib/mc-data";
 import {
-  authorize,
   COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
   type PermissionActor,
 } from "@/lib/permissions";
-import { findServicePrincipalById } from "@/lib/permissions/repository";
+import {
+  authorizeStaged,
+  recordUnresolvedActorDenial,
+  resolveStagedServicePrincipal,
+} from "@/lib/permissions/enforcement";
 import { patchTask } from "@/lib/sync/state";
 import { getEntity } from "@/lib/sync/repo";
 import * as complianceRepo from "./repo";
@@ -49,30 +51,31 @@ export async function requireProjectionAuthorized(
   resource: { type: "task"; id: string; repos?: string[]; stage?: string },
   context?: { repositoryId?: string }
 ): Promise<PermissionActor> {
-  let status: "active" | "revoked" = "active";
-  if (permissionsEnforcementEnabled()) {
-    const persisted = await findServicePrincipalById(
-      COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID
+  const staged = await resolveStagedServicePrincipal(
+    COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID
+  );
+  if (!staged.actor) {
+    recordUnresolvedActorDenial({
+      site: "compliance.projection",
+      capability,
+      actorKind: "service",
+      actorId: COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
+      resource,
+    });
+    throw new ApiError(
+      "forbidden",
+      "Durable sp_compliance_projection service principal is missing.",
+      403
     );
-    if (!persisted) {
-      throw new ApiError(
-        "forbidden",
-        "Durable sp_compliance_projection service principal is missing.",
-        403
-      );
-    }
-    status = persisted.status;
   }
-  const actor: PermissionActor = {
-    kind: "service",
-    id: COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
-    status,
-  };
-  const decision = authorize({
-    actor,
+  const decision = authorizeStaged({
+    site: "compliance.projection",
     capability,
     resource,
     context,
+    appliedActor: staged.actor,
+    shadowActor: staged.shadowActor,
+    shadowMissing: staged.shadowMissing,
   });
   if (!decision.allowed) {
     throw new ApiError(
@@ -81,7 +84,7 @@ export async function requireProjectionAuthorized(
       403
     );
   }
-  return actor;
+  return staged.actor;
 }
 
 async function setProgress(taskId: string, evt: PrEvent): Promise<void> {

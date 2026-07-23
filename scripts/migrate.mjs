@@ -14,6 +14,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
+import { resolveDbSsl } from "./lib/db-ssl.mjs";
 
 const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 const NAME_RE = /^(\d{3})_[a-z0-9_]+\.sql$/;
@@ -40,11 +41,11 @@ async function main() {
     seen.set(m[1], f);
   }
 
-  // Strip sslmode from the URL — it would override the ssl option below, and
-  // this box has no RDS CA bundle for verify-full.
+  // Strip sslmode from the URL — it would override the ssl option below;
+  // verification config comes from scripts/lib/db-ssl.mjs (TASK-623).
   const client = new Client({
     connectionString: url.replace(/([?&])sslmode=[^&]+&?/, "$1").replace(/[?&]$/, ""),
-    ssl: { rejectUnauthorized: false },
+    ssl: resolveDbSsl(),
   });
   await client.connect();
   try {

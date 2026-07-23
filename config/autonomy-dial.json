@@ -1,0 +1,5 @@
+{
+  "$comment": "Autonomy-level dial per repo/bucket (TASK-635). Operator-owned overrides that can only LOWER routing autonomy below the pilot cohort's effective mode (shadow < suggestion < confirmation) — a dial can never raise autonomy past the rollout thresholds. Unknown ids/modes are ignored (fail to cohort mode). Owner: Vince; enforcement: src/lib/routing/autonomy.ts (suggest availability + confirm-time assertion).",
+  "repos": {},
+  "buckets": {}
+}

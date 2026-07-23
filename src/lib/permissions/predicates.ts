@@ -32,7 +32,8 @@ export function evaluateContext(
       capability === "project.create" ||
       capability === "project.update" ||
       capability === "permissions.manage" ||
-      capability === "repo.approve")
+      capability === "repo.approve" ||
+      capability === "approval.decide")
   ) {
     return "context_denied";
   }

@@ -9,17 +9,21 @@ const m = vi.hoisted(() => ({
   enabled: true,
   configured: true,
   clientState: "test-client-state",
+  inlineDrain: false,
   enqueue: vi.fn(),
+  drain: vi.fn(async () => ({ claimed: 0, processed: 0, failed: 0 })),
 }));
 
 vi.mock("@/lib/secrets", () => ({
   graphWebhookEnabled: () => m.enabled,
   graphWebhookConfigured: () => m.configured,
   graphWebhookClientState: () => m.clientState,
+  graphInlineDrainEnabled: () => m.inlineDrain,
 }));
 
 vi.mock("@/lib/sync/notification-queue", () => ({
   enqueueNotifications: m.enqueue,
+  processNotificationQueue: () => m.drain(),
 }));
 
 import { GET, POST } from "@/app/api/sync/webhook/route";
@@ -30,6 +34,8 @@ beforeEach(() => {
   m.enabled = true;
   m.configured = true;
   m.clientState = "test-client-state";
+  m.inlineDrain = false;
+  m.drain.mockClear();
   m.enqueue.mockReset().mockResolvedValue({
     accepted: 1,
     duplicates: 0,
@@ -129,5 +135,51 @@ describe("Graph notification delivery", () => {
       ],
       { expectedClientState: "test-client-state" }
     );
+  });
+});
+
+describe("inline drain after ack (TASK-627)", () => {
+  const notifyBody = {
+    value: [
+      {
+        subscriptionId: "sub-1",
+        clientState: "test-client-state",
+        changeType: "updated",
+        resource: "sites/s/lists/l",
+        resourceData: { id: "42" },
+      },
+    ],
+  };
+
+  function notifyReq(): Request {
+    return new Request("http://test/api/sync/webhook", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(notifyBody),
+    });
+  }
+
+  it("drains the queue after acking when enabled", async () => {
+    m.inlineDrain = true;
+    const resp = await POST(notifyReq(), ctx);
+    expect(resp.status).toBe(200);
+    await new Promise((r) => setImmediate(r));
+    expect(m.drain).toHaveBeenCalledTimes(1);
+  });
+
+  it("kill switch off: ack only, cron drain remains the path", async () => {
+    m.inlineDrain = false;
+    const resp = await POST(notifyReq(), ctx);
+    expect(resp.status).toBe(200);
+    await new Promise((r) => setImmediate(r));
+    expect(m.drain).not.toHaveBeenCalled();
+  });
+
+  it("nothing accepted: no inline drain", async () => {
+    m.inlineDrain = true;
+    m.enqueue.mockResolvedValue({ accepted: 0, duplicates: 1, rejected: 0, results: [] });
+    await POST(notifyReq(), ctx);
+    await new Promise((r) => setImmediate(r));
+    expect(m.drain).not.toHaveBeenCalled();
   });
 });

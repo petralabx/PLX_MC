@@ -1,11 +1,10 @@
 // P4: sync.mutate (session) + sync.service.write (cron) authorization.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/route";
 import { authorize, SYNC_INBOUND_SERVICE_PRINCIPAL_ID } from "@/lib/permissions";
 
 const authState = vi.hoisted(() => ({
   session: null as { user?: { oid?: string | null; email?: string | null } } | null,
-  enforcement: false,
   user: null as { entraOid: string; accessRole: "owner" | "admin" | "member"; status: "active" | "revoked" } | null,
   service: null as { id: string; name: string; status: "active" | "revoked" } | null,
   serviceLookups: 0,
@@ -13,8 +12,10 @@ const authState = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth", () => ({
   auth: async () => authState.session,
-  permissionsEnforcementEnabled: () => authState.enforcement,
-  hydrateMcUserByOid: async (oid: string) =>
+}));
+
+vi.mock("@/lib/permissions/repository", () => ({
+  findMcUserByEntraOid: async (oid: string) =>
     authState.user && authState.user.entraOid === oid
       ? {
           id: "u1",
@@ -25,34 +26,32 @@ vi.mock("@/lib/auth", () => ({
           status: authState.user.status,
         }
       : null,
-  permissionActorFromMcUser: (user: {
-    entraOid: string;
-    accessRole: "owner" | "admin" | "member";
-    status: "active" | "revoked";
-  }) => ({
-    kind: "human" as const,
-    id: user.entraOid,
-    role: user.accessRole,
-    status: user.status,
-  }),
-}));
-
-vi.mock("@/lib/permissions/repository", () => ({
   findServicePrincipalById: async (id: string) => {
     authState.serviceLookups += 1;
     return authState.service?.id === id ? authState.service : null;
   },
 }));
 
+vi.mock("@/lib/permissions/decision-log", () => ({
+  recordPermissionDecision: vi.fn(async () => true),
+}));
+
 import { requireSyncMutateActor, requireSyncServiceWrite } from "@/lib/sync/engine";
 
 beforeEach(() => {
   authState.session = null;
-  authState.enforcement = false;
   authState.user = null;
   authState.service = null;
   authState.serviceLookups = 0;
 });
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+function enableEnforcement() {
+  vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED", "1");
+}
 
 describe("requireSyncMutateActor (session)", () => {
   it("allows admin session oid and ignores any caller-supplied actor concept", async () => {
@@ -77,7 +76,7 @@ describe("requireSyncMutateActor (session)", () => {
   });
 
   it("denies member role when enforcement hydrates a member (no sync.mutate)", async () => {
-    authState.enforcement = true;
+    enableEnforcement();
     authState.session = { user: { oid: "entra-member-1" } };
     authState.user = { entraOid: "entra-member-1", accessRole: "member", status: "active" };
     await expect(requireSyncMutateActor()).rejects.toMatchObject({
@@ -87,7 +86,7 @@ describe("requireSyncMutateActor (session)", () => {
   });
 
   it("allows owner/admin when enforcement hydrates grants", async () => {
-    authState.enforcement = true;
+    enableEnforcement();
     authState.session = { user: { oid: "entra-owner-1" } };
     authState.user = { entraOid: "entra-owner-1", accessRole: "owner", status: "active" };
     const { oid } = await requireSyncMutateActor();
@@ -97,7 +96,7 @@ describe("requireSyncMutateActor (session)", () => {
 
 describe("requireSyncServiceWrite (cron / inbound)", () => {
   it("allows active durable sp_sync_inbound when enforcement is enabled", async () => {
-    authState.enforcement = true;
+    enableEnforcement();
     authState.service = {
       id: SYNC_INBOUND_SERVICE_PRINCIPAL_ID,
       name: "SharePoint inbound sync",
@@ -115,7 +114,7 @@ describe("requireSyncServiceWrite (cron / inbound)", () => {
   });
 
   it("denies missing or revoked persisted service principal when enforcement is enabled", async () => {
-    authState.enforcement = true;
+    enableEnforcement();
     await expect(requireSyncServiceWrite()).rejects.toMatchObject({
       code: "forbidden",
       status: 403,
@@ -133,7 +132,6 @@ describe("requireSyncServiceWrite (cron / inbound)", () => {
   });
 
   it("flag-off remains DB-free and operator context cannot affect grants", async () => {
-    authState.enforcement = false;
     const actor = await requireSyncServiceWrite({
       operatorContext: "owner@petrasoap.com",
     });

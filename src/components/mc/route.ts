@@ -29,6 +29,7 @@ export const SCREEN_VALUES = [
   "architecture",
   "ai-spend",
   "routing-inbox",
+  "approvals",
 ] as const;
 
 export type Screen = (typeof SCREEN_VALUES)[number];

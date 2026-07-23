@@ -8,7 +8,7 @@
 
 import { AGENTS, CURRENT_USER, HUMANS, STAGE_IDX } from "./data";
 import { evidenceComplete } from "./helpers";
-import type { StageKey, Task } from "./types";
+import type { ApprovalGate, StageKey, Task } from "./types";
 
 // The last stage a task may occupy without a human accountable owner.
 export const ACCOUNTABLE_GATE_STAGE: StageKey = "planned";
@@ -59,9 +59,23 @@ export function agentRunApprovalNeeded(
   return !!executor && executor.mode === "approve" && !task.agentRunApproved;
 }
 
+// Runtime approval gates (TASK-629): the A2A input-required state.
+export function pendingApprovalGates(
+  task: Pick<Task, "approvalGates">
+): ApprovalGate[] {
+  return (task.approvalGates ?? []).filter((g) => g.status === "pending");
+}
+
+export function inputRequired(task: Pick<Task, "approvalGates">): boolean {
+  return pendingApprovalGates(task).length > 0;
+}
+
 // Why this task cannot move to `nextStage`, or null when the move is allowed.
 export function stageAdvanceViolation(
-  task: Pick<Task, "id" | "accountableOwner" | "evidence" | "assignee" | "agentRunApproved">,
+  task: Pick<
+    Task,
+    "id" | "accountableOwner" | "evidence" | "assignee" | "agentRunApproved" | "approvalGates"
+  >,
   nextStage: StageKey
 ): string | null {
   const nextIdx = STAGE_IDX[nextStage];
@@ -77,6 +91,12 @@ export function stageAdvanceViolation(
   }
   if (DONE_STAGES.includes(nextStage) && task.evidence && !evidenceComplete(task.evidence)) {
     return `${task.id} can't be marked ${nextStage} until its evidence bundle is complete.`;
+  }
+  // Runtime approval gate (TASK-629): input-required freezes the stage until a
+  // human decides every pending gate — no advance in either direction.
+  const pending = pendingApprovalGates(task);
+  if (pending.length > 0) {
+    return `${task.id} is input-required — a human must decide the pending approval gate (${pending[0].reason}) before it can change stage.`;
   }
   return null;
 }

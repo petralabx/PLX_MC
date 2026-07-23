@@ -92,6 +92,17 @@ permissions kernel (`authorize`), and the routing control-plane repo for
 proposals/revisions. Depended on by: the `/api/compliance/*` routes,
 `/api/routing/propose`, and the GitHub status-check / routing metadata workflows.
 
+### Runtime approval gates (TASK-629/630)
+
+`src/lib/compliance/approvals.ts` — the A2A "input-required" primitive. An
+agent raises a gate mid-run (`POST /api/cursor/request-approval`,
+`approval.request`); the task's stage freezes (`mc-data/policy`) until a human
+with `approval.decide` — never the requester (separation of duties, 403) —
+decides it via `POST /api/approvals/decide`. Transitions append
+`approval.requested` / `approval.decided` to `mc_events`; the Approvals inbox
+(`/?screen=approvals`) lists pending gates from `GET /api/approvals`.
+Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
+
 ### Key Files
 
 - `src/lib/compliance/risk.ts` — risk-tier classifier + per-tier bundle floor

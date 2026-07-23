@@ -8,6 +8,7 @@
 
 import { ApiError, route } from "@/lib/api/route";
 import { reconcileSweep } from "@/lib/compliance/service";
+import { checkMissedTick } from "@/lib/sync/health";
 import { cronConfigured, cronSecret } from "@/lib/secrets";
 
 // The compliance service (pg) is Node-only; never cache a reconcile trigger.
@@ -29,5 +30,13 @@ export const GET = route(async (req) => {
       `[compliance] reconcile ok — processed=${result.processed} resolved=${result.resolved} failed=${result.failed}`
     );
   }
-  return result;
+  // Missed-tick watchdog (TASK-624): this cron is scheduled independently of
+  // the sweep cron, so it can see the sweep's absence. Fail-open by contract.
+  const missedTick = await checkMissedTick();
+  if (missedTick.stale) {
+    console.error(
+      `[sync] missed-tick — last complete sweep ageMs=${missedTick.ageMs ?? "never"} alerted=${missedTick.alerted}`
+    );
+  }
+  return { ...result, missedTick };
 });

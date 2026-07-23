@@ -15,6 +15,7 @@
  * never deletes SP items — TOOLS.md). Staging sandbox stays as-is.
  */
 import { Client } from "pg";
+import { resolveDbSsl } from "./lib/db-ssl.mjs";
 
 const APPLY = process.argv.includes("--apply");
 
@@ -27,7 +28,7 @@ async function main() {
 
   const client = new Client({
     connectionString: url,
-    ssl: { rejectUnauthorized: false },
+    ssl: resolveDbSsl(),
   });
   await client.connect();
 

@@ -15,6 +15,7 @@
 @import "../styles/mc-architecture.css";
 @import "../styles/mc-vendor-spend.css";
 @import "../styles/mc-routing-inbox.css";
+@import "../styles/mc-approvals.css";
 
 * {
   box-sizing: border-box;

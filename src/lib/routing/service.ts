@@ -4,6 +4,7 @@
 
 import { ApiError } from "@/lib/api/route";
 import { withTransaction, type TxQuery } from "@/lib/db";
+import { assertAutonomyAllowsConfirmation } from "@/lib/routing/autonomy";
 import {
   formatRepoNotAllowedMessage,
   normalizeRepoInputs,
@@ -215,6 +216,15 @@ export async function confirmExistingTask(
     }
 
     assertRepoEligible(task, proposal.repoId);
+    // Autonomy dial (TASK-635): service actors need effective "confirmation"
+    // autonomy for the repo AND the target bucket. Humans always decide.
+    if (authorized.actorKind === "service") {
+      assertAutonomyAllowsConfirmation({
+        cohortMode: "confirmation",
+        repoId: proposal.repoId,
+        bucketId: task.bucket ?? null,
+      });
+    }
 
     const decisionId = mintId("rd");
     const linkId = mintId("rwl");
@@ -472,6 +482,14 @@ export async function createConfirmedTask(
   }
 
   const bucket = await requireExistingBucket(input.bucketId);
+  // Autonomy dial (TASK-635): service-actor creations honor the bucket dial;
+  // repo-level is asserted below once the proposal (and its repo) is loaded.
+  if (authorized.actorKind === "service") {
+    assertAutonomyAllowsConfirmation({
+      cohortMode: "confirmation",
+      bucketId: input.bucketId,
+    });
+  }
   const registry = await syncRepo.getRepos();
   const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
   const { ids: repos, rejected } = normalizeRepoInputs(input.repos ?? [], registryMap);
@@ -497,6 +515,13 @@ export async function createConfirmedTask(
     const proposal = await lockProposalForUpdate(input.proposalId, q);
     if (!proposal) {
       throw new ApiError("not_found", `unknown proposal ${input.proposalId}`, 404);
+    }
+    if (authorized.actorKind === "service") {
+      assertAutonomyAllowsConfirmation({
+        cohortMode: "confirmation",
+        repoId: proposal.repoId,
+        bucketId: input.bucketId,
+      });
     }
     if (proposal.state === "resolved" && proposal.selectedTaskId) {
       return {

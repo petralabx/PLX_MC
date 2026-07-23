@@ -1,0 +1,134 @@
+/* Approvals inbox (TASK-631) — scoped under .mc; --p-* tokens only (no raw hex). */
+
+.ap-page {
+  padding: 0 var(--p-gutter) 80px;
+  max-width: 900px;
+}
+
+.ap-head {
+  margin-bottom: var(--p-space-3);
+}
+
+.ap-title {
+  font-size: var(--p-text-h2);
+  color: var(--p-ink);
+  margin: 0 0 4px;
+}
+
+.ap-sub {
+  color: var(--p-muted);
+  font-size: var(--p-text-body);
+  margin: 0;
+}
+
+.ap-error {
+  border: 1px solid var(--p-hot, var(--p-grid));
+  border-radius: var(--p-radius-sm);
+  color: var(--p-hot, var(--p-ink));
+  padding: 8px 12px;
+  margin-bottom: var(--p-space-2);
+}
+
+.ap-empty {
+  color: var(--p-muted);
+  padding: var(--p-space-3) 0;
+}
+
+.ap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-2);
+}
+
+.ap-item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--p-space-2);
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper);
+  padding: var(--p-space-2);
+}
+
+.ap-item-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.ap-task {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--p-ink);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ap-task:hover,
+.ap-task:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.ap-reason {
+  color: var(--p-ink);
+  margin: 4px 0;
+}
+
+.ap-meta {
+  color: var(--p-muted);
+  font-family: var(--mono);
+  font-size: var(--p-text-kicker);
+}
+
+.ap-note {
+  margin-top: 8px;
+  width: 100%;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: transparent;
+  color: var(--p-ink);
+  padding: 6px 8px;
+  font-size: var(--p-text-body);
+}
+
+.ap-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: center;
+}
+
+.ap-btn {
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: transparent;
+  color: var(--p-ink);
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.ap-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ap-btn.approve {
+  border-color: var(--p-ok, var(--p-grid));
+  color: var(--p-ok, var(--p-ink));
+}
+
+.ap-btn.reject {
+  border-color: var(--p-hot, var(--p-grid));
+  color: var(--p-hot, var(--p-ink));
+}
+
+.ap-btn:hover,
+.ap-btn:focus-visible {
+  outline: 2px solid var(--p-focus, var(--p-ink));
+  outline-offset: 2px;
+}

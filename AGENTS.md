@@ -22,8 +22,11 @@ DESIGN_TOKENS).
 - `./scripts/preflight.sh --mode pre-commit|pre-push|ci` â€” the one gate command.
 - SharePoint sync (current): five-minute inbound delta sweep + outbound push
   via Vercel Cron / `POST /api/sync/sweep` (see `docs/modules/sync/README.md`).
-  Graph change-notification subscription renewal and notification queue are
-  deferred (P11) — gated scaffolding only, not live push freshness.
+  Graph change-notification subscriptions, scoped-delta notification queue, and
+  inline post-ack drain are implemented (TASK-626/627) but activation stays
+  deferred (P11): double-gated on `PLX_MC_GRAPH_SUBSCRIPTIONS_LIVE=1` AND the
+  mirror-is-boring gate, default off — the delta sweep remains the correctness
+  backbone.
 - Routing maintenance cron: `GET /api/cron/routing-maintenance` (hourly) —
   retention expiry + rolling-breach cohort demotion; authorized only for
   `sp_routing_maintenance`. Rollout runbook:
@@ -55,7 +58,7 @@ Staging fallback hostname `mc-staging.plxcustomer.io` may exist for preview/brea
 | Web app | Next.js (App Router) + TypeScript; all screens from the design handoff; production host Vercel `plx-mission-control` @ `https://mc.plxcustomer.io` | `app/`, `src/`; hosting: see Production Hosting above |
 | Brand surface | PLX design system, fourth brand surface per ADR-003; `--p-*` tokens, opt-in `.brand-plx` boundary | `src/styles/`, `src/components/brand/`, `docs/design-system/` |
 | Sync engine (delta) — current | Two-way Microsoft Graph mirror: outbound PATCH on mutation, inbound delta poll (ToDos/Risk/Projects/Roadmap), conflict queue, audit log, freshness API | `docs/modules/sync/README.md`; product backdrop: `docs/product/SHAREPOINT_INTEGRATION.md` |
-| Graph change-notifications — deferred (P11) | Push webhooks / subscription renewal / notification queue — gated scaffolding only until P11; delta sweep remains the correctness backbone | `docs/modules/sync/README.md` (P11); cron routes under `src/app/api/cron/sync-*` |
+| Graph change-notifications — deferred (P11) | Push webhooks, subscription lifecycle (ensure+renew), scoped-delta queue, and inline drain are implemented; live activation double-gated (`PLX_MC_GRAPH_SUBSCRIPTIONS_LIVE` + mirror-is-boring gate, default off); delta sweep remains the correctness backbone | `docs/modules/sync/README.md` (P11); cron routes under `src/app/api/cron/sync-*` |
 | Governance tooling | Contract generator + drift gate, hygiene checker, preflight wrapper (Python 3.12) | `scripts/`, `config/` |
 | Operator-local MCP / swarm | Stdio MCP client + agentic swarm loopback — not deployed on Vercel | `tools/plx-mc-mcp/`; swarm `127.0.0.1:8900` |
 | Architecture (in-app + diagram pack) | Read-only interactive C4 catalog; `source-map.json` + Mermaid/SVG are **generated consumers** of Git authority; validated by `check-architecture-diagrams.py` | In-app: [`/?screen=architecture`](https://mc.plxcustomer.io/?screen=architecture); model API: `GET /api/architecture/model`; pack: [`docs/architecture/`](docs/architecture/); fallback: `public/architecture/*.svg`; contract: `docs/modules/architecture/README.md` |

@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
-import { authorize } from "@/lib/permissions";
+import { authorizeStaged } from "@/lib/permissions/enforcement";
 import { normalizeRoutingEvidence } from "@/lib/routing/evidence";
 import {
   runShadowRouting,
@@ -14,6 +14,8 @@ import {
   type ShadowRoutingResult,
 } from "@/lib/routing/engine";
 import { upsertRoutingSession } from "@/lib/routing/repo";
+import { resolveAutonomyLevel, type ResolvedAutonomy } from "@/lib/routing/autonomy";
+import { loadAgentOutcomes, type AgentOutcomeMetrics } from "@/lib/routing/outcomes";
 import { resolveRepoCohortRuntimeState } from "@/lib/routing/rollout";
 import type {
   RoutingCandidateRecord,
@@ -64,6 +66,12 @@ export interface SuggestWorkResult {
   mcRoutingMarker: string;
   /** Operator email is audit context only — never used for authorization. */
   operatorContext: string;
+  /** Evaluation loop (TASK-634): effective autonomy + the requesting runtime's outcomes. */
+  evaluation: {
+    autonomy: ResolvedAutonomy;
+    runtime: string;
+    outcomes: AgentOutcomeMetrics | null;
+  };
 }
 
 export function routingSuggestEnabled(): boolean {
@@ -81,11 +89,13 @@ function sessionDeepLink(sessionId: string): string {
 function requireSuggestAuthorized(identity: McpIdentity): void {
   // Authorize the durable MCP service principal only. Operator email is
   // admission/audit context on the request identity — never a grant input.
-  const decision = authorize({
-    actor: identity.actor,
+  const decision = authorizeStaged({
+    site: "routing.suggest",
     capability: "routing.suggest",
     resource: { type: "routing", id: identity.repo },
     context: { repositoryId: identity.repo },
+    auditLabel: identity.operatorEmail,
+    appliedActor: identity.actor,
   });
   if (!decision.allowed) {
     throw new ApiError(
@@ -146,6 +156,18 @@ export async function actionSuggestWork(
     throw new ApiError(
       "routing_suggest_unavailable_for_cohort",
       "Routing suggestions are unavailable for this unknown, disabled, or shadow-only repository cohort.",
+      503
+    );
+  }
+  // Autonomy dial (TASK-635): an operator dial can lower the cohort's mode.
+  const autonomy = resolveAutonomyLevel({
+    cohortMode: cohortRuntime.state.effectiveMode,
+    repoId: identity.repo,
+  });
+  if (autonomy.mode === "shadow") {
+    throw new ApiError(
+      "routing_suggest_unavailable_for_cohort",
+      "Routing suggestions are dialed down to shadow for this repository (config/autonomy-dial.json).",
       503
     );
   }
@@ -243,7 +265,27 @@ export async function actionSuggestWork(
     },
     mcRoutingMarker: `MC-Routing: ${routingSessionId}`,
     operatorContext: identity.operatorEmail,
+    evaluation: {
+      autonomy,
+      runtime: identity.runtime,
+      outcomes: await loadRuntimeOutcomes(identity.runtime),
+    },
   };
+}
+
+// Evaluation metrics feed the suggestion envelope (TASK-634) — fail-open so a
+// metrics outage never blocks suggestions.
+async function loadRuntimeOutcomes(runtime: string): Promise<AgentOutcomeMetrics | null> {
+  try {
+    const outcomes = await loadAgentOutcomes();
+    return outcomes.find((o) => o.runtime === runtime) ?? null;
+  } catch (err) {
+    console.error(
+      "[routing] outcome metrics unavailable for suggest envelope (fail-open): %s",
+      err instanceof Error ? err.message : String(err)
+    );
+    return null;
+  }
 }
 
 function jsonResult(payload: unknown) {

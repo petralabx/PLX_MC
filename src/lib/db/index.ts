@@ -4,6 +4,7 @@
 
 import { Pool } from "pg";
 import { databaseUrl } from "@/lib/secrets";
+import { resolveDbSsl } from "./tls";
 
 // Survive Next.js dev-mode module reloads without leaking pools.
 const globalForDb = globalThis as unknown as { __plxMcPool?: Pool };
@@ -11,12 +12,12 @@ const globalForDb = globalThis as unknown as { __plxMcPool?: Pool };
 function pool(): Pool {
   if (!globalForDb.__plxMcPool) {
     globalForDb.__plxMcPool = new Pool({
-      // Strip sslmode — it would override the ssl option, and this box has
-      // no RDS CA bundle for verify-full (same approach as scripts/migrate.mjs).
+      // Strip sslmode — it would override the ssl option; verification config
+      // comes from resolveDbSsl (vendored RDS CA bundle, TASK-623).
       connectionString: databaseUrl()
         .replace(/([?&])sslmode=[^&]+&?/, "$1")
         .replace(/[?&]$/, ""),
-      ssl: { rejectUnauthorized: false },
+      ssl: resolveDbSsl(),
       max: 5,
       // Idle sockets to RDS get dropped silently after long quiet periods;
       // without these a checkout of a dead connection hangs a request

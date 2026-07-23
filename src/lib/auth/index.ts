@@ -19,9 +19,12 @@ export {
   extractEntraOid,
   hydrateMcUserByOid,
   permissionsEnforcementEnabled,
+  permissionsEnforcementMode,
+  permissionsIdentityHydrationEnabled,
   permissionActorFromDirectoryRole,
   permissionActorFromMcUser,
   toSessionIdentity,
+  type PermissionsEnforcementMode,
 } from "./identity";
 export const oidcEnabled = entraAuthConfigured;
 

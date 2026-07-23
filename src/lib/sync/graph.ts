@@ -17,10 +17,21 @@ export class GraphError extends Error {
   constructor(
     public status: number,
     public body: string,
-    url: string
+    url: string,
+    /** Parsed Retry-After header (ms) on 429/503 throttling responses. */
+    public retryAfterMs?: number
   ) {
     super(`graph ${status} on ${url}: ${body.slice(0, 300)}`);
   }
+}
+
+function retryAfterMsFrom(resp: Response): number | undefined {
+  const header = resp.headers.get("retry-after");
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const at = Date.parse(header);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
@@ -61,7 +72,9 @@ export async function graphFetch<T>(url: string, init?: RequestInit): Promise<T>
       ...init?.headers,
     },
   });
-  if (!resp.ok) throw new GraphError(resp.status, await resp.text(), absolute);
+  if (!resp.ok) {
+    throw new GraphError(resp.status, await resp.text(), absolute, retryAfterMsFrom(resp));
+  }
   if (resp.status === 204) return undefined as T;
   return (await resp.json()) as T;
 }
@@ -310,6 +323,40 @@ export async function listDelta(
     items.push(...page.value);
     if (page["@odata.deltaLink"]) return { items, deltaLink: page["@odata.deltaLink"] };
     if (!page["@odata.nextLink"]) throw new Error(`delta walk for ${listKey} ended without a deltaLink`);
+    url = page["@odata.nextLink"];
+  }
+}
+
+// ─── Project Documents drive delta (TASK-628) ────────────────────────────────
+
+// Resolve the drive backing the Project Documents library. Null when the
+// documents list is not provisioned — callers skip with an honest audit.
+export async function documentsDriveId(ctx: SiteContext): Promise<string | null> {
+  const listId = ctx.listIds["documents"];
+  if (!listId) return null;
+  const drive = await graphFetch<{ id?: string }>(
+    `/sites/${ctx.siteId}/lists/${listId}/drive?$select=id`
+  );
+  return drive?.id ?? null;
+}
+
+// Walk a drive root delta to completion (SHAREPOINT_INTEGRATION.md §6 —
+// document library inbound uses /drives/{drive-id}/root/delta).
+export async function driveDelta(
+  driveId: string,
+  storedDeltaLink: string | null
+): Promise<{ items: Record<string, unknown>[]; deltaLink: string }> {
+  let url = storedDeltaLink ?? `/drives/${driveId}/root/delta`;
+  const items: Record<string, unknown>[] = [];
+  for (;;) {
+    const page = await graphFetch<{
+      value: Record<string, unknown>[];
+      "@odata.nextLink"?: string;
+      "@odata.deltaLink"?: string;
+    }>(url);
+    items.push(...page.value);
+    if (page["@odata.deltaLink"]) return { items, deltaLink: page["@odata.deltaLink"] };
+    if (!page["@odata.nextLink"]) throw new Error("drive delta walk ended without a deltaLink");
     url = page["@odata.nextLink"];
   }
 }

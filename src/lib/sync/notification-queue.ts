@@ -3,7 +3,7 @@
 // Cron path: authorize durable sp_sync_inbound, claim pending rows, process.
 
 import { query, withTransaction } from "@/lib/db";
-import { requireSyncServiceWrite, runSweep } from "./engine";
+import { requireSyncServiceWrite, runScopedListDelta, runSweep } from "./engine";
 import {
   buildReplayKey,
   verifyNotificationIdentity,
@@ -42,14 +42,18 @@ export interface ProcessQueueResult {
 export type ScopedDeltaRunner = (listKey: string, actorId: string) => Promise<void>;
 
 /**
- * Default processor: one authorized full sweep (covers the notified list).
- * Scoped pull export is not in P11 owns; the 5-min cron remains recovery.
+ * Default processor (TASK-627): targeted inbound pull of the notified list.
+ * Unknown list keys fall back to one full sweep — the 5-min cron remains the
+ * correctness recovery path either way.
  */
 export async function defaultScopedDeltaRunner(
-  _listKey: string,
+  listKey: string,
   actorId: string
 ): Promise<void> {
-  await runSweep(actorId);
+  const scoped = await runScopedListDelta(listKey);
+  if (scoped == null) {
+    await runSweep(actorId);
+  }
 }
 
 export async function enqueueScopedDelta(

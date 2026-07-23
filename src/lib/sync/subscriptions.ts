@@ -230,6 +230,47 @@ export async function ensureListSubscription(
   return { subscription, createdLive };
 }
 
+/** Registers covered by change notifications when P11 goes live (TASK-626). */
+export const SUBSCRIBED_LIST_KEYS = ["todos", "risks", "projects", "roadmap"] as const;
+
+export interface EnsureAllResult {
+  listKey: string;
+  created: boolean;
+  createdLive: boolean;
+  id: string;
+}
+
+/**
+ * Ensure every subscribed register has an active subscription (TASK-626).
+ * Idempotent: an existing active row is kept, except when live Graph is
+ * allowed and the row is still a local `sub_local_*` placeholder — that row
+ * is disabled and replaced by a real Graph subscription.
+ */
+export async function ensureAllListSubscriptions(
+  deps: GraphSubscriptionDeps & { listKeys?: readonly string[] } = {}
+): Promise<EnsureAllResult[]> {
+  const d = depsWithDefaults(deps);
+  if (!d.enabled() || !d.configured()) return [];
+  const listKeys = deps.listKeys ?? SUBSCRIBED_LIST_KEYS;
+  const active = await listActiveSubscriptions();
+  const results: EnsureAllResult[] = [];
+  for (const listKey of listKeys) {
+    const existing = active.find((s) => s.listKey === listKey);
+    const isLocalPlaceholder = existing?.id.startsWith("sub_local_") ?? false;
+    if (existing && !(d.allowLiveGraph && isLocalPlaceholder)) {
+      results.push({ listKey, created: false, createdLive: false, id: existing.id });
+      continue;
+    }
+    if (existing && isLocalPlaceholder && d.allowLiveGraph) {
+      // Replace the acceptance placeholder with a real Graph subscription.
+      await disableSubscription(existing.id, { ...deps, allowLiveGraph: false });
+    }
+    const { subscription, createdLive } = await ensureListSubscription(listKey, deps);
+    results.push({ listKey, created: true, createdLive, id: subscription.id });
+  }
+  return results;
+}
+
 /** Renew subscriptions expiring within `withinMs` (default 12h). */
 export async function renewExpiringSubscriptions(
   deps: GraphSubscriptionDeps & { withinMs?: number } = {}

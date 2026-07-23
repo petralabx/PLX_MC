@@ -16,6 +16,7 @@
 // Exit codes: 0 — ok (or nothing to do), 1 — failure.
 
 import { Client } from "pg";
+import { resolveDbSsl } from "./lib/db-ssl.mjs";
 
 const APP_ROLE = "plx_mc_app";
 const APP_DB = "plx_mc";
@@ -38,11 +39,11 @@ async function main() {
     return 1;
   }
 
-  // Strip sslmode from the URL — it would override the ssl option below, and
-  // this box has no RDS CA bundle for verify-full.
+  // Strip sslmode from the URL — it would override the ssl option below;
+  // verification config comes from scripts/lib/db-ssl.mjs (TASK-623).
   const client = new Client({
     connectionString: adminUrl.replace(/([?&])sslmode=[^&]+&?/, "$1").replace(/[?&]$/, ""),
-    ssl: { rejectUnauthorized: false },
+    ssl: resolveDbSsl(),
   });
   await client.connect();
   try {

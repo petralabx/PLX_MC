@@ -196,6 +196,23 @@ export function graphNotificationUrl(): string {
   return requireSecret("PLX_MC_GRAPH_NOTIFICATION_URL");
 }
 
+// P11 go-live (TASK-626): allow live Graph subscription create/renew. Still
+// runtime-gated on the mirror-is-boring streak in the subscriptions cron.
+export function graphSubscriptionsLive(): boolean {
+  return (process.env.PLX_MC_GRAPH_SUBSCRIPTIONS_LIVE ?? "0").trim() === "1";
+}
+
+// Inline post-ack queue drain from the webhook (TASK-627, <60s edit-to-UI).
+// Default ON when the webhook itself is enabled; =0 falls back to cron drain.
+export function graphInlineDrainEnabled(): boolean {
+  return (process.env.PLX_MC_GRAPH_NOTIFICATION_INLINE_DRAIN ?? "1").trim() === "1";
+}
+
+// Project Documents library sync increment (TASK-628). Default OFF.
+export function documentsSyncEnabled(): boolean {
+  return (process.env.PLX_MC_DOCUMENTS_SYNC_ENABLED ?? "0").trim() === "1";
+}
+
 // CI auth for the compliance verify endpoint (EN-007 review #3). The GitHub
 // status-check workflow calls POST /api/compliance/verify with
 // `Authorization: Bearer $COMPLIANCE_CI_TOKEN`; the route rejects anything that

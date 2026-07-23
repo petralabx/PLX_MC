@@ -3,6 +3,7 @@
 export {
   POLICY_VERSION,
   MCP_SERVICE_PRINCIPAL_ID,
+  MCP_AGENT_SERVICE_PRINCIPAL_IDS,
   SYNC_INBOUND_SERVICE_PRINCIPAL_ID,
   ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
   GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
@@ -13,6 +14,7 @@ import type {
   AccessRole,
   ActorStatus,
   AuthorizeDecision,
+  McpAgentServicePrincipalId,
   AuthorizeInput,
   Capability,
   DenyReasonCode,
@@ -30,6 +32,7 @@ export type {
   AccessRole,
   ActorStatus,
   AuthorizeDecision,
+  McpAgentServicePrincipalId,
   AuthorizeInput,
   Capability,
   DenyReasonCode,

@@ -16,7 +16,7 @@ dispatch logic.
 
 | Surface | Path |
 |---------|------|
-| REST cursor API | `src/app/api/cursor/*` — self-auth via `PLX_MC_MCP_API_KEY` + operator headers |
+| REST cursor API | `src/app/api/cursor/*` — self-auth via per-agent keys (`PLX_MC_MCP_AGENT_KEYS`) or the legacy shared `PLX_MC_MCP_API_KEY` (retire via `PLX_MC_MCP_SHARED_KEY_ENABLED=0`) + operator headers |
 | Routing suggest | `POST /api/cursor/routing/suggest` — `mc_suggest_work` (`routing.suggest`) |
 | Streamable HTTP MCP | `GET/POST/DELETE /api/cursor/mcp` — remote team registration |
 | Stdio MCP client | `tools/plx-mc-mcp/index.ts` — local Cursor + Cloud Agents |

@@ -2,18 +2,17 @@
 // Never trust caller-supplied actor fields for authorization.
 
 import { ApiError } from "@/lib/api/route";
+import { auth } from "@/lib/auth";
 import {
-  auth,
-  hydrateMcUserByOid,
-  permissionActorFromMcUser,
-  permissionsEnforcementEnabled,
-} from "@/lib/auth";
-import {
-  authorize,
-  type Capability,
-  type PermissionActor,
-  type PermissionContext,
-  type PermissionResource,
+  authorizeStaged,
+  recordUnresolvedActorDenial,
+  resolveStagedHumanActor,
+} from "@/lib/permissions/enforcement";
+import type {
+  Capability,
+  PermissionActor,
+  PermissionContext,
+  PermissionResource,
 } from "@/lib/permissions";
 import type { McpIdentity } from "@/lib/mcp/auth";
 
@@ -53,18 +52,30 @@ export async function requireSessionActor(
     );
   }
 
-  let actor: PermissionActor | null = null;
-  if (permissionsEnforcementEnabled()) {
-    const user = await hydrateMcUserByOid(oid);
-    if (!user) {
-      throw new ApiError("forbidden", "No MC identity for session oid.", 403);
-    }
-    actor = permissionActorFromMcUser(user);
-  } else {
-    actor = { kind: "human", id: oid, role: "admin", status: "active" };
+  const auditLabel = session?.user?.email?.trim().toLowerCase() || oid;
+  const staged = await resolveStagedHumanActor(oid);
+  if (!staged.appliedActor) {
+    recordUnresolvedActorDenial({
+      site: "routing.session",
+      capability,
+      actorKind: "human",
+      actorId: oid,
+      resource,
+      auditLabel,
+    });
+    throw new ApiError("forbidden", "No MC identity for session oid.", 403);
   }
 
-  const decision = authorize({ actor, capability, resource, context });
+  const decision = authorizeStaged({
+    site: "routing.session",
+    capability,
+    resource,
+    context,
+    auditLabel,
+    appliedActor: staged.appliedActor,
+    shadowActor: staged.shadowActor,
+    shadowMissing: staged.shadowMissing,
+  });
   if (!decision.allowed) {
     throw new ApiError(
       "forbidden",
@@ -74,10 +85,10 @@ export async function requireSessionActor(
   }
 
   return {
-    actor,
+    actor: staged.appliedActor,
     actorId: oid,
     actorKind: "human",
-    auditLabel: session?.user?.email?.trim().toLowerCase() || oid,
+    auditLabel,
   };
 }
 
@@ -88,11 +99,13 @@ export function requireMcpActor(
   resource?: PermissionResource,
   context?: PermissionContext
 ): AuthorizedActor {
-  const decision = authorize({
-    actor: identity.actor,
+  const decision = authorizeStaged({
+    site: "routing.mcp",
     capability,
     resource,
     context,
+    auditLabel: identity.operatorEmail,
+    appliedActor: identity.actor,
   });
   if (!decision.allowed) {
     throw new ApiError(
@@ -115,11 +128,13 @@ export function requireAuthorizedActor(
   resource?: PermissionResource,
   context?: PermissionContext
 ): void {
-  const decision = authorize({
-    actor: authorized.actor,
+  const decision = authorizeStaged({
+    site: "routing.recheck",
     capability,
     resource,
     context,
+    auditLabel: authorized.auditLabel,
+    appliedActor: authorized.actor,
   });
   if (!decision.allowed) {
     throw new ApiError(

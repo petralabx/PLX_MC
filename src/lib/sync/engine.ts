@@ -57,10 +57,15 @@ import {
 } from "./mapping";
 import { evaluateSyncFreshness, type SyncFreshnessResult } from "./freshness";
 import * as repo from "./repo";
-import { authorize, SYNC_INBOUND_SERVICE_PRINCIPAL_ID, type PermissionActor } from "@/lib/permissions";
-import { findServicePrincipalById } from "@/lib/permissions/repository";
+import { SYNC_INBOUND_SERVICE_PRINCIPAL_ID, type PermissionActor } from "@/lib/permissions";
+import {
+  authorizeStaged,
+  recordUnresolvedActorDenial,
+  resolveStagedHumanActor,
+  resolveStagedServicePrincipal,
+} from "@/lib/permissions/enforcement";
 import { ApiError } from "@/lib/api/route";
-import { auth, hydrateMcUserByOid, permissionActorFromMcUser, permissionsEnforcementEnabled } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import type { Project } from "@/lib/mc-data/types";
 
 const SYNC_ACTOR = "scribe"; // the ops agent persona attributed to engine sweeps
@@ -1059,28 +1064,33 @@ export async function requireSyncMutateActor(): Promise<{ oid: string; actor: Pe
     throw new ApiError("forbidden", "Authenticated session with Entra oid required for sync.mutate.", 403);
   }
 
-  let actor: PermissionActor | null = null;
-  if (permissionsEnforcementEnabled()) {
-    const user = await hydrateMcUserByOid(oid);
-    if (!user) {
-      throw new ApiError("forbidden", "No MC identity for session oid.", 403);
-    }
-    actor = permissionActorFromMcUser(user);
-  } else {
-    // Enforcement off: still require oid; grant admin-shaped actor so local
-    // sessions can exercise mutate routes without identity tables.
-    actor = { kind: "human", id: oid, role: "admin", status: "active" };
+  const auditLabel = session?.user?.email?.trim().toLowerCase() || oid;
+  const staged = await resolveStagedHumanActor(oid);
+  if (!staged.appliedActor) {
+    recordUnresolvedActorDenial({
+      site: "sync.mutate",
+      capability: "sync.mutate",
+      actorKind: "human",
+      actorId: oid,
+      resource: { type: "sync" },
+      auditLabel,
+    });
+    throw new ApiError("forbidden", "No MC identity for session oid.", 403);
   }
 
-  const decision = authorize({
-    actor,
+  const decision = authorizeStaged({
+    site: "sync.mutate",
     capability: "sync.mutate",
     resource: { type: "sync" },
+    auditLabel,
+    appliedActor: staged.appliedActor,
+    shadowActor: staged.shadowActor,
+    shadowMissing: staged.shadowMissing,
   });
   if (!decision.allowed) {
     throw new ApiError("forbidden", `sync.mutate denied (${decision.reasonCode}).`, 403);
   }
-  return { oid, actor };
+  return { oid, actor: staged.appliedActor };
 }
 
 /**
@@ -1091,34 +1101,33 @@ export async function requireSyncMutateActor(): Promise<{ oid: string; actor: Pe
 export async function requireSyncServiceWrite(
   _context: { operatorContext?: string } = {}
 ): Promise<PermissionActor> {
-  let status: "active" | "revoked" = "active";
-  if (permissionsEnforcementEnabled()) {
-    const persisted = await findServicePrincipalById(
-      SYNC_INBOUND_SERVICE_PRINCIPAL_ID
+  const staged = await resolveStagedServicePrincipal(SYNC_INBOUND_SERVICE_PRINCIPAL_ID);
+  if (!staged.actor) {
+    recordUnresolvedActorDenial({
+      site: "sync.service",
+      capability: "sync.service.write",
+      actorKind: "service",
+      actorId: SYNC_INBOUND_SERVICE_PRINCIPAL_ID,
+      resource: { type: "sync" },
+    });
+    throw new ApiError(
+      "forbidden",
+      "Durable sp_sync_inbound service principal is missing.",
+      403
     );
-    if (!persisted) {
-      throw new ApiError(
-        "forbidden",
-        "Durable sp_sync_inbound service principal is missing.",
-        403
-      );
-    }
-    status = persisted.status;
   }
-  const actor: PermissionActor = {
-    kind: "service",
-    id: SYNC_INBOUND_SERVICE_PRINCIPAL_ID,
-    status,
-  };
-  const decision = authorize({
-    actor,
+  const decision = authorizeStaged({
+    site: "sync.service",
     capability: "sync.service.write",
     resource: { type: "sync" },
+    appliedActor: staged.actor,
+    shadowActor: staged.shadowActor,
+    shadowMissing: staged.shadowMissing,
   });
   if (!decision.allowed) {
     throw new ApiError("forbidden", `sync.service.write denied (${decision.reasonCode}).`, 403);
   }
-  return actor;
+  return staged.actor;
 }
 
 // ─── Manual reconciliation (humans decide — SOUL non-negotiable) ─────────────

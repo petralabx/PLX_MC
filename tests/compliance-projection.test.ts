@@ -26,38 +26,40 @@ const store = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/lib/auth", () => ({
-  permissionsEnforcementEnabled: () => store.enforcement,
-}));
-
-vi.mock("@/lib/permissions", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/permissions")>();
-  return {
-    ...actual,
-    authorize: (input: { actor: { id: string }; capability: string }) => {
-      store.authorizeCalls.push({
-        capability: input.capability,
-        actorId: input.actor.id,
-      });
+vi.mock("@/lib/permissions/enforcement", () => ({
+  resolveStagedServicePrincipal: async (id: string) => {
+    if (!store.enforcement) {
       return {
-        allowed: store.authorizeAllowed,
-        reasonCode: store.authorizeAllowed ? "allowed" : store.authorizeReason,
-        policyVersion: "permissions.v1",
+        actor: { kind: "service", id, status: "active" },
+        missing: false,
+        shadowActor: null,
+        shadowMissing: false,
+        mode: "off",
       };
-    },
-  };
-});
-
-vi.mock("@/lib/permissions/repository", () => ({
-  findServicePrincipalById: async (id: string) => {
-    if (!store.principalPresent) return null;
-    if (id !== COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID) return null;
+    }
+    if (!store.principalPresent || id !== COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID) {
+      return { actor: null, missing: true, shadowActor: null, shadowMissing: false, mode: "enforce" };
+    }
     return {
-      id: COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
-      name: "PLX MC Compliance Projection",
-      status: store.principalStatus,
+      actor: { kind: "service", id, status: store.principalStatus },
+      missing: false,
+      shadowActor: null,
+      shadowMissing: false,
+      mode: "enforce",
     };
   },
+  authorizeStaged: (input: { capability: string; appliedActor: { id: string } }) => {
+    store.authorizeCalls.push({
+      capability: input.capability,
+      actorId: input.appliedActor.id,
+    });
+    return {
+      allowed: store.authorizeAllowed,
+      reasonCode: store.authorizeAllowed ? "allowed" : store.authorizeReason,
+      policyVersion: "permissions.v2",
+    };
+  },
+  recordUnresolvedActorDenial: () => {},
 }));
 
 vi.mock("@/lib/sync/engine", () => ({

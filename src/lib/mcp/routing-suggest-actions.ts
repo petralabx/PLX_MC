@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
-import { authorize } from "@/lib/permissions";
+import { authorizeStaged } from "@/lib/permissions/enforcement";
 import { normalizeRoutingEvidence } from "@/lib/routing/evidence";
 import {
   runShadowRouting,
@@ -81,11 +81,13 @@ function sessionDeepLink(sessionId: string): string {
 function requireSuggestAuthorized(identity: McpIdentity): void {
   // Authorize the durable MCP service principal only. Operator email is
   // admission/audit context on the request identity — never a grant input.
-  const decision = authorize({
-    actor: identity.actor,
+  const decision = authorizeStaged({
+    site: "routing.suggest",
     capability: "routing.suggest",
     resource: { type: "routing", id: identity.repo },
     context: { repositoryId: identity.repo },
+    auditLabel: identity.operatorEmail,
+    appliedActor: identity.actor,
   });
   if (!decision.allowed) {
     throw new ApiError(

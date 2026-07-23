@@ -10,11 +10,14 @@ import { permissionsEnforcementEnabled } from "@/lib/auth";
 import { resolveHumanAccountableOwner, type Task } from "@/lib/mc-data";
 import { publicMcBaseUrl } from "@/lib/mcp/envelope";
 import {
-  authorize,
   GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
   type PermissionActor,
 } from "@/lib/permissions";
-import { findServicePrincipalById } from "@/lib/permissions/repository";
+import {
+  authorizeStaged,
+  recordUnresolvedActorDenial,
+  resolveStagedServicePrincipal,
+} from "@/lib/permissions/enforcement";
 import { normalizeRoutingEvidence } from "@/lib/routing/evidence";
 import {
   runShadowRouting,
@@ -130,11 +133,12 @@ export interface CheckoutInput {
 
 export async function checkout(input: CheckoutInput): Promise<{ checkoutId: string }> {
   if (input.actor) {
-    const decision = authorize({
-      actor: input.actor,
+    const decision = authorizeStaged({
+      site: "compliance.checkout",
       capability: "task.checkout",
       resource: { type: "task", id: input.taskId },
       context: { repositoryId: input.repo },
+      appliedActor: input.actor,
     });
     if (!decision.allowed) {
       throw new ApiError(
@@ -216,11 +220,12 @@ export async function complete(input: CompleteInput): Promise<{ ok: true }> {
   }
 
   if (input.actor) {
-    const decision = authorize({
-      actor: input.actor,
+    const decision = authorizeStaged({
+      site: "compliance.complete",
       capability: "task.complete",
       resource: { type: "task", id: d.taskId },
       context: { repositoryId: d.repo },
+      appliedActor: input.actor,
     });
     if (!decision.allowed) {
       throw new ApiError(
@@ -468,30 +473,31 @@ function toBucketViews(
 export async function requireGithubActionsProposeAuthorized(
   repositoryId: string
 ): Promise<PermissionActor> {
-  let status: "active" | "revoked" = "active";
-  if (permissionsEnforcementEnabled()) {
-    const persisted = await findServicePrincipalById(
-      GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID
+  const staged = await resolveStagedServicePrincipal(
+    GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID
+  );
+  if (!staged.actor) {
+    recordUnresolvedActorDenial({
+      site: "compliance.routing-propose",
+      capability: "routing.propose",
+      actorKind: "service",
+      actorId: GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
+      resource: { type: "routing", id: repositoryId },
+    });
+    throw new ApiError(
+      "forbidden",
+      "Durable sp_github_actions_routing service principal is missing.",
+      403
     );
-    if (!persisted) {
-      throw new ApiError(
-        "forbidden",
-        "Durable sp_github_actions_routing service principal is missing.",
-        403
-      );
-    }
-    status = persisted.status;
   }
-  const actor: PermissionActor = {
-    kind: "service",
-    id: GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
-    status,
-  };
-  const decision = authorize({
-    actor,
+  const decision = authorizeStaged({
+    site: "compliance.routing-propose",
     capability: "routing.propose",
     resource: { type: "routing", id: repositoryId },
     context: { repositoryId },
+    appliedActor: staged.actor,
+    shadowActor: staged.shadowActor,
+    shadowMissing: staged.shadowMissing,
   });
   if (!decision.allowed) {
     throw new ApiError(
@@ -500,7 +506,7 @@ export async function requireGithubActionsProposeAuthorized(
       403
     );
   }
-  return actor;
+  return staged.actor;
 }
 
 /**

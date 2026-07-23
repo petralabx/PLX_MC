@@ -4,13 +4,15 @@
 // + routing.maintain only. Final typed links and audit events are preserved.
 
 import { ApiError, route } from "@/lib/api/route";
-import { permissionsEnforcementEnabled } from "@/lib/auth";
 import {
-  authorize,
   ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
   type PermissionActor,
 } from "@/lib/permissions";
-import { findServicePrincipalById } from "@/lib/permissions/repository";
+import {
+  authorizeStaged,
+  recordUnresolvedActorDenial,
+  resolveStagedServicePrincipal,
+} from "@/lib/permissions/enforcement";
 import { cronConfigured, cronSecret } from "@/lib/secrets";
 import {
   demoteBreachedCohorts,
@@ -33,29 +35,30 @@ export const maxDuration = 60;
  * Operator context is never accepted as a grant path.
  */
 export async function requireRoutingMaintenance(): Promise<PermissionActor> {
-  let status: "active" | "revoked" = "active";
-  if (permissionsEnforcementEnabled()) {
-    const persisted = await findServicePrincipalById(
-      ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID
+  const staged = await resolveStagedServicePrincipal(
+    ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID
+  );
+  if (!staged.actor) {
+    recordUnresolvedActorDenial({
+      site: "routing.maintenance",
+      capability: "routing.maintain",
+      actorKind: "service",
+      actorId: ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
+      resource: { type: "routing" },
+    });
+    throw new ApiError(
+      "forbidden",
+      "Durable sp_routing_maintenance service principal is missing.",
+      403
     );
-    if (!persisted) {
-      throw new ApiError(
-        "forbidden",
-        "Durable sp_routing_maintenance service principal is missing.",
-        403
-      );
-    }
-    status = persisted.status;
   }
-  const actor: PermissionActor = {
-    kind: "service",
-    id: ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
-    status,
-  };
-  const decision = authorize({
-    actor,
+  const decision = authorizeStaged({
+    site: "routing.maintenance",
     capability: "routing.maintain",
     resource: { type: "routing" },
+    appliedActor: staged.actor,
+    shadowActor: staged.shadowActor,
+    shadowMissing: staged.shadowMissing,
   });
   if (!decision.allowed) {
     throw new ApiError(
@@ -64,7 +67,7 @@ export async function requireRoutingMaintenance(): Promise<PermissionActor> {
       403
     );
   }
-  return actor;
+  return staged.actor;
 }
 
 export interface MaintenanceInput {

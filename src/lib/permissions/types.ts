@@ -109,8 +109,27 @@ export type IdentityQuery = (
   params?: unknown[]
 ) => Promise<Record<string, unknown>[]>;
 
-/** Durable MCP cursor API service principal (shared API key authenticates this). */
+/**
+ * Durable MCP cursor API service principal. Historically the shared API key
+ * authenticated this single principal; per-agent keys (TASK-619) resolve to
+ * one of MCP_AGENT_SERVICE_PRINCIPAL_IDS, with this id as the legacy shared-key
+ * fallback while that key is being retired.
+ */
 export const MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_cursor" as const;
+
+/**
+ * Reviewed registry of per-agent MCP service principals (one credential per
+ * agent runtime). Keys configured outside this list never authenticate.
+ */
+export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
+  "sp_mcp_cursor",
+  "sp_mcp_claude_code",
+  "sp_mcp_codex",
+  "sp_mcp_swarm",
+] as const;
+
+export type McpAgentServicePrincipalId =
+  (typeof MCP_AGENT_SERVICE_PRINCIPAL_IDS)[number];
 
 /** Durable inbound sync writer used by later phases. */
 export const SYNC_INBOUND_SERVICE_PRINCIPAL_ID = "sp_sync_inbound" as const;

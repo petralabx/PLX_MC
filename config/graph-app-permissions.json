@@ -1,0 +1,31 @@
+{
+  "$comment": "Least-privilege contract for the app-only Microsoft Graph app registration (TASK-621). scripts/audit-graph-app-permissions.mjs decodes the app token's roles claim and fails on drift. Owner: Vince. Enforcement: preflight-invocable audit script + runbook docs/runbooks/graph-least-privilege.md.",
+  "appRegistration": "plx-mission-control-graph (app-only; MICROSOFT_GRAPH_CLIENT_ID)",
+  "requiredRoles": [
+    "Sites.Selected"
+  ],
+  "siteGrants": [
+    {
+      "site": "/sites/plx-mission-control",
+      "permission": "write",
+      "$comment": "Granted per-site via POST /sites/{siteId}/permissions once Sites.Selected replaces the broad role."
+    }
+  ],
+  "transitionalRoles": [
+    {
+      "role": "Sites.ReadWrite.All",
+      "$comment": "Broad legacy role the sync engine runs on today. Retire after Sites.Selected + the site grant above are verified in production.",
+      "retireBy": "2026-08-21"
+    }
+  ],
+  "forbiddenRoles": [
+    "Sites.FullControl.All",
+    "Sites.Manage.All",
+    "Sites.Create.All",
+    "User.Read.All",
+    "Mail.Send",
+    "ChannelMessage.Send",
+    "Directory.Read.All",
+    "Directory.ReadWrite.All"
+  ]
+}

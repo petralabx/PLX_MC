@@ -47,8 +47,35 @@ declare module "@auth/core/jwt" {
   }
 }
 
+/**
+ * Staged enforcement rollout (TASK-618): off → log-only → review → enforce.
+ * - off       — legacy behavior: no DB hydration, humans synthesized as admin.
+ * - log-only  — hydrate identities best-effort and record every decision;
+ *               outcomes are unchanged (nothing new is denied).
+ * - review    — service principals fully enforced (existence + revocation);
+ *               humans still admitted as before, real-identity decision
+ *               recorded as a shadow verdict for review.
+ * - enforce   — full enforcement for humans and service principals.
+ */
+export type PermissionsEnforcementMode = "off" | "log-only" | "review" | "enforce";
+
+export function permissionsEnforcementMode(): PermissionsEnforcementMode {
+  const mode = (process.env.PLX_MC_PERMISSIONS_ENFORCEMENT_MODE ?? "").trim().toLowerCase();
+  if (mode === "off" || mode === "log-only" || mode === "review" || mode === "enforce") {
+    return mode;
+  }
+  // Legacy flag compatibility: ENABLED=1 has always meant full enforcement.
+  const legacy = (process.env.PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED ?? "0").trim();
+  return legacy === "1" ? "enforce" : "off";
+}
+
 export function permissionsEnforcementEnabled(): boolean {
-  return (process.env.PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED ?? "0").trim() === "1";
+  return permissionsEnforcementMode() === "enforce";
+}
+
+/** True when identity hydration may touch the database (any staged mode). */
+export function permissionsIdentityHydrationEnabled(): boolean {
+  return permissionsEnforcementMode() !== "off";
 }
 
 export function extractEntraOid(
@@ -107,7 +134,7 @@ export async function hydrateMcUserByOid(
   entraOid: string,
   runQuery?: IdentityQuery
 ): Promise<McUserRecord | null> {
-  if (!permissionsEnforcementEnabled()) {
+  if (!permissionsIdentityHydrationEnabled()) {
     return null;
   }
   return findMcUserByEntraOid(entraOid, runQuery);

@@ -59,26 +59,23 @@ vi.mock("@/lib/auth", () => ({
   permissionsEnforcementEnabled: () => false,
 }));
 
-vi.mock("@/lib/permissions", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/permissions")>();
-  return {
-    ...actual,
-    authorize: (input: { capability: string; actor: { id: string } }) => {
-      db.authorizeCalls.push(input.capability);
-      return {
-        allowed: db.authorizeAllowed,
-        reasonCode: db.authorizeAllowed ? "allowed" : db.authorizeReason,
-        policyVersion: "permissions.v1",
-      };
-    },
-  };
-});
-
-vi.mock("@/lib/permissions/repository", () => ({
-  findServicePrincipalById: async (id: string) =>
-    id === GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID
-      ? { id, name: "GA Routing", status: "active" as const }
-      : null,
+vi.mock("@/lib/permissions/enforcement", () => ({
+  resolveStagedServicePrincipal: async (id: string) => ({
+    actor: { kind: "service", id, status: "active" },
+    missing: false,
+    shadowActor: null,
+    shadowMissing: false,
+    mode: "off",
+  }),
+  authorizeStaged: (input: { capability: string; appliedActor: { id: string } }) => {
+    db.authorizeCalls.push(input.capability);
+    return {
+      allowed: db.authorizeAllowed,
+      reasonCode: db.authorizeAllowed ? "allowed" : db.authorizeReason,
+      policyVersion: "permissions.v2",
+    };
+  },
+  recordUnresolvedActorDenial: () => {},
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({

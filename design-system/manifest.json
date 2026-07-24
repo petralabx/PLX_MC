@@ -1,0 +1,42 @@
+{
+  "name": "plx-design-system",
+  "version": "1.0.0",
+  "channel": "staging",
+  "sourceCommit": "8cbc140ef",
+  "authority": "petralabx/plx-customer-portal",
+  "artifacts": [
+    {
+      "path": "tokens.css",
+      "sha256": "3cd830b6f53710b5665cc0d913298597d88235f04796c6dd3720e0cb1de0e413"
+    },
+    {
+      "path": "tokens.ts",
+      "sha256": "80dbc10d6b8bf63a8f86df23a40b3a4106aac9e6fa35e6815463ee4afe41a7ba"
+    },
+    {
+      "path": "fonts/MaziusDisplay-Regular.woff2",
+      "sha256": "2220486909addce8dadf31067c02e6f6e9b2d03f9991d71a3d5c0b3cd44e9a2b"
+    },
+    {
+      "path": "fonts/MaziusDisplay-Italic.otf",
+      "sha256": "d18a599f1b51e14106dcf230b114a2769062e3cfb4c4a478f9a95611adf7cc03"
+    },
+    {
+      "path": "fonts/MaziusDisplay-Bold.woff2",
+      "sha256": "6404b8d08d2caa851d720b9326038695c5312cb16879c1bbb1fab8202e5d66ce"
+    },
+    {
+      "path": "fonts/MaziusDisplay-Extraitalic.woff2",
+      "sha256": "8aa5b435bb134a0e8e1c9dcad4c9e0f1476d1de3795562b0eb0457894491374e"
+    },
+    {
+      "path": "fonts/MaziusDisplay-ExtraItalicBold.woff2",
+      "sha256": "10e81027a7b32d952d24fd6d93b6e8986a0c414dfd8df8b380c0184eaae770a9"
+    },
+    {
+      "path": "fonts/LICENSE.txt",
+      "sha256": "c6b0b6376b9aa4290f1d4841f3fb12fae229710b3834fc9a77207d3f5ed9381a"
+    }
+  ],
+  "integrity": "sha256-39e28ca756aef25bf4ae55af3da1fd75657353ef603a07911243057e6dd2bb5d"
+}

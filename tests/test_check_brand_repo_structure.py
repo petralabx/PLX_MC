@@ -111,3 +111,53 @@ def test_exit_1_when_required_file_missing(tmp_path):
 def test_exit_1_on_invalid_json(tmp_path):
     (tmp_path / "plx-brand.json").write_text("{not json", encoding="utf-8")
     assert _run(tmp_path).returncode == 1
+
+
+def test_exit_0_on_operational_adopter_with_pin(tmp_path):
+    manifest = {
+        "schemaVersion": "plx-brand/v1",
+        "repoKind": "operational",
+        "brand": {"slug": "plx", "displayName": "Petra Lab-X"},
+        "designSystem": {
+            "adoptsPlxTokens": True,
+            "authority": "petralabx/plx-customer-portal",
+            "channel": "staging",
+            "pinnedVersion": "1.0.0",
+            "pinnedIntegrity": "sha256-" + ("a" * 64),
+            "tokenPrefix": "--p-",
+            "boundaryClass": "brand-plx",
+            "decidedBy": "vince",
+            "decidedAt": "2026-07-24",
+            "rationale": "Operational adopter pin fixture.",
+        },
+        "mc": {"github": "petralabx/PLX_MC", "registryId": "plx-mission-control"},
+    }
+    (tmp_path / "plx-brand.json").write_text(
+        __import__("json").dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_exit_1_when_adopter_missing_pin(tmp_path):
+    manifest = {
+        "schemaVersion": "plx-brand/v1",
+        "repoKind": "operational",
+        "brand": {"slug": "plx", "displayName": "Petra Lab-X"},
+        "designSystem": {
+            "adoptsPlxTokens": True,
+            "authority": "petralabx/plx-customer-portal",
+            "tokenPrefix": "--p-",
+            "boundaryClass": "brand-plx",
+            "decidedBy": "vince",
+            "decidedAt": "2026-07-24",
+            "rationale": "Missing pin fields should fail.",
+        },
+        "mc": {"github": "petralabx/PLX_MC", "registryId": "plx-mission-control"},
+    }
+    (tmp_path / "plx-brand.json").write_text(
+        __import__("json").dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert "pinnedVersion" in result.stdout

@@ -1,22 +1,24 @@
 {
   "schemaVersion": "plx-brand-parity/v1",
   "portalRepo": "plx-customer-portal",
-  "portalCommit": "aac879b84",
-  "syncedAt": "2026-07-02T10:33:07Z",
+  "portalCommit": "243506d7a",
+  "syncedAt": "2026-07-24T13:13:24Z",
   "owner": "Vince",
   "rationale": "ADR-003 upstream authority; MC must not fork shared brand artifacts.",
+  "authorityVersion": "1.0.0",
+  "authorityIntegrity": "sha256-39e28ca756aef25bf4ae55af3da1fd75657353ef603a07911243057e6dd2bb5d",
   "files": [
     {
       "path": "docs/design-system/tokens.css",
-      "sha256": "473e8b9651a26f726313c89d5c44384528a09aad95245e028234090ccd967ec9"
+      "sha256": "3cd830b6f53710b5665cc0d913298597d88235f04796c6dd3720e0cb1de0e413"
     },
     {
       "path": "docs/design-system/tokens.ts",
-      "sha256": "1c7b6b1aef69cb6e7fc13a2db24fab3cfb5609959ac5b8a4f9537cf832f74aa4"
+      "sha256": "80dbc10d6b8bf63a8f86df23a40b3a4106aac9e6fa35e6815463ee4afe41a7ba"
     },
     {
       "path": "src/styles/brand-tokens.css",
-      "sha256": "d5bc3ba77af0bcfd619c8b55094f94a0ae3aebb0bf82376daa1d7c85469050fc"
+      "sha256": "ee2a8efd32b8b9effe7e0f533b243bed02921d286e271dc05883e4abc1d0526d"
     },
     {
       "path": "src/components/brand/BrandBoundary.tsx",
@@ -53,6 +55,18 @@
     {
       "path": "public/fonts/mazius/MaziusDisplay-Italic.otf",
       "sha256": "d18a599f1b51e14106dcf230b114a2769062e3cfb4c4a478f9a95611adf7cc03"
+    },
+    {
+      "path": "public/fonts/mazius/MaziusDisplay-Bold.woff2",
+      "sha256": "6404b8d08d2caa851d720b9326038695c5312cb16879c1bbb1fab8202e5d66ce"
+    },
+    {
+      "path": "public/fonts/mazius/MaziusDisplay-Extraitalic.woff2",
+      "sha256": "8aa5b435bb134a0e8e1c9dcad4c9e0f1476d1de3795562b0eb0457894491374e"
+    },
+    {
+      "path": "public/fonts/mazius/MaziusDisplay-ExtraItalicBold.woff2",
+      "sha256": "10e81027a7b32d952d24fd6d93b6e8986a0c414dfd8df8b380c0184eaae770a9"
     },
     {
       "path": "public/brand/favicon-16.png",
@@ -129,6 +143,10 @@
     {
       "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-Regular.woff2",
       "sha256": "2220486909addce8dadf31067c02e6f6e9b2d03f9991d71a3d5c0b3cd44e9a2b"
+    },
+    {
+      "path": "src/components/brand/README.md",
+      "sha256": "80964da7a4f330206cc5b0f891c89516f6cb608b0d841b8c0b34e3d208c88e82"
     }
   ]
 }

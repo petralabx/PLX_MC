@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "plx-brand/v1",
+  "repoKind": "operational",
+  "brand": {
+    "slug": "plx",
+    "displayName": "Petra Lab-X"
+  },
+  "designSystem": {
+    "adoptsPlxTokens": true,
+    "authority": "petralabx/plx-customer-portal",
+    "channel": "staging",
+    "pinnedVersion": "1.0.0",
+    "pinnedIntegrity": "sha256-39e28ca756aef25bf4ae55af3da1fd75657353ef603a07911243057e6dd2bb5d",
+    "tokenPrefix": "--p-",
+    "boundaryClass": "brand-plx",
+    "decidedBy": "vince",
+    "decidedAt": "2026-07-24",
+    "rationale": "Mission Control is a 4th portal surface sharing the brand token layer (ADR-003 / ADR-005)."
+  },
+  "mc": {
+    "github": "petralabx/PLX_MC",
+    "registryId": "plx-mission-control"
+  }
+}

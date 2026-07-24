@@ -99,10 +99,12 @@ def _validate_manifest_shape(manifest: dict, violations: list[str]) -> str:
     ):
         _require_field(ds, key, violations, "designSystem")
 
-    if ds.get("adoptsPlxTokens") is True and not ds.get("authority"):
-        violations.append(
-            "plx-brand.json designSystem.authority required when adoptsPlxTokens is true"
-        )
+    if ds.get("adoptsPlxTokens") is True:
+        for key in ("authority", "channel", "pinnedVersion", "pinnedIntegrity"):
+            if not ds.get(key):
+                violations.append(
+                    f"plx-brand.json designSystem.{key} required when adoptsPlxTokens is true"
+                )
 
     prefix = ds.get("tokenPrefix", "")
     # Allow a digit as the first character so digit-leading brands (e.g. the

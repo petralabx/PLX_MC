@@ -50,6 +50,7 @@
   --p-ok-text:      #48603F;
   --p-warn-text:    #7E5C0F;
   --p-info-text:    #476378;
+  --p-hot-text:     #46535F;
 
   /* Mazius Display is loaded via next/font/local; Inter and JetBrains Mono are
      loaded via next/font/google. All are exposed on <html> by app/layout.tsx. */
@@ -62,6 +63,7 @@
   --p-text-h2:      24px;
   --p-text-h3:      18px;
   --p-text-body:    14px;
+  --p-text-body-compact: 13px;
   --p-text-small:   12px;
   --p-text-mono:    11px;
   --p-text-meta:    10px;
@@ -88,6 +90,16 @@
   --p-dur-fast:     120ms;
   --p-dur:          180ms;
   --p-dur-slow:     320ms;
+
+  --p-icon:         16px;
+  --p-icon-lg:      32px;
+
+  --p-field-label-w: 160px;
+
+  --p-z-drawer:     60;
+  --p-z-scrim:      59;
+
+  --p-scrim:        rgba(27, 26, 23, 0.5);
 }
 
 /* ─── 2. BRAND PALETTE — dark scheme ────────────────────────────────────── */
@@ -113,6 +125,9 @@
   --p-ok-text:      var(--p-ok);
   --p-warn-text:    var(--p-warn);
   --p-info-text:    var(--p-info);
+  --p-hot-text:     var(--p-hot);
+
+  --p-scrim:        rgba(0, 0, 0, 0.6);
 }
 
 /* ─── 3. shadcn TOKEN REMAP ─────────────────────────────────────────────── */

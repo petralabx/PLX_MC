@@ -51,6 +51,21 @@
           "type": "string",
           "description": "GitHub repo that owns tokens when adoptsPlxTokens is true."
         },
+        "channel": {
+          "type": "string",
+          "enum": ["staging", "main"],
+          "description": "Authority release channel the consumer pins."
+        },
+        "pinnedVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "Semver of the authority design-system/ package this consumer has adopted."
+        },
+        "pinnedIntegrity": {
+          "type": "string",
+          "pattern": "^sha256-[a-f0-9]{64}$",
+          "description": "Package integrity from authority design-system/manifest.json."
+        },
         "tokenPrefix": {
           "type": "string",
           "pattern": "^--[a-z][a-z0-9-]*-$",
@@ -77,7 +92,14 @@
       "allOf": [
         {
           "if": { "properties": { "adoptsPlxTokens": { "const": true } } },
-          "then": { "required": ["authority"] }
+          "then": {
+            "required": [
+              "authority",
+              "channel",
+              "pinnedVersion",
+              "pinnedIntegrity"
+            ]
+          }
         }
       ]
     },

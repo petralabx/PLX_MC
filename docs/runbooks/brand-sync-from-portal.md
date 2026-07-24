@@ -1,32 +1,45 @@
 # Brand Sync from PLX Customer Portal
 
 **Owner:** Vince  
-**Applies to:** PLX Mission Control (`PLX_MC-new-project`)  
-**Authority:** ADR-003 — Portal is upstream; MC consumes, never forks.
+**Applies to:** PLX Mission Control (`PLX_MC`)  
+**Authority:** ADR-003 / ADR-005 — Portal is upstream; MC consumes, never forks.
+
+## Pin (ADR-005)
+
+Root `plx-brand.json` records adoption + `pinnedVersion` / `pinnedIntegrity`.
+The pin cache is `design-system/` (mirrors the portal package). Ledger:
+`design-system/SYNC-LOG.md`.
+
+Preflight runs `scripts/check-ds-pin.py` whenever `plx-brand.json` is present.
 
 ## When to run
 
 Run after any of these events:
 
-- Portal merges a design-system change (`docs/design-system/`, `portal/src/styles/brand-tokens.css`, brand components, `public/brand/`, Mazius webfonts).
+- Portal cuts a new `design-system/` release and you decide to **adopt** (bump pin first).
+- Portal merges shared brand artifacts (runtime `brand-tokens.css`, brand components, logos).
 - MC visual review shows typography/color drift vs Portal.
-- `scripts/preflight.sh` fails with `brand portal parity FAIL`.
+- `scripts/preflight.sh` fails with design-system pin or brand portal parity FAIL.
 
-## One-command sync
+## One-command sync (preferred)
 
 ```bash
-# Default: ~/plx-customer-portal
-bash scripts/sync-brand-from-portal.sh
-
-# Custom portal checkout
-PLX_PORTAL_ROOT=/path/to/plx-customer-portal bash scripts/sync-brand-from-portal.sh
+# Requires plx-brand.json pin to match portal design-system/manifest.json
+PLX_PORTAL_ROOT=/path/to/plx-customer-portal bash scripts/plx-ds-sync.sh
 ```
 
-This script:
+This:
 
-1. Copies shared artifacts from Portal → MC (tokens, brand components, logos, favicons, Mazius production cuts + archive).
-2. Refreshes `config/brand-portal-parity.json` with SHA-256 checksums and portal commit provenance.
-3. Runs `scripts/check-brand-portal-parity.py` to verify.
+1. Verifies the portal package version/integrity against `plx-brand.json`.
+2. Copies `design-system/**` into MC's pin cache and mirrors tokens/fonts.
+3. Syncs runtime brand components/assets and refreshes `config/brand-portal-parity.json`.
+4. Runs `check-ds-pin.py` + `check-brand-portal-parity.py`.
+
+Legacy helper (parity refresh only; no pin verify):
+
+```bash
+PLX_PORTAL_ROOT=/path/to/plx-customer-portal bash scripts/sync-brand-from-portal.sh
+```
 
 ## Verify locally
 

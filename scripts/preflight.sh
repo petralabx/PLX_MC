@@ -56,6 +56,8 @@ run_policy() {
   if [[ -f plx-brand.json ]]; then
     step "Brand repo structure (plx-brand.json present)"
     "$PY" scripts/check-brand-repo-structure.py --repo-root "$REPO_ROOT"
+    step "Design-system pin (ADR-005)"
+    "$PY" scripts/check-ds-pin.py --repo-root "$REPO_ROOT"
   fi
 
   if [[ -f config/brand-portal-parity.json ]]; then

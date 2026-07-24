@@ -13,3 +13,9 @@
 - Tasks: TASK-681 … TASK-685
 - Planning checkout: `MC-Checkout: dsp_mryvrl8gj222kz`
 - Cloud wiring checkout: `MC-Checkout: dsp_mryw4pv5w1uabx`
+<<<<<<< HEAD
+
+- `VERDICT.md` — program roll-up
+- `P2-MC-PIN-VERDICT.md` — TASK-684 consumer pin
+=======
+>>>>>>> origin/main

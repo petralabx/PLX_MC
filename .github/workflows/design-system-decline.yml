@@ -1,0 +1,69 @@
+name: design-system-decline
+
+# When an adopt PR is closed without merge, record DECLINED in SYNC-LOG via a
+# small ledger PR (pin stays unchanged).
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - "plx-brand.json"
+      - "design-system/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  record-decline:
+    if: >
+      github.event.pull_request.merged == false &&
+      contains(join(github.event.pull_request.labels.*.name, ','), 'design-system-update')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Parse version from PR title/branch
+        id: ver
+        run: |
+          set -euo pipefail
+          TITLE='${{ github.event.pull_request.title }}'
+          HEAD='${{ github.event.pull_request.head.ref }}'
+          VERSION=$(printf '%s\n%s\n' "$TITLE" "$HEAD" | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/^v//')
+          if [ -z "$VERSION" ]; then
+            echo "Could not parse version from title/branch — skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Append decline ledger
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          REASON="closed without merge (PR #${{ github.event.pull_request.number }})"
+          python3 scripts/plx-ds-record-decline.py \
+            --version "${{ steps.ver.outputs.version }}" \
+            --reason "$REASON" \
+            --actor "${{ github.event.pull_request.user.login }}"
+          BRANCH="ds-decline/v${{ steps.ver.outputs.version }}"
+          git config user.name "plx-ds-adopt[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add design-system/SYNC-LOG.md
+          if git diff --cached --quiet; then
+            echo "SYNC-LOG already recorded"
+            exit 0
+          fi
+          git commit -m "chore(design-system): record decline of v${{ steps.ver.outputs.version }}"
+          git push -u origin "$BRANCH" --force
+          gh pr create \
+            --title "chore(design-system): record decline of v${{ steps.ver.outputs.version }}" \
+            --body "Auto-ledger for closed adopt PR #${{ github.event.pull_request.number }}. Pin unchanged." \
+            --base main \
+            --head "$BRANCH" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

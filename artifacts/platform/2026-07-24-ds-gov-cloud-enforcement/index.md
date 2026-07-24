@@ -19,3 +19,4 @@
 - `P2-MC-PIN-VERDICT.md` — TASK-684 consumer pin
 =======
 >>>>>>> origin/main
+- Adopt automation checkout: `MC-Checkout: dsp_mryz9sz5jp0d8b`

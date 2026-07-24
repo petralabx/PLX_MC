@@ -22,6 +22,7 @@ mc:
     mc_p2: TASK-684
     p3_hold: TASK-685
   checkout_planning: dsp_mryvrl8gj222kz
+  checkout_cloud_wiring: dsp_mryw4pv5w1uabx
 ---
 
 # Design System + Governance Cloud Enforcement

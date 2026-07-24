@@ -2,7 +2,7 @@
   "schemaVersion": "plx-brand-parity/v1",
   "portalRepo": "plx-customer-portal",
   "portalCommit": "243506d7a",
-  "syncedAt": "2026-07-24T13:13:15Z",
+  "syncedAt": "2026-07-24T13:13:24Z",
   "owner": "Vince",
   "rationale": "ADR-003 upstream authority; MC must not fork shared brand artifacts.",
   "authorityVersion": "1.0.0",
@@ -143,6 +143,10 @@
     {
       "path": "docs/design-system/assets/fonts/mazius/MaziusDisplay-Regular.woff2",
       "sha256": "2220486909addce8dadf31067c02e6f6e9b2d03f9991d71a3d5c0b3cd44e9a2b"
+    },
+    {
+      "path": "src/components/brand/README.md",
+      "sha256": "80964da7a4f330206cc5b0f891c89516f6cb608b0d841b8c0b34e3d208c88e82"
     }
   ]
 }

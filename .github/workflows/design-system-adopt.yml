@@ -1,0 +1,183 @@
+name: design-system-adopt
+
+# Opens a human-gated ADOPT/DECLINE PR when the portal authority package bumps.
+# Policy: config/design-system-adopt-policy.json (autoAdopt: never).
+
+on:
+  repository_dispatch:
+    types: [plx-ds-update]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Authority design-system semver (e.g. 1.0.1)
+        required: true
+        type: string
+      integrity:
+        description: Authority manifest integrity (sha256-…)
+        required: true
+        type: string
+      channel:
+        description: Authority channel ref
+        required: false
+        default: staging
+        type: string
+      allow_same_version:
+        description: Rebuild even if already pinned (dry-run wiring)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: design-system-adopt-${{ github.event.client_payload.version || inputs.version || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  open-adopt-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PLX_MC
+        uses: actions/checkout@v4
+        with:
+          path: mc
+
+      - name: Resolve payload + policy
+        id: meta
+        working-directory: mc
+        run: |
+          set -euo pipefail
+          enabled=$(jq -r '.enabled' config/design-system-adopt-policy.json)
+          auto=$(jq -r '.autoAdopt' config/design-system-adopt-policy.json)
+          label=$(jq -r '.label' config/design-system-adopt-policy.json)
+          prefix=$(jq -r '.branchPrefix' config/design-system-adopt-policy.json)
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "label=$label" >> "$GITHUB_OUTPUT"
+          echo "branchPrefix=$prefix" >> "$GITHUB_OUTPUT"
+          if [ "$enabled" != "true" ]; then
+            echo "Adopt policy disabled — skipping"
+            exit 0
+          fi
+          if [ "$auto" != "never" ]; then
+            echo "Only autoAdopt=never is supported in v1 (human-gate). Got: $auto"
+            exit 1
+          fi
+
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            VERSION='${{ github.event.client_payload.version }}'
+            INTEGRITY='${{ github.event.client_payload.integrity }}'
+            CHANNEL='${{ github.event.client_payload.channel }}'
+            ALLOW_SAME='false'
+            CHANGELOG='${{ github.event.client_payload.changelogExcerpt }}'
+          else
+            VERSION='${{ inputs.version }}'
+            INTEGRITY='${{ inputs.integrity }}'
+            CHANNEL='${{ inputs.channel }}'
+            ALLOW_SAME='${{ inputs.allow_same_version }}'
+            CHANGELOG=''
+          fi
+          CHANNEL="${CHANNEL:-staging}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "integrity=$INTEGRITY" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "allow_same=$ALLOW_SAME" >> "$GITHUB_OUTPUT"
+          {
+            echo "changelog<<EOF"
+            printf '%s\n' "$CHANGELOG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout authority package
+        if: steps.meta.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: petralabx/plx-customer-portal
+          ref: ${{ steps.meta.outputs.channel }}
+          path: authority
+          sparse-checkout: |
+            design-system
+            portal/src/styles/brand-tokens.css
+          sparse-checkout-cone-mode: false
+
+      - name: Prepare adopt tree
+        if: steps.meta.outputs.enabled == 'true'
+        id: prep
+        working-directory: mc
+        run: |
+          set -euo pipefail
+          printf '%s\n' "${{ steps.meta.outputs.changelog }}" > /tmp/changelog-excerpt.md
+          ARGS=(
+            --authority-root ../authority
+            --version "${{ steps.meta.outputs.version }}"
+            --integrity "${{ steps.meta.outputs.integrity }}"
+            --changelog-excerpt-file /tmp/changelog-excerpt.md
+          )
+          if [ "${{ steps.meta.outputs.allow_same }}" = "true" ]; then
+            ARGS+=(--allow-same-version)
+          fi
+          set +e
+          OUT=$(python3 scripts/plx-ds-prepare-adopt.py "${ARGS[@]}")
+          CODE=$?
+          set -e
+          echo "$OUT"
+          if [ $CODE -ne 0 ]; then exit $CODE; fi
+          if echo "$OUT" | grep -q '^skip:'; then
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skipped=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open ADOPT/DECLINE PR
+        if: steps.meta.outputs.enabled == 'true' && steps.prep.outputs.skipped != 'true'
+        working-directory: mc
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          INTEGRITY="${{ steps.meta.outputs.integrity }}"
+          BRANCH="${{ steps.meta.outputs.branchPrefix }}v${VERSION}"
+          LABEL="${{ steps.meta.outputs.label }}"
+          CHANNEL="${{ steps.meta.outputs.channel }}"
+          git config user.name "plx-ds-adopt[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No file changes after prepare — nothing to PR"
+            exit 0
+          fi
+          git commit -m "chore(design-system): propose adopt v${VERSION}"
+          git push -u origin "$BRANCH" --force
+          BODY=$(cat <<EOF
+          ## Design-system update — human gate
+
+          Authority \`petralabx/plx-customer-portal\` published **v${VERSION}**.
+
+          | Field | Value |
+          |---|---|
+          | pinnedIntegrity | \`${INTEGRITY}\` |
+          | channel | \`${CHANNEL}\` |
+          | autoAdopt policy | \`never\` (merge = ADOPT, close = DECLINE) |
+
+          ### Changelog excerpt
+
+          ${{ steps.meta.outputs.changelog }}
+
+          ### Decision
+
+          - **ADOPT** — merge this PR (updates pin + mirrors + SYNC-LOG).
+          - **DECLINE** — close this PR; the decline workflow records the ledger line and leaves the pin unchanged.
+
+          Label: \`${LABEL}\`
+          EOF
+          )
+          gh label create "$LABEL" --description "Design-system adopt/decline gate" --color "0E8A16" || true
+          if gh pr list --head "$BRANCH" --json number --jq 'length' | grep -vq '^0$'; then
+            gh pr edit "$BRANCH" --title "chore(design-system): adopt v${VERSION}" --body "$BODY"
+            gh pr edit "$BRANCH" --add-label "$LABEL" || true
+          else
+            gh pr create --title "chore(design-system): adopt v${VERSION}" --body "$BODY" --base main --head "$BRANCH" --label "$LABEL"
+          fi

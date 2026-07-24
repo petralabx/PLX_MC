@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "plx-ds-adopt-policy/v1",
+  "enabled": true,
+  "channel": "staging",
+  "authorityRepo": "petralabx/plx-customer-portal",
+  "autoAdopt": "never",
+  "label": "design-system-update",
+  "prTitlePrefix": "chore(design-system): adopt",
+  "branchPrefix": "ds-adopt/"
+}

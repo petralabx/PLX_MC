@@ -58,14 +58,18 @@ def check_pin(repo_root: Path) -> list[str]:
 
     for key in ("authority", "channel", "pinnedVersion", "pinnedIntegrity"):
         if not ds.get(key):
-            violations.append(f"plx-brand.json designSystem.{key} required when adopting")
+            violations.append(
+                f"plx-brand.json designSystem.{key} required when adopting"
+            )
 
     pinned_version = ds.get("pinnedVersion")
     pinned_integrity = ds.get("pinnedIntegrity")
 
     manifest_path = repo_root / "design-system" / "manifest.json"
     if not manifest_path.is_file():
-        violations.append("missing design-system/manifest.json (run scripts/plx-ds-sync.sh)")
+        violations.append(
+            "missing design-system/manifest.json (run scripts/plx-ds-sync.sh)"
+        )
         return violations
 
     try:
@@ -98,12 +102,16 @@ def check_pin(repo_root: Path) -> list[str]:
 
     for entry in artifacts:
         if not isinstance(entry, dict):
-            violations.append("design-system/manifest.json artifacts[] entry must be object")
+            violations.append(
+                "design-system/manifest.json artifacts[] entry must be object"
+            )
             continue
         rel = entry.get("path")
         expected = entry.get("sha256")
         if not rel or not expected:
-            violations.append("design-system/manifest.json artifacts[] missing path/sha256")
+            violations.append(
+                "design-system/manifest.json artifacts[] missing path/sha256"
+            )
             continue
         package_file = repo_root / "design-system" / rel
         if not package_file.is_file():
@@ -155,7 +163,9 @@ def main(argv: list[str] | None = None) -> int:
             brand = json.loads(brand_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             brand = {}
-        if (brand.get("designSystem") or {}).get("adoptsPlxTokens") is not True and not violations:
+        if (brand.get("designSystem") or {}).get(
+            "adoptsPlxTokens"
+        ) is not True and not violations:
             print("design-system pin: skip (adoptsPlxTokens is false)")
             return 0
 

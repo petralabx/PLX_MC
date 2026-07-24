@@ -112,6 +112,7 @@ def test_exit_1_on_invalid_json(tmp_path):
     (tmp_path / "plx-brand.json").write_text("{not json", encoding="utf-8")
     assert _run(tmp_path).returncode == 1
 
+
 def test_exit_0_on_operational_adopter_with_pin(tmp_path):
     manifest = {
         "schemaVersion": "plx-brand/v1",
@@ -160,4 +161,3 @@ def test_exit_1_when_adopter_missing_pin(tmp_path):
     result = _run(tmp_path)
     assert result.returncode == 1
     assert "pinnedVersion" in result.stdout
-

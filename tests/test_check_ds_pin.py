@@ -35,7 +35,9 @@ def _write_adopting_fixture(root: Path, *, integrity: str | None = None) -> str:
         {"path": "fonts/LICENSE.txt", "sha256": _sha256(font)},
     ]
     hashes = [a["sha256"] for a in artifacts]
-    actual_integrity = "sha256-" + hashlib.sha256("\n".join(hashes).encode()).hexdigest()
+    actual_integrity = (
+        "sha256-" + hashlib.sha256("\n".join(hashes).encode()).hexdigest()
+    )
     if integrity is None:
         integrity = actual_integrity
 
@@ -57,7 +59,9 @@ def _write_adopting_fixture(root: Path, *, integrity: str | None = None) -> str:
         },
         "mc": {"github": "petralabx/PLX_MC", "registryId": "plx-mission-control"},
     }
-    (root / "plx-brand.json").write_text(json.dumps(brand, indent=2) + "\n", encoding="utf-8")
+    (root / "plx-brand.json").write_text(
+        json.dumps(brand, indent=2) + "\n", encoding="utf-8"
+    )
 
     ds = root / "design-system"
     ds.mkdir(parents=True)
@@ -100,7 +104,9 @@ def test_exit_0_when_pin_matches(tmp_path):
 
 def test_exit_1_on_mirror_drift(tmp_path):
     _write_adopting_fixture(tmp_path)
-    (tmp_path / "docs/design-system/tokens.css").write_bytes(b":root { --p-paper: #000; }\n")
+    (tmp_path / "docs/design-system/tokens.css").write_bytes(
+        b":root { --p-paper: #000; }\n"
+    )
     result = _run(tmp_path)
     assert result.returncode == 1
     assert "mirror drift" in result.stdout

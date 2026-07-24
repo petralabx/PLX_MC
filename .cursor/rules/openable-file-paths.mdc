@@ -1,0 +1,47 @@
+---
+description: Share markdown and file paths as session-openable references
+alwaysApply: true
+---
+
+# Openable File Paths In Chat
+
+Whenever you share a file (especially `.md`) or a filesystem path with the user,
+make it openable from this Cursor session.
+
+## Required format (Cloud-safe)
+
+1. Prefer an **inline backtick path** — Cursor treats these as openable file
+   references. In multi-root / Cloud VM workspaces, use the **absolute** path.
+2. For a specific region, use a **code citation block**
+   (` ```startLine:endLine:filepath ` `) so the user can jump to those lines.
+3. If you mention several files, give **each** its own backtick path (or
+   citation).
+4. You may also add a normal GitHub `https://github.com/.../blob/<branch>/...`
+   URL when the file is already pushed and the user needs a browser tab — that
+   is additive, not a substitute for the workspace path.
+
+## Forbidden (causes web 404 on cursor.com/agents)
+
+Do **not** wrap workspace paths in markdown links with a leading-slash href:
+
+- Bad: `[SPEC.md](/agent/repos/PLX_MC/artifacts/.../SPEC.md)`
+  → browser goes to `https://cursor.com/agent/repos/...` → 404
+- Bad: `[SPEC.md](file:///agent/repos/...)` as the only reference
+
+Leading-slash markdown targets are **site-relative web URLs** on the Cloud
+Agent web UI, not workspace open actions.
+
+## Examples
+
+Good:
+
+- Draft SPEC: `/agent/repos/PLX_MC/artifacts/platform/2026-07-24-ds-gov-cloud-enforcement/SPEC.md`
+- Kickoff report: `/agent/repos/PLX_MC/artifacts/platform/2026-07-24-ds-gov-cloud-enforcement/REPORT.md`
+- (written in chat as backtick-wrapped absolute paths)
+
+Also good for a region — use a citation fence with `startLine:endLine:filepath`.
+
+Bad:
+
+- `[SPEC.md](/agent/repos/PLX_MC/artifacts/.../SPEC.md)` (web 404 on Cloud)
+- “See the SPEC in the orchestrator folder” (no path)

@@ -1,30 +1,37 @@
-# Cursor Cloud — Service Account API key (inline MCP launches)
+# Cursor Cloud — API key for inline MCP launches
 
 **Owner:** Vince · **Status:** active · **Related:** TASK-682 / ds-gov-cloud-enforcement  
 **Why:** Team HTTP MCP servers (`PLX-MC-Hub` / `PLX-MC-Portal`) are registered but
 often **fail to attach** to Cloud Agent tool catalogs (Cursor platform bug). A
-**service account API key** lets automation launch Cloud Agents with inline
+**user or service-account API key** lets automation launch Cloud Agents with inline
 `mcpServers[]`, bypassing the broken Team MCP attach path for verification and
 governed runs.
 
 ## Create the key (human — dashboard only)
 
-1. Open [Cursor Dashboard → Settings → API Keys → Service Accounts](https://cursor.com/dashboard/settings)
-   (exact nav may say **Cloud Agents → API Keys → Service Accounts**).
-2. Create a service account (e.g. name `plx-cloud-mcp`).
-3. Generate an API key. Copy it once.
-4. Store in AWS Secrets Manager `prod/ec2-secrets` as:
-   - `CURSOR_CLOUD_SERVICE_API_KEY` (canonical)
-   - optional alias `CURSOR_SERVICE_ACCOUNT_API_KEY`
-5. Do **not** commit the key. This Cloud Agent role is **secrets-read only** and
-   cannot `PutSecretValue` — an operator with write access must store it.
+Use **either**:
+
+1. **Personal user API key** (works now; current production secret) —
+   [Dashboard → API Keys](https://cursor.com/dashboard/api) → **New API Key**.
+   Must **not** be a Team Admin/spend key (those return 401 on `/v0|/v1/agents`).
+2. **Enterprise service account** (preferred for shared CI later) —
+   Team Settings → Service accounts → mint a key.
+
+Store in AWS Secrets Manager `prod/ec2-secrets` as `CURSOR_CLOUD_SERVICE_API_KEY`
+(name kept for continuity; value may be a personal user key).
+This Cloud Agent role is **secrets-read only** and cannot `PutSecretValue`.
+
+**Verified 2026-07-24 (Vince confirmed personal key):** secret → `GET /v1/me`
+`vince@petrasoap.com`; inline MCP launch agent
+`bc-83d3035f-1fa5-4191-acc4-6ccc26b65b9d` saw `PLX-MC-Hub` / `PLX-MC-Portal`
+and `mc_self_check: ok`.
 
 ## Verify the key type
 
 ```bash
-# Must NOT be the Team Admin spend key (crsr_… Admin). Service/user keys work with:
+# Must NOT be the Team Admin spend key (crsr_… Admin). User/service keys work with:
 curl -sS -u "$CURSOR_CLOUD_SERVICE_API_KEY:" \
-  https://api.cursor.com/v0/agents | head
+  https://api.cursor.com/v1/me
 ```
 
 If you see *“This is a team API key … only works with the Cursor Admin API”*,
@@ -32,23 +39,26 @@ you used the wrong key.
 
 ## Launch a Cloud Agent with inline PLX-MC MCP
 
+Use **`POST /v1/agents`** with `repos` + `mcpServers`. The v0 create shape
+rejects `mcpServers`.
+
 ```bash
-export CURSOR_CLOUD_SERVICE_API_KEY=…   # from secrets
+export CURSOR_CLOUD_SERVICE_API_KEY=…   # from secrets (personal or service account)
 export PLX_MC_MCP_API_KEY=…             # from prod/ec2-secrets
 
 curl -sS --request POST \
-  --url https://api.cursor.com/v0/agents \
+  --url https://api.cursor.com/v1/agents \
   -u "${CURSOR_CLOUD_SERVICE_API_KEY}:" \
   --header 'Content-Type: application/json' \
   --data @- <<EOF
 {
-  "prompt": {
-    "text": "Call mc_self_check via PLX-MC-Hub. Report whether Hub/Portal MCP tools are in the catalog. Do not change code."
-  },
-  "source": {
-    "repository": "https://github.com/petralabx/PLX_MC",
-    "ref": "main"
-  },
+  "prompt": "Call mc_self_check via PLX-MC-Hub. Report whether Hub/Portal MCP tools are in the catalog. Do not change code.",
+  "repos": [
+    {
+      "url": "https://github.com/petralabx/PLX_MC",
+      "ref": "main"
+    }
+  ],
   "mcpServers": [
     {
       "name": "PLX-MC-Hub",
@@ -77,11 +87,7 @@ curl -sS --request POST \
 EOF
 ```
 
-Adjust the request body fields to match the current
-[Cloud Agents API](https://cursor.com/docs/cloud-agent/api/endpoints) schema if
-field names differ (`repos` vs `source`, etc.).
-
-## Interim path (no service account yet)
+## Interim path (dashboard-launched agents without Team MCP attach)
 
 Hydrate `PLX_MC_MCP_API_KEY` from AWS and call REST:
 
@@ -95,5 +101,6 @@ See `docs/runbooks/cloud-agent-fleet-wiring.md` and
 
 ## Kill switch
 
-Delete/rotate the service account key in the Cursor dashboard; remove the secret
-from `prod/ec2-secrets`. Team MCP entries remain independently disableable.
+Delete/rotate the key in the Cursor dashboard; remove
+`CURSOR_CLOUD_SERVICE_API_KEY` from `prod/ec2-secrets`. Team MCP entries remain
+independently disableable.

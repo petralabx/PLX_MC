@@ -1,2 +1,12 @@
 *.sh text eol=lf
 docs/templates/mc-routing-manifest.json text eol=lf
+
+# Hash-pinned design-system artifacts (ADR-005). scripts/check-ds-pin.py hashes
+# raw bytes to match the portal release gate, so any working-tree line-ending
+# conversion changes the hash and the gate reports drift. With core.autocrlf=true
+# every Windows checkout failed on tokens.css, tokens.ts, and fonts/LICENSE.txt
+# while the committed content was correct. -text disables conversion in both
+# directions so the working tree is byte-identical to the blob on every platform.
+design-system/** -text
+docs/design-system/** -text
+public/fonts/mazius/** -text

@@ -16,6 +16,31 @@
 
 ## Lessons
 
+### 2026-07-26 (ET) — A "Validation before merge" section that ran nothing hid four defects in petralabx/skills
+
+- **What happened:** `petralabx/skills` shipped a `SKILL.md` whose frontmatter
+  failed to parse — an unquoted `": "` made YAML read the description as a
+  nested mapping, so the agent picker offered the skill with no description at
+  all. Behind the same unguarded merge path: seven `manifest.json` descriptions
+  were the literal two-character string `">-"` (`canvas` advertised itself in 2
+  characters instead of 797), ten more had drifted from their `SKILL.md` source,
+  and `gitRef` named a PR-branch commit that squash-merging left unreachable
+  from `main`.
+- **Root cause:** Each description is stored twice — `SKILL.md` frontmatter for
+  the Cursor/Claude picker, `manifest.json` for the MC skills directory — with
+  nothing checking that the copies agree. The one documented verification step,
+  `CONTRIBUTING.md` §5 "Validation before merge", named no command, so humans and
+  agents alike could report it satisfied without executing anything.
+- **Rule going forward:** Promoted to `.cursor/rules/verification-integrity.mdc`.
+  This family — a signal trusted for more than it asserts — is the most repeated
+  one in this file (2026-06-10, 2026-06-19, 2026-06-21, 2026-07-11, 2026-07-16,
+  2026-07-20, 2026-07-23), and had previously been promoted only in its
+  deployment-shaped form as `.cursor/rules/deployment-verification.mdc`.
+  Mechanically enforced in `petralabx/skills` by `scripts/validate-manifest.py`
+  and a required CI job (PRs #11-#14) covering unparseable frontmatter,
+  block-scalar markers, description drift, and unreachable `gitRef`; the gate was
+  replayed against all three historical trees and does fail on each.
+
 ### 2026-07-23 (UTC) — Edge middleware bundle rejects Node APIs in reachable modules
 
 - **What happened:** Adding an fs-read of the vendored RDS CA bundle to

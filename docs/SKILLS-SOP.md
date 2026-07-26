@@ -7,7 +7,7 @@ personal laptops against PLX-tracked repos (`PLX_MC`, `plx-customer-portal`, etc
 
 > **TL;DR** — **PLX-MC access ≠ skills installed.** Register the PLX-MC MCP server for
 > task checkout, then run the **company skills bootstrap once per machine**. Skills come
-> from **`petralabx/skills`** (catalog pin ~v1.3.1 / `pinSha` in
+> from **`petralabx/skills`** (catalog pin ~v1.4.0 / `pinSha` in
 > `config/skills-catalog.json`) — **not** the full `agentic-swarm` catalog. Legacy
 > `taylorvalton/plx-cursor-skills` v1.0.0 is historical only. Start a **new** Cursor
 > session after bootstrap. To share a skill company-wide, use Mission Control **Skills
@@ -92,7 +92,7 @@ Optional dry run:
 1. Clone or update `~/plx-cursor-skills` (Windows: `%USERPROFILE%\plx-cursor-skills`) —
    local directory name unchanged; **remote** is `petralabx/skills` per catalog.
 2. Check out catalog **`pinSha`** (or `pinTag` when set) from `config/skills-catalog.json`
-   (~v1.3.1 as of 2026-07-26).
+   (~v1.4.0 as of 2026-07-26).
 3. Install **published** skills from `manifest.json` into:
    - `~/.cursor/skills/<id>/`
    - `~/.claude/skills/<id>/`
@@ -107,20 +107,24 @@ Restart Claude Code similarly if you rely on global Claude skills.
 
 ---
 
-## 4. What you get (company catalog ~v1.3.1)
+## 4. What you get (company catalog ~v1.4.0)
 
 The default bundle is **`plx-engineering-core`** pinned via `config/skills-catalog.json`.
 Skill ids are authoritative in `manifest.json` `packages[].skillIds` — not a static
 list in PLX_MC.
 
-Current pin (2026-07-26) includes operator skills such as:
+Current pin (2026-07-26) carries **69 skills**, up from 39 — v1.4.0 imported the
+remaining operator-laptop skills and removed none. Examples:
 
 | Category | Examples (see manifest for full set) |
 |----------|-------------------------------------|
-| UAT / portal | `uat-feedback-batch-fix`, `uat-weekly-batch-loop` |
+| UAT / portal | `uat-feedback-batch-fix`, `uat-weekly-batch-loop`, `uat-loop-invariants` |
 | Data / env | `staging-dual-db-migrate` |
-| Integrations | `plx-graph-mail`, `worktree-open-session` |
+| Integrations | `plx-graph-mail`, `worktree-open-session`, `worktree-bootstrap` |
 | Workstation | `plx-mc-workstation` |
+| Convergence loops | `adversarial-review-loop`, `champion-challenger-loop`, `perf-budget-loop`, `quality-streak-loop` |
+| Cursor tooling | `sdk`, `statusline`, `update-cursor-settings`, `create-subagent`, `loop` |
+| Knowledge capture | `session-brain`, `cursor-inbox-bridge` |
 
 **Plus** any skills shipped natively in the repo you bootstrap from (PLX_MC adds `mc-sync`
 and may add others under `.cursor/skills/`).

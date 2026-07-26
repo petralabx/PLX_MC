@@ -7,6 +7,6 @@
   "manifestPath": "manifest.json",
   "packageId": "plx-engineering-core",
   "pinTag": "",
-  "pinSha": "64d371a51179b4c17296ba8fa2ad2f9b4b848cd3",
-  "notes": "petralabx/skills is the canonical company skill content repo; pinSha tracks catalog v1.3.1, which restores seven descriptions that had been corrupted to the literal YAML block-scalar marker '>-' (babysit, canvas, create-hook, create-rule, create-skill, migrate-to-skills, split-to-prs) and corrects manifest gitRef to a commit reachable from main. legacySourceRepo documents the pre-migration source."
+  "pinSha": "7fb3c06e931362270a7a0d55ce246673db8d2543",
+  "notes": "petralabx/skills is the canonical company skill content repo; pinSha tracks catalog v1.4.0, which grows the plx-engineering-core bundle from 39 to 69 skills (30 added, none removed) by importing the remaining operator-laptop skills, and carries the v1.3.2 hardening: every manifest description is now byte-identical to its SKILL.md frontmatter, enforced by scripts/validate-manifest.py in required CI alongside schema, id/directory parity and gitRef reachability checks. The pinned commit also re-stamps manifest gitRef to the v1.4.0 tree - PLX_MC prefers manifest.gitRef over pinSha, so a stale gitRef would have served the 39-skill v1.3.1 tree despite this pin. legacySourceRepo documents the pre-migration source."
 }

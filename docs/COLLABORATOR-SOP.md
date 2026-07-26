@@ -255,7 +255,7 @@ changes).
 The full `agentic-swarm` repo contains operator-only skills. **Do not** run the
 all-skills installer on a team laptop.
 
-Instead, bootstrap from **`petralabx/skills`** (catalog pin ~v1.2.0 in
+Instead, bootstrap from **`petralabx/skills`** (catalog pin ~v1.3.0 in
 `config/skills-catalog.json`):
 
 **Windows:** `.\scripts\bootstrap-company-skills.ps1` · **macOS/Linux:** `./scripts/bootstrap-company-skills.sh`

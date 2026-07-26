@@ -63,7 +63,7 @@ Canonical fleet governance list: `config/tracked-repos-registry.json` (org: **`p
 The first eight rows are the active fleet. `test-perms-check` is an excluded
 pending-adoption sandbox, not a routing cohort.
 
-Company skills catalog: **`petralabx/skills`** pinned at **~v1.3.0** via `config/skills-catalog.json`. Legacy `taylorvalton/plx-cursor-skills` v1.0.0 is deprecated — bootstrap from `petralabx/skills` per [`SKILLS-SOP.md`](SKILLS-SOP.md).
+Company skills catalog: **`petralabx/skills`** pinned at **~v1.3.1** via `config/skills-catalog.json`. Legacy `taylorvalton/plx-cursor-skills` v1.0.0 is deprecated — bootstrap from `petralabx/skills` per [`SKILLS-SOP.md`](SKILLS-SOP.md).
 
 ---
 

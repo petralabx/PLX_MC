@@ -7,6 +7,6 @@
   "manifestPath": "manifest.json",
   "packageId": "plx-engineering-core",
   "pinTag": "",
-  "pinSha": "ad21201545b1b58444738a9796081d3b7004d7a0",
-  "notes": "petralabx/skills is the canonical company skill content repo; pinSha tracks catalog v1.3.0, which adds plx-mc-workstation and repairs the project-hardener SKILL.md YAML frontmatter. legacySourceRepo documents the pre-migration source."
+  "pinSha": "64d371a51179b4c17296ba8fa2ad2f9b4b848cd3",
+  "notes": "petralabx/skills is the canonical company skill content repo; pinSha tracks catalog v1.3.1, which restores seven descriptions that had been corrupted to the literal YAML block-scalar marker '>-' (babysit, canvas, create-hook, create-rule, create-skill, migrate-to-skills, split-to-prs) and corrects manifest gitRef to a commit reachable from main. legacySourceRepo documents the pre-migration source."
 }

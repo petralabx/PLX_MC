@@ -1,0 +1,42 @@
+---
+description: A gate proves only what it asserts — prove checks exist and can fail before trusting them green
+alwaysApply: true
+---
+
+# Verification Integrity
+
+`local-ci-before-push.mdc` says run the gates. This rule says know what they
+assert. A check that never executed, or that cannot fail, is indistinguishable
+from no check — and worse, because it gets reported as coverage.
+
+## A documented step with no runnable command is a gap, not a step
+
+If a runbook, CONTRIBUTING section, or checklist names a verification step and
+gives no command, treat it as a missing gate: say so and name what is
+unverified. Never restate a documented step as done.
+
+`petralabx/skills` had a §5 titled "Validation before merge" that listed nothing
+to run. Three defect classes reached agents behind it, and the manifest's
+provenance pointer rotted unnoticed — see the 2026-07-26 entry in `LESSONS.md`.
+
+## Prove a gate can fail before trusting it green
+
+When adding a gate, or relying on an unfamiliar one for the first time, show it
+failing on input known to be bad: replay it against the defect it was written
+for, or seed the fault deliberately. Report that failure alongside the pass. A
+gate only ever observed passing has been run, not tested.
+
+## An environmentally-failing gate gets quarantined, not routed around
+
+A check that fails for reasons unrelated to the change — platform line endings,
+absent local credentials, clock skew — stops being a signal the moment its
+failure becomes routine. Fix it, or quarantine it explicitly with a named owner
+and a tracked task. "Known false positive" is not a disposition.
+
+## Duplicated facts get a parity check or one source
+
+When the same value must live in two places — generated surface and contract,
+catalog pin and manifest, frontmatter and directory entry — add a check that
+they agree, or collapse them to one source. This repo already uses that idiom
+(`generate-governance-surfaces.py --check`, the design-system pin check); extend
+it rather than relying on care.

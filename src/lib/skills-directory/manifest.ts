@@ -36,7 +36,7 @@ const ManifestSchema = z.object({
   skills: z.array(SkillEntrySchema).min(1),
 });
 
-/** First non-empty string among publisher stamp, fetch ref, and catalog pin. */
+/** First non-empty candidate, in the caller's order of trust. */
 export function resolveEffectiveGitRef(
   ...candidates: Array<string | null | undefined>
 ): string {
@@ -48,9 +48,18 @@ export function resolveEffectiveGitRef(
   return "";
 }
 
+/**
+ * `observedRef` is the ref the manifest was actually read from, and it wins over
+ * the `gitRef` recorded inside the manifest.
+ *
+ * A file cannot name the commit that contains it: the sha does not exist until
+ * the commit is made, so an in-file stamp is stale by construction and every
+ * version bump ships one that lags. Trusting it over the ref we just fetched
+ * from let a v1.3.1 stamp advertise itself while a v1.4.0 pin served 69 skills.
+ */
 export function parseManifestJson(
   raw: string,
-  opts: { fallbackGitRef?: string } = {}
+  opts: { observedRef?: string } = {}
 ): { ok: true; manifest: SkillsManifest } | { ok: false; error: string } {
   try {
     const parsed = ManifestSchema.safeParse(JSON.parse(raw));
@@ -62,7 +71,7 @@ export function parseManifestJson(
       ok: true,
       manifest: {
         ...data,
-        gitRef: resolveEffectiveGitRef(data.gitRef, opts.fallbackGitRef),
+        gitRef: resolveEffectiveGitRef(opts.observedRef, data.gitRef),
       } as SkillsManifest,
     };
   } catch (err) {

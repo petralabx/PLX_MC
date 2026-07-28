@@ -4,7 +4,7 @@ Evidence bundle for the exposed PLX_Forms app-only Graph client secret (app `c4b
 
 - **Date:** 2026-07-27
 - **Domain:** platform
-- **Status:** Runbook filed; rotation blocked on per-store app identity
+- **Status:** Remediated 2026-07-27 — secret revoked, all four copies deleted, no store update required
 - **MC tasks:** TASK-742 (rotation), TASK-750 (PLX_Cursor_Graph excess roles), TASK-751 (other plaintext credentials)
 
 ## Contents

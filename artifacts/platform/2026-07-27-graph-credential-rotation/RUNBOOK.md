@@ -6,9 +6,15 @@
 | **Owner** | Vince Taylor-Valton |
 | **App** | `PLX_Forms` — client `c4b5438d-66d4-4445-9e85-c45b4c8040ed` |
 | **Tenant** | `dc28356c-e440-4a9e-b8e6-e40967bfee06` (Petra Hygienic Systems Int Ltd) |
-| **Status** | Not started — **blocked**, see [BLOCKER](#blocker--the-same-variable-name-means-two-different-apps) |
+| **Status** | **Superseded — never exercised.** See [REPORT.md](REPORT.md) for what actually happened |
 | **MC task** | TASK-742 (`BKT-HARDENING`, high) |
 | **Revised** | 2026-07-27 — store inventory corrected against the Vercel API; Business Central finding reversed |
+
+> **Read REPORT.md first.** The incident was resolved by revoking the secret outright, not by
+> rotating it, because measurement showed **no deployed store held this credential** — every
+> readable store holds app `3013790b`. The store table below was built from variable *names*
+> and is not a reliable map of which app each store uses. This document is retained only as a
+> reference procedure for a future rotation that genuinely spans stores.
 
 ## Why
 

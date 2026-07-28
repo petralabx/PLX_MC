@@ -37,6 +37,64 @@ fi
 
 step() { echo ""; echo "=== [preflight] $1 ==="; }
 
+# Pin from requirements.txt (e.g. ruff==0.15.16 → 0.15.16). Empty if absent.
+pin_from_requirements() {
+  local pkg="$1"
+  sed -nE "s/^${pkg}==([^[:space:]#]+).*/\\1/p" requirements.txt 2>/dev/null | head -n1
+}
+
+# Locate uvx even under WSL bash, where Windows tools appear as *.exe on PATH
+# via interop but the bare `uvx` name is often missing.
+resolve_uvx() {
+  command -v uvx 2>/dev/null || command -v uvx.exe 2>/dev/null || true
+}
+
+# Prefer `$PY -m <pkg>` when that interpreter has the module (CI / .venv path).
+# Else fall back to `uvx <pkg>@<pin>` so a clean checkout on WSL bash — where
+# system python3 lacks ruff/pytest but Windows uvx is reachable — still runs
+# the remaining gate instead of dying mid-list under `set -e`.
+# If neither works, fail loudly with bootstrap instructions (never skip).
+run_py_tool() {
+  local pkg="$1"
+  shift
+  local pin uvx_bin
+  pin="$(pin_from_requirements "$pkg")"
+
+  if "$PY" -c "import ${pkg}" >/dev/null 2>&1; then
+    "$PY" -m "$pkg" "$@"
+    return
+  fi
+
+  uvx_bin="$(resolve_uvx)"
+  if [[ -n "$uvx_bin" && -n "$pin" ]]; then
+    echo "[preflight] ${pkg} missing in \$PY (${PY}); using ${uvx_bin} ${pkg}@${pin}"
+    if [[ "$pkg" == "pytest" ]]; then
+      # Canary/full suite imports project deps (pyyaml, …) — pull the pin file.
+      "$uvx_bin" --with-requirements requirements.txt --from "pytest==${pin}" pytest "$@"
+    else
+      "$uvx_bin" "${pkg}@${pin}" "$@"
+    fi
+    return
+  fi
+
+  echo "[preflight] FATAL: ${pkg} is required for this preflight mode but is unavailable." >&2
+  echo "[preflight]   interpreter: ${PY}" >&2
+  echo "[preflight]   import ${pkg}: failed" >&2
+  if [[ -z "$uvx_bin" ]]; then
+    echo "[preflight]   uvx / uvx.exe: not on PATH" >&2
+  elif [[ -z "$pin" ]]; then
+    echo "[preflight]   pin: ${pkg} not found in requirements.txt" >&2
+  fi
+  echo "[preflight] Bootstrap (preferred):" >&2
+  echo "[preflight]   python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # Windows" >&2
+  echo "[preflight]   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt     # POSIX" >&2
+  echo "[preflight] Or install uv and retry (falls back to uvx ${pkg}@<pin from requirements.txt>)." >&2
+  exit 1
+}
+
+run_ruff() { run_py_tool ruff "$@"; }
+run_pytest() { run_py_tool pytest "$@"; }
+
 # ---------------------------------------------------------------------------
 # Policy gates — always run, in every mode. These are cheap and absolute.
 # ---------------------------------------------------------------------------
@@ -54,13 +112,15 @@ run_policy() {
   "$PY" scripts/check-repo-hygiene.py
 
   step "Shebang line endings (eol=lf)"
-  "$PY" scripts/check-shebang-eol.py --repo-root "$REPO_ROOT"
+  # Self-resolve cwd rather than passing bash's $REPO_ROOT: under WSL bash +
+  # a native Windows .venv python, /mnt/c/... becomes C:\mnt\c\... and git dies.
+  "$PY" scripts/check-shebang-eol.py
 
   if [[ -f plx-brand.json ]]; then
     step "Brand repo structure (plx-brand.json present)"
-    "$PY" scripts/check-brand-repo-structure.py --repo-root "$REPO_ROOT"
+    "$PY" scripts/check-brand-repo-structure.py
     step "Design-system pin (ADR-005)"
-    "$PY" scripts/check-ds-pin.py --repo-root "$REPO_ROOT"
+    "$PY" scripts/check-ds-pin.py
   fi
 
   if [[ -f config/brand-portal-parity.json ]]; then
@@ -90,12 +150,12 @@ run_policy() {
 run_quick() {
   if [[ -f pyproject.toml || -f requirements.txt ]]; then
     step "Python lint (ruff check)"
-    "$PY" -m ruff check .
+    run_ruff check .
     step "Python format (ruff format --check)"
-    "$PY" -m ruff format --check .
+    run_ruff format --check .
     if [[ -f tests/test_canary.py ]]; then
       step "Canary tests (imports + smoke)"
-      "$PY" -m pytest tests/test_canary.py -x -q --no-header
+      run_pytest tests/test_canary.py -x -q --no-header
     fi
   else
     echo "[preflight] SKIP python quick checks (no pyproject.toml/requirements.txt)"
@@ -117,7 +177,7 @@ run_quick() {
 run_full() {
   if [[ -f pyproject.toml || -f requirements.txt ]]; then
     step "Python tests (full suite)"
-    "$PY" -m pytest -q
+    run_pytest -q
   fi
 
   if [[ -f package.json ]]; then

@@ -121,7 +121,7 @@ def main() -> None:
             "  $env:MICROSOFT_GRAPH_CLIENT_ID     = $__graph.clientId",
             "  $env:MICROSOFT_GRAPH_CLIENT_SECRET = $__graph.clientSecret",
             "} catch {",
-            f"  Write-Warning \"Graph credential unavailable from {CURSOR_GRAPH_SECRET_ID}: $($_.Exception.Message)\"",
+            f'  Write-Warning "Graph credential unavailable from {CURSOR_GRAPH_SECRET_ID}: $($_.Exception.Message)"',
             '  Write-Warning "Check AWS credentials (aws sts get-caller-identity), then re-source this file."',
             "} finally {",
             "  Remove-Variable __graph, __awsCli -ErrorAction SilentlyContinue",

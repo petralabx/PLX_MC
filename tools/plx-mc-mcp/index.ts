@@ -97,13 +97,20 @@ server.tool("mc_self_check", "Validate PLX MC MCP auth and connectivity.", {}, a
 
 server.tool(
   "mc_get_context",
-  "Read compact or full MC context (tasks, buckets).",
-  { depth: z.enum(["compact", "full"]).optional(), bucket: z.string().optional() },
-  async ({ depth, bucket }) => {
+  "Read compact or full MC context (tasks, buckets). Pass taskIds to scope; bucket scopes by project. Applied filters are echoed in meta.filter.",
+  {
+    depth: z.enum(["compact", "full"]).optional(),
+    bucket: z.string().optional(),
+    taskIds: z.array(z.string().min(1)).optional(),
+  },
+  async ({ depth, bucket, taskIds }) => {
     if (!MCP_ENABLED) return disabledTool("mc_get_context");
     const qs = new URLSearchParams();
     if (depth) qs.set("depth", depth);
     if (bucket) qs.set("bucket", bucket);
+    if (taskIds?.length) {
+      for (const id of taskIds) qs.append("taskIds", id);
+    }
     const q = qs.toString();
     return printResult(await mcFetch(`/context${q ? `?${q}` : ""}`));
   }
@@ -111,9 +118,10 @@ server.tool(
 
 server.tool(
   "mc_search_tasks",
-  "Search/list MC tasks.",
+  "Search/list MC tasks. `query` and `q` are aliases. Applied filters are echoed in meta.filter.",
   {
-    q: z.string().optional(),
+    q: z.string().optional().describe("Search text (alias of query)"),
+    query: z.string().optional().describe("Search text (alias of q)"),
     bucket: z.string().optional(),
     stage: z.string().optional(),
     limit: z.number().int().optional(),
@@ -122,6 +130,7 @@ server.tool(
     if (!MCP_ENABLED) return disabledTool("mc_search_tasks");
     const qs = new URLSearchParams();
     if (args.q) qs.set("q", args.q);
+    if (args.query) qs.set("query", args.query);
     if (args.bucket) qs.set("bucket", args.bucket);
     if (args.stage) qs.set("stage", args.stage);
     if (args.limit) qs.set("limit", String(args.limit));

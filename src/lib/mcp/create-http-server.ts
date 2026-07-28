@@ -55,27 +55,36 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_get_context",
-    "Compact or full task/bucket context from Mission Control.",
-    { depth: z.enum(["compact", "full"]).optional(), bucket: z.string().optional() },
-    async ({ depth, bucket }) => {
-      const data = await actionGetContext(depth ?? "compact");
-      if (bucket && depth !== "full" && "topTasks" in data && data.topTasks) {
-        return jsonResult({ ...data, topTasks: data.topTasks.filter((t) => t.bucket === bucket) });
-      }
-      return jsonResult(data);
+    "Compact or full task/bucket context from Mission Control. Pass taskIds to scope the task list; bucket scopes by project.",
+    {
+      depth: z.enum(["compact", "full"]).optional(),
+      bucket: z.string().optional(),
+      taskIds: z.array(z.string().min(1)).optional(),
+    },
+    async (args) => {
+      const result = await actionGetContext(args);
+      const { filter, ...data } = result;
+      return jsonResult({ data, meta: { filter } });
     }
   );
 
   server.tool(
     "mc_search_tasks",
-    "Search/list tasks by query, bucket, or stage.",
+    "Search/list tasks by query (alias: q), bucket, or stage. Applied filters are echoed in meta.filter.",
     {
-      q: z.string().optional(),
+      q: z.string().optional().describe("Search text (alias of query)"),
+      query: z.string().optional().describe("Search text (alias of q)"),
       bucket: z.string().optional(),
       stage: z.string().optional(),
       limit: z.number().int().min(1).max(200).optional(),
     },
-    async (args) => jsonResult(await actionSearchTasks(args))
+    async (args) => {
+      const result = await actionSearchTasks(args);
+      return jsonResult({
+        data: { tasks: result.tasks, total: result.total },
+        meta: { filter: result.filter },
+      });
+    }
   );
 
   server.tool(

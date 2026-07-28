@@ -118,7 +118,7 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 
 | Step | Tool | Notes |
 |------|------|-------|
-| Find work | `mc_search_tasks` | Filter by `q`, `bucket`, `stage`, `limit` |
+| Find work | `mc_search_tasks` | Filter by `query` (alias `q`), `bucket`, `stage`, `limit`; `meta.filter` echoes what was applied |
 | Create task | `mc_create_task` | Requires `title` + `bucket`; optional `description`, `priority`, `repos` (registry **ids**, not GitHub slugs — see table below) |
 | Start | `mc_checkout_task` | Copy `MC-Checkout: dsp_*` from `meta.links.checkoutStamp` |
 

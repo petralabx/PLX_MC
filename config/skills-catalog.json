@@ -6,7 +6,7 @@
   "sourceBranch": "main",
   "manifestPath": "manifest.json",
   "packageId": "plx-engineering-core",
-  "pinTag": "",
-  "pinSha": "7fb3c06e931362270a7a0d55ce246673db8d2543",
-  "notes": "petralabx/skills is the canonical company skill content repo; pinSha tracks catalog v1.4.0, which grows the plx-engineering-core bundle from 39 to 69 skills (30 added, none removed) by importing the remaining operator-laptop skills, and carries the v1.3.2 hardening: every manifest description is now byte-identical to its SKILL.md frontmatter, enforced by scripts/validate-manifest.py in required CI alongside schema, id/directory parity and gitRef reachability checks. The pinned commit also re-stamps manifest gitRef to the v1.4.0 tree - PLX_MC prefers manifest.gitRef over pinSha, so a stale gitRef would have served the 39-skill v1.3.1 tree despite this pin. legacySourceRepo documents the pre-migration source."
+  "pinTag": "v1.4.1",
+  "pinSha": "",
+  "notes": "petralabx/skills is the canonical company skill content repo. The pin is now a release tag rather than a sha: petralabx/skills tags each merge to main with v<manifest.version>, so v1.4.1 is readable, immutable, and resolves to exactly one commit. v1.4.1 carries the 69-skill plx-engineering-core bundle (v1.4.0 imported the remaining operator-laptop skills, 30 added and none removed), the v1.3.2 description parity hardening, and two skill fixes that landed after the old sha pin and were therefore invisible to agents. manifest.gitRef no longer exists: a manifest cannot name the commit that contains it, so the stamp was stale by construction, and PLX_MC preferring it over the pin nearly served the 39-skill v1.3.1 tree under a v1.4.0 pin. Provenance now comes from the ref actually fetched. legacySourceRepo documents the pre-migration source."
 }

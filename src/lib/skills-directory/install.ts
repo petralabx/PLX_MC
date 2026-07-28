@@ -51,8 +51,11 @@ function psSingleQuote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
-function refForInstall(allowlist: AllowlistConfig, manifest: SkillsManifest): string {
-  return allowlist.pinSha || allowlist.pinTag || manifest.gitRef || allowlist.sourceBranch;
+// The catalog pin decides what gets installed. manifest.gitRef used to sit in
+// this chain, which let a stale publisher stamp choose the ref for an operator's
+// workstation; petralabx/skills no longer carries the field at all.
+function refForInstall(allowlist: AllowlistConfig): string {
+  return allowlist.pinSha || allowlist.pinTag || allowlist.sourceBranch;
 }
 
 function uniqueNonEmpty(values: string[] | undefined): string[] {
@@ -238,7 +241,7 @@ export function buildSkillsInstallPlan(options: BuildSkillsInstallOptions): Skil
             drift.staleSkillIds.includes(skill.id)
         )
       : skills;
-  const gitRef = refForInstall(options.allowlist, options.manifest);
+  const gitRef = refForInstall(options.allowlist);
 
   return {
     mode: options.mode,

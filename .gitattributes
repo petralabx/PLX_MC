@@ -1,4 +1,19 @@
 *.sh text eol=lf
+
+# Vitest cannot load a shebang-bearing .mjs whose working copy has CRLF: the
+# suite fails to collect with "SyntaxError: Invalid or unexpected token" before
+# any test runs. Plain node imports the same file fine, and Linux CI never sees
+# it, so on Windows two suites were permanently red and treated as folklore.
+# scripts/check-shebang-eol.py keeps this list honest.
+#
+# The rest are pinned on the same principle rather than after an incident: a
+# shebang declares the file is run directly, and git already stores every one of
+# these as LF, so this only stops Windows checkouts from rewriting them.
+*.mjs text eol=lf
+*.py text eol=lf
+*.ps1 text eol=lf
+bin/* text eol=lf
+tools/plx-mc-mcp/index.ts text eol=lf
 docs/templates/mc-routing-manifest.json text eol=lf
 
 # Hash-pinned design-system artifacts (ADR-005). scripts/check-ds-pin.py hashes

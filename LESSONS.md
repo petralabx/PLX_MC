@@ -58,6 +58,23 @@
   `src/lib/auth`, `src/lib/permissions`, or `src/lib/db` must stay free of
   Node-API usage; verify with `npm run build`, not just typecheck/tests.
 
+### 2026-07-22 (ET) — MCP launchers need clean-environment and current-Node probes
+
+- **What happened:** Both PLX-MC Cursor MCP targets failed discovery before
+  exposing tools. The shared PowerShell launcher assumed `$HOME` and a
+  fallible staging loader, then Node 24 rejected an internal `require()` mixed
+  with the entrypoint's top-level `await`.
+- **Root cause:** Startup was only exercised in an interactive shell and the
+  TypeScript MCP entrypoint had no protocol-level smoke test under the current
+  Node runtime.
+- **Rule going forward:** MCP launch verification must spawn each configured
+  target through its real wrapper, initialize an SDK client, list tools, and
+  call the authenticated self-check under the supported Node version. Runnable
+  as `node tools/plx-mc-mcp/smoke-launch.mjs` (`--auth` for the credentialed
+  self-check, `--target portal` for the portal binding); it asserts the launcher
+  starts, the session initializes, and the routing mutation tools registered —
+  the exact path the `require()` broke.
+
 ### 2026-07-20 (ET) — User-level PLX-MC MCP pinned portal while editing the hub
 
 - **What happened:** PR #152 compliance blocked because checkout

@@ -24,20 +24,55 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 
 
 def git(
-    repo_root: str, *args: str, stdin: str | None = None
+    repo_root: str,
+    *args: str,
+    stdin: str | None = None,
+    git_dir: str | None = None,
 ) -> subprocess.CompletedProcess:
+    env = None
+    if git_dir:
+        env = {**os.environ, "GIT_DIR": git_dir, "GIT_WORK_TREE": repo_root}
     return subprocess.run(
         ["git", "-C", repo_root, *args],
         capture_output=True,
         text=True,
         encoding="utf-8",
         input=stdin,
+        env=env,
     )
+
+
+def wsl_gitdir(repo_root: str) -> str | None:
+    """Translate a Windows worktree's gitdir so WSL git can follow it.
+
+    `git worktree add` on Windows writes an absolute `gitdir: C:/...` into the
+    worktree's .git file. WSL git cannot resolve a drive-letter path, so it
+    appends it to the cwd and reports `not a git repository` for a checkout that
+    is perfectly valid — which is how preflight came to abort inside every
+    worktree while passing in the main clone. Returns None when the layout is
+    anything else, so normal checkouts take the untouched path above.
+    """
+    marker = os.path.join(repo_root, ".git")
+    if not os.path.isfile(marker):
+        return None
+    try:
+        with open(marker, encoding="utf-8") as handle:
+            entry = handle.read().strip()
+    except OSError:
+        return None
+    if not entry.startswith("gitdir:"):
+        return None
+    match = re.match(r"^([A-Za-z]):[\\/](.*)$", entry.split(":", 1)[1].strip())
+    if not match:
+        return None
+    drive, rest = match.groups()
+    return f"/mnt/{drive.lower()}/{rest.replace(chr(92), '/')}"
 
 
 def has_shebang(path: str) -> bool:
@@ -54,9 +89,20 @@ def main() -> int:
     args = parser.parse_args()
     repo_root = os.path.abspath(args.repo_root)
 
+    git_dir = None
     listing = git(repo_root, "ls-files", "-z")
     if listing.returncode != 0:
-        print("FATAL: not a git checkout", file=sys.stderr)
+        git_dir = wsl_gitdir(repo_root)
+        if git_dir:
+            listing = git(repo_root, "ls-files", "-z", git_dir=git_dir)
+    if listing.returncode != 0:
+        # Report what git said rather than guessing. "not a git checkout" was
+        # wrong in the case that actually came up, and a check that misnames its
+        # own failure costs the same hour the CRLF symptom did.
+        print(f"FATAL: git could not read {repo_root}", file=sys.stderr)
+        detail = listing.stderr.strip()
+        if detail:
+            print(f"  {detail}", file=sys.stderr)
         return 2
 
     shebang_files = [
@@ -71,7 +117,13 @@ def main() -> int:
     # git check-attr reports the effective attribute, so this follows whatever
     # .gitattributes actually resolves to rather than re-implementing matching.
     query = git(
-        repo_root, "check-attr", "--stdin", "-z", "eol", stdin="\0".join(shebang_files)
+        repo_root,
+        "check-attr",
+        "--stdin",
+        "-z",
+        "eol",
+        stdin="\0".join(shebang_files),
+        git_dir=git_dir,
     )
     fields = query.stdout.split("\0")
     unpinned = [

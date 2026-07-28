@@ -53,6 +53,9 @@ run_policy() {
   step "Repo hygiene"
   "$PY" scripts/check-repo-hygiene.py
 
+  step "Shebang line endings (eol=lf)"
+  "$PY" scripts/check-shebang-eol.py --repo-root "$REPO_ROOT"
+
   if [[ -f plx-brand.json ]]; then
     step "Brand repo structure (plx-brand.json present)"
     "$PY" scripts/check-brand-repo-structure.py --repo-root "$REPO_ROOT"

@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { registerRoutingMutationTools } from "./routing-mutation-tools";
 
 type PrintResult = (result: unknown) => {
   content: Array<{ type: "text"; text: string }>;
@@ -75,11 +76,6 @@ export function registerRoutingTools(opts: {
   printResult: PrintResult;
   disabledTool: DisabledTool;
 }): void {
-  // Inline import keeps this file the stable seam index.ts already imports.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { registerRoutingMutationTools } = require("./routing-mutation-tools") as {
-    registerRoutingMutationTools: (o: typeof opts) => void;
-  };
   registerRoutingSuggestTools(opts);
   registerRoutingMutationTools(opts);
 }

@@ -169,7 +169,7 @@
       "tier": "tooling",
       "integration_branch": "main",
       "release_branch": null,
-      "compliance_mode": "hard",
+      "compliance_mode": "soft",
       "routing_manifest": {
         "path": ".github/plx-mc-routing-manifest.json",
         "schema_version": "plx-mc-routing-manifest/v1",

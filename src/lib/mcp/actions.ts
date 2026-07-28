@@ -41,18 +41,93 @@ export async function actionSelfCheck(identity: McpIdentity) {
   };
 }
 
-export async function actionGetContext(depth: "compact" | "full" = "compact") {
+export type SearchTasksInput = {
+  /** Canonical search text. */
+  q?: string;
+  /** Alias for `q` — agents commonly pass this name; must not conflict with `q`. */
+  query?: string;
+  bucket?: string;
+  stage?: string;
+  limit?: number;
+};
+
+export type SearchTasksFilter = {
+  query?: string;
+  bucket?: string;
+  stage?: string;
+  limit: number;
+};
+
+export type GetContextInput = {
+  depth?: "compact" | "full";
+  bucket?: string;
+  taskIds?: string[];
+};
+
+export type GetContextFilter = {
+  depth: "compact" | "full";
+  bucket?: string;
+  taskIds?: string[];
+};
+
+/** Resolve `q` / `query` aliases; reject conflicting values. */
+export function resolveSearchQueryText(input: { q?: string; query?: string }): string {
+  const q = input.q;
+  const query = input.query;
+  if (q != null && query != null && q !== query) {
+    throw new ApiError(
+      "invalid_request",
+      "Provide only one of q or query (they are aliases); conflicting values were sent."
+    );
+  }
+  return (q ?? query ?? "").trim();
+}
+
+export function resolveSearchFilter(input: SearchTasksInput): SearchTasksFilter {
+  const query = resolveSearchQueryText(input);
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  return {
+    ...(query ? { query } : {}),
+    ...(input.bucket ? { bucket: input.bucket } : {}),
+    ...(input.stage ? { stage: input.stage } : {}),
+    limit,
+  };
+}
+
+export function resolveContextFilter(input: GetContextInput = {}): GetContextFilter {
+  const depth = input.depth === "full" ? "full" : "compact";
+  const taskIds = (input.taskIds ?? []).map((id) => id.trim()).filter(Boolean);
+  return {
+    depth,
+    ...(input.bucket ? { bucket: input.bucket } : {}),
+    ...(taskIds.length ? { taskIds } : {}),
+  };
+}
+
+export async function actionGetContext(input: GetContextInput | "compact" | "full" = "compact") {
+  // Back-compat: older callers passed depth as a bare string.
+  const opts: GetContextInput = typeof input === "string" ? { depth: input } : input;
+  const filter = resolveContextFilter(opts);
   const snap = await snapshot();
-  if (depth === "full") {
+  const idSet = filter.taskIds ? new Set(filter.taskIds) : null;
+
+  if (filter.depth === "full") {
+    let tasks = snap.tasks;
+    if (filter.bucket) tasks = tasks.filter((t) => t.bucket === filter.bucket);
+    if (idSet) tasks = tasks.filter((t) => idSet.has(t.id));
     return {
-      tasks: snap.tasks,
+      tasks,
       buckets: snap.buckets,
       conflicts: snap.conflicts.length,
       errors: snap.errors.length,
       lastSweep: snap.lastSweep,
+      filter,
     };
   }
-  const active = snap.tasks.filter((t) => !["merged", "verified"].includes(t.stage));
+
+  let active = snap.tasks.filter((t) => !["merged", "verified"].includes(t.stage));
+  if (filter.bucket) active = active.filter((t) => t.bucket === filter.bucket);
+  if (idSet) active = active.filter((t) => idSet.has(t.id));
   return {
     taskCount: snap.tasks.length,
     activeCount: active.length,
@@ -65,18 +140,15 @@ export async function actionGetContext(depth: "compact" | "full" = "compact") {
       priority: t.priority,
     })),
     lastSweep: snap.lastSweep,
+    filter,
   };
 }
 
-export async function actionSearchTasks(query: {
-  q?: string;
-  bucket?: string;
-  stage?: string;
-  limit?: number;
-}) {
+export async function actionSearchTasks(input: SearchTasksInput = {}) {
+  const filter = resolveSearchFilter(input);
   const snap = await snapshot();
   let tasks = snap.tasks;
-  const q = (query.q ?? "").trim().toLowerCase();
+  const q = (filter.query ?? "").toLowerCase();
   if (q) {
     tasks = tasks.filter(
       (t) =>
@@ -85,10 +157,9 @@ export async function actionSearchTasks(query: {
         (t.description ?? "").toLowerCase().includes(q)
     );
   }
-  if (query.bucket) tasks = tasks.filter((t) => t.bucket === query.bucket);
-  if (query.stage) tasks = tasks.filter((t) => t.stage === query.stage);
-  const limit = Math.min(Math.max(query.limit ?? 50, 1), 200);
-  return { tasks: tasks.slice(0, limit), total: tasks.length };
+  if (filter.bucket) tasks = tasks.filter((t) => t.bucket === filter.bucket);
+  if (filter.stage) tasks = tasks.filter((t) => t.stage === filter.stage);
+  return { tasks: tasks.slice(0, filter.limit), total: tasks.length, filter };
 }
 
 export async function actionCreateTask(identity: McpIdentity, input: CreateTaskInput) {

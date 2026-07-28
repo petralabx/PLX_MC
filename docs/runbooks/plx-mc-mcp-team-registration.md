@@ -32,6 +32,10 @@ Cursor MCP child processes do not inherit PowerShell env vars. Use the repo laun
    python scripts/bootstrap-windows-secrets.py
    ```
 
+   Secrets Manager is authoritative (`prod/ec2-secrets` for MCP/GitHub/Swarm;
+   `plx/prod/m365/cursor-graph/v1` for the matched `MICROSOFT_GRAPH_*` set).
+   The script does **not** read credential text files under `~/.aws`.
+
 2. Override the local `PLX-MC` block in `.cursor/mcp.json` to run the Windows launcher
    (do **not** commit this override — Linux/macOS keep `node tools/plx-mc-mcp/launch.mjs`):
 

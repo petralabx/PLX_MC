@@ -51,7 +51,14 @@ Writes (local only):
 - `~/.secrets-env.staging.ps1` — full agent hydrate
 - `~/.secrets-env.github.ps1` — Windows GitHub fragment
 - `~/.secrets-env.github` — Unix GitHub fragment
-- prefers `~/.aws/Secret_Github.txt` when present (must be the org PAT)
+
+**Precedence (TASK-756):** AWS Secrets Manager only. Do **not** restore
+`~/.aws/Secret_Github.txt` (or any `PLX_FORMS_*` / `forms-api-secret-*.txt`)
+as a bootstrap fallback — that path caused the 2026-07-26 Graph 401 outage.
+`PETRALABX_GITHUB_TOKEN` comes from `prod/ec2-secrets`. The three
+`MICROSOFT_GRAPH_*` values are a matched set from
+`plx/prod/m365/cursor-graph/v1` (PLX_Cursor_Graph), never from
+`prod/ec2-secrets` Graph keys.
 
 ### Profile auto-source (so agents do not forget)
 

@@ -21,13 +21,17 @@ const createSchema = z.object({
 
 export const GET = cursorRoute("mc_search_tasks", async (req) => {
   const sp = new URL(req.url).searchParams;
-  const data = await actionSearchTasks({
+  const result = await actionSearchTasks({
     q: sp.get("q") ?? undefined,
+    query: sp.get("query") ?? undefined,
     bucket: sp.get("bucket") ?? undefined,
     stage: sp.get("stage") ?? undefined,
     limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
   });
-  return { data };
+  return {
+    data: { tasks: result.tasks, total: result.total },
+    meta: { filter: result.filter },
+  };
 });
 
 export const POST = cursorRoute("mc_create_task", async (req, _ctx, identity, meta) => {

@@ -7,7 +7,7 @@ personal laptops against PLX-tracked repos (`PLX_MC`, `plx-customer-portal`, etc
 
 > **TL;DR** — **PLX-MC access ≠ skills installed.** Register the PLX-MC MCP server for
 > task checkout, then run the **company skills bootstrap once per machine**. Skills come
-> from **`petralabx/skills`** (catalog pin ~v1.2.0 / `pinSha` in
+> from **`petralabx/skills`** (catalog pin `v1.4.1` / `pinTag` in
 > `config/skills-catalog.json`) — **not** the full `agentic-swarm` catalog. Legacy
 > `taylorvalton/plx-cursor-skills` v1.0.0 is historical only. Start a **new** Cursor
 > session after bootstrap. To share a skill company-wide, use Mission Control **Skills
@@ -91,8 +91,10 @@ Optional dry run:
 
 1. Clone or update `~/plx-cursor-skills` (Windows: `%USERPROFILE%\plx-cursor-skills`) —
    local directory name unchanged; **remote** is `petralabx/skills` per catalog.
-2. Check out catalog **`pinSha`** (or `pinTag` when set) from `config/skills-catalog.json`
-   (~v1.2.0 as of 2026-07-13).
+2. Check out the catalog pin from `config/skills-catalog.json` — **`pinTag`** (`v1.4.1`
+   as of 2026-07-28), or `pinSha` when one is set. This now happens on a fresh clone
+   too; it previously applied only when updating an existing checkout, so new
+   machines silently installed whatever was on `main`.
 3. Install **published** skills from `manifest.json` into:
    - `~/.cursor/skills/<id>/`
    - `~/.claude/skills/<id>/`
@@ -107,19 +109,25 @@ Restart Claude Code similarly if you rely on global Claude skills.
 
 ---
 
-## 4. What you get (company catalog ~v1.2.0)
+## 4. What you get (company catalog v1.4.1)
 
 The default bundle is **`plx-engineering-core`** pinned via `config/skills-catalog.json`.
 Skill ids are authoritative in `manifest.json` `packages[].skillIds` — not a static
 list in PLX_MC.
 
-Current pin (2026-07-13) includes operator skills such as:
+Current pin (2026-07-28) carries **69 skills**, up from 39 — v1.4.0 imported the
+remaining operator-laptop skills and removed none, and v1.4.1 adds two skill
+fixes that landed after the previous sha pin. Examples:
 
 | Category | Examples (see manifest for full set) |
 |----------|-------------------------------------|
-| UAT / portal | `uat-feedback-batch-fix`, `uat-weekly-batch-loop` |
+| UAT / portal | `uat-feedback-batch-fix`, `uat-weekly-batch-loop`, `uat-loop-invariants` |
 | Data / env | `staging-dual-db-migrate` |
-| Integrations | `plx-graph-mail`, `worktree-open-session` |
+| Integrations | `plx-graph-mail`, `worktree-open-session`, `worktree-bootstrap` |
+| Workstation | `plx-mc-workstation` |
+| Convergence loops | `adversarial-review-loop`, `champion-challenger-loop`, `perf-budget-loop`, `quality-streak-loop` |
+| Cursor tooling | `sdk`, `statusline`, `update-cursor-settings`, `create-subagent`, `loop` |
+| Knowledge capture | `session-brain`, `cursor-inbox-bridge` |
 
 **Plus** any skills shipped natively in the repo you bootstrap from (PLX_MC adds `mc-sync`
 and may add others under `.cursor/skills/`).
@@ -151,7 +159,7 @@ Expect `Catalog: petralabx/skills` and published skills from the pinned manifest
 
 ## 6. Refresh when the catalog changes
 
-When PLX announces a new skills release (updated `pinSha` / tag in `config/skills-catalog.json`):
+When PLX announces a new skills release (updated `pinTag` in `config/skills-catalog.json`):
 
 **Option A — bootstrap (all machines):**
 
@@ -201,7 +209,9 @@ Personal skills are **private by default**. They are **not** uploaded automatica
 3. Submissions persist in Postgres (`skill_submissions`) when `PLX_MC_DATABASE_URL` is set; dev falls back to in-memory store.
 4. **Reviewer** approves in the Skills Directory UI (or `PATCH /api/skills-directory/submissions/[id]`).
    Approval triggers the publish hook: GitHub PR when writes are enabled (see runbook), or `publish-instructions.md` for manual operator steps.
-5. After merge + tag, operator bumps `pinSha` in `config/skills-catalog.json` if needed.
+5. The merge bumps `manifest.version` (required CI in `petralabx/skills`) and the
+   Release tag workflow tags main `v<version>`. Operator then moves `pinTag` in
+   `config/skills-catalog.json` to that tag.
 6. **Team refresh:** bootstrap (§6) or `mc_install_skills` / `mc_sync_skills`.
 
 **Fallback — direct PR to content repo** (when MC is unavailable):

@@ -148,11 +148,11 @@ describe("skills-directory manifest", () => {
     if (r.ok) expect(r.manifest.skills).toHaveLength(3);
   });
 
-  it("accepts manifests without gitRef and fills from fallback", () => {
+  it("accepts manifests without gitRef and uses the observed ref", () => {
     const raw = JSON.parse(FIXTURE_MANIFEST) as Record<string, unknown>;
     delete raw.gitRef;
     const r = parseManifestJson(JSON.stringify(raw), {
-      fallbackGitRef: "805c514bcd91f68172d45cee915c04d01f33ff8b",
+      observedRef: "805c514bcd91f68172d45cee915c04d01f33ff8b",
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -161,8 +161,16 @@ describe("skills-directory manifest", () => {
     }
   });
 
-  it("prefers publisher gitRef over fallback", () => {
-    const r = parseManifestJson(FIXTURE_MANIFEST, { fallbackGitRef: "other-ref" });
+  // A manifest cannot name the commit containing it, so an in-file stamp is
+  // always older than the tree it describes. The ref we read it from is not.
+  it("prefers the observed ref over the stamp inside the manifest", () => {
+    const r = parseManifestJson(FIXTURE_MANIFEST, { observedRef: "observed-ref" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.manifest.gitRef).toBe("observed-ref");
+  });
+
+  it("falls back to the manifest stamp when no ref was observed", () => {
+    const r = parseManifestJson(FIXTURE_MANIFEST);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.manifest.gitRef).toBe("v1.0.0-test");
   });
@@ -197,6 +205,23 @@ describe("skills-directory loader", () => {
     expect(result.meta.state).toBe("ready");
     expect(result.meta.gitRef).toBe("abc123");
     expect(result.skills.map((s) => s.id)).toEqual(["create-skill", "wterm-preflight"]);
+  });
+
+  // Regression: petralabx/skills published v1.4.0 while manifest.gitRef still
+  // named the v1.3.1 commit. Reporting the stamp over the ref we fetched from
+  // would have credited a 69-skill tree to the commit that held 39.
+  it("reports the fetched ref, not a stale stamp inside the manifest", async () => {
+    const staleStamp = {
+      ...FIXTURE_MANIFEST_OBJ,
+      gitRef: "be419300a0932607d6b3ba57e592d8ca87db3704",
+    };
+    const result = await listSkillCatalog(
+      TEST_CATALOG_V3,
+      fakeSource({
+        manifest: { ok: true, manifest: staleStamp, ref: "7fb3c06e931362270a7a0d55ce246673db8d2543" },
+      })
+    );
+    expect(result.meta.gitRef).toBe("7fb3c06e931362270a7a0d55ce246673db8d2543");
   });
 
   it("lists ready catalog from legacy allowlist", async () => {

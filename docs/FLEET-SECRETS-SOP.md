@@ -31,7 +31,8 @@ enrollment). PR discipline: [COLLABORATOR-SOP.md](COLLABORATOR-SOP.md),
 | Layer | Location | Rule |
 |-------|----------|------|
 | **Canonical secrets store** | AWS Secrets Manager — `prod/ec2-secrets` (`us-east-1`) | Write new values here first |
-| **Operator local load** | `~/load-secrets.ps1` | Hydrates env for local ops; do not paste values into chat, PRs, or commits |
+| **Workstation Graph (Cursor)** | AWS Secrets Manager — `plx/prod/m365/cursor-graph/v1` | Matched `MICROSOFT_GRAPH_TENANT_ID` / `_CLIENT_ID` / `_CLIENT_SECRET` set (PLX_Cursor_Graph). Never pair with `prod/ec2-secrets` Graph keys. |
+| **Operator local load** | `~/load-secrets.ps1` / `~/.secrets-env.staging.ps1` via `scripts/bootstrap-windows-secrets.py` | Hydrates env for local ops; SM only — no `~/.aws/*.txt` credential fallbacks (TASK-756) |
 | **Per-repo gate config** | GitHub repo **Secrets** + **Variables** | Set by org admin during onboarding |
 | **MC runtime** | Vercel **Production** env on `mc.plxcustomer.io` | Redeploy after any change |
 

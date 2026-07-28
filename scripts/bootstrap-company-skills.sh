@@ -113,14 +113,10 @@ skills_repo_ready() {
   git -C "$SKILLS_REPO" rev-parse --git-dir >/dev/null 2>&1
 }
 
-if ! skills_repo_ready; then
-  echo "=== Cloning $SOURCE_REPO ==="
-  run git clone "https://github.com/${SOURCE_REPO}.git" "$SKILLS_REPO"
-elif [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "=== Would update $SKILLS_REPO ($SOURCE_BRANCH) ==="
-else
-  echo "=== Updating $SKILLS_REPO ==="
-  run git -C "$SKILLS_REPO" fetch origin --tags "$SOURCE_BRANCH"
+# Both the clone and the update path must land on the pinned ref. A fresh clone
+# used to skip this and install whatever was on the default branch, so the pin
+# governed existing workstations only and new ones silently ran ahead of it.
+checkout_pin() {
   if [[ -n "$PIN_SHA" ]]; then
     run git -C "$SKILLS_REPO" checkout "$PIN_SHA"
   elif [[ -n "$PIN_TAG" ]]; then
@@ -129,6 +125,21 @@ else
     run git -C "$SKILLS_REPO" switch "$SOURCE_BRANCH" 2>/dev/null || run git -C "$SKILLS_REPO" checkout "$SOURCE_BRANCH"
     run git -C "$SKILLS_REPO" merge --ff-only "origin/${SOURCE_BRANCH}"
   fi
+}
+
+if ! skills_repo_ready; then
+  echo "=== Cloning $SOURCE_REPO ==="
+  run git clone "https://github.com/${SOURCE_REPO}.git" "$SKILLS_REPO"
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    run git -C "$SKILLS_REPO" fetch origin --tags
+    checkout_pin
+  fi
+elif [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "=== Would update $SKILLS_REPO ($SOURCE_BRANCH) ==="
+else
+  echo "=== Updating $SKILLS_REPO ==="
+  run git -C "$SKILLS_REPO" fetch origin --tags "$SOURCE_BRANCH"
+  checkout_pin
 fi
 
 MANIFEST_FILE="${SKILLS_REPO}/${MANIFEST_PATH}"

@@ -20,6 +20,8 @@ export interface McpResponseMeta {
     events?: string;
     conflicts?: string;
   };
+  /** Applied tool filters (search/context). Absent keys were not requested. */
+  filter?: Record<string, unknown>;
   evidence?: Record<string, unknown>;
   audit: { eventSeq?: string; kinds: string[] };
   sync?: McpSyncMeta;
@@ -48,6 +50,7 @@ export function buildMeta(
       ...partial.links,
     },
     audit: partial.audit ?? { kinds: [] },
+    filter: partial.filter,
     evidence: partial.evidence,
     sync: partial.sync,
   };

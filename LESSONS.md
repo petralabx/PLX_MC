@@ -16,6 +16,64 @@
 
 ## Lessons
 
+### 2026-07-28 (ET) — A manifest cannot name the commit that contains it, and we trusted it over the ref we fetched
+
+- **What happened:** `petralabx/skills` published `manifest.json` with a `gitRef`
+  naming the v1.3.1 commit while the release served the 69-skill v1.4.0 tree, and
+  PLX_MC reported that stamp in preference to the ref it had just fetched from.
+  The reachability gate added a day earlier (skills #14) passed the whole time:
+  `be41930` really is reachable from `main`, it simply was not current. Corrected
+  by hand, it was stale again within two merges.
+- **Root cause:** The commit sha does not exist until the commit is made, so a
+  sha written *inside* a file is stale by construction and every version-bumping
+  PR necessarily ships one that lags — no PR-time check can ever catch it. Worse,
+  the fetcher already knew the truth (`ref = pinSha || pinTag || sourceBranch`)
+  and discarded it: `resolveEffectiveGitRef(manifest.gitRef, ref)` let a
+  self-report outrank an observation. MC's own publish flow wrote the base branch
+  head into the field, so it minted stale stamps automatically — nobody had to
+  mistype anything.
+- **Rule going forward:** Provenance is what a consumer observed, never what an
+  artifact claims about itself; when the two are both available, the observation
+  wins. A fact an artifact cannot know about itself does not belong in it — mark
+  releases from outside, with a tag applied after the commit exists. Enforced:
+  the field and its schema slot are gone (`additionalProperties: false` rejects
+  re-adding it, `scripts/validate-manifest.py` explains why), a **Release tag**
+  workflow tags each merge `v<manifest.version>`, and PLX_MC pins `pinTag`. The
+  reachability check is replaced by two rules that *are* decidable while a PR is
+  open: touching the catalog must bump the version, and a released version is
+  immutable. This is the "duplicated facts get a parity check or one source"
+  clause of `verification-integrity.mdc` resolved by deleting the duplicate.
+  (skills #18/#19, PLX_MC #175/#176.)
+
+### 2026-07-28 (ET) — CRLF broke two test suites for weeks, and the experiment that exonerated it was itself broken
+
+- **What happened:** Two vitest suites failed to collect on every Windows
+  checkout with `SyntaxError: Invalid or unexpected token` — no file, no line, no
+  test run — long enough that the pair was treated as expected-red folklore.
+  `.gitattributes` covered `*.sh` but not `*.mjs`, so `core.autocrlf` rewrote 15
+  shebang `.mjs` files on checkout, including `tools/plx-mc-mcp/launch.mjs`, and
+  vitest cannot parse a shebang-bearing `.mjs` with CRLF. This was the third
+  incident of the class after the `.sh` failure in `petralabx/skills` and the
+  design-system hash drift that produced the `-text` rules in this same file, yet
+  it was the first ever written down — so each recurrence paid full price again.
+- **Root cause:** Two separate failures. The defect itself: `.gitattributes` was
+  extended reactively, one extension per incident, with nothing enumerating what
+  still needed covering. The misdiagnosis: CRLF was ruled out by converting the
+  files to LF and re-running, but the conversion used
+  `[System.IO.File]::WriteAllText` with relative paths, and .NET resolves those
+  against the *process* working directory rather than the PowerShell location —
+  so the writes landed in a different checkout than the one under test. The
+  experiment never touched what it measured, and its clean result was filed as
+  evidence.
+- **Rule going forward:** Every tracked file beginning with `#!` must resolve to
+  `eol=lf`, enforced by `scripts/check-shebang-eol.py` in `preflight.sh` (the
+  promotion this class earned three incidents ago). An experiment that appears to
+  exonerate a strong hypothesis must first prove it changed the thing it tested —
+  re-read the bytes, or assert the mutation — before its result is recorded
+  anywhere. Prefer absolute paths in throwaway scripts; PowerShell's location and
+  the .NET process directory are not the same thing. (PLX_MC #177; the Windows
+  suite went 119/121 → 121/121, 1380 → 1390 tests.)
+
 ### 2026-07-26 (ET) — A "Validation before merge" section that ran nothing hid four defects in petralabx/skills
 
 - **What happened:** `petralabx/skills` shipped a `SKILL.md` whose frontmatter

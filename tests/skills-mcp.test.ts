@@ -42,6 +42,14 @@ const stdioMcpSource = readFileSync(
 );
 const ctx = { params: Promise.resolve({} as Record<string, string>) };
 
+// The catalog reports the ref it fetched from, not the stamp inside the
+// manifest, so a registry only counts as in-sync when it names the current pin.
+const catalogPointer = JSON.parse(
+  readFileSync(join(process.cwd(), "config/skills-catalog.json"), "utf8")
+) as { pinSha?: string; pinTag?: string; sourceBranch: string };
+const pinnedRef =
+  catalogPointer.pinSha || catalogPointer.pinTag || catalogPointer.sourceBranch;
+
 function headers(): HeadersInit {
   return {
     "x-api-key": "test-mcp-key",
@@ -135,7 +143,7 @@ describe("cursor skills MCP proxies", () => {
         localRegistry: {
           schemaVersion: "agentic-skills-registry.v1",
           catalogVersion: "1.0.0-test",
-          gitRef: "v1.0.0-test",
+          gitRef: pinnedRef,
           packageId: "plx-engineering-core",
           syncedAt: "2026-06-30T12:00:00.000Z",
           skills: [{ id: "create-skill", contentSha: "x" }],

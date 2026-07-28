@@ -150,8 +150,7 @@ export function buildPublishedManifest(
   manifest: SkillsManifest,
   submission: SkillSubmission,
   packageId: string,
-  now: Date,
-  opts: { gitRef?: string } = {}
+  now: Date
 ): SkillsManifest {
   const skillId = assertValidSkillId(submission.skillId);
   const existing = manifest.skills.find((entry) => entry.id === skillId);
@@ -172,8 +171,11 @@ export function buildPublishedManifest(
   return {
     ...manifest,
     publishedAt: now.toISOString(),
-    // Prefer explicit stamp (usually base branch HEAD), else keep existing publisher stamp.
-    gitRef: opts.gitRef?.trim() || manifest.gitRef || "",
+    // Deliberately not stamped. This used to write the base branch HEAD, which is
+    // the commit *before* the publish PR, so every published manifest shipped a
+    // gitRef that was stale the moment it merged. Consumers resolve provenance
+    // from the ref they fetched instead; existing values pass through untouched
+    // until petralabx/skills drops the field.
     packages: upsertPackageSkill(manifest, packageId, skillId),
     skills,
   };
@@ -305,9 +307,7 @@ export async function publishApprovedSkillSubmission(
   if (!manifestFile) {
     throw new Error(`${manifestPath} not found in ${targetRepo}@${baseBranch}`);
   }
-  const parsedManifest = parseManifestJson(manifestFile.content, {
-    fallbackGitRef: baseSha,
-  });
+  const parsedManifest = parseManifestJson(manifestFile.content);
   if (!parsedManifest.ok) {
     throw new Error(`invalid ${manifestPath}: ${parsedManifest.error}`);
   }
@@ -315,8 +315,7 @@ export async function publishApprovedSkillSubmission(
     parsedManifest.manifest,
     submission,
     packageId,
-    now,
-    { gitRef: baseSha }
+    now
   );
   const path = skillPath(submission.skillId);
   const existingSkill = await github.getFile({ owner, repo, ref: baseBranch, path });

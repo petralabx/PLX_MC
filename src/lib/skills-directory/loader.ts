@@ -71,8 +71,8 @@ export async function listSkillCatalog(
       version: fetched.manifest.version,
       catalogVersion: fetched.manifest.version,
       gitRef: resolveEffectiveGitRef(
-        fetched.manifest.gitRef,
         fetched.ref,
+        fetched.manifest.gitRef,
         pointer.pinSha,
         pointer.pinTag,
         pointer.sourceBranch

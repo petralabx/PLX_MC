@@ -46,17 +46,24 @@ rejects `mcpServers`.
 export CURSOR_CLOUD_SERVICE_API_KEY=…   # from secrets (personal or service account)
 export PLX_MC_MCP_API_KEY=…             # from prod/ec2-secrets
 
+# v1 shape (2026-07): prompt must be { text }, repos use startingRef.
 curl -sS --request POST \
   --url https://api.cursor.com/v1/agents \
   -u "${CURSOR_CLOUD_SERVICE_API_KEY}:" \
   --header 'Content-Type: application/json' \
   --data @- <<EOF
 {
-  "prompt": "Call mc_self_check via PLX-MC-Hub. Report whether Hub/Portal MCP tools are in the catalog. Do not change code.",
+  "prompt": {
+    "text": "Call mc_self_check via PLX-MC-Portal. Report whether Hub/Portal MCP tools are in the catalog. Do not change code."
+  },
   "repos": [
     {
+      "url": "https://github.com/petralabx/plx-customer-portal",
+      "startingRef": "staging"
+    },
+    {
       "url": "https://github.com/petralabx/PLX_MC",
-      "ref": "main"
+      "startingRef": "main"
     }
   ],
   "mcpServers": [
@@ -87,14 +94,75 @@ curl -sS --request POST \
 EOF
 ```
 
+The create response is `{ agent, run }`: record `agent.id`, `agent.url`, and
+`run.id`, then read terminal status from
+`GET /v1/agents/{agentId}/runs/{runId}`.
+
+`repos[]` and a named Cloud `env` are mutually exclusive in the v1 API.
+Therefore an explicit multi-repo launch does **not** inherit the saved
+environment's Runtime Secrets or install state. If that run needs a secret for
+a REST/E2E fallback, pass only the required values through encrypted
+session-scoped `envVars` and verify boolean/length presence in the agent.
+`envVars` is a beta field and may be silently ignored for accounts where it has
+not rolled out; never assume injection succeeded.
+
+Verified 2026-07-29: agent `bc-a6a3aa9b-0fcc-4c4a-819e-5c726d5641ae` —
+Portal MCP tools attached + `mc_self_check` ok. Either repo-specific server can
+occasionally attach with an empty catalog. Record the failed server, relaunch
+once with both inline, and do not use a server until `meta.actor.repo` matches
+the target repository.
+
 ## Interim path (dashboard-launched agents without Team MCP attach)
 
-Hydrate `PLX_MC_MCP_API_KEY` from AWS and call REST:
+Hydrate `PLX_MC_MCP_API_KEY` from AWS, set the target repo explicitly, and use
+`x-mc-runtime: cursor-cloud`. This is the working fallback when a
+dashboard-launched agent has no Team MCP catalog:
 
-- `GET /api/cursor/self-check`
-- `POST /api/cursor/checkout`
-- `POST /api/cursor/progress`
-- `POST /api/cursor/complete`
+```bash
+set -euo pipefail
+: "${PLX_MC_MCP_API_KEY:?hydrate from prod/ec2-secrets}"
+
+MC_BASE_URL=https://mc.plxcustomer.io
+MC_REPO=petralabx/PLX_MC # change per target repo
+MC_HEADERS=(
+  -H "x-api-key: ${PLX_MC_MCP_API_KEY}"
+  -H "x-mc-operator-email: cos@petrasoap.com"
+  -H "x-mc-repo: ${MC_REPO}"
+  -H "x-mc-runtime: cursor-cloud"
+  -H "content-type: application/json"
+)
+
+self_check="$(curl -fsS "${MC_HEADERS[@]}" \
+  "${MC_BASE_URL}/api/cursor/self-check")"
+jq -e --arg repo "${MC_REPO}" \
+  '.data.ok == true and .data.mcpEnabled == true and .meta.actor.repo == $repo' \
+  <<<"${self_check}"
+
+checkout="$(curl -fsS -X POST "${MC_HEADERS[@]}" \
+  "${MC_BASE_URL}/api/cursor/checkout" \
+  --data '{"taskId":"TASK-REPLACE"}')"
+checkout_id="$(jq -er '.data.checkoutId' <<<"${checkout}")"
+jq -r '.data.prBodyLine' <<<"${checkout}"
+
+curl -fsS -X POST "${MC_HEADERS[@]}" \
+  "${MC_BASE_URL}/api/cursor/progress" \
+  --data '{"taskId":"TASK-REPLACE","stage":"progress","progressPct":75,"notes":"Cloud closeout verification"}'
+
+jq -n --arg checkoutId "${checkout_id}" '{
+  checkoutId: $checkoutId,
+  summary: "Cloud Agent completed governed closeout verification",
+  rollback: "Reopen the task if the evidence is invalid",
+  verificationCommands: [
+    "REST self-check returned the exact target repo",
+    "checkout -> progress -> complete"
+  ]
+}' | curl -fsS -X POST "${MC_HEADERS[@]}" \
+  "${MC_BASE_URL}/api/cursor/complete" --data @-
+```
+
+Use a real backlog task in the correct bucket and replace `TASK-REPLACE`
+consistently. Preserve the exact returned `MC-Checkout` line; never construct
+one manually.
 
 See `docs/runbooks/cloud-agent-fleet-wiring.md` and
 `docs/runbooks/plx-mc-mcp-team-registration.md`.

@@ -63,11 +63,18 @@ Register at [cursor.com/agents](https://cursor.com/agents) → MCP servers → A
 | Header `x-api-key` | `PLX_MC_MCP_API_KEY` from `prod/ec2-secrets` (AWS Secrets Manager) |
 | Header `x-mc-operator-email` | `cos@petrasoap.com` (agents) or `vince@petrasoap.com` (human operator) |
 | Header `x-mc-repo` | Target repo slug, e.g. `petralabx/plx-customer-portal` or `petralabx/PLX_MC` |
-| Header `x-mc-runtime` | `cursor` |
+| Header `x-mc-runtime` | `cursor-cloud` for Cloud Team/inline HTTP; `cursor` for Desktop |
 
 Requires `PLX_MC_MCP_ENABLED=1` on the Vercel production deployment (already live).
 
 **Verified 2026-06-30:** `GET /api/cursor/self-check` returns `200 { ok: true, mcpEnabled: true }` with the headers above.
+
+**Cloud attach caveat (2026-07):** a saved Team MCP can appear in Integrations
+but attach with an empty catalog in a Cloud Agent. For API-launched agents, use
+inline `mcpServers[]` as the reliable path. For dashboard-launched agents with
+an empty catalog, use the REST `/api/cursor/*` fallback. Follow
+`docs/runbooks/cursor-cloud-service-account-api-key.md`; do not repeatedly
+delete/recreate Team MCP entries.
 
 After registration, reload MCP in Cursor and run `mc_self_check`. Confirm the
 returned `meta.actor.repo` exactly matches the repo being edited before checkout.

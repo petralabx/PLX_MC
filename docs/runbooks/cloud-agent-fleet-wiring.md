@@ -23,11 +23,13 @@ Dashboard: [Cloud Agents environments](https://cursor.com/dashboard/cloud-agents
 Current environment (2026-07-24 dogfood):  
 https://cursor.com/dashboard/cloud-agents/environments/e/2d1524f6-8755-11f1-a7d1-d6b4613131ce
 
-## Team MCP (required for Cloud)
+## Cloud MCP paths
 
 Register **Streamable HTTP** Team MCP servers (Integrations → Team MCP Servers).
 Do **not** rely on repo-local `.cursor/mcp.json` alone for Cloud — this session’s
 MCP catalog only showed `cursor-cloud` until Team HTTP is attached.
+Team registration is the dashboard-launch path, but attachment is not reliable
+enough to be the only operating path.
 
 | Name | URL | Headers |
 |---|---|---|
@@ -39,6 +41,22 @@ Kill switch: disable the Team MCP server entry (or Vercel `PLX_MC_MCP_ENABLED=0`
 Keep `SWARM_DISPATCH_ENABLED=0` unless a session explicitly needs swarm.
 
 Details and Desktop pitfalls: `docs/runbooks/plx-mc-mcp-team-registration.md`.
+
+### Reliability SOP
+
+1. **API-launched Cloud Agent:** pass both repo-specific servers inline through
+   `POST /v1/agents` `mcpServers[]`. This is the primary reliable governed-launch
+   path; use `x-mc-runtime: cursor-cloud`. An explicit `repos[]` launch does not
+   inherit a named dashboard environment's Runtime Secrets; use the documented
+   encrypted `envVars` fallback only for the minimum session values required.
+2. **One empty inline catalog:** record which server failed and relaunch once
+   with both servers. Use only the server whose `mc_self_check` identity matches
+   the target repo. Do not keep retrying.
+3. **Dashboard launch with empty Team MCP catalog:** call the REST
+   `https://mc.plxcustomer.io/api/cursor/*` lifecycle using the same key and
+   identity headers. Exact commands and request bodies are in
+   `docs/runbooks/cursor-cloud-service-account-api-key.md`.
+4. Never reuse a checkout minted for one `meta.actor.repo` in another repo.
 
 ## Environment.json note
 
@@ -56,7 +74,8 @@ After team rules + Team MCP are saved:
 1. Start a new Cloud Agent on the shared multi-repo environment.
 2. Confirm always-applied rules include the four fleet slices from
    `config/cloud-agent-fleet-always-apply.md`.
-3. Confirm MCP catalog lists `PLX-MC-Hub` (and Portal when working portal).
+3. Confirm the target repo's MCP catalog is non-empty. If Team attachment is
+   empty, use the inline launch path above and record the Team attach failure.
 4. Call `mc_self_check` → `ok: true`, `mcpEnabled: true`.
 5. Call `mc_checkout_task` on a throwaway/backlog task → receive `MC-Checkout: dsp_*`
    with `meta.actor.repo` matching the target repo.

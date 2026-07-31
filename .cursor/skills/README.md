@@ -10,6 +10,6 @@ not populate `/`.
 Repo-local skills (e.g. `mc-sync`) may coexist. Pack skills are overwritten
 on re-sync from petralabx/skills.
 
-`guided-project-discovery` synced from package version 1.6.1 on 2026-07-31
-(TASK-871). Other project skill copies retain their existing versions until a
+`guided-project-discovery` synced from package version 1.6.2 on 2026-07-31
+(TASK-875). Other project skill copies retain their existing versions until a
 separate full-pack drift reconciliation is approved.

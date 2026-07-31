@@ -72,8 +72,8 @@ out of scope for TASK-682 unless needed for Node toolchain.
 After team rules + Team MCP are saved:
 
 1. Start a new Cloud Agent on the shared multi-repo environment.
-2. Confirm always-applied rules include the four fleet slices from
-   `config/cloud-agent-fleet-always-apply.md`.
+2. Confirm always-applied rules include the five fleet slices from
+   `config/cloud-agent-fleet-always-apply.md` (including Rule 5 — gate closeout).
 3. Confirm the target repo's MCP catalog is non-empty. If Team attachment is
    empty, use the inline launch path above and record the Team attach failure.
 4. Call `mc_self_check` → `ok: true`, `mcpEnabled: true`.

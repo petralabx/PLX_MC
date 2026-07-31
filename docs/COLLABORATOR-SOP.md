@@ -148,7 +148,7 @@ the work and pass it, and it's how autonomous changes stay accountable.
    ```
 4. Call **`mc_complete_task`** (or equivalent) so **`task.evidence`** is complete
    before the gate runs — summary, rollback, verification commands, test shots/PRD
-   as tier requires. Also add PR-body **`## Rollback Plan`** when repo CI expects
+   as tier requires. Then run `node scripts/compliance-pr-verify.mjs --wait` (or confirm GitHub `compliance` is SUCCESS) — `complete()` is evidence hand-in, not gate success. Also add PR-body **`## Rollback Plan`** when repo CI expects
    it (e.g. `agentic-swarm`). Name the **human accountable owner**.
 
 > **Full agent provisioning guide:** Mission Control → **SOP guide** →

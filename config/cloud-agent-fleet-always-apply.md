@@ -99,6 +99,39 @@ attach bug even when Integrations lists Hub/Portal):
 
 Optional: launch agents with inline `mcpServers` via a Cursor **service account**
 API key — `docs/runbooks/cursor-cloud-service-account-api-key.md`.
+
+**Cloud Agent mint default for non-Hub/Portal repos:** do not reuse a Portal or
+Hub `dsp_*` stamp. Prefer REST `/api/cursor/*` or
+`COMPLIANCE_CAPTURE=1 MC_REPO=petralabx/<this-repo> node scripts/compliance-checkout.mjs`
+with the exact full slug of the repo under edit. A successful checkout whose
+`meta.actor.repo` does not match is invalid and fails the gate as decision 3.
+```
+
+---
+
+## Rule 5 — MC PR evidence closeout (gate, not just complete)
+
+```markdown
+# Cross-Repo MC PR Evidence Closeout
+Version: cursor-cloud-team-rules.v1
+
+Before creating or updating a PR on a governed repo: call `mc_complete_task`
+(or REST `/api/cursor/complete`) with summary, rollback, and
+verificationCommands.
+
+A successful `mc_complete_task` is **evidence hand-in only** — it is **not**
+gate success. On petralabx/local-inference#11, `complete()` returned ok and the
+GitHub `compliance` check BLOCKED 19 seconds later (wrong-scope checkout).
+
+Do **not** treat the PR as ready, done, or mergeable until:
+
+1. Evidence is handed in, and
+2. The repo's GitHub `compliance` check is `SUCCESS` for the stamped PR
+   (or `node scripts/compliance-pr-verify.mjs --wait` / the repo's equivalent
+   exits 0).
+
+Never invent checkout stamps. Never edit `.github/workflows/*compliance*` to
+force a green check.
 ```
 
 ---

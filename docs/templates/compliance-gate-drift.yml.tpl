@@ -3,6 +3,9 @@
 # scripts/generate-compliance-gate.py in the PUBLIC petralabx/PLX_MC repo,
 # pinned to a commit SHA. This job fetches that generator, emits the downstream
 # variant, and diffs it against the committed gate — failing on drift.
+#
+# Also pins scripts/compliance-pr-verify.mjs (close-out verify sibling of
+# compliance-checkout.mjs) so consumer copies cannot silently rot.
 
 name: Compliance Gate Drift
 
@@ -22,6 +25,7 @@ jobs:
       GEN_SHA: {{GEN_SHA}}
       GEN_PATH: scripts/generate-compliance-gate.py
       GATE_FILE: .github/workflows/plx-mc-compliance.yml
+      VERIFY_PATH: scripts/compliance-pr-verify.mjs
     steps:
       - uses: actions/checkout@v4
       - name: Verify gate matches the pinned PLX_MC source
@@ -42,3 +46,24 @@ jobs:
             exit 1
           fi
           echo "Compliance gate matches the PLX_MC source (pinned ${GEN_SHA})."
+      - name: Verify compliance-pr-verify.mjs matches the pinned PLX_MC source
+        run: |
+          set -euo pipefail
+          if [ ! -f "$VERIFY_PATH" ]; then
+            echo "::error::Missing $VERIFY_PATH — scaffold from PLX_MC (scripts/scaffold-tracked-repo.sh)."
+            exit 1
+          fi
+          url="https://raw.githubusercontent.com/${GEN_REPO}/${GEN_SHA}/${VERIFY_PATH}"
+          echo "source: $url"
+          ok=
+          for i in 1 2 3; do
+            if curl -fsSL "$url" -o /tmp/compliance-pr-verify.mjs; then ok=1; break; fi
+            echo "fetch attempt $i failed; retrying..."; sleep 3
+          done
+          [ -n "$ok" ] || { echo "::error::could not fetch pinned $VERIFY_PATH from $url"; exit 1; }
+          if ! diff -u "$VERIFY_PATH" /tmp/compliance-pr-verify.mjs; then
+            echo "::error::compliance-pr-verify.mjs drift — consumer copy != PLX_MC@${GEN_SHA}."
+            echo "Fix: re-scaffold from PLX_MC, or bump GEN_SHA if the source changed intentionally."
+            exit 1
+          fi
+          echo "compliance-pr-verify.mjs matches the PLX_MC source (pinned ${GEN_SHA})."

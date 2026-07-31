@@ -70,11 +70,11 @@ describe("compliance-pr-verify", () => {
       env: baseEnv,
       fetch,
       gh: ghStub("MC-Checkout: dsp_x\nTASK-1", "COMPLETED\tSUCCESS"),
-      log: (m) => logs.push(m),
+      log: (m: string) => logs.push(m),
       argv: [],
     });
     expect(r.ok).toBe(false);
-    expect(logs.some((l) => l.includes("FAIL") && l.includes("actor.repo"))).toBe(true);
+    expect(logs.some((l: string) => l.includes("FAIL") && l.includes("actor.repo"))).toBe(true);
   });
 
   it("rejects a PR with no MC-Checkout stamp", async () => {
@@ -95,7 +95,7 @@ describe("compliance-pr-verify", () => {
       argv: [],
     });
     expect(r.ok).toBe(false);
-    expect(r.reasons.some((x) => x.includes("no 'MC-Checkout"))).toBe(true);
+    expect(r.reasons.some((x: string) => x.includes("no 'MC-Checkout"))).toBe(true);
   });
 
   it("rejects a failing compliance conclusion even when evidence looks fine", async () => {
@@ -132,7 +132,7 @@ describe("compliance-pr-verify", () => {
       argv: [],
     });
     expect(r.ok).toBe(false);
-    expect(r.reasons.some((x) => x.includes("compliance = FAILURE"))).toBe(true);
+    expect(r.reasons.some((x: string) => x.includes("compliance = FAILURE"))).toBe(true);
   });
 
   it("accepts correct scope + stamp + evidence + green gate", async () => {

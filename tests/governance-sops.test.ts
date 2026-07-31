@@ -238,6 +238,21 @@ describe("seed registry + Collaborator SOP (integration)", () => {
     }
   });
 
+  it("loads the PLX Knowledge Video SOP with install and pipeline guidance", async () => {
+    const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
+    const r = parseSopRegistryJson(raw);
+    if (!r.ok) throw new Error("seed registry invalid");
+    const video = r.config.sops.find((s) => s.slug === "mc-sop-plx-knowledge-video")!;
+    expect(video.status).toBe("active");
+    expect(video.source?.repo_path).toBe("docs/PLX-KNOWLEDGE-VIDEO-SOP.md");
+    const detail = await getSopDetail(video, createSopSource());
+    expect(detail.ok).toBe(true);
+    if (detail.ok) {
+      expect(detail.toc.some((h) => /install/i.test(h.text))).toBe(true);
+      expect(detail.toc.some((h) => /pipeline|narration/i.test(h.text))).toBe(true);
+    }
+  });
+
   it("activates agent-PR, hygiene, and rollback SOPs with readable sources", async () => {
     const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
     const r = parseSopRegistryJson(raw);

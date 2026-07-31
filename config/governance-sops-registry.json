@@ -35,6 +35,17 @@
       "source": { "repo_path": "docs/SKILLS-SOP.md" }
     },
     {
+      "slug": "mc-sop-plx-knowledge-video",
+      "title": "PLX Knowledge Video — Contributor SOP",
+      "description": "Install and provision plx-knowledge-video, run the narration-first capture pipeline against a safe staging flow, and deliver a verified Knowledge Hub package.",
+      "audience": "PLX contributors producing Knowledge Hub how-to, onboarding, or workflow videos",
+      "owner": "Vince",
+      "effective_date": "2026-07-31",
+      "status": "active",
+      "tags": ["Skills", "Knowledge", "Video", "Provisioning", "Agent workflow"],
+      "source": { "repo_path": "docs/PLX-KNOWLEDGE-VIDEO-SOP.md" }
+    },
+    {
       "slug": "mc-sop-agent-pr",
       "title": "Agent — How to Use Mission Control",
       "description": "End-to-end agent guide: MC hierarchy, dual registries, MCP checkout/progress/complete, MC-Checkout stamps, task.evidence vs PR-body rollback, Loop Ledgers owner-aware reads, and risk-tier bundles.",

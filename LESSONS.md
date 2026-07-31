@@ -16,6 +16,22 @@
 
 ## Lessons
 
+### 2026-07-31 (ET) — Catalog publication did not update Cloud picker copies
+
+- **What happened:** `guided-project-discovery` was published and visible through
+  the v1.6.0 catalog, but existing Cloud conversations and the portal/PLX_MC
+  `.cursor/skills/` trees could not invoke it. A full-package re-sync would also
+  have deleted newer consumer-side capabilities-deck assets.
+- **Root cause:** Cursor fixes its skill catalog when a conversation starts, while
+  the company catalog and committed project-skill copies are separate consumers.
+  Distribution had no executable parity check, and some canonical skill IDs had
+  acquired consumer-only changes.
+- **Rule going forward:** Publish an immutable skills tag, sync and byte-compare
+  the requested skill into each project tree, then prove it in a new conversation.
+  Do not overwrite the full package until every reported consumer delta is
+  upstreamed or explicitly disposed. Use the skills repo parity checker for both
+  known-bad RED and post-sync GREEN evidence.
+
 ### 2026-07-30 (ET) — Portal MCP checkout stamps fail the PLX_MC compliance gate
 
 - **What happened:** PR #184 stamped `MC-Checkout: dsp_ms7yca0a2b8u4a` from

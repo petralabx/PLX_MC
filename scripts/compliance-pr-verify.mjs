@@ -234,6 +234,9 @@ export async function verify(opts = {}) {
   let status = "";
   let conclusion = "";
   for (;;) {
+    // Prefer the newest compliance check-run. StatusCheckRollup can retain a
+    // stale FAILURE alongside a later SUCCESS after evidence is handed in
+    // (seen on PR reopen / complete-then-rerun). First-line select is wrong.
     const roll = gh([
       "pr",
       "view",
@@ -243,7 +246,7 @@ export async function verify(opts = {}) {
       "--json",
       "statusCheckRollup",
       "--jq",
-      '.statusCheckRollup[] | select(.name=="compliance") | [.status,(.conclusion//"")] | @tsv',
+      '[.statusCheckRollup[] | select(.name=="compliance")] | sort_by(.completedAt // .startedAt // "") | last | [.status,(.conclusion//"")] | @tsv',
     ]);
     const line = (roll.stdout || "").trim().split("\n")[0] || "";
     status = line.split("\t")[0] || "";

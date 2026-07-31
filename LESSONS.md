@@ -16,6 +16,23 @@
 
 ## Lessons
 
+### 2026-07-30 (ET) — Portal MCP checkout stamps fail the PLX_MC compliance gate
+
+- **What happened:** PR #184 stamped `MC-Checkout: dsp_ms7yca0a2b8u4a` from
+  `PLX-MC-Portal` / a portal-scoped create+checkout. CI compliance blocked with
+  `agent PR has no checked-out MC task (decision 3: checkout handshake required)`
+  even though complete() had succeeded for TASK-863.
+- **Root cause:** `PLX-MC-Portal` pins `x-mc-repo: petralabx/plx-customer-portal`.
+  A successful checkout for that repo is invisible to verify on
+  `petralabx/PLX_MC`. `PLX-MC-Hub` was empty/unavailable in the session, so the
+  agent fell back to Portal without checking `meta.actor.repo`.
+- **Rule going forward:** For `petralabx/PLX_MC` work, only accept checkouts
+  where `meta.actor.repo == petralabx/PLX_MC`. Prefer `PLX-MC-Hub`; if Hub is
+  empty, hydrate `PLX_MC_MCP_API_KEY` and use REST
+  (`docs/runbooks/cursor-cloud-service-account-api-key.md`) or
+  `COMPLIANCE_CAPTURE=1 MC_REPO=petralabx/PLX_MC node scripts/compliance-checkout.mjs`.
+  Never stamp a Portal `dsp_*` on a Hub PR.
+
 ### 2026-07-28 (ET) — A manifest cannot name the commit that contains it, and we trusted it over the ref we fetched
 
 - **What happened:** `petralabx/skills` published `manifest.json` with a `gitRef`

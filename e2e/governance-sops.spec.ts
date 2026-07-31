@@ -26,8 +26,8 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
 
   test("index lists the seed catalog; active SOPs are ready", async ({ page }) => {
     const rows = page.locator("[data-testid='gs-row']");
-    // Fleet SOPs (8) + PLX-Brain pointers (3) + Portal pointers (3).
-    await expect(rows).toHaveCount(14);
+    // Fleet SOPs (9) + PLX-Brain pointers (3) + Portal pointers (3).
+    await expect(rows).toHaveCount(15);
 
     const collab = page.locator("[data-testid='gs-row'][data-slug='mc-sop-collaborator']");
     await expect(collab).toBeVisible();
@@ -40,6 +40,13 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
     await expect(skills).toHaveAttribute("data-state", "ready");
     await expect(skills).toContainText("Company Skills SOP");
     await expect(skills).toContainText("Active");
+
+    const knowledgeVideo = page.locator(
+      "[data-testid='gs-row'][data-slug='mc-sop-plx-knowledge-video']",
+    );
+    await expect(knowledgeVideo).toBeVisible();
+    await expect(knowledgeVideo).toHaveAttribute("data-state", "ready");
+    await expect(knowledgeVideo).toContainText("PLX Knowledge Video");
 
     const agentPr = page.locator("[data-testid='gs-row'][data-slug='mc-sop-agent-pr']");
     await expect(agentPr).toBeVisible();

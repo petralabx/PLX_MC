@@ -7,7 +7,7 @@ personal laptops against PLX-tracked repos (`PLX_MC`, `plx-customer-portal`, etc
 
 > **TL;DR** — **PLX-MC access ≠ skills installed.** Register the PLX-MC MCP server for
 > task checkout, then run the **company skills bootstrap once per machine**. Skills come
-> from **`petralabx/skills`** (catalog pin `v1.4.1` / `pinTag` in
+> from **`petralabx/skills`** (catalog pin `v1.6.2` / `pinTag` in
 > `config/skills-catalog.json`) — **not** the full `agentic-swarm` catalog. Legacy
 > `taylorvalton/plx-cursor-skills` v1.0.0 is historical only. Start a **new** Cursor
 > session after bootstrap. To share a skill company-wide, use Mission Control **Skills
@@ -91,8 +91,8 @@ Optional dry run:
 
 1. Clone or update `~/plx-cursor-skills` (Windows: `%USERPROFILE%\plx-cursor-skills`) —
    local directory name unchanged; **remote** is `petralabx/skills` per catalog.
-2. Check out the catalog pin from `config/skills-catalog.json` — **`pinTag`** (`v1.4.1`
-   as of 2026-07-28), or `pinSha` when one is set. This now happens on a fresh clone
+2. Check out the catalog pin from `config/skills-catalog.json` — **`pinTag`** (`v1.6.2`
+   as of 2026-07-31), or `pinSha` when one is set. This now happens on a fresh clone
    too; it previously applied only when updating an existing checkout, so new
    machines silently installed whatever was on `main`.
 3. Install **published** skills from `manifest.json` into:
@@ -109,15 +109,15 @@ Restart Claude Code similarly if you rely on global Claude skills.
 
 ---
 
-## 4. What you get (company catalog v1.4.1)
+## 4. What you get (company catalog v1.6.2)
 
 The default bundle is **`plx-engineering-core`** pinned via `config/skills-catalog.json`.
 Skill ids are authoritative in `manifest.json` `packages[].skillIds` — not a static
 list in PLX_MC.
 
-Current pin (2026-07-28) carries **69 skills**, up from 39 — v1.4.0 imported the
-remaining operator-laptop skills and removed none, and v1.4.1 adds two skill
-fixes that landed after the previous sha pin. Examples:
+Current pin (2026-07-31) carries **71 skills**. It includes
+`guided-project-discovery` and `plx-knowledge-video`; v1.6.2 also enforces
+executable-mode parity for installed validators. Examples:
 
 | Category | Examples (see manifest for full set) |
 |----------|-------------------------------------|
@@ -127,7 +127,7 @@ fixes that landed after the previous sha pin. Examples:
 | Workstation | `plx-mc-workstation` |
 | Convergence loops | `adversarial-review-loop`, `champion-challenger-loop`, `perf-budget-loop`, `quality-streak-loop` |
 | Cursor tooling | `sdk`, `statusline`, `update-cursor-settings`, `create-subagent`, `loop` |
-| Knowledge capture | `session-brain`, `cursor-inbox-bridge` |
+| Knowledge capture | `session-brain`, `cursor-inbox-bridge`, `plx-knowledge-video` |
 
 **Plus** any skills shipped natively in the repo you bootstrap from (PLX_MC adds `mc-sync`
 and may add others under `.cursor/skills/`).
@@ -313,6 +313,7 @@ Until in-app install lands, **`mc_install_skills` + bootstrap** remain the insta
 | Catalog pin | `PLX_MC/config/skills-catalog.json` |
 | MC browse UI | Mission Control → System of record → **Skills directory** |
 | MCP runbook | `PLX_MC/docs/runbooks/plx-mc-mcp-team-registration.md` |
+| Knowledge video pipeline | `PLX_MC/docs/PLX-KNOWLEDGE-VIDEO-SOP.md` |
 | Repo layout / manifest schema | `PLX_MC/docs/plx-cursor-skills/` |
 | PR compliance | `PLX_MC/docs/COLLABORATOR-SOP.md` |
 

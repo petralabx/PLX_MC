@@ -1,12 +1,12 @@
 ---
 name: capabilities-deck
 description: >-
-  Interview PLX users and turn an opportunity, source deck, or customer brief
-  into a compelling confidential pitch microsite, presentation-clean PDF, and
-  email-ready delivery using the typed microsite engine. Use for capabilities
-  decks, innovation or diversification pitches, second-source / technical
-  transfer proposals, multi-concept product proposals, or PAUME-style customer
-  microsites.
+  Build a confidential, multi-concept "capabilities deck" / product-innovation
+  pitch microsite for a brand (the PAUME pattern) using the typed microsite
+  engine. Use when asked to build a capabilities deck, an innovation /
+  diversification pitch, a multi-concept product proposal microsite, or "a
+  PAUME-style microsite" for a customer, publish it to staging, and export/email
+  a print-clean PDF.
 ---
 
 # Capabilities Deck
@@ -29,39 +29,19 @@ renderer is shared. Canonical engine: **`portal/src/lib/microsites/`** and
   `opportunity`, `capability`, `why`, `trinity`, `concepts[]`,
   `diversification`, `commercial`, `pricing`, `begin`, `close`, `contact`. Rich
   headings are arrays of `{ text, em? }` segments (real JSX, not HTML strings).
-- Capability rows accept evidence-backed percentages or non-numeric status
-  labels. Concepts may rename the default `Hero claims` list with `claimsLabel`.
-- `data/paume.ts` — multi-concept + pricing example.
-- `data/foot-powder.ts` — single-concept + no-pricing example.
+- `data/paume.ts` — the worked example to copy.
 - `registry.ts` — slug → spec map.
 - `components/microsite/microsite.tsx` — renders any spec.
 
-## Guided discovery — ask, do not hand the user a schema
+## Inputs (gather first)
 
-Read [INTAKE.md](INTAKE.md). Inspect supplied files, links, and the brand's
-current public materials before asking questions.
-
-Rules:
-
-1. Ask in short rounds (maximum five questions), starting with meeting audience,
-   desired decisions, current relationship, source materials, confidentiality,
-   and delivery deadline.
-2. Ask only what cannot be inferred or verified. PLX users should describe the
-   opportunity in business language, not fill `MicrositeSpec` sections.
-3. Treat existing-business quote, technical-transfer / second-source review,
-   and new-concept samples as independent lanes. Give each lane its own decision
-   and CTA.
-4. Maintain a source ledger: `customer-provided`, `brand-verified`,
-   `PLX-verified`, `proposal`, or `unknown`.
-5. Never invent pricing, volume, timing, capacity, certifications, formula
-   approval, or finished-product efficacy. Omit unsupported sections.
-6. Confirm output mode: microsite, PDF, email-ready summary, or all three; draft
-   versus send; recipients; and approval owner.
-
-The deck is a **decision instrument**, not a brochure. Every major section must
-help the meeting audience understand an opportunity, evaluate PLX, or make the
-next decision. It must also work when presented live, skimmed from an email
-link, or read as a PDF without narration.
+- Brand name + slug (`/<slug>`, kebab-case)
+- Pitch content for each `MicrositeSpec` section: opportunity moments, the
+  concepts / "trinity", why-us cells + certs, capability bars, diversification
+  benefits, the commercial table, pricing tiers, begin steps, and close + contact
+- Imagery: an `og.png` plus one image per concept
+- Delivery: confirm the operator wants the PDF export + email (default recipient
+  **vince@petrasoap.com**)
 
 ## Workflow
 
@@ -74,33 +54,23 @@ link, or read as a PDF without narration.
 - [ ] 6. Harden + validate
 - [ ] 7. Publish to staging + verify live
 - [ ] 8. Export a print-clean PDF
-- [ ] 9. Archive PDF to SharePoint (`08-Marketing & Brand`)
-- [ ] 10. Register CustomerPitch on the customer record (Pitch library)
-- [ ] 11. Email the PDF to the operator (vince@petrasoap.com)
+- [ ] 9. Email the PDF to the operator (vince@petrasoap.com)
 ```
 
 1. **Worktree + bootstrap** — off `staging`; run
    `scripts/bootstrap-worktree.ps1` (see `.cursor/rules/worktree-bootstrap.mdc`).
 2. **Author the spec** — `portal/src/lib/microsites/data/<slug>.ts`, copying the
-   closest worked example; satisfy `schema.ts`. Turn the decision map into a
-   narrative: stakes → opportunity → concept/business lanes → why PLX →
-   commercial decision table → explicit next steps. Keep proposals visibly
-   distinct from verified facts.
+   shape of `data/paume.ts`; satisfy **every** required field in `schema.ts`.
+   Source real content from the operator / their brief; don't invent
+   pricing or claims.
 3. **Register** — add `[<slug>.slug]: <slug>` to the map in
    `portal/src/lib/microsites/registry.ts`.
 4. **Route** — copy `portal/src/app/paume/page.tsx` to
    `portal/src/app/<slug>/page.tsx` (set `SLUG`); add `"/<slug>"` to
    `PUBLIC_ROUTES` in `portal/src/middleware.ts`. Keep `confidential: true`
-   (→ `noindex`). **Default frictionless:** do **not** set `accessGate` and do
-   **not** wrap the deck in `AccessGate` unless the operator explicitly asks for
-   a soft company-name obscurity lock. Customers read that screen as a broken
-   password page when they do not know the unlock word (ALDI deodorant, 2026-07-30).
-   Prefer share-link + PDF; if a gate is required, put the unlock word in the
-   share email and add helper copy on failure.
-5. **Imagery** — add an OG image and one image per concept. If the brand provides
-   none, ask whether to use verified public brand imagery as a clearly labelled
-   current-format reference or to generate concept imagery. Never present a
-   reference image as an approved product.
+   (→ `noindex`).
+5. **Imagery** — add `portal/public/microsites/<slug>/og.png` and one
+   `concept-*.png` per concept (paths are referenced from the spec).
 6. **Harden + validate** — run the **ui-ux-design-loop** skill's gate pack (axe
    clean in both light and dark); then
    `cd portal && npm run typecheck && npm run lint && npm run build`
@@ -110,56 +80,44 @@ link, or read as a PDF without narration.
    `https://staging.plxcustomer.io/<slug>`. Confirm the live URL returns 200.
 8. **PDF export** — produce a **print-clean** PDF (see "PDF export" below). Never
    ship the naive full-page render of the live microsite — its grids fragment.
-9. **Archive PDF** — upload the verified PDF to the customer SharePoint folder
-   `08-Marketing & Brand` (mandatory — see [ARCHIVE.md](ARCHIVE.md)).
-10. **Register Pitch library row** — create or upsert a `CustomerPitch` on the
-    customer record so staff can reopen the deck from admin and the PD pipeline
-    (mandatory — see [PITCH-LIBRARY.md](PITCH-LIBRARY.md)). Prefer the admin UI;
-    use the admin API or `register-customer-pitch.mjs` when headless.
-11. **Email** — prepare the email-ready summary (include live URL + PDF archive
-    link), then draft or send exactly as authorized (see "Email delivery").
+9. **Email** — send the PDF to the operator via Resend (see "Email delivery").
 
 ## PDF export
 
 The microsite is a scroll-designed web layout; a naive `page.pdf()` of the live
-URL paginates badly (grey voids, collapsed columns, half-cut images). Prefer a
-**dedicated Letter print HTML** (or an equivalent print stylesheet) that reflows
-the narrative — do **not** ship a Chromium screenshot of the scroll deck as the
-customer leave-behind.
+URL paginates badly (grey voids, collapsed columns, half-cut images). Generate a
+**print-clean** PDF with a print stylesheet that reflows the layout, and only
+after the fonts and images have loaded.
 
-**First-class Letter polish (ALDI deodorant, 2026-07-30):**
+**Reformatting rules (the failure modes we hit, and the fixes):**
 
-1. **PLX design system, not a parallel look.** Load Mazius Display + Inter +
-   JetBrains Mono; use `--p-paper` / `--p-ink` / `--p-accent` (`#244A39`) /
-   `--p-grid` / `--p-muted` / `--p-rail`. Microsite lane accents stay
-   `--c-forest` / `--c-amber` / `--c-steel`. No Fraunces/IBM Plex / invented gold.
-2. **Own the margins on the page box.** Chrome headless is unreliable with
-   `@page { margin }`. Use `@page { size: letter; margin: 0 }` and
-   `.page { height: 279.4mm; padding: ~22mm }` so text never kisses the trim.
-   Measure with `pdftoppm` + pixel→mm (target ≥18–22mm).
-3. **Fill the folio — do not vertically center a tiny block.** Sparse top-third
-   layouts read unfinished. Grow section panels (`flex: 1`) and scale type /
-   padding so each page uses the Letter frame; leave calm unused area *inside*
-   framed panels, not empty bands above/below a floating card.
-4. **Do not pin body copy to the panel footer** (`margin-top: auto` on card
-   paragraphs) — that creates a sandwich void in the middle of tall panels.
-5. **Progress rails must read Done / Now / Todo** (filled vs current vs open),
-   with an explicit “Step N of M · Now” label when a path is mid-flight.
-6. **PDF stands alone.** No “optional web gate” language. If a staging URL is
-   included, state the unlock word only when a gate still exists (default: none).
-7. **Verify every page raster** (`pdftoppm`) — page count alone is not QA.
-
-**Also still true for print-CSS-on-live-microsite attempts:**
-
-- **Hairline grids fragment.** Convert `gap: 1px` faux grids to flex + per-child
-  `1px solid var(--p-grid)` borders under `@media print`.
-- **Fixed heights strand whitespace.** `min-height: 0 !important`; drop sticky.
-- **Orphaned headers / split cards.** Glue `.sec-head` to its grid; avoid
-  `break-inside: avoid` on whole tall `section`s.
-- **Protect product-format references.** `object-fit: contain` in a fixed frame
-  when the whole pack is evidence; reserve `cover` for croppable lifestyle art.
-- **Render discipline:** fonts ready, images `complete`, reveal animations on,
-  then `page.pdf({ printBackground: true, preferCSSPageSize: true })`.
+- **Hairline grids fragment.** The engine's grids use a grey container background
+  with `gap: 1px` as faux hairlines. Under pagination CSS grid collapses to one
+  column and leaves large grey voids. **Fix:** in `@media print`, convert
+  `.tcards / .whygrid / .steps / .pack-grid / .split` to
+  `display: flex` with `background: transparent; border: 0`, and give each child
+  `flex: 1 1 0` plus its own `1px solid var(--p-grid)` border.
+- **Fixed heights strand whitespace.** `min-height` on cards/`.heroing` and the
+  sticky concept visual leave empty space when a block moves to the next page.
+  **Fix:** `min-height: 0 !important` and drop `position: sticky` in print.
+- **Orphaned headers / split cards.** Glue each section header to its grid with
+  `.sec-head { break-after: avoid }` + grid `{ break-before: avoid }`, and protect
+  atomic blocks with `break-inside: avoid` on every card, `.heroing`, and
+  `.claims li`. Do **not** put `break-inside: avoid` on whole `section`s — tall
+  sections then force a page each and strand huge blank space.
+- **Compact scale.** Shrink the print type scale + section padding (e.g.
+  `--w-sec`, `--w-display`, `--w-body`, `--w-pad`) and hide screen-only chrome
+  (`.sitebar`, `.scrollcue`, `.ghostmark`, `.grid-lines`). Target ≈ letter,
+  `@page { margin: 11mm 10mm; size: letter }`.
+- **Uniform imagery.** Concept/packaging source images have mixed aspect ratios;
+  use `object-fit: cover` with a fixed thumb height so all tiles read uniform
+  rather than `contain` (which leaves inconsistent bars).
+- **Render discipline (Playwright/Chromium):** reveal animated blocks
+  (`.rv → .in`), expand any animated bars/rail to their `--to` width, `await
+  document.fonts.ready`, and wait until every `<img>` is `complete &&
+  naturalWidth > 0` before `page.pdf({ printBackground: true,
+  preferCSSPageSize: true })`. Verify by rasterizing pages (`pdftoppm`) and
+  eyeballing every page — do not trust page count alone.
 
 **Responsiveness requirement:** all print/reformatting rules live inside
 `@media print` (and normal responsive breakpoints stay intact). The screen
@@ -169,23 +127,11 @@ touching shared CSS.
 
 ## Email delivery
 
-Use the **plx-graph-mail** skill and Microsoft Graph on the Windows workstation.
-Confirm recipients, draft-versus-send authorization, and sender before acting.
-
-**Canonical template:** [EMAIL.md](EMAIL.md) — customer card (name, website,
-LinkedIn, HQ, category), meeting block, opportunity synopsis, staging deck URL,
-and a **presentation guide** with deep links to each included section (`#top`,
-`#opportunity`, `#concepts`, `#{{concept.id}}`, `#why`, `#commercial`, `#begin`,
-`#contact`, …). Omit rows for sections the deck does not ship.
-
-Also:
-
-- attach the verified print-clean PDF when one was exported in the same delivery
-- state that concept imagery/formulas are directions when applicable
-- identify the PLX contact and meeting date
-
-Confirm Graph returns success. If re-sending a corrected file, say explicitly
-that the new attachment supersedes the prior version.
+Attach the PDF and send via Resend (`RESEND_API_KEY` is in the environment).
+Default recipient **vince@petrasoap.com**; sender `onboarding@resend.dev` (custom
+domain not verified). Subject names the brand + "Product Brief (PDF)"; body
+includes the confidential staging link. Confirm the API returns an `id`. If you
+re-send a corrected file, say so in the body so the prior attachment is discarded.
 
 ## Done
 
@@ -194,21 +140,10 @@ that the new attachment supersedes the prior version.
 - axe WCAG A/AA clean both themes; typecheck + lint + build pass
 - Live at `staging.plxcustomer.io/<slug>`
 - Print-clean PDF exported (every page verified — no grey voids, collapsed
-  columns, or cut-off sections/images), **archived to SharePoint**
-  (`08-Marketing & Brand`), **registered in the customer Pitch library**
-  (`CustomerPitch` with live URL + SharePoint URL + meeting date + status), and
-  emailed to the operator with both the live URL and the archive link
+  columns, or cut-off sections/images) and emailed to the operator
 
 ## Notes
 
-- **Public-link boundary:** `confidential: true` adds the visual label and
-  `noindex,nofollow`; it does not authenticate the viewer. Obtain accountable-
-  operator approval before publishing a link-accessible pitch. If the content
-  must be restricted by identity, use an authenticated portal route instead —
-  **not** `accessGate` (soft company-name obscurity only; customers confuse it
-  with a broken password wall).
-- **Default open:** frictionless staging link after operator approval. Soft gates
-  are opt-in only.
 - **Staging only** (`.cursor/rules/staging-environment.mdc`). Production needs
   explicit operator approval.
 - The engine renders structured segments — never `dangerouslySetInnerHTML`.

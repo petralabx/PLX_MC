@@ -1,15 +1,14 @@
 # Project skills (synced from petralabx/skills)
 
 These skills are the **plx-engineering-core** package from
-[petralabx/skills](https://github.com/petralabx/skills) (`manifest.json`).
+[petralabx/skills](https://github.com/petralabx/skills) **v1.6.2**.
 
-Cursor Cloud's `/` skill picker is **project-scoped**: it enumerates
-`.cursor/skills/` in this repo. User-global `~/.cursor/skills` alone does
-not populate `/`.
+Cursor Cloud's "/" skill picker is **project-scoped**: it enumerates
+".cursor/skills/" in this repo. User-global "~/.cursor/skills" alone does
+not populate "/".
 
-Repo-local skills (e.g. `mc-sync`) may coexist. Pack skills are overwritten
-on re-sync from petralabx/skills.
+**Do not edit skills here as the source of truth.** Update petralabx/skills,
+then re-run scripts/distribute-to-repos.sh.
 
-`guided-project-discovery` synced from package version 1.6.2 on 2026-07-31
-(TASK-875). Other project skill copies retain their existing versions until a
-separate full-pack drift reconciliation is approved.
+Synced via scripts/distribute-to-repos.sh from petralabx/skills@v1.6.2
+on base branch main.

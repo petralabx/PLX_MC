@@ -140,6 +140,9 @@ run_policy() {
   # Self-resolve repo root from __file__ (same WSL/Windows path caveat as brand parity).
   "$PY" scripts/check-architecture-diagrams.py
 
+  step "Unified knowledge program (TASK-477)"
+  "$PY" scripts/check-unified-knowledge-program.py
+
   step "Migration numbering (serialized prefixes)"
   "$PY" scripts/check-migrations.py
 }

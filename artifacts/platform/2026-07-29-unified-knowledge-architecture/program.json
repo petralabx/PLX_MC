@@ -1,0 +1,1577 @@
+{
+  "schema_version": "plx-unified-knowledge-program/v1",
+  "program_id": "PRJ-UNIFIED-KNOWLEDGE",
+  "title": "Unified PLX Document and Knowledge Architecture",
+  "source_task": "TASK-477",
+  "accountable_owner": "vince@petrasoap.com",
+  "architecture_pattern": "Knowledge Ledger with Disposable Projections",
+  "status": "approved-spec",
+  "authority_matrix": [
+    {
+      "system": "SharePoint and Microsoft 365",
+      "authority": "canonical",
+      "canonical_for": [
+        "business-owned operational records",
+        "controlled documents",
+        "retention labels and records declarations"
+      ],
+      "projection_policy": "Ingest identifiers, metadata, permissions, version references, and extracts; never silently replace the source file.",
+      "authoring_return_path": "Open the authoritative SharePoint or Microsoft 365 item.",
+      "owner": "department head for the owning business domain"
+    },
+    {
+      "system": "Git repositories",
+      "authority": "canonical",
+      "canonical_for": [
+        "technical documentation",
+        "SOPs and runbooks governed in code",
+        "tools and skills"
+      ],
+      "projection_policy": "Index immutable commit references and derived chunks; rebuild projections from Git.",
+      "authoring_return_path": "Open a pull request in the owning repository.",
+      "owner": "repository owner"
+    },
+    {
+      "system": "PLX Customer Portal gold tables",
+      "authority": "workflow-authority",
+      "canonical_for": [
+        "customer workflow state",
+        "product and formulation workflow records",
+        "vendor workflow state"
+      ],
+      "projection_policy": "Project approved workflow facts and links, not mutable copies of gold records.",
+      "authoring_return_path": "Open the authoritative Portal workflow.",
+      "owner": "Portal domain owner"
+    },
+    {
+      "system": "Mission Control",
+      "authority": "execution-authority",
+      "canonical_for": [
+        "projects",
+        "buckets",
+        "tasks",
+        "milestones",
+        "risks",
+        "delivery evidence"
+      ],
+      "projection_policy": "All implementation activity resolves to a Task and evidence remains attributable.",
+      "authoring_return_path": "Open the Mission Control task or project.",
+      "owner": "vince@petrasoap.com"
+    },
+    {
+      "system": "Knowledge Ledger",
+      "authority": "canonical",
+      "canonical_for": [
+        "versioned knowledge assertions",
+        "provenance relationships",
+        "ontology versions",
+        "ingestion receipts"
+      ],
+      "projection_policy": "Append or supersede assertions bitemporally; never treat search indexes as ledger truth.",
+      "authoring_return_path": "Open the cited source and submit a governed assertion or ontology change.",
+      "owner": "vince@petrasoap.com"
+    },
+    {
+      "system": "PLX Second-Brain",
+      "authority": "derived",
+      "canonical_for": [
+        "derived memory",
+        "confidence-weighted relationships",
+        "retrieval context"
+      ],
+      "projection_policy": "Disposable consumer of ledger and canonical-source events; outage cannot block canonical reads.",
+      "authoring_return_path": "Return to the cited canonical source or ledger assertion.",
+      "owner": "Second-Brain service owner"
+    },
+    {
+      "system": "Agent Registry",
+      "authority": "registry-authority",
+      "canonical_for": [
+        "agent identity",
+        "approved capabilities",
+        "human accountability binding",
+        "revocation state"
+      ],
+      "projection_policy": "Expose reviewed identities and capability versions to policy enforcement.",
+      "authoring_return_path": "Use the governed Agent Registry approval flow.",
+      "owner": "vince@petrasoap.com"
+    },
+    {
+      "system": "MCPs, tools, and skills",
+      "authority": "registry-authority",
+      "canonical_for": [
+        "tool contracts",
+        "skill packages",
+        "runtime integration metadata"
+      ],
+      "projection_policy": "Pin immutable versions and audit invocation; no unregistered autonomous action.",
+      "authoring_return_path": "Change the canonical registry or source repository.",
+      "owner": "integration owner"
+    },
+    {
+      "system": "DocuSign",
+      "authority": "canonical",
+      "canonical_for": [
+        "envelope execution evidence",
+        "signature certificates",
+        "signer and routing evidence"
+      ],
+      "projection_policy": "Store envelope identifiers, status, hashes, and links; preserve signed artifacts under approved retention controls.",
+      "authoring_return_path": "Open the authoritative DocuSign envelope or controlled archive.",
+      "owner": "Quality and Legal"
+    },
+    {
+      "system": "Portal ontology workbench",
+      "authority": "workflow-authority",
+      "canonical_for": [
+        "ontology change proposals",
+        "review decisions",
+        "impact previews",
+        "publication approvals"
+      ],
+      "projection_policy": "Draft changes in branches; publish immutable ontology versions to the ledger only after approval.",
+      "authoring_return_path": "Open the ontology proposal and approval history.",
+      "owner": "department ontology steward"
+    },
+    {
+      "system": "Graph, vector, and full-text indexes",
+      "authority": "derived",
+      "canonical_for": [
+        "none"
+      ],
+      "projection_policy": "Disposable, version-stamped, security-trimmed projections rebuilt from the ledger and canonical-source connectors.",
+      "authoring_return_path": "Return to the ledger assertion and canonical source.",
+      "owner": "knowledge platform operator"
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-01",
+      "statement": "Knowledge Ledger with Disposable Projections is the governing architecture pattern.",
+      "enforced_by": [
+        "program schema constant",
+        "validator required invariant"
+      ]
+    },
+    {
+      "id": "INV-02",
+      "statement": "Every surfaced fact identifies its canonical source, source revision, ingestion receipt, and derivation path.",
+      "enforced_by": [
+        "ledger assertion contract",
+        "provenance completeness gate"
+      ]
+    },
+    {
+      "id": "INV-03",
+      "statement": "Graph, vector, text, cache, and Second-Brain surfaces are rebuildable and never become sole authority.",
+      "enforced_by": [
+        "projection rebuild drill",
+        "authority matrix"
+      ]
+    },
+    {
+      "id": "INV-04",
+      "statement": "Ontology changes are versioned, previewed, reviewed, reversible, and attributable.",
+      "enforced_by": [
+        "ontology workbench publication gate",
+        "immutable ontology version"
+      ]
+    },
+    {
+      "id": "INV-05",
+      "statement": "Department heads remain accountable while teams and agents retain bounded autonomy.",
+      "enforced_by": [
+        "human owner on every milestone, risk, gate, and task",
+        "Agent Registry capability policy"
+      ]
+    },
+    {
+      "id": "INV-06",
+      "statement": "Every implementation action resolves to a Mission Control task with evidence and rollback.",
+      "enforced_by": [
+        "Mission Control checkout",
+        "completion evidence gate"
+      ]
+    },
+    {
+      "id": "INV-07",
+      "statement": "Authorization is deny by default and search results are security trimmed before ranking or generation.",
+      "enforced_by": [
+        "central authorization policy",
+        "retrieval authorization tests"
+      ]
+    },
+    {
+      "id": "INV-08",
+      "statement": "Retention, disposition, legal hold, privacy, and residency remain source-aware and policy controlled.",
+      "enforced_by": [
+        "records schedule gate",
+        "data-flow inventory"
+      ]
+    },
+    {
+      "id": "INV-09",
+      "statement": "Part 11 controls apply only after Quality and Legal approve intended use and the validated-system boundary.",
+      "enforced_by": [
+        "Phase 0 intended-use gate",
+        "validation plan"
+      ]
+    },
+    {
+      "id": "INV-10",
+      "statement": "Duplicate, contradiction, and staleness signals never silently delete or overwrite canonical content.",
+      "enforced_by": [
+        "human resolution queues",
+        "non-destructive detectors"
+      ]
+    },
+    {
+      "id": "INV-11",
+      "statement": "Every answer or recommendation exposes source links, revision time, confidence, and known conflicts.",
+      "enforced_by": [
+        "explainability acceptance tests",
+        "answer citation contract"
+      ]
+    },
+    {
+      "id": "INV-12",
+      "statement": "Milestones, dependencies, risks, gates, and validation are machine readable and fail closed on drift.",
+      "enforced_by": [
+        "program JSON Schema",
+        "deterministic program validator"
+      ]
+    }
+  ],
+  "phase_zero_gates": [
+    {
+      "id": "P0G-01",
+      "title": "Microsoft 365 estate and licensing inventory",
+      "owner": "vince@petrasoap.com",
+      "status": "blocked",
+      "done_when": [
+        "Live-environment tenants, sites, libraries, Purview capabilities, license entitlements, regions, and administrators are recorded.",
+        "Graph permissions and least-privilege connector identities are approved."
+      ],
+      "blocks": [
+        "MS-02",
+        "MS-04",
+        "MS-06"
+      ]
+    },
+    {
+      "id": "P0G-02",
+      "title": "Portal and Second-Brain repository and runtime inventory",
+      "owner": "vince@petrasoap.com",
+      "status": "blocked",
+      "done_when": [
+        "The authoritative Portal document stack and Second-Brain implementation are accessible and reviewed.",
+        "Existing schemas, ownership, APIs, and deployment boundaries are recorded without inference."
+      ],
+      "blocks": [
+        "MS-01",
+        "MS-03",
+        "MS-05"
+      ]
+    },
+    {
+      "id": "P0G-03",
+      "title": "Part 11 intended-use and validated-system boundary",
+      "owner": "vince@petrasoap.com",
+      "status": "blocked",
+      "done_when": [
+        "Quality and Legal document which records and signatures are regulated.",
+        "Validation, audit-trail review, retention, signature, and record-copy obligations have named owners."
+      ],
+      "blocks": [
+        "MS-04",
+        "MS-06",
+        "MS-07"
+      ]
+    },
+    {
+      "id": "P0G-04",
+      "title": "Authorization and privacy model",
+      "owner": "vince@petrasoap.com",
+      "status": "blocked",
+      "done_when": [
+        "Identity classes, customer and vendor isolation, department access, agent capabilities, and break-glass paths are approved.",
+        "Sensitive-data classes and purpose limitations are mapped to enforceable policies."
+      ],
+      "blocks": [
+        "MS-02",
+        "MS-03",
+        "MS-05",
+        "MS-06"
+      ]
+    },
+    {
+      "id": "P0G-05",
+      "title": "Knowledge ledger and audit-store deployment decision",
+      "owner": "vince@petrasoap.com",
+      "status": "blocked",
+      "done_when": [
+        "Postgres deployment, backup, encryption, residency, recovery, and immutable audit retention are approved.",
+        "Ledger transaction-time and valid-time semantics are approved."
+      ],
+      "blocks": [
+        "MS-01",
+        "MS-03",
+        "MS-06"
+      ]
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-01",
+      "category": "authority",
+      "statement": "Each knowledge object shall declare one canonical system and an authoring return path.",
+      "priority": "must",
+      "verification": [
+        "Authority matrix contract test",
+        "Sample object trace"
+      ]
+    },
+    {
+      "id": "REQ-02",
+      "category": "knowledge",
+      "statement": "The ledger shall preserve immutable assertion versions with valid time and transaction time.",
+      "priority": "must",
+      "verification": [
+        "Bitemporal correction test",
+        "Historical as-of query"
+      ]
+    },
+    {
+      "id": "REQ-03",
+      "category": "knowledge",
+      "statement": "Graph, vector, full-text, cache, and Second-Brain projections shall be rebuildable from versioned sources.",
+      "priority": "must",
+      "verification": [
+        "Empty-index rebuild drill",
+        "Projection checksum comparison"
+      ]
+    },
+    {
+      "id": "REQ-04",
+      "category": "knowledge",
+      "statement": "Every assertion and chunk shall carry source identity, source revision, extraction version, and ingestion receipt.",
+      "priority": "must",
+      "verification": [
+        "Provenance completeness query"
+      ]
+    },
+    {
+      "id": "REQ-05",
+      "category": "ontology",
+      "statement": "Administrators shall safely propose, preview, review, publish, deprecate, and roll back ontology changes in the Portal.",
+      "priority": "must",
+      "verification": [
+        "Workbench end-to-end approval scenario",
+        "Rollback scenario"
+      ]
+    },
+    {
+      "id": "REQ-06",
+      "category": "ontology",
+      "statement": "Ontology versions shall preserve stable identifiers, labels, synonyms, mappings, owners, and effective dates.",
+      "priority": "must",
+      "verification": [
+        "Ontology version diff",
+        "Stable identifier regression test"
+      ]
+    },
+    {
+      "id": "REQ-07",
+      "category": "discovery",
+      "statement": "Users shall search lexically and semantically across authorized PLX sources with source filters.",
+      "priority": "must",
+      "verification": [
+        "Golden query suite",
+        "Security-trimmed result test"
+      ]
+    },
+    {
+      "id": "REQ-08",
+      "category": "discovery",
+      "statement": "Answers shall display citations, revision time, confidence, derivation, and contradiction state.",
+      "priority": "must",
+      "verification": [
+        "Explainability snapshot",
+        "Unsupported-answer rejection test"
+      ]
+    },
+    {
+      "id": "REQ-09",
+      "category": "discovery",
+      "statement": "The system shall flag exact, near, and semantic duplicate candidates without destructive deduplication.",
+      "priority": "must",
+      "verification": [
+        "Duplicate benchmark",
+        "Human resolution audit"
+      ]
+    },
+    {
+      "id": "REQ-10",
+      "category": "discovery",
+      "statement": "The system shall flag stale and contradictory content using source-aware rules and owner review.",
+      "priority": "must",
+      "verification": [
+        "Staleness policy tests",
+        "Contradiction scenario"
+      ]
+    },
+    {
+      "id": "REQ-11",
+      "category": "security",
+      "statement": "Connectors and retrieval shall enforce least privilege, deny by default, and preserve source ACL semantics.",
+      "priority": "must",
+      "verification": [
+        "Cross-tenant isolation test",
+        "Revocation propagation test"
+      ]
+    },
+    {
+      "id": "REQ-12",
+      "category": "security",
+      "statement": "Agent, MCP, tool, and skill actions shall use registered identities, versioned capabilities, and auditable invocation.",
+      "priority": "must",
+      "verification": [
+        "Unregistered agent denial",
+        "Capability-version audit trace"
+      ]
+    },
+    {
+      "id": "REQ-13",
+      "category": "privacy",
+      "statement": "Data classification, minimization, purpose limitation, residency, and subject-right handling shall be source aware.",
+      "priority": "must",
+      "verification": [
+        "Data-flow review",
+        "Residency control evidence"
+      ]
+    },
+    {
+      "id": "REQ-14",
+      "category": "records",
+      "statement": "Retention, disposition, legal hold, and records declaration shall remain governed by approved source policies.",
+      "priority": "must",
+      "verification": [
+        "Retention label mapping",
+        "Hold and disposition scenario"
+      ]
+    },
+    {
+      "id": "REQ-15",
+      "category": "compliance",
+      "statement": "Regulated records shall support accurate and complete copies, protection, retrieval, and approved retention.",
+      "priority": "must",
+      "verification": [
+        "Record export test",
+        "Retention and retrieval qualification"
+      ]
+    },
+    {
+      "id": "REQ-16",
+      "category": "compliance",
+      "statement": "Regulated actions shall create secure, computer-generated, time-stamped audit trails attributable to an authorized actor.",
+      "priority": "must",
+      "verification": [
+        "Audit trail qualification",
+        "Clock and identity test"
+      ]
+    },
+    {
+      "id": "REQ-17",
+      "category": "compliance",
+      "statement": "Electronic signatures shall be unique, verified, linked to their records, and display required signature meaning.",
+      "priority": "must",
+      "verification": [
+        "DocuSign envelope and record linkage test",
+        "Signature manifestation review"
+      ]
+    },
+    {
+      "id": "REQ-18",
+      "category": "governance",
+      "statement": "Every milestone, task, risk, and gate shall have a named human accountable owner.",
+      "priority": "must",
+      "verification": [
+        "Program validator owner check"
+      ]
+    },
+    {
+      "id": "REQ-19",
+      "category": "governance",
+      "statement": "Teams and agents may execute only within approved, revocable, and evidence-producing autonomy bounds.",
+      "priority": "must",
+      "verification": [
+        "Agent policy scenarios",
+        "Human approval boundary tests"
+      ]
+    },
+    {
+      "id": "REQ-20",
+      "category": "operations",
+      "statement": "Connectors shall be idempotent, cursor based, observable, replayable, and independently degradable.",
+      "priority": "must",
+      "verification": [
+        "Replay test",
+        "Partial outage test"
+      ]
+    },
+    {
+      "id": "REQ-21",
+      "category": "operations",
+      "statement": "Canonical content shall remain readable when the ledger, Second-Brain, or any projection is unavailable.",
+      "priority": "must",
+      "verification": [
+        "Projection outage drill",
+        "Canonical deep-link test"
+      ]
+    },
+    {
+      "id": "REQ-22",
+      "category": "operations",
+      "statement": "Projection versions shall identify ledger watermark, ontology version, model version, and build receipt.",
+      "priority": "must",
+      "verification": [
+        "Projection receipt inspection"
+      ]
+    },
+    {
+      "id": "REQ-23",
+      "category": "authority",
+      "statement": "Mission Control execution records shall remain linked to delivery evidence and canonical project artifacts.",
+      "priority": "must",
+      "verification": [
+        "Task-to-evidence trace"
+      ]
+    },
+    {
+      "id": "REQ-24",
+      "category": "discovery",
+      "statement": "Customer and vendor knowledge shall be isolated from other tenants before retrieval and generation.",
+      "priority": "must",
+      "verification": [
+        "Adversarial tenant-leakage suite"
+      ]
+    },
+    {
+      "id": "REQ-25",
+      "category": "operations",
+      "statement": "Source deletions and permission changes shall create tombstones and projection removals without erasing audit history.",
+      "priority": "must",
+      "verification": [
+        "Deletion and ACL-change replay"
+      ]
+    },
+    {
+      "id": "REQ-26",
+      "category": "governance",
+      "statement": "Program state shall be schema validated with acyclic dependencies and complete requirement coverage before dispatch.",
+      "priority": "must",
+      "verification": [
+        "Deterministic validator",
+        "Mission Control import dry-run"
+      ]
+    }
+  ],
+  "milestones": [
+    {
+      "id": "MS-00",
+      "order": 0,
+      "title": "Authority, estate, and compliance discovery",
+      "owner": "vince@petrasoap.com",
+      "status": "blocked",
+      "depends_on": [],
+      "requirements": [
+        "REQ-01",
+        "REQ-11",
+        "REQ-13",
+        "REQ-14",
+        "REQ-15",
+        "REQ-16",
+        "REQ-17",
+        "REQ-18",
+        "REQ-23",
+        "REQ-26"
+      ],
+      "risks": [
+        "RSK-01",
+        "RSK-02",
+        "RSK-03",
+        "RSK-04"
+      ],
+      "acceptance_evidence": [
+        "All Phase 0 gates passed",
+        "Approved source authority register",
+        "Quality and Legal intended-use decision",
+        "Approved data-flow and authorization model"
+      ]
+    },
+    {
+      "id": "MS-01",
+      "order": 1,
+      "title": "Versioned knowledge ledger foundation",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "depends_on": [
+        "MS-00"
+      ],
+      "requirements": [
+        "REQ-02",
+        "REQ-03",
+        "REQ-04",
+        "REQ-20",
+        "REQ-22",
+        "REQ-25"
+      ],
+      "risks": [
+        "RSK-05",
+        "RSK-06"
+      ],
+      "acceptance_evidence": [
+        "Bitemporal assertion contract tests",
+        "Ingestion receipt and tombstone tests",
+        "Backup and restore qualification"
+      ]
+    },
+    {
+      "id": "MS-02",
+      "order": 2,
+      "title": "Canonical-source connectors",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "depends_on": [
+        "MS-01"
+      ],
+      "requirements": [
+        "REQ-01",
+        "REQ-04",
+        "REQ-11",
+        "REQ-13",
+        "REQ-14",
+        "REQ-20",
+        "REQ-21",
+        "REQ-23",
+        "REQ-25"
+      ],
+      "risks": [
+        "RSK-01",
+        "RSK-03",
+        "RSK-07"
+      ],
+      "acceptance_evidence": [
+        "Connector conformance suite",
+        "ACL and deletion propagation evidence",
+        "Canonical deep links verified"
+      ]
+    },
+    {
+      "id": "MS-03",
+      "order": 3,
+      "title": "Ontology workbench and publication lifecycle",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "depends_on": [
+        "MS-01",
+        "MS-02"
+      ],
+      "requirements": [
+        "REQ-05",
+        "REQ-06",
+        "REQ-18",
+        "REQ-19",
+        "REQ-22"
+      ],
+      "risks": [
+        "RSK-08"
+      ],
+      "acceptance_evidence": [
+        "Administrator usability test",
+        "Impact preview and approval trace",
+        "Ontology rollback drill"
+      ]
+    },
+    {
+      "id": "MS-04",
+      "order": 4,
+      "title": "Records, privacy, and Part 11 controls",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "depends_on": [
+        "MS-02",
+        "MS-03"
+      ],
+      "requirements": [
+        "REQ-13",
+        "REQ-14",
+        "REQ-15",
+        "REQ-16",
+        "REQ-17",
+        "REQ-24"
+      ],
+      "risks": [
+        "RSK-02",
+        "RSK-04",
+        "RSK-09"
+      ],
+      "acceptance_evidence": [
+        "Approved validation plan and trace matrix",
+        "Audit-trail and record-copy qualification",
+        "DocuSign record-linkage qualification",
+        "Residency and privacy evidence"
+      ]
+    },
+    {
+      "id": "MS-05",
+      "order": 5,
+      "title": "Disposable projections and semantic discovery",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "depends_on": [
+        "MS-03",
+        "MS-04"
+      ],
+      "requirements": [
+        "REQ-03",
+        "REQ-07",
+        "REQ-08",
+        "REQ-09",
+        "REQ-10",
+        "REQ-11",
+        "REQ-21",
+        "REQ-22",
+        "REQ-24"
+      ],
+      "risks": [
+        "RSK-06",
+        "RSK-07",
+        "RSK-10"
+      ],
+      "acceptance_evidence": [
+        "Zero-state projection rebuild",
+        "Golden retrieval benchmark",
+        "Tenant isolation suite",
+        "Duplicate, stale, and contradiction benchmark"
+      ]
+    },
+    {
+      "id": "MS-06",
+      "order": 6,
+      "title": "Bounded agent and human workflows",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "depends_on": [
+        "MS-04",
+        "MS-05"
+      ],
+      "requirements": [
+        "REQ-08",
+        "REQ-12",
+        "REQ-18",
+        "REQ-19",
+        "REQ-23",
+        "REQ-26"
+      ],
+      "risks": [
+        "RSK-04",
+        "RSK-10"
+      ],
+      "acceptance_evidence": [
+        "Agent capability and revocation scenarios",
+        "Human approval and escalation scenarios",
+        "Mission Control evidence trace"
+      ]
+    },
+    {
+      "id": "MS-07",
+      "order": 7,
+      "title": "Pilot, validation, cutover, and operations",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "depends_on": [
+        "MS-06"
+      ],
+      "requirements": [
+        "REQ-15",
+        "REQ-16",
+        "REQ-20",
+        "REQ-21",
+        "REQ-22",
+        "REQ-25",
+        "REQ-26"
+      ],
+      "risks": [
+        "RSK-05",
+        "RSK-09",
+        "RSK-10"
+      ],
+      "acceptance_evidence": [
+        "Architecture collection pilot",
+        "Validated rollback and disaster-recovery drills",
+        "Operational SLO dashboard",
+        "Quality, Legal, Security, and department-head approvals"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "UKA-001",
+      "title": "Inventory Microsoft 365, Portal, Second-Brain, DocuSign, and registry estates",
+      "milestone": "MS-00",
+      "owner": "vince@petrasoap.com",
+      "executor": "platform discovery team",
+      "autonomy": "bounded",
+      "status": "blocked",
+      "depends_on": [],
+      "requirements": [
+        "REQ-01",
+        "REQ-11",
+        "REQ-13",
+        "REQ-14",
+        "REQ-23"
+      ],
+      "repo": "petralabx/PLX_MC",
+      "done_when": [
+        "All systems, owners, regions, licenses, repositories, schemas, APIs, and identities are evidenced.",
+        "No inaccessible system is represented as verified."
+      ]
+    },
+    {
+      "id": "UKA-002",
+      "title": "Approve Part 11 intended use and validation boundary",
+      "milestone": "MS-00",
+      "owner": "vince@petrasoap.com",
+      "executor": "Quality and Legal",
+      "autonomy": "human-only",
+      "status": "blocked",
+      "depends_on": [
+        "UKA-001"
+      ],
+      "requirements": [
+        "REQ-15",
+        "REQ-16",
+        "REQ-17"
+      ],
+      "repo": "petralabx/PLX_MC",
+      "done_when": [
+        "Regulated records, signatures, intended uses, predicates, and validation deliverables are signed off."
+      ]
+    },
+    {
+      "id": "UKA-003",
+      "title": "Approve authority, privacy, residency, and authorization matrices",
+      "milestone": "MS-00",
+      "owner": "vince@petrasoap.com",
+      "executor": "department heads and Security",
+      "autonomy": "human-only",
+      "status": "blocked",
+      "depends_on": [
+        "UKA-001"
+      ],
+      "requirements": [
+        "REQ-01",
+        "REQ-11",
+        "REQ-13",
+        "REQ-14",
+        "REQ-18",
+        "REQ-19",
+        "REQ-24",
+        "REQ-26"
+      ],
+      "repo": "petralabx/PLX_MC",
+      "done_when": [
+        "Each source, data class, role, tenant boundary, and decision owner is approved."
+      ]
+    },
+    {
+      "id": "UKA-004",
+      "title": "Implement bitemporal ledger and immutable ingestion receipts",
+      "milestone": "MS-01",
+      "owner": "vince@petrasoap.com",
+      "executor": "knowledge platform team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-002",
+        "UKA-003"
+      ],
+      "requirements": [
+        "REQ-02",
+        "REQ-04",
+        "REQ-22",
+        "REQ-25"
+      ],
+      "repo": "implementation repo selected at Phase 0",
+      "done_when": [
+        "Assertions support valid-time and transaction-time queries.",
+        "Corrections supersede rather than overwrite history.",
+        "Every ingest produces a signed receipt and source revision."
+      ]
+    },
+    {
+      "id": "UKA-005",
+      "title": "Implement connector and projection receipt contracts",
+      "milestone": "MS-01",
+      "owner": "vince@petrasoap.com",
+      "executor": "knowledge platform team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-004"
+      ],
+      "requirements": [
+        "REQ-03",
+        "REQ-20",
+        "REQ-21",
+        "REQ-22"
+      ],
+      "repo": "implementation repo selected at Phase 0",
+      "done_when": [
+        "Connector cursor, extractor version, ledger watermark, ontology version, and model version are recorded."
+      ]
+    },
+    {
+      "id": "UKA-006",
+      "title": "Connect SharePoint and Microsoft 365 canonical records",
+      "milestone": "MS-02",
+      "owner": "vince@petrasoap.com",
+      "executor": "Microsoft 365 integration team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-005"
+      ],
+      "requirements": [
+        "REQ-01",
+        "REQ-04",
+        "REQ-11",
+        "REQ-13",
+        "REQ-14",
+        "REQ-20",
+        "REQ-21",
+        "REQ-25"
+      ],
+      "repo": "implementation repo selected at Phase 0",
+      "done_when": [
+        "Delta, ACL, version, retention, deletion, and deep-link scenarios pass against an approved isolated test estate."
+      ]
+    },
+    {
+      "id": "UKA-007",
+      "title": "Connect Git, Mission Control, Agent Registry, tools, and skills",
+      "milestone": "MS-02",
+      "owner": "vince@petrasoap.com",
+      "executor": "platform integration team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-005"
+      ],
+      "requirements": [
+        "REQ-01",
+        "REQ-04",
+        "REQ-12",
+        "REQ-20",
+        "REQ-21",
+        "REQ-23",
+        "REQ-25"
+      ],
+      "repo": "petralabx/PLX_MC",
+      "done_when": [
+        "Immutable Git refs, task evidence, registry versions, invocation receipts, and canonical return links are queryable."
+      ]
+    },
+    {
+      "id": "UKA-008",
+      "title": "Connect Portal gold records, customers, vendors, and DocuSign",
+      "milestone": "MS-02",
+      "owner": "vince@petrasoap.com",
+      "executor": "Portal integration team",
+      "autonomy": "bounded",
+      "status": "blocked",
+      "depends_on": [
+        "UKA-005"
+      ],
+      "requirements": [
+        "REQ-01",
+        "REQ-04",
+        "REQ-11",
+        "REQ-13",
+        "REQ-17",
+        "REQ-20",
+        "REQ-21",
+        "REQ-24",
+        "REQ-25"
+      ],
+      "repo": "petralabx/plx-customer-portal",
+      "done_when": [
+        "Existing Portal document stack is reused after repository verification.",
+        "Customer and vendor isolation and DocuSign linkage tests pass."
+      ]
+    },
+    {
+      "id": "UKA-009",
+      "title": "Build ontology proposal, diff, and impact-preview workflow",
+      "milestone": "MS-03",
+      "owner": "vince@petrasoap.com",
+      "executor": "Portal product team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-006",
+        "UKA-007",
+        "UKA-008"
+      ],
+      "requirements": [
+        "REQ-05",
+        "REQ-06",
+        "REQ-18",
+        "REQ-19"
+      ],
+      "repo": "petralabx/plx-customer-portal",
+      "done_when": [
+        "An administrator can propose labels, synonyms, mappings, and deprecations and preview affected content."
+      ]
+    },
+    {
+      "id": "UKA-010",
+      "title": "Implement ontology approval, publication, and rollback",
+      "milestone": "MS-03",
+      "owner": "vince@petrasoap.com",
+      "executor": "ontology stewards and Portal product team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-009"
+      ],
+      "requirements": [
+        "REQ-05",
+        "REQ-06",
+        "REQ-18",
+        "REQ-19",
+        "REQ-22"
+      ],
+      "repo": "petralabx/plx-customer-portal",
+      "done_when": [
+        "Human approval publishes an immutable version and rollback creates a new attributable version."
+      ]
+    },
+    {
+      "id": "UKA-011",
+      "title": "Implement records, retention, legal-hold, and privacy controls",
+      "milestone": "MS-04",
+      "owner": "vince@petrasoap.com",
+      "executor": "Microsoft 365, Security, Privacy, and Quality",
+      "autonomy": "bounded",
+      "status": "blocked",
+      "depends_on": [
+        "UKA-006",
+        "UKA-010"
+      ],
+      "requirements": [
+        "REQ-13",
+        "REQ-14",
+        "REQ-15",
+        "REQ-24"
+      ],
+      "repo": "implementation repos selected at Phase 0",
+      "done_when": [
+        "Approved retention, hold, disposition, minimization, residency, and tenant-isolation scenarios pass."
+      ]
+    },
+    {
+      "id": "UKA-012",
+      "title": "Qualify audit trails, record copies, signatures, and training controls",
+      "milestone": "MS-04",
+      "owner": "vince@petrasoap.com",
+      "executor": "Quality and Legal",
+      "autonomy": "human-only",
+      "status": "blocked",
+      "depends_on": [
+        "UKA-002",
+        "UKA-008",
+        "UKA-011"
+      ],
+      "requirements": [
+        "REQ-15",
+        "REQ-16",
+        "REQ-17"
+      ],
+      "repo": "validation repository selected at Phase 0",
+      "done_when": [
+        "Approved validation protocols pass with deviations resolved and attributable signatures."
+      ]
+    },
+    {
+      "id": "UKA-013",
+      "title": "Build graph, vector, and full-text projection pipelines",
+      "milestone": "MS-05",
+      "owner": "vince@petrasoap.com",
+      "executor": "knowledge platform team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-010",
+        "UKA-011"
+      ],
+      "requirements": [
+        "REQ-03",
+        "REQ-07",
+        "REQ-11",
+        "REQ-21",
+        "REQ-22",
+        "REQ-24"
+      ],
+      "repo": "implementation repo selected at Phase 0",
+      "done_when": [
+        "All projections rebuild from an empty state and enforce pre-retrieval authorization."
+      ]
+    },
+    {
+      "id": "UKA-014",
+      "title": "Integrate Second-Brain as a derived consumer",
+      "milestone": "MS-05",
+      "owner": "vince@petrasoap.com",
+      "executor": "Second-Brain team",
+      "autonomy": "bounded",
+      "status": "blocked",
+      "depends_on": [
+        "UKA-013"
+      ],
+      "requirements": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-08",
+        "REQ-21",
+        "REQ-22"
+      ],
+      "repo": "Second-Brain repository confirmed at Phase 0",
+      "done_when": [
+        "Second-Brain can be erased and rebuilt without loss of canonical knowledge.",
+        "Its outage leaves canonical links and lexical discovery available."
+      ]
+    },
+    {
+      "id": "UKA-015",
+      "title": "Implement duplicate, stale, and contradiction detection",
+      "milestone": "MS-05",
+      "owner": "vince@petrasoap.com",
+      "executor": "knowledge quality team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-013"
+      ],
+      "requirements": [
+        "REQ-09",
+        "REQ-10",
+        "REQ-25"
+      ],
+      "repo": "implementation repo selected at Phase 0",
+      "done_when": [
+        "Benchmarks meet approved thresholds and every candidate routes to a human owner without destructive mutation."
+      ]
+    },
+    {
+      "id": "UKA-016",
+      "title": "Build explainable, security-trimmed discovery experience",
+      "milestone": "MS-05",
+      "owner": "vince@petrasoap.com",
+      "executor": "Portal product and knowledge platform teams",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-013",
+        "UKA-014",
+        "UKA-015"
+      ],
+      "requirements": [
+        "REQ-07",
+        "REQ-08",
+        "REQ-10",
+        "REQ-11",
+        "REQ-21",
+        "REQ-24"
+      ],
+      "repo": "petralabx/plx-customer-portal",
+      "done_when": [
+        "Golden queries, citation, contradiction, freshness, degraded-state, and tenant-isolation tests pass."
+      ]
+    },
+    {
+      "id": "UKA-017",
+      "title": "Enforce Agent Registry, MCP, tool, and skill autonomy bounds",
+      "milestone": "MS-06",
+      "owner": "vince@petrasoap.com",
+      "executor": "platform security team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-012",
+        "UKA-016"
+      ],
+      "requirements": [
+        "REQ-12",
+        "REQ-18",
+        "REQ-19",
+        "REQ-23"
+      ],
+      "repo": "petralabx/PLX_MC",
+      "done_when": [
+        "Unregistered or revoked actors fail closed.",
+        "High-impact actions require attributable human approval."
+      ]
+    },
+    {
+      "id": "UKA-018",
+      "title": "Implement zero-drift dispatch and evidence synchronization",
+      "milestone": "MS-06",
+      "owner": "vince@petrasoap.com",
+      "executor": "Mission Control team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-017"
+      ],
+      "requirements": [
+        "REQ-18",
+        "REQ-19",
+        "REQ-23",
+        "REQ-26"
+      ],
+      "repo": "petralabx/PLX_MC",
+      "done_when": [
+        "Program import dry-run is idempotent and every task preserves dependencies, owner, gates, and done-when evidence."
+      ]
+    },
+    {
+      "id": "UKA-019",
+      "title": "Pilot with the existing architecture collection",
+      "milestone": "MS-07",
+      "owner": "vince@petrasoap.com",
+      "executor": "cross-functional pilot team",
+      "autonomy": "bounded",
+      "status": "pending",
+      "depends_on": [
+        "UKA-018"
+      ],
+      "requirements": [
+        "REQ-03",
+        "REQ-07",
+        "REQ-08",
+        "REQ-10",
+        "REQ-20",
+        "REQ-21",
+        "REQ-22",
+        "REQ-25"
+      ],
+      "repo": "petralabx/PLX_MC",
+      "done_when": [
+        "Architecture sources ingest with complete provenance.",
+        "Disposable projections rebuild and degraded modes remain usable.",
+        "Technical and nontechnical users recover the same authority facts."
+      ]
+    },
+    {
+      "id": "UKA-020",
+      "title": "Validate cutover, rollback, disaster recovery, and operations",
+      "milestone": "MS-07",
+      "owner": "vince@petrasoap.com",
+      "executor": "Quality, Security, SRE, and department heads",
+      "autonomy": "human-only",
+      "status": "pending",
+      "depends_on": [
+        "UKA-019"
+      ],
+      "requirements": [
+        "REQ-15",
+        "REQ-16",
+        "REQ-20",
+        "REQ-21",
+        "REQ-22",
+        "REQ-25",
+        "REQ-26"
+      ],
+      "repo": "program-wide",
+      "done_when": [
+        "Validation, recovery, rollback, audit, SLO, support, and ownership evidence is approved before live cutover."
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "RSK-01",
+      "title": "Microsoft 365 estate or licensing assumptions are wrong",
+      "likelihood": "high",
+      "impact": "high",
+      "owner": "vince@petrasoap.com",
+      "mitigation": "Keep connector and Purview design blocked until tenant, site, region, license, role, and Graph permission evidence is approved.",
+      "trigger": "Any required feature, site, or permission cannot be demonstrated in the target tenant.",
+      "status": "blocked"
+    },
+    {
+      "id": "RSK-02",
+      "title": "Part 11 scope is inferred rather than approved",
+      "likelihood": "high",
+      "impact": "critical",
+      "owner": "vince@petrasoap.com",
+      "mitigation": "Quality and Legal approve intended use, regulated records, predicates, validation boundary, and signature controls before implementation.",
+      "trigger": "A regulated claim is made without an approved intended-use assessment.",
+      "status": "blocked"
+    },
+    {
+      "id": "RSK-03",
+      "title": "Portal or Second-Brain implementation is inaccessible",
+      "likelihood": "high",
+      "impact": "high",
+      "owner": "vince@petrasoap.com",
+      "mitigation": "Treat repository and runtime access as a Phase 0 gate; do not duplicate an unverified document or memory stack.",
+      "trigger": "The implementation cannot be inspected at a pinned revision.",
+      "status": "blocked"
+    },
+    {
+      "id": "RSK-04",
+      "title": "Authorization or tenant isolation leaks restricted knowledge",
+      "likelihood": "medium",
+      "impact": "critical",
+      "owner": "vince@petrasoap.com",
+      "mitigation": "Enforce source ACLs and tenant predicates before retrieval, add adversarial leakage tests, and fail closed on policy uncertainty.",
+      "trigger": "A query returns an object not authorized in its source system.",
+      "status": "pending"
+    },
+    {
+      "id": "RSK-05",
+      "title": "Ledger design creates a new mutable source of truth",
+      "likelihood": "medium",
+      "impact": "high",
+      "owner": "vince@petrasoap.com",
+      "mitigation": "Limit ledger authority to assertions, provenance, ontology versions, and receipts; preserve explicit authoring return paths.",
+      "trigger": "A user can edit a source-owned business record only in the ledger.",
+      "status": "pending"
+    },
+    {
+      "id": "RSK-06",
+      "title": "Projection drift produces inconsistent answers",
+      "likelihood": "medium",
+      "impact": "high",
+      "owner": "vince@petrasoap.com",
+      "mitigation": "Stamp every projection with watermarks and versions; compare checksums; rebuild regularly; display degraded freshness.",
+      "trigger": "Equivalent queries disagree across projections beyond the approved freshness budget.",
+      "status": "pending"
+    },
+    {
+      "id": "RSK-07",
+      "title": "Connector deletion or ACL events are missed",
+      "likelihood": "medium",
+      "impact": "critical",
+      "owner": "vince@petrasoap.com",
+      "mitigation": "Use delta cursors plus periodic full reconciliation, tombstones, replay, watchdogs, and deny on stale authorization state.",
+      "trigger": "A deleted or revoked item remains retrievable after the approved propagation window.",
+      "status": "pending"
+    },
+    {
+      "id": "RSK-08",
+      "title": "Ontology evolution breaks historical meaning",
+      "likelihood": "medium",
+      "impact": "high",
+      "owner": "vince@petrasoap.com",
+      "mitigation": "Use stable identifiers, immutable versions, effective dates, explicit mappings, impact previews, and reversible publication.",
+      "trigger": "A published term change silently reinterprets historical assertions.",
+      "status": "pending"
+    },
+    {
+      "id": "RSK-09",
+      "title": "Retention or residency is lost in derived stores",
+      "likelihood": "medium",
+      "impact": "critical",
+      "owner": "vince@petrasoap.com",
+      "mitigation": "Minimize extracts, map policy state, regionalize stores, propagate disposition, and preserve non-destructive compliance audit history.",
+      "trigger": "Derived content survives disposition or crosses an unapproved residency boundary.",
+      "status": "pending"
+    },
+    {
+      "id": "RSK-10",
+      "title": "Semantic retrieval is persuasive but unsupported",
+      "likelihood": "high",
+      "impact": "high",
+      "owner": "vince@petrasoap.com",
+      "mitigation": "Require citations, confidence, conflict state, refusal on insufficient evidence, and golden-query evaluation before rollout.",
+      "trigger": "An answer cannot be traced to authorized source revisions.",
+      "status": "pending"
+    }
+  ],
+  "gates": [
+    {
+      "id": "GATE-00",
+      "title": "Phase 0 authorization to build",
+      "owner": "vince@petrasoap.com",
+      "status": "blocked",
+      "after_milestone": "MS-00",
+      "criteria": [
+        "All five Phase 0 gates passed.",
+        "Quality, Legal, Security, Microsoft 365, Portal, and department owners approved their boundaries."
+      ],
+      "evidence": [
+        "Signed decision records",
+        "Pinned estate inventory",
+        "Approved validation and data-flow plans"
+      ]
+    },
+    {
+      "id": "GATE-01",
+      "title": "Ledger integrity",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "after_milestone": "MS-01",
+      "criteria": [
+        "Bitemporal corrections preserve history.",
+        "Receipts and tombstones are complete.",
+        "Restore point objective and recovery point objective are met."
+      ],
+      "evidence": [
+        "Contract tests",
+        "Backup and restore report"
+      ]
+    },
+    {
+      "id": "GATE-02",
+      "title": "Connector authority and access",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "after_milestone": "MS-02",
+      "criteria": [
+        "Every source has an approved authority and authoring return path.",
+        "ACL, deletion, replay, and degraded-state tests pass."
+      ],
+      "evidence": [
+        "Connector conformance report",
+        "Access-control test results"
+      ]
+    },
+    {
+      "id": "GATE-03",
+      "title": "Ontology stewardship usability",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "after_milestone": "MS-03",
+      "criteria": [
+        "Administrators complete proposal through rollback without direct database access.",
+        "Impact previews identify affected assertions and projections."
+      ],
+      "evidence": [
+        "Usability recording",
+        "Approval and rollback trace"
+      ]
+    },
+    {
+      "id": "GATE-04",
+      "title": "Records, privacy, and Part 11 qualification",
+      "owner": "vince@petrasoap.com",
+      "status": "blocked",
+      "after_milestone": "MS-04",
+      "criteria": [
+        "Quality and Legal approve validation evidence.",
+        "Record copies, audit trails, signatures, retention, holds, residency, and tenant isolation pass."
+      ],
+      "evidence": [
+        "Approved validation report",
+        "Requirements traceability matrix",
+        "Deviation and training records"
+      ]
+    },
+    {
+      "id": "GATE-05",
+      "title": "Projection rebuild and retrieval quality",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "after_milestone": "MS-05",
+      "criteria": [
+        "All projections rebuild from empty state.",
+        "Golden retrieval, explainability, duplicate, stale, contradiction, and leakage suites meet approved thresholds."
+      ],
+      "evidence": [
+        "Rebuild receipts",
+        "Evaluation report"
+      ]
+    },
+    {
+      "id": "GATE-06",
+      "title": "Bounded autonomy and zero-drift dispatch",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "after_milestone": "MS-06",
+      "criteria": [
+        "Revoked and unregistered actors fail closed.",
+        "Human-only decisions cannot be executed by agents.",
+        "Mission Control import is idempotent and evidence complete."
+      ],
+      "evidence": [
+        "Authorization scenario suite",
+        "Mission Control dry-run and replay"
+      ]
+    },
+    {
+      "id": "GATE-07",
+      "title": "Pilot and go-live readiness",
+      "owner": "vince@petrasoap.com",
+      "status": "pending",
+      "after_milestone": "MS-07",
+      "criteria": [
+        "Architecture pilot meets approved success thresholds.",
+        "Rollback, recovery, monitoring, support, and ownership drills pass.",
+        "Department heads and control owners approve cutover."
+      ],
+      "evidence": [
+        "Pilot report",
+        "Operational readiness review",
+        "Cutover and rollback record"
+      ]
+    }
+  ],
+  "validation": [
+    {
+      "id": "VAL-01",
+      "command": "python scripts/check-unified-knowledge-program.py",
+      "asserts": [
+        "Schema validity",
+        "Referential integrity",
+        "Acyclic milestone and task dependencies",
+        "Required invariants",
+        "Complete requirement coverage"
+      ]
+    },
+    {
+      "id": "VAL-02",
+      "command": "python scripts/check-unified-knowledge-program.py --print-mc-plan",
+      "asserts": [
+        "Deterministic, non-mutating Mission Control import dry-run",
+        "Owner, dependency, gate, and done-when preservation"
+      ]
+    },
+    {
+      "id": "VAL-03",
+      "command": "python -m pytest tests/test_check_unified_knowledge_program.py -q",
+      "asserts": [
+        "Known-bad schema, missing invariant, dangling reference, cycle, and uncovered requirement fail with exit 1",
+        "Committed package passes with exit 0"
+      ]
+    },
+    {
+      "id": "VAL-04",
+      "command": "./scripts/preflight.sh --mode pre-commit",
+      "asserts": [
+        "Program gate runs in repository policy path",
+        "Python lint, formatting, tests, typecheck, and lint remain green"
+      ]
+    },
+    {
+      "id": "VAL-05",
+      "command": "./scripts/preflight.sh --mode pre-push",
+      "asserts": [
+        "Full Python, Vitest, build, and Playwright pipeline remains green"
+      ]
+    }
+  ]
+}

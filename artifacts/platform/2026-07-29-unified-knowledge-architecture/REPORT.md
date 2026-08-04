@@ -10,8 +10,10 @@ PLX should adopt **Knowledge Ledger with Disposable Projections**.
 
 Business documents and records remain authoritative in SharePoint/Microsoft 365;
 customer, product, and vendor workflow state remains authoritative in Portal
-gold tables; technical content remains authoritative in Git; execution remains
-authoritative in Mission Control; DocuSign remains authoritative for envelope
+gold tables; technical content remains authoritative in Git. SharePoint is the
+system of record for Mission Control planning records, while Mission Control is
+workflow authority for execution, routing, and evidence policy. DocuSign remains
+authoritative for envelope
 execution evidence; registries remain authoritative for identities, tools, and
 skills.
 
@@ -110,7 +112,11 @@ the design traces:
 - operational and authority checks;
 - training and accountability;
 - signature name/date/time/meaning;
-- signature uniqueness, identity verification, and record linkage.
+- signature uniqueness, identity verification, and record linkage;
+- closed/open system classification and corresponding additional controls;
+- applicable FDA electronic-signature certification evidence;
+- non-biometric signature components, signing-session behavior, and
+  genuine-owner controls.
 
 This package is an architecture and validation plan, not a Part 11 compliance
 certificate.
@@ -135,7 +141,7 @@ connectors, ontology, controls, discovery, autonomy, and rollout.
 
 The committed program defines:
 
-- 26 traced requirements;
+- 30 traced requirements;
 - 8 dependency-ordered milestones;
 - 20 tasks with owners, executors, autonomy bounds, dependencies, repositories,
   and done-when evidence;
@@ -176,6 +182,8 @@ No implementation should proceed until:
    approved;
 5. ledger/audit-store hosting, encryption, backups, recovery, residency, and
    bitemporal semantics are approved.
+6. the recurring mirror-is-boring gate reports live, fresh data with
+   `boringGateMet` true before ontology, discovery, or another new plane starts.
 
 The Portal repository was not readable by this Cloud Agent, so the recorded
 decision to reuse Ricardo's Portal document stack is preserved but not

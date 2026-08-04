@@ -55,6 +55,9 @@ that every PLX document or knowledge workflow is regulated.
 | REQ-15 | Regulated records support accurate and complete copies, protection, retrieval, and approved retention. | Must | Record export and retrieval qualification |
 | REQ-16 | Regulated actions create secure, computer-generated, time-stamped audit trails attributable to an authorized actor. | Must | Audit-trail qualification |
 | REQ-17 | Electronic signatures are unique, verified, linked to their records, and display required signature meaning. | Must | DocuSign linkage and manifestation review |
+| REQ-28 | Quality and Legal classify every regulated workflow as a closed or open system and approve the corresponding controls. | Must | Intended-use decision and open-system assessment |
+| REQ-29 | When 21 CFR 11.100(c) applies, PLX retains evidence of the FDA electronic-signature certification process and scope. | Must | Applicability decision and certification evidence |
+| REQ-30 | Non-biometric signatures enforce approved identification components, signing-session behavior, and genuine-owner controls. | Must | Signature protocol and unauthorized-use tests |
 
 ## Governance and operations requirements
 
@@ -67,6 +70,7 @@ that every PLX document or knowledge workflow is regulated.
 | REQ-22 | Projection receipts identify ledger watermark, ontology version, model version, and build receipt. | Must | Receipt inspection |
 | REQ-23 | Mission Control execution remains linked to delivery evidence and canonical project artifacts. | Must | Task-to-evidence trace |
 | REQ-26 | Program state is schema validated with acyclic dependencies and complete requirement coverage before dispatch. | Must | Validator and MC import dry-run |
+| REQ-27 | Ontology, discovery, and other new knowledge planes start only while Mission Control's mirror-is-boring gate is met. | Must | `mc_self_check` evidence and architecture parity gate |
 
 ## Non-functional quality bars
 
@@ -86,7 +90,8 @@ that every PLX document or knowledge workflow is regulated.
 
 ## Phase 0 hard stops
 
-Implementation cannot start until all five are evidenced:
+Implementation cannot start until the five domain decisions are evidenced, and
+new-plane milestones cannot start unless the recurring mirror gate is green:
 
 1. Microsoft 365 estate, licenses, regions, administrators, and Graph permissions.
 2. Accessible, pinned Portal and Second-Brain repositories and runtime contracts.
@@ -94,6 +99,8 @@ Implementation cannot start until all five are evidenced:
 4. Approved identity, tenant isolation, privacy, and authorization model.
 5. Approved Postgres ledger, audit-store, backup, encryption, and residency
    deployment.
+6. Mission Control self-check reports live, fresh data with `boringGateMet`
+   true, and architecture parity passes.
 
 ## Explicit non-goals
 

@@ -103,6 +103,9 @@ Authority classes are:
 - `derived`: disposable memory, index, summary, ranking, or view.
 
 The complete system-by-system matrix is machine readable in `program.json`.
+SharePoint is the system of record for Mission Control planning records.
+Mission Control is workflow authority for execution, routing decisions, and
+evidence policy; its planning mutations persist through the SharePoint mirror.
 
 ## 5. Knowledge ledger
 
@@ -393,6 +396,9 @@ by Quality and Legal.
 | Signature manifestation | Name, date/time, and meaning rendered with the record | Signature manifestation protocol |
 | Signature-record linkage | Envelope/signature identifiers and hashes linked to immutable record revision | Linkage and copy protocol |
 | Identification-code controls | Identity verification, uniqueness, credential lifecycle, compromise response | IAM and DocuSign qualification |
+| Closed/open system classification | Quality and Legal classify intended use and approve additional open-system controls where applicable | Boundary decision and open-system assessment |
+| FDA certification | Applicability of 21 CFR 11.100(c) is decided and certification evidence is retained when required | Certification applicability record and evidence |
+| Non-biometric signatures | Approved identification components, signing-session behavior, and genuine-owner controls | Signature protocol and unauthorized-use scenarios |
 
 This mapping is a design trace, not a compliance certificate.
 
@@ -434,9 +440,13 @@ Use seven delivery buckets:
 7. `BKT-UKA-ROLLOUT` — pilot, validation, cutover, and operations.
 
 `program.json` defines eight dependency-ordered milestones (`MS-00` through
-`MS-07`), 20 implementation tasks, 26 requirements, 10 risks, and eight gates.
+`MS-07`), 20 implementation tasks, 30 requirements, 10 risks, and eight gates.
 The validator emits a non-mutating Mission Control import plan. Creating or
 re-homing actual MC records is a separately approved execution action.
+
+The Portal ontology workbench and disposable discovery projections also remain
+blocked unless Mission Control self-check reports live, fresh data with
+`boringGateMet` true and architecture parity passes.
 
 ## 14. Delivery sequence
 

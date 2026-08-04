@@ -9,9 +9,10 @@ unverified until their named Phase 0 gates pass.
 
 Mission Control records that the approved design is:
 
-- SharePoint/Purview remains document and records authority.
-- Portal gold tables remain workflow authority.
-- Mission Control governs execution.
+- SharePoint/Purview remains document and records authority and the system of
+  record for Mission Control planning records.
+- Portal gold tables remain customer, product, and vendor workflow authority.
+- Mission Control governs execution, routing, and evidence policy.
 - A Postgres-first bitemporal knowledge ledger stores versioned assertions,
   provenance, ontology versions, and receipts.
 - Graph, vector, text, cache, and PLX Second-Brain are derived projections.
@@ -32,6 +33,7 @@ source.
 | `AGENTS.md`, `SOUL.md`, `docs/modules/sync/README.md` | SharePoint is the canonical system of record for Mission Control human planning data; the current correctness path is Graph delta sync. | Reuse source authority and mirror discipline; do not make the knowledge layer a planning-data authority. |
 | `src/lib/sync/documents.ts` | Project Documents mapping is inbound-only; SharePoint remains authoritative and deletions are audited and skipped in this increment. | The unified connector must add explicit tombstone/reconciliation behavior without changing current source ownership. |
 | `config/sharepoint-schema.json` | Project Documents already classifies PRD, Evidence, Deed, Report, Spec, and Export and names Vince as site owner. | Extend content types/metadata only after estate review; do not create a parallel library by default. |
+| `AGENTS.md` plus `mc_self_check` on 2026-08-04 18:40 UTC | Repository doctrine blocks new planes until the mirror-is-boring gate is met; the observed live self-check reported fresh data, `boringTickStreak: 4158`, threshold 7, and `boringGateMet: true`. | Encode a recurring gate for ontology/discovery milestones; do not treat one historical pass as perpetual authorization. |
 | `docs/architecture/knowledge-entry.json` | The existing architecture collection is a derived, generated consumer with Git authoring return paths and visible degradation when Second-Brain is unavailable. | Use this collection as the first pilot and preserve its authority contract. |
 | `docs/modules/loop-ledgers/README.md` | Mission Control already uses validated, read-only, degraded-visible cross-repo projections without writing back to source ledgers. | Reuse registry, validator, source-adapter, and degraded-state patterns. |
 | `docs/modules/permissions/README.md` | Mission Control has a deny-by-default typed authorization kernel and durable service-principal capabilities. | Extend central capabilities; do not invent route-local or prompt-only authorization. |
@@ -77,7 +79,7 @@ verification item, not a fact asserted by this package.
 
 | Source | Verified requirement | Design implication |
 |---|---|---|
-| [21 CFR Part 11, FDA-access copy](https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfcfr/CFRSearch.cfm?CFRPart=11&showFR=1) | Sections 11.10 and 11.30 require controls appropriate to closed/open systems, including validation, accurate/complete copies, record protection/retrieval, access limitation, secure time-stamped audit trails, operational/authority/device checks, training, accountability, and documentation controls. Sections 11.50–11.300 govern signature manifestations, record linkage, uniqueness, identity verification, certification, and controls over identification codes/passwords. | Translate only the controls inside an approved intended-use and predicate-rule boundary into validation requirements. Architecture is not a compliance determination. |
+| [21 CFR Part 11, FDA-access copy](https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfcfr/CFRSearch.cfm?CFRPart=11&showFR=1) | Sections 11.10 and 11.30 require controls appropriate to closed/open systems, including validation, accurate/complete copies, record protection/retrieval, access limitation, secure time-stamped audit trails, operational/authority/device checks, training, accountability, and documentation controls. Sections 11.50–11.300 govern signature manifestations, record linkage, uniqueness, identity verification, certification under 11.100(c), non-biometric signature components and sessions under 11.200, and identification-code/password controls. | Translate only the controls inside an approved intended-use and predicate-rule boundary into validation requirements. Architecture is not a compliance determination. |
 | [FDA 2003 Part 11 Scope and Application guidance](https://www.fda.gov/media/75414/download) | FDA describes enforcement discretion for some Part 11 provisions while expecting continued compliance with predicate rules and recommending justified, documented risk-based decisions. | Do not read enforcement discretion as removal of predicate-rule obligations. Quality and Legal own applicability and validation depth. |
 | [FDA electronic systems guidance](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/electronic-systems-electronic-records-and-electronic-signatures-clinical-investigations-questions) | FDA explains that audit trails support reconstruction and should capture attributable creation/modification/deletion without obscuring prior data. This guidance targets clinical investigations. | Use it as supporting control rationale, not as proof that PLX's cosmetics workflows are clinical-investigation systems. |
 

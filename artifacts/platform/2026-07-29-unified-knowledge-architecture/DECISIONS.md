@@ -18,10 +18,12 @@ and unversioned federated search.
 
 ## D-02 — Keep documents and workflow state in their owning systems
 
-**Decision:** SharePoint/Purview remains document/records authority; Portal gold
-tables remain workflow authority; Git remains technical-content authority;
-Mission Control remains execution authority; DocuSign remains envelope execution
-authority; registries remain identity/package authority.
+**Decision:** SharePoint/Purview remains document/records authority and the
+system of record for Mission Control planning records; Portal gold tables remain
+customer, product, and vendor workflow authority; Git remains technical-content
+authority; Mission Control remains workflow authority for execution, routing,
+and evidence policy; DocuSign remains envelope execution authority; registries
+remain identity/package authority.
 
 **Why:** A unified discovery layer must not create multiple write paths.
 
@@ -156,7 +158,9 @@ where those controls apply.
 predicate rules, and signature use. Architecture cannot certify compliance.
 
 **Guard:** No regulated implementation proceeds without an approved intended-use
-and validated-system boundary.
+and validated-system boundary. That decision classifies closed/open systems,
+addresses FDA electronic-signature certification when applicable, and approves
+non-biometric signing-session and genuine-owner controls.
 
 ## D-15 — Preserve human accountability with bounded autonomy
 
@@ -188,6 +192,18 @@ behavior as the first collection.
 
 **Why:** It exercises the architecture without placing customer, vendor, or
 regulated records at risk.
+
+## D-18 — Enforce the mirror-is-boring entry gate
+
+**Decision:** Ontology, discovery, and any other new knowledge plane remain
+blocked unless Mission Control self-check reports live, fresh data with
+`boringGateMet` true and architecture parity passes.
+
+**Why:** The approved repository doctrine requires the current SharePoint mirror
+to be demonstrably boring before adding another operational plane.
+
+**Guard:** Recheck the gate when a new-plane milestone starts; a historical pass
+does not authorize later work after freshness or parity regresses.
 
 ## D-18 — Keep program files canonical in Git
 

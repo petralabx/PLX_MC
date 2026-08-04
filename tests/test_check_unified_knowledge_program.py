@@ -68,6 +68,18 @@ def test_exit_1_for_schema_violation(tmp_path: Path) -> None:
     assert "accountable_owner" in result.stderr
 
 
+def test_exit_1_for_empty_acceptance_evidence(tmp_path: Path) -> None:
+    repo, bundle = _copy_package(tmp_path)
+    _mutate_program(
+        bundle,
+        lambda program: program["milestones"][0].__setitem__("acceptance_evidence", []),
+    )
+    result = _run_gate(repo)
+    assert result.returncode == 1
+    assert "acceptance_evidence" in result.stderr
+    assert "should be non-empty" in result.stderr
+
+
 def test_exit_1_for_missing_required_output(tmp_path: Path) -> None:
     repo, bundle = _copy_package(tmp_path)
     (bundle / "SPEC.md").unlink()
@@ -91,6 +103,22 @@ def test_exit_1_for_missing_required_invariant(tmp_path: Path) -> None:
     result = _run_gate(repo)
     assert result.returncode == 1
     assert "required invariant" in result.stderr
+
+
+def test_exit_1_without_mirror_is_boring_invariant(tmp_path: Path) -> None:
+    repo, bundle = _copy_package(tmp_path)
+
+    def remove_invariant(program: dict) -> None:
+        program["invariants"] = [
+            invariant
+            for invariant in program["invariants"]
+            if invariant["id"] != "INV-14"
+        ]
+
+    _mutate_program(bundle, remove_invariant)
+    result = _run_gate(repo)
+    assert result.returncode == 1
+    assert "mirror-is-boring gate must be met" in result.stderr
 
 
 def test_exit_1_for_dangling_reference(tmp_path: Path) -> None:
@@ -131,6 +159,34 @@ def test_exit_1_for_uncovered_requirement(tmp_path: Path) -> None:
     result = _run_gate(repo)
     assert result.returncode == 1
     assert "not covered by any task" in result.stderr
+
+
+def test_exit_1_when_open_phase_gate_milestone_is_actionable(tmp_path: Path) -> None:
+    repo, bundle = _copy_package(tmp_path)
+
+    def make_blocked_milestone_ready(program: dict) -> None:
+        milestone = next(
+            item for item in program["milestones"] if item["id"] == "MS-01"
+        )
+        milestone["status"] = "ready"
+
+    _mutate_program(bundle, make_blocked_milestone_ready)
+    result = _run_gate(repo)
+    assert result.returncode == 1
+    assert "MS-01: must remain blocked while a Phase 0 gate is open" in result.stderr
+
+
+def test_exit_1_when_task_in_blocked_milestone_is_actionable(tmp_path: Path) -> None:
+    repo, bundle = _copy_package(tmp_path)
+
+    def make_blocked_task_ready(program: dict) -> None:
+        task = next(item for item in program["tasks"] if item["id"] == "UKA-004")
+        task["status"] = "ready"
+
+    _mutate_program(bundle, make_blocked_task_ready)
+    result = _run_gate(repo)
+    assert result.returncode == 1
+    assert "UKA-004: must remain blocked with milestone MS-01" in result.stderr
 
 
 def test_print_mc_plan_is_deterministic_and_non_mutating(tmp_path: Path) -> None:

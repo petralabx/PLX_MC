@@ -13,7 +13,8 @@
       "canonical_for": [
         "business-owned operational records",
         "controlled documents",
-        "retention labels and records declarations"
+        "retention labels and records declarations",
+        "Mission Control planning records persisted in the SharePoint mirror"
       ],
       "projection_policy": "Ingest identifiers, metadata, permissions, version references, and extracts; never silently replace the source file.",
       "authoring_return_path": "Open the authoritative SharePoint or Microsoft 365 item.",
@@ -45,16 +46,13 @@
     },
     {
       "system": "Mission Control",
-      "authority": "execution-authority",
+      "authority": "workflow-authority",
       "canonical_for": [
-        "projects",
-        "buckets",
-        "tasks",
-        "milestones",
-        "risks",
-        "delivery evidence"
+        "execution workflow",
+        "routing decisions",
+        "evidence policy and control decisions"
       ],
-      "projection_policy": "All implementation activity resolves to a Task and evidence remains attributable.",
+      "projection_policy": "Mission Control controls workflow and mutations; planning records persist to the SharePoint system of record and all implementation resolves to a Task.",
       "authoring_return_path": "Open the Mission Control task or project.",
       "owner": "vince@petrasoap.com"
     },
@@ -240,6 +238,22 @@
         "program JSON Schema",
         "deterministic program validator"
       ]
+    },
+    {
+      "id": "INV-13",
+      "statement": "SharePoint is the system of record for Mission Control planning records while Mission Control is workflow authority for execution, routing, and evidence policy.",
+      "enforced_by": [
+        "authority matrix",
+        "Mission Control sync contract"
+      ]
+    },
+    {
+      "id": "INV-14",
+      "statement": "The mirror-is-boring gate must be met before an ontology, discovery, or other new knowledge plane starts.",
+      "enforced_by": [
+        "Mission Control self-check",
+        "phase zero dispatch gate"
+      ]
     }
   ],
   "phase_zero_gates": [
@@ -317,6 +331,20 @@
         "MS-01",
         "MS-03",
         "MS-06"
+      ]
+    },
+    {
+      "id": "P0G-06",
+      "title": "Mirror-is-boring entry gate",
+      "owner": "vince@petrasoap.com",
+      "status": "passed",
+      "done_when": [
+        "Mission Control self-check schema is green and architecture parity passes.",
+        "Self-check reports live, fresh data with boringGateMet true; recheck before each new-plane milestone starts."
+      ],
+      "blocks": [
+        "MS-03",
+        "MS-05"
       ]
     }
   ],
@@ -574,6 +602,46 @@
         "Deterministic validator",
         "Mission Control import dry-run"
       ]
+    },
+    {
+      "id": "REQ-27",
+      "category": "governance",
+      "statement": "No ontology, discovery, or other new knowledge plane shall start unless the Mission Control mirror-is-boring gate is currently met.",
+      "priority": "must",
+      "verification": [
+        "mc_self_check boringGateMet evidence",
+        "Architecture parity gate"
+      ]
+    },
+    {
+      "id": "REQ-28",
+      "category": "compliance",
+      "statement": "Quality and Legal shall classify each regulated workflow as a closed or open system and approve the corresponding Part 11 controls.",
+      "priority": "must",
+      "verification": [
+        "Intended-use and system-boundary decision",
+        "Open-system additional-controls assessment"
+      ]
+    },
+    {
+      "id": "REQ-29",
+      "category": "compliance",
+      "statement": "When required by 21 CFR 11.100(c), the organization shall retain evidence of the FDA electronic-signature certification process and scope.",
+      "priority": "must",
+      "verification": [
+        "Quality and Legal certification applicability decision",
+        "Certification evidence when applicable"
+      ]
+    },
+    {
+      "id": "REQ-30",
+      "category": "compliance",
+      "statement": "Non-biometric electronic signatures shall enforce the approved identification components, signing-session behavior, and genuine-owner controls required by 21 CFR 11.200.",
+      "priority": "must",
+      "verification": [
+        "Signature component and session protocol",
+        "Unauthorized-use prevention test"
+      ]
     }
   ],
   "milestones": [
@@ -594,7 +662,11 @@
         "REQ-17",
         "REQ-18",
         "REQ-23",
-        "REQ-26"
+        "REQ-26",
+        "REQ-27",
+        "REQ-28",
+        "REQ-29",
+        "REQ-30"
       ],
       "risks": [
         "RSK-01",
@@ -614,7 +686,7 @@
       "order": 1,
       "title": "Versioned knowledge ledger foundation",
       "owner": "vince@petrasoap.com",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "MS-00"
       ],
@@ -641,7 +713,7 @@
       "order": 2,
       "title": "Canonical-source connectors",
       "owner": "vince@petrasoap.com",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "MS-01"
       ],
@@ -672,7 +744,7 @@
       "order": 3,
       "title": "Ontology workbench and publication lifecycle",
       "owner": "vince@petrasoap.com",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "MS-01",
         "MS-02"
@@ -682,7 +754,8 @@
         "REQ-06",
         "REQ-18",
         "REQ-19",
-        "REQ-22"
+        "REQ-22",
+        "REQ-27"
       ],
       "risks": [
         "RSK-08"
@@ -698,7 +771,7 @@
       "order": 4,
       "title": "Records, privacy, and Part 11 controls",
       "owner": "vince@petrasoap.com",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "MS-02",
         "MS-03"
@@ -709,7 +782,10 @@
         "REQ-15",
         "REQ-16",
         "REQ-17",
-        "REQ-24"
+        "REQ-24",
+        "REQ-28",
+        "REQ-29",
+        "REQ-30"
       ],
       "risks": [
         "RSK-02",
@@ -728,7 +804,7 @@
       "order": 5,
       "title": "Disposable projections and semantic discovery",
       "owner": "vince@petrasoap.com",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "MS-03",
         "MS-04"
@@ -742,7 +818,8 @@
         "REQ-11",
         "REQ-21",
         "REQ-22",
-        "REQ-24"
+        "REQ-24",
+        "REQ-27"
       ],
       "risks": [
         "RSK-06",
@@ -761,7 +838,7 @@
       "order": 6,
       "title": "Bounded agent and human workflows",
       "owner": "vince@petrasoap.com",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "MS-04",
         "MS-05"
@@ -789,7 +866,7 @@
       "order": 7,
       "title": "Pilot, validation, cutover, and operations",
       "owner": "vince@petrasoap.com",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "MS-06"
       ],
@@ -852,7 +929,10 @@
       "requirements": [
         "REQ-15",
         "REQ-16",
-        "REQ-17"
+        "REQ-17",
+        "REQ-28",
+        "REQ-29",
+        "REQ-30"
       ],
       "repo": "petralabx/PLX_MC",
       "done_when": [
@@ -878,7 +958,8 @@
         "REQ-18",
         "REQ-19",
         "REQ-24",
-        "REQ-26"
+        "REQ-26",
+        "REQ-27"
       ],
       "repo": "petralabx/PLX_MC",
       "done_when": [
@@ -892,7 +973,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "knowledge platform team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-002",
         "UKA-003"
@@ -906,8 +987,8 @@
       "repo": "implementation repo selected at Phase 0",
       "done_when": [
         "Assertions support valid-time and transaction-time queries.",
-        "Corrections supersede rather than overwrite history.",
-        "Every ingest produces a signed receipt and source revision."
+        "Corrections append closure and supersession events without mutating prior assertion payloads.",
+        "Every ingest produces a tamper-evident receipt with source revision and canonical digest."
       ]
     },
     {
@@ -917,7 +998,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "knowledge platform team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-004"
       ],
@@ -939,7 +1020,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "Microsoft 365 integration team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-005"
       ],
@@ -965,7 +1046,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "platform integration team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-005"
       ],
@@ -1018,7 +1099,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "Portal product team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-006",
         "UKA-007",
@@ -1028,7 +1109,8 @@
         "REQ-05",
         "REQ-06",
         "REQ-18",
-        "REQ-19"
+        "REQ-19",
+        "REQ-27"
       ],
       "repo": "petralabx/plx-customer-portal",
       "done_when": [
@@ -1042,7 +1124,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "ontology stewards and Portal product team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-009"
       ],
@@ -1097,7 +1179,10 @@
       "requirements": [
         "REQ-15",
         "REQ-16",
-        "REQ-17"
+        "REQ-17",
+        "REQ-28",
+        "REQ-29",
+        "REQ-30"
       ],
       "repo": "validation repository selected at Phase 0",
       "done_when": [
@@ -1111,7 +1196,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "knowledge platform team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-010",
         "UKA-011"
@@ -1122,7 +1207,8 @@
         "REQ-11",
         "REQ-21",
         "REQ-22",
-        "REQ-24"
+        "REQ-24",
+        "REQ-27"
       ],
       "repo": "implementation repo selected at Phase 0",
       "done_when": [
@@ -1160,7 +1246,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "knowledge quality team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-013"
       ],
@@ -1181,7 +1267,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "Portal product and knowledge platform teams",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-013",
         "UKA-014",
@@ -1207,7 +1293,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "platform security team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-012",
         "UKA-016"
@@ -1231,7 +1317,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "Mission Control team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-017"
       ],
@@ -1253,7 +1339,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "cross-functional pilot team",
       "autonomy": "bounded",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-018"
       ],
@@ -1281,7 +1367,7 @@
       "owner": "vince@petrasoap.com",
       "executor": "Quality, Security, SRE, and department heads",
       "autonomy": "human-only",
-      "status": "pending",
+      "status": "blocked",
       "depends_on": [
         "UKA-019"
       ],
@@ -1533,7 +1619,7 @@
   "validation": [
     {
       "id": "VAL-01",
-      "command": "python scripts/check-unified-knowledge-program.py",
+      "command": "python3 scripts/check-unified-knowledge-program.py",
       "asserts": [
         "Schema validity",
         "Referential integrity",
@@ -1544,7 +1630,7 @@
     },
     {
       "id": "VAL-02",
-      "command": "python scripts/check-unified-knowledge-program.py --print-mc-plan",
+      "command": "python3 scripts/check-unified-knowledge-program.py --print-mc-plan",
       "asserts": [
         "Deterministic, non-mutating Mission Control import dry-run",
         "Owner, dependency, gate, and done-when preservation"
@@ -1552,7 +1638,7 @@
     },
     {
       "id": "VAL-03",
-      "command": "python -m pytest tests/test_check_unified_knowledge_program.py -q",
+      "command": "python3 -m pytest tests/test_check_unified_knowledge_program.py -q",
       "asserts": [
         "Known-bad schema, missing invariant, dangling reference, cycle, and uncovered requirement fail with exit 1",
         "Committed package passes with exit 0"
@@ -1572,6 +1658,78 @@
       "asserts": [
         "Full Python, Vitest, build, and Playwright pipeline remains green"
       ]
+    }
+  ],
+  "department_accountability": [
+    {
+      "domain": "microsoft-365-records",
+      "accountable_role": "Microsoft 365 and records-management department head",
+      "decisions": [
+        "tenant and license scope",
+        "retention and disposition",
+        "source metadata"
+      ],
+      "named_owner_status": "phase-zero-confirmation-required"
+    },
+    {
+      "domain": "portal-workflows",
+      "accountable_role": "Portal product department head",
+      "decisions": [
+        "gold-record authority",
+        "ontology workbench workflow",
+        "customer and vendor experience"
+      ],
+      "named_owner_status": "phase-zero-confirmation-required"
+    },
+    {
+      "domain": "quality-legal",
+      "accountable_role": "Quality and Legal department heads",
+      "decisions": [
+        "Part 11 intended use",
+        "validated-system boundary",
+        "signature and record controls"
+      ],
+      "named_owner_status": "phase-zero-confirmation-required"
+    },
+    {
+      "domain": "security-privacy",
+      "accountable_role": "Security and Privacy department heads",
+      "decisions": [
+        "authorization",
+        "tenant isolation",
+        "privacy and residency"
+      ],
+      "named_owner_status": "phase-zero-confirmation-required"
+    },
+    {
+      "domain": "knowledge-platform",
+      "accountable_role": "Knowledge platform department head",
+      "decisions": [
+        "ledger semantics",
+        "projection operations",
+        "retrieval quality"
+      ],
+      "named_owner_status": "phase-zero-confirmation-required"
+    },
+    {
+      "domain": "mission-control",
+      "accountable_role": "Mission Control accountable owner",
+      "decisions": [
+        "program routing",
+        "task evidence",
+        "zero-drift dispatch"
+      ],
+      "named_owner_status": "confirmed-vince"
+    },
+    {
+      "domain": "customer-vendor",
+      "accountable_role": "Customer and vendor operations department heads",
+      "decisions": [
+        "domain meaning",
+        "duplicate and stale resolution",
+        "bounded access"
+      ],
+      "named_owner_status": "phase-zero-confirmation-required"
     }
   ]
 }

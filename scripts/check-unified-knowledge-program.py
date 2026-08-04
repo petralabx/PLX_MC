@@ -44,6 +44,9 @@ REQUIRED_INVARIANT_PHRASES = (
     "Part 11",
     "deny by default",
     "machine readable",
+    "SharePoint is the system of record",
+    "Mission Control is workflow authority",
+    "mirror-is-boring gate must be met",
 )
 
 
@@ -226,6 +229,37 @@ def _check_coverage(program: dict[str, Any]) -> list[str]:
     return violations
 
 
+def _check_blocked_statuses(program: dict[str, Any]) -> list[str]:
+    violations: list[str] = []
+    blocked_milestone_ids = {
+        milestone_id
+        for gate in program.get("phase_zero_gates", [])
+        if gate["status"] != "passed"
+        for milestone_id in gate["blocks"]
+    }
+    milestones = {
+        milestone["id"]: milestone for milestone in program.get("milestones", [])
+    }
+    for milestone_id in sorted(blocked_milestone_ids):
+        milestone = milestones.get(milestone_id)
+        if milestone and milestone["status"] != "blocked":
+            violations.append(
+                f"{milestone_id}: must remain blocked while a Phase 0 gate is open"
+            )
+
+    blocked_task_milestones = {
+        milestone["id"]
+        for milestone in milestones.values()
+        if milestone["status"] == "blocked"
+    }
+    for task in program.get("tasks", []):
+        if task["milestone"] in blocked_task_milestones and task["status"] != "blocked":
+            violations.append(
+                f"{task['id']}: must remain blocked with milestone {task['milestone']}"
+            )
+    return violations
+
+
 def _check_package(repo_root: Path, program: dict[str, Any]) -> list[str]:
     bundle = repo_root / BUNDLE_PATH
     violations: list[str] = []
@@ -333,6 +367,7 @@ def validate_program(repo_root: Path) -> tuple[dict[str, Any] | None, list[str]]
     violations.extend(_check_dependency_graphs(program))
     violations.extend(_check_invariants(program))
     violations.extend(_check_coverage(program))
+    violations.extend(_check_blocked_statuses(program))
     violations.extend(_check_package(repo_root, program))
     return program, violations
 

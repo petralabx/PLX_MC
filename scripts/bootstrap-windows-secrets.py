@@ -9,10 +9,14 @@ Precedence (authoritative — do not reverse):
      matched set from one secret: plx/prod/m365/cursor-graph/v1
      (PLX_Cursor_Graph). The generated loader fetches that secret at
      source-time so the three values cannot be paired across apps.
-  4. GitHub / MC MCP / Swarm keys come from prod/ec2-secrets.
+  4. The shared Cursor MCP key comes from prod/ec2-secrets. Dedicated agent
+     keys come from plx/prod/mc/mcp-agent-keys/v1 and never fall back to the
+     shared key.
 
 Outputs (never commit):
   ~/.secrets-env.staging.ps1   — full PLX agent workstation hydrate (Windows)
+  ~/.secrets-env.staging.<principal>.ps1
+                                — isolated non-Cursor MCP principal hydrate
   ~/.secrets-env.github.ps1    — GitHub org PAT only (Windows; safe to profile-source)
   ~/.secrets-env.github        — same for bash/zsh (Linux/macOS/DGX)
 
@@ -28,13 +32,14 @@ docs/FLEET-SECRETS-SOP.md § workstation Graph precedence.
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 from pathlib import Path
 
 import boto3
 
 HOME = Path.home()
-OUTPUT_STAGING = HOME / ".secrets-env.staging.ps1"
 OUTPUT_GITHUB_PS1 = HOME / ".secrets-env.github.ps1"
 OUTPUT_GITHUB_SH = HOME / ".secrets-env.github"
 
@@ -43,6 +48,14 @@ OUTPUT_GITHUB_SH = HOME / ".secrets-env.github"
 # (those are the broad 3013790b "Vinces MCP" app used by servers).
 CURSOR_GRAPH_SECRET_ID = "plx/prod/m365/cursor-graph/v1"
 EC2_SECRETS_ID = "prod/ec2-secrets"
+MCP_AGENT_KEYS_SECRET_ID = "plx/prod/mc/mcp-agent-keys/v1"
+MCP_CURSOR_PRINCIPAL_ID = "sp_mcp_cursor"
+MCP_PRINCIPAL_IDS = {
+    MCP_CURSOR_PRINCIPAL_ID,
+    "sp_mcp_claude_code",
+    "sp_mcp_codex",
+    "sp_mcp_swarm",
+}
 
 
 def sh_quote(value: str) -> str:
@@ -57,9 +70,49 @@ def get_secret_dict(client, secret_id: str) -> dict:
     return data
 
 
+def select_mcp_key(
+    principal_id: str,
+    compatibility: dict,
+    registry: dict,
+) -> str:
+    if principal_id not in MCP_PRINCIPAL_IDS:
+        raise SystemExit(f"unsupported mcp principal id: {principal_id}")
+    if principal_id == MCP_CURSOR_PRINCIPAL_ID:
+        key = compatibility.get("PLX_MC_MCP_API_KEY", "")
+    else:
+        key = registry.get(principal_id, "")
+    if not isinstance(key, str) or not key:
+        raise SystemExit(f"mcp principal key unavailable: {principal_id}")
+    return key
+
+
+def staging_output_path(principal_id: str, home: Path = HOME) -> Path:
+    if principal_id == MCP_CURSOR_PRINCIPAL_ID:
+        return home / ".secrets-env.staging.ps1"
+    return home / f".secrets-env.staging.{principal_id}.ps1"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--mcp-principal-id",
+        default=os.environ.get("MC_MCP_PRINCIPAL_ID", MCP_CURSOR_PRINCIPAL_ID),
+        choices=sorted(MCP_PRINCIPAL_IDS),
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+    output_staging = staging_output_path(args.mcp_principal_id)
     client = boto3.client("secretsmanager", region_name="us-east-1")
     sec = get_secret_dict(client, EC2_SECRETS_ID)
+    registry = (
+        {}
+        if args.mcp_principal_id == MCP_CURSOR_PRINCIPAL_ID
+        else get_secret_dict(client, MCP_AGENT_KEYS_SECRET_ID)
+    )
+    mcp_key = select_mcp_key(args.mcp_principal_id, sec, registry)
     # Validate cursor-graph exists and has the three keys as a set (fail closed
     # at bootstrap time rather than writing a half-wired loader).
     graph = get_secret_dict(client, CURSOR_GRAPH_SECRET_ID)
@@ -79,7 +132,8 @@ def main() -> None:
         "GITHUB_TOKEN": github,
         # MICROSOFT_GRAPH_* intentionally omitted here: emitted as a runtime
         # fetch of CURSOR_GRAPH_SECRET_ID so tenant/client/secret stay matched.
-        "MC_MCP_API_KEY": sec.get("PLX_MC_MCP_API_KEY", ""),
+        "MC_MCP_API_KEY": mcp_key,
+        "MC_MCP_PRINCIPAL_ID": args.mcp_principal_id,
         "MC_OPERATOR_EMAIL": "cos@petrasoap.com",
         "PLX_MC_MCP_ENABLED": "1",
         "SWARM_API_KEY": sec.get("SWARM_API_KEY", ""),
@@ -137,7 +191,7 @@ def main() -> None:
         ]
     )
 
-    OUTPUT_STAGING.write_text("\n".join(lines), encoding="utf-8")
+    output_staging.write_text("\n".join(lines), encoding="utf-8")
 
     gh_token = values.get("PETRALABX_GITHUB_TOKEN") or values.get("GITHUB_TOKEN") or ""
     if gh_token:
@@ -173,12 +227,13 @@ def main() -> None:
         except OSError:
             pass
 
-    print(f"wrote {OUTPUT_STAGING}")
+    print(f"wrote {output_staging}")
     if gh_token:
         print(f"wrote {OUTPUT_GITHUB_PS1}")
         print(f"wrote {OUTPUT_GITHUB_SH}")
     print("keys loaded:", ", ".join(k for k, v in values.items() if v))
     print(f"graph source: {CURSOR_GRAPH_SECRET_ID} (runtime matched set)")
+    print(f"mcp principal: {args.mcp_principal_id}")
     print(
         "tip: profile-source GitHub PAT with "
         "`. $HOME\\.secrets-env.github.ps1` (Windows) or "

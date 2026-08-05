@@ -28,7 +28,8 @@ Confirmed mutation tools will register through the same seam in a later phase.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `MC_BASE_URL` | `https://mc.plxcustomer.io` | PLX MC API base |
-| `MC_MCP_API_KEY` | _(required)_ | Server API key |
+| `MC_MCP_PRINCIPAL_ID` | inferred from known runtime; otherwise `sp_mcp_cursor` | Reviewed durable service-principal identity |
+| `MC_MCP_API_KEY` | AWS fallback when unset | Key matching `MC_MCP_PRINCIPAL_ID` |
 | `MC_OPERATOR_EMAIL` | _(required)_ | Allowlisted operator (audit context) |
 | `MC_REPO` | _(required)_ | Repo slug for checkout binding |
 | `PLX_MC_MCP_ENABLED` | `0` | Kill switch |
@@ -39,8 +40,12 @@ Confirmed mutation tools will register through the same seam in a later phase.
 
 ```bash
 cd tools/plx-mc-mcp && npm install
-PLX_MC_MCP_ENABLED=1 MC_MCP_API_KEY=... MC_OPERATOR_EMAIL=... MC_REPO=petralabx/PLX_MC npx tsx index.ts
+PLX_MC_MCP_ENABLED=1 MC_MCP_PRINCIPAL_ID=sp_mcp_claude_code MC_MCP_API_KEY=... MC_OPERATOR_EMAIL=... MC_REPO=petralabx/PLX_MC npx tsx index.ts
 ```
+
+`launch.mjs` uses `prod/ec2-secrets` only for `sp_mcp_cursor`. Dedicated
+principals are selected from `plx/prod/mc/mcp-agent-keys/v1`; a missing entry
+fails closed without shared-key fallback.
 
 ## Remote HTTP
 

@@ -37,6 +37,10 @@ enough to be the only operating path.
 | `PLX-MC-Portal` | same URL | same key/email · `x-mc-repo: petralabx/plx-customer-portal` · `x-mc-runtime: cursor-cloud` |
 
 Key source: AWS Secrets Manager `prod/ec2-secrets` → `PLX_MC_MCP_API_KEY`.  
+These Cursor Cloud registrations intentionally resolve as `sp_mcp_cursor`.
+Claude/Hermes, Codex, or swarm clients use their matching entry from
+`plx/prod/mc/mcp-agent-keys/v1`; never substitute the shared Cursor key for a
+missing dedicated entry.
 Kill switch: disable the Team MCP server entry (or Vercel `PLX_MC_MCP_ENABLED=0`).  
 Keep `SWARM_DISPATCH_ENABLED=0` unless a session explicitly needs swarm.
 

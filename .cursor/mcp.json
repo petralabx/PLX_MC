@@ -8,6 +8,7 @@
       "env": {
         "MC_BASE_URL": "https://mc.plxcustomer.io",
         "MC_MCP_API_KEY": "${env:MC_MCP_API_KEY}",
+        "MC_MCP_PRINCIPAL_ID": "sp_mcp_cursor",
         "PLX_MC_MCP_API_KEY": "${env:PLX_MC_MCP_API_KEY}",
         "MC_OPERATOR_EMAIL": "cos@petrasoap.com",
         "MC_ACCOUNTABLE": "cos@petrasoap.com",

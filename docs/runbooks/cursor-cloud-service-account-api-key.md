@@ -94,6 +94,11 @@ curl -sS --request POST \
 EOF
 ```
 
+This recipe is specifically for Cursor Cloud and therefore resolves as
+`sp_mcp_cursor`. Non-Cursor runtimes must use the matching key from
+`plx/prod/mc/mcp-agent-keys/v1`; they must not fall back to
+`PLX_MC_MCP_API_KEY`.
+
 The create response is `{ agent, run }`: record `agent.id`, `agent.url`, and
 `run.id`, then read terminal status from
 `GET /v1/agents/{agentId}/runs/{runId}`.

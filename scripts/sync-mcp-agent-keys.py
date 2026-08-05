@@ -22,6 +22,20 @@ REGISTRY_ENV_NAME = "PLX_MC_MCP_AGENT_KEYS"
 SHARED_KEY_NAME = "PLX_MC_MCP_API_KEY"
 CLAUDE_PRINCIPAL_ID = "sp_mcp_claude_code"
 SHARED_PRINCIPAL_ID = "sp_mcp_cursor"
+DEDICATED_PRINCIPAL_IDS = (
+    CLAUDE_PRINCIPAL_ID,
+    "sp_mcp_codex",
+    "sp_mcp_grok",
+    "sp_mcp_hermes",
+    "sp_mcp_swarm",
+)
+IDENTITY_LABELS = {
+    CLAUDE_PRINCIPAL_ID: "claude",
+    "sp_mcp_codex": "codex",
+    "sp_mcp_grok": "grok",
+    "sp_mcp_hermes": "hermes",
+    "sp_mcp_swarm": "swarm",
+}
 VERCEL_API = "https://api.vercel.com"
 TERMINAL_DEPLOYMENT_STATES = {"BLOCKED", "CANCELED", "ERROR", "READY"}
 
@@ -62,6 +76,8 @@ def validate_registry(raw: str) -> dict[str, str]:
     for principal_id, key in parsed.items():
         if not isinstance(principal_id, str) or not isinstance(key, str) or not key:
             raise SyncError("registry_entry_invalid")
+        if principal_id not in DEDICATED_PRINCIPAL_IDS:
+            raise SyncError("registry_principal_unreviewed")
         registry[principal_id] = key
     if not registry.get(CLAUDE_PRINCIPAL_ID):
         raise SyncError("registry_claude_principal_missing")
@@ -400,15 +416,18 @@ def main() -> int:
         poll_seconds=args.poll_seconds,
     )
 
-    claude_ok = verify_self_check(
-        session,
-        production_url=args.production_url,
-        api_key=registry[CLAUDE_PRINCIPAL_ID],
-        expected_principal_id=CLAUDE_PRINCIPAL_ID,
-        operator_email=args.operator_email,
-        repo=args.repo,
-        runtime=args.runtime,
-    )
+    identity_results = {
+        principal_id: verify_self_check(
+            session,
+            production_url=args.production_url,
+            api_key=api_key,
+            expected_principal_id=principal_id,
+            operator_email=args.operator_email,
+            repo=args.repo,
+            runtime=args.runtime,
+        )
+        for principal_id, api_key in registry.items()
+    }
     shared_ok = verify_self_check(
         session,
         production_url=args.production_url,
@@ -418,7 +437,7 @@ def main() -> int:
         repo=args.repo,
         runtime=args.runtime,
     )
-    if not claude_ok or not shared_ok:
+    if not all(identity_results.values()) or not shared_ok:
         raise SyncError("production_identity_verification_failed")
 
     git_source = (
@@ -435,7 +454,12 @@ def main() -> int:
     print(f"deployment_ref={git_source.get('ref') or 'unknown'}")
     print(f"deployment_sha={git_source.get('sha') or 'unknown'}")
     print(f"production_domain_active={active.get('id') == deployment_id}")
-    print(f"claude_identity_ok={claude_ok}")
+    for principal_id in DEDICATED_PRINCIPAL_IDS:
+        if principal_id in identity_results:
+            print(
+                f"{IDENTITY_LABELS[principal_id]}_identity_ok="
+                f"{identity_results[principal_id]}"
+            )
     print(f"shared_identity_ok={shared_ok}")
     return 0
 

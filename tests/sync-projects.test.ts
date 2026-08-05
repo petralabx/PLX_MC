@@ -8,6 +8,7 @@ const store = vi.hoisted(() => ({
   repos: [] as { id: string; name: string; lang: string; def: string; owner: string; visibility: string; scope: string }[],
   projects: [] as Project[],
   upserts: [] as Project[],
+  audits: [] as string[],
 }));
 
 vi.mock("@/lib/sync/engine", () => ({
@@ -28,8 +29,8 @@ vi.mock("@/lib/sync/repo", () => ({
   async upsertProject(p: Project) {
     store.upserts.push(p);
   },
-  async appendAudit() {
-    /* no-op */
+  async appendAudit(actor: string) {
+    store.audits.push(actor);
   },
 }));
 
@@ -41,6 +42,7 @@ beforeEach(() => {
   ];
   store.projects = [];
   store.upserts.length = 0;
+  store.audits.length = 0;
 });
 
 describe("createProject (P2)", () => {
@@ -55,6 +57,14 @@ describe("createProject (P2)", () => {
     store.projects = [{ id: "PRJ-OPS" } as Project];
     const p = await createProject({ name: "Ops" });
     expect(p.id).toBe("PRJ-OPS-2");
+  });
+
+  it("records the authenticated actor separately from the assigned owner", async () => {
+    await createProject(
+      { name: "Delegated project", owner: "assigned-owner" },
+      "session-actor@example.com"
+    );
+    expect(store.audits).toEqual(["session-actor@example.com"]);
   });
 });
 

@@ -4,10 +4,12 @@
 
 import { z } from "zod";
 import { ApiError, parseBody, route } from "@/lib/api/route";
+import { requireSessionActor } from "@/lib/routing/mutations/actors";
 import { patchBucket } from "@/lib/sync";
 
 const patchBucketSchema = z.object({
-  actor: z.string().min(1),
+  // Deprecated / ignored — authority is session oid only.
+  actor: z.string().min(1).optional(),
   name: z.string().min(1).optional(),
   owner: z.string().min(1).optional(),
   health: z.enum(["track", "risk", "off"]).optional(),
@@ -21,8 +23,13 @@ const patchBucketSchema = z.object({
 
 export const PATCH = route(async (req, ctx) => {
   const { id } = await ctx.params;
-  const { actor, ...patch } = await parseBody(req, patchBucketSchema);
-  const bucket = await patchBucket(id, patch, actor);
+  const patch = await parseBody(req, patchBucketSchema);
+  delete patch.actor;
+  const authorized = await requireSessionActor("bucket.update", {
+    type: "bucket",
+    id,
+  });
+  const bucket = await patchBucket(id, patch, authorized.auditLabel);
   if (!bucket) throw new ApiError("not_found", `unknown bucket ${id}`, 404);
   return bucket;
 });

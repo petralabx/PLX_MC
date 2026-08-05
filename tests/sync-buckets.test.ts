@@ -9,6 +9,7 @@ const store = vi.hoisted(() => ({
   repos: [] as { id: string; name: string; lang: string; def: string; owner: string; visibility: string; scope: string }[],
   buckets: [] as Bucket[],
   upserts: [] as Bucket[],
+  audits: [] as string[],
 }));
 
 vi.mock("@/lib/sync/engine", () => ({
@@ -40,8 +41,8 @@ vi.mock("@/lib/sync/repo", () => ({
   async upsertBucket(b: Bucket) {
     store.upserts.push(b);
   },
-  async appendAudit() {
-    /* no-op */
+  async appendAudit(actor: string) {
+    store.audits.push(actor);
   },
 }));
 
@@ -53,6 +54,7 @@ beforeEach(() => {
   ];
   store.buckets = [];
   store.upserts.length = 0;
+  store.audits.length = 0;
 });
 
 describe("createBucket (EN-005)", () => {
@@ -82,6 +84,14 @@ describe("createBucket (EN-005)", () => {
     store.buckets = [{ id: "BKT-OPS" } as Bucket];
     const b = await createBucket({ name: "Ops" });
     expect(b.id).toBe("BKT-OPS-2");
+  });
+
+  it("records the authenticated actor separately from the assigned owner", async () => {
+    await createBucket(
+      { name: "Delegated bucket", owner: "assigned-owner" },
+      "session-actor@example.com"
+    );
+    expect(store.audits).toEqual(["session-actor@example.com"]);
   });
 });
 

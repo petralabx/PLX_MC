@@ -4,10 +4,12 @@
 
 import { z } from "zod";
 import { ApiError, parseBody, route } from "@/lib/api/route";
+import { requireSessionActor } from "@/lib/routing/mutations/actors";
 import { patchProject } from "@/lib/sync";
 
 const patchProjectSchema = z.object({
-  actor: z.string().min(1),
+  // Deprecated / ignored — authority is session oid only.
+  actor: z.string().min(1).optional(),
   name: z.string().min(1).optional(),
   owner: z.string().min(1).optional(),
   health: z.enum(["track", "risk", "off"]).optional(),
@@ -20,8 +22,13 @@ const patchProjectSchema = z.object({
 
 export const PATCH = route(async (req, ctx) => {
   const { id } = await ctx.params;
-  const { actor, ...patch } = await parseBody(req, patchProjectSchema);
-  const project = await patchProject(id, patch, actor);
+  const patch = await parseBody(req, patchProjectSchema);
+  delete patch.actor;
+  const authorized = await requireSessionActor("project.update", {
+    type: "project",
+    id,
+  });
+  const project = await patchProject(id, patch, authorized.auditLabel);
   if (!project) throw new ApiError("not_found", `unknown project ${id}`, 404);
   return project;
 });

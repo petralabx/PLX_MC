@@ -170,7 +170,10 @@ export interface CreateBucketInput {
   project?: string | null;
 }
 
-export async function createBucket(input: CreateBucketInput): Promise<Bucket> {
+export async function createBucket(
+  input: CreateBucketInput,
+  actor = input.owner || CURRENT_USER
+): Promise<Bucket> {
   await ensureSeeded();
   await ensureReposSeeded();
   await ensureProjectsSeeded();
@@ -206,7 +209,7 @@ export async function createBucket(input: CreateBucketInput): Promise<Bucket> {
     project: projectId,
   };
   await repo.upsertBucket(bucket);
-  await repo.appendAudit(bucket.owner, `Created initiative ${id} (${name}) — pending Roadmap mirror.`, "pending");
+  await repo.appendAudit(actor, `Created initiative ${id} (${name}) — pending Roadmap mirror.`, "pending");
   return bucket;
 }
 
@@ -275,7 +278,10 @@ export interface CreateProjectInput {
   prd?: string | null;
 }
 
-export async function createProject(input: CreateProjectInput): Promise<Project> {
+export async function createProject(
+  input: CreateProjectInput,
+  actor = input.owner || CURRENT_USER
+): Promise<Project> {
   await ensureSeeded();
   await ensureReposSeeded();
   await ensureProjectsSeeded();
@@ -300,7 +306,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     prd: input.prd ?? null,
   };
   await repo.upsertProject(project);
-  await repo.appendAudit(project.owner, `Created project ${id} (${name}) — pending Projects mirror.`, "pending");
+  await repo.appendAudit(actor, `Created project ${id} (${name}) — pending Projects mirror.`, "pending");
   return project;
 }
 

@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 import { parseBody, route } from "@/lib/api/route";
+import { requireSessionActor } from "@/lib/routing/mutations/actors";
 import { createBucket } from "@/lib/sync";
 
 const createBucketSchema = z.object({
@@ -18,4 +19,11 @@ const createBucketSchema = z.object({
   project: z.string().nullable().optional(),
 });
 
-export const POST = route(async (req) => createBucket(await parseBody(req, createBucketSchema)));
+export const POST = route(async (req) => {
+  const body = await parseBody(req, createBucketSchema);
+  const authorized = await requireSessionActor(
+    "bucket.create",
+    body.project ? { type: "project", id: body.project } : undefined
+  );
+  return createBucket(body, authorized.auditLabel);
+});

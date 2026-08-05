@@ -29,7 +29,8 @@ dispatch logic.
 ```bash
 PLX_MC_MCP_ENABLED=1          # server + client kill switch
 PLX_MC_ROUTING_SUGGEST_ENABLED=1  # mc_suggest_work + pre-checkout suggestions
-MC_MCP_API_KEY=...            # AWS Secrets Manager / prod/ec2-secrets
+MC_MCP_PRINCIPAL_ID=sp_mcp_claude_code  # reviewed client identity
+MC_MCP_API_KEY=...            # matching shared or dedicated AWS key
 MC_OPERATOR_EMAIL=vince@...   # allowlisted Petra operator (audit context only)
 MC_REPO=petralabx/PLX_MC   # repo binding for checkout credentials (full GitHub slug)
 MC_BASE_URL=https://mc.plxcustomer.io
@@ -54,9 +55,11 @@ resolver. Operator/service aliases that are not people
 (for example `cos@petrasoap.com`) resolve to the PLX default accountable human,
 Vince; an owner already on the task is never replaced.
 
-**Routing suggestion:** `mc_suggest_work` authorizes `routing.suggest` for the durable MCP
-service principal (`sp_mcp_cursor`). Operator email is admission/audit context only
-and never grants human capabilities. Returns `routingSessionId` (`rtx_*`), top
+**Routing suggestion:** `mc_suggest_work` authorizes `routing.suggest` for the
+resolved durable MCP service principal (`sp_mcp_cursor`,
+`sp_mcp_claude_code`, `sp_mcp_codex`, or `sp_mcp_swarm`). Operator email is
+admission/audit context only and never grants human capabilities. Returns
+`routingSessionId` (`rtx_*`), top
 candidates with reasons and deep links, and `MC-Routing: rtx_*` — without creating
 or linking Tasks. Modular registration (`registerRoutingTools`) leaves a seam for
 later confirmed-mutation tools (P8).

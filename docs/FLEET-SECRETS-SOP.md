@@ -137,23 +137,37 @@ Never treat selected membership alone as consumption evidence.
 
 ---
 
-## 5. MCP API key rotation
+## 5. MCP API key rotation and client identity
 
 | Store | Name | Consumer env name |
 |-------|------|-------------------|
-| AWS Secrets Manager | `PLX_MC_MCP_API_KEY` | `MC_MCP_API_KEY` (stdio / team MCP config) |
-| Vercel Production | `PLX_MC_MCP_API_KEY` | Validated server-side on `/api/cursor/mcp` |
+| AWS `prod/ec2-secrets` | `PLX_MC_MCP_API_KEY` | `MC_MCP_API_KEY` for compatibility principal `sp_mcp_cursor` |
+| AWS `plx/prod/mc/mcp-agent-keys/v1` | principal-id → key registry | `MC_MCP_API_KEY` for dedicated agent principals |
+| Vercel Production | `PLX_MC_MCP_API_KEY`, `PLX_MC_MCP_AGENT_KEYS` | Validated server-side on `/api/cursor/mcp` |
 
-**Rotation procedure:**
+Clients set `MC_MCP_PRINCIPAL_ID` to one reviewed id:
+`sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, or `sp_mcp_swarm`.
+The launcher defaults Cursor runtimes to `sp_mcp_cursor`; known Claude/Hermes,
+Codex, and swarm runtime names select their dedicated ids. A requested
+dedicated key that is absent fails closed and never falls back to the shared
+Cursor key.
 
-1. Generate a new key; write to **Secrets Manager** (`prod/ec2-secrets`).
-2. Update **Vercel Production** `PLX_MC_MCP_API_KEY`; **redeploy**.
-3. Update every team MCP registration
+**Dedicated-key rotation:**
+
+1. Update the complete registry in `plx/prod/mc/mcp-agent-keys/v1`.
+2. Run `python scripts/sync-mcp-agent-keys.py` with `VERCEL_API_TOKEN`
+   hydrated. It updates sensitive Production configuration, redeploys, and
+   verifies identities without printing keys.
+3. Update the affected team MCP registration
    ([plx-mc-mcp-team-registration.md](runbooks/plx-mc-mcp-team-registration.md))
-   — `x-api-key` header or `MC_MCP_API_KEY` env.
-4. Operators reload MCP; run `mc_self_check`.
-5. **Revoke** the old key value (overwrite in Secrets Manager; confirm old
-   header returns 401).
+   with the rotated `MC_MCP_API_KEY` and matching `MC_MCP_PRINCIPAL_ID`.
+4. Reload MCP and require `mc_self_check` to report the requested service
+   principal before revoking the old value.
+
+The shared-key procedure remains compatibility-only: update
+`PLX_MC_MCP_API_KEY` in `prod/ec2-secrets` and Vercel Production, redeploy,
+reload Cursor clients, and confirm the old value returns 401. Do not disable
+`PLX_MC_MCP_SHARED_KEY_ENABLED` until every Cursor registration has migrated.
 
 Committed `.cursor/mcp.json` ships with `PLX_MC_MCP_ENABLED=0` — enable per
 operator session only.

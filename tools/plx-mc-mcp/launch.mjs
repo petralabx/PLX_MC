@@ -4,8 +4,9 @@
  *
  * Cross-environment wrapper for Cursor Desktop + Cloud Agents:
  * - Cloud: uses MC_MCP_API_KEY from the agent secrets/env panel.
- * - Local operator boxes: if the key is not in env, fetches PLX_MC_MCP_API_KEY
- *   from AWS Secrets Manager (prod/ec2-secrets) without printing it.
+ * - Local operator boxes: if the key is not in env, selects the requested
+ *   principal from its authoritative AWS secret without printing it.
+ * - Dedicated principals fail closed instead of borrowing the shared Cursor key.
  * - Forces the operator/accountable email to cos@petrasoap.com per current
  *   operator setup policy.
  */
@@ -14,14 +15,20 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  cleanMcpValue,
+  MCP_AGENT_KEYS_SECRET_ID,
+  MCP_COMPATIBILITY_SECRET_ID,
+  MCP_CURSOR_PRINCIPAL_ID,
+  resolveMcpClientKey,
+  resolveMcpPrincipalId,
+  selectMcpKeyFromSecret,
+} from "./lib/key-resolution.mjs";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..");
 
-function clean(value) {
-  const s = String(value ?? "").trim();
-  if (!s || /^\$\{[^}]+\}$/.test(s)) return "";
-  return s;
-}
+const clean = cleanMcpValue;
 
 function setDefault(name, value) {
   if (!clean(process.env[name])) process.env[name] = value;
@@ -42,8 +49,15 @@ function resolveAwsCli() {
   return "aws";
 }
 
-function loadKeyFromAws() {
-  const secretId = clean(process.env.CURSOR_MCP_AWS_SECRET_IDS)?.split(",")[0]?.trim() || "prod/ec2-secrets";
+function loadKeyFromAws(principalId) {
+  const compatibilitySecretId =
+    clean(process.env.CURSOR_MCP_AWS_SECRET_IDS)?.split(",")[0]?.trim() ||
+    MCP_COMPATIBILITY_SECRET_ID;
+  const secretId =
+    principalId === MCP_CURSOR_PRINCIPAL_ID
+      ? compatibilitySecretId
+      : clean(process.env.MC_MCP_AGENT_KEYS_SECRET_ID) ||
+        MCP_AGENT_KEYS_SECRET_ID;
   const region = clean(process.env.AWS_REGION) || "us-east-1";
   const home = process.env.USERPROFILE || process.env.HOME || "";
   const fetchPy = path.join(home, ".cursor", "bin", "fetch-aws-secret.py");
@@ -74,7 +88,7 @@ function loadKeyFromAws() {
           },
         );
         const parsed = JSON.parse(raw);
-        const key = clean(parsed.MC_MCP_API_KEY) || clean(parsed.PLX_MC_MCP_API_KEY);
+        const key = selectMcpKeyFromSecret(parsed, principalId);
         if (key) return key;
       } catch {
         // try next python / fall through to aws cli
@@ -112,7 +126,7 @@ function loadKeyFromAws() {
       },
     );
     const parsed = JSON.parse(raw);
-    return clean(parsed.MC_MCP_API_KEY) || clean(parsed.PLX_MC_MCP_API_KEY);
+    return selectMcpKeyFromSecret(parsed, principalId);
   } catch (error) {
     const detail = clean(error?.stderr) || clean(error?.message) || "unknown error";
     console.error(`[plx-mc-mcp] unable to load MCP key from AWS Secrets Manager (${secretId}, ${region}): ${detail}`);
@@ -131,9 +145,24 @@ setDefault("SWARM_DISPATCH_ENABLED", "0");
 process.env.MC_OPERATOR_EMAIL = "cos@petrasoap.com";
 process.env.MC_ACCOUNTABLE = "cos@petrasoap.com";
 
-let key = clean(process.env.MC_MCP_API_KEY) || clean(process.env.PLX_MC_MCP_API_KEY);
-if (!key) key = loadKeyFromAws();
-if (key) process.env.MC_MCP_API_KEY = key;
+let principalId = "";
+try {
+  principalId = resolveMcpPrincipalId(process.env);
+} catch {
+  console.error("[plx-mc-mcp] unsupported MC_MCP_PRINCIPAL_ID");
+  process.exit(1);
+}
+process.env.MC_MCP_PRINCIPAL_ID = principalId;
+
+let key = resolveMcpClientKey(process.env, principalId);
+if (!key) key = loadKeyFromAws(principalId);
+if (!key) {
+  console.error(
+    `[plx-mc-mcp] MCP key unavailable for reviewed principal ${principalId}`
+  );
+  process.exit(1);
+}
+process.env.MC_MCP_API_KEY = key;
 
 const tsxCli = path.join(here, "node_modules", "tsx", "dist", "cli.mjs");
 const entry = path.join(here, "index.ts");

@@ -10,6 +10,7 @@ if (-not $env:MC_MCP_API_KEY) {
 if (-not $env:MC_OPERATOR_EMAIL) { $env:MC_OPERATOR_EMAIL = 'cos@petrasoap.com' }
 if (-not $env:PLX_MC_MCP_ENABLED) { $env:PLX_MC_MCP_ENABLED = '0' }
 $env:MC_BASE_URL = 'https://mc.plxcustomer.io'
+$env:MC_MCP_PRINCIPAL_ID = 'sp_mcp_cursor'
 $env:MC_REPO = 'petralabx/PLX_MC'
 $env:MC_RUNTIME = 'cursor'
 $root = Split-Path -Parent $PSScriptRoot

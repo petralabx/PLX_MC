@@ -51,11 +51,19 @@ Cloud user broader write access.
 | Command | `npx` |
 | Args | `tsx tools/plx-mc-mcp/index.ts` |
 | `MC_BASE_URL` | `https://mc.plxcustomer.io` |
-| `MC_MCP_API_KEY` | from AWS Secrets Manager (`PLX_MC_MCP_API_KEY` in `prod/ec2-secrets`) |
+| `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, or `sp_mcp_swarm` |
+| `MC_MCP_API_KEY` | key for that exact principal: shared compatibility key only for `sp_mcp_cursor`; otherwise the matching entry in the dedicated registry |
 | `MC_OPERATOR_EMAIL` | allowlisted `@petrasoap.com` operator — **agents:** `cos@petrasoap.com`; **human:** `vince@petrasoap.com` |
 | `MC_REPO` | target repo slug (e.g. `petralabx/plx-customer-portal`) |
 | `PLX_MC_MCP_ENABLED` | `1` |
 | `SWARM_DISPATCH_ENABLED` | `0` until swarm is needed |
+
+Known launcher runtimes map automatically: `cursor`/`cursor-cloud` →
+`sp_mcp_cursor`, `claude`/`claude-code`/`hermes` →
+`sp_mcp_claude_code`, `codex` → `sp_mcp_codex`, and `swarm` →
+`sp_mcp_swarm`. Set `MC_MCP_PRINCIPAL_ID` explicitly for generic runtime names
+such as `local`. If a dedicated principal is selected but absent from the
+registry, startup fails; it never borrows the shared Cursor key.
 
 ### Windows workstation (Cursor shell env unreliable)
 
@@ -67,7 +75,17 @@ Cursor MCP child processes do not inherit PowerShell env vars. Use the repo laun
    python scripts/bootstrap-windows-secrets.py
    ```
 
-   Secrets Manager is authoritative (`prod/ec2-secrets` for MCP/GitHub/Swarm;
+   This default writes Cursor's shared compatibility identity to
+   `~/.secrets-env.staging.ps1`. Generate an isolated dedicated-principal
+   loader without overwriting Cursor's loader with:
+
+   ```powershell
+   python scripts/bootstrap-windows-secrets.py --mcp-principal-id sp_mcp_claude_code
+   . $HOME\.secrets-env.staging.sp_mcp_claude_code.ps1
+   ```
+
+   Secrets Manager is authoritative (`prod/ec2-secrets` for Cursor/GitHub/Swarm;
+   `plx/prod/mc/mcp-agent-keys/v1` for dedicated MCP identities;
    `plx/prod/m365/cursor-graph/v1` for the matched `MICROSOFT_GRAPH_*` set).
    The script does **not** read credential text files under `~/.aws`.
 

@@ -1,3 +1,8 @@
+---
+name: mc-sync
+description: Keep agent sessions aligned with PLX Mission Control tasks via the PLX-MC MCP server — checkout, progress, and complete with evidence. Use when working PLX MC tasks or when the user references Mission Control dispatch IDs.
+---
+
 # PLX MC Sync (Cursor agents)
 
 Keep agent sessions aligned with PLX Mission Control tasks via the **PLX-MC** MCP server.

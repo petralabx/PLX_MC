@@ -60,12 +60,24 @@ Details and Desktop pitfalls: `docs/runbooks/plx-mc-mcp-team-registration.md`.
 
 ## Environment.json note
 
-This Team environment currently reports `environmentJson: null` / unrecognized
-fields. Do **not** assume PLX_MC `.cursor/environment.json` (swarm terminals)
-boots on Cloud. Fleet MCP must come from **Team MCP HTTP**, not swarm loopback.
+`environment-info` reports the **dashboard-saved** config as `environmentJson: null`
+(no recognized fields), but the environment is **repo-file managed**: its
+`environmentJsonPath` is `.cursor/environment.json`, the primary repo is `PLX_MC`,
+and Cursor resolves + runs `PLX_MC/.cursor/environment.json` (which outranks the
+Team dashboard config). That file **does** boot on Cloud — validated 2026-08-05:
+promotable draft build `bld-20260805-4d38fac8-310d-408a-afab-73d8a5d99985` ran the
+PLX_MC install, and a fresh Cloud Agent booted from it with swarm `/health`
+HTTP 200 (`status: healthy`) and the MC dev server `/` HTTP 200.
 
-Optional later: add a recognized Cloud `environment.json` for install steps only —
-out of scope for TASK-682 unless needed for Node toolchain.
+To change install / terminals / ports, edit `PLX_MC/.cursor/environment.json` and
+test via a **branch build** (`refs`) — a dashboard `environment_json` override is
+rejected for a repo-file managed environment. Fleet MCP still comes from **Team MCP
+HTTP** (table above), not the swarm loopback `:8900` (that loopback is the dispatch
+API, not an MCP transport).
+
+Dev-safe DB defaults: the `swarm` terminal boots with `DATABASE_URL=""` +
+`CHECKPOINTER_BACKEND=memory`, so it starts without external DB or secrets. Keep
+that pattern on Cloud and never point Cloud dev servers at prod RDS.
 
 ## Verification (fresh Cloud Agent)
 

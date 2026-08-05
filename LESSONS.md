@@ -16,6 +16,20 @@
 
 ## Lessons
 
+### 2026-07-31 (ET) — complete() ok is not gate success (local-inference#11)
+
+- **What happened:** Cloud Agent stamped `MC-Checkout` from `PLX-MC-Portal` onto
+  `petralabx/local-inference` PR #11. `mc_complete_task` returned ok; CI
+  compliance BLOCKED 19s later with decision 3 (`checkout handshake required`,
+  `taskId: null`).
+- **Root cause:** (1) Portal MCP pins `x-mc-repo: petralabx/plx-customer-portal`;
+  prose requiring an actor.repo handshake was already active and was skipped.
+  (2) Agents treated `complete()` as gate success; it is only evidence hand-in.
+- **Rule going forward:** Mint with explicit `MC_REPO` / REST /
+  `compliance-checkout.mjs`. Close out with `compliance-pr-verify.mjs --wait`
+  (GitHub `compliance` SUCCESS). Team-rule paste source Rule 5 + contract
+  `agent_workflow` updated; scaffold copies the verify script and drift-checks it.
+
 ### 2026-07-31 (ET) — Catalog publication did not update Cloud picker copies
 
 - **What happened:** `guided-project-discovery` was published and visible through

@@ -4,7 +4,7 @@
 
 **Owner:** Vince · **Status:** active · **Effective:** 2026-07-13
 
-> **TL;DR** — Agents execute; a **named human** owns the outcome. Before an agent opens a PR: **check out** the Mission Control task(s), stamp **one `MC-Checkout: dsp_…` line per task**, hand in evidence via **`mc_complete_task`**, carry the **risk-tier bundle**, and **never** edit the compliance workflow to force a pass.
+> **TL;DR** — Agents execute; a **named human** owns the outcome. Before an agent opens a PR: **check out** the Mission Control task(s) with `meta.actor.repo` matching the repo under edit, stamp **one `MC-Checkout: dsp_…` line per task**, hand in evidence via **`mc_complete_task`**, then run **`node scripts/compliance-pr-verify.mjs --wait`** (GitHub `compliance` must be SUCCESS — `complete()` alone is not gate success). Carry the **risk-tier bundle**, and **never** edit the compliance workflow to force a pass.
 
 Live cockpit: [https://mc.plxcustomer.io](https://mc.plxcustomer.io)
 
@@ -199,6 +199,32 @@ Also include:
 
 ---
 
+## 6a. Close-out verify (required before claiming done)
+
+`mc_complete_task` writes `task.evidence`. It does **not** mean the GitHub
+`compliance` check passed. On `petralabx/local-inference#11`, `complete()`
+returned ok and the gate BLOCKED 19 seconds later (wrong-scope checkout).
+
+Before treating an agent PR as ready:
+
+```bash
+# Mint stamps with the exact repo slug (Cloud default when Team MCP is Hub/Portal only)
+COMPLIANCE_CAPTURE=1 MC_REPO=petralabx/<this-repo> \
+  MC_BASE_URL=https://mc.plxcustomer.io MC_ACCOUNTABLE=cos@petrasoap.com \
+  MC_MCP_API_KEY=… MC_TASK_ID=TASK-NNN \
+  node scripts/compliance-checkout.mjs
+
+# After PR open + evidence hand-in — must exit 0
+MC_REPO=petralabx/<this-repo> MC_MCP_API_KEY=… \
+  node scripts/compliance-pr-verify.mjs --wait
+```
+
+`compliance-pr-verify.mjs` checks: actor.repo scope, stamp/task parity, task
+evidence completeness, and the GitHub `compliance` conclusion. Prefer this over
+claiming done from a successful `complete()` alone.
+
+---
+
 ## 7. Evidence — what the gate actually checks
 
 The compliance gate evaluates **`task.evidence`** on the checked-out task entity (`verifyCompliance` → `evidenceCompleteForTier(task.evidence, tier)`). It does **not** primarily parse PR-body prose for rollback or proof.
@@ -312,7 +338,7 @@ Operator PRs without a confirmed link create/update a routing **proposal**
 **Do**
 
 - One logical theme per PR; multiple **related** MC tasks are fine (one stamp each).
-- Report progress and complete with evidence when work is ready for gate/merge.
+- Report progress and complete with evidence; then run `compliance-pr-verify.mjs --wait` and confirm GitHub `compliance` is SUCCESS before claiming done.
 - Install company skills separately from MCP ([`SKILLS-SOP.md`](SKILLS-SOP.md)).
 - Keep `MC_REPO` set to the full `petralabx/<name>` slug you are pushing to.
 - Use `mc_suggest_work` for suggestion-enabled cohorts; otherwise stop for the

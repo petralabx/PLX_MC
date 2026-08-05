@@ -118,6 +118,8 @@ If you notice yourself in any of these, stop — do not push through:
 - Name a human accountable owner for agent-driven work: agents execute, a person owns the outcome.
 - Never edit, disable, or bypass a repo's compliance gate workflow to make the check pass — that is a governance violation.
 - Prefer the automated capture hook (it checks out or creates the task and stamps the PR) over manual steps; never run an autonomous agent against a tracked repo without a checked-out task.
+- Confirm `meta.actor.repo` equals the exact full slug of the repo under edit before accepting a checkout stamp; never stamp a Portal- or Hub-scoped `dsp_*` on a different repo (decision 3).
+- A successful `mc_complete_task` is evidence hand-in only — it is not gate success. Do not treat agent work as complete until the stamped PR's GitHub `compliance` check is SUCCESS (or `scripts/compliance-pr-verify.mjs --wait` exits 0).
 - These rules apply to every agent runtime (Cursor, Claude Code, ChatGPT/Codex, the swarm). This contract is the single source — change it here, regenerate, and every runtime's rule file updates.
 
 ## Repo Hygiene

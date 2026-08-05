@@ -175,6 +175,12 @@ sed "s/{{GEN_SHA}}/$GEN_SHA/g" \
   "$ROOT_NATIVE/docs/templates/compliance-gate-drift.yml.tpl" \
   > "$WF_DIR/compliance-gate-drift.yml"
 
+echo "==> Copying compliance-pr-verify.mjs + compliance-checkout.mjs"
+mkdir -p "$TARGET/scripts"
+cp "$ROOT_NATIVE/scripts/compliance-pr-verify.mjs" "$TARGET/scripts/compliance-pr-verify.mjs"
+cp "$ROOT_NATIVE/scripts/compliance-checkout.mjs" "$TARGET/scripts/compliance-checkout.mjs"
+chmod +x "$TARGET/scripts/compliance-pr-verify.mjs" "$TARGET/scripts/compliance-checkout.mjs" 2>/dev/null || true
+
 if [[ "$WORKFLOWS_ONLY" -eq 1 ]]; then
   echo "Done (workflows only)."
   exit 0

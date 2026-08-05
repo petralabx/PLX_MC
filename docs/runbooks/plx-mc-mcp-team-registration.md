@@ -27,7 +27,7 @@ does not grant `CreateSecret`, `DeleteSecret`, `UpdateSecret`, wildcard
 Secrets Manager actions, wildcard resources, or writes to `prod/ec2-secrets`.
 
 After an authorized rotation writes the complete registry to the dedicated
-secret, hydrate `VERCEL_TOKEN` without printing it and run:
+secret, hydrate canonical `VERCEL_API_TOKEN` without printing it and run:
 
 ```bash
 python scripts/sync-mcp-agent-keys.py

@@ -324,9 +324,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    token = os.environ.get("VERCEL_TOKEN", "").strip()
+    token = (
+        os.environ.get("VERCEL_API_TOKEN", "").strip()
+        or os.environ.get("VERCEL_TOKEN", "").strip()
+    )
     if not token:
-        raise SyncError("vercel_token_missing")
+        raise SyncError("vercel_api_token_missing")
 
     secrets = boto3.client("secretsmanager", region_name=args.region)
     registry_raw = get_secret_string(secrets, args.secret_id)

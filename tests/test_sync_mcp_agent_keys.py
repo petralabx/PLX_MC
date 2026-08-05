@@ -119,7 +119,8 @@ def test_main_reports_only_redacted_evidence(monkeypatch, capsys) -> None:
         }
     )
     secrets = FakeSecrets(registry, compatibility)
-    monkeypatch.setenv("VERCEL_TOKEN", "vercel-secret")
+    monkeypatch.delenv("VERCEL_TOKEN", raising=False)
+    monkeypatch.setenv("VERCEL_API_TOKEN", "vercel-secret")
     monkeypatch.setattr(sync.boto3, "client", lambda *_args, **_kwargs: secrets)
     monkeypatch.setattr(sync.requests, "Session", lambda: object())
     monkeypatch.setattr(

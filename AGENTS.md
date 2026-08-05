@@ -142,12 +142,17 @@ standard `{ data, meta }` envelope, and composed swarm delegation.
 |---|---|
 | Owner | Vince (human accountable; agents execute) |
 | Scope | Runtime — stdio client + HTTPS cursor API on `mc.plxcustomer.io`; swarm leg loopback `127.0.0.1:8900` |
-| Auth source | `PLX_MC_MCP_API_KEY` + `PLX_MC_ALLOWED_USERS` operator email (AWS Secrets Manager); swarm via `SWARM_KEY_CMD` / `get_secret` |
+| Auth source | Per-agent registry: AWS Secrets Manager `plx/prod/mc/mcp-agent-keys/v1` → Vercel `PLX_MC_MCP_AGENT_KEYS`; legacy shared key: `prod/ec2-secrets` → `PLX_MC_MCP_API_KEY`; swarm via `SWARM_KEY_CMD` / `get_secret` |
 | Default state | **Disabled** — `PLX_MC_MCP_ENABLED=0` in committed `.cursor/mcp.json` |
 | Kill switch | `PLX_MC_MCP_ENABLED=0` and/or remove `PLX-MC` from MCP config; `SWARM_DISPATCH_ENABLED=0` for dispatch only |
 | Health check | `mc_self_check` → `GET /api/cursor/self-check` |
 | Fallback path | `scripts/compliance-checkout.mjs` + `/api/compliance/*`; `bin/swarm ask` for dispatch |
 | Data/audit boundary | All MC tool calls append `mcp.tool.invoked` to `mc_events`; task writes via sync engine only |
+
+The dedicated per-agent secret is the rotation source of truth. The
+`PLX_MC_MCP_AGENT_KEYS` field in `prod/ec2-secrets` is a compatibility mirror
+only until every legacy consumer is migrated; Cloud Agents may update the
+dedicated secret but must never receive write access to `prod/ec2-secrets`.
 
 To enable: set `PLX_MC_MCP_ENABLED=1`, `MC_MCP_API_KEY`, `MC_OPERATOR_EMAIL`, `MC_REPO`
 in team MCP env ([runbook](docs/runbooks/plx-mc-mcp-team-registration.md)). Swarm:

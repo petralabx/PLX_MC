@@ -6,6 +6,41 @@ Register one MCP entry **per target repository** at
 fixed-`x-mc-repo` entry in a different repo. Use distinct names such as
 `PLX-MC-Portal` and `PLX-MC-Hub`.
 
+## Per-agent key registry
+
+AWS Secrets Manager `plx/prod/mc/mcp-agent-keys/v1` in `us-east-1` is the
+source of truth for the serialized `PLX_MC_MCP_AGENT_KEYS` registry. The secret
+contains the registry object itself, not a larger environment object. Vercel
+Production stores the same JSON as a sensitive variable.
+
+`prod/ec2-secrets` remains authoritative for the legacy
+`PLX_MC_MCP_API_KEY`. Its `PLX_MC_MCP_AGENT_KEYS` field is a compatibility
+mirror only until all consumers have migrated to the dedicated secret. An
+operator may refresh that mirror, but Cloud Agents must not receive
+`secretsmanager:PutSecretValue` on `prod/ec2-secrets`: IAM cannot constrain a
+write to one JSON field.
+
+IAM user `plx-mc-cloud-agent` has the inline policy
+`PLXMC-MCPAgentKeys-Rotate`. It grants only `GetSecretValue`,
+`DescribeSecret`, and `PutSecretValue` on the exact dedicated-secret ARN. It
+does not grant `CreateSecret`, `DeleteSecret`, `UpdateSecret`, wildcard
+Secrets Manager actions, wildcard resources, or writes to `prod/ec2-secrets`.
+
+After an authorized rotation writes the complete registry to the dedicated
+secret, hydrate canonical `VERCEL_API_TOKEN` without printing it and run:
+
+```bash
+python scripts/sync-mcp-agent-keys.py
+```
+
+The script upserts the Vercel Production variable as `sensitive`, redeploys the
+currently active production deployment, waits for `mc.plxcustomer.io` to point
+to the new Ready deployment, and verifies the dedicated and shared keys resolve
+to their expected service principals. Output is limited to hashes, IDs,
+statuses, and booleans. `compatibility_mirror_matches=False` is a prompt for an
+operator to refresh the read-only compatibility mirror; it does not give the
+Cloud user broader write access.
+
 ## Stdio (local IDE + Cloud Agents)
 
 ### Linux / macOS / Cloud Agent (env vars in team MCP config)

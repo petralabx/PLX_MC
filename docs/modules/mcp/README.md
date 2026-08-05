@@ -3,8 +3,8 @@
 ## What
 
 First-class **PLX-MC** MCP server for team-distributed agent runtimes: task lifecycle
-(checkout / progress / complete), search, audit trail, standardized `{ data, meta }`
-envelope, and composed swarm delegation.
+(checkout / progress / complete), project and bucket creation, search, audit trail,
+standardized `{ data, meta }` envelope, and composed swarm delegation.
 
 ## Why
 
@@ -17,6 +17,7 @@ dispatch logic.
 | Surface | Path |
 |---------|------|
 | REST cursor API | `src/app/api/cursor/*` — self-auth via per-agent keys (`PLX_MC_MCP_AGENT_KEYS`) or the legacy shared `PLX_MC_MCP_API_KEY` (retire via `PLX_MC_MCP_SHARED_KEY_ENABLED=0`) + operator headers |
+| Planning hierarchy | `mc_create_project` + `mc_create_bucket` — capability-gated writes queued through the existing Projects/Roadmap SharePoint mirrors |
 | Routing suggest | `POST /api/cursor/routing/suggest` — `mc_suggest_work` (`routing.suggest`) |
 | Streamable HTTP MCP | `GET/POST/DELETE /api/cursor/mcp` — remote team registration |
 | Stdio MCP client | `tools/plx-mc-mcp/index.ts` — local Cursor + Cloud Agents |
@@ -39,6 +40,11 @@ MC_BASE_URL=https://mc.plxcustomer.io
 `mc_create_task.repos[]` uses MC registry **ids** (`portal-web`, `plx-mc`,
 `agentic-swarm`) — not the `MC_REPO` GitHub slug. See `docs/AGENT-PR-SOP.md`
 (two repo namespaces).
+
+The same registry-id rule applies to `mc_create_project.repos[]` and
+`mc_create_bucket.repos[]`. Every reviewed MCP runtime principal shares the
+explicit `project.create` / `bucket.create` grant; human-only administration,
+repository approval, and permission management remain denied.
 
 **Accountable owner defaulting:** `mc_create_task` defaults a missing
 `accountableOwner` to the human operator behind the session — the allowlisted

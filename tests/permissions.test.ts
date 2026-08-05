@@ -286,22 +286,20 @@ describe("contextual denial", () => {
     expect(decision.reasonCode).toBe("repository_mismatch");
   });
 
-  it("denies service principals from human-only contextual actions", () => {
-    // MCP may mutate Tasks through its explicit grants but cannot mutate the
-    // planning hierarchy.
+  it("allows reviewed MCP principals to create planning hierarchy", () => {
     expect(
       authorize({
         actor: service("sp_mcp_cursor"),
         capability: "bucket.create",
         resource: { type: "bucket", id: "BKT-1" },
       })
-    ).toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
+    ).toMatchObject({ allowed: true, reasonCode: "allowed" });
     expect(
       authorize({
         actor: service("sp_mcp_cursor"),
         capability: "project.create",
       })
-    ).toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
+    ).toMatchObject({ allowed: true, reasonCode: "allowed" });
   });
 
   it("denies sync.service.write for humans", () => {

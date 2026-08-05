@@ -23,13 +23,12 @@ export function evaluateContext(
     return "repository_mismatch";
   }
 
-  // Human-only planning mutations never succeed for service principals even if
-  // a future registry mistake listed them — defense in depth beside grants.
+  // Administrative mutations remain human-only even if a future registry
+  // mistake listed them. Reviewed agents may create hierarchy, but cannot edit
+  // it or manage permissions/approvals.
   if (
     actor.kind === "service" &&
-    (capability === "bucket.create" ||
-      capability === "bucket.update" ||
-      capability === "project.create" ||
+    (capability === "bucket.update" ||
       capability === "project.update" ||
       capability === "permissions.manage" ||
       capability === "repo.approve" ||

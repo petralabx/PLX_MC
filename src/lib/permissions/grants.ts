@@ -44,7 +44,7 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
   owner: OWNER_CAPABILITIES,
 };
 
-// Every per-agent MCP principal carries the same reviewed task/routing bundle;
+// Every per-agent MCP principal carries the same reviewed task/planning/routing bundle;
 // per-agent identity isolates credentials and audit, not capabilities.
 const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "task.read",
@@ -53,6 +53,8 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "task.progress",
   "task.complete",
   "task.link",
+  "bucket.create",
+  "project.create",
   "routing.suggest",
   "routing.propose",
   "routing.resolve",

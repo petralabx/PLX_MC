@@ -3,7 +3,16 @@
 import { ApiError } from "@/lib/api/route";
 import { checkout, complete } from "@/lib/compliance/service";
 import * as complianceRepo from "@/lib/compliance/repo";
-import { createTask, patchTask, snapshot, type CreateTaskInput } from "@/lib/sync";
+import {
+  createBucket,
+  createProject,
+  createTask,
+  patchTask,
+  snapshot,
+  type CreateBucketInput,
+  type CreateProjectInput,
+  type CreateTaskInput,
+} from "@/lib/sync";
 import { getEntity } from "@/lib/sync/repo";
 import { resolveHumanAccountableOwner, type Evidence, type Task } from "@/lib/mc-data";
 import { requireMcpActor } from "@/lib/routing/mutations/actors";
@@ -182,6 +191,46 @@ export async function actionCreateTask(identity: McpIdentity, input: CreateTaskI
     { source: "service", actorId: authorized.actorId }
   );
   return { task, taskId: task.id, link: taskLink(task.id), sync: await syncMetaForTask(task.id) };
+}
+
+export type CreateProjectActionInput = Omit<CreateProjectInput, "desc"> & {
+  description?: string;
+};
+
+export async function actionCreateProject(
+  identity: McpIdentity,
+  input: CreateProjectActionInput
+) {
+  requireMcpActor(identity, "project.create");
+  const { description, ...projectInput } = input;
+  const project = await createProject({
+    ...projectInput,
+    desc: description,
+    owner: input.owner ?? resolveHumanAccountableOwner(identity.operatorEmail),
+  });
+  return { project, projectId: project.id, sync: project.sync };
+}
+
+export type CreateBucketActionInput = Omit<CreateBucketInput, "desc"> & {
+  description?: string;
+};
+
+export async function actionCreateBucket(
+  identity: McpIdentity,
+  input: CreateBucketActionInput
+) {
+  requireMcpActor(
+    identity,
+    "bucket.create",
+    input.project ? { type: "project", id: input.project } : undefined
+  );
+  const { description, ...bucketInput } = input;
+  const bucket = await createBucket({
+    ...bucketInput,
+    desc: description,
+    owner: input.owner ?? resolveHumanAccountableOwner(identity.operatorEmail),
+  });
+  return { bucket, bucketId: bucket.id, sync: bucket.sync };
 }
 
 export async function actionCheckout(identity: McpIdentity, taskId: string) {

@@ -49,14 +49,17 @@ The kernel itself is pure and always callable for tests and gradual rollout.
 
 **MCP (TASK-619):** per-agent API keys (`PLX_MC_MCP_AGENT_KEYS`, JSON map of
 service principal id → key) authenticate durable per-agent principals
-(`sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_swarm`). The
+(`sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`,
+`sp_mcp_hermes`, `sp_mcp_swarm`). The
 legacy shared `PLX_MC_MCP_API_KEY` still resolves `sp_mcp_cursor` behind the
 `PLX_MC_MCP_SHARED_KEY_ENABLED` kill switch (set `0` to retire it). Ids outside
 the reviewed registry never authenticate. `X-MC-Operator-Email` is allowlisted
 audit/context only and never grants human capabilities. From `review` mode
 onward, MCP authentication loads the principal from `service_principals` and
 rejects missing or revoked records. Service capabilities always come from the
-reviewed versioned registry; callers cannot inject a capability list.
+reviewed versioned registry; callers cannot inject a capability list. The
+shared agent bundle includes project and bucket creation but not project/bucket
+updates, repository approval, or permission management.
 
 **Audit data (TASK-620):** every enforcement call site records `allowed`,
 `reasonCode`, and `policyVersion` to `permissions_decision_log` (migration 022)
@@ -82,6 +85,7 @@ concrete rule cannot be expressed that way.
 - `db/migrations/016_permissions_identities.sql` — durable identity tables
 - `db/migrations/022_permissions_decision_log.sql` — decision audit table
 - `db/migrations/023_mcp_agent_principals.sql` — per-agent MCP principals
+- `db/migrations/025_grok_hermes_mcp_principals.sql` — Grok/Hermes MCP principals
 - `src/lib/auth/identity.ts` — Entra `oid` session helpers + enforcement mode
 
 ## Dependencies

@@ -30,6 +30,8 @@ beforeEach(() => {
     JSON.stringify({
       sp_mcp_claude_code: "claude-key",
       sp_mcp_codex: "codex-key",
+      sp_mcp_grok: "grok-key",
+      sp_mcp_hermes: "hermes-key",
       sp_not_in_registry: "rogue-key",
     })
   );
@@ -45,6 +47,8 @@ describe("mcpAgentKeyRegistry", () => {
     const registry = mcpAgentKeyRegistry();
     expect(registry.get("sp_mcp_claude_code")).toBe("claude-key");
     expect(registry.get("sp_mcp_codex")).toBe("codex-key");
+    expect(registry.get("sp_mcp_grok")).toBe("grok-key");
+    expect(registry.get("sp_mcp_hermes")).toBe("hermes-key");
     expect([...registry.keys()]).not.toContain("sp_not_in_registry");
   });
 
@@ -58,6 +62,8 @@ describe("resolveMcpPrincipalIdFromKey", () => {
   it("maps each per-agent key to its own principal", () => {
     expect(resolveMcpPrincipalIdFromKey("claude-key")).toBe("sp_mcp_claude_code");
     expect(resolveMcpPrincipalIdFromKey("codex-key")).toBe("sp_mcp_codex");
+    expect(resolveMcpPrincipalIdFromKey("grok-key")).toBe("sp_mcp_grok");
+    expect(resolveMcpPrincipalIdFromKey("hermes-key")).toBe("sp_mcp_hermes");
   });
 
   it("maps the legacy shared key to sp_mcp_cursor while enabled", () => {

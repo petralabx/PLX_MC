@@ -5,6 +5,8 @@ import { z } from "zod";
 import { SKILL_ID_PATTERN } from "@/lib/skills-directory";
 import type { McpIdentity } from "./auth";
 import {
+  actionCreateBucket,
+  actionCreateProject,
   actionCheckout,
   actionComplete,
   actionCreateTask,
@@ -44,7 +46,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     },
     {
       instructions:
-        "PLX Mission Control MCP — task lifecycle (checkout/progress/complete), routing suggestions (mc_suggest_work), skills directory install/sync/submit, and optional swarm delegation. " +
+        "PLX Mission Control MCP — project/bucket creation, task lifecycle (checkout/progress/complete), routing suggestions (mc_suggest_work), skills directory install/sync/submit, and optional swarm delegation. " +
         "Prefer mc_suggest_work when the Task is unknown; always mc_checkout_task before agent work; append MC-Checkout stamp lines to PR bodies.",
     }
   );
@@ -85,6 +87,39 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         meta: { filter: result.filter },
       });
     }
+  );
+
+  server.tool(
+    "mc_create_project",
+    "Create a Mission Control project. repos[] uses MC registry ids; the project is queued for the SharePoint Projects mirror.",
+    {
+      name: z.string().min(1),
+      description: z.string().optional(),
+      owner: z.string().min(1).optional(),
+      health: z.enum(["track", "risk", "off"]).optional(),
+      target: z.string().optional(),
+      started: z.string().optional(),
+      repos: z.array(z.string()).optional(),
+      prd: z.string().nullable().optional(),
+    },
+    async (body) => jsonResult(await actionCreateProject(identity, body))
+  );
+
+  server.tool(
+    "mc_create_bucket",
+    "Create a Mission Control bucket/initiative, optionally under an existing project. repos[] uses MC registry ids; the bucket is queued for the SharePoint Roadmap mirror.",
+    {
+      name: z.string().min(1),
+      description: z.string().optional(),
+      owner: z.string().min(1).optional(),
+      health: z.enum(["track", "risk", "off"]).optional(),
+      target: z.string().optional(),
+      started: z.string().optional(),
+      repos: z.array(z.string()).optional(),
+      prd: z.string().nullable().optional(),
+      project: z.string().nullable().optional().describe("Existing Mission Control project id"),
+    },
+    async (body) => jsonResult(await actionCreateBucket(identity, body))
   );
 
   server.tool(

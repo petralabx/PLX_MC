@@ -85,7 +85,7 @@ const server = new McpServer(
   { name: "PLX-MC", version: "1.0.0" },
   {
     instructions:
-      "PLX Mission Control — checkout tasks (mc_checkout_task), suggest work (mc_suggest_work), report progress, complete with evidence, " +
+      "PLX Mission Control — create projects/buckets, checkout tasks (mc_checkout_task), suggest work (mc_suggest_work), report progress, complete with evidence, " +
       "manage the PLX skills directory, and optionally dispatch_to_swarm. Prefer mc_suggest_work when Task ID is unknown. Append MC-Checkout lines from checkout responses to PR bodies.",
   }
 );
@@ -135,6 +135,45 @@ server.tool(
     if (args.stage) qs.set("stage", args.stage);
     if (args.limit) qs.set("limit", String(args.limit));
     return printResult(await mcFetch(`/tasks?${qs.toString()}`));
+  }
+);
+
+server.tool(
+  "mc_create_project",
+  "Create a Mission Control project. repos[] uses MC registry ids; the project is queued for the SharePoint Projects mirror.",
+  {
+    name: z.string().min(1),
+    description: z.string().optional(),
+    owner: z.string().min(1).optional(),
+    health: z.enum(["track", "risk", "off"]).optional(),
+    target: z.string().optional(),
+    started: z.string().optional(),
+    repos: z.array(z.string()).optional(),
+    prd: z.string().nullable().optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_create_project");
+    return printResult(await mcFetch("/projects", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_create_bucket",
+  "Create a Mission Control bucket/initiative, optionally under an existing project. repos[] uses MC registry ids; the bucket is queued for the SharePoint Roadmap mirror.",
+  {
+    name: z.string().min(1),
+    description: z.string().optional(),
+    owner: z.string().min(1).optional(),
+    health: z.enum(["track", "risk", "off"]).optional(),
+    target: z.string().optional(),
+    started: z.string().optional(),
+    repos: z.array(z.string()).optional(),
+    prd: z.string().nullable().optional(),
+    project: z.string().nullable().optional().describe("Existing Mission Control project id"),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_create_bucket");
+    return printResult(await mcFetch("/buckets", { method: "POST", body }));
   }
 );
 

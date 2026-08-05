@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 import { parseBody, route } from "@/lib/api/route";
+import { requireSessionActor } from "@/lib/routing/mutations/actors";
 import { createProject } from "@/lib/sync";
 
 const createProjectSchema = z.object({
@@ -17,4 +18,8 @@ const createProjectSchema = z.object({
   prd: z.string().nullable().optional(),
 });
 
-export const POST = route(async (req) => createProject(await parseBody(req, createProjectSchema)));
+export const POST = route(async (req) => {
+  const body = await parseBody(req, createProjectSchema);
+  const authorized = await requireSessionActor("project.create");
+  return createProject(body, authorized.auditLabel);
+});

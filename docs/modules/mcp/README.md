@@ -63,9 +63,9 @@ Vince; an owner already on the task is never replaced.
 
 **Routing suggestion:** `mc_suggest_work` authorizes `routing.suggest` for the
 resolved durable MCP service principal (`sp_mcp_cursor`,
-`sp_mcp_claude_code`, `sp_mcp_codex`, or `sp_mcp_swarm`). Operator email is
-admission/audit context only and never grants human capabilities. Returns
-`routingSessionId` (`rtx_*`), top
+`sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`, `sp_mcp_hermes`, or
+`sp_mcp_swarm`). Operator email is admission/audit context only and never
+grants human capabilities. Returns `routingSessionId` (`rtx_*`), top
 candidates with reasons and deep links, and `MC-Routing: rtx_*` — without creating
 or linking Tasks. Modular registration (`registerRoutingTools`) leaves a seam for
 later confirmed-mutation tools (P8).

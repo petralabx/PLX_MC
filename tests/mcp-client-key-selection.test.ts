@@ -22,9 +22,10 @@ describe("MCP client principal selection", () => {
       "sp_mcp_claude_code"
     );
     expect(resolveMcpPrincipalId({ MC_RUNTIME: "hermes" })).toBe(
-      "sp_mcp_claude_code"
+      "sp_mcp_hermes"
     );
     expect(resolveMcpPrincipalId({ MC_RUNTIME: "codex" })).toBe("sp_mcp_codex");
+    expect(resolveMcpPrincipalId({ MC_RUNTIME: "grok" })).toBe("sp_mcp_grok");
     expect(resolveMcpPrincipalId({ MC_RUNTIME: "swarm" })).toBe("sp_mcp_swarm");
     expect(
       resolveMcpPrincipalId({

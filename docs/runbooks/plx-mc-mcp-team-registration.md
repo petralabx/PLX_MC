@@ -51,7 +51,7 @@ Cloud user broader write access.
 | Command | `npx` |
 | Args | `tsx tools/plx-mc-mcp/index.ts` |
 | `MC_BASE_URL` | `https://mc.plxcustomer.io` |
-| `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, or `sp_mcp_swarm` |
+| `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`, `sp_mcp_hermes`, or `sp_mcp_swarm` |
 | `MC_MCP_API_KEY` | key for that exact principal: shared compatibility key only for `sp_mcp_cursor`; otherwise the matching entry in the dedicated registry |
 | `MC_OPERATOR_EMAIL` | allowlisted `@petrasoap.com` operator — **agents:** `cos@petrasoap.com`; **human:** `vince@petrasoap.com` |
 | `MC_REPO` | target repo slug (e.g. `petralabx/plx-customer-portal`) |
@@ -59,11 +59,11 @@ Cloud user broader write access.
 | `SWARM_DISPATCH_ENABLED` | `0` until swarm is needed |
 
 Known launcher runtimes map automatically: `cursor`/`cursor-cloud` →
-`sp_mcp_cursor`, `claude`/`claude-code`/`hermes` →
-`sp_mcp_claude_code`, `codex` → `sp_mcp_codex`, and `swarm` →
-`sp_mcp_swarm`. Set `MC_MCP_PRINCIPAL_ID` explicitly for generic runtime names
-such as `local`. If a dedicated principal is selected but absent from the
-registry, startup fails; it never borrows the shared Cursor key.
+`sp_mcp_cursor`, `claude`/`claude-code` → `sp_mcp_claude_code`, `codex` →
+`sp_mcp_codex`, `grok` → `sp_mcp_grok`, `hermes` → `sp_mcp_hermes`, and
+`swarm` → `sp_mcp_swarm`. Set `MC_MCP_PRINCIPAL_ID` explicitly for generic
+runtime names such as `local`. If a dedicated principal is selected but absent
+from the registry, startup fails; it never borrows the shared Cursor key.
 
 ### Windows workstation (Cursor shell env unreliable)
 

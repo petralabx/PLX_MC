@@ -169,7 +169,7 @@ integrations:
       migration downgrade to bare-name checkout matching, not normal rollback.
     auth_source:
       - Entra OIDC sessions (human Routing Inbox / decide APIs) — durable oid
-      - MCP service principals sp_mcp_cursor (shared compatibility key) plus sp_mcp_claude_code, sp_mcp_codex, and sp_mcp_swarm (dedicated PLX_MC_MCP_AGENT_KEYS registry)
+      - MCP service principals sp_mcp_cursor (shared compatibility key) plus sp_mcp_claude_code, sp_mcp_codex, sp_mcp_grok, sp_mcp_hermes, and sp_mcp_swarm (dedicated PLX_MC_MCP_AGENT_KEYS registry)
       - GitHub Actions OIDC principal sp_github_actions_routing (metadata propose) — exact https://mc.plxcustomer.io destination validated before audience plx-mc-compliance-verify
       - Compliance OIDC binds repoFullName to the signed repository claim; new generated callers send full + legacy bare names during the dated shim
       - GitHub Actions selected-repo org variables managed by org-admin keyring OAuth; a fine-grained repo PAT may lack org-variable administration; secrets.PLX_MC_BASE_URL is legacy URL fallback only

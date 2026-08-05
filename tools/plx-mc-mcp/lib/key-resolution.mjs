@@ -2,6 +2,8 @@ const SUPPORTED_MCP_PRINCIPAL_IDS = new Set([
   "sp_mcp_cursor",
   "sp_mcp_claude_code",
   "sp_mcp_codex",
+  "sp_mcp_grok",
+  "sp_mcp_hermes",
   "sp_mcp_swarm",
 ]);
 
@@ -10,8 +12,9 @@ const RUNTIME_PRINCIPAL_IDS = new Map([
   ["cursor-cloud", "sp_mcp_cursor"],
   ["claude", "sp_mcp_claude_code"],
   ["claude-code", "sp_mcp_claude_code"],
-  ["hermes", "sp_mcp_claude_code"],
+  ["hermes", "sp_mcp_hermes"],
   ["codex", "sp_mcp_codex"],
+  ["grok", "sp_mcp_grok"],
   ["swarm", "sp_mcp_swarm"],
 ]);
 

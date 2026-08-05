@@ -16,6 +16,17 @@
 
 ## Lessons
 
+### 2026-08-05 (ET) — Immediate AWSCURRENT readback can misclassify a secret write
+
+- **What happened:** A multi-secret MCP registry update passed both writes but
+  failed its immediate readback invariant, so the compensating rollback ran.
+- **Root cause:** Verification fetched `AWSCURRENT` immediately instead of the
+  exact version IDs returned by `PutSecretValue`, making propagation timing
+  indistinguishable from a bad write.
+- **Rule going forward:** Verify each Secrets Manager write first by its returned
+  `VersionId`, then poll `AWSCURRENT` for activation; keep compensating rollback
+  for any failed content or preservation invariant.
+
 ### 2026-07-31 (ET) — complete() ok is not gate success (local-inference#11)
 
 - **What happened:** Cloud Agent stamped `MC-Checkout` from `PLX-MC-Portal` onto

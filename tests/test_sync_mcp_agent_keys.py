@@ -59,6 +59,19 @@ def test_registry_requires_claude_principal() -> None:
         sync.validate_registry(json.dumps({"sp_mcp_codex": "codex-secret"}))
 
 
+def test_registry_rejects_unreviewed_principal() -> None:
+    sync = load_script()
+    with pytest.raises(sync.SyncError, match="registry_principal_unreviewed"):
+        sync.validate_registry(
+            json.dumps(
+                {
+                    "sp_mcp_claude_code": "claude-secret",
+                    "sp_mcp_unreviewed": "rogue-secret",
+                }
+            )
+        )
+
+
 def test_vercel_upsert_is_sensitive_and_production_only() -> None:
     sync = load_script()
     session = FakeSession(
@@ -111,7 +124,15 @@ def test_provider_error_does_not_echo_response_body() -> None:
 
 def test_main_reports_only_redacted_evidence(monkeypatch, capsys) -> None:
     sync = load_script()
-    registry = '{"sp_mcp_claude_code":"claude-secret"}'
+    registry = json.dumps(
+        {
+            "sp_mcp_claude_code": "claude-secret",
+            "sp_mcp_codex": "codex-secret",
+            "sp_mcp_grok": "grok-secret",
+            "sp_mcp_hermes": "hermes-secret",
+            "sp_mcp_swarm": "swarm-secret",
+        }
+    )
     compatibility = json.dumps(
         {
             "PLX_MC_MCP_AGENT_KEYS": '{"sp_mcp_claude_code":"stale-mirror-secret"}',
@@ -164,6 +185,10 @@ def test_main_reports_only_redacted_evidence(monkeypatch, capsys) -> None:
     assert sync.main() == 0
     output = capsys.readouterr().out
     assert "claude-secret" not in output
+    assert "codex-secret" not in output
+    assert "grok-secret" not in output
+    assert "hermes-secret" not in output
+    assert "swarm-secret" not in output
     assert "stale-mirror-secret" not in output
     assert "shared-secret" not in output
     assert "vercel-secret" not in output
@@ -171,4 +196,8 @@ def test_main_reports_only_redacted_evidence(monkeypatch, capsys) -> None:
     assert "vercel_env_sensitive_production=True" in output
     assert "production_domain_active=True" in output
     assert "claude_identity_ok=True" in output
+    assert "codex_identity_ok=True" in output
+    assert "grok_identity_ok=True" in output
+    assert "hermes_identity_ok=True" in output
+    assert "swarm_identity_ok=True" in output
     assert "shared_identity_ok=True" in output

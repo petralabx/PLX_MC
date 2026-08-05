@@ -96,7 +96,18 @@ try {
     if (result.isError) {
       fail(`mc_self_check returned an error: ${text.slice(0, 400)}`);
     } else {
-      console.log(`mc_self_check ok: ${text.slice(0, 200)}`);
+      const expectedPrincipalId = env.MC_MCP_PRINCIPAL_ID?.trim();
+      const payload = JSON.parse(text);
+      const actualPrincipalId = payload?.meta?.actor?.servicePrincipalId;
+      if (expectedPrincipalId && actualPrincipalId !== expectedPrincipalId) {
+        fail(
+          `mc_self_check principal mismatch: expected ${expectedPrincipalId}, got ${actualPrincipalId ?? "missing"}`
+        );
+      } else {
+        console.log(
+          `mc_self_check ok: principal=${actualPrincipalId ?? "unreported"}`
+        );
+      }
     }
   } else {
     console.log("mc_self_check skipped (no --auth; handshake and registration were still asserted)");

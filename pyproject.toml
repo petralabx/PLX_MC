@@ -1,0 +1,14 @@
+[project]
+name = "plx-mission-control-governance"
+version = "0.1.0"
+description = "Governance and verification tooling for PLX Mission Control"
+requires-python = ">=3.12"
+dependencies = [
+  "boto3==1.43.59",
+  "jsonschema==4.26.0",
+  "pre-commit==4.6.0",
+  "pytest==9.0.3",
+  "pyyaml==6.0.3",
+  "requests==2.32.5",
+  "ruff==0.15.16",
+]

@@ -27,6 +27,9 @@ design-system/
 ├── PRIMITIVE-BOARD.md                 ← durable review board for extracted primitives
 ├── REFERENCE.md                       ← pointers to the HTML design artifacts
 ├── COMPONENT-INVENTORY.md             ← shadcn audit + brand component catalog
+├── EMAIL.md                           ← email standard index (MC reference)
+├── EMAIL-STYLE-SOP.md                 ← transactional + ops/agent email brand SOP (v1.1)
+├── plx-email-standard.html            ← visual email standard (open in browser)
 ├── source-snapshot/                   ← responsive handoff source snapshot
 └── decisions/
     ├── ADR-001-brand-vocabulary.md    ← why serif + mono + folio chassis
@@ -37,12 +40,15 @@ Read in this order: **README -> ADR-001 -> ADR-002 -> MIGRATION-PLAN or MRP-MIGR
 
 For MRP responsive work, read **PROMPT -> RESPONSIVE -> CONTRIBUTING -> MRP-REFERENCE -> MRP-MIGRATION** before touching production routes.
 
+For **email** (including agent Graph sends), read **EMAIL.md → EMAIL-STYLE-SOP.md** and open `plx-email-standard.html`. Implementation lives in the Portal repo (`email-theme.ts`).
+
 ### Surfaces Covered
 
 | Surface | Audience | Reference | Migration |
 |---|---|---|---|
 | Portal | Customers and brand owners | `REFERENCE.md` | `MIGRATION-PLAN.md` |
 | MRP | PLX staff and internal operations | `MRP-REFERENCE.md` | `MRP-MIGRATION.md` |
+| Email | Customers, suppliers, staff, ops/agent Graph | `EMAIL.md` + `EMAIL-STYLE-SOP.md` | Portal: `portal/src/lib/notifications/email-theme.ts` |
 | Homepage | Public marketing visitors | `HOMEPAGE-SCOPE.md` | Sibling track, not part of Portal/MRP rollout |
 
 ---

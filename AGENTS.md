@@ -4,6 +4,17 @@
      runtimes (Cursor, Claude Code, Codex, ...) read it on every session.
      Keep it current; it outranks any other description of the system. -->
 
+## Email brand standard (every agent send)
+
+When any agent (Cursor, Cloud, Claude, Grok) composes or sends PLX email:
+
+- Read [`docs/design-system/EMAIL.md`](docs/design-system/EMAIL.md) and
+  [`docs/design-system/EMAIL-STYLE-SOP.md`](docs/design-system/EMAIL-STYLE-SOP.md).
+- Open the visual reference [`docs/design-system/plx-email-standard.html`](docs/design-system/plx-email-standard.html).
+- **Implementation** lives in `petralabx/plx-customer-portal` —
+  `portal/src/lib/notifications/email-theme.ts` (`emailShell` + helpers). Never hand-roll HTML.
+- Transport skill: `plx-graph-mail` (validate before send; From `cos@petrasoap.com` unless overridden).
+
 ## System Overview
 
 PLX Mission Control is the human cockpit over Petra Lab-X's background agents:

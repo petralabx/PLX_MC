@@ -23,14 +23,22 @@ export function evidenceCompleteForTier(
   const req = bundleRequirementsFor(tier);
   const missing: string[] = [];
 
-  if (!ev || !ev.summary.trim()) missing.push("an evidence summary");
+  // Reasons name the FIELD to send, not the abstract artifact. The checklist is
+  // derived in actionComplete from verificationCommands + rollback, so "missing
+  // a complete evidence checklist" sent readers hunting for an `items` field
+  // that no caller supplies. Say what to do instead.
+  if (!ev || !ev.summary.trim()) missing.push("an evidence summary (send `summary`)");
   if (req.evidence === "minimal") return { ok: missing.length === 0, missing };
 
   const checklistComplete = !!ev && ev.items.length > 0 && ev.items.every((i) => i.done);
-  if (!checklistComplete) missing.push("a complete evidence checklist");
-  if (req.rollback && !ev?.rollback?.trim()) missing.push("a rollback plan");
+  if (!checklistComplete) {
+    missing.push(
+      "a complete evidence checklist (send `verificationCommands` and `rollback` to mc_complete_task; the checklist is derived from them)"
+    );
+  }
+  if (req.rollback && !ev?.rollback?.trim()) missing.push("a rollback plan (send `rollback`)");
   if (req.evidence === "full" && !(ev?.shots?.length || ev?.qa)) {
-    missing.push("change-appropriate proof (screenshots or a test run)");
+    missing.push("change-appropriate proof (send `testRun` or `shots`)");
   }
   return { ok: missing.length === 0, missing };
 }

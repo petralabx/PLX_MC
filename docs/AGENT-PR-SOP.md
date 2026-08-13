@@ -63,6 +63,11 @@ Canonical fleet governance list: `config/tracked-repos-registry.json` (org: **`p
 The first eight rows are the active fleet. `test-perms-check` is an excluded
 pending-adoption sandbox, not a routing cohort.
 
+**M365 identities:** SSO, daemon Graph, RBAC apply, and Office Nested App Auth
+are separate Entra apps. Do not put `brk-multihub://` on `PLX_Cursor_Graph`.
+Catalog: [`docs/runbooks/M365-IDENTITY-CATALOG.md`](runbooks/M365-IDENTITY-CATALOG.md)
+(fleet) and portal `docs/runbooks/M365-IDENTITY-CATALOG.md` (operator Entra steps).
+
 Company skills catalog: **`petralabx/skills`** pinned at tag **`v1.4.1`** via `config/skills-catalog.json`. Legacy `taylorvalton/plx-cursor-skills` v1.0.0 is deprecated — bootstrap from `petralabx/skills` per [`SKILLS-SOP.md`](SKILLS-SOP.md).
 
 ---

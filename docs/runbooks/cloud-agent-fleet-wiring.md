@@ -88,8 +88,9 @@ that pattern on Cloud and never point Cloud dev servers at prod RDS.
 After team rules + Team MCP are saved:
 
 1. Start a new Cloud Agent on the shared multi-repo environment.
-2. Confirm always-applied rules include the five fleet slices from
-   `config/cloud-agent-fleet-always-apply.md` (including Rule 5 — gate closeout).
+2. Confirm always-applied rules include the fleet slices from
+   `config/cloud-agent-fleet-always-apply.md` (including Rule 5 — gate closeout
+   and Rule 6 — M365 identity separation).
 3. Confirm the target repo's MCP catalog is non-empty. If Team attachment is
    empty, use the inline launch path above and record the Team attach failure.
 4. Call `mc_self_check` → `ok: true`, `mcpEnabled: true`.
@@ -100,6 +101,10 @@ After team rules + Team MCP are saved:
 
 Record results in  
 `artifacts/platform/2026-07-24-ds-gov-cloud-enforcement/CLOUD-WIRING-VERDICT.md`.
+
+Do **not** inject `PLX_Cursor_Graph` into a Cloud VM or Office task pane to
+unlock Outlook. Office add-ins use the public Nested App Auth SPA in
+[`M365-IDENTITY-CATALOG.md`](./M365-IDENTITY-CATALOG.md).
 
 ## Rollback
 

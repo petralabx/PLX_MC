@@ -145,6 +145,17 @@ run_policy() {
 
   step "Migration numbering (serialized prefixes)"
   "$PY" scripts/check-migrations.py
+
+  step "Workstation secrets-loader drift (host-local; skips where absent)"
+  # Exit codes: 0 clean, 1 drift, 2 no loader on this host.
+  # CI runners and servers have no ~/.secrets-env.staging.ps1, so 2 is the
+  # normal result there and must not fail the gate. Only a real drift (1)
+  # blocks. Anything above 2 is an unexpected error and still blocks.
+  loader_drift_rc=0
+  "$PY" scripts/check-workstation-loader-drift.py || loader_drift_rc=$?
+  if [[ "$loader_drift_rc" -eq 1 || "$loader_drift_rc" -gt 2 ]]; then
+    exit "$loader_drift_rc"
+  fi
 }
 
 # ---------------------------------------------------------------------------

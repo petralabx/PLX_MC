@@ -136,6 +136,23 @@ force a green check.
 
 ---
 
+## Rule 6 — M365 identity separation
+
+```markdown
+# Cross-Repo M365 Identity Catalog
+Version: cursor-cloud-team-rules.v1
+
+SSO, daemon Graph, RBAC apply, and Office Nested App Auth are separate Entra
+apps. Do not put `brk-multihub://` or a public SPA on `PLX_Cursor_Graph` or a
+NextAuth SSO app. Office add-ins use `PLX Office Add-ins` (public client, no
+secret). Agents cannot create Entra apps.
+
+Canonical: `plx-customer-portal` `docs/runbooks/M365-IDENTITY-CATALOG.md`
+Fleet: `PLX_MC` `docs/runbooks/M365-IDENTITY-CATALOG.md`
+```
+
+---
+
 ## Explicitly out of fleet always-apply
 
 | Topic | Where it lives |

@@ -5,6 +5,10 @@ Retire the broad app-only Graph roles in favor of `Sites.Selected` scoped to
 drift audit: `scripts/audit-graph-app-permissions.mjs`.
 Owner: Vince (accountable: cos@petrasoap.com).
 
+This is **Mission Control's** Graph daemon only. Portal SSO, `PLX_Cursor_Graph`,
+and Office Nested App Auth are different registrations. Fleet policy:
+[`M365-IDENTITY-CATALOG.md`](./M365-IDENTITY-CATALOG.md).
+
 ## Current vs target
 
 - Current (transitional): `Sites.ReadWrite.All` — tenant-wide write to every

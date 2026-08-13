@@ -35,6 +35,8 @@ test status → merge commit). The full product spec lives in
      [`docs/runbooks/plx-mc-mcp-team-registration.md`](docs/runbooks/plx-mc-mcp-team-registration.md)
    - Company skills install: [`docs/SKILLS-SOP.md`](docs/SKILLS-SOP.md) (MCP ≠
      skills installed).
+   - M365 identities (do not mix SSO / Graph daemon / Office NAA):
+     [`docs/runbooks/M365-IDENTITY-CATALOG.md`](docs/runbooks/M365-IDENTITY-CATALOG.md)
 
 ## Stack
 

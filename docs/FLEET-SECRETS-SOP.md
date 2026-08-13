@@ -251,6 +251,7 @@ mode confirms end-to-end wiring before flipping to `hard`.
 | Gate generator | `scripts/generate-compliance-gate.py` |
 | Tracked-repo scaffold | `scripts/scaffold-tracked-repo.sh` |
 | Windows secrets bootstrap | `scripts/bootstrap-windows-secrets.py` |
+| Workstation loader drift check | `scripts/check-workstation-loader-drift.py` |
 | Governance contract (integrations) | `config/governance-contract.yaml` |
 
 For activation history, OIDC dogfood order, and reconciliation cron:

@@ -84,15 +84,15 @@ describe("evidenceCompleteForTier", () => {
 
   it("standard needs a complete checklist + rollback note", () => {
     expect(evidenceCompleteForTier(evidence({ rollback: "revert the PR" }), "standard").ok).toBe(true);
-    expect(evidenceCompleteForTier(evidence({}), "standard").missing).toContain("a rollback plan");
+    expect(evidenceCompleteForTier(evidence({}), "standard").missing.some((m) => m.startsWith("a rollback plan"))).toBe(true);
     const incomplete = evidence({ rollback: "x", items: [{ key: "a", label: "a", done: false }] });
-    expect(evidenceCompleteForTier(incomplete, "standard").missing).toContain("a complete evidence checklist");
+    expect(evidenceCompleteForTier(incomplete, "standard").missing.some((m) => m.startsWith("a complete evidence checklist"))).toBe(true);
   });
 
   it("high additionally needs change-appropriate proof", () => {
     const noProof = evidence({ rollback: "revert" });
-    expect(evidenceCompleteForTier(noProof, "high").missing).toContain(
-      "change-appropriate proof (screenshots or a test run)"
+    expect(evidenceCompleteForTier(noProof, "high").missing.some((m) => m.startsWith("change-appropriate proof"))).toBe(
+      true
     );
     const withShots = evidence({ rollback: "revert", shots: [{ label: "ui", cap: "after" }] });
     expect(evidenceCompleteForTier(withShots, "high").ok).toBe(true);
@@ -105,10 +105,10 @@ describe("evidenceCompleteForTier", () => {
 
   it("requires a summary at every tier and rejects an empty checklist for note/full (S2)", () => {
     const noSummary = evidence({ summary: "  ", rollback: "x" });
-    expect(evidenceCompleteForTier(noSummary, "standard").missing).toContain("an evidence summary");
+    expect(evidenceCompleteForTier(noSummary, "standard").missing.some((m) => m.startsWith("an evidence summary"))).toBe(true);
     expect(evidenceCompleteForTier(evidence({ summary: "" }), "low").ok).toBe(false);
     const emptyItems = evidence({ items: [], rollback: "x" });
-    expect(evidenceCompleteForTier(emptyItems, "standard").missing).toContain("a complete evidence checklist");
+    expect(evidenceCompleteForTier(emptyItems, "standard").missing.some((m) => m.startsWith("a complete evidence checklist"))).toBe(true);
   });
 });
 

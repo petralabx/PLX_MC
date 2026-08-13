@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { actionCreateBucket } from "@/lib/mcp/actions";
+import { actionCreateBucket, actionListBuckets } from "@/lib/mcp/actions";
 import { cursorRoute, parseCursorBody } from "@/lib/mcp/route";
 
 const createBucketSchema = z.object({
@@ -19,5 +19,14 @@ export const POST = cursorRoute("mc_create_bucket", async (req, _ctx, identity) 
     identity,
     await parseCursorBody(req, createBucketSchema)
   );
+  return { data: result };
+});
+
+export const GET = cursorRoute("mc_list_buckets", async (req, _ctx, identity) => {
+  const params = new URL(req.url).searchParams;
+  const result = await actionListBuckets(identity, {
+    q: params.get("q") ?? undefined,
+    project: params.get("project") ?? undefined,
+  });
   return { data: result };
 });

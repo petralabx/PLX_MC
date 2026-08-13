@@ -11,6 +11,7 @@ import {
   actionComplete,
   actionCreateTask,
   actionGetContext,
+  actionListBuckets,
   actionProgress,
   actionSearchTasks,
   actionSelfCheck,
@@ -103,6 +104,16 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
       prd: z.string().nullable().optional(),
     },
     async (body) => jsonResult(await actionCreateProject(identity, body))
+  );
+
+  server.tool(
+    "mc_list_buckets",
+    "Discover valid BKT-* bucket ids and minimal ownership/project metadata before creating tasks or buckets.",
+    {
+      q: z.string().optional().describe("Case-insensitive match against bucket id or name"),
+      project: z.string().optional().describe("Exact parent project id"),
+    },
+    async (args) => jsonResult(await actionListBuckets(identity, args))
   );
 
   server.tool(

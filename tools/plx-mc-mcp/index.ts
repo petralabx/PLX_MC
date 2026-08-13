@@ -158,6 +158,23 @@ server.tool(
 );
 
 server.tool(
+  "mc_list_buckets",
+  "Discover valid BKT-* bucket ids and minimal ownership/project metadata before creating tasks or buckets.",
+  {
+    q: z.string().optional().describe("Case-insensitive match against bucket id or name"),
+    project: z.string().optional().describe("Exact parent project id"),
+  },
+  async ({ q, project }) => {
+    if (!MCP_ENABLED) return disabledTool("mc_list_buckets");
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (project) params.set("project", project);
+    const query = params.size ? `?${params.toString()}` : "";
+    return printResult(await mcFetch(`/buckets${query}`));
+  }
+);
+
+server.tool(
   "mc_create_bucket",
   "Create a Mission Control bucket/initiative, optionally under an existing project. repos[] uses MC registry ids; the bucket is queued for the SharePoint Roadmap mirror.",
   {

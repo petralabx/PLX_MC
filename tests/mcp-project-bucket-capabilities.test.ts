@@ -20,7 +20,7 @@ const stdioMcpSource = readFileSync(
 
 describe("MCP project and bucket creation capability", () => {
   it("registers project and bucket creation in both MCP transports", () => {
-    for (const tool of ["mc_create_project", "mc_create_bucket"]) {
+    for (const tool of ["mc_create_project", "mc_create_bucket", "mc_list_buckets"]) {
       expect(httpMcpSource).toContain(`"${tool}"`);
       expect(stdioMcpSource).toContain(`"${tool}"`);
     }

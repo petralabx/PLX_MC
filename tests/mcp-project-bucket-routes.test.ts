@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createBucket: vi.fn(),
   createProject: vi.fn(),
+  listBuckets: vi.fn(),
 }));
 
 vi.stubEnv("PLX_MC_MCP_ENABLED", "1");
@@ -18,9 +19,10 @@ vi.mock("@/lib/mcp/audit", () => ({
 vi.mock("@/lib/mcp/actions", () => ({
   actionCreateBucket: mocks.createBucket,
   actionCreateProject: mocks.createProject,
+  actionListBuckets: mocks.listBuckets,
 }));
 
-import { POST as createBucket } from "@/app/api/cursor/buckets/route";
+import { GET as listBuckets, POST as createBucket } from "@/app/api/cursor/buckets/route";
 import { POST as createProject } from "@/app/api/cursor/projects/route";
 
 const ctx = { params: Promise.resolve({} as Record<string, string>) };
@@ -51,6 +53,10 @@ beforeEach(() => {
     bucket: { id: "BKT-PWA-SPIKE" },
     bucketId: "BKT-PWA-SPIKE",
     sync: { state: "pending" },
+  });
+  mocks.listBuckets.mockResolvedValue({
+    buckets: [{ id: "BKT-ALPHA", name: "Alpha initiative", owner: "alice", health: "track", project: "PRJ-MAIN" }],
+    count: 1,
   });
 });
 
@@ -108,5 +114,30 @@ describe("cursor project and bucket creation routes", () => {
 
     expect(response.status).toBe(400);
     expect(mocks.createProject).not.toHaveBeenCalled();
+  });
+
+  it("lists buckets through the authenticated envelope and forwards filters", async () => {
+    const response = await listBuckets(
+      new Request("http://localhost/api/cursor/buckets?q=alpha&project=PRJ-MAIN", {
+        headers: {
+          "x-api-key": "test-mcp-key",
+          "x-mc-operator-email": "vince@petrasoap.com",
+          "x-mc-repo": "petralabx/PLX_MC",
+          "x-mc-runtime": "cursor",
+          "x-mc-worker-id": "hierarchy-test",
+        },
+      }),
+      ctx
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.listBuckets).toHaveBeenCalledWith(
+      expect.objectContaining({ servicePrincipalId: "sp_mcp_cursor" }),
+      { q: "alpha", project: "PRJ-MAIN" }
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      data: { count: 1, buckets: [{ id: "BKT-ALPHA" }] },
+      meta: { audit: { kinds: ["mc_list_buckets", "mcp.tool.invoked"] } },
+    });
   });
 });

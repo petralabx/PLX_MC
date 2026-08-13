@@ -13,7 +13,7 @@ import {
   type CreateProjectInput,
   type CreateTaskInput,
 } from "@/lib/sync";
-import { getEntity } from "@/lib/sync/repo";
+import { getBuckets, getEntity } from "@/lib/sync/repo";
 import { resolveHumanAccountableOwner, type Evidence, type Task } from "@/lib/mc-data";
 import { requireMcpActor } from "@/lib/routing/mutations/actors";
 import type { McpIdentity } from "./auth";
@@ -231,6 +231,36 @@ export async function actionCreateBucket(
     owner: input.owner ?? resolveHumanAccountableOwner(identity.operatorEmail),
   });
   return { bucket, bucketId: bucket.id, sync: bucket.sync };
+}
+
+export async function actionListBuckets(
+  identity: McpIdentity,
+  input: { q?: string; project?: string } = {}
+) {
+  // Listing is available only to principals already trusted to create buckets.
+  // This keeps discovery inside the existing reviewed capability surface.
+  requireMcpActor(identity, "bucket.create");
+
+  const query = input.q?.trim().toLowerCase();
+  const buckets = (await getBuckets())
+    .filter((bucket) => {
+      const matchesQuery =
+        !query ||
+        bucket.id.toLowerCase().includes(query) ||
+        bucket.name.toLowerCase().includes(query);
+      const matchesProject = !input.project || bucket.project === input.project;
+      return matchesQuery && matchesProject;
+    })
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map(({ id, name, owner, health, project }) => ({
+      id,
+      name,
+      owner,
+      health,
+      project: project ?? null,
+    }));
+
+  return { buckets, count: buckets.length };
 }
 
 export async function actionCheckout(identity: McpIdentity, taskId: string) {

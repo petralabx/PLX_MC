@@ -16,6 +16,27 @@
 
 ## Lessons
 
+### 2026-08-15 (ET) — Opening the PR before complete() loses the hard gate race
+
+- **What happened:** `petralabx/skills` PR #29 stamped a valid
+  `petralabx/skills` checkout (`dsp_msuaaaxyikec4x` / TASK-1045) and
+  `mc_complete_task` later returned ok, but the hard `compliance` check
+  BLOCKED: missing summary, checklist, and rollback. A rerun after evidence
+  landed went green.
+- **Root cause:** The PR was opened first. Actions verify ran against empty
+  `task.evidence` within seconds. The session then treated `complete()` ok —
+  and the missing PLX-MC MCP / `gh` / stale `PETRALABX_GITHUB_TOKEN` fallbacks —
+  as closeout. `compliance-pr-verify.mjs --wait` was never run. The 2026-07-31
+  lesson covered wrong-repo stamps plus "complete is not gate success"; an
+  in-scope handshake still fails if evidence is not persisted *before* the
+  check fires.
+- **Rule going forward:** Persist evidence (`summary`, `verificationCommands`,
+  `rollback`) and confirm it on the task *before* opening or synchronizing the
+  PR. Then wait until GitHub `compliance` is SUCCESS
+  (`node scripts/compliance-pr-verify.mjs --wait`, or REST + check-run poll
+  when `gh` is absent). If the check already ran red, re-run that job after
+  evidence lands. Fallback REST / git / GCM is not a skip of that wait.
+
 ### 2026-08-05 (ET) — Immediate AWSCURRENT readback can misclassify a secret write
 
 - **What happened:** A multi-secret MCP registry update passed both writes but

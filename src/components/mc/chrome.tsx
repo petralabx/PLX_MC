@@ -192,6 +192,7 @@ export function Sidebar({
         {item("governance-sops", "§", "SOP guide")}
         {item("skills-directory", "◈", "Skills directory")}
         {item("architecture", "⬡", "Architecture")}
+        {item("brain-ask", "?", "Ask the Brain")}
         {item(
           "ai-spend",
           "◎",

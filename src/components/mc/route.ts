@@ -27,6 +27,7 @@ export const SCREEN_VALUES = [
   "governance-sops",
   "skills-directory",
   "architecture",
+  "brain-ask",
   "ai-spend",
   "routing-inbox",
   "approvals",
@@ -43,6 +44,8 @@ export interface Route {
   sop?: string;
   /** Architecture diagram deep link: `/?screen=architecture&diagram=context|containers|task-lifecycle`. */
   diagram?: string;
+  /** Brain Ask open: `/?screen=brain-ask&node=<id>`. */
+  node?: string;
   // Module E (SPEC §3.B.3): an Insights chart segment click navigates to the
   // board carrying a FilterState here; WorkViews adopts it on mount/route change
   // through F's sanitizeFilterState. Optional, so all existing nav() sites carry
@@ -64,7 +67,7 @@ export interface ScreenProps {
 // serialized (see NOTES.md in the phase artifacts): it is a complex nested
 // object carried by one Insights → Board hand-off, not a shareable location.
 
-const ENTITY_PARAMS = ["projectId", "bucketId", "taskId", "sop", "diagram"] as const;
+const ENTITY_PARAMS = ["projectId", "bucketId", "taskId", "sop", "diagram", "node"] as const;
 
 /** Serialize a Route to a path + query string ("/", "/?screen=board", …). */
 export function routeToUrl(route: Route): string {

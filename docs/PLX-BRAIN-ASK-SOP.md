@@ -21,11 +21,31 @@ canonical in `petralabx/agentic-swarm`.
 |---|---|
 | MCP (preferred) | `brain_search` on the `plx-brain` server |
 | HTTP | `GET /api/vmc/knowledge/agent/search?q=...&limit=5` with `X-API-Key` |
-| UI | `/vmc/second-brain` (session-authed) |
+| MC UI | `/?screen=brain-ask` on `mc.plxcustomer.io` |
+| VMC UI | `/vmc/second-brain` (session-authed) |
 
-Follow up with `brain_get_node`, `brain_get_subgraph`, `brain_trail`, or
-`brain_timeline` when a hit looks relevant. Check prior decisions before
-re-debating settled questions.
+Follow up with `brain_get_node` **including `content`**, `brain_get_subgraph`,
+`brain_trail`, or `brain_timeline` when a hit looks relevant. Check prior
+decisions before re-debating settled questions.
+
+## Open is full body
+
+Search hits stay snippet-sized (`excerpt` / `snippet`, cap 280). Opening a hit
+must load full markdown via:
+
+- MCP: `brain_get_node` with `include: ["content"]`
+- HTTP: `GET /api/vmc/knowledge/agent/node/{id}?include=content`
+- MC UI: click a hit on `/?screen=brain-ask` → `GET /api/brain-ask/article?id=`
+
+Map the response to the portal `KnowledgeArticle` DTO (`id`, `title`,
+`markdown`, `namespace`, `trustTier`, `source`). Reject any reader that renders
+the search excerpt as the article body.
+
+Missing `VMC_API_KEY`, 404, or empty content → empty / not-found state. Search
+still works. Portal Hub how-tos stay at
+`https://staging.plxcustomer.io/admin/knowledge`.
+
+Do not rewrite VMC `second-brain-detail.tsx`.
 
 ## Interpreting scores
 
@@ -54,6 +74,7 @@ Trivial read-only Q&A with no decision or code change is exempt.
 ## Quick checklist
 
 - [ ] Searched before planning
+- [ ] Opened relevant hits with full `content`, not the search snippet
 - [ ] Treated sub-0.30 hits as weak
 - [ ] Ingested outcomes with provenance + ladder tags
 - [ ] Proposed relations where edges are durable

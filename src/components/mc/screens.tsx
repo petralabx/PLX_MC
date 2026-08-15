@@ -7,6 +7,7 @@ import { BucketDetail } from "./bucket-detail";
 import { ProjectDetail } from "./project-detail";
 import { FilesView } from "./files-view";
 import { ArchitectureView } from "./architecture";
+import { BrainAskView } from "./brain-ask";
 import { GovernanceSopsView } from "./governance-sops";
 import { SkillsDirectoryView } from "./skills-directory";
 import { InboxView } from "./inbox";
@@ -43,6 +44,7 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   "governance-sops": GovernanceSopsView,
   "skills-directory": SkillsDirectoryView,
   architecture: ArchitectureView,
+  "brain-ask": BrainAskView,
   "ai-spend": AiSpendView,
   "routing-inbox": RoutingInboxView,
   approvals: ApprovalsInboxView,

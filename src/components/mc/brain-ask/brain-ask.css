@@ -1,0 +1,118 @@
+.brain-ask {
+  padding: var(--p-space-6) var(--p-space-5);
+  max-width: 1200px;
+}
+
+.brain-ask-title {
+  margin: var(--p-space-2) 0 var(--p-space-3);
+  font-family: var(--mazius);
+  font-size: var(--p-text-h2);
+  font-weight: 400;
+  color: var(--p-ink);
+}
+
+.brain-ask-lead,
+.brain-ask-status,
+.brain-ask-snippet,
+.brain-ask-label {
+  color: var(--p-ink-2);
+  font-size: var(--p-text-small);
+  line-height: 1.55;
+}
+
+.brain-ask-form {
+  margin: var(--p-space-5) 0;
+}
+
+.brain-ask-row {
+  display: flex;
+  gap: var(--p-space-2);
+}
+
+.brain-ask-input {
+  flex: 1;
+  min-height: 40px;
+  padding: 0 var(--p-space-3);
+  border: 1px solid var(--p-grid);
+  background: var(--p-canvas);
+  color: var(--p-ink);
+}
+
+.brain-ask-submit {
+  min-height: 40px;
+  padding: 0 var(--p-space-4);
+  border: 1px solid var(--p-ink);
+  background: transparent;
+  color: var(--p-ink);
+  cursor: pointer;
+}
+
+.brain-ask-split {
+  display: grid;
+  grid-template-columns: minmax(240px, 34%) 1fr;
+  gap: var(--p-space-5);
+}
+
+.brain-ask-hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.brain-ask-hits button {
+  width: 100%;
+  text-align: left;
+  margin: 0 0 var(--p-space-2);
+  padding: var(--p-space-3);
+  border: 1px solid var(--p-grid);
+  background: var(--p-canvas);
+  color: var(--p-ink);
+  cursor: pointer;
+}
+
+.brain-ask-hits button.is-open {
+  border-color: var(--p-ink);
+}
+
+.brain-ask-snippet {
+  display: block;
+  margin-top: var(--p-space-1);
+}
+
+.brain-ask-page-title {
+  margin: 0 0 var(--p-space-3);
+  font-family: var(--mazius);
+  font-size: var(--p-text-h3);
+  font-weight: 400;
+  color: var(--p-ink);
+}
+
+.brain-ask-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--p-space-2);
+  margin: 0 0 var(--p-space-4);
+}
+
+.brain-ask-chips span {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  border: 1px solid var(--p-grid);
+  padding: 2px 8px;
+}
+
+.brain-ask-body p {
+  margin: 0 0 var(--p-space-3);
+  white-space: pre-wrap;
+  color: var(--p-ink);
+  line-height: 1.6;
+}
+
+@media (max-width: 800px) {
+  .brain-ask-split {
+    grid-template-columns: 1fr;
+  }
+}

@@ -30,6 +30,7 @@ const EXPECTED_SCREENS = {
   "governance-sops": true,
   "skills-directory": true,
   architecture: true,
+  "brain-ask": true,
   "ai-spend": true,
   "routing-inbox": true,
   approvals: true,

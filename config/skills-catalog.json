@@ -6,7 +6,7 @@
   "sourceBranch": "main",
   "manifestPath": "manifest.json",
   "packageId": "plx-engineering-core",
-  "pinTag": "v1.6.4",
+  "pinTag": "v1.6.7",
   "pinSha": "",
-  "notes": "petralabx/skills is the canonical company skill content repo. The pin is a release tag rather than a sha: petralabx/skills tags each merge to main with v<manifest.version>, so v1.6.4 is readable, immutable, and resolves to exactly one commit. Merge this pin only after petralabx/skills#27 is merged and the release-tag workflow has created v1.6.4. v1.6.4 adds research-eval-reuse (reuse-before-custom-build gate) and fail-closed laptop sync to Grok/Hermes/.agents; v1.6.3 is the overlay-safe Cloud distribute; v1.6.2 enforced executable-mode parity. The pin is what colleagues resolve against, so a skill published to the catalog is not installable until this field moves. Provenance comes from the ref actually fetched. legacySourceRepo documents the pre-migration source."
+  "notes": "petralabx/skills is the canonical company skill content repo. The pin is a release tag rather than a sha: petralabx/skills tags each merge to main with v<manifest.version>, so v1.6.7 is readable, immutable, and resolves to exactly one commit. Merge this pin only after petralabx/skills#30 is merged and the release-tag workflow has created v1.6.7. v1.6.7 adds skillparity (detect runtime/machine and apply the matching install plane). v1.6.6 vendors grill-with-docs, grilling, and domain-modeling. The pin is what colleagues resolve against, so a skill published to the catalog is not installable until this field moves. Provenance comes from the ref actually fetched. legacySourceRepo documents the pre-migration source."
 }

@@ -7,7 +7,7 @@ personal laptops against PLX-tracked repos (`PLX_MC`, `plx-customer-portal`, etc
 
 > **TL;DR** — **PLX-MC access ≠ skills installed.** Register the PLX-MC MCP server for
 > task checkout, then run the **company skills bootstrap once per machine**. Skills come
-> from **`petralabx/skills`** (catalog pin `v1.6.7` / `pinTag` in
+> from **`petralabx/skills`** (catalog pin `v1.6.10` / `pinTag` in
 > `config/skills-catalog.json`) — **not** the full `agentic-swarm` catalog. Legacy
 > `taylorvalton/plx-cursor-skills` v1.0.0 is historical only. Start a **new** Cursor
 > session after bootstrap. To share a skill company-wide, use Mission Control **Skills
@@ -91,7 +91,7 @@ Optional dry run:
 
 1. Clone or update `~/plx-cursor-skills` (Windows: `%USERPROFILE%\plx-cursor-skills`) —
    local directory name unchanged; **remote** is `petralabx/skills` per catalog.
-2. Check out the catalog pin from `config/skills-catalog.json` — **`pinTag`** (`v1.6.7`
+2. Check out the catalog pin from `config/skills-catalog.json` — **`pinTag`** (`v1.6.10`
    as of 2026-08-15), or `pinSha` when one is set. This now happens on a fresh clone
    too; it previously applied only when updating an existing checkout, so new
    machines silently installed whatever was on `main`.
@@ -109,7 +109,7 @@ Restart Claude Code similarly if you rely on global Claude skills.
 
 ---
 
-## 4. What you get (company catalog v1.6.7)
+## 4. What you get (company catalog v1.6.10)
 
 The default bundle is **`plx-engineering-core`** pinned via `config/skills-catalog.json`.
 Skill ids are authoritative in `manifest.json` `packages[].skillIds` — not a static

@@ -1,18 +1,22 @@
-# Runbook: petralabx GitHub org PAT on agent workstations
+# Runbook: petralabx GitHub credentials on agent workstations
 
-Keeps every agent box able to act on **all** `petralabx/*` repos via a
-fine-grained PAT (`PETRALABX_GITHUB_TOKEN`), without relying on interactive `gh`
-keyring auth.
+Keeps explicit API consumers able to read the petralabx fine-grained PAT while
+Git and `gh` use the authenticated `gh` keyring OAuth credential.
 
 ## Why
 
-The legacy shared `GITHUB_TOKEN` could not see `plx-customer-portal` (404). The
-org PAT covers **all** petralabx repos (verified 9/9). MC runtime prefers the
-GitHub App for reads; this PAT is for:
+The legacy shared `GITHUB_TOKEN` could not see `plx-customer-portal` (404). MC
+runtime prefers the GitHub App for reads. The explicit
+`PETRALABX_GITHUB_TOKEN` fallback is for:
 
-- workstation / agent `gh` + git automation
 - `resolveGithubToken` PAT fallback when App mint is skipped/fails
-- any tool that only reads `GITHUB_TOKEN` / `PETRALABX_GITHUB_TOKEN`
+- tools that explicitly read `PETRALABX_GITHUB_TOKEN`
+
+Do not alias this PAT into `GITHUB_TOKEN` or `GH_TOKEN` in an interactive shell.
+Those standard variables override `gh auth git-credential`. A token may
+authenticate API reads while lacking effective Git write authorization. The
+generated loaders therefore clear both standard overrides after setting the
+explicit PetraLabX variable.
 
 ## Secrets (AWS)
 
@@ -48,9 +52,9 @@ python scripts/bootstrap-windows-secrets.py
 
 Writes (local only):
 
-- `~/.secrets-env.staging.ps1` — full agent hydrate
-- `~/.secrets-env.github.ps1` — Windows GitHub fragment
-- `~/.secrets-env.github` — Unix GitHub fragment
+- `~/.secrets-env.staging.ps1` — full agent hydrate; clears GitHub overrides
+- `~/.secrets-env.github.ps1` — Windows fragment; sets only the explicit PAT
+- `~/.secrets-env.github` — Unix fragment; sets only the explicit PAT
 
 **Precedence (TASK-756):** AWS Secrets Manager only. Do **not** restore
 `~/.aws/Secret_Github.txt` (or any `PLX_FORMS_*` / `forms-api-secret-*.txt`)
@@ -82,12 +86,15 @@ Cursor agents also get an always-on rule:
 
 ```powershell
 . $HOME\.secrets-env.github.ps1
-# Then call GitHub API with $env:PETRALABX_GITHUB_TOKEN — expect portal push=True
+# Explicit API probe may use $env:PETRALABX_GITHUB_TOKEN.
+# Git authorization proof must use a dry-run push through the gh keyring:
+git push --dry-run origin HEAD
 ```
 
 ```bash
 source ~/.secrets-env.github
-# python/curl against /repos/petralabx/plx-customer-portal — expect permissions.push true
+# GITHUB_TOKEN and GH_TOKEN are unset; git/gh use the keyring OAuth credential.
+git push --dry-run origin HEAD
 ```
 
 ## Boxes in scope

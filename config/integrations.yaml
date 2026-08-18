@@ -217,3 +217,24 @@ integrations:
       - Bare-name compliance shim removal after 2026-10-15, only after all fleet
         gates refresh and old checkout dispatches expire
       - Runtime consumption/enforcement of optional .plx/mc-routing.json path rules
+
+  - id: vmc-brain-ask
+    name: VMC knowledge — Ask the Brain
+    owner: Vince (vince@petrasoap.com)
+    criticality: Medium
+    scope: runtime
+    autonomous: false
+    default_state: on when VMC_API_KEY is present on Vercel; fail-open empty otherwise
+    feature_flag: VMC_API_KEY presence via vmcApiConfigured() (src/lib/secrets.ts)
+    kill_switch: Unset VMC_API_KEY on Vercel Production/Preview and redeploy
+    auth_source:
+      - VMC_API_KEY via vmcApiKey() (prod/ec2-secrets → Vercel sensitive env)
+      - VMC_BASE_URL via vmcBaseUrl() (default https://missioncontrol.tayloralton.com)
+    health_check: mc_self_check.brainAskConfigured (boolean only; never print the key)
+    fallback_path: >-
+      MCP plx-brain (workstation VMC_API_KEY) and VMC UI /vmc/second-brain.
+      Ask UI fail-opens with an empty list when the MC Vercel key is missing.
+    data_audit_boundary: >-
+      Search snippets and article bodies from VMC knowledge. No secret values
+      logged. Writes stay on the VMC ingest / session-artifact path, not this
+      MC read surface.

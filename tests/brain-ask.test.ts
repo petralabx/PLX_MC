@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { asArticle, asHit, pickMarkdown, pickSnippet } from "@/lib/brain-ask";
+import { asArticle, asHit, pickMarkdown, pickSnippet, searchBrainAsk } from "@/lib/brain-ask";
 import { SCREEN_VALUES, routeToUrl, urlToRoute } from "@/components/mc/route";
 import { SCREENS } from "@/components/mc/screens";
 
@@ -48,5 +48,14 @@ describe("brain-ask screen", () => {
       screen: "brain-ask",
       node: "node-1",
     });
+  });
+});
+
+describe("brain ask credentials", () => {
+  it("fail-opens empty search when VMC_API_KEY is unset", async () => {
+    vi.stubEnv("VMC_API_KEY", "");
+    const result = await searchBrainAsk("portal interoperability");
+    expect(result.configured).toBe(false);
+    expect(result.hits).toEqual([]);
   });
 });

@@ -74,6 +74,8 @@ Secrets Manager during deploy or rotation.
 | `COMPLIANCE_OIDC_REPO_ALLOWLIST` | Comma-separated `org/repo` list allowed to mint OIDC tokens |
 | `PLX_MC_ALLOWED_USERS` | Comma-separated Petra emails — MC sign-in + MCP operator allowlist |
 | `PLX_MC_MCP_API_KEY` | Server-side MCP API key (clients use `MC_MCP_API_KEY`; see §5) |
+| `VMC_API_KEY` | Sensitive. Company-brain search for Ask (`/?screen=brain-ask` → `/api/brain-ask/*`). Source: `prod/ec2-secrets`. Missing → Ask fail-opens empty. `mc_self_check.brainAskConfigured` reports presence (boolean only). |
+| `VMC_BASE_URL` | VMC origin for Ask. Default `https://missioncontrol.tayloralton.com`. Set explicitly on Production/Preview so the default cannot drift silently. |
 
 Full activation sequence:
 [compliance-gate-rollout.md](runbooks/compliance-gate-rollout.md).
@@ -233,6 +235,7 @@ log tokens.
 ```bash
 # MC MCP health (requires allowlisted operator + MCP key)
 # Tool: mc_self_check  OR  GET https://mc.plxcustomer.io/api/cursor/self-check
+# Ask the Brain: data.brainAskConfigured must be true (boolean; never print VMC_API_KEY)
 
 # Verify endpoint posture (expect 401 without auth, not 503 once configured)
 curl -s -o /dev/null -w "%{http_code}" -X POST https://mc.plxcustomer.io/api/compliance/verify

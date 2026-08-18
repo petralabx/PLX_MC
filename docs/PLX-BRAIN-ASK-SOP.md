@@ -41,9 +41,11 @@ Map the response to the portal `KnowledgeArticle` DTO (`id`, `title`,
 `markdown`, `namespace`, `trustTier`, `source`). Reject any reader that renders
 the search excerpt as the article body.
 
-Missing `VMC_API_KEY`, 404, or empty content → empty / not-found state. Search
-still works. Portal Hub how-tos stay at
-`https://staging.plxcustomer.io/admin/knowledge`.
+Missing `VMC_API_KEY` on the MC Vercel app → Ask fail-opens with an empty list
+(`configured: false`). Search does not work until the key is set. MCP
+`brain_search` and VMC `/vmc/second-brain` use their own credentials and stay
+independent. A 404 or empty body on an open still returns not-found. Portal Hub
+how-tos stay at `https://staging.plxcustomer.io/admin/knowledge`.
 
 Do not rewrite VMC `second-brain-detail.tsx`.
 

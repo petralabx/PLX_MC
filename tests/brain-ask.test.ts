@@ -1,6 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { asArticle, asHit, pickMarkdown, pickSnippet, searchBrainAsk } from "@/lib/brain-ask";
+import {
+  asArticle,
+  asHit,
+  openStatusMessage,
+  pickMarkdown,
+  pickSnippet,
+  probeBrainAskSearch,
+  searchBrainAsk,
+  searchStatusMessage,
+} from "@/lib/brain-ask";
 import { SCREEN_VALUES, routeToUrl, urlToRoute } from "@/components/mc/route";
 import { SCREENS } from "@/components/mc/screens";
 
@@ -52,10 +61,100 @@ describe("brain-ask screen", () => {
 });
 
 describe("brain ask credentials", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it("fail-opens empty search when VMC_API_KEY is unset", async () => {
     vi.stubEnv("VMC_API_KEY", "");
     const result = await searchBrainAsk("portal interoperability");
     expect(result.configured).toBe(false);
+    expect(result.status).toBe("not_configured");
     expect(result.hits).toEqual([]);
+    expect(searchStatusMessage(result)).toMatch(/VMC_API_KEY/);
+    expect(searchStatusMessage(result)).not.toMatch(/still works/i);
+  });
+
+  it("labels a fetch throw as unreachable, not as zero hits", async () => {
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
+    vi.stubEnv("VMC_BASE_URL", "https://vmc.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network down");
+      }),
+    );
+    const result = await searchBrainAsk("portal interoperability");
+    expect(result.configured).toBe(true);
+    expect(result.status).toBe("upstream_unreachable");
+    expect(result.hits).toEqual([]);
+    expect(searchStatusMessage(result)).toMatch(/unreachable/i);
+  });
+
+  it("labels a VMC 5xx as upstream_error, not as zero hits", async () => {
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
+    vi.stubEnv("VMC_BASE_URL", "https://vmc.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 503,
+        json: async () => null,
+      })),
+    );
+    const result = await searchBrainAsk("portal interoperability");
+    expect(result.configured).toBe(true);
+    expect(result.status).toBe("upstream_error");
+    expect(result.hits).toEqual([]);
+    expect(searchStatusMessage(result)).toMatch(/returned an error/i);
+  });
+
+  it("treats HTTP 200 with an empty list as ok zero hits", async () => {
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
+    vi.stubEnv("VMC_BASE_URL", "https://vmc.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 200,
+        json: async () => ({ hits: [] }),
+      })),
+    );
+    const result = await searchBrainAsk("no such node");
+    expect(result.configured).toBe(true);
+    expect(result.status).toBe("ok");
+    expect(result.hits).toEqual([]);
+    expect(searchStatusMessage(result)).toBe("No hits for this query.");
+  });
+
+  it("probe reports HTTP status only and never forwards hits", async () => {
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
+    vi.stubEnv("VMC_BASE_URL", "https://vmc.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 200,
+        json: async () => ({
+          hits: [{ id: "secret-node", snippet: "must not leak" }],
+        }),
+      })),
+    );
+    const probe = await probeBrainAskSearch();
+    expect(probe).toEqual({ configured: true, ok: true, status: 200 });
+    expect(probe).not.toHaveProperty("hits");
+    expect(JSON.stringify(probe)).not.toContain("must not leak");
+  });
+
+  it("open copy names not-found only when VMC answered ok", () => {
+    expect(
+      openStatusMessage({ article: null, configured: true, status: "ok" }),
+    ).toMatch(/not found/i);
+    expect(
+      openStatusMessage({
+        article: null,
+        configured: true,
+        status: "upstream_unreachable",
+      }),
+    ).toMatch(/unreachable/i);
   });
 });

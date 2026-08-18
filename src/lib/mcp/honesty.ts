@@ -8,6 +8,7 @@ import {
   graphWebhookEnabled,
   vmcApiConfigured,
 } from "@/lib/secrets";
+import { probeBrainAskSearch, type BrainAskSearchProbe } from "@/lib/brain-ask";
 import {
   boringGateFieldsFromRow,
   loadBoringGateFieldsSafe,
@@ -36,8 +37,12 @@ export interface HonestyFields extends BoringGateFields {
   freshness: SyncFreshnessResult;
   webhooksEnabled: boolean;
   mcpEnabled: boolean;
-  /** True when VMC_API_KEY is set so Ask the Brain can search. Boolean only. */
+  /** True when VMC_API_KEY is set. Boolean only — not a live search. */
   brainAskConfigured: boolean;
+  /** True when a live VMC search probe returned HTTP 2xx. False if the key is missing. */
+  brainAskSearchOk: boolean;
+  /** Probe HTTP status, or 0 when the key is missing or VMC did not respond. No body. */
+  brainAskSearchStatus: number;
   graphTokenOk: boolean;
   dataSource: DataSource;
   /** Most recent checkout door from audit (`mcp` | `compliance`), if any. */
@@ -178,6 +183,7 @@ export async function buildHonestyFields(opts?: {
   now?: Date;
   loadRegisterTimestamps?: () => Promise<Partial<Record<string, Date | string | null | undefined>>>;
   probeGraphToken?: () => Promise<boolean>;
+  probeBrainAsk?: () => Promise<BrainAskSearchProbe>;
   loadLastCheckoutDoor?: () => Promise<string | null>;
   loadBoringGate?: () => Promise<BoringGateFields>;
 }): Promise<HonestyFields> {
@@ -210,6 +216,18 @@ export async function buildHonestyFields(opts?: {
       ? await loadBoringGateFieldsSafe()
       : boringGateFieldsFromRow(null);
 
+  const configured = vmcApiConfigured();
+  let brainAskSearchOk = false;
+  let brainAskSearchStatus = 0;
+  try {
+    const probe = await (opts?.probeBrainAsk ?? (() => probeBrainAskSearch()))();
+    brainAskSearchOk = probe.ok;
+    brainAskSearchStatus = probe.status;
+  } catch {
+    brainAskSearchOk = false;
+    brainAskSearchStatus = 0;
+  }
+
   return {
     syncMode: resolveSyncMode({ syncEnabled: syncOn, cronConfigured: cronOn }),
     cronConfigured: cronOn,
@@ -219,7 +237,9 @@ export async function buildHonestyFields(opts?: {
     freshness,
     webhooksEnabled: resolveWebhooksEnabled(),
     mcpEnabled: mcpEnabled(),
-    brainAskConfigured: vmcApiConfigured(),
+    brainAskConfigured: configured,
+    brainAskSearchOk,
+    brainAskSearchStatus,
     graphTokenOk,
     dataSource: resolveDataSource(freshness, graphTokenOk),
     lastCheckoutDoor,

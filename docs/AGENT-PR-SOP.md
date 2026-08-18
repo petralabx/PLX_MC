@@ -68,7 +68,7 @@ are separate Entra apps. Do not put `brk-multihub://` on `PLX_Cursor_Graph`.
 Catalog: [`docs/runbooks/M365-IDENTITY-CATALOG.md`](runbooks/M365-IDENTITY-CATALOG.md)
 (fleet) and portal `docs/runbooks/M365-IDENTITY-CATALOG.md` (operator Entra steps).
 
-Company skills catalog: **`petralabx/skills`** pinned at tag **`v1.6.7`** via `config/skills-catalog.json`. Legacy `taylorvalton/plx-cursor-skills` v1.0.0 is deprecated — bootstrap from `petralabx/skills` per [`SKILLS-SOP.md`](SKILLS-SOP.md).
+Company skills catalog: **`petralabx/skills`** pinned at tag **`v1.6.10`** via `config/skills-catalog.json`. Legacy `taylorvalton/plx-cursor-skills` v1.0.0 is deprecated — bootstrap from `petralabx/skills` per [`SKILLS-SOP.md`](SKILLS-SOP.md).
 
 ---
 

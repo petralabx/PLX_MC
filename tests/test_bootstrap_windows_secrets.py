@@ -103,6 +103,24 @@ def test_dedicated_principals_use_separate_loader_files(tmp_path: Path) -> None:
     )
 
 
+def test_github_loaders_do_not_shadow_gh_keyring_credentials() -> None:
+    bootstrap = load_script()
+
+    powershell = "\n".join(bootstrap.github_powershell_loader_lines("org-token"))
+    shell = "\n".join(bootstrap.github_shell_loader_lines("org-token"))
+
+    assert "$env:PETRALABX_GITHUB_TOKEN = 'org-token'" in powershell
+    assert "Remove-Item Env:GITHUB_TOKEN" in powershell
+    assert "Remove-Item Env:GH_TOKEN" in powershell
+    assert "$env:GITHUB_TOKEN = 'org-token'" not in powershell
+    assert "$env:GH_TOKEN = 'org-token'" not in powershell
+
+    assert "export PETRALABX_GITHUB_TOKEN='org-token'" in shell
+    assert "unset GITHUB_TOKEN GH_TOKEN" in shell
+    assert "export GITHUB_TOKEN='org-token'" not in shell
+    assert "export GH_TOKEN='org-token'" not in shell
+
+
 def test_client_principal_registries_match_server_reviewed_ids() -> None:
     bootstrap = load_script()
     server_source = SERVER_PRINCIPALS.read_text(encoding="utf-8")

@@ -42,9 +42,11 @@ contains the legacy shared MCP key and general runtime secrets.
 per-agent MCP registry; its `prod/ec2-secrets` copy is compatibility-only.
 General secrets are loaded by `~/load-secrets.ps1` (dev box). No hardcoded
 keys and no scattered `process.env` reads.
-After hydrate, prefer `PETRALABX_GITHUB_TOKEN` for `petralabx/*` GitHub automation
-(`docs/runbooks/petralabx-github-token-workstation.md`); `load-secrets.ps1` aliases
-`GITHUB_TOKEN` from that key when present.
+After hydrate, explicit API consumers may use `PETRALABX_GITHUB_TOKEN` for
+`petralabx/*` reads (`docs/runbooks/petralabx-github-token-workstation.md`). The
+generated workstation loaders clear `GITHUB_TOKEN` and `GH_TOKEN` so Git and
+`gh` use the authenticated keyring OAuth credential instead of shadowing it with
+a PAT whose effective Git-write scope may differ from account permissions.
 
 ## Tool Ownership
 

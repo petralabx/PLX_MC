@@ -24,13 +24,29 @@ export type BrainAskHit = {
   source: KnowledgeArticleSource;
 };
 
+/** Why Ask returned an empty list or a missing article. Zero hits with `ok` is success. */
+export type BrainAskUpstreamStatus =
+  | "not_configured"
+  | "ok"
+  | "upstream_unreachable"
+  | "upstream_error";
+
 export type BrainAskSearchResult = {
   query: string;
   hits: BrainAskHit[];
   configured: boolean;
+  status: BrainAskUpstreamStatus;
 };
 
 export type BrainAskOpenResult = {
   article: KnowledgeArticle | null;
   configured: boolean;
+  status: BrainAskUpstreamStatus;
+};
+
+/** Live VMC search probe for mc_self_check. HTTP status only — never hits or snippets. */
+export type BrainAskSearchProbe = {
+  configured: boolean;
+  ok: boolean;
+  status: number;
 };

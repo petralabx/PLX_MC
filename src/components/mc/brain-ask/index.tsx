@@ -3,11 +3,13 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { ApiClientError, api } from "@/lib/api";
-import type {
-  BrainAskHit,
-  BrainAskOpenResult,
-  BrainAskSearchResult,
-  KnowledgeArticle,
+import {
+  openStatusMessage,
+  searchStatusMessage,
+  type BrainAskHit,
+  type BrainAskOpenResult,
+  type BrainAskSearchResult,
+  type KnowledgeArticle,
 } from "@/lib/brain-ask";
 
 import type { ScreenProps } from "../route";
@@ -17,7 +19,6 @@ import "./brain-ask.css";
 export function BrainAskView({ route, nav }: ScreenProps) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<BrainAskHit[]>([]);
-  const [configured, setConfigured] = useState(true);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [article, setArticle] = useState<KnowledgeArticle | null>(null);
@@ -44,10 +45,7 @@ export function BrainAskView({ route, nav }: ScreenProps) {
         `/brain-ask/search?q=${encodeURIComponent(q)}`,
       );
       setHits(result.hits);
-      setConfigured(result.configured);
-      if (!result.configured) {
-        setSearchError("Brain credentials are not configured. Search still works when VMC_API_KEY is set.");
-      }
+      setSearchError(searchStatusMessage(result));
     } catch (error) {
       setHits([]);
       setSearchError(error instanceof ApiClientError ? error.message : "Search failed.");
@@ -64,15 +62,8 @@ export function BrainAskView({ route, nav }: ScreenProps) {
       const result = await api<BrainAskOpenResult>(
         `/brain-ask/article?id=${encodeURIComponent(id)}`,
       );
-      setConfigured(result.configured);
       setArticle(result.article);
-      if (!result.article) {
-        setOpenError(
-          result.configured
-            ? "Article not found or body was empty."
-            : "Brain credentials are not configured.",
-        );
-      }
+      setOpenError(openStatusMessage(result));
     } catch (error) {
       setArticle(null);
       setOpenError(error instanceof ApiClientError ? error.message : "Open failed.");
@@ -115,11 +106,6 @@ export function BrainAskView({ route, nav }: ScreenProps) {
       </form>
 
       {searchError ? <p className="brain-ask-status">{searchError}</p> : null}
-      {!configured ? (
-        <p className="brain-ask-status">
-          Fail-open: missing brain credentials. Search list stays empty.
-        </p>
-      ) : null}
 
       <div className="brain-ask-split">
         <ol className="brain-ask-hits">

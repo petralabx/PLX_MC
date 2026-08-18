@@ -256,6 +256,8 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
       webhooksEnabled: false,
       mcpEnabled: false,
       brainAskConfigured: false,
+      brainAskSearchOk: false,
+      brainAskSearchStatus: 0,
       graphTokenOk: false,
       dataSource: "seed",
       lastCheckoutDoor: null,
@@ -331,6 +333,7 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
       now: new Date("2026-07-16T18:00:00.000Z"),
       loadRegisterTimestamps: async () => ({}),
       probeGraphToken: async () => false,
+      probeBrainAsk: async () => ({ configured: true, ok: true, status: 200 }),
       loadLastCheckoutDoor: async () => "mcp",
     });
 
@@ -344,6 +347,22 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
     expect(honesty.dataSource).toBe("seed");
     expect(honesty.lastCheckoutDoor).toBe("mcp");
     expect(honesty.brainAskConfigured).toBe(true);
+    expect(honesty.brainAskSearchOk).toBe(true);
+    expect(honesty.brainAskSearchStatus).toBe(200);
+  });
+
+  it("brain ask probe fail-soft when the injector throws", async () => {
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
+    const honesty = await buildHonestyFields({
+      loadRegisterTimestamps: async () => ({}),
+      probeGraphToken: async () => false,
+      probeBrainAsk: async () => {
+        throw new Error("probe boom");
+      },
+    });
+    expect(honesty.brainAskConfigured).toBe(true);
+    expect(honesty.brainAskSearchOk).toBe(false);
+    expect(honesty.brainAskSearchStatus).toBe(0);
   });
 
   it("webhooksEnabled true only when both env gates are on", async () => {

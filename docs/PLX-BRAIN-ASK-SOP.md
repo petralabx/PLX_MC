@@ -41,13 +41,27 @@ Map the response to the portal `KnowledgeArticle` DTO (`id`, `title`,
 `markdown`, `namespace`, `trustTier`, `source`). Reject any reader that renders
 the search excerpt as the article body.
 
-Missing `VMC_API_KEY` on the MC Vercel app → Ask fail-opens with an empty list
-(`configured: false`). Search does not work until the key is set. MCP
-`brain_search` and VMC `/vmc/second-brain` use their own credentials and stay
-independent. A 404 or empty body on an open still returns not-found. Portal Hub
-how-tos stay at `https://staging.plxcustomer.io/admin/knowledge`.
+Missing `VMC_API_KEY` on the MC Vercel app → Ask fail-opens with
+`status: not_configured` and an empty list (`configured: false`). Search does
+not work until the key is set. A live VMC that does not respond or returns
+4xx/5xx is **not** a zero-hit query: the API reports
+`upstream_unreachable` or `upstream_error` while `configured` stays true.
+Zero hits with `status: ok` means VMC answered and found nothing.
+
+MCP `brain_search` and VMC `/vmc/second-brain` use their own credentials and
+stay independent. A 404 or empty body on an open still returns not-found.
+Portal Hub how-tos stay at `https://staging.plxcustomer.io/admin/knowledge`.
 
 Do not rewrite VMC `second-brain-detail.tsx`.
+
+## MC Ask reliability (ASK-H1–H4)
+
+| ID | Rule |
+|---|---|
+| ASK-H1 | `GET /api/brain-ask/search` and article open report `status`: `not_configured` \| `upstream_unreachable` \| `upstream_error` \| `ok`. Empty `hits` with `ok` is a real zero-hit result. |
+| ASK-H2 | `mc_self_check` reports `brainAskConfigured` (key presence) plus `brainAskSearchOk` and `brainAskSearchStatus` from a live VMC search probe. Booleans and HTTP status only — never snippets, hits, or the key. |
+| ASK-H3 | Ask UI names those states. It never claims search works while VMC is down. |
+| ASK-H4 | After deploy, signed-in smoke on `https://mc.plxcustomer.io/?screen=brain-ask` — `configured: true` and ≥1 hit, or an explicit error. Not portal staging. |
 
 ## Interpreting scores
 

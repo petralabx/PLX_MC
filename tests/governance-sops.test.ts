@@ -308,6 +308,7 @@ describe("seed registry + Collaborator SOP (integration)", () => {
     expect(fleetMd).toContain("`VMC_API_KEY`");
     expect(fleetMd).toContain("`VMC_BASE_URL`");
     expect(fleetMd).toContain("brainAskConfigured");
+    expect(fleetMd).toContain("brainAskSearchOk");
   });
 
   it("activates PLX-Brain pointer SOPs with readable sources", async () => {
@@ -326,6 +327,13 @@ describe("seed registry + Collaborator SOP (integration)", () => {
       const content = readFileSync(join(process.cwd(), path), "utf8");
       expect(content).toContain("petralabx/agentic-swarm");
       expect(content).toMatch(/Canonical source/i);
+      if (slug === "mc-sop-plx-brain-ask") {
+        expect(content).toContain("ASK-H1");
+        expect(content).toContain("ASK-H2");
+        expect(content).toContain("ASK-H3");
+        expect(content).toContain("brainAskSearchOk");
+        expect(content).not.toMatch(/Search still works when VMC_API_KEY/i);
+      }
       const detail = await getSopDetail(entry, createSopSource());
       expect(detail.ok).toBe(true);
       if (detail.ok) {

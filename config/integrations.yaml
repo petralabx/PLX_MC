@@ -230,10 +230,11 @@ integrations:
     auth_source:
       - VMC_API_KEY via vmcApiKey() (prod/ec2-secrets → Vercel sensitive env)
       - VMC_BASE_URL via vmcBaseUrl() (default https://missioncontrol.tayloralton.com)
-    health_check: mc_self_check.brainAskConfigured (boolean only; never print the key)
+    health_check: mc_self_check.brainAskConfigured + brainAskSearchOk / brainAskSearchStatus (booleans and HTTP status only; never print the key or snippets)
     fallback_path: >-
       MCP plx-brain (workstation VMC_API_KEY) and VMC UI /vmc/second-brain.
-      Ask UI fail-opens with an empty list when the MC Vercel key is missing.
+      Ask UI fail-opens with status not_configured when the MC Vercel key is
+      missing, and names upstream_unreachable / upstream_error when VMC is down.
     data_audit_boundary: >-
       Search snippets and article bodies from VMC knowledge. No secret values
       logged. Writes stay on the VMC ingest / session-artifact path, not this

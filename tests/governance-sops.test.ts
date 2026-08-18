@@ -304,6 +304,10 @@ describe("seed registry + Collaborator SOP (integration)", () => {
       expect(detail.toc.length).toBeGreaterThan(0);
       expect(detail.nodes.some((n) => n.type === "table")).toBe(true);
     }
+    const fleetMd = readFileSync(join(process.cwd(), "docs/FLEET-SECRETS-SOP.md"), "utf8");
+    expect(fleetMd).toContain("`VMC_API_KEY`");
+    expect(fleetMd).toContain("`VMC_BASE_URL`");
+    expect(fleetMd).toContain("brainAskConfigured");
   });
 
   it("activates PLX-Brain pointer SOPs with readable sources", async () => {

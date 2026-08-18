@@ -2,7 +2,12 @@
 // dataSource: live requires recorded inbound delta AND acquirable Graph token.
 
 import { latestCheckoutDoor } from "@/lib/compliance/repo";
-import { cronConfigured, graphWebhookConfigured, graphWebhookEnabled } from "@/lib/secrets";
+import {
+  cronConfigured,
+  graphWebhookConfigured,
+  graphWebhookEnabled,
+  vmcApiConfigured,
+} from "@/lib/secrets";
 import {
   boringGateFieldsFromRow,
   loadBoringGateFieldsSafe,
@@ -31,6 +36,8 @@ export interface HonestyFields extends BoringGateFields {
   freshness: SyncFreshnessResult;
   webhooksEnabled: boolean;
   mcpEnabled: boolean;
+  /** True when VMC_API_KEY is set so Ask the Brain can search. Boolean only. */
+  brainAskConfigured: boolean;
   graphTokenOk: boolean;
   dataSource: DataSource;
   /** Most recent checkout door from audit (`mcp` | `compliance`), if any. */
@@ -212,6 +219,7 @@ export async function buildHonestyFields(opts?: {
     freshness,
     webhooksEnabled: resolveWebhooksEnabled(),
     mcpEnabled: mcpEnabled(),
+    brainAskConfigured: vmcApiConfigured(),
     graphTokenOk,
     dataSource: resolveDataSource(freshness, graphTokenOk),
     lastCheckoutDoor,

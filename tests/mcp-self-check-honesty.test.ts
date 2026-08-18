@@ -127,6 +127,8 @@ beforeEach(() => {
   vi.stubEnv("PLX_MC_GRAPH_WEBHOOK_ENABLED", "");
   vi.stubEnv("PLX_MC_GRAPH_WEBHOOK_CLIENT_STATE", "");
   vi.stubEnv("PLX_MC_GRAPH_NOTIFICATION_URL", "");
+  vi.stubEnv("VMC_API_KEY", "");
+  vi.stubEnv("VMC_BASE_URL", "");
 });
 
 describe("honesty helpers", () => {
@@ -253,6 +255,7 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
       databaseBound: false,
       webhooksEnabled: false,
       mcpEnabled: false,
+      brainAskConfigured: false,
       graphTokenOk: false,
       dataSource: "seed",
       lastCheckoutDoor: null,
@@ -321,6 +324,7 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
     vi.stubEnv("PLX_MC_SYNC_ENABLED", "1");
     vi.stubEnv("CRON_SECRET", "cron-secret");
     vi.stubEnv("PLX_MC_DATABASE_URL", "postgres://plx_mc_app@localhost/plx_mc");
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
 
     const honesty = await buildHonestyFields({
       lastSweep: "2026-07-16T17:00:00.000Z",
@@ -339,6 +343,7 @@ describe("actionSelfCheck honesty oracle (P4)", () => {
     expect(honesty.graphTokenOk).toBe(false);
     expect(honesty.dataSource).toBe("seed");
     expect(honesty.lastCheckoutDoor).toBe("mcp");
+    expect(honesty.brainAskConfigured).toBe(true);
   });
 
   it("webhooksEnabled true only when both env gates are on", async () => {

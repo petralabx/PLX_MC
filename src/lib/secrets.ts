@@ -173,6 +173,22 @@ export function cronSecret(): string {
   return requireSecret("CRON_SECRET");
 }
 
+// Company-brain search for Ask (`/?screen=brain-ask`). Source: prod/ec2-secrets
+// VMC_API_KEY on Vercel Production/Preview. Missing key → Ask fail-opens empty.
+const DEFAULT_VMC_BASE_URL = "https://missioncontrol.tayloralton.com";
+
+export function vmcApiConfigured(): boolean {
+  return !!(process.env.VMC_API_KEY ?? "").trim();
+}
+
+export function vmcApiKey(): string {
+  return requireSecret("VMC_API_KEY");
+}
+
+export function vmcBaseUrl(): string {
+  return (process.env.VMC_BASE_URL ?? DEFAULT_VMC_BASE_URL).replace(/\/$/, "");
+}
+
 // Graph change-notification webhooks (P11). Default-off: unset kill switch or
 // missing clientState / notification URL keeps subscriptions/processing idle
 // while the five-minute delta sweep remains the recovery path.

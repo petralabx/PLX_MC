@@ -1,13 +1,11 @@
+import { vmcApiConfigured, vmcApiKey, vmcBaseUrl } from "@/lib/secrets";
+
 import { asArticle, asHit, extractNodes } from "./map";
 import type { BrainAskOpenResult, BrainAskSearchResult } from "./types";
 
-const DEFAULT_VMC_BASE_URL = "https://missioncontrol.tayloralton.com";
-
 function vmcConfig(): { baseUrl: string; apiKey: string } | null {
-  const apiKey = (process.env.VMC_API_KEY ?? "").trim();
-  if (!apiKey) return null;
-  const baseUrl = (process.env.VMC_BASE_URL ?? DEFAULT_VMC_BASE_URL).replace(/\/$/, "");
-  return { baseUrl, apiKey };
+  if (!vmcApiConfigured()) return null;
+  return { baseUrl: vmcBaseUrl(), apiKey: vmcApiKey() };
 }
 
 async function vmcGet(path: string): Promise<{ status: number; json: unknown }> {

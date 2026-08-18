@@ -7,7 +7,7 @@ from the design handoff are built (Inbox, Board/List/Timeline, Traceability,
 Agent activity, Initiative/Bucket detail, Task detail, Sync console, Files,
 Repos) plus surfaces added since the handoff: **Project detail**, **My Tasks**,
 **Insights**, **Meeting Intake**, **Loop Ledgers**, **Governance SOPs**,
-**Skills Directory**, **Architecture**, and **AI Spend** — along with the ⌘K
+**Skills Directory**, **Architecture**, **AI Spend**, and **Ask the Brain** — along with the ⌘K
 command palette, New Task / New Initiative / New Project modals, and
 PeoplePicker (Petra domain rule enforced in the UI). The screen registry
 (`src/components/mc/screens.tsx`) maps twenty `Screen` keys to components;

@@ -71,19 +71,24 @@ export async function searchBrainAsk(
   };
 }
 
+function isDocumentCatalogId(id: string): boolean {
+  return id.startsWith("document:");
+}
+
 export async function openBrainAskArticle(id: string): Promise<BrainAskOpenResult> {
-  const nodeId = id.replace(/^graph:/, "").trim();
+  const rawId = id.trim();
   const configured = Boolean(vmcConfig());
-  if (!nodeId || !configured) {
+  if (!rawId || !configured) {
     return {
       article: null,
       configured,
       status: classifyBrainAskStatus(configured, 0),
     };
   }
-  const { status, json } = await vmcGet(
-    `/api/vmc/knowledge/agent/node/${encodeURIComponent(nodeId)}?include=content`,
-  );
+  const path = isDocumentCatalogId(rawId)
+    ? `/api/vmc/knowledge/agent/document/${encodeURIComponent(rawId)}`
+    : `/api/vmc/knowledge/agent/node/${encodeURIComponent(rawId.replace(/^graph:/, ""))}?include=content`;
+  const { status, json } = await vmcGet(path);
   if (status < 200 || status >= 300) {
     return {
       article: null,

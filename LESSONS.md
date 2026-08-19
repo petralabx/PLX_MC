@@ -16,6 +16,17 @@
 
 ## Lessons
 
+### 2026-08-19 (ET) — Ask catalog hits are not graph nodes
+
+- **What happened:** Production Ask search returned titled hits (ARCHITECTURE),
+  then open showed "Company brain failed to load this article."
+- **Root cause:** `openBrainAskArticle` always GET `/api/vmc/knowledge/agent/node/{id}`.
+  Live search returns catalog ids (`document:repo-docs/...`). Those are not
+  memory-graph nodes, so the node route 404s. Session file open is cookie-only.
+- **Rule going forward:** Catalog `document:` ids open via key-authed
+  `GET /api/vmc/knowledge/agent/document/{id}`. Graph ids stay on `/agent/node`.
+  Do not dump SharePoint or catalog files into the graph to make Ask open work.
+
 ### 2026-08-15 (ET) — Opening the PR before complete() loses the hard gate race
 
 - **What happened:** `petralabx/skills` PR #29 stamped a valid

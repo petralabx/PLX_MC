@@ -4,6 +4,7 @@ import {
   asArticle,
   asHit,
   extractNodes,
+  openBrainAskArticle,
   openStatusMessage,
   pickMarkdown,
   pickSnippet,
@@ -213,6 +214,75 @@ describe("brain ask credentials", () => {
     expect(probe).toEqual({ configured: true, ok: true, status: 200 });
     expect(probe).not.toHaveProperty("hits");
     expect(JSON.stringify(probe)).not.toContain("must not leak");
+  });
+
+  it("opens document: catalog ids via /agent/document, not /agent/node", async () => {
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
+    vi.stubEnv("VMC_BASE_URL", "https://vmc.test");
+    const fetchMock = vi.fn(async (url: string) => {
+      const href = String(url);
+      if (href.includes("/agent/document/")) {
+        return {
+          status: 200,
+          json: async () => ({
+            data: {
+              id: "document:repo-docs/modules/royale/ARCHITECTURE.md",
+              title: "ARCHITECTURE",
+              markdown: "# ARCHITECTURE\n\nEnd-to-end data flow.",
+              source: "vmc",
+            },
+          }),
+        };
+      }
+      return { status: 404, json: async () => null };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await openBrainAskArticle(
+      "document:repo-docs/modules/royale/ARCHITECTURE.md",
+    );
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/agent/document/");
+    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("/agent/node/");
+    expect(result.status).toBe("ok");
+    expect(result.article?.title).toBe("ARCHITECTURE");
+    expect(result.article?.markdown).toContain("End-to-end data flow");
+  });
+
+  it("still opens graph node ids via /agent/node?include=content", async () => {
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
+    vi.stubEnv("VMC_BASE_URL", "https://vmc.test");
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toContain("/agent/node/");
+      expect(url).toContain("include=content");
+      return {
+        status: 200,
+        json: async () => ({
+          data: {
+            id: "node-1",
+            title: "Lot hold",
+            markdown: "# Lot hold\n\nGraph body.",
+          },
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await openBrainAskArticle("graph:node-1");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(result.article?.markdown).toContain("Graph body");
+  });
+
+  it("labels a document open 404 as upstream_error, not as an empty ok article", async () => {
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
+    vi.stubEnv("VMC_BASE_URL", "https://vmc.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ status: 404, json: async () => null })),
+    );
+    const result = await openBrainAskArticle(
+      "document:repo-docs/modules/royale/ARCHITECTURE.md",
+    );
+    expect(result.article).toBeNull();
+    expect(result.status).toBe("upstream_error");
+    expect(openStatusMessage(result)).toMatch(/failed to load/i);
   });
 
   it("open copy names not-found only when VMC answered ok", () => {

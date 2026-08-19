@@ -88,6 +88,9 @@ wrapper in `src/lib/api`).
 - `src/components/mc/atoms.tsx` — Avatar, Confidence, PMark
 - `src/lib/mc-data/` — typed prototype data layer (types, fixtures, helpers)
 - `src/styles/mc-surface.css`, `src/styles/mc-app.css` — surface tokens + skin
+- `src/lib/brain-ask/` — Ask the Brain search/open client. Catalog `document:`
+  ids open via VMC `GET /api/vmc/knowledge/agent/document/{id}`; graph ids stay
+  on `/agent/node?include=content`.
 - `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts`
 
 ## Owner

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   asArticle,
   asHit,
+  extractNodes,
   openStatusMessage,
   pickMarkdown,
   pickSnippet,
@@ -43,6 +44,44 @@ describe("brain ask DTO mapping", () => {
     expect(article?.trustTier).toBe("advisory");
     expect(asArticle({ id: "node-2", snippet: "only a search excerpt" })).toBeNull();
     expect(pickMarkdown({ snippet: "excerpt only" })).toBe("");
+  });
+
+  it("maps the live VMC agent-search envelope (data.results + nested item)", () => {
+    const envelope = {
+      data: {
+        query: "architecture",
+        source: "memory+documents",
+        mode: "hybrid",
+        total: 1,
+        partial: false,
+        memoryDegraded: false,
+        documentsDegraded: false,
+        results: [
+          {
+            id: "document:repo-plx-mc-architecture",
+            kind: "document",
+            score: 0.82,
+            rawScore: 12,
+            item: {
+              title: "PLX_MC architecture source-map",
+              description: "C4 catalog and generated consumers of Git authority.",
+            },
+            sourcePath: "docs/architecture/source-map.json",
+            projectSlug: "plx-mc",
+          },
+        ],
+      },
+    };
+    const nodes = extractNodes(envelope);
+    expect(nodes).toHaveLength(1);
+    const hit = asHit(nodes[0]);
+    expect(hit).toEqual({
+      id: "document:repo-plx-mc-architecture",
+      title: "PLX_MC architecture source-map",
+      snippet: "C4 catalog and generated consumers of Git authority.",
+      score: 0.82,
+      source: "vmc",
+    });
   });
 });
 
@@ -108,6 +147,37 @@ describe("brain ask credentials", () => {
     expect(result.status).toBe("upstream_error");
     expect(result.hits).toEqual([]);
     expect(searchStatusMessage(result)).toMatch(/returned an error/i);
+  });
+
+  it("maps HTTP 200 live VMC data.results into hits, not an empty ok list", async () => {
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
+    vi.stubEnv("VMC_BASE_URL", "https://vmc.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 200,
+        json: async () => ({
+          data: {
+            query: "architecture",
+            results: [
+              {
+                id: "document:repo-plx-mc-architecture",
+                score: 0.82,
+                item: {
+                  title: "PLX_MC architecture source-map",
+                  description: "C4 catalog and generated consumers of Git authority.",
+                },
+              },
+            ],
+          },
+        }),
+      })),
+    );
+    const result = await searchBrainAsk("architecture");
+    expect(result.status).toBe("ok");
+    expect(result.hits).toHaveLength(1);
+    expect(result.hits[0]?.title).toBe("PLX_MC architecture source-map");
+    expect(result.hits[0]?.snippet).toMatch(/C4 catalog/);
   });
 
   it("treats HTTP 200 with an empty list as ok zero hits", async () => {

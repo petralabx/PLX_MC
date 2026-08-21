@@ -423,14 +423,17 @@ def test_active_registry_and_pilot_descriptors_have_one_authority():
     pilots = [json.loads(path.read_text(encoding="utf-8")) for path in pilot_paths]
     enabled_pilots = [pilot for pilot in pilots if pilot["enabled"] is True]
 
-    assert len(active_repos) == 8
+    enabled_repos = {pilot["repo"] for pilot in enabled_pilots}
     assert len(enabled_pilots) == 8
     assert len({pilot["cohortId"] for pilot in enabled_pilots}) == 8
-    assert len({pilot["repo"] for pilot in enabled_pilots}) == 8
+    assert len(enabled_repos) == 8
     assert {path.stem for path in pilot_paths} == {
         pilot["cohortId"] for pilot in enabled_pilots
     }
-    assert set(active_repos) == {pilot["repo"] for pilot in enabled_pilots}
+    # Routing pilots are a subset of fleet-active repos. Extra active rows
+    # (compliance L0 enrolled, routing not yet) are allowed.
+    assert enabled_repos <= set(active_repos)
+    assert "petralabx/plx_secondbrain" in active_repos
 
     suggestion = {
         pilot["repo"] for pilot in enabled_pilots if pilot["mode"] == "suggestion"

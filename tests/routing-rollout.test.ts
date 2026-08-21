@@ -185,6 +185,16 @@ describe("rollout descriptor health reasons", () => {
       "active_registry_intersection_mismatch"
     );
 
+    const extraActive: TrackedRepoEntry = {
+      repo: "petralabx/plx_secondbrain",
+      status: "active",
+      tier: "tooling",
+      default_bucket: "BKT-KNOWLEDGE-HUB",
+    };
+    expect(
+      rolloutHealth(pilots, [...registryFor(pilots), extraActive]).reasons
+    ).not.toContain("active_registry_intersection_mismatch");
+
     const wrongMode = [{ ...pilots[0], mode: "shadow" as const }, ...pilots.slice(1)];
     expect(rolloutHealth(wrongMode, registryFor(wrongMode)).reasons).toContain(
       "configured_mode_distribution_mismatch"

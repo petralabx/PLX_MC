@@ -188,7 +188,7 @@ further repos that are **not** in that list.
 | `petralabx/furgenics` | tooling, **registry=hard** | `compliance` + `drift` | | **Gap:** live `COMPLIANCE_MODE` is **soft**. Do not silently flip. |
 | `petralabx/for-and-against` | tooling, **registry=soft**, active | `compliance` + `drift` | | Soft by registry. |
 | `petralabx/test-perms-check` | sandbox, soft, pending_adoption | optional | | Stays soft. |
-| `petralabx/plx_secondbrain` | **not in registry** | **none** | | **Gap:** no compliance enrollment. |
+| `petralabx/plx_secondbrain` | tooling, **registry=soft**, active | `compliance` + `drift` (live) | | Enrolled TASK-1165. L0 landed via https://github.com/petralabx/plx_secondbrain/pull/2. Stays soft; do not flip hard. |
 
 Most enrolled non-hub repos require **`compliance` + `drift`**. Portal adds the
 two extra names above. Do not org-require those extras.
@@ -250,7 +250,7 @@ change is a generator/template pin in **this** repo.
 | Gap | Fact | Disposition |
 |-----|------|-------------|
 | Hollow org ruleset | `PLX MC Compliance Gate` id `18679471` is active with `rules: []`. Anti-tamper required-workflow pin is **not** live. | Keep copies+`drift`. Re-run `scripts/provision-org-ruleset-required-workflows.sh` when Team rulesets can hold a workflow pin. **TASK-1164**. |
-| `plx_secondbrain` | Org repo with **no** compliance workflow / registry row. | Enroll via REPO-ONBOARDING + scaffold, or explicitly defer. **TASK-1165**. |
+| `plx_secondbrain` | Registry row active (tooling, soft). L0 `compliance`+`drift` live via https://github.com/petralabx/plx_secondbrain/pull/2. | Stay soft. Do not flip to hard. **TASK-1165**. |
 | `COMPLIANCE_MODE` drift | `furgenics` and `1hr-after`: live variable **soft**, registry **hard**. | Operator reconcile. **Do not** silently set live to `hard`. **TASK-1166**. |
 | Legacy generator fetch | Some consumer drift workflows still fetch `scripts/generate-compliance-gate.py` from **`taylorvalton/PLX_MC`**. Hub template already pins **`petralabx/PLX_MC`**. | Re-scaffold `--workflows-only` from hub `main` on those consumers. **TASK-1167**. |
 

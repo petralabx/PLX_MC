@@ -12,6 +12,7 @@ Owner: PLX Repo Maintainers
 > | Agent pillars, PR discipline, evidence | [`petralabx/PLX_MC/config/governance-contract.yaml`](https://github.com/petralabx/PLX_MC/blob/main/config/governance-contract.yaml) |
 > | Compliance gate, `MC-Checkout`, risk tiers | [`petralabx/PLX_MC/docs/COLLABORATOR-SOP.md`](https://github.com/petralabx/PLX_MC/blob/main/docs/COLLABORATOR-SOP.md) |
 > | Onboarding checklist | [`petralabx/PLX_MC/docs/runbooks/REPO-ONBOARDING.md`](https://github.com/petralabx/PLX_MC/blob/main/docs/runbooks/REPO-ONBOARDING.md) |
+> | Org CI layers (L0–L3) | [`petralabx/PLX_MC/docs/runbooks/CI-PIPELINE.md`](https://github.com/petralabx/PLX_MC/blob/main/docs/runbooks/CI-PIPELINE.md) |
 >
 > See also: `docs/GOVERNANCE.md` in this repo.
 
@@ -80,7 +81,10 @@ Mission Control milestone IDs when applicable (`MRP-M-*`, `ERP-M-*`, etc.).
 {{VALIDATION_COMMANDS}}
 ```
 
-Required GitHub checks: **CI**, **PLX MC Compliance Gate**.
+Required GitHub checks: see **L0–L3** in
+[`CI-PIPELINE.md`](https://github.com/petralabx/PLX_MC/blob/main/docs/runbooks/CI-PIPELINE.md)
+(floor: **compliance**, plus **drift** on downstream copies). Product apps add
+one always-reporting L1 name — do not org-require Playwright.
 {{LEDGER_CHECK_ROW}}
 
 ---

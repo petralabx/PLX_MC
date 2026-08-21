@@ -8,7 +8,7 @@
 
 Live cockpit: [https://mc.plxcustomer.io](https://mc.plxcustomer.io)
 
-Companion docs: [`COLLABORATOR-SOP.md`](COLLABORATOR-SOP.md) (all PR authors), [`HUMAN-MC-SOP.md`](HUMAN-MC-SOP.md) (human UI workflows), [`ROLLBACK-PLAN-SOP.md`](ROLLBACK-PLAN-SOP.md).
+Companion docs: [`COLLABORATOR-SOP.md`](COLLABORATOR-SOP.md) (all PR authors), [`HUMAN-MC-SOP.md`](HUMAN-MC-SOP.md) (human UI workflows), [`ROLLBACK-PLAN-SOP.md`](ROLLBACK-PLAN-SOP.md), [`docs/runbooks/CI-PIPELINE.md`](runbooks/CI-PIPELINE.md) (org CI layers L0–L3).
 
 ---
 
@@ -296,7 +296,10 @@ Registry seed: `config/loop-ledgers-registry.json`. Module contract: `docs/modul
 
 ## 11. Local gates before push
 
-Compliance is a **backstop**, not a substitute for repo CI.
+Compliance is a **backstop**, not a substitute for repo CI. Org-wide layering
+(L0 compliance+secrets, L1 parallel product CI, L2 HITL, L3 post-merge) is
+[`docs/runbooks/CI-PIPELINE.md`](runbooks/CI-PIPELINE.md) — do not stuff
+Playwright or a Next.js `next build` into the org-required floor.
 
 | Repo | Before commit / push |
 |------|----------------------|
@@ -385,6 +388,7 @@ Escalation: Vince. Do not admin-bypass without owner approval.
 | Rollback requirements | [`docs/ROLLBACK-PLAN-SOP.md`](ROLLBACK-PLAN-SOP.md) |
 | MCP registration | [`docs/runbooks/plx-mc-mcp-team-registration.md`](runbooks/plx-mc-mcp-team-registration.md) |
 | Fleet repo onboarding | [`docs/runbooks/REPO-ONBOARDING.md`](runbooks/REPO-ONBOARDING.md) |
+| Org CI pipeline (L0–L3) | [`docs/runbooks/CI-PIPELINE.md`](runbooks/CI-PIPELINE.md) |
 | Compliance rollout | [`docs/runbooks/compliance-gate-rollout.md`](runbooks/compliance-gate-rollout.md) |
 | GitHub App provisioning | [`docs/runbooks/github-app-provisioning.md`](runbooks/github-app-provisioning.md) |
 | Company skills | [`docs/SKILLS-SOP.md`](SKILLS-SOP.md) |

@@ -26,8 +26,8 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
 
   test("index lists the seed catalog; active SOPs are ready", async ({ page }) => {
     const rows = page.locator("[data-testid='gs-row']");
-    // Fleet SOPs (9) + PLX-Brain pointers (3) + Portal pointers (3).
-    await expect(rows).toHaveCount(15);
+    // Fleet SOPs (10) + PLX-Brain pointers (3) + Portal pointers (3).
+    await expect(rows).toHaveCount(16);
 
     const collab = page.locator("[data-testid='gs-row'][data-slug='mc-sop-collaborator']");
     await expect(collab).toBeVisible();
@@ -63,6 +63,12 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
     await expect(fleetSecrets).toHaveAttribute("data-state", "ready");
     await expect(fleetSecrets).toContainText("Fleet secrets");
     await expect(fleetSecrets).toContainText("Active");
+
+    const ciPipeline = page.locator("[data-testid='gs-row'][data-slug='mc-sop-ci-pipeline']");
+    await expect(ciPipeline).toBeVisible();
+    await expect(ciPipeline).toHaveAttribute("data-state", "ready");
+    await expect(ciPipeline).toContainText("Org CI pipeline");
+    await expect(ciPipeline).toContainText("Active");
 
     const brainAsk = page.locator("[data-testid='gs-row'][data-slug='mc-sop-plx-brain-ask']");
     await expect(brainAsk).toBeVisible();

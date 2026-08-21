@@ -235,6 +235,10 @@ Full fleet enrollment remains [`REPO-ONBOARDING.md`](REPO-ONBOARDING.md) +
 
 Hub warning: do not run full scaffold against `PLX_MC` — see REPO-ONBOARDING.
 
+Agent PRs must not serialize on shared markdown indexes (review-links lists,
+milestone registers). Put review URLs in the PR body; stamp registers after
+merge — see [`AGENT-PR-SOP.md`](../AGENT-PR-SOP.md).
+
 ---
 
 ## 9. Operator follow-ups (do not silently “fix” in a docs PR)

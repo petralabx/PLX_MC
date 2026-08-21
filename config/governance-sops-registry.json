@@ -101,6 +101,17 @@
       "source": { "repo_path": "docs/FLEET-SECRETS-SOP.md" }
     },
     {
+      "slug": "mc-sop-ci-pipeline",
+      "title": "Org CI pipeline (staged quality)",
+      "description": "Mandated petralabx CI layering: L0 compliance+secrets (~20s, org-required), L1 parallel product lint/typecheck/unit/build under one always-reporting name, L2 HITL Playwright not org-required, L3 post-merge migrate/deploy/smoke. Copies+drift until the Team required-workflow pin is live.",
+      "audience": "Org admins, maintainers, and agents wiring GitHub Actions or branch protection on a petralabx repo",
+      "owner": "Vince",
+      "effective_date": "2026-08-21",
+      "status": "active",
+      "tags": ["CI", "Compliance gate", "Onboarding", "GitHub Actions"],
+      "source": { "repo_path": "docs/runbooks/CI-PIPELINE.md" }
+    },
+    {
       "slug": "mc-sop-plx-brain-ask",
       "title": "PLX-Brain — Ask the Brain first",
       "description": "Daily read-before / write-after loop for PLX-Brain: brain_search (MCP/HTTP/UI), interpret score floors, brain_ingest with provenance + ladder tags, propose relations, and session-artifact capture. Pointer to the canonical SOP in petralabx/agentic-swarm.",

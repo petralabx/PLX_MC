@@ -8,6 +8,7 @@
 | Role | Start here |
 |------|------------|
 | Org maintainers onboarding or auditing a repo | **This runbook** (tier checklist, folder map, gap audit) |
+| Org / repo CI layering (L0–L3 required checks) | [`docs/runbooks/CI-PIPELINE.md`](CI-PIPELINE.md) |
 | Humans using MC UI (request/approve repos, review evidence) | [`docs/HUMAN-MC-SOP.md`](../HUMAN-MC-SOP.md) |
 | Day-to-day PR authors (human) | [`docs/COLLABORATOR-SOP.md`](../COLLABORATOR-SOP.md) |
 | Agents opening PRs | [`docs/AGENT-PR-SOP.md`](../AGENT-PR-SOP.md) |
@@ -22,6 +23,7 @@ Canonical inputs (all in this repo — the SSOT):
 | Scaffold script | `scripts/scaffold-tracked-repo.sh` |
 | CONTRIBUTING stub | `docs/templates/CONTRIBUTING.repo-stub.md` |
 | Drift-check template | `docs/templates/compliance-gate-drift.yml.tpl` |
+| Org CI process (L0–L3) | `docs/runbooks/CI-PIPELINE.md` |
 
 Consumer repos get thin layers only — **never copy the contract**:
 
@@ -236,7 +238,11 @@ repo-owned.
    New enrollments may start `soft` during adoption; only `petralabx/test-perms-check`
    stays soft by policy.
 3. **Branch protection** on the integration branch: require PR + status checks
-   `compliance` (and the repo's CI contexts).
+   per [`CI-PIPELINE.md`](CI-PIPELINE.md) — **L0** `compliance` (and `drift` on
+   downstream copies until the org required-workflow pin is live). Product apps
+   add **L1** under one always-reporting name (portal: `lint-typecheck-build`).
+   Do **not** org-require Playwright or a Next.js `next build`. Full CI
+   checklist: CI-PIPELINE §8 (points at `scripts/scaffold-tracked-repo.sh`).
 
 ## 5. Activate
 

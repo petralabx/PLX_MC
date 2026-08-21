@@ -9,7 +9,9 @@ PLX-tracked repos listed below, whether you work by hand or drive an AI agent
 > **TL;DR** — Every PR now runs a **compliance check** and every PR event is
 > mirrored into Mission Control's audit log. **Humans are recorded but not
 > blocked. Agents must link their work to a Mission Control task.** Never edit a
-> repo's compliance workflow to make the check pass.
+> repo's compliance workflow to make the check pass. Org CI layering (cheap L0
+> floor vs product L1 vs HITL L2 vs post-merge L3):
+> [`docs/runbooks/CI-PIPELINE.md`](runbooks/CI-PIPELINE.md).
 
 ---
 
@@ -234,7 +236,9 @@ metadata is captured — never your source code.
 
 - **Owner:** Vince — for gate questions, false blocks, or enrollment of a new repo.
 - **Per-repo CI** still applies on top of the gate (each repo has its own tests /
-  validation / hygiene checks). Green compliance ≠ green CI.
+  validation / hygiene checks). Green compliance ≠ green CI. Mandated layers:
+  [`docs/runbooks/CI-PIPELINE.md`](runbooks/CI-PIPELINE.md) (L0 org floor;
+  L1 product apps; L2 HITL not org-required; L3 post-merge).
 - **Kill switch (owner only):** a repo can be reverted to soft (`COMPLIANCE_MODE=soft`)
   or the gate removed entirely; the audit log is append-only and retains history.
 

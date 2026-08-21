@@ -311,6 +311,35 @@ describe("seed registry + Collaborator SOP (integration)", () => {
     expect(fleetMd).toContain("brainAskSearchOk");
   });
 
+  it("activates org CI pipeline SOP with docs/runbooks/CI-PIPELINE.md", async () => {
+    const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
+    const r = parseSopRegistryJson(raw);
+    if (!r.ok) throw new Error("seed registry invalid");
+    const ci = r.config.sops.find((s) => s.slug === "mc-sop-ci-pipeline")!;
+    expect(ci.status).toBe("active");
+    expect(ci.source?.repo_path).toBe("docs/runbooks/CI-PIPELINE.md");
+    const detail = await getSopDetail(ci, createSopSource());
+    expect(detail.ok).toBe(true);
+    if (detail.ok) {
+      expect(detail.nodes.length).toBeGreaterThan(5);
+      expect(detail.toc.length).toBeGreaterThan(0);
+      expect(detail.nodes.some((n) => n.type === "table")).toBe(true);
+    }
+    const ciMd = readFileSync(join(process.cwd(), "docs/runbooks/CI-PIPELINE.md"), "utf8");
+    expect(ciMd).toContain("L0");
+    expect(ciMd).toContain("lint-typecheck-build");
+    expect(ciMd).toContain("18679471");
+    expect(ciMd).toContain("plx_secondbrain");
+    expect(ciMd).toContain("scripts/scaffold-tracked-repo.sh");
+    expect(ciMd).toContain("petralabx/PLX_MC");
+    expect(ciMd).toContain("Do not silently flip");
+    expect(ciMd).toContain("Do **not** org-require");
+    expect(ciMd).toContain("TASK-1164");
+    expect(ciMd).toContain("TASK-1165");
+    expect(ciMd).toContain("TASK-1166");
+    expect(ciMd).toContain("TASK-1167");
+  });
+
   it("activates PLX-Brain pointer SOPs with readable sources", async () => {
     const raw = readFileSync(join(process.cwd(), "config/governance-sops-registry.json"), "utf8");
     const r = parseSopRegistryJson(raw);

@@ -669,10 +669,9 @@ export function rolloutHealth(
   const activeRegistryRepos = new Set(
     activeRegistry.map((entry) => entry.repo.toLowerCase())
   );
-  if (
-    activeRegistryRepos.size !== uniqueEnabledRepos.size ||
-    [...activeRegistryRepos].some((repo) => !uniqueEnabledRepos.has(repo))
-  ) {
+  // Every enabled routing pilot must have an active non-sandbox registry row.
+  // Extra fleet-active repos (compliance L0 enrolled, routing not yet) are allowed.
+  if ([...uniqueEnabledRepos].some((repo) => !activeRegistryRepos.has(repo))) {
     reasons.push("active_registry_intersection_mismatch");
   }
 

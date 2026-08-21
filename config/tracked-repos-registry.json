@@ -195,13 +195,13 @@
         "schema_version": "plx-mc-routing-manifest/v1",
         "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
       },
-      "default_bucket": "BKT-INFRA",
+      "default_bucket": "BKT-KNOWLEDGE-HUB",
       "quality_ledger": {
         "enabled": false
       },
-      "status": "pending_adoption",
+      "status": "active",
       "contributing_path": "CONTRIBUTING.md",
-      "notes": "Knowledge Hub MCP + second-brain eval. Enrolled TASK-1165. Soft until a green L0 PR, then flip status to active (still soft)."
+      "notes": "Knowledge Hub MCP + second-brain eval. Enrolled TASK-1165. L0 landed via plx_secondbrain#2. Stays soft; do not flip hard."
     },
     {
       "repo": "petralabx/test-perms-check",

@@ -152,9 +152,11 @@ the existing root and align only the control-plane surfaces around it.
 | `1hr-after` | `tooling` | Active fleet marketing repo; routing downstream activation pending |
 | `furgenics` | `tooling` | Active fleet marketing repo; routing downstream activation pending |
 | `for-and-against` | `tooling` | Active fleet marketing repo; shadow routing workflow active via PR #3 |
+| `plx_secondbrain` | `tooling` | Enrolled TASK-1165 (`pending_adoption`, soft). Knowledge Hub MCP + second-brain eval. Activate after a green L0 PR; stay soft. |
 
 These are the eight active fleet repos. `test-perms-check` remains an excluded
-pending-adoption sandbox.
+pending-adoption sandbox. `plx_secondbrain` is enrolled as tooling but is not
+yet active.
 
 ---
 

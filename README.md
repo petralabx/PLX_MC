@@ -73,6 +73,10 @@ same script; there is exactly one definition of "passing."
 ./scripts/preflight.sh --mode pre-push     # before every push (full suite + build)
 ```
 
+Org CI is staged across layers **L0–L3** (compliance + secrets floor, parallel
+product CI, HITL, post-merge). Canonical SOP:
+[`docs/runbooks/CI-PIPELINE.md`](docs/runbooks/CI-PIPELINE.md).
+
 ## Reading order for agents
 
 1. [`SOUL.md`](SOUL.md) — mission and non-negotiables

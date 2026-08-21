@@ -201,6 +201,17 @@ Also include:
 - Clear **Summary** (what / why)
 - Human accountable owner named in task or PR metadata
 - Risk label override if needed: `risk:low` / `risk:high`
+- **`## Review links`** in the **PR body**, with **absolute URLs** (preview,
+  staging, design refs). Reviewers must not have to open a second file.
+
+Agents must **not** commit a shared review-links index from a feature PR
+(for example portal `docs/runbooks/AGENT-PR-REVIEW-LINKS.md`). That file is an
+optional operator index, not an agent close-out artifact.
+
+**MRP / ERP milestone registers:** cite `MRP-M-XXX` / `ERP-M-XXX` in the PR
+title and commit messages when the work maps to a milestone. Do **not**
+require editing the shared register markdown on the feature branch — stamp the
+register after merge so agent PRs do not rebase-fight on one file.
 
 ---
 
@@ -362,6 +373,9 @@ Operator PRs without a confirmed link create/update a routing **proposal**
 - Don't treat fuzzy routing suggestions as auto-link authority.
 - Don't restore sparse operator-PR Task creation when proposals are disabled —
   fall back to explicit triage/audit only.
+- Don't commit a shared review-links index or milestone-register markdown from
+  a feature PR. Put review URLs in the PR body; cite `MRP-M-*` / `ERP-M-*` in
+  titles and commits; stamp registers after merge.
 
 ---
 

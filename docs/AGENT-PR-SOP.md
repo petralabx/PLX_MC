@@ -1,14 +1,43 @@
 # Agent — How to Use Mission Control
 
-**Audience:** AI agents and operators driving agents (Cursor, Claude Code, ChatGPT/Codex, swarm) against a PLX-tracked repo.
+**Audience:** AI agents and operators driving agents (Cursor, Claude Code, ChatGPT/Codex, Grok, swarm) against a PLX-tracked repo.
 
-**Owner:** Vince · **Status:** active · **Effective:** 2026-07-13
+**Owner:** Vince · **Status:** active · **Effective:** 2026-08-23
 
-> **TL;DR** — Agents execute; a **named human** owns the outcome. Before an agent opens a PR: **check out** the Mission Control task(s) with `meta.actor.repo` matching the repo under edit, stamp **one `MC-Checkout: dsp_…` line per task**, hand in evidence via **`mc_complete_task`**, then run **`node scripts/compliance-pr-verify.mjs --wait`** (GitHub `compliance` must be SUCCESS — `complete()` alone is not gate success). Carry the **risk-tier bundle**, and **never** edit the compliance workflow to force a pass.
+> **TL;DR** — Agents execute; a **named human** owns the outcome. Before first
+> edit or any `PR_CREATE`: **search existing `TASK-*`**, then **`mc_checkout_task`**
+> on the connector scoped to the repo under edit. Confirm returned `taskId` is a
+> **non-null string** and copy **`prBodyLine` exactly**. Never invent a `dsp_*`.
+> Never write `MC-Checkout: pending`. If checkout tools are missing, **stop —
+> do not open the PR**. Hand in evidence via **`mc_complete_task`** with
+> **non-empty `verificationCommands` AND `rollback`**, then run
+> **`node scripts/compliance-pr-verify.mjs --wait`**. Carry the **risk-tier
+> bundle**, and **never** edit the compliance workflow to force a pass.
 
 Live cockpit: [https://mc.plxcustomer.io](https://mc.plxcustomer.io)
 
 Companion docs: [`COLLABORATOR-SOP.md`](COLLABORATOR-SOP.md) (all PR authors), [`HUMAN-MC-SOP.md`](HUMAN-MC-SOP.md) (human UI workflows), [`ROLLBACK-PLAN-SOP.md`](ROLLBACK-PLAN-SOP.md), [`docs/runbooks/CI-PIPELINE.md`](runbooks/CI-PIPELINE.md) (org CI layers L0–L3).
+
+---
+
+## 0. Pipeline contract (before first edit / PR_CREATE)
+
+This SOP is the canonical copy. Claude, Cursor, Grok, Codex, and swarm
+runtimes that start from `PLX_MC` follow it. Portal consumer files are
+updated in a separate PR — do not edit those repos from here.
+
+| # | Rule |
+|---|------|
+| 1 | Search existing `TASK-*`. Do **not** auto-create unless routing found nothing **AND** the conductor said to create. |
+| 2 | `mc_checkout_task` on the connector scoped to the repo under edit. Confirm returned `taskId` is a non-null string. Copy `prBodyLine` exactly. A Hub stamp on a portal PR (and vice versa) fails GitHub verify with `taskId:null`. |
+| 3 | Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and open a PR. If tools are missing, **stop — do not open the PR**. |
+| 4 | `mc_complete_task` must include non-empty `verificationCommands` **AND** `rollback`. |
+| 5 | Local push uses the consumer's pre-push handshake when present. Never `--no-verify`. |
+| 6 | Portal required merge checks: `lint-typecheck-build`, `compliance`, `Validate ledgers`. |
+| 7 | On portal, `silent-failure-audit` is a real fail. Do not raise `BASELINE`. Fix new catch-empty-returns with `QueryResult<T>`. |
+
+There is no create-a-task-then-stamp shortcut. A pending stamp is not a
+valid checkout. `MC-Checkout: pending` is a forbidden placeholder.
 
 ---
 
@@ -124,8 +153,8 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 | Step | Tool | Notes |
 |------|------|-------|
 | Find work | `mc_search_tasks` | Filter by `query` (alias `q`), `bucket`, `stage`, `limit`; `meta.filter` echoes what was applied |
-| Create task | `mc_create_task` | Requires `title` + `bucket`; optional `description`, `priority`, `repos` (registry **ids**, not GitHub slugs — see table below) |
-| Start | `mc_checkout_task` | Copy `MC-Checkout: dsp_*` from `meta.links.checkoutStamp` |
+| Create task | `mc_create_task` | **Not the default.** Search existing `TASK-*` first. Create only when routing found nothing **AND** the conductor said to create. Requires `title` + `bucket`; optional `description`, `priority`, `repos` (registry **ids**, not GitHub slugs — see table below) |
+| Start | `mc_checkout_task` | Live repo-scoped checkout. Confirm `data.taskId` is a non-null string. Copy `prBodyLine` / `meta.links.checkoutStamp` exactly. Never invent a `dsp_*`. Never write `MC-Checkout: pending`. |
 
 #### Two repo namespaces (do not mix)
 
@@ -140,17 +169,21 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 
 **MCP cannot create projects or buckets.** Operators create those in the MC UI ([`HUMAN-MC-SOP.md`](HUMAN-MC-SOP.md)).
 
-### Checkout handshake (before first push)
+### Checkout handshake (before first edit / PR_CREATE)
 
 A successful tool call is not enough. Validate the returned checkout once:
 
-- `data.taskId` equals the expected Task.
+- `data.taskId` is a **non-null string** and equals the expected Task.
 - `meta.actor.repo` equals the exact full target slug (`petralabx/<repo>`).
 - The PR uses `data.prBodyLine` exactly; never reconstruct the stamp.
 - Missing or mismatched task/repo metadata makes the checkout invalid.
+- If the connector or script cannot return a live `dsp_*`, **stop**. Do not
+  invent an id and do not write `MC-Checkout: pending`.
 - Use `COMPLIANCE_CAPTURE=1 node scripts/compliance-checkout.mjs` with explicit
   `MC_REPO` when the MCP registration is missing or mis-scoped. The script
   performs this handshake in the checkout call and exits nonzero on mismatch.
+  That is still a live checkout — it is not permission to open a PR with a
+  placeholder stamp.
 
 ### Fallback: capture hook / HTTP
 
@@ -247,7 +280,7 @@ The compliance gate evaluates **`task.evidence`** on the checked-out task entity
 
 | Source | What it does |
 |--------|--------------|
-| **`mc_complete_task`** (`actionComplete`) | **Authoritative** — writes `task.evidence`: summary, checklist items, `rollback`, optional `testRun`/`shots` |
+| **`mc_complete_task`** (`actionComplete`) | **Authoritative** — writes `task.evidence`. Must include non-empty `verificationCommands` **AND** `rollback` (plus summary; optional `testRun`/`shots` by tier) |
 | **PR body `## Rollback Plan`** | Human-readable; may satisfy **repo-specific** checks (e.g. `petralabx/agentic-swarm` evidence workflow) but is **not** the primary MC gate input |
 
 ### `mc_complete_task` fields that matter
@@ -255,8 +288,8 @@ The compliance gate evaluates **`task.evidence`** on the checked-out task entity
 | Field | Tier impact |
 |-------|-------------|
 | `summary` | Required at all tiers |
-| `rollback` | Required for standard/high |
-| `verificationCommands` | Marks verification checklist item done |
+| `rollback` | **Required** — non-empty string. The gate treats a blank rollback as incomplete. |
+| `verificationCommands` | **Required** — non-empty string array. Marks the verification checklist item done. |
 | `testRun` or `shots` | Required for **high** tier (migrations, auth, infra, workflows, deploy) |
 | `commitSha`, `prUrl` | Audit trail; recorded on completion event |
 
@@ -315,8 +348,10 @@ Playwright or a Next.js `next build` into the org-required floor.
 | Repo | Before commit / push |
 |------|----------------------|
 | `PLX_MC` | `./scripts/preflight.sh --mode pre-commit` then `--mode pre-push` |
-| `plx-customer-portal` | Portal test/build/hygiene per `docs/runbooks/CONTRIBUTING.md` |
+| `plx-customer-portal` | Portal test/build/hygiene per `docs/runbooks/CONTRIBUTING.md`. Required merge checks: `lint-typecheck-build`, `compliance`, `Validate ledgers`. `silent-failure-audit` is a real fail. |
 | `agentic-swarm` | Repo preflight / wterm gate as documented there |
+
+Never `--no-verify`. Use the consumer's pre-push handshake when present.
 
 ---
 
@@ -365,7 +400,11 @@ Operator PRs without a confirmed link create/update a routing **proposal**
 
 **Don't**
 
-- Don't open an agent PR without checkout.
+- Don't open an agent PR without a live repo-scoped checkout.
+- Don't invent a `dsp_*` id or write `MC-Checkout: pending` so you can open the PR.
+- Don't auto-create a Task then stamp it unless routing found nothing AND the conductor said to create.
+- Don't open a PR when checkout tools are missing — stop and wait.
+- Don't skip the consumer pre-push handshake (`--no-verify` is forbidden).
 - Don't edit or disable `.github/workflows/*compliance*` to pass the check.
 - Don't put secrets in dispatch messages or PR bodies.
 - Don't treat soft-mode warnings as optional forever on repos slated for hard cutover.
@@ -376,6 +415,8 @@ Operator PRs without a confirmed link create/update a routing **proposal**
 - Don't commit a shared review-links index or milestone-register markdown from
   a feature PR. Put review URLs in the PR body; cite `MRP-M-*` / `ERP-M-*` in
   titles and commits; stamp registers after merge.
+- Don't raise portal `silent-failure-audit` BASELINE. Fix new catch-empty-returns
+  with `QueryResult<T>`.
 
 ---
 
@@ -383,8 +424,9 @@ Operator PRs without a confirmed link create/update a routing **proposal**
 
 | Reason | Fix |
 |--------|-----|
-| No valid checkout | `mc_checkout_task` + stamp `MC-Checkout` |
-| Missing evidence on task | `mc_complete_task` with summary, rollback, verification, testRun/shots as tier requires |
+| No valid checkout | `mc_checkout_task` on the **repo-scoped** connector; copy `prBodyLine`. Do not invent a stamp. |
+| Checkout tools missing | **Stop.** Do not write `MC-Checkout: pending`. Do not open the PR. |
+| Missing evidence on task | `mc_complete_task` with non-empty `verificationCommands` **AND** `rollback` (plus summary; testRun/shots as tier requires) |
 | Missing bucket PRD (high) | Link PRD on bucket in MC UI |
 | Repo-specific rollback check | Add `## Rollback Plan` to PR body (e.g. agentic-swarm) |
 | MC unreachable | Fail-closed; re-run check when MC is up |

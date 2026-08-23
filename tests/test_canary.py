@@ -92,3 +92,41 @@ def test_hygiene_gate_exit_codes(tmp_path):
     assert _run(checker, tmp_path) == 1, (
         "hygiene gate must exit 1 on a forbidden root file"
     )
+
+
+def test_pipeline_contract_forbids_pending_stamps():
+    """TASK-1199: generated surfaces + SOP forbid placeholder stamps."""
+    surfaces = [
+        REPO_ROOT / "AGENTS.md",
+        REPO_ROOT / "CLAUDE.md",
+        REPO_ROOT / ".cursor" / "rules" / "governance.mdc",
+        REPO_ROOT / "docs" / "AGENT-PR-SOP.md",
+        REPO_ROOT / "config" / "governance-contract.yaml",
+    ]
+    for path in surfaces:
+        text = path.read_text(encoding="utf-8")
+        assert "or create one" not in text, f"{path.name} still says create-then-stamp"
+        assert "checks out or creates" not in text, f"{path.name} still auto-creates"
+        assert "MC-Checkout: pending" in text, f"{path.name} must forbid pending stamps"
+        assert "verificationCommands" in text, (
+            f"{path.name} must require verificationCommands"
+        )
+
+    sop = (REPO_ROOT / "docs" / "AGENT-PR-SOP.md").read_text(encoding="utf-8")
+    assert "create-a-task-then-stamp" in sop
+    assert "do not open the PR" in sop
+
+    pipeline = (REPO_ROOT / "docs" / "runbooks" / "CI-PIPELINE.md").read_text(
+        encoding="utf-8"
+    )
+    for marker in (
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".cursorrules",
+        "mc-compliance.mdc",
+        "prompts/uat-agent/v2",
+        "copilot-instructions.md",
+        "GEMINI.md",
+        "silent-failure-audit",
+    ):
+        assert marker in pipeline, f"CI-PIPELINE.md must name {marker}"

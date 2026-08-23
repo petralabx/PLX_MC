@@ -133,8 +133,10 @@ ruleset):
 
 | Check | Layer | Notes |
 |-------|-------|--------|
+| `compliance` | L0 | Org floor. Agents need a live repo-scoped `MC-Checkout: dsp_*` — never `pending`. |
 | `lint-typecheck-build` | L1 | Keep this exact name. Split the sequential monolith into parallel jobs; do not reintroduce noop shadowing. |
 | `Validate ledgers (vmc-quality-ledger/v1)` | L1-adjacent | Ledger schema gate when the portal publishes `vmc-quality-ledger/v1`. |
+| `silent-failure-audit` | L1-adjacent | **Real fail** on portal `product_app` repos. Do not raise `BASELINE`. Fix new catch-empty-returns with `QueryResult<T>`. |
 
 Hub `PLX_MC` local equivalent is `./scripts/preflight.sh` (pre-commit / pre-push /
 CI) — that is **this repo’s** product gate, not an org-wide Next/Playwright
@@ -180,7 +182,7 @@ further repos that are **not** in that list.
 | Repo | Registry | L0 today | Extra required (repo) | Notes |
 |------|----------|----------|------------------------|--------|
 | `petralabx/PLX_MC` | hub, hard, active | `compliance` | preflight CI | Generator SSOT. No downstream `drift` copy. |
-| `petralabx/plx-customer-portal` | product_app, hard, active | `compliance` (+ `drift`) | `lint-typecheck-build`, `Validate ledgers (vmc-quality-ledger/v1)` | Staging is the integration branch. |
+| `petralabx/plx-customer-portal` | product_app, hard, active | `compliance` (+ `drift`) | `lint-typecheck-build`, `Validate ledgers (vmc-quality-ledger/v1)`, `silent-failure-audit` | Staging is the integration branch. `silent-failure-audit` is a real fail — do not raise `BASELINE`. |
 | `petralabx/agentic-swarm` | product_platform, hard, active | `compliance` + `drift` | repo preflight | |
 | `petralabx/skills` | skills, hard, active | `compliance` + `drift` | | |
 | `petralabx/local-inference` | tooling, hard, active | `compliance` + `drift` | | |
@@ -190,8 +192,34 @@ further repos that are **not** in that list.
 | `petralabx/test-perms-check` | sandbox, soft, pending_adoption | optional | | Stays soft. |
 | `petralabx/plx_secondbrain` | tooling, **registry=soft**, active | `compliance` + `drift` (live) | | Enrolled TASK-1165. L0 landed via https://github.com/petralabx/plx_secondbrain/pull/2. Stays soft; do not flip hard. |
 
-Most enrolled non-hub repos require **`compliance` + `drift`**. Portal adds the
-two extra names above. Do not org-require those extras.
+Most enrolled non-hub repos require **`compliance` + `drift`**. Portal adds
+`lint-typecheck-build`, `Validate ledgers`, and `silent-failure-audit`. Do not
+org-require those extras.
+
+---
+
+## 7a. Runtime entry files (consumers must keep in sync)
+
+`petralabx/PLX_MC` is the canonical SOP. Agents that start from this repo
+(Claude, Cursor, Grok, Codex, swarm) read the Hub copies. Portal and other
+consumers keep their own runtime entry files in sync with the pipeline
+contract in [`AGENT-PR-SOP.md`](../AGENT-PR-SOP.md) / `AGENTS.md`. Do **not**
+edit those consumer files from a PLX_MC PR.
+
+| Consumer file | Why it must stay in sync |
+|---------------|--------------------------|
+| `AGENTS.md` | Cursor / swarm / generic agent entry |
+| `CLAUDE.md` | Claude Code entry |
+| `.cursorrules` | Legacy Cursor entry |
+| `.cursor/rules/mc-compliance.mdc` | Always-apply checkout/compliance rule |
+| `prompts/uat-agent/v2/*` | Portal UAT agent prompts |
+| `.github/copilot-instructions.md` | GitHub Copilot / coding-agent entry |
+| `GEMINI.md` | Gemini / other runtime entry |
+
+Those copies must forbid `MC-Checkout: pending`, require a live repo-scoped
+checkout before `PR_CREATE`, require non-empty `verificationCommands` AND
+`rollback` on `mc_complete_task`, and never invent a `dsp_*`. On portal
+`product_app` repos, `silent-failure-audit` is a real fail.
 
 ---
 
@@ -224,8 +252,9 @@ Full fleet enrollment remains [`REPO-ONBOARDING.md`](REPO-ONBOARDING.md) +
    - **All repos:** require `compliance`. Require `drift` on downstream copies
      until the org required-workflow pin is live.
    - **Product apps:** also require the single L1 aggregator name (portal:
-     `lint-typecheck-build`). Optionally the ledger validator. **Never** add
-     Playwright or a second build job as an org-wide required check.
+     `lint-typecheck-build`). Optionally the ledger validator. On portal,
+     `silent-failure-audit` is a real fail — do not raise `BASELINE`.
+     **Never** add Playwright or a second build job as an org-wide required check.
 6. Confirm L1 `on:` has **no** path filters; the aggregator always reports.
 7. Put Playwright / persona QA on L2 (path/`if:` inside optional jobs, or
    staging).

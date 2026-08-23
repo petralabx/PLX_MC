@@ -169,10 +169,37 @@ To enable: set `PLX_MC_MCP_ENABLED=1`, `MC_MCP_API_KEY`, `MC_OPERATOR_EMAIL`, `M
 in team MCP env ([runbook](docs/runbooks/plx-mc-mcp-team-registration.md)). Swarm:
 `SWARM_DISPATCH_ENABLED=1`. All changes still pass `./scripts/preflight.sh`.
 
-Before first push, accept a checkout only when its returned Task ID and exact
-full repository slug match the intended work; copy its returned
-`MC-Checkout` line unchanged. Use `scripts/compliance-checkout.mjs` when MCP
-metadata is missing or mis-scoped.
+## Pipeline contract (all agent runtimes)
+
+This repo is the canonical SOP. Claude, Cursor, Grok, Codex, and swarm
+agents that start from `PLX_MC` follow the same rules. Consumer copies
+(`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/mc-compliance.mdc`,
+`prompts/uat-agent/v2/*`, `.github/copilot-instructions.md`, `GEMINI.md`)
+must stay in sync — do not edit those consumer files from a PLX_MC PR.
+
+Before first edit or any `PR_CREATE` on a tracked consumer:
+
+1. Search existing `TASK-*`. Do not auto-create unless routing found
+   nothing AND the conductor said to create.
+2. `mc_checkout_task` on the connector scoped to the repo under edit.
+   Confirm returned `taskId` is a non-null string. Copy `prBodyLine`
+   exactly. A Hub stamp on a portal PR (and vice versa) fails GitHub
+   verify with `taskId:null`.
+3. Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and
+   open a PR. If tools are missing, stop — do not open the PR.
+4. `mc_complete_task` must include non-empty `verificationCommands`
+   AND `rollback`.
+5. Local push uses the consumer's pre-push handshake when present.
+   Never `--no-verify`.
+6. Portal required merge checks: `lint-typecheck-build`, `compliance`,
+   `Validate ledgers`.
+7. On portal, `silent-failure-audit` is a real fail. Do not raise
+   `BASELINE`. Fix new catch-empty-returns with `QueryResult<T>`.
+
+Accept a checkout only when its returned Task ID and exact full
+repository slug match the intended work. Use
+`scripts/compliance-checkout.mjs` when MCP metadata is missing or
+mis-scoped — that is a live checkout, not a substitute stamp.
 
 ## Agentic Swarm Delegation (composed)
 
@@ -214,16 +241,19 @@ Swarm dispatch is **composed into PLX-MC** (`dispatch_to_swarm`, `list_swarm_tea
 
 ## Agent Task & PR Workflow
 
-- Every change to a tracked repo must resolve to a Mission Control (MC) task. An agent run that opens a PR must first check out an MC task (or create one) and stamp the PR body with `MC-Checkout: <id>` for each task it completes.
-- Humans (operators) are recorded but not gated; autonomous agents are gated on a complete bundle — link the work to a task so the gate can attribute and verify it.
-- One logical theme per PR. Multiple related MC tasks may be completed in a single PR — add one `MC-Checkout: <id>` line per task; the gate verifies every referenced task and blocks if any is incomplete.
+- Every change to a tracked repo must resolve to a Mission Control (MC) task. Before first edit or any PR_CREATE: search existing TASK-* ids. Do not auto-create unless routing found nothing AND the conductor said to create.
+- Check out via `mc_checkout_task` on the connector scoped to the repo under edit. Confirm the returned `taskId` is a non-null string. Copy `prBodyLine` exactly. A Hub stamp on a portal PR (and vice versa) fails GitHub verify with `taskId:null`.
+- Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and open a PR. If checkout tools are missing, stop — do not open the PR.
+- Humans (operators) are recorded but not gated; autonomous agents are gated on a complete bundle — link the work to a live repo-scoped checkout so the gate can attribute and verify it.
+- One logical theme per PR. Multiple related MC tasks may be completed in a single PR — add one live `MC-Checkout: dsp_*` line per task; the gate verifies every referenced task and blocks if any is incomplete.
 - Carry the tier-appropriate bundle: a clear description always; a `## Rollback Plan` for anything beyond docs/tests; evidence (tests/screenshots) plus a linked PRD for high-risk changes (DB migrations, auth/permissions, infra, `.github/workflows`, deploy).
 - Name a human accountable owner for agent-driven work: agents execute, a person owns the outcome.
 - Never edit, disable, or bypass a repo's compliance gate workflow to make the check pass — that is a governance violation.
-- Prefer the automated capture hook (it checks out or creates the task and stamps the PR) over manual steps; never run an autonomous agent against a tracked repo without a checked-out task.
+- `mc_complete_task` must include non-empty `verificationCommands` AND `rollback`. A successful complete is evidence hand-in only — it is not gate success. Do not treat agent work as complete until the stamped PR's GitHub `compliance` check is SUCCESS (or `scripts/compliance-pr-verify.mjs --wait` exits 0).
+- Local push uses the consumer's pre-push handshake when present. Never `--no-verify`.
 - Confirm `meta.actor.repo` equals the exact full slug of the repo under edit before accepting a checkout stamp; never stamp a Portal- or Hub-scoped `dsp_*` on a different repo (decision 3).
-- A successful `mc_complete_task` is evidence hand-in only — it is not gate success. Do not treat agent work as complete until the stamped PR's GitHub `compliance` check is SUCCESS (or `scripts/compliance-pr-verify.mjs --wait` exits 0).
-- These rules apply to every agent runtime (Cursor, Claude Code, ChatGPT/Codex, the swarm). This contract is the single source — change it here, regenerate, and every runtime's rule file updates.
+- Portal required merge checks: `lint-typecheck-build`, `compliance`, `Validate ledgers`. On portal, `silent-failure-audit` is a real fail — do not raise BASELINE; fix new catch-empty-returns with `QueryResult<T>`.
+- These rules apply to every agent runtime (Cursor, Claude Code, ChatGPT/Codex, Grok, the swarm). This contract is the single source — change it here, regenerate, and every runtime's rule file updates.
 
 ## Repo Hygiene
 

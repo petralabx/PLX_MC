@@ -17,6 +17,7 @@ import { getBuckets, getEntity } from "@/lib/sync/repo";
 import { resolveHumanAccountableOwner, type Evidence, type Task } from "@/lib/mc-data";
 import { requireMcpActor } from "@/lib/routing/mutations/actors";
 import type { McpIdentity } from "./auth";
+import { resolveCheckoutRepo } from "./checkout-repo";
 import { taskLink } from "./envelope";
 import { buildHonestyFields } from "./honesty";
 import { syncMetaForTask } from "./sync-meta";
@@ -263,15 +264,20 @@ export async function actionListBuckets(
   return { buckets, count: buckets.length };
 }
 
-export async function actionCheckout(identity: McpIdentity, taskId: string) {
+export async function actionCheckout(
+  identity: McpIdentity,
+  taskId: string,
+  options: { repo?: string } = {}
+) {
+  const repo = resolveCheckoutRepo(identity.repo, options.repo);
   requireMcpActor(identity, "task.checkout", { type: "task", id: taskId }, {
-    repositoryId: identity.repo,
+    repositoryId: repo,
   });
   const { checkoutId } = await checkout({
     taskId,
     runtime: identity.runtime,
     accountableHuman: identity.operatorEmail,
-    repo: identity.repo,
+    repo,
     actor: identity.actor,
     door: "mcp",
   });
@@ -282,6 +288,7 @@ export async function actionCheckout(identity: McpIdentity, taskId: string) {
     prBodyLine: stamp,
     link: taskLink(taskId),
     sync: await syncMetaForTask(taskId),
+    actor: { repo },
   };
 }
 

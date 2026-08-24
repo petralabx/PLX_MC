@@ -174,7 +174,7 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 A successful tool call is not enough. Validate the returned checkout once:
 
 - `data.taskId` is a **non-null string** and equals the expected Task.
-- `meta.actor.repo` equals the exact full target slug (`petralabx/<repo>`).
+- `data.actor.repo` (checkout receipt) or `meta.actor.repo` equals the exact full target slug (`petralabx/<repo>`). Hub `mc_checkout_task` accepts optional `repo` to bind allowlisted consumers (starting with `petralabx/local-inference`); omitted `repo` keeps the connector `X-MC-Repo`. Unknown slugs fail closed.
 - The PR uses `data.prBodyLine` exactly; never reconstruct the stamp.
 - Missing or mismatched task/repo metadata makes the checkout invalid.
 - If the connector or script cannot return a live `dsp_*`, **stop**. Do not

@@ -16,6 +16,22 @@
 
 ## Lessons
 
+### 2026-08-24 (ET) — Hub checkout omitted actor.repo for consumer slugs
+
+- **What happened:** Cloud/Grok used Hub `mc_checkout_task({ taskId })` for
+  `petralabx/local-inference` work (e.g. #37). The stamp minted with Hub
+  `x-mc-repo` (`petralabx/PLX_MC` or unscoped), and consumer compliance failed
+  decision 3 / `taskId:null`.
+- **Root cause:** Checkout bound `identity.repo` from the hosted connector
+  header only. The tool took `{ taskId }` and the MCP receipt omitted
+  `actor.repo`, so callers could not refuse an unscoped stamp. Cloud VMs cannot
+  run the consumer REST script (`x-mc-repo: petralabx/local-inference`).
+- **Rule going forward:** Hub `mc_checkout_task` accepts optional GitHub slug
+  `repo` and binds it only when allowlisted (start: `petralabx/local-inference`).
+  Omitted `repo` stays the connector default — never silently default Hub to a
+  consumer. Unknown slugs fail closed. Refuse a checkout receipt unless
+  `actor.repo` equals the repo under edit.
+
 ### 2026-08-19 (ET) — Ask catalog hits are not graph nodes
 
 - **What happened:** Production Ask search returned titled hits (ARCHITECTURE),

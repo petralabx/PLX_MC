@@ -221,10 +221,24 @@ server.tool(
   }
 );
 
-server.tool("mc_checkout_task", "Check out a task; returns MC-Checkout stamp for PR body.", { taskId: z.string().min(1) }, async ({ taskId }) => {
-  if (!MCP_ENABLED) return disabledTool("mc_checkout_task");
-  return printResult(await mcFetch("/checkout", { method: "POST", body: { taskId } }));
-});
+server.tool(
+  "mc_checkout_task",
+  "Check out a task; returns MC-Checkout stamp for PR body. Optional repo binds actor.repo for allowlisted consumers (e.g. petralabx/local-inference). Omitted repo keeps MC_REPO / X-MC-Repo. Unknown slugs fail closed.",
+  {
+    taskId: z.string().min(1),
+    repo: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional GitHub slug (e.g. petralabx/local-inference) to bind checkout actor.repo. Allowlisted consumers only. Omitted = MC_REPO / X-MC-Repo."
+      ),
+  },
+  async ({ taskId, repo }) => {
+    if (!MCP_ENABLED) return disabledTool("mc_checkout_task");
+    return printResult(await mcFetch("/checkout", { method: "POST", body: { taskId, ...(repo ? { repo } : {}) } }));
+  }
+);
 
 server.tool(
   "mc_report_progress",

@@ -154,9 +154,18 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_checkout_task",
-    "Check out a task for agent work; returns MC-Checkout stamp for PR body.",
-    { taskId: z.string().min(1) },
-    async ({ taskId }) => jsonResult(await actionCheckout(identity, taskId))
+    "Check out a task for agent work; returns MC-Checkout stamp for PR body. Optional repo is a GitHub slug (owner/name) that binds checkout actor.repo for allowlisted consumers (e.g. petralabx/local-inference). Omitted repo keeps the connector X-MC-Repo identity. Unknown slugs fail closed.",
+    {
+      taskId: z.string().min(1),
+      repo: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "Optional GitHub slug (e.g. petralabx/local-inference) to bind checkout actor.repo. Allowlisted consumers only. Omitted = connector X-MC-Repo. Unknown slugs fail closed."
+        ),
+    },
+    async ({ taskId, repo }) => jsonResult(await actionCheckout(identity, taskId, { repo }))
   );
 
   server.tool(

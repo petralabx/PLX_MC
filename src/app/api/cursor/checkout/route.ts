@@ -5,11 +5,12 @@ import { taskLink } from "@/lib/mcp/envelope";
 
 const checkoutSchema = z.object({
   taskId: z.string().min(1),
+  repo: z.string().min(1).optional(),
 });
 
 export const POST = cursorRoute("mc_checkout_task", async (req, _ctx, identity, meta) => {
-  const { taskId } = await parseCursorBody(req, checkoutSchema);
-  const data = await actionCheckout(identity, taskId);
+  const { taskId, repo } = await parseCursorBody(req, checkoutSchema);
+  const data = await actionCheckout(identity, taskId, { repo });
   return {
     data,
     meta: {

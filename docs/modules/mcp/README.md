@@ -54,6 +54,13 @@ tasks are not stranded at the EN-003 Planned gate. An explicit
 `accountableOwner` in the request still wins.
 
 **PR stamp:** `mc_checkout_task` → `meta.links.checkoutStamp` = `MC-Checkout: dsp_*`.
+The checkout receipt also includes `taskId` and `actor.repo` (the slug bound on
+the credential). Optional `repo` on Hub checkout is a GitHub slug that may
+override the connector `X-MC-Repo` only for allowlisted consumers (starting
+with `petralabx/local-inference`); omitted `repo` keeps the connector default
+(Hub stays `petralabx/PLX_MC`, Portal stays `petralabx/plx-customer-portal`).
+Unknown slugs fail closed. Callers must refuse a receipt whose `actor.repo`
+does not match the repo under edit.
 
 **Approval gates (TASK-629):** `mc_request_approval` (`POST /api/cursor/request-approval`) raises a runtime approval gate on a task (`approval.request`); the task freezes input-required until a human decides in the Approvals inbox.
 Checkout also backfills a missing task `accountableOwner` through the same

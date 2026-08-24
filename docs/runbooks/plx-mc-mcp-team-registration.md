@@ -122,6 +122,20 @@ Requires `PLX_MC_MCP_ENABLED=1` on the Vercel production deployment (already liv
 
 **Verified 2026-06-30:** `GET /api/cursor/self-check` returns `200 { ok: true, mcpEnabled: true }` with the headers above.
 
+### Claude Code Cloud (project `.mcp.json`)
+
+Claude Code Cloud loads **project-scope** `.mcp.json` only. User-scope
+`claude mcp add` does not reach Cloud sessions.
+
+On the Cloud environment for this repo:
+
+1. Set `MC_MCP_API_KEY` and `MC_OPERATOR_EMAIL` (env expansion in `.mcp.json`; never a literal key).
+2. Allow egress to `mc.plxcustomer.io`.
+
+This repo's committed `.mcp.json` is Hub-only (`PLX-MC-Hub`,
+`x-mc-repo: petralabx/PLX_MC`). Never put Hub in the portal repo's
+`.mcp.json`.
+
 **Cloud attach caveat (2026-07):** a saved Team MCP can appear in Integrations
 but attach with an empty catalog in a Cloud Agent. For API-launched agents, use
 inline `mcpServers[]` as the reliable path. For dashboard-launched agents with

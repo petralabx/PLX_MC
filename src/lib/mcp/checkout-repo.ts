@@ -9,7 +9,14 @@
 
 import { ApiError } from "@/lib/api/route";
 
-export const MCP_CHECKOUT_REPO_ALLOWLIST = ["petralabx/local-inference"] as const;
+export const MCP_CHECKOUT_REPO_ALLOWLIST = [
+  "petralabx/local-inference",
+  "petralabx/skills",
+  "petralabx/1hr-after",
+  "petralabx/furgenics",
+  "petralabx/for-and-against",
+  "petralabx/agentic-swarm",
+] as const;
 
 const GITHUB_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 

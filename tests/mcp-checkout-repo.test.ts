@@ -23,7 +23,16 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
 import { ApiError } from "@/lib/api/route";
 import { actionCheckout } from "@/lib/mcp/actions";
 import type { McpIdentity } from "@/lib/mcp/auth";
-import { resolveCheckoutRepo } from "@/lib/mcp/checkout-repo";
+import { MCP_CHECKOUT_REPO_ALLOWLIST, resolveCheckoutRepo } from "@/lib/mcp/checkout-repo";
+
+const HARD_GATED_CONSUMERS = [
+  "petralabx/local-inference",
+  "petralabx/skills",
+  "petralabx/1hr-after",
+  "petralabx/furgenics",
+  "petralabx/for-and-against",
+  "petralabx/agentic-swarm",
+] as const;
 
 const hubIdentity: McpIdentity = {
   operatorEmail: "cos@petrasoap.com",
@@ -52,10 +61,15 @@ describe("resolveCheckoutRepo", () => {
     );
   });
 
-  it("allowlisted local-inference binds that slug", () => {
-    expect(resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/local-inference")).toBe(
-      "petralabx/local-inference"
-    );
+  it("exports the hard-gated consumer allowlist without Portal", () => {
+    expect([...MCP_CHECKOUT_REPO_ALLOWLIST]).toEqual([...HARD_GATED_CONSUMERS]);
+    expect(MCP_CHECKOUT_REPO_ALLOWLIST).not.toContain("petralabx/plx-customer-portal");
+  });
+
+  it("allowlisted hard-gated consumers bind that slug", () => {
+    for (const slug of HARD_GATED_CONSUMERS) {
+      expect(resolveCheckoutRepo("petralabx/PLX_MC", slug)).toBe(slug);
+    }
   });
 
   it("connector's own slug is accepted even when not on the consumer allowlist", () => {
@@ -66,9 +80,14 @@ describe("resolveCheckoutRepo", () => {
   });
 
   it("rejects a non-allowlisted slug (fail closed)", () => {
-    expect(() => resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/skills")).toThrow(ApiError);
+    expect(() =>
+      resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/plx-customer-portal")
+    ).toThrow(ApiError);
+    expect(() => resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/unknown-repo")).toThrow(
+      ApiError
+    );
     try {
-      resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/skills");
+      resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/plx-customer-portal");
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError);
       expect((err as ApiError).code).toBe("repo_not_allowlisted");
@@ -131,8 +150,29 @@ describe("actionCheckout actor.repo receipt", () => {
     );
   });
 
-  it("rejects a non-allowlisted slug and does not mint a checkout", async () => {
-    await expect(actionCheckout(hubIdentity, "TASK-1206", { repo: "petralabx/skills" })).rejects.toMatchObject({
+  it("allowlisted skills binds actor.repo on the minted checkout", async () => {
+    const receipt = await actionCheckout(hubIdentity, "TASK-1206", {
+      repo: "petralabx/skills",
+    });
+    expect(receipt.actor.repo).toBe("petralabx/skills");
+    expect(mocks.checkout).toHaveBeenCalledWith(
+      expect.objectContaining({ repo: "petralabx/skills", taskId: "TASK-1206" })
+    );
+  });
+
+  it("rejects Portal slug from Hub identity and does not mint a checkout", async () => {
+    await expect(
+      actionCheckout(hubIdentity, "TASK-1206", { repo: "petralabx/plx-customer-portal" })
+    ).rejects.toMatchObject({
+      code: "repo_not_allowlisted",
+    });
+    expect(mocks.checkout).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown slug and does not mint a checkout", async () => {
+    await expect(
+      actionCheckout(hubIdentity, "TASK-1206", { repo: "petralabx/unknown-repo" })
+    ).rejects.toMatchObject({
       code: "repo_not_allowlisted",
     });
     expect(mocks.checkout).not.toHaveBeenCalled();

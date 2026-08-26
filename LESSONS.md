@@ -16,6 +16,17 @@
 
 ## Lessons
 
+### 2026-08-26 (ET) — listed gmail/Proton operators got operator_not_allowed
+
+- **What happened:** Vince allowlisted `taylorvalton@gmail.com` /
+  `stephen.alton@gmail.com` / `vtasachet@proton.me` on `PLX_MC_ALLOWED_USERS`.
+  MCP still returned `operator_not_allowed` 403.
+- **Root cause:** `isAllowedUser` required `isPetraEmail()` before the CSV
+  check, so an explicit list entry was vetoed by domain.
+- **Rule going forward:** CSV exact case-insensitive match is the admission
+  gate. Fail closed on empty CSV. Unlisted still denied. `isPetraEmail` stays
+  a picker helper, not an MCP/sign-in veto.
+
 ### 2026-08-24 (ET) — Hub checkout omitted actor.repo for consumer slugs
 
 - **What happened:** Cloud/Grok used Hub `mc_checkout_task({ taskId })` for

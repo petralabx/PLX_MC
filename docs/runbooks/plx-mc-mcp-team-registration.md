@@ -53,7 +53,7 @@ Cloud user broader write access.
 | `MC_BASE_URL` | `https://mc.plxcustomer.io` |
 | `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`, `sp_mcp_hermes`, or `sp_mcp_swarm` |
 | `MC_MCP_API_KEY` | key for that exact principal: shared compatibility key only for `sp_mcp_cursor`; otherwise the matching entry in the dedicated registry |
-| `MC_OPERATOR_EMAIL` | allowlisted `@petrasoap.com` operator — **agents:** `cos@petrasoap.com`; **human:** `vince@petrasoap.com` |
+| `MC_OPERATOR_EMAIL` | allowlisted operator on `PLX_MC_ALLOWED_USERS` — **agents:** `cos@petrasoap.com`; **human:** `vince@petrasoap.com`. Vince-approved gmail/Proton exceptions must also appear on that CSV. |
 | `MC_REPO` | target repo slug (e.g. `petralabx/plx-customer-portal`) |
 | `PLX_MC_MCP_ENABLED` | `1` |
 | `SWARM_DISPATCH_ENABLED` | `0` until swarm is needed |
@@ -101,7 +101,7 @@ Cursor MCP child processes do not inherit PowerShell env vars. Use the repo laun
 
 3. Reload Cursor MCP servers after bootstrap or key rotation.
 
-Server allowlist: set `PLX_MC_ALLOWED_USERS` on Vercel Production (comma-separated Petra emails), then **redeploy**.
+Server allowlist: set `PLX_MC_ALLOWED_USERS` on Vercel (comma-separated emails; CSV is the source of truth, including Vince-approved gmail/Proton exceptions), then **redeploy**. See [FLEET-SECRETS-SOP.md](../FLEET-SECRETS-SOP.md) §4a.
 
 Consumer repos: run `scripts/sync-plx-mc-mcp.sh` or copy `.cursor/mcp.json` `PLX-MC` block; set `MC_REPO` per repo.
 

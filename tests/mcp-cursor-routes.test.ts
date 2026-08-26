@@ -93,6 +93,30 @@ describe("mcp auth", () => {
         })
       )
     ).toThrow(ApiError);
+    try {
+      parseOperatorContext(
+        req({
+          "x-mc-operator-email": "outsider@example.com",
+          "x-mc-repo": "petralabx/PLX_MC",
+        })
+      );
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).code).toBe("operator_not_allowed");
+      expect((err as ApiError).status).toBe(403);
+    }
+  });
+
+  it("admits a listed gmail operator through parseOperatorContext", () => {
+    vi.stubEnv("PLX_MC_ALLOWED_USERS", "vince@petrasoap.com,taylorvalton@gmail.com");
+    expect(
+      parseOperatorContext(
+        req({
+          "x-mc-operator-email": "taylorvalton@gmail.com",
+          "x-mc-repo": "petralabx/PLX_MC",
+        })
+      ).operatorEmail
+    ).toBe("taylorvalton@gmail.com");
   });
 });
 

@@ -73,6 +73,23 @@ export function repositoryFromSub(sub: string): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * Match an exact repository or one controlled organization-wide rule.
+ * Only `owner/*` is supported. Broad or nested wildcard shapes fail closed.
+ */
+export function repositoryMatchesAllowlist(
+  repository: string,
+  allowlist: readonly string[]
+): boolean {
+  return allowlist.some((rule) => {
+    if (rule === repository) return true;
+    const organizationRule = /^([^/*]+)\/\*$/.exec(rule);
+    if (!organizationRule) return false;
+    const [owner, name, extra] = repository.split("/");
+    return owner === organizationRule[1] && !!name && extra === undefined;
+  });
+}
+
 function normalizeAud(aud: unknown): string | string[] {
   if (typeof aud === "string") return aud;
   if (Array.isArray(aud) && aud.every((v) => typeof v === "string")) {
@@ -142,7 +159,7 @@ export async function verifyGitHubActionsOidc(
     return { ok: false, reason: "missing_repository" };
   }
 
-  if (!allowlist.includes(repositoryClaim)) {
+  if (!repositoryMatchesAllowlist(repositoryClaim, allowlist)) {
     return { ok: false, reason: "repo_not_allowlisted" };
   }
 

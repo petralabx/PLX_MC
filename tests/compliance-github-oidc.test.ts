@@ -168,6 +168,41 @@ describe("verifyGitHubActionsOidc", () => {
     expect(result).toEqual({ ok: false, reason: "repo_not_allowlisted" });
   });
 
+  it("accepts a repository under an allowlisted organization wildcard", async () => {
+    m.complianceOidcRepoAllowlist.mockReturnValue(["petralabx/*"]);
+    m.jwtVerify.mockResolvedValue({
+      payload: payload({
+        repository: "petralabx/new-repository",
+        sub: "repo:petralabx/new-repository:ref:refs/heads/main",
+      }),
+      protectedHeader: { alg: "RS256" },
+    });
+
+    const result = await verifyGitHubActionsOidc("org-repo.jwt");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.claims.repository).toBe("petralabx/new-repository");
+  });
+
+  it.each(["*", "petralabx*", "petralabx/**", "other-org/*"])(
+    "rejects repository for unsupported or non-matching wildcard rule %s",
+    async (rule) => {
+      m.complianceOidcRepoAllowlist.mockReturnValue([rule]);
+      m.jwtVerify.mockResolvedValue({
+        payload: payload({
+          repository: "petralabx/new-repository",
+          sub: "repo:petralabx/new-repository:ref:refs/heads/main",
+        }),
+        protectedHeader: { alg: "RS256" },
+      });
+
+      await expect(verifyGitHubActionsOidc("bad-wildcard.jwt")).resolves.toEqual({
+        ok: false,
+        reason: "repo_not_allowlisted",
+      });
+    }
+  );
+
   it("happy path: returns extended claims for an allowlisted repo", async () => {
     m.jwtVerify.mockResolvedValue({
       payload: payload(),

@@ -23,6 +23,8 @@ OIDC dogfood), [REPO-ONBOARDING.md](runbooks/REPO-ONBOARDING.md) (fleet
 enrollment). PR discipline: [COLLABORATOR-SOP.md](COLLABORATOR-SOP.md),
 [AGENT-PR-SOP.md](AGENT-PR-SOP.md). MCP registration:
 [plx-mc-mcp-team-registration.md](runbooks/plx-mc-mcp-team-registration.md).
+Per-runtime MCP + PR setup:
+[OPERATOR-AGENT-PR-SETUP.md](runbooks/OPERATOR-AGENT-PR-SETUP.md).
 M365 identities (SSO vs daemon Graph vs Office NAA):
 [M365-IDENTITY-CATALOG.md](runbooks/M365-IDENTITY-CATALOG.md).
 
@@ -72,7 +74,7 @@ Secrets Manager during deploy or rotation.
 | `COMPLIANCE_OIDC_ENABLED` | `1` — prefer GitHub Actions OIDC on verify |
 | `COMPLIANCE_OIDC_AUDIENCE` | Audience verified on OIDC tokens (e.g. `plx-mc-compliance-verify`) |
 | `COMPLIANCE_OIDC_REPO_ALLOWLIST` | Comma-separated `org/repo` list allowed to mint OIDC tokens |
-| `PLX_MC_ALLOWED_USERS` | Comma-separated Petra emails — MC sign-in + MCP operator allowlist |
+| `PLX_MC_ALLOWED_USERS` | Comma-separated operator emails — MC sign-in + MCP operator allowlist. CSV is the source of truth; Vince-approved non-Petra exceptions (gmail/Proton) are admitted when listed. |
 | `PLX_MC_MCP_API_KEY` | Server-side MCP API key (clients use `MC_MCP_API_KEY`; see §5) |
 | `VMC_API_KEY` | Sensitive. Company-brain search for Ask (`/?screen=brain-ask` → `/api/brain-ask/*`). Source: `prod/ec2-secrets`. Missing → `not_configured` empty list. `mc_self_check.brainAskConfigured` is key presence; `brainAskSearchOk` / `brainAskSearchStatus` are the live probe (no snippets). |
 | `VMC_BASE_URL` | VMC origin for Ask. Default `https://missioncontrol.tayloralton.com`. Set explicitly on Production/Preview so the default cannot drift silently. |
@@ -107,11 +109,17 @@ Until then, bearer is the rollback path if OIDC minting breaks.
 
 ### 4a. `PLX_MC_ALLOWED_USERS` (Vercel Production)
 
-Controls who may sign in to MC and invoke MCP as an operator.
+Controls who may sign in to MC and invoke MCP as an operator. The CSV is the
+**source of truth**: an exact case-insensitive match admits the address.
+Vince-approved non-Petra exceptions (gmail/Proton) are allowed when listed.
+Unlisted emails are denied. An empty or unset CSV **fails closed** (nobody is
+admitted). Petra-domain helpers (`isPetraEmail`) stay for pickers; they do not
+veto an explicit list entry.
 
-1. Edit comma-separated Petra emails in Vercel Production env (source value from
-   Secrets Manager if mirrored there).
-2. **Redeploy** MC Production.
+1. Edit comma-separated emails in the Vercel env (source value from
+   Secrets Manager if mirrored there). Still comma-separated.
+2. **Redeploy** MC after any edit — env changes do not take effect
+   on the live deployment until then.
 3. Confirm: affected user runs `mc_self_check` or loads MC UI.
 4. Remove departed users promptly — stale emails are a standing access risk.
 

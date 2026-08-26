@@ -1,9 +1,10 @@
 // Pure gate decisions (unit-tested; edge-safe — no Node APIs).
 
-import { isPetraEmail } from "@/lib/mc-data/helpers";
-
-// Server-side sign-in allowlist (SOUL: domain rule enforced server-side, not
-// just in the picker). Fail closed: no allowlist configured → nobody signs in.
+// Server-side sign-in + MCP operator allowlist. Exact case-insensitive CSV
+// match is sufficient — Vince-approved non-Petra exceptions (gmail/Proton)
+// are admitted when listed. Fail closed: empty/undefined CSV → nobody is
+// admitted. Unlisted emails are denied. Petra domain remains a picker helper
+// (`isPetraEmail`); it is not a veto of an explicit list entry.
 export function isAllowedUser(
   email: unknown,
   allowlistCsv: string | undefined = process.env.PLX_MC_ALLOWED_USERS
@@ -11,11 +12,12 @@ export function isAllowedUser(
   const addr = String(email ?? "")
     .trim()
     .toLowerCase();
-  if (!addr || !isPetraEmail(addr)) return false;
+  if (!addr) return false;
   const allowed = (allowlistCsv ?? "")
     .split(",")
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
+  if (allowed.length === 0) return false;
   return allowed.includes(addr);
 }
 

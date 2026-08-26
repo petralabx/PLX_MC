@@ -72,6 +72,66 @@ describe("MCP service principal auth", () => {
         })
       )
     ).toThrow(ApiError);
+    try {
+      parseOperatorContext(
+        req({
+          "x-mc-operator-email": "outsider@example.com",
+          "x-mc-repo": "petralabx/PLX_MC",
+        })
+      );
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).code).toBe("operator_not_allowed");
+      expect((err as ApiError).status).toBe(403);
+    }
+  });
+
+  it("admits listed gmail and Proton operators", () => {
+    vi.stubEnv(
+      "PLX_MC_ALLOWED_USERS",
+      "vince@petrasoap.com,taylorvalton@gmail.com,stephen.alton@gmail.com,vtasachet@proton.me"
+    );
+    expect(
+      parseOperatorContext(
+        req({
+          "x-mc-operator-email": "taylorvalton@gmail.com",
+          "x-mc-repo": "petralabx/PLX_MC",
+        })
+      ).operatorEmail
+    ).toBe("taylorvalton@gmail.com");
+    expect(
+      parseOperatorContext(
+        req({
+          "x-mc-operator-email": "Stephen.Alton@Gmail.com",
+          "x-mc-repo": "petralabx/PLX_MC",
+        })
+      ).operatorEmail
+    ).toBe("stephen.alton@gmail.com");
+    expect(
+      parseOperatorContext(
+        req({
+          "x-mc-operator-email": "vtasachet@proton.me",
+          "x-mc-repo": "petralabx/PLX_MC",
+        })
+      ).operatorEmail
+    ).toBe("vtasachet@proton.me");
+  });
+
+  it("rejects unlisted gmail even when other gmail addresses are listed", () => {
+    vi.stubEnv("PLX_MC_ALLOWED_USERS", "vince@petrasoap.com,taylorvalton@gmail.com");
+    try {
+      parseOperatorContext(
+        req({
+          "x-mc-operator-email": "someone.else@gmail.com",
+          "x-mc-repo": "petralabx/PLX_MC",
+        })
+      );
+      throw new Error("expected operator_not_allowed");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).code).toBe("operator_not_allowed");
+      expect((err as ApiError).status).toBe(403);
+    }
   });
 
   it("rejects invalid api keys before operator parsing grants anything", async () => {

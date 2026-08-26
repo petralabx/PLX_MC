@@ -32,7 +32,7 @@ PLX_MC_MCP_ENABLED=1          # server + client kill switch
 PLX_MC_ROUTING_SUGGEST_ENABLED=1  # mc_suggest_work + pre-checkout suggestions
 MC_MCP_PRINCIPAL_ID=sp_mcp_claude_code  # reviewed client identity
 MC_MCP_API_KEY=...            # matching shared or dedicated AWS key
-MC_OPERATOR_EMAIL=vince@...   # allowlisted Petra operator (audit context only)
+MC_OPERATOR_EMAIL=vince@...   # operator on PLX_MC_ALLOWED_USERS (audit context only)
 MC_REPO=petralabx/PLX_MC   # repo binding for checkout credentials (full GitHub slug)
 MC_BASE_URL=https://mc.plxcustomer.io
 ```

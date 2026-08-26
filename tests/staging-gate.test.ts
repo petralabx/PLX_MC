@@ -1,6 +1,8 @@
 // The staging gate's invariants. Basic mode: dormant without the secret,
 // 401 without (or with wrong) credentials, pass-through with the right ones.
-// OIDC mode: the allowlist is fail-closed and Petra-domain-only.
+// OIDC/MCP mode: the CSV allowlist is fail-closed; a listed address is
+// admitted regardless of domain, and unlisted addresses (Petra or not) are
+// denied.
 
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -46,7 +48,8 @@ describe("basic gate (fallback mode)", () => {
 });
 
 describe("OIDC sign-in allowlist", () => {
-  const LIST = "ricardo@petrasoap.com, ross@petrasoap.com,VINCE@petrasoap.com";
+  const LIST =
+    "ricardo@petrasoap.com, ross@petrasoap.com,VINCE@petrasoap.com,taylorvalton@gmail.com,vtasachet@proton.me";
 
   it("admits listed Petra users case-insensitively", () => {
     expect(isAllowedUser("ricardo@petrasoap.com", LIST)).toBe(true);
@@ -57,13 +60,18 @@ describe("OIDC sign-in allowlist", () => {
     expect(isAllowedUser("someone.else@petrasoap.com", LIST)).toBe(false);
   });
 
-  it("rejects non-Petra domains regardless of the list", () => {
-    expect(isAllowedUser("ricardo@gmail.com", "ricardo@gmail.com")).toBe(false);
+  it("admits listed gmail/Proton and still denies unlisted gmail", () => {
+    expect(isAllowedUser("taylorvalton@gmail.com", LIST)).toBe(true);
+    expect(isAllowedUser("TaylorValton@Gmail.com", LIST)).toBe(true);
+    expect(isAllowedUser("vtasachet@proton.me", LIST)).toBe(true);
+    expect(isAllowedUser("someone.else@gmail.com", LIST)).toBe(false);
   });
 
   it("fails closed with no allowlist configured", () => {
     expect(isAllowedUser("vince@petrasoap.com", undefined)).toBe(false);
     expect(isAllowedUser("vince@petrasoap.com", "")).toBe(false);
+    expect(isAllowedUser("taylorvalton@gmail.com", undefined)).toBe(false);
+    expect(isAllowedUser("taylorvalton@gmail.com", "")).toBe(false);
   });
 });
 

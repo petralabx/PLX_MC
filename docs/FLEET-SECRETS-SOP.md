@@ -119,20 +119,21 @@ Controls who may sign in to MC and invoke MCP as an operator.
 
 Controls which repos may mint OIDC tokens for verify.
 
-TASK-456 provisioned the exact production fleet allowlist:
-`petralabx/PLX_MC`, `petralabx/plx-customer-portal`,
-`petralabx/agentic-swarm`, `petralabx/skills`,
-`petralabx/local-inference`, `petralabx/1hr-after`,
-`petralabx/furgenics`, and `petralabx/for-and-against`. Rotate this set
-deliberately; do not add the excluded `test-perms-check` sandbox.
+Production uses the controlled organization rule `petralabx/*`. It admits a
+signed GitHub Actions OIDC token only when the `repository` claim has exactly
+one `owner/repository` path and the owner is `petralabx`. The verifier rejects
+broad or malformed rules such as `*`, `petralabx*`, and `petralabx/**`.
+Exact `org/repo` entries remain supported for exceptions or rollback.
 
-1. Append `org/repo` (comma-separated, no spaces) for each fleet repo entering
-   OIDC.
-2. **Redeploy** MC Production.
-3. Open a test PR on that repo; confirm verify succeeds via OIDC (check MC
-   compliance audit / workflow logs).
-4. Do **not** add repos that are not yet onboarded per
-   [REPO-ONBOARDING.md](runbooks/REPO-ONBOARDING.md).
+1. Keep `petralabx/*` for the managed organization. New `petralabx`
+   repositories then enter the OIDC allowlist without a Vercel edit.
+2. **Redeploy** MC Production after any allowlist change.
+3. Confirm the target repository is onboarded per
+   [REPO-ONBOARDING.md](runbooks/REPO-ONBOARDING.md) before enabling its
+   compliance workflow. The OIDC allowlist grants authentication, not fleet
+   governance enrollment.
+4. For rollback, replace `petralabx/*` with an exact comma-separated repository
+   snapshot and redeploy MC Production.
 
 Selected organization Actions variables are separate from the Vercel OIDC
 allowlist. On the GitHub organization `free` plan, public selected repositories

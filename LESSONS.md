@@ -27,6 +27,18 @@
   gate. Fail closed on empty CSV. Unlisted still denied. `isPetraEmail` stays
   a picker helper, not an MCP/sign-in veto.
 
+### 2026-08-26 (ET) — Hub checkout allowlist blocked five hard-gated consumers
+
+- **What happened:** Colleague agents probing Hub `mc_checkout_task({ repo })`
+  succeeded only for `petralabx/local-inference`. `petralabx/skills`,
+  `petralabx/1hr-after`, `petralabx/furgenics`, `petralabx/for-and-against`,
+  and `petralabx/agentic-swarm` failed closed (`repo_not_allowlisted`).
+- **Root cause:** `MCP_CHECKOUT_REPO_ALLOWLIST` still listed only the TASK-1206
+  pilot slug.
+- **Rule going forward:** Hub checkout allowlists every hard-gated consumer
+  except Portal (`petralabx/plx-customer-portal` stays Portal-connector only).
+  Unknown slugs still fail closed.
+
 ### 2026-08-24 (ET) — Hub checkout omitted actor.repo for consumer slugs
 
 - **What happened:** Cloud/Grok used Hub `mc_checkout_task({ taskId })` for
@@ -38,10 +50,22 @@
   `actor.repo`, so callers could not refuse an unscoped stamp. Cloud VMs cannot
   run the consumer REST script (`x-mc-repo: petralabx/local-inference`).
 - **Rule going forward:** Hub `mc_checkout_task` accepts optional GitHub slug
-  `repo` and binds it only when allowlisted (start: `petralabx/local-inference`).
+  `repo` and binds it only when allowlisted (hard-gated consumers except Portal).
   Omitted `repo` stays the connector default — never silently default Hub to a
   consumer. Unknown slugs fail closed. Refuse a checkout receipt unless
   `actor.repo` equals the repo under edit.
+
+### 2026-08-26 (ET) — Hub checkout allowlist blocked five hard-gated consumers
+
+- **What happened:** Colleague agents probing Hub `mc_checkout_task({ repo })`
+  succeeded only for `petralabx/local-inference`. `petralabx/skills`,
+  `petralabx/1hr-after`, `petralabx/furgenics`, `petralabx/for-and-against`,
+  and `petralabx/agentic-swarm` failed closed (`repo_not_allowlisted`).
+- **Root cause:** `MCP_CHECKOUT_REPO_ALLOWLIST` still listed only the TASK-1206
+  pilot slug.
+- **Rule going forward:** Hub checkout allowlists every hard-gated consumer
+  except Portal (`petralabx/plx-customer-portal` stays Portal-connector only).
+  Unknown slugs still fail closed.
 
 ### 2026-08-19 (ET) — Ask catalog hits are not graph nodes
 

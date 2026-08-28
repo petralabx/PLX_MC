@@ -55,15 +55,14 @@ tasks are not stranded at the EN-003 Planned gate. An explicit
 
 **PR stamp:** `mc_checkout_task` → `meta.links.checkoutStamp` = `MC-Checkout: dsp_*`.
 The checkout receipt also includes `taskId` and `actor.repo` (the slug bound on
-the credential). Optional `repo` on Hub checkout is a GitHub slug that may
-override the connector `X-MC-Repo` only for allowlisted hard-gated consumers
-(`petralabx/local-inference`, `petralabx/skills`, `petralabx/1hr-after`,
-`petralabx/furgenics`, `petralabx/for-and-against`, `petralabx/agentic-swarm`);
-omitted `repo` keeps the connector default (Hub stays `petralabx/PLX_MC`, Portal
-stays `petralabx/plx-customer-portal`). Unknown slugs fail closed. Hub checkout
-does not bind `petralabx/plx-customer-portal` — that slug stays on the Portal
-connector. Callers must refuse a receipt whose `actor.repo` does not match the
-repo under edit.
+the credential). One Hub connector stamps every petralabx repo: optional `repo`
+on checkout is a GitHub slug that may override the connector `X-MC-Repo` for
+allowlisted consumers (`petralabx/local-inference`, `petralabx/skills`,
+`petralabx/1hr-after`, `petralabx/furgenics`, `petralabx/for-and-against`,
+`petralabx/agentic-swarm`, `petralabx/plx-customer-portal`); omitted `repo`
+keeps the connector default (Hub stays `petralabx/PLX_MC`). Unknown slugs fail
+closed. Portal is no longer Portal-connector-only. Callers must refuse a
+receipt whose `actor.repo` does not match the repo under edit.
 
 **Approval gates (TASK-629):** `mc_request_approval` (`POST /api/cursor/request-approval`) raises a runtime approval gate on a task (`approval.request`); the task freezes input-required until a human decides in the Approvals inbox.
 Checkout also backfills a missing task `accountableOwner` through the same

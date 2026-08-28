@@ -16,6 +16,19 @@
 
 ## Lessons
 
+### 2026-08-28 (ET) — Hub checkout omitted portal and forced a second connector
+
+- **What happened:** Team agents used `PLX-MC-Portal` for `plx-customer-portal`
+  because Hub `mc_checkout_task({ repo: "petralabx/plx-customer-portal" })`
+  failed closed (`repo_not_allowlisted`). Wrong-scope Hub-default stamps on
+  portal PRs returned GitHub `taskId:null`.
+- **Root cause:** `MCP_CHECKOUT_REPO_ALLOWLIST` listed every hard-gated
+  consumer except portal (TASK-1206 / #223 leftover).
+- **Rule going forward:** One Hub connector stamps every petralabx repo.
+  Pass `repo=owner/name` on checkout. Portal is allowlisted. Unknown slugs
+  still fail closed. Refuse a receipt unless `actor.repo` equals the repo
+  under edit.
+
 ### 2026-08-26 (ET) — listed gmail/Proton operators got operator_not_allowed
 
 - **What happened:** Vince allowlisted `taylorvalton@gmail.com` /

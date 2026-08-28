@@ -16,6 +16,7 @@ export const MCP_CHECKOUT_REPO_ALLOWLIST = [
   "petralabx/furgenics",
   "petralabx/for-and-against",
   "petralabx/agentic-swarm",
+  "petralabx/plx-customer-portal",
 ] as const;
 
 const GITHUB_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;

@@ -19,10 +19,11 @@ Before first edit or any `PR_CREATE` on a tracked consumer:
 
 1. Search existing `TASK-*`. Do not auto-create unless routing found
    nothing AND the conductor said to create.
-2. `mc_checkout_task` on the connector scoped to the repo under edit.
+2. `mc_checkout_task` on the Hub connector, passing `repo=owner/name`
+   so `actor.repo` matches the repo under edit (including portal).
    Confirm returned `taskId` is a non-null string. Copy `prBodyLine`
-   exactly. A Hub stamp on a portal PR (and vice versa) fails GitHub
-   verify with `taskId:null`.
+   exactly. A stamp whose `actor.repo` does not match the PR repo
+   fails GitHub verify with `taskId:null`.
 3. Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and
    open a PR. If tools are missing, stop — do not open the PR.
 4. `mc_complete_task` must include non-empty `verificationCommands`
@@ -135,7 +136,7 @@ If you notice yourself in any of these, stop — do not push through:
 ## Agent Task & PR Workflow
 
 - Every change to a tracked repo must resolve to a Mission Control (MC) task. Before first edit or any PR_CREATE: search existing TASK-* ids. Do not auto-create unless routing found nothing AND the conductor said to create.
-- Check out via `mc_checkout_task` on the connector scoped to the repo under edit. Confirm the returned `taskId` is a non-null string. Copy `prBodyLine` exactly. A Hub stamp on a portal PR (and vice versa) fails GitHub verify with `taskId:null`.
+- Check out via `mc_checkout_task` on the Hub connector, passing `repo=owner/name` so `actor.repo` matches the repo under edit (including portal). Confirm the returned `taskId` is a non-null string. Copy `prBodyLine` exactly. A stamp whose `actor.repo` does not match the PR repo fails GitHub verify with `taskId:null`.
 - Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and open a PR. If checkout tools are missing, stop — do not open the PR.
 - Humans (operators) are recorded but not gated; autonomous agents are gated on a complete bundle — link the work to a live repo-scoped checkout so the gate can attribute and verify it.
 - One logical theme per PR. Multiple related MC tasks may be completed in a single PR — add one live `MC-Checkout: dsp_*` line per task; the gate verifies every referenced task and blocks if any is incomplete.

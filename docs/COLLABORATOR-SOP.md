@@ -121,7 +121,11 @@ the work and pass it, and it's how autonomous changes stay accountable.
      accountable human searches MC and creates/assigns a Task in the registry
      `default_bucket` when none exists.
    There is no agent auto-create fallback and no edit begins without the Task.
-2. **Check the task out** — this mints a credential tied to `{task, human, repo}`:
+2. **Check the task out** — this mints a credential tied to `{task, human, repo}`.
+   Use **one Hub connector** (`PLX-MC-Hub`) for every petralabx repo, including
+   `plx-customer-portal`. Pass `repo=owner/name` on `mc_checkout_task` so
+   `actor.repo` matches the repo under edit. Portal is no longer
+   Portal-connector-only. Unknown slugs fail closed.
    - **Cursor (PLX_MC):** the capture hook does it automatically at session start
      when you opt in — it checks out known task(s) and stamps the PR for you.
      Set these in your run environment and start the session:
@@ -273,6 +277,9 @@ Follow `docs/runbooks/plx-mc-mcp-team-registration.md`:
 - Set `MC_MCP_API_KEY`, `MC_OPERATOR_EMAIL`, `PLX_MC_MCP_ENABLED=1`.
 - Register `https://mc.plxcustomer.io/api/cursor/mcp` (remote) or the stdio client
   under `tools/plx-mc-mcp/`.
+- Register **one Hub connector** (`PLX-MC-Hub`). Pass `repo=owner/name` on
+  `mc_checkout_task` (e.g. `petralabx/plx-customer-portal`). Portal is no
+  longer Portal-connector-only.
 - Set `MC_REPO` to the full slug you are working in (e.g. `petralabx/PLX_MC` or
   `petralabx/plx-customer-portal`).
 - When creating tasks, `repos[]` is a **different** namespace — MC registry ids,

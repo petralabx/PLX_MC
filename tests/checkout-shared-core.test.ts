@@ -201,7 +201,7 @@ describe("checkout doors → shared checkout() core", () => {
     );
   });
 
-  it("POST /api/cursor/checkout rejects Portal slug from Hub identity", async () => {
+  it("POST /api/cursor/checkout body.repo binds allowlisted portal", async () => {
     const { POST: cursorCheckout } = await import("@/app/api/cursor/checkout/route");
     const res = await cursorCheckout(
       new Request("http://localhost/api/cursor/checkout", {
@@ -212,12 +212,17 @@ describe("checkout doors → shared checkout() core", () => {
           "x-mc-operator-email": "vince@petrasoap.com",
           "x-mc-repo": "petralabx/PLX_MC",
         },
-        body: JSON.stringify({ taskId: "TASK-1206", repo: "petralabx/plx-customer-portal" }),
+        body: JSON.stringify({ taskId: "TASK-1285", repo: "petralabx/plx-customer-portal" }),
       }),
       { params: Promise.resolve({}) }
     );
-    expect(res.status).toBe(403);
-    expect(mocks.checkout).not.toHaveBeenCalled();
+    const json = (await res.json()) as { data: { actor?: { repo?: string }; taskId?: string } };
+    expect(res.status).toBe(200);
+    expect(json.data.taskId).toBe("TASK-1285");
+    expect(json.data.actor?.repo).toBe("petralabx/plx-customer-portal");
+    expect(mocks.checkout).toHaveBeenCalledWith(
+      expect.objectContaining({ repo: "petralabx/plx-customer-portal", taskId: "TASK-1285" })
+    );
   });
 });
 

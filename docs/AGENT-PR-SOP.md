@@ -2,11 +2,11 @@
 
 **Audience:** AI agents and operators driving agents (Cursor, Claude Code, ChatGPT/Codex, Grok, swarm) against a PLX-tracked repo.
 
-**Owner:** Vince · **Status:** active · **Effective:** 2026-08-23
+**Owner:** Vince · **Status:** active · **Effective:** 2026-08-28
 
 > **TL;DR** — Agents execute; a **named human** owns the outcome. Before first
 > edit or any `PR_CREATE`: **search existing `TASK-*`**, then **`mc_checkout_task`**
-> on the connector scoped to the repo under edit. Confirm returned `taskId` is a
+> on the Hub connector with **`repo=owner/name`**. Confirm returned `taskId` is a
 > **non-null string** and copy **`prBodyLine` exactly**. Never invent a `dsp_*`.
 > Never write `MC-Checkout: pending`. If checkout tools are missing, **stop —
 > do not open the PR**. Hand in evidence via **`mc_complete_task`** with
@@ -29,7 +29,7 @@ updated in a separate PR — do not edit those repos from here.
 | # | Rule |
 |---|------|
 | 1 | Search existing `TASK-*`. Do **not** auto-create unless routing found nothing **AND** the conductor said to create. |
-| 2 | `mc_checkout_task` on the connector scoped to the repo under edit. Confirm returned `taskId` is a non-null string. Copy `prBodyLine` exactly. A Hub stamp on a portal PR (and vice versa) fails GitHub verify with `taskId:null`. |
+| 2 | `mc_checkout_task` on the **Hub** connector. Pass `repo=owner/name` so returned `actor.repo` matches the repo under edit (including `petralabx/plx-customer-portal`). Confirm returned `taskId` is a non-null string. Copy `prBodyLine` exactly. A stamp whose `actor.repo` does not match the PR repo fails GitHub verify with `taskId:null`. |
 | 3 | Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and open a PR. If tools are missing, **stop — do not open the PR**. |
 | 4 | `mc_complete_task` must include non-empty `verificationCommands` **AND** `rollback`. |
 | 5 | Local push uses the consumer's pre-push handshake when present. Never `--no-verify`. |
@@ -174,7 +174,7 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 A successful tool call is not enough. Validate the returned checkout once:
 
 - `data.taskId` is a **non-null string** and equals the expected Task.
-- `data.actor.repo` (checkout receipt) or `meta.actor.repo` equals the exact full target slug (`petralabx/<repo>`). Hub `mc_checkout_task` accepts optional `repo` to bind allowlisted hard-gated consumers (`petralabx/local-inference`, `petralabx/skills`, `petralabx/1hr-after`, `petralabx/furgenics`, `petralabx/for-and-against`, `petralabx/agentic-swarm`); omitted `repo` keeps the connector `X-MC-Repo`. Unknown slugs fail closed. `petralabx/plx-customer-portal` stays on the Portal connector only.
+- `data.actor.repo` (checkout receipt) or `meta.actor.repo` equals the exact full target slug (`petralabx/<repo>`). One Hub connector stamps every petralabx repo: pass `repo=owner/name` on `mc_checkout_task` to bind allowlisted consumers (`petralabx/local-inference`, `petralabx/skills`, `petralabx/1hr-after`, `petralabx/furgenics`, `petralabx/for-and-against`, `petralabx/agentic-swarm`, `petralabx/plx-customer-portal`). Omitted `repo` keeps the connector `X-MC-Repo`. Unknown slugs fail closed. Portal is no longer Portal-connector-only.
 - The PR uses `data.prBodyLine` exactly; never reconstruct the stamp.
 - Missing or mismatched task/repo metadata makes the checkout invalid.
 - If the connector or script cannot return a live `dsp_*`, **stop**. Do not
@@ -424,7 +424,7 @@ Operator PRs without a confirmed link create/update a routing **proposal**
 
 | Reason | Fix |
 |--------|-----|
-| No valid checkout | `mc_checkout_task` on the **repo-scoped** connector; copy `prBodyLine`. Do not invent a stamp. |
+| No valid checkout | `mc_checkout_task` on the Hub connector with `repo=owner/name`; copy `prBodyLine`. Do not invent a stamp. |
 | Checkout tools missing | **Stop.** Do not write `MC-Checkout: pending`. Do not open the PR. |
 | Missing evidence on task | `mc_complete_task` with non-empty `verificationCommands` **AND** `rollback` (plus summary; testRun/shots as tier requires) |
 | Missing bucket PRD (high) | Link PRD on bucket in MC UI |

@@ -32,6 +32,7 @@ const HARD_GATED_CONSUMERS = [
   "petralabx/furgenics",
   "petralabx/for-and-against",
   "petralabx/agentic-swarm",
+  "petralabx/plx-customer-portal",
 ] as const;
 
 const hubIdentity: McpIdentity = {
@@ -61,9 +62,9 @@ describe("resolveCheckoutRepo", () => {
     );
   });
 
-  it("exports the hard-gated consumer allowlist without Portal", () => {
+  it("exports the hard-gated consumer allowlist including Portal", () => {
     expect([...MCP_CHECKOUT_REPO_ALLOWLIST]).toEqual([...HARD_GATED_CONSUMERS]);
-    expect(MCP_CHECKOUT_REPO_ALLOWLIST).not.toContain("petralabx/plx-customer-portal");
+    expect(MCP_CHECKOUT_REPO_ALLOWLIST).toContain("petralabx/plx-customer-portal");
   });
 
   it("allowlisted hard-gated consumers bind that slug", () => {
@@ -80,14 +81,11 @@ describe("resolveCheckoutRepo", () => {
   });
 
   it("rejects a non-allowlisted slug (fail closed)", () => {
-    expect(() =>
-      resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/plx-customer-portal")
-    ).toThrow(ApiError);
     expect(() => resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/unknown-repo")).toThrow(
       ApiError
     );
     try {
-      resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/plx-customer-portal");
+      resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/unknown-repo");
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError);
       expect((err as ApiError).code).toBe("repo_not_allowlisted");
@@ -160,13 +158,21 @@ describe("actionCheckout actor.repo receipt", () => {
     );
   });
 
-  it("rejects Portal slug from Hub identity and does not mint a checkout", async () => {
-    await expect(
-      actionCheckout(hubIdentity, "TASK-1206", { repo: "petralabx/plx-customer-portal" })
-    ).rejects.toMatchObject({
-      code: "repo_not_allowlisted",
+  it("allowlisted portal binds actor.repo on the minted checkout", async () => {
+    const receipt = await actionCheckout(hubIdentity, "TASK-1285", {
+      repo: "petralabx/plx-customer-portal",
     });
-    expect(mocks.checkout).not.toHaveBeenCalled();
+    expect(receipt.taskId).toBe("TASK-1285");
+    expect(receipt.actor.repo).toBe("petralabx/plx-customer-portal");
+    expect(mocks.checkout).toHaveBeenCalledWith(
+      expect.objectContaining({ repo: "petralabx/plx-customer-portal", taskId: "TASK-1285" })
+    );
+    expect(mocks.requireMcpActor).toHaveBeenCalledWith(
+      hubIdentity,
+      "task.checkout",
+      expect.objectContaining({ type: "task", id: "TASK-1285" }),
+      expect.objectContaining({ repositoryId: "petralabx/plx-customer-portal" })
+    );
   });
 
   it("rejects an unknown slug and does not mint a checkout", async () => {

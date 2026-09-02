@@ -14,6 +14,7 @@ import {
   addBucket,
   allBuckets,
   bucketById,
+  navBuckets,
   resetStore,
   updateBucket,
 } from "@/lib/mc-data/store";
@@ -105,5 +106,21 @@ describe("updateBucket (EN-005) — optimistic + reconcile/rollback", () => {
     await __bucketUpdateSettled();
     expect(bucketById(b.id)?.health).toBe(before); // rolled back
     expect(activeNotices().some((n) => /rolled back/i.test(n.body))).toBe(true);
+  });
+
+  it("drops health=off from navBuckets while keeping the record", async () => {
+    const visible = addBucket({ name: "Live Ops Lane" });
+    const archived = addBucket({ name: "Credential Smoke Lane" });
+    __setBucketUpdateMirrorForTests(async (id, patch) => ({
+      ...bucketById(id)!,
+      ...patch,
+    }));
+    await updateBucket(archived.id, { health: "off" });
+    await __bucketUpdateSettled();
+
+    expect(bucketById(archived.id)?.health).toBe("off");
+    expect(allBuckets().some((b) => b.id === archived.id)).toBe(true);
+    expect(navBuckets().some((b) => b.id === archived.id)).toBe(false);
+    expect(navBuckets().some((b) => b.id === visible.id)).toBe(true);
   });
 });

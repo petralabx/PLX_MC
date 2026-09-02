@@ -7,7 +7,7 @@ import Image from "next/image";
 
 import { ACTORS, CURRENT_USER, liveAgentCount } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion } from "@/lib/mc-data/hooks";
-import { allBuckets, allProjects, allTasks, dismissNotice, storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
+import { allTasks, dismissNotice, navBuckets, navProjects, storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
 import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 import { routingInboxEnabled } from "@/components/mc/routing-inbox/flag";
 
@@ -144,7 +144,7 @@ export function Sidebar({
       </div>
       <div className="grp">
         <div className="h">Projects</div>
-        {allProjects().map((p) => (
+        {navProjects().map((p) => (
           <button
             type="button"
             key={p.id}
@@ -162,7 +162,7 @@ export function Sidebar({
       </div>
       <div className="grp">
         <div className="h">Buckets</div>
-        {allBuckets().map((b) => (
+        {navBuckets().map((b) => (
           <button
             type="button"
             key={b.id}

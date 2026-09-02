@@ -36,7 +36,7 @@ import {
   TASKS,
 } from "./data";
 import { parseMentions } from "./collab";
-import { domainOf, isPetraEmail } from "./helpers";
+import { domainOf, isNavVisible, isPetraEmail } from "./helpers";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "./policy";
 import { allowedReposOnly, disallowedRepos, isAllowedRepoOrg, isApprover, repoFromRequest } from "./repos";
 import type {
@@ -261,6 +261,9 @@ export const allProjects = (): Project[] => Object.values(state.projects);
 export const projectById = (id: string): Project | undefined => state.projects[id];
 export const bucketsForProject = (projectId: string): Bucket[] =>
   allBuckets().filter((b) => b.project === projectId);
+// Nav surfaces only — health=off records remain in allProjects/allBuckets.
+export const navProjects = (): Project[] => allProjects().filter(isNavVisible);
+export const navBuckets = (): Bucket[] => allBuckets().filter(isNavVisible);
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 

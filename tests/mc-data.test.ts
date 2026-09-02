@@ -13,6 +13,7 @@ import {
   confidenceOf,
   domainOf,
   evidenceComplete,
+  isNavVisible,
   isPetraEmail,
   syncCounts,
   tasksForUser,
@@ -168,6 +169,17 @@ describe("confidenceOf", () => {
   it("reads as building/planned before the doing band", () => {
     expect(confidenceOf({ ...byId("TASK-221"), stage: "progress" }).state).toBe("building");
     expect(confidenceOf(byId("TASK-225")).label).toBe("Planned"); // backlog, no evidence
+  });
+});
+
+describe("nav visibility (soft-archive)", () => {
+  it("keeps track and risk items in nav", () => {
+    expect(isNavVisible({ health: "track" })).toBe(true);
+    expect(isNavVisible({ health: "risk" })).toBe(true);
+  });
+
+  it("hides health=off items from nav", () => {
+    expect(isNavVisible({ health: "off" })).toBe(false);
   });
 });
 

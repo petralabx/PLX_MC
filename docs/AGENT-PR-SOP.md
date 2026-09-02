@@ -2,17 +2,19 @@
 
 **Audience:** AI agents and operators driving agents (Cursor, Claude Code, ChatGPT/Codex, Grok, swarm) against a PLX-tracked repo.
 
-**Owner:** Vince · **Status:** active · **Effective:** 2026-08-28
+**Owner:** Vince · **Status:** active · **Effective:** 2026-09-02
 
 > **TL;DR** — Agents execute; a **named human** owns the outcome. Before first
-> edit or any `PR_CREATE`: **search existing `TASK-*`**, then **`mc_checkout_task`**
-> on the Hub connector with **`repo=owner/name`**. Confirm returned `taskId` is a
-> **non-null string** and copy **`prBodyLine` exactly**. Never invent a `dsp_*`.
-> Never write `MC-Checkout: pending`. If checkout tools are missing, **stop —
-> do not open the PR**. Hand in evidence via **`mc_complete_task`** with
-> **non-empty `verificationCommands` AND `rollback`**, then run
-> **`node scripts/compliance-pr-verify.mjs --wait`**. Carry the **risk-tier
-> bundle**, and **never** edit the compliance workflow to force a pass.
+> edit or any `PR_CREATE`: **search** project / bucket / `TASK-*` and **create
+> only on a miss**, then **`mc_checkout_task`** on the Hub connector with
+> **`repo=owner/name`**. Confirm returned `taskId` is a **non-null string** and
+> copy **`prBodyLine` exactly**. Never invent a `dsp_*`. Never write
+> `MC-Checkout: pending`. Never create a new task to escape one with incomplete
+> evidence. If checkout tools are missing, **stop — do not open the PR**. Hand
+> in evidence via **`mc_complete_task`** with **non-empty `verificationCommands`
+> AND `rollback`**, then run **`node scripts/compliance-pr-verify.mjs --wait`**.
+> Carry the **risk-tier bundle**, and **never** edit the compliance workflow to
+> force a pass.
 
 Live cockpit: [https://mc.plxcustomer.io](https://mc.plxcustomer.io)
 
@@ -28,7 +30,7 @@ updated in a separate PR — do not edit those repos from here.
 
 | # | Rule |
 |---|------|
-| 1 | Search existing `TASK-*`. Do **not** auto-create unless routing found nothing **AND** the conductor said to create. |
+| 1 | Search first at each level (project, bucket, then `TASK-*`). Create only on a miss (`mc_create_project` / `mc_create_bucket` / `mc_create_task`). Never create a new task to escape one with incomplete evidence. |
 | 2 | `mc_checkout_task` on the **Hub** connector. Pass `repo=owner/name` so returned `actor.repo` matches the repo under edit (including `petralabx/plx-customer-portal`). Confirm returned `taskId` is a non-null string. Copy `prBodyLine` exactly. A stamp whose `actor.repo` does not match the PR repo fails GitHub verify with `taskId:null`. |
 | 3 | Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and open a PR. If tools are missing, **stop — do not open the PR**. |
 | 4 | `mc_complete_task` must include non-empty `verificationCommands` **AND** `rollback`. |
@@ -65,9 +67,9 @@ Project (optional umbrella)
 
 | Layer | Purpose | Agent/MCP access |
 |-------|---------|------------------|
-| **Project** | Optional parent above buckets (e.g. go-live umbrella) | **UI only** — MCP cannot create projects |
-| **Bucket / Initiative** | Initiative with PRD link, repos, health | **UI only** — MCP cannot create buckets |
-| **Task** | Unit of accountable work; checkout target | `mc_search_tasks`, `mc_create_task`, `mc_checkout_task` |
+| **Project** | Optional parent above buckets (e.g. go-live umbrella) | Search via `mc_list_buckets` / `mc_get_context`; `mc_create_project` only on a miss |
+| **Bucket / Initiative** | Initiative with PRD link, repos, health | Search via `mc_list_buckets` / `mc_get_context`; `mc_create_bucket` only on a miss |
+| **Task** | Unit of accountable work; checkout target | `mc_search_tasks`; `mc_create_task` only on a miss; then `mc_checkout_task` |
 
 Compliance auto-create and projection always target a **bucket**, never a project.
 
@@ -152,8 +154,11 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 
 | Step | Tool | Notes |
 |------|------|-------|
+| Find project / bucket | `mc_list_buckets`, `mc_get_context` | Search by query (`q`) or bucket id before creating. `mc_list_buckets` returns `BKT-*` ids plus ownership/project metadata |
+| Create project | `mc_create_project` | Only on a search miss. Set `owner=vince@petrasoap.com`. `repos[]` uses MC registry **ids** (`portal-web`, `plx-mc`), never GitHub slugs |
+| Create bucket | `mc_create_bucket` | Only on a search miss. Optional `project` parent. Same owner and `repos[]` rules as project create |
 | Find work | `mc_search_tasks` | Filter by `query` (alias `q`), `bucket`, `stage`, `limit`; `meta.filter` echoes what was applied |
-| Create task | `mc_create_task` | **Not the default.** Search existing `TASK-*` first. Create only when routing found nothing **AND** the conductor said to create. Requires `title` + `bucket`; optional `description`, `priority`, `repos` (registry **ids**, not GitHub slugs — see table below) |
+| Create task | `mc_create_task` | Only on a search miss in that bucket. Requires `title` + `bucket`; optional `description`, `priority`, `repos` (registry **ids**, not GitHub slugs — see table below). Default `bucket` from `config/tracked-repos-registry.json` `default_bucket` for the repo under edit — do **not** hardcode `BKT-PROD` |
 | Start | `mc_checkout_task` | Live repo-scoped checkout. Confirm `data.taskId` is a non-null string. Copy `prBodyLine` / `meta.links.checkoutStamp` exactly. Never invent a `dsp_*`. Never write `MC-Checkout: pending`. |
 
 #### Two repo namespaces (do not mix)
@@ -167,7 +172,25 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 | Milestones | `mc_report_progress` | Every ~10–15 min on long runs; `stage`, `notes`, `progressPct` |
 | Hand in evidence | `mc_complete_task` | Writes structured `task.evidence` — see §7 |
 
-**MCP cannot create projects or buckets.** Operators create those in the MC UI ([`HUMAN-MC-SOP.md`](HUMAN-MC-SOP.md)).
+Reviewed MCP agents have `project.create`, `bucket.create`, and `task.create`.
+Search first; create only on a miss. Humans can still create the same objects
+in the UI ([`HUMAN-MC-SOP.md`](HUMAN-MC-SOP.md)).
+
+1. Find the project and bucket with `mc_list_buckets` (`q=…`) or `mc_get_context`.
+   Call `mc_create_project` or `mc_create_bucket` only if nothing matches. Set
+   `owner=vince@petrasoap.com`. `repos[]` uses MC registry ids from
+   `config/tracked-repos-registry.json` (e.g. `portal-web`, `plx-mc`) — never
+   GitHub slugs.
+2. Search tasks with `mc_search_tasks` by title keywords in that bucket. Call
+   `mc_create_task` only if nothing matches. Default bucket is that repo's
+   `default_bucket` in `config/tracked-repos-registry.json` — do not hardcode
+   `BKT-PROD`.
+3. Checkout handshake is unchanged: `mc_checkout_task` with `repo=owner/name`,
+   verify `taskId` and `actor.repo`, copy `prBodyLine` exactly, then
+   `mc_complete_task` with `summary`, `verificationCommands`, and `rollback`.
+
+Never create a new task to escape one with incomplete evidence. Never invent a
+`dsp_*`. Never write `MC-Checkout: pending`.
 
 ### Checkout handshake (before first edit / PR_CREATE)
 
@@ -359,11 +382,13 @@ Never `--no-verify`. Use the consumer's pre-push handshake when present.
 
 For a suggestion-enabled cohort with a healthy suggestion service, a missing
 Task ID calls `mc_suggest_work` (or the checkout adapter) **before any repo
-edit**, then stops for explicit operator selection or creation intent. For a
-shadow cohort, unknown cohort, or unavailable suggestion service, the agent
-stays stopped while the accountable human searches MC and creates/assigns a
-Task in the fleet registry `default_bucket` if no suitable Task exists. Neither
-path auto-creates work.
+edit**, then the agent searches existing work and creates only on a miss
+(see §5). For a shadow cohort, unknown cohort, or unavailable suggestion
+service, the agent searches MC and creates a Task in the fleet registry
+`default_bucket` only if no suitable Task exists. Neither path creates work
+without a search miss. Neither path invents a `dsp_*` or writes
+`MC-Checkout: pending`. Never create a new task to escape one with incomplete
+evidence.
 
 | Marker | Authority |
 |--------|-----------|
@@ -395,14 +420,17 @@ Operator PRs without a confirmed link create/update a routing **proposal**
 - Report progress and complete with evidence; then run `compliance-pr-verify.mjs --wait` and confirm GitHub `compliance` is SUCCESS before claiming done.
 - Install company skills separately from MCP ([`SKILLS-SOP.md`](SKILLS-SOP.md)).
 - Keep `MC_REPO` set to the full `petralabx/<name>` slug you are pushing to.
-- Use `mc_suggest_work` for suggestion-enabled cohorts; otherwise stop for the
-  accountable human to search/create/assign in the registry default Bucket.
+- Search first at each level; create only on a miss. Use the repo's registry
+  `default_bucket` — do not hardcode `BKT-PROD`.
+- Use `mc_suggest_work` for suggestion-enabled cohorts, then search existing
+  work and create only on a miss.
 
 **Don't**
 
 - Don't open an agent PR without a live repo-scoped checkout.
 - Don't invent a `dsp_*` id or write `MC-Checkout: pending` so you can open the PR.
-- Don't auto-create a Task then stamp it unless routing found nothing AND the conductor said to create.
+- Don't create a project, bucket, or task without a search miss.
+- Don't create a new task to escape one with incomplete evidence.
 - Don't open a PR when checkout tools are missing — stop and wait.
 - Don't skip the consumer pre-push handshake (`--no-verify` is forbidden).
 - Don't edit or disable `.github/workflows/*compliance*` to pass the check.

@@ -2,9 +2,13 @@
 
 **Audience:** human collaborators working in Mission Control directly — creating work, reviewing agent output, approving repos. Not for agent runtime discipline (see [`AGENT-PR-SOP.md`](AGENT-PR-SOP.md)).
 
-**Owner:** Vince · **Status:** active · **Effective:** 2026-07-13
+**Owner:** Vince · **Status:** active · **Effective:** 2026-09-02
 
-> **TL;DR** — Create projects, buckets, and tasks in the MC UI. Name a **human accountable owner** on every agent task. Approve repos into the MC allow-list after an admin creates them on GitHub. Review agent evidence on the task entity. Your own PRs **pass without checkout**; agents cannot.
+> **TL;DR** — Create projects, buckets, and tasks in the MC UI (MCP agents
+> can also create them after a search miss). Name a **human accountable owner**
+> on every agent task. Approve repos into the MC allow-list after an admin
+> creates them on GitHub. Review agent evidence on the task entity. Your own
+> PRs **pass without checkout**; agents cannot.
 
 Live cockpit: [https://mc.plxcustomer.io](https://mc.plxcustomer.io)
 
@@ -59,7 +63,15 @@ Atomic work items. Minimum fields to set before agent handoff:
 | **Repos** | Subset of MC allow-list |
 | **Priority / due** | As needed |
 
-**MCP agents can create tasks** (`mc_create_task`) but **cannot create projects or buckets** — you create those in the UI first.
+**MCP agents can create projects, buckets, and tasks** (`mc_create_project`,
+`mc_create_bucket`, `mc_create_task`) after a search miss — they do not need
+you to create the hierarchy in the UI first. Search first (`mc_list_buckets` /
+`mc_get_context` / `mc_search_tasks`); create only when nothing matches. Set
+`owner=vince@petrasoap.com`. `repos[]` uses MC registry ids (`portal-web`,
+`plx-mc`), never GitHub slugs. You can still create the same objects in the UI.
+
+Never create a new task to escape one with incomplete evidence. Never invent a
+`dsp_*`. Never write `MC-Checkout: pending`.
 
 ---
 

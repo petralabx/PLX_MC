@@ -11,7 +11,7 @@ import {
   SYNC_REGISTERS,
   TASKS,
 } from "./data";
-import type { Band, Confidence, Evidence, StageKey, Task } from "./types";
+import type { Band, Confidence, Evidence, Health, StageKey, Task } from "./types";
 
 const PETRA_EMAIL = /^[^@\s]+@(petralabx|petrasoap)\.com$/i;
 
@@ -100,4 +100,11 @@ export function isPetraEmail(email: string): boolean {
 
 export function domainOf(email: string): string {
   return (String(email ?? "").split("@")[1] ?? "").toLowerCase();
+}
+
+// Soft-archive: health=off stays in the store (evidence retained) but leaves
+// sidebar/nav and the command-palette jump lists. No unused archived/hidden
+// flag exists — health is the archive switch.
+export function isNavVisible(item: { health: Health }): boolean {
+  return item.health !== "off";
 }

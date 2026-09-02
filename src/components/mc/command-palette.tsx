@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AGENTS, CURRENT_USER } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allBuckets, allProjects, allTasks, pushNotice, reassignTask, setTaskStage } from "@/lib/mc-data/store";
+import { allTasks, navBuckets, navProjects, pushNotice, reassignTask, setTaskStage } from "@/lib/mc-data/store";
 
 import type { Nav } from "./route";
 
@@ -64,9 +64,9 @@ export function CommandPalette({
   const groups = useMemo<PaletteGroup<PaletteCommand>[]>(() => {
     void version;
     const tasks = allTasks();
-    const firstBucket = allBuckets()[0]?.id;
+    const firstBucket = navBuckets()[0]?.id;
     const firstTask = tasks[0]?.id;
-    const firstProject = allProjects()[0]?.id;
+    const firstProject = navProjects()[0]?.id;
     const create: PaletteCommand[] = [
       { key: "create:new-task", icon: "+", label: "New task", hint: "create", run: onOpenNewTask },
       { key: "create:new-project", icon: "+", label: "New project", hint: "create", run: onOpenNewProject },
@@ -128,7 +128,7 @@ export function CommandPalette({
       },
     ];
 
-    const projects: PaletteCommand[] = allProjects().map((project) => ({
+    const projects: PaletteCommand[] = navProjects().map((project) => ({
       key: `project:${project.id}`,
       icon: "◫",
       label: `Project · ${project.name}`,
@@ -136,7 +136,7 @@ export function CommandPalette({
       run: () => nav("project", { projectId: project.id }),
     }));
 
-    const buckets: PaletteCommand[] = allBuckets().map((bucket) => ({
+    const buckets: PaletteCommand[] = navBuckets().map((bucket) => ({
       key: `bucket:${bucket.id}`,
       icon: "●",
       label: `Bucket · ${bucket.name}`,

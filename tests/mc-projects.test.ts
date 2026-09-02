@@ -11,6 +11,7 @@ import {
   activeNotices,
   addProject,
   allProjects,
+  navProjects,
   projectById,
   resetStore,
   updateProject,
@@ -116,6 +117,22 @@ describe("updateProject (P2)", () => {
     expect(after.target).toBe(before.target);
     expect(after.desc).toBe(before.desc);
     expect(activeNotices().some((n) => /rolled back/i.test(n.body))).toBe(true);
+  });
+
+  it("drops health=off from navProjects while keeping the record", async () => {
+    const visible = addProject({ name: "Live Ops" });
+    const archived = addProject({ name: "Credential Smoke" });
+    __setProjectUpdateMirrorForTests(async (id, patch) => ({
+      ...projectById(id)!,
+      ...patch,
+    }));
+    await updateProject(archived.id, { health: "off" });
+    await __projectUpdateSettled();
+
+    expect(projectById(archived.id)?.health).toBe("off");
+    expect(allProjects().some((p) => p.id === archived.id)).toBe(true);
+    expect(navProjects().some((p) => p.id === archived.id)).toBe(false);
+    expect(navProjects().some((p) => p.id === visible.id)).toBe(true);
   });
 
   it("treats an empty patch as a no-op (no mirror call)", async () => {

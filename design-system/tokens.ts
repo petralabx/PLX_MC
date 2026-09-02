@@ -15,9 +15,11 @@
 
 export const lightTokens = {
   // surfaces
-  paper:        '#FBF9F5',
-  paper2:       '#F6F2EA',
-  card:         '#FBF9F5',
+  paper:        '#FBFAF6',
+  paper2:       '#ECEFE9',
+  card:         '#FBFAF6',
+  rail:         '#EEEBE3',
+  canvas:       '#F5F3EC',
 
   // text
   ink:          '#1B1A17',
@@ -52,14 +54,16 @@ export const darkTokens = {
   paper:        '#1A1816',
   paper2:       '#22201D',
   card:         '#1A1816',
+  rail:         '#16140F',
+  canvas:       '#1A1816',
   ink:          '#F1ECE0',
   ink2:         '#C9C2B5',
-  muted:        '#827B6F',
+  muted:        '#A09789',   // AA on every dark surface (2026-08-12); was #827B6F
   grid:         'rgba(241, 236, 224, 0.12)',
   grid2:        'rgba(241, 236, 224, 0.06)',
   accent:       '#7AB18C',
-  accentSoft:   '#2D4D3B',
-  ok:           '#7A9E6F',
+  accentSoft:   '#264132',   // darkened 2026-08-12 so --p-accent reads AA on it (was #2D4D3B)
+  ok:           '#7EA372',   // lightened 2026-08-12 for AA on MRP dark paper-2 (was #7A9E6F)
   warn:         '#D9A85C',
   info:         '#7A9DB3',
   hot:          '#8FA0B0',

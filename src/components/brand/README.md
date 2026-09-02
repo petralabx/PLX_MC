@@ -16,6 +16,7 @@ directly. That's the shadcn-intended extension pattern, not a fork.
 |---|---|---|
 | `<AuthStatusBanner>` | [AuthStatusBanner.tsx](AuthStatusBanner.tsx) | Auth success/info/warning/error feedback with correct `role="status"` / `role="alert"` behavior. |
 | `<BrandBoundary>` | [BrandBoundary.tsx](BrandBoundary.tsx) | Route-local `.brand-plx` activation when a screen should opt into the PLX token remap without global restyling. |
+| `<BrandStatusBadge>` | [BrandStatusBadge.tsx](BrandStatusBadge.tsx) | Token-toned status pill on `Badge variant="chassis"`. Seven tones (`neutral/ok/warn/info/hot/accent/ink`) × two variants: `outline` (v0.8 pill — sharp rectangle, hairline border + dot, no fill; default on triage surfaces) and `chip` (3px, 12% fill). `accent` and `ink` carry reserved meanings — see `docs/design-system/PATTERN-REGISTRY.md` §1 and ADR-003/ADR-004; `ink` stays solid in both variants. Map domain values to tones in a lib (e.g. `@/lib/uat-feedback/badge-mapping`), never inline. |
 | `<Kicker>` | [Kicker.tsx](Kicker.tsx) | Tiny mono uppercase eyebrow text above a section heading. Wraps the `.p-kicker` utility from `tokens.css`. |
 | `<MonoData>` | [MonoData.tsx](MonoData.tsx) | Inline numeric / code values that need monospace + tabular-nums (table cells, IDs, codes). Wraps the `.p-data` utility from `tokens.css`. |
 | `<PMark>` | [PMark.tsx](PMark.tsx) | Periodic-table-style glyph for auth instrumentation, project workbench rows, and durable design-system review examples. |

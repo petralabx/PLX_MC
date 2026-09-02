@@ -36,10 +36,14 @@
      paper is first-class: page, cards, and every primary surface use --p-paper.
      paper-2 is the recess: rails, footers, hover/active states, Sealed bands,
      stamped content emphasis. --p-card is retired (aliased to paper) — do not
-     use in new code; see design-system/decisions/ADR-002-surface-architecture.md. */
-  --p-paper:        #FBF9F5;          /* 1° — page + cards (primary surface) */
-  --p-paper-2:      #F6F2EA;          /* 2° — recess: rails, footers, hovers */
-  --p-card:         #FBF9F5;          /* deprecated alias — was #F2EDE2 */
+     use in new code; see design-system/decisions/ADR-002-surface-architecture.md.
+     Light values adopted from the MRP surface sheet per ADR-007 (2026-08-06);
+     paper-2 is the cool sage recess, not the former warm cream #F6F2EA. */
+  --p-paper:        #FBFAF6;          /* 1° — page + cards (primary surface) */
+  --p-paper-2:      #ECEFE9;          /* 2° — recess: rails, footers, hovers */
+  --p-card:         #FBFAF6;          /* deprecated alias — was #F2EDE2 */
+  --p-rail:         #EEEBE3;          /* 0° — global rail, inner sidebar, label bands (v0.8) */
+  --p-canvas:       #F5F3EC;          /* page bg beneath cards on dense surfaces (v0.8) */
 
   /* text — three steps of warm near-black */
   --p-ink:          #1B1A17;          /* primary text */
@@ -135,14 +139,37 @@
   --p-paper:        #1A1816;
   --p-paper-2:      #22201D;
   --p-card:         #1A1816;          /* deprecated alias — was #272421 */
+  --p-rail:         #16140F;
+  --p-canvas:       #1A1816;
   --p-ink:          #F1ECE0;
   --p-ink-2:        #C9C2B5;
-  --p-muted:        #827B6F;
+  /* Lightened from #827B6F (2026-08-12, ADR-007 §Deferred follow-up 1) so muted
+     text meets WCAG AA 4.5:1 on EVERY dark surface. The old value failed on all
+     six: rail 4.39, paper/canvas 4.23, paper-2 3.88, and 3.12 on the lightest
+     (MRP's forked dark paper-2 #2A3329). Because `enableSystem` is set in
+     providers.tsx, dark mode activates from OS preference with no in-app
+     opt-out, so this was reaching real users. New value clears AA everywhere —
+     worst case 4.54:1 — and is chosen to also cover the lighter MRP dark
+     hierarchy, so promoting that (ADR-007 §Deferred) becomes a pure paper
+     change with no further contrast work. */
+  --p-muted:        #A09789;
   --p-grid:         rgba(241, 236, 224, 0.12);
   --p-grid-2:       rgba(241, 236, 224, 0.06);
   --p-accent:       #7AB18C;
-  --p-accent-soft:  #2D4D3B;
-  --p-ok:           #7A9E6F;
+  /* Darkened from #2D4D3B (2026-08-12) so --p-accent reads AA on it. This pair
+     is not hypothetical: `.brand-plx` maps --accent -> --p-accent-soft and
+     --accent-foreground -> --p-accent, and shadcn uses `bg-accent
+     text-accent-foreground` for hover states in dropdown-menu, command,
+     searchable-combobox, badge and ghost buttons — so every menu hover in dark
+     mode was forest-on-forest at 3.80:1. Now 4.51:1; ink on the fill is 9.45:1.
+     The FILL moved rather than --p-accent, which is the brand forest used as
+     text across every surface and has the wider blast radius. */
+  --p-accent-soft:  #264132;
+  /* Lightened from #7A9E6F (2026-08-12): 4.33:1 on the lightest dark surface
+     (MRP's forked paper-2 #2A3329) was the last sub-AA pair in the dark sweep.
+     Now 4.59:1 there, 6.21:1 on canonical dark paper, 5.18:1 on its own 12%
+     chip fill. */
+  --p-ok:           #7EA372;
   --p-warn:         #D9A85C;
   --p-info:         #7A9DB3;
   --p-hot:          #8FA0B0;          /* mineral, lifted for dark mode (was #E26648) */
@@ -198,6 +225,13 @@
 .p-meta     { font-family: var(--p-font-mono); font-size: var(--p-text-meta); letter-spacing: var(--p-track-meta); text-transform: uppercase; color: var(--p-muted); }
 .p-data     { font-family: var(--p-font-mono); font-variant-numeric: tabular-nums; letter-spacing: var(--p-track-data); }
 .p-hairline { border: 0; border-top: 1px solid var(--p-grid); margin: 0; }
+
+/* The signature move (v0.8 handoff): ONE italic forest accent word inside a
+   serif headline — no more. Accent is rationed (PATTERN-REGISTRY §5). */
+.brand-plx h1 em,
+.brand-plx h2 em,
+.brand-plx h3 em,
+.brand-plx .p-serif em { font-style: italic; color: var(--p-accent); font-family: inherit; }
 
 /* ─── 5. NOTES ──────────────────────────────────────────────────────────── */
 /*

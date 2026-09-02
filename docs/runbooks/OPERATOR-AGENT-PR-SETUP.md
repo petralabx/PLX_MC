@@ -60,8 +60,9 @@ Registration details and headers:
 
 ## Checkout and complete (every runtime)
 
-1. Search existing `TASK-*`. Do not auto-create unless routing found nothing
-   **and** the conductor said to create.
+1. Search first at each level (project, bucket, then `TASK-*`). Create only
+   on a miss (`mc_create_project` / `mc_create_bucket` / `mc_create_task`).
+   Never create a new task to escape one with incomplete evidence.
 2. `mc_checkout_task` on the Hub connector with `repo=owner/name`. Confirm
    returned `taskId` is a non-null string and `actor.repo` matches the repo
    under edit. Copy `prBodyLine` exactly.

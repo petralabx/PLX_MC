@@ -21,9 +21,11 @@
 /* ─── 1. BRAND PALETTE — light scheme ───────────────────────────────────── */
 
 :root {
-  --p-paper:        #FBF9F5;
-  --p-paper-2:      #F6F2EA;
-  --p-card:         #FBF9F5;
+  --p-paper:        #FBFAF6;
+  --p-paper-2:      #ECEFE9;
+  --p-card:         #FBFAF6;
+  --p-rail:         #EEEBE3;
+  --p-canvas:       #F5F3EC;
 
   --p-ink:          #1B1A17;
   --p-ink-2:        #3A3833;
@@ -52,8 +54,8 @@
   --p-info-text:    #476378;
   --p-hot-text:     #46535F;
 
-  /* Mazius Display is loaded via next/font/local; Inter and JetBrains Mono are
-     loaded via next/font/google. All are exposed on <html> by app/layout.tsx. */
+  /* Inter, JetBrains Mono, and Mazius Display are self-hosted (next/font/local
+     or a runtime @font-face). All are exposed on <html> by app/layout.tsx. */
   --p-font-serif:   var(--font-mazius-display, "Mazius Display"), "Times New Roman", Georgia, serif;
   --p-font-sans:    var(--font-inter, "Inter"), "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --p-font-mono:    var(--font-jetbrains-mono, "JetBrains Mono"), "IBM Plex Mono", ui-monospace, monospace;
@@ -108,14 +110,27 @@
   --p-paper:        #1A1816;
   --p-paper-2:      #22201D;
   --p-card:         #1A1816;
+  --p-rail:         #16140F;
+  --p-canvas:       #1A1816;
   --p-ink:          #F1ECE0;
   --p-ink-2:        #C9C2B5;
-  --p-muted:        #827B6F;
+  /* Lightened from #827B6F (2026-08-12) so muted text meets WCAG AA 4.5:1 on
+     every dark surface — the old value failed on all six (rail 4.39, paper and
+     canvas 4.23, paper-2 3.88, 3.12 on MRP's forked dark paper-2). Dark mode is
+     reachable via `enableSystem` with no in-app opt-out, so this was live. See
+     docs/design-system/tokens.css for the full rationale. */
+  --p-muted:        #A09789;
   --p-grid:         rgba(241, 236, 224, 0.12);
   --p-grid-2:       rgba(241, 236, 224, 0.06);
   --p-accent:       #7AB18C;
-  --p-accent-soft:  #2D4D3B;
-  --p-ok:           #7A9E6F;
+  /* Darkened from #2D4D3B (2026-08-12): `.brand-plx` maps --accent to this and
+     --accent-foreground to --p-accent, and shadcn uses that pair for hover
+     states (dropdown-menu, command, combobox, badge, ghost buttons) — so dark
+     menu hovers were forest-on-forest at 3.80:1. Now 4.51:1. */
+  --p-accent-soft:  #264132;
+  /* Lightened from #7A9E6F (2026-08-12): was 4.33:1 on the lightest dark
+     surface (MRP forked paper-2 #2A3329), now 4.59:1. */
+  --p-ok:           #7EA372;
   --p-warn:         #D9A85C;
   --p-info:         #7A9DB3;
   --p-hot:          #8FA0B0;
@@ -164,3 +179,10 @@
 .p-meta     { font-family: var(--p-font-mono); font-size: var(--p-text-meta); letter-spacing: var(--p-track-meta); text-transform: uppercase; color: var(--p-muted); }
 .p-data     { font-family: var(--p-font-mono); font-variant-numeric: tabular-nums; letter-spacing: var(--p-track-data); }
 .p-hairline { border: 0; border-top: 1px solid var(--p-grid); margin: 0; }
+
+/* The signature move (v0.8 handoff): ONE italic forest accent word inside a
+   serif headline — no more. Accent is rationed (PATTERN-REGISTRY §5). */
+.brand-plx h1 em,
+.brand-plx h2 em,
+.brand-plx h3 em,
+.brand-plx .p-serif em { font-style: italic; color: var(--p-accent); font-family: inherit; }

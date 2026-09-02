@@ -28,6 +28,14 @@ python3 scripts/design-system-manifest.py
 ```
 
 Then bump `version` in `manifest.json` and add a `CHANGELOG.md` entry before merge.
+Also regenerate the portable skill and kit:
+
+```bash
+python3 scripts/generate-plx-brand-skill.py
+python3 scripts/generate-plx-brand-kit.py
+```
+
+Do not paste a second colour table. Values stay in `tokens.css`.
 
 ## Consume (adopting repos)
 
@@ -41,4 +49,6 @@ Opt-out brands set `adopts: false` with rationale — do not pin portal tokens.
 ## Release gate
 
 `.github/workflows/design-system-release.yml` fails PRs that touch `design-system/**`
-unless version/changelog/hashes are consistent.
+unless version/changelog/hashes are consistent, and unless the generated
+`.cursor/skills/plx-brand/SKILL.md` and `artifacts/design-system/brand-kit-vX.Y.Z/`
+match the current tokens and manifest.

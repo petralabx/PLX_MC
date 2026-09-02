@@ -9,12 +9,12 @@
     "adoptsPlxTokens": true,
     "authority": "petralabx/plx-customer-portal",
     "channel": "staging",
-    "pinnedVersion": "1.0.0",
-    "pinnedIntegrity": "sha256-39e28ca756aef25bf4ae55af3da1fd75657353ef603a07911243057e6dd2bb5d",
+    "pinnedVersion": "1.3.0",
+    "pinnedIntegrity": "sha256-ce22ba82ba5005ac57d9104e92e9551567b8013ccb96c916fdaca71f34db3d61",
     "tokenPrefix": "--p-",
     "boundaryClass": "brand-plx",
     "decidedBy": "vince",
-    "decidedAt": "2026-07-24",
+    "decidedAt": "2026-09-02",
     "rationale": "Mission Control is a 4th portal surface sharing the brand token layer (ADR-003 / ADR-005)."
   },
   "mc": {

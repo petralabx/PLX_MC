@@ -150,17 +150,19 @@ for extra in (
     if (repo / extra).is_file():
         paths.append(extra)
 
+# as_posix(), not str(): on Windows str() yields backslash separators, which
+# the checker then reports as "missing brand artifact" for every discovered file.
 brand_dir = repo / "public/brand"
 if brand_dir.is_dir():
     for p in sorted(brand_dir.iterdir()):
         if p.is_file():
-            paths.append(str(p.relative_to(repo)))
+            paths.append(p.relative_to(repo).as_posix())
 
 archive = repo / "docs/design-system/assets/fonts/mazius"
 if archive.is_dir():
     for p in sorted(archive.iterdir()):
         if p.is_file():
-            paths.append(str(p.relative_to(repo)))
+            paths.append(p.relative_to(repo).as_posix())
 
 def sha256(path: Path) -> str:
     h = hashlib.sha256()

@@ -28,6 +28,7 @@ and Cloud VMs do not invent a mega-app.
 | Directory / group membership writes | Purpose-scoped app-only | Portal RBAC apply has its own client ID. Runtime rejects the shared Graph client. |
 | Office add-ins (Outlook now; Excel/Word later) | **Public SPA**, Nested App Auth | New registration: `PLX Office Add-ins - Staging`. SPA redirect `brk-multihub://<origin>`. Delegated `Mail.Read` + `Files.ReadWrite`. **No client secret.** One public client per environment, not one per Office host. |
 | Least-privilege VM reads (CursorInbox) | Purpose-scoped `Sites.Selected` | Planned reader app. Do not inject the daemon Graph app into a Cloud VM for a narrow job. |
+| Read-only tenant inventory (Claude Code web) | Confidential app-only, six Graph **read** roles | Use **PLX Inventory Reader** (`ce0663b0-…`) via `PLX_INVENTORY_GRAPH_*`. Never widen `PLX_Cursor_Graph`. Never put `AZURE_AD_*` on this path. |
 
 Mission Control's **own** Graph contract remains
 [`graph-least-privilege.md`](./graph-least-privilege.md) (`Sites.Selected` on
@@ -40,7 +41,7 @@ Office add-in.
 
 1. One Entra client ID for "all M365".
 2. Nested App Auth / `brk-multihub://` / a public SPA on a Graph **daemon**,
-   on a NextAuth **SSO** app, or on MC's site-sync app.
+   on a NextAuth **SSO** app, on Inventory Reader, or on MC's site-sync app.
 3. Application (app-only) permissions or a client secret on an Office add-in.
 4. Expanding portal SSO authorize scopes beyond `openid profile email`.
 5. Injecting `PLX_Cursor_Graph` into an Office task pane "to make Outlook work".
@@ -86,3 +87,22 @@ staffTestGroup=<group name>
 ```
 
 No client secret.
+
+---
+
+## PLX Inventory Reader (fleet mirror)
+
+Canonical click-path and matrix: portal
+`docs/runbooks/M365-IDENTITY-CATALOG.md`.
+
+| Field | Value |
+|---|---|
+| Display name | `PLX Inventory Reader` |
+| Application (client) ID | `ce0663b0-7321-4e1c-b3d1-d0bf6e186148` |
+| Tenant | `dc28356c-e440-4a9e-b8e6-e40967bfee06` |
+| Kind | Single-tenant confidential, app-only, no redirect, no SPA/NAA |
+| Application roles | `Application.Read.All`, `Directory.Read.All`, `Device.Read.All`, `Organization.Read.All`, `Printer.Read.All`, `DeviceManagementManagedDevices.Read.All` |
+| Env | `PLX_INVENTORY_GRAPH_TENANT_ID` / `_CLIENT_ID` / `_CLIENT_SECRET` in `staging/ec2-secrets` (staging = yes) |
+| Purpose | Read-only tenant inventory for Claude Code web |
+
+Does not see the Concord LAN printer fleet. Do not load this client ID into `MICROSOFT_GRAPH_*`.

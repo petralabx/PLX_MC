@@ -142,6 +142,10 @@ repo_hygiene:
     - TOOLS.md
     - LESSONS.md
     - CLAUDE.md
+    - CODEX.md
+    - GEMINI.md
+    - GROK.md
+    - HERMES.md
     - pyproject.toml
     - requirements.txt
     - package.json

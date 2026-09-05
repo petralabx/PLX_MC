@@ -1,0 +1,149 @@
+# GEMINI.md — Gemini session guidance
+
+Runtime-specific wrapper. Shared governance is generated from `config/governance-contract.yaml`.
+
+<!-- governance:auto:start -->
+
+## Core Doctrine Pillars
+
+1. **Mission First** — Every edit, suggestion, and refactor must serve the mission. Do not introduce changes that lack a clear tie to project goals. Do not merge code without a stated connection to the mission.
+
+2. **Simplify Relentlessly** — Prefer the simplest correct solution. Simplify first, optimize second, automate third. Reject unnecessary abstraction. Reduce moving parts before adding new ones.
+
+3. **Reuse Before Create** — Search for existing modules, utilities, and patterns before proposing new ones. Extend what exists; do not duplicate. Before creating any new file: (1) search docs/modules/, (2) search the shared source tree, (3) search scripts/. Duplication without justification is a violation.
+
+4. **Truth Before Action** — When uncertain about intent, scope, or correctness, stop and ask. Do not guess at requirements. Do not proceed on assumptions. Do not fabricate test results, deployment status, or success claims.
+
+5. **Evidence Over Assertion** — Back claims with code, tests, or data. Prefer executable proof over prose explanations. Never claim "all tests passed" without running them. Never claim "deployed to production" without evidence.
+
+6. **Prune Ruthlessly** — Delete dead code, unused imports, and stale docs before adding new material. Less is better. Remove before adding.
+
+7. **Ownership and Precision** — Every requirement, rule, and config value must have a clear owner, rationale, and enforcement path. Ambiguity is a bug.
+
+## Agent Behavioral Contract
+
+1. State assumptions and success criteria before non-trivial work.
+2. Prefer the simplest correct change; do not add speculative abstractions.
+3. Make surgical edits and clean up only your own mess.
+4. Before writing code, read the local file, exports, immediate callers, and obvious shared utilities.
+5. Reuse existing modules and conventions before creating new ones.
+6. Use models for judgment calls, not deterministic routing, retries, status-code handling, transforms, auth, or permission logic.
+7. When repo patterns conflict, choose the newer or more tested pattern, explain why, and flag the other for cleanup.
+8. Tests must protect intent and invariants, not just output shape.
+9. Checkpoint meaningful multi-step progress by summarizing what changed, what was verified, and what remains.
+10. When context grows large or the task starts drifting, summarize the current state and restart from that summary instead of pushing through.
+11. Match local conventions even when you would choose differently in new code.
+12. Fail visibly: never call work complete when checks, records, migrations, edge cases, or deployments were skipped.
+
+## Agent Task & PR Workflow
+
+- Every change to a tracked repo must resolve to a Mission Control (MC) task. Before first edit or any PR_CREATE: search existing TASK-* ids. Do not auto-create unless routing found nothing AND the conductor said to create.
+- Check out via `mc_checkout_task` on the Hub connector, passing `repo=owner/name` so `actor.repo` matches the repo under edit (including portal). Confirm the returned `taskId` is a non-null string. Copy `prBodyLine` exactly. A stamp whose `actor.repo` does not match the PR repo fails GitHub verify with `taskId:null`.
+- Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and open a PR. If checkout tools are missing, stop — do not open the PR.
+- Humans (operators) are recorded but not gated; autonomous agents are gated on a complete bundle — link the work to a live repo-scoped checkout so the gate can attribute and verify it.
+- One logical theme per PR. Multiple related MC tasks may be completed in a single PR — add one live `MC-Checkout: dsp_*` line per task; the gate verifies every referenced task and blocks if any is incomplete.
+- Carry the tier-appropriate bundle: a clear description always; a `## Rollback Plan` for anything beyond docs/tests; evidence (tests/screenshots) plus a linked PRD for high-risk changes (DB migrations, auth/permissions, infra, `.github/workflows`, deploy).
+- Name a human accountable owner for agent-driven work: agents execute, a person owns the outcome.
+- Never edit, disable, or bypass a repo's compliance gate workflow to make the check pass — that is a governance violation.
+- `mc_complete_task` must include non-empty `verificationCommands` AND `rollback`. A successful complete is evidence hand-in only — it is not gate success. Do not treat agent work as complete until the stamped PR's GitHub `compliance` check is SUCCESS (or `scripts/compliance-pr-verify.mjs --wait` exits 0).
+- Local push uses the consumer's pre-push handshake when present. Never `--no-verify`.
+- Confirm `meta.actor.repo` equals the exact full slug of the repo under edit before accepting a checkout stamp; never stamp a Portal- or Hub-scoped `dsp_*` on a different repo (decision 3).
+- Portal required merge checks: `lint-typecheck-build`, `compliance`, `Validate ledgers`. On portal, `silent-failure-audit` is a real fail — do not raise BASELINE; fix new catch-empty-returns with `QueryResult<T>`.
+- These rules apply to every agent runtime (Cursor, Claude Code, ChatGPT/Codex, Grok, the swarm). This contract is the single source — change it here, regenerate, and every runtime's rule file updates.
+
+## Repo Hygiene
+
+- FORBIDDEN at repo root: `FINAL_*`
+- FORBIDDEN at repo root: `QA_*`
+- FORBIDDEN at repo root: `*_SUMMARY.md`
+- FORBIDDEN at repo root: `*_REPORT.md`
+- FORBIDDEN at repo root: `*_ASSESSMENT.md`
+- FORBIDDEN at repo root: `*_COMPLETION*.md`
+- FORBIDDEN at repo root: `*_CHECKLIST.md`
+- FORBIDDEN at repo root: `*_SPECIFICATION.md`
+- FORBIDDEN at repo root: `*_20[0-9][0-9]*.md`
+- Reports location: `artifacts/<domain>/<yyyy-mm-dd>-<slug>/REPORT.md`
+- Archive location: `archive/<yyyy-mm-dd>-<reason>/`
+- No status adjectives in filenames: FINAL, COMPLETE, LATEST, NEW, FIXED
+- No case-variant duplicates
+- Use lowercase kebab-case for evidence bundle slugs
+
+## Code Standards
+
+### Python
+
+- Run ruff check and ruff format before every commit
+- Run pytest before every commit
+- Use %s-style formatting in logger calls, not f-strings
+- Tests must write transient artifacts to temp directories, not tracked repo paths
+
+### Typescript
+
+- Run npm run typecheck before every commit
+- All UI color comes from --p-* design tokens behind the .brand-plx boundary — no raw hex in components (brand authority: plx-customer-portal, see ADR-003)
+- All API routes go through one shared route wrapper — no ad hoc handler boilerplate
+- Mutating routes (POST/PATCH/PUT/DELETE) require schema validation (e.g. Zod) — no manual typeof checks
+- One standard response envelope: { data } on success, { error: { code, message } } on failure
+- All frontend API calls go through one shared fetch wrapper — no raw fetch('/api/...')
+- No flat file may shadow a module directory barrel — if lib/foo/index.ts exists, lib/foo.ts must not
+
+### Powershell
+
+- Never name a variable or parameter after a PowerShell automatic variable ($Args, $Input, $_, $PSItem, $this, $Host, $Error, $Matches, $Foreach, $Switch) — the reserved automatic silently shadows it (e.g. a parameter named $Args drops every splatted argument), so a native call runs with zero args. Use an explicit name such as $Arguments.
+- When splatting arguments to a native command, pass an absolute working directory — a relative path resolves against the spawning process's cwd, not the repo root
+
+### Dependencies
+
+- Governance tooling deps live in requirements.txt — verify a clean install after changes
+- Commit lockfiles in the same change that modifies the manifest
+- Re-run the typecheck/test gate after any dependency change
+
+## Module Boundaries
+
+- Every module needs a contract README at docs/modules/<name>/README.md with: What, Why, How, Dependencies, Owner
+- Import through module entry points (barrel index), not internal module files
+- Compatibility shims must include a removal date comment: module-shim — remove after YYYY-MM-DD
+- A shim past its expiry date is a CRITICAL violation
+
+## Database Safety
+
+- NEVER use DROP TABLE, TRUNCATE, or DELETE FROM without a WHERE clause
+- Treat every connection as if it has full DDL privileges on production data
+- All DDL goes through a numbered migration runner — no inline CREATE TABLE or ALTER TABLE in application code
+- All SQL uses parameterized placeholders — never string interpolation of user input
+- All migration INSERTs must be idempotent (ON CONFLICT DO NOTHING or equivalent)
+- Migration failures must crash the deploy (exit 1), never continue with broken schema
+- Numbered migrations are globally serialized — two PRs must never ship the same numeric prefix; CI fails on duplicates
+
+## Branch Hygiene
+
+- One PR per logical theme — never stack unrelated work on a shared branch
+- Delete branches immediately after PR merge or abandonment
+- Do not let multiple agents push to the same branch without coordination
+- File issues for code defects only — not for environment or toolchain problems
+
+## Testing
+
+- Tests assert invariants, not implementation details
+- Every governance enforcement script must have at least one test verifying its exit-code behavior
+- Monkeypatch targets must match the module where the symbol is used at runtime, not where it was defined
+- Every session that modifies source code must run the relevant verification commands and show exit-0 evidence
+
+## Safety
+
+- Do not fabricate evidence, test results, or deployment claims
+- Do not create files that reference nonexistent modules or APIs
+- Do not rewrite store/schema-owning modules without reviewing the existing schema first
+- Do not add new dependencies without checking existing modules (Pillar 3: Reuse Before Create)
+- Secrets come from a secrets manager via one shared accessor — no hardcoded keys, no scattered env lookups
+
+## External Integrations
+
+- Every new external provider, MCP server, or operator-side tool must declare before merge: owner, scope (runtime vs local-only), auth source, default state, kill switch or feature flag, health check, fallback path, and data/audit boundary
+- Operator-local tools ship disabled by default in committed config and are never represented as deployed runtime capability
+- Integrations that can act autonomously (send, post, join, record) require explicit enablement and auditable state
+- Every agent session that changes code, makes a decision, or produces analysis must leave a structured SessionArtifact v1 (repo tag `PLX_MC`) so it feeds the company-brain knowledge graph — POST to `$VMC_BASE_URL/api/vmc/knowledge/session-artifact` (e.g. https://missioncontrol.tayloralton.com) with `$VMC_API_KEY`; trivial read-only Q&A sessions are exempt
+- Session-artifact capture runtime coverage: the Cursor `sessionEnd` hook (`scripts/compliance-closeout.mjs`) captures automatically; runtimes without hook support use the session-brain skill (see the agentic-swarm repo's `.cursor/skills/session-brain`) to submit manually
+- Session-artifact capture is fail-open and gated by the SESSION_BRAIN_ENABLED kill switch (default enabled) — capture failure must never block a session; failed submissions queue to `artifacts/session-brain/<date>/<session_id>.json` for manual replay
+
+<!-- governance:auto:end -->

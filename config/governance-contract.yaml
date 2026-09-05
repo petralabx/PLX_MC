@@ -2,7 +2,8 @@
 #
 # This is the SINGLE SOURCE OF TRUTH for all agent governance rules in this
 # repository. Every other surface — .cursor/rules/governance.mdc and the
-# marker blocks inside AGENTS.md / CLAUDE.md — derives from this file.
+# marker blocks inside AGENTS.md / CLAUDE.md / CODEX.md / GROK.md / GEMINI.md /
+# HERMES.md — derives from this file.
 #
 # When editing: change here first, then run:
 #   python scripts/generate-governance-surfaces.py
@@ -18,11 +19,15 @@ version: "0.3.0"
 
 # Files that receive the generated governance block between
 # <!-- governance:auto:start --> / <!-- governance:auto:end --> markers.
-# Add CODEX.md, GROK.md, GEMINI.md, etc. as you adopt more agent runtimes.
+# Marker files: AGENTS.md, CLAUDE.md, CODEX.md, GROK.md, GEMINI.md, HERMES.md.
 surfaces:
   marker_files:
     - AGENTS.md
     - CLAUDE.md
+    - CODEX.md
+    - GROK.md
+    - GEMINI.md
+    - HERMES.md
   rule_file: .cursor/rules/governance.mdc
 
 pillars:
@@ -137,6 +142,10 @@ repo_hygiene:
     - TOOLS.md
     - LESSONS.md
     - CLAUDE.md
+    - CODEX.md
+    - GEMINI.md
+    - GROK.md
+    - HERMES.md
     - pyproject.toml
     - requirements.txt
     - package.json

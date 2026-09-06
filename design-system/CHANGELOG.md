@@ -1,5 +1,34 @@
 # PLX Design System changelog
 
+## 1.4.0 — 2026-09-01
+
+**Office gets the real brand faces.** No token values changed. The Office
+templates previously declared Georgia and Segoe UI, a documented substitution
+that existed because the package only shipped web fonts (woff2) that Office
+cannot load. `fonts/desktop/` now carries installable cuts of all three brand
+families, so the templates name the real faces.
+
+| Face | Role | Cuts |
+|---|---|---|
+| Mazius Display | headings (`--p-font-serif`) | Regular, Bold, Italic |
+| Mazius Display Extra Italic | display accent | Regular, Bold |
+| Inter | body (`--p-font-sans`) | Regular, Bold, Italic, Bold Italic |
+| JetBrains Mono | data and labels (`--p-font-mono`) | Regular, Bold, Italic, Bold Italic |
+
+The Mazius desktop cuts are lossless sfnt restorations of the shipped woff2
+files — outlines untouched, glyph counts identical. Their name tables were
+normalized to two RIBBI-clean families; the upstream files disagreed on family
+name (the italic called itself `MAZIUS REVIEW 20.09`), which made Office treat
+each cut as unrelated and synthesise fake bold and oblique. The SIL OFL
+copyright declares no Reserved Font Name, so renaming is permitted. Inter 4.1
+and JetBrains Mono 2.304 are upstream desktop releases, both SIL OFL 1.1, with
+licences alongside.
+
+Consumers must install the cuts per machine — Office names a family but never
+embeds it. Run `fonts/desktop/install-plx-fonts.ps1`. It verifies every cut
+against this manifest before touching the system and is safe to re-run.
+Machines without the cuts degrade to Georgia / Segoe UI as before.
+
 ## 1.3.0 — 2026-08-12
 
 **Dark-scheme WCAG AA remediation.** Three value changes, no additions, removals

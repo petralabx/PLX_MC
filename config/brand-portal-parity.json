@@ -1,8 +1,8 @@
 {
   "schemaVersion": "plx-brand-parity/v1",
   "portalRepo": "plx-customer-portal",
-  "portalCommit": "c9b8ff828",
-  "syncedAt": "2026-09-02T09:47:21Z",
+  "portalCommit": "c68fb05b4",
+  "syncedAt": "2026-09-06T20:22:00Z",
   "owner": "Vince",
   "rationale": "ADR-003 upstream authority; MC must not fork shared brand artifacts.",
   "files": [
@@ -143,6 +143,6 @@
       "sha256": "2220486909addce8dadf31067c02e6f6e9b2d03f9991d71a3d5c0b3cd44e9a2b"
     }
   ],
-  "authorityVersion": "1.3.0",
-  "authorityIntegrity": "sha256-ce22ba82ba5005ac57d9104e92e9551567b8013ccb96c916fdaca71f34db3d61"
+  "authorityVersion": "1.4.0",
+  "authorityIntegrity": "sha256-7b96dd22f77aaad5e2cab39e3ed663fb65f915785d71eafe5e00e54edd4684a0"
 }

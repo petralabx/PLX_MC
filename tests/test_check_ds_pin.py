@@ -25,15 +25,32 @@ def _run(repo_root: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _write_adopting_fixture(root: Path, *, integrity: str | None = None) -> str:
+def _write_adopting_fixture(
+    root: Path, *, integrity: str | None = None, with_desktop: bool = False
+) -> str:
     tokens = b":root { --p-paper: #FBF9F5; }\n"
     tokens_ts = b"export const tokens = {};\n"
     font = b"font-bytes\n"
+    desktop_font = b"desktop-ttf-bytes\n"
     artifacts = [
         {"path": "tokens.css", "sha256": _sha256(tokens)},
         {"path": "tokens.ts", "sha256": _sha256(tokens_ts)},
         {"path": "fonts/LICENSE.txt", "sha256": _sha256(font)},
     ]
+    if with_desktop:
+        # v1.4.0 added desktop-install cuts under fonts/desktop/.
+        artifacts.append(
+            {
+                "path": "fonts/desktop/Inter-Regular.ttf",
+                "sha256": _sha256(desktop_font),
+            }
+        )
+        artifacts.append(
+            {
+                "path": "fonts/desktop/install-plx-fonts.ps1",
+                "sha256": _sha256(desktop_font),
+            }
+        )
     hashes = [a["sha256"] for a in artifacts]
     actual_integrity = (
         "sha256-" + hashlib.sha256("\n".join(hashes).encode()).hexdigest()
@@ -91,6 +108,13 @@ def _write_adopting_fixture(root: Path, *, integrity: str | None = None) -> str:
     return actual_integrity
 
 
+def _write_desktop_cut(root: Path, name: str = "Inter-Regular.ttf") -> None:
+    """Vendor one desktop cut into the consumer package tree."""
+    desktop = root / "design-system/fonts/desktop"
+    desktop.mkdir(parents=True, exist_ok=True)
+    (desktop / name).write_bytes(b"desktop-ttf-bytes\n")
+
+
 def test_exit_0_when_no_plx_brand_json(tmp_path):
     assert _run(tmp_path).returncode == 0
 
@@ -120,3 +144,50 @@ def test_exit_1_on_pin_integrity_mismatch(tmp_path):
     result = _run(tmp_path)
     assert result.returncode == 1
     assert "pin integrity drift" in result.stdout
+
+
+def test_desktop_cuts_are_not_required(tmp_path):
+    """A web consumer pins v1.4.0 without vendoring 2.9 MB of desktop fonts."""
+    _write_adopting_fixture(tmp_path, with_desktop=True)
+    result = _run(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "missing pinned artifact" not in result.stdout
+
+
+def test_desktop_cuts_never_demand_a_public_mirror(tmp_path):
+    """Vendoring a desktop cut must not require serving it from public/.
+
+    The old rule matched every path starting with 'fonts/', so a vendored
+    fonts/desktop/install-plx-fonts.ps1 was demanded at
+    public/fonts/mazius/install-plx-fonts.ps1 — a PowerShell script in the
+    web root.
+    """
+    _write_adopting_fixture(tmp_path, with_desktop=True)
+    _write_desktop_cut(tmp_path)
+    _write_desktop_cut(tmp_path, "install-plx-fonts.ps1")
+    result = _run(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "missing consumer mirror" not in result.stdout
+    assert not (tmp_path / "public/fonts/mazius/install-plx-fonts.ps1").exists()
+
+
+def test_vendored_desktop_cut_still_hash_checked(tmp_path):
+    """Opting in to a desktop cut opts in to its hash. Presence is optional;
+    correctness is not."""
+    _write_adopting_fixture(tmp_path, with_desktop=True)
+    _write_desktop_cut(tmp_path)
+    (tmp_path / "design-system/fonts/desktop/Inter-Regular.ttf").write_bytes(
+        b"tampered\n"
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert "drift: design-system/fonts/desktop/Inter-Regular.ttf" in result.stdout
+
+
+def test_web_font_mirror_still_required(tmp_path):
+    """Scoping the rule must not weaken it for web fonts."""
+    _write_adopting_fixture(tmp_path)
+    (tmp_path / "public/fonts/mazius/LICENSE.txt").unlink()
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert "missing consumer mirror: public/fonts/mazius/LICENSE.txt" in result.stdout

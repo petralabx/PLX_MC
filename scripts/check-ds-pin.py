@@ -7,7 +7,12 @@ Reads root plx-brand.json. When adoptsPlxTokens is true:
   3. Each package artifact under design-system/ must match its sha256
   4. Consumer mirrors of pin targets must be byte-identical to the package:
        docs/design-system/tokens.css|.ts
-       public/fonts/mazius/* (for fonts present in the package)
+       public/fonts/mazius/* (for web fonts present in the package)
+
+Channels: the package ships web fonts at fonts/<file> and desktop-install cuts
+at fonts/desktop/<file>. Only web fonts are consumer mirror targets. Desktop
+cuts are for installing on a workstation, so a web consumer is not required to
+vendor them; when it does hold a copy, that copy must still match the pin.
 
 Exit 0 when clean or when plx-brand.json is absent / adoptsPlxTokens is false.
 """
@@ -26,6 +31,16 @@ MIRROR_MAP = {
     "tokens.css": "docs/design-system/tokens.css",
     "tokens.ts": "docs/design-system/tokens.ts",
 }
+
+# Desktop font cuts are installed on a workstation, never served by a web
+# consumer. They are pin-verified when present but are not required artifacts
+# and never mirror into public/.
+DESKTOP_FONT_PREFIX = "fonts/desktop/"
+
+
+def is_web_font(rel: str) -> bool:
+    """True for fonts/<file>; false for fonts/desktop/<file> and non-fonts."""
+    return rel.startswith("fonts/") and "/" not in rel[len("fonts/") :]
 
 
 def sha256_file(path: Path) -> str:
@@ -115,6 +130,9 @@ def check_pin(repo_root: Path) -> list[str]:
             continue
         package_file = repo_root / "design-system" / rel
         if not package_file.is_file():
+            # A web consumer need not vendor desktop-install cuts.
+            if rel.startswith(DESKTOP_FONT_PREFIX):
+                continue
             violations.append(f"missing pinned artifact: design-system/{rel}")
             continue
         actual = sha256_file(package_file)
@@ -124,7 +142,7 @@ def check_pin(repo_root: Path) -> list[str]:
             )
 
         mirror_rel = MIRROR_MAP.get(rel)
-        if rel.startswith("fonts/"):
+        if is_web_font(rel):
             mirror_rel = f"public/fonts/mazius/{Path(rel).name}"
         if not mirror_rel:
             continue

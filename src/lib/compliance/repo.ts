@@ -6,6 +6,7 @@
 // a live database.
 
 import { query } from "@/lib/db";
+import { announceGoLiveEventSafe } from "./go-live-announcer";
 import type { ActorKind } from "./types";
 
 export type Verdict = "pass" | "block" | "pending";
@@ -31,6 +32,7 @@ export async function appendEvent(e: AppendEventInput): Promise<void> {
      ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING`,
     [e.kind, e.actor, e.repo ?? null, e.taskId ?? null, e.pr ?? null, JSON.stringify(e.payload ?? {}), e.dedupKey ?? null]
   );
+  await announceGoLiveEventSafe(e);
 }
 
 export interface EventRow {

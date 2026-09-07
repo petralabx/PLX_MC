@@ -116,6 +116,7 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 - `src/lib/compliance/projection.ts` — PR lifecycle → sync task projection (authorize-gated)
 - `src/lib/compliance/bucket-prd.ts` — bucket PRD resolution for verifyPr
 - `src/lib/compliance/webhook.ts` — HMAC verify + PR-event parse (in-memory body)
+- `src/lib/compliance/go-live-announcer.ts` — one-line Teams Workflow posts on `checkout` / `pr.opened` / `task.completed` (TASK-1454; kill switches default off)
 - `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts`
 - `src/app/api/routing/propose/route.ts` — OIDC propose (middleware carve-out exact)
 - `src/middleware.ts` — exact self-auth carve-outs including `api/routing/propose`

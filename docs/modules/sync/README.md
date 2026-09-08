@@ -130,6 +130,10 @@ Routing mutations fail closed when required registers are stale.
 
 - Session conflict resolve / error retry / manual sweep: Entra `oid` from the
   authenticated session (caller-supplied actor ignored) + `sync.mutate`.
+- MCP conflict resolve (`mc_resolve_conflict` / `mc_resolve_conflicts`): durable
+  MCP service principal + `sync.mutate`. Resolution enum is `keep_mc` \|
+  `keep_sp` (mapped to engine `mc` \| `sp`). No Entra session. Ledger owns
+  Keep MC for stage-lag leftovers; never silent `keep_sp`.
 - Cron / inbound writes: durable service principal `sp_sync_inbound` +
   `sync.service.write`. Outer cron Bearer admission is unchanged.
 

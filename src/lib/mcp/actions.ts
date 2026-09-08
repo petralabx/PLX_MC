@@ -38,6 +38,12 @@ export {
   registerRoutingMutationTools,
 } from "./routing-mutation-actions";
 
+export {
+  actionResolveConflict,
+  actionResolveConflicts,
+  registerSyncConflictTools,
+} from "./sync-actions";
+
 export async function actionSelfCheck(identity: McpIdentity) {
   const snap = await snapshot();
   const honesty = await buildHonestyFields({ lastSweep: snap.lastSweep });

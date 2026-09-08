@@ -171,6 +171,9 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 `MC_REPO` is the full GitHub slug for the repo you are pushing to. `repos[]` on create/patch is the MC registry **id** (`portal-web`, `plx-mc`, `agentic-swarm`). The API also accepts a unique registry `name` or `owner/name` slug and normalizes to the id before persist — prefer the id.
 | Milestones | `mc_report_progress` | Every ~10–15 min on long runs; `stage`, `notes`, `progressPct` |
 | Hand in evidence | `mc_complete_task` | Writes structured `task.evidence` — see §7 |
+| Drain Sync leftovers | `mc_resolve_conflict` / `mc_resolve_conflicts` | Required `resolution`: `keep_mc` \| `keep_sp`. Same engine as the Sync console. Auth is the MCP principal + `sync.mutate`, not browser Entra. |
+
+**Ledger owns Keep MC** for stage-lag leftovers on Sync/Conflicts. Never default or silently send `keep_sp`. Agents never move a task to **Verified**.
 
 Reviewed MCP agents have `project.create`, `bucket.create`, and `task.create`.
 Search first; create only on a miss. Humans can still create the same objects

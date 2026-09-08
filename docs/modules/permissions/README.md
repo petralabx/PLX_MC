@@ -58,8 +58,9 @@ audit/context only and never grants human capabilities. From `review` mode
 onward, MCP authentication loads the principal from `service_principals` and
 rejects missing or revoked records. Service capabilities always come from the
 reviewed versioned registry; callers cannot inject a capability list. The
-shared agent bundle includes project and bucket creation but not project/bucket
-updates, repository approval, or permission management.
+shared agent bundle includes project and bucket creation plus `sync.mutate`
+(conflict resolve via MCP) but not project/bucket updates, repository approval,
+or permission management. Console sweep/retry remain Entra-gated.
 
 **Audit data (TASK-620):** every enforcement call site records `allowed`,
 `reasonCode`, and `policyVersion` to `permissions_decision_log` (migration 022)

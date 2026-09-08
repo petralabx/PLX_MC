@@ -204,6 +204,7 @@ describe("service-principal separation", () => {
         "routing.suggest",
         "routing.propose",
         "routing.resolve",
+        "sync.mutate",
       ])
     );
     expect(mcpCaps).not.toContain("repo.approve");
@@ -214,6 +215,7 @@ describe("service-principal separation", () => {
     expect(authorize({ actor, capability: "routing.suggest" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "routing.resolve" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "task.link" }).allowed).toBe(true);
+    expect(authorize({ actor, capability: "sync.mutate" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "repo.approve" }).allowed).toBe(false);
   });
 

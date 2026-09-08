@@ -256,6 +256,32 @@ server.tool(
 );
 
 server.tool(
+  "mc_resolve_conflict",
+  "Resolve one SharePoint Sync conflict. resolution is required: keep_mc (Ledger default for stage lag) or keep_sp (explicit only — never silent). Same engine as the Sync console; auth is the MCP principal, not Entra. Agents never mark a task Verified.",
+  {
+    conflictId: z.string().min(1),
+    resolution: z.enum(["keep_mc", "keep_sp"]),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_resolve_conflict");
+    return printResult(await mcFetch("/conflicts/resolve", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_resolve_conflicts",
+  "Resolve a batch of SharePoint Sync conflicts with one explicit resolution (keep_mc | keep_sp). Never default keep_sp. Ledger owns Keep MC for stage-lag leftovers. Agents never mark a task Verified.",
+  {
+    conflictIds: z.array(z.string().min(1)).min(1),
+    resolution: z.enum(["keep_mc", "keep_sp"]),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_resolve_conflicts");
+    return printResult(await mcFetch("/conflicts/resolve", { method: "POST", body }));
+  }
+);
+
+server.tool(
   "mc_complete_task",
   "Complete agent work for a checkout credential.",
   {

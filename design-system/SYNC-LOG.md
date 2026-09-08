@@ -34,3 +34,33 @@ Consumer ledger for the portal authority package (`petralabx/plx-customer-portal
   the Office-font bump that follows in 1.4.0
 - note: `BrandStatusBadge` still not mirrored — same shadcn `Badge` / `@/lib/utils`
   dependency gap as v1.0.0. The sync script's component list omits it deliberately.
+
+## v1.4.0 — 2026-09-02
+
+- authority: `petralabx/plx-customer-portal` @ staging (`c68fb05b4`)
+- integrity: `sha256-7b96dd22f77aaad5e2cab39e3ed663fb65f915785d71eafe5e00e54edd4684a0`
+- portal merge: https://github.com/petralabx/plx-customer-portal/pull/1018
+- **no token values changed.** 1.4.0 makes Office templates use the real brand
+  faces (Mazius Display headings, Inter body, JetBrains Mono data) instead of the
+  documented Georgia / Segoe UI substitution. MC renders no Office documents, so
+  no MC surface changes.
+- package grows from 8 to 24 artifacts: 16 desktop font cuts under
+  `fonts/desktop/` plus the installer script. MC vendors none of them.
+
+### Why the pin gate needed a fix first
+
+`scripts/check-ds-pin.py` required every manifest artifact to exist in the
+consumer and mirrored anything under `fonts/` into `public/fonts/mazius/`. That
+rule predates `fonts/desktop/`, so pinning 1.4.0 unchanged would have:
+
+1. required MC to vendor ~2.9 MB of desktop TTF/OTF cuts it never loads, and
+2. demanded `public/fonts/mazius/install-plx-fonts.ps1` — a PowerShell script
+   published in the web root.
+
+The gate now distinguishes the two channels. Web fonts (`fonts/<file>`) are
+still required and still mirrored. Desktop cuts (`fonts/desktop/<file>`) are
+optional for a web consumer, and never mirror into `public/`. A vendored desktop
+cut is still hash-checked, so presence stays optional while correctness does not.
+
+Four tests in `tests/test_check_ds_pin.py` cover this; two of them fail against
+the previous gate.

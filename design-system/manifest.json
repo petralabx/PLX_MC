@@ -1,6 +1,6 @@
 {
   "name": "plx-design-system",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "channel": "staging",
   "sourceCommit": "00fe1abc6",
   "authority": "petralabx/plx-customer-portal",
@@ -36,7 +36,71 @@
     {
       "path": "fonts/LICENSE.txt",
       "sha256": "c6b0b6376b9aa4290f1d4841f3fb12fae229710b3834fc9a77207d3f5ed9381a"
+    },
+    {
+      "path": "fonts/desktop/install-plx-fonts.ps1",
+      "sha256": "f816ac84b8f1da0069c0188d16d437afe9788d4c9cbf31296b61b132a638d79b"
+    },
+    {
+      "path": "fonts/desktop/Inter-Bold.ttf",
+      "sha256": "288316099b1e0a47a4716d159098005eef7c0066921f34e3200393dbdb01947f"
+    },
+    {
+      "path": "fonts/desktop/Inter-BoldItalic.ttf",
+      "sha256": "948405a16cdc62701da5f4005ed068ca5f4d27061d98f7974ccfc37831d9581d"
+    },
+    {
+      "path": "fonts/desktop/Inter-Italic.ttf",
+      "sha256": "bbc051dd204b5019a1aa0bc0ae2aa8a05ab13e7a3f979fa357631dc7feb6833a"
+    },
+    {
+      "path": "fonts/desktop/Inter-OFL.txt",
+      "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a"
+    },
+    {
+      "path": "fonts/desktop/Inter-Regular.ttf",
+      "sha256": "40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+    },
+    {
+      "path": "fonts/desktop/JetBrainsMono-Bold.ttf",
+      "sha256": "5590990c82e097397517f275f430af4546e1c45cff408bde4255dad142479dcb"
+    },
+    {
+      "path": "fonts/desktop/JetBrainsMono-BoldItalic.ttf",
+      "sha256": "4039d5ce0ed225bf9c8b2c8c6436290ae2f356b7e90d70fa666227238324aa3b"
+    },
+    {
+      "path": "fonts/desktop/JetBrainsMono-Italic.ttf",
+      "sha256": "9d0a1f7a708e6af183f1193b7e81d40da294f5c67682c085d8401c60aac8ded4"
+    },
+    {
+      "path": "fonts/desktop/JetBrainsMono-OFL.txt",
+      "sha256": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad"
+    },
+    {
+      "path": "fonts/desktop/JetBrainsMono-Regular.ttf",
+      "sha256": "a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f"
+    },
+    {
+      "path": "fonts/desktop/MaziusDisplay-Bold.otf",
+      "sha256": "899439199485293772125d9e220d2b81cbbca305fdec99469179fa7d97c83df0"
+    },
+    {
+      "path": "fonts/desktop/MaziusDisplay-Extraitalic.otf",
+      "sha256": "34792d1995314dac679713302b27aecd23281e7cf8899dfe1e9f8fdadf576e8f"
+    },
+    {
+      "path": "fonts/desktop/MaziusDisplay-ExtraItalicBold.otf",
+      "sha256": "75dec286a1fad530eda14a41ec79bd2d7f0368000a3284d48b27d817d15db057"
+    },
+    {
+      "path": "fonts/desktop/MaziusDisplay-Italic.otf",
+      "sha256": "600c654b14079b830529c89a5c5fe2be58d9d5f18976bd4958c0e7179b3dc7de"
+    },
+    {
+      "path": "fonts/desktop/MaziusDisplay-Regular.otf",
+      "sha256": "f3c23212b5d43fe476c52bc75dc76a6b6c72c44741a2beadb214a29e9bad6211"
     }
   ],
-  "integrity": "sha256-ce22ba82ba5005ac57d9104e92e9551567b8013ccb96c916fdaca71f34db3d61"
+  "integrity": "sha256-7b96dd22f77aaad5e2cab39e3ed663fb65f915785d71eafe5e00e54edd4684a0"
 }

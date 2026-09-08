@@ -13,7 +13,10 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Use a native path on Windows. Under MSYS/git-bash `pwd` prints /c/Users/...,
+# which native python resolves to C:\c\Users\... and then cannot find. `pwd -W`
+# prints the Windows form; it does not exist elsewhere, so fall back to `pwd`.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })"
 PORTAL_ROOT="${PLX_PORTAL_ROOT:-}"
 
 if [[ -z "$PORTAL_ROOT" ]]; then

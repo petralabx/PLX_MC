@@ -25,6 +25,7 @@ import {
 } from "./skills-actions";
 import { registerRoutingSuggestTools } from "./routing-suggest-actions";
 import { registerRoutingMutationTools } from "./routing-mutation-actions";
+import { registerSyncConflictTools } from "./sync-actions";
 
 function jsonResult(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -256,6 +257,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   );
 
   registerRoutingTools(server, identity);
+  registerSyncConflictTools(server, identity);
 
   return server;
 }

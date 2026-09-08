@@ -70,6 +70,12 @@ you to create the hierarchy in the UI first. Search first (`mc_list_buckets` /
 `owner=vince@petrasoap.com`. `repos[]` uses MC registry ids (`portal-web`,
 `plx-mc`), never GitHub slugs. You can still create the same objects in the UI.
 
+**Sync leftovers:** Ledger drains SharePoint Sync/Conflicts via Hub MCP
+`mc_resolve_conflict` / `mc_resolve_conflicts` (`keep_mc` \| `keep_sp`). Keep MC
+is canonical for stage-lag leftovers. You can still resolve in the Sync console
+(Entra session). Agents never silently choose Keep SP and never mark a task
+Verified.
+
 Never create a new task to escape one with incomplete evidence. Never invent a
 `dsp_*`. Never write `MC-Checkout: pending`.
 
@@ -259,6 +265,7 @@ Troubleshooting runbook: [`docs/runbooks/github-app-provisioning.md`](runbooks/g
 | Agent PR blocked, no checkout | Missing `MC-Checkout` stamp | Agent checks out task, stamps PR |
 | Ledger stale | No recent commit to artifacts file | Update quality ledger in source repo |
 | Used sync sweep for ledgers | Wrong subsystem | Use Loop Ledgers screen or `GET /api/loop-ledgers` only |
+| Sync/Conflicts leftovers, stage lag | SharePoint still holds an older stage | Ledger Keep MC via `mc_resolve_conflict`; do not ask agents for Verified |
 
 Escalation: Vince.
 

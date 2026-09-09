@@ -35,7 +35,9 @@ export async function assertProjectIdAccess(
   if (!projectId) return;
   const projects = await getProjects();
   const project = projects.find((row) => row.id === projectId);
-  if (!project) return;
+  if (!project) {
+    throw new ApiError("not_found", `unknown project ${projectId}`, 404);
+  }
   assertCanAccessProject(project, principal);
 }
 

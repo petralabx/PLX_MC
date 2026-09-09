@@ -1246,8 +1246,8 @@ export async function runSweep(actor: string = SYNC_ACTOR): Promise<SweepResult>
     pushDeferred += r.deferred;
   }
   const hiddenBucketIds = restrictedBucketIds(
-    await repo.getBuckets(),
-    restrictedProjectIds(await repo.getProjects())
+    (await repo.getBucketRows()).map((row) => row.bucket),
+    restrictedProjectIds((await repo.getProjectRows()).map((row) => row.project))
   );
   for (const type of PUSHABLE) {
     const rows = await repo.getEntities(type);

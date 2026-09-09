@@ -103,4 +103,33 @@ describe("project ACL list filters", () => {
     expect(canAccessBucket(buckets[1], projectsById, agent)).toBe(true);
     expect(canAccessTask(tasks[1], bucketsById, projectsById, vince)).toBe(true);
   });
+
+  it("fail-opens unparented buckets and tasks (null/empty project)", () => {
+    expect(canAccessBucket({ project: null }, projectsById, outsider)).toBe(true);
+    expect(canAccessBucket({ project: "" }, projectsById, outsider)).toBe(true);
+    expect(canAccessBucket({ project: undefined }, projectsById, outsider)).toBe(true);
+    expect(canAccessTask({ bucket: "BKT-ORPHAN" }, bucketsById, projectsById, outsider)).toBe(true);
+  });
+
+  it("fail-closes a bucket whose project id is set but missing from the map", () => {
+    const dangling = { id: "BKT-DANGLING", project: "PRJ-GONE" };
+    expect(canAccessBucket(dangling, projectsById, outsider)).toBe(false);
+    expect(canAccessBucket(dangling, projectsById, vince)).toBe(false);
+    expect(filterBucketsByAcl([...buckets, dangling], projectsById, vince).map((b) => b.id)).toEqual([
+      "BKT-OPEN",
+      "BKT-SECRET",
+      "BKT-ORPHAN",
+    ]);
+  });
+
+  it("fail-closes a task whose bucket points at a missing project parent", () => {
+    const danglingBucket = { id: "BKT-DANGLING", project: "PRJ-GONE" };
+    const danglingTask = { id: "TASK-DANGLING", bucket: "BKT-DANGLING" };
+    const withDangling = indexById([...buckets, danglingBucket]);
+    expect(canAccessTask(danglingTask, withDangling, projectsById, outsider)).toBe(false);
+    expect(canAccessTask(danglingTask, withDangling, projectsById, vince)).toBe(false);
+    expect(
+      filterTasksByAcl([...tasks, danglingTask], withDangling, projectsById, vince).map((t) => t.id)
+    ).toEqual(["TASK-1", "TASK-2", "TASK-3"]);
+  });
 });

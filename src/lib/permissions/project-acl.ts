@@ -100,9 +100,11 @@ export function canAccessBucket(
   principal: ProjectAclPrincipal | null | undefined
 ): boolean {
   const projectId = bucket?.project;
+  // Unparented (null/empty) stays shared-like. A non-empty id with no row
+  // is a dangling parent — fail closed so ACL cannot be bypassed by omission.
   if (!projectId) return true;
   const project = projectsById.get(projectId);
-  if (!project) return true;
+  if (!project) return false;
   return canAccessProject(project, principal);
 }
 

@@ -10,6 +10,9 @@ export const GO_LIVE_TEAM_ID = "73b1b6fb-ea03-493c-b1a0-3af4883a2953";
 export const GO_LIVE_CHANNEL_ID = "19:046f10be721e4782906a2309e8a7492d@thread.tacv2";
 export const GO_LIVE_GITHUB_ORG = "petralabx";
 
+/** Bare slugs as stored on pr.opened mc_events (webhook writes repository.name). */
+export const GO_LIVE_BARE_REPO_SLUGS = new Set(["plx-customer-portal", "agentic-swarm", "PLX_MC"]);
+
 const TASK_ID_RE = /^TASK-\d{1,6}$/;
 const ACTOR_RE = /^[A-Za-z0-9._@-]{1,64}$/;
 const REPO_SLUG_RE = /^[A-Za-z0-9._-]+$/;
@@ -38,6 +41,7 @@ export interface GoLiveConfig {
   completeEnabled: boolean;
   dryRun: boolean;
   webhookUrl: string;
+  chatWebhookUrl: string;
   teamId: string;
   channelId: string;
 }
@@ -79,6 +83,7 @@ export function loadGoLiveConfig(
     completeEnabled: envFlagFrom(env, "MC_GO_LIVE_ANNOUNCE_COMPLETE", false),
     dryRun: envFlagFrom(env, "MC_GO_LIVE_ANNOUNCER_DRY_RUN", false),
     webhookUrl: (env.MC_GO_LIVE_TEAMS_WORKFLOW_URL ?? "").trim(),
+    chatWebhookUrl: (env.MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL ?? "").trim(),
     teamId,
     channelId,
   };
@@ -134,15 +139,26 @@ export function sanitizeTitle(raw: string | null | undefined): string {
   return stripped.length > MAX_TITLE ? `${stripped.slice(0, MAX_TITLE - 1)}…` : stripped;
 }
 
-export function sanitizeGithubPrUrl(repo: string | null | undefined, pr: string | null | undefined): string | null {
-  const repoId = (repo ?? "").trim();
-  const prNum = (pr ?? "").trim();
-  if (!/^\d{1,8}$/.test(prNum)) return null;
-  const parts = repoId.split("/");
+export function normalizeGithubRepo(repo: string | null | undefined): string | null {
+  const raw = (repo ?? "").trim();
+  if (!raw) return null;
+  if (!raw.includes("/")) {
+    if (!GO_LIVE_BARE_REPO_SLUGS.has(raw) || !REPO_SLUG_RE.test(raw)) return null;
+    return `${GO_LIVE_GITHUB_ORG}/${raw}`;
+  }
+  const parts = raw.split("/");
   if (parts.length !== 2) return null;
   const [org, slug] = parts;
   if (org !== GO_LIVE_GITHUB_ORG || !REPO_SLUG_RE.test(slug)) return null;
-  const url = `https://github.com/${org}/${slug}/pull/${prNum}`;
+  return `${org}/${slug}`;
+}
+
+export function sanitizeGithubPrUrl(repo: string | null | undefined, pr: string | null | undefined): string | null {
+  const prNum = (pr ?? "").trim();
+  if (!/^\d{1,8}$/.test(prNum)) return null;
+  const normalized = normalizeGithubRepo(repo);
+  if (!normalized) return null;
+  const url = `https://github.com/${normalized}/pull/${prNum}`;
   if (url.length > MAX_URL) return null;
   return url;
 }
@@ -295,6 +311,35 @@ async function postWithRetry(
   return last as GoLivePostReceipt;
 }
 
+async function postDestination(
+  url: string,
+  line: string,
+  postWebhook: (url: string, line: string) => Promise<GoLivePostReceipt>,
+  sleep: (ms: number) => Promise<void>
+): Promise<GoLivePostReceipt> {
+  try {
+    return await postWithRetry(url, line, postWebhook, sleep);
+  } catch (err) {
+    console.error(
+      "[go-live-announcer] dest failed: %s",
+      err instanceof Error ? err.message : "error"
+    );
+    return {
+      ok: false,
+      status: 0,
+      receiptId: "throw",
+      retryable: false,
+      permanentAuth: false,
+    };
+  }
+}
+
+function chatWebhookForFanout(cfg: GoLiveConfig): string | null {
+  const url = cfg.chatWebhookUrl.trim();
+  if (!url || !isHttpsWebhookUrl(url)) return null;
+  return url;
+}
+
 export async function announceGoLiveEvent(
   event: GoLiveEventInput,
   deps: GoLiveDeps = {}
@@ -334,24 +379,51 @@ export async function announceGoLiveEvent(
     return { sent: false, skipped: "duplicate", eventId, line, receiptId: null };
   }
 
-  const receipt = await postWithRetry(
-    cfg.webhookUrl,
-    line,
-    deps.postWebhook ?? ((webhookUrl, text) => postTeamsWorkflow(webhookUrl, text)),
-    deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
-  );
-  if (!receipt.ok) {
+  const postWebhook = deps.postWebhook ?? ((webhookUrl, text) => postTeamsWorkflow(webhookUrl, text));
+  const sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const chatUrl = chatWebhookForFanout(cfg);
+
+  const [channelOutcome, chatOutcome] = await Promise.allSettled([
+    postDestination(cfg.webhookUrl, line, postWebhook, sleep),
+    chatUrl ? postDestination(chatUrl, line, postWebhook, sleep) : Promise.resolve(null),
+  ]);
+
+  const channelReceipt: GoLivePostReceipt =
+    channelOutcome.status === "fulfilled"
+      ? channelOutcome.value
+      : { ok: false, status: 0, receiptId: "throw", retryable: false, permanentAuth: false };
+
+  if (chatUrl) {
+    const chatReceipt = chatOutcome.status === "fulfilled" ? chatOutcome.value : null;
+    if (!chatReceipt || !chatReceipt.ok) {
+      console.error(
+        "[go-live-announcer] chat send failed eventId=%s status=%s auth=%s retryable=%s",
+        eventId,
+        chatReceipt?.status ?? 0,
+        chatReceipt?.permanentAuth ?? false,
+        chatReceipt?.retryable ?? false
+      );
+    }
+  }
+
+  if (!channelReceipt.ok) {
     console.error(
       "[go-live-announcer] send failed eventId=%s status=%s auth=%s retryable=%s",
       eventId,
-      receipt.status,
-      receipt.permanentAuth,
-      receipt.retryable
+      channelReceipt.status,
+      channelReceipt.permanentAuth,
+      channelReceipt.retryable
     );
-    return { sent: false, skipped: receipt.permanentAuth ? "auth_failed" : "send_failed", eventId, line, receiptId: receipt.receiptId };
+    return {
+      sent: false,
+      skipped: channelReceipt.permanentAuth ? "auth_failed" : "send_failed",
+      eventId,
+      line,
+      receiptId: channelReceipt.receiptId,
+    };
   }
-  await (deps.markSent ?? defaultMarkSent)(eventId, receipt.receiptId);
-  return { sent: true, skipped: null, eventId, line, receiptId: receipt.receiptId };
+  await (deps.markSent ?? defaultMarkSent)(eventId, channelReceipt.receiptId);
+  return { sent: true, skipped: null, eventId, line, receiptId: channelReceipt.receiptId };
 }
 
 export async function announceGoLiveEventSafe(event: GoLiveEventInput): Promise<void> {

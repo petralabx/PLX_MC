@@ -7,9 +7,12 @@ import {
   canAccessTask,
   filterBucketsByAcl,
   filterProjectsByAcl,
+  filterStateSideChannels,
   filterTasksByAcl,
+  hiddenHierarchyIds,
   indexById,
   isRestrictedProject,
+  mentionsHiddenHierarchyId,
   normalizeProjectMembers,
   principalFromTokens,
   projectVisibility,
@@ -131,5 +134,84 @@ describe("project ACL list filters", () => {
     expect(
       filterTasksByAcl([...tasks, danglingTask], withDangling, projectsById, vince).map((t) => t.id)
     ).toEqual(["TASK-1", "TASK-2", "TASK-3"]);
+  });
+});
+
+describe("project ACL state side channels", () => {
+  const hidden = hiddenHierarchyIds({
+    tasks: [{ id: "TASK-2" }, { id: "TASK-1" }],
+    buckets: [{ id: "BKT-SECRET" }, { id: "BKT-OPEN" }],
+    projects: [{ id: "PRJ-SECRET" }, { id: "PRJ-OPEN" }],
+    visible: {
+      tasks: [{ id: "TASK-1" }],
+      buckets: [{ id: "BKT-OPEN" }],
+      projects: [{ id: "PRJ-OPEN" }],
+    },
+  });
+
+  it("collects only hierarchy ids hidden from the caller", () => {
+    expect([...hidden].sort()).toEqual(["BKT-SECRET", "PRJ-SECRET", "TASK-2"]);
+  });
+
+  it("matches hidden ids as whole tokens, not substrings", () => {
+    expect(mentionsHiddenHierarchyId("Edited TASK-2 — pending ToDos mirror.", hidden)).toBe(true);
+    expect(mentionsHiddenHierarchyId("Edited TASK-20 — pending ToDos mirror.", hidden)).toBe(false);
+  });
+
+  it("drops conflicts, errors, and audit rows that name a hidden id", () => {
+    const side = filterStateSideChannels({
+      hiddenIds: hidden,
+      conflicts: [
+        {
+          id: "cf-secret",
+          entity: "ToDos",
+          entityId: "TASK-2",
+          field: "title",
+          mcVal: "private contents",
+          spVal: "x",
+        },
+        {
+          id: "cf-open",
+          entity: "ToDos",
+          entityId: "TASK-1",
+          field: "title",
+          mcVal: "public",
+          spVal: "y",
+        },
+        {
+          id: "cf-note",
+          entity: "Risk",
+          entityId: "RISK-1",
+          field: "note",
+          mcVal: "see BKT-SECRET",
+          spVal: "",
+        },
+      ],
+      errors: [
+        {
+          id: "er-secret",
+          entity: "Project",
+          entityId: "PRJ-SECRET",
+          field: "name",
+          value: "hidden",
+          reason: "lookup",
+        },
+        {
+          id: "er-open",
+          entity: "Project",
+          entityId: "PRJ-OPEN",
+          field: "name",
+          value: "ok",
+          reason: "lookup",
+        },
+      ],
+      audit: [
+        { ts: "t1", actor: "sync", body: "Created task TASK-2 (private contents).", state: "synced" },
+        { ts: "t2", actor: "sync", body: "Created task TASK-1 (public).", state: "synced" },
+      ],
+    });
+    expect(side.conflicts.map((row) => row.id)).toEqual(["cf-open"]);
+    expect(side.errors.map((row) => row.id)).toEqual(["er-open"]);
+    expect(side.audit.map((row) => row.ts)).toEqual(["t2"]);
   });
 });

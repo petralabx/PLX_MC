@@ -7,7 +7,7 @@ import {
   aclPrincipalFromAuthorized,
   requireSessionActor,
 } from "@/lib/routing/mutations/actors";
-import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
+import { assertBucketProjectAccess, assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { patchTask } from "@/lib/sync";
 
 const STAGES = ["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified"] as const;
@@ -61,7 +61,11 @@ export const PATCH = route(async (req, ctx) => {
       ? "task.complete"
       : "task.progress";
   const authorized = await requireSessionActor(capability, { type: "task", id });
-  await assertTaskProjectAccess(id, aclPrincipalFromAuthorized(authorized));
+  const principal = aclPrincipalFromAuthorized(authorized);
+  await assertTaskProjectAccess(id, principal);
+  if (patch.bucket) {
+    await assertBucketProjectAccess(patch.bucket, principal);
+  }
   const task = await patchTask(id, patch, authorized.auditLabel, {
     attribution: { source: "human", actorId: authorized.actorId },
   });

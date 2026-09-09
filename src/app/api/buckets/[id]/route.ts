@@ -8,7 +8,7 @@ import {
   aclPrincipalFromAuthorized,
   requireSessionActor,
 } from "@/lib/routing/mutations/actors";
-import { assertBucketProjectAccess } from "@/lib/permissions/project-acl-guard";
+import { assertBucketProjectAccess, assertProjectIdAccess } from "@/lib/permissions/project-acl-guard";
 import { patchBucket } from "@/lib/sync";
 
 const patchBucketSchema = z.object({
@@ -33,7 +33,11 @@ export const PATCH = route(async (req, ctx) => {
     type: "bucket",
     id,
   });
-  await assertBucketProjectAccess(id, aclPrincipalFromAuthorized(authorized));
+  const principal = aclPrincipalFromAuthorized(authorized);
+  await assertBucketProjectAccess(id, principal);
+  if (typeof patch.project === "string" && patch.project.trim()) {
+    await assertProjectIdAccess(patch.project, principal);
+  }
   const bucket = await patchBucket(id, patch, authorized.auditLabel);
   if (!bucket) throw new ApiError("not_found", `unknown bucket ${id}`, 404);
   return bucket;

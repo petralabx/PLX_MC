@@ -39,6 +39,7 @@ export {
 } from "./routing-mutation-actions";
 
 export {
+  actionListConflicts,
   actionResolveConflict,
   actionResolveConflicts,
   registerSyncConflictTools,

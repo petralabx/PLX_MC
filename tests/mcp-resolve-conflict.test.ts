@@ -178,9 +178,9 @@ describe("MCP + console wiring", () => {
     "utf8"
   );
 
-  it("registers mc_resolve_conflict and mc_resolve_conflicts on both transports", () => {
+  it("registers mc_list_conflicts, mc_resolve_conflict and mc_resolve_conflicts on both transports", () => {
     expect(httpMcpSource).toContain("registerSyncConflictTools");
-    for (const tool of ["mc_resolve_conflict", "mc_resolve_conflicts"]) {
+    for (const tool of ["mc_list_conflicts", "mc_resolve_conflict", "mc_resolve_conflicts"]) {
       expect(httpToolSource).toContain(`"${tool}"`);
       expect(stdioMcpSource).toContain(`"${tool}"`);
     }

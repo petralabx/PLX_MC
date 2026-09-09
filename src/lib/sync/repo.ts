@@ -444,13 +444,40 @@ const toConflict = (r: ConflictRow): SpConflict => ({
   note: r.note,
 });
 
-export async function openConflicts(): Promise<SpConflict[]> {
-  const rows = await query<ConflictRow>(
+/** Open conflict row plus raw SQL fields Ledger needs (cf-* id, entityType, detected_at). */
+export type ListedConflict = SpConflict & {
+  entityType: SyncConflictSubject;
+  mc_val: string | null;
+  sp_val: string | null;
+  detected_at: string;
+};
+
+function isoDetectedAt(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+const toListedConflict = (r: ConflictRow): ListedConflict => ({
+  ...toConflict(r),
+  entityType: r.entity_type,
+  mc_val: r.mc_val,
+  sp_val: r.sp_val,
+  detected_at: isoDetectedAt(r.detected_at),
+});
+
+async function loadOpenConflictRows(): Promise<ConflictRow[]> {
+  return query<ConflictRow>(
     `SELECT id, list_key, entity_type, entity_id, field, mc_val, sp_val,
             detected_at, detected_by, note
        FROM sync_conflicts WHERE resolved_at IS NULL ORDER BY detected_at`
   );
-  return rows.map(toConflict);
+}
+
+export async function openConflicts(): Promise<SpConflict[]> {
+  return (await loadOpenConflictRows()).map(toConflict);
+}
+
+export async function listOpenConflicts(): Promise<ListedConflict[]> {
+  return (await loadOpenConflictRows()).map(toListedConflict);
 }
 
 export async function getConflict(

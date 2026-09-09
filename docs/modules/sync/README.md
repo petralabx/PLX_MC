@@ -130,6 +130,9 @@ Routing mutations fail closed when required registers are stale.
 
 - Session conflict resolve / error retry / manual sweep: Entra `oid` from the
   authenticated session (caller-supplied actor ignored) + `sync.mutate`.
+- MCP conflict list (`mc_list_conflicts`): durable MCP service principal +
+  `task.read`. Returns open `sync_conflicts` rows (`cf-*` ids) from
+  `repo.listOpenConflicts()`. No Entra session. Does not resolve.
 - MCP conflict resolve (`mc_resolve_conflict` / `mc_resolve_conflicts`): durable
   MCP service principal + `sync.mutate`. Resolution enum is `keep_mc` \|
   `keep_sp` (mapped to engine `mc` \| `sp`). No Entra session. Ledger owns

@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api/route";
 import { principalFromTokens } from "@/lib/permissions/project-acl";
 
 const getProjects = vi.hoisted(() => vi.fn());
@@ -40,7 +39,10 @@ describe("assertProjectIdAccess", () => {
       code: "not_found",
       status: 404,
     });
-    await expect(assertProjectIdAccess("PRJ-GONE", vince)).rejects.toBeInstanceOf(ApiError);
+    await expect(assertProjectIdAccess("PRJ-GONE", vince)).rejects.toMatchObject({
+      code: "not_found",
+      status: 404,
+    });
   });
 
   it("still denies restricted non-members with 403 and allows members", async () => {

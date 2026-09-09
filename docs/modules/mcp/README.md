@@ -55,7 +55,9 @@ the default. Rails should create a restricted project after merge with
 `visibility=restricted` and `members` including `vince@petrasoap.com`,
 `tanush@petrasoap.com` (TASK-1527 mailbox; not in the in-repo HUMANS fixture),
 and the Hub agent principals that need access (`sp_mcp_cursor`,
-`sp_mcp_claude_code`, …). The creating principal is auto-added.
+`sp_mcp_claude_code`, …). The creating principal is auto-added. Create
+restricted from the start — restrict-after-push leaves any already-mirrored
+SharePoint rows org-visible (see permissions module residual).
 
 **Accountable owner defaulting:** `mc_create_task` defaults a missing
 `accountableOwner` to the human operator behind the session — the allowlisted

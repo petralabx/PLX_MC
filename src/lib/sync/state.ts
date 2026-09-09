@@ -424,6 +424,8 @@ export async function patchProject(id: string, patch: PatchProjectInput, actor: 
   next.visibility = acl.visibility;
   next.members = acl.members;
   if (isRestrictedProject(next)) {
+    // Stops later outbound pushes. Does not delete already-mirrored SharePoint
+    // Projects / Roadmap / ToDos items (restrict-after-push residual).
     next.sync = projectSyncRef(PROJECT_VISIBILITY_RESTRICTED);
   }
   await repo.upsertProject(next);

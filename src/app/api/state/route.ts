@@ -5,6 +5,7 @@
 import { route } from "@/lib/api/route";
 import { aclPrincipalFromSession } from "@/lib/routing/mutations/actors";
 import { snapshot } from "@/lib/sync";
+import { filterStateSideChannels, hiddenHierarchyIds } from "@/lib/permissions/project-acl";
 import { scopeHierarchy } from "@/lib/permissions/project-acl-guard";
 
 export const GET = route(async () => {
@@ -20,11 +21,25 @@ export const GET = route(async () => {
   const bucketComments = Object.fromEntries(
     Object.entries(snap.bucketComments ?? {}).filter(([bucketId]) => visibleBucketIds.has(bucketId))
   );
+  const side = filterStateSideChannels({
+    conflicts: snap.conflicts,
+    errors: snap.errors,
+    audit: snap.audit,
+    hiddenIds: hiddenHierarchyIds({
+      tasks: snap.tasks,
+      buckets: snap.buckets,
+      projects: snap.projects,
+      visible: scoped,
+    }),
+  });
   return {
     ...snap,
     tasks: scoped.tasks,
     buckets: scoped.buckets,
     projects: scoped.projects,
     bucketComments,
+    conflicts: side.conflicts,
+    errors: side.errors,
+    audit: side.audit,
   };
 });

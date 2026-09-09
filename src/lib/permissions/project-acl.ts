@@ -159,3 +159,79 @@ export function restrictedBucketIds(
       .map((bucket) => bucket.id)
   );
 }
+
+/** Hierarchy ids present in the full snapshot but hidden from this principal. */
+export function hiddenHierarchyIds(input: {
+  tasks: readonly { id: string }[];
+  buckets: readonly { id: string }[];
+  projects: readonly { id: string }[];
+  visible: {
+    tasks: readonly { id: string }[];
+    buckets: readonly { id: string }[];
+    projects: readonly { id: string }[];
+  };
+}): Set<string> {
+  const visibleIds = new Set([
+    ...input.visible.tasks.map((row) => row.id),
+    ...input.visible.buckets.map((row) => row.id),
+    ...input.visible.projects.map((row) => row.id),
+  ]);
+  const hidden = new Set<string>();
+  for (const row of [...input.tasks, ...input.buckets, ...input.projects]) {
+    if (row.id && !visibleIds.has(row.id)) hidden.add(row.id);
+  }
+  return hidden;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** True when `text` mentions a hidden project/bucket/task id as a whole token. */
+export function mentionsHiddenHierarchyId(
+  text: string,
+  hiddenIds: ReadonlySet<string>
+): boolean {
+  if (!text || hiddenIds.size === 0) return false;
+  for (const id of hiddenIds) {
+    if (!id) continue;
+    const pattern = new RegExp(`(^|[^A-Za-z0-9_-])${escapeRegExp(id)}([^A-Za-z0-9_-]|$)`);
+    if (pattern.test(text)) return true;
+  }
+  return false;
+}
+
+function stringFields(row: object): string[] {
+  return Object.values(row).filter((value): value is string => typeof value === "string");
+}
+
+/**
+ * Strip audit / conflict / error rows that name a hidden hierarchy id.
+ * Used by GET /api/state so scoping tasks/buckets/projects is not undone by
+ * side-channel metadata.
+ */
+export function filterStateSideChannels<
+  TConflict extends { entityId: string },
+  TError extends { entityId: string },
+  TAudit extends { body: string },
+>(input: {
+  conflicts?: readonly TConflict[];
+  errors?: readonly TError[];
+  audit?: readonly TAudit[];
+  hiddenIds: ReadonlySet<string>;
+}): {
+  conflicts: TConflict[];
+  errors: TError[];
+  audit: TAudit[];
+} {
+  const { hiddenIds } = input;
+  const keepEntityRow = <T extends { entityId: string }>(row: T): boolean => {
+    if (hiddenIds.has(row.entityId)) return false;
+    return !stringFields(row).some((text) => mentionsHiddenHierarchyId(text, hiddenIds));
+  };
+  return {
+    conflicts: (input.conflicts ?? []).filter(keepEntityRow),
+    errors: (input.errors ?? []).filter(keepEntityRow),
+    audit: (input.audit ?? []).filter((row) => !mentionsHiddenHierarchyId(row.body, hiddenIds)),
+  };
+}

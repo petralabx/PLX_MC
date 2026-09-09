@@ -9,6 +9,7 @@ import {
   eventIdFor,
   formatGoLiveLine,
   loadGoLiveConfig,
+  normalizeGithubRepo,
   sanitizeGithubPrUrl,
   sanitizeTaskId,
 } from "@/lib/compliance/go-live-announcer";
@@ -76,6 +77,26 @@ describe("go-live formatter", () => {
     expect(sanitizeGithubPrUrl("petralabx/PLX_MC", "12")).toBe(
       "https://github.com/petralabx/PLX_MC/pull/12"
     );
+  });
+
+  it("normalizes allowlisted bare slugs to petralabx/<slug>", () => {
+    expect(normalizeGithubRepo("PLX_MC")).toBe("petralabx/PLX_MC");
+    expect(normalizeGithubRepo("plx-customer-portal")).toBe("petralabx/plx-customer-portal");
+    expect(normalizeGithubRepo("agentic-swarm")).toBe("petralabx/agentic-swarm");
+    expect(normalizeGithubRepo("petralabx/PLX_MC")).toBe("petralabx/PLX_MC");
+    expect(normalizeGithubRepo("unknown-repo")).toBeNull();
+    expect(normalizeGithubRepo("evil/org")).toBeNull();
+  });
+
+  it("builds PR URLs from bare allowlisted slugs stored on mc_events", () => {
+    expect(sanitizeGithubPrUrl("PLX_MC", "12")).toBe("https://github.com/petralabx/PLX_MC/pull/12");
+    expect(sanitizeGithubPrUrl("plx-customer-portal", "88")).toBe(
+      "https://github.com/petralabx/plx-customer-portal/pull/88"
+    );
+    expect(sanitizeGithubPrUrl("agentic-swarm", "3")).toBe(
+      "https://github.com/petralabx/agentic-swarm/pull/3"
+    );
+    expect(sanitizeGithubPrUrl("not-allowlisted", "1")).toBeNull();
   });
 });
 
@@ -347,5 +368,201 @@ describe("go-live send + dedup", () => {
 
   it("builds checkout event IDs from the checkout credential", () => {
     expect(eventIdFor(checkoutEvent())).toBe("checkout:dsp_mtrj5s9mn2ilbt");
+  });
+
+  it("builds PR-open event IDs from a bare stored slug", () => {
+    expect(
+      eventIdFor({
+        kind: "pr.opened",
+        actor: "cursor",
+        repo: "plx-customer-portal",
+        taskId: "TASK-1454",
+        pr: "232",
+      })
+    ).toBe("pr.opened:plx-customer-portal:232");
+  });
+
+  it("sends a PR-open announce when mc_events stored a bare slug", async () => {
+    const postWebhook = vi.fn(async () => ({
+      ok: true,
+      status: 202,
+      receiptId: "run-pr-bare",
+      retryable: false,
+      permanentAuth: false,
+    }));
+    const result = await announceGoLiveEvent(
+      {
+        kind: "pr.opened",
+        actor: "cursor",
+        repo: "plx-customer-portal",
+        taskId: "TASK-1524",
+        pr: "240",
+      },
+      {
+        loadConfig: () => enabledConfig(),
+        alreadySent: async () => false,
+        markSent: async () => undefined,
+        postWebhook,
+      }
+    );
+    expect(result.sent).toBe(true);
+    expect(result.line).toBe(
+      "PR opened for TASK-1524: https://github.com/petralabx/plx-customer-portal/pull/240"
+    );
+    expect(postWebhook).toHaveBeenCalledTimes(1);
+  });
+
+  it("fans out to the optional chat Workflow when set", async () => {
+    const postWebhook = vi.fn(async () => ({
+      ok: true,
+      status: 202,
+      receiptId: "run-fanout",
+      retryable: false,
+      permanentAuth: false,
+    }));
+    const result = await announceGoLiveEvent(checkoutEvent(), {
+      loadConfig: () =>
+        enabledConfig({
+          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
+        }),
+      loadTitle: async () => "Outbound Teams announcer",
+      alreadySent: async () => false,
+      markSent: async () => undefined,
+      postWebhook,
+    });
+    expect(result.sent).toBe(true);
+    expect(postWebhook).toHaveBeenCalledTimes(2);
+    expect(postWebhook).toHaveBeenCalledWith(
+      "https://example.invalid/workflow",
+      "cursor claimed TASK-1454 (Outbound Teams announcer)"
+    );
+    expect(postWebhook).toHaveBeenCalledWith(
+      "https://example.invalid/chat",
+      "cursor claimed TASK-1454 (Outbound Teams announcer)"
+    );
+  });
+
+  it("marks announce.sent when channel succeeds even if chat fails", async () => {
+    const postWebhook = vi.fn(async (url: string) => {
+      if (url === "https://example.invalid/chat") {
+        return {
+          ok: false,
+          status: 400,
+          receiptId: "http-400",
+          retryable: false,
+          permanentAuth: false,
+        };
+      }
+      return {
+        ok: true,
+        status: 202,
+        receiptId: "run-channel",
+        retryable: false,
+        permanentAuth: false,
+      };
+    });
+    const markSent = vi.fn();
+    const result = await announceGoLiveEvent(checkoutEvent(), {
+      loadConfig: () =>
+        enabledConfig({
+          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
+        }),
+      loadTitle: async () => "title",
+      alreadySent: async () => false,
+      markSent,
+      postWebhook,
+    });
+    expect(result.sent).toBe(true);
+    expect(result.receiptId).toBe("run-channel");
+    expect(markSent).toHaveBeenCalledWith("checkout:dsp_mtrj5s9mn2ilbt", "run-channel");
+    expect(postWebhook).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not mark announce.sent when channel fails even if chat succeeds", async () => {
+    const postWebhook = vi.fn(async (url: string) => {
+      if (url === "https://example.invalid/workflow") {
+        return {
+          ok: false,
+          status: 503,
+          receiptId: "http-503",
+          retryable: false,
+          permanentAuth: false,
+        };
+      }
+      return {
+        ok: true,
+        status: 202,
+        receiptId: "run-chat",
+        retryable: false,
+        permanentAuth: false,
+      };
+    });
+    const markSent = vi.fn();
+    const result = await announceGoLiveEvent(checkoutEvent(), {
+      loadConfig: () =>
+        enabledConfig({
+          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
+        }),
+      loadTitle: async () => "title",
+      alreadySent: async () => false,
+      markSent,
+      postWebhook,
+      sleep: async () => undefined,
+    });
+    expect(result.sent).toBe(false);
+    expect(result.skipped).toBe("send_failed");
+    expect(markSent).not.toHaveBeenCalled();
+    expect(postWebhook).toHaveBeenCalledTimes(2);
+  });
+
+  it("still marks channel success when the chat dest throws", async () => {
+    const postWebhook = vi.fn(async (url: string) => {
+      if (url === "https://example.invalid/chat") {
+        throw new Error("network");
+      }
+      return {
+        ok: true,
+        status: 202,
+        receiptId: "run-channel-throw",
+        retryable: false,
+        permanentAuth: false,
+      };
+    });
+    const markSent = vi.fn();
+    const result = await announceGoLiveEvent(checkoutEvent(), {
+      loadConfig: () =>
+        enabledConfig({
+          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
+        }),
+      loadTitle: async () => "title",
+      alreadySent: async () => false,
+      markSent,
+      postWebhook,
+    });
+    expect(result.sent).toBe(true);
+    expect(markSent).toHaveBeenCalledWith("checkout:dsp_mtrj5s9mn2ilbt", "run-channel-throw");
+  });
+
+  it("skips a malformed chat Workflow URL without blocking the channel", async () => {
+    const postWebhook = vi.fn(async () => ({
+      ok: true,
+      status: 202,
+      receiptId: "run-channel-only",
+      retryable: false,
+      permanentAuth: false,
+    }));
+    const result = await announceGoLiveEvent(checkoutEvent(), {
+      loadConfig: () =>
+        enabledConfig({
+          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "http://example.invalid/chat",
+        }),
+      loadTitle: async () => "title",
+      alreadySent: async () => false,
+      markSent: async () => undefined,
+      postWebhook,
+    });
+    expect(result.sent).toBe(true);
+    expect(postWebhook).toHaveBeenCalledTimes(1);
+    expect(postWebhook).toHaveBeenCalledWith("https://example.invalid/workflow", expect.any(String));
   });
 });

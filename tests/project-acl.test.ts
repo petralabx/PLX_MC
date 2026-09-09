@@ -114,6 +114,10 @@ describe("project ACL list filters", () => {
     expect(canAccessTask({ bucket: "BKT-ORPHAN" }, bucketsById, projectsById, outsider)).toBe(true);
   });
 
+  it("fail-closes a whitespace-only project id (non-empty, no row)", () => {
+    expect(canAccessBucket({ project: "   " }, projectsById, outsider)).toBe(false);
+  });
+
   it("fail-closes a bucket whose project id is set but missing from the map", () => {
     const dangling = { id: "BKT-DANGLING", project: "PRJ-GONE" };
     expect(canAccessBucket(dangling, projectsById, outsider)).toBe(false);

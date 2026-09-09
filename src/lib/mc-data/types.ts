@@ -117,6 +117,9 @@ export interface RepoRequest {
 export type Health = "track" | "risk" | "off";
 export type SyncState = "synced" | "pending" | "conflict" | "error";
 
+/** Project ACL visibility. Omitted / shared = org-visible default. */
+export type ProjectVisibility = "shared" | "restricted";
+
 export interface SyncRef {
   state: SyncState;
   ts: string;
@@ -139,6 +142,10 @@ export interface Project {
   repos: string[];
   sync: SyncRef;
   prd: string | null;
+  // Omitted or "shared" keeps today's org-visible default. "restricted" is
+  // fail-closed to `members` (emails, Entra oids, directory ids, sp_* ids).
+  visibility?: ProjectVisibility;
+  members?: string[];
 }
 
 export interface Bucket {

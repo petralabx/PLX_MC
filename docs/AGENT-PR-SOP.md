@@ -155,7 +155,7 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 | Step | Tool | Notes |
 |------|------|-------|
 | Find project / bucket | `mc_list_buckets`, `mc_get_context` | Search by query (`q`) or bucket id before creating. `mc_list_buckets` returns `BKT-*` ids plus ownership/project metadata |
-| Create project | `mc_create_project` | Only on a search miss. Set `owner=vince@petrasoap.com`. `repos[]` uses MC registry **ids** (`portal-web`, `plx-mc`), never GitHub slugs |
+| Create project | `mc_create_project` | Only on a search miss. Set `owner=vince@petrasoap.com`. `repos[]` uses MC registry **ids** (`portal-web`, `plx-mc`), never GitHub slugs. Optional `visibility=restricted` + `members[]` for ACL-private projects (TASK-1527) |
 | Create bucket | `mc_create_bucket` | Only on a search miss. Optional `project` parent. Same owner and `repos[]` rules as project create |
 | Find work | `mc_search_tasks` | Filter by `query` (alias `q`), `bucket`, `stage`, `limit`; `meta.filter` echoes what was applied |
 | Create task | `mc_create_task` | Only on a search miss in that bucket. Requires `title` + `bucket`; optional `description`, `priority`, `repos` (registry **ids**, not GitHub slugs — see table below). Default `bucket` from `config/tracked-repos-registry.json` `default_bucket` for the repo under edit — do **not** hardcode `BKT-PROD` |

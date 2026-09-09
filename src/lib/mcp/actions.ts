@@ -13,9 +13,19 @@ import {
   type CreateProjectInput,
   type CreateTaskInput,
 } from "@/lib/sync";
-import { getBuckets, getEntity } from "@/lib/sync/repo";
+import { getEntity } from "@/lib/sync/repo";
 import { resolveHumanAccountableOwner, type Evidence, type Task } from "@/lib/mc-data";
-import { requireMcpActor } from "@/lib/routing/mutations/actors";
+import {
+  aclPrincipalFromMcp,
+  requireMcpActor,
+} from "@/lib/routing/mutations/actors";
+import {
+  assertBucketProjectAccess,
+  assertProjectIdAccess,
+  assertTaskProjectAccess,
+  loadProjectAclMaps,
+} from "@/lib/permissions/project-acl-guard";
+import { filterBucketsByAcl, filterTasksByAcl, indexById } from "@/lib/permissions/project-acl";
 import type { McpIdentity } from "./auth";
 import { resolveCheckoutRepo } from "./checkout-repo";
 import { taskLink } from "./envelope";
@@ -121,20 +131,32 @@ export function resolveContextFilter(input: GetContextInput = {}): GetContextFil
   };
 }
 
-export async function actionGetContext(input: GetContextInput | "compact" | "full" = "compact") {
+export async function actionGetContext(
+  input: GetContextInput | "compact" | "full" = "compact",
+  identity?: McpIdentity
+) {
   // Back-compat: older callers passed depth as a bare string.
   const opts: GetContextInput = typeof input === "string" ? { depth: input } : input;
   const filter = resolveContextFilter(opts);
   const snap = await snapshot();
+  const principal = identity ? aclPrincipalFromMcp(identity) : undefined;
+  const projectsById = indexById(snap.projects ?? []);
+  const bucketsById = indexById(snap.buckets ?? []);
+  const visibleBuckets = principal
+    ? filterBucketsByAcl(snap.buckets ?? [], projectsById, principal)
+    : (snap.buckets ?? []);
+  const visibleTasks = principal
+    ? filterTasksByAcl(snap.tasks, bucketsById, projectsById, principal)
+    : snap.tasks;
   const idSet = filter.taskIds ? new Set(filter.taskIds) : null;
 
   if (filter.depth === "full") {
-    let tasks = snap.tasks;
+    let tasks = visibleTasks;
     if (filter.bucket) tasks = tasks.filter((t) => t.bucket === filter.bucket);
     if (idSet) tasks = tasks.filter((t) => idSet.has(t.id));
     return {
       tasks,
-      buckets: snap.buckets,
+      buckets: visibleBuckets,
       conflicts: snap.conflicts.length,
       errors: snap.errors.length,
       lastSweep: snap.lastSweep,
@@ -142,13 +164,13 @@ export async function actionGetContext(input: GetContextInput | "compact" | "ful
     };
   }
 
-  let active = snap.tasks.filter((t) => !["merged", "verified"].includes(t.stage));
+  let active = visibleTasks.filter((t) => !["merged", "verified"].includes(t.stage));
   if (filter.bucket) active = active.filter((t) => t.bucket === filter.bucket);
   if (idSet) active = active.filter((t) => idSet.has(t.id));
   return {
-    taskCount: snap.tasks.length,
+    taskCount: visibleTasks.length,
     activeCount: active.length,
-    buckets: snap.buckets.map((b) => ({ id: b.id, name: b.name })),
+    buckets: visibleBuckets.map((b) => ({ id: b.id, name: b.name })),
     topTasks: active.slice(0, 15).map((t) => ({
       id: t.id,
       title: t.title,
@@ -161,10 +183,15 @@ export async function actionGetContext(input: GetContextInput | "compact" | "ful
   };
 }
 
-export async function actionSearchTasks(input: SearchTasksInput = {}) {
+export async function actionSearchTasks(input: SearchTasksInput = {}, identity?: McpIdentity) {
   const filter = resolveSearchFilter(input);
   const snap = await snapshot();
-  let tasks = snap.tasks;
+  const principal = identity ? aclPrincipalFromMcp(identity) : undefined;
+  const projectsById = indexById(snap.projects ?? []);
+  const bucketsById = indexById(snap.buckets ?? []);
+  let tasks = principal
+    ? filterTasksByAcl(snap.tasks, bucketsById, projectsById, principal)
+    : snap.tasks;
   const q = (filter.query ?? "").toLowerCase();
   if (q) {
     tasks = tasks.filter(
@@ -185,6 +212,7 @@ export async function actionCreateTask(identity: McpIdentity, input: CreateTaskI
     type: "bucket",
     id: input.bucket,
   });
+  await assertBucketProjectAccess(input.bucket, aclPrincipalFromMcp(identity));
   const task = await createTask(
     {
       ...input,
@@ -211,10 +239,14 @@ export async function actionCreateProject(
 ) {
   requireMcpActor(identity, "project.create");
   const { description, ...projectInput } = input;
+  const creator = aclPrincipalFromMcp(identity);
   const project = await createProject({
     ...projectInput,
     desc: description,
     owner: input.owner ?? resolveHumanAccountableOwner(identity.operatorEmail),
+    ...(projectInput.visibility === "restricted"
+      ? { members: [...creator.tokens, ...(projectInput.members ?? [])] }
+      : {}),
   });
   return { project, projectId: project.id, sync: project.sync };
 }
@@ -232,6 +264,7 @@ export async function actionCreateBucket(
     "bucket.create",
     input.project ? { type: "project", id: input.project } : undefined
   );
+  await assertProjectIdAccess(input.project, aclPrincipalFromMcp(identity));
   const { description, ...bucketInput } = input;
   const bucket = await createBucket({
     ...bucketInput,
@@ -250,7 +283,13 @@ export async function actionListBuckets(
   requireMcpActor(identity, "bucket.create");
 
   const query = input.q?.trim().toLowerCase();
-  const buckets = (await getBuckets())
+  const maps = await loadProjectAclMaps();
+  const visible = filterBucketsByAcl(
+    maps.buckets,
+    maps.projectsById,
+    aclPrincipalFromMcp(identity)
+  );
+  const buckets = visible
     .filter((bucket) => {
       const matchesQuery =
         !query ||
@@ -280,6 +319,7 @@ export async function actionCheckout(
   requireMcpActor(identity, "task.checkout", { type: "task", id: taskId }, {
     repositoryId: repo,
   });
+  await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
   const { checkoutId } = await checkout({
     taskId,
     runtime: identity.runtime,
@@ -313,6 +353,7 @@ export async function actionProgress(
     type: "task",
     id: input.taskId,
   });
+  await assertTaskProjectAccess(input.taskId, aclPrincipalFromMcp(identity));
   const patch: Record<string, unknown> = {};
   if (input.stage) patch.stage = input.stage;
   if (input.notes) {
@@ -374,6 +415,10 @@ export async function actionComplete(
   }
 ) {
   requireMcpActor(identity, "task.complete");
+  const existingDispatch = await complianceRepo.getDispatch(input.checkoutId);
+  if (existingDispatch?.taskId) {
+    await assertTaskProjectAccess(existingDispatch.taskId, aclPrincipalFromMcp(identity));
+  }
   await complete({
     checkoutId: input.checkoutId,
     summary: input.summary,

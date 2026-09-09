@@ -15,6 +15,11 @@ import type {
   PermissionResource,
 } from "@/lib/permissions";
 import type { McpIdentity } from "@/lib/mcp/auth";
+import { HUMANS } from "@/lib/mc-data/data";
+import {
+  principalFromTokens,
+  type ProjectAclPrincipal,
+} from "@/lib/permissions/project-acl";
 
 export interface AuthorizedActor {
   actor: PermissionActor;
@@ -120,6 +125,48 @@ export function requireMcpActor(
     actorKind: "service",
     auditLabel: identity.operatorEmail,
   };
+}
+
+function directoryIdsForEmail(email: string | undefined): string[] {
+  if (!email) return [];
+  const needle = email.trim().toLowerCase();
+  return Object.values(HUMANS)
+    .filter((human) => human.email?.toLowerCase() === needle)
+    .map((human) => human.id);
+}
+
+/** ACL principal for an authenticated MCP agent (sp_* + operator email). */
+export function aclPrincipalFromMcp(identity: McpIdentity): ProjectAclPrincipal {
+  return principalFromTokens(
+    identity.servicePrincipalId,
+    identity.actor.id,
+    identity.operatorEmail,
+    ...directoryIdsForEmail(identity.operatorEmail)
+  );
+}
+
+/** ACL principal for a session or MCP actor already authorized for a capability. */
+export function aclPrincipalFromAuthorized(authorized: AuthorizedActor): ProjectAclPrincipal {
+  return principalFromTokens(
+    authorized.actorId,
+    authorized.auditLabel,
+    authorized.actor.id,
+    ...directoryIdsForEmail(authorized.auditLabel)
+  );
+}
+
+/** Best-effort session principal for read filters. Missing session → empty tokens (shared only). */
+export async function aclPrincipalFromSession(): Promise<ProjectAclPrincipal> {
+  try {
+    const session = (await auth()) as {
+      user?: { oid?: string | null; email?: string | null };
+    } | null;
+    const email = session?.user?.email?.trim();
+    const oid = session?.user?.oid?.trim();
+    return principalFromTokens(email, oid, ...directoryIdsForEmail(email));
+  } catch {
+    return principalFromTokens();
+  }
 }
 
 export function requireAuthorizedActor(

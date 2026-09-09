@@ -32,7 +32,9 @@ vi.mock("@/lib/sync", () => ({
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
-  getEntity: vi.fn(async () => null),
+  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: "BKT-OPEN" } })),
+  getBuckets: vi.fn(async () => [{ id: "BKT-OPEN", project: null }]),
+  getProjects: vi.fn(async () => []),
 }));
 
 vi.mock("@/lib/mcp/sync-meta", () => ({
@@ -46,6 +48,7 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
     actorKind: "service",
     auditLabel: "vince@example.com",
   })),
+  aclPrincipalFromMcp: () => ({ tokens: ["sp_mcp_cursor"] }),
 }));
 
 import { actionComplete } from "@/lib/mcp/actions";

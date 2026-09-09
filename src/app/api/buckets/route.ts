@@ -4,7 +4,11 @@
 
 import { z } from "zod";
 import { parseBody, route } from "@/lib/api/route";
-import { requireSessionActor } from "@/lib/routing/mutations/actors";
+import {
+  aclPrincipalFromAuthorized,
+  requireSessionActor,
+} from "@/lib/routing/mutations/actors";
+import { assertProjectIdAccess } from "@/lib/permissions/project-acl-guard";
 import { createBucket } from "@/lib/sync";
 
 const createBucketSchema = z.object({
@@ -25,5 +29,6 @@ export const POST = route(async (req) => {
     "bucket.create",
     body.project ? { type: "project", id: body.project } : undefined
   );
+  await assertProjectIdAccess(body.project, aclPrincipalFromAuthorized(authorized));
   return createBucket(body, authorized.auditLabel);
 });

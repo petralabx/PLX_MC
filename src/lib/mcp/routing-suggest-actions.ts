@@ -24,6 +24,8 @@ import type {
 } from "@/lib/routing/types";
 import { snapshot } from "@/lib/sync";
 import { getRegisterInboundCompletions } from "@/lib/sync/repo";
+import { filterBucketsByAcl, filterTasksByAcl, indexById } from "@/lib/permissions/project-acl";
+import { aclPrincipalFromMcp } from "@/lib/routing/mutations/actors";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import type { McpIdentity } from "./auth";
 import { publicMcBaseUrl, taskLink } from "./envelope";
@@ -190,6 +192,11 @@ export async function actionSuggestWork(
   });
 
   const snap = await snapshot();
+  const principal = aclPrincipalFromMcp(identity);
+  const projectsById = indexById(snap.projects ?? []);
+  const bucketsById = indexById(snap.buckets ?? []);
+  const visibleTasks = filterTasksByAcl(snap.tasks, bucketsById, projectsById, principal);
+  const visibleBuckets = filterBucketsByAcl(snap.buckets ?? [], projectsById, principal);
   const trackedRepos = (
     (trackedReposRegistry as { repos?: Array<Record<string, unknown>> }).repos ?? []
   ).map((entry) => ({
@@ -208,8 +215,8 @@ export async function actionSuggestWork(
     evidence: normalized.evidence,
     markers: normalized.markers,
     branchTaskIds: normalized.branchTaskIds,
-    tasks: toTaskViews(snap.tasks),
-    buckets: toBucketViews(snap.buckets),
+    tasks: toTaskViews(visibleTasks),
+    buckets: toBucketViews(visibleBuckets),
     trackedRepos,
     operationalRepos,
     loadRegisterTimestamps: () => getRegisterInboundCompletions(),

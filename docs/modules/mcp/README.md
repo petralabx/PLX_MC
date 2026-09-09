@@ -46,6 +46,17 @@ The same registry-id rule applies to `mc_create_project.repos[]` and
 explicit `project.create` / `bucket.create` grant; human-only administration,
 repository approval, and permission management remain denied.
 
+**Restricted projects (TASK-1527):** `mc_create_project` accepts optional
+`visibility` (`shared` | `restricted`) and `members[]` (emails, Entra oids,
+directory ids, or reviewed `sp_mcp_*` ids). Restricted projects fail-close
+`mc_get_context` / `mc_search_tasks` / `mc_list_buckets` / task mutate for
+non-members and are omitted from the SharePoint Projects mirror. Shared remains
+the default. Rails should create a restricted project after merge with
+`visibility=restricted` and `members` including `vince@petrasoap.com`,
+`tanush@petrasoap.com` (TASK-1527 mailbox; not in the in-repo HUMANS fixture),
+and the Hub agent principals that need access (`sp_mcp_cursor`,
+`sp_mcp_claude_code`, …). The creating principal is auto-added.
+
 **Accountable owner defaulting:** `mc_create_task` defaults a missing
 `accountableOwner` to the human operator behind the session — the allowlisted
 `MC_OPERATOR_EMAIL` / `X-MC-Operator-Email` resolved to a directory id via

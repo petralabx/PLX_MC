@@ -37,5 +37,15 @@ export function evaluateContext(
     return "context_denied";
   }
 
+  if (context?.projectVisibility === "restricted") {
+    const members = new Set(
+      (context.projectMembers ?? []).map((token) => token.trim().toLowerCase()).filter(Boolean)
+    );
+    const tokens = (context.principalTokens ?? []).map((token) => token.trim().toLowerCase());
+    if (members.size === 0 || !tokens.some((token) => members.has(token))) {
+      return "context_denied";
+    }
+  }
+
   return null;
 }

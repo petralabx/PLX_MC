@@ -49,6 +49,10 @@ vi.mock("@/lib/sync", () => ({
 vi.mock("@/lib/sync/repo", () => ({
   getEntity: vi.fn(async () => null),
   getBuckets: mocks.getBuckets,
+  getProjects: vi.fn(async () => [
+    { id: "PRJ-MAIN", visibility: "shared", members: [] },
+    { id: "PRJ-COS-COMPANION", visibility: "shared", members: [] },
+  ]),
 }));
 
 vi.mock("@/lib/mcp/sync-meta", () => ({
@@ -57,6 +61,7 @@ vi.mock("@/lib/mcp/sync-meta", () => ({
 
 vi.mock("@/lib/routing/mutations/actors", () => ({
   requireMcpActor: mocks.requireMcpActor,
+  aclPrincipalFromMcp: () => ({ tokens: ["sp_mcp_cursor", "vince@petrasoap.com"] }),
 }));
 
 import { actionCreateBucket, actionCreateProject, actionListBuckets } from "@/lib/mcp/actions";
@@ -123,6 +128,25 @@ describe("MCP planning hierarchy creation actions", () => {
       projectId: "PRJ-COS-COMPANION",
       sync: { state: "pending" },
     });
+  });
+
+  it("passes restricted visibility and unions creator + requested members", async () => {
+    await actionCreateProject(identity, {
+      name: "Trading Lab",
+      visibility: "restricted",
+      members: ["tanush@petrasoap.com"],
+    });
+    expect(mocks.projects[0]).toEqual(
+      expect.objectContaining({
+        name: "Trading Lab",
+        visibility: "restricted",
+        members: expect.arrayContaining([
+          "tanush@petrasoap.com",
+          "sp_mcp_cursor",
+          "vince@petrasoap.com",
+        ]),
+      })
+    );
   });
 
   it("authorizes a bucket against its parent project and preserves explicit owner", async () => {

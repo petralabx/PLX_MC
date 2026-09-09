@@ -4,7 +4,11 @@
 
 import { z } from "zod";
 import { ApiError, parseBody, route } from "@/lib/api/route";
-import { requireSessionActor } from "@/lib/routing/mutations/actors";
+import {
+  aclPrincipalFromAuthorized,
+  requireSessionActor,
+} from "@/lib/routing/mutations/actors";
+import { assertProjectIdAccess } from "@/lib/permissions/project-acl-guard";
 import { patchProject } from "@/lib/sync";
 
 const patchProjectSchema = z.object({
@@ -18,6 +22,8 @@ const patchProjectSchema = z.object({
   desc: z.string().optional(),
   repos: z.array(z.string()).optional(),
   prd: z.string().nullable().optional(),
+  visibility: z.enum(["shared", "restricted"]).optional(),
+  members: z.array(z.string().trim().min(1).max(320)).max(200).optional(),
 });
 
 export const PATCH = route(async (req, ctx) => {
@@ -28,6 +34,7 @@ export const PATCH = route(async (req, ctx) => {
     type: "project",
     id,
   });
+  await assertProjectIdAccess(id, aclPrincipalFromAuthorized(authorized));
   const project = await patchProject(id, patch, authorized.auditLabel);
   if (!project) throw new ApiError("not_found", `unknown project ${id}`, 404);
   return project;

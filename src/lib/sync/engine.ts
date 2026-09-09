@@ -14,6 +14,12 @@
 import { ACTORS, BUCKETS, FILES, HUMANS, PROJECTS, REPOS, RISKS, SP_CONFLICTS, SP_ERRORS, TASKS } from "@/lib/mc-data/data";
 import type { Bucket, SyncState, Task } from "@/lib/mc-data/types";
 import {
+  isRestrictedProject,
+  RESTRICTED_MIRROR_SP,
+  restrictedBucketIds,
+  restrictedProjectIds,
+} from "@/lib/permissions/project-acl";
+import {
   createListItem,
   documentsDriveId,
   driveDelta,
@@ -462,6 +468,10 @@ async function pushProjectsMirror(
   let pushed = 0;
   let deferred = 0;
   for (const { project, spItemId } of pending) {
+    if (isRestrictedProject(project)) {
+      await repo.setProjectSync(project.id, "synced", { spRef: RESTRICTED_MIRROR_SP.projects });
+      continue;
+    }
     if (deferredSet.has(pushRetryKey("project", project.id))) {
       deferred += 1;
       continue;
@@ -518,14 +528,20 @@ async function pushBucketRoadmap(
     );
     return { pushed: 0, deferred: 0 };
   }
+  const projectRows = await repo.getProjectRows();
   const projectSpIds = new Map(
-    (await repo.getProjectRows())
+    projectRows
       .filter((r) => r.spItemId)
       .map((r) => [r.project.id, Number(r.spItemId)])
   );
+  const hiddenProjects = restrictedProjectIds(projectRows.map((r) => r.project));
   let pushed = 0;
   let deferred = 0;
   for (const { bucket, spItemId } of pending) {
+    if (bucket.project && hiddenProjects.has(bucket.project)) {
+      await repo.setBucketSync(bucket.id, "synced", { spRef: RESTRICTED_MIRROR_SP.roadmap });
+      continue;
+    }
     if (deferredSet.has(pushRetryKey("bucket", bucket.id))) {
       deferred += 1;
       continue;
@@ -1229,9 +1245,23 @@ export async function runSweep(actor: string = SYNC_ACTOR): Promise<SweepResult>
     pushed += r.pushed;
     pushDeferred += r.deferred;
   }
+  const hiddenBucketIds = restrictedBucketIds(
+    (await repo.getBucketRows()).map((row) => row.bucket),
+    restrictedProjectIds((await repo.getProjectRows()).map((row) => row.project))
+  );
   for (const type of PUSHABLE) {
     const rows = await repo.getEntities(type);
     for (const row of rows.filter((r) => r.sync_state === "pending")) {
+      if (
+        type === "task" &&
+        hiddenBucketIds.has(String((row.data as unknown as Task).bucket ?? ""))
+      ) {
+        await repo.updateEntity(type, row.id, {
+          syncState: "synced",
+          syncExtras: { sp: RESTRICTED_MIRROR_SP.todos },
+        });
+        continue;
+      }
       if (deferredSet.has(pushRetryKey(type, row.id))) {
         pushDeferred += 1;
         continue;

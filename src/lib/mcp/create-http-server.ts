@@ -66,7 +66,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
       taskIds: z.array(z.string().min(1)).optional(),
     },
     async (args) => {
-      const result = await actionGetContext(args);
+      const result = await actionGetContext(args, identity);
       const { filter, ...data } = result;
       return jsonResult({ data, meta: { filter } });
     }
@@ -83,7 +83,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
       limit: z.number().int().min(1).max(200).optional(),
     },
     async (args) => {
-      const result = await actionSearchTasks(args);
+      const result = await actionSearchTasks(args, identity);
       return jsonResult({
         data: { tasks: result.tasks, total: result.total },
         meta: { filter: result.filter },
@@ -93,7 +93,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_create_project",
-    "Create a Mission Control project. repos[] uses MC registry ids; the project is queued for the SharePoint Projects mirror.",
+    "Create a Mission Control project. repos[] uses MC registry ids. visibility=restricted + members[] (emails/oids/sp_*) fail-closes the project; shared is the default and still queues the SharePoint Projects mirror.",
     {
       name: z.string().min(1),
       description: z.string().optional(),
@@ -103,6 +103,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
       started: z.string().optional(),
       repos: z.array(z.string()).optional(),
       prd: z.string().nullable().optional(),
+      visibility: z.enum(["shared", "restricted"]).optional(),
+      members: z.array(z.string().min(1)).max(200).optional(),
     },
     async (body) => jsonResult(await actionCreateProject(identity, body))
   );

@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   patchTask: vi.fn(),
   checkout: vi.fn(),
   complete: vi.fn(),
+  assertBucketProjectAccess: vi.fn(async () => undefined),
+  assertTaskProjectAccess: vi.fn(async () => undefined),
+  assertProjectIdAccess: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/routing/mutations/actors", () => ({
@@ -16,9 +19,9 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
 }));
 
 vi.mock("@/lib/permissions/project-acl-guard", () => ({
-  assertBucketProjectAccess: vi.fn(async () => undefined),
-  assertTaskProjectAccess: vi.fn(async () => undefined),
-  assertProjectIdAccess: vi.fn(async () => undefined),
+  assertBucketProjectAccess: mocks.assertBucketProjectAccess,
+  assertTaskProjectAccess: mocks.assertTaskProjectAccess,
+  assertProjectIdAccess: mocks.assertProjectIdAccess,
 }));
 
 vi.mock("@/lib/sync", () => ({
@@ -96,6 +99,44 @@ describe("task authorization routes", () => {
       "vince@example.com",
       expect.objectContaining({ attribution: { source: "human", actorId: "oid-1" } })
     );
+  });
+
+  it("PATCH /api/tasks/{id} asserts ACL on the destination bucket before move", async () => {
+    const { PATCH } = await import("@/app/api/tasks/[id]/route");
+    const req = new Request("http://localhost/api/tasks/TASK-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bucket: "BKT-SECRET" }),
+    });
+    await PATCH(req, { params: Promise.resolve({ id: "TASK-1" }) });
+    expect(mocks.assertTaskProjectAccess).toHaveBeenCalledWith("TASK-1", {
+      tokens: ["oid-1", "vince@example.com"],
+    });
+    expect(mocks.assertBucketProjectAccess).toHaveBeenCalledWith("BKT-SECRET", {
+      tokens: ["oid-1", "vince@example.com"],
+    });
+    expect(mocks.patchTask).toHaveBeenCalled();
+  });
+
+  it("does not move a task when the destination bucket ACL denies", async () => {
+    mocks.assertBucketProjectAccess.mockRejectedValueOnce(
+      new (await import("@/lib/api/route")).ApiError(
+        "project_acl_denied",
+        "Not a member of this restricted project.",
+        403
+      )
+    );
+    const { PATCH } = await import("@/app/api/tasks/[id]/route");
+    const req = new Request("http://localhost/api/tasks/TASK-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bucket: "BKT-SECRET" }),
+    });
+    await expect(PATCH(req, { params: Promise.resolve({ id: "TASK-1" }) })).rejects.toMatchObject({
+      code: "project_acl_denied",
+      status: 403,
+    });
+    expect(mocks.patchTask).not.toHaveBeenCalled();
   });
 
   it("compliance checkout authorizes task.checkout with session actor", async () => {

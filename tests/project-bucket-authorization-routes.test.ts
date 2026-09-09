@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   createBucket: vi.fn(),
   patchProject: vi.fn(),
   patchBucket: vi.fn(),
+  assertProjectIdAccess: vi.fn(async () => undefined),
+  assertBucketProjectAccess: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/routing/mutations/actors", () => ({
@@ -17,8 +19,8 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
 }));
 
 vi.mock("@/lib/permissions/project-acl-guard", () => ({
-  assertProjectIdAccess: vi.fn(async () => undefined),
-  assertBucketProjectAccess: vi.fn(async () => undefined),
+  assertProjectIdAccess: mocks.assertProjectIdAccess,
+  assertBucketProjectAccess: mocks.assertBucketProjectAccess,
 }));
 
 vi.mock("@/lib/sync", () => ({
@@ -142,6 +144,38 @@ describe("project and bucket authorization routes", () => {
       { health: "off" },
       "vince@example.com"
     );
+  });
+
+  it("PATCH /api/buckets/{id} asserts ACL on the destination project before move", async () => {
+    const { PATCH } = await import("@/app/api/buckets/[id]/route");
+    await PATCH(
+      request("/api/buckets/BKT-1", "PATCH", { project: "PRJ-SECRET" }),
+      { params: Promise.resolve({ id: "BKT-1" }) }
+    );
+    expect(mocks.assertBucketProjectAccess).toHaveBeenCalledWith("BKT-1", {
+      tokens: ["oid-owner", "vince@example.com"],
+    });
+    expect(mocks.assertProjectIdAccess).toHaveBeenCalledWith("PRJ-SECRET", {
+      tokens: ["oid-owner", "vince@example.com"],
+    });
+    expect(mocks.patchBucket).toHaveBeenCalledWith(
+      "BKT-1",
+      { project: "PRJ-SECRET" },
+      "vince@example.com"
+    );
+  });
+
+  it("does not move a bucket when the destination project ACL denies", async () => {
+    mocks.assertProjectIdAccess.mockRejectedValueOnce(
+      new ApiError("project_acl_denied", "Not a member of this restricted project.", 403)
+    );
+    const { PATCH } = await import("@/app/api/buckets/[id]/route");
+    await expect(
+      PATCH(request("/api/buckets/BKT-1", "PATCH", { project: "PRJ-SECRET" }), {
+        params: Promise.resolve({ id: "BKT-1" }),
+      })
+    ).rejects.toMatchObject({ code: "project_acl_denied", status: 403 });
+    expect(mocks.patchBucket).not.toHaveBeenCalled();
   });
 
   it.each([

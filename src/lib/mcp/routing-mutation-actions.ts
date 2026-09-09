@@ -5,7 +5,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
-import { requireMcpActor } from "@/lib/routing/mutations/actors";
+import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
+import { assertBucketProjectAccess, assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import {
   attachCheckoutLink,
   confirmExistingTask,
@@ -40,6 +41,7 @@ export async function actionConfirmExisting(
     type: "routing",
     id: input.proposalId,
   });
+  await assertTaskProjectAccess(input.taskId, aclPrincipalFromMcp(identity));
   const result = await confirmExistingTask(authorized, {
     proposalId: input.proposalId,
     taskId: input.taskId,
@@ -78,6 +80,7 @@ export async function actionAttachCheckout(
     type: "routing",
     id: input.proposalId,
   });
+  await assertTaskProjectAccess(input.taskId, aclPrincipalFromMcp(identity));
   const result = await attachCheckoutLink(authorized, {
     proposalId: input.proposalId,
     taskId: input.taskId,
@@ -120,6 +123,7 @@ export async function actionCreateRoutedTask(
     type: "routing",
     id: input.proposalId,
   });
+  await assertBucketProjectAccess(input.bucketId, aclPrincipalFromMcp(identity));
   const result = await createConfirmedTask(authorized, {
     proposalId: input.proposalId,
     bucketId: input.bucketId,

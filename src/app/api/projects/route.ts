@@ -16,10 +16,20 @@ const createProjectSchema = z.object({
   desc: z.string().optional(),
   repos: z.array(z.string()).optional(),
   prd: z.string().nullable().optional(),
+  visibility: z.enum(["shared", "restricted"]).optional(),
+  members: z.array(z.string().trim().min(1).max(320)).max(200).optional(),
 });
 
 export const POST = route(async (req) => {
   const body = await parseBody(req, createProjectSchema);
   const authorized = await requireSessionActor("project.create");
-  return createProject(body, authorized.auditLabel);
+  return createProject(
+    {
+      ...body,
+      ...(body.visibility === "restricted"
+        ? { members: [authorized.auditLabel, authorized.actorId, ...(body.members ?? [])] }
+        : {}),
+    },
+    authorized.auditLabel
+  );
 });

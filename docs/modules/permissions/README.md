@@ -70,12 +70,22 @@ verdict. Recording is fail-open and a no-op in mode `off`. UI affordance
 checks (e.g. the `isApprover` display shim) are not enforcement and are not
 recorded.
 
+**Project ACL (TASK-1527):** restricted projects are a resource allowlist, not a
+new capability. `src/lib/permissions/project-acl.ts` is the pure membership
+check (`emails` / Entra oids / directory ids / reviewed `sp_mcp_*` ids).
+`project-acl-guard.ts` loads project/bucket/task rows and fail-closes API + MCP
+list/read/mutate. Shared/default projects are unchanged. `authorize()` also
+denies when `context.projectVisibility === "restricted"` and the caller’s
+`principalTokens` miss `projectMembers`.
+
 **Future extension:** add typed capabilities + grant-bundle / predicate updates
 with contract tests. Do not introduce a policy expression language until a
 concrete rule cannot be expressed that way.
 
 ### Key Files
 
+- `src/lib/permissions/project-acl.ts` — restricted-project membership (pure)
+- `src/lib/permissions/project-acl-guard.ts` — server loaders / snapshot scoping
 - `src/lib/permissions/authorize.ts` — deny-by-default kernel
 - `src/lib/permissions/grants.ts` — role + service-principal bundles
 - `src/lib/permissions/predicates.ts` — contextual denials

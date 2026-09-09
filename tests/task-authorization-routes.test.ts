@@ -12,6 +12,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/routing/mutations/actors", () => ({
   requireSessionActor: mocks.requireSessionActor,
+  aclPrincipalFromAuthorized: () => ({ tokens: ["oid-1", "vince@example.com"] }),
+}));
+
+vi.mock("@/lib/permissions/project-acl-guard", () => ({
+  assertBucketProjectAccess: vi.fn(async () => undefined),
+  assertTaskProjectAccess: vi.fn(async () => undefined),
+  assertProjectIdAccess: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/sync", () => ({

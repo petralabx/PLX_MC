@@ -22,6 +22,8 @@ vi.mock("@/lib/routing", async () => {
 
 vi.mock("@/lib/routing/mutations/actors", () => ({
   requireSessionActor: mocks.requireSessionActor,
+  aclPrincipalFromAuthorized: () => ({ tokens: ["oid-1"] }),
+  aclPrincipalFromSession: async () => ({ tokens: [] }),
 }));
 
 vi.mock("@/app/api/routing/inbox/_lib/queries", () => ({

@@ -11,6 +11,8 @@ const createProjectSchema = z.object({
   started: z.string().optional(),
   repos: z.array(z.string()).optional(),
   prd: z.string().nullable().optional(),
+  visibility: z.enum(["shared", "restricted"]).optional(),
+  members: z.array(z.string().trim().min(1).max(320)).max(200).optional(),
 });
 
 export const POST = cursorRoute("mc_create_project", async (req, _ctx, identity) => {

@@ -277,6 +277,35 @@ describe("contextual denial", () => {
     expect(decision.allowed).toBe(true);
   });
 
+  it("denies restricted-project access when the caller is not a member", () => {
+    const decision = authorize({
+      actor: human("admin"),
+      capability: "task.read",
+      resource: { type: "project", id: "PRJ-SECRET" },
+      context: {
+        projectVisibility: "restricted",
+        projectMembers: ["vince@petrasoap.com", "sp_mcp_cursor"],
+        principalTokens: ["outsider@petrasoap.com"],
+      },
+    });
+    expect(decision.allowed).toBe(false);
+    expect(decision.reasonCode).toBe("context_denied");
+  });
+
+  it("allows restricted-project access when a member token matches", () => {
+    const decision = authorize({
+      actor: service("sp_mcp_cursor"),
+      capability: "task.read",
+      resource: { type: "project", id: "PRJ-SECRET" },
+      context: {
+        projectVisibility: "restricted",
+        projectMembers: ["vince@petrasoap.com", "sp_mcp_cursor"],
+        principalTokens: ["sp_mcp_cursor"],
+      },
+    });
+    expect(decision.allowed).toBe(true);
+  });
+
   it("denies task mutation when repository binding fails", () => {
     const decision = authorize({
       actor: human("member"),

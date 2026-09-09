@@ -16,8 +16,15 @@ vi.mock("@/lib/mcp/sync-meta", () => ({
   syncMetaForTask: vi.fn(async () => ({ status: "queued" })),
 }));
 
+vi.mock("@/lib/sync/repo", () => ({
+  getEntity: vi.fn(async () => ({ data: { id: "TASK-1206", bucket: "BKT-OPEN" } })),
+  getBuckets: vi.fn(async () => [{ id: "BKT-OPEN", project: null }]),
+  getProjects: vi.fn(async () => []),
+}));
+
 vi.mock("@/lib/routing/mutations/actors", () => ({
   requireMcpActor: mocks.requireMcpActor,
+  aclPrincipalFromMcp: () => ({ tokens: ["sp_mcp_grok"] }),
 }));
 
 import { ApiError } from "@/lib/api/route";

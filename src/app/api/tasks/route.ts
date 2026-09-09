@@ -2,7 +2,11 @@
 
 import { z } from "zod";
 import { parseBody, route } from "@/lib/api/route";
-import { requireSessionActor } from "@/lib/routing/mutations/actors";
+import {
+  aclPrincipalFromAuthorized,
+  requireSessionActor,
+} from "@/lib/routing/mutations/actors";
+import { assertBucketProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { createTask } from "@/lib/sync";
 
 const STAGES = ["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified"] as const;
@@ -33,6 +37,7 @@ export const POST = route(async (req) => {
     type: "bucket",
     id: body.bucket,
   });
+  await assertBucketProjectAccess(body.bucket, aclPrincipalFromAuthorized(authorized));
   return createTask(
     {
       ...body,

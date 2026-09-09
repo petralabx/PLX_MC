@@ -41,6 +41,14 @@ const tasks: Task[] = [
     bucket: "BKT-WMS",
     priority: "medium",
   } as Task,
+  {
+    id: "TASK-SECRET",
+    title: "Restricted trading contents",
+    description: "must not leak",
+    stage: "progress",
+    bucket: "BKT-TRADING",
+    priority: "high",
+  } as Task,
 ];
 
 vi.mock("@/lib/sync", () => ({
@@ -51,6 +59,14 @@ vi.mock("@/lib/sync", () => ({
     buckets: [
       { id: "BKT-MISSION-CONTROL-OPS", name: "Mission Control / Ops" },
       { id: "BKT-WMS", name: "WMS" },
+      { id: "BKT-TRADING", name: "Trading Lab", project: "PRJ-TRADING" },
+    ],
+    projects: [
+      {
+        id: "PRJ-TRADING",
+        visibility: "restricted",
+        members: ["vince@petrasoap.com", "tanush@petrasoap.com", "sp_mcp_cursor"],
+      },
     ],
     conflicts: [],
     errors: [],
@@ -71,6 +87,23 @@ import {
   actionSearchTasks,
   resolveSearchQueryText,
 } from "@/lib/mcp/actions";
+import type { McpIdentity } from "@/lib/mcp/auth";
+
+const memberIdentity: McpIdentity = {
+  operatorEmail: "tanush@petrasoap.com",
+  runtime: "cursor",
+  workerId: "test",
+  repo: "petralabx/PLX_MC",
+  servicePrincipalId: "sp_mcp_cursor",
+  actor: { kind: "service", id: "sp_mcp_cursor", status: "active" },
+};
+
+const outsiderIdentity: McpIdentity = {
+  ...memberIdentity,
+  operatorEmail: "greg.m@petrasoap.com",
+  servicePrincipalId: "sp_mcp_grok",
+  actor: { kind: "service", id: "sp_mcp_grok", status: "active" },
+};
 
 describe("resolveSearchQueryText", () => {
   it("accepts q or query alone", () => {
@@ -136,5 +169,25 @@ describe("actionGetContext taskIds honouring", () => {
     if (!("tasks" in result) || !result.tasks) throw new Error("expected tasks");
     expect(result.tasks.map((t) => t.id).sort()).toEqual(["TASK-221", "TASK-791"]);
     expect(result.filter.taskIds).toEqual(["TASK-221", "TASK-791"]);
+  });
+});
+
+describe("restricted project ACL on search/context", () => {
+  it("hides restricted task contents from non-members", async () => {
+    const result = await actionSearchTasks({ query: "Restricted trading", limit: 10 }, outsiderIdentity);
+    expect(result.tasks).toEqual([]);
+    expect(result.total).toBe(0);
+  });
+
+  it("returns restricted task contents to allowlisted members and agents", async () => {
+    const result = await actionSearchTasks({ query: "Restricted trading", limit: 10 }, memberIdentity);
+    expect(result.tasks.map((t) => t.id)).toEqual(["TASK-SECRET"]);
+  });
+
+  it("omits restricted buckets from context for outsiders", async () => {
+    const result = await actionGetContext({ depth: "compact" }, outsiderIdentity);
+    if (!("topTasks" in result) || !result.topTasks) throw new Error("expected topTasks");
+    expect(result.topTasks.some((t) => t.id === "TASK-SECRET")).toBe(false);
+    expect(result.buckets.some((b) => b.id === "BKT-TRADING")).toBe(false);
   });
 });

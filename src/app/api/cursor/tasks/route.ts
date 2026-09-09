@@ -19,15 +19,18 @@ const createSchema = z.object({
   targetEnv: z.enum(["staging", "production"]).optional(),
 });
 
-export const GET = cursorRoute("mc_search_tasks", async (req) => {
+export const GET = cursorRoute("mc_search_tasks", async (req, _ctx, identity) => {
   const sp = new URL(req.url).searchParams;
-  const result = await actionSearchTasks({
-    q: sp.get("q") ?? undefined,
-    query: sp.get("query") ?? undefined,
-    bucket: sp.get("bucket") ?? undefined,
-    stage: sp.get("stage") ?? undefined,
-    limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
-  });
+  const result = await actionSearchTasks(
+    {
+      q: sp.get("q") ?? undefined,
+      query: sp.get("query") ?? undefined,
+      bucket: sp.get("bucket") ?? undefined,
+      stage: sp.get("stage") ?? undefined,
+      limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
+    },
+    identity
+  );
   return {
     data: { tasks: result.tasks, total: result.total },
     meta: { filter: result.filter },

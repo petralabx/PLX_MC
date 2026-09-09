@@ -81,6 +81,10 @@ export interface PermissionContext {
   accountableOwnerId?: string;
   actorIsAccountableOwner?: boolean;
   targetEnv?: "staging" | "production";
+  /** Restricted-project membership tokens for the resource under check. */
+  projectVisibility?: "shared" | "restricted";
+  projectMembers?: string[];
+  principalTokens?: string[];
 }
 
 export type DenyReasonCode =

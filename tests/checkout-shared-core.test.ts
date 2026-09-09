@@ -24,6 +24,14 @@ vi.mock("@/lib/compliance/service", async () => {
 vi.mock("@/lib/routing/mutations/actors", () => ({
   requireSessionActor: mocks.requireSessionActor,
   requireMcpActor: mocks.requireMcpActor,
+  aclPrincipalFromMcp: () => ({ tokens: ["sp_mcp_cursor"] }),
+  aclPrincipalFromAuthorized: () => ({ tokens: ["oid-1"] }),
+}));
+
+vi.mock("@/lib/permissions/project-acl-guard", () => ({
+  assertTaskProjectAccess: vi.fn(async () => undefined),
+  assertBucketProjectAccess: vi.fn(async () => undefined),
+  assertProjectIdAccess: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/mcp/auth", async () => {

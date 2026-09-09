@@ -8,13 +8,13 @@ function parseTaskIds(sp: URLSearchParams): string[] | undefined {
   return ids.length ? ids : undefined;
 }
 
-export const GET = cursorRoute("mc_get_context", async (req) => {
+export const GET = cursorRoute("mc_get_context", async (req, _ctx, identity) => {
   const url = new URL(req.url);
   const sp = url.searchParams;
   const depth = sp.get("depth") === "full" ? "full" : "compact";
   const bucket = sp.get("bucket") ?? undefined;
   const taskIds = parseTaskIds(sp);
-  const result = await actionGetContext({ depth, bucket, taskIds });
+  const result = await actionGetContext({ depth, bucket, taskIds }, identity);
   const { filter, ...data } = result;
   return { data, meta: { filter } };
 });

@@ -29,6 +29,9 @@ vi.mock("@/lib/sync/repo", () => ({
   async upsertProject(p: Project) {
     store.upserts.push(p);
   },
+  async setProjectSync() {
+    return undefined;
+  },
   async appendAudit(actor: string) {
     store.audits.push(actor);
   },
@@ -65,6 +68,33 @@ describe("createProject (P2)", () => {
       "session-actor@example.com"
     );
     expect(store.audits).toEqual(["session-actor@example.com"]);
+  });
+
+  it("persists restricted visibility, owner tokens, and omits the SharePoint mirror", async () => {
+    const p = await createProject({
+      name: "Trading Lab",
+      owner: "vince",
+      visibility: "restricted",
+      members: ["tanush@petrasoap.com", "sp_mcp_cursor"],
+    });
+    expect(p.visibility).toBe("restricted");
+    expect(p.members).toEqual(
+      expect.arrayContaining([
+        "vince",
+        "vince@petrasoap.com",
+        "tanush@petrasoap.com",
+        "sp_mcp_cursor",
+      ])
+    );
+    expect(p.sync.state).toBe("synced");
+    expect(p.sync.sp).toMatch(/omitted \(restricted\)/);
+  });
+
+  it("keeps default shared projects unchanged when visibility is omitted", async () => {
+    const p = await createProject({ name: "Org wide" });
+    expect(p.visibility).toBe("shared");
+    expect(p.members).toEqual([]);
+    expect(p.sync.state).toBe("pending");
   });
 });
 

@@ -4,7 +4,15 @@
 // path (spec §6 "pending until the first successful write, then synced").
 
 import { ApiError } from "@/lib/api/route";
-import { CURRENT_USER, SP_LISTS } from "@/lib/mc-data/data";
+import { CURRENT_USER, HUMANS, SP_LISTS } from "@/lib/mc-data/data";
+import {
+  isRestrictedProject,
+  normalizeProjectMembers,
+  PROJECT_VISIBILITY_RESTRICTED,
+  PROJECT_VISIBILITY_SHARED,
+  RESTRICTED_MIRROR_SP,
+  type ProjectVisibility,
+} from "@/lib/permissions/project-acl";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
 import {
   formatRepoNotAllowedMessage,
@@ -208,8 +216,23 @@ export async function createBucket(
     prd: input.prd ?? null,
     project: projectId,
   };
+  const parent = projectId
+    ? (await repo.getProjects()).find((project) => project.id === projectId)
+    : undefined;
+  if (isRestrictedProject(parent)) {
+    bucket.sync = { state: "synced", ts: repo.stamp(), sp: RESTRICTED_MIRROR_SP.roadmap };
+  }
   await repo.upsertBucket(bucket);
-  await repo.appendAudit(actor, `Created initiative ${id} (${name}) — pending Roadmap mirror.`, "pending");
+  if (isRestrictedProject(parent)) {
+    await repo.setBucketSync(bucket.id, "synced", { spRef: RESTRICTED_MIRROR_SP.roadmap });
+    await repo.appendAudit(
+      actor,
+      `Created initiative ${id} (${name}) — omitted from Roadmap mirror (restricted).`,
+      "synced"
+    );
+  } else {
+    await repo.appendAudit(actor, `Created initiative ${id} (${name}) — pending Roadmap mirror.`, "pending");
+  }
   return bucket;
 }
 
@@ -267,6 +290,45 @@ function nextProjectId(name: string, existing: Set<string>): string {
   return `${base}-${n}`;
 }
 
+function ownerMemberTokens(owner: string): string[] {
+  const trimmed = owner.trim();
+  const tokens = [trimmed];
+  const byId = HUMANS[trimmed];
+  if (byId?.id) tokens.push(byId.id);
+  if (byId?.email) tokens.push(byId.email);
+  const needle = trimmed.toLowerCase();
+  for (const human of Object.values(HUMANS)) {
+    if (human.email?.toLowerCase() === needle) {
+      tokens.push(human.id, human.email);
+    }
+  }
+  return tokens;
+}
+
+function resolveProjectAcl(
+  input: { visibility?: ProjectVisibility; members?: string[]; owner: string }
+): { visibility: ProjectVisibility; members: string[] } {
+  const visibility = input.visibility ?? PROJECT_VISIBILITY_SHARED;
+  if (visibility !== PROJECT_VISIBILITY_RESTRICTED) {
+    return { visibility: PROJECT_VISIBILITY_SHARED, members: [] };
+  }
+  return {
+    visibility: PROJECT_VISIBILITY_RESTRICTED,
+    members: normalizeProjectMembers([...ownerMemberTokens(input.owner), ...(input.members ?? [])]),
+  };
+}
+
+function projectSyncRef(visibility: ProjectVisibility, existingSp?: string): Project["sync"] {
+  if (visibility === PROJECT_VISIBILITY_RESTRICTED) {
+    return { state: "synced", ts: repo.stamp(), sp: RESTRICTED_MIRROR_SP.projects };
+  }
+  return {
+    state: "pending",
+    ts: repo.stamp(),
+    sp: existingSp && !existingSp.includes("omitted") ? existingSp : "Projects · unprovisioned",
+  };
+}
+
 export interface CreateProjectInput {
   name: string;
   owner?: string;
@@ -276,6 +338,8 @@ export interface CreateProjectInput {
   desc?: string;
   repos?: string[];
   prd?: string | null;
+  visibility?: ProjectVisibility;
+  members?: string[];
 }
 
 export async function createProject(
@@ -293,20 +357,37 @@ export async function createProject(
   const existing = await repo.getProjects();
   const id = nextProjectId(name, new Set(existing.map((p) => p.id)));
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, ".");
+  const owner = input.owner || CURRENT_USER;
+  const acl = resolveProjectAcl({
+    visibility: input.visibility,
+    members: input.members,
+    owner,
+  });
   const project: Project = {
     id,
     name,
-    owner: input.owner || CURRENT_USER,
+    owner,
     health: input.health ?? "track",
     target: input.target?.trim() || "—",
     started: input.started?.trim() || today,
     desc: (input.desc ?? "").trim(),
     repos,
-    sync: { state: "pending", ts: repo.stamp(), sp: "Projects · unprovisioned" },
+    sync: projectSyncRef(acl.visibility),
     prd: input.prd ?? null,
+    visibility: acl.visibility,
+    members: acl.members,
   };
   await repo.upsertProject(project);
-  await repo.appendAudit(actor, `Created project ${id} (${name}) — pending Projects mirror.`, "pending");
+  if (isRestrictedProject(project)) {
+    await repo.setProjectSync(project.id, "synced", { spRef: RESTRICTED_MIRROR_SP.projects });
+    await repo.appendAudit(
+      actor,
+      `Created project ${id} (${name}) — omitted from Projects mirror (restricted).`,
+      "synced"
+    );
+  } else {
+    await repo.appendAudit(actor, `Created project ${id} (${name}) — pending Projects mirror.`, "pending");
+  }
   return project;
 }
 
@@ -319,6 +400,8 @@ export interface PatchProjectInput {
   desc?: string;
   repos?: string[];
   prd?: string | null;
+  visibility?: ProjectVisibility;
+  members?: string[];
 }
 
 export async function patchProject(id: string, patch: PatchProjectInput, actor: string): Promise<Project | null> {
@@ -331,9 +414,29 @@ export async function patchProject(id: string, patch: PatchProjectInput, actor: 
     const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
     patch = { ...patch, repos: requireRegistryRepos(patch.repos, registryMap) };
   }
-  const next: Project = { ...existing, ...definedEntries(patch) };
+  const defined = definedEntries(patch);
+  const next: Project = { ...existing, ...defined };
+  const acl = resolveProjectAcl({
+    visibility: next.visibility,
+    members: next.members,
+    owner: next.owner,
+  });
+  next.visibility = acl.visibility;
+  next.members = acl.members;
+  if (isRestrictedProject(next)) {
+    next.sync = projectSyncRef(PROJECT_VISIBILITY_RESTRICTED);
+  }
   await repo.upsertProject(next);
-  await repo.appendAudit(actor, `Edited project ${id} — pending Projects mirror.`, "pending");
+  if (isRestrictedProject(next)) {
+    await repo.setProjectSync(next.id, "synced", { spRef: RESTRICTED_MIRROR_SP.projects });
+  }
+  await repo.appendAudit(
+    actor,
+    isRestrictedProject(next)
+      ? `Edited project ${id} — omitted from Projects mirror (restricted).`
+      : `Edited project ${id} — pending Projects mirror.`,
+    isRestrictedProject(next) ? "synced" : "pending"
+  );
   return next;
 }
 

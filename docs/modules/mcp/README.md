@@ -64,13 +64,22 @@ keeps the connector default (Hub stays `petralabx/PLX_MC`). Unknown slugs fail
 closed. Portal is no longer Portal-connector-only. Callers must refuse a
 receipt whose `actor.repo` does not match the repo under edit.
 
-**Sync conflict resolve (TASK-1467):** `mc_resolve_conflict` /
-`mc_resolve_conflicts` (`POST /api/cursor/conflicts/resolve`) call
-`resolveConflict` in the sync engine. Args: conflict id(s) + required
+**Sync conflict list + resolve (TASK-1467 / TASK-1473):** `mc_list_conflicts`
+(`GET /api/cursor/conflicts`) returns open Sync rows from `repo.listOpenConflicts()`
+(`id`, `entityType`, `entityId`, `field`, `mc_val`, `sp_val`, `detected_at`, plus
+the `openConflicts()` UI fields). Optional filters: `entityId` / `taskId`
+(aliases), `field`, `limit`. Auth is the MCP principal + `task.read`, not Entra.
+`mc_get_context` still returns only a conflicts **count**. Ids follow
+`cf-{entityId.lower}-{field}-{detectedAtMs}` (e.g. `cf-task-123-stage-…`).
+`mc_resolve_conflict` / `mc_resolve_conflicts` (`POST /api/cursor/conflicts/resolve`)
+call `resolveConflict` in the sync engine. Args: conflict id(s) + required
 `resolution` `keep_mc` \| `keep_sp`. Auth is the MCP principal + `sync.mutate`,
 not browser Entra. Ledger owns Keep MC for stage-lag leftovers; never silent
 `keep_sp`; agents never mark a task Verified. The Sync console
-`POST /api/sync/conflicts/{id}/resolve` stays Entra-gated.
+`POST /api/sync/conflicts/{id}/resolve` stays Entra-gated. The Sync badge
+(`counts.conflict + counts.error`) and review-queue label
+(`openConflicts + openErrors`) can disagree; this tool lists open conflict
+rows only.
 
 **Approval gates (TASK-629):** `mc_request_approval` (`POST /api/cursor/request-approval`) raises a runtime approval gate on a task (`approval.request`); the task freezes input-required until a human decides in the Approvals inbox.
 Checkout also backfills a missing task `accountableOwner` through the same

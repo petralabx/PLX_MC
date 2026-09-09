@@ -256,6 +256,27 @@ server.tool(
 );
 
 server.tool(
+  "mc_list_conflicts",
+  "List open SharePoint Sync conflicts (cf-* ids) so Ledger can Keep MC leftovers. Optional filters: entityId / taskId, field, limit. Auth is the MCP principal, not Entra. Does not resolve; never marks a task Verified.",
+  {
+    entityId: z.string().min(1).optional(),
+    taskId: z.string().min(1).optional(),
+    field: z.string().min(1).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+  },
+  async ({ entityId, taskId, field, limit }) => {
+    if (!MCP_ENABLED) return disabledTool("mc_list_conflicts");
+    const qs = new URLSearchParams();
+    if (entityId) qs.set("entityId", entityId);
+    if (taskId) qs.set("taskId", taskId);
+    if (field) qs.set("field", field);
+    if (limit != null) qs.set("limit", String(limit));
+    const q = qs.toString();
+    return printResult(await mcFetch(`/conflicts${q ? `?${q}` : ""}`));
+  }
+);
+
+server.tool(
   "mc_resolve_conflict",
   "Resolve one SharePoint Sync conflict. resolution is required: keep_mc (Ledger default for stage lag) or keep_sp (explicit only — never silent). Same engine as the Sync console; auth is the MCP principal, not Entra. Agents never mark a task Verified.",
   {

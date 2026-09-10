@@ -20,7 +20,7 @@ const stdioMcpSource = readFileSync(
 
 describe("MCP project and bucket creation capability", () => {
   it("registers project and bucket creation in both MCP transports", () => {
-    for (const tool of ["mc_create_project", "mc_create_bucket", "mc_list_buckets"]) {
+    for (const tool of ["mc_create_project", "mc_create_bucket", "mc_update_bucket", "mc_list_buckets"]) {
       expect(httpMcpSource).toContain(`"${tool}"`);
       expect(stdioMcpSource).toContain(`"${tool}"`);
     }
@@ -39,7 +39,7 @@ describe("MCP project and bucket creation capability", () => {
     for (const principalId of MCP_AGENT_SERVICE_PRINCIPAL_IDS) {
       const capabilities = capabilitiesForServicePrincipal(principalId);
       expect(capabilities).toEqual(
-        expect.arrayContaining(["project.create", "bucket.create"])
+        expect.arrayContaining(["project.create", "bucket.create", "bucket.update"])
       );
       expect(
         authorize({
@@ -51,6 +51,12 @@ describe("MCP project and bucket creation capability", () => {
         authorize({
           actor: { kind: "service", id: principalId, status: "active" },
           capability: "bucket.create",
+        }).allowed
+      ).toBe(true);
+      expect(
+        authorize({
+          actor: { kind: "service", id: principalId, status: "active" },
+          capability: "bucket.update",
         }).allowed
       ).toBe(true);
     }

@@ -45,8 +45,9 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
 };
 
 // Every per-agent MCP principal carries the same reviewed task/planning/routing
-// + sync.resolve (via sync.mutate) bundle; per-agent identity isolates
-// credentials and audit, not capabilities. Console sweep/retry stay Entra-gated.
+// + bucket.update + sync.resolve (via sync.mutate) bundle; per-agent identity
+// isolates credentials and audit, not capabilities. Console sweep/retry stay
+// Entra-gated. project.update remains human-only.
 const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "task.read",
   "task.create",
@@ -55,6 +56,7 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "task.complete",
   "task.link",
   "bucket.create",
+  "bucket.update",
   "project.create",
   "routing.suggest",
   "routing.propose",

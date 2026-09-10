@@ -13,6 +13,7 @@ composed swarm delegation.
 | `mc_suggest_work` | Suggest existing Tasks + `routingSessionId` (no create/link) |
 | `mc_create_project` | Create project (SharePoint Projects mirror) |
 | `mc_create_bucket` | Create bucket/initiative, optionally under a project (SharePoint Roadmap mirror) |
+| `mc_update_bucket` | Patch an existing bucket (`prd`, health, owner, description, name, target, repos, project) |
 | `mc_create_task` | Create task (SharePoint mirror) |
 | `mc_checkout_task` | Checkout + `MC-Checkout: dsp_*` stamp |
 | `mc_report_progress` | Stage/notes updates |

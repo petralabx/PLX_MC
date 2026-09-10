@@ -24,12 +24,12 @@ export function evaluateContext(
   }
 
   // Administrative mutations remain human-only even if a future registry
-  // mistake listed them. Reviewed agents may create hierarchy, but cannot edit
-  // it or manage permissions/approvals.
+  // mistake listed them. Reviewed agents may create and patch buckets
+  // (mc_update_bucket / bucket.update) but cannot edit projects or manage
+  // permissions/approvals.
   if (
     actor.kind === "service" &&
-    (capability === "bucket.update" ||
-      capability === "project.update" ||
+    (capability === "project.update" ||
       capability === "permissions.manage" ||
       capability === "repo.approve" ||
       capability === "approval.decide")

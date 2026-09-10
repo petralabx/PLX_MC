@@ -17,7 +17,7 @@ dispatch logic.
 | Surface | Path |
 |---------|------|
 | REST cursor API | `src/app/api/cursor/*` — self-auth via per-agent keys (`PLX_MC_MCP_AGENT_KEYS`) or the legacy shared `PLX_MC_MCP_API_KEY` (retire via `PLX_MC_MCP_SHARED_KEY_ENABLED=0`) + operator headers |
-| Planning hierarchy | `mc_create_project` + `mc_create_bucket` — capability-gated writes queued through the existing Projects/Roadmap SharePoint mirrors |
+| Planning hierarchy | `mc_create_project` + `mc_create_bucket` + `mc_update_bucket` — capability-gated writes queued through the existing Projects/Roadmap SharePoint mirrors |
 | Routing suggest | `POST /api/cursor/routing/suggest` — `mc_suggest_work` (`routing.suggest`) |
 | Streamable HTTP MCP | `GET/POST/DELETE /api/cursor/mcp` — remote team registration |
 | Stdio MCP client | `tools/plx-mc-mcp/index.ts` — local Cursor + Cloud Agents |
@@ -41,10 +41,19 @@ MC_BASE_URL=https://mc.plxcustomer.io
 `agentic-swarm`) — not the `MC_REPO` GitHub slug. See `docs/AGENT-PR-SOP.md`
 (two repo namespaces).
 
-The same registry-id rule applies to `mc_create_project.repos[]` and
-`mc_create_bucket.repos[]`. Every reviewed MCP runtime principal shares the
-explicit `project.create` / `bucket.create` grant; human-only administration,
+The same registry-id rule applies to `mc_create_project.repos[]`,
+`mc_create_bucket.repos[]`, and `mc_update_bucket.repos[]`. Every reviewed MCP
+runtime principal shares the explicit `project.create` / `bucket.create` /
+`bucket.update` grant; human-only administration (`project.update`),
 repository approval, and permission management remain denied.
+
+**Patch bucket (TASK-1594):** `mc_update_bucket` (`PATCH /api/cursor/buckets`)
+takes required `id` plus at least one of `prd`, `health`, `owner`,
+`description`, `name`, `target`, `started`, `repos`, `project`. Auth is the MCP
+principal + existing `bucket.update` (same grant as Entra `PATCH /api/buckets/{id}`),
+not a new capability. Unknown ids return 404; principals without the grant
+return 403. Use this to set a missing `prd` on an existing `BKT-*` without
+the Entra UI.
 
 **Restricted projects (TASK-1527):** `mc_create_project` accepts optional
 `visibility` (`shared` | `restricted`) and `members[]` (emails, Entra oids,

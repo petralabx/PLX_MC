@@ -7,11 +7,13 @@ import {
   createBucket,
   createProject,
   createTask,
+  patchBucket,
   patchTask,
   snapshot,
   type CreateBucketInput,
   type CreateProjectInput,
   type CreateTaskInput,
+  type PatchBucketInput,
 } from "@/lib/sync";
 import { getEntity } from "@/lib/sync/repo";
 import { resolveHumanAccountableOwner, type Evidence, type Task } from "@/lib/mc-data";
@@ -308,6 +310,46 @@ export async function actionListBuckets(
     }));
 
   return { buckets, count: buckets.length };
+}
+
+export type UpdateBucketActionInput = {
+  id: string;
+  name?: string;
+  description?: string;
+  owner?: string;
+  health?: PatchBucketInput["health"];
+  target?: string;
+  started?: string;
+  repos?: string[];
+  prd?: string | null;
+  project?: string | null;
+};
+
+export async function actionUpdateBucket(
+  identity: McpIdentity,
+  input: UpdateBucketActionInput
+) {
+  const authorized = requireMcpActor(identity, "bucket.update", {
+    type: "bucket",
+    id: input.id,
+  });
+  const principal = aclPrincipalFromMcp(identity);
+  await assertBucketProjectAccess(input.id, principal);
+  if (typeof input.project === "string" && input.project.trim()) {
+    await assertProjectIdAccess(input.project, principal);
+  }
+  const { id, description, ...rest } = input;
+  const patch: PatchBucketInput = {
+    ...rest,
+    ...(description !== undefined ? { desc: description } : {}),
+  };
+  const defined = Object.entries(patch).filter(([, value]) => value !== undefined);
+  if (defined.length === 0) {
+    throw new ApiError("invalid_request", "Provide at least one field to update besides id.");
+  }
+  const bucket = await patchBucket(id, patch, authorized.auditLabel);
+  if (!bucket) throw new ApiError("not_found", `unknown bucket ${id}`, 404);
+  return { bucket, bucketId: bucket.id, sync: bucket.sync };
 }
 
 export async function actionCheckout(

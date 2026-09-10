@@ -205,10 +205,12 @@ describe("service-principal separation", () => {
         "routing.propose",
         "routing.resolve",
         "sync.mutate",
+        "bucket.update",
       ])
     );
     expect(mcpCaps).not.toContain("repo.approve");
     expect(mcpCaps).not.toContain("permissions.manage");
+    expect(mcpCaps).not.toContain("project.update");
 
     const actor = service("sp_mcp_cursor");
     expect(authorize({ actor, capability: "task.create" }).allowed).toBe(true);
@@ -216,6 +218,8 @@ describe("service-principal separation", () => {
     expect(authorize({ actor, capability: "routing.resolve" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "task.link" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "sync.mutate" }).allowed).toBe(true);
+    expect(authorize({ actor, capability: "bucket.update" }).allowed).toBe(true);
+    expect(authorize({ actor, capability: "project.update" }).allowed).toBe(false);
     expect(authorize({ actor, capability: "repo.approve" }).allowed).toBe(false);
   });
 
@@ -317,11 +321,18 @@ describe("contextual denial", () => {
     expect(decision.reasonCode).toBe("repository_mismatch");
   });
 
-  it("allows reviewed MCP principals to create planning hierarchy", () => {
+  it("allows reviewed MCP principals to create planning hierarchy and patch buckets", () => {
     expect(
       authorize({
         actor: service("sp_mcp_cursor"),
         capability: "bucket.create",
+        resource: { type: "bucket", id: "BKT-1" },
+      })
+    ).toMatchObject({ allowed: true, reasonCode: "allowed" });
+    expect(
+      authorize({
+        actor: service("sp_mcp_cursor"),
+        capability: "bucket.update",
         resource: { type: "bucket", id: "BKT-1" },
       })
     ).toMatchObject({ allowed: true, reasonCode: "allowed" });

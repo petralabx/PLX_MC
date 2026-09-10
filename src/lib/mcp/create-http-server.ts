@@ -7,6 +7,7 @@ import type { McpIdentity } from "./auth";
 import {
   actionCreateBucket,
   actionCreateProject,
+  actionUpdateBucket,
   actionCheckout,
   actionComplete,
   actionCreateTask,
@@ -134,6 +135,24 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
       project: z.string().nullable().optional().describe("Existing Mission Control project id"),
     },
     async (body) => jsonResult(await actionCreateBucket(identity, body))
+  );
+
+  server.tool(
+    "mc_update_bucket",
+    "Patch fields on an existing Mission Control bucket/initiative (prd, health, owner, description, name, target, started, repos, project). Queues the SharePoint Roadmap mirror.",
+    {
+      id: z.string().min(1).describe("Existing BKT-* bucket id"),
+      name: z.string().min(1).optional(),
+      description: z.string().optional(),
+      owner: z.string().min(1).optional(),
+      health: z.enum(["track", "risk", "off"]).optional(),
+      target: z.string().optional(),
+      started: z.string().optional(),
+      repos: z.array(z.string()).optional(),
+      prd: z.string().nullable().optional(),
+      project: z.string().nullable().optional().describe("Existing Mission Control project id, or null to unparent"),
+    },
+    async (body) => jsonResult(await actionUpdateBucket(identity, body))
   );
 
   server.tool(

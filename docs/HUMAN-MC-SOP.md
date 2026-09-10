@@ -66,7 +66,9 @@ Atomic work items. Minimum fields to set before agent handoff:
 **MCP agents can create projects, buckets, and tasks** (`mc_create_project`,
 `mc_create_bucket`, `mc_create_task`) after a search miss — they do not need
 you to create the hierarchy in the UI first. Search first (`mc_list_buckets` /
-`mc_get_context` / `mc_search_tasks`); create only when nothing matches. Set
+`mc_get_context` / `mc_search_tasks`); create only when nothing matches. Patch
+an existing bucket with `mc_update_bucket` (for example to set `prd`) instead
+of recreating it. Set
 `owner=vince@petrasoap.com`. `repos[]` uses MC registry ids (`portal-web`,
 `plx-mc`), never GitHub slugs. You can still create the same objects in the UI.
 

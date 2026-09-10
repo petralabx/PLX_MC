@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   createBucket: vi.fn(),
   createProject: vi.fn(),
   listBuckets: vi.fn(),
+  updateBucket: vi.fn(),
 }));
 
 vi.stubEnv("PLX_MC_MCP_ENABLED", "1");
@@ -20,16 +21,17 @@ vi.mock("@/lib/mcp/actions", () => ({
   actionCreateBucket: mocks.createBucket,
   actionCreateProject: mocks.createProject,
   actionListBuckets: mocks.listBuckets,
+  actionUpdateBucket: mocks.updateBucket,
 }));
 
-import { GET as listBuckets, POST as createBucket } from "@/app/api/cursor/buckets/route";
+import { GET as listBuckets, PATCH as updateBucket, POST as createBucket } from "@/app/api/cursor/buckets/route";
 import { POST as createProject } from "@/app/api/cursor/projects/route";
 
 const ctx = { params: Promise.resolve({} as Record<string, string>) };
 
-function post(url: string, body: unknown): Request {
+function cursorRequest(url: string, method: "POST" | "PATCH", body: unknown): Request {
   return new Request(url, {
-    method: "POST",
+    method,
     headers: {
       "content-type": "application/json",
       "x-api-key": "test-mcp-key",
@@ -40,6 +42,10 @@ function post(url: string, body: unknown): Request {
     },
     body: JSON.stringify(body),
   });
+}
+
+function post(url: string, body: unknown): Request {
+  return cursorRequest(url, "POST", body);
 }
 
 beforeEach(() => {
@@ -57,6 +63,11 @@ beforeEach(() => {
   mocks.listBuckets.mockResolvedValue({
     buckets: [{ id: "BKT-ALPHA", name: "Alpha initiative", owner: "alice", health: "track", project: "PRJ-MAIN" }],
     count: 1,
+  });
+  mocks.updateBucket.mockResolvedValue({
+    bucket: { id: "BKT-P1-INGEST-TRUTH-ORPHANS", prd: "https://example.com/prd.md" },
+    bucketId: "BKT-P1-INGEST-TRUTH-ORPHANS",
+    sync: { state: "pending" },
   });
 });
 
@@ -139,5 +150,37 @@ describe("cursor project and bucket creation routes", () => {
       data: { count: 1, buckets: [{ id: "BKT-ALPHA" }] },
       meta: { audit: { kinds: ["mc_list_buckets", "mcp.tool.invoked"] } },
     });
+  });
+
+  it("validates and patches a bucket through the authenticated envelope", async () => {
+    const response = await updateBucket(
+      cursorRequest("http://localhost/api/cursor/buckets", "PATCH", {
+        id: "BKT-P1-INGEST-TRUTH-ORPHANS",
+        prd: "https://github.com/petralabx/agentic-swarm/blob/main/docs/trading-v2/prd/index.md",
+      }),
+      ctx
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.updateBucket).toHaveBeenCalledWith(
+      expect.objectContaining({ servicePrincipalId: "sp_mcp_cursor" }),
+      {
+        id: "BKT-P1-INGEST-TRUTH-ORPHANS",
+        prd: "https://github.com/petralabx/agentic-swarm/blob/main/docs/trading-v2/prd/index.md",
+      }
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      data: { bucketId: "BKT-P1-INGEST-TRUTH-ORPHANS" },
+      meta: { audit: { kinds: ["mc_update_bucket", "mcp.tool.invoked"] } },
+    });
+  });
+
+  it("rejects a bucket patch that has no fields besides id", async () => {
+    const response = await updateBucket(
+      cursorRequest("http://localhost/api/cursor/buckets", "PATCH", { id: "BKT-1" }),
+      ctx
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.updateBucket).not.toHaveBeenCalled();
   });
 });

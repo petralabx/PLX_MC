@@ -157,6 +157,7 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 | Find project / bucket | `mc_list_buckets`, `mc_get_context` | Search by query (`q`) or bucket id before creating. `mc_list_buckets` returns `BKT-*` ids plus ownership/project metadata |
 | Create project | `mc_create_project` | Only on a search miss. Set `owner=vince@petrasoap.com`. `repos[]` uses MC registry **ids** (`portal-web`, `plx-mc`), never GitHub slugs. Optional `visibility=restricted` + `members[]` for ACL-private projects (TASK-1527) |
 | Create bucket | `mc_create_bucket` | Only on a search miss. Optional `project` parent. Same owner and `repos[]` rules as project create |
+| Patch bucket | `mc_update_bucket` | Existing `BKT-*` only. Required `id` plus at least one of `prd`, `health`, `owner`, `description`, `name`, `target`, `started`, `repos`, `project`. Same `repos[]` registry-id rule. |
 | Find work | `mc_search_tasks` | Filter by `query` (alias `q`), `bucket`, `stage`, `limit`; `meta.filter` echoes what was applied |
 | Create task | `mc_create_task` | Only on a search miss in that bucket. Requires `title` + `bucket`; optional `description`, `priority`, `repos` (registry **ids**, not GitHub slugs — see table below). Default `bucket` from `config/tracked-repos-registry.json` `default_bucket` for the repo under edit — do **not** hardcode `BKT-PROD` |
 | Start | `mc_checkout_task` | Live repo-scoped checkout. Confirm `data.taskId` is a non-null string. Copy `prBodyLine` / `meta.links.checkoutStamp` exactly. Never invent a `dsp_*`. Never write `MC-Checkout: pending`. |
@@ -176,9 +177,10 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 
 **Ledger owns Keep MC** for stage-lag leftovers on Sync/Conflicts. Never default or silently send `keep_sp`. Agents never move a task to **Verified**.
 
-Reviewed MCP agents have `project.create`, `bucket.create`, and `task.create`.
-Search first; create only on a miss. Humans can still create the same objects
-in the UI ([`HUMAN-MC-SOP.md`](HUMAN-MC-SOP.md)).
+Reviewed MCP agents have `project.create`, `bucket.create`, `bucket.update`,
+and `task.create`. Search first; create only on a miss. Patch an existing
+bucket with `mc_update_bucket` (do not recreate it to set `prd`). Humans can
+still create and edit the same objects in the UI ([`HUMAN-MC-SOP.md`](HUMAN-MC-SOP.md)).
 
 1. Find the project and bucket with `mc_list_buckets` (`q=…`) or `mc_get_context`.
    Call `mc_create_project` or `mc_create_bucket` only if nothing matches. Set

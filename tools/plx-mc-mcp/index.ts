@@ -195,6 +195,27 @@ server.tool(
 );
 
 server.tool(
+  "mc_update_bucket",
+  "Patch fields on an existing Mission Control bucket/initiative (prd, health, owner, description, name, target, started, repos, project). Queues the SharePoint Roadmap mirror.",
+  {
+    id: z.string().min(1).describe("Existing BKT-* bucket id"),
+    name: z.string().min(1).optional(),
+    description: z.string().optional(),
+    owner: z.string().min(1).optional(),
+    health: z.enum(["track", "risk", "off"]).optional(),
+    target: z.string().optional(),
+    started: z.string().optional(),
+    repos: z.array(z.string()).optional(),
+    prd: z.string().nullable().optional(),
+    project: z.string().nullable().optional().describe("Existing Mission Control project id, or null to unparent"),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_update_bucket");
+    return printResult(await mcFetch("/buckets", { method: "PATCH", body }));
+  }
+);
+
+server.tool(
   "mc_create_task",
   "Create a new MC task. repos[] items are MC registry ids (portal-web, plx-mc, agentic-swarm) — not GitHub slugs. MC_REPO / X-MC-Repo stays the full GitHub slug for checkout/compliance and is a different namespace from repos[].",
   {

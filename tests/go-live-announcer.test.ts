@@ -74,8 +74,18 @@ function okReceipt(receiptId: string) {
   };
 }
 
+function authFailedReceipt() {
+  return {
+    ok: false,
+    status: 401,
+    receiptId: "http-401",
+    retryable: false,
+    permanentAuth: true,
+  };
+}
+
 function memoryDedupe() {
-  const sent = new Map<string, { ts: number; receipt?: string }>();
+  const sent = new Map<string, { ts: number; receipt?: string; status: "claimed" | "sent" | "coalesced" }>();
   const clock = { t: Date.now() };
   return {
     clock,
@@ -83,18 +93,31 @@ function memoryDedupe() {
     alreadySent: async (id: string) => sent.has(id),
     claimSent: async (id: string) => {
       if (sent.has(id)) return false;
-      sent.set(id, { ts: clock.t });
+      sent.set(id, { ts: clock.t, status: "claimed" });
       return true;
     },
     siblingSent: async (taskId: string, kind: GoLiveKind, withinMs: number) => {
       const row = sent.get(`${kind}:${taskId}`);
-      if (!row) return false;
+      if (!row || row.status !== "sent") return false;
       return clock.t - row.ts <= withinMs;
     },
     markSent: async (id: string, receiptId: string) => {
-      sent.set(id, { ...(sent.get(id) ?? { ts: clock.t }), receipt: receiptId });
+      const prev = sent.get(id) ?? { ts: clock.t, status: "claimed" as const };
+      sent.set(id, {
+        ...prev,
+        receipt: receiptId,
+        status: receiptId === "coalesced" ? "coalesced" : "sent",
+      });
     },
   };
+}
+
+async function waitUntil(pred: () => boolean, label: string, ms = 1000) {
+  const start = Date.now();
+  while (!pred()) {
+    if (Date.now() - start > ms) throw new Error(`timeout waiting for ${label}`);
+    await new Promise((r) => setTimeout(r, 5));
+  }
 }
 
 const HUB = "https://mc.plxcustomer.io/tasks/TASK-1454";
@@ -665,5 +688,118 @@ describe("go-live send + dedup", () => {
     expect(pr.skipped).toBe("duplicate");
     expect(postWebhook).toHaveBeenCalledTimes(1);
     expect(COALESCE_WINDOW_MS).toBe(15 * 60 * 1000);
+  });
+
+  it("sends complete after a failed PR-open that claimed but never marked sent", async () => {
+    const postWebhook = vi
+      .fn()
+      .mockResolvedValueOnce(authFailedReceipt())
+      .mockResolvedValueOnce(okReceipt("run-complete-after-pr-fail"));
+    const dedupe = memoryDedupe();
+    const pr = await announceGoLiveEvent(prOpenEvent("TASK-1692"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Dedupe work",
+      ...dedupe,
+      postWebhook,
+    });
+    const complete = await announceGoLiveEvent(completeEvent("TASK-1692"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Dedupe work",
+      ...dedupe,
+      postWebhook,
+    });
+    expect(pr.skipped).toBe("auth_failed");
+    expect(complete.sent).toBe(true);
+    expect(postWebhook).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not consume the PR key when combined complete fails to send", async () => {
+    const postWebhook = vi
+      .fn()
+      .mockResolvedValueOnce(authFailedReceipt())
+      .mockResolvedValueOnce(okReceipt("run-pr-after-complete-fail"));
+    const dedupe = memoryDedupe();
+    const complete = await announceGoLiveEvent(
+      {
+        kind: "task.completed",
+        actor: "cursor",
+        taskId: "TASK-1697",
+        payload: {
+          checkoutId: "dsp_combinedfail1",
+          prUrl: "https://github.com/petralabx/PLX_MC/pull/1571",
+        },
+      },
+      {
+        loadConfig: () => enabledConfig(),
+        loadTitle: async () => "Hard-dedupe announces",
+        ...dedupe,
+        postWebhook,
+      }
+    );
+    const pr = await announceGoLiveEvent(
+      {
+        kind: "pr.opened",
+        actor: "cursor",
+        repo: "PLX_MC",
+        taskId: "TASK-1697",
+        pr: "1571",
+      },
+      {
+        loadConfig: () => enabledConfig(),
+        loadTitle: async () => "Hard-dedupe announces",
+        ...dedupe,
+        postWebhook,
+      }
+    );
+    expect(complete.skipped).toBe("auth_failed");
+    expect(pr.sent).toBe(true);
+    expect(postWebhook).toHaveBeenCalledTimes(2);
+  });
+
+  it("posts complete when a sibling PR key is claimed but not sent", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run-after-orphan-claim"));
+    const dedupe = memoryDedupe();
+    await dedupe.claimSent("pr.opened:TASK-1697");
+    const complete = await announceGoLiveEvent(completeEvent("TASK-1697"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Dedupe work",
+      ...dedupe,
+      postWebhook,
+    });
+    expect(complete.sent).toBe(true);
+    expect(postWebhook).toHaveBeenCalledTimes(1);
+  });
+
+  it("posts at least one line when PR-open and complete overlap before either send succeeds", async () => {
+    const dedupe = memoryDedupe();
+    let entered = 0;
+    let releaseFirst!: () => void;
+    const holdFirst = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const postWebhook = vi.fn(async () => {
+      entered += 1;
+      if (entered === 1) await holdFirst;
+      return okReceipt(`run-overlap-${entered}`);
+    });
+    const prP = announceGoLiveEvent(prOpenEvent("TASK-1697"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Dedupe work",
+      ...dedupe,
+      postWebhook,
+    });
+    await waitUntil(() => entered === 1, "first webhook enter");
+    const completeP = announceGoLiveEvent(completeEvent("TASK-1697"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Dedupe work",
+      ...dedupe,
+      postWebhook,
+    });
+    await waitUntil(() => entered === 2, "second webhook enter");
+    releaseFirst();
+    const [pr, complete] = await Promise.all([prP, completeP]);
+    expect(pr.sent).toBe(true);
+    expect(complete.sent).toBe(true);
+    expect(postWebhook).toHaveBeenCalledTimes(2);
   });
 });

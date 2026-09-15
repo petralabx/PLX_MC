@@ -54,13 +54,13 @@ At most one successful post per `(taskId, eventType)`:
 
 - Dedup key: `announce:<kind>:<taskId>` in `mc_events` (for example `announce:task.completed:TASK-1697`).
 - Claim **before** the Workflow POST (`INSERT … ON CONFLICT DO NOTHING RETURNING seq`). Re-fires, webhook retries, and a second `complete()` with a different checkout id do not post again.
-- Optional Azure Blob overlay on `stvmcresearch` / `mc-go-live-delivery` uses `If-None-Match: *`. TASK-1454 approved that container; it was never wired until TASK-1699. When the connection string is unset, Postgres is the gate. A 409/412 from Blob is treated as already claimed.
+- Optional Azure Blob overlay on `stvmcresearch` / `mc-go-live-delivery` uses `If-None-Match: *`. TASK-1454 approved that container; it was never wired until TASK-1699. When the connection string is unset, Postgres is the gate. Blob is written **after** a won Postgres insert. A 409/412 from Blob must not revoke that win or block a retry that has no `mc_events` row.
 
 `appendEvent` skips the announcer when a keyed `mc_events` insert is a no-op (webhook replay).
 
 ## Coalesce
 
-If `pr.opened` and `task.completed` fire within 15 minutes for the same task, the later event is skipped (`coalesced`). When complete arrives first with a PR URL, one combined line is posted and the PR key is claimed so a lagging GitHub webhook does not add a second message.
+If `pr.opened` and `task.completed` fire within 15 minutes for the same task, the later event is skipped (`coalesced`) only when the sibling row is `payload.status = sent`. A claimed-but-unsent sibling (failed Workflow POST) does not suppress the other kind. When complete arrives first with a PR URL, one combined line is posted and the PR key is claimed **after** that POST succeeds so a lagging GitHub webhook does not add a second message. Overlapping in-flight claims may post both lines rather than drop to zero.
 
 ## Immediate rollback
 

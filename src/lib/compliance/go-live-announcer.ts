@@ -1,4 +1,4 @@
-// One-way BC go-live Teams announcer (TASK-1454 / TASK-1699). Posts a single
+// One-way BC go-live Teams announcer (TASK-1454 / TASK-1699 / TASK-1701). Posts a single
 // markdown line on checkout / PR-open / complete via the Teams Workflow webhook.
 // Chat Workflow is the intended live path; channel URL is optional fallback.
 // Never fans out to both. Fail-closed for sends. Never throws into
@@ -301,6 +301,7 @@ async function defaultSiblingSent(taskId: string, kind: GoLiveKind, withinMs: nu
   const rows = await query<{ n: string }>(
     `SELECT 1 AS n FROM mc_events
       WHERE dedup_key = $1
+        AND payload->>'status' = 'sent'
         AND ts > now() - ($2::text || ' milliseconds')::interval
       LIMIT 1`,
     [announceDedupKey(siblingId), String(Math.max(0, Math.floor(withinMs)))]
@@ -309,12 +310,9 @@ async function defaultSiblingSent(taskId: string, kind: GoLiveKind, withinMs: nu
 }
 
 async function defaultClaimSent(eventId: string, meta: GoLiveClaimMeta): Promise<boolean> {
-  const azure = await putGoLiveDeliveryBlobIfNotExists({
-    eventId,
-    taskId: meta.taskId,
-    kind: meta.kind,
-  });
-  if (azure === "exists") return false;
+  // Postgres is the always-on claim. Blob is an overlay written after a won
+  // insert so an orphan blob cannot block a later retry that never got an
+  // mc_events row.
   const rows = await query<{ seq: string }>(
     `INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload, dedup_key)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -330,15 +328,22 @@ async function defaultClaimSent(eventId: string, meta: GoLiveClaimMeta): Promise
       announceDedupKey(eventId),
     ]
   );
-  return rows.length > 0;
+  if (rows.length === 0) return false;
+  await putGoLiveDeliveryBlobIfNotExists({
+    eventId,
+    taskId: meta.taskId,
+    kind: meta.kind,
+  });
+  return true;
 }
 
 async function defaultMarkSent(eventId: string, receiptId: string): Promise<void> {
+  const status = receiptId === "coalesced" ? "coalesced" : "sent";
   await query(
     `UPDATE mc_events
         SET payload = coalesce(payload, '{}'::jsonb) || $2::jsonb
       WHERE dedup_key = $1`,
-    [announceDedupKey(eventId), JSON.stringify({ eventId, receiptId, status: "sent" })]
+    [announceDedupKey(eventId), JSON.stringify({ eventId, receiptId, status })]
   );
 }
 
@@ -474,17 +479,11 @@ export async function announceGoLiveEvent(
     return { sent: false, skipped: "duplicate", eventId, line, receiptId: null };
   }
 
+  // Re-check only a successfully sent sibling. A claimed-but-unsent row must
+  // not collapse overlapping PR-open + complete into zero Workflow POSTs.
   if (sibling && (await siblingSent(taskId, sibling, COALESCE_WINDOW_MS))) {
     await markSent(eventId, "coalesced");
     return { sent: false, skipped: "coalesced", eventId, line, receiptId: null };
-  }
-
-  // Combined complete: claim the PR key so a lagging pr.opened webhook does not post.
-  if (kind === "task.completed" && url) {
-    const prEventId = `pr.opened:${taskId}`;
-    if (!(await alreadySent(prEventId))) {
-      await claimSent(prEventId, { taskId, kind: "pr.opened" });
-    }
   }
 
   const dest = primaryDeliveryUrl(cfg);
@@ -511,6 +510,11 @@ export async function announceGoLiveEvent(
     };
   }
   await markSent(eventId, receipt.receiptId);
+  if (kind === "task.completed" && url) {
+    const prEventId = `pr.opened:${taskId}`;
+    const claimedPr = await claimSent(prEventId, { taskId, kind: "pr.opened" });
+    if (claimedPr) await markSent(prEventId, "coalesced");
+  }
   return { sent: true, skipped: null, eventId, line, receiptId: receipt.receiptId };
 }
 

@@ -354,7 +354,7 @@ describe("go-live send + dedup", () => {
   it("duplicate event ID produces no second post", async () => {
     const postWebhook = vi.fn();
     const dedupe = memoryDedupe();
-    await dedupe.claimSent("checkout:TASK-1454", { taskId: "TASK-1454", kind: "checkout" });
+    await dedupe.claimSent("checkout:TASK-1454");
     const result = await announceGoLiveEvent(checkoutEvent(), {
       loadConfig: () => enabledConfig(),
       loadTitle: async () => "title",

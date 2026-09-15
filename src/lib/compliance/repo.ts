@@ -26,12 +26,15 @@ export interface AppendEventInput {
 }
 
 export async function appendEvent(e: AppendEventInput): Promise<void> {
-  await query(
+  const rows = await query<{ seq: string }>(
     `INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload, dedup_key)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING`,
+     ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING
+     RETURNING seq`,
     [e.kind, e.actor, e.repo ?? null, e.taskId ?? null, e.pr ?? null, JSON.stringify(e.payload ?? {}), e.dedupKey ?? null]
   );
+  // Replay of a keyed event must not re-announce (Power Automate / webhook retries).
+  if (e.dedupKey && rows.length === 0) return;
   await announceGoLiveEventSafe(e);
 }
 

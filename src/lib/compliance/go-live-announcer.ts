@@ -1,14 +1,17 @@
-// One-way BC go-live Teams announcer (TASK-1454). Posts a single plain-text
-// line on checkout / PR-open / complete via the Teams Workflow webhook.
-// Fail-closed for sends. Never throws into checkout/complete/ingest.
-// Never logs webhook URLs, secrets, or inbound message bodies.
+// One-way BC go-live Teams announcer (TASK-1454 / TASK-1699). Posts a single
+// markdown line on checkout / PR-open / complete via the Teams Workflow webhook.
+// Chat Workflow is the intended live path; channel URL is optional fallback.
+// Never fans out to both. Fail-closed for sends. Never throws into
+// checkout/complete/ingest. Never logs webhook URLs, secrets, or inbound bodies.
 
 import { query } from "@/lib/db";
 import { getEntity } from "@/lib/sync/repo";
+import { putGoLiveDeliveryBlobIfNotExists } from "./go-live-delivery-blob";
 
 export const GO_LIVE_TEAM_ID = "73b1b6fb-ea03-493c-b1a0-3af4883a2953";
 export const GO_LIVE_CHANNEL_ID = "19:046f10be721e4782906a2309e8a7492d@thread.tacv2";
 export const GO_LIVE_GITHUB_ORG = "petralabx";
+export const COALESCE_WINDOW_MS = 15 * 60 * 1000;
 
 /** Bare slugs as stored on pr.opened mc_events (webhook writes repository.name). */
 export const GO_LIVE_BARE_REPO_SLUGS = new Set(["plx-customer-portal", "agentic-swarm", "PLX_MC"]);
@@ -20,7 +23,7 @@ const ANNOUNCE_KINDS = new Set(["checkout", "pr.opened", "task.completed"]);
 
 const MAX_TITLE = 80;
 const MAX_URL = 200;
-const MAX_LINE = 240;
+const MAX_LINE = 400;
 const TRANSIENT_TRIES = 3;
 
 export type GoLiveKind = "checkout" | "pr.opened" | "task.completed";
@@ -54,10 +57,17 @@ export interface GoLiveSendResult {
   receiptId: string | null;
 }
 
+export interface GoLiveClaimMeta {
+  taskId: string;
+  kind: GoLiveKind;
+}
+
 export interface GoLiveDeps {
   loadConfig?: () => GoLiveConfig;
   loadTitle?: (taskId: string) => Promise<string | null>;
   alreadySent?: (eventId: string) => Promise<boolean>;
+  claimSent?: (eventId: string, meta: GoLiveClaimMeta) => Promise<boolean>;
+  siblingSent?: (taskId: string, kind: GoLiveKind, withinMs: number) => Promise<boolean>;
   markSent?: (eventId: string, receiptId: string) => Promise<void>;
   postWebhook?: (url: string, line: string) => Promise<GoLivePostReceipt>;
   sleep?: (ms: number) => Promise<void>;
@@ -99,13 +109,20 @@ function envFlagFrom(
   return raw === "1" || raw === "true" || raw === "yes";
 }
 
+export function primaryDeliveryUrl(cfg: GoLiveConfig): string | null {
+  const chat = cfg.chatWebhookUrl.trim();
+  if (chat && isHttpsWebhookUrl(chat)) return chat;
+  const channel = cfg.webhookUrl.trim();
+  if (channel && isHttpsWebhookUrl(channel)) return channel;
+  return null;
+}
+
 export function configBlocksSend(cfg: GoLiveConfig): string | null {
   if (!cfg.enabled) return "global_disabled";
   if (cfg.dryRun) return "dry_run";
   if (cfg.teamId !== GO_LIVE_TEAM_ID) return "team_not_allowlisted";
   if (cfg.channelId !== GO_LIVE_CHANNEL_ID) return "channel_not_allowlisted";
-  if (!cfg.webhookUrl) return "missing_webhook";
-  if (!isHttpsWebhookUrl(cfg.webhookUrl)) return "malformed_webhook";
+  if (!primaryDeliveryUrl(cfg)) return "missing_delivery";
   return null;
 }
 
@@ -139,6 +156,24 @@ export function sanitizeTitle(raw: string | null | undefined): string {
   return stripped.length > MAX_TITLE ? `${stripped.slice(0, MAX_TITLE - 1)}…` : stripped;
 }
 
+export function hubBaseUrl(): string {
+  return (process.env.PLX_MC_PUBLIC_URL ?? "https://mc.plxcustomer.io").replace(/\/+$/, "");
+}
+
+export function hubTaskMarkdown(taskId: string, title?: string | null): string | null {
+  const id = sanitizeTaskId(taskId);
+  if (!id) return null;
+  const url = `${hubBaseUrl()}/tasks/${encodeURIComponent(id)}`;
+  if (url.length > MAX_URL) return null;
+  return `[${id} — ${sanitizeTitle(title)}](${url})`;
+}
+
+export function prMarkdown(url: string): string | null {
+  const match = url.trim().match(/^https:\/\/github\.com\/petralabx\/[A-Za-z0-9._-]+\/pull\/(\d{1,8})$/);
+  if (!match) return null;
+  return `[PR #${match[1]}](${url})`;
+}
+
 export function normalizeGithubRepo(repo: string | null | undefined): string | null {
   const raw = (repo ?? "").trim();
   if (!raw) return null;
@@ -163,25 +198,46 @@ export function sanitizeGithubPrUrl(repo: string | null | undefined, pr: string 
   return url;
 }
 
+export function prUrlFromEvent(event: GoLiveEventInput): string | null {
+  if (event.kind === "pr.opened") return sanitizeGithubPrUrl(event.repo, event.pr);
+  const payload = event.payload ?? {};
+  if (typeof payload.prUrl === "string") {
+    const match = payload.prUrl
+      .trim()
+      .match(/^https:\/\/github\.com\/(petralabx\/[A-Za-z0-9._-]+)\/pull\/(\d{1,8})\/?$/);
+    if (match) return sanitizeGithubPrUrl(match[1], match[2]);
+  }
+  if (event.pr) return sanitizeGithubPrUrl(event.repo, event.pr);
+  return null;
+}
+
+function checkoutIdFrom(event: GoLiveEventInput): string | null {
+  const checkoutId = typeof event.payload?.checkoutId === "string" ? event.payload.checkoutId.trim() : "";
+  if (!checkoutId || !/^dsp_[a-z0-9]+$/.test(checkoutId)) return null;
+  return checkoutId;
+}
+
 export function eventIdFor(e: GoLiveEventInput): string | null {
   const taskId = sanitizeTaskId(e.taskId);
-  const payload = e.payload ?? {};
+  if (!taskId) return null;
   if (e.kind === "checkout") {
-    const checkoutId = typeof payload.checkoutId === "string" ? payload.checkoutId.trim() : "";
-    if (!taskId || !checkoutId || !/^dsp_[a-z0-9]+$/.test(checkoutId)) return null;
-    return `checkout:${checkoutId}`;
+    if (!checkoutIdFrom(e)) return null;
+    return `checkout:${taskId}`;
   }
   if (e.kind === "pr.opened") {
-    if (!taskId) return null;
-    const url = sanitizeGithubPrUrl(e.repo, e.pr);
-    if (!url) return null;
-    return `pr.opened:${e.repo}:${e.pr}`;
+    if (!sanitizeGithubPrUrl(e.repo, e.pr)) return null;
+    return `pr.opened:${taskId}`;
   }
   if (e.kind === "task.completed") {
-    const checkoutId = typeof payload.checkoutId === "string" ? payload.checkoutId.trim() : "";
-    if (!taskId || !checkoutId || !/^dsp_[a-z0-9]+$/.test(checkoutId)) return null;
-    return `task.completed:${checkoutId}`;
+    if (!checkoutIdFrom(e)) return null;
+    return `task.completed:${taskId}`;
   }
+  return null;
+}
+
+export function coalesceSiblingKind(kind: GoLiveKind): GoLiveKind | null {
+  if (kind === "pr.opened") return "task.completed";
+  if (kind === "task.completed") return "pr.opened";
   return null;
 }
 
@@ -190,16 +246,22 @@ export function formatGoLiveLine(
   input: { actor: string; taskId: string; title?: string; url?: string }
 ): string | null {
   const actor = sanitizeActor(input.actor);
-  const taskId = sanitizeTaskId(input.taskId);
-  if (!actor || !taskId) return null;
+  const taskLink = hubTaskMarkdown(input.taskId, input.title);
+  if (!actor || !taskLink) return null;
   let line: string;
   if (kind === "checkout") {
-    line = `${actor} claimed ${taskId} (${sanitizeTitle(input.title)})`;
+    line = `${actor} claimed ${taskLink}`;
   } else if (kind === "pr.opened") {
     if (!input.url) return null;
-    line = `PR opened for ${taskId}: ${input.url}`;
+    const prLink = prMarkdown(input.url);
+    if (!prLink) return null;
+    line = `PR opened for ${taskLink} — ${prLink}`;
+  } else if (input.url) {
+    const prLink = prMarkdown(input.url);
+    if (!prLink) return null;
+    line = `${taskLink} complete — ${prLink}`;
   } else {
-    line = `${taskId} complete`;
+    line = `${taskLink} complete`;
   }
   if (line.length > MAX_LINE) return null;
   return line;
@@ -234,20 +296,49 @@ async function defaultAlreadySent(eventId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-async function defaultMarkSent(eventId: string, receiptId: string): Promise<void> {
-  await query(
+async function defaultSiblingSent(taskId: string, kind: GoLiveKind, withinMs: number): Promise<boolean> {
+  const siblingId = `${kind}:${taskId}`;
+  const rows = await query<{ n: string }>(
+    `SELECT 1 AS n FROM mc_events
+      WHERE dedup_key = $1
+        AND ts > now() - ($2::text || ' milliseconds')::interval
+      LIMIT 1`,
+    [announceDedupKey(siblingId), String(Math.max(0, Math.floor(withinMs)))]
+  );
+  return rows.length > 0;
+}
+
+async function defaultClaimSent(eventId: string, meta: GoLiveClaimMeta): Promise<boolean> {
+  const azure = await putGoLiveDeliveryBlobIfNotExists({
+    eventId,
+    taskId: meta.taskId,
+    kind: meta.kind,
+  });
+  if (azure === "exists") return false;
+  const rows = await query<{ seq: string }>(
     `INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload, dedup_key)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING`,
+     ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING
+     RETURNING seq`,
     [
       "announce.sent",
       "mc-go-live",
       null,
+      meta.taskId,
       null,
-      null,
-      JSON.stringify({ eventId, receiptId }),
+      JSON.stringify({ eventId, status: "claimed", kind: meta.kind }),
       announceDedupKey(eventId),
     ]
+  );
+  return rows.length > 0;
+}
+
+async function defaultMarkSent(eventId: string, receiptId: string): Promise<void> {
+  await query(
+    `UPDATE mc_events
+        SET payload = coalesce(payload, '{}'::jsonb) || $2::jsonb
+      WHERE dedup_key = $1`,
+    [announceDedupKey(eventId), JSON.stringify({ eventId, receiptId, status: "sent" })]
   );
 }
 
@@ -334,12 +425,6 @@ async function postDestination(
   }
 }
 
-function chatWebhookForFanout(cfg: GoLiveConfig): string | null {
-  const url = cfg.chatWebhookUrl.trim();
-  if (!url || !isHttpsWebhookUrl(url)) return null;
-  return url;
-}
-
 export async function announceGoLiveEvent(
   event: GoLiveEventInput,
   deps: GoLiveDeps = {}
@@ -361,69 +446,72 @@ export async function announceGoLiveEvent(
   const taskId = sanitizeTaskId(event.taskId);
   if (!actor || !taskId) return { ...empty, skipped: "invalid_event", eventId };
 
-  let title: string | undefined;
-  let url: string | undefined;
-  if (kind === "checkout") {
-    title = sanitizeTitle(await (deps.loadTitle ?? defaultLoadTitle)(taskId));
-  }
-  if (kind === "pr.opened") {
-    const built = sanitizeGithubPrUrl(event.repo, event.pr);
-    if (!built) return { ...empty, skipped: "unapproved_url", eventId };
-    url = built;
-  }
+  const title = sanitizeTitle(await (deps.loadTitle ?? defaultLoadTitle)(taskId));
+  const url = prUrlFromEvent(event) ?? undefined;
+  if (kind === "pr.opened" && !url) return { ...empty, skipped: "unapproved_url", eventId };
 
   const line = formatGoLiveLine(kind, { actor, taskId, title, url });
   if (!line) return { ...empty, skipped: "invalid_event", eventId };
 
-  if (await (deps.alreadySent ?? defaultAlreadySent)(eventId)) {
+  const alreadySent = deps.alreadySent ?? defaultAlreadySent;
+  const claimSent = deps.claimSent ?? defaultClaimSent;
+  const siblingSent = deps.siblingSent ?? defaultSiblingSent;
+  const markSent = deps.markSent ?? defaultMarkSent;
+
+  if (await alreadySent(eventId)) {
     return { sent: false, skipped: "duplicate", eventId, line, receiptId: null };
   }
 
-  const postWebhook = deps.postWebhook ?? ((webhookUrl, text) => postTeamsWorkflow(webhookUrl, text));
-  const sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-  const chatUrl = chatWebhookForFanout(cfg);
+  const sibling = coalesceSiblingKind(kind);
+  if (sibling && (await siblingSent(taskId, sibling, COALESCE_WINDOW_MS))) {
+    const claimed = await claimSent(eventId, { taskId, kind });
+    if (claimed) await markSent(eventId, "coalesced");
+    return { sent: false, skipped: "coalesced", eventId, line, receiptId: null };
+  }
 
-  const [channelOutcome, chatOutcome] = await Promise.allSettled([
-    postDestination(cfg.webhookUrl, line, postWebhook, sleep),
-    chatUrl ? postDestination(chatUrl, line, postWebhook, sleep) : Promise.resolve(null),
-  ]);
+  const claimed = await claimSent(eventId, { taskId, kind });
+  if (!claimed) {
+    return { sent: false, skipped: "duplicate", eventId, line, receiptId: null };
+  }
 
-  const channelReceipt: GoLivePostReceipt =
-    channelOutcome.status === "fulfilled"
-      ? channelOutcome.value
-      : { ok: false, status: 0, receiptId: "throw", retryable: false, permanentAuth: false };
+  if (sibling && (await siblingSent(taskId, sibling, COALESCE_WINDOW_MS))) {
+    await markSent(eventId, "coalesced");
+    return { sent: false, skipped: "coalesced", eventId, line, receiptId: null };
+  }
 
-  if (chatUrl) {
-    const chatReceipt = chatOutcome.status === "fulfilled" ? chatOutcome.value : null;
-    if (!chatReceipt || !chatReceipt.ok) {
-      console.error(
-        "[go-live-announcer] chat send failed eventId=%s status=%s auth=%s retryable=%s",
-        eventId,
-        chatReceipt?.status ?? 0,
-        chatReceipt?.permanentAuth ?? false,
-        chatReceipt?.retryable ?? false
-      );
+  // Combined complete: claim the PR key so a lagging pr.opened webhook does not post.
+  if (kind === "task.completed" && url) {
+    const prEventId = `pr.opened:${taskId}`;
+    if (!(await alreadySent(prEventId))) {
+      await claimSent(prEventId, { taskId, kind: "pr.opened" });
     }
   }
 
-  if (!channelReceipt.ok) {
+  const dest = primaryDeliveryUrl(cfg);
+  if (!dest) return { ...empty, skipped: "missing_delivery", eventId, line };
+
+  const postWebhook = deps.postWebhook ?? ((webhookUrl, text) => postTeamsWorkflow(webhookUrl, text));
+  const sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const receipt = await postDestination(dest, line, postWebhook, sleep);
+
+  if (!receipt.ok) {
     console.error(
       "[go-live-announcer] send failed eventId=%s status=%s auth=%s retryable=%s",
       eventId,
-      channelReceipt.status,
-      channelReceipt.permanentAuth,
-      channelReceipt.retryable
+      receipt.status,
+      receipt.permanentAuth,
+      receipt.retryable
     );
     return {
       sent: false,
-      skipped: channelReceipt.permanentAuth ? "auth_failed" : "send_failed",
+      skipped: receipt.permanentAuth ? "auth_failed" : "send_failed",
       eventId,
       line,
-      receiptId: channelReceipt.receiptId,
+      receiptId: receipt.receiptId,
     };
   }
-  await (deps.markSent ?? defaultMarkSent)(eventId, channelReceipt.receiptId);
-  return { sent: true, skipped: null, eventId, line, receiptId: channelReceipt.receiptId };
+  await markSent(eventId, receipt.receiptId);
+  return { sent: true, skipped: null, eventId, line, receiptId: receipt.receiptId };
 }
 
 export async function announceGoLiveEventSafe(event: GoLiveEventInput): Promise<void> {

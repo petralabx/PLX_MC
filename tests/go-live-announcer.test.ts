@@ -277,6 +277,28 @@ describe("go-live kill switches", () => {
     expect(primaryDeliveryUrl(cfg)).toBe("https://example.invalid/chat");
   });
 
+  it("chat-only prod shape (channel URL absent, checkout off) actually posts", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run-chat-only"));
+    const result = await announceGoLiveEvent(completeEvent("TASK-1692"), {
+      loadConfig: () =>
+        enabledConfig({
+          MC_GO_LIVE_ANNOUNCE_CHECKOUT: "",
+          MC_GO_LIVE_TEAMS_WORKFLOW_URL: "",
+          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
+        }),
+      loadTitle: async () => "Restamp complete",
+      ...memoryDedupe(),
+      postWebhook,
+    });
+    expect(result.sent).toBe(true);
+    expect(result.skipped).toBeNull();
+    expect(postWebhook).toHaveBeenCalledTimes(1);
+    expect(postWebhook).toHaveBeenCalledWith(
+      "https://example.invalid/chat",
+      "[TASK-1692 — Restamp complete](https://mc.plxcustomer.io/tasks/TASK-1692) complete"
+    );
+  });
+
   it("wrong team fails closed", () => {
     expect(configBlocksSend(enabledConfig({ MC_GO_LIVE_TEAM_ID: "00000000-0000-0000-0000-000000000000" }))).toBe(
       "team_not_allowlisted"
@@ -365,26 +387,33 @@ describe("go-live send + dedup", () => {
     expect(postWebhook).not.toHaveBeenCalled();
   });
 
-  it("dedupes complete by taskId across different checkout receipts", async () => {
+  it("restamp complete of the same TASK posts once (two dsp_* → one dest)", async () => {
     const postWebhook = vi.fn(async () => okReceipt("run-complete"));
     const dedupe = memoryDedupe();
-    const first = await announceGoLiveEvent(completeEvent("TASK-1697", "dsp_firstcheckout1"), {
-      loadConfig: () => enabledConfig(),
-      loadTitle: async () => "Hard-dedupe announces",
+    const chatOnly = () =>
+      enabledConfig({
+        MC_GO_LIVE_ANNOUNCE_CHECKOUT: "",
+        MC_GO_LIVE_TEAMS_WORKFLOW_URL: "",
+        MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
+      });
+    const first = await announceGoLiveEvent(completeEvent("TASK-1692", "dsp_firstcheckout1"), {
+      loadConfig: chatOnly,
+      loadTitle: async () => "Restamp complete",
       ...dedupe,
       postWebhook,
     });
-    const second = await announceGoLiveEvent(completeEvent("TASK-1697", "dsp_secondcheckout2"), {
-      loadConfig: () => enabledConfig(),
-      loadTitle: async () => "Hard-dedupe announces",
+    const second = await announceGoLiveEvent(completeEvent("TASK-1692", "dsp_secondcheckout2"), {
+      loadConfig: chatOnly,
+      loadTitle: async () => "Restamp complete",
       ...dedupe,
       postWebhook,
     });
     expect(first.sent).toBe(true);
+    expect(second.sent).toBe(false);
     expect(second.skipped).toBe("duplicate");
     expect(postWebhook).toHaveBeenCalledTimes(1);
-    expect(eventIdFor(completeEvent("TASK-1697", "dsp_aaaa"))).toBe("task.completed:TASK-1697");
-    expect(eventIdFor(completeEvent("TASK-1697", "dsp_bbbb"))).toBe("task.completed:TASK-1697");
+    expect(eventIdFor(completeEvent("TASK-1692", "dsp_aaaa"))).toBe("task.completed:TASK-1692");
+    expect(eventIdFor(completeEvent("TASK-1692", "dsp_bbbb"))).toBe("task.completed:TASK-1692");
   });
 
   it("does not re-post after a failed send because the slot is already claimed", async () => {
@@ -503,20 +532,26 @@ describe("go-live send + dedup", () => {
     expect(postWebhook).toHaveBeenCalledTimes(1);
   });
 
-  it("posts only to chat when both Workflow URLs are set", async () => {
+  it("dual URLs still post to one dest (chat primary, never fan-out)", async () => {
     const postWebhook = vi.fn(async () => okReceipt("run-chat"));
-    const result = await announceGoLiveEvent(checkoutEvent(), {
+    const result = await announceGoLiveEvent(completeEvent("TASK-1697"), {
       loadConfig: () =>
         enabledConfig({
+          MC_GO_LIVE_ANNOUNCE_CHECKOUT: "",
+          MC_GO_LIVE_TEAMS_WORKFLOW_URL: "https://example.invalid/workflow",
           MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
         }),
-      loadTitle: async () => "Outbound Teams announcer",
+      loadTitle: async () => "Hard-dedupe announces",
       ...memoryDedupe(),
       postWebhook,
     });
     expect(result.sent).toBe(true);
     expect(postWebhook).toHaveBeenCalledTimes(1);
-    expect(postWebhook).toHaveBeenCalledWith("https://example.invalid/chat", `cursor claimed ${TITLE_LINK}`);
+    expect(postWebhook).toHaveBeenCalledWith(
+      "https://example.invalid/chat",
+      "[TASK-1697 — Hard-dedupe announces](https://mc.plxcustomer.io/tasks/TASK-1697) complete"
+    );
+    expect(postWebhook).not.toHaveBeenCalledWith("https://example.invalid/workflow", expect.anything());
   });
 
   it("falls back to the channel Workflow when chat URL is empty", async () => {

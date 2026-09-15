@@ -242,7 +242,7 @@ integrations:
 
   - id: mc-go-live-announcer
     name: Go-live Teams announcer
-    resolves: TASK-1454 / TASK-1524 / TASK-1699
+    resolves: TASK-1454 / TASK-1524 / TASK-1699 / TASK-1701
     owner: Vince (vince@petrasoap.com)
     criticality: Medium
     scope: runtime (gated; chat Workflow is the live dest)

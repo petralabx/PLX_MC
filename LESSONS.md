@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-09-15 (ET) — Go-live coalesce on any claim dropped both posts
+
+- **What happened:** Bugbot on PLX_MC #243: `siblingSent` treated any `announce:` row as sent, and combined complete claimed `pr.opened` before the Workflow POST. A failed send, or two overlapping claims, could coalesce both kinds and leave chat empty. Blob `exists` before Postgres insert could also stick a retry.
+- **Root cause:** Coalesce keyed off row presence, not `payload.status = sent`. Sibling PR claim ran pre-POST. Blob overlay was the claim gate.
+- **Rule going forward:** Coalesce only when the sibling is `sent`. Claim the PR key after a successful combined complete POST. Postgres insert first; blob overlay after a won insert. Same-kind restamp still one attempt. Prefer two overlapping posts over zero.
+
 ### 2026-09-15 (ET) — Go-live chat dupes were claim-after-send plus a weak key
 
 - **What happened:** The operator go-live Teams chat showed TASK-1692/1697 complete twice, plus a PR-open line with a raw GitHub URL, after the channel Workflow had already been removed from Vercel.

@@ -344,3 +344,35 @@ export function cursorAdminApiKey(): string {
   }
   return value;
 }
+
+// Optional Azure Blob overlay for BC go-live announce delivery state
+// (TASK-1454 approved account `stvmcresearch`; TASK-1699 wires the client).
+// Absent connection string → overlay skipped; Postgres claim stays required.
+export const GO_LIVE_STORAGE_ACCOUNT = "stvmcresearch";
+export const GO_LIVE_DELIVERY_CONTAINER_DEFAULT = "mc-go-live-delivery";
+
+export interface GoLiveDeliveryStorage {
+  accountName: string;
+  container: string;
+  connectionString: string;
+}
+
+export function goLiveDeliveryStorageConfigured(): boolean {
+  return !!firstSecret("MC_GO_LIVE_STORAGE_CONNECTION_STRING", "AZURE_STORAGE_CONNECTION_STRING");
+}
+
+export function goLiveDeliveryStorage(): GoLiveDeliveryStorage | null {
+  const connectionString = firstSecret(
+    "MC_GO_LIVE_STORAGE_CONNECTION_STRING",
+    "AZURE_STORAGE_CONNECTION_STRING"
+  );
+  if (!connectionString) return null;
+  const accountMatch = /AccountName=([^;]+)/i.exec(connectionString);
+  const accountName = (accountMatch?.[1] ?? "").trim();
+  if (accountName !== GO_LIVE_STORAGE_ACCOUNT) return null;
+  const container = (process.env.MC_GO_LIVE_DELIVERY_CONTAINER ?? GO_LIVE_DELIVERY_CONTAINER_DEFAULT)
+    .trim()
+    .toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(container)) return null;
+  return { accountName, container, connectionString };
+}

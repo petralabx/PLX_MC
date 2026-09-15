@@ -239,3 +239,38 @@ integrations:
       Search snippets and article bodies from VMC knowledge. No secret values
       logged. Writes stay on the VMC ingest / session-artifact path, not this
       MC read surface.
+
+  - id: mc-go-live-announcer
+    name: Go-live Teams announcer
+    resolves: TASK-1454 / TASK-1524 / TASK-1699
+    owner: Vince (vince@petrasoap.com)
+    criticality: Medium
+    scope: runtime (gated; chat Workflow is the live dest)
+    autonomous: true # posts into the operator go-live Teams chat
+    default_state: off (MC_GO_LIVE_ANNOUNCER_ENABLED defaults off; ANNOUNCE_CHECKOUT stays off)
+    feature_flag: >-
+      MC_GO_LIVE_ANNOUNCER_ENABLED plus per-event MC_GO_LIVE_ANNOUNCE_PR_OPEN /
+      MC_GO_LIVE_ANNOUNCE_COMPLETE. MC_GO_LIVE_ANNOUNCE_CHECKOUT must stay off
+      unless operators explicitly re-enable.
+    kill_switch: >-
+      MC_GO_LIVE_ANNOUNCER_ENABLED=0, MC_GO_LIVE_ANNOUNCER_DRY_RUN=1, or turn
+      the Power Automate Workflow Off. Do not delete the Team or chat.
+    auth_source:
+      - Teams Workflow URLs from the shared secret store
+        (MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL intended live path;
+        MC_GO_LIVE_TEAMS_WORKFLOW_URL optional channel fallback)
+      - Optional Azure Blob delivery state on allowlisted account stvmcresearch
+        via goLiveDeliveryStorage() (MC_GO_LIVE_STORAGE_CONNECTION_STRING or
+        AZURE_STORAGE_CONNECTION_STRING)
+    health_check: >-
+      Unit tests in tests/go-live-announcer.test.ts and
+      tests/go-live-delivery-blob.test.ts. Runtime: announce.sent rows plus
+      optional blob objects; webhook URLs are never logged.
+    fallback_path: >-
+      Unset announcer flags. Postgres mc_events claim is the always-on dedupe
+      gate; Azure Blob is an overlay when the connection string is present.
+      Channel Workflow is used only when the chat URL is empty.
+    data_audit_boundary: >-
+      Posts one markdown line (task title + Hub/PR deep links). No inbound
+      Teams history is read. Connection strings, Workflow URLs, and SAS are
+      never logged. Dedup keys are announce:<kind>:<taskId>.

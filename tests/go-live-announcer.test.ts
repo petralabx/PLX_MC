@@ -1,17 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  COALESCE_WINDOW_MS,
   GO_LIVE_CHANNEL_ID,
   GO_LIVE_TEAM_ID,
   announceGoLiveEvent,
   classifyWebhookStatus,
+  coalesceSiblingKind,
   configBlocksSend,
   eventIdFor,
   formatGoLiveLine,
+  hubTaskMarkdown,
   loadGoLiveConfig,
   normalizeGithubRepo,
+  prMarkdown,
+  prUrlFromEvent,
+  primaryDeliveryUrl,
   sanitizeGithubPrUrl,
   sanitizeTaskId,
+  type GoLiveKind,
 } from "@/lib/compliance/go-live-announcer";
 
 function enabledConfig(overrides: Record<string, string> = {}) {
@@ -28,41 +35,122 @@ function enabledConfig(overrides: Record<string, string> = {}) {
   });
 }
 
-function checkoutEvent() {
+function checkoutEvent(taskId = "TASK-1454") {
   return {
     kind: "checkout",
     actor: "cursor",
     repo: "petralabx/plx-customer-portal",
-    taskId: "TASK-1454",
+    taskId,
     payload: { checkoutId: "dsp_mtrj5s9mn2ilbt" },
   };
 }
 
+function completeEvent(taskId = "TASK-1454", checkoutId = "dsp_mtrj5s9mn2ilbt") {
+  return {
+    kind: "task.completed",
+    actor: "cursor",
+    taskId,
+    payload: { checkoutId },
+  };
+}
+
+function prOpenEvent(taskId = "TASK-1454") {
+  return {
+    kind: "pr.opened",
+    actor: "cursor",
+    repo: "petralabx/PLX_MC",
+    taskId,
+    pr: "231",
+  };
+}
+
+function okReceipt(receiptId: string) {
+  return {
+    ok: true,
+    status: 202,
+    receiptId,
+    retryable: false,
+    permanentAuth: false,
+  };
+}
+
+function memoryDedupe() {
+  const sent = new Map<string, { ts: number; receipt?: string }>();
+  const clock = { t: Date.now() };
+  return {
+    clock,
+    sent,
+    alreadySent: async (id: string) => sent.has(id),
+    claimSent: async (id: string) => {
+      if (sent.has(id)) return false;
+      sent.set(id, { ts: clock.t });
+      return true;
+    },
+    siblingSent: async (taskId: string, kind: GoLiveKind, withinMs: number) => {
+      const row = sent.get(`${kind}:${taskId}`);
+      if (!row) return false;
+      return clock.t - row.ts <= withinMs;
+    },
+    markSent: async (id: string, receiptId: string) => {
+      sent.set(id, { ...(sent.get(id) ?? { ts: clock.t }), receipt: receiptId });
+    },
+  };
+}
+
+const HUB = "https://mc.plxcustomer.io/tasks/TASK-1454";
+const TITLE_LINK = `[TASK-1454 — Outbound Teams announcer](${HUB})`;
+
 describe("go-live formatter", () => {
-  it("formats checkout as one line", () => {
+  it("formats checkout with a Hub title deep link", () => {
     expect(
       formatGoLiveLine("checkout", {
         actor: "cursor",
         taskId: "TASK-1454",
         title: "Outbound Teams announcer",
       })
-    ).toBe("cursor claimed TASK-1454 (Outbound Teams announcer)");
+    ).toBe(`cursor claimed ${TITLE_LINK}`);
   });
 
-  it("formats PR-open as one line", () => {
+  it("formats PR-open with title and PR markdown links", () => {
     expect(
       formatGoLiveLine("pr.opened", {
         actor: "cursor",
         taskId: "TASK-1454",
+        title: "Outbound Teams announcer",
         url: "https://github.com/petralabx/PLX_MC/pull/231",
       })
-    ).toBe("PR opened for TASK-1454: https://github.com/petralabx/PLX_MC/pull/231");
+    ).toBe(`${`PR opened for ${TITLE_LINK} — [PR #231](https://github.com/petralabx/PLX_MC/pull/231)`}`);
   });
 
-  it("formats completion as one line", () => {
-    expect(formatGoLiveLine("task.completed", { actor: "cursor", taskId: "TASK-1454" })).toBe(
-      "TASK-1454 complete"
+  it("formats completion with a Hub title deep link", () => {
+    expect(
+      formatGoLiveLine("task.completed", {
+        actor: "cursor",
+        taskId: "TASK-1454",
+        title: "Outbound Teams announcer",
+      })
+    ).toBe(`${TITLE_LINK} complete`);
+  });
+
+  it("formats a combined complete + PR line", () => {
+    expect(
+      formatGoLiveLine("task.completed", {
+        actor: "cursor",
+        taskId: "TASK-1454",
+        title: "Outbound Teams announcer",
+        url: "https://github.com/petralabx/PLX_MC/pull/1571",
+      })
+    ).toBe(`${TITLE_LINK} complete — [PR #1571](https://github.com/petralabx/PLX_MC/pull/1571)`);
+  });
+
+  it("builds Hub and PR markdown", () => {
+    expect(hubTaskMarkdown("TASK-1697", "Hard-dedupe announces")).toBe(
+      "[TASK-1697 — Hard-dedupe announces](https://mc.plxcustomer.io/tasks/TASK-1697)"
     );
+    expect(prMarkdown("https://github.com/petralabx/PLX_MC/pull/1571")).toBe(
+      "[PR #1571](https://github.com/petralabx/PLX_MC/pull/1571)"
+    );
+    expect(prMarkdown("https://github.com/evil/org/pull/1")).toBeNull();
   });
 
   it("rejects invalid task IDs", () => {
@@ -98,16 +186,27 @@ describe("go-live formatter", () => {
     );
     expect(sanitizeGithubPrUrl("not-allowlisted", "1")).toBeNull();
   });
+
+  it("reads a complete-payload PR URL from the allowlisted org", () => {
+    expect(
+      prUrlFromEvent({
+        kind: "task.completed",
+        actor: "cursor",
+        taskId: "TASK-1697",
+        payload: { checkoutId: "dsp_abc", prUrl: "https://github.com/petralabx/PLX_MC/pull/1571" },
+      })
+    ).toBe("https://github.com/petralabx/PLX_MC/pull/1571");
+  });
 });
 
 describe("go-live kill switches", () => {
   it("global disabled sends nothing", async () => {
     const postWebhook = vi.fn();
+    const dedupe = memoryDedupe();
     const result = await announceGoLiveEvent(checkoutEvent(), {
       loadConfig: () => enabledConfig({ MC_GO_LIVE_ANNOUNCER_ENABLED: "0" }),
       loadTitle: async () => "Outbound Teams announcer",
-      alreadySent: async () => false,
-      markSent: async () => undefined,
+      ...dedupe,
       postWebhook,
     });
     expect(result.sent).toBe(false);
@@ -120,8 +219,7 @@ describe("go-live kill switches", () => {
     const result = await announceGoLiveEvent(checkoutEvent(), {
       loadConfig: () => enabledConfig({ MC_GO_LIVE_ANNOUNCE_CHECKOUT: "0" }),
       loadTitle: async () => "title",
-      alreadySent: async () => false,
-      markSent: async () => undefined,
+      ...memoryDedupe(),
       postWebhook,
     });
     expect(result.skipped).toBe("checkout_disabled");
@@ -130,41 +228,22 @@ describe("go-live kill switches", () => {
 
   it("PR-open disabled sends nothing", async () => {
     const postWebhook = vi.fn();
-    const result = await announceGoLiveEvent(
-      {
-        kind: "pr.opened",
-        actor: "cursor",
-        repo: "petralabx/PLX_MC",
-        taskId: "TASK-1454",
-        pr: "231",
-      },
-      {
-        loadConfig: () => enabledConfig({ MC_GO_LIVE_ANNOUNCE_PR_OPEN: "0" }),
-        alreadySent: async () => false,
-        markSent: async () => undefined,
-        postWebhook,
-      }
-    );
+    const result = await announceGoLiveEvent(prOpenEvent(), {
+      loadConfig: () => enabledConfig({ MC_GO_LIVE_ANNOUNCE_PR_OPEN: "0" }),
+      ...memoryDedupe(),
+      postWebhook,
+    });
     expect(result.skipped).toBe("pr_open_disabled");
     expect(postWebhook).not.toHaveBeenCalled();
   });
 
   it("complete disabled sends nothing", async () => {
     const postWebhook = vi.fn();
-    const result = await announceGoLiveEvent(
-      {
-        kind: "task.completed",
-        actor: "cursor",
-        taskId: "TASK-1454",
-        payload: { checkoutId: "dsp_mtrj5s9mn2ilbt" },
-      },
-      {
-        loadConfig: () => enabledConfig({ MC_GO_LIVE_ANNOUNCE_COMPLETE: "0" }),
-        alreadySent: async () => false,
-        markSent: async () => undefined,
-        postWebhook,
-      }
-    );
+    const result = await announceGoLiveEvent(completeEvent(), {
+      loadConfig: () => enabledConfig({ MC_GO_LIVE_ANNOUNCE_COMPLETE: "0" }),
+      ...memoryDedupe(),
+      postWebhook,
+    });
     expect(result.skipped).toBe("complete_disabled");
     expect(postWebhook).not.toHaveBeenCalled();
   });
@@ -174,17 +253,49 @@ describe("go-live kill switches", () => {
     const result = await announceGoLiveEvent(checkoutEvent(), {
       loadConfig: () => enabledConfig({ MC_GO_LIVE_ANNOUNCER_DRY_RUN: "1" }),
       loadTitle: async () => "title",
-      alreadySent: async () => false,
-      markSent: async () => undefined,
+      ...memoryDedupe(),
       postWebhook,
     });
     expect(result.skipped).toBe("dry_run");
     expect(postWebhook).not.toHaveBeenCalled();
   });
 
-  it("missing webhook fails closed", () => {
-    expect(configBlocksSend(enabledConfig({ MC_GO_LIVE_TEAMS_WORKFLOW_URL: "" }))).toBe(
-      "missing_webhook"
+  it("missing delivery URL fails closed", () => {
+    expect(
+      configBlocksSend(
+        enabledConfig({ MC_GO_LIVE_TEAMS_WORKFLOW_URL: "", MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "" })
+      )
+    ).toBe("missing_delivery");
+  });
+
+  it("chat-only config is enough to send", () => {
+    const cfg = enabledConfig({
+      MC_GO_LIVE_TEAMS_WORKFLOW_URL: "",
+      MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
+    });
+    expect(configBlocksSend(cfg)).toBeNull();
+    expect(primaryDeliveryUrl(cfg)).toBe("https://example.invalid/chat");
+  });
+
+  it("chat-only prod shape (channel URL absent, checkout off) actually posts", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run-chat-only"));
+    const result = await announceGoLiveEvent(completeEvent("TASK-1692"), {
+      loadConfig: () =>
+        enabledConfig({
+          MC_GO_LIVE_ANNOUNCE_CHECKOUT: "",
+          MC_GO_LIVE_TEAMS_WORKFLOW_URL: "",
+          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
+        }),
+      loadTitle: async () => "Restamp complete",
+      ...memoryDedupe(),
+      postWebhook,
+    });
+    expect(result.sent).toBe(true);
+    expect(result.skipped).toBeNull();
+    expect(postWebhook).toHaveBeenCalledTimes(1);
+    expect(postWebhook).toHaveBeenCalledWith(
+      "https://example.invalid/chat",
+      "[TASK-1692 — Restamp complete](https://mc.plxcustomer.io/tasks/TASK-1692) complete"
     );
   });
 
@@ -208,8 +319,7 @@ describe("go-live kill switches", () => {
       { kind: "message", actor: "cursor", taskId: "TASK-1454" },
       {
         loadConfig: () => enabledConfig(),
-        alreadySent: async () => false,
-        markSent: async () => undefined,
+        ...memoryDedupe(),
         postWebhook,
       }
     );
@@ -220,94 +330,119 @@ describe("go-live kill switches", () => {
 
 describe("go-live send + dedup", () => {
   it("sends a valid checkout once", async () => {
-    const postWebhook = vi.fn(async () => ({
-      ok: true,
-      status: 202,
-      receiptId: "run-checkout-1",
-      retryable: false,
-      permanentAuth: false,
-    }));
-    const markSent = vi.fn();
+    const postWebhook = vi.fn(async () => okReceipt("run-checkout-1"));
+    const dedupe = memoryDedupe();
     const result = await announceGoLiveEvent(checkoutEvent(), {
       loadConfig: () => enabledConfig(),
       loadTitle: async () => "Outbound Teams announcer",
-      alreadySent: async () => false,
-      markSent,
+      ...dedupe,
       postWebhook,
     });
     expect(result.sent).toBe(true);
-    expect(result.line).toBe("cursor claimed TASK-1454 (Outbound Teams announcer)");
+    expect(result.line).toBe(`cursor claimed ${TITLE_LINK}`);
     expect(result.receiptId).toBe("run-checkout-1");
     expect(postWebhook).toHaveBeenCalledTimes(1);
-    expect(markSent).toHaveBeenCalledWith("checkout:dsp_mtrj5s9mn2ilbt", "run-checkout-1");
+    expect(dedupe.sent.get("checkout:TASK-1454")?.receipt).toBe("run-checkout-1");
   });
 
-  it("sends a valid PR-open once", async () => {
-    const postWebhook = vi.fn(async () => ({
-      ok: true,
-      status: 202,
-      receiptId: "run-pr-1",
-      retryable: false,
-      permanentAuth: false,
-    }));
-    const result = await announceGoLiveEvent(
-      {
-        kind: "pr.opened",
-        actor: "cursor",
-        repo: "petralabx/PLX_MC",
-        taskId: "TASK-1454",
-        pr: "231",
-      },
-      {
-        loadConfig: () => enabledConfig(),
-        alreadySent: async () => false,
-        markSent: async () => undefined,
-        postWebhook,
-      }
-    );
+  it("sends a valid PR-open once with markdown links", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run-pr-1"));
+    const result = await announceGoLiveEvent(prOpenEvent(), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Outbound Teams announcer",
+      ...memoryDedupe(),
+      postWebhook,
+    });
     expect(result.sent).toBe(true);
-    expect(result.line).toBe("PR opened for TASK-1454: https://github.com/petralabx/PLX_MC/pull/231");
+    expect(result.line).toBe(
+      `PR opened for ${TITLE_LINK} — [PR #231](https://github.com/petralabx/PLX_MC/pull/231)`
+    );
     expect(result.receiptId).toBe("run-pr-1");
   });
 
   it("sends a valid completion once", async () => {
-    const postWebhook = vi.fn(async () => ({
-      ok: true,
-      status: 202,
-      receiptId: "run-complete-1",
-      retryable: false,
-      permanentAuth: false,
-    }));
-    const result = await announceGoLiveEvent(
-      {
-        kind: "task.completed",
-        actor: "cursor",
-        taskId: "TASK-1454",
-        payload: { checkoutId: "dsp_mtrj5s9mn2ilbt" },
-      },
-      {
-        loadConfig: () => enabledConfig(),
-        alreadySent: async () => false,
-        markSent: async () => undefined,
-        postWebhook,
-      }
-    );
+    const postWebhook = vi.fn(async () => okReceipt("run-complete-1"));
+    const result = await announceGoLiveEvent(completeEvent(), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Outbound Teams announcer",
+      ...memoryDedupe(),
+      postWebhook,
+    });
     expect(result.sent).toBe(true);
-    expect(result.line).toBe("TASK-1454 complete");
+    expect(result.line).toBe(`${TITLE_LINK} complete`);
     expect(result.receiptId).toBe("run-complete-1");
   });
 
   it("duplicate event ID produces no second post", async () => {
     const postWebhook = vi.fn();
+    const dedupe = memoryDedupe();
+    await dedupe.claimSent("checkout:TASK-1454");
     const result = await announceGoLiveEvent(checkoutEvent(), {
       loadConfig: () => enabledConfig(),
       loadTitle: async () => "title",
-      alreadySent: async () => true,
-      markSent: async () => undefined,
+      ...dedupe,
       postWebhook,
     });
     expect(result.skipped).toBe("duplicate");
     expect(postWebhook).not.toHaveBeenCalled();
+  });
+
+  it("restamp complete of the same TASK posts once (two dsp_* → one dest)", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run-complete"));
+    const dedupe = memoryDedupe();
+    const chatOnly = () =>
+      enabledConfig({
+        MC_GO_LIVE_ANNOUNCE_CHECKOUT: "",
+        MC_GO_LIVE_TEAMS_WORKFLOW_URL: "",
+        MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
+      });
+    const first = await announceGoLiveEvent(completeEvent("TASK-1692", "dsp_firstcheckout1"), {
+      loadConfig: chatOnly,
+      loadTitle: async () => "Restamp complete",
+      ...dedupe,
+      postWebhook,
+    });
+    const second = await announceGoLiveEvent(completeEvent("TASK-1692", "dsp_secondcheckout2"), {
+      loadConfig: chatOnly,
+      loadTitle: async () => "Restamp complete",
+      ...dedupe,
+      postWebhook,
+    });
+    expect(first.sent).toBe(true);
+    expect(second.sent).toBe(false);
+    expect(second.skipped).toBe("duplicate");
+    expect(postWebhook).toHaveBeenCalledTimes(1);
+    expect(eventIdFor(completeEvent("TASK-1692", "dsp_aaaa"))).toBe("task.completed:TASK-1692");
+    expect(eventIdFor(completeEvent("TASK-1692", "dsp_bbbb"))).toBe("task.completed:TASK-1692");
+  });
+
+  it("does not re-post after a failed send because the slot is already claimed", async () => {
+    const postWebhook = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        receiptId: "http-401",
+        retryable: false,
+        permanentAuth: true,
+      })
+      .mockResolvedValueOnce(okReceipt("should-not-send"));
+    const dedupe = memoryDedupe();
+    const first = await announceGoLiveEvent(completeEvent("TASK-1692"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "title",
+      ...dedupe,
+      postWebhook,
+    });
+    const second = await announceGoLiveEvent(completeEvent("TASK-1692", "dsp_othercheckout99"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "title",
+      ...dedupe,
+      postWebhook,
+    });
+    expect(first.skipped).toBe("auth_failed");
+    expect(second.skipped).toBe("duplicate");
+    expect(postWebhook).toHaveBeenCalledTimes(1);
   });
 
   it("retries transient send errors then succeeds", async () => {
@@ -320,18 +455,11 @@ describe("go-live send + dedup", () => {
         retryable: true,
         permanentAuth: false,
       })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 202,
-        receiptId: "run-retry",
-        retryable: false,
-        permanentAuth: false,
-      });
+      .mockResolvedValueOnce(okReceipt("run-retry"));
     const result = await announceGoLiveEvent(checkoutEvent(), {
       loadConfig: () => enabledConfig(),
-      loadTitle: async () => "title",
-      alreadySent: async () => false,
-      markSent: async () => undefined,
+      loadTitle: async () => "Outbound Teams announcer",
+      ...memoryDedupe(),
       postWebhook,
       sleep: async () => undefined,
     });
@@ -351,8 +479,7 @@ describe("go-live send + dedup", () => {
     const result = await announceGoLiveEvent(checkoutEvent(), {
       loadConfig: () => enabledConfig(),
       loadTitle: async () => "title",
-      alreadySent: async () => false,
-      markSent: async () => undefined,
+      ...memoryDedupe(),
       postWebhook,
       sleep: async () => undefined,
     });
@@ -366,11 +493,8 @@ describe("go-live send + dedup", () => {
     expect(classifyWebhookStatus(503)).toEqual({ retryable: true, permanentAuth: false });
   });
 
-  it("builds checkout event IDs from the checkout credential", () => {
-    expect(eventIdFor(checkoutEvent())).toBe("checkout:dsp_mtrj5s9mn2ilbt");
-  });
-
-  it("builds PR-open event IDs from a bare stored slug", () => {
+  it("builds event IDs from taskId + kind, not checkout receipts", () => {
+    expect(eventIdFor(checkoutEvent())).toBe("checkout:TASK-1454");
     expect(
       eventIdFor({
         kind: "pr.opened",
@@ -379,17 +503,13 @@ describe("go-live send + dedup", () => {
         taskId: "TASK-1454",
         pr: "232",
       })
-    ).toBe("pr.opened:plx-customer-portal:232");
+    ).toBe("pr.opened:TASK-1454");
+    expect(coalesceSiblingKind("pr.opened")).toBe("task.completed");
+    expect(coalesceSiblingKind("task.completed")).toBe("pr.opened");
   });
 
   it("sends a PR-open announce when mc_events stored a bare slug", async () => {
-    const postWebhook = vi.fn(async () => ({
-      ok: true,
-      status: 202,
-      receiptId: "run-pr-bare",
-      retryable: false,
-      permanentAuth: false,
-    }));
+    const postWebhook = vi.fn(async () => okReceipt("run-pr-bare"));
     const result = await announceGoLiveEvent(
       {
         kind: "pr.opened",
@@ -400,169 +520,150 @@ describe("go-live send + dedup", () => {
       },
       {
         loadConfig: () => enabledConfig(),
-        alreadySent: async () => false,
-        markSent: async () => undefined,
+        loadTitle: async () => "Bare slug PR announce",
+        ...memoryDedupe(),
         postWebhook,
       }
     );
     expect(result.sent).toBe(true);
     expect(result.line).toBe(
-      "PR opened for TASK-1524: https://github.com/petralabx/plx-customer-portal/pull/240"
+      "PR opened for [TASK-1524 — Bare slug PR announce](https://mc.plxcustomer.io/tasks/TASK-1524) — [PR #240](https://github.com/petralabx/plx-customer-portal/pull/240)"
     );
     expect(postWebhook).toHaveBeenCalledTimes(1);
   });
 
-  it("fans out to the optional chat Workflow when set", async () => {
-    const postWebhook = vi.fn(async () => ({
-      ok: true,
-      status: 202,
-      receiptId: "run-fanout",
-      retryable: false,
-      permanentAuth: false,
-    }));
-    const result = await announceGoLiveEvent(checkoutEvent(), {
+  it("dual URLs still post to one dest (chat primary, never fan-out)", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run-chat"));
+    const result = await announceGoLiveEvent(completeEvent("TASK-1697"), {
       loadConfig: () =>
         enabledConfig({
+          MC_GO_LIVE_ANNOUNCE_CHECKOUT: "",
+          MC_GO_LIVE_TEAMS_WORKFLOW_URL: "https://example.invalid/workflow",
           MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
         }),
-      loadTitle: async () => "Outbound Teams announcer",
-      alreadySent: async () => false,
-      markSent: async () => undefined,
+      loadTitle: async () => "Hard-dedupe announces",
+      ...memoryDedupe(),
       postWebhook,
     });
     expect(result.sent).toBe(true);
-    expect(postWebhook).toHaveBeenCalledTimes(2);
-    expect(postWebhook).toHaveBeenCalledWith(
-      "https://example.invalid/workflow",
-      "cursor claimed TASK-1454 (Outbound Teams announcer)"
-    );
+    expect(postWebhook).toHaveBeenCalledTimes(1);
     expect(postWebhook).toHaveBeenCalledWith(
       "https://example.invalid/chat",
-      "cursor claimed TASK-1454 (Outbound Teams announcer)"
+      "[TASK-1697 — Hard-dedupe announces](https://mc.plxcustomer.io/tasks/TASK-1697) complete"
     );
+    expect(postWebhook).not.toHaveBeenCalledWith("https://example.invalid/workflow", expect.anything());
   });
 
-  it("marks announce.sent when channel succeeds even if chat fails", async () => {
-    const postWebhook = vi.fn(async (url: string) => {
-      if (url === "https://example.invalid/chat") {
-        return {
-          ok: false,
-          status: 400,
-          receiptId: "http-400",
-          retryable: false,
-          permanentAuth: false,
-        };
-      }
-      return {
-        ok: true,
-        status: 202,
-        receiptId: "run-channel",
-        retryable: false,
-        permanentAuth: false,
-      };
-    });
-    const markSent = vi.fn();
+  it("falls back to the channel Workflow when chat URL is empty", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run-channel-only"));
     const result = await announceGoLiveEvent(checkoutEvent(), {
-      loadConfig: () =>
-        enabledConfig({
-          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
-        }),
-      loadTitle: async () => "title",
-      alreadySent: async () => false,
-      markSent,
-      postWebhook,
-    });
-    expect(result.sent).toBe(true);
-    expect(result.receiptId).toBe("run-channel");
-    expect(markSent).toHaveBeenCalledWith("checkout:dsp_mtrj5s9mn2ilbt", "run-channel");
-    expect(postWebhook).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not mark announce.sent when channel fails even if chat succeeds", async () => {
-    const postWebhook = vi.fn(async (url: string) => {
-      if (url === "https://example.invalid/workflow") {
-        return {
-          ok: false,
-          status: 503,
-          receiptId: "http-503",
-          retryable: false,
-          permanentAuth: false,
-        };
-      }
-      return {
-        ok: true,
-        status: 202,
-        receiptId: "run-chat",
-        retryable: false,
-        permanentAuth: false,
-      };
-    });
-    const markSent = vi.fn();
-    const result = await announceGoLiveEvent(checkoutEvent(), {
-      loadConfig: () =>
-        enabledConfig({
-          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
-        }),
-      loadTitle: async () => "title",
-      alreadySent: async () => false,
-      markSent,
-      postWebhook,
-      sleep: async () => undefined,
-    });
-    expect(result.sent).toBe(false);
-    expect(result.skipped).toBe("send_failed");
-    expect(markSent).not.toHaveBeenCalled();
-    expect(postWebhook).toHaveBeenCalledTimes(2);
-  });
-
-  it("still marks channel success when the chat dest throws", async () => {
-    const postWebhook = vi.fn(async (url: string) => {
-      if (url === "https://example.invalid/chat") {
-        throw new Error("network");
-      }
-      return {
-        ok: true,
-        status: 202,
-        receiptId: "run-channel-throw",
-        retryable: false,
-        permanentAuth: false,
-      };
-    });
-    const markSent = vi.fn();
-    const result = await announceGoLiveEvent(checkoutEvent(), {
-      loadConfig: () =>
-        enabledConfig({
-          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "https://example.invalid/chat",
-        }),
-      loadTitle: async () => "title",
-      alreadySent: async () => false,
-      markSent,
-      postWebhook,
-    });
-    expect(result.sent).toBe(true);
-    expect(markSent).toHaveBeenCalledWith("checkout:dsp_mtrj5s9mn2ilbt", "run-channel-throw");
-  });
-
-  it("skips a malformed chat Workflow URL without blocking the channel", async () => {
-    const postWebhook = vi.fn(async () => ({
-      ok: true,
-      status: 202,
-      receiptId: "run-channel-only",
-      retryable: false,
-      permanentAuth: false,
-    }));
-    const result = await announceGoLiveEvent(checkoutEvent(), {
-      loadConfig: () =>
-        enabledConfig({
-          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "http://example.invalid/chat",
-        }),
-      loadTitle: async () => "title",
-      alreadySent: async () => false,
-      markSent: async () => undefined,
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Outbound Teams announcer",
+      ...memoryDedupe(),
       postWebhook,
     });
     expect(result.sent).toBe(true);
     expect(postWebhook).toHaveBeenCalledTimes(1);
     expect(postWebhook).toHaveBeenCalledWith("https://example.invalid/workflow", expect.any(String));
+  });
+
+  it("skips a malformed chat Workflow URL and uses the channel fallback", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run-channel-fallback"));
+    const result = await announceGoLiveEvent(checkoutEvent(), {
+      loadConfig: () =>
+        enabledConfig({
+          MC_GO_LIVE_TEAMS_CHAT_WORKFLOW_URL: "http://example.invalid/chat",
+        }),
+      loadTitle: async () => "Outbound Teams announcer",
+      ...memoryDedupe(),
+      postWebhook,
+    });
+    expect(result.sent).toBe(true);
+    expect(postWebhook).toHaveBeenCalledTimes(1);
+    expect(postWebhook).toHaveBeenCalledWith("https://example.invalid/workflow", expect.any(String));
+  });
+
+  it("coalesces complete when PR-open already posted for the same task", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run"));
+    const dedupe = memoryDedupe();
+    const pr = await announceGoLiveEvent(prOpenEvent("TASK-1697"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Dedupe work",
+      ...dedupe,
+      postWebhook,
+    });
+    const complete = await announceGoLiveEvent(completeEvent("TASK-1697"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Dedupe work",
+      ...dedupe,
+      postWebhook,
+    });
+    expect(pr.sent).toBe(true);
+    expect(complete.skipped).toBe("coalesced");
+    expect(postWebhook).toHaveBeenCalledTimes(1);
+  });
+
+  it("coalesces PR-open when complete already posted for the same task", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run"));
+    const dedupe = memoryDedupe();
+    const complete = await announceGoLiveEvent(completeEvent("TASK-1697"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Dedupe work",
+      ...dedupe,
+      postWebhook,
+    });
+    const pr = await announceGoLiveEvent(prOpenEvent("TASK-1697"), {
+      loadConfig: () => enabledConfig(),
+      loadTitle: async () => "Dedupe work",
+      ...dedupe,
+      postWebhook,
+    });
+    expect(complete.sent).toBe(true);
+    expect(pr.skipped).toBe("coalesced");
+    expect(postWebhook).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends one combined complete line and suppresses a later PR-open", async () => {
+    const postWebhook = vi.fn(async () => okReceipt("run-combined"));
+    const dedupe = memoryDedupe();
+    const complete = await announceGoLiveEvent(
+      {
+        kind: "task.completed",
+        actor: "cursor",
+        taskId: "TASK-1697",
+        payload: {
+          checkoutId: "dsp_combined1",
+          prUrl: "https://github.com/petralabx/PLX_MC/pull/1571",
+        },
+      },
+      {
+        loadConfig: () => enabledConfig(),
+        loadTitle: async () => "Hard-dedupe announces",
+        ...dedupe,
+        postWebhook,
+      }
+    );
+    const pr = await announceGoLiveEvent(
+      {
+        kind: "pr.opened",
+        actor: "cursor",
+        repo: "PLX_MC",
+        taskId: "TASK-1697",
+        pr: "1571",
+      },
+      {
+        loadConfig: () => enabledConfig(),
+        loadTitle: async () => "Hard-dedupe announces",
+        ...dedupe,
+        postWebhook,
+      }
+    );
+    expect(complete.sent).toBe(true);
+    expect(complete.line).toBe(
+      "[TASK-1697 — Hard-dedupe announces](https://mc.plxcustomer.io/tasks/TASK-1697) complete — [PR #1571](https://github.com/petralabx/PLX_MC/pull/1571)"
+    );
+    expect(pr.skipped).toBe("duplicate");
+    expect(postWebhook).toHaveBeenCalledTimes(1);
+    expect(COALESCE_WINDOW_MS).toBe(15 * 60 * 1000);
   });
 });

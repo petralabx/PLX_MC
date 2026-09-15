@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-09-15 (ET) — Go-live chat dupes were claim-after-send plus a weak key
+
+- **What happened:** The operator go-live Teams chat showed TASK-1692/1697 complete twice, plus a PR-open line with a raw GitHub URL, after the channel Workflow had already been removed from Vercel.
+- **Root cause:** Dedup keyed `announce:task.completed:<checkoutId>` (two checkouts → two posts). `announce.sent` wrote only after the *channel* POST succeeded, so a chat-only success never claimed. Azure Blob delivery state on `stvmcresearch` (TASK-1454) was never wired. Formatter used bare ids / raw URLs.
+- **Rule going forward:** Claim `announce:<kind>:<taskId>` before the Workflow POST. Chat URL is the single live dest; do not fan out to channel+chat. Load the Hub title and post markdown deep links. Coalesce `pr.opened` + `task.completed` inside 15 minutes. Keep `MC_GO_LIVE_ANNOUNCE_CHECKOUT` off unless operators explicitly re-enable.
+
 ### 2026-08-28 (ET) — Hub checkout omitted portal and forced a second connector
 
 - **What happened:** Team agents used `PLX-MC-Portal` for `plx-customer-portal`

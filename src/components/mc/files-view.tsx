@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allFiles, bucketById, fileById, filesIn, markAllSynced } from "@/lib/mc-data/store";
+import { allFiles, bucketById, fileById, filesIn, markAllSynced, sweepInFlight } from "@/lib/mc-data/store";
 
 import { Avatar, SyncTick } from "./atoms";
 import { buildBreadcrumbPath, sortFileEntries } from "./record-logic";
@@ -43,7 +43,7 @@ export function FilesView() {
           <button
             type="button"
             className="btn acc"
-            disabled={pendingCount === 0}
+            disabled={pendingCount === 0 || sweepInFlight()}
             onClick={() => markAllSynced()}
           >
             {pendingCount > 0 ? `Sync now ↻ · ${pendingCount}` : "Synced ✓"}

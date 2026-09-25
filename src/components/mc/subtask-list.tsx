@@ -8,13 +8,14 @@
 
 import { useState } from "react";
 
-import { ACTORS, CURRENT_USER, type Subtask, type SubtaskStatus } from "@/lib/mc-data";
+import { ACTORS, type Subtask, type SubtaskStatus } from "@/lib/mc-data";
 import {
   addSubtask,
   promoteSubtaskToTask,
   reorderSubtasks,
   toggleSubtask,
   updateSubtask,
+  viewerId,
 } from "@/lib/mc-data/store";
 
 import { Avatar } from "./atoms";
@@ -224,7 +225,7 @@ export function SubtaskList({
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
-              addSubtask(taskId, draft, CURRENT_USER);
+              addSubtask(taskId, draft, viewerId());
               setDraft("");
             }
           }}

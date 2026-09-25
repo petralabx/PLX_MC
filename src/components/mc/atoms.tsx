@@ -4,23 +4,27 @@
 import type { CSSProperties, MouseEventHandler } from "react";
 
 import { ACTORS, PRIORITY, STAGES, STAGE_IDX, confidenceOf } from "@/lib/mc-data";
-import type { Health, PriorityKey, SyncRef, Task } from "@/lib/mc-data";
+import type { Actor, Health, PriorityKey, SyncRef, Task } from "@/lib/mc-data";
 import { allRepos } from "@/lib/mc-data/store";
 
 type AvatarSize = "sm" | "lg" | "xl";
 
 export function Avatar({
   id,
+  actor,
   size,
   lead,
   title,
 }: {
   id: string;
+  // A resolved actor outside the fixture roster (e.g. a signed-in viewer who
+  // is not in the directory) renders as-is instead of vanishing.
+  actor?: Actor;
   size?: AvatarSize;
   lead?: boolean;
   title?: string;
 }) {
-  const a = ACTORS[id];
+  const a = actor ?? ACTORS[id];
   if (!a) return null;
   const cls = ["av", a.kind, size, lead ? "lead" : ""].filter(Boolean).join(" ");
   const hover =

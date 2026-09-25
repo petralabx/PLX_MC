@@ -2,9 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { AGENTS, CURRENT_USER } from "@/lib/mc-data";
+import { AGENTS } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allTasks, navBuckets, navProjects, pushNotice, reassignTask, setTaskStage } from "@/lib/mc-data/store";
+import {
+  allTasks,
+  assignableViewerId,
+  navBuckets,
+  navProjects,
+  pushNotice,
+  reassignTask,
+  setTaskStage,
+} from "@/lib/mc-data/store";
 
 import type { Nav } from "./route";
 
@@ -64,6 +72,7 @@ export function CommandPalette({
   const groups = useMemo<PaletteGroup<PaletteCommand>[]>(() => {
     void version;
     const tasks = allTasks();
+    const me = assignableViewerId();
     const firstBucket = navBuckets()[0]?.id;
     const firstTask = tasks[0]?.id;
     const firstProject = navProjects()[0]?.id;
@@ -149,7 +158,8 @@ export function CommandPalette({
     // create/agent stubs. Both route through the FROZEN spine wrappers
     // (setTaskStage / reassignTask → patchTaskFields → optimistic + PATCH +
     // reconcile/rollback + notice), so no new store code and no half-wire.
-    // "Done" = the `verified` stage (band=done); "to me" = CURRENT_USER.
+    // "Done" = the `verified` stage (band=done); "to me" = the signed-in viewer
+    // (only when they are in the directory — an unlisted viewer can't be assigned).
     // Already-done / already-mine are handled by HIDING the action (a per-task
     // command rebuilt from `tasks`), so the palette never offers a no-op.
     const taskCommands: PaletteCommand[] = tasks.flatMap((task) => {
@@ -172,13 +182,13 @@ export function CommandPalette({
           run: () => setTaskStage(task.id, "verified"), // band=done; spine wrapper
         });
       }
-      if (task.assignee !== CURRENT_USER) {
+      if (me && task.assignee !== me) {
         commands.push({
           key: `assign-me:${task.id}`,
           icon: "☺",
           label: `Assign ${task.id} to me`,
           hint: "task action",
-          run: () => reassignTask(task.id, CURRENT_USER), // spine wrapper; honest deferred-mirror copy
+          run: () => reassignTask(task.id, me), // spine wrapper; honest deferred-mirror copy
         });
       }
       return commands;

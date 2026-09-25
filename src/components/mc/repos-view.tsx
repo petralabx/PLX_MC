@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { CURRENT_USER, isApprover } from "@/lib/mc-data";
+import { isApprover } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   actorById,
@@ -12,6 +12,7 @@ import {
   rejectRepo,
   repoRequests,
   requestRepo,
+  viewerId,
 } from "@/lib/mc-data/store";
 
 import { Avatar } from "./atoms";
@@ -39,7 +40,7 @@ export function ReposView({ nav }: ScreenProps) {
   const registry = allRepos();
   const repoRows = deriveRepoRows(registry, allTasks());
   const requests = repoRequests();
-  const approver = isApprover(actorById(CURRENT_USER));
+  const approver = isApprover(actorById(viewerId()));
 
   const submitRequest = () => {
     if (!repoName.trim()) return;

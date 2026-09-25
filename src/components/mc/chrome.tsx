@@ -2,7 +2,16 @@
 // Ported from docs/product/prototype/mc-chrome.jsx. Counts come from the
 // runtime store so the sync pill and badges stay live after store actions.
 // The command palette (⌘K) mounts here when the authoring lane lands.
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import Image from "next/image";
 
 import { liveAgentCount, pendingApprovalGates } from "@/lib/mc-data";
@@ -23,10 +32,14 @@ import { routingInboxEnabled } from "@/components/mc/routing-inbox/flag";
 import { Avatar, PMark } from "./atoms";
 import {
   createNavGroupState,
+  drawerFocusTarget,
   isPlainLeftClick,
   navGroupOf,
   navHref,
+  nextDrawerOpen,
   visibleNavGroups,
+  wrapFocusIndex,
+  type DrawerEvent,
   type NavBadge,
   type NavGroupId,
   type NavList,
@@ -34,16 +47,56 @@ import {
 import type { Nav, Route } from "./route";
 import { useVendorAlertCount } from "./vendor-spend/use-alert-badge";
 
+// The ≤1024px nav drawer (RESPONSIVE.md §3 drawer protocol). The shell owns
+// it; the Topbar's hamburger toggles it and the Sidebar is the drawer panel.
+// Esc dismisses, body scroll locks while open (body.mc-sb-open), and focus
+// moves into the drawer on open and back to the hamburger on close.
+export function useNavDrawer() {
+  const [open, setOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  const send = useCallback((event: DrawerEvent) => setOpen((prev) => nextDrawerOpen(prev, event)), []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) send("escape");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    document.body.classList.add("mc-sb-open");
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.classList.remove("mc-sb-open");
+    };
+  }, [open, send]);
+
+  useEffect(() => {
+    const target = drawerFocusTarget(wasOpen.current, open);
+    wasOpen.current = open;
+    if (target === "panel") panelRef.current?.querySelector<HTMLElement>(".side-close")?.focus();
+    if (target === "toggle") toggleRef.current?.focus();
+  }, [open]);
+
+  return { open, send, toggleRef, panelRef };
+}
+
 export function Topbar({
   nav,
   dark,
   setDark,
   onOpenPalette,
+  drawerOpen = false,
+  onToggleDrawer,
+  drawerToggleRef,
 }: {
   nav: Nav;
   dark: boolean;
   setDark: (next: boolean) => void;
   onOpenPalette: () => void;
+  drawerOpen?: boolean;
+  onToggleDrawer?: () => void;
+  drawerToggleRef?: RefObject<HTMLButtonElement | null>;
 }) {
   useMcVersion();
   const viewer = useViewer();
@@ -56,6 +109,19 @@ export function Topbar({
   return (
     <header className="mc-top">
       <div className="l">
+        {/* ≤1024px only (CSS): opens the nav drawer. */}
+        <button
+          type="button"
+          ref={drawerToggleRef}
+          className="iconbtn hamburger"
+          aria-label="Open navigation"
+          aria-expanded={drawerOpen}
+          aria-controls="mc-nav"
+          data-testid="nav-drawer-toggle"
+          onClick={onToggleDrawer}
+        >
+          <span aria-hidden="true">☰</span>
+        </button>
         <button type="button" className="brand" onClick={() => nav("home")}>
           <Image
             src={dark ? "/brand/logo-horizontal-cream.png" : "/brand/logo-horizontal-ink.png"}
@@ -78,7 +144,7 @@ export function Topbar({
           <span className="search-hint">
             Search · jump · create…
           </span>
-          <span className="key">⌘K</span>
+          <span className="key kbd-hint">⌘K</span>
         </button>
         <button
           type="button"
@@ -126,11 +192,18 @@ export function Sidebar({
   nav,
   onNewProject,
   onNewInitiative,
+  drawerOpen = false,
+  onDrawer,
+  drawerRef,
 }: {
   route: Route;
   nav: Nav;
   onNewProject: () => void;
   onNewInitiative: () => void;
+  /** ≤1024px: the sidebar is the drawer panel (see useNavDrawer). */
+  drawerOpen?: boolean;
+  onDrawer?: (event: DrawerEvent) => void;
+  drawerRef?: RefObject<HTMLElement | null>;
 }) {
   useMcVersion();
   const unread = unreadCount();
@@ -176,6 +249,7 @@ export function Sidebar({
         event.preventDefault();
         const { screen, ...extra } = target;
         nav(screen, extra);
+        onDrawer?.("navigate");
       }}
     >
       {body}
@@ -199,7 +273,14 @@ export function Sidebar({
             </>
           )
         )}
-        <button type="button" className="item side-new-initiative" onClick={onNewProject}>
+        <button
+          type="button"
+          className="item side-new-initiative"
+          onClick={() => {
+            onDrawer?.("navigate");
+            onNewProject();
+          }}
+        >
           <span className="ic" aria-hidden="true">+</span>
           <span className="nm">New project</span>
         </button>
@@ -221,7 +302,14 @@ export function Sidebar({
             </>
           )
         )}
-        <button type="button" className="item side-new-initiative" onClick={onNewInitiative}>
+        <button
+          type="button"
+          className="item side-new-initiative"
+          onClick={() => {
+            onDrawer?.("navigate");
+            onNewInitiative();
+          }}
+        >
           <span className="ic" aria-hidden="true">+</span>
           <span className="nm">New initiative</span>
         </button>
@@ -234,8 +322,35 @@ export function Sidebar({
     routingInbox: routingInboxEnabled(),
   });
 
+  // Open drawer: Tab / Shift+Tab wrap inside it (the page is under the scrim).
+  const trapFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (!drawerOpen || event.key !== "Tab") return;
+    const focusables = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>("a[href], button:not([disabled])")
+    ).filter((el) => el.offsetParent !== null);
+    const next = wrapFocusIndex(
+      focusables.length,
+      focusables.indexOf(document.activeElement as HTMLElement),
+      event.shiftKey
+    );
+    if (next !== null) {
+      event.preventDefault();
+      focusables[next].focus();
+    }
+  };
+
   return (
-    <nav className="mc-side" id="mc-nav" aria-label="Main">
+    <nav
+      className={`mc-side${drawerOpen ? " open" : ""}`}
+      id="mc-nav"
+      aria-label="Main"
+      ref={drawerRef}
+      onKeyDown={trapFocus}
+    >
+      {/* ≤1024px only (CSS): dismisses the drawer. */}
+      <button type="button" className="side-close" aria-label="Close navigation" onClick={() => onDrawer?.("close")}>
+        <span aria-hidden="true">✕</span>
+      </button>
       {groups.map((group) => {
         const headingId = `mc-nav-h-${group.id}`;
         const bodyId = `mc-nav-${group.id}`;
@@ -282,6 +397,20 @@ export function Sidebar({
         );
       })}
     </nav>
+  );
+}
+
+// The drawer's backdrop (≤1024px only, CSS): a tap dismisses. Decorative for
+// assistive tech — Esc and the close button are the keyboard paths.
+export function NavScrim({ open, onDrawer }: { open: boolean; onDrawer: (event: DrawerEvent) => void }) {
+  if (!open) return null;
+  return (
+    <div
+      className="mc-scrim"
+      aria-hidden="true"
+      data-testid="nav-drawer-scrim"
+      onClick={() => onDrawer("backdrop")}
+    />
   );
 }
 

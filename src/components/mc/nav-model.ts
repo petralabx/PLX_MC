@@ -209,3 +209,30 @@ export function createNavGroupState(getStorage: () => NavStorage | null): NavGro
     },
   };
 }
+
+// ─── Drawer (≤1024px) — RESPONSIVE.md §3 drawer protocol ────────────────────
+// The hamburger toggles; the close button, Esc, a backdrop tap and any nav
+// item click all dismiss.
+export type DrawerEvent = "toggle" | "close" | "escape" | "backdrop" | "navigate";
+
+export function nextDrawerOpen(open: boolean, event: DrawerEvent): boolean {
+  return event === "toggle" ? !open : false;
+}
+
+/** Where focus goes on a drawer transition: into it on open, back to the hamburger on close. */
+export function drawerFocusTarget(wasOpen: boolean, isOpen: boolean): "panel" | "toggle" | null {
+  if (!wasOpen && isOpen) return "panel";
+  if (wasOpen && !isOpen) return "toggle";
+  return null;
+}
+
+/**
+ * Keep Tab inside the open drawer (the page behind it is under the scrim).
+ * Returns the index to focus when Tab / Shift+Tab would leave the drawer, or
+ * null to let the browser move focus normally.
+ */
+export function wrapFocusIndex(count: number, current: number, shift: boolean): number | null {
+  if (count === 0) return null;
+  if (shift) return current <= 0 ? count - 1 : null;
+  return current < 0 || current === count - 1 ? 0 : null;
+}

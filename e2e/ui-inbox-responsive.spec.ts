@@ -27,7 +27,7 @@ test.describe("inbox responsive (G3)", () => {
   });
 
   test("inbox home: no horizontal overflow", async ({ page }, testInfo) => {
-    await expect(page.getByRole("heading", { name: /Mission control/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /What needs me today/i })).toBeVisible();
     await page.screenshot({ path: `${SHOT_DIR}/${testInfo.project.name}.png`, fullPage: true });
     await expectNoHorizontalOverflow(page, `inbox/${testInfo.project.name}`);
   });

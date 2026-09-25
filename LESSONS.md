@@ -16,6 +16,30 @@
 
 ## Lessons
 
+### 2026-09-25 (ET) — Session-end artifacts carried no real session data
+
+- **What happened:** Wave 5 review: `compliance-closeout.mjs` sent a random `session_id`, `started_at` = `ended_at`, a hardcoded `repo`, a canned summary, a `localhost:3100` default, and `files_touched` from `git status` only (empty after a commit). Its `git()` helper also `trim()`ed porcelain output, so the first ` M path` line lost its first path character.
+- **Root cause:** The hook ignored its stdin payload and read git state only at the moment the session ended.
+- **Rule going forward:** Session-end hooks read the runtime payload first (Cursor `conversation_id` / `duration_ms`, Claude Code `session_id` / `transcript_path`). They derive the window from the payload or git and say in the artifact when a value was generated or unknown. Build summary and files from the session's commits plus the working tree. Never `trim()` porcelain output — use `trimEnd()`.
+
+### 2026-09-25 (ET) — Ask invented provenance and hid broken 2xx bodies
+
+- **What happened:** Wave 5 review: `asArticle` filled `namespace: "company/"` and `trustTier: "advisory"` when VMC omitted them, and a 2xx search with a non-JSON body reported `status: ok` with zero hits.
+- **Root cause:** Display defaults were written into the DTO, and `vmcGet` turned a `res.json()` failure into `json: null` without telling the caller.
+- **Rule going forward:** Missing provenance stays `null` in the DTO; only the UI says "unknown". A body that does not parse is `upstream_error`, whatever the HTTP status.
+
+### 2026-09-25 (ET) — Colleague UX: navigation named after internals, and a phone nav that ate the screen
+
+- **What happened:** The sidebar grouped screens by system internals ("Views", "System of record"), called the same thing "bucket" and "initiative", showed raw env-flag text (`PLX_MC_ROUTING_INBOX_ENABLED ≠ 1`), and below 1024px turned into a horizontal strip filling ~60% of a phone screen. Home was a notification list, not "what do I do next".
+- **Root cause:** Chrome grew one screen at a time with no shared nav model, and the ≤1024px override predated the RESPONSIVE.md drawer protocol.
+- **Rule going forward:** Nav comes from `src/components/mc/nav-model.ts` only — the sidebar, ⌘K and tests read it; add a screen there, not in chrome or the palette. User-facing copy says "Initiative", never "bucket", and never shows env-flag names. Below 1025px the sidebar is the RESPONSIVE.md drawer (hamburger, scrim, Esc/backdrop/close/item dismiss, focus in and back). Home rows each carry one action and every section has loading / error-with-Retry / empty states.
+
+### 2026-09-25 (ET) — UI trust: a hardcoded viewer and failures that looked like success
+
+- **What happened:** Every colleague saw Vince's greeting, "Assigned to me", and avatar, and local audit rows were written as Vince (`CURRENT_USER = "vince"` in 19 files). A failed `/api/state` kept fixture data that looked live. "Sync now" logged "Sweep completed" before the server answered. Approvals showed an auth error and "No pending approvals" together.
+- **Root cause:** Prototype placeholders (a constant user, a demo sweep, a constant "Connected") survived the move to a real backend. Failure paths collapsed into success-looking states (`rows = []`, fixture kept, optimistic flip).
+- **Rule going forward:** Identity comes from the server (`GET /api/viewer`), never a client constant. An unknown viewer stays unresolved; it never falls back to a real person. Every client load has an explicit failure state the UI renders (offline banner, error with Retry). Never let an empty or fixture state stand in for a failure. Claims like "synced" or "connected" come only from a server response.
+
 ### 2026-09-25 (ET) — Review found five trust gaps hiding behind green tests
 
 - **What happened:** A read-only review (TASK-1935) found `/api/repos` trusting the body `actor` for its approver check. It also found merged portal/PLX_MC PRs missing from the Repos view (`pr.repo` was the GitHub name, the filter compared registry ids) and PRs merged more than 8h after checkout losing their task. HTTP MCP tool calls left no audit event, and `mc_complete_task` accepted calls with no `verificationCommands`/`rollback`. `plx_secondbrain` was also missing from the Hub checkout allowlist, the second consumer missed after portal on 2026-08-28.

@@ -4,7 +4,6 @@ import type { CSSProperties, DragEvent } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  CURRENT_USER,
   CYCLES,
   MILESTONES,
   STAGES,
@@ -21,6 +20,7 @@ import {
   setTaskPriority,
   setTaskStage,
   taskById,
+  viewerId,
 } from "@/lib/mc-data/store";
 import type { Bucket, Stage, Task } from "@/lib/mc-data";
 
@@ -401,7 +401,7 @@ function TimelineView({ tasks, onOpen }: { tasks: Task[]; onOpen: (taskId: strin
     <div className="tl">
       <div className="grid">
         <div className="cyc">
-          <div className="corner">Bucket / task</div>
+          <div className="corner">Initiative / task</div>
           <div className="bands">
             {CYCLES.map((cycle) => (
               <div className="b" key={cycle.id}>
@@ -560,7 +560,7 @@ export function WorkViews({ route, nav }: ScreenProps) {
   // show "my tasks in that one bucket", so route.bucketId is ignored here.
   const bucket = isMine ? undefined : route.bucketId ? bucketById(route.bucketId) : undefined;
   const baseTasks = isMine
-    ? tasksForUser(CURRENT_USER, allTasks())
+    ? tasksForUser(viewerId(), allTasks())
     : filterTasksByBucket(allTasks(), route.bucketId);
   const visible = useMemo(
     () => applyFilters(baseTasks, filters),
@@ -791,7 +791,7 @@ export function WorkViews({ route, nav }: ScreenProps) {
           <p className="sub">
             {isMine
               ? "Assigned to, co-owned by, or reported by you — across every initiative."
-              : "Board, list, and timeline are three lenses over the same task ledger across buckets."}
+              : "Board, list, and timeline are three lenses over the same task ledger across initiatives."}
           </p>
         </div>
         <div className="r">

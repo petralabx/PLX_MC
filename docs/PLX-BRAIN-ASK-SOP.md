@@ -39,13 +39,14 @@ must load full markdown via:
 
 Map the response to the portal `KnowledgeArticle` DTO (`id`, `title`,
 `markdown`, `namespace`, `trustTier`, `source`). Reject any reader that renders
-the search excerpt as the article body.
+the search excerpt as the article body. When VMC omits `namespace` or
+`trustTier` they stay `null` (UI shows "unknown") — never default them.
 
 Missing `VMC_API_KEY` on the MC Vercel app → Ask fail-opens with
 `status: not_configured` and an empty list (`configured: false`). Search does
-not work until the key is set. A live VMC that does not respond or returns
-4xx/5xx is **not** a zero-hit query: the API reports
-`upstream_unreachable` or `upstream_error` while `configured` stays true.
+not work until the key is set. A live VMC that does not respond, returns
+4xx/5xx, or answers 2xx with a non-JSON body is **not** a zero-hit query: the
+API reports `upstream_unreachable` or `upstream_error` while `configured` stays true.
 Zero hits with `status: ok` means VMC answered and found nothing.
 
 MCP `brain_search` and VMC `/vmc/second-brain` use their own credentials and

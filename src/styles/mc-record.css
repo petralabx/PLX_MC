@@ -749,6 +749,11 @@
   font-size: var(--p-text-kicker);
 }
 
+/* Repo activity screen: glyph · name · three counters. */
+.mc .repo-row.activity-row .rh {
+  grid-template-columns: auto 1fr auto auto auto;
+}
+
 /* ─── Repo self-service: request form + review queue (EN-002 / WS-2) ───────── */
 .mc .repo-req-form {
   align-items: center;
@@ -932,5 +937,9 @@
 
   .mc .repo-row .rbody {
     padding-left: var(--p-gutter);
+  }
+
+  .mc .repo-row.activity-row .rh {
+    grid-template-columns: auto 1fr;
   }
 }

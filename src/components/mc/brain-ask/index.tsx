@@ -131,8 +131,8 @@ export function BrainAskView({ route, nav }: ScreenProps) {
               <h2 className="brain-ask-page-title">{article.title}</h2>
               <div className="brain-ask-chips">
                 <span>{article.source}</span>
-                <span>{article.namespace}</span>
-                <span>{article.trustTier}</span>
+                <span>{article.namespace ?? "namespace unknown"}</span>
+                <span>{article.trustTier ?? "trust tier unknown"}</span>
                 {article.versionLabel ? <span>{article.versionLabel}</span> : null}
               </div>
               <div className="brain-ask-body">

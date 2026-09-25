@@ -8,7 +8,6 @@ import type { BucketProjection } from "@/lib/loop-ledgers";
 import {
   ACTORS,
   BUCKETS,
-  CURRENT_USER,
   MILESTONES,
   PRDS,
   STAGES,
@@ -34,6 +33,7 @@ import {
   mentionables,
   projectById,
   updateBucket,
+  viewerId,
 } from "@/lib/mc-data/store";
 
 import { Avatar, AvatarStack, HealthPill, PMark, ReqChip, SyncTick } from "./atoms";
@@ -159,7 +159,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             This initiative needs a <em className="empty-accent">PRD</em>
           </h3>
           <p>
-            Every bucket carries a PRD: problem, testable requirements, acceptance criteria,
+            Every initiative carries a PRD: problem, testable requirements, acceptance criteria,
             non-goals, and rollback. Drafting stays in the authoring lane.
           </p>
           <div className="acts">
@@ -224,7 +224,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             <span className="k">Accountable owner</span>
             <span className="v sm fact-owner">
               <Avatar id={bucket.owner} size="sm" />
-              {ACTORS[bucket.owner].name}
+              {ACTORS[bucket.owner]?.name ?? bucket.owner}
             </span>
           </div>
           <div className="f">
@@ -397,7 +397,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
               <Timeline
                 comments={commentsForBucket(bucket.id)}
                 people={mentionables()}
-                currentUser={CURRENT_USER}
+                currentUser={viewerId()}
                 onAdd={(body) => addBucketComment(bucket.id, body)}
                 onEdit={(commentId, body) => editBucketComment(bucket.id, commentId, body)}
                 onDelete={(commentId) => deleteBucketComment(bucket.id, commentId)}

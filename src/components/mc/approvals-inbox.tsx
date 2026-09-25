@@ -11,7 +11,7 @@ import { api, ApiClientError } from "@/lib/api";
 import type { ApprovalGate } from "@/lib/mc-data";
 import type { ScreenProps } from "@/components/mc/route";
 
-interface PendingApprovalRow {
+export interface PendingApprovalRow {
   taskId: string;
   taskTitle: string;
   stage: string;
@@ -22,21 +22,65 @@ interface ApprovalsResponse {
   approvals: PendingApprovalRow[];
 }
 
+// The queue source (GET /api/approvals), shared with Home's "What needs me".
+export function fetchPendingApprovals(): Promise<PendingApprovalRow[]> {
+  return api<ApprovalsResponse>("/approvals").then((data) => data.approvals);
+}
+
+export function approvalsLoadError(err: unknown): string {
+  return err instanceof ApiClientError ? err.message : "Failed to load approvals.";
+}
+
+// The queue load's outcome. A failed load is its own state — never an empty
+// list — so the screen can't show an auth error and "No pending approvals" at
+// once (Wave 2 — UI trust).
+export type ApprovalsLoad =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; rows: PendingApprovalRow[] };
+
+export type ApprovalsView = "loading" | "error" | "empty" | "list";
+
+export function approvalsView(load: ApprovalsLoad): ApprovalsView {
+  if (load.status !== "ready") return load.status;
+  return load.rows.length === 0 ? "empty" : "list";
+}
+
+// The non-list states (exactly one renders); nothing for "list", which the
+// screen renders itself.
+export function ApprovalsStatus({ load, onRetry }: { load: ApprovalsLoad; onRetry: () => void }) {
+  const view = approvalsView(load);
+  if (view === "loading") return <div className="ap-empty">Loading…</div>;
+  if (view === "error" && load.status === "error") {
+    return (
+      <div className="ap-error" role="alert">
+        {load.message}{" "}
+        <button type="button" className="ap-btn" onClick={onRetry}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (view === "empty") {
+    return <div className="ap-empty">No pending approvals — nothing is input-required.</div>;
+  }
+  return null;
+}
+
 export function ApprovalsInboxView({ nav }: ScreenProps) {
-  const [rows, setRows] = useState<PendingApprovalRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [queue, setQueue] = useState<ApprovalsLoad>({ status: "loading" });
+  // A failed approve/reject — shown above the list it concerns, not as a view.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busyGate, setBusyGate] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
 
   const load = useCallback((): Promise<void> => {
-    return api<ApprovalsResponse>("/approvals")
-      .then((data) => {
-        setRows(data.approvals);
-        setError(null);
+    return fetchPendingApprovals()
+      .then((rows) => {
+        setQueue({ status: "ready", rows });
       })
       .catch((err: Error) => {
-        setError(err instanceof ApiClientError ? err.message : "Failed to load approvals.");
-        setRows([]);
+        setQueue({ status: "error", message: approvalsLoadError(err) });
       });
   }, []);
 
@@ -44,10 +88,15 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
     void load();
   }, [load]);
 
+  const retry = useCallback(() => {
+    setQueue({ status: "loading" });
+    void load();
+  }, [load]);
+
   const decide = useCallback(
     async (row: PendingApprovalRow, decision: "approved" | "rejected") => {
       setBusyGate(row.gate.id);
-      setError(null);
+      setActionError(null);
       try {
         await api("/approvals/decide", {
           method: "POST",
@@ -60,13 +109,16 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
         });
         await load();
       } catch (err) {
-        setError(err instanceof ApiClientError ? err.message : "Decision failed.");
+        setActionError(err instanceof ApiClientError ? err.message : "Decision failed.");
       } finally {
         setBusyGate(null);
       }
     },
     [load, notes]
   );
+
+  const view = approvalsView(queue);
+  const rows = queue.status === "ready" ? queue.rows : [];
 
   return (
     <div className="ap-page">
@@ -77,12 +129,9 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
           human — never the requester — decides.
         </p>
       </div>
-      {error ? <div className="ap-error">{error}</div> : null}
-      {rows === null ? (
-        <div className="ap-empty">Loading…</div>
-      ) : rows.length === 0 ? (
-        <div className="ap-empty">No pending approvals — nothing is input-required.</div>
-      ) : (
+      <ApprovalsStatus load={queue} onRetry={retry} />
+      {view === "list" && actionError ? <div className="ap-error">{actionError}</div> : null}
+      {view === "list" ? (
         <ul className="ap-list">
           {rows.map((row) => (
             <li key={row.gate.id} className="ap-item">
@@ -130,7 +179,7 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
     </div>
   );
 }

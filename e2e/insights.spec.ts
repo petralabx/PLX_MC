@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { waitForHydration } from "./helpers";
 
 // SPEC §3.B (Module E) — the Insights view: a native-SVG, current-state read over
-// allTasks(). Reachable from the sidebar Views group, the ⌘K palette, and the
+// allTasks(). Reachable from the sidebar Plan group, the ⌘K palette, and the
 // `g i` chord. It renders a status donut + the Total / Overdue / Unassigned /
 // Blocked KPIs + by-Initiative / by-Assignee / by-Priority breakdown bars. Every
 // status/priority/assignee SEGMENT is click-to-filter: the click navigates to the
@@ -21,7 +21,7 @@ import { waitForHydration } from "./helpers";
 async function gotoInsights(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/");
   await waitForHydration(page);
-  await page.locator("nav.mc-side button", { hasText: "Insights" }).first().click();
+  await page.locator("nav.mc-side a", { hasText: "Insights" }).first().click();
   // The Insights page header identifies the screen (kicker "Insights").
   await expect(page.locator(".mc-main .ph .kk")).toContainText("Insights");
 }

@@ -6,21 +6,19 @@
 //
 // This is the checkout/compliance slug namespace (owner/name), not repos[]
 // registry ids (portal-web, plx-mc, …).
+//
+// The allowlist is derived from the fleet registry
+// (config/tracked-repos-registry.json, build-time JSON import) — never a
+// hand-kept copy. Only entries with status "active" are admitted, so a
+// pending_adoption / sandbox entry stays fail-closed until it is activated;
+// tests/tracked-repos-drift.test.ts asserts equality with the active set.
 
 import { ApiError } from "@/lib/api/route";
+import { ACTIVE_TRACKED_REPO_SLUGS } from "@/lib/compliance";
 
-export const MCP_CHECKOUT_REPO_ALLOWLIST = [
-  "petralabx/local-inference",
-  "petralabx/skills",
-  "petralabx/1hr-after",
-  "petralabx/furgenics",
-  "petralabx/for-and-against",
-  "petralabx/agentic-swarm",
-  "petralabx/plx-customer-portal",
-  "petralabx/plx_secondbrain",
-] as const;
+export const MCP_CHECKOUT_REPO_ALLOWLIST: readonly string[] = ACTIVE_TRACKED_REPO_SLUGS;
 
-const GITHUB_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+export const GITHUB_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 const ALLOWLIST_BY_LOWER = new Map<string, string>(
   MCP_CHECKOUT_REPO_ALLOWLIST.map((slug) => [slug.toLowerCase(), slug])

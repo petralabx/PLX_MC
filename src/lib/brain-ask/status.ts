@@ -7,10 +7,13 @@ import type {
 export function classifyBrainAskStatus(
   configured: boolean,
   httpStatus: number,
+  bodyParsed = true,
 ): BrainAskUpstreamStatus {
   if (!configured) return "not_configured";
   if (httpStatus === 0) return "upstream_unreachable";
   if (httpStatus < 200 || httpStatus >= 300) return "upstream_error";
+  // A 2xx whose body is not JSON is a broken upstream, not an empty result.
+  if (!bodyParsed) return "upstream_error";
   return "ok";
 }
 

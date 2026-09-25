@@ -30,6 +30,7 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
 import { ApiError } from "@/lib/api/route";
 import { actionCheckout } from "@/lib/mcp/actions";
 import type { McpIdentity } from "@/lib/mcp/auth";
+import { ACTIVE_TRACKED_REPO_SLUGS } from "@/lib/compliance";
 import { MCP_CHECKOUT_REPO_ALLOWLIST, resolveCheckoutRepo } from "@/lib/mcp/checkout-repo";
 
 const HARD_GATED_CONSUMERS = [
@@ -70,14 +71,21 @@ describe("resolveCheckoutRepo", () => {
     );
   });
 
-  it("exports the hard-gated consumer allowlist including Portal", () => {
-    expect([...MCP_CHECKOUT_REPO_ALLOWLIST]).toEqual([...HARD_GATED_CONSUMERS]);
+  it("derives the allowlist from ACTIVE fleet registry entries (every hard-gated consumer + Portal)", () => {
+    expect([...MCP_CHECKOUT_REPO_ALLOWLIST]).toEqual([...ACTIVE_TRACKED_REPO_SLUGS]);
+    for (const slug of HARD_GATED_CONSUMERS) {
+      expect(MCP_CHECKOUT_REPO_ALLOWLIST).toContain(slug);
+    }
     expect(MCP_CHECKOUT_REPO_ALLOWLIST).toContain("petralabx/plx-customer-portal");
   });
 
-  it("binds plx_secondbrain, an active registry consumer (review 2026-09-25)", () => {
+  it("registry repos missing from the old hard-coded list become allowed (plx_secondbrain)", () => {
     expect(resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/plx_secondbrain")).toBe(
       "petralabx/plx_secondbrain"
+    );
+    // Case-insensitive request still resolves to the registry's canonical casing.
+    expect(resolveCheckoutRepo("petralabx/plx-customer-portal", "PETRALABX/PLX_MC")).toBe(
+      "petralabx/PLX_MC"
     );
   });
 
@@ -92,6 +100,19 @@ describe("resolveCheckoutRepo", () => {
     expect(resolveCheckoutRepo("petralabx/plx-customer-portal", "petralabx/plx-customer-portal")).toBe(
       "petralabx/plx-customer-portal"
     );
+  });
+
+  it("rejects a registry repo that is not active (pending_adoption test-perms-check)", () => {
+    expect(() => resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/test-perms-check")).toThrow(
+      ApiError
+    );
+    try {
+      resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/test-perms-check");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).code).toBe("repo_not_allowlisted");
+      expect((err as ApiError).status).toBe(403);
+    }
   });
 
   it("rejects a non-allowlisted slug (fail closed)", () => {

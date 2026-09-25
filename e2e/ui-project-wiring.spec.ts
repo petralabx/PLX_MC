@@ -65,7 +65,7 @@ test.describe("project wiring (G2)", () => {
 
     // Back on the project, the Overview "Open →" link reaches bucket detail too.
     await page.locator(".mc .ph .back").click();
-    await page.locator(".mc .mc-side .grp button", { hasText: "PLX Portal Go-Live" }).click();
+    await page.locator(".mc .mc-side .grp a", { hasText: "PLX Portal Go-Live" }).click();
     // Dismiss any queued rollback toasts first — the notice host floats over
     // the section header rail and would intercept the click. Re-query each
     // pass: dismissing one removes it from the DOM, so a snapshot goes stale.

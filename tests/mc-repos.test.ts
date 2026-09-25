@@ -268,7 +268,7 @@ describe("self-service request → approve", () => {
     expect(validated.visibility).toBe("public");
     expect(allRepos()["new-tool"]).toBeUndefined(); // not in the registry until approved
 
-    expect(approveRepo(req.id)).toBe(true); // vince is Owner
+    expect(approveRepo(req.id, "vince")).toBe(true); // vince is Owner
     expect(repoRequests().find((r) => r.id === req.id)?.status).toBe("approved");
     expect(allRepos()["new-tool"]?.name).toBe("new-tool");
   });
@@ -290,7 +290,7 @@ describe("self-service request → approve", () => {
     await __repoValidationSettled();
     expect(repoRequests().find((r) => r.id === req.id)?.verified).toBe(false);
 
-    expect(approveRepo(req.id)).toBe(false); // vince is Owner, but the repo is unverified
+    expect(approveRepo(req.id, "vince")).toBe(false); // vince is Owner, but the repo is unverified
     expect(repoRequests().find((r) => r.id === req.id)?.status).toBe("pending");
     expect(allRepos()["unverified-repo"]).toBeUndefined();
   });
@@ -309,7 +309,7 @@ describe("self-service request → approve", () => {
 
   it("rejects a request without adding it to the registry", () => {
     const req = requestRepo({ name: "wontfix" });
-    expect(rejectRepo(req.id)).toBe(true);
+    expect(rejectRepo(req.id, "vince")).toBe(true);
     expect(repoRequests().find((r) => r.id === req.id)?.status).toBe("rejected");
     expect(allRepos()["wontfix"]).toBeUndefined();
   });

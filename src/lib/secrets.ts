@@ -173,6 +173,12 @@ export function cronSecret(): string {
   return requireSecret("CRON_SECRET");
 }
 
+// Nightly GitHub backfill of merged-but-unattributed PRs (/api/cron/github-backfill).
+// Default OFF: it writes a github.backfill.report row to mc_events. Kill switch.
+export function githubBackfillEnabled(): boolean {
+  return (process.env.PLX_MC_GITHUB_BACKFILL_ENABLED ?? "0").trim() === "1";
+}
+
 // Company-brain search for Ask (`/?screen=brain-ask`). Source: prod/ec2-secrets
 // VMC_API_KEY on Vercel Production/Preview. Missing key → Ask fail-opens empty.
 const DEFAULT_VMC_BASE_URL = "https://missioncontrol.tayloralton.com";

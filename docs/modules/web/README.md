@@ -10,15 +10,30 @@ Repos) plus surfaces added since the handoff: **Project detail**, **My Tasks**,
 **Skills Directory**, **Architecture**, **AI Spend**, and **Ask the Brain** — along with the ⌘K
 command palette, New Task / New Initiative / New Project modals, and
 PeoplePicker (Petra domain rule enforced in the UI). The screen registry
-(`src/components/mc/screens.tsx`) maps twenty `Screen` keys to components;
+(`src/components/mc/screens.tsx`) maps twenty-four `Screen` keys to components;
 Board, List, Timeline, and My Tasks share `WorkViews`. State flows through the runtime store
 (`src/lib/mc-data/store.ts`) — since 2026-06-11 a client cache over the sync
-module's API: it hydrates from `GET /api/state` after mount and mirrors every
+module's API: it hydrates from `GET /api/state` after mount (the signed-in
+viewer comes from `GET /api/viewer`, resolved from the Entra session — no
+hardcoded current user) and mirrors every
 mutation through the shared fetch wrapper (`src/lib/api`), staying
-optimistic-local-first so the UI degrades to the last-synced view offline.
+optimistic-local-first so the UI degrades to the last-synced view offline —
+labelled by an app-wide "Offline — showing cached or demo data" banner with
+Retry whenever `GET /api/state` fails (store `dataSource()`).
 The getter/action surface is unchanged from the prototype port. It owns
 routing, screens, and client state only — it is NOT the system of record
 (SharePoint is) and NOT the sync engine (the `sync` module is).
+
+**Colleague UX (Wave 6).** Home (`home`) is "What needs me today": approvals
+waiting on the viewer, their routing proposals (flagged), their overdue tasks,
+and for owners/admins unowned tasks and SharePoint sync issues — one action
+per row, each section with loading / error-with-Retry / empty states; the
+rules are pure in `needs-me.ts`. The sidebar and the ⌘K Navigate group share
+one declarative model (`nav-model.ts`): My work · Plan · Knowledge · Admin &
+health (collapsed by default, remembered in localStorage). Items are real
+links (`routeToUrl`). At ≤1024px the sidebar is a slide-in drawer behind a
+topbar hamburger (RESPONSIVE.md §3). "Initiative" is the only user-facing
+name for a bucket; the Help screen (`help`) has a glossary.
 
 **Project detail** (`project` screen): rolls up initiatives (buckets) under a
 Project with an initiative card grid; inline edit for health, accountable
@@ -82,9 +97,11 @@ wrapper in `src/lib/api`).
 - `src/components/mc/shell.tsx` — client shell: brand boundary, dark toggle, route state
 - `src/components/mc/route.ts` — `Screen` union + `Route` / `nav` contract
 - `src/components/mc/screens.tsx` — screen registry (`SCREENS`)
-- `src/components/mc/chrome.tsx` — Topbar + Sidebar (Projects group)
+- `src/components/mc/chrome.tsx` — Topbar + Sidebar + nav drawer (renders `nav-model.ts`)
+- `src/components/mc/nav-model.ts` — nav groups/items shared by sidebar, ⌘K and tests
 - `src/components/mc/project-detail.tsx` — Project detail + initiative card grid
-- `src/components/mc/inbox.tsx` — the Inbox/home screen
+- `src/components/mc/inbox.tsx` — Home: "What needs me today" (rules in `needs-me.ts`)
+- `src/components/mc/help.tsx` — Help: how Mission Control works + glossary
 - `src/components/mc/atoms.tsx` — Avatar, Confidence, PMark
 - `src/lib/mc-data/` — typed prototype data layer (types, fixtures, helpers)
 - `src/styles/mc-surface.css`, `src/styles/mc-app.css` — surface tokens + skin

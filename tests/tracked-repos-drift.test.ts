@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { registryDrift, TRACKED_REPO_SLUGS } from "@/lib/compliance";
+import { ACTIVE_TRACKED_REPO_SLUGS, registryDrift, TRACKED_REPO_SLUGS } from "@/lib/compliance";
 import { GO_LIVE_BARE_REPO_SLUGS, GO_LIVE_GITHUB_ORG } from "@/lib/compliance/go-live-announcer";
 import { parseRegistryJson } from "@/lib/loop-ledgers";
 import { REPOS } from "@/lib/mc-data/data";
@@ -38,10 +38,30 @@ describe("fleet registry is the single source of truth", () => {
     expect(new Set(TRACKED_REPO_SLUGS).size).toBe(TRACKED_REPO_SLUGS.length);
   });
 
-  it("Hub MCP checkout allowlist equals the registry set", () => {
-    expect(registryDrift(MCP_CHECKOUT_REPO_ALLOWLIST)).toEqual({
+  it("Hub MCP checkout allowlist equals the ACTIVE registry set", () => {
+    expect(registryDrift(MCP_CHECKOUT_REPO_ALLOWLIST, ACTIVE_TRACKED_REPO_SLUGS)).toEqual({
       unknown: [],
       missing: [],
+      duplicates: [],
+    });
+    // Non-active entries (test-perms-check is pending_adoption) stay fail-closed.
+    expect(MCP_CHECKOUT_REPO_ALLOWLIST).not.toContain("petralabx/test-perms-check");
+    expect(registryDrift(MCP_CHECKOUT_REPO_ALLOWLIST).missing).toEqual([
+      "petralabx/test-perms-check",
+    ]);
+  });
+
+  it("the active set is the registry filtered to status === active", () => {
+    const registry = JSON.parse(
+      readFileSync(join(ROOT, "config/tracked-repos-registry.json"), "utf8")
+    ) as { repos: Array<{ repo: string; status?: string }> };
+    expect([...ACTIVE_TRACKED_REPO_SLUGS]).toEqual(
+      registry.repos.filter((entry) => entry.status === "active").map((entry) => entry.repo)
+    );
+    expect(ACTIVE_TRACKED_REPO_SLUGS).toContain("petralabx/plx_secondbrain");
+    expect(registryDrift(ACTIVE_TRACKED_REPO_SLUGS)).toEqual({
+      unknown: [],
+      missing: ["petralabx/test-perms-check"],
       duplicates: [],
     });
   });

@@ -9,13 +9,14 @@
 //
 // The allowlist is derived from the fleet registry
 // (config/tracked-repos-registry.json, build-time JSON import) — never a
-// hand-kept copy. Enrolling a repo in the registry is what allowlists it here;
-// tests/tracked-repos-drift.test.ts asserts the two sets are equal.
+// hand-kept copy. Only entries with status "active" are admitted, so a
+// pending_adoption / sandbox entry stays fail-closed until it is activated;
+// tests/tracked-repos-drift.test.ts asserts equality with the active set.
 
 import { ApiError } from "@/lib/api/route";
-import { TRACKED_REPO_SLUGS } from "@/lib/compliance";
+import { ACTIVE_TRACKED_REPO_SLUGS } from "@/lib/compliance";
 
-export const MCP_CHECKOUT_REPO_ALLOWLIST: readonly string[] = TRACKED_REPO_SLUGS;
+export const MCP_CHECKOUT_REPO_ALLOWLIST: readonly string[] = ACTIVE_TRACKED_REPO_SLUGS;
 
 const GITHUB_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 

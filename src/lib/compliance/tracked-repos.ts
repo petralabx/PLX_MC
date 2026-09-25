@@ -12,15 +12,22 @@ export interface TrackedRepo {
   /** Canonical owner/name slug. */
   repo: string;
   displayName: string;
+  /** Registry enrollment status (`active`, `pending_adoption`, …); "" when absent. */
+  status: string;
 }
 
 /** Every registry repo, in registry order. */
 export const TRACKED_REPOS: readonly TrackedRepo[] = Object.freeze(
-  ((trackedReposRegistry as { repos?: Array<{ repo?: unknown; display_name?: unknown }> }).repos ?? [])
+  (
+    (trackedReposRegistry as {
+      repos?: Array<{ repo?: unknown; display_name?: unknown; status?: unknown }>;
+    }).repos ?? []
+  )
     .map((entry) => {
       const repo = typeof entry.repo === "string" ? entry.repo.trim() : "";
       const displayName = typeof entry.display_name === "string" ? entry.display_name : repo;
-      return { repo, displayName };
+      const status = typeof entry.status === "string" ? entry.status : "";
+      return { repo, displayName, status };
     })
     .filter((entry) => entry.repo.length > 0)
 );
@@ -28,6 +35,15 @@ export const TRACKED_REPOS: readonly TrackedRepo[] = Object.freeze(
 /** Every registry repo as its canonical owner/name slug, in registry order. */
 export const TRACKED_REPO_SLUGS: readonly string[] = Object.freeze(
   TRACKED_REPOS.map((entry) => entry.repo)
+);
+
+/**
+ * Registry repos with status === "active" only. Gates that admit work (the Hub
+ * MCP checkout allowlist) derive from this so a pending/sandbox entry stays
+ * fail-closed; subset drift checks still use the full TRACKED_REPO_SLUGS.
+ */
+export const ACTIVE_TRACKED_REPO_SLUGS: readonly string[] = Object.freeze(
+  TRACKED_REPOS.filter((entry) => entry.status === "active").map((entry) => entry.repo)
 );
 
 export interface RegistryDrift {

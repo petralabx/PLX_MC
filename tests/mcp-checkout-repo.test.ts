@@ -30,7 +30,7 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
 import { ApiError } from "@/lib/api/route";
 import { actionCheckout } from "@/lib/mcp/actions";
 import type { McpIdentity } from "@/lib/mcp/auth";
-import { TRACKED_REPO_SLUGS } from "@/lib/compliance";
+import { ACTIVE_TRACKED_REPO_SLUGS } from "@/lib/compliance";
 import { MCP_CHECKOUT_REPO_ALLOWLIST, resolveCheckoutRepo } from "@/lib/mcp/checkout-repo";
 
 const HARD_GATED_CONSUMERS = [
@@ -70,8 +70,8 @@ describe("resolveCheckoutRepo", () => {
     );
   });
 
-  it("derives the allowlist from the fleet registry (every hard-gated consumer + Portal)", () => {
-    expect([...MCP_CHECKOUT_REPO_ALLOWLIST]).toEqual([...TRACKED_REPO_SLUGS]);
+  it("derives the allowlist from ACTIVE fleet registry entries (every hard-gated consumer + Portal)", () => {
+    expect([...MCP_CHECKOUT_REPO_ALLOWLIST]).toEqual([...ACTIVE_TRACKED_REPO_SLUGS]);
     for (const slug of HARD_GATED_CONSUMERS) {
       expect(MCP_CHECKOUT_REPO_ALLOWLIST).toContain(slug);
     }
@@ -99,6 +99,19 @@ describe("resolveCheckoutRepo", () => {
     expect(resolveCheckoutRepo("petralabx/plx-customer-portal", "petralabx/plx-customer-portal")).toBe(
       "petralabx/plx-customer-portal"
     );
+  });
+
+  it("rejects a registry repo that is not active (pending_adoption test-perms-check)", () => {
+    expect(() => resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/test-perms-check")).toThrow(
+      ApiError
+    );
+    try {
+      resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/test-perms-check");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).code).toBe("repo_not_allowlisted");
+      expect((err as ApiError).status).toBe(403);
+    }
   });
 
   it("rejects a non-allowlisted slug (fail closed)", () => {

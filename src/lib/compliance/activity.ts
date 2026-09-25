@@ -97,7 +97,7 @@ function stampedEvent(ev: EventRow): boolean {
 /** Pure fold: events (any order) + newest backfill report → per-repo rows. */
 export function computeRepoActivity(input: {
   events: EventRow[];
-  registry: readonly TrackedRepo[];
+  registry: readonly Pick<TrackedRepo, "repo" | "displayName">[];
   backfill: BackfillReport | null;
   now: Date;
   sampleLimit?: number;

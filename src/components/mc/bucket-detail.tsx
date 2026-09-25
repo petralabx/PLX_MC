@@ -19,6 +19,7 @@ import {
   type Task,
   type Trace,
 } from "@/lib/mc-data";
+import { docLinkFromPrd } from "@/lib/mc-data/doc-links";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   addBucketComment,
@@ -115,6 +116,9 @@ export function BucketDetail({ route, nav }: ScreenProps) {
   const parentProject = bucket.project ? projectById(bucket.project) : undefined;
   const rollups = rollupsForBucket(bucket.id, allTasks(), MILESTONES, allRisks());
   const prd = bucket.prd ? PRDS[bucket.prd] : null;
+  // A prd that isn't a built-in PRD id may be a URL to a spec elsewhere
+  // (e.g. a tracked repo's docs); show it instead of dropping it.
+  const specLink = prd ? null : docLinkFromPrd(bucket.prd);
 
   const ledgerMilestones = projection?.bound ? projection.milestones : [];
   const ledgerTrace = projection?.bound ? projection.trace : null;
@@ -255,6 +259,20 @@ export function BucketDetail({ route, nav }: ScreenProps) {
 
         <div className="bkbody">
           <div className="c">
+            {specLink && (
+              <div className="blk" data-testid="bucket-spec-link">
+                <div className="bh">
+                  <span className="kk">/ Spec</span>
+                </div>
+                <ul className="doc-links">
+                  <li>
+                    <a href={specLink.href} target="_blank" rel="noopener noreferrer">
+                      {specLink.label}
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            )}
             {prd && (
               <div className="blk">
                 <div className="bh">

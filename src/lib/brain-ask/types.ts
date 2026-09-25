@@ -8,8 +8,9 @@ export type KnowledgeArticle = {
   tags?: string[];
   project?: string;
   domain?: string;
-  namespace: string;
-  trustTier: string;
+  /** null when upstream omitted it (unknown provenance). */
+  namespace: string | null;
+  trustTier: string | null;
   source: KnowledgeArticleSource;
   versionLabel?: string;
   href?: string;

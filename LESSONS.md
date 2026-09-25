@@ -16,6 +16,18 @@
 
 ## Lessons
 
+### 2026-09-25 (ET) — Session-end artifacts carried no real session data
+
+- **What happened:** Wave 5 review: `compliance-closeout.mjs` sent a random `session_id`, `started_at` = `ended_at`, a hardcoded `repo`, a canned summary, a `localhost:3100` default, and `files_touched` from `git status` only (empty after a commit). Its `git()` helper also `trim()`ed porcelain output, so the first ` M path` line lost its first path character.
+- **Root cause:** The hook ignored its stdin payload and read git state only at the moment the session ended.
+- **Rule going forward:** Session-end hooks read the runtime payload first (Cursor `conversation_id` / `duration_ms`, Claude Code `session_id` / `transcript_path`). They derive the window from the payload or git and say in the artifact when a value was generated or unknown. Build summary and files from the session's commits plus the working tree. Never `trim()` porcelain output — use `trimEnd()`.
+
+### 2026-09-25 (ET) — Ask invented provenance and hid broken 2xx bodies
+
+- **What happened:** Wave 5 review: `asArticle` filled `namespace: "company/"` and `trustTier: "advisory"` when VMC omitted them, and a 2xx search with a non-JSON body reported `status: ok` with zero hits.
+- **Root cause:** Display defaults were written into the DTO, and `vmcGet` turned a `res.json()` failure into `json: null` without telling the caller.
+- **Rule going forward:** Missing provenance stays `null` in the DTO; only the UI says "unknown". A body that does not parse is `upstream_error`, whatever the HTTP status.
+
 ### 2026-09-25 (ET) — Colleague UX: navigation named after internals, and a phone nav that ate the screen
 
 - **What happened:** The sidebar grouped screens by system internals ("Views", "System of record"), called the same thing "bucket" and "initiative", showed raw env-flag text (`PLX_MC_ROUTING_INBOX_ENABLED ≠ 1`), and below 1024px turned into a horizontal strip filling ~60% of a phone screen. Home was a notification list, not "what do I do next".

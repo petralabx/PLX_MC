@@ -111,6 +111,7 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 - `src/lib/compliance/verify.ts` — `evidenceCompleteForTier` + `verifyCompliance`
 - `src/lib/compliance/types.ts` — `RiskTier`, `ActorKind`, `VerifyInput/Result`
 - `src/lib/compliance/index.ts` — pure-core barrel (import through here)
+- `src/lib/compliance/tracked-repos.ts` — fleet registry accessor (`TRACKED_REPO_SLUGS`, build-time JSON import of `config/tracked-repos-registry.json`) + pure `registryDrift()`; the Hub MCP checkout allowlist is derived from its `status: active` entries (`ACTIVE_TRACKED_REPO_SLUGS`, so pending/sandbox entries stay fail-closed) and `tests/tracked-repos-drift.test.ts` pins every subset list (pilots, go-live, loop ledgers, REPOS seed) to it
 - `src/lib/compliance/service.ts` — server service: checkout / complete / verifyPr /
   ingest / `proposeRoutingFromPr` / listEvents
 - `src/lib/compliance/repo.ts` — Postgres accessors (dispatch ledger, mc_events, check ledger)
@@ -120,6 +121,8 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 - `src/lib/compliance/webhook.ts` — HMAC verify + PR-event parse (in-memory body)
 - `src/lib/compliance/github-pr.ts` — GitHub PR → `VerifyPrInput` (stamps, labels, changed files) for `mc_verify_pr`
 - `src/lib/compliance/go-live-announcer.ts` — one-line Teams Workflow posts on `checkout` / `pr.opened` / `task.completed` (TASK-1454/1699/1701; chat-primary, hard dedupe per task+event, coalesce only on sibling `sent`, kill switches default off; `ANNOUNCE_CHECKOUT` stays off unless operators re-enable)
+- `src/lib/compliance/backfill.ts` — nightly GitHub backfill: merged PRs (last N days) per registry repo with no resolvable `MC-Checkout` stamp and no task `prs[]` link; injected GitHub client (stubbed in tests), fail-open per repo, one `github.backfill.report` row in `mc_events`; cron `src/app/api/cron/github-backfill/route.ts`, kill switch `PLX_MC_GITHUB_BACKFILL_ENABLED` (default off)
+- `src/lib/compliance/activity.ts` — per-registry-repo activity summary (last activity, open/unstamped PRs, unattributed merges from the newest backfill report, 30-day gate block rate, freshness), a pure fold over `mc_events` served by session-gated `GET /api/activity` to the Activity screen (`/?screen=activity`, `src/components/mc/activity-view.tsx`); unknown is `null`, never 0
 - `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts`
 - `src/app/api/routing/propose/route.ts` — OIDC propose (middleware carve-out exact)
 - `src/middleware.ts` — exact self-auth carve-outs including `api/routing/propose`

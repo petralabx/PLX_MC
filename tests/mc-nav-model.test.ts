@@ -61,12 +61,13 @@ describe("nav model — grouped by task", () => {
     const admin = NAV_GROUPS.find((g) => g.id === "admin")!;
     expect(admin.collapsible).toBe(true);
     expect(NAV_GROUPS.filter((g) => g.collapsible).map((g) => g.id)).toEqual(["admin"]);
-    expect(screensOf(OFF, "admin")).toEqual(["repos", "files", "sync", "loop-ledgers", "ai-spend", "matrix", "feed"]);
+    expect(screensOf(OFF, "admin")).toEqual(["repos", "files", "sync", "loop-ledgers", "activity", "ai-spend", "matrix", "feed"]);
     expect(screensOf(ON, "admin")).toEqual([
       "repos",
       "files",
       "sync",
       "loop-ledgers",
+      "activity",
       "ai-spend",
       "matrix",
       "feed",

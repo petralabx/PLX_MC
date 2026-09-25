@@ -274,3 +274,42 @@ integrations:
       Posts one markdown line (task title + Hub/PR deep links). No inbound
       Teams history is read. Connection strings, Workflow URLs, and SAS are
       never logged. Dedup keys are announce:<kind>:<taskId>.
+
+  - id: github-backfill
+    name: Nightly GitHub backfill — merged PRs with no MC task link
+    owner: Vince (vince@petrasoap.com)
+    criticality: Low
+    # Coverage report for work that bypassed MC (webhook not enabled org-wide,
+    # stamp missing/unresolvable). Runtime, but ships dormant behind its own
+    # kill switch on top of CRON_SECRET.
+    scope: runtime (read-only GitHub pulls list; gated; off by default)
+    autonomous: false # reads PR metadata only; never comments, links, or creates Tasks
+    default_state: off
+    feature_flag: >-
+      PLX_MC_GITHUB_BACKFILL_ENABLED=1 via githubBackfillEnabled()
+      (src/lib/secrets.ts). Scheduled by the /api/cron/github-backfill
+      vercel.json entry (nightly 07:23 UTC); CRON_SECRET unset → 503.
+    kill_switch: >-
+      Unset PLX_MC_GITHUB_BACKFILL_ENABLED (route returns enabled:false, no
+      GitHub reads, no writes), or remove the vercel.json cron entry / unset
+      CRON_SECRET.
+    auth_source:
+      - GitHub token via resolveGithubToken() (src/lib/github-app) — App
+        installation token (requested scope contents:read + metadata:read) or
+        the PETRALABX_GITHUB_TOKEN / GITHUB_TOKEN PAT fallback. Listing PRs on a
+        private repo needs Pull requests:read on whichever credential resolves;
+        without it that repo reports degraded (permission_denied / not_found).
+    health_check: >-
+      Each run returns and records per-repo status ok | degraded with a
+      distinct reason (token_unconfigured, permission_denied, not_found,
+      rate_limit, network_error) plus a truncated flag; the Activity screen
+      (/?screen=activity) shows the newest report and its age.
+    fallback_path: >-
+      The GitHub App webhook + compliance gate remain the primary attribution
+      path; this report only surfaces gaps. With the flag off the Activity
+      screen shows unattributed as unknown, never zero.
+    data_audit_boundary: >-
+      Appends one github.backfill.report row per run to mc_events (payload: PR
+      number, title, URL, author, merged time, reason; at most 50 listed per
+      repo). PR bodies are parsed in memory for MC-Checkout stamps only — never
+      persisted. No Task or link mutations.

@@ -92,6 +92,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         ],
       },
       { screen: "loop-ledgers", label: "Loop ledgers", icon: "◰" },
+      { screen: "activity", label: "Repo activity", icon: "↯", hint: "cross-repo freshness" },
       { screen: "ai-spend", label: "AI spend", icon: "◎", badge: "ai-spend" },
       { screen: "matrix", label: "Traceability", icon: "⊞" },
       { screen: "feed", label: "Agent activity", icon: "◉", badge: "agents" },

@@ -265,6 +265,18 @@
 .mc .nrow .age { font-family:var(--mono); font-size:var(--p-text-cap); color:var(--p-muted); }
 .mc .nrow .id { font-family:var(--mono); font-size:var(--p-text-meta); color:var(--p-muted); }
 
+/* Home — "What needs me today" (Wave 6): one section per kind of work, each
+   with exactly one of loading / error-with-retry / empty / rows. */
+.mc .inbox .grouphd h2.nm { margin:0; font-weight:400; }
+.mc .inbox .needs-sec:not(:first-child) .grouphd { margin-top:26px; border-top:1px solid var(--p-grid); }
+.mc .needs-state { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px var(--p-gutter);
+  border-bottom:1px solid var(--p-grid-2); font-size:var(--p-text-ui); line-height:1.4; color:var(--p-muted); }
+.mc .needs-state.err { color:var(--p-ink); border-left:2px solid var(--p-hot); }
+.mc .needs-sec .nrow-meta { flex-wrap:wrap; justify-content:flex-end; min-width:0; }
+.mc .nrow .nrow-act { font-family:var(--mono); font-size:var(--p-text-cap); letter-spacing:var(--p-track-meta);
+  text-transform:uppercase; color:var(--p-accent); white-space:nowrap; }
+.mc .needs-more { background:none; border:0; padding:10px var(--p-gutter); }
+
 /* ════════ HELP (Wave 6 — colleague UX) ════════ */
 .mc .help { padding:18px var(--p-gutter) 80px; max-width:880px; display:flex; flex-direction:column; gap:26px; }
 .mc .help h2 { font-family:var(--mono); font-size:var(--p-text-kicker); font-weight:400; letter-spacing:0.18em; text-transform:uppercase;

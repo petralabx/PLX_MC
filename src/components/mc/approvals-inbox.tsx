@@ -11,7 +11,7 @@ import { api, ApiClientError } from "@/lib/api";
 import type { ApprovalGate } from "@/lib/mc-data";
 import type { ScreenProps } from "@/components/mc/route";
 
-interface PendingApprovalRow {
+export interface PendingApprovalRow {
   taskId: string;
   taskTitle: string;
   stage: string;
@@ -20,6 +20,15 @@ interface PendingApprovalRow {
 
 interface ApprovalsResponse {
   approvals: PendingApprovalRow[];
+}
+
+// The queue source (GET /api/approvals), shared with Home's "What needs me".
+export function fetchPendingApprovals(): Promise<PendingApprovalRow[]> {
+  return api<ApprovalsResponse>("/approvals").then((data) => data.approvals);
+}
+
+export function approvalsLoadError(err: unknown): string {
+  return err instanceof ApiClientError ? err.message : "Failed to load approvals.";
 }
 
 // The queue load's outcome. A failed load is its own state — never an empty
@@ -66,15 +75,12 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
   const [notes, setNotes] = useState<Record<string, string>>({});
 
   const load = useCallback((): Promise<void> => {
-    return api<ApprovalsResponse>("/approvals")
-      .then((data) => {
-        setQueue({ status: "ready", rows: data.approvals });
+    return fetchPendingApprovals()
+      .then((rows) => {
+        setQueue({ status: "ready", rows });
       })
       .catch((err: Error) => {
-        setQueue({
-          status: "error",
-          message: err instanceof ApiClientError ? err.message : "Failed to load approvals.",
-        });
+        setQueue({ status: "error", message: approvalsLoadError(err) });
       });
   }, []);
 

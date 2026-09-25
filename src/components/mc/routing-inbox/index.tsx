@@ -18,7 +18,7 @@ interface InboxCandidate {
   reasons: string[];
 }
 
-interface InboxProposalSummary {
+export interface InboxProposalSummary {
   id: string;
   repoId: string;
   changeId: string;
@@ -34,7 +34,7 @@ interface InboxProposalSummary {
   selectedBucketId: string | null;
 }
 
-interface InboxListResponse {
+export interface InboxListResponse {
   proposals: InboxProposalSummary[];
   counts: Record<InboxScope, number>;
   offline?: boolean;

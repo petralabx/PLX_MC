@@ -44,6 +44,7 @@ import {
   type NavGroupId,
   type NavList,
 } from "./nav-model";
+import { needsMeCount, todayGridDay } from "./needs-me";
 import type { Nav, Route } from "./route";
 import { useVendorAlertCount } from "./vendor-spend/use-alert-badge";
 
@@ -179,6 +180,8 @@ const navGroupState = createNavGroupState(() =>
   typeof window === "undefined" ? null : window.localStorage
 );
 
+const noClockSubscribe = () => () => {};
+
 function useNavGroupOpen(id: NavGroupId): boolean {
   return useSyncExternalStore(
     navGroupState.subscribe,
@@ -206,6 +209,9 @@ export function Sidebar({
   drawerRef?: RefObject<HTMLElement | null>;
 }) {
   useMcVersion();
+  const viewer = useViewer();
+  // Client clock only (null on the server) so SSR and hydration agree.
+  const today = useSyncExternalStore(noClockSubscribe, () => todayGridDay(new Date()), () => null);
   const unread = unreadCount();
   const tasks = allTasks();
   // Honest live-agent count: agents currently executing in-flight work (EN-005),
@@ -219,6 +225,9 @@ export function Sidebar({
   // Vendors at warn/critical/over budget (MTD) — the AI Spend proactive badge.
   const vendorAlerts = useVendorAlertCount();
   const adminOpen = useNavGroupOpen("admin");
+  // Home badge: what the store can say needs this viewer (Home's needs-me
+  // rules) plus unread notifications — both live on Home.
+  const needs = viewer && today !== null ? needsMeCount(viewer, tasks, today, sc) : 0;
 
   // Keep the active screen visible: arriving on an Admin & health screen (deep
   // link, ⌘K, the topbar sync pill) expands that group.
@@ -229,7 +238,12 @@ export function Sidebar({
   }, [route.screen]);
 
   const badges: Record<NavBadge, ReactNode> = {
-    needs: unread ? <span className="badge acc">{unread}</span> : null,
+    needs:
+      needs + unread ? (
+        <span className="badge acc" title={`${needs} need you · ${unread} unread`}>
+          {needs + unread}
+        </span>
+      ) : null,
     approvals: approvals ? <span className="badge acc">{approvals}</span> : null,
     sync: conflicts ? <span className="badge hot">{conflicts}</span> : null,
     agents: <span className="badge acc">{live} live</span>,

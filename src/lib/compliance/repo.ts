@@ -25,7 +25,8 @@ export interface AppendEventInput {
   dedupKey?: string | null;
 }
 
-export async function appendEvent(e: AppendEventInput): Promise<void> {
+/** Appends one event; resolves to its seq, or undefined when a keyed replay was a no-op. */
+export async function appendEvent(e: AppendEventInput): Promise<string | undefined> {
   const rows = await query<{ seq: string }>(
     `INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload, dedup_key)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -34,8 +35,9 @@ export async function appendEvent(e: AppendEventInput): Promise<void> {
     [e.kind, e.actor, e.repo ?? null, e.taskId ?? null, e.pr ?? null, JSON.stringify(e.payload ?? {}), e.dedupKey ?? null]
   );
   // Replay of a keyed event must not re-announce (Power Automate / webhook retries).
-  if (e.dedupKey && rows.length === 0) return;
+  if (e.dedupKey && rows.length === 0) return undefined;
   await announceGoLiveEventSafe(e);
+  return rows[0] ? String(rows[0].seq) : undefined;
 }
 
 export interface EventRow {

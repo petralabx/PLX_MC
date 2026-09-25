@@ -115,6 +115,29 @@ async function resolveDispatch(
   return valid ? d : null;
 }
 
+// One gate verdict event per (repo, pr, head, subject, verdict) — shared by the
+// gate writer and the merge-attribution reader so the two keys cannot drift.
+function gateDedupKey(repoName: string, prNumber: number, headSha: string, subjectId: string | null, verdict: string): string {
+  return `gate:${repoName}:${prNumber}:${headSha}:${subjectId ?? "none"}:${verdict}`;
+}
+
+// Merge attribution, not gating: the TTL bounds when a credential can pass the
+// gate, but a PR that passed in time and merged after expiry is still that
+// task's work. Accept an expired credential only when it is unrevoked, bound to
+// this repo, and the gate passed this exact head for its task.
+async function resolveDispatchForMerge(
+  checkoutId: string,
+  evt: PrEvent
+): Promise<repo.DispatchRow | null> {
+  const d = await repo.getDispatch(checkoutId);
+  if (!d || d.revoked || !dispatchRepoMatches(d.repo, evt.repo, evt.repoFullName)) return null;
+  if (new Date(d.expiresAt).getTime() > Date.now()) return d;
+  const passedTaskId = await repo.eventTaskIdByDedupKey(
+    gateDedupKey(evt.repo, evt.prNumber, evt.headSha, d.taskId, "pass")
+  );
+  return passedTaskId === d.taskId ? d : null;
+}
+
 // ─── Checkout (the handshake, decision 3) ────────────────────────────────────
 
 /** Which HTTP door invoked the shared checkout() core (audit provenance). */
@@ -328,7 +351,7 @@ async function recordVerdict(
     // Idempotent per (repo, pr, sha, subject, verdict): a replay dedups; a
     // re-verify that flips a verdict still records (review S3). subjectId keeps
     // each task — and each invalid checkout — of a multi-task PR distinct.
-    dedupKey: `gate:${input.repo}:${input.prNumber}:${input.headSha}:${subjectId ?? "none"}:${result.verdict}`,
+    dedupKey: gateDedupKey(input.repo, input.prNumber, input.headSha, subjectId, result.verdict),
   });
 }
 
@@ -743,7 +766,10 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
   if (ids.length > 0) {
     actorKind = "agent";
     for (const cid of ids) {
-      const d = await resolveDispatch(cid, evt.repo, evt.repoFullName);
+      const d =
+        evt.action === "closed" && evt.merged
+          ? await resolveDispatchForMerge(cid, evt)
+          : await resolveDispatch(cid, evt.repo, evt.repoFullName);
       if (d?.taskId) taskIds.push(d.taskId);
       if (actorIdentity === (evt.author || "operator") && d?.runtime) actorIdentity = d.runtime;
     }

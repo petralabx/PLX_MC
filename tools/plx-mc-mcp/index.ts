@@ -328,15 +328,17 @@ server.tool(
 
 server.tool(
   "mc_complete_task",
-  "Complete agent work for a checkout credential.",
+  "Complete agent work for a checkout credential. verificationCommands and rollback are required.",
   {
     checkoutId: z.string().min(1),
     summary: z.string().min(1),
     commitSha: z.string().optional(),
     prUrl: z.string().optional(),
-    verificationCommands: z.array(z.string()).optional(),
+    // Pipeline contract: non-empty verificationCommands AND rollback (matches
+    // completeTaskInputShape in src/lib/mcp/actions.ts).
+    verificationCommands: z.array(z.string().trim().min(1)).min(1),
     filesChanged: z.array(z.string()).optional(),
-    rollback: z.string().optional(),
+    rollback: z.string().trim().min(1),
     testRun: z
       .object({
         suite: z.string().min(1),

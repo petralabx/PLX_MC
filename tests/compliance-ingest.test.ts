@@ -8,7 +8,7 @@ import { parsePullRequestEvent, verifyGithubSignature } from "@/lib/compliance/w
 
 const db = vi.hoisted(() => ({
   dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; taskId: string; revoked: boolean; repo: string; expiresAt: string }>(),
-  events: [] as { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown> }[],
+  events: [] as { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown>; dedupKey?: string }[],
 }));
 
 vi.mock("@/lib/compliance/projection", () => ({
@@ -20,8 +20,11 @@ vi.mock("@/lib/compliance/repo", () => ({
   async getDispatch(id: string) {
     return db.dispatches.get(id) ?? null;
   },
-  async appendEvent(e: { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown> }) {
+  async appendEvent(e: { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown>; dedupKey?: string }) {
     db.events.push(e);
+  },
+  async eventTaskIdByDedupKey(dedupKey: string) {
+    return db.events.find((e) => e.dedupKey === dedupKey)?.taskId ?? null;
   },
 }));
 
@@ -116,6 +119,41 @@ describe("ingestPullRequest", () => {
     const evt = parsePullRequestEvent(prPayload({ action: "closed" }, { merged: true, body: "x\nMC-Checkout: dsp_x" }))!;
     await ingestPullRequest(evt);
     expect(db.events.map((e) => e.kind)).toEqual(expect.arrayContaining(["pr.merged", "task.promotion.requested"]));
+  });
+
+  // Checkout TTL gates new work; it must not erase attribution for a PR that
+  // passed the gate in time but merged after the credential expired.
+  describe("merge after the checkout TTL", () => {
+    const expired = (over: Partial<{ revoked: boolean; repo: string }> = {}) => ({
+      id: "dsp_old", actorKind: "agent" as const, taskId: "TASK-901", revoked: false, repo: "PLX_MC",
+      expiresAt: new Date(Date.now() - 24 * 3_600_000).toISOString(), ...over,
+    });
+    const gatePassed = (taskId: string) =>
+      db.events.push({ kind: "gate.passed", actor: "claude-code", repo: "PLX_MC", taskId, pr: "42", dedupKey: `gate:PLX_MC:42:abc123:${taskId}:pass` });
+    const mergeEvt = () =>
+      parsePullRequestEvent(prPayload({ action: "closed" }, { merged: true, body: "x\nMC-Checkout: dsp_old" }))!;
+
+    it("keeps the task link when the gate passed this head with that checkout", async () => {
+      db.dispatches.set("dsp_old", expired());
+      gatePassed("TASK-901");
+      const r = await ingestPullRequest(mergeEvt());
+      expect(r).toMatchObject({ actorKind: "agent", taskId: "TASK-901" });
+      expect(db.events.filter((e) => e.kind === "task.promotion.requested").map((e) => e.taskId)).toEqual(["TASK-901"]);
+    });
+
+    it("does not attribute an expired checkout the gate never passed", async () => {
+      db.dispatches.set("dsp_old", expired());
+      const r = await ingestPullRequest(mergeEvt());
+      expect(r.taskId).toBeNull();
+    });
+
+    it("never attributes a revoked or wrong-repo checkout, even after a pass", async () => {
+      gatePassed("TASK-901");
+      db.dispatches.set("dsp_old", expired({ revoked: true }));
+      expect((await ingestPullRequest(mergeEvt())).taskId).toBeNull();
+      db.dispatches.set("dsp_old", expired({ repo: "plx-customer-portal" }));
+      expect((await ingestPullRequest(mergeEvt())).taskId).toBeNull();
+    });
   });
 
   it("records a closed-without-merge PR as pr.closed, never pr.opened (B1)", async () => {

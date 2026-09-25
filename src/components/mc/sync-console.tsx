@@ -8,6 +8,7 @@ import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   actorById,
   auditLog,
+  dataSource,
   lastSweep,
   markAllSynced,
   openConflicts,
@@ -16,6 +17,7 @@ import {
   retryError,
   spLists,
   storeSyncCounts,
+  sweepInFlight,
 } from "@/lib/mc-data/store";
 import type { SyncFreshnessResult } from "@/lib/sync/freshness";
 
@@ -24,6 +26,7 @@ import { directionGlyph, directionLabel } from "./record-logic";
 import type { ScreenProps } from "./route";
 import {
   SYNC_STALE_BANNER,
+  connectionStatus,
   resolutionsPausedFromFreshness,
   syncStaleBannerText,
 } from "./sync-console.freshness";
@@ -62,16 +65,19 @@ export function SyncConsole({ nav }: ScreenProps) {
 
   const resolutionsPaused = resolutionsPausedFromFreshness(freshness);
   const staleBanner = syncStaleBannerText(freshness);
+  const connection = connectionStatus(dataSource(), freshness);
 
   const listByKey = useMemo(() => {
     return new Map(lists.map((list) => [list.key, list]));
   }, [lists]);
 
   // markAllSynced triggers a real engine sweep (outbound push + inbound
-  // delta) and adopts the result; the old demo inbound simulation is gone.
+  // delta) and adopts the result only once the server confirms; a failure
+  // surfaces as a notice. The old demo inbound simulation is gone.
   const onSyncNow = () => {
     markAllSynced();
   };
+  const syncing = sweepInFlight();
 
   const overallClass = unresolved > 0 ? "warn" : counts.pending > 0 ? "pending" : "";
   const overallLabel =
@@ -99,8 +105,8 @@ export function SyncConsole({ nav }: ScreenProps) {
             <span className="d" />
             {overallLabel}
           </span>
-          <button type="button" className="btn acc" onClick={onSyncNow}>
-            Sync now ↻
+          <button type="button" className="btn acc" disabled={syncing} onClick={onSyncNow}>
+            {syncing ? "Syncing…" : "Sync now ↻"}
           </button>
         </div>
       </div>
@@ -117,7 +123,7 @@ export function SyncConsole({ nav }: ScreenProps) {
 
         <div className="spsite">
           <div className="l">
-            <span className={`dotc ${SP_SITE.connected ? "ok" : "off"}`} />
+            <span className={`dotc ${connection.tone}`} />
             <div>
               <div className="nm">{SP_SITE.name}</div>
               <div className="url">
@@ -129,7 +135,7 @@ export function SyncConsole({ nav }: ScreenProps) {
           <div className="r">
             <div className="f">
               <span className="k">Connection</span>
-              <span className="v">{SP_SITE.connected ? "Connected · Microsoft 365" : "Disconnected"}</span>
+              <span className="v">{connection.label}</span>
             </div>
             <div className="f">
               <span className="k">Cadence</span>

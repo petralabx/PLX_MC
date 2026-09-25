@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   __setPatchMirrorForTests,
+  __setStateLoaderForTests,
+  __setSweepMirrorForTests,
   activeNotices,
   addSubtask,
   addTask,
@@ -33,12 +35,15 @@ import {
   setTaskRepos,
   setTaskStage,
   setTaskTargetEnv,
+  spLists,
   storeSyncCounts,
+  sweepInFlight,
   taskById,
   toggleSubtask,
   unreadCount,
+  type ServerSnapshot,
 } from "@/lib/mc-data/store";
-import { CURRENT_USER } from "@/lib/mc-data";
+import { OPERATOR_ID } from "@/lib/mc-data";
 import type { Task } from "@/lib/mc-data";
 
 beforeEach(() => resetStore());
@@ -63,13 +68,85 @@ describe("addTask", () => {
   });
 });
 
-describe("markAllSynced (the sweep)", () => {
-  it("flips every pending item to synced and zeroes pending counts", () => {
-    addTask({ title: "x", bucket: "BKT-WMS" });
+// "Sync now" (Wave 2 — UI trust): nothing is marked synced, and no "Sweep
+// completed" row is written, until the server's sweep has actually succeeded.
+describe("markAllSynced (Sync now — the sweep)", () => {
+  const sweepRow = (body: string) => auditLog().some((r) => r.body.startsWith(body));
+
+  // What GET /api/state returns after a successful sweep: the pushed task is
+  // synced, pending counts are zero, and the engine wrote its own audit row.
+  function sweptSnapshot(taskId: string): ServerSnapshot {
+    return {
+      tasks: allTasks().map((t) => (t.id === taskId ? { ...t, sync: { ...t.sync, state: "synced" } } : t)),
+      risks: [],
+      files: [],
+      conflicts: [],
+      errors: [],
+      audit: [{ ts: "2026.09.25 · 12:00", actor: "vince", body: "Sweep completed — 1 outbound push, 0 inbound changes.", state: "synced" }],
+      counts: { todos: { synced: 1, pending: 0, conflict: 0, error: 0 } },
+      lastSweep: "2026.09.25 · 12:00",
+    };
+  }
+
+  it("does not mark anything synced or log 'Sweep completed' before the server confirms", () => {
+    const t = addTask({ title: "x", bucket: "BKT-WMS" });
+    const pending = storeSyncCounts().pending;
     markAllSynced();
-    const counts = storeSyncCounts();
-    expect(counts.pending).toBe(0);
-    expect(allTasks().every((t) => t.sync.state !== "pending")).toBe(true);
+    expect(taskById(t.id)?.sync.state).toBe("pending");
+    expect(storeSyncCounts().pending).toBe(pending);
+    expect(sweepRow("Sweep completed")).toBe(false);
+  });
+
+  it("holds items pending while the sweep is in flight, then adopts the server's result", async () => {
+    const t = addTask({ title: "x", bucket: "BKT-WMS" });
+    let finish!: () => void;
+    __setSweepMirrorForTests(() => new Promise<void>((resolve) => (finish = resolve)));
+    __setStateLoaderForTests(async () => sweptSnapshot(t.id));
+
+    const done = markAllSynced();
+    expect(sweepInFlight()).toBe(true);
+    expect(taskById(t.id)?.sync.state).toBe("pending");
+
+    finish();
+    await done;
+    expect(sweepInFlight()).toBe(false);
+    expect(taskById(t.id)?.sync.state).toBe("synced");
+    expect(spLists().find((l) => l.key === "todos")?.counts.pending).toBe(0);
+    expect(auditLog()[0].body).toBe("Sweep completed — 1 outbound push, 0 inbound changes.");
+    expect(activeNotices()).toHaveLength(0);
+  });
+
+  it("keeps items unsynced and surfaces an error notice when the sweep fails", async () => {
+    const t = addTask({ title: "x", bucket: "BKT-WMS" });
+    const pending = storeSyncCounts().pending;
+    __setSweepMirrorForTests(async () => {
+      throw new Error("sync.mutate denied (not_permitted).");
+    });
+
+    await markAllSynced();
+    expect(sweepInFlight()).toBe(false);
+    expect(taskById(t.id)?.sync.state).toBe("pending");
+    expect(storeSyncCounts().pending).toBe(pending);
+    expect(sweepRow("Sweep completed")).toBe(false);
+    const notices = activeNotices();
+    expect(notices).toHaveLength(1);
+    expect(notices[0].tone).toBe("error");
+    expect(notices[0].body).toContain("sync.mutate denied");
+  });
+
+  it("runs one sweep at a time (a second click while in flight is not a second sweep)", async () => {
+    let calls = 0;
+    let finish!: () => void;
+    __setSweepMirrorForTests(() => {
+      calls += 1;
+      return new Promise<void>((resolve) => (finish = resolve));
+    });
+    __setStateLoaderForTests(async () => sweptSnapshot("TASK-221"));
+    const first = markAllSynced();
+    const second = markAllSynced();
+    finish();
+    await Promise.all([first, second]);
+    expect(calls).toBe(1);
   });
 });
 
@@ -184,7 +261,7 @@ describe("patchTaskFields (the shared mutation spine)", () => {
 // The two palette spine actions (Module G, SPEC §3.G.2 / §3.G.3). The palette's
 // run handlers are thin wrappers around these store actions; the invariant is
 // that "Mark done" → stage:"verified" (band=done) and "Assign to me" →
-// assignee: CURRENT_USER, both routed through the FROZEN spine (optimistic +
+// assignee: the viewer (OPERATOR_ID stands in here), both routed through the FROZEN spine (optimistic +
 // PATCH + reconcile/rollback + notice). The already-done / already-mine cases
 // are handled by the palette HIDING the command (asserted by the gating predicates).
 describe("palette spine actions — Mark done / Assign to me (Module G)", () => {
@@ -195,25 +272,25 @@ describe("palette spine actions — Mark done / Assign to me (Module G)", () => 
     expect(taskById("TASK-221")?.stage).toBe("verified");
   });
 
-  it("'Assign to me' sets the assignee to CURRENT_USER optimistically", () => {
+  it("'Assign to me' sets the assignee to OPERATOR_ID optimistically", () => {
     // TASK-221 seeds unassigned (assignee null), so assigning to me is a change.
     expect(taskById("TASK-221")?.assignee).toBeNull();
-    reassignTask("TASK-221", CURRENT_USER);
-    expect(taskById("TASK-221")?.assignee).toBe(CURRENT_USER);
+    reassignTask("TASK-221", OPERATOR_ID);
+    expect(taskById("TASK-221")?.assignee).toBe(OPERATOR_ID);
   });
 
   it("hides the action when already in the target state (the gating predicates)", () => {
     // The palette appends "Mark done" only when stage ∉ {verified, merged}, and
-    // "Assign to me" only when assignee !== CURRENT_USER. Mirror those predicates
+    // "Assign to me" only when assignee !== the viewer. Mirror those predicates
     // so the no-op-avoidance contract is pinned (SPEC §3.G.2).
     const done: Task = { ...taskById("TASK-221")!, stage: "verified" };
-    const mine: Task = { ...taskById("TASK-221")!, assignee: CURRENT_USER };
+    const mine: Task = { ...taskById("TASK-221")!, assignee: OPERATOR_ID };
     const isDone = (t: Task) => t.stage === "verified" || t.stage === "merged";
     expect(isDone(done)).toBe(true);
     expect(isDone({ ...done, stage: "merged" })).toBe(true);
     expect(isDone(taskById("TASK-221")!)).toBe(false); // "planned" → action shown
-    expect(mine.assignee === CURRENT_USER).toBe(true); // → "Assign to me" hidden
-    expect(taskById("TASK-221")!.assignee === CURRENT_USER).toBe(false); // → shown
+    expect(mine.assignee === OPERATOR_ID).toBe(true); // → "Assign to me" hidden
+    expect(taskById("TASK-221")!.assignee === OPERATOR_ID).toBe(false); // → shown
   });
 
   it("'Mark done' rolls back + surfaces a notice when the PATCH rejects", async () => {
@@ -235,12 +312,12 @@ describe("palette spine actions — Mark done / Assign to me (Module G)", () => 
 
   it("'Assign to me' rolls back + surfaces a notice when the PATCH rejects", async () => {
     const before = taskById("TASK-221")!.assignee;
-    expect(before).not.toBe(CURRENT_USER); // guard: a real change
+    expect(before).not.toBe(OPERATOR_ID); // guard: a real change
     __setPatchMirrorForTests(async () => {
       throw new Error("PATCH 500");
     });
 
-    await reassignTask("TASK-221", CURRENT_USER);
+    await reassignTask("TASK-221", OPERATOR_ID);
 
     expect(taskById("TASK-221")?.assignee).toBe(before); // reassign rolled back
     expect(activeNotices()).toHaveLength(1);

@@ -29,8 +29,12 @@ import type {
   Trace,
 } from "./types";
 
-// The signed-in human whose cockpit this is (the operator, until M365 auth lands).
-export const CURRENT_USER = "vince";
+// The hub operator (Owner). NOT the signed-in viewer — screens read the viewer
+// the server resolved from the Entra session (store `viewer()` / useViewer()).
+// Only (1) the stand-in viewer in dormant no-OIDC mode (DORMANT_OPERATOR_ID,
+// src/lib/api/session-actor.ts) and (2) the server-side default owner for
+// records created with none.
+export const OPERATOR_ID = "vince";
 
 export const STAGES: Stage[] = [
   { n: "01", key: "backlog", name: "Backlog", band: "todo" },
@@ -371,7 +375,6 @@ export const SP_SITE: SpSite = {
   host: "petrasoap.sharepoint.com",
   path: "/sites/plx-mission-control",
   tz: "UTC",
-  connected: true,
 };
 // No sweep has run against the production site yet; live values arrive from
 // the API on hydration.

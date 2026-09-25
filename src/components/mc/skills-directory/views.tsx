@@ -3,7 +3,8 @@
 import { useState } from "react";
 
 import { api } from "@/lib/api";
-import { ACTORS, CURRENT_USER, isApprover } from "@/lib/mc-data";
+import { isApprover } from "@/lib/mc-data";
+import { useViewer } from "@/lib/mc-data/hooks";
 import type {
   CatalogListResult,
   SkillDetailResult,
@@ -49,11 +50,6 @@ type ScriptModalState =
     }
   | { action: ScriptAction; status: "error"; error: string };
 
-function currentSubmitterEmail(): string {
-  const actor = ACTORS[CURRENT_USER];
-  return actor?.kind === "human" ? actor.email ?? "" : "";
-}
-
 function actionLabel(action: ScriptAction): string {
   return action === "install" ? "Install" : "Sync";
 }
@@ -96,8 +92,10 @@ export function IndexView({
   const { meta, skills } = catalog;
   const tags = deriveTags(skills);
   const filtered = applyFilters(skills, filter);
-  const approver = isApprover(ACTORS[CURRENT_USER]);
-  const canSubmit = skillId.trim() && skillMarkdown.trim() && currentSubmitterEmail();
+  const viewer = useViewer();
+  const submitterEmail = viewer?.email ?? "";
+  const approver = isApprover(viewer);
+  const canSubmit = skillId.trim() && skillMarkdown.trim() && submitterEmail;
 
   async function loadReviewQueue() {
     setQueueState({ kind: "loading" });
@@ -138,7 +136,7 @@ export function IndexView({
           skillId: id,
           title: `Skill review: ${id}`,
           description: description.trim() || undefined,
-          submitterEmail: currentSubmitterEmail(),
+          submitterEmail,
           skillMd: markdown,
         }),
       });
@@ -157,7 +155,7 @@ export function IndexView({
       "/skills-directory/submissions/" + encodeURIComponent(id),
       {
         method: "PATCH",
-        body: JSON.stringify({ actor: CURRENT_USER, status, reviewComment: label }),
+        body: JSON.stringify({ actor: viewer?.id, status, reviewComment: label }),
       }
     );
     setSubmissions((rows) => rows?.map((row) => (row.id === id ? updated : row)) ?? [updated]);

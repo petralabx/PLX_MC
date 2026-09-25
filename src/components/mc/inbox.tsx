@@ -1,24 +1,41 @@
 // Inbox / Home — the default cockpit screen.
 // Ported from docs/product/prototype/mc-views.jsx › InboxView. Two sections:
 // "Needs your attention" (notifications) and "Assigned to me" (the viewer's tasks).
-import { ACTORS, CURRENT_USER, tasksForUser } from "@/lib/mc-data";
-import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allTasks, inboxNotifications, markRead, unreadCount } from "@/lib/mc-data/store";
+import { useSyncExternalStore } from "react";
+
+import { tasksForUser, type Human } from "@/lib/mc-data";
+import { useMcVersion, useViewer } from "@/lib/mc-data/hooks";
+import { allTasks, inboxNotifications, markRead, unreadCount, viewerId } from "@/lib/mc-data/store";
 
 import { Confidence } from "./atoms";
 import type { ScreenProps } from "./route";
 
+// Time-of-day greeting for the signed-in viewer. `hour` is null until the
+// client clock is read (SSR has no viewer timezone), and an unresolved viewer
+// is greeted without a name rather than as someone else.
+export function greeting(hour: number | null, viewer: Human | null): string {
+  const part =
+    hour === null ? "Hello" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = viewer?.name.split(" ")[0];
+  return firstName ? `${part}, ${firstName}` : part;
+}
+
+const noSubscribe = () => () => {};
+
 export function InboxView({ nav, openNewTask }: ScreenProps & { openNewTask?: () => void }) {
   useMcVersion();
-  const firstName = ACTORS[CURRENT_USER].name.split(" ")[0];
-  const mine = tasksForUser(CURRENT_USER, allTasks()).slice(0, 5);
+  const viewer = useViewer();
+  // Server snapshot null → SSR and the hydrating render agree; the client
+  // re-renders with its local hour straight after.
+  const hour = useSyncExternalStore(noSubscribe, () => new Date().getHours(), () => null);
+  const mine = tasksForUser(viewerId(), allTasks()).slice(0, 5);
   const unread = unreadCount();
 
   return (
     <div className="mc-main" data-testid="inbox-screen">
       <div className="ph">
         <div>
-          <span className="kk">Good morning, {firstName}</span>
+          <span className="kk">{greeting(hour, viewer)}</span>
           <h1>
             Mission <em>control</em>
           </h1>

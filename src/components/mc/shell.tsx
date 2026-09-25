@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandBoundary } from "@/components/brand";
 import { hydrate } from "@/lib/mc-data/store";
 
-import { NoticeHost, Sidebar, Topbar } from "./chrome";
+import { NoticeHost, OfflineBanner, Sidebar, Topbar } from "./chrome";
 import { CommandPalette } from "./command-palette";
 import { InboxView } from "./inbox";
 import { NewInitiativeModal } from "./new-initiative-modal";
@@ -193,6 +193,7 @@ export function MissionControlShell() {
   return (
     <BrandBoundary className={`mc${dark ? " dark" : ""}`} data-mc-ready={ready ? "true" : undefined}>
       <Topbar nav={nav} dark={dark} setDark={setDark} onOpenPalette={openPalette} />
+      <OfflineBanner />
       <div className="mc-shell">
         <Sidebar route={route} nav={nav} onNewProject={openNewProject} onNewInitiative={openNewInitiative} />
         {route.screen === "home" ? (

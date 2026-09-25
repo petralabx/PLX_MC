@@ -485,7 +485,6 @@ export interface SpSite {
   host: string;
   path: string;
   tz: string;
-  connected: boolean;
 }
 
 export interface SpConflict {

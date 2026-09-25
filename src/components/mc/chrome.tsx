@@ -2,12 +2,21 @@
 // Ported from docs/product/prototype/mc-chrome.jsx. Counts come from the
 // runtime store so the sync pill and badges stay live after store actions.
 // The command palette (⌘K) mounts here when the authoring lane lands.
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Image from "next/image";
 
 import { liveAgentCount } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion, useViewer } from "@/lib/mc-data/hooks";
-import { allTasks, dismissNotice, navBuckets, navProjects, storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
+import {
+  allTasks,
+  dataSource,
+  dismissNotice,
+  hydrate,
+  navBuckets,
+  navProjects,
+  storeSyncCounts,
+  unreadCount,
+} from "@/lib/mc-data/store";
 import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 import { routingInboxEnabled } from "@/components/mc/routing-inbox/flag";
 
@@ -205,6 +214,31 @@ export function Sidebar({
           : null}
       </div>
     </nav>
+  );
+}
+
+// OfflineBanner — app-wide honesty strip under the topbar (Wave 2 — UI trust).
+// When GET /api/state fails the store keeps rendering seed/cached data that
+// looks real, so say so and offer a retry (hydrate() reloads state + viewer).
+// Renders nothing while the data is live or the first load is still pending.
+export function OfflineBanner() {
+  useMcVersion();
+  const [retrying, setRetrying] = useState(false);
+  if (dataSource() !== "offline") return null;
+  const retry = () => {
+    setRetrying(true);
+    void hydrate().finally(() => setRetrying(false));
+  };
+  return (
+    <div className="sk-banner mc-offline" role="alert" data-testid="offline-banner">
+      <span className="dot" />
+      <span className="sk-banner-body">
+        <span className="sk-banner-ct">Offline — showing cached or demo data</span>
+      </span>
+      <button type="button" className="btn ghost sm" disabled={retrying} onClick={retry}>
+        {retrying ? "Retrying…" : "Retry"}
+      </button>
+    </div>
   );
 }
 

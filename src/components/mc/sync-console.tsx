@@ -8,6 +8,7 @@ import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   actorById,
   auditLog,
+  dataSource,
   lastSweep,
   markAllSynced,
   openConflicts,
@@ -24,6 +25,7 @@ import { directionGlyph, directionLabel } from "./record-logic";
 import type { ScreenProps } from "./route";
 import {
   SYNC_STALE_BANNER,
+  connectionStatus,
   resolutionsPausedFromFreshness,
   syncStaleBannerText,
 } from "./sync-console.freshness";
@@ -62,6 +64,7 @@ export function SyncConsole({ nav }: ScreenProps) {
 
   const resolutionsPaused = resolutionsPausedFromFreshness(freshness);
   const staleBanner = syncStaleBannerText(freshness);
+  const connection = connectionStatus(dataSource(), freshness);
 
   const listByKey = useMemo(() => {
     return new Map(lists.map((list) => [list.key, list]));
@@ -117,7 +120,7 @@ export function SyncConsole({ nav }: ScreenProps) {
 
         <div className="spsite">
           <div className="l">
-            <span className={`dotc ${SP_SITE.connected ? "ok" : "off"}`} />
+            <span className={`dotc ${connection.tone}`} />
             <div>
               <div className="nm">{SP_SITE.name}</div>
               <div className="url">
@@ -129,7 +132,7 @@ export function SyncConsole({ nav }: ScreenProps) {
           <div className="r">
             <div className="f">
               <span className="k">Connection</span>
-              <span className="v">{SP_SITE.connected ? "Connected · Microsoft 365" : "Disconnected"}</span>
+              <span className="v">{connection.label}</span>
             </div>
             <div className="f">
               <span className="k">Cadence</span>

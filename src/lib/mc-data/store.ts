@@ -88,7 +88,15 @@ interface McState {
   // The signed-in viewer, resolved server-side from the Entra session (GET
   // /api/viewer). Null until the server answers — the client never guesses.
   viewer: Human | null;
+  // Where the data on screen came from — see DataSource.
+  dataSource: DataSource;
 }
+
+// Wave 2 — UI trust. "seed" = the bundled fixtures before the first GET
+// /api/state answer; "live" = the server snapshot; "offline" = the last load
+// failed, so screens show cached (last live) or demo (seed) data that looks
+// real — the shell's OfflineBanner says so instead of staying silent.
+export type DataSource = "seed" | "live" | "offline";
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
@@ -114,6 +122,7 @@ function initialState(): McState {
     buckets: Object.fromEntries(BUCKETS.map((b) => [b.id, clone(b)])),
     projects: Object.fromEntries(PROJECTS.map((p) => [p.id, clone(p)])),
     viewer: null,
+    dataSource: "seed",
   };
 }
 
@@ -198,6 +207,7 @@ export const openConflicts = (): SpConflict[] => state.conflicts;
 export const openErrors = (): SpError[] => state.errors;
 export const auditLog = (): AuditRow[] => state.audit;
 export const lastSweep = (): string => state.lastSweep;
+export const dataSource = (): DataSource => state.dataSource;
 // EN-002 / WS-2 — the repo registry (allow-list) and self-service request queue.
 export const allRepos = (): Record<string, Repo> => state.repos;
 export const repoRequests = (): RepoRequest[] => state.repoRequests;
@@ -305,7 +315,7 @@ function serverCall(fn: () => Promise<void>) {
 }
 
 // API response shape of GET /api/state (the engine's snapshot).
-interface ServerSnapshot {
+export interface ServerSnapshot {
   tasks: Task[];
   risks: Risk[];
   files: FileEntry[];
@@ -328,6 +338,7 @@ interface ServerSnapshot {
 // Adopt the server's truth for everything the engine owns; notifications,
 // actors, and the not-yet-mirrored lists keep their local/fixture state.
 function applyServerState(snapshot: ServerSnapshot) {
+  state.dataSource = "live";
   state.tasks = snapshot.tasks;
   state.risks = snapshot.risks;
   state.files = snapshot.files;
@@ -364,8 +375,40 @@ function mirrorRepoRequest(request: RepoRequest) {
   });
 }
 
+// The GET /api/state seam (same pattern as the viewer seam below). A failed
+// load marks the data source offline — the fixture/cached data stays on screen
+// but is labelled as such (OfflineBanner), then the error propagates as before.
+type StateLoader = () => Promise<ServerSnapshot>;
+
+const defaultStateLoader: StateLoader = () => api<ServerSnapshot>("/state");
+
+let stateLoader: StateLoader = defaultStateLoader;
+let stateLoaderInjected = false;
+
+export function __setStateLoaderForTests(fn: StateLoader | null) {
+  stateLoader = fn ?? defaultStateLoader;
+  stateLoaderInjected = fn !== null;
+}
+
 async function refreshFromServer() {
-  applyServerState(await api<ServerSnapshot>("/state"));
+  let snapshot: ServerSnapshot;
+  try {
+    snapshot = await stateLoader();
+  } catch (err) {
+    state.dataSource = "offline";
+    emit();
+    throw err;
+  }
+  applyServerState(snapshot);
+}
+
+// Hydrate/Retry's snapshot load: no-op under SSR/tests unless a loader is
+// injected; a failure is already surfaced via dataSource, so it is only logged.
+function loadState(): Promise<void> {
+  if (typeof window === "undefined" && !stateLoaderInjected) return Promise.resolve();
+  return refreshFromServer().catch((err) => {
+    console.warn("[mc-store] /api/state unavailable — showing cached or demo data:", err);
+  });
 }
 
 // The viewer seam (mirrors the PATCH-mirror seams below): the production
@@ -417,7 +460,8 @@ function persistInvited() {
 // render match): invited people from localStorage (directory increment is
 // not server-side yet), then the engine's snapshot and the signed-in viewer
 // from the API. User tasks now persist server-side — localStorage no longer
-// carries them. Returns the viewer load (for tests); callers fire-and-forget.
+// carries them. Also the OfflineBanner's Retry. Returns when both loads have
+// settled (for tests and the Retry button); the shell fires and forgets.
 export function hydrate(): Promise<void> {
   if (canPersist()) {
     try {
@@ -436,8 +480,7 @@ export function hydrate(): Promise<void> {
       // corrupt payload — ignore, fall back to seed data
     }
   }
-  serverCall(refreshFromServer);
-  return loadViewer();
+  return Promise.all([loadState(), loadViewer()]).then(() => undefined);
 }
 
 export function nextTaskId(): string {
@@ -1750,5 +1793,7 @@ export function resetStore() {
   projectUpdateInFlight = Promise.resolve();
   viewerLoader = defaultViewerLoader;
   viewerLoaderInjected = false;
+  stateLoader = defaultStateLoader;
+  stateLoaderInjected = false;
   emit();
 }

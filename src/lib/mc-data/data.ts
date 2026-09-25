@@ -375,7 +375,6 @@ export const SP_SITE: SpSite = {
   host: "petrasoap.sharepoint.com",
   path: "/sites/plx-mission-control",
   tz: "UTC",
-  connected: true,
 };
 // No sweep has run against the production site yet; live values arrive from
 // the API on hydration.

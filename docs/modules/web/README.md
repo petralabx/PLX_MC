@@ -17,7 +17,9 @@ module's API: it hydrates from `GET /api/state` after mount (the signed-in
 viewer comes from `GET /api/viewer`, resolved from the Entra session — no
 hardcoded current user) and mirrors every
 mutation through the shared fetch wrapper (`src/lib/api`), staying
-optimistic-local-first so the UI degrades to the last-synced view offline.
+optimistic-local-first so the UI degrades to the last-synced view offline —
+labelled by an app-wide "Offline — showing cached or demo data" banner with
+Retry whenever `GET /api/state` fails (store `dataSource()`).
 The getter/action surface is unchanged from the prototype port. It owns
 routing, screens, and client state only — it is NOT the system of record
 (SharePoint is) and NOT the sync engine (the `sync` module is).

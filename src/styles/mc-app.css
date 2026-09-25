@@ -329,6 +329,12 @@
 .mc .mc-notice .x:hover { color: var(--p-ink); }
 .mc .mc-notice .x:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 1px; color: var(--p-ink); }
 
+/* ════════ OFFLINE BANNER (Wave 2 — UI trust) ════════
+   Full-width strip under the topbar while GET /api/state is failing and the
+   screens show cached or demo data. Reuses the .sk-banner skin (as the sync
+   console's stale banner does); this only flattens it into a strip. */
+.mc .mc-offline { margin: 0; border-radius: 0; border-width: 0 0 1px 3px; }
+
 /* ─── Keyboard focus — one branded ring for every interactive control ─────────
    Several skins define their own :focus-visible accent ring; this baseline
    covers the rest (.btn, sidebar items, toolbar segments, rows-as-buttons) so

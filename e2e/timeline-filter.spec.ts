@@ -10,7 +10,7 @@ import { gotoBoard } from "./helpers";
 //     all three lenses (board / list / timeline). A "Due" preset facet is the
 //     timeline's natural filter.
 //   • The two former dead palette stubs are now real per-task spine actions
-//     ("Mark <id> done" → stage verified; "Assign <id> to me" → CURRENT_USER),
+//     ("Mark <id> done" → stage verified; "Assign <id> to me" → the viewer),
 //     routed through the frozen mutation spine.
 //
 // Determinism: offline fixtures (src/lib/mc-data/data.ts). The "Next cycle

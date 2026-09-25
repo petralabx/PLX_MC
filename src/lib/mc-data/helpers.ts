@@ -5,7 +5,6 @@
 
 import {
   AGENTS,
-  CURRENT_USER,
   STAGE_IDX,
   STAGES,
   SYNC_REGISTERS,
@@ -63,7 +62,7 @@ export function liveAgentCount(tasks: Task[] = TASKS): number {
 
 // Tasks the viewer owns, co-owns, or reports — drives the Inbox "Assigned to me".
 // Pass the store's live task array for reactive screens; defaults to the fixture.
-export function tasksForUser(userId: string = CURRENT_USER, tasks: Task[] = TASKS): Task[] {
+export function tasksForUser(userId: string, tasks: Task[] = TASKS): Task[] {
   return tasks.filter(
     (t) =>
       t.assignee === userId ||

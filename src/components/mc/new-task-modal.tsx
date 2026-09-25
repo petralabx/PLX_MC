@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  CURRENT_USER,
   PRDS,
   PRIORITY,
   STAGES,
@@ -14,7 +13,16 @@ import {
   type TargetEnv,
 } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { actorById, addTask, allBuckets, allRepos, bucketById, nextTaskId } from "@/lib/mc-data/store";
+import {
+  actorById,
+  addTask,
+  allBuckets,
+  allRepos,
+  bucketById,
+  nextTaskId,
+  ownerOrViewerDefault,
+  viewerId,
+} from "@/lib/mc-data/store";
 
 import { Avatar } from "./atoms";
 import { LabelEditor } from "./label-editor";
@@ -74,8 +82,9 @@ export function NewTaskModal({
   const [description, setDescription] = useState("");
   const [bucketId, setBucketId] = useState(startingBucketId);
   const [ownerId, setOwnerId] = useState<string | null>(null);
-  // EN-003: a human is always accountable; default to the operator authoring it.
-  const [accountableId, setAccountableId] = useState<string | null>(CURRENT_USER);
+  // EN-003: a human is always accountable; default to the viewer authoring it.
+  const [pickedAccountableId, setAccountableId] = useState<string | null | undefined>(undefined);
+  const accountableId = ownerOrViewerDefault(pickedAccountableId);
   const [humanOnly, setHumanOnly] = useState(false);
   const [accountablePickerOpen, setAccountablePickerOpen] = useState(false);
   const [priority, setPriority] = useState<PriorityKey>("medium");
@@ -140,7 +149,7 @@ export function NewTaskModal({
       description,
       bucket: bucketId,
       assignee: ownerId,
-      accountableOwner: accountableId,
+      accountableOwner: ownerOrViewerDefault(pickedAccountableId),
       humanOnly,
       priority,
       stage,
@@ -150,12 +159,11 @@ export function NewTaskModal({
       repos,
       targetEnv,
       labels,
-      reporter: CURRENT_USER,
+      reporter: viewerId(),
     });
     onClose();
     nav("board", { bucketId: created.bucket });
   }, [
-    accountableId,
     bucketId,
     canCreate,
     description,
@@ -166,6 +174,7 @@ export function NewTaskModal({
     nav,
     onClose,
     ownerId,
+    pickedAccountableId,
     priority,
     repos,
     requirements,

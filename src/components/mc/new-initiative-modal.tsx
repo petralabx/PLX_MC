@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { CURRENT_USER } from "@/lib/mc-data";
 import type { Bucket } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { actorById, addBucket, allProjects, allRepos } from "@/lib/mc-data/store";
+import { actorById, addBucket, allProjects, allRepos, ownerOrViewerDefault } from "@/lib/mc-data/store";
 
 import { Avatar } from "./atoms";
 import { PeoplePicker } from "./people-picker";
@@ -31,8 +30,9 @@ export function NewInitiativeModal({
   const defaultProjectId = projectId ?? projects.find((p) => p.id === "PRJ-PORTAL-GOLIVE")?.id ?? projects[0]?.id ?? null;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  // A bucket is always human-accountable (EN-003); default to the operator.
-  const [ownerId, setOwnerId] = useState<string | null>(CURRENT_USER);
+  // A bucket is always human-accountable (EN-003); default to the viewer.
+  const [pickedOwnerId, setOwnerId] = useState<string | null | undefined>(undefined);
+  const ownerId = ownerOrViewerDefault(pickedOwnerId);
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const [health, setHealth] = useState<Bucket["health"]>("track");
   const [target, setTarget] = useState("");
@@ -57,7 +57,7 @@ export function NewInitiativeModal({
     if (!canCreate) return;
     const created = addBucket({
       name,
-      owner: ownerId ?? undefined,
+      owner: ownerOrViewerDefault(pickedOwnerId) ?? undefined,
       health,
       target,
       desc: description,
@@ -66,7 +66,7 @@ export function NewInitiativeModal({
     });
     onClose();
     nav("bucket", { bucketId: created.id, projectId: selectedProjectId ?? undefined });
-  }, [canCreate, name, ownerId, health, target, description, repos, selectedProjectId, onClose, nav]);
+  }, [canCreate, name, pickedOwnerId, health, target, description, repos, selectedProjectId, onClose, nav]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

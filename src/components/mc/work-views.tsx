@@ -4,7 +4,6 @@ import type { CSSProperties, DragEvent } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  CURRENT_USER,
   CYCLES,
   MILESTONES,
   STAGES,
@@ -21,6 +20,7 @@ import {
   setTaskPriority,
   setTaskStage,
   taskById,
+  viewerId,
 } from "@/lib/mc-data/store";
 import type { Bucket, Stage, Task } from "@/lib/mc-data";
 
@@ -560,7 +560,7 @@ export function WorkViews({ route, nav }: ScreenProps) {
   // show "my tasks in that one bucket", so route.bucketId is ignored here.
   const bucket = isMine ? undefined : route.bucketId ? bucketById(route.bucketId) : undefined;
   const baseTasks = isMine
-    ? tasksForUser(CURRENT_USER, allTasks())
+    ? tasksForUser(viewerId(), allTasks())
     : filterTasksByBucket(allTasks(), route.bucketId);
   const visible = useMemo(
     () => applyFilters(baseTasks, filters),

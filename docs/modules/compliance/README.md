@@ -109,6 +109,7 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 - `src/lib/compliance/verify.ts` — `evidenceCompleteForTier` + `verifyCompliance`
 - `src/lib/compliance/types.ts` — `RiskTier`, `ActorKind`, `VerifyInput/Result`
 - `src/lib/compliance/index.ts` — pure-core barrel (import through here)
+- `src/lib/compliance/tracked-repos.ts` — fleet registry accessor (`TRACKED_REPO_SLUGS`, build-time JSON import of `config/tracked-repos-registry.json`) + pure `registryDrift()`; the Hub MCP checkout allowlist is derived from it and `tests/tracked-repos-drift.test.ts` pins every subset list (pilots, go-live, loop ledgers, REPOS seed) to it
 - `src/lib/compliance/service.ts` — server service: checkout / complete / verifyPr /
   ingest / `proposeRoutingFromPr` / listEvents
 - `src/lib/compliance/repo.ts` — Postgres accessors (dispatch ledger, mc_events, check ledger)

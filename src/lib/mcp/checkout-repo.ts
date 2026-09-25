@@ -6,18 +6,16 @@
 //
 // This is the checkout/compliance slug namespace (owner/name), not repos[]
 // registry ids (portal-web, plx-mc, …).
+//
+// The allowlist is derived from the fleet registry
+// (config/tracked-repos-registry.json, build-time JSON import) — never a
+// hand-kept copy. Enrolling a repo in the registry is what allowlists it here;
+// tests/tracked-repos-drift.test.ts asserts the two sets are equal.
 
 import { ApiError } from "@/lib/api/route";
+import { TRACKED_REPO_SLUGS } from "@/lib/compliance";
 
-export const MCP_CHECKOUT_REPO_ALLOWLIST = [
-  "petralabx/local-inference",
-  "petralabx/skills",
-  "petralabx/1hr-after",
-  "petralabx/furgenics",
-  "petralabx/for-and-against",
-  "petralabx/agentic-swarm",
-  "petralabx/plx-customer-portal",
-] as const;
+export const MCP_CHECKOUT_REPO_ALLOWLIST: readonly string[] = TRACKED_REPO_SLUGS;
 
 const GITHUB_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 

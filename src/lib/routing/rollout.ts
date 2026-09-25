@@ -658,7 +658,11 @@ export function rolloutHealth(
   const reasons: string[] = [];
   const enabledRepos = enrolled.map((pilot) => pilot.repo.toLowerCase());
   const uniqueEnabledRepos = new Set(enabledRepos);
-  if (enrolled.length !== 8) reasons.push("enabled_pilot_count_not_8");
+  // Every committed pilot descriptor must be enabled exactly once; the expected
+  // count follows the descriptor set (registry-backed via the intersection check
+  // below), never a hard-coded cohort size.
+  const expectedPilots = new Set(pilots.map((pilot) => pilot.repo.toLowerCase())).size;
+  if (enrolled.length !== expectedPilots) reasons.push("enabled_pilot_count_mismatch");
   if (uniqueEnabledRepos.size !== enabledRepos.length) {
     reasons.push("duplicate_enabled_pilot_repo");
   }

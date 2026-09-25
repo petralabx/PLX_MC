@@ -173,12 +173,36 @@ describe("rollout descriptor health reasons", () => {
       default_bucket: pilot.defaultBucket,
     }));
 
+  it("derives the expected pilot count from the descriptor set, not a hard-coded 8", () => {
+    const pilots = listPilotDescriptors();
+    // A ninth, registry-backed pilot (plx_secondbrain is an active registry repo)
+    // must not trip the count check — the count follows the descriptors.
+    const ninth: PilotDescriptor = {
+      ...pilots[pilots.length - 1],
+      cohortId: "plx-secondbrain",
+      repo: "petralabx/plx_secondbrain",
+      displayName: "PLX Second Brain",
+      tier: "tooling",
+      defaultBucket: "BKT-KNOWLEDGE-HUB",
+    };
+    const nine = [...pilots, ninth];
+    const reasons = rolloutHealth(nine, registryFor(nine)).reasons;
+    expect(reasons).not.toContain("enabled_pilot_count_mismatch");
+    expect(reasons.some((reason) => reason.startsWith("enabled_pilot_count"))).toBe(false);
+    expect(reasons).not.toContain("duplicate_enabled_pilot_repo");
+  });
+
   it("reports duplicate/count, registry, modes, tier, bucket, and fuzzy failures", () => {
     const pilots = listPilotDescriptors();
     const duplicate = [...pilots, { ...pilots[0], cohortId: "duplicate" }];
     const duplicateHealth = rolloutHealth(duplicate, registryFor(pilots));
-    expect(duplicateHealth.reasons).toContain("enabled_pilot_count_not_8");
+    expect(duplicateHealth.reasons).toContain("enabled_pilot_count_mismatch");
     expect(duplicateHealth.reasons).toContain("duplicate_enabled_pilot_repo");
+
+    const disabled = [{ ...pilots[0], enabled: false }, ...pilots.slice(1)];
+    expect(rolloutHealth(disabled, registryFor(pilots)).reasons).toContain(
+      "enabled_pilot_count_mismatch"
+    );
 
     const registryMismatch = registryFor(pilots).slice(1);
     expect(rolloutHealth(pilots, registryMismatch).reasons).toContain(

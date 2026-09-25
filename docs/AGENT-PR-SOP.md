@@ -203,7 +203,7 @@ Never create a new task to escape one with incomplete evidence. Never invent a
 A successful tool call is not enough. Validate the returned checkout once:
 
 - `data.taskId` is a **non-null string** and equals the expected Task.
-- `data.actor.repo` (checkout receipt) or `meta.actor.repo` equals the exact full target slug (`petralabx/<repo>`). One Hub connector stamps every petralabx repo: pass `repo=owner/name` on `mc_checkout_task` to bind allowlisted consumers (`petralabx/local-inference`, `petralabx/skills`, `petralabx/1hr-after`, `petralabx/furgenics`, `petralabx/for-and-against`, `petralabx/agentic-swarm`, `petralabx/plx-customer-portal`). Omitted `repo` keeps the connector `X-MC-Repo`. Unknown slugs fail closed. Portal is no longer Portal-connector-only.
+- `data.actor.repo` (checkout receipt) or `meta.actor.repo` equals the exact full target slug (`petralabx/<repo>`). One Hub connector stamps every petralabx repo: pass `repo=owner/name` on `mc_checkout_task` to bind allowlisted consumers (`petralabx/local-inference`, `petralabx/skills`, `petralabx/1hr-after`, `petralabx/furgenics`, `petralabx/for-and-against`, `petralabx/agentic-swarm`, `petralabx/plx-customer-portal`, `petralabx/plx_secondbrain`). Omitted `repo` keeps the connector `X-MC-Repo`. Unknown slugs fail closed. Portal is no longer Portal-connector-only.
 - The PR uses `data.prBodyLine` exactly; never reconstruct the stamp.
 - Missing or mismatched task/repo metadata makes the checkout invalid.
 - If the connector or script cannot return a live `dsp_*`, **stop**. Do not

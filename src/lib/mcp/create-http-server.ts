@@ -1,7 +1,9 @@
 // Builds the in-process PLX-MC MCP server (HTTP transport + shared tool logic).
 
+import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { ApiError } from "@/lib/api/route";
 import { SKILL_ID_PATTERN } from "@/lib/skills-directory";
 import type { McpIdentity } from "./auth";
 import {
@@ -9,6 +11,7 @@ import {
   actionCreateProject,
   actionUpdateBucket,
   actionCheckout,
+  completeTaskInputShape,
   actionComplete,
   actionCreateTask,
   actionGetContext,
@@ -17,6 +20,7 @@ import {
   actionSearchTasks,
   actionSelfCheck,
 } from "./actions";
+import { recordMcpToolCall } from "./audit";
 import { taskLink } from "./envelope";
 import {
   actionInstallSkills,
@@ -30,6 +34,65 @@ import { registerSyncConflictTools } from "./sync-actions";
 
 function jsonResult(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
+}
+
+type ToolResult = { content?: { type: string; text?: string }[]; isError?: boolean };
+
+// The task/checkout ids a JSON tool result carries, bare or under `data` — the
+// same fields the REST wrapper (route.ts) records from its handler data.
+function auditIds(result: ToolResult): { taskId?: string; checkoutId?: string } {
+  const text = result.content?.find((c) => c.type === "text")?.text;
+  if (!text) return {};
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+  const data = (parsed.data && typeof parsed.data === "object" ? parsed.data : {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+  return {
+    taskId: str(parsed.taskId) ?? str(data.taskId),
+    checkoutId: str(parsed.checkoutId) ?? str(data.checkoutId),
+  };
+}
+
+// Every remote tool call appends mcp.tool.invoked, matching the REST wrapper's
+// audit trail. Wrapping registration (before any tool is added) covers the
+// routing and sync helper modules that register on this server too.
+function auditToolCalls(server: McpServer, identity: McpIdentity): void {
+  const register = server.tool.bind(server) as (...args: unknown[]) => unknown;
+  server.tool = ((...args: unknown[]) => {
+    const tool = String(args[0]);
+    const handler = args[args.length - 1] as (...handlerArgs: unknown[]) => Promise<ToolResult>;
+    args[args.length - 1] = async (...handlerArgs: unknown[]) => {
+      const started = Date.now();
+      const requestId = randomUUID();
+      try {
+        const result = await handler(...handlerArgs);
+        await recordMcpToolCall({
+          tool,
+          identity,
+          requestId,
+          ...auditIds(result),
+          ok: !result.isError,
+          durationMs: Date.now() - started,
+        });
+        return result;
+      } catch (err) {
+        await recordMcpToolCall({
+          tool,
+          identity,
+          requestId,
+          ok: false,
+          durationMs: Date.now() - started,
+          error: err instanceof ApiError ? err.message : "internal",
+        }).catch(() => {});
+        throw err;
+      }
+    };
+    return register(...args);
+  }) as typeof server.tool;
 }
 
 /**
@@ -53,6 +116,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         "Prefer mc_suggest_work when the Task is unknown; always mc_checkout_task before agent work; append MC-Checkout stamp lines to PR bodies.",
     }
   );
+  auditToolCalls(server, identity);
 
   server.tool("mc_self_check", "Validate MCP auth and PLX MC reachability.", {}, async () =>
     jsonResult(await actionSelfCheck(identity))
@@ -206,25 +270,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_complete_task",
-    "Mark agent work complete for a checkout credential.",
-    {
-      checkoutId: z.string().min(1),
-      summary: z.string().min(1),
-      commitSha: z.string().optional(),
-      prUrl: z.string().optional(),
-      verificationCommands: z.array(z.string()).optional(),
-      filesChanged: z.array(z.string()).optional(),
-      rollback: z.string().optional(),
-      testRun: z
-        .object({
-          suite: z.string().min(1),
-          passed: z.number().int().nonnegative(),
-          failed: z.number().int().nonnegative(),
-          total: z.number().int().nonnegative().optional(),
-        })
-        .optional(),
-      shots: z.array(z.object({ label: z.string(), cap: z.string() })).optional(),
-    },
+    "Mark agent work complete for a checkout credential. verificationCommands and rollback are required.",
+    completeTaskInputShape,
     async (body) => jsonResult(await actionComplete(identity, body))
   );
 

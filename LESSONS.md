@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-09-25 (ET) — UI trust: a hardcoded viewer and failures that looked like success
+
+- **What happened:** Every colleague saw Vince's greeting, "Assigned to me", and avatar, and local audit rows were written as Vince (`CURRENT_USER = "vince"` in 19 files). A failed `/api/state` kept fixture data that looked live. "Sync now" logged "Sweep completed" before the server answered. Approvals showed an auth error and "No pending approvals" together.
+- **Root cause:** Prototype placeholders (a constant user, a demo sweep, a constant "Connected") survived the move to a real backend. Failure paths collapsed into success-looking states (`rows = []`, fixture kept, optimistic flip).
+- **Rule going forward:** Identity comes from the server (`GET /api/viewer`), never a client constant. An unknown viewer stays unresolved; it never falls back to a real person. Every client load has an explicit failure state the UI renders (offline banner, error with Retry). Never let an empty or fixture state stand in for a failure. Claims like "synced" or "connected" come only from a server response.
+
 ### 2026-09-15 (ET) — Go-live coalesce on any claim dropped both posts
 
 - **What happened:** Bugbot on PLX_MC #243: `siblingSent` treated any `announce:` row as sent, and combined complete claimed `pr.opened` before the Workflow POST. A failed send, or two overlapping claims, could coalesce both kinds and leave chat empty. Blob `exists` before Postgres insert could also stick a retry.

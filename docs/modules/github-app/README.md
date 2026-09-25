@@ -67,7 +67,10 @@ The reader module remains least-privilege read-only; the writer lives in
 - Depended on by: `loop-ledgers` (github-api source adapter, **owner-aware** token
   routing), `sync` (`validateRepoInOrg`), and **`skills-directory`** (`GithubSkillsSource`
   reads `petralabx/skills` per `config/skills-catalog.json`; org App install must
-  cover the catalog repo — see `docs/runbooks/github-app-provisioning.md` Step 2b).
+  cover the catalog repo — see `docs/runbooks/github-app-provisioning.md` Step 2b),
+  and **`compliance`** (`backfill.ts` lists closed PRs per registry repo; private
+  repos need Pull requests:read on the resolved credential, which the narrowed
+  App token does not request — those repos report degraded, never zero).
   All import `resolveGithubToken` through this barrel.
 
 ### Key Files

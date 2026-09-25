@@ -118,6 +118,7 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 - `src/lib/compliance/bucket-prd.ts` — bucket PRD resolution for verifyPr
 - `src/lib/compliance/webhook.ts` — HMAC verify + PR-event parse (in-memory body)
 - `src/lib/compliance/go-live-announcer.ts` — one-line Teams Workflow posts on `checkout` / `pr.opened` / `task.completed` (TASK-1454/1699/1701; chat-primary, hard dedupe per task+event, coalesce only on sibling `sent`, kill switches default off; `ANNOUNCE_CHECKOUT` stays off unless operators re-enable)
+- `src/lib/compliance/backfill.ts` — nightly GitHub backfill: merged PRs (last N days) per registry repo with no resolvable `MC-Checkout` stamp and no task `prs[]` link; injected GitHub client (stubbed in tests), fail-open per repo, one `github.backfill.report` row in `mc_events`; cron `src/app/api/cron/github-backfill/route.ts`, kill switch `PLX_MC_GITHUB_BACKFILL_ENABLED` (default off)
 - `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts`
 - `src/app/api/routing/propose/route.ts` — OIDC propose (middleware carve-out exact)
 - `src/middleware.ts` — exact self-auth carve-outs including `api/routing/propose`

@@ -84,7 +84,7 @@ function fullRepoBindingEnabled(): boolean {
   ).trim() !== "0";
 }
 
-function dispatchRepoMatches(
+export function dispatchRepoMatches(
   dispatchRepo: string,
   repoName: string,
   repoFullName?: string

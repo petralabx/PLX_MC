@@ -108,7 +108,7 @@ agent_behavior:
 agent_workflow:
   title: Agent Task & PR Workflow
   rules:
-    - "Every change to a tracked repo must resolve to a Mission Control (MC) task. Before first edit or any PR_CREATE: search existing TASK-* ids. Do not auto-create unless routing found nothing AND the conductor said to create."
+    - "Every change to a tracked repo must resolve to a Mission Control (MC) task. Before first edit or any PR_CREATE: search projects, buckets and existing TASK-* ids first; on a real miss create the task (mc_create_task, default bucket from config/tracked-repos-registry.json) and check it out. Never create a task to escape incomplete evidence on a live checkout."
     - "Check out via `mc_checkout_task` on the Hub connector, passing `repo=owner/name` so `actor.repo` matches the repo under edit (including portal). Confirm the returned `taskId` is a non-null string. Copy `prBodyLine` exactly. A stamp whose `actor.repo` does not match the PR repo fails GitHub verify with `taskId:null`."
     - "Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and open a PR. If checkout tools are missing, stop — do not open the PR."
     - "Humans (operators) are recorded but not gated; autonomous agents are gated on a complete bundle — link the work to a live repo-scoped checkout so the gate can attribute and verify it."

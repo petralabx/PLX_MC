@@ -17,8 +17,10 @@ swarm agents get from `AGENTS.md` / `docs/AGENT-PR-SOP.md`.
 
 Before first edit or any `PR_CREATE` on a tracked consumer:
 
-1. Search existing `TASK-*`. Do not auto-create unless routing found
-   nothing AND the conductor said to create.
+1. Search projects, buckets and existing `TASK-*` first. On a real miss,
+   `mc_create_task` in the registry default bucket
+   (`config/tracked-repos-registry.json`), then check it out. Never create a
+   task to escape incomplete evidence on a live checkout.
 2. `mc_checkout_task` on the Hub connector, passing `repo=owner/name`
    so `actor.repo` matches the repo under edit (including portal).
    Confirm returned `taskId` is a non-null string. Copy `prBodyLine`
@@ -26,13 +28,14 @@ Before first edit or any `PR_CREATE` on a tracked consumer:
    fails GitHub verify with `taskId:null`.
 3. Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and
    open a PR. If tools are missing, stop — do not open the PR.
-4. `mc_complete_task` must include non-empty `verificationCommands`
+4. Put the `MC-Checkout: dsp_…` line in the PR body at open — the compliance gate reads the body on opened/synchronize/reopened only. Never an empty commit/push to re-trigger CI.
+5. `mc_complete_task` must include non-empty `verificationCommands`
    AND `rollback`.
-5. Local push uses the consumer's pre-push handshake when present.
+6. Local push uses the consumer's pre-push handshake when present.
    Never `--no-verify`.
-6. Portal required merge checks: `lint-typecheck-build`, `compliance`,
+7. Portal required merge checks: `lint-typecheck-build`, `compliance`,
    `Validate ledgers`.
-7. On portal, `silent-failure-audit` is a real fail. Do not raise
+8. On portal, `silent-failure-audit` is a real fail. Do not raise
    `BASELINE`. Fix new catch-empty-returns with `QueryResult<T>`.
 
 ## Key Commands
@@ -135,7 +138,7 @@ If you notice yourself in any of these, stop — do not push through:
 
 ## Agent Task & PR Workflow
 
-- Every change to a tracked repo must resolve to a Mission Control (MC) task. Before first edit or any PR_CREATE: search existing TASK-* ids. Do not auto-create unless routing found nothing AND the conductor said to create.
+- Every change to a tracked repo must resolve to a Mission Control (MC) task. Before first edit or any PR_CREATE: search projects, buckets and existing TASK-* ids first; on a real miss create the task (mc_create_task, default bucket from config/tracked-repos-registry.json) and check it out. Never create a task to escape incomplete evidence on a live checkout.
 - Check out via `mc_checkout_task` on the Hub connector, passing `repo=owner/name` so `actor.repo` matches the repo under edit (including portal). Confirm the returned `taskId` is a non-null string. Copy `prBodyLine` exactly. A stamp whose `actor.repo` does not match the PR repo fails GitHub verify with `taskId:null`.
 - Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and open a PR. If checkout tools are missing, stop — do not open the PR.
 - Humans (operators) are recorded but not gated; autonomous agents are gated on a complete bundle — link the work to a live repo-scoped checkout so the gate can attribute and verify it.

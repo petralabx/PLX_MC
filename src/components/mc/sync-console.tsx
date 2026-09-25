@@ -17,6 +17,7 @@ import {
   retryError,
   spLists,
   storeSyncCounts,
+  sweepInFlight,
 } from "@/lib/mc-data/store";
 import type { SyncFreshnessResult } from "@/lib/sync/freshness";
 
@@ -71,10 +72,12 @@ export function SyncConsole({ nav }: ScreenProps) {
   }, [lists]);
 
   // markAllSynced triggers a real engine sweep (outbound push + inbound
-  // delta) and adopts the result; the old demo inbound simulation is gone.
+  // delta) and adopts the result only once the server confirms; a failure
+  // surfaces as a notice. The old demo inbound simulation is gone.
   const onSyncNow = () => {
     markAllSynced();
   };
+  const syncing = sweepInFlight();
 
   const overallClass = unresolved > 0 ? "warn" : counts.pending > 0 ? "pending" : "";
   const overallLabel =
@@ -102,8 +105,8 @@ export function SyncConsole({ nav }: ScreenProps) {
             <span className="d" />
             {overallLabel}
           </span>
-          <button type="button" className="btn acc" onClick={onSyncNow}>
-            Sync now ↻
+          <button type="button" className="btn acc" disabled={syncing} onClick={onSyncNow}>
+            {syncing ? "Syncing…" : "Sync now ↻"}
           </button>
         </div>
       </div>

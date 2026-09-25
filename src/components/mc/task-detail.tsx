@@ -41,6 +41,7 @@ import {
   setTaskStage,
   setTaskTargetEnv,
   spLists,
+  sweepInFlight,
   taskById,
   viewerId,
 } from "@/lib/mc-data/store";
@@ -811,7 +812,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
               </div>
               <div className="sor-foot">
                 <span className="note">Last sync · {task.sync.ts}</span>
-                <button type="button" className="btn ghost sm" onClick={syncNow}>
+                <button type="button" className="btn ghost sm" disabled={sweepInFlight()} onClick={syncNow}>
                   Sync now
                 </button>
               </div>

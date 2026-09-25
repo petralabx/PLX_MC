@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   __setPatchMirrorForTests,
+  __setStateLoaderForTests,
+  __setSweepMirrorForTests,
   activeNotices,
   addSubtask,
   addTask,
@@ -33,10 +35,13 @@ import {
   setTaskRepos,
   setTaskStage,
   setTaskTargetEnv,
+  spLists,
   storeSyncCounts,
+  sweepInFlight,
   taskById,
   toggleSubtask,
   unreadCount,
+  type ServerSnapshot,
 } from "@/lib/mc-data/store";
 import { OPERATOR_ID } from "@/lib/mc-data";
 import type { Task } from "@/lib/mc-data";
@@ -63,13 +68,85 @@ describe("addTask", () => {
   });
 });
 
-describe("markAllSynced (the sweep)", () => {
-  it("flips every pending item to synced and zeroes pending counts", () => {
-    addTask({ title: "x", bucket: "BKT-WMS" });
+// "Sync now" (Wave 2 — UI trust): nothing is marked synced, and no "Sweep
+// completed" row is written, until the server's sweep has actually succeeded.
+describe("markAllSynced (Sync now — the sweep)", () => {
+  const sweepRow = (body: string) => auditLog().some((r) => r.body.startsWith(body));
+
+  // What GET /api/state returns after a successful sweep: the pushed task is
+  // synced, pending counts are zero, and the engine wrote its own audit row.
+  function sweptSnapshot(taskId: string): ServerSnapshot {
+    return {
+      tasks: allTasks().map((t) => (t.id === taskId ? { ...t, sync: { ...t.sync, state: "synced" } } : t)),
+      risks: [],
+      files: [],
+      conflicts: [],
+      errors: [],
+      audit: [{ ts: "2026.09.25 · 12:00", actor: "vince", body: "Sweep completed — 1 outbound push, 0 inbound changes.", state: "synced" }],
+      counts: { todos: { synced: 1, pending: 0, conflict: 0, error: 0 } },
+      lastSweep: "2026.09.25 · 12:00",
+    };
+  }
+
+  it("does not mark anything synced or log 'Sweep completed' before the server confirms", () => {
+    const t = addTask({ title: "x", bucket: "BKT-WMS" });
+    const pending = storeSyncCounts().pending;
     markAllSynced();
-    const counts = storeSyncCounts();
-    expect(counts.pending).toBe(0);
-    expect(allTasks().every((t) => t.sync.state !== "pending")).toBe(true);
+    expect(taskById(t.id)?.sync.state).toBe("pending");
+    expect(storeSyncCounts().pending).toBe(pending);
+    expect(sweepRow("Sweep completed")).toBe(false);
+  });
+
+  it("holds items pending while the sweep is in flight, then adopts the server's result", async () => {
+    const t = addTask({ title: "x", bucket: "BKT-WMS" });
+    let finish!: () => void;
+    __setSweepMirrorForTests(() => new Promise<void>((resolve) => (finish = resolve)));
+    __setStateLoaderForTests(async () => sweptSnapshot(t.id));
+
+    const done = markAllSynced();
+    expect(sweepInFlight()).toBe(true);
+    expect(taskById(t.id)?.sync.state).toBe("pending");
+
+    finish();
+    await done;
+    expect(sweepInFlight()).toBe(false);
+    expect(taskById(t.id)?.sync.state).toBe("synced");
+    expect(spLists().find((l) => l.key === "todos")?.counts.pending).toBe(0);
+    expect(auditLog()[0].body).toBe("Sweep completed — 1 outbound push, 0 inbound changes.");
+    expect(activeNotices()).toHaveLength(0);
+  });
+
+  it("keeps items unsynced and surfaces an error notice when the sweep fails", async () => {
+    const t = addTask({ title: "x", bucket: "BKT-WMS" });
+    const pending = storeSyncCounts().pending;
+    __setSweepMirrorForTests(async () => {
+      throw new Error("sync.mutate denied (not_permitted).");
+    });
+
+    await markAllSynced();
+    expect(sweepInFlight()).toBe(false);
+    expect(taskById(t.id)?.sync.state).toBe("pending");
+    expect(storeSyncCounts().pending).toBe(pending);
+    expect(sweepRow("Sweep completed")).toBe(false);
+    const notices = activeNotices();
+    expect(notices).toHaveLength(1);
+    expect(notices[0].tone).toBe("error");
+    expect(notices[0].body).toContain("sync.mutate denied");
+  });
+
+  it("runs one sweep at a time (a second click while in flight is not a second sweep)", async () => {
+    let calls = 0;
+    let finish!: () => void;
+    __setSweepMirrorForTests(() => {
+      calls += 1;
+      return new Promise<void>((resolve) => (finish = resolve));
+    });
+    __setStateLoaderForTests(async () => sweptSnapshot("TASK-221"));
+    const first = markAllSynced();
+    const second = markAllSynced();
+    finish();
+    await Promise.all([first, second]);
+    expect(calls).toBe(1);
   });
 });
 

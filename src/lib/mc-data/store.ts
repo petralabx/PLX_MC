@@ -1644,38 +1644,50 @@ export function reassignTask(taskId: string, actorId: string | null) {
   );
 }
 
-// "Sync now": outbound push — everything pending flips to synced.
-export function markAllSynced(): string {
-  const ts = stamp();
-  for (const t of state.tasks) {
-    if (t.sync.state === "pending") {
-      t.sync.state = "synced";
-      t.sync.ts = ts;
-    }
-  }
-  for (const f of state.files) {
-    if (f.sync?.state === "pending") {
-      f.sync.state = "synced";
-      f.sync.ts = ts;
-    }
-  }
-  for (const l of state.lists) {
-    if (l.counts.pending > 0) {
-      l.counts.synced += l.counts.pending;
-      l.counts.pending = 0;
-    }
-    l.lastSync = ts;
-  }
-  state.lastSweep = ts;
-  pushAudit(viewerId(), "Sweep completed — outbound pending pushed to SharePoint.", "synced");
+// The sweep seam (mirrors the PATCH-mirror seam): the production default runs
+// the real POST /api/sync/sweep; tests inject a deterministic mirror.
+type SweepMirror = () => Promise<unknown>;
+
+const defaultSweepMirror: SweepMirror = () =>
+  api("/sync/sweep", { method: "POST", body: JSON.stringify({ actor: viewerId() }) });
+
+let sweepMirror: SweepMirror = defaultSweepMirror;
+let sweepMirrorInjected = false;
+let sweeping: Promise<void> | null = null;
+
+export function __setSweepMirrorForTests(fn: SweepMirror | null) {
+  sweepMirror = fn ?? defaultSweepMirror;
+  sweepMirrorInjected = fn !== null;
+}
+
+// True while a "Sync now" sweep is in flight (its buttons show it as pending).
+export const sweepInFlight = (): boolean => sweeping !== null;
+
+// "Sync now": run a REAL engine sweep (outbound push + inbound delta). Nothing
+// is marked synced locally — pending items stay pending while it is in flight,
+// then the refreshed snapshot carries the engine's own sync states, counts and
+// "Sweep completed" audit row. On failure nothing changes and a notice says
+// why (Wave 2 — UI trust; it used to claim success before the server did).
+// One sweep at a time. Name kept for the frozen component surface. Returns the
+// in-flight sweep (for tests); callers fire-and-forget.
+export function markAllSynced(): Promise<void> {
+  if (sweeping) return sweeping;
+  if (typeof window === "undefined" && !sweepMirrorInjected) return Promise.resolve();
+  sweeping = sweepMirror()
+    .then(() => refreshFromServer())
+    .catch((err: unknown) => {
+      pushNotice(
+        `Sync failed — nothing was marked synced. ${
+          err instanceof Error ? err.message : "The server rejected the sweep."
+        }`
+      );
+    })
+    .finally(() => {
+      sweeping = null;
+      emit();
+    });
   emit();
-  // Run a REAL sweep (outbound push + inbound delta) and adopt the engine's
-  // resulting truth — counts, conflicts, audit — when it lands.
-  serverCall(async () => {
-    await api("/sync/sweep", { method: "POST", body: JSON.stringify({ actor: viewerId() }) });
-    await refreshFromServer();
-  });
-  return ts;
+  return sweeping;
 }
 
 // Manual conflict resolution — a human picks the winner; the choice is audited.
@@ -1795,5 +1807,8 @@ export function resetStore() {
   viewerLoaderInjected = false;
   stateLoader = defaultStateLoader;
   stateLoaderInjected = false;
+  sweepMirror = defaultSweepMirror;
+  sweepMirrorInjected = false;
+  sweeping = null;
   emit();
 }

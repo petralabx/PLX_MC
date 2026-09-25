@@ -1,4 +1,4 @@
-import { AGENTS, MODE, agentIsActive, agentRunApprovalNeeded, isAgentId } from "@/lib/mc-data";
+import { AGENTS, MODE, agentIsActive, agentRunApprovalNeeded, isAgentId, resolveRepoInput } from "@/lib/mc-data";
 import type { FeedEvent, FileEntry, Repo, StageKey, Task } from "@/lib/mc-data";
 
 const PLANNING_STAGES: ReadonlySet<StageKey> = new Set([
@@ -137,9 +137,14 @@ export function deriveRepoRows(repos: Record<string, Repo>, tasks: Task[]): Repo
         repoCount: task.repos.length,
       }));
 
+    // Projected PRs carry the GitHub name or owner/name slug, not the registry
+    // id, so resolve each through the registry before matching.
     const prs = tasks.flatMap((task) =>
       (task.prs ?? [])
-        .filter((pr) => pr.repo === repo.id)
+        .filter((pr) => {
+          const resolved = resolveRepoInput(pr.repo, repos);
+          return resolved.ok && resolved.id === repo.id;
+        })
         .map((pr) => ({
           taskId: task.id,
           num: pr.num,

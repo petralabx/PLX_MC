@@ -1,10 +1,8 @@
 import { z } from "zod";
 
 import { ApiError, parseBody, route } from "@/lib/api/route";
-import { auth, oidcEnabled } from "@/lib/auth";
-import { ACTORS } from "@/lib/mc-data/data";
+import { resolveRequestActor } from "@/lib/api/session-actor";
 import { isApprover } from "@/lib/mc-data/repos";
-import type { Actor } from "@/lib/mc-data/types";
 import {
   getSkillSubmission,
   publishApprovedSkillSubmission,
@@ -18,37 +16,10 @@ const patchSchema = z.object({
   reviewComment: z.string().optional(),
 });
 
-function actorByEmail(email: string | null | undefined): Actor | undefined {
-  const normalized = email?.trim().toLowerCase();
-  if (!normalized) return undefined;
-  return Object.values(ACTORS).find(
-    (actor) => actor.kind === "human" && actor.email?.toLowerCase() === normalized
-  );
-}
-
-async function resolveReviewActor(bodyActor: string | undefined): Promise<Actor | undefined> {
-  if (oidcEnabled()) {
-    let session: { user?: { email?: string | null } } | null;
-    try {
-      session = (await auth()) as { user?: { email?: string | null } } | null;
-    } catch {
-      throw new ApiError("not_authenticated", "No signed-in reviewer session found.", 401);
-    }
-    const actor = actorByEmail(session?.user?.email);
-    if (!actor) {
-      throw new ApiError("not_authenticated", "No signed-in reviewer session found.", 401);
-    }
-    return actor;
-  }
-  // Dormant local/test mode has no Auth.js session provider; keep the prototype
-  // actor field only there so local dev and unit tests can exercise the route.
-  return bodyActor ? ACTORS[bodyActor] : undefined;
-}
-
 export const PATCH = route(async (req, ctx) => {
   const { id } = await ctx.params;
   const body = await parseBody(req, patchSchema);
-  const reviewActor = await resolveReviewActor(body.actor);
+  const reviewActor = await resolveRequestActor(body.actor);
   if (!isApprover(reviewActor)) {
     throw new ApiError(
       "not_approver",

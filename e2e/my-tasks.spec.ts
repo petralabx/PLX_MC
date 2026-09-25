@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { CURRENT_USER, TASKS } from "../src/lib/mc-data/data";
+import { OPERATOR_ID, TASKS } from "../src/lib/mc-data/data";
 import { waitForHydration } from "./helpers";
 
 // SPEC §6 #6 + #5a — My Tasks reachability and scoping.
@@ -10,9 +10,10 @@ import { waitForHydration } from "./helpers";
 //   • Is bucket-agnostic and SUPPRESSES the bucket pill (it must not display a
 //     bucket scope it isn't honoring).
 
-// The fixture's "mine" set (reporter/assignee/coassignee == CURRENT_USER).
+// The fixture's "mine" set (reporter/assignee/coassignee == OPERATOR_ID): the
+// e2e server runs dormant (no OIDC), so GET /api/viewer names the operator.
 const MINE = TASKS.filter(
-  (t) => t.assignee === CURRENT_USER || t.coassignees.includes(CURRENT_USER) || t.reporter === CURRENT_USER
+  (t) => t.assignee === OPERATOR_ID || t.coassignees.includes(OPERATOR_ID) || t.reporter === OPERATOR_ID
 );
 
 async function expectOnMyTasks(page: import("@playwright/test").Page) {

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   BUCKETS,
-  CURRENT_USER,
+  OPERATOR_ID,
   PROJECTS,
   STAGES,
   TASKS,
@@ -130,7 +130,7 @@ describe("tasksForUser", () => {
   // single-bucket filter on top would wrongly drop the user's other tasks.
   it("seeds My Tasks across multiple buckets (cross-bucket, not one initiative)", () => {
     const mineBuckets = new Set(
-      tasksForUser(CURRENT_USER, TASKS).map((t) => t.bucket)
+      tasksForUser(OPERATOR_ID, TASKS).map((t) => t.bucket)
     );
     expect(mineBuckets.size).toBeGreaterThan(1);
   });

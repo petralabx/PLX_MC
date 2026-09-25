@@ -61,7 +61,7 @@ describe("createBucket (EN-005)", () => {
   it("generates a BKT-<slug> id, applies defaults, and upserts the bucket", async () => {
     const b = await createBucket({ name: "Mission Control Ops" });
     expect(b.id).toBe("BKT-MISSION-CONTROL-OPS");
-    expect(b.owner).toBe("vince"); // CURRENT_USER default
+    expect(b.owner).toBe("vince"); // OPERATOR_ID default (server-side)
     expect(b.health).toBe("track");
     expect(b.sync.state).toBe("pending");
     expect(store.upserts).toHaveLength(1);

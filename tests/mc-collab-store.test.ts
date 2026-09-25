@@ -31,7 +31,6 @@ import {
   unreadCount,
   updateSubtask,
 } from "@/lib/mc-data/store";
-import { CURRENT_USER } from "@/lib/mc-data";
 
 beforeEach(() => resetStore());
 
@@ -210,12 +209,5 @@ describe("bucket discussion thread (persisted + optimistic — Item 4)", () => {
     expect(notices).toHaveLength(1);
     expect(notices[0].body).toContain("BKT-WMS");
     expect(notices[0].body.toLowerCase()).toContain("rolled back");
-  });
-});
-
-// Guard CURRENT_USER assumption used above (mention-self test relies on it).
-describe("test fixture assumptions", () => {
-  it("CURRENT_USER is vince", () => {
-    expect(CURRENT_USER).toBe("vince");
   });
 });

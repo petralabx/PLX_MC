@@ -16,6 +16,7 @@ import {
   bucketById,
   navBuckets,
   resetStore,
+  UNRESOLVED_VIEWER_ID,
   updateBucket,
 } from "@/lib/mc-data/store";
 import type { Bucket } from "@/lib/mc-data";
@@ -42,7 +43,8 @@ describe("addBucket (EN-005)", () => {
     const b = addBucket({ name: "Mission Control Ops" });
     expect(b.id).toBe("BKT-MISSION-CONTROL-OPS");
     expect(b.health).toBe("track");
-    expect(b.owner).toBe("vince"); // CURRENT_USER default
+    // Owner defaults to the viewer — unresolved in Node tests, never a borrowed person.
+    expect(b.owner).toBe(UNRESOLVED_VIEWER_ID);
     expect(allBuckets().length).toBe(before + 1);
     expect(bucketById(b.id)?.name).toBe("Mission Control Ops");
   });

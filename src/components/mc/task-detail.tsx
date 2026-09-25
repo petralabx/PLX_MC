@@ -5,7 +5,6 @@ import { useState } from "react";
 import {
   ACTORS,
   AGENTS,
-  CURRENT_USER,
   PRIORITY,
   STAGES,
   STAGE_IDX,
@@ -42,7 +41,9 @@ import {
   setTaskStage,
   setTaskTargetEnv,
   spLists,
+  sweepInFlight,
   taskById,
+  viewerId,
 } from "@/lib/mc-data/store";
 
 import {
@@ -550,7 +551,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
               comments={task.comments ?? []}
               activity={task.activity}
               people={mentionables()}
-              currentUser={CURRENT_USER}
+              currentUser={viewerId()}
               onAdd={(body) => addComment(task.id, body)}
               onEdit={(commentId, body) => editComment(task.id, commentId, body)}
               onDelete={(commentId) => deleteComment(task.id, commentId)}
@@ -811,7 +812,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
               </div>
               <div className="sor-foot">
                 <span className="note">Last sync · {task.sync.ts}</span>
-                <button type="button" className="btn ghost sm" onClick={syncNow}>
+                <button type="button" className="btn ghost sm" disabled={sweepInFlight()} onClick={syncNow}>
                   Sync now
                 </button>
               </div>

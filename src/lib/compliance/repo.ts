@@ -131,6 +131,42 @@ export async function eventsAfter(afterSeq = 0, limit = 100, kind: string | null
   }));
 }
 
+/**
+ * Newest-first events for one task (mc_get_task history). `excludeKinds` drops
+ * noise such as the agent's own mcp.tool.invoked audit rows.
+ */
+export async function eventsForTask(
+  taskId: string,
+  opts: { limit: number; excludeKinds?: string[] }
+): Promise<EventRow[]> {
+  const rows = await query<{
+    seq: string;
+    ts: Date;
+    kind: string;
+    actor: string;
+    repo: string | null;
+    task_id: string | null;
+    pr: string | null;
+    payload: Record<string, unknown>;
+  }>(
+    `SELECT seq, ts, kind, actor, repo, task_id, pr, payload
+       FROM mc_events
+      WHERE task_id = $1 AND NOT (kind = ANY($2::text[]))
+      ORDER BY seq DESC LIMIT $3`,
+    [taskId, opts.excludeKinds ?? [], opts.limit]
+  );
+  return rows.map((r) => ({
+    seq: String(r.seq),
+    ts: r.ts instanceof Date ? r.ts.toISOString() : String(r.ts),
+    kind: r.kind,
+    actor: r.actor,
+    repo: r.repo,
+    taskId: r.task_id,
+    pr: r.pr,
+    payload: r.payload,
+  }));
+}
+
 /** Most recent checkout audit door (`mcp` | `compliance`), or null if none. */
 export async function latestCheckoutDoor(): Promise<string | null> {
   const rows = await query<{ door: string | null }>(
@@ -202,6 +238,54 @@ export async function getDispatch(id: string): Promise<DispatchRow | null> {
         expiresAt: r.expires_at.toISOString(),
       }
     : null;
+}
+
+export interface DispatchListRow extends DispatchRow {
+  issuedAt: string;
+}
+
+export interface ListDispatchesFilter {
+  taskId?: string;
+  /** Exact full owner/name slug, case-insensitive. */
+  repo?: string;
+  /** true = unrevoked and unexpired only; false = revoked or expired only; omitted = both. */
+  active?: boolean;
+  limit: number;
+}
+
+/** Newest-first dispatch (checkout) rows — mc_list_checkouts / mc_get_task. */
+export async function listDispatches(f: ListDispatchesFilter): Promise<DispatchListRow[]> {
+  const rows = await query<{
+    id: string;
+    actor_kind: ActorKind;
+    runtime: string;
+    task_id: string;
+    accountable_human: string;
+    repo: string;
+    revoked: boolean;
+    issued_at: Date;
+    expires_at: Date;
+  }>(
+    `SELECT id, actor_kind, runtime, task_id, accountable_human, repo, revoked, issued_at, expires_at
+       FROM mc_dispatch
+      WHERE ($1::text IS NULL OR task_id = $1)
+        AND ($2::text IS NULL OR lower(repo) = lower($2))
+        AND ($3::boolean IS NULL OR (NOT revoked AND expires_at > now()) = $3)
+      ORDER BY issued_at DESC
+      LIMIT $4`,
+    [f.taskId ?? null, f.repo ?? null, f.active ?? null, f.limit]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    actorKind: r.actor_kind,
+    runtime: r.runtime,
+    taskId: r.task_id,
+    accountableHuman: r.accountable_human,
+    repo: r.repo,
+    revoked: r.revoked,
+    issuedAt: r.issued_at.toISOString(),
+    expiresAt: r.expires_at.toISOString(),
+  }));
 }
 
 // ─── Compliance check ledger ─────────────────────────────────────────────────

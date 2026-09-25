@@ -177,10 +177,10 @@ describe("MCP planning hierarchy creation actions", () => {
     });
   });
 
-  it("guards bucket discovery with bucket.create and returns minimal sorted metadata", async () => {
+  it("guards bucket discovery with task.read (no create grant) and returns minimal sorted metadata", async () => {
     const result = await actionListBuckets(identity, {});
 
-    expect(mocks.requireMcpActor).toHaveBeenCalledWith(identity, "bucket.create");
+    expect(mocks.requireMcpActor).toHaveBeenCalledWith(identity, "task.read");
     expect(result).toEqual({
       buckets: [
         { id: "BKT-ALPHA", name: "Alpha initiative", owner: "alice", health: "track", project: "PRJ-MAIN" },
@@ -190,7 +190,7 @@ describe("MCP planning hierarchy creation actions", () => {
     });
   });
 
-  it("fails closed before reading buckets when bucket.create is denied", async () => {
+  it("fails closed before reading buckets when task.read is denied", async () => {
     mocks.requireMcpActor.mockImplementationOnce(() => {
       throw new Error("denied");
     });

@@ -63,9 +63,11 @@ const noClockSubscribe = () => () => {};
 
 /**
  * Every nav badge, computed once per shell so the sidebar, rail, tabs and
- * More sheet always agree. Unknown is "—" (never a fabricated 0): the store
- * is still on its seed fixtures, or the viewer has not resolved. Attention
- * badges (sync, AI spend) stay hidden until they have something to say.
+ * More sheet always agree. A count is known only once the server has answered
+ * (dataSource "live"); before that — seed fixtures, or the offline fallback
+ * showing cached or demo data — it is "—", never a fabricated or "confirmed"
+ * 0. Attention badges (sync, AI spend) stay hidden until they have something
+ * to say.
  */
 export function useNavCounts(): NavCounts {
   useMcVersion();
@@ -73,7 +75,7 @@ export function useNavCounts(): NavCounts {
   // Client clock only (null on the server) so SSR and hydration agree.
   const today = useSyncExternalStore(noClockSubscribe, () => todayGridDay(new Date()), () => null);
   const vendorAlerts = useVendorAlertCount();
-  const loaded = dataSource() !== "seed";
+  const loaded = dataSource() === "live";
   const tasks = allTasks();
   const sc = storeSyncCounts();
   const conflicts = sc.conflict + sc.error;

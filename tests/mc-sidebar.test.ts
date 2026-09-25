@@ -7,9 +7,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { Sidebar, type NavCounts } from "@/components/mc/chrome";
+import { Sidebar, useNavCounts, type NavCounts } from "@/components/mc/chrome";
 import type { Route } from "@/components/mc/route";
-import { resetStore } from "@/lib/mc-data/store";
+import { __setStateLoaderForTests, dataSource, hydrate, resetStore } from "@/lib/mc-data/store";
 
 beforeEach(() => resetStore());
 
@@ -68,7 +68,7 @@ describe("Sidebar", () => {
       }
     );
     expect(html).toContain('<span class="badge unk"><span aria-hidden="true">3+</span><span class="vh">, at least 3</span></span>');
-    expect(html).toContain('<span class="badge unk"><span aria-hidden="true">—</span><span class="vh">, count loading</span></span>');
+    expect(html).toContain('<span class="badge unk"><span aria-hidden="true">—</span><span class="vh">, count unknown</span></span>');
     expect(html).toContain('<span class="badge warn"><span aria-hidden="true">2</span><span class="vh">, 2</span></span>');
     expect(html).not.toContain("0 live");
     expect(html).not.toMatch(/aria-hidden="true">0</);
@@ -91,5 +91,26 @@ describe("Sidebar", () => {
     expect(html).toContain('<div id="mc-nav-admin" class="grp-body" hidden="">');
     // The items are still in the document (so the disclosure has something to reveal).
     expect(html).toContain("SharePoint sync issues");
+  });
+});
+
+// Review round 1: counts computed from cached or demo data (store offline) are
+// not confirmed — they read "—", never a hidden "confirmed" zero.
+describe("useNavCounts", () => {
+  const Probe = () => createElement("pre", null, JSON.stringify(useNavCounts()));
+  const counts = () => JSON.parse(renderToStaticMarkup(createElement(Probe)).replace(/^<pre>|<\/pre>$/g, "").replace(/&quot;/g, '"')) as NavCounts;
+
+  it("is unknown while the store is on seed data or offline", async () => {
+    expect(counts().approvals).toEqual({ n: null, exact: false });
+    __setStateLoaderForTests(async () => {
+      throw new Error("HTTP 500");
+    });
+    await hydrate();
+    expect(dataSource()).toBe("offline");
+    const offline = counts();
+    expect(offline.approvals).toEqual({ n: null, exact: false });
+    expect(offline.agents).toEqual({ n: null, exact: false });
+    expect(offline.needs).toEqual({ n: null, exact: false });
+    expect(offline.sync).toBeUndefined();
   });
 });

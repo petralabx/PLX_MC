@@ -227,6 +227,69 @@ test.describe("shell — context pane (≥1600)", () => {
   });
 });
 
+test.describe("shell — review round 1 regressions", () => {
+  test("phone: the full-screen pane is usable — a tap inside it does not close it, no FAB over it", async ({ page }) => {
+    await open(page, 393, "/?screen=board&taskId=TASK-221");
+    const pane = page.getByRole("complementary", { name: "Details" });
+    await expect(pane).toBeVisible();
+    await expect(page.getByRole("button", { name: "New task" })).toHaveCount(0);
+    await pane.getByText("Timeline · comments").first().click();
+    await expect(pane).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("taskId")).toBe("TASK-221");
+    // The tabs stay usable beside the pane.
+    await page.locator("nav.mc-tabs").getByRole("link", { name: /Knowledge/ }).click();
+    await expect(page.getByRole("complementary", { name: "Details" })).toHaveCount(0);
+  });
+
+  test("≥1600: hiding the pane with a task selected hides it — no modal overlay takes its place", async ({ page }) => {
+    await open(page, 1920, "/?screen=board");
+    await page.locator("[data-testid='board-screen'] .tcard").first().click();
+    const pane = page.getByRole("complementary", { name: "Details" });
+    await expect(pane.locator("[data-testid='task-detail-screen']")).toBeVisible();
+    await page.getByRole("button", { name: "Details pane" }).click();
+    await expect(pane).toBeHidden();
+    await expect(page.locator(".mc-scrim")).toHaveCount(0);
+    await expect(page.locator("body")).not.toHaveClass(/mc-lock/);
+    expect(new URL(page.url()).searchParams.get("taskId")).toBeNull();
+  });
+
+  test("phone drawer stacks the Projects and Initiatives lists (no clipped row)", async ({ page }) => {
+    await open(page, 393, "/?screen=board");
+    await page.locator("nav.mc-tabs").getByRole("button", { name: "More" }).click();
+    await page.getByRole("dialog", { name: "More" }).getByRole("button", { name: /All screens/ }).click();
+    const drawer = page.locator("nav.mc-side");
+    for (const name of ["Projects", "Initiatives"]) {
+      const group = drawer.getByRole("group", { name });
+      const first = (await group.getByRole("link").first().boundingBox())!;
+      const add = (await group.getByRole("button").last().boundingBox())!;
+      expect(add.y, `${name}: New … sits below the list`).toBeGreaterThan(first.y + first.height - 1);
+      expect(add.x + add.width, `${name}: inside the drawer`).toBeLessThanOrEqual((await drawer.boundingBox())!.width + 1);
+    }
+    expect(await drawer.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  });
+
+  test("icons keep their tier sizes: 18 in icon buttons, 20 in tabs, 22 in the FAB", async ({ page }) => {
+    await open(page, 393, "/?screen=board");
+    const size = async (selector: string) => Math.round((await page.locator(selector).first().boundingBox())!.width);
+    expect(await size("nav.mc-tabs a .ic")).toBe(20);
+    expect(await size(".mc-fab .ic")).toBe(22);
+    expect(await size(".mc-top .search-icon .ic")).toBe(18);
+  });
+
+  test("desktop marks the current item with one 2px accent rule, not the rail's extra inset", async ({ page }) => {
+    await open(page, 1440, "/?screen=board");
+    const item = page.locator("nav.mc-side").getByRole("link", { name: "Board" });
+    await expect(item).toHaveCSS("box-shadow", "none");
+    await expect(item).toHaveCSS("border-left-width", "2px");
+  });
+
+  test("a reload on another screen does not overwrite a tab's remembered screen", async ({ page }) => {
+    await open(page, 393, "/?screen=mine");
+    await open(page, 393, "/?screen=board");
+    await expect(page.locator("nav.mc-tabs").getByRole("link", { name: /My work/ })).toHaveAttribute("href", "/?screen=mine");
+  });
+});
+
 test.describe("shell — layers, focus and keyboard", () => {
   test("the skip link is the first tab stop and moves focus to main", async ({ page }) => {
     for (const width of TIERS) {

@@ -3,9 +3,10 @@
 // The pane holds the selected item of a collection screen (Board, List, My
 // tasks, Approvals). Selection lives in the URL (taskId), so every form below
 // shows the same thing and collapsing one loses nothing:
-//   <641     a full-screen page over the list; the tabs stay visible
+//   <641     a full-screen page over the list; the tabs stay visible and
+//            usable (no scrim, no Tab trap); Esc and focus in / back still work
 //   641–1599 an overlay sheet (560 on tablet, 480 on desktop) with a scrim —
-//            a layer: Esc, focus trap, focus back to the card that opened it
+//            a modal layer: Esc, focus trap, focus back to the card that opened it
 //   ≥1600    a persistent grid column beside the list, resizable by dragging
 //            the separator or with ←/→ (16px) and Home/End; width remembered
 // The live column (≥2200, pinned by the user) holds Agent activity.
@@ -19,6 +20,7 @@ import { useLayer } from "./use-layer";
 export function ContextPane({
   selected,
   persistent,
+  modal,
   width,
   onWidth,
   onClose,
@@ -29,6 +31,8 @@ export function ContextPane({
   selected: string | undefined;
   /** ≥1600 and not hidden: a grid column, not an overlay layer. */
   persistent: boolean;
+  /** ≥641: an overlay over the page (scrim, Tab trap, scroll lock). Below, a full-screen page. */
+  modal: boolean;
   /** Current width in px (for the separator's value). */
   width: number;
   /** persist=false while dragging; true once the drag or key press settles. */
@@ -39,7 +43,7 @@ export function ContextPane({
 }) {
   const ref = useRef<HTMLElement | null>(null);
   const overlay = Boolean(selected) && !persistent;
-  const { onKeyDown } = useLayer(overlay, onClose, ref);
+  const { onKeyDown } = useLayer(overlay, onClose, ref, { lockScroll: modal });
 
   const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -82,13 +86,13 @@ export function ContextPane({
 
   return (
     <>
-      {overlay ? <div className="mc-scrim for-pane" aria-hidden="true" onClick={onClose} /> : null}
+      {overlay && modal ? <div className="mc-scrim for-pane" aria-hidden="true" onClick={onClose} /> : null}
       <aside
         id="mc-pane"
         className={`mc-pane${selected ? " open" : ""}`}
         aria-label="Details"
         ref={ref}
-        onKeyDown={overlay ? onKeyDown : undefined}
+        onKeyDown={overlay && modal ? onKeyDown : undefined}
       >
         {persistent ? (
           <div

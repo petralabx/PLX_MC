@@ -2,13 +2,13 @@
 // sidebar, rail, bottom tabs and More sheet:
 //   n       exact — every source has answered
 //   n+      partial — a lower bound ("at least n")
-//   —       unknown — still loading, never shown as 0
+//   —       unknown — not loaded, or offline data; never shown as 0
 //   hidden  zero, but only once it is confirmed
 // The visible glyph is aria-hidden and a visually hidden phrase carries the
 // meaning, so a link reads "Home, at least 3" rather than "Home 3+".
 
 export interface Count {
-  /** null = unknown (loading or unavailable). */
+  /** null = unknown (not loaded yet, or only cached / demo data). */
   n: number | null;
   /** false = n is a lower bound. */
   exact: boolean;
@@ -26,7 +26,7 @@ export function CountBadge({ count }: { count: Count | undefined }) {
   const unit = count.unit ? ` ${count.unit}` : "";
   const known = count.n !== null;
   const text = !known ? "—" : `${count.n}${count.exact ? "" : "+"}${unit}`;
-  const spoken = !known ? "count loading" : count.exact ? `${count.n}${unit}` : `at least ${count.n}${unit}`;
+  const spoken = !known ? "count unknown" : count.exact ? `${count.n}${unit}` : `at least ${count.n}${unit}`;
   const tone = !known || !count.exact ? "unk" : (count.tone ?? "acc");
   return (
     <span className={`badge ${tone}`}>

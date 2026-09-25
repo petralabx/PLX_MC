@@ -10,6 +10,7 @@ import { NavIcon } from "./nav-icon";
 import {
   NAV_TABS,
   createTabMemory,
+  isPaneScreen,
   isPlainLeftClick,
   navHref,
   tabOf,
@@ -135,7 +136,8 @@ export function GroupStrip({ route, nav, flags }: { route: Route; nav: Nav; flag
 /** Phone "New task" in the thumb zone — on My work and Plan, never over a task. */
 export function NewTaskFab({ route, onNewTask }: { route: Route; onNewTask: () => void }) {
   const tab = tabOf(route.screen);
-  if ((tab !== "my-work" && tab !== "plan") || route.screen === "task") return null;
+  const taskOpen = route.screen === "task" || (isPaneScreen(route.screen) && Boolean(route.taskId));
+  if ((tab !== "my-work" && tab !== "plan") || taskOpen) return null;
   return (
     <button type="button" className="mc-fab" aria-label="New task" onClick={onNewTask}>
       <Plus className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />

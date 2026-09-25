@@ -47,8 +47,9 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  /* Lucide icons in shell surfaces only — screens size their own .ic. */
-  .mc :is(.mc-chrome, .mc-side, .mc-tabs, .mc-fab, .mc-sheet, .mc-pane > .pane-head, .mc-live > .live-h) .ic {
+  /* Lucide icons in shell surfaces only — screens size their own .ic.
+     :where() keeps this at (0,2,0) so the per-control sizes below win. */
+  .mc :where(.mc-chrome, .mc-side, .mc-tabs, .mc-fab, .mc-sheet, .mc-pane > .pane-head, .mc-live > .live-h) .ic {
     width: 16px;
     height: 16px;
     flex: 0 0 auto;
@@ -371,8 +372,13 @@
   .mc .mc-side .item[aria-current="page"] .ic {
     color: var(--p-accent);
   }
+  /* Projects / Initiatives lists. Reset the task-detail subtask row skin
+     (mc-task.css `.mc .sub`), which shares the class name. */
   .mc .mc-side .sub {
+    display: block;
     margin-top: 12px;
+    padding: 0;
+    border-bottom: 0;
   }
   /* Project / initiative health tick */
   .mc .mc-side .item .hl {
@@ -999,6 +1005,7 @@
     }
     .mc .mc-side .item[aria-current="page"] {
       border-left-color: var(--p-accent);
+      box-shadow: none;
     }
     .mc .mc-side .item .nm {
       position: static;

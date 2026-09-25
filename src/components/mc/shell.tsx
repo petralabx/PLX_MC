@@ -66,6 +66,7 @@ export function MissionControlShell() {
 
   // Wide-tier preferences (ADR-005): the pane width and hidden state, and the
   // pinned live column. CSS owns the layout; these only pick the form.
+  const notPhone = useMinWidth(641);
   const wide = useMinWidth(1600);
   const ultra = useMinWidth(2200);
   const storedPaneWidth = usePref(paneWidthPref, null);
@@ -107,10 +108,11 @@ export function MissionControlShell() {
     };
   }, []);
 
-  // Each phone tab remembers the last screen it showed.
+  // Each phone tab remembers the last screen it showed — only once the URL has
+  // been adopted (`ready`), so the pre-adoption "home" render never overwrites it.
   useEffect(() => {
-    rememberTabScreen(route.screen);
-  }, [route.screen]);
+    if (ready) rememberTabScreen(route.screen);
+  }, [ready, route.screen]);
 
   // The latest route and pane preference, for nav() to read at click time
   // without re-creating nav (every screen receives it).
@@ -176,6 +178,18 @@ export function MissionControlShell() {
   }, [go]);
 
   const openTaskPage = useCallback((taskId: string) => go({ screen: "task", taskId }), [go]);
+
+  // The top-bar toggle (≥1600). Hiding the column also drops the selection:
+  // with nowhere to show it, it must not reappear as an overlay.
+  const togglePane = useCallback(() => {
+    if (paneHiddenRef.current) {
+      paneHiddenPref.set(false);
+      return;
+    }
+    paneHiddenPref.set(true);
+    const current = routeRef.current;
+    if (current.taskId) go({ screen: current.screen, bucketId: current.bucketId, projectId: current.projectId });
+  }, [go]);
 
   const setPaneWidth = useCallback((width: number, persist: boolean) => {
     paneWidthPref.set(clampPaneWidth(width), persist);
@@ -322,7 +336,7 @@ export function MissionControlShell() {
           dark={dark}
           setDark={setDark}
           onOpenPalette={openPalette}
-          pane={paneScreen ? { shown: !paneHidden, toggle: () => paneHiddenPref.set(!paneHidden) } : undefined}
+          pane={paneScreen ? { shown: !paneHidden, toggle: togglePane } : undefined}
           live={{ pinned: livePinned, toggle: () => livePinnedPref.set(!livePinned) }}
         />
         <OfflineBanner />
@@ -357,6 +371,7 @@ export function MissionControlShell() {
           <ContextPane
             selected={selected}
             persistent={persistentPane}
+            modal={notPhone}
             width={paneWidth}
             onWidth={setPaneWidth}
             onClose={closePane}

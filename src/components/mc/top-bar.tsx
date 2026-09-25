@@ -5,7 +5,8 @@
 //           theme toggle · avatar; the static workspace label joins when the
 //           bar is ≥900 wide and "Mission Control" when ≥1280 (container queries)
 //   ≥1600   + details-pane toggle on collection screens
-//   ≥2200   + pin agent activity
+//   ≥2200   + pin the live column
+import type { RefObject } from "react";
 import Image from "next/image";
 import { Moon, PanelRight, Pin, Search, Sun } from "lucide-react";
 
@@ -36,6 +37,8 @@ export function Topbar({
   onOpenPalette,
   pane,
   live,
+  paneToggleRef,
+  liveToggleRef,
 }: {
   route: Route;
   nav: Nav;
@@ -44,8 +47,11 @@ export function Topbar({
   onOpenPalette: () => void;
   /** ≥1600 on collection screens: show / hide the persistent details pane. */
   pane?: { shown: boolean; toggle: () => void };
-  /** ≥2200: pin / unpin the agent-activity column. */
+  /** ≥2200: pin / unpin the live column. */
   live?: { pinned: boolean; toggle: () => void };
+  /** Focus lands here when the pane or live column is closed from inside it. */
+  paneToggleRef?: RefObject<HTMLButtonElement | null>;
+  liveToggleRef?: RefObject<HTMLButtonElement | null>;
 }) {
   useMcVersion();
   const viewer = useViewer();
@@ -90,6 +96,7 @@ export function Topbar({
         {pane ? (
           <button
             type="button"
+            ref={paneToggleRef}
             className="iconbtn wide-only"
             aria-label="Details pane"
             aria-pressed={pane.shown}
@@ -102,24 +109,29 @@ export function Topbar({
         {live ? (
           <button
             type="button"
+            ref={liveToggleRef}
             className="iconbtn ultra-only"
-            aria-label="Pin agent activity"
+            aria-label="Pin live column"
             aria-pressed={live.pinned}
             onClick={live.toggle}
           >
             <Pin className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
           </button>
         ) : null}
-        <button
-          type="button"
+        <a
+          href={navHref({ screen: "sync" })}
           className={`topsync ${sync.cls}`}
-          onClick={() => nav("sync")}
+          onClick={(event) => {
+            if (!isPlainLeftClick(event)) return;
+            event.preventDefault();
+            nav("sync");
+          }}
           title="SharePoint sync issues · review queue"
           data-testid="nav-sync-console"
         >
           <span className="d" />
           <span className="lb">{sync.label}</span>
-        </button>
+        </a>
         <button
           type="button"
           className="iconbtn theme"

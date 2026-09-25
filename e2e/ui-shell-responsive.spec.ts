@@ -34,10 +34,16 @@ function allowedRuleIds(): Set<string> {
   }
 }
 
+// Drawers, sheets and the pane animate; measure them at rest.
+test.use({ contextOptions: { reducedMotion: "reduce" } });
+
 async function open(page: Page, width: number, url = "/", height = 900) {
   await page.setViewportSize({ width, height });
   await page.goto(url);
   await waitForHydration(page);
+  // The harness has no database: wait for the offline fallback to settle so
+  // every check sees the banner (and its Retry) that a real failure shows.
+  await expect(page.getByTestId("offline-banner")).toBeVisible();
 }
 
 async function shellViolations(page: Page, extra: string[] = []) {
@@ -151,7 +157,7 @@ test.describe("shell — nav form per width", () => {
     expect(new URL(page.url()).searchParams.get("screen")).toBe("task");
 
     await open(page, 2560, "/?screen=board", 1100);
-    const pin = page.getByRole("button", { name: "Pin agent activity" });
+    const pin = page.getByRole("button", { name: "Pin live column" });
     await expect(pin).toHaveAttribute("aria-pressed", "false");
     await pin.click();
     const live = page.getByRole("complementary", { name: "Agent activity" });
@@ -162,7 +168,7 @@ test.describe("shell — nav form per width", () => {
     await page.reload();
     await waitForHydration(page);
     await expect(page.getByRole("complementary", { name: "Agent activity" })).toBeVisible();
-    await page.getByRole("button", { name: "Unpin agent activity" }).click();
+    await page.getByRole("button", { name: "Unpin live column" }).click();
     await expect(page.getByRole("complementary", { name: "Agent activity" })).toHaveCount(0);
   });
 
@@ -170,7 +176,7 @@ test.describe("shell — nav form per width", () => {
     await page.addInitScript(() => window.localStorage.setItem("mc.live.pinned", "1"));
     await open(page, 1920, "/?screen=board");
     await expect(page.getByRole("complementary", { name: "Agent activity" })).toBeHidden();
-    await expect(page.getByRole("button", { name: "Pin agent activity" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "Pin live column" })).toBeHidden();
   });
 });
 
@@ -287,6 +293,86 @@ test.describe("shell — review round 1 regressions", () => {
     await open(page, 393, "/?screen=mine");
     await open(page, 393, "/?screen=board");
     await expect(page.locator("nav.mc-tabs").getByRole("link", { name: /My work/ })).toHaveAttribute("href", "/?screen=mine");
+  });
+});
+
+test.describe("shell — review round 2 regressions", () => {
+  test("Esc inside the overlay pane goes to the field first (mention list, not the pane)", async ({ page }) => {
+    await open(page, 1440, "/?screen=board&taskId=TASK-221");
+    const pane = page.getByRole("complementary", { name: "Details" });
+    const box = pane.getByRole("textbox", { name: /Write a comment/ });
+    await box.click();
+    await box.pressSequentially("hello @");
+    await expect(pane.getByRole("listbox")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(pane.getByRole("listbox")).toHaveCount(0);
+    await expect(pane).toBeVisible();
+    await expect(box).toHaveValue("hello @");
+    expect(new URL(page.url()).searchParams.get("taskId")).toBe("TASK-221");
+    // With nothing left to dismiss inside, the next Esc closes the pane.
+    await page.keyboard.press("Escape");
+    await expect(pane).toBeHidden();
+  });
+
+  test("phone pane sits under the chrome (banner visible) and the covered page is inert", async ({ page }) => {
+    await open(page, 393, "/?screen=board&taskId=TASK-221");
+    const pane = page.getByRole("complementary", { name: "Details" });
+    await expect(pane).toBeVisible();
+    const banner = (await page.getByTestId("offline-banner").boundingBox())!;
+    const paneBox = (await pane.boundingBox())!;
+    expect(Math.round(paneBox.y)).toBeGreaterThanOrEqual(Math.round(banner.y + banner.height));
+    await expect(page.locator(".mc-top .search-icon")).toBeInViewport();
+    await expect(pane.getByRole("button", { name: "Close details" })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    expect(await page.evaluate(() => Boolean(document.activeElement?.closest("#mc-main")))).toBe(false);
+    await expect(page.locator("main#mc-main")).toHaveAttribute("inert", "");
+  });
+
+  test("closing the empty pane and unpinning the live column leave focus on their toggles", async ({ page }) => {
+    await open(page, 2560, "/?screen=board", 1100);
+    await page.getByRole("complementary", { name: "Details" }).getByRole("button", { name: "Close details" }).click();
+    await expect(page.getByRole("button", { name: "Details pane" })).toBeFocused();
+    await page.getByRole("button", { name: "Pin live column" }).click();
+    await page.getByRole("button", { name: "Unpin live column" }).click();
+    await expect(page.getByRole("button", { name: "Pin live column" })).toBeFocused();
+  });
+
+  test("g-chords do not fire while a shell layer owns the keyboard", async ({ page }) => {
+    await open(page, 393, "/?screen=list");
+    await page.locator("nav.mc-tabs").getByRole("button", { name: "More" }).click();
+    await expect(page.getByRole("dialog", { name: "More" })).toBeVisible();
+    await page.keyboard.press("g");
+    await page.keyboard.press("b");
+    await expect(page.getByRole("dialog", { name: "More" })).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("screen")).toBe("list");
+  });
+
+  test("shell buttons are 44px tall on a coarse pointer at any width", async ({ browser }) => {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, hasTouch: true, isMobile: true });
+    await page.goto("/?screen=board&taskId=TASK-221");
+    await waitForHydration(page);
+    await expect(page.getByTestId("offline-banner")).toBeVisible();
+    for (const target of [page.getByTestId("offline-banner").getByRole("button"), page.getByRole("link", { name: "Open page" })]) {
+      expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.close();
+  });
+
+  test("the live column holds the user's pick — Agent activity by default, or Approvals", async ({ page }) => {
+    await open(page, 2560, "/?screen=board", 1100);
+    await page.getByRole("button", { name: "Pin live column" }).click();
+    const live = page.locator("aside.mc-live");
+    const pick = live.getByRole("group", { name: "Live column shows" });
+    await expect(pick.getByRole("button", { name: "Agent activity" })).toHaveAttribute("aria-pressed", "true");
+    await pick.getByRole("button", { name: "Approvals" }).click();
+    await expect(live).toHaveAttribute("aria-label", "Approvals");
+    await expect(live.locator(".ap-page")).toBeVisible();
+    await page.reload();
+    await waitForHydration(page);
+    await expect(page.locator("aside.mc-live")).toHaveAttribute("aria-label", "Approvals");
+    // Not shown twice: on the Approvals screen itself the column steps aside.
+    await open(page, 2560, "/?screen=approvals", 1100);
+    await expect(page.locator("aside.mc-live")).toHaveCount(0);
   });
 });
 
@@ -432,7 +518,7 @@ test.describe("shell — offline banner", () => {
       const top = (await page.locator(".mc-top").boundingBox())!;
       expect(Math.round(banner.y)).toBe(Math.round(top.y + top.height));
       expect(Math.round(banner.height)).toBe(44);
-      await page.waitForTimeout(500);
+      await page.waitForLoadState("networkidle");
       const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
       expect(cls, `CLS @ ${width}`).toBeLessThan(0.01);
     }

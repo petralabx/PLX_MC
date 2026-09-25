@@ -4,13 +4,16 @@
 // drawer, the More sheet, the overlay context pane, and — as "slots" — the
 // ⌘K palette and the New task / project / initiative modals.
 //
-// - Esc closes only the TOPMOST layer. One document-level capture listener
-//   owns it: if the top layer is shell-owned it closes it and stops the event,
-//   so screen-level Esc handlers underneath (the palette's, WorkViews' filter
-//   clear) never also fire. A slot on top owns its own Esc, so the listener
-//   stands aside. Pickers and popovers that stop Esc at the window capture
-//   phase (people-picker, filter-bar) still close first, because window
-//   capture runs before document capture.
+// - Esc closes only the TOPMOST layer. One document-level listener owns it,
+//   in the bubble phase: React's own handlers (registered on the document at
+//   hydration, so earlier) run first, and a field inside the layer that
+//   handles Esc itself — a mention list, a comment being edited — calls
+//   preventDefault and keeps the layer open. Otherwise, if the top layer is
+//   shell-owned, the listener closes it and stops the event before the
+//   window-level Esc handlers (the palette's, WorkViews' filter clear) run.
+//   A slot on top owns its own Esc, so the listener stands aside. Pickers and
+//   popovers that stop Esc at the window capture phase (people-picker,
+//   filter-bar) never reach it.
 // - Focus moves into a layer on open ([data-autofocus] or its first control)
 //   and back to whatever opened it on close.
 // - Tab / Shift+Tab wrap inside an open layer (wrapFocusIndex in nav-model).
@@ -28,7 +31,7 @@ interface LayerEntry {
 const stack: LayerEntry[] = [];
 let listening = false;
 
-function onEscapeCapture(event: KeyboardEvent) {
+function onEscape(event: KeyboardEvent) {
   if (event.key !== "Escape" || event.defaultPrevented) return;
   const top = stack[stack.length - 1];
   if (!top?.close) return;
@@ -43,12 +46,17 @@ function syncDocument() {
     stack.some((entry) => entry.lock)
   );
   if (stack.length > 0 && !listening) {
-    document.addEventListener("keydown", onEscapeCapture, true);
+    document.addEventListener("keydown", onEscape);
     listening = true;
   } else if (stack.length === 0 && listening) {
-    document.removeEventListener("keydown", onEscapeCapture, true);
+    document.removeEventListener("keydown", onEscape);
     listening = false;
   }
+}
+
+/** True while any layer (shell-owned or slot) is open — gates global shortcuts. */
+export function hasOpenLayer(): boolean {
+  return stack.length > 0;
 }
 
 function pushLayer(entry: LayerEntry): () => void {

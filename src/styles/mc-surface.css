@@ -58,7 +58,7 @@
      ~916px, with no width media query. */
   --p-gutter: clamp(14px, calc(2.4vw + 4px), 26px);
 
-  /* Shell layout tokens (ADR-005 §6) — sizes only, no colour. Tier overrides
+  /* Shell layout tokens (ADR-005, Decision 8) — sizes only, no colour. Tier overrides
      (--p-top-h ≥641, --p-tabs-h ≥641, --p-pane-w ≥2200) live in mc-shell.css,
      the one file allowed width media queries. */
   --p-top-h: 52px;              /* top bar; 56px ≥641 */

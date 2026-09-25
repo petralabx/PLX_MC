@@ -94,6 +94,14 @@ export const paneHiddenPref = createPref<boolean>("mc.pane.hidden", (raw) => raw
 /** The live column pinned by the user (shown ≥2200 only; dormant below). */
 export const livePinnedPref = createPref<boolean>("mc.live.pinned", (raw) => raw === "1", (v) => (v ? "1" : "0"));
 
+/** What the live column holds (spec Q5: one, the user picks; Agent activity by default). */
+export type LiveKind = "feed" | "approvals";
+export const liveKindPref = createPref<LiveKind>(
+  "mc.live.kind",
+  (raw) => (raw === "approvals" ? "approvals" : "feed"),
+  (value) => value
+);
+
 // One stable subscribe function per query, so useSyncExternalStore does not
 // resubscribe on every render.
 const mediaSubscribers = new Map<string, (listener: () => void) => () => void>();

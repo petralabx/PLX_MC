@@ -3,7 +3,7 @@
 //   n       exact — every source has answered
 //   n+      partial — a lower bound ("at least n")
 //   —       unknown — not loaded, or offline data; never shown as 0
-//   hidden  zero, but only once it is confirmed
+//   hidden  zero, but only once it is confirmed (a lower bound of 0 reads —)
 // The visible glyph is aria-hidden and a visually hidden phrase carries the
 // meaning, so a link reads "Home, at least 3" rather than "Home 3+".
 
@@ -24,7 +24,8 @@ export function CountBadge({ count }: { count: Count | undefined }) {
   if (!count) return null;
   if (count.n === 0 && count.exact) return null;
   const unit = count.unit ? ` ${count.unit}` : "";
-  const known = count.n !== null;
+  // A lower bound of zero says nothing: it reads as unknown, not "0+".
+  const known = count.n !== null && (count.exact || count.n > 0);
   const text = !known ? "—" : `${count.n}${count.exact ? "" : "+"}${unit}`;
   const spoken = !known ? "count unknown" : count.exact ? `${count.n}${unit}` : `at least ${count.n}${unit}`;
   const tone = !known || !count.exact ? "unk" : (count.tone ?? "acc");

@@ -108,6 +108,10 @@ describe("shell markup", () => {
     expect(html).not.toContain("<h1");
   });
 
+  it("makes the sync pill a real link to the sync console", () => {
+    expect(topbar()).toMatch(/<a href="\/\?screen=sync" class="topsync pending"[^>]*data-testid="nav-sync-console"/);
+  });
+
   it("never claims Synced before the server answers", () => {
     expect(topbar()).toContain("Checking…");
     expect(topbar()).not.toContain("Synced");
@@ -155,6 +159,11 @@ describe("shell CSS contract (ADR-005)", () => {
     expect(shell).toContain("background: var(--p-scrim)");
     expect(shell).toContain("width: var(--p-drawer-w)");
     expect(shell).toMatch(/body\.mc-lock\s*\{\s*overflow: hidden;/);
+  });
+
+  it("gives toast dismiss and shell buttons 44px targets where touch applies", () => {
+    expect(shell).toMatch(/\.mc \.mc-notices \.mc-notice \.x \{[^}]*min-width: var\(--p-touch\);[^}]*min-height: var\(--p-touch\);/);
+    expect(shell).toMatch(/@media \(pointer: coarse\) \{[^@]*\.mc \.mc-offline \.btn,[^{]*\.mc \.mc-pane \.pane-head \.btn[^{]*\{[^}]*min-height: var\(--p-touch\);/);
   });
 
   it("animates only when motion is welcome, and hides the ⌘K hint on touch", () => {

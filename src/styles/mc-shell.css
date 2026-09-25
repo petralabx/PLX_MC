@@ -18,8 +18,10 @@
 
 /* Rules for this file (ADR-005):
    - Base styles are the phone. Tiers are min-width media queries at 641, 1025,
-     1600 and 2200 — and this is the only MC file allowed width media queries.
-     Anything else that answers to width uses @container (main, pane, chrome).
+     1600 and 2200 — and this is the only MC file allowed new width media
+     queries (legacy files keep their max-width blocks until PRs 2–7 convert
+     them). Anything else that answers to width uses @container (main, pane,
+     chrome).
    - --p-* tokens only: no raw colour, no new colour, no token value changes.
    - Only drawers, sheets and the pane move (--p-dur, --p-ease); reduced
      motion means nothing moves. Hover styles live under (hover: hover). */
@@ -520,12 +522,13 @@
     height: 22px;
   }
 
-  /* Context pane — phone: a full-screen page over the list, tabs visible.
-     Hidden until something is selected (≥1600 it may be a column instead). */
+  /* Context pane — phone: a page over the list, between the chrome (top bar
+     and offline banner stay visible) and the tabs. Hidden until something is
+     selected (≥1600 it may be a column instead). */
   .mc .mc-pane {
     position: fixed;
-    inset: 0 0 calc(var(--p-tabs-h) + var(--p-safe-b)) 0;
-    z-index: 35;
+    inset: var(--p-chrome-h) 0 calc(var(--p-tabs-h) + var(--p-safe-b)) 0;
+    z-index: 25;
     display: none;
     flex-direction: column;
     min-width: 0;
@@ -541,7 +544,7 @@
     gap: var(--p-space-2);
     flex: 0 0 auto;
     min-height: var(--p-top-h);
-    padding: var(--p-safe-t) var(--p-gutter) 0 6px;
+    padding: 0 var(--p-gutter) 0 6px;
     border-bottom: 1px solid var(--p-grid);
   }
   .mc .mc-pane .pane-head .kk {
@@ -685,6 +688,17 @@
     color: var(--p-muted);
   }
 
+  /* Toast dismiss: a 44px target (toasts sit in the phone thumb zone); the
+     negative margin keeps the toast's own height. */
+  .mc .mc-notices .mc-notice .x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--p-touch);
+    min-height: var(--p-touch);
+    margin: -12px -10px -12px 0;
+  }
+
   /* Toasts — phone: above the tab bar, full width */
   .mc .mc-notices {
     position: fixed;
@@ -764,6 +778,7 @@
       display: inline-flex;
     }
     .mc .mc-top .topsync {
+      text-decoration: none;
       display: inline-flex;
       align-items: center;
       gap: 7px;
@@ -1101,6 +1116,30 @@
       padding: 0 6px 0 var(--p-gutter);
       border-bottom: 1px solid var(--p-grid);
     }
+    .mc .mc-live .live-h .seg {
+      display: inline-flex;
+      border: 1px solid var(--p-grid);
+    }
+    .mc .mc-live .live-h .seg button {
+      min-height: 32px;
+      padding: 0 10px;
+      border: 0;
+      border-left: 1px solid var(--p-grid);
+      background: transparent;
+      font-family: var(--p-font-mono);
+      font-size: var(--p-text-tick);
+      letter-spacing: var(--p-track-meta);
+      text-transform: uppercase;
+      color: var(--p-muted);
+      cursor: pointer;
+    }
+    .mc .mc-live .live-h .seg button:first-child {
+      border-left: 0;
+    }
+    .mc .mc-live .live-h .seg button[aria-pressed="true"] {
+      background: var(--p-ink);
+      color: var(--p-paper);
+    }
     .mc .mc-live .live-h .kk {
       flex: 1 1 auto;
       font-family: var(--p-font-mono);
@@ -1128,6 +1167,11 @@
   @media (pointer: coarse) {
     .mc .mc-side .item,
     .mc .mc-side .h-toggle {
+      min-height: var(--p-touch);
+    }
+    .mc .mc-offline .btn,
+    .mc .mc-pane .pane-head .btn,
+    .mc .mc-live .live-h .seg button {
       min-height: var(--p-touch);
     }
   }

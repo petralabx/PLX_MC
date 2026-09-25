@@ -39,7 +39,9 @@ at the top of the screen, out of thumb reach.
    be hidden, and that is remembered too (`mc.pane.hidden`). Opening a task from a collection screen fills
    the pane instead of leaving the collection; the page is still one click away ("Open page").
 4. **Ultra-wide, `(min-width: 2200px)`:** adds an optional fourth column, `--p-live-w` (340px), that the
-   user can pin (`mc.live.pinned`). It holds Agent activity (spec Q5). The default pane width becomes 520px.
+   user can pin (`mc.live.pinned`). It holds Agent activity or Approvals — the user picks, Agent activity by
+   default (spec Q5; `mc.live.kind`) — and steps aside on the screen it would repeat. The default pane width
+   becomes 520px.
 5. **Content caps.** Main content is capped at `--p-content-max` (1360px), and reading text at
    `--p-read-max` (72ch). Boards and the timeline are exempt. At ≥1700px of main-container width, the
    9-stage board may use a 168px compact-card floor instead of RESPONSIVE.md §4's 240px pipeline minimum
@@ -48,7 +50,9 @@ at the top of the screen, out of thumb reach.
    for the shell: nav form, tabs, pane persistence, sheets vs dialogs, and top-bar slots. Everything inside
    `main` and the pane uses `@container` (`main`, `pane`), plus capability queries (`hover`, `pointer`,
    `prefers-reduced-motion`). Top-bar slots that pivot at other widths (the workspace label at 900, the
-   "Mission Control" wordmark at 1280) use `@container chrome`, not new media queries.
+   "Mission Control" wordmark at 1280) use `@container chrome`, not new media queries. The legacy MC
+   stylesheets keep their existing max-width blocks until PRs 2–7 convert them; no new width query goes
+   anywhere but `mc-shell.css`.
 7. **Cascade layers.** `@layer mc.tokens, mc.legacy, mc.shell, mc.screens, mc.state`. Every existing MC
    stylesheet is imported into `mc.legacy` in its original order (`src/app/globals.css`), so screens keep
    their exact cascade while the shell layer supersedes them without specificity fights. Screens move to
@@ -56,8 +60,9 @@ at the top of the screen, out of thumb reach.
    `globals.css` imports first (Turbopack emits `@import`s ahead of the importing file's own rules).
 8. **Surface-local layout tokens** are added in `mc-surface.css`: `--p-top-h`, `--p-tabs-h`,
    `--p-safe-t/-b`, `--p-rail-w`, `--p-side-w`, `--p-drawer-w`, `--p-sheet-max`, `--p-pane-w/-min/-max`,
-   `--p-live-w`, `--p-content-max`, `--p-read-max`, `--p-banner-h` and `--p-touch`. No colours are added and
-   no Portal token changes.
+   `--p-live-w`, `--p-content-max`, `--p-read-max`, `--p-banner-h` and `--p-touch`. `mc-shell.css` derives
+   `--p-chrome-h` (top bar + safe area + the banner row when present) for everything that sticks under the
+   chrome. No colours are added and no Portal token changes.
 
 ## Amendments to existing MC rules
 
@@ -83,11 +88,15 @@ at the top of the screen, out of thumb reach.
 
 - Below 2200, the live column hides. The pin preference is kept but dormant.
 - Below 1600, the pane becomes an overlay layer: Esc or the scrim closes it and focus returns to what opened
-  it. Selection lives in the URL (`taskId`), so collapsing it loses no state.
+  it. Below 641 it is a page between the chrome and the tabs: no scrim, the covered page is inert, the top
+  bar and offline banner stay visible. Selection lives in the URL (`taskId`), so collapsing it loses no
+  state.
 - Main never goes below 560px: the pane is clamped to 640, so at 1600 main keeps ≥720; with the live column
   at 2200, 240 + 640 + 340 leaves ≥980.
-- Every layer (drawer, More sheet, overlay pane, ⌘K, modals) shares one stack: Esc closes only the topmost,
-  focus returns to its trigger, Tab wraps inside, the body scroll locks.
+- Every layer (drawer, More sheet, overlay pane, ⌘K, modals) shares one stack (`use-layer.ts`): Esc closes
+  only the topmost — after any field inside it has handled Esc itself — and focus returns to its trigger.
+  The shell-owned layers (drawer, More sheet, overlay pane from 641) also wrap Tab and lock the body scroll;
+  the ⌘K palette and the New … modals keep their own Esc and focus-in and only join the stack.
 - Tests: the shell spec (`e2e/ui-shell-responsive.spec.ts`) asserts the nav form and axe at
   **393 / 820 / 1440 / 2560**, and no horizontal page scroll from 360 to 3440. The existing per-screen
   specs keep their 393 / 820 / 1280 projects.

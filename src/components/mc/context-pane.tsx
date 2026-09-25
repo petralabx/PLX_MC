@@ -9,12 +9,13 @@
 //            a modal layer: Esc, focus trap, focus back to the card that opened it
 //   ≥1600    a persistent grid column beside the list, resizable by dragging
 //            the separator or with ←/→ (16px) and Home/End; width remembered
-// The live column (≥2200, pinned by the user) holds Agent activity.
+// The live column (≥2200, pinned by the user) holds Agent activity or
+// Approvals — the user picks (spec Q5), Agent activity by default.
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { ArrowLeft, PinOff, X } from "lucide-react";
 
 import { isPlainLeftClick, navHref } from "./nav-model";
-import { PANE_MAX, PANE_MIN, PANE_STEP, clampPaneWidth } from "./shell-prefs";
+import { PANE_MAX, PANE_MIN, PANE_STEP, clampPaneWidth, type LiveKind } from "./shell-prefs";
 import { useLayer } from "./use-layer";
 
 export function ContextPane({
@@ -144,12 +145,31 @@ export function PaneEmpty() {
   );
 }
 
-export function LiveColumn({ onUnpin, children }: { onUnpin: () => void; children: ReactNode }) {
+const LIVE_LABEL: Record<LiveKind, string> = { feed: "Agent activity", approvals: "Approvals" };
+
+export function LiveColumn({
+  kind,
+  onKind,
+  onUnpin,
+  children,
+}: {
+  kind: LiveKind;
+  onKind: (kind: LiveKind) => void;
+  onUnpin: () => void;
+  children: ReactNode;
+}) {
   return (
-    <aside className="mc-live" aria-label="Agent activity">
+    <aside className="mc-live" aria-label={LIVE_LABEL[kind]}>
       <div className="live-h">
-        <span className="kk">Agent activity · pinned</span>
-        <button type="button" className="iconbtn" aria-label="Unpin agent activity" onClick={onUnpin}>
+        <span className="kk">Pinned</span>
+        <div className="seg" role="group" aria-label="Live column shows">
+          {(["feed", "approvals"] as const).map((option) => (
+            <button key={option} type="button" aria-pressed={kind === option} onClick={() => onKind(option)}>
+              {LIVE_LABEL[option]}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="iconbtn" aria-label="Unpin live column" onClick={onUnpin}>
           <PinOff className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
         </button>
       </div>

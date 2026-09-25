@@ -81,17 +81,21 @@ export function useNavCounts(): NavCounts {
   const conflicts = sc.conflict + sc.error;
 
   // Home badge: what the store can say needs this viewer (Home's needs-me
-  // rules) plus unread notifications. Routing proposals are fetched by Home
-  // itself, so with the routing inbox on the badge is a lower bound.
+  // rules) plus unread notifications. Home itself reads approvals (GET
+  // /api/approvals) and routing proposals from their own endpoints, so from
+  // the store alone this is a lower bound; PR 2 (needs-me exactness) makes it
+  // exact.
   const needs: Count =
     loaded && viewer && today !== null && viewerLoadState(viewer, viewerSettled()) === "ready"
-      ? { n: needsMeCount(viewer, tasks, today, sc) + unreadCount(), exact: !routingInboxEnabled() }
+      ? { n: needsMeCount(viewer, tasks, today, sc) + unreadCount(), exact: false }
       : UNKNOWN_COUNT;
 
   return {
     needs,
-    // Pending runtime approval gates on the tasks this viewer can see.
-    approvals: loaded ? { n: tasks.reduce((n, t) => n + pendingApprovalGates(t).length, 0), exact: true } : UNKNOWN_COUNT,
+    // Pending runtime approval gates on the tasks this viewer can see. The
+    // Approvals screen reads GET /api/approvals, a different source — so a
+    // lower bound, never claimed exact.
+    approvals: loaded ? { n: tasks.reduce((n, t) => n + pendingApprovalGates(t).length, 0), exact: false } : UNKNOWN_COUNT,
     sync: loaded && conflicts > 0 ? { n: conflicts, exact: true, tone: "warn" } : undefined,
     // Honest live-agent count: agents executing in-flight work (EN-005).
     agents: loaded ? { n: liveAgentCount(tasks), exact: true, unit: "live" } : UNKNOWN_COUNT,

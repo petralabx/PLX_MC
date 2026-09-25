@@ -8,8 +8,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { Sidebar, useNavCounts, type NavCounts } from "@/components/mc/chrome";
+import { CountBadge } from "@/components/mc/count-badge";
 import type { Route } from "@/components/mc/route";
-import { __setStateLoaderForTests, dataSource, hydrate, resetStore } from "@/lib/mc-data/store";
+import {
+  __setStateLoaderForTests,
+  allTasks,
+  dataSource,
+  hydrate,
+  openConflicts,
+  openErrors,
+  resetStore,
+} from "@/lib/mc-data/store";
 
 beforeEach(() => resetStore());
 
@@ -112,5 +121,45 @@ describe("useNavCounts", () => {
     expect(offline.agents).toEqual({ n: null, exact: false });
     expect(offline.needs).toEqual({ n: null, exact: false });
     expect(offline.sync).toBeUndefined();
+  });
+});
+
+// Review round 2: a lower bound of zero says nothing — it reads "—", not "0+".
+describe("CountBadge", () => {
+  const badge = (n: number | null, exact: boolean) => renderToStaticMarkup(createElement(CountBadge, { count: { n, exact } }));
+  it("renders a partial zero as unknown, and hides only a confirmed zero", () => {
+    expect(badge(0, false)).toContain('<span aria-hidden="true">—</span>');
+    expect(badge(0, false)).toContain("count unknown");
+    expect(badge(0, true)).toBe("");
+    expect(badge(4, false)).toContain('<span aria-hidden="true">4+</span>');
+  });
+});
+
+describe("useNavCounts once the store is live", () => {
+  const Probe = () => createElement("pre", null, JSON.stringify(useNavCounts()));
+  const counts = () => JSON.parse(renderToStaticMarkup(createElement(Probe)).replace(/^<pre>|<\/pre>$/g, "").replace(/&quot;/g, '"')) as NavCounts;
+
+  it("reports exact store-only counts, and lower bounds where the page reads another source", async () => {
+    __setStateLoaderForTests(async () => ({
+      tasks: allTasks().slice(0, 2),
+      risks: [],
+      files: [],
+      conflicts: openConflicts(),
+      errors: openErrors(),
+      audit: [],
+      counts: {},
+      lastSweep: "2026.09.25 · 12:00",
+    }));
+    await hydrate();
+    expect(dataSource()).toBe("live");
+    const live = counts();
+    // Live agents are derived from the store alone: exact.
+    expect(live.agents).toMatchObject({ exact: true, unit: "live" });
+    expect(typeof live.agents?.n).toBe("number");
+    // Approvals come from GET /api/approvals on their page; the store's gates
+    // are not the same source, so the badge is never claimed exact.
+    expect(live.approvals?.exact).toBe(false);
+    // No viewer on the server render → the Home count is unknown.
+    expect(live.needs).toEqual({ n: null, exact: false });
   });
 });

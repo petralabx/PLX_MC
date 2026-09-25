@@ -10,7 +10,7 @@
 //   641–1024 top bar · 64px icon rail (→ labelled drawer) · main
 //   ≥1025    top bar · 240px sidebar · main
 //   ≥1600    + persistent context pane on collection screens
-//   ≥2200    + optional pinned live column (Agent activity)
+//   ≥2200    + optional pinned live column (Agent activity or Approvals)
 // JS reads the tier only for behaviour: at ≥1600 opening a task from a
 // collection screen fills the pane instead of leaving the collection.
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
@@ -19,6 +19,7 @@ import { BrandBoundary } from "@/components/brand";
 import { hydrate } from "@/lib/mc-data/store";
 
 import { AgentFeed } from "./agent-feed";
+import { ApprovalsInboxView } from "./approvals-inbox";
 import { BottomTabs, GroupStrip, NewTaskFab, rememberTabScreen } from "./bottom-tabs";
 import { NavScrim, NoticeHost, OfflineBanner, Sidebar, navFlags, useNavCounts, useNavDrawer } from "./chrome";
 import { CommandPalette } from "./command-palette";
@@ -34,6 +35,7 @@ import { routeToUrl, urlToRoute } from "./route";
 import { SCREENS } from "./screens";
 import {
   clampPaneWidth,
+  liveKindPref,
   livePinnedPref,
   minWidthNow,
   paneHiddenPref,
@@ -43,7 +45,7 @@ import {
 } from "./shell-prefs";
 import { TaskDetailView } from "./task-detail";
 import { Topbar } from "./top-bar";
-import { useLayerSlot } from "./use-layer";
+import { hasOpenLayer, useLayerSlot } from "./use-layer";
 
 export function MissionControlShell() {
   const [dark, setDark] = useState(false);
@@ -61,6 +63,8 @@ export function MissionControlShell() {
   // <1025px: the sidebar is a drawer (phone: More → All screens; tablet: the rail toggle).
   const drawer = useNavDrawer();
   const moreRef = useRef<HTMLButtonElement | null>(null);
+  const paneToggleRef = useRef<HTMLButtonElement | null>(null);
+  const liveToggleRef = useRef<HTMLButtonElement | null>(null);
   const counts = useNavCounts();
   const flags = navFlags();
 
@@ -72,6 +76,7 @@ export function MissionControlShell() {
   const storedPaneWidth = usePref(paneWidthPref, null);
   const paneHidden = usePref(paneHiddenPref, false);
   const livePinned = usePref(livePinnedPref, false);
+  const liveKind = usePref(liveKindPref, "feed");
   const paneWidth = storedPaneWidth ?? (ultra ? 520 : 440);
 
   // The palette and modals handle their own Esc; registering them keeps the
@@ -173,9 +178,17 @@ export function MissionControlShell() {
       // Deselect; the collection (and its filters) stay.
       go({ screen: current.screen, bucketId: current.bucketId, projectId: current.projectId });
     } else {
+      // The empty column is hidden; its Close button goes with it, so focus
+      // moves to the top-bar toggle that brings it back.
       paneHiddenPref.set(true);
+      paneToggleRef.current?.focus();
     }
   }, [go]);
+
+  const unpinLive = useCallback(() => {
+    livePinnedPref.set(false);
+    liveToggleRef.current?.focus();
+  }, []);
 
   const openTaskPage = useCallback((taskId: string) => go({ screen: "task", taskId }), [go]);
 
@@ -273,7 +286,7 @@ export function MissionControlShell() {
       // Bare-key chords are gated so they never fire while typing or while a
       // modal/palette owns the keyboard (the filter input lives on the views
       // surface; PeoplePicker's capture-phase Esc closes a picker first).
-      if (newTaskOpen || newInitiativeOpen || paletteOpen) return;
+      if (newTaskOpen || newInitiativeOpen || paletteOpen || hasOpenLayer()) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest?.("input,textarea,[contenteditable]")) return;
@@ -319,7 +332,10 @@ export function MissionControlShell() {
   }, []);
 
   const ScreenComponent = SCREENS[route.screen];
-  const showLive = livePinned && route.screen !== "feed";
+  // The live column never repeats the screen underneath it.
+  const showLive = livePinned && route.screen !== (liveKind === "approvals" ? "approvals" : "feed");
+  // Phone: the pane is a page over the list, so the covered page is inert.
+  const phonePaneOpen = Boolean(selected) && !notPhone;
   // The only inline style: the user's pane width as data (a custom property).
   const bodyStyle =
     storedPaneWidth === null ? undefined : ({ "--p-pane-w": `${storedPaneWidth}px` } as CSSProperties);
@@ -338,6 +354,8 @@ export function MissionControlShell() {
           onOpenPalette={openPalette}
           pane={paneScreen ? { shown: !paneHidden, toggle: togglePane } : undefined}
           live={{ pinned: livePinned, toggle: () => livePinnedPref.set(!livePinned) }}
+          paneToggleRef={paneToggleRef}
+          liveToggleRef={liveToggleRef}
         />
         <OfflineBanner />
       </div>
@@ -359,7 +377,7 @@ export function MissionControlShell() {
           onDrawerKeyDown={drawer.onKeyDown}
         />
         <NavScrim open={drawer.open} onDrawer={drawer.send} />
-        <main className="mc-stage" id="mc-main" tabIndex={-1}>
+        <main className="mc-stage" id="mc-main" tabIndex={-1} inert={phonePaneOpen || undefined}>
           <GroupStrip route={route} nav={nav} flags={flags} />
           {route.screen === "home" ? (
             <InboxView route={route} nav={nav} openNewTask={() => openNewTask()} />
@@ -381,8 +399,12 @@ export function MissionControlShell() {
           </ContextPane>
         ) : null}
         {showLive ? (
-          <LiveColumn onUnpin={() => livePinnedPref.set(false)}>
-            <AgentFeed route={{ screen: "feed" }} nav={nav} />
+          <LiveColumn kind={liveKind} onKind={(kind) => liveKindPref.set(kind)} onUnpin={unpinLive}>
+            {liveKind === "approvals" ? (
+              <ApprovalsInboxView route={{ screen: "approvals" }} nav={nav} />
+            ) : (
+              <AgentFeed route={{ screen: "feed" }} nav={nav} />
+            )}
           </LiveColumn>
         ) : null}
       </div>

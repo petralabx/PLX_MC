@@ -165,14 +165,20 @@ export async function waitForHydration(page: Page): Promise<void> {
 export async function openSidebar(page: Page, label: string): Promise<void> {
   // Sidebar items are links (<a class="item">, Wave 6 nav model) with a ".nm"
   // label span; scope to the nav so we never match a same-named control
-  // elsewhere (e.g. the "Board" view tab). At <=1024px the sidebar is a drawer
-  // behind the topbar hamburger, and "Admin & health" starts collapsed — open
-  // whichever stands between us and the item.
+  // elsewhere (e.g. the "Board" view tab). Below 1025px the sidebar is a drawer
+  // (ADR-005): on tablet behind the icon rail's toggle, on phone behind
+  // More → All screens. "Admin & health" starts collapsed — open whichever
+  // stands between us and the item.
   const nav = page.locator("nav.mc-side");
-  const hamburger = page.locator("[data-testid='nav-drawer-toggle']");
-  if (await hamburger.isVisible()) {
-    if ((await hamburger.getAttribute("aria-expanded")) !== "true") await hamburger.click();
-    await expect(hamburger).toHaveAttribute("aria-expanded", "true");
+  const railToggle = page.locator("[data-testid='nav-drawer-toggle']");
+  const more = page.locator("nav.mc-tabs").getByRole("button", { name: "More" });
+  if (await railToggle.isVisible()) {
+    if ((await railToggle.getAttribute("aria-expanded")) !== "true") await railToggle.click();
+    await expect(railToggle).toHaveAttribute("aria-expanded", "true");
+  } else if ((await more.isVisible()) && !/\bopen\b/.test((await nav.getAttribute("class")) ?? "")) {
+    await more.click();
+    await page.getByRole("dialog", { name: "More" }).getByRole("button", { name: /All screens/ }).click();
+    await expect(nav).toHaveClass(/\bopen\b/);
   }
   const adminToggle = nav.locator("button[aria-controls='mc-nav-admin']");
   const inAdmin = nav.locator("#mc-nav-admin .item", { hasText: label });

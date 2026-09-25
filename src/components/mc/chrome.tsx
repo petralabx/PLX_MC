@@ -1,7 +1,9 @@
-// Mission Control chrome: the Topbar and Sidebar shared by every screen.
-// Ported from docs/product/prototype/mc-chrome.jsx. Counts come from the
-// runtime store so the sync pill and badges stay live after store actions.
-// The command palette (⌘K) mounts here when the authoring lane lands.
+// Mission Control chrome shared by every screen: the Sidebar (one element that
+// mc-shell.css renders as the phone drawer, the tablet rail and the desktop
+// sidebar — ADR-005), the nav counts every nav surface shows, the offline
+// banner and the notice toasts. The top bar lives in top-bar.tsx; the phone
+// tabs, strip and FAB in bottom-tabs.tsx; the More sheet in more-sheet.tsx.
+// Counts come from the runtime store so badges stay live after store actions.
 import {
   useCallback,
   useEffect,
@@ -12,7 +14,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import Image from "next/image";
+import { PanelLeft, Plus, X } from "lucide-react";
 
 import { liveAgentCount, pendingApprovalGates } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion, useViewer } from "@/lib/mc-data/hooks";
@@ -25,152 +27,99 @@ import {
   navProjects,
   storeSyncCounts,
   unreadCount,
+  viewerSettled,
 } from "@/lib/mc-data/store";
 import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 import { routingInboxEnabled } from "@/components/mc/routing-inbox/flag";
 
-import { Avatar, PMark } from "./atoms";
+import { CountBadge, UNKNOWN_COUNT, type Count } from "./count-badge";
+import { NavIcon } from "./nav-icon";
 import {
   createNavGroupState,
-  drawerFocusTarget,
   isPlainLeftClick,
   navGroupOf,
   navHref,
   nextDrawerOpen,
   visibleNavGroups,
-  wrapFocusIndex,
   type DrawerEvent,
   type NavBadge,
+  type NavFlags,
   type NavGroupId,
   type NavList,
 } from "./nav-model";
-import { needsMeCount, todayGridDay } from "./needs-me";
+import { needsMeCount, todayGridDay, viewerLoadState } from "./needs-me";
 import type { Nav, Route } from "./route";
+import { useLayer } from "./use-layer";
 import { useVendorAlertCount } from "./vendor-spend/use-alert-badge";
 
-// The ≤1024px nav drawer (RESPONSIVE.md §3 drawer protocol). The shell owns
-// it; the Topbar's hamburger toggles it and the Sidebar is the drawer panel.
-// Esc dismisses, body scroll locks while open (body.mc-sb-open), and focus
-// moves into the drawer on open and back to the hamburger on close.
-export function useNavDrawer() {
-  const [open, setOpen] = useState(false);
-  const toggleRef = useRef<HTMLButtonElement | null>(null);
-  const panelRef = useRef<HTMLElement | null>(null);
-  const wasOpen = useRef(false);
-  const send = useCallback((event: DrawerEvent) => setOpen((prev) => nextDrawerOpen(prev, event)), []);
+export type NavCounts = Partial<Record<NavBadge, Count>>;
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) send("escape");
-    };
-    window.addEventListener("keydown", onKeyDown);
-    document.body.classList.add("mc-sb-open");
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      document.body.classList.remove("mc-sb-open");
-    };
-  }, [open, send]);
-
-  useEffect(() => {
-    const target = drawerFocusTarget(wasOpen.current, open);
-    wasOpen.current = open;
-    if (target === "panel") panelRef.current?.querySelector<HTMLElement>(".side-close")?.focus();
-    if (target === "toggle") toggleRef.current?.focus();
-  }, [open]);
-
-  return { open, send, toggleRef, panelRef };
+/** The feature flags that gate nav items, resolved once for every surface. */
+export function navFlags(): NavFlags {
+  return { meetingIntake: meetingIntakeEnabled(), routingInbox: routingInboxEnabled() };
 }
 
-export function Topbar({
-  nav,
-  dark,
-  setDark,
-  onOpenPalette,
-  drawerOpen = false,
-  onToggleDrawer,
-  drawerToggleRef,
-}: {
-  nav: Nav;
-  dark: boolean;
-  setDark: (next: boolean) => void;
-  onOpenPalette: () => void;
-  drawerOpen?: boolean;
-  onToggleDrawer?: () => void;
-  drawerToggleRef?: RefObject<HTMLButtonElement | null>;
-}) {
+const noClockSubscribe = () => () => {};
+
+/**
+ * Every nav badge, computed once per shell so the sidebar, rail, tabs and
+ * More sheet always agree. Unknown is "—" (never a fabricated 0): the store
+ * is still on its seed fixtures, or the viewer has not resolved. Attention
+ * badges (sync, AI spend) stay hidden until they have something to say.
+ */
+export function useNavCounts(): NavCounts {
   useMcVersion();
   const viewer = useViewer();
-  const c = storeSyncCounts();
-  const need = c.conflict + c.error;
-  const cls = need > 0 ? "warn" : c.pending > 0 ? "pending" : "ok";
-  const label =
-    need > 0 ? `${need} to resolve` : c.pending > 0 ? `${c.pending} pending` : "Synced";
+  // Client clock only (null on the server) so SSR and hydration agree.
+  const today = useSyncExternalStore(noClockSubscribe, () => todayGridDay(new Date()), () => null);
+  const vendorAlerts = useVendorAlertCount();
+  const loaded = dataSource() !== "seed";
+  const tasks = allTasks();
+  const sc = storeSyncCounts();
+  const conflicts = sc.conflict + sc.error;
 
-  return (
-    <header className="mc-top">
-      <div className="l">
-        {/* ≤1024px only (CSS): opens the nav drawer. */}
-        <button
-          type="button"
-          ref={drawerToggleRef}
-          className="iconbtn hamburger"
-          aria-label="Open navigation"
-          aria-expanded={drawerOpen}
-          aria-controls="mc-nav"
-          data-testid="nav-drawer-toggle"
-          onClick={onToggleDrawer}
-        >
-          <span aria-hidden="true">☰</span>
-        </button>
-        <button type="button" className="brand" onClick={() => nav("home")}>
-          <Image
-            src={dark ? "/brand/logo-horizontal-cream.png" : "/brand/logo-horizontal-ink.png"}
-            alt="Petra Lab-X"
-            width={409}
-            height={107}
-            className="brand-logo"
-            priority
-          />
-          <span className="sub">Mission Control</span>
-        </button>
-        <div className="ws">
-          <PMark acc />
-          <span>PLX Engineering</span>
-          <span className="chev">▾</span>
-        </div>
-      </div>
-      <div className="r">
-        <button type="button" className="search" onClick={onOpenPalette}>
-          <span className="search-hint">
-            Search · jump · create…
-          </span>
-          <span className="key kbd-hint">⌘K</span>
-        </button>
-        <button
-          type="button"
-          className={`topsync ${cls}`}
-          onClick={() => nav("sync")}
-          title="SharePoint sync issues · review queue"
-          data-testid="nav-sync-console"
-        >
-          <span className="d" />
-          <span className="lb">{label}</span>
-        </button>
-        <button
-          type="button"
-          className="iconbtn"
-          title={dark ? "Light mode" : "Dark mode"}
-          onClick={() => setDark(!dark)}
-        >
-          {dark ? "☀" : "☾"}
-        </button>
-        {viewer ? (
-          <Avatar actor={viewer} id={viewer.id} size="lg" title={`${viewer.name} · ${viewer.role}`} />
-        ) : null}
-      </div>
-    </header>
-  );
+  // Home badge: what the store can say needs this viewer (Home's needs-me
+  // rules) plus unread notifications. Routing proposals are fetched by Home
+  // itself, so with the routing inbox on the badge is a lower bound.
+  const needs: Count =
+    loaded && viewer && today !== null && viewerLoadState(viewer, viewerSettled()) === "ready"
+      ? { n: needsMeCount(viewer, tasks, today, sc) + unreadCount(), exact: !routingInboxEnabled() }
+      : UNKNOWN_COUNT;
+
+  return {
+    needs,
+    // Pending runtime approval gates on the tasks this viewer can see.
+    approvals: loaded ? { n: tasks.reduce((n, t) => n + pendingApprovalGates(t).length, 0), exact: true } : UNKNOWN_COUNT,
+    sync: loaded && conflicts > 0 ? { n: conflicts, exact: true, tone: "warn" } : undefined,
+    // Honest live-agent count: agents executing in-flight work (EN-005).
+    agents: loaded ? { n: liveAgentCount(tasks), exact: true, unit: "live" } : UNKNOWN_COUNT,
+    "ai-spend": vendorAlerts ? { n: vendorAlerts, exact: true, tone: "warn" } : undefined,
+  };
+}
+
+// The nav drawer: the phone drawer (opened from More → All screens) and the
+// tablet rail's labelled expansion. Same dismiss contract as before
+// (nextDrawerOpen): the toggle, the close button, Esc, the scrim and any nav
+// item. use-layer.ts owns Esc, focus in/back, Tab wrap and the scroll lock.
+export function useNavDrawer() {
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const send = useCallback((event: DrawerEvent) => setOpen((prev) => nextDrawerOpen(prev, event)), []);
+  const close = useCallback(() => send("escape"), [send]);
+  const { onKeyDown } = useLayer(open, close, panelRef);
+
+  // ≥1025 the same element is the fixed sidebar: a drawer left open while the
+  // window widens must not keep the page scroll-locked.
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1025px)");
+    const onChange = () => {
+      if (desktop.matches) send("close");
+    };
+    desktop.addEventListener("change", onChange);
+    return () => desktop.removeEventListener("change", onChange);
+  }, [send]);
+
+  return { open, send, panelRef, onKeyDown };
 }
 
 // Admin & health's expanded state — remembered per browser (nav-model.ts
@@ -179,8 +128,6 @@ export function Topbar({
 const navGroupState = createNavGroupState(() =>
   typeof window === "undefined" ? null : window.localStorage
 );
-
-const noClockSubscribe = () => () => {};
 
 function useNavGroupOpen(id: NavGroupId): boolean {
   return useSyncExternalStore(
@@ -193,41 +140,27 @@ function useNavGroupOpen(id: NavGroupId): boolean {
 export function Sidebar({
   route,
   nav,
+  counts,
   onNewProject,
   onNewInitiative,
   drawerOpen = false,
   onDrawer,
   drawerRef,
+  onDrawerKeyDown,
 }: {
   route: Route;
   nav: Nav;
+  counts: NavCounts;
   onNewProject: () => void;
   onNewInitiative: () => void;
-  /** ≤1024px: the sidebar is the drawer panel (see useNavDrawer). */
+  /** Below 1025px the sidebar is the drawer panel (see useNavDrawer). */
   drawerOpen?: boolean;
   onDrawer?: (event: DrawerEvent) => void;
   drawerRef?: RefObject<HTMLElement | null>;
+  onDrawerKeyDown?: (event: ReactKeyboardEvent<HTMLElement>) => void;
 }) {
   useMcVersion();
-  const viewer = useViewer();
-  // Client clock only (null on the server) so SSR and hydration agree.
-  const today = useSyncExternalStore(noClockSubscribe, () => todayGridDay(new Date()), () => null);
-  const unread = unreadCount();
-  const tasks = allTasks();
-  // Honest live-agent count: agents currently executing in-flight work (EN-005),
-  // not a fabricated online flag.
-  const live = liveAgentCount(tasks);
-  const sc = storeSyncCounts();
-  const conflicts = sc.conflict + sc.error;
-  // Pending runtime approval gates on the tasks this viewer can see — read from
-  // the store (no extra fetch); the Approvals screen itself loads GET /api/approvals.
-  const approvals = tasks.reduce((n, t) => n + pendingApprovalGates(t).length, 0);
-  // Vendors at warn/critical/over budget (MTD) — the AI Spend proactive badge.
-  const vendorAlerts = useVendorAlertCount();
   const adminOpen = useNavGroupOpen("admin");
-  // Home badge: what the store can say needs this viewer (Home's needs-me
-  // rules) plus unread notifications — both live on Home.
-  const needs = viewer && today !== null ? needsMeCount(viewer, tasks, today, sc) : 0;
 
   // Keep the active screen visible: arriving on an Admin & health screen (deep
   // link, ⌘K, the topbar sync pill) expands that group.
@@ -237,27 +170,15 @@ export function Sidebar({
     }
   }, [route.screen]);
 
-  const badges: Record<NavBadge, ReactNode> = {
-    needs:
-      needs + unread ? (
-        <span className="badge acc" title={`${needs} need you · ${unread} unread`}>
-          {needs + unread}
-        </span>
-      ) : null,
-    approvals: approvals ? <span className="badge acc">{approvals}</span> : null,
-    sync: conflicts ? <span className="badge hot">{conflicts}</span> : null,
-    agents: <span className="badge acc">{live} live</span>,
-    "ai-spend": vendorAlerts ? <span className="badge hot">{vendorAlerts}</span> : null,
-  };
-
   // Items are real links (open in a new tab, copy the URL); a plain click stays
   // a client-side nav() so screens switch without a reload.
-  const link = (key: string, target: Route, active: boolean, body: ReactNode) => (
+  const link = (key: string, target: Route, active: boolean, label: string, body: ReactNode) => (
     <a
       key={key}
       href={navHref(target)}
       className={`item${active ? " active" : ""}`}
       aria-current={active ? "page" : undefined}
+      title={label}
       onClick={(event) => {
         if (!isPlainLeftClick(event)) return;
         event.preventDefault();
@@ -281,6 +202,7 @@ export function Sidebar({
             `project:${p.id}`,
             { screen: "project", projectId: p.id },
             route.screen === "project" && route.projectId === p.id,
+            p.name,
             <>
               <span className={`hl ${p.health}`} aria-hidden="true" />
               <span className="nm">{p.name}</span>
@@ -295,7 +217,7 @@ export function Sidebar({
             onNewProject();
           }}
         >
-          <span className="ic" aria-hidden="true">+</span>
+          <Plus className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
           <span className="nm">New project</span>
         </button>
       </div>
@@ -310,6 +232,7 @@ export function Sidebar({
             `bucket:${b.id}`,
             { screen: "bucket", bucketId: b.id },
             route.screen === "bucket" && route.bucketId === b.id,
+            b.name,
             <>
               <span className={`hl ${b.health}`} aria-hidden="true" />
               <span className="nm">{b.name}</span>
@@ -324,34 +247,14 @@ export function Sidebar({
             onNewInitiative();
           }}
         >
-          <span className="ic" aria-hidden="true">+</span>
+          <Plus className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
           <span className="nm">New initiative</span>
         </button>
       </div>
     ),
   };
 
-  const groups = visibleNavGroups({
-    meetingIntake: meetingIntakeEnabled(),
-    routingInbox: routingInboxEnabled(),
-  });
-
-  // Open drawer: Tab / Shift+Tab wrap inside it (the page is under the scrim).
-  const trapFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (!drawerOpen || event.key !== "Tab") return;
-    const focusables = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>("a[href], button:not([disabled])")
-    ).filter((el) => el.offsetParent !== null);
-    const next = wrapFocusIndex(
-      focusables.length,
-      focusables.indexOf(document.activeElement as HTMLElement),
-      event.shiftKey
-    );
-    if (next !== null) {
-      event.preventDefault();
-      focusables[next].focus();
-    }
-  };
+  const groups = visibleNavGroups(navFlags());
 
   return (
     <nav
@@ -359,12 +262,32 @@ export function Sidebar({
       id="mc-nav"
       aria-label="Main"
       ref={drawerRef}
-      onKeyDown={trapFocus}
+      onKeyDown={drawerOpen ? onDrawerKeyDown : undefined}
     >
-      {/* ≤1024px only (CSS): dismisses the drawer. */}
-      <button type="button" className="side-close" aria-label="Close navigation" onClick={() => onDrawer?.("close")}>
-        <span aria-hidden="true">✕</span>
-      </button>
+      <div className="side-head">
+        {/* 641–1024px only (CSS): expands the icon rail into the labelled drawer. */}
+        <button
+          type="button"
+          className="iconbtn rail-toggle"
+          aria-label="Open navigation"
+          aria-expanded={drawerOpen}
+          aria-controls="mc-nav"
+          data-testid="nav-drawer-toggle"
+          onClick={() => onDrawer?.("toggle")}
+        >
+          <PanelLeft className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+        </button>
+        {/* Drawer only (CSS): dismisses it. */}
+        <button
+          type="button"
+          className="iconbtn side-close"
+          aria-label="Close navigation"
+          onClick={() => onDrawer?.("close")}
+          data-autofocus
+        >
+          <X className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+        </button>
+      </div>
       {groups.map((group) => {
         const headingId = `mc-nav-h-${group.id}`;
         const bodyId = `mc-nav-${group.id}`;
@@ -390,18 +313,17 @@ export function Sidebar({
                 {group.label}
               </div>
             )}
-            <div id={bodyId} hidden={!open}>
+            <div id={bodyId} className="grp-body" hidden={!open}>
               {group.items.map((item) =>
                 link(
                   item.screen,
                   { screen: item.screen },
                   route.screen === item.screen,
+                  item.label,
                   <>
-                    <span className="ic" aria-hidden="true">
-                      {item.icon}
-                    </span>
+                    <NavIcon name={item.lucide} />
                     <span className="nm">{item.label}</span>
-                    {item.badge ? badges[item.badge] : null}
+                    {item.badge ? <CountBadge count={counts[item.badge]} /> : null}
                   </>
                 )
               )}
@@ -414,8 +336,8 @@ export function Sidebar({
   );
 }
 
-// The drawer's backdrop (≤1024px only, CSS): a tap dismisses. Decorative for
-// assistive tech — Esc and the close button are the keyboard paths.
+// The drawer's backdrop (drawer forms only, CSS): a tap dismisses. Decorative
+// for assistive tech — Esc and the close button are the keyboard paths.
 export function NavScrim({ open, onDrawer }: { open: boolean; onDrawer: (event: DrawerEvent) => void }) {
   if (!open) return null;
   return (
@@ -428,24 +350,26 @@ export function NavScrim({ open, onDrawer }: { open: boolean; onDrawer: (event: 
   );
 }
 
-// OfflineBanner — app-wide honesty strip under the topbar (Wave 2 — UI trust).
-// When GET /api/state fails the store keeps rendering seed/cached data that
-// looks real, so say so and offer a retry (hydrate() reloads state + viewer).
-// Renders nothing while the data is live or the first load is still pending.
+// OfflineBanner — app-wide honesty strip in the sticky chrome under the top
+// bar (Wave 2 — UI trust). When GET /api/state fails the store keeps rendering
+// seed/cached data that looks real, so say so and offer a retry (hydrate()
+// reloads state + viewer). While the first load is still pending it holds an
+// empty slot of the banner's exact height (--p-banner-h), so a failure that
+// arrives after paint swaps slot → banner without moving the page (ADR-005).
 export function OfflineBanner() {
   useMcVersion();
   const [retrying, setRetrying] = useState(false);
-  if (dataSource() !== "offline") return null;
+  const source = dataSource();
+  if (source === "seed") return <div className="banner-slot" aria-hidden="true" />;
+  if (source !== "offline") return null;
   const retry = () => {
     setRetrying(true);
     void hydrate().finally(() => setRetrying(false));
   };
   return (
-    <div className="sk-banner mc-offline" role="alert" data-testid="offline-banner">
-      <span className="dot" />
-      <span className="sk-banner-body">
-        <span className="sk-banner-ct">Offline — showing cached or demo data</span>
-      </span>
+    <div className="mc-offline" role="alert" data-testid="offline-banner">
+      <span className="d" />
+      <span className="body">Offline — showing cached or demo data</span>
       <button type="button" className="btn ghost sm" disabled={retrying} onClick={retry}>
         {retrying ? "Retrying…" : "Retry"}
       </button>

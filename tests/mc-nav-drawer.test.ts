@@ -1,21 +1,18 @@
-// Wave 6 — colleague UX: below 1025px the sidebar is a slide-in drawer (the
-// RESPONSIVE.md §3 drawer protocol) instead of a horizontal strip that ate
-// ~60% of a phone screen. The open/close state machine and the focus protocol
-// are pure (nav-model.ts); the markup is rendered with renderToStaticMarkup.
-import { readFileSync } from "node:fs";
+// The shell's nav forms (ADR-005): below 1025px the sidebar is a drawer — on
+// phone opened from More → All screens, on tablet from the 64px icon rail's
+// toggle — and ≥1025 it is the labelled sidebar. The open/close state machine
+// and Tab wrap are pure (nav-model.ts); the markup is rendered with
+// renderToStaticMarkup; the CSS contract is read from src/styles.
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { NavScrim, Sidebar, Topbar } from "@/components/mc/chrome";
-import {
-  drawerFocusTarget,
-  nextDrawerOpen,
-  wrapFocusIndex,
-  type DrawerEvent,
-} from "@/components/mc/nav-model";
+import { NavScrim, Sidebar } from "@/components/mc/chrome";
+import { nextDrawerOpen, wrapFocusIndex, type DrawerEvent } from "@/components/mc/nav-model";
+import { Topbar } from "@/components/mc/top-bar";
 import { resetStore } from "@/lib/mc-data/store";
 
 beforeEach(() => resetStore());
@@ -23,7 +20,7 @@ beforeEach(() => resetStore());
 const DISMISS: DrawerEvent[] = ["close", "escape", "backdrop", "navigate"];
 
 describe("drawer open/close state", () => {
-  it("the hamburger toggles it", () => {
+  it("the toggle toggles it", () => {
     expect(nextDrawerOpen(false, "toggle")).toBe(true);
     expect(nextDrawerOpen(true, "toggle")).toBe(false);
   });
@@ -35,20 +32,8 @@ describe("drawer open/close state", () => {
   it("a dismiss while closed is a no-op (desktop nav clicks never open it)", () => {
     for (const event of DISMISS) expect(nextDrawerOpen(false, event), event).toBe(false);
   });
-});
 
-describe("drawer focus protocol", () => {
-  it("moves focus into the drawer on open and back to the hamburger on close", () => {
-    expect(drawerFocusTarget(false, true)).toBe("panel");
-    expect(drawerFocusTarget(true, false)).toBe("toggle");
-  });
-
-  it("never moves focus when nothing changed (e.g. a desktop sidebar click)", () => {
-    expect(drawerFocusTarget(false, false)).toBeNull();
-    expect(drawerFocusTarget(true, true)).toBeNull();
-  });
-
-  it("wraps Tab and Shift+Tab inside the open drawer", () => {
+  it("wraps Tab and Shift+Tab inside an open layer", () => {
     expect(wrapFocusIndex(5, 4, false)).toBe(0); // Tab off the last → first
     expect(wrapFocusIndex(5, 0, true)).toBe(4); // Shift+Tab off the first → last
     expect(wrapFocusIndex(5, -1, false)).toBe(0); // focus outside → first
@@ -58,15 +43,14 @@ describe("drawer focus protocol", () => {
   });
 });
 
-const topbar = (drawerOpen: boolean) =>
+const topbar = () =>
   renderToStaticMarkup(
     createElement(Topbar, {
+      route: { screen: "board" },
       nav: () => {},
       dark: false,
       setDark: () => {},
       onOpenPalette: () => {},
-      drawerOpen,
-      onToggleDrawer: () => {},
     })
   );
 
@@ -75,6 +59,7 @@ const sidebar = (drawerOpen: boolean) =>
     createElement(Sidebar, {
       route: { screen: "home" },
       nav: () => {},
+      counts: {},
       onNewProject: () => {},
       onNewInitiative: () => {},
       drawerOpen,
@@ -82,52 +67,98 @@ const sidebar = (drawerOpen: boolean) =>
     })
   );
 
-describe("drawer markup", () => {
-  it("puts a labelled hamburger that controls the nav in the topbar's left slot", () => {
-    const closed = topbar(false);
-    const left = closed.slice(closed.indexOf('<div class="l">'), closed.indexOf('<div class="r">'));
-    expect(left).toContain(
-      'class="iconbtn hamburger" aria-label="Open navigation" aria-expanded="false" aria-controls="mc-nav" data-testid="nav-drawer-toggle"'
+describe("shell markup", () => {
+  it("puts the drawer toggle on the rail, labelled and controlling the nav", () => {
+    const closed = sidebar(false);
+    expect(closed).toMatch(/^<nav class="mc-side" id="mc-nav" aria-label="Main"/);
+    expect(closed).toContain(
+      'class="iconbtn rail-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="mc-nav" data-testid="nav-drawer-toggle"'
     );
-    expect(topbar(true)).toContain('aria-expanded="true" aria-controls="mc-nav"');
-  });
-
-  it("marks the ⌘K shortcut as a keyboard hint (hidden on touch devices)", () => {
-    expect(topbar(false)).toContain('<span class="key kbd-hint">⌘K</span>');
+    expect(sidebar(true)).toMatch(/^<nav class="mc-side open" id="mc-nav"/);
+    expect(sidebar(true)).toContain('aria-expanded="true" aria-controls="mc-nav"');
   });
 
   it("opens the nav as a drawer with a close button and a backdrop", () => {
-    const closed = sidebar(false);
-    expect(closed).toMatch(/^<nav class="mc-side" id="mc-nav"/);
-    expect(closed).toContain('<button type="button" class="side-close" aria-label="Close navigation">');
-    expect(sidebar(true)).toMatch(/^<nav class="mc-side open" id="mc-nav"/);
-
+    expect(sidebar(false)).toContain('class="iconbtn side-close" aria-label="Close navigation"');
     const scrim = (open: boolean) => renderToStaticMarkup(createElement(NavScrim, { open, onDrawer: () => {} }));
     expect(scrim(false)).toBe("");
     expect(scrim(true)).toBe('<div class="mc-scrim" aria-hidden="true" data-testid="nav-drawer-scrim"></div>');
   });
-});
 
-describe("responsive CSS contract (RESPONSIVE.md)", () => {
-  const css = readFileSync(join(import.meta.dirname, "..", "src/styles/mc-app.css"), "utf8");
-
-  it("uses only the canonical 1024px / 640px width breakpoints", () => {
-    const widths = [...css.matchAll(/\((?:max|min)-width:\s*(\d+)px\)/g)].map((m) => m[1]);
-    expect(widths.length).toBeGreaterThan(0);
-    expect(new Set(widths)).toEqual(new Set(["1024", "640"]));
+  it("has no hamburger in the top bar any more", () => {
+    expect(topbar()).not.toContain("hamburger");
+    expect(topbar()).not.toContain("nav-drawer-toggle");
   });
 
-  it("drives the drawer from the brand drawer/scrim tokens and locks body scroll", () => {
-    const tablet = css.slice(css.indexOf("@media (max-width:1024px)"));
-    expect(tablet).toContain("z-index:var(--p-z-drawer)");
-    expect(tablet).toContain("z-index:var(--p-z-scrim)");
-    expect(tablet).toContain("background:var(--p-scrim)");
-    expect(tablet).toContain("width:min(280px, 85vw)");
-    expect(tablet).toMatch(/body\.mc-sb-open\s*\{\s*overflow:hidden;/);
+  it("marks the ⌘K shortcut as a keyboard hint (hidden on touch devices)", () => {
+    expect(topbar()).toContain('<span class="key kbd-hint">⌘K</span>');
+  });
+
+  it("shows the workspace as a static label — no chevron, no control", () => {
+    const html = topbar();
+    const ws = html.slice(html.indexOf('<span class="ws"'), html.indexOf('<span class="title"'));
+    expect(ws).toContain("PLX Engineering");
+    expect(ws).not.toMatch(/▾|<button|chev/);
+  });
+
+  it("gives the phone an accessible search control and a screen title that is not a heading", () => {
+    const html = topbar();
+    expect(html).toContain('aria-label="Search, jump or create"');
+    expect(html).toContain('<span class="title">Board</span>');
+    expect(html).not.toContain("<h1");
+  });
+
+  it("never claims Synced before the server answers", () => {
+    expect(topbar()).toContain("Checking…");
+    expect(topbar()).not.toContain("Synced");
+  });
+});
+
+describe("shell CSS contract (ADR-005)", () => {
+  const styles = join(import.meta.dirname, "..", "src/styles");
+  const shell = readFileSync(join(styles, "mc-shell.css"), "utf8");
+  // Width *media* queries only — container queries (@container) are the sanctioned
+  // tool for everything that answers to a width inside the shell.
+  const widthQueries = (css: string) =>
+    [...css.matchAll(/@media[^{]*/g)].flatMap((media) =>
+      [...media[0].matchAll(/\((max|min)-width:\s*(\d+)px\)/g)].map((m) => `${m[1]}-${m[2]}`)
+    );
+
+  it("declares the MC cascade-layer order first", () => {
+    const firstRule = shell.replace(/\/\*[\s\S]*?\*\//g, "").trim();
+    expect(firstRule.startsWith("@layer mc.tokens, mc.legacy, mc.shell, mc.screens, mc.state;")).toBe(true);
+  });
+
+  it("authors mobile-first: width tiers are min-width 641 / 1025 / 1600 / 2200 only", () => {
+    const widths = widthQueries(shell);
+    expect(widths.length).toBeGreaterThan(0);
+    expect(new Set(widths)).toEqual(new Set(["min-641", "min-1025", "min-1600", "min-2200"]));
+  });
+
+  it("keeps the new wide tiers out of every other MC stylesheet", () => {
+    for (const file of readdirSync(styles).filter((f) => f.endsWith(".css") && f !== "mc-shell.css")) {
+      const widths = widthQueries(readFileSync(join(styles, file), "utf8"));
+      expect(widths.filter((w) => w.startsWith("min-")), file).toEqual([]);
+    }
+    expect(widthQueries(readFileSync(join(styles, "mc-surface.css"), "utf8"))).toEqual([]);
+  });
+
+  it("uses tokens only — no raw colour", () => {
+    const code = shell.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(code).not.toMatch(/\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\s*\(/);
+  });
+
+  it("drives drawers and sheets from the brand drawer/scrim tokens and locks body scroll", () => {
+    expect(shell).toContain("z-index: var(--p-z-drawer)");
+    expect(shell).toContain("z-index: var(--p-z-scrim)");
+    expect(shell).toContain("background: var(--p-scrim)");
+    expect(shell).toContain("width: var(--p-drawer-w)");
+    expect(shell).toMatch(/body\.mc-lock\s*\{\s*overflow: hidden;/);
   });
 
   it("animates only when motion is welcome, and hides the ⌘K hint on touch", () => {
-    expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*\{[^}]*\.mc \.mc-side \{[^}]*transition:/);
-    expect(css).toMatch(/@media \(hover: none\)\s*\{[^}]*\.mc \.kbd-hint \{\s*display:none;/);
+    expect(shell).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*\{[^}]*\.mc \.mc-side \{[^}]*transition:/);
+    expect(shell).toMatch(/@media \(hover: none\), \(pointer: coarse\)\s*\{[^}]*\.mc \.kbd-hint \{\s*display: none;/);
   });
 });

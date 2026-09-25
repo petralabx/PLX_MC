@@ -1,22 +1,24 @@
 // Wave 6 — colleague UX: the sidebar renders the shared nav model as a labelled
-// <nav> of real links (open in a new tab / copy URL), with decorative glyphs
-// hidden from assistive tech and Admin & health collapsed by default.
+// <nav> of real links (open in a new tab / copy URL), with decorative icons
+// hidden from assistive tech and Admin & health collapsed by default. ADR-005:
+// the icons are Lucide and the badges speak the honest count vocabulary.
 // No DOM environment (vitest runs in Node) — rendered with renderToStaticMarkup.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { Sidebar } from "@/components/mc/chrome";
+import { Sidebar, type NavCounts } from "@/components/mc/chrome";
 import type { Route } from "@/components/mc/route";
 import { resetStore } from "@/lib/mc-data/store";
 
 beforeEach(() => resetStore());
 
-const render = (route: Route) =>
+const render = (route: Route, counts: NavCounts = {}) =>
   renderToStaticMarkup(
     createElement(Sidebar, {
       route,
       nav: () => {},
+      counts,
       onNewProject: () => {},
       onNewInitiative: () => {},
     })
@@ -47,11 +49,29 @@ describe("Sidebar", () => {
     expect(html).toContain('href="/?screen=bucket&amp;bucketId=BKT-');
   });
 
-  it("hides decorative glyphs and health ticks from assistive tech", () => {
+  it("hides decorative icons and health ticks from assistive tech", () => {
     const html = render({ screen: "home" });
-    expect(html).not.toMatch(/<span class="ic">/);
+    const svgs = html.match(/<svg[^>]*>/g) ?? [];
+    expect(svgs.length).toBeGreaterThan(20); // one Lucide icon per nav item, plus controls
+    for (const svg of svgs) expect(svg).toContain('aria-hidden="true"');
     expect(html).not.toMatch(/<span class="hl [a-z]+">/);
-    expect(html).toContain('<span class="ic" aria-hidden="true">');
+  });
+
+  it("speaks honest counts: exact, a lower bound, unknown — and hides a confirmed zero", () => {
+    const html = render(
+      { screen: "home" },
+      {
+        needs: { n: 3, exact: false },
+        approvals: { n: null, exact: false },
+        agents: { n: 0, exact: true, unit: "live" },
+        sync: { n: 2, exact: true, tone: "warn" },
+      }
+    );
+    expect(html).toContain('<span class="badge unk"><span aria-hidden="true">3+</span><span class="vh">, at least 3</span></span>');
+    expect(html).toContain('<span class="badge unk"><span aria-hidden="true">—</span><span class="vh">, count loading</span></span>');
+    expect(html).toContain('<span class="badge warn"><span aria-hidden="true">2</span><span class="vh">, 2</span></span>');
+    expect(html).not.toContain("0 live");
+    expect(html).not.toMatch(/aria-hidden="true">0</);
   });
 
   it("names initiatives, never buckets, and keeps New project / New initiative as buttons", () => {
@@ -68,7 +88,7 @@ describe("Sidebar", () => {
     expect(html).toContain(
       'id="mc-nav-h-admin" aria-expanded="false" aria-controls="mc-nav-admin"'
     );
-    expect(html).toContain('<div id="mc-nav-admin" hidden="">');
+    expect(html).toContain('<div id="mc-nav-admin" class="grp-body" hidden="">');
     // The items are still in the document (so the disclosure has something to reveal).
     expect(html).toContain("SharePoint sync issues");
   });

@@ -24,10 +24,12 @@ from this repo are tagged `repo: "PLX_MC"`.
 
 ## How capture happens (do not duplicate work the hook already does)
 
-- **Cursor** `sessionEnd` hook (`scripts/compliance-closeout.mjs`) captures
-  this automatically — best-effort assembly from git state (branch, status)
-  plus a POST to the VMC ingestion endpoint. If the hook is configured and
-  ran, do nothing extra.
+- **Cursor** `sessionEnd` (`.cursor/hooks.json`) and **Claude Code**
+  `SessionEnd` (`.claude/settings.json`, `--runtime claude-code`) hooks run
+  `scripts/compliance-closeout.mjs`, which captures this automatically: the
+  hook payload's session id and start time, commit subjects and files since
+  the session started, uncommitted files, then a POST to the VMC ingestion
+  endpoint. If the hook is configured and ran, do nothing extra.
 - **Runtimes without hook support**, or a session you know ran without the
   hook firing (e.g. a detached worktree, a manual/background session), submit
   manually using the `session-brain` skill from the agentic-swarm repo

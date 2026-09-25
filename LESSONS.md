@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-09-25 (ET) — Session-end artifacts carried no real session data
+
+- **What happened:** Wave 5 review: `compliance-closeout.mjs` sent a random `session_id`, `started_at` = `ended_at`, a hardcoded `repo`, a canned summary, a `localhost:3100` default, and `files_touched` from `git status` only (empty after a commit). Its `git()` helper also `trim()`ed porcelain output, so the first ` M path` line lost its first path character.
+- **Root cause:** The hook ignored its stdin payload and read git state only at the moment the session ended.
+- **Rule going forward:** Session-end hooks read the runtime payload first (Cursor `conversation_id` / `duration_ms`, Claude Code `session_id` / `transcript_path`). They derive the window from the payload or git and say in the artifact when a value was generated or unknown. Build summary and files from the session's commits plus the working tree. Never `trim()` porcelain output — use `trimEnd()`.
+
 ### 2026-09-25 (ET) — Ask invented provenance and hid broken 2xx bodies
 
 - **What happened:** Wave 5 review: `asArticle` filled `namespace: "company/"` and `trustTier: "advisory"` when VMC omitted them, and a 2xx search with a non-JSON body reported `status: ok` with zero hits.

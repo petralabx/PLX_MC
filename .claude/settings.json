@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/compliance-closeout.mjs\" --runtime claude-code",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -26,7 +26,7 @@ test.describe("create a new initiative (EN-005)", () => {
 
     // …and the initiative is now a live row in the sidebar bucket list.
     await expect(
-      page.locator("nav.mc-side button .nm", { hasText: name })
+      page.locator("nav.mc-side a .nm", { hasText: name })
     ).toBeVisible();
   });
 });

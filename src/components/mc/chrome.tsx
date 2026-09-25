@@ -2,10 +2,10 @@
 // Ported from docs/product/prototype/mc-chrome.jsx. Counts come from the
 // runtime store so the sync pill and badges stay live after store actions.
 // The command palette (⌘K) mounts here when the authoring lane lands.
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import Image from "next/image";
 
-import { liveAgentCount } from "@/lib/mc-data";
+import { liveAgentCount, pendingApprovalGates } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import {
   allTasks,
@@ -21,7 +21,17 @@ import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 import { routingInboxEnabled } from "@/components/mc/routing-inbox/flag";
 
 import { Avatar, PMark } from "./atoms";
-import type { Nav, Route, Screen } from "./route";
+import {
+  createNavGroupState,
+  isPlainLeftClick,
+  navGroupOf,
+  navHref,
+  visibleNavGroups,
+  type NavBadge,
+  type NavGroupId,
+  type NavList,
+} from "./nav-model";
+import type { Nav, Route } from "./route";
 import { useVendorAlertCount } from "./vendor-spend/use-alert-badge";
 
 export function Topbar({
@@ -74,7 +84,7 @@ export function Topbar({
           type="button"
           className={`topsync ${cls}`}
           onClick={() => nav("sync")}
-          title="Sync / Conflicts · Review queue"
+          title="SharePoint sync issues · review queue"
           data-testid="nav-sync-console"
         >
           <span className="d" />
@@ -96,6 +106,21 @@ export function Topbar({
   );
 }
 
+// Admin & health's expanded state — remembered per browser (nav-model.ts
+// holds the storage + in-memory fallback). The server snapshot is "collapsed"
+// so SSR and the hydrating render agree.
+const navGroupState = createNavGroupState(() =>
+  typeof window === "undefined" ? null : window.localStorage
+);
+
+function useNavGroupOpen(id: NavGroupId): boolean {
+  return useSyncExternalStore(
+    navGroupState.subscribe,
+    () => navGroupState.isOpen(id),
+    () => false
+  );
+}
+
 export function Sidebar({
   route,
   nav,
@@ -109,110 +134,153 @@ export function Sidebar({
 }) {
   useMcVersion();
   const unread = unreadCount();
+  const tasks = allTasks();
   // Honest live-agent count: agents currently executing in-flight work (EN-005),
   // not a fabricated online flag.
-  const live = liveAgentCount(allTasks());
+  const live = liveAgentCount(tasks);
   const sc = storeSyncCounts();
   const conflicts = sc.conflict + sc.error;
+  // Pending runtime approval gates on the tasks this viewer can see — read from
+  // the store (no extra fetch); the Approvals screen itself loads GET /api/approvals.
+  const approvals = tasks.reduce((n, t) => n + pendingApprovalGates(t).length, 0);
   // Vendors at warn/critical/over budget (MTD) — the AI Spend proactive badge.
   const vendorAlerts = useVendorAlertCount();
+  const adminOpen = useNavGroupOpen("admin");
 
-  const item = (target: Screen, ic: string, label: string, badge?: ReactNode) => (
-    <button
-      type="button"
-      className={`item${route.screen === target ? " active" : ""}`}
-      onClick={() => nav(target)}
+  // Keep the active screen visible: arriving on an Admin & health screen (deep
+  // link, ⌘K, the topbar sync pill) expands that group.
+  useEffect(() => {
+    if (navGroupOf(route.screen) === "admin" && !navGroupState.isOpen("admin")) {
+      navGroupState.setOpen("admin", true);
+    }
+  }, [route.screen]);
+
+  const badges: Record<NavBadge, ReactNode> = {
+    needs: unread ? <span className="badge acc">{unread}</span> : null,
+    approvals: approvals ? <span className="badge acc">{approvals}</span> : null,
+    sync: conflicts ? <span className="badge hot">{conflicts}</span> : null,
+    agents: <span className="badge acc">{live} live</span>,
+    "ai-spend": vendorAlerts ? <span className="badge hot">{vendorAlerts}</span> : null,
+  };
+
+  // Items are real links (open in a new tab, copy the URL); a plain click stays
+  // a client-side nav() so screens switch without a reload.
+  const link = (key: string, target: Route, active: boolean, body: ReactNode) => (
+    <a
+      key={key}
+      href={navHref(target)}
+      className={`item${active ? " active" : ""}`}
+      aria-current={active ? "page" : undefined}
+      onClick={(event) => {
+        if (!isPlainLeftClick(event)) return;
+        event.preventDefault();
+        const { screen, ...extra } = target;
+        nav(screen, extra);
+      }}
     >
-      <span className="ic">{ic}</span>
-      <span className="nm">{label}</span>
-      {badge}
-    </button>
+      {body}
+    </a>
   );
 
-  return (
-    <nav className="mc-side">
-      <div className="grp">
-        {item(
-          "home",
-          "⌂",
-          "Inbox",
-          unread ? <span className="badge acc">{unread}</span> : null
+  const lists: Record<NavList, ReactNode> = {
+    projects: (
+      <div className="sub" role="group" aria-labelledby="mc-nav-h-projects" key="projects">
+        <div className="h" id="mc-nav-h-projects">
+          Projects
+        </div>
+        {navProjects().map((p) =>
+          link(
+            `project:${p.id}`,
+            { screen: "project", projectId: p.id },
+            route.screen === "project" && route.projectId === p.id,
+            <>
+              <span className={`hl ${p.health}`} aria-hidden="true" />
+              <span className="nm">{p.name}</span>
+            </>
+          )
         )}
-        {item("approvals", "✓", "Approvals")}
-      </div>
-      <div className="grp">
-        <div className="h">Views</div>
-        {item("board", "▦", "Board")}
-        {item("list", "≣", "List")}
-        {item("timeline", "▭", "Timeline")}
-        {item("mine", "☉", "My Tasks")}
-        {item("insights", "◔", "Insights")}
-        {item("matrix", "⊞", "Traceability")}
-        {item("feed", "◉", "Agent activity", <span className="badge acc">{live} live</span>)}
-      </div>
-      <div className="grp">
-        <div className="h">Projects</div>
-        {navProjects().map((p) => (
-          <button
-            type="button"
-            key={p.id}
-            className={`item${route.screen === "project" && route.projectId === p.id ? " active" : ""}`}
-            onClick={() => nav("project", { projectId: p.id })}
-          >
-            <span className={`hl ${p.health}`} />
-            <span className="nm">{p.name}</span>
-          </button>
-        ))}
         <button type="button" className="item side-new-initiative" onClick={onNewProject}>
-          <span className="ic">+</span>
+          <span className="ic" aria-hidden="true">+</span>
           <span className="nm">New project</span>
         </button>
       </div>
-      <div className="grp">
-        <div className="h">Buckets</div>
-        {navBuckets().map((b) => (
-          <button
-            type="button"
-            key={b.id}
-            className={`item${route.screen === "bucket" && route.bucketId === b.id ? " active" : ""}`}
-            onClick={() => nav("bucket", { bucketId: b.id })}
-          >
-            <span className={`hl ${b.health}`} />
-            <span className="nm">{b.name}</span>
-          </button>
-        ))}
+    ),
+    initiatives: (
+      <div className="sub" role="group" aria-labelledby="mc-nav-h-initiatives" key="initiatives">
+        <div className="h" id="mc-nav-h-initiatives">
+          Initiatives
+        </div>
+        {navBuckets().map((b) =>
+          link(
+            `bucket:${b.id}`,
+            { screen: "bucket", bucketId: b.id },
+            route.screen === "bucket" && route.bucketId === b.id,
+            <>
+              <span className={`hl ${b.health}`} aria-hidden="true" />
+              <span className="nm">{b.name}</span>
+            </>
+          )
+        )}
         <button type="button" className="item side-new-initiative" onClick={onNewInitiative}>
-          <span className="ic">+</span>
+          <span className="ic" aria-hidden="true">+</span>
           <span className="nm">New initiative</span>
         </button>
       </div>
-      <div className="grp">
-        <div className="h">System of record</div>
-        {item("repos", "❮❯", "Repos")}
-        {item("files", "❒", "Files")}
-        {item(
-          "sync",
-          "⇄",
-          "Sync / Conflicts",
-          conflicts ? <span className="badge hot">{conflicts}</span> : null
-        )}
-        {item("loop-ledgers", "◰", "Loop ledgers")}
-        {item("governance-sops", "§", "SOP guide")}
-        {item("skills-directory", "◈", "Skills directory")}
-        {item("architecture", "⬡", "Architecture")}
-        {item("brain-ask", "?", "Ask the Brain")}
-        {item(
-          "ai-spend",
-          "◎",
-          "AI Spend",
-          vendorAlerts ? <span className="badge hot">{vendorAlerts}</span> : null
-        )}
-        {/* Meeting bridge nav appears only when the WS-4 flag is on (off by default). */}
-        {meetingIntakeEnabled() ? item("intake", "🗒", "Meeting intake") : null}
-        {routingInboxEnabled()
-          ? item("routing-inbox", "»", "Routing inbox")
-          : null}
-      </div>
+    ),
+  };
+
+  const groups = visibleNavGroups({
+    meetingIntake: meetingIntakeEnabled(),
+    routingInbox: routingInboxEnabled(),
+  });
+
+  return (
+    <nav className="mc-side" id="mc-nav" aria-label="Main">
+      {groups.map((group) => {
+        const headingId = `mc-nav-h-${group.id}`;
+        const bodyId = `mc-nav-${group.id}`;
+        const open = !group.collapsible || adminOpen;
+        return (
+          <div className="grp" role="group" aria-labelledby={headingId} key={group.id}>
+            {group.collapsible ? (
+              <button
+                type="button"
+                className="h h-toggle"
+                id={headingId}
+                aria-expanded={open}
+                aria-controls={bodyId}
+                onClick={() => navGroupState.setOpen(group.id, !open)}
+              >
+                {group.label}
+                <span className="chev" aria-hidden="true">
+                  {open ? "▾" : "▸"}
+                </span>
+              </button>
+            ) : (
+              <div className="h" id={headingId}>
+                {group.label}
+              </div>
+            )}
+            <div id={bodyId} hidden={!open}>
+              {group.items.map((item) =>
+                link(
+                  item.screen,
+                  { screen: item.screen },
+                  route.screen === item.screen,
+                  <>
+                    <span className="ic" aria-hidden="true">
+                      {item.icon}
+                    </span>
+                    <span className="nm">{item.label}</span>
+                    {item.badge ? badges[item.badge] : null}
+                  </>
+                )
+              )}
+              {group.lists?.map((list) => lists[list])}
+            </div>
+          </div>
+        );
+      })}
     </nav>
   );
 }

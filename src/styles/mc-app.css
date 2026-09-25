@@ -60,6 +60,12 @@
 .mc .mc-side .item .hl.risk::before { background:var(--p-warn); }
 .mc .mc-side .item .hl.off::before { background:var(--p-hot); }
 .mc .mc-side .item .nm { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* Wave 6 nav model: items are links; Plan nests its project + initiative lists;
+   Admin & health's heading is a disclosure button. */
+.mc .mc-side a.item { text-decoration:none; }
+.mc .mc-side .sub { margin-top:12px; }
+.mc .mc-side .h-toggle { width:100%; background:none; border:0; cursor:pointer; text-align:left; }
+.mc .mc-side .h-toggle:hover { color:var(--p-ink); }
 
 .mc .mc-main { min-width:0; background:transparent; display:flex; flex-direction:column; }
 

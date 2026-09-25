@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { openSidebar, waitForHydration } from "./helpers";
+import { openSidebar, sidebarLink, waitForHydration } from "./helpers";
 
 async function gotoArchitecture(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/?screen=architecture");
@@ -13,8 +13,8 @@ test.describe("Architecture interactive canvas", () => {
     await gotoArchitecture(page);
   });
 
-  test("sidebar item lives in System of record and is active", async ({ page }) => {
-    const navItem = page.locator("nav.mc-side button", { hasText: "Architecture" });
+  test("sidebar item lives in Knowledge and is active", async ({ page }) => {
+    const navItem = sidebarLink(page, "Knowledge", "Architecture");
     await expect(navItem).toBeVisible();
     await expect(navItem).toHaveClass(/active/);
   });

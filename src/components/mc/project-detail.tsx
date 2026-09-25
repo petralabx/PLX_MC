@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from "react";
 
 import { ACTORS, PROJECTS, STAGES, STAGE_IDX, type Project } from "@/lib/mc-data";
+import { projectDocLinks } from "@/lib/mc-data/doc-links";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import { allTasks, bucketsForProject, projectById, pushNotice, updateProject } from "@/lib/mc-data/store";
 
@@ -39,6 +40,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
 
   const rollups = rollupForProject(buckets, tasks);
   const progress = projectProgress(tasks);
+  const docLinks = projectDocLinks(project, buckets);
 
   // All edits route through updateProject (store) → PATCH /api/projects/{id}:
   // optimistic local apply, reconcile to server truth on success, rollback +
@@ -244,6 +246,25 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
             the pre-P1 unstyled pile (name/ID/status colliding). */}
         <div className="bkbody pv-wide">
           <div className="c">
+            {docLinks.length > 0 && (
+              <div className="blk" data-testid="project-doc-links">
+                <div className="bh">
+                  <span className="kk">
+                    / Documents &amp; links · <b>{docLinks.length}</b>
+                  </span>
+                </div>
+                <ul className="doc-links">
+                  {docLinks.map((doc) => (
+                    <li key={`${doc.scope}:${doc.scopeId}`}>
+                      <span className="doc-scope">{doc.scopeName}</span>
+                      <a href={doc.href} target="_blank" rel="noopener noreferrer">
+                        {doc.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="blk">
               <div className="bh">
                 <span className="kk">

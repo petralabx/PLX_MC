@@ -1265,3 +1265,10 @@
   border: 1px solid var(--p-ok);
   padding: 3px 7px;
 }
+
+/* Documents & links (project screen) and Spec (bucket screen): Project.prd /
+   Bucket.prd URLs rendered as links (src/lib/mc-data/doc-links.ts). */
+.mc .doc-links { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.mc .doc-links li { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; min-width:0; }
+.mc .doc-links .doc-scope { font-family:var(--mono); font-size:var(--p-text-kicker); letter-spacing:0.14em; text-transform:uppercase; color:var(--p-muted); }
+.mc .doc-links a { color:var(--p-accent); text-decoration:underline; text-underline-offset:2px; overflow-wrap:anywhere; }

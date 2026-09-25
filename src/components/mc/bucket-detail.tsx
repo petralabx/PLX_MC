@@ -155,7 +155,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             This initiative needs a <em className="empty-accent">PRD</em>
           </h3>
           <p>
-            Every bucket carries a PRD: problem, testable requirements, acceptance criteria,
+            Every initiative carries a PRD: problem, testable requirements, acceptance criteria,
             non-goals, and rollback. Drafting stays in the authoring lane.
           </p>
           <div className="acts">

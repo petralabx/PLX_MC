@@ -148,7 +148,7 @@ export function CommandPalette({
     const buckets: PaletteCommand[] = navBuckets().map((bucket) => ({
       key: `bucket:${bucket.id}`,
       icon: "●",
-      label: `Bucket · ${bucket.name}`,
+      label: `Initiative · ${bucket.name}`,
       hint: bucket.id,
       run: () => nav("bucket", { bucketId: bucket.id }),
     }));
@@ -216,7 +216,7 @@ export function CommandPalette({
       { title: "Create", items: create },
       { title: "Navigate", items: navigate },
       { title: "Projects", items: projects },
-      { title: "Buckets", items: buckets },
+      { title: "Initiatives", items: buckets },
       { title: "Tasks", items: taskCommands },
       { title: "Assign agents", items: assignAgents },
     ];
@@ -284,7 +284,7 @@ export function CommandPalette({
               setQuery(event.target.value);
               setSelected(0);
             }}
-            placeholder="Create a task, jump to a bucket, assign an agent..."
+            placeholder="Create a task, jump to an initiative, assign an agent..."
             aria-label="Command palette search"
           />
           <span className="esc">ESC</span>

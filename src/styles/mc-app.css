@@ -254,6 +254,19 @@
 .mc .nrow .age { font-family:var(--mono); font-size:var(--p-text-cap); color:var(--p-muted); }
 .mc .nrow .id { font-family:var(--mono); font-size:var(--p-text-meta); color:var(--p-muted); }
 
+/* ════════ HELP (Wave 6 — colleague UX) ════════ */
+.mc .help { padding:18px var(--p-gutter) 80px; max-width:880px; display:flex; flex-direction:column; gap:26px; }
+.mc .help h2 { font-family:var(--mono); font-size:var(--p-text-kicker); font-weight:400; letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--p-ink); margin:0 0 12px; }
+.mc .help-steps { margin:0; padding-left:1.3em; display:flex; flex-direction:column; gap:8px; max-width:66ch;
+  font-size:var(--p-text-lede); line-height:1.5; color:var(--p-ink-2); }
+.mc .help-glossary { margin:0; border-top:1px solid var(--p-grid); }
+.mc .help-glossary > div { display:grid; grid-template-columns:minmax(140px, 220px) minmax(0, 1fr); gap:6px 20px; padding:12px 0;
+  border-bottom:1px solid var(--p-grid-2); }
+.mc .help-glossary dt { font-size:var(--p-text-ui); font-weight:500; color:var(--p-ink); }
+.mc .help-glossary dd { margin:0; max-width:66ch; font-size:var(--p-text-ui); line-height:1.5; color:var(--p-ink-2); }
+.mc .help-stages { margin:8px 0 0; padding-left:1.4em; display:flex; flex-wrap:wrap; gap:4px 22px; }
+
 /* ui-loop shared utilities — token-scoped replacements for inline layout styles */
 .mc .ph-compact { padding-bottom:var(--p-space-3); }
 .mc .r-gap-2 { display:flex; align-items:center; gap:var(--p-space-2); }
@@ -373,4 +386,5 @@
   .mc .mc-top { gap:10px; padding:9px var(--p-gutter); flex-wrap:wrap; }
   .mc .mc-top .ws { display:none; }
   .mc .ph { padding:18px var(--p-gutter) 14px; }
+  .mc .help-glossary > div { grid-template-columns:minmax(0, 1fr); }
 }

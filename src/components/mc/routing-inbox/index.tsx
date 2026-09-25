@@ -50,7 +50,7 @@ interface InboxDetail extends InboxProposalSummary {
 const SCOPE_LABELS: Record<InboxScope, string> = {
   personal: "Needs your decision",
   project: "Project-scoped",
-  bucket: "Bucket-scoped",
+  bucket: "Initiative-scoped",
   unrouted: "Unrouted",
 };
 
@@ -154,7 +154,7 @@ export function RoutingInboxView({ route }: ScreenProps) {
             <h1>
               Routing <em>inbox</em>
             </h1>
-            <p className="sub">Disabled (PLX_MC_ROUTING_INBOX_ENABLED ≠ 1).</p>
+            <p className="sub">Routing inbox is not enabled for this workspace.</p>
           </div>
         </div>
       </div>

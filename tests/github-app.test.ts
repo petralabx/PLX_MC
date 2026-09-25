@@ -104,6 +104,9 @@ describe("requestInstallationToken", () => {
     expect(init?.method).toBe("POST");
     expect(String(init?.headers && (init.headers as Record<string, string>).authorization)).toMatch(/^Bearer /);
     expect(String(init?.body)).toContain('"contents":"read"');
+    expect(String(init?.body)).toContain('"metadata":"read"');
+    expect(String(init?.body)).toContain('"pull_requests":"read"');
+    expect(JSON.parse(String(init?.body))).toEqual({ permissions: { contents: "read", metadata: "read", pull_requests: "read" } });
   });
 
   it("throws an honest error on a non-2xx response (never returns a bogus token)", async () => {

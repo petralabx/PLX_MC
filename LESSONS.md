@@ -28,6 +28,12 @@
 - **Root cause:** Display defaults were written into the DTO, and `vmcGet` turned a `res.json()` failure into `json: null` without telling the caller.
 - **Rule going forward:** Missing provenance stays `null` in the DTO; only the UI says "unknown". A body that does not parse is `upstream_error`, whatever the HTTP status.
 
+### 2026-09-25 (ET) — Review found five trust gaps hiding behind green tests
+
+- **What happened:** A read-only review (TASK-1935) found `/api/repos` trusting the body `actor` for its approver check. It also found merged portal/PLX_MC PRs missing from the Repos view (`pr.repo` was the GitHub name, the filter compared registry ids) and PRs merged more than 8h after checkout losing their task. HTTP MCP tool calls left no audit event, and `mc_complete_task` accepted calls with no `verificationCommands`/`rollback`. `plx_secondbrain` was also missing from the Hub checkout allowlist, the second consumer missed after portal on 2026-08-28.
+- **Root cause:** Each rule was enforced on one path only. Session identity existed only in the skills review route, and repo normalization only on `repos[]` input. The TTL was applied to merge attribution as well as gating, audit ran only in the REST wrapper, the required evidence was only in docs, and the allowlist was hand-kept.
+- **Rule going forward:** Resolve actors with `resolveRequestActor` (session in OIDC mode, never the body). Compare repo references through `resolveRepoInput`. The checkout TTL gates new verdicts; merge attribution accepts an expired, unrevoked, repo-bound checkout only when the gate passed that head. MCP tools audit at registration (`auditToolCalls`), and complete inputs share `completeTaskInputShape`. A second hand-kept allowlist miss means derive the list from `config/tracked-repos-registry.json` (TASK-1937).
+
 ### 2026-09-15 (ET) — Go-live coalesce on any claim dropped both posts
 
 - **What happened:** Bugbot on PLX_MC #243: `siblingSent` treated any `announce:` row as sent, and combined complete claimed `pr.opened` before the Workflow POST. A failed send, or two overlapping claims, could coalesce both kinds and leave chat empty. Blob `exists` before Postgres insert could also stick a retry.

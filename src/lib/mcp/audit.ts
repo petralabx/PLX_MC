@@ -13,7 +13,7 @@ export async function recordMcpToolCall(input: {
   durationMs: number;
   error?: string | null;
 }): Promise<string | undefined> {
-  await repo.appendEvent({
+  return repo.appendEvent({
     kind: "mcp.tool.invoked",
     actor: `${input.identity.runtime}:${input.identity.operatorEmail}`,
     repo: input.identity.repo,
@@ -29,6 +29,4 @@ export async function recordMcpToolCall(input: {
     },
     dedupKey: `mcp:${input.requestId}`,
   });
-  const rows = await repo.eventsAfter(0, 1, "mcp.tool.invoked");
-  return rows.at(-1)?.seq;
 }

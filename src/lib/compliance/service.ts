@@ -332,7 +332,19 @@ async function recordVerdict(
   });
 }
 
-export async function verifyPr(input: VerifyPrInput): Promise<VerifyPrResult> {
+export interface VerifyPrOptions {
+  /**
+   * false = compute the verdict only (mc_verify_pr): no check-ledger row and no
+   * gate.* event. The gate route always records. Default true.
+   */
+  record?: boolean;
+}
+
+export async function verifyPr(
+  input: VerifyPrInput,
+  options: VerifyPrOptions = {}
+): Promise<VerifyPrResult> {
+  const record = options.record ?? true;
   const tier = classifyRiskTier(input.changedPaths, input.labels ?? []);
 
   // Actor + task(s) come from the checkout credential(s), never git metadata
@@ -347,7 +359,7 @@ export async function verifyPr(input: VerifyPrInput): Promise<VerifyPrResult> {
   // Operator PR: one verdict, recorded ungated (decision 5).
   if (ids.length === 0) {
     const result = verifyCompliance({ task: null, actor: "operator", tier, bucketPrd: "unknown" });
-    await recordVerdict(input, tier, "operator", null, "operator", result, null);
+    if (record) await recordVerdict(input, tier, "operator", null, "operator", result, null);
     return { ...result, tier, actorKind: "operator", taskId: null, tasks: [] };
   }
 
@@ -362,7 +374,7 @@ export async function verifyPr(input: VerifyPrInput): Promise<VerifyPrResult> {
     const task = await loadTask(taskId);
     const bucketPrd = await bucketPrdForTask(task);
     const result = verifyCompliance({ task, actor: "agent", tier, bucketPrd });
-    await recordVerdict(input, tier, "agent", taskId, actorIdentity, result, taskId ?? cid);
+    if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, result, taskId ?? cid);
     tasks.push({ checkoutId: cid, taskId, verdict: result.verdict, reasons: result.reasons });
   }
 

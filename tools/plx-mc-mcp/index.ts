@@ -14,6 +14,7 @@ import { randomBytes } from "node:crypto";
 import os from "node:os";
 import { z } from "zod";
 import { callSwarmTool } from "./lib/swarm-client.mjs";
+import { installToolErrorEnvelope, restErrorFromResponse } from "./lib/tool-errors.mjs";
 import { registerRoutingTools } from "./routing-suggest-tools";
 
 const DEFAULT_MC_BASE = "https://mc.plxcustomer.io";
@@ -68,8 +69,8 @@ async function mcFetch(path: string, init?: { method?: string; body?: unknown })
     let json: unknown;
     try { json = JSON.parse(text); } catch { json = { raw: text }; }
     if (!res.ok) {
-      const err = json as { error?: { message?: string } };
-      throw new Error(err?.error?.message || `HTTP ${res.status}`);
+      // Keep the REST error code; installToolErrorEnvelope returns it as JSON.
+      throw restErrorFromResponse(res.status, json);
     }
     return json;
   } finally {
@@ -89,6 +90,8 @@ const server = new McpServer(
       "manage the PLX skills directory, and optionally dispatch_to_swarm. Prefer mc_suggest_work when Task ID is unknown. Append MC-Checkout lines from checkout responses to PR bodies.",
   }
 );
+// Before any registration: failed tools return { error: { code, message } } JSON.
+installToolErrorEnvelope(server);
 
 server.tool("mc_self_check", "Validate PLX MC MCP auth and connectivity.", {}, async () => {
   if (!MCP_ENABLED) return disabledTool("mc_self_check");
@@ -413,6 +416,81 @@ server.tool(
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_submit_skill");
     return printResult(await mcFetch("/skills/submit", { method: "POST", body }));
+  }
+);
+
+// ── Wave 4: agent read tools + approval request (cursor REST proxies) ──
+
+server.tool(
+  "mc_get_task",
+  "Read one MC task: the task, accountable owner, evidence, checkouts (dsp_* dispatches) and recent mc_events history. Read-only; restricted-project tasks return not_found.",
+  { id: z.string().min(1).describe("TASK-* id") },
+  async ({ id }) => {
+    if (!MCP_ENABLED) return disabledTool("mc_get_task");
+    return printResult(await mcFetch(`/tasks/${encodeURIComponent(id)}`));
+  }
+);
+
+server.tool(
+  "mc_list_checkouts",
+  "List checkout credentials (dsp_* dispatches), newest first. Filters: repo (full owner/name slug), taskId, active (true = unrevoked and unexpired). Read-only.",
+  {
+    repo: z.string().min(1).optional().describe("Full GitHub slug, e.g. petralabx/PLX_MC"),
+    taskId: z.string().min(1).optional(),
+    active: z.boolean().optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+  },
+  async ({ repo, taskId, active, limit }) => {
+    if (!MCP_ENABLED) return disabledTool("mc_list_checkouts");
+    const qs = new URLSearchParams();
+    if (repo) qs.set("repo", repo);
+    if (taskId) qs.set("taskId", taskId);
+    if (active !== undefined) qs.set("active", String(active));
+    if (limit != null) qs.set("limit", String(limit));
+    const q = qs.toString();
+    return printResult(await mcFetch(`/checkouts${q ? `?${q}` : ""}`));
+  }
+);
+
+server.tool(
+  "mc_search_knowledge",
+  "Search the company brain (Ask the Brain / VMC knowledge). Each hit carries provenance: id, source, namespace, score. Read-only.",
+  {
+    q: z.string().describe("Search text"),
+    limit: z.number().int().min(1).max(25).optional(),
+  },
+  async ({ q, limit }) => {
+    if (!MCP_ENABLED) return disabledTool("mc_search_knowledge");
+    const qs = new URLSearchParams({ q });
+    if (limit != null) qs.set("limit", String(limit));
+    return printResult(await mcFetch(`/knowledge/search?${qs.toString()}`));
+  }
+);
+
+server.tool(
+  "mc_verify_pr",
+  "Compute the compliance-gate verdict for a PR from its MC-Checkout stamps and changed files. Read-only (recorded:false); the GitHub `compliance` check stays the merge authority.",
+  {
+    repo: z.string().min(1).describe("Full GitHub slug, e.g. petralabx/PLX_MC"),
+    pr: z.number().int().positive(),
+  },
+  async ({ repo, pr }) => {
+    if (!MCP_ENABLED) return disabledTool("mc_verify_pr");
+    const qs = new URLSearchParams({ repo, pr: String(pr) });
+    return printResult(await mcFetch(`/verify?${qs.toString()}`));
+  }
+);
+
+server.tool(
+  "mc_request_approval",
+  "Raise a runtime approval gate on a task. The task freezes input-required until a human other than the requester decides it in the Approvals inbox.",
+  {
+    taskId: z.string().min(1),
+    reason: z.string().min(1).max(500),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_request_approval");
+    return printResult(await mcFetch("/request-approval", { method: "POST", body }));
   }
 );
 

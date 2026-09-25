@@ -286,6 +286,27 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
     expect(db.events.filter((e) => e.kind === "gate.passed").length).toBe(1);
   });
 
+  it("computes the same verdict without writing the ledger when record is false (mc_verify_pr)", async () => {
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
+    const checksBefore = db.checks.length;
+    const eventsBefore = db.events.length;
+
+    const agent = await verifyPr(
+      { repo: "PLX_MC", prNumber: 21, headSha: "sha21", changedPaths: ["src/x.ts"], checkoutId },
+      { record: false }
+    );
+    const operator = await verifyPr(
+      { repo: "PLX_MC", prNumber: 22, headSha: "sha22", changedPaths: ["src/x.ts"] },
+      { record: false }
+    );
+
+    expect(agent).toMatchObject({ verdict: "pass", actorKind: "agent", taskId: "TASK-900" });
+    expect(operator).toMatchObject({ verdict: "pass", actorKind: "operator" });
+    expect(db.checks.length).toBe(checksBefore);
+    expect(db.events.length).toBe(eventsBefore);
+  });
+
   it("treats a PR with no checkout as operator work and passes it", async () => {
     const r = await verifyPr({ repo: "PLX_MC", prNumber: 10, headSha: "jkl", changedPaths: ["db/migrations/007_x.sql"] });
     expect(r.actorKind).toBe("operator");

@@ -280,9 +280,10 @@ export async function actionListBuckets(
   identity: McpIdentity,
   input: { q?: string; project?: string } = {}
 ) {
-  // Listing is available only to principals already trusted to create buckets.
-  // This keeps discovery inside the existing reviewed capability surface.
-  requireMcpActor(identity, "bucket.create");
+  // Discovery is a read: task.read, like mc_list_conflicts. Read-only
+  // principals must not need a create grant (or a TASK-0 workaround) to find a
+  // BKT-* id; restricted-project buckets stay hidden by the ACL filter below.
+  requireMcpActor(identity, "task.read");
 
   const query = input.q?.trim().toLowerCase();
   const maps = await loadProjectAclMaps();

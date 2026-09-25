@@ -41,6 +41,7 @@ const HARD_GATED_CONSUMERS = [
   "petralabx/for-and-against",
   "petralabx/agentic-swarm",
   "petralabx/plx-customer-portal",
+  "petralabx/plx_secondbrain",
 ] as const;
 
 const hubIdentity: McpIdentity = {

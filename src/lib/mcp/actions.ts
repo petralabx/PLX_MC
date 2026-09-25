@@ -1,5 +1,6 @@
 // PLX MC cursor API actions — shared by REST routes and HTTP MCP transport.
 
+import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { checkout, complete } from "@/lib/compliance/service";
 import * as complianceRepo from "@/lib/compliance/repo";
@@ -441,6 +442,31 @@ export async function actionProgress(
     sync: await syncMetaForTask(input.taskId),
   };
 }
+
+// The pipeline contract requires non-empty verificationCommands AND a rollback
+// on every completion. One input shape serves the HTTP MCP tool and the REST
+// route so the transports cannot disagree.
+const nonBlank = z.string().trim().min(1);
+export const completeTaskInputShape = {
+  checkoutId: z.string().min(1),
+  summary: z.string().min(1),
+  commitSha: z.string().optional(),
+  prUrl: z.string().optional(),
+  verificationCommands: z.array(nonBlank).min(1),
+  filesChanged: z.array(z.string()).optional(),
+  rollback: nonBlank,
+  // High/full-tier proof: a test run or screenshots. Required by the gate for
+  // high-risk changes (migrations, auth, infra); optional for standard tier.
+  testRun: z
+    .object({
+      suite: z.string().min(1),
+      passed: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+      total: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
+  shots: z.array(z.object({ label: z.string(), cap: z.string() })).optional(),
+};
 
 export async function actionComplete(
   identity: McpIdentity,

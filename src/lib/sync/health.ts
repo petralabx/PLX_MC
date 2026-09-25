@@ -76,7 +76,7 @@ export interface MissedTickOptions {
   now?: Date;
   loadCompletions?: () => Promise<Record<string, Date | null>>;
   latestAlertAt?: (kind: string) => Promise<string | null>;
-  append?: typeof appendEvent;
+  append?: (e: Parameters<typeof appendEvent>[0]) => Promise<unknown>;
   notify?: (text: string) => Promise<boolean>;
 }
 

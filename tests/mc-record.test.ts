@@ -66,6 +66,23 @@ describe("deriveRepoRows", () => {
     expect(portal?.prs).toHaveLength(2);
   });
 
+  it("attributes projected PRs stored under the GitHub name or owner/name slug", () => {
+    // The compliance projection stores `pr.repo` as the GitHub repo name
+    // (plx-customer-portal, PLX_MC) or a full slug, not the registry id.
+    const base = TASKS.find((t) => t.id === "TASK-222")!;
+    const projected: Task[] = [
+      { ...base, id: "TASK-9002", repos: ["portal-web"], prs: [{ repo: "plx-customer-portal", num: 838, status: "merged", title: "portal" }] },
+      { ...base, id: "TASK-9003", repos: ["plx-mc"], prs: [{ repo: "PLX_MC", num: 244, status: "merged", title: "mc" }] },
+      { ...base, id: "TASK-9004", repos: ["plx-mc"], prs: [{ repo: "petralabx/PLX_MC", num: 245, status: "open", title: "mc slug" }] },
+      { ...base, id: "TASK-9005", repos: ["plx-mc"], prs: [{ repo: "not-a-registry-repo", num: 1, status: "open", title: "stray" }] },
+    ];
+    const rows = deriveRepoRows(REPOS, projected);
+    expect(rows.find((row) => row.repo.id === "portal-web")?.prs.map((pr) => pr.num)).toEqual([838]);
+    expect(rows.find((row) => row.repo.id === "plx-mc")?.prs.map((pr) => pr.num)).toEqual([244, 245]);
+    expect(rows.find((row) => row.repo.id === "plx-mc")?.openPrCount).toBe(1);
+    expect(rows.flatMap((row) => row.prs).some((pr) => pr.num === 1)).toBe(false);
+  });
+
   it("derives task counts from repo membership, not fixture rollups", () => {
     const rows = deriveRepoRows(REPOS, allTasks());
     const portal = rows.find((row) => row.repo.id === "portal-web");

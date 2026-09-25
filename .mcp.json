@@ -5,7 +5,7 @@
       "url": "https://mc.plxcustomer.io/api/cursor/mcp",
       "headers": {
         "Authorization": "Bearer ${MC_MCP_API_KEY}",
-        "x-mc-operator-email": "${MC_OPERATOR_EMAIL:-vince@petrasoap.com}",
+        "x-mc-operator-email": "${MC_OPERATOR_EMAIL:-cos@petrasoap.com}",
         "x-mc-repo": "petralabx/PLX_MC",
         "x-mc-runtime": "claude-code"
       }

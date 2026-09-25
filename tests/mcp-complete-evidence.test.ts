@@ -124,7 +124,8 @@ describe("mc_complete_task transport contracts", () => {
     const end = source.indexOf("\nserver.tool(", start + 1);
     const block = source.slice(start, end);
 
-    expect(block).toContain("rollback: z.string().optional()");
+    expect(block).toContain("verificationCommands: z.array(z.string().trim().min(1)).min(1)");
+    expect(block).toContain("rollback: z.string().trim().min(1)");
     expect(block).toContain("testRun: z");
     expect(block).toContain("shots: z.array");
     expect(block).toContain('mcFetch("/complete", { method: "POST", body })');
@@ -139,9 +140,8 @@ describe("mc_complete_task transport contracts", () => {
     const end = source.indexOf("\n  server.tool(", start + 1);
     const block = source.slice(start, end);
 
-    expect(block).toContain("rollback: z.string().optional()");
-    expect(block).toContain("testRun: z");
-    expect(block).toContain("shots: z.array");
+    // The HTTP tool and REST route share one required-evidence shape.
+    expect(block).toContain("completeTaskInputShape");
     expect(block).toContain("actionComplete(identity, body)");
   });
 });

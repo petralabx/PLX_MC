@@ -21,9 +21,9 @@ function vmcConfig(): { baseUrl: string; apiKey: string } | null {
 async function vmcGet(
   path: string,
   timeoutMs = VMC_FETCH_TIMEOUT_MS,
-): Promise<{ status: number; json: unknown }> {
+): Promise<{ status: number; json: unknown; parsed: boolean }> {
   const cfg = vmcConfig();
-  if (!cfg) return { status: 0, json: null };
+  if (!cfg) return { status: 0, json: null, parsed: false };
   try {
     const res = await fetch(`${cfg.baseUrl}${path}`, {
       headers: {
@@ -33,19 +33,28 @@ async function vmcGet(
       cache: "no-store",
       signal: AbortSignal.timeout(timeoutMs),
     });
-    const json = await res.json().catch(() => null);
-    return { status: res.status, json };
+    let parsed = true;
+    const json = await res.json().catch(() => {
+      parsed = false;
+      return null;
+    });
+    return { status: res.status, json, parsed };
   } catch {
-    return { status: 0, json: null };
+    return { status: 0, json: null, parsed: false };
   }
 }
 
-function emptySearch(query: string, configured: boolean, httpStatus: number): BrainAskSearchResult {
+function emptySearch(
+  query: string,
+  configured: boolean,
+  httpStatus: number,
+  parsed = true,
+): BrainAskSearchResult {
   return {
     query,
     hits: [],
     configured,
-    status: classifyBrainAskStatus(configured, httpStatus),
+    status: classifyBrainAskStatus(configured, httpStatus, parsed),
   };
 }
 
@@ -56,10 +65,12 @@ export async function searchBrainAsk(
   const q = query.trim();
   const configured = Boolean(vmcConfig());
   if (!q || !configured) return emptySearch(q, configured, 0);
-  const { status, json } = await vmcGet(
+  const { status, json, parsed } = await vmcGet(
     `/api/vmc/knowledge/agent/search?q=${encodeURIComponent(q)}&limit=${limit}`,
   );
-  if (status < 200 || status >= 300) return emptySearch(q, configured, status);
+  if (status < 200 || status >= 300 || !parsed) {
+    return emptySearch(q, configured, status, parsed);
+  }
   return {
     query: q,
     configured,
@@ -88,12 +99,12 @@ export async function openBrainAskArticle(id: string): Promise<BrainAskOpenResul
   const path = isDocumentCatalogId(rawId)
     ? `/api/vmc/knowledge/agent/document/${encodeURIComponent(rawId)}`
     : `/api/vmc/knowledge/agent/node/${encodeURIComponent(rawId.replace(/^graph:/, ""))}?include=content`;
-  const { status, json } = await vmcGet(path);
-  if (status < 200 || status >= 300) {
+  const { status, json, parsed } = await vmcGet(path);
+  if (status < 200 || status >= 300 || !parsed) {
     return {
       article: null,
       configured,
-      status: classifyBrainAskStatus(configured, status),
+      status: classifyBrainAskStatus(configured, status, parsed),
     };
   }
   const [raw] = extractNodes(json);

@@ -47,6 +47,12 @@ describe("brain ask DTO mapping", () => {
     expect(pickMarkdown({ snippet: "excerpt only" })).toBe("");
   });
 
+  it("reports missing provenance as null, never an invented namespace or trust tier", () => {
+    const article = asArticle({ id: "node-3", markdown: "# Body\n\nNo provenance upstream." });
+    expect(article?.namespace).toBeNull();
+    expect(article?.trustTier).toBeNull();
+  });
+
   it("maps the live VMC agent-search envelope (data.results + nested item)", () => {
     const envelope = {
       data: {
@@ -196,6 +202,29 @@ describe("brain ask credentials", () => {
     expect(result.status).toBe("ok");
     expect(result.hits).toEqual([]);
     expect(searchStatusMessage(result)).toBe("No hits for this query.");
+  });
+
+  it("labels HTTP 200 with an unparseable body as upstream_error, not as ok zero hits", async () => {
+    vi.stubEnv("VMC_API_KEY", "test-vmc-key");
+    vi.stubEnv("VMC_BASE_URL", "https://vmc.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 200,
+        json: async () => {
+          throw new SyntaxError("Unexpected token '<'");
+        },
+      })),
+    );
+    const search = await searchBrainAsk("architecture");
+    expect(search.configured).toBe(true);
+    expect(search.status).toBe("upstream_error");
+    expect(search.hits).toEqual([]);
+    expect(searchStatusMessage(search)).toMatch(/returned an error/i);
+    const open = await openBrainAskArticle("graph:node-1");
+    expect(open.article).toBeNull();
+    expect(open.status).toBe("upstream_error");
+    expect(openStatusMessage(open)).toMatch(/failed to load/i);
   });
 
   it("probe reports HTTP status only and never forwards hits", async () => {

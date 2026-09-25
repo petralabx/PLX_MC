@@ -688,15 +688,20 @@
     color: var(--p-muted);
   }
 
-  /* Toast dismiss: a 44px target (toasts sit in the phone thumb zone); the
-     negative margin keeps the toast's own height. */
+  /* Toast dismiss: a 44px target (toasts sit in the phone thumb zone). The
+     hit area is a centred pseudo-element, so the toast keeps its own size and
+     covers no more of the page than before. */
   .mc .mc-notices .mc-notice .x {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: var(--p-touch);
-    min-height: var(--p-touch);
-    margin: -12px -10px -12px 0;
+    position: relative;
+  }
+  .mc .mc-notices .mc-notice .x::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--p-touch);
+    height: var(--p-touch);
+    transform: translate(-50%, -50%);
   }
 
   /* Toasts — phone: above the tab bar, full width */

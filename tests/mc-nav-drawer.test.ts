@@ -162,7 +162,7 @@ describe("shell CSS contract (ADR-005)", () => {
   });
 
   it("gives toast dismiss and shell buttons 44px targets where touch applies", () => {
-    expect(shell).toMatch(/\.mc \.mc-notices \.mc-notice \.x \{[^}]*min-width: var\(--p-touch\);[^}]*min-height: var\(--p-touch\);/);
+    expect(shell).toMatch(/\.mc \.mc-notices \.mc-notice \.x::after \{[^}]*width: var\(--p-touch\);[^}]*height: var\(--p-touch\);/);
     expect(shell).toMatch(/@media \(pointer: coarse\) \{[^@]*\.mc \.mc-offline \.btn,[^{]*\.mc \.mc-pane \.pane-head \.btn[^{]*\{[^}]*min-height: var\(--p-touch\);/);
   });
 

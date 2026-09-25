@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { openSidebar, waitForHydration } from "./helpers";
+import { openSidebar, sidebarLink, waitForHydration } from "./helpers";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 // A mix of healthy + degraded rows in scariest-first order (as the API would sort).
@@ -321,8 +321,8 @@ test.describe("loop ledgers screen", () => {
 
   // ── Sidebar item is present ───────────────────────────────────────────────
 
-  test("sidebar shows Loop ledgers in the System of record group", async ({ page }) => {
-    const navItem = page.locator("nav.mc-side button", { hasText: "Loop ledgers" });
+  test("sidebar shows Loop ledgers in the Admin & health group", async ({ page }) => {
+    const navItem = sidebarLink(page, "Admin & health", "Loop ledgers");
     await expect(navItem).toBeVisible();
     await expect(navItem).toHaveClass(/active/);
   });

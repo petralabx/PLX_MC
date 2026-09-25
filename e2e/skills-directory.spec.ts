@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { openSidebar, waitForHydration } from "./helpers";
+import { openSidebar, sidebarLink, waitForHydration } from "./helpers";
 
 const CATALOG_FIXTURE = {
   meta: {
@@ -187,8 +187,8 @@ test.describe("MC Skills Directory", () => {
     await expect(page.locator("[data-testid='sk-screen']")).toBeVisible();
   });
 
-  test("sidebar item lives in System of record and is active", async ({ page }) => {
-    const navItem = page.locator("nav.mc-side button", { hasText: "Skills directory" });
+  test("sidebar item lives in Knowledge and is active", async ({ page }) => {
+    const navItem = sidebarLink(page, "Knowledge", "Skills directory");
     await expect(navItem).toBeVisible();
     await expect(navItem).toHaveClass(/active/);
   });

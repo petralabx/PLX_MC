@@ -163,9 +163,33 @@ export async function waitForHydration(page: Page): Promise<void> {
 }
 
 export async function openSidebar(page: Page, label: string): Promise<void> {
-  // Sidebar items are <button> with a ".nm" label span; scope to the nav so we
-  // never match a same-named control elsewhere (e.g. the "Board" view tab).
-  await page.locator("nav.mc-side button", { hasText: label }).first().click();
+  // Sidebar items are links (<a class="item">, Wave 6 nav model) with a ".nm"
+  // label span; scope to the nav so we never match a same-named control
+  // elsewhere (e.g. the "Board" view tab). At <=1024px the sidebar is a drawer
+  // behind the topbar hamburger, and "Admin & health" starts collapsed — open
+  // whichever stands between us and the item.
+  const nav = page.locator("nav.mc-side");
+  const hamburger = page.locator("[data-testid='nav-drawer-toggle']");
+  if (await hamburger.isVisible()) {
+    if ((await hamburger.getAttribute("aria-expanded")) !== "true") await hamburger.click();
+    await expect(hamburger).toHaveAttribute("aria-expanded", "true");
+  }
+  const adminToggle = nav.locator("button[aria-controls='mc-nav-admin']");
+  const inAdmin = nav.locator("#mc-nav-admin .item", { hasText: label });
+  if ((await inAdmin.count()) > 0 && (await adminToggle.getAttribute("aria-expanded")) !== "true") {
+    await adminToggle.click();
+    await expect(adminToggle).toHaveAttribute("aria-expanded", "true");
+  }
+  await nav.locator(".item", { hasText: label }).first().click();
+}
+
+// A sidebar link inside one labelled nav group ("My work", "Plan",
+// "Knowledge", "Admin & health").
+export function sidebarLink(page: Page, group: string, label: string): Locator {
+  return page
+    .locator("nav.mc-side")
+    .getByRole("group", { name: group, exact: true })
+    .getByRole("link", { name: label });
 }
 
 // The board renders one ".bcol" per column; the header ".bhead .nm" carries the

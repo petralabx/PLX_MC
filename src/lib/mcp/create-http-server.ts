@@ -21,7 +21,7 @@ import {
   actionSelfCheck,
 } from "./actions";
 import { recordMcpToolCall } from "./audit";
-import { taskLink } from "./envelope";
+import { installMcpToolErrorEnvelope, taskLink } from "./envelope";
 import {
   actionInstallSkills,
   actionListSkills,
@@ -31,6 +31,8 @@ import {
 import { registerRoutingSuggestTools } from "./routing-suggest-actions";
 import { registerRoutingMutationTools } from "./routing-mutation-actions";
 import { registerSyncConflictTools } from "./sync-actions";
+import { registerAgentReadTools } from "./read-actions";
+import { registerApprovalTools } from "./approval-actions";
 
 function jsonResult(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -116,6 +118,11 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         "Prefer mc_suggest_work when the Task is unknown; always mc_checkout_task before agent work; append MC-Checkout stamp lines to PR bodies.",
     }
   );
+  // Before any registration: every tool (incl. split modules) returns a thrown
+  // ApiError as isError + { error: { code, message, hint? } }.
+  installMcpToolErrorEnvelope(server);
+  // Installed after the envelope so the audit wrapper sits inside it and sees
+  // raw throws (recording their message) before they become isError results.
   auditToolCalls(server, identity);
 
   server.tool("mc_self_check", "Validate MCP auth and PLX MC reachability.", {}, async () =>
@@ -326,6 +333,10 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   registerRoutingTools(server, identity);
   registerSyncConflictTools(server, identity);
+
+  // ── Wave 4: agent read tools + approval request (separate modules) ──
+  registerAgentReadTools(server, identity);
+  registerApprovalTools(server, identity);
 
   return server;
 }

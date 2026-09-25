@@ -27,7 +27,7 @@ test.describe("My Tasks view", () => {
   test("reachable via the sidebar entry", async ({ page }) => {
     await page.goto("/");
     await waitForHydration(page);
-    await page.locator("nav.mc-side button", { hasText: "My Tasks" }).click();
+    await page.locator("nav.mc-side a", { hasText: "My tasks" }).click();
     await expectOnMyTasks(page);
   });
 
@@ -58,7 +58,7 @@ test.describe("My Tasks view", () => {
   }) => {
     await page.goto("/");
     await waitForHydration(page);
-    await page.locator("nav.mc-side button", { hasText: "My Tasks" }).click();
+    await page.locator("nav.mc-side a", { hasText: "My tasks" }).click();
     await expectOnMyTasks(page);
 
     // My Tasks defaults to the List lens grouped by Initiative (SPEC §5 D1).

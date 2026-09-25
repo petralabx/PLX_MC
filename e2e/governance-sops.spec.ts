@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { openSidebar, waitForHydration } from "./helpers";
+import { openSidebar, sidebarLink, waitForHydration } from "./helpers";
 
 // MC-SOP-Guide (governance-sops) — full-stack E2E against the REAL API: the dev
 // server reads the committed registry + docs/COLLABORATOR-SOP.md, so this
@@ -18,8 +18,8 @@ test.describe("MC-SOP-Guide (governance-sops)", () => {
     await expect(page.locator("[data-testid='gs-screen']")).toBeVisible();
   });
 
-  test("sidebar item lives in System of record and is active", async ({ page }) => {
-    const navItem = page.locator("nav.mc-side button", { hasText: "SOP guide" });
+  test("sidebar item lives in Knowledge and is active", async ({ page }) => {
+    const navItem = sidebarLink(page, "Knowledge", "SOP guide");
     await expect(navItem).toBeVisible();
     await expect(navItem).toHaveClass(/active/);
   });

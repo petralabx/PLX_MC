@@ -18,9 +18,9 @@ import {
   addTask,
   allBuckets,
   allRepos,
-  assignableViewerId,
   bucketById,
   nextTaskId,
+  ownerOrViewerDefault,
   viewerId,
 } from "@/lib/mc-data/store";
 
@@ -83,7 +83,8 @@ export function NewTaskModal({
   const [bucketId, setBucketId] = useState(startingBucketId);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   // EN-003: a human is always accountable; default to the viewer authoring it.
-  const [accountableId, setAccountableId] = useState<string | null>(assignableViewerId);
+  const [pickedAccountableId, setAccountableId] = useState<string | null | undefined>(undefined);
+  const accountableId = ownerOrViewerDefault(pickedAccountableId);
   const [humanOnly, setHumanOnly] = useState(false);
   const [accountablePickerOpen, setAccountablePickerOpen] = useState(false);
   const [priority, setPriority] = useState<PriorityKey>("medium");
@@ -148,7 +149,7 @@ export function NewTaskModal({
       description,
       bucket: bucketId,
       assignee: ownerId,
-      accountableOwner: accountableId,
+      accountableOwner: ownerOrViewerDefault(pickedAccountableId),
       humanOnly,
       priority,
       stage,
@@ -163,7 +164,6 @@ export function NewTaskModal({
     onClose();
     nav("board", { bucketId: created.bucket });
   }, [
-    accountableId,
     bucketId,
     canCreate,
     description,
@@ -174,6 +174,7 @@ export function NewTaskModal({
     nav,
     onClose,
     ownerId,
+    pickedAccountableId,
     priority,
     repos,
     requirements,

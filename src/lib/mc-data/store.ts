@@ -228,6 +228,11 @@ export const viewerSettled = (): boolean => state.viewerSettled;
 // directory (a signed-in person outside it can't be assigned work).
 export const assignableViewerId = (): string | null =>
   state.viewer && state.actors[state.viewer.id] ? state.viewer.id : null;
+// A create modal's owner field: `picked` is undefined until the user chooses
+// (or clears) someone, and until then it follows the viewer as it resolves —
+// the modal can open before GET /api/viewer has answered.
+export const ownerOrViewerDefault = (picked: string | null | undefined): string | null =>
+  picked === undefined ? assignableViewerId() : picked;
 
 export interface StoreSyncCounts {
   pending: number;

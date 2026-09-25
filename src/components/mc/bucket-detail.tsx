@@ -220,7 +220,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             <span className="k">Accountable owner</span>
             <span className="v sm fact-owner">
               <Avatar id={bucket.owner} size="sm" />
-              {ACTORS[bucket.owner].name}
+              {ACTORS[bucket.owner]?.name ?? bucket.owner}
             </span>
           </div>
           <div className="f">

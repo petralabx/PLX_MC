@@ -18,6 +18,7 @@ import {
 } from "@/lib/mc-data/store";
 import type { SpConflict } from "@/lib/mc-data/types";
 import { evaluateSyncFreshness } from "@/lib/sync/freshness";
+import { NAV_GROUPS, navCommands } from "@/components/mc/nav-model";
 
 const m = vi.hoisted(() => ({
   checkRoutingFreshness: vi.fn(),
@@ -103,17 +104,20 @@ describe("GET /api/sync/freshness", () => {
 });
 
 describe("nav + console wiring", () => {
-  it("exposes Sync / Conflicts (and Review queue) in chrome + command palette", () => {
-    const chrome = readSrc("src/components/mc/chrome.tsx");
-    expect(chrome).toContain("Sync / Conflicts");
-    expect(chrome).toContain('nav("sync")');
-    expect(chrome).toMatch(/Review queue/);
+  it("exposes SharePoint sync issues (plus Conflicts / Review queue) in the nav model + command palette", () => {
+    // Wave 6: the sidebar and ⌘K share one nav model (nav-model.ts).
+    const sync = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.screen === "sync");
+    expect(sync?.label).toBe("SharePoint sync issues");
+    expect(sync?.badge).toBe("sync");
+    const commands = navCommands({ meetingIntake: false, routingInbox: false })
+      .filter((c) => c.screen === "sync")
+      .map((c) => c.label);
+    expect(commands).toEqual(["Go to SharePoint sync issues", "Go to Conflicts", "Go to Review queue"]);
 
-    const palette = readSrc("src/components/mc/command-palette.tsx");
-    expect(palette).toContain("Go to Sync / Conflicts");
-    expect(palette).toContain("Go to Conflicts");
-    expect(palette).toContain("Go to Review queue");
-    expect(palette).toMatch(/nav\("sync"\)/);
+    // The topbar sync pill still lands on the console.
+    const chrome = readSrc("src/components/mc/chrome.tsx");
+    expect(chrome).toContain('nav("sync")');
+    expect(chrome).toMatch(/review queue/i);
   });
 
   it("SyncConsole uses openConflicts and fail-closed stale banner", () => {

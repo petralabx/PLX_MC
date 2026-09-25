@@ -2,8 +2,6 @@
 // (loading / error-with-retry / empty / data) plus the pure helpers and the
 // screen + sidebar registration. vitest has no DOM, so the presentational body
 // is rendered to static markup with react-dom/server.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -18,6 +16,7 @@ import {
   hasActivitySignal,
 } from "@/components/mc/activity-view.helpers";
 import { SCREEN_VALUES, urlToRoute } from "@/components/mc/route";
+import { NAV_GROUPS } from "@/components/mc/nav-model";
 import { SCREENS } from "@/components/mc/screens";
 import type { RepoActivityReport, RepoActivityRow } from "@/lib/compliance";
 
@@ -173,9 +172,8 @@ describe("Activity screen registration", () => {
     expect(SCREENS.activity).toBeTypeOf("function");
   });
 
-  it("has a sidebar entry in the System of record group", () => {
-    const chrome = readFileSync(join(import.meta.dirname, "..", "src/components/mc/chrome.tsx"), "utf8");
-    const group = chrome.slice(chrome.indexOf("System of record"));
-    expect(group).toMatch(/item\("activity",\s*"[^"]+",\s*"Repo activity"\)/);
+  it("has a sidebar entry in the Admin & health group", () => {
+    const admin = NAV_GROUPS.find((g) => g.id === "admin")!;
+    expect(admin.items).toContainEqual(expect.objectContaining({ screen: "activity", label: "Repo activity" }));
   });
 });

@@ -201,7 +201,7 @@ test.describe("ai spend screen", () => {
   });
 
   test("sidebar badge shows the alerting vendor count", async ({ page }) => {
-    const navItem = page.locator("nav.mc-side button", { hasText: "AI Spend" });
+    const navItem = page.locator("nav.mc-side a", { hasText: "AI spend" });
     await expect(navItem.locator(".badge")).toContainText("1");
   });
 

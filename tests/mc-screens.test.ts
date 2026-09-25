@@ -35,6 +35,7 @@ const EXPECTED_SCREENS = {
   "routing-inbox": true,
   approvals: true,
   activity: true,
+  help: true,
 } satisfies Record<Screen, true>;
 
 describe("SCREENS registry (PR-D1)", () => {

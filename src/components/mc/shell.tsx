@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandBoundary } from "@/components/brand";
 import { hydrate } from "@/lib/mc-data/store";
 
-import { NoticeHost, OfflineBanner, Sidebar, Topbar } from "./chrome";
+import { NavScrim, NoticeHost, OfflineBanner, Sidebar, Topbar, useNavDrawer } from "./chrome";
 import { CommandPalette } from "./command-palette";
 import { InboxView } from "./inbox";
 import { NewInitiativeModal } from "./new-initiative-modal";
@@ -31,6 +31,8 @@ export function MissionControlShell() {
   // data-mc-ready on the shell root so automation can wait for genuine
   // interactivity, not the SSR-present-but-not-hydrated DOM.
   const [ready, setReady] = useState(false);
+  // ≤1024px: the sidebar is a slide-in drawer behind the topbar hamburger.
+  const drawer = useNavDrawer();
 
   // Hydrate after mount so SSR HTML and the first client render stay
   // identical: invited people from localStorage, then the engine's live
@@ -192,10 +194,27 @@ export function MissionControlShell() {
 
   return (
     <BrandBoundary className={`mc${dark ? " dark" : ""}`} data-mc-ready={ready ? "true" : undefined}>
-      <Topbar nav={nav} dark={dark} setDark={setDark} onOpenPalette={openPalette} />
+      <Topbar
+        nav={nav}
+        dark={dark}
+        setDark={setDark}
+        onOpenPalette={openPalette}
+        drawerOpen={drawer.open}
+        onToggleDrawer={() => drawer.send("toggle")}
+        drawerToggleRef={drawer.toggleRef}
+      />
       <OfflineBanner />
       <div className="mc-shell">
-        <Sidebar route={route} nav={nav} onNewProject={openNewProject} onNewInitiative={openNewInitiative} />
+        <Sidebar
+          route={route}
+          nav={nav}
+          onNewProject={openNewProject}
+          onNewInitiative={openNewInitiative}
+          drawerOpen={drawer.open}
+          onDrawer={drawer.send}
+          drawerRef={drawer.panelRef}
+        />
+        <NavScrim open={drawer.open} onDrawer={drawer.send} />
         {route.screen === "home" ? (
           <InboxView route={route} nav={nav} openNewTask={() => openNewTask()} />
         ) : (

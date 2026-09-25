@@ -13,8 +13,11 @@ import {
   reassignTask,
   setTaskStage,
 } from "@/lib/mc-data/store";
+import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 
+import { navCommands } from "./nav-model";
 import type { Nav } from "./route";
+import { routingInboxEnabled } from "./routing-inbox/flag";
 
 export interface PaletteItem {
   key: string;
@@ -82,15 +85,12 @@ export function CommandPalette({
       { key: "create:new-bucket", icon: "+", label: "New initiative", hint: "create", run: onOpenNewInitiative },
     ];
 
+    // Screen jumps come from the shared nav model (nav-model.ts) — the same
+    // groups, labels and flags as the sidebar; the three detail jumps follow.
     const navigate: PaletteCommand[] = [
-      { key: "nav:home", icon: "⌂", label: "Go to Inbox", run: () => nav("home") },
-      { key: "nav:board", icon: "▦", label: "Go to Board", run: () => nav("board") },
-      { key: "nav:list", icon: "≣", label: "Go to List", run: () => nav("list") },
-      { key: "nav:timeline", icon: "▭", label: "Go to Timeline", run: () => nav("timeline") },
-      { key: "nav:mine", icon: "☉", label: "Go to My Tasks", run: () => nav("mine") },
-      { key: "nav:insights", icon: "◔", label: "Go to Insights", run: () => nav("insights") },
-      { key: "nav:matrix", icon: "⊞", label: "Go to Traceability", run: () => nav("matrix") },
-      { key: "nav:feed", icon: "◉", label: "Go to Agent activity", run: () => nav("feed") },
+      ...navCommands({ meetingIntake: meetingIntakeEnabled(), routingInbox: routingInboxEnabled() }).map(
+        ({ screen, ...command }) => ({ ...command, run: () => nav(screen) })
+      ),
       {
         key: "nav:project",
         icon: "◫",
@@ -109,23 +109,6 @@ export function CommandPalette({
           if (firstBucket) nav("bucket", { bucketId: firstBucket });
         },
       },
-      { key: "nav:repos", icon: "❮❯", label: "Go to Repos", run: () => nav("repos") },
-      { key: "nav:files", icon: "❒", label: "Go to Files", run: () => nav("files") },
-      { key: "nav:sync", icon: "⇄", label: "Go to Sync / Conflicts", hint: "review queue", run: () => nav("sync") },
-      { key: "nav:conflicts", icon: "⇄", label: "Go to Conflicts", hint: "sync console", run: () => nav("sync") },
-      {
-        key: "nav:review-queue",
-        icon: "⇄",
-        label: "Go to Review queue",
-        hint: "sync conflicts",
-        run: () => nav("sync"),
-      },
-      { key: "nav:loop-ledgers", icon: "◰", label: "Go to Loop ledgers", run: () => nav("loop-ledgers") },
-      { key: "nav:governance-sops", icon: "§", label: "Go to SOP guide", run: () => nav("governance-sops") },
-      { key: "nav:skills-directory", icon: "◈", label: "Go to Skills directory", run: () => nav("skills-directory") },
-      { key: "nav:architecture", icon: "⬡", label: "Go to Architecture", run: () => nav("architecture") },
-      { key: "nav:brain-ask", icon: "?", label: "Go to Ask the Brain", run: () => nav("brain-ask") },
-      { key: "nav:ai-spend", icon: "◎", label: "Go to AI Spend", run: () => nav("ai-spend") },
       {
         key: "nav:task",
         icon: "▸",
@@ -148,7 +131,7 @@ export function CommandPalette({
     const buckets: PaletteCommand[] = navBuckets().map((bucket) => ({
       key: `bucket:${bucket.id}`,
       icon: "●",
-      label: `Bucket · ${bucket.name}`,
+      label: `Initiative · ${bucket.name}`,
       hint: bucket.id,
       run: () => nav("bucket", { bucketId: bucket.id }),
     }));
@@ -216,7 +199,7 @@ export function CommandPalette({
       { title: "Create", items: create },
       { title: "Navigate", items: navigate },
       { title: "Projects", items: projects },
-      { title: "Buckets", items: buckets },
+      { title: "Initiatives", items: buckets },
       { title: "Tasks", items: taskCommands },
       { title: "Assign agents", items: assignAgents },
     ];
@@ -284,7 +267,7 @@ export function CommandPalette({
               setQuery(event.target.value);
               setSelected(0);
             }}
-            placeholder="Create a task, jump to a bucket, assign an agent..."
+            placeholder="Create a task, jump to an initiative, assign an agent..."
             aria-label="Command palette search"
           />
           <span className="esc">ESC</span>

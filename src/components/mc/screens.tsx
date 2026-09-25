@@ -11,6 +11,7 @@ import { ArchitectureView } from "./architecture";
 import { BrainAskView } from "./brain-ask";
 import { GovernanceSopsView } from "./governance-sops";
 import { SkillsDirectoryView } from "./skills-directory";
+import { HelpView } from "./help";
 import { InboxView } from "./inbox";
 import { InsightsView } from "./insights";
 import { MeetingIntakeView } from "./meeting-intake";
@@ -50,4 +51,5 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   "routing-inbox": RoutingInboxView,
   approvals: ApprovalsInboxView,
   activity: ActivityView,
+  help: HelpView,
 };

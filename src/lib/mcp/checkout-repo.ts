@@ -18,7 +18,7 @@ import { ACTIVE_TRACKED_REPO_SLUGS } from "@/lib/compliance";
 
 export const MCP_CHECKOUT_REPO_ALLOWLIST: readonly string[] = ACTIVE_TRACKED_REPO_SLUGS;
 
-const GITHUB_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+export const GITHUB_SLUG_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 const ALLOWLIST_BY_LOWER = new Map<string, string>(
   MCP_CHECKOUT_REPO_ALLOWLIST.map((slug) => [slug.toLowerCase(), slug])

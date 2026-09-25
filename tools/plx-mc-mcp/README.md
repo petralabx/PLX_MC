@@ -18,8 +18,18 @@ composed swarm delegation.
 | `mc_checkout_task` | Checkout + `MC-Checkout: dsp_*` stamp |
 | `mc_report_progress` | Stage/notes updates |
 | `mc_complete_task` | Complete with evidence |
+| `mc_get_task` | One task + accountable owner, evidence, checkouts, recent events; checkout ids redacted to `checkoutRef` (read-only) |
+| `mc_list_checkouts` | Checkouts as `checkoutRef` (`dsp_…` + last 4, never the usable id) filtered by `repo` (owner/name), `taskId`, `active` (read-only) |
+| `mc_search_knowledge` | Ask the Brain search; hits carry provenance (read-only) |
+| `mc_verify_pr` | Compliance-gate verdict for `repo` + `pr`, not recorded (read-only) |
+| `mc_request_approval` | Raise a runtime approval gate on a task |
 | `dispatch_to_swarm` | COS swarm delegation |
 | `list_swarm_teams` / `swarm_health` | Swarm helpers |
+
+Failed tools return `isError` + `{ "error": { "code", "message" } }` JSON
+(`lib/tool-errors.mjs`), keeping the cursor REST error code. When this client
+is unavailable, `node scripts/mc.mjs checkout|complete|status` calls the same
+REST routes (see `docs/modules/mcp/README.md`).
 
 Suggestion tools register via `routing-suggest-tools.ts` (`registerRoutingTools`).
 Confirmed mutation tools will register through the same seam in a later phase.

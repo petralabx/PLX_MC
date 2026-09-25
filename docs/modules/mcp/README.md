@@ -24,6 +24,30 @@ dispatch logic.
 | Swarm compose | `tools/plx-mc-mcp/lib/swarm-client.mjs` (composed into the PLX-MC client) |
 | Audit | `mcp.tool.invoked` events in `mc_events` via `src/lib/mcp/audit.ts` |
 | Capture hook | `scripts/compliance-checkout.mjs` prefers `/api/cursor/checkout` when `MC_MCP_API_KEY` set; missing `MC_TASK_ID` calls `/api/cursor/routing/suggest` and stops for explicit selection/`MC_CREATE_TASK=1` |
+| Agent read tools | `src/lib/mcp/read-actions.ts` — `task.read` only, never a write grant (table below) |
+| Tool errors | `installMcpToolErrorEnvelope` (`src/lib/mcp/envelope.ts`) — a thrown `ApiError` returns `isError` + `{ "error": { "code", "message", "hint"? } }`; stdio mirrors it in `tools/plx-mc-mcp/lib/tool-errors.mjs` |
+| REST fallback CLI | `node scripts/mc.mjs checkout --task TASK-n --repo owner/name` · `complete --checkout dsp_x --summary … --verify "cmd" --rollback "…"` (refused without ≥1 `--verify` and a `--rollback`) · `status --task TASK-n` — env `MC_BASE_URL`, `MC_MCP_API_KEY`, `MC_OPERATOR_EMAIL`, `MC_REPO`; JSON out, exit 1 with the error code |
+
+**Agent read tools + approval request (wave 4):**
+
+| Tool | REST (stdio proxy) | Auth | Returns |
+|------|--------------------|------|---------|
+| `mc_get_task` | `GET /api/cursor/tasks/{id}` | `task.read` + project ACL | task (as `mc_get_context` full), `accountableOwner`, `evidence`, `checkouts`, recent `events` (excludes `mcp.tool.invoked`); every `dsp_*` id redacted |
+| `mc_list_checkouts` | `GET /api/cursor/checkouts?repo=&taskId=&active=&limit=` | `task.read` + project ACL | dispatches newest first as `checkoutRef` + `taskId`, `repo`, `runtime`, `issuedAt`, `expiresAt`, `active`; `repo` is an exact owner/name slug |
+| `mc_search_knowledge` | `GET /api/cursor/knowledge/search?q=&limit=` | `task.read` | Ask the Brain hits with provenance (`id`, `source`, `namespace`, `score`) + honest `status` |
+| `mc_verify_pr` | `GET /api/cursor/verify?repo=&pr=` | `task.read` | the `/api/compliance/verify` verdict from GitHub PR stamps/labels/files; `recorded: false` (no check row, no `gate.*` event) |
+| `mc_request_approval` | `POST /api/cursor/request-approval` | `approval.request` (write) | `gateId`, `status: pending`, `inputRequired: true` |
+
+`mc_list_buckets` now needs only `task.read` (was `bucket.create`), so
+read-only principals can discover `BKT-*` ids without a create grant.
+
+**Checkout ids are credentials.** `complete()` accepts any unrevoked, unexpired
+`dsp_*` id, and the dispatch row records no minting principal, so the read tools
+never return a full id — active or inactive, in checkout rows, event payloads,
+or verify reasons. They return `checkoutRef` (`dsp_…` + last 4). An agent
+completes with the id from its own `mc_checkout_task` receipt.
+`mc_request_approval` applies the same restricted-project guard
+(`assertTaskProjectAccess`) as the other task writes.
 
 **Enable (opt-in):**
 
@@ -103,7 +127,7 @@ not browser Entra. Ledger owns Keep MC for stage-lag leftovers; never silent
 (`openConflicts + openErrors`) can disagree; this tool lists open conflict
 rows only.
 
-**Approval gates (TASK-629):** `mc_request_approval` (`POST /api/cursor/request-approval`) raises a runtime approval gate on a task (`approval.request`); the task freezes input-required until a human decides in the Approvals inbox.
+**Approval gates (TASK-629):** `mc_request_approval` (`POST /api/cursor/request-approval`, and the HTTP/stdio MCP tool — both call `actionRequestApproval` in `src/lib/mcp/approval-actions.ts`) raises a runtime approval gate on a task (`approval.request`); the task freezes input-required until a human decides in the Approvals inbox.
 Checkout also backfills a missing task `accountableOwner` through the same
 resolver. Operator/service aliases that are not people
 (for example `cos@petrasoap.com`) resolve to the PLX default accountable human,
@@ -140,8 +164,10 @@ standard bundle.
 
 ## Dependencies
 
-- `src/lib/compliance/*` — checkout/complete ledger
+- `src/lib/compliance/*` — checkout/complete ledger, verifier (`verifyPr({ record: false })`), approvals, PR loader (`github-pr.ts`)
 - `src/lib/sync/*` — task mutations → SharePoint mirror
+- `src/lib/brain-ask` — `mc_search_knowledge` (VMC knowledge search)
+- `src/lib/github-app` — `mc_verify_pr` reads PR metadata + files via `resolveGithubToken`
 - swarm delegation runs through the composed `swarm-client.mjs` in the PLX-MC client
   (the standalone `swarm-dispatch-mcp` shim was removed in P5)
 - `@modelcontextprotocol/sdk` — stdio + Streamable HTTP transport

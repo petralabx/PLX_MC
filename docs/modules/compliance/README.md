@@ -41,7 +41,9 @@ truth table is proven before any plumbing exists.
   Each task's verdict is recorded as its own check + `gate.passed/blocked` event;
   a single stamp is the back-compat subset. Bucket PRD is resolved from the
   persisted `buckets` table (`bucket-prd.ts`) — high-risk agent PRs block when
-  the task's bucket has no PRD link.
+  the task's bucket has no PRD link. `verifyPr(input, { record: false })`
+  computes the same verdict without the check row or gate event — used only by
+  the read-only MCP `mc_verify_pr`, whose inputs come from `github-pr.ts`.
 - `verify` route auth is dual-path: GitHub Actions OIDC is the preferred
   first-class auth for `POST /api/compliance/verify`, with
   `COMPLIANCE_CI_TOKEN` bearer as fallback/break-glass during dogfood. The route
@@ -116,6 +118,7 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 - `src/lib/compliance/projection.ts` — PR lifecycle → sync task projection (authorize-gated)
 - `src/lib/compliance/bucket-prd.ts` — bucket PRD resolution for verifyPr
 - `src/lib/compliance/webhook.ts` — HMAC verify + PR-event parse (in-memory body)
+- `src/lib/compliance/github-pr.ts` — GitHub PR → `VerifyPrInput` (stamps, labels, changed files) for `mc_verify_pr`
 - `src/lib/compliance/go-live-announcer.ts` — one-line Teams Workflow posts on `checkout` / `pr.opened` / `task.completed` (TASK-1454/1699/1701; chat-primary, hard dedupe per task+event, coalesce only on sibling `sent`, kill switches default off; `ANNOUNCE_CHECKOUT` stays off unless operators re-enable)
 - `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts`
 - `src/app/api/routing/propose/route.ts` — OIDC propose (middleware carve-out exact)

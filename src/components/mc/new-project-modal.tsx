@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Project } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { actorById, addProject, allRepos, assignableViewerId } from "@/lib/mc-data/store";
+import { actorById, addProject, allRepos, ownerOrViewerDefault } from "@/lib/mc-data/store";
 
 import { Avatar } from "./atoms";
 import { PeoplePicker } from "./people-picker";
@@ -20,7 +20,8 @@ export function NewProjectModal({ onClose, nav }: { onClose: () => void; nav: Na
   useMcVersion();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [ownerId, setOwnerId] = useState<string | null>(assignableViewerId);
+  const [pickedOwnerId, setOwnerId] = useState<string | null | undefined>(undefined);
+  const ownerId = ownerOrViewerDefault(pickedOwnerId);
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const [health, setHealth] = useState<Project["health"]>("track");
   const [target, setTarget] = useState("");
@@ -44,7 +45,7 @@ export function NewProjectModal({ onClose, nav }: { onClose: () => void; nav: Na
     if (!canCreate) return;
     const created = addProject({
       name,
-      owner: ownerId ?? undefined,
+      owner: ownerOrViewerDefault(pickedOwnerId) ?? undefined,
       health,
       target,
       desc: description,
@@ -52,7 +53,7 @@ export function NewProjectModal({ onClose, nav }: { onClose: () => void; nav: Na
     });
     onClose();
     nav("project", { projectId: created.id });
-  }, [canCreate, name, ownerId, health, target, description, repos, onClose, nav]);
+  }, [canCreate, name, pickedOwnerId, health, target, description, repos, onClose, nav]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

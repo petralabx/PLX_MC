@@ -134,6 +134,15 @@ test.describe("saved views & filter persistence", () => {
       const text = msg.text();
       if (/\/api\/state/.test(text)) return; // documented offline fallback
       if (/Failed to load resource.*500/i.test(text)) return; // the same 500, surfaced as a resource error
+      // Home's "What needs me" reads session-gated approvals / routing; with no
+      // Entra session in this harness they 403 by design (Home shows its error
+      // state). Filter only those URLs so any other resource error still fails.
+      if (
+        /Failed to load resource.*403/i.test(text) &&
+        /\/api\/(approvals|routing\/inbox)\b/.test(msg.location().url)
+      ) {
+        return;
+      }
       consoleErrors.push(text);
     });
     await page.addInitScript((k) => {

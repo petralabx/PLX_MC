@@ -401,7 +401,7 @@ function TimelineView({ tasks, onOpen }: { tasks: Task[]; onOpen: (taskId: strin
     <div className="tl">
       <div className="grid">
         <div className="cyc">
-          <div className="corner">Bucket / task</div>
+          <div className="corner">Initiative / task</div>
           <div className="bands">
             {CYCLES.map((cycle) => (
               <div className="b" key={cycle.id}>
@@ -791,7 +791,7 @@ export function WorkViews({ route, nav }: ScreenProps) {
           <p className="sub">
             {isMine
               ? "Assigned to, co-owned by, or reported by you — across every initiative."
-              : "Board, list, and timeline are three lenses over the same task ledger across buckets."}
+              : "Board, list, and timeline are three lenses over the same task ledger across initiatives."}
           </p>
         </div>
         <div className="r">

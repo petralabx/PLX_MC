@@ -88,6 +88,9 @@ interface McState {
   // The signed-in viewer, resolved server-side from the Entra session (GET
   // /api/viewer). Null until the server answers — the client never guesses.
   viewer: Human | null;
+  // Whether GET /api/viewer has answered (either way) — lets viewer-scoped
+  // screens tell "still loading" from "couldn't resolve" (Wave 6 Home).
+  viewerSettled: boolean;
   // Where the data on screen came from — see DataSource.
   dataSource: DataSource;
 }
@@ -122,6 +125,7 @@ function initialState(): McState {
     buckets: Object.fromEntries(BUCKETS.map((b) => [b.id, clone(b)])),
     projects: Object.fromEntries(PROJECTS.map((p) => [p.id, clone(p)])),
     viewer: null,
+    viewerSettled: false,
     dataSource: "seed",
   };
 }
@@ -219,6 +223,7 @@ export const repoRequests = (): RepoRequest[] => state.repoRequests;
 export const UNRESOLVED_VIEWER_ID = "unresolved-viewer";
 export const viewer = (): Human | null => state.viewer;
 export const viewerId = (): string => state.viewer?.id ?? UNRESOLVED_VIEWER_ID;
+export const viewerSettled = (): boolean => state.viewerSettled;
 // The viewer as an owner/assignee default — only when they are in the
 // directory (a signed-in person outside it can't be assigned work).
 export const assignableViewerId = (): string | null =>
@@ -439,10 +444,13 @@ function loadViewer(): Promise<void> {
   return viewerLoader().then(
     (next) => {
       state.viewer = next;
+      state.viewerSettled = true;
       emit();
     },
     (err) => {
       console.warn("[mc-store] viewer unavailable — staying unresolved:", err);
+      state.viewerSettled = true;
+      emit();
     }
   );
 }

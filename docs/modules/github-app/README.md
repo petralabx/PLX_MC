@@ -2,9 +2,9 @@
 
 ## What
 
-Server-side GitHub authentication for read-only repository Contents reads. Mints
+Server-side GitHub authentication for read-only Contents + Metadata + Pull requests. Mints
 short-lived **GitHub App installation access tokens** (JWT RS256 → installation
-token, scoped to read-only Contents + Metadata), caches them, and exposes one
+token, scoped to read-only Contents + Metadata + Pull requests), caches them, and exposes one
 shared resolver — `resolveGithubToken()` — that every server-side GitHub read
 goes through. It is NOT a general GitHub client and performs no writes; it only
 produces a bearer token (or null).
@@ -24,7 +24,7 @@ retiring the broad PAT entirely.
 - `mintAppJwt(creds, now?)` — RS256 JWT signed with the App private key via
   `node:crypto` (no extra dependency); `iat` backdated 60s, `exp` ≤10 min.
 - `requestInstallationToken(creds, opts?)` — `POST /app/installations/{id}/access_tokens`
-  with the JWT, requesting `{ permissions: { contents: read, metadata: read } }`
+  with the JWT, requesting `{ permissions: { contents: read, metadata: read, pull_requests: read } }`
   (defence in depth even if the App grant is broader). Throws an honest error on
   non-2xx; never returns a bogus token.
 - `getInstallationToken(opts?)` — module-cached token, refreshed 60s before
@@ -69,8 +69,9 @@ The reader module remains least-privilege read-only; the writer lives in
   reads `petralabx/skills` per `config/skills-catalog.json`; org App install must
   cover the catalog repo — see `docs/runbooks/github-app-provisioning.md` Step 2b),
   and **`compliance`** (`backfill.ts` lists closed PRs per registry repo; private
-  repos need Pull requests:read on the resolved credential, which the narrowed
-  App token does not request — those repos report degraded, never zero).
+  repos need `pull_requests:read`, which the token now requests). The
+  `plx-mc-compliance` App already grants Pull requests; the installation must
+  have accepted that permission or the mint fails and falls back to the static PAT.
   All import `resolveGithubToken` through this barrel.
 
 ### Key Files

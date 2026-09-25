@@ -1,6 +1,6 @@
 // GitHub App authentication: mint short-lived installation access tokens for
-// read-only repo Contents reads. Preferred over a long-lived classic PAT — the
-// installation token is scoped (read-only Contents on only the installed repos)
+// read-only repo Contents + Metadata + Pull requests reads. Preferred over a
+// long-lived classic PAT, the token is scoped to only the installed repos
 // and expires within the hour, so a leak has a bounded blast radius.
 //
 // Server-side only. RS256 signing uses node:crypto (no extra dependency). The
@@ -85,8 +85,9 @@ export function __resetInstallationTokenCache(): void {
 
 /**
  * Exchange the App JWT for an installation access token, explicitly narrowed to
- * read-only Contents + Metadata (defence in depth even if the App's granted
- * permissions are broader). Never logs the token.
+ * read-only Contents + Metadata + Pull requests (defence in depth even if the
+ * App's granted permissions are broader). Pull requests enables PR listing for
+ * github-backfill / mc_verify_pr on private repos. Never logs the token.
  */
 export async function requestInstallationToken(
   creds: GithubAppCredentials,
@@ -104,7 +105,7 @@ export async function requestInstallationToken(
         "x-github-api-version": "2022-11-28",
         "content-type": "application/json",
       },
-      body: JSON.stringify({ permissions: { contents: "read", metadata: "read" } }),
+      body: JSON.stringify({ permissions: { contents: "read", metadata: "read", pull_requests: "read" } }),
     }
   );
   if (!res.ok) {

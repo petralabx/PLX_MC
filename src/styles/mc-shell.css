@@ -1,0 +1,17 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   MISSION CONTROL SHELL — mobile-first chrome (ADR-005)
+   ──────────────────────────────────────────────────────────────────────────
+
+   Cascade layers, lowest → highest. Unlayered CSS (brand-tokens.css and the
+   base rules in globals.css) still beats every layer.
+     mc.tokens  surface tokens            mc-surface.css
+     mc.legacy  today's skin, untouched   mc-app.css + every screen file
+     mc.shell   this file                 chrome grid, nav forms, layers
+     mc.screens container-query screens   (PRs 2–7 move screens here)
+     mc.state   tier-gated utilities
+
+   This statement must be the first layered CSS the browser sees, so
+   globals.css imports this file first. Turbopack emits @imports ahead of the
+   importing file's own rules, so an order statement placed in globals.css
+   would land after the layers it is meant to order. */
+@layer mc.tokens, mc.legacy, mc.shell, mc.screens, mc.state;

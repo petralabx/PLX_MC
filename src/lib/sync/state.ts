@@ -4,7 +4,7 @@
 // path (spec §6 "pending until the first successful write, then synced").
 
 import { ApiError } from "@/lib/api/route";
-import { CURRENT_USER, HUMANS, SP_LISTS } from "@/lib/mc-data/data";
+import { OPERATOR_ID, HUMANS, SP_LISTS } from "@/lib/mc-data/data";
 import {
   isRestrictedProject,
   normalizeProjectMembers,
@@ -180,7 +180,7 @@ export interface CreateBucketInput {
 
 export async function createBucket(
   input: CreateBucketInput,
-  actor = input.owner || CURRENT_USER
+  actor = input.owner || OPERATOR_ID
 ): Promise<Bucket> {
   await ensureSeeded();
   await ensureReposSeeded();
@@ -206,7 +206,7 @@ export async function createBucket(
   const bucket: Bucket = {
     id,
     name,
-    owner: input.owner || CURRENT_USER,
+    owner: input.owner || OPERATOR_ID,
     health: input.health ?? "track",
     target: input.target?.trim() || "—",
     started: input.started?.trim() || today,
@@ -344,7 +344,7 @@ export interface CreateProjectInput {
 
 export async function createProject(
   input: CreateProjectInput,
-  actor = input.owner || CURRENT_USER
+  actor = input.owner || OPERATOR_ID
 ): Promise<Project> {
   await ensureSeeded();
   await ensureReposSeeded();
@@ -357,7 +357,7 @@ export async function createProject(
   const existing = await repo.getProjects();
   const id = nextProjectId(name, new Set(existing.map((p) => p.id)));
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, ".");
-  const owner = input.owner || CURRENT_USER;
+  const owner = input.owner || OPERATOR_ID;
   const acl = resolveProjectAcl({
     visibility: input.visibility,
     members: input.members,

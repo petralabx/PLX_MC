@@ -5,7 +5,6 @@ import { useState } from "react";
 import {
   ACTORS,
   AGENTS,
-  CURRENT_USER,
   PRIORITY,
   STAGES,
   STAGE_IDX,
@@ -43,6 +42,7 @@ import {
   setTaskTargetEnv,
   spLists,
   taskById,
+  viewerId,
 } from "@/lib/mc-data/store";
 
 import {
@@ -550,7 +550,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
               comments={task.comments ?? []}
               activity={task.activity}
               people={mentionables()}
-              currentUser={CURRENT_USER}
+              currentUser={viewerId()}
               onAdd={(body) => addComment(task.id, body)}
               onEdit={(commentId, body) => editComment(task.id, commentId, body)}
               onDelete={(commentId) => deleteComment(task.id, commentId)}

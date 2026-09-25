@@ -58,7 +58,7 @@ fallback path, data/audit boundary).
 
 ## Dependencies
 
-- **mc-data** — `addTask`, `directory`, `pushNotice`, `BUCKET_IDX`, `CURRENT_USER`
+- **mc-data** — `addTask`, `directory`, `pushNotice`, `BUCKET_IDX`, `viewerId`
   (promotion + owner resolution + initiative metadata).
 - **secrets** — `graphCredentials` / `azureOpenAiConfig` (shared accessor) for
   the live Graph + in-tenant Azure OpenAI paths.

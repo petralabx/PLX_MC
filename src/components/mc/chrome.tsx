@@ -5,8 +5,8 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 
-import { ACTORS, CURRENT_USER, liveAgentCount } from "@/lib/mc-data";
-import { useMcNotices, useMcVersion } from "@/lib/mc-data/hooks";
+import { liveAgentCount } from "@/lib/mc-data";
+import { useMcNotices, useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import { allTasks, dismissNotice, navBuckets, navProjects, storeSyncCounts, unreadCount } from "@/lib/mc-data/store";
 import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 import { routingInboxEnabled } from "@/components/mc/routing-inbox/flag";
@@ -27,6 +27,7 @@ export function Topbar({
   onOpenPalette: () => void;
 }) {
   useMcVersion();
+  const viewer = useViewer();
   const c = storeSyncCounts();
   const need = c.conflict + c.error;
   const cls = need > 0 ? "warn" : c.pending > 0 ? "pending" : "ok";
@@ -78,11 +79,9 @@ export function Topbar({
         >
           {dark ? "☀" : "☾"}
         </button>
-        <Avatar
-          id={CURRENT_USER}
-          size="lg"
-          title={`${ACTORS[CURRENT_USER].name} · ${ACTORS[CURRENT_USER].kind === "human" ? ACTORS[CURRENT_USER].role : "Agent"}`}
-        />
+        {viewer ? (
+          <Avatar actor={viewer} id={viewer.id} size="lg" title={`${viewer.name} · ${viewer.role}`} />
+        ) : null}
       </div>
     </header>
   );

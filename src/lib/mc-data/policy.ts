@@ -6,7 +6,7 @@
 //   3. a task cannot reach a done stage (merged/verified) with an incomplete
 //      evidence bundle (the completion contract — reuses evidenceComplete).
 
-import { AGENTS, CURRENT_USER, HUMANS, STAGE_IDX } from "./data";
+import { AGENTS, OPERATOR_ID, HUMANS, STAGE_IDX } from "./data";
 import { evidenceComplete } from "./helpers";
 import type { ApprovalGate, StageKey, Task } from "./types";
 
@@ -30,7 +30,7 @@ export function hasHumanAccountableOwner(task: Pick<Task, "accountableOwner">): 
 // email an MCP request is admitted under, or an already-short directory id) to
 // the human directory id that should own agent-driven work. Known Petra emails
 // and directory ids map to that human; service aliases (cos@…) and anything
-// unresolvable fall back to the hub's default accountable human (CURRENT_USER).
+// unresolvable fall back to the hub's default accountable human (OPERATOR_ID).
 // Shared by MCP task creation and the checkout backfill so a task created and
 // checked out by the same session lands on the same owner.
 export function resolveHumanAccountableOwner(operator: string): string {
@@ -38,7 +38,7 @@ export function resolveHumanAccountableOwner(operator: string): string {
   const byEmail = Object.values(HUMANS).find(
     (h) => (h.email ?? "").toLowerCase() === normalized
   );
-  return byEmail?.id ?? HUMANS[normalized]?.id ?? CURRENT_USER;
+  return byEmail?.id ?? HUMANS[normalized]?.id ?? OPERATOR_ID;
 }
 
 // Why an actor cannot be the executor of this task, or null when allowed.

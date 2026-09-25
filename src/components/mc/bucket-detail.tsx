@@ -8,7 +8,6 @@ import type { BucketProjection } from "@/lib/loop-ledgers";
 import {
   ACTORS,
   BUCKETS,
-  CURRENT_USER,
   MILESTONES,
   PRDS,
   STAGES,
@@ -33,6 +32,7 @@ import {
   mentionables,
   projectById,
   updateBucket,
+  viewerId,
 } from "@/lib/mc-data/store";
 
 import { Avatar, AvatarStack, HealthPill, PMark, ReqChip, SyncTick } from "./atoms";
@@ -379,7 +379,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
               <Timeline
                 comments={commentsForBucket(bucket.id)}
                 people={mentionables()}
-                currentUser={CURRENT_USER}
+                currentUser={viewerId()}
                 onAdd={(body) => addBucketComment(bucket.id, body)}
                 onEdit={(commentId, body) => editBucketComment(bucket.id, commentId, body)}
                 onDelete={(commentId) => deleteBucketComment(bucket.id, commentId)}

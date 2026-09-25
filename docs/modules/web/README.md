@@ -13,7 +13,9 @@ PeoplePicker (Petra domain rule enforced in the UI). The screen registry
 (`src/components/mc/screens.tsx`) maps twenty `Screen` keys to components;
 Board, List, Timeline, and My Tasks share `WorkViews`. State flows through the runtime store
 (`src/lib/mc-data/store.ts`) — since 2026-06-11 a client cache over the sync
-module's API: it hydrates from `GET /api/state` after mount and mirrors every
+module's API: it hydrates from `GET /api/state` after mount (the signed-in
+viewer comes from `GET /api/viewer`, resolved from the Entra session — no
+hardcoded current user) and mirrors every
 mutation through the shared fetch wrapper (`src/lib/api`), staying
 optimistic-local-first so the UI degrades to the last-synced view offline.
 The getter/action surface is unchanged from the prototype port. It owns

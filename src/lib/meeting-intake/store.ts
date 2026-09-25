@@ -11,8 +11,7 @@
 // Everything here is gated by the feature flag + opt-in register (governance:
 // disabled by default, only designated meetings feed in).
 
-import { CURRENT_USER } from "@/lib/mc-data";
-import { addTask, bucketById, directory, pushNotice } from "@/lib/mc-data/store";
+import { addTask, bucketById, directory, pushNotice, viewerId } from "@/lib/mc-data/store";
 import type { Task } from "@/lib/mc-data";
 
 import { parseAiInsights, transcriptToActionItems } from "./adapters";
@@ -70,7 +69,7 @@ export const meetingRegister = (): MeetingRegisterEntry[] => state.register;
 export function optInMeeting(
   meetingId: string,
   label?: string,
-  actorId: string = CURRENT_USER
+  actorId: string = viewerId()
 ): MeetingRegisterEntry | null {
   const id = String(meetingId ?? "").trim();
   if (!id) return null;
@@ -208,7 +207,7 @@ export function promoteProposedTask(proposedId: string, opts: PromoteOptions = {
     accountableOwner,
     humanOnly: opts.humanOnly,
     repos,
-    reporter: opts.actor ?? CURRENT_USER,
+    reporter: opts.actor ?? viewerId(),
     due: opts.due ?? p.due,
     labels: ["from-meeting"],
   });

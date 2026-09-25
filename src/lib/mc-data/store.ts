@@ -17,7 +17,6 @@ import { api } from "@/lib/api";
 import {
   ACTORS,
   BUCKETS,
-  CURRENT_USER,
   FILES,
   INBOX,
   PROJECTS,
@@ -86,6 +85,9 @@ interface McState {
   buckets: Record<string, Bucket>;
   // P2: projects (parent above buckets), keyed by id. Seeded from PROJECTS fixture.
   projects: Record<string, Project>;
+  // The signed-in viewer, resolved server-side from the Entra session (GET
+  // /api/viewer). Null until the server answers — the client never guesses.
+  viewer: Human | null;
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -111,6 +113,7 @@ function initialState(): McState {
     ),
     buckets: Object.fromEntries(BUCKETS.map((b) => [b.id, clone(b)])),
     projects: Object.fromEntries(PROJECTS.map((p) => [p.id, clone(p)])),
+    viewer: null,
   };
 }
 
@@ -198,6 +201,18 @@ export const lastSweep = (): string => state.lastSweep;
 // EN-002 / WS-2 — the repo registry (allow-list) and self-service request queue.
 export const allRepos = (): Record<string, Repo> => state.repos;
 export const repoRequests = (): RepoRequest[] => state.repoRequests;
+
+// The viewer (Wave 2 — UI trust). Local audit / activity / authorship rows are
+// attributed to viewerId(): the server-resolved viewer, or — before the server
+// has named one (first paint, a failed load, SSR/tests) — this placeholder,
+// which is never a real directory id, so no one is impersonated.
+export const UNRESOLVED_VIEWER_ID = "unresolved-viewer";
+export const viewer = (): Human | null => state.viewer;
+export const viewerId = (): string => state.viewer?.id ?? UNRESOLVED_VIEWER_ID;
+// The viewer as an owner/assignee default — only when they are in the
+// directory (a signed-in person outside it can't be assigned work).
+export const assignableViewerId = (): string | null =>
+  state.viewer && state.actors[state.viewer.id] ? state.viewer.id : null;
 
 export interface StoreSyncCounts {
   pending: number;
@@ -353,6 +368,37 @@ async function refreshFromServer() {
   applyServerState(await api<ServerSnapshot>("/state"));
 }
 
+// The viewer seam (mirrors the PATCH-mirror seams below): the production
+// default issues GET /api/viewer; tests inject a loader so the path runs in the
+// Node env, where the default is a no-op like every other server call.
+type ViewerLoader = () => Promise<Human | null>;
+
+const defaultViewerLoader: ViewerLoader = async () =>
+  (await api<{ viewer: Human | null }>("/viewer")).viewer;
+
+let viewerLoader: ViewerLoader = defaultViewerLoader;
+let viewerLoaderInjected = false;
+
+export function __setViewerLoaderForTests(fn: ViewerLoader | null) {
+  viewerLoader = fn ?? defaultViewerLoader;
+  viewerLoaderInjected = fn !== null;
+}
+
+// Adopt the server-resolved viewer. A failed load leaves it as it was
+// (unresolved on first load) — never replaced by a fallback person.
+function loadViewer(): Promise<void> {
+  if (typeof window === "undefined" && !viewerLoaderInjected) return Promise.resolve();
+  return viewerLoader().then(
+    (next) => {
+      state.viewer = next;
+      emit();
+    },
+    (err) => {
+      console.warn("[mc-store] viewer unavailable — staying unresolved:", err);
+    }
+  );
+}
+
 function persistInvited() {
   if (!canPersist()) return;
   try {
@@ -369,9 +415,10 @@ function persistInvited() {
 
 // Hydrate after mount (never at module init, so SSR and the first client
 // render match): invited people from localStorage (directory increment is
-// not server-side yet), then the engine's snapshot from the API. User tasks
-// now persist server-side — localStorage no longer carries them.
-export function hydrate() {
+// not server-side yet), then the engine's snapshot and the signed-in viewer
+// from the API. User tasks now persist server-side — localStorage no longer
+// carries them. Returns the viewer load (for tests); callers fire-and-forget.
+export function hydrate(): Promise<void> {
   if (canPersist()) {
     try {
       const rawInvited = window.localStorage.getItem(INVITED_KEY);
@@ -390,6 +437,7 @@ export function hydrate() {
     }
   }
   serverCall(refreshFromServer);
+  return loadViewer();
 }
 
 export function nextTaskId(): string {
@@ -421,7 +469,7 @@ export interface NewTaskInput {
 export function addTask(input: NewTaskInput): Task {
   const id = nextTaskId();
   const num = (id.match(/(\d+)/) ?? ["", ""])[1];
-  const reporter = input.reporter ?? CURRENT_USER;
+  const reporter = input.reporter ?? viewerId();
   // A human-only task can never carry an agent executor (EN-003 policy) — clamp
   // defensively even though the authoring picker hides agents in that mode.
   const assignee =
@@ -566,7 +614,7 @@ export interface NewRepoRequestInput {
 // may request; the request lands `pending` + unverified, then is validated
 // against the GitHub org. An unverified request is never auto-promoted — an
 // approver still has to approve it (approveRepo) before it joins the allow-list.
-export function requestRepo(input: NewRepoRequestInput, actorId: string = CURRENT_USER): RepoRequest {
+export function requestRepo(input: NewRepoRequestInput, actorId: string = viewerId()): RepoRequest {
   const name = (input.name ?? "").trim();
   const owner = (input.owner ?? "").trim() || DEFAULT_NEW_REPO_ORG;
   const id = `RR-${++repoRequestSeq}`;
@@ -629,7 +677,7 @@ export function requestRepo(input: NewRepoRequestInput, actorId: string = CURREN
 // UNVERIFIED request (one that failed GitHub-org validation) can never be
 // approved — that would put an unvalidated repo on the allow-list, exactly what
 // the validation gate prevents (error-code-style reason: repo_unverified).
-export function approveRepo(requestId: string, actorId: string = CURRENT_USER): boolean {
+export function approveRepo(requestId: string, actorId: string = viewerId()): boolean {
   if (!isApprover(state.actors[actorId])) {
     pushNotice("Only an Owner or Admin can approve a repo request.");
     return false;
@@ -657,7 +705,7 @@ export function approveRepo(requestId: string, actorId: string = CURRENT_USER): 
 }
 
 // Reject a pending request — gated to an approver. Nothing joins the registry.
-export function rejectRepo(requestId: string, actorId: string = CURRENT_USER): boolean {
+export function rejectRepo(requestId: string, actorId: string = viewerId()): boolean {
   if (!isApprover(state.actors[actorId])) {
     pushNotice("Only an Owner or Admin can reject a repo request.");
     return false;
@@ -754,7 +802,7 @@ type PatchMirror = (taskId: string, patch: TaskFieldPatch) => Promise<Task>;
 const defaultPatchMirror: PatchMirror = (taskId, patch) =>
   api<Task>(`/tasks/${taskId}`, {
     method: "PATCH",
-    body: JSON.stringify({ actor: CURRENT_USER, ...patch }),
+    body: JSON.stringify({ actor: viewerId(), ...patch }),
   });
 
 let patchMirror: PatchMirror = defaultPatchMirror;
@@ -812,7 +860,7 @@ export function patchTaskFields(
 
   Object.assign(t, Object.fromEntries(entries));
   if (opts?.activity) {
-    t.activity = [{ age: "now", who: CURRENT_USER, kind: "move", what: opts.activity }, ...t.activity];
+    t.activity = [{ age: "now", who: viewerId(), kind: "move", what: opts.activity }, ...t.activity];
   }
   emit();
 
@@ -878,7 +926,7 @@ export const setTaskRepos = (taskId: string, repos: string[], opts?: { reason?: 
   }
   const reason = opts?.reason?.trim();
   if (reason) {
-    pushAudit(CURRENT_USER, `Retargeted repos for ${taskId} — reason: "${reason}".`, "pending");
+    pushAudit(viewerId(), `Retargeted repos for ${taskId} — reason: "${reason}".`, "pending");
     patchTaskFields(taskId, { repos: allowed }, { activity: `retargeted repos — reason: "${reason}" — pending push` });
     return;
   }
@@ -1012,7 +1060,7 @@ export function promoteSubtaskToTask(taskId: string, subtaskId: string): Task | 
     description: sub.description ?? "",
     bucket: t.bucket,
     assignee: sub.assignee ?? null,
-    reporter: CURRENT_USER,
+    reporter: viewerId(),
     repos: t.repos,
     due: sub.due,
   });
@@ -1050,7 +1098,7 @@ function buildComment(body: string, author: string): Comment | null {
 // Add a comment to a task's thread (EN-001 / WS-3). Persists through the task
 // PATCH spine (DB-only tier — comments are never mirrored to SharePoint), then
 // fires the @mention notify path for anyone tagged.
-export function addComment(taskId: string, body: string, author: string = CURRENT_USER): Comment | null {
+export function addComment(taskId: string, body: string, author: string = viewerId()): Comment | null {
   const t = taskById(taskId);
   if (!t) return null;
   const comment = buildComment(body, author);
@@ -1063,7 +1111,7 @@ export function addComment(taskId: string, body: string, author: string = CURREN
 // Edit one's own comment. Re-parses mentions and stamps editedTs; newly-added
 // mentions fire the notify path (already-notified recipients are not re-fired
 // because the inbox is append-only and the author dedup excludes the editor).
-export function editComment(taskId: string, commentId: string, body: string, editor: string = CURRENT_USER) {
+export function editComment(taskId: string, commentId: string, body: string, editor: string = viewerId()) {
   const t = taskById(taskId);
   if (!t) return;
   const text = body.trim();
@@ -1080,7 +1128,7 @@ export function editComment(taskId: string, commentId: string, body: string, edi
 }
 
 // Delete one's own comment.
-export function deleteComment(taskId: string, commentId: string, actor: string = CURRENT_USER) {
+export function deleteComment(taskId: string, commentId: string, actor: string = viewerId()) {
   const t = taskById(taskId);
   if (!t) return;
   const existing = (t.comments ?? []).find((c) => c.id === commentId);
@@ -1106,7 +1154,7 @@ type BucketCommentMirror = (bucketId: string, comments: Comment[]) => Promise<Co
 const defaultBucketCommentMirror: BucketCommentMirror = (bucketId, comments) =>
   api<Comment[]>(`/buckets/${bucketId}/comments`, {
     method: "PATCH",
-    body: JSON.stringify({ actor: CURRENT_USER, comments }),
+    body: JSON.stringify({ actor: viewerId(), comments }),
   });
 
 let bucketCommentMirror = defaultBucketCommentMirror;
@@ -1148,7 +1196,7 @@ function persistBucketThread(bucketId: string, prior: Comment[]): void {
   );
 }
 
-export function addBucketComment(bucketId: string, body: string, author: string = CURRENT_USER): Comment | null {
+export function addBucketComment(bucketId: string, body: string, author: string = viewerId()): Comment | null {
   const comment = buildComment(body, author);
   if (!comment) return null;
   const prior = clone(state.bucketComments[bucketId] ?? []);
@@ -1162,7 +1210,7 @@ export function addBucketComment(bucketId: string, body: string, author: string 
   return comment;
 }
 
-export function editBucketComment(bucketId: string, commentId: string, body: string, editor: string = CURRENT_USER) {
+export function editBucketComment(bucketId: string, commentId: string, body: string, editor: string = viewerId()) {
   const text = body.trim();
   if (!text) return;
   const list = state.bucketComments[bucketId] ?? [];
@@ -1182,7 +1230,7 @@ export function editBucketComment(bucketId: string, commentId: string, body: str
   persistBucketThread(bucketId, prior);
 }
 
-export function deleteBucketComment(bucketId: string, commentId: string, actor: string = CURRENT_USER) {
+export function deleteBucketComment(bucketId: string, commentId: string, actor: string = viewerId()) {
   const list = state.bucketComments[bucketId] ?? [];
   const existing = list.find((c) => c.id === commentId);
   if (!existing || existing.author !== actor) return;
@@ -1251,7 +1299,7 @@ export function addProject(input: NewProjectInput): Project {
   const project: Project = {
     id,
     name,
-    owner: input.owner || CURRENT_USER,
+    owner: input.owner || viewerId(),
     health: input.health ?? "track",
     target: (input.target ?? "").trim() || "—",
     started: (input.started ?? "").trim() || today,
@@ -1293,7 +1341,7 @@ export type ProjectPatch = Partial<
 
 type ProjectUpdateMirror = (id: string, patch: ProjectPatch) => Promise<Project>;
 const defaultProjectUpdateMirror: ProjectUpdateMirror = (id, patch) =>
-  api<Project>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify({ actor: CURRENT_USER, ...patch }) });
+  api<Project>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify({ actor: viewerId(), ...patch }) });
 let projectUpdateMirror = defaultProjectUpdateMirror;
 let projectUpdateMirrorInjected = false;
 let projectUpdateInFlight: Promise<void> = Promise.resolve();
@@ -1411,7 +1459,7 @@ export function addBucket(input: NewBucketInput): Bucket {
   const bucket: Bucket = {
     id,
     name,
-    owner: input.owner || CURRENT_USER,
+    owner: input.owner || viewerId(),
     health: input.health ?? "track",
     target: (input.target ?? "").trim() || "—",
     started: (input.started ?? "").trim() || today,
@@ -1457,7 +1505,7 @@ export type BucketPatch = Partial<
 // real PATCH; tests inject a deterministic mirror to exercise reconcile/rollback.
 type BucketUpdateMirror = (id: string, patch: BucketPatch) => Promise<Bucket>;
 const defaultBucketUpdateMirror: BucketUpdateMirror = (id, patch) =>
-  api<Bucket>(`/buckets/${id}`, { method: "PATCH", body: JSON.stringify({ actor: CURRENT_USER, ...patch }) });
+  api<Bucket>(`/buckets/${id}`, { method: "PATCH", body: JSON.stringify({ actor: viewerId(), ...patch }) });
 let bucketUpdateMirror = defaultBucketUpdateMirror;
 let bucketUpdateMirrorInjected = false;
 let bucketUpdateInFlight: Promise<void> = Promise.resolve();
@@ -1526,7 +1574,7 @@ export function reassignTask(taskId: string, actorId: string | null) {
   if (actorId === null) {
     if (t.assignee === null) return;
     pushAudit(
-      CURRENT_USER,
+      viewerId(),
       `Unassigned ${taskId} — clearing Assigned To on the next SharePoint sync.`,
       "pending"
     );
@@ -1542,7 +1590,7 @@ export function reassignTask(taskId: string, actorId: string | null) {
   // Client audit intentionally carries the assignee name for the local trail;
   // the server audit (state.ts) omits it — a documented divergence, not parity.
   pushAudit(
-    CURRENT_USER,
+    viewerId(),
     `Reassigned ${taskId} to ${who.name} — Assigned To mirrors to SharePoint on the next sync.`,
     "pending"
   );
@@ -1576,12 +1624,12 @@ export function markAllSynced(): string {
     l.lastSync = ts;
   }
   state.lastSweep = ts;
-  pushAudit(CURRENT_USER, "Sweep completed — outbound pending pushed to SharePoint.", "synced");
+  pushAudit(viewerId(), "Sweep completed — outbound pending pushed to SharePoint.", "synced");
   emit();
   // Run a REAL sweep (outbound push + inbound delta) and adopt the engine's
   // resulting truth — counts, conflicts, audit — when it lands.
   serverCall(async () => {
-    await api("/sync/sweep", { method: "POST", body: JSON.stringify({ actor: CURRENT_USER }) });
+    await api("/sync/sweep", { method: "POST", body: JSON.stringify({ actor: viewerId() }) });
     await refreshFromServer();
   });
   return ts;
@@ -1615,7 +1663,7 @@ export function resolveConflict(conflictId: string, winner: "mc" | "sp") {
   }
   const kept = winner === "mc" ? c.mcVal : c.spVal;
   pushAudit(
-    CURRENT_USER,
+    viewerId(),
     `Resolved conflict on ${c.entityId} · ${c.field} — kept ${winner === "mc" ? "Mission Control" : "SharePoint"} (\u201c${kept}\u201d).`,
     "synced"
   );
@@ -1624,7 +1672,7 @@ export function resolveConflict(conflictId: string, winner: "mc" | "sp") {
   serverCall(async () => {
     await api(`/sync/conflicts/${conflictId}/resolve`, {
       method: "POST",
-      body: JSON.stringify({ winner, actor: CURRENT_USER }),
+      body: JSON.stringify({ winner, actor: viewerId() }),
     });
     await refreshFromServer();
   });
@@ -1650,7 +1698,7 @@ export function retryError(errorId: string) {
     }
   }
   pushAudit(
-    CURRENT_USER,
+    viewerId(),
     `Retried push for ${e.entityId} · ${e.field} — value normalized (\u201c${e.value}\u201d → \u201cMed\u201d) and accepted.`,
     "synced"
   );
@@ -1659,7 +1707,7 @@ export function retryError(errorId: string) {
   serverCall(async () => {
     await api(`/sync/errors/${errorId}/retry`, {
       method: "POST",
-      body: JSON.stringify({ actor: CURRENT_USER }),
+      body: JSON.stringify({ actor: viewerId() }),
     });
     await refreshFromServer();
   });
@@ -1700,5 +1748,7 @@ export function resetStore() {
   projectUpdateMirror = defaultProjectUpdateMirror;
   projectUpdateMirrorInjected = false;
   projectUpdateInFlight = Promise.resolve();
+  viewerLoader = defaultViewerLoader;
+  viewerLoaderInjected = false;
   emit();
 }

@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { CURRENT_USER } from "@/lib/mc-data";
 import type { Project } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { actorById, addProject, allRepos } from "@/lib/mc-data/store";
+import { actorById, addProject, allRepos, assignableViewerId } from "@/lib/mc-data/store";
 
 import { Avatar } from "./atoms";
 import { PeoplePicker } from "./people-picker";
@@ -21,7 +20,7 @@ export function NewProjectModal({ onClose, nav }: { onClose: () => void; nav: Na
   useMcVersion();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [ownerId, setOwnerId] = useState<string | null>(CURRENT_USER);
+  const [ownerId, setOwnerId] = useState<string | null>(assignableViewerId);
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const [health, setHealth] = useState<Project["health"]>("track");
   const [target, setTarget] = useState("");

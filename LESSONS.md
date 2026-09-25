@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-09-25 (ET) — Ask invented provenance and hid broken 2xx bodies
+
+- **What happened:** Wave 5 review: `asArticle` filled `namespace: "company/"` and `trustTier: "advisory"` when VMC omitted them, and a 2xx search with a non-JSON body reported `status: ok` with zero hits.
+- **Root cause:** Display defaults were written into the DTO, and `vmcGet` turned a `res.json()` failure into `json: null` without telling the caller.
+- **Rule going forward:** Missing provenance stays `null` in the DTO; only the UI says "unknown". A body that does not parse is `upstream_error`, whatever the HTTP status.
+
 ### 2026-09-15 (ET) — Go-live coalesce on any claim dropped both posts
 
 - **What happened:** Bugbot on PLX_MC #243: `siblingSent` treated any `announce:` row as sent, and combined complete claimed `pr.opened` before the Workflow POST. A failed send, or two overlapping claims, could coalesce both kinds and leave chat empty. Blob `exists` before Postgres insert could also stick a retry.

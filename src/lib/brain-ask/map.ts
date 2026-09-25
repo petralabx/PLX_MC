@@ -116,8 +116,9 @@ export function asArticle(raw: BrainAskRawNode): KnowledgeArticle | null {
     tags: tags && tags.length > 0 ? tags : undefined,
     project: asString(node.project) || undefined,
     domain: asString(node.domain) || undefined,
-    namespace: asString(node.namespace) || "company/",
-    trustTier: asString(node.trustTier) || "advisory",
+    // Missing provenance stays null — never invent a namespace or trust tier.
+    namespace: asString(node.namespace) || null,
+    trustTier: asString(node.trustTier) || null,
     source: asSource(node.source),
     versionLabel: asString(node.versionLabel) || undefined,
     href: asString(node.url) || asString(node.href) || undefined,

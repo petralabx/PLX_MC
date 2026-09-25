@@ -336,7 +336,7 @@ export function defaultBackfillDeps(): BackfillDeps {
 /** Persist one report as an mc_events row (the UI reads the newest one). */
 export async function recordBackfillReport(
   report: BackfillReport,
-  append: (e: repo.AppendEventInput) => Promise<void> = repo.appendEvent
+  append: (e: repo.AppendEventInput) => Promise<unknown> = repo.appendEvent
 ): Promise<void> {
   await append({
     kind: BACKFILL_EVENT_KIND,

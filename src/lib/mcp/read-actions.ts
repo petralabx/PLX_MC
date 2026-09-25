@@ -3,7 +3,8 @@
 // HTTP MCP transport. Every tool authorizes task.read only — read tools never
 // require a write grant — and applies the restricted-project ACL the same way
 // mc_get_context does. None of them writes: mc_verify_pr computes the gate
-// verdict with verifyPr({ record: false }).
+// verdict with verifyPr({ record: false }). None of them returns a full dsp_*
+// checkout id (see redactCheckoutIds).
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -43,9 +44,34 @@ function requireGithubSlug(value: string): string {
   return slug;
 }
 
+// A live dsp_* id is a bearer credential: complete() accepts any unrevoked,
+// unexpired id, and the dispatch row records no minting principal to prove
+// ownership against. So read tools never return a full id — active or not (one
+// rule, no expiry-race edge). An agent's own id comes from its checkout receipt.
+const CHECKOUT_ID_RE = /dsp_[A-Za-z0-9]+/g;
+
+/** Non-usable reference for a checkout id: `dsp_…` + its last 4 chars. */
+export function checkoutRef(id: string): string {
+  return `dsp_…${id.slice(-4)}`;
+}
+
+/** Copy of a JSON value with every dsp_* token replaced by its checkoutRef. */
+export function redactCheckoutIds<T>(value: T): T {
+  if (typeof value === "string") {
+    return value.replace(CHECKOUT_ID_RE, (id) => checkoutRef(id)) as T;
+  }
+  if (Array.isArray(value)) return value.map((item) => redactCheckoutIds(item)) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactCheckoutIds(item)])
+    ) as T;
+  }
+  return value;
+}
+
 function toCheckoutView(row: complianceRepo.DispatchListRow, now = Date.now()) {
   return {
-    checkoutId: row.id,
+    checkoutRef: checkoutRef(row.id),
     taskId: row.taskId,
     repo: row.repo,
     runtime: row.runtime,
@@ -74,7 +100,8 @@ export async function actionGetTask(identity: McpIdentity, id: string) {
     }),
     complianceRepo.listDispatches({ taskId, limit: GET_TASK_CHECKOUT_LIMIT }),
   ]);
-  return {
+  // Event payloads (checkout, task.completed) and gate reasons carry dsp_* ids.
+  return redactCheckoutIds({
     taskId,
     task,
     accountableOwner: task.accountableOwner,
@@ -82,7 +109,7 @@ export async function actionGetTask(identity: McpIdentity, id: string) {
     checkouts: checkouts.map((row) => toCheckoutView(row)),
     events,
     link: taskLink(taskId),
-  };
+  });
 }
 
 // ─── mc_list_checkouts ───────────────────────────────────────────────────────
@@ -148,7 +175,9 @@ export async function actionVerifyPr(identity: McpIdentity, input: { repo: strin
   }
   const { input: verifyInput, truncated } = await loadPrVerifyInput(repo, input.pr);
   const result = await verifyPr(verifyInput, { record: false });
-  return {
+  // Stamps are read with MC's GitHub credential; tasks[] and reasons name
+  // unresolved checkouts by id — redact them all.
+  return redactCheckoutIds({
     repo: verifyInput.repoFullName ?? repo,
     pr: input.pr,
     headSha: verifyInput.headSha,
@@ -157,7 +186,7 @@ export async function actionVerifyPr(identity: McpIdentity, input: { repo: strin
     changedPathsTruncated: truncated,
     ...result,
     recorded: false,
-  };
+  });
 }
 
 // ─── HTTP MCP registration ───────────────────────────────────────────────────
@@ -165,14 +194,14 @@ export async function actionVerifyPr(identity: McpIdentity, input: { repo: strin
 export function registerAgentReadTools(server: McpServer, identity: McpIdentity): void {
   server.tool(
     "mc_get_task",
-    "Read one MC task: the task (as mc_get_context depth:full), its accountable owner and evidence, its checkouts (dsp_* dispatches), and its recent mc_events history (newest first; excludes mcp.tool.invoked audit rows). Read-only; restricted-project tasks return not_found.",
+    "Read one MC task: the task (as mc_get_context depth:full), its accountable owner and evidence, its checkouts, and its recent mc_events history (newest first; excludes mcp.tool.invoked audit rows). Checkout ids are redacted to checkoutRef (dsp_…last4) everywhere — use your own mc_checkout_task receipt to complete. Read-only; restricted-project tasks return not_found.",
     { id: z.string().min(1).describe("TASK-* id") },
     async ({ id }) => mcpJsonResult({ data: await actionGetTask(identity, id) })
   );
 
   server.tool(
     "mc_list_checkouts",
-    "List checkout credentials (dsp_* dispatches), newest first. Filters: repo (full owner/name slug, exact match), taskId, active (true = unrevoked and unexpired; false = revoked or expired). Read-only.",
+    "List checkouts (dispatches), newest first, as checkoutRef (dsp_…last4) + taskId, repo, runtime, issuedAt, expiresAt, active — never the usable dsp_* id. Filters: repo (full owner/name slug, exact match), taskId, active (true = unrevoked and unexpired; false = revoked or expired). Read-only.",
     {
       repo: z.string().min(1).optional().describe("Full GitHub slug, e.g. petralabx/PLX_MC"),
       taskId: z.string().min(1).optional(),
@@ -197,7 +226,7 @@ export function registerAgentReadTools(server: McpServer, identity: McpIdentity)
 
   server.tool(
     "mc_verify_pr",
-    "Compute the compliance-gate verdict for a PR (same verifier as /api/compliance/verify) from its MC-Checkout stamps, labels and changed files on GitHub. Read-only: nothing is recorded (recorded:false). The GitHub `compliance` check stays the merge authority.",
+    "Compute the compliance-gate verdict for a PR (same verifier as /api/compliance/verify) from its MC-Checkout stamps, labels and changed files on GitHub. Read-only: nothing is recorded (recorded:false); checkout ids come back redacted (dsp_…last4). The GitHub `compliance` check stays the merge authority.",
     {
       repo: z.string().min(1).describe("Full GitHub slug, e.g. petralabx/PLX_MC"),
       pr: z.number().int().positive().describe("PR number"),

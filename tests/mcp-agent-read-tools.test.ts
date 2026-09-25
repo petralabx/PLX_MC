@@ -203,7 +203,21 @@ beforeEach(() => {
   });
   m.getBuckets.mockResolvedValue(BUCKETS);
   m.getProjects.mockResolvedValue(PROJECTS);
+  m.getEntity.mockImplementation(async (type: string, id: string) => {
+    const task = [OPEN_TASK, HIDDEN_TASK].find((t) => t.id === id);
+    return type === "task" && task ? { id, data: task } : null;
+  });
   m.eventsForTask.mockResolvedValue([
+    {
+      seq: "43",
+      ts: "2026-09-25T10:05:00.000Z",
+      kind: "gate.blocked",
+      actor: "cursor",
+      repo: "PLX_MC",
+      taskId: "TASK-100",
+      pr: "42",
+      payload: { reasons: ["checkout dsp_abc123: agent PR has no checked-out MC task"] },
+    },
     {
       seq: "42",
       ts: "2026-09-25T10:00:00.000Z",
@@ -212,14 +226,16 @@ beforeEach(() => {
       repo: "petralabx/PLX_MC",
       taskId: "TASK-100",
       pr: null,
-      payload: { checkoutId: "dsp_abc123" },
+      payload: { checkoutId: "dsp_abc123", accountableHuman: "vince@petrasoap.com" },
     },
   ]);
   // The SQL applies the taskId filter; the mock mirrors that one predicate.
   m.listDispatches.mockImplementation(async (filter: { taskId?: string }) =>
-    [dispatch("dsp_abc123", "TASK-100"), dispatch("dsp_secret1", "TASK-200")].filter(
-      (row) => !filter.taskId || row.taskId === filter.taskId
-    )
+    [
+      dispatch("dsp_abc123", "TASK-100"),
+      dispatch("dsp_old9999", "TASK-100", { expiresAt: "2026-09-01T00:00:00.000Z" }),
+      dispatch("dsp_secret1", "TASK-200"),
+    ].filter((row) => !filter.taskId || row.taskId === filter.taskId)
   );
   m.appendEvent.mockResolvedValue(undefined);
   m.recordCheck.mockResolvedValue(undefined);
@@ -276,15 +292,20 @@ describe("mc_get_task", () => {
       accountableOwner: "greg",
       evidence: { summary: "Added read tools", rollback: "Revert the PR" },
       link: "https://mc.plxcustomer.io/tasks/TASK-100",
-      events: [{ seq: "42", kind: "checkout" }],
+      events: [
+        { seq: "43", kind: "gate.blocked" },
+        { seq: "42", kind: "checkout", payload: { checkoutId: "dsp_…c123" } },
+      ],
       checkouts: [
         {
-          checkoutId: "dsp_abc123",
+          checkoutRef: "dsp_…c123",
           taskId: "TASK-100",
           repo: "petralabx/PLX_MC",
+          runtime: "cursor",
           active: true,
           revoked: false,
         },
+        { checkoutRef: "dsp_…9999", active: false },
       ],
     });
     // Audit rows of agent reads must not crowd out the task's own history.
@@ -293,6 +314,20 @@ describe("mc_get_task", () => {
       expect.objectContaining({ excludeKinds: ["mcp.tool.invoked"] })
     );
     expect(m.listDispatches).toHaveBeenCalledWith(expect.objectContaining({ taskId: "TASK-100" }));
+  });
+
+  it("never returns a usable dsp_* credential — checkouts or event payloads", async () => {
+    const { body } = await callTool("mc_get_task", { id: "TASK-100" });
+    const text = JSON.stringify(body);
+    // complete() accepts any unrevoked, unexpired dsp_* id, so a live id is a
+    // credential; expired/revoked ids are redacted too (one rule).
+    expect(text).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
+    for (const checkout of body.data.checkouts) {
+      expect(checkout).not.toHaveProperty("checkoutId");
+    }
+    expect(body.data.events[0].payload.reasons[0]).toBe(
+      "checkout dsp_…c123: agent PR has no checked-out MC task"
+    );
   });
 
   it("fails closed with a structured not_found for a restricted-project task", async () => {
@@ -307,8 +342,11 @@ describe("mc_get_task", () => {
       params: Promise.resolve({ id: "TASK-100" }),
     });
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const text = await res.text();
+    expect(text).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
+    const json = JSON.parse(text);
     expect(json.data).toMatchObject({ taskId: "TASK-100", accountableOwner: "greg" });
+    expect(json.data.checkouts[0].checkoutRef).toBe("dsp_…c123");
     expect(json.meta.audit.kinds).toEqual(["mc_get_task", "mcp.tool.invoked"]);
   });
 
@@ -338,11 +376,28 @@ describe("mc_list_checkouts", () => {
       active: true,
       limit: 50,
     });
-    expect(body.data.checkouts.map((c: { checkoutId: string }) => c.checkoutId)).toEqual([
-      "dsp_abc123",
+    // TASK-200's checkout sits in a restricted project → dropped.
+    expect(body.data.checkouts.map((c: { checkoutRef: string }) => c.checkoutRef)).toEqual([
+      "dsp_…c123",
+      "dsp_…9999",
     ]);
-    expect(body.data.count).toBe(1);
+    expect(body.data.count).toBe(2);
     expect(body.meta.filter).toEqual({ repo: "petralabx/PLX_MC", active: true, limit: 50 });
+  });
+
+  it("redacts every checkout id — active and inactive — on MCP and REST", async () => {
+    const { body } = await callTool("mc_list_checkouts", {});
+    expect(JSON.stringify(body)).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
+    expect(body.data.checkouts).toEqual([
+      expect.objectContaining({ checkoutRef: "dsp_…c123", active: true }),
+      expect.objectContaining({ checkoutRef: "dsp_…9999", active: false }),
+    ]);
+    for (const checkout of body.data.checkouts) {
+      expect(checkout).not.toHaveProperty("checkoutId");
+    }
+    const res = await listCheckoutsRoute(rest("/api/cursor/checkouts"), noParams);
+    expect(res.status).toBe(200);
+    expect(await res.text()).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
   });
 
   it("rejects a bare repo name with a structured invalid_repo error", async () => {
@@ -447,7 +502,7 @@ describe("mc_verify_pr", () => {
       repo: "petralabx/PLX_MC",
       pr: 42,
       headSha: "headsha42",
-      checkoutIds: ["dsp_abc123"],
+      checkoutIds: ["dsp_…c123"],
       changedPathCount: 1,
       verdict: "pass",
       tier: "standard",
@@ -472,12 +527,25 @@ describe("mc_verify_pr", () => {
     expect(body.data.reasons.join(" ")).toMatch(/evidence summary/);
   });
 
+  it("never echoes a stamp's full dsp_* id, including in per-checkout reasons", async () => {
+    stubGithub();
+    // The stamp does not resolve (e.g. bound to another repo) — the verifier
+    // names it by checkout id in tasks[] and reasons.
+    m.getDispatch.mockResolvedValue(null);
+    const { body } = await callTool("mc_verify_pr", { repo: "petralabx/PLX_MC", pr: 42 });
+    expect(body.data.verdict).toBe("block");
+    expect(JSON.stringify(body)).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
+    expect(body.data.tasks[0]).toMatchObject({ checkoutId: "dsp_…c123", taskId: null });
+    expect(body.data.reasons[0]).toMatch(/^checkout dsp_…c123: /);
+  });
+
   it("serves GET /api/cursor/verify?repo=&pr=", async () => {
     stubGithub();
     const res = await verifyRoute(rest("/api/cursor/verify?repo=petralabx/PLX_MC&pr=42"), noParams);
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toMatchObject({ verdict: "pass", recorded: false });
+    const text = await res.text();
+    expect(text).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
+    expect(JSON.parse(text).data).toMatchObject({ verdict: "pass", recorded: false });
     expect(m.recordCheck).not.toHaveBeenCalled();
   });
 
@@ -522,6 +590,29 @@ describe("mc_request_approval", () => {
     const json = await res.json();
     expect(json.data).toMatchObject({ gateId: "apg_0123456789abcdef", inputRequired: true });
     expect(json.meta.links.task).toBe("https://mc.plxcustomer.io/tasks/TASK-100");
+  });
+
+  it("refuses a task in a restricted project the principal cannot see (MCP tool)", async () => {
+    const { isError, body } = await callTool("mc_request_approval", {
+      taskId: "TASK-200",
+      reason: "please approve",
+    });
+    expect(isError).toBe(true);
+    expect(body.error.code).toBe("project_acl_denied");
+    expect(m.requestApprovalGate).not.toHaveBeenCalled();
+  });
+
+  it("refuses a task in a restricted project the principal cannot see (REST route)", async () => {
+    const res = await requestApprovalRoute(
+      rest("/api/cursor/request-approval", {
+        method: "POST",
+        body: JSON.stringify({ taskId: "TASK-200", reason: "please approve" }),
+      }),
+      noParams
+    );
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe("project_acl_denied");
+    expect(m.requestApprovalGate).not.toHaveBeenCalled();
   });
 
   it("requires approval.request — a read-only principal is refused before the gate is raised", async () => {

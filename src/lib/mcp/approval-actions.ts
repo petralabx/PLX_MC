@@ -6,7 +6,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { requestApprovalGate } from "@/lib/compliance/approvals";
-import { requireMcpActor } from "@/lib/routing/mutations/actors";
+import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
+import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import type { McpIdentity } from "./auth";
 import { mcpJsonResult, taskLink } from "./envelope";
 
@@ -27,6 +28,9 @@ export async function actionRequestApproval(
     { type: "task", id: input.taskId },
     { repositoryId: identity.repo }
   );
+  // Same restricted-project guard as every other MCP task write (progress,
+  // checkout, complete): no gates on a task the principal cannot see.
+  await assertTaskProjectAccess(input.taskId, aclPrincipalFromMcp(identity));
   const { gate } = await requestApprovalGate({
     taskId: input.taskId,
     reason: input.reason,

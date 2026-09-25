@@ -18,8 +18,8 @@ composed swarm delegation.
 | `mc_checkout_task` | Checkout + `MC-Checkout: dsp_*` stamp |
 | `mc_report_progress` | Stage/notes updates |
 | `mc_complete_task` | Complete with evidence |
-| `mc_get_task` | One task + accountable owner, evidence, checkouts, recent events (read-only) |
-| `mc_list_checkouts` | `dsp_*` checkouts filtered by `repo` (owner/name), `taskId`, `active` (read-only) |
+| `mc_get_task` | One task + accountable owner, evidence, checkouts, recent events; checkout ids redacted to `checkoutRef` (read-only) |
+| `mc_list_checkouts` | Checkouts as `checkoutRef` (`dsp_…` + last 4, never the usable id) filtered by `repo` (owner/name), `taskId`, `active` (read-only) |
 | `mc_search_knowledge` | Ask the Brain search; hits carry provenance (read-only) |
 | `mc_verify_pr` | Compliance-gate verdict for `repo` + `pr`, not recorded (read-only) |
 | `mc_request_approval` | Raise a runtime approval gate on a task |

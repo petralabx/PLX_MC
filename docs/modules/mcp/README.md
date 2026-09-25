@@ -32,14 +32,22 @@ dispatch logic.
 
 | Tool | REST (stdio proxy) | Auth | Returns |
 |------|--------------------|------|---------|
-| `mc_get_task` | `GET /api/cursor/tasks/{id}` | `task.read` + project ACL | task (as `mc_get_context` full), `accountableOwner`, `evidence`, `checkouts`, recent `events` (excludes `mcp.tool.invoked`) |
-| `mc_list_checkouts` | `GET /api/cursor/checkouts?repo=&taskId=&active=&limit=` | `task.read` + project ACL | `dsp_*` dispatches newest first; `repo` is an exact owner/name slug |
+| `mc_get_task` | `GET /api/cursor/tasks/{id}` | `task.read` + project ACL | task (as `mc_get_context` full), `accountableOwner`, `evidence`, `checkouts`, recent `events` (excludes `mcp.tool.invoked`); every `dsp_*` id redacted |
+| `mc_list_checkouts` | `GET /api/cursor/checkouts?repo=&taskId=&active=&limit=` | `task.read` + project ACL | dispatches newest first as `checkoutRef` + `taskId`, `repo`, `runtime`, `issuedAt`, `expiresAt`, `active`; `repo` is an exact owner/name slug |
 | `mc_search_knowledge` | `GET /api/cursor/knowledge/search?q=&limit=` | `task.read` | Ask the Brain hits with provenance (`id`, `source`, `namespace`, `score`) + honest `status` |
 | `mc_verify_pr` | `GET /api/cursor/verify?repo=&pr=` | `task.read` | the `/api/compliance/verify` verdict from GitHub PR stamps/labels/files; `recorded: false` (no check row, no `gate.*` event) |
 | `mc_request_approval` | `POST /api/cursor/request-approval` | `approval.request` (write) | `gateId`, `status: pending`, `inputRequired: true` |
 
 `mc_list_buckets` now needs only `task.read` (was `bucket.create`), so
 read-only principals can discover `BKT-*` ids without a create grant.
+
+**Checkout ids are credentials.** `complete()` accepts any unrevoked, unexpired
+`dsp_*` id, and the dispatch row records no minting principal, so the read tools
+never return a full id — active or inactive, in checkout rows, event payloads,
+or verify reasons. They return `checkoutRef` (`dsp_…` + last 4). An agent
+completes with the id from its own `mc_checkout_task` receipt.
+`mc_request_approval` applies the same restricted-project guard
+(`assertTaskProjectAccess`) as the other task writes.
 
 **Enable (opt-in):**
 

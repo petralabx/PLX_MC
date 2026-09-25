@@ -423,7 +423,7 @@ server.tool(
 
 server.tool(
   "mc_get_task",
-  "Read one MC task: the task, accountable owner, evidence, checkouts (dsp_* dispatches) and recent mc_events history. Read-only; restricted-project tasks return not_found.",
+  "Read one MC task: the task, accountable owner, evidence, checkouts and recent mc_events history. Checkout ids are redacted to checkoutRef (dsp_…last4). Read-only; restricted-project tasks return not_found.",
   { id: z.string().min(1).describe("TASK-* id") },
   async ({ id }) => {
     if (!MCP_ENABLED) return disabledTool("mc_get_task");
@@ -433,7 +433,7 @@ server.tool(
 
 server.tool(
   "mc_list_checkouts",
-  "List checkout credentials (dsp_* dispatches), newest first. Filters: repo (full owner/name slug), taskId, active (true = unrevoked and unexpired). Read-only.",
+  "List checkouts (dispatches), newest first, as checkoutRef (dsp_…last4) — never the usable dsp_* id. Filters: repo (full owner/name slug), taskId, active (true = unrevoked and unexpired). Read-only.",
   {
     repo: z.string().min(1).optional().describe("Full GitHub slug, e.g. petralabx/PLX_MC"),
     taskId: z.string().min(1).optional(),

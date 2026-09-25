@@ -40,6 +40,7 @@ const HARD_GATED_CONSUMERS = [
   "petralabx/for-and-against",
   "petralabx/agentic-swarm",
   "petralabx/plx-customer-portal",
+  "petralabx/plx_secondbrain",
 ] as const;
 
 const hubIdentity: McpIdentity = {
@@ -72,6 +73,12 @@ describe("resolveCheckoutRepo", () => {
   it("exports the hard-gated consumer allowlist including Portal", () => {
     expect([...MCP_CHECKOUT_REPO_ALLOWLIST]).toEqual([...HARD_GATED_CONSUMERS]);
     expect(MCP_CHECKOUT_REPO_ALLOWLIST).toContain("petralabx/plx-customer-portal");
+  });
+
+  it("binds plx_secondbrain, an active registry consumer (review 2026-09-25)", () => {
+    expect(resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/plx_secondbrain")).toBe(
+      "petralabx/plx_secondbrain"
+    );
   });
 
   it("allowlisted hard-gated consumers bind that slug", () => {

@@ -189,6 +189,7 @@ export function Sidebar({
           conflicts ? <span className="badge hot">{conflicts}</span> : null
         )}
         {item("loop-ledgers", "◰", "Loop ledgers")}
+        {item("activity", "↯", "Repo activity")}
         {item("governance-sops", "§", "SOP guide")}
         {item("skills-directory", "◈", "Skills directory")}
         {item("architecture", "⬡", "Architecture")}

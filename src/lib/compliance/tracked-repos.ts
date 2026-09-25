@@ -8,11 +8,26 @@
 
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 
+export interface TrackedRepo {
+  /** Canonical owner/name slug. */
+  repo: string;
+  displayName: string;
+}
+
+/** Every registry repo, in registry order. */
+export const TRACKED_REPOS: readonly TrackedRepo[] = Object.freeze(
+  ((trackedReposRegistry as { repos?: Array<{ repo?: unknown; display_name?: unknown }> }).repos ?? [])
+    .map((entry) => {
+      const repo = typeof entry.repo === "string" ? entry.repo.trim() : "";
+      const displayName = typeof entry.display_name === "string" ? entry.display_name : repo;
+      return { repo, displayName };
+    })
+    .filter((entry) => entry.repo.length > 0)
+);
+
 /** Every registry repo as its canonical owner/name slug, in registry order. */
 export const TRACKED_REPO_SLUGS: readonly string[] = Object.freeze(
-  ((trackedReposRegistry as { repos?: Array<{ repo?: unknown }> }).repos ?? [])
-    .map((entry) => (typeof entry.repo === "string" ? entry.repo.trim() : ""))
-    .filter((slug) => slug.length > 0)
+  TRACKED_REPOS.map((entry) => entry.repo)
 );
 
 export interface RegistryDrift {

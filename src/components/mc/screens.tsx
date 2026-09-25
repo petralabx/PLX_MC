@@ -1,6 +1,7 @@
 // Screen registry — the shell renders SCREENS[route.screen].
 import type { ComponentType } from "react";
 
+import { ActivityView } from "./activity-view";
 import { AiSpendView } from "./vendor-spend";
 import { AgentFeed } from "./agent-feed";
 import { BucketDetail } from "./bucket-detail";
@@ -48,4 +49,5 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   "ai-spend": AiSpendView,
   "routing-inbox": RoutingInboxView,
   approvals: ApprovalsInboxView,
+  activity: ActivityView,
 };

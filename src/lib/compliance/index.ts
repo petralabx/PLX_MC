@@ -7,3 +7,12 @@ export * from "./types";
 export * from "./risk";
 export * from "./verify";
 export * from "./tracked-repos";
+// Type-only (erased at build) so client screens can type the Activity payload
+// without pulling the server loaders into the bundle.
+export type {
+  ActivityFreshness,
+  OpenPrItem,
+  RepoActivityReport,
+  RepoActivityRow,
+} from "./activity";
+export type { UnattributedPr } from "./backfill";

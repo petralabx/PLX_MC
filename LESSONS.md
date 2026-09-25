@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-09-25 (ET) — Colleague UX: navigation named after internals, and a phone nav that ate the screen
+
+- **What happened:** The sidebar grouped screens by system internals ("Views", "System of record"), called the same thing "bucket" and "initiative", showed raw env-flag text (`PLX_MC_ROUTING_INBOX_ENABLED ≠ 1`), and below 1024px turned into a horizontal strip filling ~60% of a phone screen. Home was a notification list, not "what do I do next".
+- **Root cause:** Chrome grew one screen at a time with no shared nav model, and the ≤1024px override predated the RESPONSIVE.md drawer protocol.
+- **Rule going forward:** Nav comes from `src/components/mc/nav-model.ts` only — the sidebar, ⌘K and tests read it; add a screen there, not in chrome or the palette. User-facing copy says "Initiative", never "bucket", and never shows env-flag names. Below 1025px the sidebar is the RESPONSIVE.md drawer (hamburger, scrim, Esc/backdrop/close/item dismiss, focus in and back). Home rows each carry one action and every section has loading / error-with-Retry / empty states.
+
 ### 2026-09-25 (ET) — UI trust: a hardcoded viewer and failures that looked like success
 
 - **What happened:** Every colleague saw Vince's greeting, "Assigned to me", and avatar, and local audit rows were written as Vince (`CURRENT_USER = "vince"` in 19 files). A failed `/api/state` kept fixture data that looked live. "Sync now" logged "Sweep completed" before the server answered. Approvals showed an auth error and "No pending approvals" together.

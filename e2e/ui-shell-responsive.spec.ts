@@ -420,41 +420,45 @@ test.describe("shell — review round 3 regressions", () => {
   });
 
   test("a dormant live column (below 2200) never mounts or fetches", async ({ page }) => {
-    // Home's own section fetches /api/approvals too (and the shell renders Home
-    // for one tick before it adopts a deep link), so compare against the same
-    // load with nothing pinned rather than expecting zero requests.
-    const approvalsRequests = async (pinned: boolean) => {
-      const seen: string[] = [];
-      const listener = (request: { url(): string }) => {
-        if (/\/api\/approvals(\?|$)/.test(request.url())) seen.push(request.url());
+    // Home's own section fetches /api/approvals too, and the shell renders Home
+    // for one tick before it adopts a deep link, so a raw request count varies
+    // run to run. Instead, flag every /api/approvals call made while a live
+    // column is in the DOM, and track whether one ever mounts.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __liveMounted: boolean; __liveFetches: number };
+      w.__liveMounted = false;
+      w.__liveFetches = 0;
+      new MutationObserver(() => {
+        if (document.querySelector(".mc-live")) w.__liveMounted = true;
+      }).observe(document, { childList: true, subtree: true });
+      const original = window.fetch.bind(window);
+      window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (/\/api\/approvals(\?|$)/.test(url) && document.querySelector(".mc-live")) w.__liveFetches += 1;
+        return original(input, init);
       };
-      page.on("request", listener);
+    });
+    const load = async (width: number) => {
       await page.goto("/");
-      await page.evaluate((pin) => {
-        window.localStorage.setItem("mc.live.pinned", pin ? "1" : "0");
-        window.localStorage.setItem("mc.live.kind", "approvals");
-      }, pinned);
-      seen.length = 0;
       await page.evaluate(() => {
-        (window as unknown as { __liveMounted: boolean }).__liveMounted = false;
+        window.localStorage.setItem("mc.live.pinned", "1");
+        window.localStorage.setItem("mc.live.kind", "approvals");
       });
-      await page.addInitScript(() => {
-        const w = window as unknown as { __liveMounted: boolean };
-        w.__liveMounted = false;
-        new MutationObserver(() => {
-          if (document.querySelector(".mc-live")) w.__liveMounted = true;
-        }).observe(document, { childList: true, subtree: true });
-      });
-      await open(page, 1440, "/?screen=board");
+      await open(page, width, "/?screen=board", width >= 2200 ? 1100 : 900);
       await page.waitForLoadState("networkidle");
-      const mounted = await page.evaluate(() => (window as unknown as { __liveMounted: boolean }).__liveMounted);
-      page.off("request", listener);
-      return { count: seen.length, mounted };
+      return page.evaluate(() => {
+        const w = window as unknown as { __liveMounted: boolean; __liveFetches: number };
+        return { mounted: w.__liveMounted, fetches: w.__liveFetches };
+      });
     };
-    const unpinned = await approvalsRequests(false);
-    const pinned = await approvalsRequests(true);
-    expect(pinned.mounted).toBe(false);
-    expect(pinned.count).toBe(unpinned.count);
+    // Control: at 2560 the pinned column mounts and its fetch is seen.
+    const ultra = await load(2560);
+    expect(ultra.mounted).toBe(true);
+    expect(ultra.fetches).toBeGreaterThan(0);
+    // Below 2200 the same preference stays dormant.
+    const wide = await load(1440);
+    expect(wide.mounted).toBe(false);
+    expect(wide.fetches).toBe(0);
   });
 
   test("a decision in the pinned Approvals column refreshes Home's approvals section", async ({ page }) => {

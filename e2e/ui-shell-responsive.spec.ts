@@ -376,6 +376,125 @@ test.describe("shell — review round 2 regressions", () => {
   });
 });
 
+test.describe("shell — review round 3 regressions", () => {
+  test("crossing 641 with the pane open keeps the layer order and the user's focus", async ({ page }) => {
+    await open(page, 393, "/?screen=board&taskId=TASK-221");
+    await page.locator("nav.mc-tabs").getByRole("button", { name: "More" }).click();
+    const sheet = page.getByRole("dialog", { name: "More" });
+    await expect(sheet.getByRole("button", { name: "Close" })).toBeFocused();
+    await page.setViewportSize({ width: 852, height: 393 }); // rotate to landscape
+    await expect(sheet.getByRole("button", { name: "Close" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+    await expect(page.getByRole("complementary", { name: "Details" })).toBeVisible();
+  });
+
+  test("≥1600: Back to a selection after hiding the pane shows the column again — never an overlay", async ({ page }) => {
+    await open(page, 1920, "/?screen=board");
+    await page.locator("[data-testid='board-screen'] .tcard").first().click();
+    await page.getByRole("button", { name: "Details pane" }).click();
+    await expect(page.getByRole("complementary", { name: "Details" })).toBeHidden();
+    await page.goBack();
+    const pane = page.getByRole("complementary", { name: "Details" });
+    await expect(pane.locator("[data-testid='task-detail-screen']")).toBeVisible();
+    await expect(page.locator(".mc-scrim")).toHaveCount(0);
+    await expect(page.locator("body")).not.toHaveClass(/mc-lock/);
+    await expect(page.getByRole("button", { name: "Details pane" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("the live picker cannot hide its own column", async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem("mc.live.pinned", "1"));
+    await open(page, 2560, "/?screen=approvals", 1100);
+    const pick = page.locator("aside.mc-live").getByRole("group", { name: "Live column shows" });
+    await expect(pick.getByRole("button", { name: "Agent activity" })).toHaveAttribute("aria-pressed", "true");
+    await expect(pick.getByRole("button", { name: "Approvals" })).toBeDisabled();
+  });
+
+  test("the '/' filter shortcut does not pull focus out of an open layer", async ({ page }) => {
+    await open(page, 820, "/?screen=board");
+    await page.getByTestId("nav-drawer-toggle").click();
+    const close = page.locator("nav.mc-side").getByRole("button", { name: "Close navigation" });
+    await expect(close).toBeFocused();
+    await page.keyboard.press("/");
+    await expect(close).toBeFocused();
+  });
+
+  test("a dormant live column (below 2200) never mounts or fetches", async ({ page }) => {
+    // Home's own section fetches /api/approvals too (and the shell renders Home
+    // for one tick before it adopts a deep link), so compare against the same
+    // load with nothing pinned rather than expecting zero requests.
+    const approvalsRequests = async (pinned: boolean) => {
+      const seen: string[] = [];
+      const listener = (request: { url(): string }) => {
+        if (/\/api\/approvals(\?|$)/.test(request.url())) seen.push(request.url());
+      };
+      page.on("request", listener);
+      await page.goto("/");
+      await page.evaluate((pin) => {
+        window.localStorage.setItem("mc.live.pinned", pin ? "1" : "0");
+        window.localStorage.setItem("mc.live.kind", "approvals");
+      }, pinned);
+      seen.length = 0;
+      await page.evaluate(() => {
+        (window as unknown as { __liveMounted: boolean }).__liveMounted = false;
+      });
+      await page.addInitScript(() => {
+        const w = window as unknown as { __liveMounted: boolean };
+        w.__liveMounted = false;
+        new MutationObserver(() => {
+          if (document.querySelector(".mc-live")) w.__liveMounted = true;
+        }).observe(document, { childList: true, subtree: true });
+      });
+      await open(page, 1440, "/?screen=board");
+      await page.waitForLoadState("networkidle");
+      const mounted = await page.evaluate(() => (window as unknown as { __liveMounted: boolean }).__liveMounted);
+      page.off("request", listener);
+      return { count: seen.length, mounted };
+    };
+    const unpinned = await approvalsRequests(false);
+    const pinned = await approvalsRequests(true);
+    expect(pinned.mounted).toBe(false);
+    expect(pinned.count).toBe(unpinned.count);
+  });
+
+  test("a decision in the pinned Approvals column refreshes Home's approvals section", async ({ page }) => {
+    const row = {
+      taskId: "TASK-221",
+      taskTitle: "WMS integration",
+      stage: "planned",
+      gate: {
+        id: "apg_e2e_1",
+        reason: "Promote to Approved",
+        requestedBy: "agent:e2e",
+        requestedAt: "2026-09-25T09:00:00Z",
+        status: "pending",
+      },
+    };
+    let decided = false;
+    await page.route(/\/api\/approvals\/decide$/, async (route) => {
+      decided = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { ok: true } }) });
+    });
+    await page.route(/\/api\/approvals(\?.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { approvals: decided ? [] : [row] } }),
+      });
+    });
+    await page.addInitScript(() => {
+      window.localStorage.setItem("mc.live.pinned", "1");
+      window.localStorage.setItem("mc.live.kind", "approvals");
+    });
+    await open(page, 2560, "/", 1100);
+    const homeSection = page.locator("[data-testid='inbox-screen'] .needs-sec").filter({ hasText: /Approvals waiting/i });
+    await expect(homeSection).toContainText("Promote to Approved");
+    await page.locator("aside.mc-live").getByRole("button", { name: "Approve" }).click();
+    await expect(page.locator("aside.mc-live")).toContainText(/No pending approvals/);
+    await expect(homeSection).not.toContainText("Promote to Approved");
+  });
+});
+
 test.describe("shell — layers, focus and keyboard", () => {
   test("the skip link is the first tab stop and moves focus to main", async ({ page }) => {
     for (const width of TIERS) {

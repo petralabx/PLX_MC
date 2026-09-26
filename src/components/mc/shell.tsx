@@ -170,7 +170,14 @@ export function MissionControlShell() {
 
   const paneScreen = isPaneScreen(route.screen);
   const selected = paneScreen ? route.taskId : undefined;
-  const persistentPane = wide && paneScreen && !paneHidden;
+  // At ≥1600 a selection in the URL (Back, a deep link, a reload) is a request
+  // to see it: it shows the column even if the user had hidden it, so it
+  // never comes back as an overlay; the effect below makes that stick.
+  const paneShown = !paneHidden || Boolean(selected);
+  const persistentPane = wide && paneScreen && paneShown;
+  useEffect(() => {
+    if (wide && paneHidden && selected) paneHiddenPref.set(false);
+  }, [wide, paneHidden, selected]);
 
   const closePane = useCallback(() => {
     const current = routeRef.current;
@@ -195,7 +202,7 @@ export function MissionControlShell() {
   // The top-bar toggle (≥1600). Hiding the column also drops the selection:
   // with nowhere to show it, it must not reappear as an overlay.
   const togglePane = useCallback(() => {
-    if (paneHiddenRef.current) {
+    if (paneHiddenRef.current && !routeRef.current.taskId) {
       paneHiddenPref.set(false);
       return;
     }
@@ -332,8 +339,10 @@ export function MissionControlShell() {
   }, []);
 
   const ScreenComponent = SCREENS[route.screen];
-  // The live column never repeats the screen underneath it.
-  const showLive = livePinned && route.screen !== (liveKind === "approvals" ? "approvals" : "feed");
+  // The live column exists only ≥2200 (dormant below: never mounted, never
+  // fetching) and never repeats the screen underneath it.
+  const liveHereKind = route.screen === "approvals" ? "approvals" : route.screen === "feed" ? "feed" : null;
+  const showLive = ultra && livePinned && liveKind !== liveHereKind;
   // Phone: the pane is a page over the list, so the covered page is inert.
   const phonePaneOpen = Boolean(selected) && !notPhone;
   // The only inline style: the user's pane width as data (a custom property).
@@ -352,7 +361,7 @@ export function MissionControlShell() {
           dark={dark}
           setDark={setDark}
           onOpenPalette={openPalette}
-          pane={paneScreen ? { shown: !paneHidden, toggle: togglePane } : undefined}
+          pane={paneScreen ? { shown: paneShown, toggle: togglePane } : undefined}
           live={{ pinned: livePinned, toggle: () => livePinnedPref.set(!livePinned) }}
           paneToggleRef={paneToggleRef}
           liveToggleRef={liveToggleRef}
@@ -399,7 +408,12 @@ export function MissionControlShell() {
           </ContextPane>
         ) : null}
         {showLive ? (
-          <LiveColumn kind={liveKind} onKind={(kind) => liveKindPref.set(kind)} onUnpin={unpinLive}>
+          <LiveColumn
+            kind={liveKind}
+            unavailable={liveHereKind}
+            onKind={(kind) => liveKindPref.set(kind)}
+            onUnpin={unpinLive}
+          >
             {liveKind === "approvals" ? (
               <ApprovalsInboxView route={{ screen: "approvals" }} nav={nav} />
             ) : (

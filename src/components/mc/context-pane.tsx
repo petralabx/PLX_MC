@@ -149,11 +149,14 @@ const LIVE_LABEL: Record<LiveKind, string> = { feed: "Agent activity", approvals
 
 export function LiveColumn({
   kind,
+  unavailable,
   onKind,
   onUnpin,
   children,
 }: {
   kind: LiveKind;
+  /** The kind the screen underneath already shows — it can't be picked here. */
+  unavailable: LiveKind | null;
   onKind: (kind: LiveKind) => void;
   onUnpin: () => void;
   children: ReactNode;
@@ -164,7 +167,14 @@ export function LiveColumn({
         <span className="kk">Pinned</span>
         <div className="seg" role="group" aria-label="Live column shows">
           {(["feed", "approvals"] as const).map((option) => (
-            <button key={option} type="button" aria-pressed={kind === option} onClick={() => onKind(option)}>
+            <button
+              key={option}
+              type="button"
+              aria-pressed={kind === option}
+              disabled={option === unavailable}
+              title={option === unavailable ? "Shown on this screen" : undefined}
+              onClick={() => onKind(option)}
+            >
               {LIVE_LABEL[option]}
             </button>
           ))}

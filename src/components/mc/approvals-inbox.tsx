@@ -27,6 +27,23 @@ export function fetchPendingApprovals(): Promise<PendingApprovalRow[]> {
   return api<ApprovalsResponse>("/approvals").then((data) => data.approvals);
 }
 
+// Several surfaces can show the pending list at once (Home's section, this
+// screen, the pinned live column ≥2200). A decision in one tells the others to
+// reload, so no surface keeps offering a gate that is already decided.
+type ApprovalsListener = () => unknown;
+const approvalsListeners = new Set<ApprovalsListener>();
+
+export function onApprovalsChanged(listener: ApprovalsListener): () => void {
+  approvalsListeners.add(listener);
+  return () => {
+    approvalsListeners.delete(listener);
+  };
+}
+
+function approvalsChanged(source: ApprovalsListener) {
+  for (const listener of approvalsListeners) if (listener !== source) void listener();
+}
+
 export function approvalsLoadError(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Failed to load approvals.";
 }
@@ -88,6 +105,8 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
     void load();
   }, [load]);
 
+  useEffect(() => onApprovalsChanged(load), [load]);
+
   const retry = useCallback(() => {
     setQueue({ status: "loading" });
     void load();
@@ -108,6 +127,7 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
           }),
         });
         await load();
+        approvalsChanged(load);
       } catch (err) {
         setActionError(err instanceof ApiClientError ? err.message : "Decision failed.");
       } finally {

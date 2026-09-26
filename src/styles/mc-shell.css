@@ -420,7 +420,7 @@
 
   /* Count badges — n · n+ (partial) · — (unknown); zero is hidden only once
      confirmed. Attention tone is warn, never hot (hot is a lost write). */
-  .mc :is(.mc-side, .mc-tabs, .mc-sheet) .badge {
+  .mc :where(.mc-side, .mc-tabs, .mc-sheet) .badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -437,11 +437,11 @@
     white-space: nowrap;
     color: var(--p-accent);
   }
-  .mc :is(.mc-side, .mc-tabs, .mc-sheet) .badge.warn {
+  .mc :where(.mc-side, .mc-tabs, .mc-sheet) .badge.warn {
     border-color: var(--p-warn);
     color: var(--p-warn-text);
   }
-  .mc :is(.mc-side, .mc-tabs, .mc-sheet) .badge.unk {
+  .mc :where(.mc-side, .mc-tabs, .mc-sheet) .badge.unk {
     border-style: dashed;
     border-color: var(--p-grid);
     color: var(--p-muted);

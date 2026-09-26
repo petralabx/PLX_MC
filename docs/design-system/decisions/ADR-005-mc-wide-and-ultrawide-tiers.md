@@ -36,7 +36,8 @@ at the top of the screen, out of thumb reach.
    pane becomes a persistent grid column: `nav | main | pane`. The pane is
    `clamp(var(--p-pane-min), var(--p-pane-w), var(--p-pane-max))` (360 / 440 / 640), user-resizable by
    dragging its separator or with ←/→ (16px) and Home/End, and its width is remembered (`mc.pane.w`). It can
-   be hidden, and that is remembered too (`mc.pane.hidden`). Opening a task from a collection screen fills
+   be hidden, and that is remembered too (`mc.pane.hidden`); a selection arriving in the URL (Back, a deep
+   link) shows it again rather than opening an overlay. Opening a task from a collection screen fills
    the pane instead of leaving the collection; the page is still one click away ("Open page").
 4. **Ultra-wide, `(min-width: 2200px)`:** adds an optional fourth column, `--p-live-w` (340px), that the
    user can pin (`mc.live.pinned`). It holds Agent activity or Approvals — the user picks, Agent activity by

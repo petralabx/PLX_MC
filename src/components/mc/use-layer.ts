@@ -95,14 +95,32 @@ export function useLayer(
     closeRef.current = onClose;
   });
 
+  // The entry lives as long as the layer is open. Changing lockScroll (the
+  // pane crossing 641px, e.g. a phone rotating) only updates the lock — it
+  // must not re-push the layer above newer ones or pull focus back into it.
+  const entryRef = useRef<LayerEntry | null>(null);
+  const lockRef = useRef(lockScroll);
+  useEffect(() => {
+    lockRef.current = lockScroll;
+    if (entryRef.current) {
+      entryRef.current.lock = lockScroll;
+      syncDocument();
+    }
+  }, [lockScroll]);
+
   useEffect(() => {
     if (!open) return;
-    const release = pushLayer({ close: () => closeRef.current(), lock: lockScroll });
+    const entry: LayerEntry = { close: () => closeRef.current(), lock: lockRef.current };
+    entryRef.current = entry;
+    const release = pushLayer(entry);
     const panel = panelRef.current;
     const first = panel?.querySelector<HTMLElement>("[data-autofocus]") ?? (panel ? focusablesIn(panel)[0] : null);
     first?.focus();
-    return release;
-  }, [open, panelRef, lockScroll]);
+    return () => {
+      entryRef.current = null;
+      release();
+    };
+  }, [open, panelRef]);
 
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLElement>) => {

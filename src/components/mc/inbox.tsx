@@ -20,7 +20,12 @@ import {
   viewerSettled,
 } from "@/lib/mc-data/store";
 
-import { approvalsLoadError, fetchPendingApprovals, type PendingApprovalRow } from "./approvals-inbox";
+import {
+  approvalsLoadError,
+  fetchPendingApprovals,
+  onApprovalsChanged,
+  type PendingApprovalRow,
+} from "./approvals-inbox";
 import { Confidence } from "./atoms";
 import {
   approvalRows,
@@ -174,6 +179,9 @@ export function InboxView({ nav, openNewTask }: ScreenProps & { openNewTask?: ()
   useEffect(() => {
     void loadApprovals();
   }, [loadApprovals]);
+
+  // A decision made elsewhere (the Approvals screen, the pinned live column).
+  useEffect(() => onApprovalsChanged(loadApprovals), [loadApprovals]);
 
   useEffect(() => {
     if (routingOn) void loadRouting();

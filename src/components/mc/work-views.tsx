@@ -27,6 +27,7 @@ import type { Bucket, Stage, Task } from "@/lib/mc-data";
 import { Assignee, Confidence, Label, Priority, RepoChip, ReqChip, Spine, SyncTick } from "./atoms";
 import { FilterBar } from "./filter-bar";
 import type { Route, Screen, ScreenProps } from "./route";
+import { hasOpenLayer } from "./use-layer";
 import {
   deleteSavedView,
   loadPersistedView,
@@ -588,6 +589,8 @@ export function WorkViews({ route, nav }: ScreenProps) {
         "input,textarea,[contenteditable]"
       );
       if (event.key === "/" && !inField) {
+        // A shell layer (drawer, More sheet, overlay pane) owns the keyboard.
+        if (hasOpenLayer()) return;
         event.preventDefault();
         filterInputRef.current?.focus();
         return;

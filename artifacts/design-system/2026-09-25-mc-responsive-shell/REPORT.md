@@ -54,10 +54,10 @@ fixed with a regression test that failed first.
 |---|---|---|
 | Layer wrap is pixel-neutral | scratch Playwright sweep, 25 screens × 393/820/1440 + /signin, /welcome, dark, open palette, `maxDiffPixels: 0` vs `main` | 96 / 96 identical (after fixing one cascade inversion, see LESSONS 2026-09-25) |
 | Layers hold in the production build | `npm run build`, then `next start` + a computed-style probe on `.mc-top .search` (legacy rule has higher specificity than the shell rule) | shell value wins (`--p-canvas`) |
-| New shell e2e | `npm run test:e2e -- e2e/ui-shell-responsive.spec.ts` | (final run pending) |
+| New shell e2e | `npm run test:e2e -- e2e/ui-shell-responsive.spec.ts` | 43 passed |
 | Drawer e2e | `npm run test:e2e -- e2e/nav-drawer.spec.ts` | 3 passed |
-| Full e2e (3 projects) | `npm run test:e2e` | (final run pending; baseline `main`: 227 passed, 5 skipped) |
-| Unit | `npx vitest run` | (final run pending); 3 Docker-only failures expected = `tests/routing-postgres.test.ts` (needs Docker; fails identically on `main` in this container) |
+| Full e2e (3 projects) | `npm run test:e2e` | 270 passed, 5 skipped, 0 failed (baseline `main`: 227 passed, 5 skipped) |
+| Unit | `npx vitest run` | 1860 passed, 3 failed = `tests/routing-postgres.test.ts` only (needs Docker; fails identically on `main` in this container) |
 | Python | `.venv/bin/python -m pytest -q` | 132 passed |
 | Preflight | `./scripts/preflight.sh --mode pre-commit` | all checks passed (policy gates, ruff, format, canary, typecheck, lint) |
 | Typecheck / lint | `npm run typecheck` · `npm run lint` | exit 0 · 0 errors (11 pre-existing warnings, same as `main`) |

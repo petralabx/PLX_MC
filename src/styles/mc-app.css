@@ -7,71 +7,10 @@
    paper, one forest accent, hairlines not shadows, sharp corners, near-zero icons.
    ────────────────────────────────────────────────────────────────────────── */
 
-/* ─── Shell: top chrome + sidebar + main ──────────────────────────────────── */
-.mc .mc-top { display:flex; align-items:center; justify-content:space-between; gap:18px;
-  padding:9px 18px; border-bottom:1px solid var(--p-grid); background:var(--p-paper);
-  position:sticky; top:0; z-index:30; }
-.mc .mc-top .l, .mc .mc-top .r { display:flex; align-items:center; gap:12px; }
-.mc .mc-top .brand { display:flex; align-items:center; gap:9px; cursor:pointer; flex:0 0 auto; background:none; border:0; padding:0; }
-.mc .mc-top .brand .brand-logo { height:18px; width:auto; display:block; }
-.mc .mc-top .brand .sub { font-family:var(--mono); font-size:var(--p-text-cap); letter-spacing:0.24em; text-transform:uppercase; white-space:nowrap;
-  color:var(--p-muted); padding-left:9px; border-left:1px solid var(--p-grid); }
-.mc .mc-top .ws { display:flex; align-items:center; gap:8px; padding:5px 9px; border:1px solid var(--p-grid); cursor:pointer; font-size:var(--p-text-mono); color:var(--p-ink-2); }
-.mc .mc-top .ws .pm { flex:0 0 auto; }
-.mc .mc-top .ws .chev { color:var(--p-muted); font-size:var(--p-text-tick); }
-.mc .mc-top .search { display:flex; align-items:center; gap:10px; padding:6px 11px; border:1px solid var(--p-grid);
-  min-width:300px; color:var(--p-muted); font-size:var(--p-text-small); cursor:text; background:var(--p-canvas); }
-.mc .mc-top .search:hover { border-color:var(--p-ink-2); }
-.mc .mc-top .search .key { font-family:var(--mono); font-size:var(--p-text-tick); padding:1px 6px; border:1px solid var(--p-grid); margin-left:auto; color:var(--p-ink-2); letter-spacing:0.06em; }
-.mc .mc-top .iconbtn { width:30px; height:30px; border:1px solid var(--p-grid); background:transparent; color:var(--p-ink-2);
-  font-family:var(--mono); font-size:var(--p-text-mono); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
-.mc .mc-top .iconbtn:hover { border-color:var(--p-ink-2); }
-/* Drawer toggle — tablet/phone only (see RESPONSIVE below). */
-.mc .mc-top .hamburger { display:none; }
-
-/* topbar live sync pill */
-.mc .mc-top .topsync { display:inline-flex; align-items:center; gap:7px; padding:6px 11px; border:1px solid var(--p-grid); cursor:pointer;
-  font-family:var(--mono); font-size:var(--p-text-tick); letter-spacing:0.12em; text-transform:uppercase; color:var(--p-muted); transition:border-color var(--p-dur-fast) var(--p-ease); }
-.mc .mc-top .topsync:hover { border-color:var(--p-ink-2); }
-.mc .mc-top .topsync .d { width:6px; height:6px; border-radius:50%; background:var(--p-ok); flex:0 0 auto; }
-.mc .mc-top .topsync.ok { color:var(--p-ok); }
-.mc .mc-top .topsync.pending { color:var(--p-muted); } .mc .mc-top .topsync.pending .d { background:var(--p-muted); }
-.mc .mc-top .topsync.warn { color:var(--p-warn); } .mc .mc-top .topsync.warn .d { background:var(--p-warn); }
-
-.mc .mc-shell { display:grid; grid-template-columns:216px 1fr; min-height:calc(100vh - 49px); }
-.mc .mc-side { border-right:1px solid var(--p-grid); background:var(--p-rail); padding:14px 0 24px; overflow-y:auto; }
-.mc .mc-side .grp { padding:0 12px; margin-bottom:16px; }
-.mc .mc-side .grp .h { font-family:var(--mono); font-size:var(--p-text-cap); letter-spacing:var(--p-track-tick); text-transform:uppercase;
-  color:var(--p-muted); margin:0 0 6px; padding:0 8px; display:flex; align-items:center; justify-content:space-between; }
-.mc .mc-side .item { display:flex; align-items:center; gap:9px; padding:6px 8px; cursor:pointer; font-size:var(--p-text-ui); width:100%; text-align:left;
-  color:var(--p-ink-2); border:0; border-left:2px solid transparent; background:none; border-radius:0; transition:background var(--p-dur-fast) var(--p-ease), color var(--p-dur-fast) var(--p-ease); }
-.mc .mc-side .item:hover { background:var(--p-paper-2); color:var(--p-ink); }
-.mc .mc-side .item.active { color:var(--p-ink); border-left-color:var(--p-accent); background:var(--p-paper-2); font-weight:500; }
-.mc .mc-side .item .ic { font-family:var(--mono); font-size:var(--p-text-meta); color:var(--p-muted); width:14px; text-align:center; flex:0 0 auto; }
-.mc .mc-side .item.active .ic { color:var(--p-accent); }
-.mc .mc-side .item .badge { margin-left:auto; font-family:var(--mono); font-size:var(--p-text-tick); color:var(--p-muted); padding:0 5px; border:1px solid var(--p-grid); line-height:15px; }
-.mc .mc-side .item .badge.acc { color:var(--p-accent); border-color:var(--p-accent); }
-.mc .mc-side .item .badge.hot { color:var(--p-hot); border-color:var(--p-hot); }
-.mc .mc-side .item .hl { width:14px; height:14px; flex:0 0 auto; background:transparent; border-radius:0;
-  display:inline-flex; align-items:center; justify-content:center; }
-.mc .mc-side .item .hl::before { content:""; width:2px; height:11px; border-radius:1px; background:var(--p-muted);
-  transition:height var(--p-dur-fast) var(--p-ease); }
-.mc .mc-side .item:hover .hl::before { height:13px; }
-.mc .mc-side .item.active .hl::before { height:13px; }
-.mc .mc-side .item .hl.track::before { background:var(--p-ok); }
-.mc .mc-side .item .hl.risk::before { background:var(--p-warn); }
-.mc .mc-side .item .hl.off::before { background:var(--p-hot); }
-.mc .mc-side .item .nm { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-/* Wave 6 nav model: items are links; Plan nests its project + initiative lists;
-   Admin & health's heading is a disclosure button. */
-.mc .mc-side a.item { text-decoration:none; }
-.mc .mc-side .sub { margin-top:12px; }
-.mc .mc-side .h-toggle { width:100%; background:none; border:0; cursor:pointer; text-align:left; }
-.mc .mc-side .h-toggle:hover { color:var(--p-ink); }
-/* Drawer close + backdrop — tablet/phone only (see RESPONSIVE below). */
-.mc .mc-side .side-close { display:none; }
-.mc .mc-scrim { display:none; }
-
+/* ─── Shell chrome → src/styles/mc-shell.css (ADR-005, mobile-first) ──────
+   The top bar, sidebar / rail / drawer, bottom tabs, sheets, context pane,
+   offline banner and toast placement live there. What stays here is the
+   screen root every screen renders inside the shell's <main>. */
 .mc .mc-main { min-width:0; background:transparent; display:flex; flex-direction:column; }
 
 /* ─── Page header (each screen) ───────────────────────────────────────────── */
@@ -302,20 +241,10 @@
 .mc .duecell { font-family:var(--mono); font-size:var(--p-text-meta); color:var(--p-muted); }
 
 /* ════════ NOTICES (rollback-on-failure toast — Module B) ════════
-   A fixed bottom-right stack surfaced by the store's notice channel when a
-   mirrored PATCH fails and the optimistic edit is rolled back. Tokens only —
-   the error tone reuses --p-hot (the palette's alert tone, as on blocked
-   cards / the sync warn badge); no raw hex. */
-.mc .mc-notices {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: min(420px, calc(100vw - 36px));
-}
+   Toasts surfaced by the store's notice channel when a mirrored PATCH fails
+   and the optimistic edit is rolled back. Their placement (above the phone
+   tabs, bottom-right from 641px) lives in mc-shell.css. Tokens only — the
+   error tone reuses --p-hot (the palette's alert tone); no raw hex. */
 .mc .mc-notice {
   display: flex;
   align-items: flex-start;
@@ -365,11 +294,6 @@
 .mc .mc-notice .x:hover { color: var(--p-ink); }
 .mc .mc-notice .x:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 1px; color: var(--p-ink); }
 
-/* ════════ OFFLINE BANNER (Wave 2 — UI trust) ════════
-   Full-width strip under the topbar while GET /api/state is failing and the
-   screens show cached or demo data. Reuses the .sk-banner skin (as the sync
-   console's stale banner does); this only flattens it into a strip. */
-.mc .mc-offline { margin: 0; border-radius: 0; border-width: 0 0 1px 3px; }
 
 /* ─── Keyboard focus — one branded ring for every interactive control ─────────
    Several skins define their own :focus-visible accent ring; this baseline
@@ -381,58 +305,20 @@
   outline-offset: 1px;
 }
 
-/* ════════ RESPONSIVE — desktop-first cockpit ════════
-   Canonical tiers only (docs/design-system/RESPONSIVE.md §1):
-   tablet ≤1024px · phone ≤640px. */
+/* ════════ RESPONSIVE — screen skin (desktop-first, legacy) ════════
+   Shell tiers moved to mc-shell.css (ADR-005). These screen rules keep the
+   RESPONSIVE.md §1 pivots until PRs 2–7 convert them to @container main. */
 @media (max-width:1024px) {
-  .mc .mc-shell { grid-template-columns:1fr; }
-  /* The sidebar becomes a slide-in drawer behind the topbar hamburger
-     (RESPONSIVE.md §3 drawer protocol): off-canvas and out of the tab order
-     until opened; tap the backdrop, the close button, Esc or any item to
-     dismiss. Body scroll is locked while it is open. */
-  .mc .mc-side { position:fixed; top:0; bottom:0; left:0; z-index:var(--p-z-drawer); width:min(280px, 85vw);
-    padding:10px 0 24px; overflow-y:auto; overscroll-behavior:contain; transform:translateX(-100%); visibility:hidden; }
-  .mc .mc-side.open { transform:none; visibility:visible; }
-  .mc .mc-scrim { display:block; position:fixed; inset:0; z-index:var(--p-z-scrim); background:var(--p-scrim); }
-  .mc .mc-top .hamburger { display:inline-flex; }
-  .mc .mc-side .side-close { display:flex; align-items:center; justify-content:center; width:44px; height:44px;
-    margin:0 12px 8px auto; border:1px solid var(--p-grid); background:transparent; color:var(--p-ink-2);
-    font-family:var(--mono); font-size:var(--p-text-mono); cursor:pointer; }
-  body.mc-sb-open { overflow:hidden; }
   .mc .ph h1 { font-size:var(--p-text-page-tablet); }
-  .mc .mc-top .search { min-width:0; }
 
   /* Touch targets ≥44px on touch tiers (RESPONSIVE.md §1). Values, hairlines
      and type stay put — only the hit area grows. */
-  .mc .mc-side .item,
-  .mc .mc-side .h-toggle,
   .mc .btn,
-  .mc .mc-top .iconbtn,
-  .mc .mc-top .topsync,
-  .mc .mc-top .search,
   .mc .vsw button,
   .mc .tb .seg button { min-height:44px; }
-  .mc .mc-top .iconbtn { min-width:44px; }
 }
 
 @media (max-width:640px) {
-  /* Centered topbar search collapses to its ⌘K affordance; the workspace
-     switcher label yields to the brand (RESPONSIVE.md §3 topbar slot rules). */
-  .mc .mc-top { gap:10px; padding:9px var(--p-gutter); flex-wrap:wrap; }
-  .mc .mc-top .ws { display:none; }
   .mc .ph { padding:18px var(--p-gutter) 14px; }
   .mc .help-glossary > div { grid-template-columns:minmax(0, 1fr); }
-}
-
-/* The drawer slides (220ms, RESPONSIVE.md §3) only when motion is welcome;
-   visibility flips at the end of the close so the panel leaves the tab order. */
-@media (prefers-reduced-motion: no-preference) {
-  .mc .mc-side { transition:transform 220ms var(--p-ease), visibility 0s linear 220ms; }
-  .mc .mc-side.open { transition:transform 220ms var(--p-ease), visibility 0s; }
-}
-
-/* Touch devices have no ⌘K — hide keyboard hints (a capability query, not a
-   width breakpoint). */
-@media (hover: none) {
-  .mc .kbd-hint { display:none; }
 }

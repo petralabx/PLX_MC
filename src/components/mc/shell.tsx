@@ -1,23 +1,51 @@
 "use client";
 
 // The Mission Control application shell: the brand boundary, dark-mode state,
-// route state, and the chrome (Topbar + Sidebar) shared by every screen.
-// Screens come from the registry in screens.tsx; modal-level surfaces (New
-// Task, command palette) mount here when their lane lands.
-import { useCallback, useEffect, useRef, useState } from "react";
+// route state, and the chrome shared by every screen. Screens come from the
+// registry in screens.tsx; modal-level surfaces (New Task, command palette)
+// mount here.
+//
+// Layout is mobile-first and CSS-owned (src/styles/mc-shell.css, ADR-005):
+//   <641     top bar · group strip · main · bottom tabs (+ More sheet, FAB)
+//   641–1024 top bar · 64px icon rail (→ labelled drawer) · main
+//   ≥1025    top bar · 240px sidebar · main
+//   ≥1600    + persistent context pane on collection screens
+//   ≥2200    + optional pinned live column (Agent activity or Approvals)
+// JS reads the tier only for behaviour: at ≥1600 opening a task from a
+// collection screen fills the pane instead of leaving the collection.
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { BrandBoundary } from "@/components/brand";
 import { hydrate } from "@/lib/mc-data/store";
 
-import { NavScrim, NoticeHost, OfflineBanner, Sidebar, Topbar, useNavDrawer } from "./chrome";
+import { AgentFeed } from "./agent-feed";
+import { ApprovalsInboxView } from "./approvals-inbox";
+import { BottomTabs, GroupStrip, NewTaskFab, rememberTabScreen } from "./bottom-tabs";
+import { NavScrim, NoticeHost, OfflineBanner, Sidebar, navFlags, useNavCounts, useNavDrawer } from "./chrome";
 import { CommandPalette } from "./command-palette";
+import { ContextPane, LiveColumn, PaneEmpty } from "./context-pane";
 import { InboxView } from "./inbox";
+import { MoreSheet } from "./more-sheet";
+import { isPaneScreen } from "./nav-model";
 import { NewInitiativeModal } from "./new-initiative-modal";
 import { NewProjectModal } from "./new-project-modal";
 import { NewTaskModal } from "./new-task-modal";
 import type { Nav, Route, Screen } from "./route";
 import { routeToUrl, urlToRoute } from "./route";
 import { SCREENS } from "./screens";
+import {
+  clampPaneWidth,
+  liveKindPref,
+  livePinnedPref,
+  minWidthNow,
+  paneHiddenPref,
+  paneWidthPref,
+  useMinWidth,
+  usePref,
+} from "./shell-prefs";
+import { TaskDetailView } from "./task-detail";
+import { Topbar } from "./top-bar";
+import { hasOpenLayer, useLayerSlot } from "./use-layer";
 
 export function MissionControlShell() {
   const [dark, setDark] = useState(false);
@@ -27,12 +55,36 @@ export function MissionControlShell() {
   const [newTaskCtx, setNewTaskCtx] = useState<{ bucketId?: string } | undefined>(undefined);
   const [newInitiativeOpen, setNewInitiativeOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   // Post-hydration readiness flag (see the effect below): surfaced as
   // data-mc-ready on the shell root so automation can wait for genuine
   // interactivity, not the SSR-present-but-not-hydrated DOM.
   const [ready, setReady] = useState(false);
-  // ≤1024px: the sidebar is a slide-in drawer behind the topbar hamburger.
+  // <1025px: the sidebar is a drawer (phone: More → All screens; tablet: the rail toggle).
   const drawer = useNavDrawer();
+  const moreRef = useRef<HTMLButtonElement | null>(null);
+  const paneToggleRef = useRef<HTMLButtonElement | null>(null);
+  const liveToggleRef = useRef<HTMLButtonElement | null>(null);
+  const counts = useNavCounts();
+  const flags = navFlags();
+
+  // Wide-tier preferences (ADR-005): the pane width and hidden state, and the
+  // pinned live column. CSS owns the layout; these only pick the form.
+  const notPhone = useMinWidth(641);
+  const wide = useMinWidth(1600);
+  const ultra = useMinWidth(2200);
+  const storedPaneWidth = usePref(paneWidthPref, null);
+  const paneHidden = usePref(paneHiddenPref, false);
+  const livePinned = usePref(livePinnedPref, false);
+  const liveKind = usePref(liveKindPref, "feed");
+  const paneWidth = storedPaneWidth ?? (ultra ? 520 : 440);
+
+  // The palette and modals handle their own Esc; registering them keeps the
+  // layer stack honest (use-layer.ts) and returns focus to what opened them.
+  useLayerSlot(paletteOpen);
+  useLayerSlot(newTaskOpen);
+  useLayerSlot(newProjectOpen);
+  useLayerSlot(newInitiativeOpen);
 
   // Hydrate after mount so SSR HTML and the first client render stay
   // identical: invited people from localStorage, then the engine's live
@@ -61,8 +113,22 @@ export function MissionControlShell() {
     };
   }, []);
 
-  const nav = useCallback<Nav>((screen: Screen, extra) => {
-    const next: Route = { screen, ...extra };
+  // Each phone tab remembers the last screen it showed — only once the URL has
+  // been adopted (`ready`), so the pre-adoption "home" render never overwrites it.
+  useEffect(() => {
+    if (ready) rememberTabScreen(route.screen);
+  }, [ready, route.screen]);
+
+  // The latest route and pane preference, for nav() to read at click time
+  // without re-creating nav (every screen receives it).
+  const routeRef = useRef(route);
+  const paneHiddenRef = useRef(paneHidden);
+  useEffect(() => {
+    routeRef.current = route;
+    paneHiddenRef.current = paneHidden;
+  });
+
+  const go = useCallback((next: Route) => {
     setRoute(next);
     // Shallow history update via the native History API: Next 14+ syncs its
     // router state from pushState without re-rendering server components or
@@ -75,7 +141,82 @@ export function MissionControlShell() {
     }
   }, []);
 
+  const nav = useCallback<Nav>(
+    (screen: Screen, extra) => {
+      const current = routeRef.current;
+      // Panes, not pages, on wide screens (ADR-005): at ≥1600 a task opened
+      // from a collection screen fills the context pane and the collection
+      // stays put. The selection is in the URL, so narrowing the window shows
+      // the same task as an overlay. "Open page" still reaches the task page.
+      if (
+        screen === "task" &&
+        extra?.taskId &&
+        isPaneScreen(current.screen) &&
+        !paneHiddenRef.current &&
+        minWidthNow(1600)
+      ) {
+        go({
+          screen: current.screen,
+          bucketId: current.bucketId,
+          projectId: current.projectId,
+          taskId: extra.taskId,
+        });
+        return;
+      }
+      go({ screen, ...extra });
+    },
+    [go]
+  );
+
+  const paneScreen = isPaneScreen(route.screen);
+  const selected = paneScreen ? route.taskId : undefined;
+  // At ≥1600 a selection in the URL (Back, a deep link, a reload) is a request
+  // to see it: it shows the column even if the user had hidden it, so it
+  // never comes back as an overlay; the effect below makes that stick.
+  const paneShown = !paneHidden || Boolean(selected);
+  const persistentPane = wide && paneScreen && paneShown;
+  useEffect(() => {
+    if (wide && paneHidden && selected) paneHiddenPref.set(false);
+  }, [wide, paneHidden, selected]);
+
+  const closePane = useCallback(() => {
+    const current = routeRef.current;
+    if (current.taskId) {
+      // Deselect; the collection (and its filters) stay.
+      go({ screen: current.screen, bucketId: current.bucketId, projectId: current.projectId });
+    } else {
+      // The empty column is hidden; its Close button goes with it, so focus
+      // moves to the top-bar toggle that brings it back.
+      paneHiddenPref.set(true);
+      paneToggleRef.current?.focus();
+    }
+  }, [go]);
+
+  const unpinLive = useCallback(() => {
+    livePinnedPref.set(false);
+    liveToggleRef.current?.focus();
+  }, []);
+
+  const openTaskPage = useCallback((taskId: string) => go({ screen: "task", taskId }), [go]);
+
+  // The top-bar toggle (≥1600). Hiding the column also drops the selection:
+  // with nowhere to show it, it must not reappear as an overlay.
+  const togglePane = useCallback(() => {
+    if (paneHiddenRef.current && !routeRef.current.taskId) {
+      paneHiddenPref.set(false);
+      return;
+    }
+    paneHiddenPref.set(true);
+    const current = routeRef.current;
+    if (current.taskId) go({ screen: current.screen, bucketId: current.bucketId, projectId: current.projectId });
+  }, [go]);
+
+  const setPaneWidth = useCallback((width: number, persist: boolean) => {
+    paneWidthPref.set(clampPaneWidth(width), persist);
+  }, []);
+
   const openPalette = useCallback(() => {
+    setMoreOpen(false);
     setPaletteOpen(true);
   }, []);
 
@@ -112,6 +253,12 @@ export function MissionControlShell() {
     setNewInitiativeOpen(false);
   }, []);
 
+  const closeMore = useCallback(() => setMoreOpen(false), []);
+  const openAllScreens = useCallback(() => {
+    setMoreOpen(false);
+    drawer.send("toggle");
+  }, [drawer]);
+
   // Pending `g`-prefix for two-key view chords (g b / g l / g t / g m / g i). A
   // ref (not state) so arming the prefix never triggers a render.
   const gPrefix = useRef<number | null>(null);
@@ -138,6 +285,7 @@ export function MissionControlShell() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         if (newTaskOpen || newInitiativeOpen) return;
         event.preventDefault();
+        setMoreOpen(false);
         setPaletteOpen((prev) => !prev);
         return;
       }
@@ -145,7 +293,7 @@ export function MissionControlShell() {
       // Bare-key chords are gated so they never fire while typing or while a
       // modal/palette owns the keyboard (the filter input lives on the views
       // surface; PeoplePicker's capture-phase Esc closes a picker first).
-      if (newTaskOpen || newInitiativeOpen || paletteOpen) return;
+      if (newTaskOpen || newInitiativeOpen || paletteOpen || hasOpenLayer()) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest?.("input,textarea,[contenteditable]")) return;
@@ -191,36 +339,109 @@ export function MissionControlShell() {
   }, []);
 
   const ScreenComponent = SCREENS[route.screen];
+  // The live column exists only ≥2200 (dormant below: never mounted, never
+  // fetching) and never repeats the screen underneath it.
+  const liveHereKind = route.screen === "approvals" ? "approvals" : route.screen === "feed" ? "feed" : null;
+  const showLive = ultra && livePinned && liveKind !== liveHereKind;
+  // Phone: the pane is a page over the list, so the covered page is inert.
+  const phonePaneOpen = Boolean(selected) && !notPhone;
+  // The only inline style: the user's pane width as data (a custom property).
+  const bodyStyle =
+    storedPaneWidth === null ? undefined : ({ "--p-pane-w": `${storedPaneWidth}px` } as CSSProperties);
 
   return (
-    <BrandBoundary className={`mc${dark ? " dark" : ""}`} data-mc-ready={ready ? "true" : undefined}>
-      <Topbar
-        nav={nav}
-        dark={dark}
-        setDark={setDark}
-        onOpenPalette={openPalette}
-        drawerOpen={drawer.open}
-        onToggleDrawer={() => drawer.send("toggle")}
-        drawerToggleRef={drawer.toggleRef}
-      />
-      <OfflineBanner />
-      <div className="mc-shell">
+    <BrandBoundary className={`mc mc-app${dark ? " dark" : ""}`} data-mc-ready={ready ? "true" : undefined}>
+      <a className="mc-skip" href="#mc-main">
+        Skip to content
+      </a>
+      <div className="mc-chrome">
+        <Topbar
+          route={route}
+          nav={nav}
+          dark={dark}
+          setDark={setDark}
+          onOpenPalette={openPalette}
+          pane={paneScreen ? { shown: paneShown, toggle: togglePane } : undefined}
+          live={{ pinned: livePinned, toggle: () => livePinnedPref.set(!livePinned) }}
+          paneToggleRef={paneToggleRef}
+          liveToggleRef={liveToggleRef}
+        />
+        <OfflineBanner />
+      </div>
+      <div
+        className="mc-body"
+        data-pane={persistentPane ? "open" : "closed"}
+        data-live={showLive ? "pinned" : "off"}
+        style={bodyStyle}
+      >
         <Sidebar
           route={route}
           nav={nav}
+          counts={counts}
           onNewProject={openNewProject}
           onNewInitiative={openNewInitiative}
           drawerOpen={drawer.open}
           onDrawer={drawer.send}
           drawerRef={drawer.panelRef}
+          onDrawerKeyDown={drawer.onKeyDown}
         />
         <NavScrim open={drawer.open} onDrawer={drawer.send} />
-        {route.screen === "home" ? (
-          <InboxView route={route} nav={nav} openNewTask={() => openNewTask()} />
-        ) : (
-          <ScreenComponent route={route} nav={nav} />
-        )}
+        <main className="mc-stage" id="mc-main" tabIndex={-1} inert={phonePaneOpen || undefined}>
+          <GroupStrip route={route} nav={nav} flags={flags} />
+          {route.screen === "home" ? (
+            <InboxView route={route} nav={nav} openNewTask={() => openNewTask()} />
+          ) : (
+            <ScreenComponent route={route} nav={nav} />
+          )}
+        </main>
+        {paneScreen ? (
+          <ContextPane
+            selected={selected}
+            persistent={persistentPane}
+            modal={notPhone}
+            width={paneWidth}
+            onWidth={setPaneWidth}
+            onClose={closePane}
+            onOpenPage={openTaskPage}
+          >
+            {selected ? <TaskDetailView route={{ screen: "task", taskId: selected }} nav={nav} /> : <PaneEmpty />}
+          </ContextPane>
+        ) : null}
+        {showLive ? (
+          <LiveColumn
+            kind={liveKind}
+            unavailable={liveHereKind}
+            onKind={(kind) => liveKindPref.set(kind)}
+            onUnpin={unpinLive}
+          >
+            {liveKind === "approvals" ? (
+              <ApprovalsInboxView route={{ screen: "approvals" }} nav={nav} />
+            ) : (
+              <AgentFeed route={{ screen: "feed" }} nav={nav} />
+            )}
+          </LiveColumn>
+        ) : null}
       </div>
+      <NewTaskFab route={route} onNewTask={() => openNewTask({ bucketId: route.bucketId })} />
+      <BottomTabs
+        route={route}
+        nav={nav}
+        counts={counts}
+        moreOpen={moreOpen}
+        onMore={() => setMoreOpen((open) => !open)}
+        moreRef={moreRef}
+      />
+      <MoreSheet
+        open={moreOpen}
+        onClose={closeMore}
+        onAllScreens={openAllScreens}
+        route={route}
+        nav={nav}
+        flags={flags}
+        counts={counts}
+        dark={dark}
+        setDark={setDark}
+      />
       {paletteOpen ? (
         <CommandPalette
           onClose={closePalette}

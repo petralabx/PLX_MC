@@ -53,8 +53,30 @@
   --p-text-cap-2: 8px;        /* densest micro caption (table heads, tags) */
 
   /* Screen gutter (DESIGN_TOKENS.md §Layout: "keep 26px as the screen
-     gutter"). Narrows on phone per RESPONSIVE.md §2 (12–14px page padding). */
-  --p-gutter: 26px;
+     gutter"; RESPONSIVE.md §2: 12–14px on phone). ADR-005 replaces the
+     26px → 14px step at 640px with a fluid clamp: 14px at 390, 26px from
+     ~916px, with no width media query. */
+  --p-gutter: clamp(14px, calc(2.4vw + 4px), 26px);
+
+  /* Shell layout tokens (ADR-005, Decision 8) — sizes only, no colour. Tier overrides
+     (--p-top-h ≥641, --p-tabs-h ≥641, --p-pane-w ≥2200) live in mc-shell.css,
+     the one file allowed width media queries. */
+  --p-top-h: 52px;              /* top bar; 56px ≥641 */
+  --p-tabs-h: 56px;             /* phone bottom tabs (+ safe area); 0 ≥641 */
+  --p-safe-t: env(safe-area-inset-top, 0px);
+  --p-safe-b: env(safe-area-inset-bottom, 0px);
+  --p-rail-w: 64px;             /* tablet icon rail */
+  --p-side-w: 240px;            /* desktop sidebar (RESPONSIVE.md §2; was 216) */
+  --p-drawer-w: min(320px, 85vw); /* rail → labelled drawer */
+  --p-sheet-max: 560px;         /* tablet sheets and dialogs */
+  --p-pane-w: 440px;            /* context pane default; user width is mc.pane.w */
+  --p-pane-min: 360px;
+  --p-pane-max: 640px;
+  --p-live-w: 340px;            /* pinned live column, ≥2200 */
+  --p-content-max: 1360px;      /* lists, tables, dashboards (boards opt out) */
+  --p-read-max: 72ch;           /* articles, help, SOPs, descriptions */
+  --p-banner-h: 44px;           /* offline banner, and the slot that reserves it */
+  --p-touch: 44px;              /* minimum touch target */
 
   /* Font-name bridge to the canonical tokens loaded by app/layout.tsx. */
   --mazius: var(--p-font-serif);
@@ -85,12 +107,4 @@
 .dark .mc {
   --p-rail: #16140f;
   --p-canvas: #1a1816;
-}
-
-/* Phone tier (RESPONSIVE.md §2): page horizontal padding drops to 12–14px.
-   Every screen gutter reads var(--p-gutter), so one override retunes them all. */
-@media (max-width: 640px) {
-  .mc {
-    --p-gutter: 14px;
-  }
 }

@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
+
+- **What happened:** On the first CI run of MC responsive PR 1 (petralabx/PLX_MC#254), "a dormant live column never mounts or fetches" failed (expected 2 `/api/approvals` requests, got 1). It had passed every local run.
+- **Root cause:** The test compared raw request counts between two loads, but Home's own approvals fetch during the shell's one-tick pre-adoption render fires on some runs and not others. The count measured timing, not the behaviour under test.
+- **Rule going forward:** An e2e check that no request is made attributes each request to its source (e.g. wrap `fetch` in an init script and flag calls made while the component is in the DOM) instead of comparing totals across loads. Pair it with a positive control that proves the probe sees the request when it should happen, and a mutation check that the test fails without the guard.
+
 ### 2026-09-25 (ET) — Session-end artifacts carried no real session data
 
 - **What happened:** Wave 5 review: `compliance-closeout.mjs` sent a random `session_id`, `started_at` = `ended_at`, a hardcoded `repo`, a canned summary, a `localhost:3100` default, and `files_touched` from `git status` only (empty after a commit). Its `git()` helper also `trim()`ed porcelain output, so the first ` M path` line lost its first path character.

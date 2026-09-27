@@ -44,6 +44,14 @@ truth table is proven before any plumbing exists.
   the task's bucket has no PRD link. `verifyPr(input, { record: false })`
   computes the same verdict without the check row or gate event — used only by
   the read-only MCP `mc_verify_pr`, whose inputs come from `github-pr.ts`.
+- TASK-2011: expired checkouts fall back to live GitHub open-PR/stamp proof,
+  once per PR verification/ingestion, failing closed when GitHub is unavailable.
+  Revoked/released credentials, repo mismatches, and deleted/verified tasks
+  cannot use that fallback. PR close/merge releases after attribution and
+  projection; reopen clears release for unrevoked matching stamps. Release
+  and its audit event are atomic; release is separate from revocation so
+  exact-head merge attribution survives webhook replay. Schema:
+  `db/migrations/026_dispatch_release.sql`.
 - `verify` route auth is dual-path: GitHub Actions OIDC is the preferred
   first-class auth for `POST /api/compliance/verify`, with
   `COMPLIANCE_CI_TOKEN` bearer as fallback/break-glass during dogfood. The route

@@ -17,6 +17,7 @@ vi.mock("@/lib/compliance/projection", () => ({
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
+  releaseDispatches: vi.fn(async () => {}),
   async getDispatch(id: string) {
     return db.dispatches.get(id) ?? null;
   },

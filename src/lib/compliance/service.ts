@@ -41,6 +41,7 @@ import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import { bucketPrdForTask } from "./bucket-prd";
 import type { EventsQuery } from "./events";
+import { loadPrState, type PrState } from "./github-pr";
 import { projectPullRequest, projectionEnabled } from "./projection";
 import * as repo from "./repo";
 import { classifyRiskTier } from "./risk";
@@ -53,7 +54,8 @@ import {
 import { verifyCompliance } from "./verify";
 import type { PrEvent } from "./webhook";
 
-// Checkout credentials are short-lived (decision 14).
+// Decision 14, amended TASK-2011 (Vince, 2026-09-27): the 8h TTL applies
+// unless the live open PR still carries the stamp. Merge/close releases it.
 const CHECKOUT_TTL_MIN = 8 * 60;
 
 function genId(prefix: string): string {
@@ -103,16 +105,56 @@ export function dispatchRepoMatches(
   return bareRepo(dispatchRepo).toLowerCase() === bareRepo(repoName).toLowerCase();
 }
 
+type DispatchResolution = { dispatch: repo.DispatchRow; reason?: never } | {
+  dispatch: null;
+  reason: "unknown_checkout" | "revoked" | "released" | "repo_mismatch" | "expired" | "pr_not_open" | "stamp_not_in_pr" | "task_closed";
+};
+
 async function resolveDispatch(
   checkoutId: string,
   repoName: string,
   repoFullName?: string
-): Promise<repo.DispatchRow | null> {
+): Promise<DispatchResolution> {
   const d = await repo.getDispatch(checkoutId);
-  const repoMatches =
-    !!d && dispatchRepoMatches(d.repo, repoName, repoFullName);
-  const valid = !!d && !d.revoked && new Date(d.expiresAt).getTime() > Date.now() && repoMatches;
-  return valid ? d : null;
+  if (!d) return { dispatch: null, reason: "unknown_checkout" };
+  if (d.revoked) return { dispatch: null, reason: "revoked" };
+  if (d.releasedAt) return { dispatch: null, reason: "released" };
+  if (!dispatchRepoMatches(d.repo, repoName, repoFullName)) return { dispatch: null, reason: "repo_mismatch" };
+  if (!(new Date(d.expiresAt).getTime() > Date.now())) return { dispatch: null, reason: "expired" };
+  return { dispatch: d };
+}
+
+type PrIdentity = Pick<VerifyPrInput, "repo" | "repoFullName" | "prNumber">;
+
+async function resolveDispatchForOpenPr(
+  checkoutId: string,
+  input: PrIdentity,
+  prState: PrState
+): Promise<DispatchResolution> {
+  // Re-read after the GitHub request so revocation/release during it still wins.
+  const d = await repo.getDispatch(checkoutId);
+  if (!d) return { dispatch: null, reason: "unknown_checkout" };
+  if (d.revoked) return { dispatch: null, reason: "revoked" };
+  if (d.releasedAt) return { dispatch: null, reason: "released" };
+  if (!dispatchRepoMatches(d.repo, input.repo, input.repoFullName)) return { dispatch: null, reason: "repo_mismatch" };
+  if (!prState.open) return { dispatch: null, reason: "pr_not_open" };
+  if (!prState.checkoutIds.includes(checkoutId)) return { dispatch: null, reason: "stamp_not_in_pr" };
+  const task = await loadTask(d.taskId);
+  if (!task || task.stage === "verified") return { dispatch: null, reason: "task_closed" };
+  return { dispatch: d };
+}
+
+// One lazy GitHub read per PR, and only if a checkout failed solely on expiry.
+function prDispatchResolver(input: PrIdentity) {
+  let state: Promise<PrState> | undefined;
+  return async (checkoutId: string): Promise<DispatchResolution> => {
+    const resolved = await resolveDispatch(checkoutId, input.repo, input.repoFullName);
+    if (resolved.reason !== "expired") return resolved;
+    const d = await repo.getDispatch(checkoutId);
+    const fullName = input.repoFullName?.includes("/") ? input.repoFullName : d?.repo ?? input.repo;
+    state ??= loadPrState(fullName, input.prNumber);
+    return resolveDispatchForOpenPr(checkoutId, input, await state);
+  };
 }
 
 // One gate verdict event per (repo, pr, head, subject, verdict) — shared by the
@@ -121,8 +163,7 @@ function gateDedupKey(repoName: string, prNumber: number, headSha: string, subje
   return `gate:${repoName}:${prNumber}:${headSha}:${subjectId ?? "none"}:${verdict}`;
 }
 
-// Merge attribution, not gating: the TTL bounds when a credential can pass the
-// gate, but a PR that passed in time and merged after expiry is still that
+// Merge attribution, not gating: a PR that passed and merged after expiry is still that
 // task's work. Accept an expired credential only when it is unrevoked, bound to
 // this repo, and the gate passed this exact head for its task.
 async function resolveDispatchForMerge(
@@ -238,8 +279,8 @@ export async function complete(input: CompleteInput): Promise<{ ok: true }> {
   // Validate the credential strictly — a bogus/expired/revoked id must not append
   // an orphan task.completed to the canonical log (review S4).
   const d = await repo.getDispatch(input.checkoutId);
-  if (!d || d.revoked || new Date(d.expiresAt).getTime() <= Date.now()) {
-    throw new ApiError("invalid_checkout", "Unknown, revoked, or expired checkout.", 409);
+  if (!d || d.revoked || d.releasedAt || new Date(d.expiresAt).getTime() <= Date.now()) {
+    throw new ApiError("invalid_checkout", "Unknown, revoked, released, or expired checkout.", 409);
   }
 
   if (input.actor) {
@@ -390,13 +431,19 @@ export async function verifyPr(
   // incomplete task blocks the whole PR (one logical theme, N related tasks). Each
   // task's verdict is its own recorded check + event.
   const tasks: VerifyPrTaskResult[] = [];
+  const resolveForPr = prDispatchResolver(input);
   for (const cid of ids) {
-    const d = await resolveDispatch(cid, input.repo, input.repoFullName);
+    const resolution = await resolveForPr(cid);
+    const d = resolution.dispatch;
     const taskId = d?.taskId ?? null;
     const actorIdentity = d?.runtime ?? "agent";
     const task = await loadTask(taskId);
     const bucketPrd = await bucketPrdForTask(task);
-    const result = verifyCompliance({ task, actor: "agent", tier, bucketPrd });
+    const result: VerifyResult = resolution.reason
+      ? { verdict: "block", reasons: [resolution.reason] }
+      : task?.stage === "verified"
+        ? { verdict: "block", reasons: ["task_closed"] }
+        : verifyCompliance({ task, actor: "agent", tier, bucketPrd });
     if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, result, taskId ?? cid);
     tasks.push({ checkoutId: cid, taskId, verdict: result.verdict, reasons: result.reasons });
   }
@@ -762,6 +809,15 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
   let taskId: string | null = null;
   let actorIdentity = evt.author || "operator";
   const ids = evt.checkoutIds?.length ? evt.checkoutIds : evt.checkoutId ? [evt.checkoutId] : [];
+  if (evt.action === "reopened") {
+    for (const cid of ids) {
+      const d = await repo.getDispatch(cid);
+      if (d && !d.revoked && d.releasedAt && dispatchRepoMatches(d.repo, evt.repo, evt.repoFullName)) {
+        await repo.unreleaseDispatches([cid], { repo: d.repo });
+      }
+    }
+  }
+  const resolveForPr = prDispatchResolver(evt);
   let taskIds: string[] = [];
   if (ids.length > 0) {
     actorKind = "agent";
@@ -769,7 +825,9 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
       const d =
         evt.action === "closed" && evt.merged
           ? await resolveDispatchForMerge(cid, evt)
-          : await resolveDispatch(cid, evt.repo, evt.repoFullName);
+          : evt.action === "closed"
+            ? (await resolveDispatch(cid, evt.repo, evt.repoFullName)).dispatch
+            : (await resolveForPr(cid)).dispatch;
       if (d?.taskId) taskIds.push(d.taskId);
       if (actorIdentity === (evt.author || "operator") && d?.runtime) actorIdentity = d.runtime;
     }
@@ -857,6 +915,13 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
         taskIds,
         sparse: needsProposal,
       });
+    }
+    // Attribute/project the merge before release. Release is not revocation:
+    // resolveDispatchForMerge must still attribute a replay of the same head.
+    for (const cid of new Set(ids)) {
+      const d = await repo.getDispatch(cid);
+      if (!d || d.revoked || !dispatchRepoMatches(d.repo, evt.repo, evt.repoFullName)) continue;
+      await repo.releaseDispatches([cid], { repo: d.repo, pr: evt.prNumber, reason: evt.merged ? "merged" : "closed" });
     }
     return { action: evt.action, actorKind, taskId, recorded: true, proposalId, deepLink };
   }
@@ -979,9 +1044,8 @@ export interface ReconcileSweepResult {
 
 // Replay queued work when MC recovers (driven by POST /api/compliance/reconcile
 // or the sync scheduler cadence). Resolved rows drop out of the pending set.
-// Note (review N7): if a checkout's TTL lapses while a verify sits queued, the
-// replay re-resolves the now-expired credential and blocks — intended fail-closed
-// behavior (a stale credential must not pass), not a regression.
+// Replay re-resolves expired credentials against the live open PR attachment;
+// unavailable GitHub remains fail-closed and leaves the work queued.
 export async function reconcileSweep(): Promise<ReconcileSweepResult> {
   const pending = await repo.pendingReconcile();
   let resolved = 0;

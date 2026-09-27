@@ -80,7 +80,9 @@ function toCheckoutView(row: complianceRepo.DispatchListRow, now = Date.now()) {
     issuedAt: row.issuedAt,
     expiresAt: row.expiresAt,
     revoked: row.revoked,
-    active: !row.revoked && new Date(row.expiresAt).getTime() > now,
+    releasedAt: row.releasedAt,
+    releasedReason: row.releasedReason,
+    active: !row.revoked && !row.releasedAt && new Date(row.expiresAt).getTime() > now,
   };
 }
 
@@ -201,7 +203,7 @@ export function registerAgentReadTools(server: McpServer, identity: McpIdentity)
 
   server.tool(
     "mc_list_checkouts",
-    "List checkouts (dispatches), newest first, as checkoutRef (dsp_…last4) + taskId, repo, runtime, issuedAt, expiresAt, active — never the usable dsp_* id. Filters: repo (full owner/name slug, exact match), taskId, active (true = unrevoked and unexpired; false = revoked or expired). Read-only.",
+    "List checkouts (dispatches), newest first, as checkoutRef (dsp_…last4) + taskId, repo, runtime, issuedAt, expiresAt, releasedAt, releasedReason, active — never the usable dsp_* id. Filters: repo (full owner/name slug, exact match), taskId, active (true = unrevoked, unreleased and unexpired; false = inactive). Active is ledger-only; open-PR expiry exceptions are checked during verification. Read-only.",
     {
       repo: z.string().min(1).optional().describe("Full GitHub slug, e.g. petralabx/PLX_MC"),
       taskId: z.string().min(1).optional(),

@@ -65,6 +65,8 @@ function dispatch(id: string, repo: string, taskId = "TASK-1"): DispatchRow {
     accountableHuman: "vince@petrasoap.com",
     repo,
     revoked: false,
+    releasedAt: null,
+    releasedReason: null,
     // Long expired — attribution is historical, TTL does not matter here.
     expiresAt: "2026-01-01T00:00:00.000Z",
   };

@@ -11,7 +11,7 @@ name: PLX MC Compliance Gate
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
   workflow_call:
     inputs:
       mode:

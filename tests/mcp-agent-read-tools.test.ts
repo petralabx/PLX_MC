@@ -364,6 +364,15 @@ describe("mc_get_task", () => {
 });
 
 describe("mc_list_checkouts", () => {
+  it("reports a released unexpired checkout as inactive", async () => {
+    m.listDispatches.mockResolvedValue([dispatch("dsp_released", "TASK-100", {
+      releasedAt: "2026-09-27T10:00:00.000Z", releasedReason: "merged",
+    })]);
+    const { body } = await callTool("mc_list_checkouts", {});
+    expect(body.data.checkouts[0]).toMatchObject({
+      active: false, releasedAt: "2026-09-27T10:00:00.000Z", releasedReason: "merged",
+    });
+  });
   it("filters by repo slug, taskId and active, and drops ACL-hidden tasks", async () => {
     const { isError, body } = await callTool("mc_list_checkouts", {
       repo: "petralabx/PLX_MC",

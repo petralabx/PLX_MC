@@ -191,6 +191,8 @@ export interface DispatchRow {
   repo: string;
   revoked: boolean;
   expiresAt: string;
+  releasedAt: string | null;
+  releasedReason: string | null;
 }
 
 export async function insertDispatch(d: {
@@ -220,8 +222,10 @@ export async function getDispatch(id: string): Promise<DispatchRow | null> {
     repo: string;
     revoked: boolean;
     expires_at: Date;
+    released_at: Date | null;
+    released_reason: string | null;
   }>(
-    `SELECT id, actor_kind, runtime, task_id, accountable_human, repo, revoked, expires_at
+    `SELECT id, actor_kind, runtime, task_id, accountable_human, repo, revoked, expires_at, released_at, released_reason
        FROM mc_dispatch WHERE id = $1`,
     [id]
   );
@@ -236,6 +240,8 @@ export async function getDispatch(id: string): Promise<DispatchRow | null> {
         repo: r.repo,
         revoked: r.revoked,
         expiresAt: r.expires_at.toISOString(),
+        releasedAt: r.released_at?.toISOString() ?? null,
+        releasedReason: r.released_reason ?? null,
       }
     : null;
 }
@@ -248,7 +254,7 @@ export interface ListDispatchesFilter {
   taskId?: string;
   /** Exact full owner/name slug, case-insensitive. */
   repo?: string;
-  /** true = unrevoked and unexpired only; false = revoked or expired only; omitted = both. */
+  /** true = unrevoked, unreleased and unexpired; false = inactive; omitted = both. */
   active?: boolean;
   limit: number;
 }
@@ -265,12 +271,14 @@ export async function listDispatches(f: ListDispatchesFilter): Promise<DispatchL
     revoked: boolean;
     issued_at: Date;
     expires_at: Date;
+    released_at: Date | null;
+    released_reason: string | null;
   }>(
-    `SELECT id, actor_kind, runtime, task_id, accountable_human, repo, revoked, issued_at, expires_at
+    `SELECT id, actor_kind, runtime, task_id, accountable_human, repo, revoked, issued_at, expires_at, released_at, released_reason
        FROM mc_dispatch
       WHERE ($1::text IS NULL OR task_id = $1)
         AND ($2::text IS NULL OR lower(repo) = lower($2))
-        AND ($3::boolean IS NULL OR (NOT revoked AND expires_at > now()) = $3)
+        AND ($3::boolean IS NULL OR (NOT revoked AND released_at IS NULL AND expires_at > now()) = $3)
       ORDER BY issued_at DESC
       LIMIT $4`,
     [f.taskId ?? null, f.repo ?? null, f.active ?? null, f.limit]
@@ -285,7 +293,36 @@ export async function listDispatches(f: ListDispatchesFilter): Promise<DispatchL
     revoked: r.revoked,
     issuedAt: r.issued_at.toISOString(),
     expiresAt: r.expires_at.toISOString(),
+    releasedAt: r.released_at?.toISOString() ?? null,
+    releasedReason: r.released_reason ?? null,
   }));
+}
+
+/** Release and audit atomically; a repeated close is a no-op. */
+export async function releaseDispatches(
+  ids: string[],
+  input: { repo: string; pr: number; reason: "merged" | "closed" }
+): Promise<void> {
+  await query(
+    `WITH released AS (
+       UPDATE mc_dispatch SET released_at = now(), released_reason = $4
+        WHERE id = ANY($1::text[]) AND lower(repo) = lower($2)
+          AND NOT revoked AND released_at IS NULL
+        RETURNING id, runtime, repo, task_id
+     )
+     INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload)
+     SELECT 'checkout.released', runtime, repo, task_id, $3,
+            jsonb_build_object('checkoutId', id, 'reason', $4::text) FROM released`,
+    [ids, input.repo, String(input.pr), input.reason]
+  );
+}
+
+export async function unreleaseDispatches(ids: string[], input: { repo: string }): Promise<void> {
+  await query(
+    `UPDATE mc_dispatch SET released_at = NULL, released_reason = NULL
+      WHERE id = ANY($1::text[]) AND lower(repo) = lower($2) AND NOT revoked`,
+    [ids, input.repo]
+  );
 }
 
 // ─── Compliance check ledger ─────────────────────────────────────────────────

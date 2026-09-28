@@ -16,6 +16,28 @@ const FILES_PER_PAGE = 100;
 // GitHub's PR files listing stops at 3000 entries (30 pages of 100).
 const MAX_FILE_PAGES = 30;
 
+export interface PrState {
+  open: boolean;
+  checkoutIds: string[];
+}
+
+/** Live attachment proof for expired checkouts; never reads the files listing. */
+export async function loadPrState(repoFullName: string, prNumber: number): Promise<PrState> {
+  const [owner, name] = repoFullName.split("/");
+  if (!owner || !name) throw new ApiError("github_unavailable", "A full repository slug is required to read PR state.", 503);
+  const token = await resolveGithubToken({ repoOwner: owner });
+  if (!token) throw new ApiError("github_unavailable", "No GitHub auth configured - the PR cannot be read.", 503);
+  const pr = (await githubGet(
+    `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${prNumber}`,
+    token
+  )) as { state?: string; number?: number; base?: { repo?: unknown } };
+  const evt = parsePullRequestEvent({ action: "verify", pull_request: pr, repository: pr?.base?.repo });
+  if (!evt || pr.number !== prNumber || !["open", "closed"].includes(pr.state ?? "")) {
+    throw new ApiError("github_error", "GitHub returned an unrecognized pull request payload.", 502);
+  }
+  return { open: pr.state === "open", checkoutIds: evt.checkoutIds };
+}
+
 export interface LoadedPrVerifyInput {
   input: VerifyPrInput;
   /** True when GitHub's 3000-file listing cap was hit — the tier may be understated. */

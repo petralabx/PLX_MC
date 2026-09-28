@@ -44,3 +44,12 @@ def test_canonical_and_downstream_send_full_and_legacy_repo_names():
             "prNumber:$prNumber, headSha:$headSha"
         ) in workflow
         assert "module-shim — remove after 2026-10-15" in workflow
+
+
+def test_pull_request_trigger_includes_edited_so_stamp_edits_rerun_gate():
+    # TASK-2011: editing the MC-Checkout stamp in a PR body must re-run the
+    # gate without a push, in both the canonical and downstream variants.
+    for variant in ("canonical", "downstream"):
+        workflow = _run("--emit", variant).stdout
+
+        assert "types: [opened, synchronize, reopened, edited]" in workflow

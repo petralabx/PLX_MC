@@ -59,7 +59,7 @@ NAME_AND_PR_TRIGGER = """name: PLX MC Compliance Gate
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
 """
 
 WORKFLOW_CALL_TRIGGER = """  workflow_call:

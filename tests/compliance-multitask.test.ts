@@ -6,6 +6,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 
+vi.mock("@/lib/compliance/github-pr", () => ({
+  loadPrState: vi.fn(async () => ({ open: false, checkoutIds: [] })),
+}));
+
 const db = vi.hoisted(() => ({
   dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string; revoked: boolean; expiresAt: string }>(),
   events: [] as { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown> }[],

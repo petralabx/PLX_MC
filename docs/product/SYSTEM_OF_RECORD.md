@@ -40,7 +40,16 @@ Identity is the **checkout credential**, resolved server‑side — never the gi
 | **Sub‑agent** | Inherits parent run's token | Yes (via parent task) | Same as parent |
 
 **Dispatch ledger** (the "registry" — credentials, not personas):
-`token → task → accountable human → repo → issued/expires/revoked`.
+`token → task → accountable human → repo → issued/expires/revoked/released`.
+
+Decision 14 amendment (TASK-2011, Vince, 2026-09-27): a checkout attached to an
+open PR does not expire. On expiry only, GitHub must confirm the PR is open and
+its live body contains the stamp; unavailable GitHub fails closed. Revoked or
+released credentials, repo mismatches, and deleted/verified tasks still block.
+Merged tasks can carry follow-on PRs. Close/merge sets `released_at` and
+`released_reason` after merge attribution and emits `checkout.released`;
+reopen clears release for unrevoked, repo-matching stamps in the body. Release
+never sets `revoked`, so exact-head historical merge attribution is preserved.
 
 **Gate decision table** (resolved from the ledger + PR link, not git metadata):
 

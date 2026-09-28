@@ -8,7 +8,7 @@ const m = vi.hoisted(() => ({ resolveGithubToken: vi.fn() }));
 
 vi.mock("@/lib/github-app", () => ({ resolveGithubToken: m.resolveGithubToken }));
 
-import { loadPrVerifyInput } from "@/lib/compliance/github-pr";
+import { loadPrState, loadPrVerifyInput } from "@/lib/compliance/github-pr";
 
 const PR = {
   number: 7,
@@ -96,5 +96,35 @@ describe("loadPrVerifyInput", () => {
       status: 503,
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("loadPrState", () => {
+  it.each(["open", "closed"])("reads %s state and live stamps in one GET", async (state) => {
+    const fetchMock = vi.fn(async () => Response.json({ ...PR, state }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await loadPrState("petralabx/plx-customer-portal", 7)).toEqual({ open: state === "open", checkoutIds: ["dsp_one", "dsp_two"] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]).toMatchObject(["https://api.github.com/repos/petralabx/plx-customer-portal/pulls/7", { cache: "no-store" }]);
+  });
+
+  it("fails closed without credentials", async () => {
+    m.resolveGithubToken.mockResolvedValueOnce(null);
+    await expect(loadPrState("petralabx/PLX_MC", 7)).rejects.toMatchObject({ code: "github_unavailable" });
+  });
+
+  it.each([404, 403, 500])("fails closed on HTTP %s", async (status) => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status })));
+    await expect(loadPrState("petralabx/PLX_MC", 7)).rejects.toThrow();
+  });
+
+  it("fails closed on network failure", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    await expect(loadPrState("petralabx/PLX_MC", 7)).rejects.toMatchObject({ code: "github_unreachable" });
+  });
+
+  it.each([{}, { ...PR, state: "unknown" }, { ...PR, state: "open", number: 8 }])("rejects malformed state", async (pr) => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(pr)));
+    await expect(loadPrState("petralabx/PLX_MC", 7)).rejects.toMatchObject({ code: "github_error" });
   });
 });

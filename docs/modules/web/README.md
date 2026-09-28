@@ -31,9 +31,21 @@ per row, each section with loading / error-with-Retry / empty states; the
 rules are pure in `needs-me.ts`. The sidebar and the ⌘K Navigate group share
 one declarative model (`nav-model.ts`): My work · Plan · Knowledge · Admin &
 health (collapsed by default, remembered in localStorage). Items are real
-links (`routeToUrl`). At ≤1024px the sidebar is a slide-in drawer behind a
-topbar hamburger (RESPONSIVE.md §3). "Initiative" is the only user-facing
-name for a bucket; the Help screen (`help`) has a glossary.
+links (`routeToUrl`). "Initiative" is the only user-facing name for a bucket;
+the Help screen (`help`) has a glossary.
+
+**Mobile-first shell (ADR-005).** One nav model drives every surface: phone
+(<641) bottom tabs My work · Plan · Knowledge · More (each remembers its last
+screen), a group strip, a More sheet and the full drawer via More → All
+screens; tablet a 64px icon rail that expands into the labelled drawer;
+desktop the 240px sidebar; ≥1600 a persistent, resizable context pane on
+Board / List / My tasks / Approvals (opening a task fills it; `taskId` stays in
+the URL, so narrower windows show it as an overlay); ≥2200 an optional pinned
+live column (Agent activity or Approvals, the user's pick). Every layer
+(drawer, More sheet, overlay pane, ⌘K, modals) shares `use-layer.ts`: Esc
+closes only the topmost, focus returns to its trigger. Nav badges speak one
+honest vocabulary (`count-badge.tsx`): n, n+ (lower bound), — (unknown),
+hidden only at a confirmed zero.
 
 **Project detail** (`project` screen): rolls up initiatives (buckets) under a
 Project with an initiative card grid; inline edit for health, accountable
@@ -79,7 +91,11 @@ pixel-precisely in `docs/product/README.md` §6 and
   from the handoff spec — treat `docs/product/prototype/` as the look/behavior
   spec, never as code to lift verbatim — and adds its own data + CSS block.
 - The `.mc` shell opts into the PLX brand boundary and adds two surface tokens
-  (`--p-rail`, `--p-canvas`) per ADR-004; all color stays in `--p-*`.
+  (`--p-rail`, `--p-canvas`) per ADR-004 and the size-only layout tokens of
+  ADR-005; all color stays in `--p-*`. New width media queries go only in
+  `src/styles/mc-shell.css` (min-width 641 / 1025 / 1600 / 2200); every other
+  MC stylesheet is imported into `@layer mc.legacy` and keeps its existing
+  max-width blocks until its screen is converted to `@container`.
 - Verification: `npm run typecheck`, `npm run lint`, `npm run test`,
   `npm run build` — all wrapped by `scripts/preflight.sh`.
 
@@ -87,24 +103,34 @@ pixel-precisely in `docs/product/README.md` §6 and
 
 design-system (tokens + primitives); sync (the API surface per
 `docs/product/SHAREPOINT_INTEGRATION.md` §6, consumed via the shared fetch
-wrapper in `src/lib/api`).
+wrapper in `src/lib/api`); `lucide-react` for nav icons (named imports only,
+mapped in `nav-icon.tsx`).
 
 ### Key Files
 
 - `src/app/layout.tsx` — root layout: fonts, metadata, global CSS
 - `src/app/page.tsx` — renders the Mission Control shell
-- `src/app/globals.css` — imports brand tokens + the `.mc` surface/skin
-- `src/components/mc/shell.tsx` — client shell: brand boundary, dark toggle, route state
+- `src/app/globals.css` — imports the layer order, brand tokens + the `.mc` surface/skin
+- `src/components/mc/shell.tsx` — client shell: brand boundary, dark toggle, route state, composes the chrome
 - `src/components/mc/route.ts` — `Screen` union + `Route` / `nav` contract
 - `src/components/mc/screens.tsx` — screen registry (`SCREENS`)
-- `src/components/mc/chrome.tsx` — Topbar + Sidebar + nav drawer (renders `nav-model.ts`)
-- `src/components/mc/nav-model.ts` — nav groups/items shared by sidebar, ⌘K and tests
+- `src/components/mc/chrome.tsx` — Sidebar (drawer · rail · sidebar), nav counts, offline banner, toasts
+- `src/components/mc/top-bar.tsx` — top bar (slots per tier, static workspace label, sync pill)
+- `src/components/mc/bottom-tabs.tsx` — phone tabs (with tab memory), group strip, New-task FAB
+- `src/components/mc/more-sheet.tsx` — phone More sheet (Admin & health, All screens, appearance)
+- `src/components/mc/context-pane.tsx` — context pane (page <641, overlay <1600, resizable column ≥1600) + live column
+- `src/components/mc/use-layer.ts` — layer stack: Esc (topmost only), focus in/back, Tab wrap, scroll lock
+- `src/components/mc/shell-prefs.ts` — pane width / hidden, live pin and pick (localStorage + memory), tier hooks
+- `src/components/mc/count-badge.tsx` — honest count badge (n · n+ · —)
+- `src/components/mc/nav-icon.tsx` — Lucide icon map for the nav
+- `src/components/mc/nav-model.ts` — nav groups/items, phone tabs, tab memory, pane screens — shared by every nav surface, ⌘K and tests
 - `src/components/mc/project-detail.tsx` — Project detail + initiative card grid
 - `src/components/mc/inbox.tsx` — Home: "What needs me today" (rules in `needs-me.ts`)
 - `src/components/mc/help.tsx` — Help: how Mission Control works + glossary
 - `src/components/mc/atoms.tsx` — Avatar, Confidence, PMark
 - `src/lib/mc-data/` — typed prototype data layer (types, fixtures, helpers)
-- `src/styles/mc-surface.css`, `src/styles/mc-app.css` — surface tokens + skin
+- `src/styles/mc-shell.css` — mobile-first shell; the layer order; the only MC file allowed new width media queries (ADR-005)
+- `src/styles/mc-surface.css`, `src/styles/mc-app.css` — surface + layout tokens, screen skin (`mc.legacy`)
 - `src/lib/brain-ask/` — Ask the Brain search/open client. Catalog `document:`
   ids open via VMC `GET /api/vmc/knowledge/agent/document/{id}`; graph ids stay
   on `/agent/node?include=content`.

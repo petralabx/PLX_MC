@@ -39,9 +39,11 @@ function liveSnapshot(): ServerSnapshot {
 const banner = () => renderToStaticMarkup(createElement(OfflineBanner));
 
 describe("store data source", () => {
-  it("starts on seed data — neither live nor (yet) offline", () => {
+  it("starts on seed data — neither live nor (yet) offline — holding the banner's place", () => {
     expect(dataSource()).toBe("seed");
-    expect(banner()).toBe("");
+    // An empty, aria-hidden slot of the banner's height (ADR-005): if the first
+    // load fails, slot → banner moves nothing on the page. No copy, no alert.
+    expect(banner()).toBe('<div class="banner-slot" aria-hidden="true"></div>');
   });
 
   it("flips to offline when /api/state fails, and the fixture data stays on screen", async () => {

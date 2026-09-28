@@ -16,11 +16,23 @@
 
 ## Lessons
 
+### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
+
+- **What happened:** On the first CI run of MC responsive PR 1 (petralabx/PLX_MC#254), "a dormant live column never mounts or fetches" failed (expected 2 `/api/approvals` requests, got 1). It had passed every local run.
+- **Root cause:** The test compared raw request counts between two loads, but Home's own approvals fetch during the shell's one-tick pre-adoption render fires on some runs and not others. The count measured timing, not the behaviour under test.
+- **Rule going forward:** An e2e check that no request is made attributes each request to its source (e.g. wrap `fetch` in an init script and flag calls made while the component is in the DOM) instead of comparing totals across loads. Pair it with a positive control that proves the probe sees the request when it should happen, and a mutation check that the test fails without the guard.
+
 ### 2026-09-25 (ET) — Session-end artifacts carried no real session data
 
 - **What happened:** Wave 5 review: `compliance-closeout.mjs` sent a random `session_id`, `started_at` = `ended_at`, a hardcoded `repo`, a canned summary, a `localhost:3100` default, and `files_touched` from `git status` only (empty after a commit). Its `git()` helper also `trim()`ed porcelain output, so the first ` M path` line lost its first path character.
 - **Root cause:** The hook ignored its stdin payload and read git state only at the moment the session ended.
 - **Rule going forward:** Session-end hooks read the runtime payload first (Cursor `conversation_id` / `duration_ms`, Claude Code `session_id` / `transcript_path`). They derive the window from the payload or git and say in the artifact when a value was generated or unknown. Build summary and files from the session's commits plus the working tree. Never `trim()` porcelain output — use `trimEnd()`.
+
+### 2026-09-25 (ET) — Mobile-first shell: layers, Esc stacking and the drawer rule it replaces
+
+- **What happened:** MC responsive PR 1 (ADR-005) replaced the ≤1024px hamburger drawer with phone bottom tabs, a tablet icon rail and wide-screen panes. Wrapping the existing CSS in `@layer mc.legacy` first shifted routing-inbox and architecture text; the reference `mc-shell.css` also carried 900/1280 media queries and app-wide `.mc .av` / `.mc .ic` rules.
+- **Root cause:** `mc-surface.css` holds base element rules (`.mc button { font-family: inherit }`) as well as tokens; put in a lower layer than the screen files, class-only screen rules (`.ri-tab`) beat it regardless of specificity. Separately, the palette and modals close on any window-level Esc without checking `defaultPrevented`, so a drawer under the palette closed on the same key.
+- **Rule going forward:** The earlier rule "below 1025px the sidebar is the RESPONSIVE.md drawer behind a hamburger" is superseded by ADR-005: the drawer opens from the rail (tablet) or More → All screens (phone). Keep every legacy MC file in `mc.legacy` in its original order, and prove a layer change with a zero-pixel diff before building on it. Width media queries go only in `src/styles/mc-shell.css` (min-width 641/1025/1600/2200); anything else that answers to a width uses `@container`. Shell rules on generic class names (`.ic`, `.badge`) are scoped to shell surfaces, with `:where()` so they never outrank a control's own size. Overlays join `use-layer.ts` (or `useLayerSlot`) so Esc closes only the topmost layer; the layer listener sits on the document in the bubble phase, because a capture listener pre-empts React's handlers and a field inside the layer (a mention list, a comment edit) must get Esc first.
 
 ### 2026-09-25 (ET) — Ask invented provenance and hid broken 2xx bodies
 

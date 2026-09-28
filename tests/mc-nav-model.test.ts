@@ -7,12 +7,21 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { CommandPalette } from "@/components/mc/command-palette";
 import {
+  GROUP_TAB,
   NAV_GROUPS,
+  NAV_TABS,
+  PANE_SCREENS,
   createNavGroupState,
+  createTabMemory,
+  isPaneScreen,
   isPlainLeftClick,
+  isScreen,
   navCommands,
   navGroupOf,
   navHref,
+  screenTitle,
+  tabOf,
+  tabScreens,
   visibleNavGroups,
   type NavFlags,
 } from "@/components/mc/nav-model";
@@ -212,6 +221,135 @@ describe("Admin & health expanded state", () => {
     state.setOpen("admin", true);
     unsubscribe();
     state.setOpen("admin", false);
+    expect(calls).toBe(1);
+  });
+});
+
+// ─── ADR-005: every nav surface derives from the same model ──────────────────
+
+describe("phone tabs — one per group, derived from the model", () => {
+  it("has My work · Plan · Knowledge · More, and each group maps to exactly one tab", () => {
+    expect(NAV_TABS.map((t) => t.label)).toEqual(["My work", "Plan", "Knowledge", "More"]);
+    expect(NAV_GROUPS.map((g) => GROUP_TAB[g.id])).toEqual(["my-work", "plan", "knowledge", "more"]);
+    // Tab landing screens are nav items of their own group, never hand-listed elsewhere.
+    for (const tab of NAV_TABS.filter((t) => t.home)) expect(tabOf(tab.home!), tab.id).toBe(tab.id);
+    expect(NAV_TABS.find((t) => t.id === "more")!.home).toBeUndefined();
+  });
+
+  it("puts every screen under a tab: nav items under their group's, detail screens under Plan", () => {
+    for (const group of NAV_GROUPS) {
+      for (const item of group.items) expect(tabOf(item.screen), item.screen).toBe(GROUP_TAB[group.id]);
+    }
+    for (const detail of ["task", "bucket", "project"] as const) expect(tabOf(detail)).toBe("plan");
+    for (const screen of SCREEN_VALUES) expect(NAV_TABS.map((t) => t.id)).toContain(tabOf(screen));
+  });
+
+  it("gives each tab's group strip that group's visible items; More has none", () => {
+    expect(tabScreens("plan", OFF).map((i) => i.screen)).toEqual(["board", "list", "timeline", "insights"]);
+    expect(tabScreens("my-work", OFF).map((i) => i.screen)).toEqual(["home", "mine", "approvals"]);
+    expect(tabScreens("more", ON)).toEqual([]);
+  });
+
+  it("names the phone title from the nav label, or the detail screen's noun", () => {
+    expect(screenTitle("board")).toBe("Board");
+    expect(screenTitle("sync")).toBe("SharePoint sync issues");
+    expect(screenTitle("task")).toBe("Task");
+    expect(screenTitle("bucket")).toBe("Initiative");
+    expect(screenTitle("project")).toBe("Project");
+  });
+
+  it("gives every nav item a Lucide icon name", () => {
+    for (const item of NAV_GROUPS.flatMap((g) => g.items)) expect(item.lucide, item.screen).toMatch(/^[A-Z][A-Za-z0-9]+$/);
+  });
+
+  it("validates screen names from storage or URLs", () => {
+    expect(isScreen("board")).toBe(true);
+    expect(isScreen("not-a-screen")).toBe(false);
+    expect(isScreen("")).toBe(false);
+  });
+});
+
+describe("context pane screens (≥1600)", () => {
+  it("are the collections a task is opened from — never the task page itself", () => {
+    expect([...PANE_SCREENS]).toEqual(["board", "list", "mine", "approvals"]);
+    expect(isPaneScreen("list")).toBe(true);
+    expect(isPaneScreen("task")).toBe(false);
+    expect(isPaneScreen("home")).toBe(false);
+  });
+});
+
+describe("tab memory — each tab returns to its last screen", () => {
+  const memoryStorage = () => {
+    const data = new Map<string, string>();
+    return {
+      data,
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+    };
+  };
+
+  it("remembers the last screen per tab, across reloads", () => {
+    const storage = memoryStorage();
+    const memory = createTabMemory(() => storage);
+    expect(memory.last("plan")).toBeUndefined();
+    memory.remember("list");
+    memory.remember("brain-ask");
+    expect(memory.last("plan")).toBe("list");
+    expect(memory.last("knowledge")).toBe("brain-ask");
+    expect(createTabMemory(() => storage).last("plan")).toBe("list");
+  });
+
+  it("never lands a tab on a detail screen, and More is a sheet, not a landing spot", () => {
+    const storage = memoryStorage();
+    const memory = createTabMemory(() => storage);
+    memory.remember("board");
+    memory.remember("task");
+    memory.remember("project");
+    memory.remember("repos");
+    expect(memory.last("plan")).toBe("board");
+    expect(memory.last("more")).toBeUndefined();
+    expect(storage.data.size).toBe(1);
+  });
+
+  it("ignores garbage or another tab's screen found in storage", () => {
+    const storage = memoryStorage();
+    storage.data.set("mc.tab.plan.last", "not-a-screen");
+    storage.data.set("mc.tab.knowledge.last", "board");
+    storage.data.set("mc.tab.my-work.last", "task");
+    const memory = createTabMemory(() => storage);
+    expect(memory.last("plan")).toBeUndefined();
+    expect(memory.last("knowledge")).toBeUndefined();
+    expect(memory.last("my-work")).toBeUndefined();
+  });
+
+  it("still remembers for the page when storage is unavailable or throws", () => {
+    const throwing = {
+      getItem: () => {
+        throw new Error("SecurityError");
+      },
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+    };
+    for (const getStorage of [() => null, () => throwing, () => { throw new Error("denied"); }]) {
+      const memory = createTabMemory(getStorage);
+      expect(memory.last("plan")).toBeUndefined();
+      expect(() => memory.remember("timeline")).not.toThrow();
+      expect(memory.last("plan")).toBe("timeline");
+    }
+  });
+
+  it("notifies subscribers only when a tab's screen actually changes", () => {
+    const memory = createTabMemory(() => null);
+    let calls = 0;
+    const unsubscribe = memory.subscribe(() => {
+      calls += 1;
+    });
+    memory.remember("list");
+    memory.remember("list");
+    memory.remember("task");
+    unsubscribe();
+    memory.remember("board");
     expect(calls).toBe(1);
   });
 });

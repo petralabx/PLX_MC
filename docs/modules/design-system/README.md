@@ -32,8 +32,10 @@ language. See `docs/design-system/decisions/ADR-003-mission-control-surface.md`.
   may be added here without upstream sign-off — e.g. ADR-004 adds the missing
   `--p-rail`/`--p-canvas` surface tokens for the `.mc` shell without changing
   any existing token value.
-- Responsive governance: exactly three breakpoints (≥1025 / 641–1024 / ≤640),
-  44px touch targets, tables are the only horizontal-scroll surface.
+- Responsive governance: RESPONSIVE.md's pivots (641 / 1025) plus, for Mission
+  Control only, the wide (≥1600) and ultra-wide (≥2200) tiers waived by
+  `decisions/ADR-005-mc-wide-and-ultrawide-tiers.md`; 44px touch targets;
+  tables and boards are the only horizontal-scroll surfaces.
 
 ## Dependencies
 

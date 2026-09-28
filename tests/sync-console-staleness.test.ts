@@ -114,10 +114,10 @@ describe("nav + console wiring", () => {
       .map((c) => c.label);
     expect(commands).toEqual(["Go to SharePoint sync issues", "Go to Conflicts", "Go to Review queue"]);
 
-    // The topbar sync pill still lands on the console.
-    const chrome = readSrc("src/components/mc/chrome.tsx");
-    expect(chrome).toContain('nav("sync")');
-    expect(chrome).toMatch(/review queue/i);
+    // The topbar sync pill still lands on the console (top-bar.tsx since ADR-005).
+    const topBar = readSrc("src/components/mc/top-bar.tsx");
+    expect(topBar).toContain('nav("sync")');
+    expect(topBar).toMatch(/review queue/i);
   });
 
   it("SyncConsole uses openConflicts and fail-closed stale banner", () => {

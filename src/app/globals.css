@@ -1,21 +1,27 @@
+/* mc-shell.css comes first: it declares the MC cascade-layer order (ADR-005).
+   brand-tokens.css stays unlayered (Portal parity file). Every existing MC file,
+   mc-surface.css included (it carries base element rules, not only tokens),
+   goes into mc.legacy in its original order, so their mutual cascade is
+   unchanged and the mc.shell layer supersedes them. */
+@import "../styles/mc-shell.css";
 @import "../styles/brand-tokens.css";
-@import "../styles/mc-surface.css";
-@import "../styles/mc-app.css";
-@import "../styles/mc-views.css";
-@import "../styles/mc-charts.css";
-@import "../styles/mc-task.css";
-@import "../styles/mc-record.css";
-@import "../styles/mc-overview.css";
-@import "../styles/mc-authoring.css";
-@import "../styles/mc-auth.css";
-@import "../styles/mc-welcome.css";
-@import "../styles/mc-loop-ledgers.css";
-@import "../styles/mc-governance-sops.css";
-@import "../styles/mc-skills-directory.css";
-@import "../styles/mc-architecture.css";
-@import "../styles/mc-vendor-spend.css";
-@import "../styles/mc-routing-inbox.css";
-@import "../styles/mc-approvals.css";
+@import "../styles/mc-surface.css" layer(mc.legacy);
+@import "../styles/mc-app.css" layer(mc.legacy);
+@import "../styles/mc-views.css" layer(mc.legacy);
+@import "../styles/mc-charts.css" layer(mc.legacy);
+@import "../styles/mc-task.css" layer(mc.legacy);
+@import "../styles/mc-record.css" layer(mc.legacy);
+@import "../styles/mc-overview.css" layer(mc.legacy);
+@import "../styles/mc-authoring.css" layer(mc.legacy);
+@import "../styles/mc-auth.css" layer(mc.legacy);
+@import "../styles/mc-welcome.css" layer(mc.legacy);
+@import "../styles/mc-loop-ledgers.css" layer(mc.legacy);
+@import "../styles/mc-governance-sops.css" layer(mc.legacy);
+@import "../styles/mc-skills-directory.css" layer(mc.legacy);
+@import "../styles/mc-architecture.css" layer(mc.legacy);
+@import "../styles/mc-vendor-spend.css" layer(mc.legacy);
+@import "../styles/mc-routing-inbox.css" layer(mc.legacy);
+@import "../styles/mc-approvals.css" layer(mc.legacy);
 
 * {
   box-sizing: border-box;

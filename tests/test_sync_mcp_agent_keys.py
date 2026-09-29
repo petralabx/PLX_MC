@@ -86,6 +86,135 @@ def test_registry_accepts_agent_runner_principal() -> None:
     assert sync.IDENTITY_LABELS["sp_mcp_agent_runner"] == "agent_runner"
 
 
+def test_registry_accepts_portal_principal() -> None:
+    sync = load_script()
+    registry = sync.validate_registry(
+        json.dumps(
+            {
+                "sp_mcp_claude_code": "claude-secret",
+                "sp_mcp_portal": "portal-secret",
+            }
+        )
+    )
+    assert registry["sp_mcp_portal"] == "portal-secret"
+    assert sync.IDENTITY_LABELS["sp_mcp_portal"] == "portal"
+
+
+def search_response(principal_id: str) -> FakeResponse:
+    return FakeResponse(
+        200,
+        {
+            "data": {"tasks": [], "total": 0},
+            "meta": {"actor": {"servicePrincipalId": principal_id}},
+        },
+    )
+
+
+IDENTITY_ARGS = {
+    "production_url": "https://mc.example.test/",
+    "operator_email": "cos@petrasoap.com",
+    "repo": "petralabx/local-inference",
+    "runtime": "cursor-cloud",
+}
+
+
+def test_portal_is_the_only_search_verified_principal() -> None:
+    sync = load_script()
+    assert sync.SEARCH_VERIFIED_PRINCIPAL_IDS == frozenset({"sp_mcp_portal"})
+
+
+def test_task_search_identity_accepts_the_portal_actor() -> None:
+    sync = load_script()
+    session = FakeSession(search_response("sp_mcp_portal"))
+
+    assert sync.verify_task_search_identity(
+        session,
+        api_key="portal-secret",
+        expected_principal_id="sp_mcp_portal",
+        **IDENTITY_ARGS,
+    )
+    call = session.calls[0]
+    assert call["method"] == "GET"
+    assert call["url"] == "https://mc.example.test/api/cursor/tasks"
+    assert call["params"] == {"limit": "1"}
+    assert call["headers"]["x-api-key"] == "portal-secret"
+
+
+def test_task_search_identity_rejects_another_actor() -> None:
+    sync = load_script()
+    session = FakeSession(search_response("sp_mcp_claude_code"))
+
+    assert not sync.verify_task_search_identity(
+        session,
+        api_key="portal-secret",
+        expected_principal_id="sp_mcp_portal",
+        **IDENTITY_ARGS,
+    )
+
+
+def test_task_search_identity_rejects_a_missing_actor() -> None:
+    sync = load_script()
+    session = FakeSession(FakeResponse(200, {"data": {"tasks": []}, "meta": {}}))
+
+    assert not sync.verify_task_search_identity(
+        session,
+        api_key="portal-secret",
+        expected_principal_id="sp_mcp_portal",
+        **IDENTITY_ARGS,
+    )
+
+
+def test_task_search_identity_fails_closed_on_forbidden() -> None:
+    sync = load_script()
+    session = FakeSession(FakeResponse(403, {"error": {"code": "forbidden"}}))
+
+    with pytest.raises(sync.SyncError, match="task_search_sp_mcp_portal_http_403"):
+        sync.verify_task_search_identity(
+            session,
+            api_key="portal-secret",
+            expected_principal_id="sp_mcp_portal",
+            **IDENTITY_ARGS,
+        )
+
+
+def test_portal_identity_never_calls_self_check() -> None:
+    sync = load_script()
+    session = FakeSession(search_response("sp_mcp_portal"))
+
+    assert sync.verify_identity(
+        session,
+        api_key="portal-secret",
+        expected_principal_id="sp_mcp_portal",
+        **IDENTITY_ARGS,
+    )
+    assert [call["url"] for call in session.calls] == [
+        "https://mc.example.test/api/cursor/tasks"
+    ]
+
+
+def test_other_identities_keep_the_self_check() -> None:
+    sync = load_script()
+    session = FakeSession(
+        FakeResponse(
+            200,
+            {
+                "data": {"ok": True, "mcpEnabled": True},
+                "meta": {"actor": {"servicePrincipalId": "sp_mcp_grok"}},
+            },
+        )
+    )
+
+    assert sync.verify_identity(
+        session,
+        api_key="grok-secret",
+        expected_principal_id="sp_mcp_grok",
+        **IDENTITY_ARGS,
+    )
+    assert [call["url"] for call in session.calls] == [
+        "https://mc.example.test/api/cursor/self-check"
+    ]
+
+
 def test_vercel_upsert_is_sensitive_and_production_only() -> None:
     sync = load_script()
     session = FakeSession(
@@ -145,6 +274,7 @@ def test_main_reports_only_redacted_evidence(monkeypatch, capsys) -> None:
             "sp_mcp_grok": "grok-secret",
             "sp_mcp_hermes": "hermes-secret",
             "sp_mcp_swarm": "swarm-secret",
+            "sp_mcp_portal": "portal-secret",
         }
     )
     compatibility = json.dumps(
@@ -193,7 +323,20 @@ def test_main_reports_only_redacted_evidence(monkeypatch, capsys) -> None:
         "wait_for_domain_activation",
         lambda *_args, **_kwargs: {"id": "dpl_current"},
     )
-    monkeypatch.setattr(sync, "verify_self_check", lambda *_args, **_kwargs: True)
+    self_checked: list[str] = []
+    searched: list[str] = []
+
+    def fake_self_check(*_args, expected_principal_id: str, **_kwargs) -> bool:
+        self_checked.append(expected_principal_id)
+        # The portal allowlist denies mc_self_check (CG-07b).
+        return expected_principal_id != "sp_mcp_portal"
+
+    def fake_task_search(*_args, expected_principal_id: str, **_kwargs) -> bool:
+        searched.append(expected_principal_id)
+        return True
+
+    monkeypatch.setattr(sync, "verify_self_check", fake_self_check)
+    monkeypatch.setattr(sync, "verify_task_search_identity", fake_task_search)
     monkeypatch.setattr(sys, "argv", [str(SCRIPT)])
 
     assert sync.main() == 0
@@ -214,4 +357,9 @@ def test_main_reports_only_redacted_evidence(monkeypatch, capsys) -> None:
     assert "grok_identity_ok=True" in output
     assert "hermes_identity_ok=True" in output
     assert "swarm_identity_ok=True" in output
+    assert "portal_identity_ok=True" in output
     assert "shared_identity_ok=True" in output
+    assert "portal-secret" not in output
+    assert searched == ["sp_mcp_portal"]
+    assert "sp_mcp_portal" not in self_checked
+    assert "sp_mcp_cursor" in self_checked

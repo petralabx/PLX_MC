@@ -21,6 +21,7 @@ import {
   actionSelfCheck,
 } from "./actions";
 import { recordMcpToolCall } from "./audit";
+import { assertMcpToolAllowed } from "./tool-allowlist";
 import { installMcpToolErrorEnvelope, taskLink } from "./envelope";
 import {
   actionInstallSkills,
@@ -97,6 +98,30 @@ function auditToolCalls(server: McpServer, identity: McpIdentity): void {
   }) as typeof server.tool;
 }
 
+// A principal with a tool allowlist (sp_mcp_portal, decision CG-07b) gets
+// forbidden for every other tool, reads included, before the tool runs.
+// Installed after the audit wrapper so the audit row records the refusal.
+// It wraps server.tool and server.registerTool, so a tool that a split module
+// adds later is refused too unless the allowlist names it.
+function guardToolAllowlist(server: McpServer, identity: McpIdentity): void {
+  const registrars = server as unknown as Record<"tool" | "registerTool", (...args: unknown[]) => unknown>;
+  for (const method of ["tool", "registerTool"] as const) {
+    const register = registrars[method].bind(server);
+    registrars[method] = (...args: unknown[]) => {
+      const tool = String(args[0]);
+      const last = args.length - 1;
+      const handler = args[last];
+      if (typeof handler === "function") {
+        args[last] = async (...handlerArgs: unknown[]) => {
+          assertMcpToolAllowed(identity, tool);
+          return handler(...handlerArgs);
+        };
+      }
+      return register(...args);
+    };
+  }
+}
+
 /**
  * Modular routing tool registration seam.
  * P5: suggestion tools. P8: confirmed mutation tools.
@@ -124,6 +149,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   // Installed after the envelope so the audit wrapper sits inside it and sees
   // raw throws (recording their message) before they become isError results.
   auditToolCalls(server, identity);
+  guardToolAllowlist(server, identity);
 
   server.tool("mc_self_check", "Validate MCP auth and PLX MC reachability.", {}, async () =>
     jsonResult(await actionSelfCheck(identity))
@@ -146,19 +172,29 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_search_tasks",
-    "Search/list tasks by query (alias: q), bucket, or stage. Applied filters are echoed in meta.filter.",
+    "Search/list tasks by query (alias: q), bucket, stage, or assignee. Applied filters are echoed in meta.filter.",
     {
       q: z.string().optional().describe("Search text (alias of query)"),
       query: z.string().optional().describe("Search text (alias of q)"),
       bucket: z.string().optional(),
       stage: z.string().optional(),
+      assignee: z
+        .string()
+        .optional()
+        .describe("Exact assignee id, e.g. agent:hasitha-fernando or a person id"),
       limit: z.number().int().min(1).max(200).optional(),
     },
     async (args) => {
       const result = await actionSearchTasks(args, identity);
+      // meta.actor names the calling principal, as GET /api/cursor/tasks does.
+      // Key rotation verifies sp_mcp_portal through this search, because its
+      // tool allowlist denies mc_self_check (decision CG-07b).
       return jsonResult({
         data: { tasks: result.tasks, total: result.total },
-        meta: { filter: result.filter },
+        meta: {
+          filter: result.filter,
+          actor: { servicePrincipalId: identity.servicePrincipalId },
+        },
       });
     }
   );
@@ -240,6 +276,13 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         .optional()
         .describe(
           "MC registry ids only (e.g. portal-web, plx-mc, agentic-swarm). Not MC_REPO / GitHub slugs — those are for checkout/compliance."
+        ),
+      assignee: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "Optional executor: a person id, or agent:<slug> for an agent. Only sp_mcp_portal may set an agent: assignee; any other MCP principal gets forbidden (403)."
         ),
     },
     async (body) => jsonResult(await actionCreateTask(identity, { ...body, reporter: body.reporter || identity.operatorEmail }))

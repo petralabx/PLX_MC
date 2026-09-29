@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
+  PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   authorize,
   capabilitiesForServicePrincipal,
 } from "@/lib/permissions";
@@ -35,8 +36,11 @@ describe("MCP project and bucket creation capability", () => {
     ).toBe(true);
   });
 
-  it("grants project and bucket creation to every reviewed MCP agent principal", () => {
-    for (const principalId of MCP_AGENT_SERVICE_PRINCIPAL_IDS) {
+  it("grants project and bucket creation to every full-bundle MCP agent principal", () => {
+    // sp_mcp_portal holds a least-privilege grant (decision CG-07b).
+    for (const principalId of MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
+      (id) => id !== PORTAL_MCP_SERVICE_PRINCIPAL_ID
+    )) {
       const capabilities = capabilitiesForServicePrincipal(principalId);
       expect(capabilities).toEqual(
         expect.arrayContaining(["project.create", "bucket.create", "bucket.update"])
@@ -71,6 +75,17 @@ describe("MCP project and bucket creation capability", () => {
         "sp_mcp_hermes",
       ])
     );
+  });
+
+  it("denies project and bucket actions to sp_mcp_portal", () => {
+    for (const capability of ["project.create", "bucket.create", "bucket.update"]) {
+      expect(
+        authorize({
+          actor: { kind: "service", id: PORTAL_MCP_SERVICE_PRINCIPAL_ID, status: "active" },
+          capability,
+        }).allowed
+      ).toBe(false);
+    }
   });
 
   it("keeps the reviewed principal registry in parity with durable migrations", () => {

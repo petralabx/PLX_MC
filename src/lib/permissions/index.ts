@@ -4,6 +4,7 @@ export {
   POLICY_VERSION,
   MCP_SERVICE_PRINCIPAL_ID,
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
+  PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   SYNC_INBOUND_SERVICE_PRINCIPAL_ID,
   ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
   GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
@@ -47,6 +48,7 @@ export type {
 };
 
 export { authorize, isCapability } from "./authorize";
+export { isAgentAssignee, mayAssignAgent } from "./agent-assignee";
 export {
   capabilitiesForRole,
   capabilitiesForServicePrincipal,

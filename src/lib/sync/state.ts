@@ -5,6 +5,7 @@
 
 import { ApiError } from "@/lib/api/route";
 import { OPERATOR_ID, HUMANS, SP_LISTS } from "@/lib/mc-data/data";
+import { normalizeBucketPrd } from "@/lib/mc-data/doc-links";
 import {
   isRestrictedProject,
   normalizeProjectMembers,
@@ -203,6 +204,8 @@ export async function createBucket(
   } else {
     projectId = await defaultProjectId();
   }
+  const prd = normalizeBucketPrd(input.prd ?? null);
+  if (!prd.ok) throw new ApiError("invalid_request", "PRD link must be an http or https URL.", 422);
   const bucket: Bucket = {
     id,
     name,
@@ -213,7 +216,7 @@ export async function createBucket(
     desc: (input.desc ?? "").trim(),
     repos,
     sync: { state: "pending", ts: repo.stamp(), sp: "Roadmap · unprovisioned" },
-    prd: input.prd ?? null,
+    prd: prd.value ?? null,
     project: projectId,
   };
   const parent = projectId
@@ -263,6 +266,11 @@ export async function patchBucket(id: string, patch: PatchBucketInput, actor: st
     const registry = await repo.getRepos();
     const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
     patch = { ...patch, repos: requireRegistryRepos(patch.repos, registryMap) };
+  }
+  if (patch.prd !== undefined) {
+    const prd = normalizeBucketPrd(patch.prd);
+    if (!prd.ok) throw new ApiError("invalid_request", "PRD link must be an http or https URL.", 422);
+    patch = { ...patch, prd: prd.value };
   }
   if (patch.project) await assertProjectExists(patch.project);
   const defined = definedEntries(patch);

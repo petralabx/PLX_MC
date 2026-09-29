@@ -2,7 +2,7 @@
 // anything that isn't http(s) do not (src/lib/mc-data/doc-links.ts).
 import { describe, expect, it } from "vitest";
 
-import { docLinkFromPrd, projectDocLinks } from "@/lib/mc-data/doc-links";
+import { docLinkFromPrd, normalizeBucketPrd, projectDocLinks } from "@/lib/mc-data/doc-links";
 
 const SPEC =
   "https://github.com/petralabx/plx-customer-portal/blob/staging/docs/projects/cos-companion/DESKTOP-SPEC.md";
@@ -44,6 +44,23 @@ describe("docLinkFromPrd", () => {
     ]) {
       expect(docLinkFromPrd(prd)).toBeNull();
     }
+  });
+});
+
+describe("normalizeBucketPrd", () => {
+  it("stores an http(s) URL and clears a blank value", () => {
+    expect(normalizeBucketPrd("  https://example.com/prd.md  ")).toEqual({
+      ok: true,
+      value: "https://example.com/prd.md",
+    });
+    expect(normalizeBucketPrd("")).toEqual({ ok: true, value: null });
+    expect(normalizeBucketPrd(null)).toEqual({ ok: true, value: null });
+    expect(normalizeBucketPrd(undefined)).toEqual({ ok: true, value: undefined });
+  });
+
+  it("rejects a bare id and an unsafe scheme", () => {
+    expect(normalizeBucketPrd("PRD-001")).toEqual({ ok: false });
+    expect(normalizeBucketPrd("javascript:alert(1)")).toEqual({ ok: false });
   });
 });
 

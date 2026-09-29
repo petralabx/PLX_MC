@@ -32,11 +32,10 @@ export interface VerifyInput {
   task: Task | null;
   actor: ActorKind;
   tier: RiskTier;
-  // Whether the task's bucket has an approved PRD (per-bucket PRD, decision 12).
-  // "unknown" when there is no server bucket store yet (EN-005/006); the gate
-  // then treats the high-risk PRD requirement as advisory, not a hard block
-  // (review S1 — never hard-block on an unsatisfiable condition).
-  bucketPrd: "present" | "absent" | "unknown";
+  // Whether the task's initiative has an http(s) PRD link (decision 12).
+  // "store_unavailable" and "unknown" stay advisory: never hard-block when the
+  // bucket store cannot be read (review S1). "no_bucket" blocks.
+  bucketPrd: "present" | "absent" | "no_bucket" | "store_unavailable" | "unknown";
 }
 
 export interface VerifyResult {

@@ -18,7 +18,7 @@ import {
   type Task,
   type Trace,
 } from "@/lib/mc-data";
-import { docLinkFromPrd } from "@/lib/mc-data/doc-links";
+import { docLinkFromPrd, normalizeBucketPrd } from "@/lib/mc-data/doc-links";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   addBucketComment,
@@ -83,6 +83,52 @@ export function summarizeTrace(trace: Trace | null): TraceSummary {
  */
 export function mergeMilestones(fixture: Milestone[], ledger: Milestone[]): Milestone[] {
   return [...fixture, ...ledger];
+}
+
+function PrdLinkField({ bucketId, prd }: { bucketId: string; prd: string | null }) {
+  const [draft, setDraft] = useState(prd ?? "");
+  const [message, setMessage] = useState<string | null>(null);
+
+  function save(raw: string) {
+    const normalized = normalizeBucketPrd(raw);
+    if (!normalized.ok || normalized.value === undefined) {
+      setMessage("Paste an http or https URL.");
+      return;
+    }
+    if ((normalized.value ?? null) === (prd ?? null)) {
+      setMessage(null);
+      return;
+    }
+    updateBucket(bucketId, { prd: normalized.value });
+    setMessage(null);
+  }
+
+  return (
+    <div className="f">
+      <span className="k">PRD link</span>
+      <span className="v sm">
+        <input
+          className="le-input"
+          type="url"
+          value={draft}
+          placeholder="https://"
+          aria-label="PRD link"
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setMessage(null);
+          }}
+          onBlur={(event) => save(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+          }}
+        />
+        {message ? <span className="kk">{message}</span> : null}
+      </span>
+    </div>
+  );
 }
 
 export function BucketDetail({ route, nav }: ScreenProps) {
@@ -159,17 +205,9 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             This initiative needs a <em className="empty-accent">PRD</em>
           </h3>
           <p>
-            Every initiative carries a PRD: problem, testable requirements, acceptance criteria,
-            non-goals, and rollback. Drafting stays in the authoring lane.
+            Paste an https URL for the PRD. The high-risk gate accepts that link.
           </p>
-          <div className="acts">
-            <button type="button" className="btn acc" title="coming soon">
-              Draft PRD with Scribe
-            </button>
-            <button type="button" className="btn ghost" title="coming soon">
-              Start blank
-            </button>
-          </div>
+          <PrdLinkField key={`${bucket.id}:${bucket.prd ?? ""}`} bucketId={bucket.id} prd={bucket.prd} />
         </div>
       </div>
     );
@@ -251,6 +289,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
               </select>
             </span>
           </div>
+          <PrdLinkField key={`${bucket.id}:${bucket.prd ?? ""}`} bucketId={bucket.id} prd={bucket.prd} />
           <div className="f">
             <span className="k">Tasks</span>
             <span className="v">{rollups.tasks.length}</span>

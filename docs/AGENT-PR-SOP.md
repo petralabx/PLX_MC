@@ -461,7 +461,7 @@ Operator PRs without a confirmed link create/update a routing **proposal**
 | No valid checkout | `mc_checkout_task` on the Hub connector with `repo=owner/name`; copy `prBodyLine`. Do not invent a stamp. |
 | Checkout tools missing | **Stop.** Do not write `MC-Checkout: pending`. Do not open the PR. |
 | Missing evidence on task | `mc_complete_task` with non-empty `verificationCommands` **AND** `rollback` (plus summary; testRun/shots as tier requires) |
-| Missing bucket PRD (high) | Link PRD on bucket in MC UI |
+| Missing bucket PRD (high) | On the initiative page, paste an https URL into PRD link and save. |
 | Repo-specific rollback check | Add `## Rollback Plan` to PR body (e.g. agentic-swarm) |
 | MC unreachable | Fail-closed; re-run check when MC is up |
 

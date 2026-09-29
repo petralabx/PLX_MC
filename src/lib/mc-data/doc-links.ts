@@ -30,6 +30,19 @@ function lastPathSegment(url: URL): string | null {
   }
 }
 
+/** Store an http(s) PRD link, clear a blank value, or reject anything else. */
+export function normalizeBucketPrd(
+  prd: string | null | undefined
+): { ok: true; value: string | null | undefined } | { ok: false } {
+  if (prd === undefined) return { ok: true, value: undefined };
+  if (prd === null) return { ok: true, value: null };
+  const trimmed = prd.trim();
+  if (!trimmed) return { ok: true, value: null };
+  const link = docLinkFromPrd(trimmed);
+  if (!link) return { ok: false };
+  return { ok: true, value: link.href };
+}
+
 export function docLinkFromPrd(prd: string | null | undefined): DocLink | null {
   const raw = prd?.trim();
   if (!raw) return null;

@@ -75,11 +75,13 @@ export function verifyCompliance(input: VerifyInput): VerifyResult {
   reasons.push(...ev.missing.map((m) => `missing ${m}`));
   if (bundleRequirementsFor(tier).prd) {
     if (bucketPrd === "absent") {
-      reasons.push("high-risk change requires an approved bucket PRD");
-    } else if (bucketPrd === "unknown") {
-      // No server bucket store yet (EN-005/006): the PRD requirement can't be
-      // evaluated, so it is advisory — never a hard block (review S1).
-      notes.push("bucket-PRD requirement not enforced yet (no bucket store) — advisory");
+      reasons.push("high-risk change requires a linked bucket PRD");
+    } else if (bucketPrd === "no_bucket") {
+      reasons.push("high-risk change requires the task on an initiative with a linked bucket PRD");
+    } else if (bucketPrd === "unknown" || bucketPrd === "store_unavailable") {
+      // The bucket store cannot be read (EN-005/006): advisory, never a hard
+      // block (review S1). A missing initiative is no_bucket and does block.
+      notes.push("bucket-PRD requirement not enforced yet (bucket store unavailable) — advisory");
     }
   }
 

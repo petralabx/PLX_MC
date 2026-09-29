@@ -122,7 +122,7 @@ Live feed of what agents are doing (streaming/working/awaiting‑review), each l
 
 ### 6.7 Initiative (bucket) detail — `mc-bucket.jsx › BucketDetail`
 Two columns.
-- **Left:** PRD summary; an **embedded SharePoint ToDos list** (`.splist`) styled like a real MS List — header "ToDos (MS List) · {initiative}", columns Task ID / Title / Status / Assigned To (avatars) / Sync, footer "Mirrors two‑way … last sync". Empty state offers **"Draft PRD with Scribe"** / **"Start blank"** (→ New Task modal).
+- **Left:** PRD summary; an **embedded SharePoint ToDos list** (`.splist`) styled like a real MS List — header "ToDos (MS List) · {initiative}", columns Task ID / Title / Status / Assigned To (avatars) / Sync, footer "Mirrors two‑way … last sync". Empty state asks for an https PRD link and saves it on the initiative.
 - **Right:** **Documents & Links** panel (`.doclinks`) — rows for Project Plan, Roadmap, Milestone Register, Risk Register (MS Lists), Project Documents (Library → Files screen), and each GitHub repo; then Milestones, Risks, and a traceability summary.
 
 ### 6.8 Task detail — `mc-task.jsx › TaskDetail` + `TaskRecord`

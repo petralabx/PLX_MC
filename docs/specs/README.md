@@ -8,9 +8,9 @@ proves the phase is done. Accountable human for all three: vince@petrasoap.com.
 |---|---|---|---|
 | [`frontier-implementation-spec.md`](frontier-implementation-spec.md) | r12 | Approved 28 Sep 2026 | The frontier stack: checkout leases, merge queue, the cloud proofs and the rest of the five workstreams. |
 | [`frontier-review-log.md`](frontier-review-log.md) | rounds 1–9 | Record | The adversarial review of the frontier spec, finding by finding. |
-| [`agent-fleet-spec.md`](agent-fleet-spec.md) | r12 | D1–D24 confirmed; reviewed in seven rounds, then closed by the operator (28 Sep 2026) | Agents registered in the portal, run on an always-on runner, on any model through the fleet's own proxy. COS is the chief of staff, one agent reached from the portal, the COS Companion and Grok Bot. |
-| [`agent-fleet-review-log.md`](agent-fleet-review-log.md) | rounds 1–7 | Record | The adversarial review of the fleet spec, finding by finding. |
-| [`swarm-retirement-spec.md`](swarm-retirement-spec.md) | r11 | D1–D13 confirmed; reviewed in seven rounds, then closed by the operator (28 Sep 2026) | Retire `petralabx/agentic-swarm` and VMC: measure use, move the brain to `plx_secondbrain`, retire the rest. The trading lab is not touched and keeps the repo. |
+| [`agent-fleet-spec.md`](agent-fleet-spec.md) | r13 | D1–D26 confirmed; reviewed in seven rounds plus one pass on r13 (28 Sep 2026) | Agents registered in the portal, run in parallel on an always-on runner, on any model through the fleet's own proxy on its own EC2 host. A version passes an eval before it goes live. COS is the chief of staff, one agent reached from the portal, the COS Companion and Grok Bot. |
+| [`agent-fleet-review-log.md`](agent-fleet-review-log.md) | rounds 1–7, r13 pass | Record | The adversarial review of the fleet spec, finding by finding. |
+| [`swarm-retirement-spec.md`](swarm-retirement-spec.md) | r12 | D1–D13 confirmed; reviewed in seven rounds, then closed by the operator; r12 follows fleet r13 (28 Sep 2026) | Retire `petralabx/agentic-swarm` and VMC: measure use, move the brain to `plx_secondbrain`, retire the rest. The trading lab is not touched and keeps the repo. |
 | [`swarm-retirement-review-log.md`](swarm-retirement-review-log.md) | rounds 1–7 | Record | The adversarial review of the retirement spec, finding by finding. |
 
 ## How the specs depend on each other
@@ -20,8 +20,9 @@ proves the phase is done. Accountable human for all three: vince@petrasoap.com.
   rules (retirement section 10).
 - Frontier P14 waits on `BRAIN_URL`, the brain's own address, which exists after
   retirement R6a (frontier D14).
-- Retirement R8 waits for fleet P1 (the fleet's OpenAI organisation for the brain's
-  embedding key), and R9 waits for fleet P1 and P2 (the brain's fleet key).
+- Retirement R5's tailnet fence waits for fleet P1, which creates `tag:fleet-proxy`.
+  R8 waits for fleet P1 (the fleet's OpenAI organisation for the brain's embedding
+  key), and R9 waits for fleet P1 and P2 (the brain's fleet key).
 - The fleet spec retires Mission Control's agents module (fleet D15, P9). The
   retirement spec lists the swarm pieces the fleet replaces.
 - No frontier phase edits the swarm (frontier SC-12).

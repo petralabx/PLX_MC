@@ -249,6 +249,41 @@ change the interpreter trading runs. r12 applies all 16.
 | R7F-15 | minor | The status route stopped a run after its own callback; the claim ignored the switches. | A run may finish after its accepted callback; claim step 0 checks the switches. |
 | R7F-16 | minor | A thin bundle cannot be fetched into an empty repo; fsck of all history would fail on legacy objects. | A throwaway repo with the parent as an alternate, then a local fetch with `transfer.fsckObjects`, which checks only new objects. |
 
+## After the review: r13 (operator decisions, one critic pass)
+
+After the review closed, the operator made three decisions on 28 Sep 2026:
+- **D5 amended:** the fleet proxy moves to its own EC2 host, `fleet-proxy`, with its own
+  Postgres. Nothing of the fleet runs on the Dell. Local aliases become an optional
+  phase, P1b, that calls the Dell's model server over the tailnet under the A/B load
+  test. Every late blocker in rounds 4 to 7 came from running the fleet on the Dell.
+- **D25 added:** an agent eval gate on activation (P15a, P15). The portal's admin
+  evaluation module is Persona QA, which tests UI and never scores agents (F47, F48).
+- **D26 added:** bounded parallel runs (per-loop `maxConcurrent`, a counting limit, per-run
+  systemd limits, a larger runner host).
+
+One blind critic then reviewed only the r13 changes: 0 blockers, 12 majors, 5 minors.
+All 17 are applied.
+
+| ID | Sev | Finding | r13 fix |
+|---|---|---|---|
+| R13-1 | major | The guard's rewording left P14's Dell task retirement unguarded. | Both Dell steps (P1b, P14) are named under the guard; P14 disables tasks by exact name. |
+| R13-2 | major | Reaching the Dell's `:8000` from another node is not proven (Docker Desktop, Windows Firewall). | P1b first runs a read-only `curl` from `fleet-proxy`; if it fails, P1b stops. |
+| R13-3 | major | P1 named tags created later by P5 and R5. | Each phase adds its own tag's rule; retirement R5's fence waits for fleet P1. |
+| R13-4 | major | P11 still required $0 cloud spend while P1b is optional. | A spend cap on the cloud alias; SC-2's hosted half depends on P1b. |
+| R13-5 | major | Keys minted before P1b lacked local aliases; limits tracked the host, not the loop. | P1b updates keys; `max_parallel_requests` is the sum of the loops' `maxConcurrent`. |
+| R13-6 | major | Approvals and claims skipped the count; a refused claim could block the job; `FOR UPDATE` on a missing row. | Count on approval and claim; refuse before minting; no row for a refused claim; insert-then-lock. |
+| R13-7 | major | Parallel runs shared one key's spend. | One key per run, deleted at the end. |
+| R13-8 | major | The portal build needs about 12 GB; 8 GB per run and a 32 GB host were too small. | 64 GB host, `MemoryMax=12G`; runs never build (CI does); Node heap and test workers capped. |
+| R13-9 | major | Parallel runs shared the mirror, push tree and hook config. | A per-repo lock; a push work tree per run; `git -c core.hooksPath`. |
+| R13-10 | major | Nothing gave the runner the candidate version; no eval key; no kill or sweep for evals. | The claim returns both versions; P2 mints eval keys; evals heartbeat and poll. |
+| R13-11 | major | Closed tickets are already fixed on `staging`; brief inputs were not stored. | Cases carry `baseSha`; P11 stores its inputs; P15 waits for 10 P11 runs. |
+| R13-12 | major | A candidate could skip the gate with `required: false`; a stale baseline; SUPER_ADMIN only. | The gate reads the active version's flag; the baseline must still be active; SUPER_ADMIN named. |
+| R13-13 | minor | Hasitha's eval could take a slot for hours and cost more than stated. | Cached baselines, per-case caps, a spare slot only; the acceptance runs on COS. |
+| R13-14 | minor | The driver's host was unnamed again; P1b edits files but was "operator". | Never the Dell, a Spark, TRADINGBOX or the VMC host; P1b is a PR plus operator. |
+| R13-15 | minor | The operator identity also covers trading's untagged hosts. | Tests deny TRADINGBOX, the VMC host and swarm-prod. |
+| R13-16 | minor | The backup needs root's metadata access; Prisma's cache owner. | Backup as root; `prisma generate` as the service user. |
+| R13-17 | minor | Migration count wording, eval "no portal write", a citation, the risk row. | Corrected. |
+
 ## Convergence
 
 | Round | Reviewer | Blockers | Majors | Minors |
@@ -275,4 +310,7 @@ operating detail.
 - **D18** reworded in r11: Cursor Cloud stays the default executor; only an
   ADMIN-authorised ticket goes to the runner, only while the routing flag is on, and it
   moves to Cursor if unclaimed for 30 minutes. The operator confirmed it on 28 Sep 2026.
-- **D24** reworded in r9 ("its own fresh clone"); meaning unchanged.
+- **D24** reworded in r9 ("its own fresh clone") and r13 ("a key minted for that run");
+  meaning unchanged, isolation tighter.
+- **D5** amended again in r13 (its own EC2 host), and **D25** and **D26** added. The
+  operator confirmed all three on 28 Sep 2026.

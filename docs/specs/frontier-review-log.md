@@ -319,11 +319,17 @@ further, and re-checked the evidence for each. Round 5 approved the draft with n
 `CHANGES.md` (section 18) holds the full text of each finding and each fix. TASK-2088
 commits the approved draft to PLX_MC `docs/specs/`.
 
-The spec header keeps `round_10: pending`. The README defines round 10 as the review of
+The spec header keeps `round_10: pending`. Finding IDs in this section (R10-1 to
+R10-6) belong to the draft critic. The review round logs its findings as `RR10-`,
+so the two series do not collide. The README defines round 10 as the review of
 every r13 change that runs once the draft's own critic approves it. The orchestrator
-adds that review's result to this section, applies its findings and then sets the
+adds that review's result after this section, applies its findings and then sets the
 header line. Until then, P4's code branch, the P15 re-run, P16 and P14 wait (D13,
 SC-13).
+
+Vince answered the r13 question on 2026-09-29T18:09:35Z: `yes r13, D5 as r13`.
+The spec header records `r13_yes: yes` and `d5_r13_yes: yes`. `round_10` stays
+pending. The r13 changes still wait for this review.
 
 | Round | Date | Blockers | Nits | Verdict |
 |---|---|---|---|---|
@@ -342,9 +348,11 @@ SC-13).
 | R10-5 | B | 3 | P14, D5 | The acceptance tied the D5 phrase to `spec_revision` (`D5 as $REV`), but the gate gave Vince the literal `D5 as r13`. A yes given against r14 would fail. | One fixed phrase, `D5 as r13`, given once: in a yes on r13 or in the P14 later yes. P14 records `d5_confirmed`, `d5_confirmed_at` and `d5_confirmed_in` and checks them as fixed lines. |
 | R10-6 | B | 4 | P15, P16 | The draft did not say plainly whether P15 runs again under r13. P16's check `! grep -qx 'pr255: open'` passed on the r12 P15 run, which has no `gate_pr_types` line. | An r12 run of P15 does not satisfy r13, so P15 runs again under r13 before P16. The P16 PLX_MC acceptance reads `gate_pr_types: opened, synchronize, reopened, edited` and `pr255: merged f6d2bab7670a` from `merge-queue-audit.md`. |
 
-The author also changed the header in rounds 3 and 4, so that r13 does not read as
-approved. The header now marks `r13_yes`, `d5_r13_yes`, `pending_r13_changes` and
-`round_10` as pending, and keeps r12's approval for the phases r13 does not change.
+The author also changed the header in rounds 3 and 4, so that r13 did not read as
+approved. That draft header marked `r13_yes`, `d5_r13_yes`, `pending_r13_changes` and
+`round_10` as pending, and kept r12's approval for the phases r13 does not change.
+The landing edit on 29 Sep 2026 then set `r13_yes` and `d5_r13_yes` to yes from
+Vince's answer. `round_10` stays pending.
 
 Nits. From round 3, the author applied nits 3, 4, 11 and 13. Nit 2 closed with R10-5,
 and nit 9 came back as R10-6. Nits 1, 5, 6, 7, 8, 10 and 12 are left for round 10 or
@@ -359,3 +367,23 @@ the documented diff command reproduced the previous `r13.diff` byte for byte; ea
 replaced one exact, unique anchor. The new P14 acceptance was dry-run with a synthetic
 `brain-register.md`. It passed on the three good forms and failed, on the intended
 check, on six bad ones.
+
+Landing review of `8ed919f` (29 Sep 2026), applied before merge. The read-only
+verification on PR #260 found defects in the adopted draft. This landing edit
+fixes them. Round 10 still reviews the r13 changes. It did not run here.
+
+- Open questions 2–7 are in the spec. Questions 1 and 8 are the recorded yes.
+- D4's two readings are the same default. They are not a separate yes.
+- The portal "opened/synchronize/reopened only" wording is still true until P16 (F10).
+- The 409 names the task, the repo and the expiry. It does not name the holder.
+- Citations at the pins: generator test `:49-55`; F23 includes
+  `compliance-gate.yml:77`; F14 workbench prompt `:359`; portal `tasks/lessons.md:15`;
+  `mc-quality-ledger.yml:20-33`; auto-merge merge-queue section `:125-144`.
+- `fc7ceef3d123` is the revision pin. It is not a claim that it is still `origin/main`.
+- P16 acceptance removes the two pre-#255 body-edit sentences and requires
+  `max_entries_to_merge` to stay `1`.
+- P4's same-holder case must set an expiry longer than the copied 60-minute mock.
+- `vitest list` checks read the `it` title, the text after the last ` > `.
+- Residual risk names `.cursor/skills/mc-sync/SKILL.md:49-50` and
+  `docs/runbooks/CONTRIBUTING.md:262-263`. `CLAUDE.md:106` at the portal pin does
+  not state the three-trigger rule.

@@ -105,9 +105,37 @@ export function dispatchRepoMatches(
   return bareRepo(dispatchRepo).toLowerCase() === bareRepo(repoName).toLowerCase();
 }
 
+type CheckoutBlockReason =
+  | "unknown_checkout"
+  | "revoked"
+  | "released"
+  | "repo_mismatch"
+  | "expired"
+  | "pr_not_open"
+  | "stamp_not_in_pr"
+  | "task_closed"
+  | "task_deleted";
+
+// The gate log is what a blocked author reads. Name the cause and the next step.
+const CHECKOUT_BLOCK_TEXT: Record<CheckoutBlockReason, string> = {
+  unknown_checkout: "unknown checkout — re-checkout the task",
+  revoked: "checkout revoked — re-checkout the task",
+  released: "checkout released — re-checkout the task",
+  repo_mismatch: "checkout is bound to another repo",
+  expired: "checkout expired — re-checkout",
+  pr_not_open: "pull request is not open",
+  stamp_not_in_pr: "checkout stamp is not in the pull request body",
+  task_closed: "task is already verified",
+  task_deleted: "task deleted — re-register",
+};
+
+function checkoutBlockReason(reason: CheckoutBlockReason): string {
+  return CHECKOUT_BLOCK_TEXT[reason];
+}
+
 type DispatchResolution = { dispatch: repo.DispatchRow; reason?: never } | {
   dispatch: null;
-  reason: "unknown_checkout" | "revoked" | "released" | "repo_mismatch" | "expired" | "pr_not_open" | "stamp_not_in_pr" | "task_closed";
+  reason: CheckoutBlockReason;
 };
 
 async function resolveDispatch(
@@ -140,7 +168,8 @@ async function resolveDispatchForOpenPr(
   if (!prState.open) return { dispatch: null, reason: "pr_not_open" };
   if (!prState.checkoutIds.includes(checkoutId)) return { dispatch: null, reason: "stamp_not_in_pr" };
   const task = await loadTask(d.taskId);
-  if (!task || task.stage === "verified") return { dispatch: null, reason: "task_closed" };
+  if (!task) return { dispatch: null, reason: "task_deleted" };
+  if (task.stage === "verified") return { dispatch: null, reason: "task_closed" };
   return { dispatch: d };
 }
 
@@ -440,10 +469,12 @@ export async function verifyPr(
     const task = await loadTask(taskId);
     const bucketPrd = await bucketPrdForTask(task);
     const result: VerifyResult = resolution.reason
-      ? { verdict: "block", reasons: [resolution.reason] }
-      : task?.stage === "verified"
-        ? { verdict: "block", reasons: ["task_closed"] }
-        : verifyCompliance({ task, actor: "agent", tier, bucketPrd });
+      ? { verdict: "block", reasons: [checkoutBlockReason(resolution.reason)] }
+      : !task
+        ? { verdict: "block", reasons: [checkoutBlockReason("task_deleted")] }
+        : task.stage === "verified"
+          ? { verdict: "block", reasons: [checkoutBlockReason("task_closed")] }
+          : verifyCompliance({ task, actor: "agent", tier, bucketPrd });
     if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, result, taskId ?? cid);
     tasks.push({ checkoutId: cid, taskId, verdict: result.verdict, reasons: result.reasons });
   }

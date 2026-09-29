@@ -40,6 +40,10 @@ IDENTITY_LABELS = {
     "sp_mcp_agent_runner": "agent_runner",
     "sp_mcp_portal": "portal",
 }
+# The MCP tool allowlist denies mc_self_check to these principals (decision
+# CG-07b). The sync verifies them through the task search they may call:
+# GET /api/cursor/tasks echoes the resolved principal in meta.actor.
+SEARCH_VERIFIED_PRINCIPAL_IDS = frozenset({"sp_mcp_portal"})
 VERCEL_API = "https://api.vercel.com"
 TERMINAL_DEPLOYMENT_STATES = {"BLOCKED", "CANCELED", "ERROR", "READY"}
 
@@ -289,6 +293,17 @@ def wait_for_domain_activation(
     raise SyncError("production_domain_activation_timeout")
 
 
+def mc_headers(
+    *, api_key: str, operator_email: str, repo: str, runtime: str
+) -> dict[str, str]:
+    return {
+        "x-api-key": api_key,
+        "x-mc-operator-email": operator_email,
+        "x-mc-repo": repo,
+        "x-mc-runtime": runtime,
+    }
+
+
 def verify_self_check(
     session: requests.Session,
     *,
@@ -304,12 +319,9 @@ def verify_self_check(
         "GET",
         f"{production_url.rstrip('/')}/api/cursor/self-check",
         operation=f"self_check_{expected_principal_id}",
-        headers={
-            "x-api-key": api_key,
-            "x-mc-operator-email": operator_email,
-            "x-mc-repo": repo,
-            "x-mc-runtime": runtime,
-        },
+        headers=mc_headers(
+            api_key=api_key, operator_email=operator_email, repo=repo, runtime=runtime
+        ),
     )
     data = result.get("data")
     meta = result.get("meta")
@@ -321,6 +333,64 @@ def verify_self_check(
         and data.get("mcpEnabled") is True
         and isinstance(actor, dict)
         and actor.get("servicePrincipalId") == expected_principal_id
+    )
+
+
+def verify_task_search_identity(
+    session: requests.Session,
+    *,
+    production_url: str,
+    api_key: str,
+    expected_principal_id: str,
+    operator_email: str,
+    repo: str,
+    runtime: str,
+) -> bool:
+    result = request_json(
+        session,
+        "GET",
+        f"{production_url.rstrip('/')}/api/cursor/tasks",
+        operation=f"task_search_{expected_principal_id}",
+        headers=mc_headers(
+            api_key=api_key, operator_email=operator_email, repo=repo, runtime=runtime
+        ),
+        params={"limit": "1"},
+    )
+    data = result.get("data")
+    meta = result.get("meta")
+    if not isinstance(data, dict) or not isinstance(meta, dict):
+        return False
+    actor = meta.get("actor")
+    return (
+        isinstance(data.get("tasks"), list)
+        and isinstance(actor, dict)
+        and actor.get("servicePrincipalId") == expected_principal_id
+    )
+
+
+def verify_identity(
+    session: requests.Session,
+    *,
+    production_url: str,
+    api_key: str,
+    expected_principal_id: str,
+    operator_email: str,
+    repo: str,
+    runtime: str,
+) -> bool:
+    verify = (
+        verify_task_search_identity
+        if expected_principal_id in SEARCH_VERIFIED_PRINCIPAL_IDS
+        else verify_self_check
+    )
+    return verify(
+        session,
+        production_url=production_url,
+        api_key=api_key,
+        expected_principal_id=expected_principal_id,
+        operator_email=operator_email,
+        repo=repo,
+        runtime=runtime,
     )
 
 
@@ -421,7 +491,7 @@ def main() -> int:
     )
 
     identity_results = {
-        principal_id: verify_self_check(
+        principal_id: verify_identity(
             session,
             production_url=args.production_url,
             api_key=api_key,

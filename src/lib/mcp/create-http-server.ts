@@ -186,9 +186,15 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     },
     async (args) => {
       const result = await actionSearchTasks(args, identity);
+      // meta.actor names the calling principal, as GET /api/cursor/tasks does.
+      // Key rotation verifies sp_mcp_portal through this search, because its
+      // tool allowlist denies mc_self_check (decision CG-07b).
       return jsonResult({
         data: { tasks: result.tasks, total: result.total },
-        meta: { filter: result.filter },
+        meta: {
+          filter: result.filter,
+          actor: { servicePrincipalId: identity.servicePrincipalId },
+        },
       });
     }
   );

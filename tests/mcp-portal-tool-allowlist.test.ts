@@ -242,6 +242,21 @@ describe("sp_mcp_portal through HTTP MCP (POST /api/cursor/mcp)", () => {
     expect((result.body.data as { total: number }).total).toBe(1);
   });
 
+  it("reports its principal in the search metadata for the key-rotation check", async () => {
+    const result = await callTool("portal-key", "mc_search_tasks", { limit: 1 });
+    expect(result.isError).toBe(false);
+    expect(result.body.meta).toMatchObject({ actor: { servicePrincipalId: PORTAL } });
+    const selfCheck = await callTool("portal-key", "mc_self_check", {});
+    expect(selfCheck.body).toMatchObject({ error: { code: "forbidden" } });
+  });
+
+  it("reports a full MCP principal in the search metadata too", async () => {
+    const result = await callTool("claude-key", "mc_search_tasks", { limit: 1 });
+    expect(result.body.meta).toMatchObject({
+      actor: { servicePrincipalId: "sp_mcp_claude_code" },
+    });
+  });
+
   for (const [tool, args] of Object.entries(REFUSED_TOOL_ARGS)) {
     it(`refuses ${tool} with forbidden`, async () => {
       const result = await callTool("portal-key", tool, args);
@@ -301,6 +316,22 @@ describe("sp_mcp_portal through the cursor REST routes", () => {
     expect(resp.status).toBe(200);
     const json = (await resp.json()) as { data: { total: number } };
     expect(json.data.total).toBe(1);
+  });
+
+  it("verifies the portal key through GET /api/cursor/tasks?limit=1, as the key sync does", async () => {
+    const resp = await cursorTasksGet(
+      new Request("http://localhost/api/cursor/tasks?limit=1", {
+        headers: headers("portal-key"),
+      }),
+      { params: Promise.resolve({}) }
+    );
+    expect(resp.status).toBe(200);
+    const json = (await resp.json()) as {
+      data: { tasks: unknown[] };
+      meta: { actor: { servicePrincipalId: string } };
+    };
+    expect(Array.isArray(json.data.tasks)).toBe(true);
+    expect(json.meta.actor.servicePrincipalId).toBe(PORTAL);
   });
 
   it("refuses every other cursor route with 403 forbidden", async () => {

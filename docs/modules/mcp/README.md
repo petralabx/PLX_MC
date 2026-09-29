@@ -90,7 +90,10 @@ and `mc_search_tasks`. Every other HTTP MCP tool and every other cursor REST
 route gives `forbidden` (403) before it runs, reads included (`mc_get_context`,
 `mc_list_buckets`, `mc_list_conflicts`, `mc_self_check`). A tool or route added
 later is refused too until the allowlist names it. Other principals have no
-allowlist. The portal's existing MC key does not change.
+allowlist. The portal's existing MC key does not change. `mc_search_tasks`
+(HTTP MCP and `GET /api/cursor/tasks`) returns the calling principal in
+`meta.actor.servicePrincipalId`. Key rotation uses that search to verify the
+portal key, because `mc_self_check` stays forbidden to it.
 
 **Agent reports (agent fleet P8, D12):** `POST /api/cursor/agent-report`
 records one free-form report per agent run as an `agent.report` event in

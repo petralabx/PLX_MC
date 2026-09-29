@@ -72,6 +72,20 @@ def test_registry_rejects_unreviewed_principal() -> None:
         )
 
 
+def test_registry_accepts_agent_runner_principal() -> None:
+    sync = load_script()
+    registry = sync.validate_registry(
+        json.dumps(
+            {
+                "sp_mcp_claude_code": "claude-secret",
+                "sp_mcp_agent_runner": "runner-secret",
+            }
+        )
+    )
+    assert registry["sp_mcp_agent_runner"] == "runner-secret"
+    assert sync.IDENTITY_LABELS["sp_mcp_agent_runner"] == "agent_runner"
+
+
 def test_vercel_upsert_is_sensitive_and_production_only() -> None:
     sync = load_script()
     session = FakeSession(

@@ -204,6 +204,27 @@
       "notes": "Knowledge Hub MCP + second-brain eval. Enrolled TASK-1165. L0 landed via plx_secondbrain#2. Stays soft; do not flip hard."
     },
     {
+      "repo": "petralabx/agent-runner",
+      "display_name": "Agent Runner",
+      "org": "petralabx",
+      "tier": "tooling",
+      "integration_branch": "main",
+      "release_branch": null,
+      "compliance_mode": "soft",
+      "routing_manifest": {
+        "path": ".github/plx-mc-routing-manifest.json",
+        "schema_version": "plx-mc-routing-manifest/v1",
+        "digest": "sha256:38176edbeb9b727233fa7adddf236839d1f9703ad7876cfa09d77896143c8d07"
+      },
+      "default_bucket": "BKT-INFRA",
+      "quality_ledger": {
+        "enabled": false
+      },
+      "status": "pending_adoption",
+      "contributing_path": "CONTRIBUTING.md",
+      "notes": "Agent fleet runner (fleet P6/P6a, D24). MC principal sp_mcp_agent_runner. Enrolled TASK-2068 as pending_adoption. An org admin creates the repo; the adoption PR uses scaffold --workflows-only plus hand-written docs/GOVERNANCE.md and CONTRIBUTING.md (plx_secondbrain#2 precedent). A later PLX_MC PR flips status to active. No routing pilot."
+    },
+    {
       "repo": "petralabx/test-perms-check",
       "display_name": "Test Perms Check",
       "org": "petralabx",

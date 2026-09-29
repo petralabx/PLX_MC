@@ -158,7 +158,7 @@ describe("runGithubBackfill", () => {
     const github = stubGithub({});
     const report = await runGithubBackfill(deps(github));
     expect(report.repos.map((r) => r.repo)).toContain("petralabx/plx_secondbrain");
-    expect(report.repos).toHaveLength(10);
+    expect(report.repos).toHaveLength(11);
     expect(report.totals).toEqual({ merged: 0, unattributed: 0, degraded: 0 });
   });
 
@@ -362,9 +362,9 @@ describe("GET /api/cron/github-backfill", () => {
     expect(data.enabled).toBe(true);
     expect(data.recorded).toBe(true);
     expect(data.report.windowDays).toBe(3);
-    expect(data.report.repos).toHaveLength(10);
+    expect(data.report.repos).toHaveLength(11);
     // No token configured in this test → every repo is visibly degraded.
-    expect(data.report.totals.degraded).toBe(10);
+    expect(data.report.totals.degraded).toBe(11);
     expect(m.append).toHaveBeenCalledTimes(1);
     expect(m.append.mock.calls[0][0]).toMatchObject({ kind: BACKFILL_EVENT_KIND });
   });
@@ -375,6 +375,6 @@ describe("GET /api/cron/github-backfill", () => {
     expect(resp.status).toBe(200);
     const { data } = await resp.json();
     expect(data.recorded).toBe(false);
-    expect(data.report.repos).toHaveLength(10);
+    expect(data.report.repos).toHaveLength(11);
   });
 });

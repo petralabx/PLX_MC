@@ -153,9 +153,11 @@ the existing root and align only the control-plane surfaces around it.
 | `furgenics` | `tooling` | Active fleet marketing repo; routing downstream activation pending |
 | `for-and-against` | `tooling` | Active fleet marketing repo; shadow routing workflow active via PR #3 |
 | `plx_secondbrain` | `tooling` | Active fleet tooling repo (TASK-1165). Knowledge Hub MCP + second-brain eval. L0 via https://github.com/petralabx/plx_secondbrain/pull/2. Soft; do not flip hard. |
+| `agent-runner` | `tooling` | Pending adoption (TASK-2068, agent fleet P6a). Agent fleet runner; MC principal `sp_mcp_agent_runner`. Adoption uses `--workflows-only` plus hand-written `docs/GOVERNANCE.md` and `CONTRIBUTING.md`, as `plx_secondbrain#2` did: it has no routing pilot, so a full scaffold exits non-zero. Starts soft. |
 
-These are the nine active fleet repos. `test-perms-check` remains an excluded
-pending-adoption sandbox.
+These are the nine active fleet repos. `agent-runner` is pending adoption: the
+checkout allowlist excludes it until a PLX_MC PR sets `status: "active"` and
+deploys. `test-perms-check` remains an excluded pending-adoption sandbox.
 
 ---
 

@@ -28,6 +28,7 @@ DEDICATED_PRINCIPAL_IDS = (
     "sp_mcp_grok",
     "sp_mcp_hermes",
     "sp_mcp_swarm",
+    "sp_mcp_agent_runner",
 )
 IDENTITY_LABELS = {
     CLAUDE_PRINCIPAL_ID: "claude",
@@ -35,6 +36,7 @@ IDENTITY_LABELS = {
     "sp_mcp_grok": "grok",
     "sp_mcp_hermes": "hermes",
     "sp_mcp_swarm": "swarm",
+    "sp_mcp_agent_runner": "agent_runner",
 }
 VERCEL_API = "https://api.vercel.com"
 TERMINAL_DEPLOYMENT_STATES = {"BLOCKED", "CANCELED", "ERROR", "READY"}

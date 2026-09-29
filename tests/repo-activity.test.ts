@@ -211,7 +211,7 @@ describe("GET /api/activity", () => {
     expect(resp.status).toBe(200);
     const { data } = await resp.json();
     expect(m.requireSessionActor).toHaveBeenCalledWith("task.read");
-    expect(data.repos).toHaveLength(10);
+    expect(data.repos).toHaveLength(11);
     const plx = data.repos.find((r: { repo: string }) => r.repo === "petralabx/PLX_MC");
     expect(plx.gate).toEqual({ passed: 0, blocked: 1, blockRate: 1 });
     expect(plx.unattributed.count).toBe(2);

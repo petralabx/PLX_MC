@@ -50,7 +50,7 @@ The kernel itself is pure and always callable for tests and gradual rollout.
 **MCP (TASK-619):** per-agent API keys (`PLX_MC_MCP_AGENT_KEYS`, JSON map of
 service principal id → key) authenticate durable per-agent principals
 (`sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`,
-`sp_mcp_hermes`, `sp_mcp_swarm`). The
+`sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`). The
 legacy shared `PLX_MC_MCP_API_KEY` still resolves `sp_mcp_cursor` behind the
 `PLX_MC_MCP_SHARED_KEY_ENABLED` kill switch (set `0` to retire it). Ids outside
 the reviewed registry never authenticate. `X-MC-Operator-Email` is allowlisted

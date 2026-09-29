@@ -57,6 +57,7 @@ MCP_PRINCIPAL_IDS = {
     "sp_mcp_grok",
     "sp_mcp_hermes",
     "sp_mcp_swarm",
+    "sp_mcp_agent_runner",
 }
 
 

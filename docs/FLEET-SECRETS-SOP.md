@@ -161,7 +161,7 @@ Never treat selected membership alone as consumption evidence.
 
 Clients set `MC_MCP_PRINCIPAL_ID` to one reviewed id:
 `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`,
-`sp_mcp_hermes`, or `sp_mcp_swarm`. The launcher defaults Cursor runtimes to
+`sp_mcp_hermes`, `sp_mcp_swarm`, or `sp_mcp_agent_runner`. The launcher defaults Cursor runtimes to
 `sp_mcp_cursor`; known Claude, Codex, Grok, Hermes, and swarm runtime names
 select their dedicated ids. A requested dedicated key that is absent fails
 closed and never falls back to the shared Cursor key.

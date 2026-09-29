@@ -65,8 +65,10 @@ management. Console sweep/retry remain Entra-gated.
 
 **Portal principal (agent fleet P8, decision CG-07b):** `sp_mcp_portal`
 (migration 028) does not get the shared agent bundle. Its grant is
-`task.create` and `task.read` only: it creates and searches tasks, and skill
-submission refuses it by id. It is the only MCP principal that may set an
+`task.create` and `task.read` only. The MCP tool allowlist
+(`src/lib/mcp/tool-allowlist.ts`) then limits it to `mc_create_task` and
+`mc_search_tasks`: every other HTTP MCP tool and cursor REST route gives 403,
+reads included. It is the only MCP principal that may set an
 `agent:` assignee; a signed-in person may too. The pure predicates
 `isAgentAssignee` and `mayAssignAgent` live in `agent-assignee.ts`; the
 server-only guard `assertAgentAssigneeAllowed` (`agent-assignee-guard.ts`)

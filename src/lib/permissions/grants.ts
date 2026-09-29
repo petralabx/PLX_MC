@@ -70,6 +70,9 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
 // sp_mcp_portal (agent fleet P8) is least privilege (decision CG-07b): it
 // creates tasks, an `agent:` assignee included, and searches them. No
 // checkout, progress, complete, bucket, project, routing or approval action.
+// task.read also admits read tools such as mc_get_context and mc_list_buckets,
+// so src/lib/mcp/tool-allowlist.ts limits the portal to mc_create_task and
+// mc_search_tasks over HTTP MCP and the cursor REST routes.
 const PORTAL_MCP_CAPABILITIES: readonly Capability[] = ["task.read", "task.create"];
 
 const SERVICE_GRANTS: Record<string, readonly Capability[]> = {

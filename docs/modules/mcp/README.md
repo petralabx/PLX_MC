@@ -83,9 +83,14 @@ filters by exact assignee, so a runner finds the tasks assigned to its agents.
 
 **Portal principal (agent fleet P8):** `sp_mcp_portal` is the key the portal's
 COS delegate tool uses. Its grant is least privilege (decision CG-07b): it may
-create tasks (with an `agent:` assignee) and search tasks. Checkout, progress,
-complete, bucket, project, routing, approval, telemetry and skill submission
-are refused. The portal's existing MC key does not change.
+create tasks (with an `agent:` assignee) and search tasks. Its grant holds only
+`task.create` and `task.read`. Because `task.read` also admits read tools, a
+tool allowlist (`src/lib/mcp/tool-allowlist.ts`) limits it to `mc_create_task`
+and `mc_search_tasks`. Every other HTTP MCP tool and every other cursor REST
+route gives `forbidden` (403) before it runs, reads included (`mc_get_context`,
+`mc_list_buckets`, `mc_list_conflicts`, `mc_self_check`). A tool or route added
+later is refused too until the allowlist names it. Other principals have no
+allowlist. The portal's existing MC key does not change.
 
 **Agent reports (agent fleet P8, D12):** `POST /api/cursor/agent-report`
 records one free-form report per agent run as an `agent.report` event in

@@ -1,6 +1,7 @@
 // Shared PLX skills-directory actions for cursor REST routes and HTTP MCP tools.
 
 import { ApiError } from "@/lib/api/route";
+import { PORTAL_MCP_SERVICE_PRINCIPAL_ID } from "@/lib/permissions";
 import {
   buildSkillsInstallPlan,
   createSkillSubmission,
@@ -149,7 +150,22 @@ function ownerAsEmail(owner: string | undefined, fallback: string): string {
   return fallback;
 }
 
+/**
+ * Skill submission carries no capability of its own. sp_mcp_portal may only
+ * create and search tasks (decision CG-07b), so it is refused here.
+ */
+export function assertSkillSubmitAllowed(identity: McpIdentity): void {
+  if (identity.servicePrincipalId === PORTAL_MCP_SERVICE_PRINCIPAL_ID) {
+    throw new ApiError(
+      "forbidden",
+      "Skill submission is denied for sp_mcp_portal (task create and search only).",
+      403
+    );
+  }
+}
+
 export async function actionSubmitSkill(identity: McpIdentity, input: SubmitSkillInput) {
+  assertSkillSubmitAllowed(identity);
   const noteParts = [
     "Submitted through mc_submit_skill.",
     input.tags?.length ? `Tags: ${input.tags.join(", ")}` : "",

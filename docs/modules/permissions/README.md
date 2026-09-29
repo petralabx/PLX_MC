@@ -50,7 +50,7 @@ The kernel itself is pure and always callable for tests and gradual rollout.
 **MCP (TASK-619):** per-agent API keys (`PLX_MC_MCP_AGENT_KEYS`, JSON map of
 service principal id → key) authenticate durable per-agent principals
 (`sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`,
-`sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`). The
+`sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`, `sp_mcp_portal`). The
 legacy shared `PLX_MC_MCP_API_KEY` still resolves `sp_mcp_cursor` behind the
 `PLX_MC_MCP_SHARED_KEY_ENABLED` kill switch (set `0` to retire it). Ids outside
 the reviewed registry never authenticate. `X-MC-Operator-Email` is allowlisted
@@ -62,6 +62,15 @@ shared agent bundle includes project and bucket creation, bucket updates
 (`mc_update_bucket` / `bucket.update`), plus `sync.mutate` (conflict resolve
 via MCP) but not project updates, repository approval, or permission
 management. Console sweep/retry remain Entra-gated.
+
+**Portal principal (agent fleet P8, decision CG-07b):** `sp_mcp_portal`
+(migration 028) does not get the shared agent bundle. Its grant is
+`task.create` and `task.read` only: it creates and searches tasks, and skill
+submission refuses it by id. It is the only MCP principal that may set an
+`agent:` assignee; a signed-in person may too. The pure predicates
+`isAgentAssignee` and `mayAssignAgent` live in `agent-assignee.ts`; the
+server-only guard `assertAgentAssigneeAllowed` (`agent-assignee-guard.ts`)
+throws 403 in `actionCreateTask` and `PATCH /api/tasks/[id]`.
 
 **Audit data (TASK-620):** every enforcement call site records `allowed`,
 `reasonCode`, and `policyVersion` to `permissions_decision_log` (migration 022)

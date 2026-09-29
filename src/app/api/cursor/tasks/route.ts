@@ -27,6 +27,7 @@ export const GET = cursorRoute("mc_search_tasks", async (req, _ctx, identity) =>
       query: sp.get("query") ?? undefined,
       bucket: sp.get("bucket") ?? undefined,
       stage: sp.get("stage") ?? undefined,
+      assignee: sp.get("assignee") ?? undefined,
       limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
     },
     identity

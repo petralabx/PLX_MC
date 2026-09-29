@@ -218,7 +218,8 @@ describe("POST /api/cursor/agent-report", () => {
   });
 
   it("gives 400 for a missing field or a slug that could break the dedup key", async () => {
-    const { markdown: _omit, ...noMarkdown } = REPORT;
+    const noMarkdown: Partial<typeof REPORT> = { ...REPORT };
+    delete noMarkdown.markdown;
     expect((await POST(req(noMarkdown), ctx)).status).toBe(400);
     expect((await POST(req({ ...REPORT, agentSlug: "agent:x" }), ctx)).status).toBe(400);
     expect((await POST(req({ ...REPORT, runId: "a:b" }), ctx)).status).toBe(400);

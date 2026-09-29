@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { ApiError } from "@/lib/api/route";
 import { cursorRoute, parseCursorBody } from "@/lib/mcp/route";
-import { actionSubmitSkill } from "@/lib/mcp/skills-actions";
+import { actionSubmitSkill, assertSkillSubmitAllowed } from "@/lib/mcp/skills-actions";
 import { createSkillSubmission, SKILL_ID_PATTERN } from "@/lib/skills-directory";
 
 const submitSchema = z.object({
@@ -21,6 +21,7 @@ const submitSchema = z.object({
 });
 
 export const POST = cursorRoute("mc_skills_submit", async (req, _ctx, identity) => {
+  assertSkillSubmitAllowed(identity);
   const body = await parseCursorBody(req, submitSchema);
   if (body.id || body.name || body.skillMd) {
     if (!body.id || !body.name || !body.description || !body.skillMd) {

@@ -67,9 +67,34 @@ MC_BASE_URL=https://mc.plxcustomer.io
 
 The same registry-id rule applies to `mc_create_project.repos[]`,
 `mc_create_bucket.repos[]`, and `mc_update_bucket.repos[]`. Every reviewed MCP
-runtime principal shares the explicit `project.create` / `bucket.create` /
+runtime principal except `sp_mcp_portal` shares the explicit `project.create` / `bucket.create` /
 `bucket.update` grant; human-only administration (`project.update`),
 repository approval, and permission management remain denied.
+
+**Agent assignees (agent fleet P8):** a task's `assignee` may name an agent as
+`agent:<slug>` (for example `agent:hasitha-fernando`). `mc_create_task` and
+`POST /api/cursor/tasks` accept an optional `assignee`. Only a signed-in person
+or `sp_mcp_portal` may set an `agent:` assignee. Every other MCP principal,
+`sp_mcp_grok` included, gets `forbidden` (403), so outside doors cannot
+delegate through MC. The rule lives in `actionCreateTask`; the session route
+`PATCH /api/tasks/[id]` applies the same rule. A person or non-agent assignee
+stays open to every principal. `mc_search_tasks` (`GET /api/cursor/tasks?assignee=`)
+filters by exact assignee, so a runner finds the tasks assigned to its agents.
+
+**Portal principal (agent fleet P8):** `sp_mcp_portal` is the key the portal's
+COS delegate tool uses. Its grant is least privilege (decision CG-07b): it may
+create tasks (with an `agent:` assignee) and search tasks. Checkout, progress,
+complete, bucket, project, routing, approval, telemetry and skill submission
+are refused. The portal's existing MC key does not change.
+
+**Agent reports (agent fleet P8, D12):** `POST /api/cursor/agent-report`
+records one free-form report per agent run as an `agent.report` event in
+`mc_events`. The body is `agentSlug`, `loopId`, `runId`, `title` and `markdown`
+(at most 32 KB of UTF-8). Auth is the MCP principal plus `telemetry.report`,
+like `session-telemetry`. The dedup key is `report:<agentSlug>:<runId>`, so a
+repeat run id adds nothing and the response says `recorded: false`. Read
+reports through `GET /api/events?kind=agent.report`. No auth gives 401; a
+body over 32 KB gives 400.
 
 **Patch bucket (TASK-1594):** `mc_update_bucket` (`PATCH /api/cursor/buckets`)
 takes required `id` plus at least one of `prd`, `health`, `owner`,
@@ -136,7 +161,8 @@ Vince; an owner already on the task is never replaced.
 **Routing suggestion:** `mc_suggest_work` authorizes `routing.suggest` for the
 resolved durable MCP service principal (`sp_mcp_cursor`,
 `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`, `sp_mcp_hermes`,
-`sp_mcp_swarm`, or `sp_mcp_agent_runner`). Operator email is admission/audit context only and never
+`sp_mcp_swarm`, or `sp_mcp_agent_runner`; `sp_mcp_portal` holds no
+`routing.suggest`). Operator email is admission/audit context only and never
 grants human capabilities. Returns `routingSessionId` (`rtx_*`), top
 candidates with reasons and deep links, and `MC-Routing: rtx_*` — without creating
 or linking Tasks. Modular registration (`registerRoutingTools`) leaves a seam for

@@ -22,6 +22,7 @@ import {
   aclPrincipalFromMcp,
   requireMcpActor,
 } from "@/lib/routing/mutations/actors";
+import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
 import {
   assertBucketProjectAccess,
   assertProjectIdAccess,
@@ -78,6 +79,8 @@ export type SearchTasksInput = {
   query?: string;
   bucket?: string;
   stage?: string;
+  /** Exact assignee id, e.g. `agent:hasitha-fernando` or a person id. */
+  assignee?: string;
   limit?: number;
 };
 
@@ -85,6 +88,7 @@ export type SearchTasksFilter = {
   query?: string;
   bucket?: string;
   stage?: string;
+  assignee?: string;
   limit: number;
 };
 
@@ -116,10 +120,12 @@ export function resolveSearchQueryText(input: { q?: string; query?: string }): s
 export function resolveSearchFilter(input: SearchTasksInput): SearchTasksFilter {
   const query = resolveSearchQueryText(input);
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const assignee = (input.assignee ?? "").trim();
   return {
     ...(query ? { query } : {}),
     ...(input.bucket ? { bucket: input.bucket } : {}),
     ...(input.stage ? { stage: input.stage } : {}),
+    ...(assignee ? { assignee } : {}),
     limit,
   };
 }
@@ -206,6 +212,11 @@ export async function actionSearchTasks(input: SearchTasksInput = {}, identity?:
   }
   if (filter.bucket) tasks = tasks.filter((t) => t.bucket === filter.bucket);
   if (filter.stage) tasks = tasks.filter((t) => t.stage === filter.stage);
+  if (filter.assignee) {
+    // A runner finds the tasks assigned to its agents (agent fleet P8).
+    const wanted = filter.assignee.toLowerCase();
+    tasks = tasks.filter((t) => (t.assignee ?? "").trim().toLowerCase() === wanted);
+  }
   return { tasks: tasks.slice(0, filter.limit), total: tasks.length, filter };
 }
 
@@ -215,6 +226,9 @@ export async function actionCreateTask(identity: McpIdentity, input: CreateTaskI
     type: "bucket",
     id: input.bucket,
   });
+  // Only a signed-in person or sp_mcp_portal may set an `agent:` assignee
+  // (agent fleet P8, D16). This covers the MCP tool and POST /api/cursor/tasks.
+  assertAgentAssigneeAllowed(identity.actor, input.assignee);
   await assertBucketProjectAccess(input.bucket, aclPrincipalFromMcp(identity));
   const task = await createTask(
     {

@@ -154,6 +154,26 @@ describe("verifyMcpRequest with per-agent keys", () => {
     );
   });
 
+  it("loads the agent runner principal from its migration 027 row when enforcement is on", async () => {
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED", "1");
+    const identityQuery = vi.fn(async () => [
+      { id: "sp_mcp_agent_runner", name: "PLX MC MCP Agent Runner", status: "active" },
+    ]);
+    const identity = await verifyMcpRequest(
+      req({ "x-api-key": "runner-key", ...OPERATOR_HEADERS }),
+      { query: identityQuery }
+    );
+    expect(identity.actor).toEqual({
+      kind: "service",
+      id: "sp_mcp_agent_runner",
+      status: "active",
+    });
+    expect(identityQuery).toHaveBeenCalledWith(
+      expect.stringContaining("FROM service_principals"),
+      ["sp_mcp_agent_runner"]
+    );
+  });
+
   it("rejects a revoked per-agent principal when enforcement is on", async () => {
     vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED", "1");
     const identityQuery = vi.fn(async () => [

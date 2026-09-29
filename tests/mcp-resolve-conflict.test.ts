@@ -25,6 +25,7 @@ import {
 } from "@/lib/mcp/sync-actions";
 import {
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
+  PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   authorize,
   capabilitiesForServicePrincipal,
 } from "@/lib/permissions";
@@ -74,8 +75,11 @@ describe("conflict resolution schema", () => {
 });
 
 describe("MCP sync.mutate grant", () => {
-  it("grants sync.mutate to every reviewed MCP agent principal", () => {
-    for (const principalId of MCP_AGENT_SERVICE_PRINCIPAL_IDS) {
+  it("grants sync.mutate to every full-bundle MCP agent principal", () => {
+    // sp_mcp_portal holds a least-privilege grant (decision CG-07b).
+    for (const principalId of MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
+      (id) => id !== PORTAL_MCP_SERVICE_PRINCIPAL_ID
+    )) {
       expect(capabilitiesForServicePrincipal(principalId)).toEqual(
         expect.arrayContaining(["sync.mutate"])
       );

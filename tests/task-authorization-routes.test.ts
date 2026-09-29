@@ -101,6 +101,42 @@ describe("task authorization routes", () => {
     );
   });
 
+  it("PATCH /api/tasks/{id} lets a signed-in person set an agent: assignee", async () => {
+    const { PATCH } = await import("@/app/api/tasks/[id]/route");
+    const req = new Request("http://localhost/api/tasks/TASK-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assignee: "agent:hasitha-fernando" }),
+    });
+    await PATCH(req, { params: Promise.resolve({ id: "TASK-1" }) });
+    expect(mocks.patchTask).toHaveBeenCalledWith(
+      "TASK-1",
+      expect.objectContaining({ assignee: "agent:hasitha-fernando" }),
+      "vince@example.com",
+      expect.anything()
+    );
+  });
+
+  it("PATCH /api/tasks/{id} refuses an agent: assignee from a non-person actor", async () => {
+    mocks.requireSessionActor.mockResolvedValueOnce({
+      actor: { kind: "service", id: "sp_mcp_grok", status: "active" },
+      actorId: "sp_mcp_grok",
+      actorKind: "service",
+      auditLabel: "vince@example.com",
+    });
+    const { PATCH } = await import("@/app/api/tasks/[id]/route");
+    const req = new Request("http://localhost/api/tasks/TASK-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assignee: "agent:hasitha-fernando" }),
+    });
+    await expect(PATCH(req, { params: Promise.resolve({ id: "TASK-1" }) })).rejects.toMatchObject({
+      code: "forbidden",
+      status: 403,
+    });
+    expect(mocks.patchTask).not.toHaveBeenCalled();
+  });
+
   it("PATCH /api/tasks/{id} asserts ACL on the destination bucket before move", async () => {
     const { PATCH } = await import("@/app/api/tasks/[id]/route");
     const req = new Request("http://localhost/api/tasks/TASK-1", {

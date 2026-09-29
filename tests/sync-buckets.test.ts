@@ -80,6 +80,13 @@ describe("createBucket (EN-005)", () => {
     expect(b.repos).toEqual(["plx-mc"]);
   });
 
+  it("rejects a PRD value that is not an http(s) URL", async () => {
+    await expect(createBucket({ name: "No Link", prd: "PRD-001" })).rejects.toMatchObject({
+      code: "invalid_request",
+    });
+    expect(store.upserts).toHaveLength(0);
+  });
+
   it("suffixes the id on collision with an existing bucket", async () => {
     store.buckets = [{ id: "BKT-OPS" } as Bucket];
     const b = await createBucket({ name: "Ops" });
@@ -107,6 +114,20 @@ describe("patchBucket (EN-005)", () => {
     expect(store.upserts[0].health).toBe("risk");
 
     expect(await patchBucket("BKT-NOPE", { health: "off" }, "vince")).toBeNull();
+  });
+
+  it("stores an https PRD link and rejects any other string", async () => {
+    store.buckets = [
+      { id: "BKT-FIN", name: "Finance", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "x", repos: [], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null },
+    ];
+    await expect(patchBucket("BKT-FIN", { prd: "x" }, "vince")).rejects.toMatchObject({
+      code: "invalid_request",
+    });
+    expect(store.upserts).toHaveLength(0);
+    const updated = await patchBucket("BKT-FIN", { prd: " https://example.com/prd.md " }, "vince");
+    expect(updated?.prd).toBe("https://example.com/prd.md");
+    const cleared = await patchBucket("BKT-FIN", { prd: "  " }, "vince");
+    expect(cleared?.prd).toBeNull();
   });
 
   it("seeds the registry then validates edited repos against the PERSISTED allow-list", async () => {

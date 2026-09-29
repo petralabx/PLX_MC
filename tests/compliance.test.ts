@@ -156,7 +156,19 @@ describe("verifyCompliance (decisions 2, 5, 9)", () => {
       bucketPrd: "absent",
     });
     expect(r.verdict).toBe("block");
-    expect(r.reasons.some((x) => /bucket PRD/.test(x))).toBe(true);
+    expect(r.reasons.some((x) => x === "high-risk change requires a linked bucket PRD")).toBe(true);
+  });
+
+  it("blocks a high-risk agent PR that is not on an initiative", () => {
+    const full = evidence({ rollback: "revert", shots: [{ label: "ui", cap: "after" }] });
+    const r = verifyCompliance({
+      task: taskish({ accountableOwner: "greg", evidence: full }),
+      actor: "agent",
+      tier: "high",
+      bucketPrd: "no_bucket",
+    });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.some((x) => /initiative with a linked bucket PRD/.test(x))).toBe(true);
   });
 
   it("passes a high-risk agent PR with full bundle + PRD + owner", () => {
@@ -177,6 +189,18 @@ describe("verifyCompliance (decisions 2, 5, 9)", () => {
       actor: "agent",
       tier: "high",
       bucketPrd: "unknown",
+    });
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.some((x) => /advisory/.test(x))).toBe(true);
+  });
+
+  it("passes a high-risk agent PR when the bucket store cannot be read (advisory)", () => {
+    const full = evidence({ rollback: "revert", shots: [{ label: "ui", cap: "after" }] });
+    const r = verifyCompliance({
+      task: taskish({ accountableOwner: "greg", evidence: full }),
+      actor: "agent",
+      tier: "high",
+      bucketPrd: "store_unavailable",
     });
     expect(r.verdict).toBe("pass");
     expect(r.reasons.some((x) => /advisory/.test(x))).toBe(true);

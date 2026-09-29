@@ -201,7 +201,7 @@ the work and pass it, and it's how autonomous changes stay accountable.
 | Agent PR with no valid checkout | Check out the task and add `MC-Checkout: <id>` (see §4). |
 | Missing rollback on task | `mc_complete_task` with `rollback` in **`task.evidence`** (MC gate). |
 | Missing PR-body rollback (repo CI) | Add `## Rollback Plan` to the PR body (e.g. `agentic-swarm`). |
-| Missing evidence/PRD on a high-risk change | Complete **`task.evidence`** (testRun/shots); link bucket PRD in MC; or relabel `risk:low` if mis-tiered. |
+| Missing evidence/PRD on a high-risk change | Complete **`task.evidence`** (testRun/shots). On the initiative page, save an https URL as the PRD link. Relabel `risk:low` only when the tier is wrong. |
 | "MC unreachable" | MC is temporarily down (fail-closed). Re-run the check once it's back; it auto-recovers via the reconcile sweep. |
 
 If you're stuck or believe the verdict is wrong, ping the owner (Vince) — don't

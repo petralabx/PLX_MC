@@ -291,7 +291,7 @@ Do these steps in order, once per repo the phase touches:
 
    CIP lands the PR. Agents never merge.
 8. **Wait for green.** Wait for `compliance` SUCCESS (`node scripts/compliance-pr-verify.mjs --wait` exits 0 where the repo has it).
-   - If the gate reports "high-risk change requires an approved bucket PRD", stop and ask Vince. Do not change the bucket.
+   - If the gate reports "high-risk change requires a linked bucket PRD" or "high-risk change requires the task on an initiative with a linked bucket PRD", stop and ask Vince. Do not change the bucket.
    - If any required check fails after the freeze, stop and report the failing check to Vince. Do not push. Vince or CIP decides whether the same task is checked out again for a fix.
 
 | Repo | Install | Pre-commit | Pre-push |

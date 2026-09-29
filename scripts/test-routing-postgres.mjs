@@ -48,6 +48,8 @@ function parseArgs(argv) {
     sequence: false,
     concurrency: false,
     revisionAtomicity: false,
+    agentRunnerPrincipal: false,
+    portalPrincipal: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -58,8 +60,10 @@ function parseArgs(argv) {
     else if (arg === "--sequence") out.sequence = true;
     else if (arg === "--concurrency") out.concurrency = true;
     else if (arg === "--revision-atomicity") out.revisionAtomicity = true;
+    else if (arg === "--agent-runner-principal") out.agentRunnerPrincipal = true;
+    else if (arg === "--portal-principal") out.portalPrincipal = true;
     else if (arg === "--help" || arg === "-h") {
-      console.log(`Usage: node scripts/test-routing-postgres.mjs --through NNN [--schema] [--idempotency] [--sequence] [--concurrency] [--revision-atomicity]`);
+      console.log(`Usage: node scripts/test-routing-postgres.mjs --through NNN [--schema] [--idempotency] [--sequence] [--concurrency] [--revision-atomicity] [--agent-runner-principal] [--portal-principal]`);
       process.exit(0);
     } else {
       throw new Error(`unknown argument: ${arg}`);
@@ -74,7 +78,9 @@ function parseArgs(argv) {
     !out.idempotency &&
     !out.sequence &&
     !out.concurrency &&
-    !out.revisionAtomicity
+    !out.revisionAtomicity &&
+    !out.agentRunnerPrincipal &&
+    !out.portalPrincipal
   ) {
     out.schema = true;
     out.idempotency = true;
@@ -609,6 +615,58 @@ async function assertRevisionAtomicity(client, url) {
   console.log("revision atomicity assertions passed");
 }
 
+// Fleet P6a: migration 027 inserts the agent runner MCP principal. Apply its
+// SQL a second time and check that one active row exists.
+const AGENT_RUNNER_MIGRATION = "027_agent_runner_mcp_principal.sql";
+
+async function assertAgentRunnerPrincipal(client, files) {
+  if (!files.includes(AGENT_RUNNER_MIGRATION)) {
+    throw new Error(`--agent-runner-principal needs ${AGENT_RUNNER_MIGRATION} (use --through 027 or later)`);
+  }
+  const sql = await readFile(path.join(MIGRATIONS_DIR, AGENT_RUNNER_MIGRATION), "utf8");
+  await client.query("BEGIN");
+  try {
+    await client.query(sql);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw new Error(`second apply of ${AGENT_RUNNER_MIGRATION} failed: ${err.message}`);
+  }
+  const { rows } = await client.query(
+    `SELECT id, name, status FROM service_principals WHERE id = 'sp_mcp_agent_runner'`
+  );
+  if (rows.length !== 1 || rows[0].status !== "active") {
+    throw new Error(`agent runner principal mismatch: ${JSON.stringify(rows)}`);
+  }
+  console.log(`agent runner principal assertions passed (${rows[0].id} ${rows[0].status})`);
+}
+
+// Fleet P8: migration 028 inserts the portal MCP principal. Apply its SQL a
+// second time and check that one active row exists.
+const PORTAL_MIGRATION = "028_portal_mcp_principal.sql";
+
+async function assertPortalPrincipal(client, files) {
+  if (!files.includes(PORTAL_MIGRATION)) {
+    throw new Error(`--portal-principal needs ${PORTAL_MIGRATION} (use --through 028 or later)`);
+  }
+  const sql = await readFile(path.join(MIGRATIONS_DIR, PORTAL_MIGRATION), "utf8");
+  await client.query("BEGIN");
+  try {
+    await client.query(sql);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw new Error(`second apply of ${PORTAL_MIGRATION} failed: ${err.message}`);
+  }
+  const { rows } = await client.query(
+    `SELECT id, name, status FROM service_principals WHERE id = 'sp_mcp_portal'`
+  );
+  if (rows.length !== 1 || rows[0].status !== "active") {
+    throw new Error(`portal principal mismatch: ${JSON.stringify(rows)}`);
+  }
+  console.log(`portal principal assertions passed (${rows[0].id} ${rows[0].status})`);
+}
+
 async function main() {
   refuseConfiguredUrls();
   const args = parseArgs(process.argv.slice(2));
@@ -653,6 +711,8 @@ async function main() {
     if (args.sequence) await assertSequence(client);
     if (args.concurrency) await assertConcurrency(url);
     if (args.revisionAtomicity) await assertRevisionAtomicity(client, url);
+    if (args.agentRunnerPrincipal) await assertAgentRunnerPrincipal(client, files);
+    if (args.portalPrincipal) await assertPortalPrincipal(client, files);
 
     console.log("routing postgres harness OK");
     return 0;

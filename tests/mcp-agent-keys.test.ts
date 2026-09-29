@@ -32,6 +32,8 @@ beforeEach(() => {
       sp_mcp_codex: "codex-key",
       sp_mcp_grok: "grok-key",
       sp_mcp_hermes: "hermes-key",
+      sp_mcp_agent_runner: "runner-key",
+      sp_mcp_portal: "portal-key",
       sp_not_in_registry: "rogue-key",
     })
   );
@@ -49,6 +51,8 @@ describe("mcpAgentKeyRegistry", () => {
     expect(registry.get("sp_mcp_codex")).toBe("codex-key");
     expect(registry.get("sp_mcp_grok")).toBe("grok-key");
     expect(registry.get("sp_mcp_hermes")).toBe("hermes-key");
+    expect(registry.get("sp_mcp_agent_runner")).toBe("runner-key");
+    expect(registry.get("sp_mcp_portal")).toBe("portal-key");
     expect([...registry.keys()]).not.toContain("sp_not_in_registry");
   });
 
@@ -64,6 +68,8 @@ describe("resolveMcpPrincipalIdFromKey", () => {
     expect(resolveMcpPrincipalIdFromKey("codex-key")).toBe("sp_mcp_codex");
     expect(resolveMcpPrincipalIdFromKey("grok-key")).toBe("sp_mcp_grok");
     expect(resolveMcpPrincipalIdFromKey("hermes-key")).toBe("sp_mcp_hermes");
+    expect(resolveMcpPrincipalIdFromKey("runner-key")).toBe("sp_mcp_agent_runner");
+    expect(resolveMcpPrincipalIdFromKey("portal-key")).toBe("sp_mcp_portal");
   });
 
   it("maps the legacy shared key to sp_mcp_cursor while enabled", () => {
@@ -93,6 +99,53 @@ describe("verifyMcpRequest with per-agent keys", () => {
       id: "sp_mcp_claude_code",
       status: "active",
     });
+  });
+
+  it("authenticates the agent runner key as sp_mcp_agent_runner with the MCP bundle", async () => {
+    const { authorize } = await import("@/lib/permissions");
+    const identity = await verifyMcpRequest(
+      req({ "x-api-key": "runner-key", ...OPERATOR_HEADERS })
+    );
+    expect(identity.servicePrincipalId).toBe("sp_mcp_agent_runner");
+    expect(identity.actor).toEqual({
+      kind: "service",
+      id: "sp_mcp_agent_runner",
+      status: "active",
+    });
+    expect(authorize({ actor: identity.actor, capability: "task.checkout" }).allowed).toBe(true);
+    expect(authorize({ actor: identity.actor, capability: "permissions.manage" }).allowed).toBe(
+      false
+    );
+    expect(authorize({ actor: identity.actor, capability: "repo.approve" }).allowed).toBe(false);
+  });
+
+  it("authenticates the portal key as sp_mcp_portal with only task create and read", async () => {
+    const { authorize } = await import("@/lib/permissions");
+    const identity = await verifyMcpRequest(
+      req({ "x-api-key": "portal-key", ...OPERATOR_HEADERS })
+    );
+    expect(identity.servicePrincipalId).toBe("sp_mcp_portal");
+    expect(identity.actor).toEqual({ kind: "service", id: "sp_mcp_portal", status: "active" });
+    expect(authorize({ actor: identity.actor, capability: "task.create" }).allowed).toBe(true);
+    expect(authorize({ actor: identity.actor, capability: "task.read" }).allowed).toBe(true);
+    expect(authorize({ actor: identity.actor, capability: "task.checkout" }).allowed).toBe(false);
+    expect(authorize({ actor: identity.actor, capability: "task.complete" }).allowed).toBe(false);
+  });
+
+  it("loads the portal principal from its migration 028 row when enforcement is on", async () => {
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED", "1");
+    const identityQuery = vi.fn(async () => [
+      { id: "sp_mcp_portal", name: "PLX MC MCP Portal", status: "active" },
+    ]);
+    const identity = await verifyMcpRequest(
+      req({ "x-api-key": "portal-key", ...OPERATOR_HEADERS }),
+      { query: identityQuery }
+    );
+    expect(identity.actor).toEqual({ kind: "service", id: "sp_mcp_portal", status: "active" });
+    expect(identityQuery).toHaveBeenCalledWith(
+      expect.stringContaining("FROM service_principals"),
+      ["sp_mcp_portal"]
+    );
   });
 
   it("keeps the legacy shared key working as sp_mcp_cursor", async () => {
@@ -130,6 +183,26 @@ describe("verifyMcpRequest with per-agent keys", () => {
     expect(identityQuery).toHaveBeenCalledWith(
       expect.stringContaining("FROM service_principals"),
       ["sp_mcp_claude_code"]
+    );
+  });
+
+  it("loads the agent runner principal from its migration 027 row when enforcement is on", async () => {
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED", "1");
+    const identityQuery = vi.fn(async () => [
+      { id: "sp_mcp_agent_runner", name: "PLX MC MCP Agent Runner", status: "active" },
+    ]);
+    const identity = await verifyMcpRequest(
+      req({ "x-api-key": "runner-key", ...OPERATOR_HEADERS }),
+      { query: identityQuery }
+    );
+    expect(identity.actor).toEqual({
+      kind: "service",
+      id: "sp_mcp_agent_runner",
+      status: "active",
+    });
+    expect(identityQuery).toHaveBeenCalledWith(
+      expect.stringContaining("FROM service_principals"),
+      ["sp_mcp_agent_runner"]
     );
   });
 

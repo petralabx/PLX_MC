@@ -7,6 +7,7 @@ import {
   aclPrincipalFromAuthorized,
   requireSessionActor,
 } from "@/lib/routing/mutations/actors";
+import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
 import { assertBucketProjectAccess, assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { patchTask } from "@/lib/sync";
 
@@ -61,6 +62,9 @@ export const PATCH = route(async (req, ctx) => {
       ? "task.complete"
       : "task.progress";
   const authorized = await requireSessionActor(capability, { type: "task", id });
+  // Same rule as actionCreateTask: only a signed-in person or sp_mcp_portal
+  // may set an `agent:` assignee (agent fleet P8).
+  assertAgentAssigneeAllowed(authorized.actor, patch.assignee);
   const principal = aclPrincipalFromAuthorized(authorized);
   await assertTaskProjectAccess(id, principal);
   if (patch.bucket) {

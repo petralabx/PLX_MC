@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/api/route";
 import { verifyMcpRequest, type McpIdentity } from "./auth";
 import { buildMeta, wrapMcpResponse, type McpResponseMeta } from "./envelope";
 import { recordMcpToolCall } from "./audit";
+import { assertMcpToolAllowed } from "./tool-allowlist";
 
 type RouteContext = { params: Promise<Record<string, string>> };
 
@@ -28,6 +29,9 @@ export function cursorRoute(toolName: string, handler: CursorHandler) {
     let requestId = "";
     try {
       identity = await verifyMcpRequest(req);
+      // A principal with a tool allowlist (sp_mcp_portal) gets 403 for any
+      // other route before the handler reads the body or any data.
+      assertMcpToolAllowed(identity, toolName);
       const baseMeta = buildMeta(identity);
       requestId = baseMeta.requestId;
       const result = await handler(req, ctx, identity, baseMeta);

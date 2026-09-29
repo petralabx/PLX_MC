@@ -121,12 +121,16 @@ server.tool(
 
 server.tool(
   "mc_search_tasks",
-  "Search/list MC tasks. `query` and `q` are aliases. Applied filters are echoed in meta.filter.",
+  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, or assignee. Applied filters are echoed in meta.filter.",
   {
     q: z.string().optional().describe("Search text (alias of query)"),
     query: z.string().optional().describe("Search text (alias of q)"),
     bucket: z.string().optional(),
     stage: z.string().optional(),
+    assignee: z
+      .string()
+      .optional()
+      .describe("Exact assignee id, e.g. agent:hasitha-fernando or a person id"),
     limit: z.number().int().optional(),
   },
   async (args) => {
@@ -136,6 +140,7 @@ server.tool(
     if (args.query) qs.set("query", args.query);
     if (args.bucket) qs.set("bucket", args.bucket);
     if (args.stage) qs.set("stage", args.stage);
+    if (args.assignee) qs.set("assignee", args.assignee);
     if (args.limit) qs.set("limit", String(args.limit));
     return printResult(await mcFetch(`/tasks?${qs.toString()}`));
   }
@@ -232,6 +237,13 @@ server.tool(
       .optional()
       .describe(
         "MC registry ids only (e.g. portal-web, plx-mc, agentic-swarm). Not MC_REPO / GitHub slugs — those are for checkout/compliance."
+      ),
+    assignee: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional executor: a person id, or agent:<slug> for an agent. Only sp_mcp_portal may set an agent: assignee; any other MCP principal gets forbidden (403)."
       ),
   },
   async (body) => {

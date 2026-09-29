@@ -161,7 +161,8 @@ Never treat selected membership alone as consumption evidence.
 
 Clients set `MC_MCP_PRINCIPAL_ID` to one reviewed id:
 `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`,
-`sp_mcp_hermes`, or `sp_mcp_swarm`. The launcher defaults Cursor runtimes to
+`sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`, or `sp_mcp_portal`
+(create and search tasks only). The launcher defaults Cursor runtimes to
 `sp_mcp_cursor`; known Claude, Codex, Grok, Hermes, and swarm runtime names
 select their dedicated ids. A requested dedicated key that is absent fails
 closed and never falls back to the shared Cursor key.
@@ -171,12 +172,19 @@ closed and never falls back to the shared Cursor key.
 1. Update the complete registry in `plx/prod/mc/mcp-agent-keys/v1`.
 2. Run `python scripts/sync-mcp-agent-keys.py` with `VERCEL_API_TOKEN`
    hydrated. It updates sensitive Production configuration, redeploys, and
-   verifies identities without printing keys.
+   verifies identities without printing keys. It checks each principal
+   through `GET /api/cursor/self-check`. It checks `sp_mcp_portal` through
+   `GET /api/cursor/tasks?limit=1` instead (see step 4).
 3. Update the affected team MCP registration
    ([plx-mc-mcp-team-registration.md](runbooks/plx-mc-mcp-team-registration.md))
    with the rotated `MC_MCP_API_KEY` and matching `MC_MCP_PRINCIPAL_ID`.
 4. Reload MCP and require `mc_self_check` to report the requested service
-   principal before revoking the old value.
+   principal before revoking the old value. `sp_mcp_portal` may not call
+   `mc_self_check` (decision CG-07b), so a 403 from it is expected. For the
+   portal key, call `mc_search_tasks` with `limit: 1` (or
+   `GET /api/cursor/tasks?limit=1` with the portal key). Require
+   `meta.actor.servicePrincipalId` to equal `sp_mcp_portal` before revoking
+   the old value.
 
 The shared-key procedure remains compatibility-only: update
 `PLX_MC_MCP_API_KEY` in `prod/ec2-secrets` and Vercel Production, redeploy,

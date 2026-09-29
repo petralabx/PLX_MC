@@ -30,8 +30,9 @@ const NO_DRIFT = { unknown: [], missing: expect.any(Array), duplicates: [] };
 
 describe("fleet registry is the single source of truth", () => {
   it("lists every org repo as a canonical owner/name slug (incl. plx_secondbrain)", () => {
-    expect(TRACKED_REPO_SLUGS.length).toBe(10);
+    expect(TRACKED_REPO_SLUGS.length).toBe(11);
     expect(TRACKED_REPO_SLUGS).toContain("petralabx/plx_secondbrain");
+    expect(TRACKED_REPO_SLUGS).toContain("petralabx/agent-runner");
     for (const slug of TRACKED_REPO_SLUGS) {
       expect(slug).toMatch(/^petralabx\/[A-Za-z0-9_.-]+$/);
     }
@@ -44,9 +45,12 @@ describe("fleet registry is the single source of truth", () => {
       missing: [],
       duplicates: [],
     });
-    // Non-active entries (test-perms-check is pending_adoption) stay fail-closed.
+    // Non-active entries (agent-runner and test-perms-check are
+    // pending_adoption) stay fail-closed.
+    expect(MCP_CHECKOUT_REPO_ALLOWLIST).not.toContain("petralabx/agent-runner");
     expect(MCP_CHECKOUT_REPO_ALLOWLIST).not.toContain("petralabx/test-perms-check");
     expect(registryDrift(MCP_CHECKOUT_REPO_ALLOWLIST).missing).toEqual([
+      "petralabx/agent-runner",
       "petralabx/test-perms-check",
     ]);
   });
@@ -61,7 +65,7 @@ describe("fleet registry is the single source of truth", () => {
     expect(ACTIVE_TRACKED_REPO_SLUGS).toContain("petralabx/plx_secondbrain");
     expect(registryDrift(ACTIVE_TRACKED_REPO_SLUGS)).toEqual({
       unknown: [],
-      missing: ["petralabx/test-perms-check"],
+      missing: ["petralabx/agent-runner", "petralabx/test-perms-check"],
       duplicates: [],
     });
   });

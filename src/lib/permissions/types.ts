@@ -125,6 +125,13 @@ export type IdentityQuery = (
 export const MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_cursor" as const;
 
 /**
+ * Portal MCP principal (agent fleet P8). The portal's COS delegate tool uses
+ * its key. Its grant is least privilege (decision CG-07b): create and search
+ * tasks only. It is the only MCP principal that may set an `agent:` assignee.
+ */
+export const PORTAL_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_portal" as const;
+
+/**
  * Reviewed registry of per-agent MCP service principals (one credential per
  * agent runtime). Keys configured outside this list never authenticate.
  */
@@ -135,6 +142,8 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
   "sp_mcp_grok",
   "sp_mcp_hermes",
   "sp_mcp_swarm",
+  "sp_mcp_agent_runner",
+  "sp_mcp_portal",
 ] as const;
 
 export type McpAgentServicePrincipalId =

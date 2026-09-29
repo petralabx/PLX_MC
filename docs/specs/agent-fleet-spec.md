@@ -1,7 +1,7 @@
 ---
 title: Agent fleet — implementation spec
-revision: r12 (28 Sep 2026: round-7 review applied: 16 findings; the critic found no blocker, and the author raised one (r11's machine-wide Python could take over trading's bare `python` calls). The fleet uses a private Python in `C:\fleet` by full path; `C:\fleet` has its own permissions; the stop rule and trading guard avoid CIM; runner holds are enforced inside the dispatch functions for every path; a released runner run goes to Cursor; the claim checks the agent's switches and never overwrites another checkout; SSH to the runner comes only from the operator. r11: round-6 review applied: 19 findings; the critic found no blocker, and the author raised one (r10's load test itself loaded the Dell while trading's worker ran). The load test runs only while `dell-vta` holds no lease, with one thread per probe process; the fleet lives in `C:\fleet` with a machine-wide Python and changes no permission on trading's files; the claim looks up and reuses a stored checkout before minting and sets the executor ids; a callback that can no longer land ends the run; the parent fsck-checks bundles in a throwaway repo and diffs without rename detection. D18's routing wording amended. r10: round-5 review applied: 22 findings; the critic found no blocker, and the author raised one (r9's load test would always fail). The Dell load test times a CPU workload at the worker's slot count; the fleet proxy runs as its own Windows account; no `local-coder`; a runner UAT job is held for a claim route, rerouted to Cursor on the same attempt after 30 minutes, and minted before one transaction; every failed runner run releases its UAT run; the parent computes the changed files itself. r9: round-4 review applied: 16 findings, 2 of them blockers; 15 held against the code. The Dell load gate becomes an alternating A/B test at the fleet's limits; the runner host has no trading role and its run users cannot reach instance metadata or the VPC; UAT jobs reach the runner only when an ADMIN authorised the ticket, under a new `agent_runner` provider and flag, and the run is created at pull; the parent moves commits by bundle and pushes from a pinned work tree; the stale sweep runs in the paced reconcile route; the fleet gets a portal MC principal and its own Postgres. r8: round-3 review applied: 19 findings, 1 of them a blocker. UAT uses the portal's existing agent authorisation and a `fix/agent-runner-` branch; the parent pushes from its own clone after a governance check; local aliases get rate limits; the Dell load gate compares lease durations. r7: round-2 review applied: 25 findings, 6 of them blockers. Loops pause, not agents; the MC checkout is minted when an approved UAT job is pulled; the runner host is fenced by its own firewall; approvals are buttons, not model tools; door keys cannot reach the portal's external API; the fleet proxy runs from its own clone with its own lock. r6: round-1 review applied: 51 findings, 11 of them blockers. The fleet gets its own proxy instance, so no fleet phase edits or restarts the trading gateway; agent runs get their own table; the runner pulls UAT jobs and never opens PRs; approvals are ADMIN-only in the portal; the runner host is a dedicated EC2 fenced off from trading. D23 confirmed. r5: D23. r4: COS as chief of staff; MC agents module retires. Record: agent-fleet-review-log.md)
-status: draft; D1–D24 confirmed (D5 and D16 as amended in r6, D18 as amended in r11, and D24, confirmed 28 Sep 2026); reviewed seven times, then closed by the operator on 28 Sep 2026; P13 confirms Grok Bot
+revision: r13 (28 Sep 2026: operator decisions after the review. D5 amended: the fleet proxy moves to its own EC2 host, `fleet-proxy`, with its own Postgres; nothing of the fleet runs on the Dell, and local aliases become an optional phase, P1b, that calls the Dell's model server over the tailnet under the A/B load test. D25 (confirmed): an agent eval gate on activation (P15a, P15), because the portal's Persona QA tests UI, not agents. D26 (confirmed): bounded parallel runs, with a per-loop `maxConcurrent` and a larger runner host. r12: round-7 review applied: 16 findings; the critic found no blocker, and the author raised one (r11's machine-wide Python could take over trading's bare `python` calls). The fleet uses a private Python in `C:\fleet` by full path; `C:\fleet` has its own permissions; the stop rule and trading guard avoid CIM; runner holds are enforced inside the dispatch functions for every path; a released runner run goes to Cursor; the claim checks the agent's switches and never overwrites another checkout; SSH to the runner comes only from the operator. r11: round-6 review applied: 19 findings; the critic found no blocker, and the author raised one (r10's load test itself loaded the Dell while trading's worker ran). The load test runs only while `dell-vta` holds no lease, with one thread per probe process; the fleet lives in `C:\fleet` with a machine-wide Python and changes no permission on trading's files; the claim looks up and reuses a stored checkout before minting and sets the executor ids; a callback that can no longer land ends the run; the parent fsck-checks bundles in a throwaway repo and diffs without rename detection. D18's routing wording amended. r10: round-5 review applied: 22 findings; the critic found no blocker, and the author raised one (r9's load test would always fail). The Dell load test times a CPU workload at the worker's slot count; the fleet proxy runs as its own Windows account; no `local-coder`; a runner UAT job is held for a claim route, rerouted to Cursor on the same attempt after 30 minutes, and minted before one transaction; every failed runner run releases its UAT run; the parent computes the changed files itself. r9: round-4 review applied: 16 findings, 2 of them blockers; 15 held against the code. The Dell load gate becomes an alternating A/B test at the fleet's limits; the runner host has no trading role and its run users cannot reach instance metadata or the VPC; UAT jobs reach the runner only when an ADMIN authorised the ticket, under a new `agent_runner` provider and flag, and the run is created at pull; the parent moves commits by bundle and pushes from a pinned work tree; the stale sweep runs in the paced reconcile route; the fleet gets a portal MC principal and its own Postgres. r8: round-3 review applied: 19 findings, 1 of them a blocker. UAT uses the portal's existing agent authorisation and a `fix/agent-runner-` branch; the parent pushes from its own clone after a governance check; local aliases get rate limits; the Dell load gate compares lease durations. r7: round-2 review applied: 25 findings, 6 of them blockers. Loops pause, not agents; the MC checkout is minted when an approved UAT job is pulled; the runner host is fenced by its own firewall; approvals are buttons, not model tools; door keys cannot reach the portal's external API; the fleet proxy runs from its own clone with its own lock. r6: round-1 review applied: 51 findings, 11 of them blockers. The fleet gets its own proxy instance, so no fleet phase edits or restarts the trading gateway; agent runs get their own table; the runner pulls UAT jobs and never opens PRs; approvals are ADMIN-only in the portal; the runner host is a dedicated EC2 fenced off from trading. D23 confirmed. r5: D23. r4: COS as chief of staff; MC agents module retires. Record: agent-fleet-review-log.md)
+status: draft; D1–D26 confirmed (D5 as amended in r13, D16 as amended in r6, D18 as amended in r11, and D24, confirmed 28 Sep 2026); D25 and D26 added in r13 and confirmed 28 Sep 2026; reviewed seven times, then closed by the operator on 28 Sep 2026; P13 confirms Grok Bot
 accountable human: vince@petrasoap.com
 repos: petralabx/plx-customer-portal, petralabx/local-inference, petralabx/PLX_MC, new petralabx/agent-runner
 ---
@@ -76,6 +76,9 @@ swarm retirement spec does that.
 | F43 | **The Dell's two local aliases share one backend:** `local-primary` and `local-fast` both call `127.0.0.1:8000`. Trading's scheduled lanes use `local-driver` only (F27); `local-primary` and `local-fast` are the swarm's interactive aliases. The `dell-vta` worker runs `COMPUTE_WORKER_MAX_SLOTS=4` shard threads. | local-inference `litellm/config.yaml:2-11`; swarm `config/models.yaml:43-51,64-68`; `config/trading-workers.yaml:226-240` |
 | F44 | **Every MC checkout call mints a new `dsp_`.** The portal's checkout client always POSTs `/checkout`, and MC inserts a new dispatch on each call; reuse happens only when the caller reads a stored `mcCheckoutId` first. | portal `mission-control/checkout-client.ts:291-303,340-351`; PLX_MC `src/lib/compliance/service.ts:197-202`; portal `workflow/production-services.ts:747-752` |
 | F45 | **On the Dell, trading lives in `vince`'s profile.** Trading's local-inference checkout is `C:\Users\vince\local-inference`, the swarm checkout is under `C:\Users\vince\Documents\GitHub`, and Python is a per-user install under `C:\Users\vince\AppData\Local\Programs\Python\Python312`. Trading's scheduled scripts call a bare `python`, so whichever `python` comes first on the PATH runs trading. Trading also keeps state in `C:\ProgramData\AgenticSwarm`. Scheduled-task and CIM calls can hang for minutes to hours on this host. A standard account cannot read another user's profile by default. | local-inference `.orchestrator/sharepoint-doc-org-harness/docs/ops.md:263`; swarm `config/trading-workers.yaml:194,204-205`; `config/operator-hosts.yaml:246`; `scripts/trading-research/dawn_harvest_scheduler.ps1:44`; `scripts/compute-fabric/vta-worker-process.ps1:7-10`; `selfupdate-vta-worker.ps1:127,204-212` |
+| F46 | **The Dell's vLLM backend already listens on every interface** (`--host 0.0.0.0 --port 8000`), and local-inference's health check names `http://100.103.33.54:8000/v1`. That check runs on the Dell itself, and vLLM is a Docker Desktop port behind Windows Firewall, so reachability from another node is not yet proven; P1b checks it first. | local-inference `scripts/start_dell_vllm_qwen3_32b_awq.sh:21`; `scripts/start_dell_vllm_qwen3_32b_awq_durable.sh:34`; `scripts/health_check_local_inference.ps1:5` |
+| F47 | **The portal's admin "evaluation" module is Persona QA, and it does not evaluate agents.** `/admin/agents/persona-qa` lists runs of a scripted Playwright explorer that tests staging UI routes after each deploy (`PersonaQaRun` keyed by staging SHA, with findings, tapes and evidence). It makes no model calls and has no score, grader, rubric or golden-set table. A new enqueue cancels every running or queued run, so it runs one at a time. | portal `app/admin/agents/persona-qa/page.tsx:31`; `prisma/schema.prisma:7525-7650`; `services/persona-qa-worker/src/missions.mjs:65-170`; `app/api/internal/persona-qa/enqueue-service.ts:188,220`; `.github/workflows/persona-qa-post-deploy.yml` |
+| F48 | **`AgentVersion.evalConfig` declares rubrics and KPIs, but nothing checks them.** The schema is `{ rubrics[], kpis[], notes }` ("declarative: no new scoring code"). Its only runtime reader shows the persona-QA supervisor's cadence. Activating a version moves the pointer and writes an audit row; it checks no eval. The agent detail page has no Eval section. | portal `lib/agents/capabilities.ts:48-56`; `app/admin/agents/persona-qa/_lib/supervisor-ledger.ts:165,259-271`; `app/api/admin/agents/[agentId]/activate/route.ts:31-41`; `app/admin/agents/[agentId]/agent-detail.tsx:87-90,654` |
 | F30 | A seed spec with the default activation policy activates its code definition on every `db-seed-staging` run, which replaces a version an admin activated. The persona-QA seeds use `activationPolicy: "DRAFT_ONLY"` to avoid that; the COS and Hasitha seeds do not. | `portal/src/lib/agents/persona-qa-agents.ts:809`; `__tests__/seed-version-policy.test.ts:33-123` |
 
 ## 3. Decisions
@@ -86,7 +89,7 @@ swarm retirement spec does that.
 | D2 | The runner lives in its own small repo. It grows from the Hermes bridge. | Confirmed 28 Sep 2026 |
 | D3 | First two loops: the CoS daily brief and Hasitha UAT batch fixes. | Confirmed 28 Sep 2026 |
 | D4 | Each agent can use any model provider or a model we host. No lock-in to one vendor. | Confirmed 28 Sep 2026 |
-| D5 | **One model gateway for agents: a fleet instance of the local-inference LiteLLM proxy on the Dell VTA, at `:4001`.** It runs from its own clone of the repo on the Dell, with its own config (`litellm/fleet.yaml`), start script, env file (fleet vendor keys and its own Langfuse keys), virtual environment, watchdog task, lock, log and key database. It defines no `local-driver` alias. An agent names a fleet alias (for example `cloud-claude-sonnet`, `cloud-gpt`, `local-primary`), never a vendor SDK. Fleet vendor keys live only in the fleet env file on the Dell. The existing proxy at `:4000` stays exactly as it is. | Confirmed 28 Sep 2026 as "one gateway"; **amended in r6** to a separate fleet instance, so no fleet phase touches the trading lane (round-1 finding CR-F8). Amendment confirmed 28 Sep 2026. |
+| D5 | **One model gateway for agents: a fleet instance of the local-inference LiteLLM proxy on its own small EC2 host, `fleet-proxy`, at `:4001` on the tailnet.** It runs from its own install with its own config (`litellm/fleet.yaml`), systemd unit, env file rendered from its own secret `prod/fleet-proxy`, and its own Postgres. It is not the runner host (SC-6), not the Dell, and not a trading host. It defines no `local-driver` or `local-coder` alias. An agent names a fleet alias (for example `cloud-claude-sonnet`, `cloud-gpt`, `local-primary`), never a vendor SDK. Fleet vendor keys live only on `fleet-proxy`. Local aliases (P1b) reach the Dell's model server over the tailnet (F46); nothing of the fleet runs on the Dell. The existing proxy at `:4000` stays exactly as it is. | Confirmed 28 Sep 2026 as "one gateway"; amended in r6 to a separate fleet instance on the Dell (round-1 finding CR-F8); **amended in r13 to its own EC2 host**, because every late blocker on the Dell came from running the fleet next to trading. Amendment confirmed by the operator 28 Sep 2026. |
 | D6 | **Runner harness: Hermes Agent.** It talks to any OpenAI-compatible endpoint (F8). Each agent gets one Hermes profile that points at the fleet proxy with that agent's alias and key. | Confirmed 28 Sep 2026 |
 | D7 | **Models we host run from the runner only, in phase 1.** Portal chat keeps its current cloud path (F4, F10). | Confirmed 28 Sep 2026 |
 | D8 | **A model change is a new `AgentVersion`, then activate.** The audit log records it. | Confirmed 28 Sep 2026 |
@@ -105,36 +108,40 @@ swarm retirement spec does that.
 | D21 | **COS's outside doors use per-person keys.** A key acts for the person who created it (`createdById`), carries scopes, expires within 90 days and can be revoked. COS answers through a door with that person's permissions. | Confirmed 28 Sep 2026 |
 | D22 | **One agent worker.** `persona-qa-worker` stays per-deploy for now and folds into the runner later. No third worker. | Confirmed 28 Sep 2026 |
 | D23 | **The trading lab is not affected** (F27). No fleet phase edits, restarts, reroutes or adds load to the trading gateway at `:4000`, its env file, its watchdog, the `local-driver` lane, the Sparks, the `dell-vta` worker, TRADINGBOX or `prod/ec2-secrets`. The fleet proxy (D5) defines no `local-driver` alias. The runner never runs on a host that runs trading work, and its tailnet access reaches only the fleet proxy. | Confirmed 28 Sep 2026 |
-| D24 | **The runner enforces D9 by construction.** Each run executes as its own OS user in its own fresh clone, with only its own agent key. GitHub access is a GitHub App installation token limited to the loop's `repos` with contents write, and never `petralabx/agentic-swarm`. Only the runner's parent process holds the token; the agent's OS user never sees it. The parent fetches the run's commit into a clone it owns, re-checks the governance files, and pushes only `fix/agent-runner-<run id>` (F35), with the pre-push hook run from a pinned `staging` copy, never from the run's commit. GitHub cannot limit an App to one branch pattern without blocking other pushers, so the parent's rule is enforced in code and tested, and a daily audit of the App's pushes alerts on any other ref. The runner has its own MC principal, `sp_mcp_agent_runner`, added to PLX_MC's principal list by a PR (F33). The runner never opens, merges or approves a PR. | Proposed in r6 (round-1 finding CR-F16); confirmed 28 Sep 2026 |
+| D24 | **The runner enforces D9 by construction.** Each run executes as its own OS user in its own fresh clone, with only a fleet key minted for that run (r13; P6). GitHub access is a GitHub App installation token limited to the loop's `repos` with contents write, and never `petralabx/agentic-swarm`. Only the runner's parent process holds the token; the agent's OS user never sees it. The parent fetches the run's commit into a clone it owns, re-checks the governance files, and pushes only `fix/agent-runner-<run id>` (F35), with the pre-push hook run from a pinned `staging` copy, never from the run's commit. GitHub cannot limit an App to one branch pattern without blocking other pushers, so the parent's rule is enforced in code and tested, and a daily audit of the App's pushes alerts on any other ref. The runner has its own MC principal, `sp_mcp_agent_runner`, added to PLX_MC's principal list by a PR (F33). The runner never opens, merges or approves a PR. | Proposed in r6 (round-1 finding CR-F16); confirmed 28 Sep 2026 |
+| D25 | **An agent version passes an eval before it goes live.** Each runner agent's `evalConfig` names an eval suite, a pass threshold and whether the gate is required. A new version runs the suite on the runner in eval mode (no writes, no push, no checkout), is scored by deterministic checks and a judge model from another provider family, and is compared with the active version. `activate` refuses a required version that scores below its threshold or below the active version, unless an ADMIN overrides with a reason, written with its audit row by the fail-closed writer. Persona QA stays the portal's UI smoke test and also checks what a runner PR deployed (P14). | Proposed in r13, from the operator's question about the admin evaluation module (F47, F48). Confirmed 28 Sep 2026. |
+| D26 | **Runs are parallel from phase 1, within limits.** Each loop has `maxConcurrent` (1 to 4, default 1), counted by the portal. The runner host runs up to `RUNNER_MAX_CONCURRENT_RUNS` runs at once, each as its own OS user, in its own clone and its own systemd unit with CPU, memory and task limits. The host starts at 1 for the canary and ramps to 2, then 4, each step after a clean week. | Proposed in r13, from the operator's question about parallelism. Confirmed 28 Sep 2026. |
 
 ### Model choice for the pilots
 
 | Agent | Loop | Model alias | Why |
 |---|---|---|---|
-| `chief-of-staff` | Daily brief | `local-primary` (Dell) | Read-only, daily, low risk. It proves the self-hosted path at zero cloud cost. |
+| `chief-of-staff` | Daily brief | a cloud fast alias, then `local-primary` if P1b passes (P7) | Read-only, daily, low risk. On a local alias it runs at zero cloud cost. |
 | `hasitha-fernando` | UAT batch fixes | a strong cloud coding alias (for example `cloud-claude-sonnet` or `cloud-gpt`) | It writes code. Tool-calling quality matters more than cost. |
 
 COS chat in the portal and through its doors keeps the portal's current cloud path (D7).
-A loop may name its own model (P3), so COS's brief uses `local-primary` while COS chat
+A loop may name its own model (P3), so COS's brief can use a fleet alias while COS chat
 stays on the cloud path.
 
 ## 4. Success criteria
 
 | # | Criterion | Check |
 |---|---|---|
-| SC-1 | Changing an agent's model, within the aliases the agent's key allows, takes one new `AgentVersion` and an activate. No code deploy and no env change. | P7 |
-| SC-2 | One agent runs on a hosted model and one on a cloud model, both through the fleet proxy. | P11, P14 |
+| SC-1 | Changing an agent's model, within the aliases the agent's key allows, takes one new `AgentVersion`, a passing eval when the agent's gate is required (D25), and an activate. No code deploy and no env change. | P7, P15 |
+| SC-2 | One agent runs on a cloud model through the fleet proxy (P11, P14). If P1b passes, one runs on a hosted model too (P7). | P11, P14; P1b, P7 |
 | SC-3 | Every PR the fleet produces carries a live MC stamp whose `actor.repo` matches its repo. The portal's checkout provides it for UAT work (D18). | P14; the `compliance` check |
 | SC-4 | Setting an agent to `DISABLED`, or `TRIPLE_T_ENABLED` to false, stops its next run within one scheduler tick and kills a running one within 60 seconds (the runner polls every 20 seconds). | P4, P6 |
 | SC-5 | Spend is visible and capped per agent and per run. | P2, P6 |
-| SC-6 | Runner hosts and agent profiles hold no vendor key. Fleet vendor keys exist only in the fleet proxy's env file on the Dell. | P1, P6 |
-| SC-7 | Two DB migrations in this spec, each in its own PR: P4a (`AgentRun`) and P12a (API key scopes). No other `prisma/migrations/` change. | `git diff --stat` per PR |
+| SC-6 | Runner hosts and agent profiles hold no vendor key. Fleet vendor keys exist only on `fleet-proxy`: in `prod/fleet-proxy` and the env file rendered from it. | P1, P6 |
+| SC-7 | Three DB migrations in this spec, each in its own PR: P4a (`AgentRun`), P12a (API key scopes) and P15a (eval tables). No other `prisma/migrations/` change. | `git diff --stat` per PR |
 | SC-8 | The runner does not run on the Dell VTA or on any host that runs trading work. | P5 |
 | SC-9 | **COS is one agent.** A question asked through Grok Bot shows up in the asker's COS threads in the portal, and the audit log records the door. | P13 |
 | SC-10 | **MC has no agent list of its own.** No placeholder agents remain, a task can name an agent as assignee, and `humanOnly` rules still reject an agent. | P9 |
 | SC-11 | **An `approve` loop does nothing until an ADMIN presses Approve** in the portal or companion, and the approval is in the audit log. No model tool and no outside door can approve. | P10, P12b, P14 |
 | SC-12 | COS can pause an agent and cannot turn one on. | P10 tests |
-| SC-13 | **The trading lab sees no change** (D23). The process that owns port 4000 keeps its start time, and the trading guard's file hashes do not change, across every fleet phase. The fleet proxy has no `local-driver` alias. The runner host cannot reach `:4000`, the Sparks or TRADINGBOX, and its run users cannot reach the instance metadata service or the VPC. P1's Dell load test passes after P1 and after P2. | P1, P2, P5 |
+| SC-13 | **The trading lab sees no change** (D23). The process that owns port 4000 keeps its start time, and the trading guard's file hashes do not change, across every fleet phase. The fleet proxy has no `local-driver` alias. The runner host cannot reach `:4000`, the Sparks or TRADINGBOX, and its run users cannot reach the instance metadata service or the VPC. No fleet process runs on the Dell; if P1b adds the local aliases, its Dell load test passes. | P1, P1b, P5 |
+| SC-14 | **Evals gate activation** (D25). A required agent version that scores below its threshold, or below the active version, cannot be activated without an audited ADMIN override. | P15 |
+| SC-15 | **Runs are parallel and isolated** (D26). Two runs of different loops, or two claims of one `uat-job` loop with `maxConcurrent: 2`, run at the same time; killing or starving one does not affect the other; a loop never exceeds its `maxConcurrent`. | P4, P6 |
 
 ## 5. Execution contract
 
@@ -150,26 +157,20 @@ stays on the cloud path.
   Production follows the normal promotion path.
 - Any live model call in an acceptance step names its expected cost.
 - Dates and times shown to the operator are ET.
-- **Trading guard (D23):** every phase that runs a command on the Dell records, before
+- **Trading guard (D23):** two steps run a command on the Dell: P1b and P14's
+  retirement of the two Hermes bridge tasks. Each records, before
   and after, the start time of the process that owns port 4000
   (the PID from `netstat -ano` for `:4000`, then `tasklist /V /FI "PID eq <pid>"`)
   and the SHA-256 of trading's `litellm/config.yaml`, `.env.local`, `.env.langfuse`,
   `scripts/start_proxy.sh`, `scripts/ensure_proxy.sh` and the task definitions of
   `LocalInferenceProxy*` and `AgenticSwarm-VTA-*` (exported with
   `schtasks /Query /XML`, with a timeout), plus, run as `vince`, the output of
-  `where python` and `py -0p`. A change fails the
-  phase. No fleet phase runs `git pull` in trading's checkout. A fleet phase stops a
-  proxy only by the process that owns that proxy's port (`4001`, or P2's spare port):
-  it finds the owner with `netstat -ano` (CIM calls can hang on the Dell, F45) and runs
-  `taskkill /PID <pid> /F`. Before it stops the `:4001` proxy, it runs
-  `schtasks /Change /TN LocalInferenceFleetProxy /DISABLE` and
-  `schtasks /End /TN LocalInferenceFleetProxy`, each with a 60-second timeout. Ending
-  the task skips the watchdog's trap, so the phase removes a stale lock itself
-  (`C:\fleet\local-inference-fleet\.run\watchdog.lock.d`). After the stop, it
-  confirms with `netstat -ano` that nothing listens on 4001 for 5 minutes, longer than
-  the watchdog's start loop, so a start already under way cannot bind the port. It
-  re-enables the task afterwards if the proxy should run. It never stops a process by name and never runs
-  `restart_litellm_proxy.ps1`.
+  `where python` and `py -0p`, using `netstat`, `tasklist` and `schtasks` with
+  timeouts (CIM calls can hang on the Dell, F45). A change fails the phase. No fleet
+  process runs on the Dell; P1b's probe runs only for its test and is removed after, and
+  no phase runs `git pull` in trading's checkout.
+- **Fleet proxy stop rule:** the fleet proxy stops only with
+  `sudo systemctl stop litellm-fleet` on `fleet-proxy`. Nothing else stops it.
 
 ## 6. Phases
 
@@ -180,124 +181,124 @@ stays on the cloud path.
 - Acceptance: `grep -n "admin/agents" tasks/lessons.md` prints the line.
 - Rollback: revert the commit.
 
-### P1 — Fleet proxy with cloud aliases (local-inference, then operator)
+### P1 — Fleet proxy host with cloud aliases (local-inference PR, then operator)
 
-- Add, all new files: `litellm/fleet.yaml`, `scripts/start_fleet_proxy.sh` and
-  `scripts/ensure_fleet_proxy.sh`.
-  - The start script sources only `.env.fleet` (gitignored), runs from `.venv-fleet`
-    with a pinned LiteLLM version, and binds `100.103.33.54:4001`. It never sources
-    `.env.local`.
-  - The watchdog script uses its own lock (`.run/watchdog.lock.d` inside the fleet clone) and
-    its own log, and probes `http://100.103.33.54:4001/health/liveliness`. It shares
-    no path with `ensure_proxy.sh` (F10).
-- `fleet.yaml` holds:
-  - cloud aliases for every D11 provider: `anthropic/…`, `openai/…`, `gemini/…`,
-    `xai/…`, `mistral/…`, `deepseek/…`, `openrouter/…`, each with at least a strong
-    and a fast alias, keys read from env (`os.environ/<PROVIDER>_API_KEY`);
-  - local aliases `local-primary` and `local-fast` (the Dell backends), with the
-    backend key read from `os.environ/FLEET_LOCAL_BACKEND_KEY`. Each local deployment
-    sets `max_parallel_requests` and `rpm` in its `litellm_params`, so the fleet's total
-    load on the Dell has a ceiling whatever the keys allow. Both aliases call the same
-    backend (F43), so each gets half of the backend ceiling the operator sets. Record how the pinned
-    LiteLLM version treats a full deployment (1.89.4 makes requests wait; 1.103.0 answers
-    429 at once). No `local-driver` alias and no `local-coder` alias: Spark A runs
-    trading's worker (D23).
-  - `callbacks: ["langfuse_otel"]`, as trading's config uses (F37), with the fleet's
-    own Langfuse keys. The start script defaults `LANGFUSE_OTEL_HOST` to
-    `http://127.0.0.1:3100` the same way trading's does, so traces never leave the Dell.
-- The operator:
-  - unpacks a private Python (the NuGet or embeddable package, a different minor version
-    from trading's 3.12) into `C:\fleet\python`. No installer runs, so nothing is added
-    to any PATH, no launcher or file association changes, and `vince`'s Python is never
-    offered an upgrade (F45). The fleet's scripts call `C:\fleet\python\python.exe` by
-    full path. The operator makes a separate clone of the repo at
-    `C:\fleet\local-inference-fleet`, outside every user profile. It never runs
-    `git pull` in trading's checkout;
+- **Infra (operator).** Create a new, dedicated EC2 instance `fleet-proxy` (Ubuntu LTS,
+  2 vCPU, 8 GB RAM, 50 GB disk). It is not the runner host (SC-6), not TRADINGBOX, the
+  VMC host, swarm-prod or the brain host. High-risk infra bundle, bucket PRD.
+  - Security group: no inbound. Outbound only TCP 443 (model providers, Secrets
+    Manager, S3), TCP 80 (package mirrors) and Tailscale's UDP 41641 and 3478.
+  - Instance profile: a new role whose only permissions are
+    `secretsmanager:GetSecretValue` on `prod/fleet-proxy-??????` and `s3:PutObject` on
+    the fleet backup prefix (P1's backup timer). IMDSv2 with a hop limit of 1, and the
+    host's `nftables` table drops `169.254.169.254` and `fd00:ec2::254` for every user
+    but root.
+  - Tailnet: save the policy; add `tag:fleet-proxy` to `tagOwners`; accept the
+    operator's identity to `tag:fleet-proxy:4001` and SSH (`action: check`). The rules
+    from `tag:agent-runner` (fleet P5) and `tag:plx-brain` (retirement R5) are added by
+    the phase that creates each tag, so no rule names a tag that does not exist yet. Add
+    `tests` that TRADINGBOX → `:4000`, the Dell → Spark B `:18090` and
+    TRADINGBOX → `tag:dgx:22` still pass; that `tag:fleet-proxy` is denied `:4000`, the
+    Sparks and TRADINGBOX; and that TRADINGBOX, the VMC host and swarm-prod are denied
+    `tag:fleet-proxy:4001` and SSH to it. Join
+    with `tailscale up --ssh --advertise-tags=tag:fleet-proxy --accept-dns=false --accept-routes=false`.
+    Record the host's tailnet address as `<fleet-proxy>`.
+- **Code (local-inference PR, new files only):**
+  - `litellm/fleet.yaml`: cloud aliases for every D11 provider (`anthropic/…`,
+    `openai/…`, `gemini/…`, `xai/…`, `mistral/…`, `deepseek/…`, `openrouter/…`), each
+    with at least a strong and a fast alias, keys read from env
+    (`os.environ/<PROVIDER>_API_KEY`). No local alias yet (P1b adds them), and never
+    `local-driver` or `local-coder` (D23). No trace callback: the fleet never sends
+    traces to trading's Langfuse on the Dell. Request and spend logs live in the fleet's
+    own Postgres.
+  - `deploy/fleet-proxy/`: a systemd unit `litellm-fleet.service` (user
+    `litellm-fleet`, a pinned LiteLLM version in `/opt/litellm-fleet`, bound to
+    `<fleet-proxy>:4001` only, `Restart=always`, `EnvironmentFile=/etc/litellm-fleet/fleet.env`);
+    `render-env.sh`, which renders that file (root only, mode 0600) from
+    `prod/fleet-proxy`; a daily `pg_dump` timer to the S3 backup prefix, run as root
+    (only root reaches the metadata service); and a README. The unit runs
+    `prisma generate` as `litellm-fleet`, with its cache in `/var/lib/litellm-fleet`.
+- **Operator:**
   - creates the fleet's provider accounts (separate organisations or teams, D11), sets
-    their data-use options (for example, opt out of training), and puts the keys,
-    `FLEET_LITELLM_MASTER_KEY`, `FLEET_LOCAL_BACKEND_KEY`, the fleet Langfuse keys and
-    `LANGFUSE_OTEL_HOST=http://127.0.0.1:3100` in `.env.fleet`;
-  - creates a local Windows account `svc-fleet` with no admin rights. It changes no
-    permission on any of trading's files: a standard account already cannot read
-    `vince`'s profile, where trading lives (F45). `C:\fleet` is created with inheritance
-    turned off and access for SYSTEM, Administrators and `svc-fleet` only (a new folder
-    under `C:\` would otherwise let every local account modify it). Everything in it,
-    `.env.fleet` included, belongs to `svc-fleet`. As `svc-fleet`, the operator builds
-    `.venv-fleet`, runs `pip install`, sets up LiteLLM's Prisma client (P2) and runs
-    P2's spare-port test, so no cache lands in `vince`'s profile. A flaw in the fleet
-    proxy then reaches none of trading's files or tokens;
-  - adds one Windows Firewall inbound port rule for TCP 4001 on the Tailscale interface
-    only (a program rule would not match: a venv's `python.exe` hands off to the base
-    interpreter);
-  - registers a scheduled task `LocalInferenceFleetProxy` that runs
-    `ensure_fleet_proxy.sh` from the fleet clone as `svc-fleet`, at startup and every
-    5 minutes. The `LocalInferenceProxy*` tasks are not touched.
+    their data-use options (for example, opt out of training), and stores the keys,
+    `FLEET_LITELLM_MASTER_KEY` and `DATABASE_URL` in `prod/fleet-proxy`;
+  - installs PostgreSQL on `fleet-proxy`, listening on localhost only, with one database
+    `litellm_fleet`; `allow_requests_on_db_unavailable` stays off (fail closed);
+  - renders the env file and enables the unit.
 - Acceptance:
   - `git diff --name-only origin/main...HEAD` lists only new files and `.gitignore`.
   - `git diff -U0 origin/main...HEAD -- litellm/ | grep '^+.*api_key:' | grep -v 'os.environ/'`
     prints nothing.
-  - From another tailnet node (not the Dell),
-    `curl -sS -H "Authorization: Bearer $FLEET_LITELLM_MASTER_KEY" http://100.103.33.54:4001/v1/models`
-    lists every new alias and no `local-driver`.
-  - One short chat completion per alias returns HTTP 200, and each has a trace in the
-    fleet's Langfuse project. Expected cost: under $0.25 total.
-  - As `svc-fleet`, reading trading's `.env.local` fails with access denied, and so
-    does creating a file in `C:\ProgramData\AgenticSwarm`. `icacls C:\fleet` lists only
-    SYSTEM, Administrators and `svc-fleet`. The trading guard also records `icacls`
-    output for trading's checkout, `.env*` files and `C:\ProgramData\AgenticSwarm`
-    before and after; it does not change.
-  - The execution contract's trading guard holds.
-  - **Dell load test (A/B).** This measures whether fleet traffic slows the Dell while
-    trading's own work runs as normal. P1 adds `scripts/fleet_load_probe.py` and
-    `scripts/fleet_load_drive.py`. Neither reads or writes trading data; the operator
-    reads the `dell-vta` lease list, read-only, to pick the window.
-    - What trading shares with the fleet on the Dell is the machine, not the model
-      server: trading's scheduled lanes never call `:8000` (F43), while the `dell-vta`
-      worker runs CPU-bound shards. So the probe runs on the Dell and times a fixed
-      numpy workload (matrix and rolling-window math, like a backtest) in as many
-      parallel processes as the worker's slot count (`COMPUTE_WORKER_MAX_SLOTS`, 4
-      today), each pinned to one thread (`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and
-      `MKL_NUM_THREADS` set to 1), about 60 seconds.
-    - The test runs only while `dell-vta` holds no lease, so the probe itself never
-      competes with trading's shards. The probe reads the worker's leases every 5
-      seconds, read-only; if a lease starts, it kills its own processes and the driver
-      within 5 seconds, discards that pair and runs it again later.
-    - The driver runs on the operator's workstation on the tailnet, never a Spark,
-      TRADINGBOX or the VMC host. It sends traffic to both local aliases through
-      `:4001` at their deployment limits, with 2,000-token prompts and 512-token
-      answers. Expected cost: $0.
-    - In one ET window, run 5 pairs, alternating: the probe with the driver off, then
-      the probe with the driver on. Alternating cancels drift in trading's own load.
-    - The test fails if the median probe time with the driver on is more than 10% above
-      its median with the driver off. Faster is not a fail. The evidence lists any
-      pair the probe discarded because a lease started.
-    - Repeat it after P2 (the driver uses enough P2 agent keys to reach each local
-      deployment's `max_parallel_requests`, since each key allows one request at a
-      time) and after any change to a local alias's limits.
-    - On a fail: stop the fleet proxy by the execution contract's stop rule, and
-      record it. Cloud aliases move to a proxy on a separate small EC2 (never the
-      runner host, SC-6). Local aliases wait until the Dell has headroom.
-- Rollback: stop the fleet proxy by the execution contract's stop rule; unregister
-  `LocalInferenceFleetProxy`; remove the firewall rule; delete `C:\fleet` (the private
-  Python, the clone and `.env.fleet`) and the `svc-fleet` account; then revert.
-  `:4000` never changed.
+  - From the operator's tailnet identity,
+    `curl -sS -H "Authorization: Bearer $FLEET_LITELLM_MASTER_KEY" http://<fleet-proxy>:4001/v1/models`
+    lists every cloud alias and no `local-` alias.
+  - One short chat completion per alias returns HTTP 200, and each appears in
+    `GET /spend/logs`. Expected cost: under $0.25 total.
+  - On `fleet-proxy`: `aws secretsmanager get-secret-value --secret-id prod/ec2-secrets`
+    returns `AccessDenied`; as `litellm-fleet`, an IMDSv2 token request times out;
+    probes to the Dell's `:4000` and `:8000`, the Sparks and TRADINGBOX fail.
+  - `sudo systemctl kill litellm-fleet` is followed by a restart within 30 seconds.
+  - The tailnet policy `tests` pass. No command ran on the Dell.
+- Rollback: `sudo systemctl disable --now litellm-fleet`; restore the saved tailnet
+  policy; terminate the instance; revert. `:4000` never changed.
+
+### P1b — Local aliases through the fleet proxy (local-inference PR, then operator; after P1 and P2; optional)
+
+- First, read-only: from `fleet-proxy`, after adding the tailnet rule below,
+  `curl -m5 http://100.103.33.54:8000/v1/models` must answer. If it does not, P1b
+  stops and local aliases stay out: opening the Dell's firewall would need its own
+  D23 exception.
+
+- Add `local-primary` and `local-fast` to `fleet.yaml`, both calling the Dell backend
+  at `http://100.103.33.54:8000/v1` over the tailnet (F46), with the backend key
+  `FLEET_LOCAL_BACKEND_KEY` in `prod/fleet-proxy`. Each sets `max_parallel_requests`
+  and `rpm` in its `litellm_params`; both call the same backend (F43), so each gets half
+  of the ceiling the operator sets. Record how the pinned LiteLLM version treats a full
+  deployment (1.89.4 makes requests wait; 1.103.0 answers 429 at once).
+- Tailnet: one more accept rule, `tag:fleet-proxy` to `100.103.33.54:8000`, saved
+  first, with the P1 `tests` re-run. Nothing on the Dell changes.
+- **Dell load test (A/B).** This measures whether fleet traffic slows the Dell while
+  trading's own work runs as normal. It is the only fleet step that runs a command on
+  the Dell, under the trading guard.
+  - The operator unpacks a portable Python with numpy into `C:\fleet-probe` (for
+    example the NuGet package plus `pip install --target`), with no installer and no
+    PATH change, and deletes the folder after the test.
+  - The probe (`scripts/fleet_load_probe.py`, added in this phase) times a fixed numpy
+    workload (matrix and rolling-window math, like a backtest) in as many processes as
+    the worker's slot count (`COMPUTE_WORKER_MAX_SLOTS`, 4 today), each pinned to one
+    thread (`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS` = 1), about
+    60 seconds. It reads neither trading's data nor its files.
+  - It runs only while `dell-vta` holds no lease. It reads the worker's leases every 5
+    seconds, read-only; if a lease starts, it kills its own processes and the driver
+    within 5 seconds and that pair is run again later.
+  - The driver (`scripts/fleet_load_drive.py`) runs on the operator's workstation, never
+    on the Dell, a Spark, TRADINGBOX or the VMC host, and
+    sends traffic to both local aliases through `fleet-proxy` at their deployment
+    limits, with 2,000-token prompts and 512-token answers. Expected cost: $0.
+  - Run 5 pairs in one ET window, alternating driver off and on. The test fails if
+    the median probe time with the driver on is more than 10% above its median with
+    the driver off. Faster is not a fail.
+  - Repeat after any change to a local alias's limits, using enough P2 keys to reach
+    each deployment's `max_parallel_requests`.
+- Update the keys (`POST /key/update`) of agents allowed a local alias: add the local
+  aliases, set `max_parallel_requests` to the sum of the agent's loops'
+  `maxConcurrent`, and set `rpm_limit` and `tpm_limit`. Repeat whenever a new version
+  changes `maxConcurrent` or the aliases.
+- Acceptance: the load test passes; the trading guard holds; one short completion on
+  each local alias returns 200; `C:\fleet-probe` is gone.
+- On a fail, or as rollback: remove the local aliases from `fleet.yaml`, restart
+  `litellm-fleet`, and remove the tailnet rule. Cloud aliases keep working.
 
 ### P2 — Per-agent keys and budgets (fleet proxy)
 
-- Give the fleet proxy its own Postgres cluster on the Dell: its own service, data
-  directory and port (not 5432; record them), holding one database `litellm_fleet`.
-  Never trading's WSL2 server at `127.0.0.1:5432` (F41), and never Langfuse's. `DATABASE_URL` goes in
-  `.env.fleet` only. Install LiteLLM's database extras (the Prisma client and Node)
-  into `.venv-fleet` only.
-- Prove database mode on Windows first: start the fleet clone's proxy on a spare port
-  with `DATABASE_URL`, mint and use one key, then stop it by its port owner. Only then
-  restart `:4001` by the execution contract's stop rule (task disabled first).
-- Keep `allow_requests_on_db_unavailable` off for the fleet proxy (fail closed). The
-  trading lane is not on this proxy, so this cannot affect trading.
-- Mint one virtual key per agent with `POST /key/generate`: a non-empty `models`
-  list of fleet aliases, `max_budget`, `budget_duration`, and `metadata.agent_slug`.
-  Local aliases cost $0, so a budget never stops them: every key that lists a local
-  alias also gets `max_parallel_requests: 1`, an `rpm_limit` and a `tpm_limit`.
+- The fleet proxy already has its database (P1). Mint one virtual key per agent with
+  `POST /key/generate`: a non-empty `models` list of fleet aliases, `max_budget`,
+  `budget_duration`, and `metadata.agent_slug`. A key that lists a local alias (after
+  P1b) also gets `max_parallel_requests` equal to the sum of its loops'
+  `maxConcurrent` (D26), an `rpm_limit` and a `tpm_limit`, because local aliases cost $0
+  and a budget never stops them.
+- Mint one eval key per agent with a P15 suite (`metadata.purpose: eval`), listing the
+  agent's model aliases and its `judgeModel`, with its own budget.
 - Mint one more key for the brain (retirement spec R9), with cloud aliases only
   (retirement D6).
 - Acceptance:
@@ -309,13 +310,11 @@ stays on the cloud path.
     $0.01.
   - Every key has a non-empty `models` list; `GET /v1/models` with each key does not
     list `local-driver`, and with the brain key lists no `local-` alias.
-  - A burst of ten parallel requests with one key on a local alias gets 429 for all
-    but one. A burst across three keys never has more requests running on a local
-    deployment than its `max_parallel_requests` (the proxy's log shows the count).
-  - The trading guard holds, and P1's Dell load test passes again with the P2 keys.
-- Rollback: unset `DATABASE_URL` in `.env.fleet` and restart the fleet proxy only.
-  To remove P2 entirely, also stop and remove the fleet Postgres service and its data
-  directory.
+  - After P1b: a burst across three keys never has more requests running on a local
+    deployment than its `max_parallel_requests`, and P1b's load test passes again with
+    the P2 keys.
+- Rollback: delete the minted keys (`POST /key/delete`). Agents lose fleet access; the
+  proxy keeps running.
 
 ### P3 — Registry contract (portal, code only)
 
@@ -334,6 +333,10 @@ stays on the cloud path.
   - `maxMinutesPerRun`: positive integer, default 30
   - `model`: optional fleet alias for this loop; defaults to `primaryModel`
   - `mcBucket`: bucket id for the loop's TASKs
+  - `maxConcurrent`: integer 1 to 4, default 1 (D26)
+- `evalConfigSchema` gains optional `suite` (an eval suite id), `threshold` (minimum
+  pass rate, 0 to 1), `required` (default false), `judgeModel` (a fleet alias) and
+  `maxUsdPerEval` (D25). Existing `rubrics`, `kpis` and `notes` stay.
 - A loop without `runtime` stays an allow-list token, as COS's loops are today (F17).
 - Set `activationPolicy: "DRAFT_ONLY"` on the `chief-of-staff` and `hasitha-fernando`
   seed specs (F30).
@@ -341,7 +344,9 @@ stays on the cloud path.
 - Acceptance:
   - Unit tests: old seeds parse; a bad cron fails; a `repos` entry that is not
     `owner/name` fails; `Petralabx/Agentic-Swarm` in `repos` fails; `repos` on a
-    non-`uat-job` loop fails; a loop without `autonomy` reads as `approve`.
+    non-`uat-job` loop fails; a loop without `autonomy` reads as `approve`;
+    `maxConcurrent: 5` fails; an eval config with `required: true` and no `suite`
+    fails.
   - A seed-policy test: a seed run keeps an admin-activated `activeVersionId` for
     both agents.
   - Portal checks exit 0. `git diff --stat origin/staging...HEAD -- portal/prisma`
@@ -366,7 +371,7 @@ stays on the cloud path.
   checks and `npm run build` exit 0; the diff touches only the schema, the new
   migration folder and the seed.
 - Rollback: revert the code and keep the tables. Prisma has no down migrations, and a
-  drop would be a third migration.
+  drop would be a fourth migration.
 
 ### P4 — Runner API (portal, new routes)
 
@@ -380,8 +385,12 @@ stays on the cloud path.
   sets the first status from the registry: `AWAITING_APPROVAL` for an `approve` loop,
   `RUNNING` otherwise. A `uat-job` run is not started here: P14a creates it at pull,
   already `RUNNING`, because the ticket's ADMIN authorisation is its approval (D16). It writes the `RUN_START` / `RUN_END` audit pair as the service
-  user. The lock is per agent and loop: a second start while one is `RUNNING` returns
-  `SKIPPED_LOCKED`.
+  user. A start is refused with `SKIPPED_LOCKED` when the loop already has
+  `maxConcurrent` runs `RUNNING` (D26). In one transaction the portal runs
+  `INSERT … ON CONFLICT DO NOTHING` for the loop's `AgentLoopState` row, then
+  `SELECT … FOR UPDATE` on it, then counts, so two starts at the limit never both
+  succeed. An approval that moves a run from `AWAITING_APPROVAL` to `RUNNING`, and a P14a
+  claim, count the same way; an approval at the limit leaves the run waiting.
 - `POST /api/runner/v1/runs/{id}/heartbeat`: the runner calls it every 60 seconds. A
   `RUNNING` row with no heartbeat for 10 minutes (as `RUN_LOCK_TTL_MS`, F34) becomes
   `FAILED` with reason `stale`, which frees the lock. Every runner route checks for
@@ -426,7 +435,9 @@ stays on the cloud path.
     through); a valid token gives 200.
   - A `DISABLED` agent is absent from the list; a paused loop is absent; with
     `TRIPLE_T_ENABLED=false` the list gives 503.
-  - A second start for the same agent and loop returns `SKIPPED_LOCKED`; a row with no
+  - With `maxConcurrent: 1`, a second start for the same agent and loop returns
+    `SKIPPED_LOCKED`; with `maxConcurrent: 2`, ten concurrent starts leave exactly two
+    `RUNNING`; a row with no
     heartbeat for 10 minutes becomes `FAILED` and the next start succeeds.
   - Three failed runs in a row pause the loop, and the agent stays `ENABLED`; after an
     ADMIN clears it, the count starts again.
@@ -445,8 +456,9 @@ stays on the cloud path.
   `disabled: false` names the Spark, and whether the gateway's `local-driver` alias
   points at it (F27). A Spark that does any of these is out: run nothing on it and do
   not load-test it. On 28 Sep 2026 both Sparks are out.
-- **Step 2, infra change.** Create a new, dedicated EC2 instance (Ubuntu LTS, 4 vCPU,
-  16 GB RAM, 150 GB disk). It is not TRADINGBOX and not the swarm or VMC host. Its
+- **Step 2, infra change.** Create a new, dedicated EC2 instance (Ubuntu LTS, 8 vCPU,
+  64 GB RAM, 300 GB disk: about 2 vCPU and 12 GB per concurrent run for up to four runs,
+  plus the parent and the OS, D26). It is not TRADINGBOX and not the swarm or VMC host. Its
   security group allows no inbound traffic and outbound HTTPS, plus HTTP to the Ubuntu
   package mirrors; no security group that TRADINGBOX or the VMC host uses admits it.
   It gets no instance profile by default, so the operator manages it over Tailscale
@@ -463,7 +475,7 @@ stays on the cloud path.
   This is an infra change: high-risk bundle, bucket PRD, the operator creates it.
 - **Step 3, tailnet policy.** A new tag needs a `tagOwners` entry, so the policy always
   changes. Save the current policy, add `tag:agent-runner` to `tagOwners` and one accept
-  rule to `100.103.33.54:4001`, plus an `acls` rule for port 22 and an `ssh` rule from
+  rule from it to `tag:fleet-proxy:4001` (P1 must be done), plus an `acls` rule for port 22 and an `ssh` rule from
   the operator's user identity to `tag:agent-runner` (`action: check`, a non-root
   `users` list), and add policy `tests` that TRADINGBOX → `:4000`, the
   Dell → Spark B `:18090` and TRADINGBOX → `tag:dgx:22` are still accepted. Add
@@ -475,7 +487,7 @@ stays on the cloud path.
   `tailscale up --ssh --advertise-tags=tag:agent-runner --accept-dns=false --accept-routes=false`,
   so DNS and apt keep using the VPC resolver. A root-owned `nftables` table of family
   `inet` (IPv4 and IPv6) first accepts `ct state established,related`, then allows new
-  outbound traffic on `tailscale0` only to `100.103.33.54:4001` and drops the rest,
+  outbound traffic on `tailscale0` only to `<fleet-proxy>:4001` and drops the rest,
   including every `fd7a:` tailnet address.
   Every run user (D24) has the primary group `fleet-run`. For that group
   (`meta skgid`), the same table also drops `169.254.0.0/16` (the instance metadata
@@ -483,7 +495,7 @@ stays on the cloud path.
   through the local stub `127.0.0.53`; `systemd-resolved` forwards the query as its own
   user. Agents run as unprivileged users, so they cannot change the table.
 - Acceptance, all from the runner host:
-  - `curl -m5 http://100.103.33.54:4001/v1/models` with a fleet key succeeds.
+  - `curl -m5 http://<fleet-proxy>:4001/v1/models` with a fleet key succeeds.
   - These all fail, on both the IPv4 and the `fd7a:` IPv6 tailnet address where one
     exists: the Dell's `:4000`, `:8000`, `:3100` and `:8787`; Spark A `:18082`; Spark B
     `:18090`; TRADINGBOX and the VMC host (also on their private VPC addresses).
@@ -530,7 +542,16 @@ stays on the cloud path.
   - A scheduler tick (every minute). It reads P4, runs due loops, sends a heartbeat
     every 60 seconds and polls the run's status route every 20 seconds during a run;
     a stop answer, or three polls in a row that get no answer, kills the run (SC-4).
-    If P4 does not answer, no run starts. One run at a time in phase 1.
+    If P4 does not answer, no run starts.
+  - Parallel runs (D26): the runner runs up to `RUNNER_MAX_CONCURRENT_RUNS` at once:
+    1 for the canary, 2 after P11's first clean week, 4 after P14's first clean week.
+    Each tick starts at most (limit minus running) due runs, oldest first. Each run is
+    a transient systemd unit in `fleet-runs.slice` with `CPUQuota=200%`,
+    `MemoryMax=12G` and `TasksMax=512`, as its own OS user in its own clone, with its
+    own heartbeat, status poll and kill. A run whose clone passes 20 GB is killed.
+    Runs execute the portal's typecheck, lint and tests, never `npm run build` (CI's
+    `lint-typecheck-build` covers the build), with
+    `NODE_OPTIONS=--max-old-space-size=6144` and test workers capped at 2.
   - `task-assigned` loops: pick up open MC tasks whose assignee is this agent (P8).
     One attempt per task; a failed task waits for a human to re-queue it.
   - `approve` loops: ask for approval through P4 and wait without holding the lock (D16).
@@ -559,19 +580,25 @@ stays on the cloud path.
       `governanceSnapshot` and `assertGovernanceUnchanged` (`:303-327`) in that work
       tree. The callback carries these parent-computed changed files and evidence; the
       parent never copies a test plan or file list the run reported.
-    - Push: from a non-bare work tree checked out at the pinned `staging` SHA, with
-      `core.hooksPath` set to that tree's `.githooks`, the parent runs
+    - Parallel runs share the parent's mirror, so the parent holds a per-repo lock
+      around every fetch, `worktree add` and push, and gives each run its own push work
+      tree (the MC receipt lives in each work tree's git dir).
+    - Push: from that run's own non-bare work tree checked out at the pinned `staging`
+      SHA, with `git -c core.hooksPath=<that tree>/.githooks`, the parent runs
       `git push origin <sha>:refs/heads/fix/agent-runner-<run id>` with
       `CURSOR_AGENT=1`, `MC_REPO` set, and the receipt for the checkout the portal
       minted at pull (`compliance-checkout.mjs --write-receipt`). The hook then runs
       the pinned script, never the run's (F40).
     The run's user never sees the GitHub App token. MC calls go out as
     `sp_mcp_agent_runner`.
-  - Per-agent Hermes profile generated from the registry: fleet `base_url`, the
-    loop's alias, the agent's P2 key. Pin the Hermes version.
-  - Caps: `maxMinutesPerRun`, a Hermes turn limit, and a spend check. Every 60 seconds
-    the runner reads its key's spend from `/key/info` and kills the run when the
-    spend since the run began passes `maxUsdPerRun` (SC-5).
+  - Per-run Hermes profile generated from the registry: fleet `base_url`, the
+    loop's alias, and the run's own key (below). Pin the Hermes version.
+  - Caps: `maxMinutesPerRun`, a Hermes turn limit, and a spend cap. Parallel runs of one
+    agent must not share a spend figure, so the parent mints a key for each run
+    (`POST /key/generate` with the agent key's aliases and limits, `max_budget` =
+    `maxUsdPerRun`) and deletes it when the run ends. The proxy refuses the run's calls
+    past its budget, and the runner reads that key's `/key/info` every 60 seconds for
+    `AgentRun.usd` and telemetry (SC-5).
   - One `POST /api/cursor/session-telemetry` per run, so MC counts runner spend.
   - For loops that touch the UAT database, avoid inbound pacer minutes 6, 21, 36 and
     51 UTC (F23).
@@ -579,8 +606,11 @@ stays on the cloud path.
   - Unit tests pass (`node --test`).
   - The root guide contains the locked sentence and each of the seven needles
     (one `grep -c` per needle, each at least 1).
-  - Canary with a test agent on `local-fast`: one run, one `AgentRun` row, one audit
-    pair, one telemetry event.
+  - Canary with a test agent on a cloud fast alias: one run, one `AgentRun` row, one
+    audit pair, one telemetry event.
+  - With the limit at 2: two runs of different loops run at the same time; killing
+    one leaves the other running; a run that passes `MemoryMax` is killed by systemd
+    and the other run finishes.
   - Set the agent `DISABLED` during a run: the run is killed within 60 seconds and
     no run starts on the next tick. Kill the runner mid-run: the row becomes `FAILED`
     (stale) within 15 minutes of its last heartbeat (10 minutes stale, plus up to 5
@@ -595,10 +625,12 @@ stays on the cloud path.
 
 ### P7 — Model swap test (no code)
 
-- On a test agent whose key allows both `local-fast` and a cloud alias, create a new
-  version that changes only `primaryModel` from one to the other. Activate it.
-- Acceptance: the next run's Langfuse trace shows the new `model_group`. No deploy,
-  no env change (SC-1). Expected cost: under $0.05.
+- On a test agent whose key allows two aliases (a cloud fast alias and, once P1b has
+  passed, `local-fast`), create a new version that changes only `primaryModel` from one
+  to the other. Activate it. After P1b, the same step moves `chief-of-staff` (P11) to
+  `local-primary`.
+- Acceptance: the next run's entry in the fleet proxy's `GET /spend/logs` shows the new
+  `model_group`. No deploy, no env change (SC-1). Expected cost: under $0.05.
 
 ### P8 — MC: agent reports and agent assignees (PLX_MC)
 
@@ -683,7 +715,8 @@ stays on the cloud path.
 ### P11 — Pilot 1: COS daily brief
 
 - Agent `chief-of-staff`, new version with one `runner` loop, `autonomy: auto`
-  (it only reads and reports), `model: local-primary`, `repos: []`.
+  (it only reads and reports), `model:` a cloud fast alias until P1b passes, then
+  `local-primary` through P7's swap, `repos: []`.
 - Schedule: weekdays, 07:47 ET.
 - Inputs: open MC tasks and agent reports (MC), and the P4 `brief-inputs` route (D17).
   The run's user holds only its agent key, so the runner's parent fetches these
@@ -691,7 +724,9 @@ stays on the cloud path.
 - Output: one `agent.report` in MC (P8), posted by the parent as
   `sp_mcp_agent_runner`, shown in the COS panel's Tasks tab (P10).
 - Acceptance: five weekday runs in a row, each with an `AgentRun` row and a report in
-  MC. Cloud spend for this loop is $0 (SC-2).
+  MC. Cloud spend for this loop stays under $1 a week on the cloud alias, and $0 after
+  P7 moves it to `local-primary`. Each run stores its brief inputs with its `AgentRun`
+  (they become P15's eval cases).
 
 ### P12 — COS door for other tools (portal)
 
@@ -775,14 +810,17 @@ stays on the cloud path.
     0. Refuse if the agent is not `ENABLED`, its loop is paused, or Triple-T is off
        (SC-4).
     1. If the idempotency key has a stored result, return that binding.
-    2. If the run is no longer held for `agent_runner`, refuse without minting.
+    2. If the run is no longer held for `agent_runner`, or the loop already has
+       `maxConcurrent` runs `RUNNING` (P4), refuse without minting. A refused claim
+       writes no `AgentRun`.
     3. If the run's `mcCheckoutId` was minted by an earlier claim of this run and has at
        least `maxMinutesPerRun` plus 60 minutes left, reuse it. Otherwise mint one and
        write it with a conditional update (only while the run is still held and has no
        fresher runner mint), so a claim that lost a race never overwrites the checkout
        Cursor's envelope froze.
     4. In one database transaction: move the `UatAgentRun` from `QUEUED_FOR_AGENT` to
-       `AGENT_RUNNING` only if its provider is still `agent_runner` (compare-and-set);
+       `AGENT_RUNNING` only if its provider is still `agent_runner` (compare-and-set)
+       and the loop's count, taken under P4's lock, is still below `maxConcurrent`;
        set `executorAgentId` to the agent's slug, `executorRunId` to the new
        `AgentRun.id` and the "runner already tried" mark; create the `AgentRun` as
        `RUNNING` with `uatRunId`; store the idempotency result; and write the binding's
@@ -830,19 +868,81 @@ stays on the cloud path.
 - Agent `hasitha-fernando`, new version with one `runner` loop, `trigger: uat-job`,
   `autonomy: approve`, a cloud coding alias, `repos: ["petralabx/plx-customer-portal"]`,
   `maxUsdPerRun` set by the operator, and `maxMinutesPerRun` of at most 120, well inside
-  the checkout's 8 hours.
+  the checkout's 8 hours. `maxConcurrent: 1` for the first week, then 2 (D26).
 - Each run: an ADMIN authorises the ticket for agent work (F36); the runner claims the
   job and the portal mints the checkout (P14a); the run's user branches from `staging`,
   fixes and runs the portal checks; the parent pushes `fix/agent-runner-<run id>` (D24)
   and calls the callback. The portal opens the
   draft PR with the stamp and completes the task (D18). The runner posts a short
   `agent.report` that links the PR.
-- After two clean weeks, retire only the Dell tasks `PLX-Hermes-UAT-Bridge` and
-  `PLX-Hermes-UAT-Bridge-Watchdog` (F7). Keep the Hermes install; trading tasks on the
+- After two clean weeks, under the trading guard, disable only the Dell tasks
+  `PLX-Hermes-UAT-Bridge` and `PLX-Hermes-UAT-Bridge-Watchdog` (F7), by exact name, with
+  `schtasks /Change /TN <name> /DISABLE` and a timeout. Keep the Hermes install; trading tasks on the
   Dell are not touched (D23).
 - Acceptance: one batch gives one draft PR. `compliance`, `lint-typecheck-build`,
-  `Validate ledgers` and `workbench-api` are green. Spend stays under the cap. The UAT run graph
+  `Validate ledgers` and `workbench-api` are green. After CIP merges it and staging
+  deploys, the Persona QA post-deploy run for that SHA has no new verified
+  high-severity finding (F47). Spend stays under the cap. The UAT run graph
   shows the runner as executor (SC-2, SC-3, SC-5, SC-11).
+
+### P15a — Agent eval tables (portal, migration, its own PR)
+
+- New models: `AgentEvalCase` (`suite`, `name`, `input` JSON, `checks` JSON: the
+  deterministic assertions plus an optional rubric for the judge); `AgentEvalRun`
+  (`agentId`, `agentVersionId`, `baselineVersionId`, `suite`, `status`, `passRate`,
+  `baselinePassRate`, `usd`, `startedAt`, `endedAt`, `claimedBy`); and
+  `AgentEvalResult` (`runId`, `caseId`, `passed`, `score`, `judgeModel`, `notes`,
+  `transcriptRef`). Index `AgentEvalRun` on `(agentVersionId, suite, status)`.
+- Acceptance and rollback as P4a (its own PR; applied to staging and UAT; keep the
+  tables on rollback).
+
+### P15 — Agent eval gate (portal and runner, after P4, P6 and P15a)
+
+- **Enqueue:** an ADMIN button on the agent detail page, and `VERSION_CREATE` for an
+  agent whose `evalConfig.required` is true, create an `AgentEvalRun` for the new
+  version against the active one on the version's `suite`.
+- **Run:** the runner claims eval runs through `POST /api/runner/v1/evals/claim` and
+  posts results to `POST /api/runner/v1/evals/{id}/results` (runner token, Zod, standard
+  envelope). The claim returns snapshots of both versions (persona, loop, model), so the
+  runner never depends on the active-version-only routes. An eval run takes a run slot
+  only when one is spare, so it never delays a scheduled or UAT run. It heartbeats and
+  polls a status route like any run (SC-4), and P4's stale sweep covers it. It runs each
+  case as the candidate version, and reuses a cached result for the active version when
+  that version and case are unchanged, in eval mode: the run's user gets the agent's eval
+  key (P2), and the parent never claims a UAT job, mints a checkout, pushes or writes to
+  MC; its only portal write is the results post. Cases run one after another, each
+  capped at `maxMinutesPerRun`. Scoring applies the case's deterministic checks first,
+  then the rubric through `judgeModel`, a fleet alias from another provider family
+  than the agent's model. A run stops when it passes `maxUsdPerEval`.
+- **Gate:** `activate` (`app/api/admin/agents/[agentId]/activate/route.ts`, SUPER_ADMIN
+  only) applies the gate when the ACTIVE version's `evalConfig.required` is true, so a
+  candidate cannot skip it by setting `required: false`. It refuses unless the
+  candidate's latest finished eval has a `passRate` at or above `threshold` and at or
+  above its baseline's, and, inside the pointer transaction, that eval's
+  `baselineVersionId` is still the active version. A SUPER_ADMIN can override with a
+  reason; the override and its audit row are written together by the fail-closed
+  writer (P10).
+- **UI:** an Eval section on the agent detail page shows each version's runs, pass
+  rates against the baseline, per-case results and cost. Persona QA stays as it is
+  (F47).
+- **Suites for the pilots:** `chief-of-staff` gets 10 cases from the brief inputs P11
+  stored, each checking that the brief names every open blocker and invents none (so
+  P15's suite waits for 10 P11 runs). `hasitha-fernando` gets 5 closed UAT tickets whose
+  fixes are known: each case's `input` carries `baseSha` (the parent of the fix commit)
+  and the expected files, the run's clone is seeded at `baseSha`, and the case checks
+  that the proposed diff touches those files and that the portal checks pass on it (no
+  push). Both set `required: true`.
+- Acceptance:
+  - An eval of a deliberately worse version (a wrong model alias) scores below the
+    active version, and `activate` refuses it; an ADMIN override with a reason
+    activates it, with one audit row.
+  - An eval run makes no MC write, no portal write and no push (the runner's audit and
+    the MC event log show none).
+  - A run stops at `maxUsdPerEval`. The acceptance runs on the `chief-of-staff` suite.
+    Expected cost: under $2.
+  - Portal checks, build and hygiene exit 0; runner unit tests pass.
+- Rollback: revert the gate in `activate` first (activation then works as before),
+  then the rest.
 
 ## 7. Risks
 
@@ -855,10 +955,10 @@ stays on the cloud path.
 | COS gains power it should not have, or an outside model acts through it. | D14; D16 (ADMIN-only approvals, in the portal); P12b refuses approve, delegate and pause through the door; each tool is switched on per version. |
 | COS's answers leave the portal through Grok Bot to another model vendor. | D21 per-person keys and permissions; the door is off by default; brain reads wait for key scopes (P10); the data boundary is declared in P12b. |
 | Retiring MC's agents module removes an approval gate. | Nothing real uses it (four placeholders, no pull loop). `humanOnly` and the TASK-629 gates stay (P9). The registry's `autonomy` (P3) and ADMIN approvals (P10) land first. |
-| The fleet proxy or local-model calls take capacity from the `dell-vta` trading worker (F27). | Local deployments have a total limit in `fleet.yaml` (P1), and local-alias keys are rate-limited (P2). P1's A/B load test runs the fleet at those limits after P1 and P2; if it fails, the cloud aliases move to a proxy on a separate small EC2 and local aliases wait. |
+| Local-model calls take capacity from the `dell-vta` trading worker (F27). | No fleet process runs on the Dell (D5). Local aliases are optional (P1b), capped per deployment and per key, and pass the A/B load test first; on a fail they come out and cloud aliases keep working. |
 | Agent calls to `local-coder` would run on Spark A, next to the trading worker. | Phase 1 has no `local-coder` alias (D23). Adding one later needs its own spec and a D23 exception. |
 | An agent on the runner host reaches something it should not. | D24 per-run users; the token stays in the parent process; P5's root-owned host firewall; no vendor key on the host (SC-6). |
-| Fencing the runner changes the tailnet policy that trading's paths use. | P5 fences on the host. The policy change adds only a tag and one accept rule; it is saved first, and `tests` and `sshTests` prove trading's paths still pass. |
+| Fencing the fleet's hosts changes the tailnet policy that trading's paths use. | P1, P1b and P5 each save the policy first, add only their own tag and accept rules, and re-run `tests` and `sshTests` that prove trading's paths still pass. |
 | A failing loop takes COS offline. | The run-end rule pauses the loop, never the agent (P4). |
 | A seed run silently replaces an admin-made version. | P3 sets `DRAFT_ONLY` on both pilot agents (F30). |
 | Hermes CLI changes between versions. | Pin the version in P6. |
@@ -866,7 +966,8 @@ stays on the cloud path.
 ## 8. Order
 
 P0, P1, P3, P5, P6a and P8 can start at once. P2 needs P1. P4a needs
-P3. P4 needs P4a. P6 needs P2, P4, P5, P6a, P8 and P10. P7 needs P6. P9 needs P8 and
+P3. P4 needs P4a. P1b needs P1 and P2 and runs whenever the operator chooses. P6 needs P2, P4,
+P5, P6a, P8 and P10. P15a needs P4a; P15 needs P4, P6, P15a and 10 stored P11 runs. P7 needs P6 and P15. P9 needs P8 and
 P10. P10 needs P3, P4 and P8; its brain read also waits for the retirement spec's R11.
 P11 needs P6 and P10. P12a comes before P12b; P12b needs P10. P13 needs P12b. P14a needs
 P4, P6, P6a and P10. P14 needs P14a and P11 green for one week. The retirement spec's R8 waits for P1
@@ -874,8 +975,7 @@ P4, P6, P6a and P10. P14 needs P14a and P11 green for one week. The retirement s
 
 ## 9. Open questions
 
-None. The operator confirmed the D5 and D16 amendments and D24 on 28 Sep 2026. P13
-confirms how Grok Bot connects.
+None. The operator confirmed D5 as amended in r13, and D25 and D26, on 28 Sep 2026.
 
 ## 10. Later add-ons (not in phase 1)
 

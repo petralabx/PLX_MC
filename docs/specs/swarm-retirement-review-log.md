@@ -236,6 +236,13 @@ R10 carry. r11 applies all 13.
 | R7R-12 | minor | The `never` test missed `migrate only` names and three new names; the audit URL stayed. | Test extended; names listed; the audit URL deleted at day 30. |
 | R7R-13 | minor | The replay ignored R7's pairing and imports a swarm library. | The replay uses R7's pair; `session_artifact_lib` moves with it. |
 
+## After the review: r12
+
+r12 follows fleet r13, whose proxy moved to its own EC2 host (fleet D5): R5's tailnet
+fence points at `tag:fleet-proxy` and waits for fleet P1, and R9 no longer repeats a Dell
+load test, because the brain key reaches only cloud aliases. The r13 critic pass
+reviewed these edits with the fleet changes and found nothing further here.
+
 ## Convergence
 
 | Round | Reviewer | Blockers | Majors | Minors |

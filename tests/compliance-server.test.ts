@@ -163,8 +163,13 @@ describe("open PR checkout lifetime (TASK-2011)", () => {
   });
 
   it.each([
-    ["revoked", "revoked"], ["released", "released"], ["repo", "repo_mismatch"],
-    ["closed", "pr_not_open"], ["stamp", "stamp_not_in_pr"], ["verified", "task_closed"], ["deleted", "task_closed"],
+    ["revoked", "checkout revoked — re-checkout the task"],
+    ["released", "checkout released — re-checkout the task"],
+    ["repo", "checkout is bound to another repo"],
+    ["closed", "pull request is not open"],
+    ["stamp", "checkout stamp is not in the pull request body"],
+    ["verified", "task is already verified"],
+    ["deleted", "task deleted — re-register"],
   ])("blocks %s with its distinct reason", async (condition, reason) => {
     const d = db.dispatches.get("dsp_old")!;
     if (condition === "revoked") d.revoked = true;
@@ -193,7 +198,20 @@ describe("open PR checkout lifetime (TASK-2011)", () => {
 
   it("blocks released unexpired checkouts without a GitHub read", async () => {
     Object.assign(db.dispatches.get("dsp_old")!, { expiresAt: new Date(Date.now() + 3600000).toISOString(), releasedAt: new Date().toISOString() });
-    expect((await verifyPr(input)).tasks[0].reasons).toEqual(["released"]);
+    expect((await verifyPr(input)).tasks[0].reasons).toEqual(["checkout released — re-checkout the task"]);
+    expect(github.loadPrState).not.toHaveBeenCalled();
+  });
+
+  it("names a deleted task on a live checkout", async () => {
+    db.dispatches.get("dsp_old")!.expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+    db.tasks.delete("TASK-900");
+    const result = await verifyPr(input);
+    expect(result.verdict).toBe("block");
+    expect(result.tasks[0]).toMatchObject({
+      taskId: "TASK-900",
+      reasons: ["task deleted — re-register"],
+    });
+    expect(result.reasons.join(" ")).not.toMatch(/no checked-out/);
     expect(github.loadPrState).not.toHaveBeenCalled();
   });
 

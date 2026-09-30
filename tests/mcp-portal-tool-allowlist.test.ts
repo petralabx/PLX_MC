@@ -4,6 +4,8 @@
 // mc_get_context, so a per-principal tool allowlist refuses every other tool.
 // These tests walk every HTTP MCP tool and every cursor REST route, so a new
 // tool or route is refused to the portal unless this allowlist names it.
+// Fleet P8b adds one route name, mc_list_agent_reports, for
+// GET /api/cursor/agent-reports. It is a REST route, not an HTTP MCP tool.
 
 import { readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -75,6 +77,7 @@ vi.mock("@/lib/compliance/repo", () => ({
     h.writes.push("appendEvent");
     return "1";
   }),
+  listAgentReports: vi.fn(async () => []),
 }));
 
 vi.mock("@/lib/mcp/audit", () => ({
@@ -95,6 +98,8 @@ import { MCP_AGENT_SERVICE_PRINCIPAL_IDS } from "@/lib/permissions";
 
 const PORTAL = "sp_mcp_portal";
 const ALLOWED_TOOLS = ["mc_create_task", "mc_search_tasks"];
+// Allowlist names that are cursor REST routes only (fleet P8b).
+const ALLOWED_ROUTE_NAMES = ["mc_list_agent_reports"];
 
 const KEYS: Record<string, string> = {
   sp_mcp_claude_code: "claude-key",
@@ -191,9 +196,13 @@ afterEach(() => {
 });
 
 describe("MCP tool allowlist", () => {
-  it("lets sp_mcp_portal call only mc_create_task and mc_search_tasks", () => {
-    expect([...(MCP_TOOL_ALLOWLISTS[PORTAL] ?? [])].sort()).toEqual(ALLOWED_TOOLS);
-    for (const tool of ALLOWED_TOOLS) expect(isMcpToolAllowed(PORTAL, tool)).toBe(true);
+  it("lets sp_mcp_portal call only mc_create_task, mc_search_tasks and mc_list_agent_reports", () => {
+    expect([...(MCP_TOOL_ALLOWLISTS[PORTAL] ?? [])].sort()).toEqual(
+      [...ALLOWED_TOOLS, ...ALLOWED_ROUTE_NAMES].sort()
+    );
+    for (const tool of [...ALLOWED_TOOLS, ...ALLOWED_ROUTE_NAMES]) {
+      expect(isMcpToolAllowed(PORTAL, tool)).toBe(true);
+    }
     for (const tool of Object.keys(REFUSED_TOOL_ARGS)) {
       expect({ tool, allowed: isMcpToolAllowed(PORTAL, tool) }).toEqual({ tool, allowed: false });
     }
@@ -334,6 +343,22 @@ describe("sp_mcp_portal through the cursor REST routes", () => {
     expect(json.meta.actor.servicePrincipalId).toBe(PORTAL);
   });
 
+  it("reads agent reports through GET /api/cursor/agent-reports (fleet P8b)", async () => {
+    const mod = (await import(join(CURSOR_API_DIR, "agent-reports", "route.ts"))) as {
+      GET: RouteHandler;
+    };
+    const resp = await mod.GET(
+      new Request("http://localhost/api/cursor/agent-reports?limit=1", {
+        headers: headers("portal-key"),
+      }),
+      { params: Promise.resolve({}) }
+    );
+    expect(resp.status).toBe(200);
+    const json = (await resp.json()) as { data: { reports: unknown[]; hasMore: boolean } };
+    expect(json.data).toEqual({ reports: [], nextCursor: null, hasMore: false });
+    expect(h.writes).toEqual([]);
+  });
+
   it("refuses every other cursor route with 403 forbidden", async () => {
     const refused: string[] = [];
     const wrong: string[] = [];
@@ -347,6 +372,7 @@ describe("sp_mcp_portal through the cursor REST routes", () => {
         if (typeof handler !== "function") continue;
         const label = `${method} /api/cursor/${dir}`;
         if (dir === "tasks" && (method === "GET" || method === "POST")) continue;
+        if (dir === "agent-reports" && method === "GET") continue;
         const path = dir.replace("[id]", "TASK-1");
         const resp = await handler(
           new Request(`http://localhost/api/cursor/${path}`, {

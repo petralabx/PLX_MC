@@ -35,6 +35,7 @@ import { resolveCheckoutRepo } from "./checkout-repo";
 import { taskLink } from "./envelope";
 import { buildHonestyFields } from "./honesty";
 import { syncMetaForTask } from "./sync-meta";
+import { runIdempotentTaskCreate, taskCreatePayloadHash } from "./task-create-idempotency";
 
 export {
   actionSuggestWork,
@@ -220,7 +221,13 @@ export async function actionSearchTasks(input: SearchTasksInput = {}, identity?:
   return { tasks: tasks.slice(0, filter.limit), total: tasks.length, filter };
 }
 
-export async function actionCreateTask(identity: McpIdentity, input: CreateTaskInput) {
+export type CreateTaskActionInput = CreateTaskInput & {
+  /** Optional idempotency key (fleet P8b): a repeat returns the original task. */
+  idempotencyKey?: string;
+};
+
+export async function actionCreateTask(identity: McpIdentity, createInput: CreateTaskActionInput) {
+  const { idempotencyKey, ...input } = createInput;
   // Task creation remains gated by the reviewed MCP service-principal registry.
   const authorized = requireMcpActor(identity, "task.create", {
     type: "bucket",
@@ -229,21 +236,72 @@ export async function actionCreateTask(identity: McpIdentity, input: CreateTaskI
   // Only a signed-in person or sp_mcp_portal may set an `agent:` assignee
   // (agent fleet P8, D16). This covers the MCP tool and POST /api/cursor/tasks.
   assertAgentAssigneeAllowed(identity.actor, input.assignee);
-  await assertBucketProjectAccess(input.bucket, aclPrincipalFromMcp(identity));
-  const task = await createTask(
+  const principal = aclPrincipalFromMcp(identity);
+  await assertBucketProjectAccess(input.bucket, principal);
+  const create = (options?: Parameters<typeof createTask>[2]) =>
+    createTask(
+      {
+        ...input,
+        reporter: identity.operatorEmail,
+        // Agent-created tasks default to the human operator behind the session
+        // (Entra email admitted by the allowlist) so the EN-003 gate does not
+        // strand them ownerless in Planned — same resolution as the checkout
+        // backfill. An explicit accountableOwner from the caller still wins.
+        accountableOwner:
+          input.accountableOwner ?? resolveHumanAccountableOwner(identity.operatorEmail),
+      },
+      { source: "service", actorId: authorized.actorId },
+      options
+    );
+  if (idempotencyKey === undefined) {
+    const task = await create();
+    return { task, taskId: task.id, link: taskLink(task.id), sync: await syncMetaForTask(task.id) };
+  }
+
+  // The checks above run before the claim, so a refused call does not use up
+  // the key. See task-create-idempotency.ts for the claim and replay rules.
+  let created: Task | undefined;
+  const outcome = await runIdempotentTaskCreate(
     {
-      ...input,
-      reporter: identity.operatorEmail,
-      // Agent-created tasks default to the human operator behind the session
-      // (Entra email admitted by the allowlist) so the EN-003 gate does not
-      // strand them ownerless in Planned — same resolution as the checkout
-      // backfill. An explicit accountableOwner from the caller still wins.
-      accountableOwner:
-        input.accountableOwner ?? resolveHumanAccountableOwner(identity.operatorEmail),
+      principalId: identity.servicePrincipalId,
+      idempotencyKey,
+      payloadHash: taskCreatePayloadHash(input),
+      actor: identity.runtime,
+      repo: identity.repo,
     },
-    { source: "service", actorId: authorized.actorId }
+    async (persistResult) => {
+      // The result event commits in the task's own transaction.
+      created = await create({ inTransaction: (q, task) => persistResult(q, task.id) });
+      return created.id;
+    }
   );
-  return { task, taskId: task.id, link: taskLink(task.id), sync: await syncMetaForTask(task.id) };
+  if (created) {
+    return {
+      task: created,
+      taskId: created.id,
+      link: taskLink(created.id),
+      sync: await syncMetaForTask(created.id),
+    };
+  }
+  const row = await getEntity("task", outcome.taskId);
+  if (!row) {
+    throw new ApiError(
+      "not_found",
+      `Task ${outcome.taskId} for idempotencyKey ${idempotencyKey} no longer exists.`,
+      404
+    );
+  }
+  // The task may have moved since the first call. Check the project of its
+  // current bucket before any of its data or sync metadata goes back.
+  const replayedTask = row.data as unknown as Task;
+  await assertBucketProjectAccess(replayedTask.bucket, principal);
+  return {
+    task: replayedTask,
+    taskId: outcome.taskId,
+    link: taskLink(outcome.taskId),
+    sync: await syncMetaForTask(outcome.taskId),
+    replayed: true,
+  };
 }
 
 export type CreateProjectActionInput = Omit<CreateProjectInput, "desc"> & {

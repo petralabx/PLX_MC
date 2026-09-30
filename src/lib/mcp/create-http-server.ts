@@ -23,6 +23,7 @@ import {
 import { recordMcpToolCall } from "./audit";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 import { installMcpToolErrorEnvelope, taskLink } from "./envelope";
+import { idempotencyKeySchema } from "./task-create-idempotency";
 import {
   actionInstallSkills,
   actionListSkills,
@@ -283,6 +284,11 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         .optional()
         .describe(
           "Optional executor: a person id, or agent:<slug> for an agent. Only sp_mcp_portal may set an agent: assignee; any other MCP principal gets forbidden (403)."
+        ),
+      idempotencyKey: idempotencyKeySchema
+        .optional()
+        .describe(
+          "Optional idempotency key. A repeat with the same key from the same principal returns the original task (replayed: true) and creates nothing. The same key with a different payload gets 409."
         ),
     },
     async (body) => jsonResult(await actionCreateTask(identity, { ...body, reporter: body.reporter || identity.operatorEmail }))

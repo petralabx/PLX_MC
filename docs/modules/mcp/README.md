@@ -90,7 +90,9 @@ and `mc_search_tasks`. Every other HTTP MCP tool and every other cursor REST
 route gives `forbidden` (403) before it runs, reads included (`mc_get_context`,
 `mc_list_buckets`, `mc_list_conflicts`, `mc_self_check`). A tool or route added
 later is refused too until the allowlist names it. Other principals have no
-allowlist. The portal's existing MC key does not change. `mc_search_tasks`
+allowlist. Fleet P8b adds one read: the grant gains `agent_report.read` and the
+allowlist gains `mc_list_agent_reports` (`GET /api/cursor/agent-reports`). No
+other principal holds that capability. The portal's existing MC key does not change. `mc_search_tasks`
 (HTTP MCP and `GET /api/cursor/tasks`) returns the calling principal in
 `meta.actor.servicePrincipalId`. Key rotation uses that search to verify the
 portal key, because `mc_self_check` stays forbidden to it.
@@ -100,9 +102,36 @@ records one free-form report per agent run as an `agent.report` event in
 `mc_events`. The body is `agentSlug`, `loopId`, `runId`, `title` and `markdown`
 (at most 32 KB of UTF-8). Auth is the MCP principal plus `telemetry.report`,
 like `session-telemetry`. The dedup key is `report:<agentSlug>:<runId>`, so a
-repeat run id adds nothing and the response says `recorded: false`. Read
-reports through `GET /api/events?kind=agent.report`. No auth gives 401; a
-body over 32 KB gives 400.
+repeat run id adds nothing and the response says `recorded: false`. A signed-in
+person reads reports through `GET /api/events?kind=agent.report`. No auth gives
+401; a body over 32 KB gives 400.
+
+**Agent-report reader (agent fleet P8b):** `GET /api/cursor/agent-reports`
+reads `agent.report` events with the same key auth as `/api/cursor/tasks`,
+newest first. Filters: `agentSlug`, `loopId`. `limit` is 1 to 100 (default
+20). Pass `cursor=<nextCursor>` for the next page; `hasMore` says whether more
+rows exist. Each row has `id` (the event seq), `agentSlug`, `loopId`, `runId`,
+`title`, `markdown` and `createdAt`. A malformed or repeated query value gives
+400. Auth is the MCP principal plus `agent_report.read`, which only
+`sp_mcp_portal` holds; every other principal gets 403.
+
+**Task-create idempotency (agent fleet P8b):** `POST /api/cursor/tasks` and
+`mc_create_task` take an optional `idempotencyKey` (1 to 128 letters, digits,
+`.`, `_` or `-`). A repeat with the same key from the same principal returns
+the original task with `replayed: true` and creates nothing. The same key with
+a different payload gets 409 `idempotency_key_reused` (the reporter is not part
+of the payload). The key uses `mc_events` dedup keys
+(`task.create.idempotency:<principal>:<key>`), so it needs no migration. A
+repeat that arrives while the first create still runs waits up to about 5 s,
+then gets 409 `idempotency_in_progress`. If the first create failed, a repeat
+gets 409 `idempotency_key_failed`: send a new key. A call that fails its auth,
+assignee or project checks does not use up the key. The result event commits
+in the task's own transaction, so a task never exists without its result. A
+claim with no result after 120 s is abandoned: the next repeat closes it and
+gets `idempotency_key_failed`. A lock on the claim key keeps a late first call
+from committing a task after that. A replay checks the project of the task's
+current bucket, so a task that moved into a restricted project gives 403
+`project_acl_denied` to a non-member.
 
 **Patch bucket (TASK-1594):** `mc_update_bucket` (`PATCH /api/cursor/buckets`)
 takes required `id` plus at least one of `prd`, `health`, `owner`,

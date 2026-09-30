@@ -35,6 +35,7 @@ import type {
   Task,
 } from "@/lib/mc-data/types";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
+import type { TxQuery } from "@/lib/db";
 import type { EntityData, FieldAttribution } from "./mapping";
 import * as repo from "./repo";
 
@@ -474,9 +475,19 @@ export interface MutationAttribution {
   actorId: string;
 }
 
+export interface CreateTaskOptions {
+  /**
+   * Runs inside the create transaction, after the task row is written. A throw
+   * rolls the task back. Task-create idempotency (fleet P8b) records its result
+   * event here, so the task and the result commit together.
+   */
+  inTransaction?: (q: TxQuery, task: Task) => Promise<void>;
+}
+
 export async function createTask(
   input: CreateTaskInput,
-  attribution?: MutationAttribution
+  attribution?: MutationAttribution,
+  options: CreateTaskOptions = {}
 ): Promise<Task> {
   await ensureSeeded();
   await ensureReposSeeded();
@@ -561,6 +572,7 @@ export async function createTask(
       `INSERT INTO sync_audit_log (actor, body, state) VALUES ($1, $2, $3)`,
       [input.reporter, `Created ${id} — pending first push to ToDos.`, "pending"]
     );
+    if (options.inTransaction) await options.inTransaction(q, task);
     return task;
   });
 }

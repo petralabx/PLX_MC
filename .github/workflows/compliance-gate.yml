@@ -12,6 +12,8 @@ name: PLX MC Compliance Gate
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
+  merge_group:
+    types: [checks_requested]
   workflow_call:
     inputs:
       mode:
@@ -43,6 +45,8 @@ jobs:
           PR_BASE_REF: ${{ github.base_ref }}
           REPO_NAME: ${{ github.event.repository.name }}
           REPO_FULL_NAME: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
         run: |
           set -euo pipefail
           if [ -z "${MC_BASE_URL:-}" ]; then
@@ -55,74 +59,105 @@ jobs:
               "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=plx-mc-compliance-verify" \
               | jq -r '.value // ""' || true)
           fi
-          git fetch --no-tags --depth=1 origin "$PR_BASE_REF" || true
-          # Capture the diff separately from jq. Piping `git diff | jq ... || echo '[]'`
-          # double-emits ([] from jq AND [] from the ||) when git diff prints nothing
-          # AND fails (a shallow fetch of a busy base has no merge base) — that invalid
-          # JSON crashes the --argjson below and hard-fails this otherwise-soft gate.
-          diff_out=$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" 2>/dev/null || true)
-          changed=$(printf '%s' "$diff_out" | jq -R -s 'split("\n") | map(select(length>0))')
-          # Read EVERY MC-Checkout stamp (one per task) — a PR may complete N
-          # related tasks; verify checks all of them and blocks if any is incomplete.
-          # `grep || true` swallows the no-match exit (operator PR) under pipefail;
-          # jq then emits a valid empty array for the no-stamp case.
-          checkoutIds=$(printf '%s' "$PR_BODY" \
-            | { grep -oE 'MC-Checkout: dsp_[A-Za-z0-9]+' || true; } \
-            | sed 's/.* //' | sort -u \
-            | jq -R -s 'split("\n") | map(select(length>0))')
-          # Also send checkoutId (first stamp) so a not-yet-deployed single-task
-          # verify still gates the PR during the deploy window (back-compat); the
-          # multi-task verify prefers checkoutIds and ignores it.
-          checkout=$(printf '%s' "$checkoutIds" | jq -r '.[0] // ""')
-          # module-shim — remove after 2026-10-15: keep bare repo until all
-          # fleet workflows and verify callers send repoFullName.
-          body=$(jq -n \
-            --arg repo "$REPO_NAME" \
-            --arg repoFullName "$REPO_FULL_NAME" \
-            --argjson prNumber "$PR_NUMBER" \
-            --arg headSha "$PR_HEAD_SHA" \
-            --argjson changedPaths "$changed" \
-            --argjson labels "${PR_LABELS:-[]}" \
-            --argjson checkoutIds "${checkoutIds:-[]}" \
-            --arg checkoutId "${checkout:-}" \
-            '{repo:$repo, repoFullName:$repoFullName, prNumber:$prNumber, headSha:$headSha, changedPaths:$changedPaths, labels:$labels, checkoutIds:$checkoutIds}
-             + (if $checkoutId != "" then {checkoutId:$checkoutId} else {} end)')
-          # Prefer OIDC; on unauthorized/verify_disabled (pre-deploy cutover when MC
-          # is still bearer-only) retry once with COMPLIANCE_CI_TOKEN.
-          AUTH_PATH=""
-          resp=""
-          if [ -n "${OIDC_TOKEN:-}" ]; then
-            resp=$(curl -sS --max-time 20 -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
-              -H 'content-type: application/json' \
-              -H "authorization: Bearer ${OIDC_TOKEN}" \
-              -d "$body" || true)
-            err=$(printf '%s' "$resp" | jq -r '.error.code // empty' 2>/dev/null || true)
-            if [ -n "$resp" ] && [ "$err" != "unauthorized" ] && [ "$err" != "verify_disabled" ]; then
-              AUTH_PATH="oidc"
-              echo "auth=oidc"
+          # merge_group: the queue ref is gh-readonly-queue/<base>/pr-<N>-<sha>. The
+          # queue builds one PR per group, so read PR N (body, head, labels, files)
+          # with gh api and verify its stamps on its own head. PR_HEAD_SHA stays
+          # empty when PR N cannot be read; the block path below handles that.
+          if [ "${GITHUB_EVENT_NAME:-}" = "merge_group" ]; then
+            PR_NUMBER=""
+            PR_HEAD_SHA=""
+            PR_BODY=""
+            PR_LABELS="[]"
+            changed="[]"
+            N=$(printf '%s' "${MERGE_GROUP_HEAD_REF:-}" \
+              | sed -nE 's#^(refs/heads/)?gh-readonly-queue/[^/]+/pr-([0-9]+)-[0-9a-f]+$#\2#p')
+            if [ -n "$N" ] \
+              && pr=$(gh api "repos/${REPO_FULL_NAME}/pulls/${N}") \
+              && files=$(gh api --paginate "repos/${REPO_FULL_NAME}/pulls/${N}/files" --jq '.[].filename'); then
+              PR_NUMBER="$N"
+              PR_HEAD_SHA=$(printf '%s' "$pr" | jq -r '.head.sha // ""')
+              PR_BODY=$(printf '%s' "$pr" | jq -r '.body // ""')
+              PR_LABELS=$(printf '%s' "$pr" | jq -c '[(.labels // [])[].name]')
+              changed=$(printf '%s' "$files" | jq -R -s 'split("\n") | map(select(length>0))')
             fi
+          else
+            git fetch --no-tags --depth=1 origin "$PR_BASE_REF" || true
+            # Capture the diff separately from jq. Piping `git diff | jq ... || echo '[]'`
+            # double-emits ([] from jq AND [] from the ||) when git diff prints nothing
+            # AND fails (a shallow fetch of a busy base has no merge base) — that invalid
+            # JSON crashes the --argjson below and hard-fails this otherwise-soft gate.
+            diff_out=$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" 2>/dev/null || true)
+            changed=$(printf '%s' "$diff_out" | jq -R -s 'split("\n") | map(select(length>0))')
           fi
-          if [ -z "$AUTH_PATH" ] && [ -n "${MC_CI_TOKEN:-}" ]; then
-            resp=$(curl -sS --max-time 20 -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
-              -H 'content-type: application/json' \
-              -H "authorization: Bearer ${MC_CI_TOKEN}" \
-              -d "$body" || true)
+          if [ "${GITHUB_EVENT_NAME:-}" = "merge_group" ] && [ -z "$PR_HEAD_SHA" ]; then
+            echo "merge_group: could not resolve the pull request"
+            verdict="block"
+            reasons="merge_group: could not resolve the pull request"
+          else
+            # Read EVERY MC-Checkout stamp (one per task) — a PR may complete N
+            # related tasks; verify checks all of them and blocks if any is incomplete.
+            # `grep || true` swallows the no-match exit (operator PR) under pipefail;
+            # jq then emits a valid empty array for the no-stamp case.
+            checkoutIds=$(printf '%s' "$PR_BODY" \
+              | { grep -oE 'MC-Checkout: dsp_[A-Za-z0-9]+' || true; } \
+              | sed 's/.* //' | sort -u \
+              | jq -R -s 'split("\n") | map(select(length>0))')
+            # Also send checkoutId (first stamp) so a not-yet-deployed single-task
+            # verify still gates the PR during the deploy window (back-compat); the
+            # multi-task verify prefers checkoutIds and ignores it.
+            checkout=$(printf '%s' "$checkoutIds" | jq -r '.[0] // ""')
+            # module-shim — remove after 2026-10-15: keep bare repo until all
+            # fleet workflows and verify callers send repoFullName.
+            body=$(jq -n \
+              --arg repo "$REPO_NAME" \
+              --arg repoFullName "$REPO_FULL_NAME" \
+              --argjson prNumber "$PR_NUMBER" \
+              --arg headSha "$PR_HEAD_SHA" \
+              --argjson changedPaths "$changed" \
+              --argjson labels "${PR_LABELS:-[]}" \
+              --argjson checkoutIds "${checkoutIds:-[]}" \
+              --arg checkoutId "${checkout:-}" \
+              --arg event "${GITHUB_EVENT_NAME:-}" \
+              '{repo:$repo, repoFullName:$repoFullName, prNumber:$prNumber, headSha:$headSha, changedPaths:$changedPaths, labels:$labels, checkoutIds:$checkoutIds}
+               + (if $checkoutId != "" then {checkoutId:$checkoutId} else {} end)
+               + (if $event == "merge_group" then {event:$event} else {} end)')
+            # Prefer OIDC; on unauthorized/verify_disabled (pre-deploy cutover when MC
+            # is still bearer-only) retry once with COMPLIANCE_CI_TOKEN.
+            AUTH_PATH=""
+            resp=""
             if [ -n "${OIDC_TOKEN:-}" ]; then
-              AUTH_PATH="bearer-fallback"
-              echo "auth=bearer-fallback"
-            else
-              AUTH_PATH="bearer"
-              echo "auth=bearer"
+              resp=$(curl -sS --max-time 20 -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
+                -H 'content-type: application/json' \
+                -H "authorization: Bearer ${OIDC_TOKEN}" \
+                -d "$body" || true)
+              err=$(printf '%s' "$resp" | jq -r '.error.code // empty' 2>/dev/null || true)
+              if [ -n "$resp" ] && [ "$err" != "unauthorized" ] && [ "$err" != "verify_disabled" ]; then
+                AUTH_PATH="oidc"
+                echo "auth=oidc"
+              fi
             fi
+            if [ -z "$AUTH_PATH" ] && [ -n "${MC_CI_TOKEN:-}" ]; then
+              resp=$(curl -sS --max-time 20 -X POST "${MC_BASE_URL%/}/api/compliance/verify" \
+                -H 'content-type: application/json' \
+                -H "authorization: Bearer ${MC_CI_TOKEN}" \
+                -d "$body" || true)
+              if [ -n "${OIDC_TOKEN:-}" ]; then
+                AUTH_PATH="bearer-fallback"
+                echo "auth=bearer-fallback"
+              else
+                AUTH_PATH="bearer"
+                echo "auth=bearer"
+              fi
+            fi
+            echo "verify response: $resp"
+            if [ -z "$resp" ]; then
+              echo "Compliance gate: MC unreachable (network/timeout)."
+              if [ "$MODE" = "hard" ]; then exit 1; fi
+              echo "soft mode — not failing the check"; exit 0
+            fi
+            verdict=$(printf '%s' "$resp" | jq -r '.data.verdict // "block"')
+            reasons=$(printf '%s' "$resp" | jq -r '(.data.reasons // []) | join("; ")')
           fi
-          echo "verify response: $resp"
-          if [ -z "$resp" ]; then
-            echo "Compliance gate: MC unreachable (network/timeout)."
-            if [ "$MODE" = "hard" ]; then exit 1; fi
-            echo "soft mode — not failing the check"; exit 0
-          fi
-          verdict=$(printf '%s' "$resp" | jq -r '.data.verdict // "block"')
-          reasons=$(printf '%s' "$resp" | jq -r '(.data.reasons // []) | join("; ")')
           echo "verdict=$verdict mode=$MODE"
           if [ "$verdict" = "pass" ]; then
             echo "Compliance gate: PASS"

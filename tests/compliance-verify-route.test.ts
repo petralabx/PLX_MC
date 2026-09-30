@@ -231,3 +231,93 @@ describe("POST /api/compliance/verify — CI auth boundary", () => {
     expect(m.verifyGitHubActionsOidc).not.toHaveBeenCalled();
   });
 });
+
+// Frontier P16 (D4): the merge queue re-runs compliance on merge_group. The
+// generated job posts PR N's verify payload plus event "merge_group", and the
+// OIDC token is signed for the queue ref gh-readonly-queue/<base>/pr-<N>-<sha>.
+describe("POST /api/compliance/verify — merge_group binding", () => {
+  const queueClaims = {
+    ...signedClaims,
+    sub: "repo:petralabx/PLX_MC:ref:refs/heads/gh-readonly-queue/main/pr-1-0123abcd",
+    eventName: "merge_group",
+    ref: "refs/heads/gh-readonly-queue/main/pr-1-0123abcd",
+    sha: "queue-group-sha",
+  };
+  const queueBody = { ...reqBody, event: "merge_group" };
+  const oidcWith = (claims: Record<string, unknown>) => {
+    m.complianceCiTokenConfigured.mockReturnValue(false);
+    m.complianceOidcEnabled.mockReturnValue(true);
+    m.complianceOidcConfigured.mockReturnValue(true);
+    m.verifyGitHubActionsOidc.mockResolvedValue({ ok: true, claims });
+  };
+
+  it("merge_group: an OIDC merge_group with a matching pr-N queue ref passes the binding", async () => {
+    oidcWith(queueClaims);
+    const resp = await call("Bearer oidc-jwt", queueBody);
+    expect(resp.status).toBe(200);
+    expect(m.verifyPrOrQueue).toHaveBeenCalledWith({
+      ...queueBody,
+      repoFullName: "petralabx/PLX_MC",
+    });
+  });
+
+  it.each([
+    ["another PR number", "refs/heads/gh-readonly-queue/main/pr-2-0123abcd"],
+    ["a branch ref", "refs/heads/main"],
+    ["a pull request ref", "refs/pull/1/merge"],
+    ["a non-hex group sha", "refs/heads/gh-readonly-queue/main/pr-1-xyz"],
+    ["a nested base", "refs/heads/gh-readonly-queue/a/b/pr-1-0123abcd"],
+    ["no ref", null],
+  ])("merge_group: an OIDC merge_group whose ref is %s fails the binding", async (_label, ref) => {
+    oidcWith({ ...queueClaims, ref });
+    const resp = await call("Bearer oidc-jwt", queueBody);
+    expect(resp.status).toBe(401);
+    expect(m.verifyPrOrQueue).not.toHaveBeenCalled();
+  });
+
+  it("merge_group: event must match the OIDC event_name claim", async () => {
+    oidcWith(signedClaims);
+    expect((await call("Bearer oidc-jwt", queueBody)).status).toBe(401);
+    oidcWith(queueClaims);
+    expect((await call("Bearer oidc-jwt", reqBody)).status).toBe(401);
+    expect((await call("Bearer oidc-jwt", { ...reqBody, event: "pull_request" })).status).toBe(401);
+    expect(m.verifyPrOrQueue).not.toHaveBeenCalled();
+  });
+
+  it("merge_group: an OIDC token with no event_name claim and event merge_group fails the binding", async () => {
+    oidcWith({ ...queueClaims, eventName: null });
+    const resp = await call("Bearer oidc-jwt", queueBody);
+    expect(resp.status).toBe(401);
+    expect(m.verifyPrOrQueue).not.toHaveBeenCalled();
+  });
+
+  it("merge_group support keeps a null event_name claim valid for pull_request", async () => {
+    oidcWith({ ...signedClaims, eventName: null });
+    const resp = await call("Bearer oidc-jwt");
+    expect(resp.status).toBe(200);
+    expect(m.verifyPrOrQueue).toHaveBeenCalledWith({
+      ...reqBody,
+      repoFullName: "petralabx/PLX_MC",
+    });
+  });
+
+  it("merge_group support forwards a body without event unchanged", async () => {
+    const resp = await call("Bearer ci-token");
+    expect(resp.status).toBe(200);
+    const forwarded = m.verifyPrOrQueue.mock.calls[0][0];
+    expect(forwarded).toEqual(reqBody);
+    expect("event" in forwarded).toBe(false);
+  });
+
+  it("merge_group: a bearer caller's event is trusted and forwarded", async () => {
+    const resp = await call("Bearer ci-token", queueBody);
+    expect(resp.status).toBe(200);
+    expect(m.verifyPrOrQueue).toHaveBeenCalledWith(queueBody);
+  });
+
+  it("merge_group: an unknown event value is rejected before verify", async () => {
+    const resp = await call("Bearer ci-token", { ...reqBody, event: "push" });
+    expect(resp.status).toBe(400);
+    expect(m.verifyPrOrQueue).not.toHaveBeenCalled();
+  });
+});

@@ -57,6 +57,23 @@ truth table is proven before any plumbing exists.
   `COMPLIANCE_CI_TOKEN` bearer as fallback/break-glass during dogfood. The route
   stays fail-closed (503 when neither path is configured; 401 on bad/missing
   bearer) while remaining carved out from the UI session middleware.
+- Merge queue (frontier P16): the generated gate also triggers on
+  `merge_group` (`checks_requested`, no `paths` filter). The job keeps id
+  `compliance`. On `merge_group` it parses PR `N` from the queue ref
+  `gh-readonly-queue/<base>/pr-<N>-<sha>`, reads PR `N`'s body, head SHA,
+  labels and changed files with `gh api`, and posts the usual verify payload
+  plus `event: "merge_group"` for PR `N`'s head. When it cannot resolve PR `N`,
+  it prints `merge_group: could not resolve the pull request` and takes the
+  normal block path (exit 1 in hard mode, the soft-mode notice otherwise). So
+  a queue must keep `max_entries_to_merge` at 1: the job verifies only PR `N`.
+  The verify body's optional `event` defaults to `pull_request`. For OIDC,
+  `event` must equal the signed `event_name`; `merge_group` also needs the
+  queue ref with `pr-<N>` equal to `prNumber`, and a token without
+  `event_name` never enters that mode. A bearer caller's `event` is trusted.
+  In `merge_group` mode `verifyPr` never reads GitHub: it applies the usual
+  checkout checks, and accepts an expired stamp only when the gate already
+  passed this exact head for its task; otherwise it blocks the stamp as
+  expired. The verdict replaces the check row for that head and task.
 - `POST /api/routing/propose` (P6) is the **authoritative** metadata-only proposal
   path for PR opened/reopened/synchronize/closed. Auth is GitHub Actions OIDC
   only. Verified claims bind to submitted full/numeric repository identity,

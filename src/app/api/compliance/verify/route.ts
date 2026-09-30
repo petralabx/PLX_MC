@@ -30,7 +30,13 @@ const verifySchema = z.object({
   labels: z.array(z.string()).optional(),
   checkoutId: z.string().optional(),
   checkoutIds: z.array(z.string()).optional(),
+  // Frontier P16: the gate's trigger. No default, so a body without it is
+  // forwarded unchanged; verifyPr reads a missing event as pull_request.
+  event: z.enum(["pull_request", "merge_group"]).optional(),
 });
+
+// The merge queue's ref: refs/heads/gh-readonly-queue/<base>/pr-<N>-<sha>.
+const MERGE_QUEUE_REF = /^refs\/heads\/gh-readonly-queue\/[^/]+\/pr-(\d+)-[0-9a-f]+$/;
 
 const UNAUTHORIZED = new ApiError("unauthorized", "Invalid or missing CI authorization.", 401);
 type VerifyBody = z.infer<typeof verifySchema>;
@@ -83,6 +89,15 @@ function bindOidcVerifyBody(
     )
   ) {
     return null;
+  }
+
+  // merge_group binds to the signed event and the queue ref's PR number. A
+  // null event_name claim matches nothing here, so it never enters this mode.
+  if (body.event === "merge_group") {
+    if (claims.eventName !== "merge_group") return null;
+    const queueRef = MERGE_QUEUE_REF.exec(claims.ref ?? "");
+    if (!queueRef || Number(queueRef[1]) !== body.prNumber) return null;
+    return { ...body, repoFullName: claims.repository };
   }
 
   if (claims.eventName != null && claims.eventName !== "pull_request") {

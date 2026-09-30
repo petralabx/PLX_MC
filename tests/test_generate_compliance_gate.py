@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = REPO_ROOT / "scripts" / "generate-compliance-gate.py"
@@ -72,14 +76,33 @@ def _gate_script(workflow: str) -> str:
     return "\n".join(script) + "\n"
 
 
-def _run_gate(tmp_path: Path, mode: str, head_ref: str, gh_exit: int):
-    # Runs the generated step with no OIDC and a stub gh, so only the
-    # merge_group resolve step and the verdict exits execute.
+CURL_STUB = """#!/bin/sh
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-d" ]; then printf '%s' "$2" > "$STUB_DIR/payload.json"; fi
+  shift
+done
+echo '{"data":{"verdict":"pass","reasons":[]}}'
+"""
+
+
+def _run_gate(
+    tmp_path: Path,
+    mode: str,
+    head_ref: str,
+    gh_exit: int,
+    gh_script: str | None = None,
+    extra_env: dict[str, str] | None = None,
+):
+    # Runs the generated step with no OIDC, a stub gh and a stub curl that
+    # records the verify payload in $STUB_DIR/payload.json.
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"
-    gh.write_text(f"#!/bin/sh\necho gh-called >&2\nexit {gh_exit}\n")
+    gh.write_text(gh_script or f"#!/bin/sh\necho gh-called >&2\nexit {gh_exit}\n")
     gh.chmod(0o755)
+    curl = bin_dir / "curl"
+    curl.write_text(CURL_STUB)
+    curl.chmod(0o755)
     script = tmp_path / "gate.sh"
     script.write_text(_gate_script(_run("--emit", "downstream").stdout))
     env = {
@@ -89,11 +112,13 @@ def _run_gate(tmp_path: Path, mode: str, head_ref: str, gh_exit: int):
         "GITHUB_EVENT_NAME": "merge_group",
         "MERGE_GROUP_HEAD_REF": head_ref,
         "REPO_FULL_NAME": "petralabx/PLX_MC",
+        "STUB_DIR": str(tmp_path),
     }
     # GitHub sets every step env key; merge_group leaves the PR fields empty.
     for key in ("MC_CI_TOKEN", "GH_TOKEN", "PR_BODY", "PR_NUMBER", "PR_HEAD_SHA"):
         env[key] = ""
     env.update(PR_LABELS="[]", PR_BASE_REF="", REPO_NAME="PLX_MC")
+    env.update(extra_env or {})
     return subprocess.run(
         ["bash", str(script)],
         cwd=tmp_path,
@@ -172,3 +197,64 @@ def test_merge_group_unreadable_pr_takes_the_soft_mode_exit(tmp_path):
     assert "gh-called" in result.stderr
     assert "merge_group: could not resolve the pull request" in result.stdout
     assert "soft mode — recording only, not failing the check" in result.stdout
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq is not installed")
+def test_merge_group_resolved_pr_posts_pr_n_payload_with_event(tmp_path):
+    pr = {
+        "head": {"sha": "abc123"},
+        "body": "Fix.\nMC-Checkout: dsp_two\nMC-Checkout: dsp_one\n",
+        "labels": [{"name": "risk:low"}],
+    }
+    (tmp_path / "pr.json").write_text(json.dumps(pr))
+    gh_script = """#!/bin/sh
+case "$*" in
+  *pulls/42/files*) printf 'src/a.ts\\ndocs/b.md\\n' ;;
+  *pulls/42*) cat "$STUB_DIR/pr.json" ;;
+  *) exit 1 ;;
+esac
+"""
+    ref = "refs/heads/gh-readonly-queue/main/pr-42-0123abcd"
+    result = _run_gate(
+        tmp_path, "hard", ref, 0, gh_script=gh_script, extra_env={"MC_CI_TOKEN": "ci"}
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Compliance gate: PASS" in result.stdout
+    payload = json.loads((tmp_path / "payload.json").read_text())
+    assert payload == {
+        "repo": "PLX_MC",
+        "repoFullName": "petralabx/PLX_MC",
+        "prNumber": 42,
+        "headSha": "abc123",
+        "changedPaths": ["src/a.ts", "docs/b.md"],
+        "labels": ["risk:low"],
+        "checkoutIds": ["dsp_one", "dsp_two"],
+        "checkoutId": "dsp_one",
+        "event": "merge_group",
+    }
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq is not installed")
+def test_merge_group_support_leaves_the_pull_request_payload_without_event(tmp_path):
+    result = _run_gate(
+        tmp_path,
+        "hard",
+        "",
+        1,
+        extra_env={
+            "GITHUB_EVENT_NAME": "pull_request",
+            "MC_CI_TOKEN": "ci",
+            "PR_BODY": "MC-Checkout: dsp_one",
+            "PR_NUMBER": "7",
+            "PR_HEAD_SHA": "def456",
+            "PR_BASE_REF": "main",
+        },
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "gh-called" not in result.stderr
+    payload = json.loads((tmp_path / "payload.json").read_text())
+    assert "event" not in payload
+    assert payload["prNumber"] == 7
+    assert payload["checkoutIds"] == ["dsp_one"]

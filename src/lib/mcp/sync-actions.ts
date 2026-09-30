@@ -7,7 +7,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { requireMcpActor } from "@/lib/routing/mutations/actors";
 import { resolveConflict } from "@/lib/sync/engine";
-import { listOpenConflicts } from "@/lib/sync/repo";
+import { dismissConflict, listOpenConflicts } from "@/lib/sync/repo";
 import type { McpIdentity } from "./auth";
 
 export const CONFLICT_RESOLUTIONS = ["keep_mc", "keep_sp"] as const;
@@ -27,6 +27,37 @@ export const resolveConflictsSchema = z.object({
 
 export type ResolveConflictInput = z.infer<typeof resolveConflictSchema>;
 export type ResolveConflictsInput = z.infer<typeof resolveConflictsSchema>;
+
+export const dismissConflictSchema = z.object({
+  conflictId: z.string().trim().min(1),
+  reason: z.string().trim().min(1).max(2000).optional(),
+}).strict();
+
+export const dismissConflictsSchema = z.object({
+  conflictIds: z.array(z.string().trim().min(1)).min(1).max(500),
+  reason: z.string().trim().min(1).max(2000).optional(),
+}).strict();
+
+export async function actionDismissConflict(identity: McpIdentity, input: z.infer<typeof dismissConflictSchema>) {
+  const authorized = requireMcpActor(identity, "sync.mutate", { type: "sync" });
+  const dismissed = await dismissConflict(input.conflictId, authorized.actorId, input.reason);
+  if (!dismissed) {
+    throw new ApiError("not_found", `unknown or not-open conflict ${input.conflictId}`, 404);
+  }
+  return { conflictId: input.conflictId, dismissed: true };
+}
+
+export async function actionDismissConflicts(identity: McpIdentity, input: z.infer<typeof dismissConflictsSchema>) {
+  const authorized = requireMcpActor(identity, "sync.mutate", { type: "sync" });
+  const results = [];
+  for (const conflictId of input.conflictIds) {
+    const dismissed = await dismissConflict(conflictId, authorized.actorId, input.reason);
+    results.push(dismissed
+      ? { conflictId, dismissed: true }
+      : { conflictId, dismissed: false, error: `unknown or not-open conflict ${conflictId}` });
+  }
+  return { results, dismissedCount: results.filter((row) => row.dismissed).length };
+}
 
 export const LIST_CONFLICTS_DEFAULT_LIMIT = 200;
 export const LIST_CONFLICTS_MAX_LIMIT = 500;
@@ -147,6 +178,18 @@ export async function actionListConflicts(identity: McpIdentity, input: ListConf
 
 /** HTTP MCP registration for SharePoint conflict list + resolve (TASK-1467/1473). */
 export function registerSyncConflictTools(server: McpServer, identity: McpIdentity): void {
+  server.tool(
+    "mc_dismiss_conflict",
+    "Close an obsolete open Sync conflict without applying either value, changing task stage or writing SharePoint. Records actor and optional reason; requires sync.mutate.",
+    dismissConflictSchema.shape,
+    async (args) => jsonResult(await actionDismissConflict(identity, args))
+  );
+  server.tool(
+    "mc_dismiss_conflicts",
+    "Dismiss up to 500 open Sync conflicts without applying either value or changing task data. Records actor and optional reason; returns per-id outcomes. Requires sync.mutate.",
+    dismissConflictsSchema.shape,
+    async (args) => jsonResult(await actionDismissConflicts(identity, args))
+  );
   server.tool(
     "mc_list_conflicts",
     "List open SharePoint Sync conflicts (cf-* ids) so Ledger can Keep MC leftovers. Optional filters: entityId / taskId, field, limit. Auth is the MCP principal + task.read, not Entra. Does not resolve; never marks a task Verified.",

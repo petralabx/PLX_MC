@@ -524,6 +524,29 @@ export async function resolveConflictRow(id: string, winner: "mc" | "sp"): Promi
   await query("UPDATE sync_conflicts SET resolved_at = now(), winner = $2 WHERE id = $1", [id, winner]);
 }
 
+/** Close only an open row and record the audit atomically; never touch either side. */
+export async function dismissConflict(id: string, actor: string, reason?: string): Promise<boolean> {
+  return withTransaction(async (q) => {
+    const rows = await q<{ entity_id: string; field: string }>(
+      `UPDATE sync_conflicts
+          SET resolved_at = now(), dismissed_at = now(), dismissed_by = $2,
+              dismissal_reason = $3
+        WHERE id = $1 AND resolved_at IS NULL
+        RETURNING entity_id, field`,
+      [id, actor, reason ?? null]
+    );
+    const row = rows[0];
+    if (!row) return false;
+    await appendAudit(
+      actor,
+      `Dismissed conflict ${id} on ${row.entity_id} · ${row.field} without applying either value.${reason ? ` Reason: ${reason}` : ""}`,
+      "synced",
+      q
+    );
+    return true;
+  });
+}
+
 // ─── Push errors ─────────────────────────────────────────────────────────────
 
 interface ErrorRow {
@@ -585,8 +608,8 @@ export async function resolveErrorRow(id: string): Promise<void> {
 
 // ─── Audit log ───────────────────────────────────────────────────────────────
 
-export async function appendAudit(actor: string, body: string, state: SyncState): Promise<void> {
-  await query("INSERT INTO sync_audit_log (actor, body, state) VALUES ($1, $2, $3)", [actor, body, state]);
+export async function appendAudit(actor: string, body: string, state: SyncState, q: TxQuery = query): Promise<void> {
+  await q("INSERT INTO sync_audit_log (actor, body, state) VALUES ($1, $2, $3)", [actor, body, state]);
 }
 
 export async function auditRows(limit = 100): Promise<AuditRow[]> {

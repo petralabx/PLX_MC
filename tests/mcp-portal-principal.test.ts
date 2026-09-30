@@ -1,7 +1,8 @@
 // Fleet P8, decision CG-07b: sp_mcp_portal holds a least-privilege grant. It
 // may create tasks (an agent: assignee included) and search tasks. It may not
 // check out, report progress, complete, touch buckets or projects, or use any
-// other write. Every other MCP principal keeps the full MCP bundle.
+// other write. Every other MCP principal keeps the full MCP bundle. Fleet P8b
+// adds one read, agent_report.read, for GET /api/cursor/agent-reports.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
@@ -109,6 +110,7 @@ import {
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   authorize,
+  capabilitiesForRole,
   capabilitiesForServicePrincipal,
 } from "@/lib/permissions";
 
@@ -192,11 +194,10 @@ describe("sp_mcp_portal grant", () => {
     expect(MCP_AGENT_SERVICE_PRINCIPAL_IDS).toContain(PORTAL);
   });
 
-  it("holds exactly task.read and task.create", () => {
-    expect([...capabilitiesForServicePrincipal(PORTAL)].sort()).toEqual([
-      "task.create",
-      "task.read",
-    ]);
+  it("holds exactly task.read, task.create and agent_report.read", () => {
+    // Fleet P8b adds one read: agent reports, for the portal only.
+    const granted = ["agent_report.read", "task.create", "task.read"];
+    expect([...capabilitiesForServicePrincipal(PORTAL)].sort()).toEqual(granted);
     for (const capability of CAPABILITIES) {
       const allowed = authorize({
         actor: { kind: "service", id: PORTAL, status: "active" },
@@ -204,8 +205,25 @@ describe("sp_mcp_portal grant", () => {
       }).allowed;
       expect({ capability, allowed }).toEqual({
         capability,
-        allowed: capability === "task.read" || capability === "task.create",
+        allowed: granted.includes(capability),
       });
+    }
+  });
+
+  it("gives agent_report.read to no other principal and no human role", () => {
+    for (const principalId of MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => id !== PORTAL)) {
+      expect(capabilitiesForServicePrincipal(principalId)).not.toContain("agent_report.read");
+    }
+    for (const id of [
+      "sp_sync_inbound",
+      "sp_routing_maintenance",
+      "sp_github_actions_routing",
+      "sp_compliance_projection",
+    ]) {
+      expect(capabilitiesForServicePrincipal(id)).not.toContain("agent_report.read");
+    }
+    for (const role of ["member", "admin", "owner"] as const) {
+      expect(capabilitiesForRole(role)).not.toContain("agent_report.read");
     }
   });
 
@@ -275,6 +293,8 @@ describe("sp_mcp_portal through the MCP tools", () => {
     ],
     ["mc_confirm_existing", { proposalId: "rp_1", taskId: "TASK-1" }],
     ["mc_attach_checkout", { proposalId: "rp_1", taskId: "TASK-1", checkoutId: "dsp_x" }],
+    ["mc_dismiss_conflict", { conflictId: "cf-1" }],
+    ["mc_dismiss_conflicts", { conflictIds: ["cf-1"] }],
     ["mc_resolve_conflict", { conflictId: "cf-1", resolution: "keep_mc" }],
     [
       "mc_submit_skill",

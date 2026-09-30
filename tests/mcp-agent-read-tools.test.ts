@@ -278,7 +278,9 @@ describe("tool registry", () => {
     ]) {
       expect(names).toContain(tool);
     }
-    expect(names).toHaveLength(27);
+    expect(names).toContain("mc_dismiss_conflict");
+    expect(names).toContain("mc_dismiss_conflicts");
+    expect(names).toHaveLength(29);
   });
 });
 

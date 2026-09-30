@@ -72,8 +72,14 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
 // checkout, progress, complete, bucket, project, routing or approval action.
 // task.read also admits read tools such as mc_get_context and mc_list_buckets,
 // so src/lib/mcp/tool-allowlist.ts limits the portal to mc_create_task and
-// mc_search_tasks over HTTP MCP and the cursor REST routes.
-const PORTAL_MCP_CAPABILITIES: readonly Capability[] = ["task.read", "task.create"];
+// mc_search_tasks over HTTP MCP and the cursor REST routes. Fleet P8b adds one
+// read, agent_report.read, for GET /api/cursor/agent-reports. Only the portal
+// holds it.
+const PORTAL_MCP_CAPABILITIES: readonly Capability[] = [
+  "task.read",
+  "task.create",
+  "agent_report.read",
+];
 
 const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
   ...Object.fromEntries(

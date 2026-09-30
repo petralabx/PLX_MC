@@ -245,6 +245,15 @@ server.tool(
       .describe(
         "Optional executor: a person id, or agent:<slug> for an agent. Only sp_mcp_portal may set an agent: assignee; any other MCP principal gets forbidden (403)."
       ),
+    idempotencyKey: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+      .optional()
+      .describe(
+        "Optional idempotency key. A repeat with the same key from the same principal returns the original task (replayed: true) and creates nothing. The same key with a different payload gets 409."
+      ),
   },
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_create_task");
@@ -309,6 +318,32 @@ server.tool(
     if (limit != null) qs.set("limit", String(limit));
     const q = qs.toString();
     return printResult(await mcFetch(`/conflicts${q ? `?${q}` : ""}`));
+  }
+);
+
+server.tool(
+  "mc_dismiss_conflict",
+  "Close obsolete open Sync conflicts without applying either value, changing task stage or writing SharePoint. Records actor and optional reason; requires sync.mutate.",
+  {
+    conflictId: z.string().trim().min(1),
+    reason: z.string().trim().min(1).max(2000).optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_dismiss_conflict");
+    return printResult(await mcFetch("/conflicts/dismiss", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_dismiss_conflicts",
+  "Close obsolete open Sync conflicts without applying either value, changing task stage or writing SharePoint. Records actor and optional reason; requires sync.mutate.",
+  {
+    conflictIds: z.array(z.string().trim().min(1)).min(1).max(500),
+    reason: z.string().trim().min(1).max(2000).optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_dismiss_conflicts");
+    return printResult(await mcFetch("/conflicts/dismiss", { method: "POST", body }));
   }
 );
 

@@ -68,7 +68,10 @@ management. Console sweep/retry remain Entra-gated.
 `task.create` and `task.read` only. The MCP tool allowlist
 (`src/lib/mcp/tool-allowlist.ts`) then limits it to `mc_create_task` and
 `mc_search_tasks`: every other HTTP MCP tool and cursor REST route gives 403,
-reads included. It is the only MCP principal that may set an
+reads included. Fleet P8b adds one read: `agent_report.read`, with the
+allowlist name `mc_list_agent_reports` for `GET /api/cursor/agent-reports`.
+Only `sp_mcp_portal` holds `agent_report.read`; no other principal and no human
+role does. It is the only MCP principal that may set an
 `agent:` assignee; a signed-in person may too. The pure predicates
 `isAgentAssignee` and `mayAssignAgent` live in `agent-assignee.ts`; the
 server-only guard `assertAgentAssigneeAllowed` (`agent-assignee-guard.ts`)

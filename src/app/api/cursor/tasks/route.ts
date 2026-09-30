@@ -2,6 +2,7 @@ import { z } from "zod";
 import { cursorRoute, parseCursorBody } from "@/lib/mcp/route";
 import { actionCreateTask, actionSearchTasks } from "@/lib/mcp/actions";
 import { taskLink } from "@/lib/mcp/envelope";
+import { idempotencyKeySchema } from "@/lib/mcp/task-create-idempotency";
 
 const createSchema = z.object({
   title: z.string().min(1),
@@ -17,6 +18,8 @@ const createSchema = z.object({
   accountableOwner: z.string().nullable().optional(),
   repos: z.array(z.string()).optional(),
   targetEnv: z.enum(["staging", "production"]).optional(),
+  // Fleet P8b: a repeat with the same key returns the original task.
+  idempotencyKey: idempotencyKeySchema.optional(),
 });
 
 export const GET = cursorRoute("mc_search_tasks", async (req, _ctx, identity) => {

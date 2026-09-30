@@ -31,6 +31,8 @@ export const CAPABILITIES = [
   "approval.request",
   "approval.decide",
   "telemetry.report",
+  // Read agent.report events through GET /api/cursor/agent-reports (fleet P8b).
+  "agent_report.read",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];

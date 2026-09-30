@@ -177,6 +177,8 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   },
   mc_confirm_existing: { proposalId: "rp_1", taskId: "TASK-1" },
   mc_attach_checkout: { proposalId: "rp_1", taskId: "TASK-1", checkoutId: "dsp_x" },
+  mc_dismiss_conflict: { conflictId: "cf-1" },
+  mc_dismiss_conflicts: { conflictIds: ["cf-1"] },
   mc_resolve_conflict: { conflictId: "cf-1", resolution: "keep_mc" },
   mc_resolve_conflicts: { conflictIds: ["cf-1"], resolution: "keep_mc" },
 };

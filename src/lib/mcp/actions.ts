@@ -55,6 +55,8 @@ export {
 
 export {
   actionListConflicts,
+  actionDismissConflict,
+  actionDismissConflicts,
   actionResolveConflict,
   actionResolveConflicts,
   registerSyncConflictTools,

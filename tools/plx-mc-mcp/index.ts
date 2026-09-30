@@ -322,6 +322,32 @@ server.tool(
 );
 
 server.tool(
+  "mc_dismiss_conflict",
+  "Close obsolete open Sync conflicts without applying either value, changing task stage or writing SharePoint. Records actor and optional reason; requires sync.mutate.",
+  {
+    conflictId: z.string().trim().min(1),
+    reason: z.string().trim().min(1).max(2000).optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_dismiss_conflict");
+    return printResult(await mcFetch("/conflicts/dismiss", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_dismiss_conflicts",
+  "Close obsolete open Sync conflicts without applying either value, changing task stage or writing SharePoint. Records actor and optional reason; requires sync.mutate.",
+  {
+    conflictIds: z.array(z.string().trim().min(1)).min(1).max(500),
+    reason: z.string().trim().min(1).max(2000).optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_dismiss_conflicts");
+    return printResult(await mcFetch("/conflicts/dismiss", { method: "POST", body }));
+  }
+);
+
+server.tool(
   "mc_resolve_conflict",
   "Resolve one SharePoint Sync conflict. resolution is required: keep_mc (Ledger default for stage lag) or keep_sp (explicit only — never silent). Same engine as the Sync console; auth is the MCP principal, not Entra. Agents never mark a task Verified.",
   {

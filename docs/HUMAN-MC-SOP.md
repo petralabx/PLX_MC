@@ -299,3 +299,22 @@ Details: [`ROLLBACK-PLAN-SOP.md`](ROLLBACK-PLAN-SOP.md), [`COLLABORATOR-SOP.md`]
 | MCP team setup | [`docs/runbooks/plx-mc-mcp-team-registration.md`](runbooks/plx-mc-mcp-team-registration.md) |
 | Loop Ledgers module | [`docs/modules/loop-ledgers/README.md`](modules/loop-ledgers/README.md) |
 | GitHub App setup | [`docs/runbooks/github-app-provisioning.md`](runbooks/github-app-provisioning.md) |
+
+### Dismiss obsolete Sync conflicts (TASK-1642)
+
+Use Hub `mc_dismiss_conflict(conflictId, reason?)` or
+`mc_dismiss_conflicts(conflictIds, reason?)` when a conflict is obsolete and
+neither frozen side should be applied. For example, TASK-1134 is already merged
+while its old conflict records progress/specced. Dismiss only closes the queue
+row: it does not change the live task stage, dirty fields, or SharePoint.
+Use `keep_mc` when the live Hub value actually needs to be pushed to SharePoint;
+dismiss does not repair drift. Never set tasks to Verified.
+
+Both transports require the existing `sync.mutate` permission. The stdio route
+is `POST /api/cursor/conflicts/dismiss`. The row stores `resolved_at`,
+`dismissed_at`, `dismissed_by`, and optional `dismissal_reason`; its frozen
+values and winner remain unchanged. A sync audit entry is committed in the
+same transaction. Missing or already-closed IDs return a clear error (batch:
+per-ID failure and `dismissedCount`). Batches accept 1–500 IDs and reasons
+1–2000 characters. Each successful ID commits independently; retrying a batch
+cannot dismiss an already-closed row again.

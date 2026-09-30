@@ -236,8 +236,9 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
   // Only a signed-in person or sp_mcp_portal may set an `agent:` assignee
   // (agent fleet P8, D16). This covers the MCP tool and POST /api/cursor/tasks.
   assertAgentAssigneeAllowed(identity.actor, input.assignee);
-  await assertBucketProjectAccess(input.bucket, aclPrincipalFromMcp(identity));
-  const create = () =>
+  const principal = aclPrincipalFromMcp(identity);
+  await assertBucketProjectAccess(input.bucket, principal);
+  const create = (options?: Parameters<typeof createTask>[2]) =>
     createTask(
       {
         ...input,
@@ -249,7 +250,8 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
         accountableOwner:
           input.accountableOwner ?? resolveHumanAccountableOwner(identity.operatorEmail),
       },
-      { source: "service", actorId: authorized.actorId }
+      { source: "service", actorId: authorized.actorId },
+      options
     );
   if (idempotencyKey === undefined) {
     const task = await create();
@@ -267,8 +269,9 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
       actor: identity.runtime,
       repo: identity.repo,
     },
-    async () => {
-      created = await create();
+    async (persistResult) => {
+      // The result event commits in the task's own transaction.
+      created = await create({ inTransaction: (q, task) => persistResult(q, task.id) });
       return created.id;
     }
   );
@@ -288,8 +291,12 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
       404
     );
   }
+  // The task may have moved since the first call. Check the project of its
+  // current bucket before any of its data or sync metadata goes back.
+  const replayedTask = row.data as unknown as Task;
+  await assertBucketProjectAccess(replayedTask.bucket, principal);
   return {
-    task: row.data as unknown as Task,
+    task: replayedTask,
     taskId: outcome.taskId,
     link: taskLink(outcome.taskId),
     sync: await syncMetaForTask(outcome.taskId),

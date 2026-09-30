@@ -10,6 +10,8 @@ const store = vi.hoisted(() => ({
   repos: [] as { id: string; name: string; lang: string; def: string; owner: string; visibility: string; scope: string }[],
   entities: [] as { id: string }[],
   audits: [] as { actor: string; body: string; state: string }[],
+  txLog: [] as string[],
+  committed: 0,
 }));
 
 vi.mock("@/lib/sync/engine", () => ({
@@ -21,12 +23,15 @@ vi.mock("@/lib/sync/engine", () => ({
 vi.mock("@/lib/db", () => ({
   withTransaction: async <T>(fn: (q: unknown) => Promise<T>) => {
     const q = async (text: string, _params: unknown[] = []) => {
+      store.txLog.push(text);
       if (text.includes("INSERT INTO entities")) {
         return [{ id: "TASK-9001" }];
       }
       return [];
     };
-    return fn(q);
+    const result = await fn(q);
+    store.committed += 1;
+    return result;
   },
 }));
 
@@ -65,6 +70,39 @@ beforeEach(() => {
   ];
   store.entities = [];
   store.audits.length = 0;
+  store.txLog.length = 0;
+  store.committed = 0;
+});
+
+describe("createTask — inTransaction option (fleet P8b)", () => {
+  it("runs the hook in the create transaction, after the task row", async () => {
+    const seen: { taskId: string; sameTx: boolean }[] = [];
+    await createTask(
+      { title: "with hook", bucket: "BKT-WMS", reporter: "vince" },
+      undefined,
+      {
+        inTransaction: async (q, task) => {
+          await q("INSERT INTO mc_events (hook)");
+          seen.push({ taskId: task.id, sameTx: store.txLog.some((t) => t.includes("INSERT INTO entities")) });
+        },
+      }
+    );
+    expect(seen).toEqual([{ taskId: "TASK-9001", sameTx: true }]);
+    const entityAt = store.txLog.findIndex((t) => t.includes("INSERT INTO entities"));
+    expect(store.txLog.indexOf("INSERT INTO mc_events (hook)")).toBeGreaterThan(entityAt);
+    expect(store.committed).toBe(1);
+  });
+
+  it("does not commit when the hook throws", async () => {
+    await expect(
+      createTask({ title: "hook fails", bucket: "BKT-WMS", reporter: "vince" }, undefined, {
+        inTransaction: async () => {
+          throw new Error("hook failed");
+        },
+      })
+    ).rejects.toThrow("hook failed");
+    expect(store.committed).toBe(0);
+  });
 });
 
 describe("createTask — repo allow-list uses the persisted registry (Item 2)", () => {

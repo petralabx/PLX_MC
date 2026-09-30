@@ -125,7 +125,13 @@ of the payload). The key uses `mc_events` dedup keys
 repeat that arrives while the first create still runs waits up to about 5 s,
 then gets 409 `idempotency_in_progress`. If the first create failed, a repeat
 gets 409 `idempotency_key_failed`: send a new key. A call that fails its auth,
-assignee or project checks does not use up the key.
+assignee or project checks does not use up the key. The result event commits
+in the task's own transaction, so a task never exists without its result. A
+claim with no result after 120 s is abandoned: the next repeat closes it and
+gets `idempotency_key_failed`. A lock on the claim key keeps a late first call
+from committing a task after that. A replay checks the project of the task's
+current bucket, so a task that moved into a restricted project gives 403
+`project_acl_denied` to a non-member.
 
 **Patch bucket (TASK-1594):** `mc_update_bucket` (`PATCH /api/cursor/buckets`)
 takes required `id` plus at least one of `prd`, `health`, `owner`,

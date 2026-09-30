@@ -5,7 +5,7 @@
 // repo seam in tests/mc-patch.test.ts — so the service logic is provable without
 // a live database.
 
-import { query } from "@/lib/db";
+import { query, type TxQuery } from "@/lib/db";
 import { announceGoLiveEventSafe } from "./go-live-announcer";
 import type { ActorKind } from "./types";
 
@@ -25,15 +25,18 @@ export interface AppendEventInput {
   dedupKey?: string | null;
 }
 
-/** Appends one event; resolves to its seq, or undefined when a keyed replay was a no-op. */
-export async function appendEvent(e: AppendEventInput): Promise<string | undefined> {
-  const rows = await query<{ seq: string }>(
-    `INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload, dedup_key)
+const APPEND_EVENT_SQL = `INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload, dedup_key)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING
-     RETURNING seq`,
-    [e.kind, e.actor, e.repo ?? null, e.taskId ?? null, e.pr ?? null, JSON.stringify(e.payload ?? {}), e.dedupKey ?? null]
-  );
+     RETURNING seq`;
+
+function appendEventParams(e: AppendEventInput): unknown[] {
+  return [e.kind, e.actor, e.repo ?? null, e.taskId ?? null, e.pr ?? null, JSON.stringify(e.payload ?? {}), e.dedupKey ?? null];
+}
+
+/** Appends one event; resolves to its seq, or undefined when a keyed replay was a no-op. */
+export async function appendEvent(e: AppendEventInput): Promise<string | undefined> {
+  const rows = await query<{ seq: string }>(APPEND_EVENT_SQL, appendEventParams(e));
   // Replay of a keyed event must not re-announce (Power Automate / webhook retries).
   if (e.dedupKey && rows.length === 0) return undefined;
   await announceGoLiveEventSafe(e);
@@ -130,6 +133,37 @@ export async function eventByDedupKey(dedupKey: string): Promise<EventRow | null
     pr: r.pr,
     payload: r.payload,
   };
+}
+
+// ─── Task-create idempotency inside one transaction (fleet P8b) ────────────
+
+/** Holds a lock on this dedup key until the transaction ends. */
+export async function lockDedupKeyTx(q: TxQuery, dedupKey: string): Promise<void> {
+  await q(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [dedupKey]);
+}
+
+/** The event with this dedup key and its age in seconds, or null. */
+export async function eventAgeByDedupKeyTx(
+  q: TxQuery,
+  dedupKey: string
+): Promise<{ taskId: string | null; ageSeconds: number } | null> {
+  const rows = await q<{ task_id: string | null; age_seconds: number | string }>(
+    `SELECT task_id, EXTRACT(EPOCH FROM (now() - ts))::float8 AS age_seconds
+       FROM mc_events WHERE dedup_key = $1 LIMIT 1`,
+    [dedupKey]
+  );
+  const r = rows[0];
+  return r ? { taskId: r.task_id, ageSeconds: Number(r.age_seconds) } : null;
+}
+
+/**
+ * appendEvent inside a transaction: resolves to the seq, or undefined when the
+ * dedup key exists. It sends no go-live announcement, so use it only for event
+ * kinds that the announcer ignores.
+ */
+export async function appendEventTx(q: TxQuery, e: AppendEventInput): Promise<string | undefined> {
+  const rows = await q<{ seq: string }>(APPEND_EVENT_SQL, appendEventParams(e));
+  return rows[0] ? String(rows[0].seq) : undefined;
 }
 
 export interface AgentReportRow {

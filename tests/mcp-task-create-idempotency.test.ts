@@ -3,7 +3,9 @@
 // same key from the same principal returns the original task and creates
 // nothing. The same key with a different payload gets 409. The key rides on
 // the mc_events dedup keys (appendEvent), so no migration is needed. The fake
-// mc_events table below keeps the unique dedup_key rule of migration 010.
+// mc_events table below keeps the unique dedup_key rule of migration 010. Its
+// fake transactions stage their rows and commit them only when the whole
+// transaction succeeds, and the fake advisory lock serialises one key.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
@@ -21,15 +23,31 @@ type EventRow = {
   dedup_key: string | null;
 };
 
-const h = vi.hoisted(() => ({
-  rows: [] as EventRow[],
-  tasks: [] as Record<string, unknown>[],
-  createInputs: [] as Record<string, unknown>[],
-  createDelayMs: 0,
-}));
+type FakeQuery = ((text: string, params?: unknown[]) => Promise<unknown[]>) & {
+  afterCommit?: (fn: () => void) => void;
+};
 
-vi.mock("@/lib/db", () => ({
-  query: async (text: string, params: unknown[] = []) => {
+const h = vi.hoisted(() => {
+  const state = {
+    rows: [] as EventRow[],
+    tasks: [] as Record<string, unknown>[],
+    createInputs: [] as Record<string, unknown>[],
+    createDelayMs: 0,
+    // createTask waits for this gate before its transaction (a slow or stopped call).
+    createGate: null as Promise<void> | null,
+    // Failure injection: the result insert throws inside the create transaction.
+    failResultInsert: false,
+    // The age in seconds that the fake now() gives every mc_events row.
+    ageSeconds: 0,
+    locks: new Map<string, Promise<void>>(),
+    // How many times a transaction waited for a held claim lock.
+    lockWaits: 0,
+    buckets: [] as Record<string, unknown>[],
+    projects: [] as Record<string, unknown>[],
+  };
+
+  function runSql(text: string, params: unknown[], staged: EventRow[] | null): unknown[] {
+    const visible = staged ? [...state.rows, ...staged] : state.rows;
     if (text.includes("INSERT INTO mc_events")) {
       const [kind, actor, repo, taskId, pr, payload, dedupKey] = params as [
         string,
@@ -40,10 +58,13 @@ vi.mock("@/lib/db", () => ({
         string,
         string | null,
       ];
+      if (state.failResultInsert && kind === "task.create.idempotency.result") {
+        throw new Error("injected: result write failed");
+      }
       // ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING
-      if (dedupKey && h.rows.some((row) => row.dedup_key === dedupKey)) return [];
-      const seq = String(h.rows.length + 1);
-      h.rows.push({
+      if (dedupKey && visible.some((row) => row.dedup_key === dedupKey)) return [];
+      const seq = String(visible.length + 1);
+      (staged ?? state.rows).push({
         seq,
         ts: new Date("2026-09-30T12:00:00Z"),
         kind,
@@ -56,31 +77,93 @@ vi.mock("@/lib/db", () => ({
       });
       return [{ seq }];
     }
+    if (text.includes("EXTRACT(EPOCH FROM (now() - ts))")) {
+      const [dedupKey] = params as [string];
+      return visible
+        .filter((row) => row.dedup_key === dedupKey)
+        .slice(0, 1)
+        .map((row) => ({ task_id: row.task_id, age_seconds: state.ageSeconds }));
+    }
     if (text.includes("FROM mc_events") && text.includes("dedup_key = $1")) {
       const [dedupKey] = params as [string];
-      return h.rows.filter((row) => row.dedup_key === dedupKey).slice(0, 1);
+      return visible.filter((row) => row.dedup_key === dedupKey).slice(0, 1);
     }
     throw new Error(`unexpected SQL in test: ${text}`);
-  },
+  }
+
+  async function fakeTransaction<T>(fn: (q: FakeQuery) => Promise<T>): Promise<T> {
+    const staged: EventRow[] = [];
+    const commits: (() => void)[] = [];
+    const held: (() => void)[] = [];
+    const q: FakeQuery = async (text, params = []) => {
+      if (text.includes("pg_advisory_xact_lock")) {
+        const key = String(params[0]);
+        if (state.locks.has(key)) state.lockWaits += 1;
+        while (state.locks.has(key)) await state.locks.get(key);
+        let release: () => void = () => undefined;
+        state.locks.set(
+          key,
+          new Promise<void>((resolve) => {
+            release = () => {
+              state.locks.delete(key);
+              resolve();
+            };
+          })
+        );
+        held.push(release);
+        return [{}];
+      }
+      return runSql(text, params, staged);
+    };
+    q.afterCommit = (commit) => commits.push(commit);
+    try {
+      const result = await fn(q);
+      // COMMIT: the staged rows and the task become visible together.
+      state.rows.push(...staged);
+      for (const commit of commits) commit();
+      return result;
+    } finally {
+      for (const release of held) release();
+    }
+  }
+
+  return Object.assign(state, { runSql, fakeTransaction });
+});
+
+vi.mock("@/lib/db", () => ({
+  query: async (text: string, params: unknown[] = []) => h.runSql(text, params, null),
+  withTransaction: h.fakeTransaction,
 }));
 
 vi.mock("@/lib/sync", () => ({
-  createTask: vi.fn(async (input: CreateTaskInput) => {
-    h.createInputs.push({ ...input });
-    if (h.createDelayMs) await new Promise((resolve) => setTimeout(resolve, h.createDelayMs));
-    if (input.title === "boom") {
-      const { ApiError } = await import("@/lib/api/route");
-      throw new ApiError("invalid_repos", "repos must be registry ids", 422);
+  createTask: vi.fn(
+    async (
+      input: CreateTaskInput,
+      _attribution?: unknown,
+      options?: { inTransaction?: (q: unknown, task: Task) => Promise<void> }
+    ) => {
+      h.createInputs.push({ ...input });
+      if (h.createDelayMs) await new Promise((resolve) => setTimeout(resolve, h.createDelayMs));
+      if (h.createGate) await h.createGate;
+      if (input.title === "boom") {
+        const { ApiError } = await import("@/lib/api/route");
+        throw new ApiError("invalid_repos", "repos must be registry ids", 422);
+      }
+      const task = { id: `TASK-${900 + h.tasks.length}`, stage: "backlog", ...input };
+      // Like the real createTask: the task row and the inTransaction writes
+      // commit together, or not at all.
+      await h.fakeTransaction(async (q) => {
+        if (options?.inTransaction) await options.inTransaction(q, task as unknown as Task);
+        q.afterCommit?.(() => h.tasks.push(task));
+      });
+      return task as unknown as Task;
     }
-    const task = { id: `TASK-${900 + h.tasks.length}`, stage: "backlog", ...input };
-    h.tasks.push(task);
-    return task as unknown as Task;
-  }),
+  ),
   patchTask: vi.fn(async () => null),
   snapshot: vi.fn(async () => ({
     tasks: h.tasks,
-    buckets: [{ id: "BKT-INFRA", name: "Infra" }],
-    projects: [],
+    buckets: h.buckets,
+    projects: h.projects,
     conflicts: [],
     errors: [],
     lastSweep: null,
@@ -92,8 +175,8 @@ vi.mock("@/lib/sync/repo", () => ({
     const task = h.tasks.find((row) => row.id === id);
     return task ? { data: task } : null;
   }),
-  getBuckets: vi.fn(async () => [{ id: "BKT-INFRA", name: "Infra" }]),
-  getProjects: vi.fn(async () => []),
+  getBuckets: vi.fn(async () => h.buckets),
+  getProjects: vi.fn(async () => h.projects),
 }));
 
 vi.mock("@/lib/mcp/sync-meta", () => ({
@@ -117,11 +200,15 @@ vi.mock("@/lib/permissions/decision-log", () => ({
   recordPermissionDecision: vi.fn(async () => true),
 }));
 
+
 import { POST as mcpPost } from "@/app/api/cursor/mcp/route";
 import { POST as tasksPost } from "@/app/api/cursor/tasks/route";
+import type { TxQuery } from "@/lib/db";
+import { syncMetaForTask } from "@/lib/mcp/sync-meta";
 import {
   runIdempotentTaskCreate,
   taskCreatePayloadHash,
+  type PersistIdempotencyResult,
 } from "@/lib/mcp/task-create-idempotency";
 
 const ctx = { params: Promise.resolve({}) };
@@ -200,7 +287,36 @@ beforeEach(() => {
   h.tasks.length = 0;
   h.createInputs.length = 0;
   h.createDelayMs = 0;
+  h.createGate = null;
+  h.failResultInsert = false;
+  h.ageSeconds = 0;
+  h.locks.clear();
+  h.lockWaits = 0;
+  h.buckets = [{ id: "BKT-INFRA", name: "Infra", project: null }];
+  h.projects = [];
 });
+
+// Moves a created task into a restricted project that the caller is not a member of.
+function moveTaskIntoRestrictedProject(taskId: string) {
+  h.buckets.push({ id: "BKT-SECRET", name: "Secret", project: "PRJ-SECRET" });
+  h.projects.push({
+    id: "PRJ-SECRET",
+    name: "Secret",
+    visibility: "restricted",
+    members: ["someone-else@petrasoap.com"],
+  });
+  const task = h.tasks.find((row) => row.id === taskId);
+  if (!task) throw new Error(`no ${taskId}`);
+  task.bucket = "BKT-SECRET";
+  task.title = "Secret title";
+}
+
+// A gate that holds createTask before its transaction until the test opens it.
+function holdCreate(): () => void {
+  let open: () => void = () => undefined;
+  h.createGate = new Promise<void>((resolve) => (open = resolve));
+  return open;
+}
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -349,6 +465,71 @@ describe("POST /api/cursor/tasks with an idempotency key", () => {
     expect(resp.status).toBe(401);
     expect(h.rows).toEqual([]);
   });
+
+  it("rolls the task back when its result write fails, and a retry creates nothing", async () => {
+    // Failure injection: the result insert throws inside the create transaction.
+    h.failResultInsert = true;
+    const first = await restCreate({ ...TASK, idempotencyKey: "k-atomic" });
+    expect(first.status).toBe(500);
+    // No task exists without its result.
+    expect(h.tasks).toEqual([]);
+    expect(h.rows.map((row) => [row.kind, row.payload.error ?? null])).toEqual([
+      ["task.create.idempotency", null],
+      ["task.create.idempotency.failed", "internal"],
+    ]);
+    h.failResultInsert = false;
+    const retry = await restCreate({ ...TASK, idempotencyKey: "k-atomic" });
+    expect(retry.status).toBe(409);
+    expect(retry.json.error?.code).toBe("idempotency_key_failed");
+    expect(h.createInputs).toHaveLength(1);
+    expect(h.tasks).toEqual([]);
+  });
+
+  it("closes an abandoned claim, and the late first call rolls its task back", async () => {
+    // The first call claims the key, then stops before its create commits.
+    const open = holdCreate();
+    const first = restCreate({ ...TASK, idempotencyKey: "k-stopped" });
+    await vi.waitFor(() => expect(h.createInputs).toHaveLength(1));
+    h.ageSeconds = 300;
+    const retry = await restCreate({ ...TASK, idempotencyKey: "k-stopped" });
+    expect(retry.status).toBe(409);
+    expect(retry.json.error?.code).toBe("idempotency_key_failed");
+    expect(
+      h.rows.find((row) => row.kind === "task.create.idempotency.failed")?.payload.error
+    ).toBe("abandoned");
+    // The first call resumes after the claim closed: its task rolls back.
+    open();
+    const late = await first;
+    expect(late.status).toBe(409);
+    expect(late.json.error?.code).toBe("idempotency_key_failed");
+    expect(h.tasks).toEqual([]);
+    expect(h.createInputs).toHaveLength(1);
+    expect(h.rows.some((row) => row.kind === "task.create.idempotency.result")).toBe(false);
+  });
+
+  it("refuses a replay after the task moved into a restricted project", async () => {
+    const first = await restCreate({ ...TASK, idempotencyKey: "k-moved" });
+    expect(first.status).toBe(200);
+    moveTaskIntoRestrictedProject("TASK-900");
+    vi.mocked(syncMetaForTask).mockClear();
+    const replay = await restCreate({ ...TASK, idempotencyKey: "k-moved" });
+    expect(replay.status).toBe(403);
+    expect(replay.json.error?.code).toBe("project_acl_denied");
+    expect(replay.json.data).toBeUndefined();
+    expect(JSON.stringify(replay.json)).not.toContain("Secret title");
+    expect(syncMetaForTask).not.toHaveBeenCalled();
+    expect(h.tasks).toHaveLength(1);
+  });
+
+  it("still replays for a member of the task's new restricted project", async () => {
+    await restCreate({ ...TASK, idempotencyKey: "k-member" });
+    moveTaskIntoRestrictedProject("TASK-900");
+    h.projects[0].members = ["vince@petrasoap.com"];
+    const replay = await restCreate({ ...TASK, idempotencyKey: "k-member" });
+    expect(replay.status).toBe(200);
+    expect(replay.json.data).toMatchObject({ taskId: "TASK-900", replayed: true });
+    expect(h.tasks).toHaveLength(1);
+  });
 });
 
 describe("mc_create_task with an idempotency key", () => {
@@ -399,6 +580,21 @@ describe("mc_create_task with an idempotency key", () => {
     expect(h.tasks).toHaveLength(0);
     expect(h.rows).toEqual([]);
   });
+
+  it("refuses a replay after the task moved into a restricted project", async () => {
+    const args = { ...TASK, reporter: "cos@petrasoap.com", idempotencyKey: "tool-moved" };
+    const first = await toolCreate(args);
+    expect(first.isError).toBe(false);
+    moveTaskIntoRestrictedProject("TASK-900");
+    vi.mocked(syncMetaForTask).mockClear();
+    const replay = await toolCreate(args);
+    expect(replay.isError).toBe(true);
+    expect(replay.body).toMatchObject({ error: { code: "project_acl_denied" } });
+    expect(JSON.stringify(replay.body)).not.toContain("Secret title");
+    expect(replay.body).not.toHaveProperty("task");
+    expect(syncMetaForTask).not.toHaveBeenCalled();
+    expect(h.tasks).toHaveLength(1);
+  });
 });
 
 describe("taskCreatePayloadHash", () => {
@@ -427,24 +623,85 @@ describe("runIdempotentTaskCreate", () => {
     repo: "petralabx/PLX_MC",
   };
 
+  const fast = { pollMs: 5, pollAttempts: 3 };
+
+  // A create that waits for `gate`, then commits its task and result together.
+  function gatedCreate(gate: Promise<void>, taskId: string, holdLock?: Promise<void>) {
+    return async (persist: PersistIdempotencyResult) => {
+      await gate;
+      await h.fakeTransaction(async (q) => {
+        await persist(q as unknown as TxQuery, taskId);
+        if (holdLock) await holdLock;
+      });
+      return taskId;
+    };
+  }
+
+  function latch(): { promise: Promise<void>; open: () => void } {
+    let open: () => void = () => undefined;
+    const promise = new Promise<void>((resolve) => (open = resolve));
+    return { promise, open };
+  }
+
   it("gives 409 in progress when the first create has not finished in time", async () => {
-    let release: (id: string) => void = () => undefined;
-    const slow = runIdempotentTaskCreate(
-      claim,
-      () => new Promise<string>((resolve) => (release = resolve)),
-      { pollMs: 5, pollAttempts: 3 }
-    );
+    const gate = latch();
+    const slow = runIdempotentTaskCreate(claim, gatedCreate(gate.promise, "TASK-900"), fast);
     await vi.waitFor(() => expect(h.rows).toHaveLength(1));
     const create = vi.fn(async () => "TASK-999");
-    await expect(
-      runIdempotentTaskCreate(claim, create, { pollMs: 5, pollAttempts: 3 })
-    ).rejects.toMatchObject({ code: "idempotency_in_progress", status: 409 });
+    await expect(runIdempotentTaskCreate(claim, create, fast)).rejects.toMatchObject({
+      code: "idempotency_in_progress",
+      status: 409,
+    });
     expect(create).not.toHaveBeenCalled();
-    release("TASK-900");
+    gate.open();
     await expect(slow).resolves.toEqual({ taskId: "TASK-900", replayed: false });
-    await expect(
-      runIdempotentTaskCreate(claim, create, { pollMs: 5, pollAttempts: 3 })
-    ).resolves.toEqual({ taskId: "TASK-900", replayed: true });
+    await expect(runIdempotentTaskCreate(claim, create, fast)).resolves.toEqual({
+      taskId: "TASK-900",
+      replayed: true,
+    });
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("keeps a young claim in progress and closes it once abandoned", async () => {
+    // The first call claims the key and never finishes (the process stopped).
+    void runIdempotentTaskCreate(claim, () => new Promise<string>(() => undefined), fast);
+    await vi.waitFor(() => expect(h.rows).toHaveLength(1));
+    const create = vi.fn(async () => "TASK-999");
+    h.ageSeconds = 119;
+    await expect(runIdempotentTaskCreate(claim, create, fast)).rejects.toMatchObject({
+      code: "idempotency_in_progress",
+    });
+    h.ageSeconds = 120;
+    await expect(runIdempotentTaskCreate(claim, create, fast)).rejects.toMatchObject({
+      code: "idempotency_key_failed",
+      status: 409,
+    });
+    expect(create).not.toHaveBeenCalled();
+    expect(h.rows.map((row) => row.kind)).toEqual([
+      "task.create.idempotency",
+      "task.create.idempotency.failed",
+    ]);
+  });
+
+  it("replays the committed result when the result wins the claim lock", async () => {
+    // The first call holds the claim lock inside its create transaction.
+    const commit = latch();
+    const first = runIdempotentTaskCreate(
+      claim,
+      gatedCreate(Promise.resolve(), "TASK-900", commit.promise),
+      fast
+    );
+    await vi.waitFor(() => expect(h.locks.size).toBe(1));
+    // An old claim: the repeat would close it, but it waits for the lock first.
+    h.ageSeconds = 300;
+    const repeat = runIdempotentTaskCreate(claim, vi.fn(async () => "TASK-999"), fast);
+    await vi.waitFor(() => expect(h.lockWaits).toBe(1));
+    commit.open();
+    await expect(first).resolves.toEqual({ taskId: "TASK-900", replayed: false });
+    await expect(repeat).resolves.toEqual({ taskId: "TASK-900", replayed: true });
+    expect(h.rows.map((row) => row.kind)).toEqual([
+      "task.create.idempotency",
+      "task.create.idempotency.result",
+    ]);
   });
 });

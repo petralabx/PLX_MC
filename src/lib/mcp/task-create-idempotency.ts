@@ -5,19 +5,25 @@
 // The key rides on the mc_events dedup keys (migration 010), so it needs no
 // migration. The first call appends a claim event keyed
 // task.create.idempotency:<principal>:<key> with a hash of the payload. Only
-// the call whose insert wins creates the task. That call then appends a result
-// event that carries the task id. A repeat from the same principal finds the
-// claim:
+// the call whose insert wins creates the task. Its result event carries the
+// task id and commits in the same transaction as the task, so a task never
+// exists without its result. A repeat from the same principal finds the claim:
 // - a different payload hash gives 409 idempotency_key_reused;
 // - a result gives the original task back and creates nothing;
 // - a failure marker gives 409 idempotency_key_failed (send a new key);
 // - with no result yet, the first call still runs. The repeat waits a short
-//   time for the result, then gives 409 idempotency_in_progress.
+//   time for the result, then gives 409 idempotency_in_progress;
+// - a claim with no result after abandonAfterSeconds is abandoned: the first
+//   call stopped before its create committed. The repeat writes the failure
+//   marker and gives 409 idempotency_key_failed. A lock on the claim key makes
+//   the marker and the result exclusive, so a late first call rolls its task
+//   back.
 
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import * as complianceRepo from "@/lib/compliance/repo";
+import { withTransaction, type TxQuery } from "@/lib/db";
 
 // The key is the last part of the dedup key, so it may not contain ":".
 export const idempotencyKeySchema = z
@@ -72,10 +78,32 @@ export interface IdempotentCreateClaim {
 export interface IdempotentCreatePolling {
   pollMs: number;
   pollAttempts: number;
+  /** A claim with no result or failure marker after this age is abandoned. */
+  abandonAfterSeconds: number;
 }
 
-// A repeat waits up to about 5 s for a create that still runs.
-const DEFAULT_POLLING: IdempotentCreatePolling = { pollMs: 250, pollAttempts: 20 };
+// A repeat waits up to about 5 s for a create that still runs. A create
+// transaction ends well inside 120 s (query_timeout is 20 s).
+const DEFAULT_POLLING: IdempotentCreatePolling = {
+  pollMs: 250,
+  pollAttempts: 20,
+  abandonAfterSeconds: 120,
+};
+
+/**
+ * Records the result inside the create transaction. `create` must call it
+ * before its transaction commits (createTask's inTransaction option). It
+ * throws, and so rolls the task back, when the claim is already closed.
+ */
+export type PersistIdempotencyResult = (q: TxQuery, taskId: string) => Promise<void>;
+
+function keyFailed(idempotencyKey: string): ApiError {
+  return new ApiError(
+    "idempotency_key_failed",
+    `The first create with idempotencyKey ${idempotencyKey} failed and created no task. Send a new key.`,
+    409
+  );
+}
 
 /**
  * Run `create` at most once per principal and idempotency key. Resolves to the
@@ -83,37 +111,53 @@ const DEFAULT_POLLING: IdempotentCreatePolling = { pollMs: 250, pollAttempts: 20
  */
 export async function runIdempotentTaskCreate(
   claim: IdempotentCreateClaim,
-  create: () => Promise<string>,
-  polling: IdempotentCreatePolling = DEFAULT_POLLING
+  create: (persistResult: PersistIdempotencyResult) => Promise<string>,
+  polling: Partial<IdempotentCreatePolling> = {}
 ): Promise<{ taskId: string; replayed: boolean }> {
+  const opts = { ...DEFAULT_POLLING, ...polling };
   const claimKey = `${CLAIM_KIND}:${claim.principalId}:${claim.idempotencyKey}`;
+  const resultKey = `${claimKey}:task`;
+  const failedKey = `${claimKey}:failed`;
   const payload = {
     principalId: claim.principalId,
     idempotencyKey: claim.idempotencyKey,
     payloadHash: claim.payloadHash,
   };
+  const event = { actor: claim.actor, repo: claim.repo };
   const claimed = await complianceRepo.appendEvent({
     kind: CLAIM_KIND,
-    actor: claim.actor,
-    repo: claim.repo,
+    ...event,
     taskId: null,
     payload,
     dedupKey: claimKey,
   });
 
   if (claimed !== undefined) {
-    let taskId: string;
+    const persistResult: PersistIdempotencyResult = async (q, taskId) => {
+      await complianceRepo.lockDedupKeyTx(q, claimKey);
+      if (await complianceRepo.eventAgeByDedupKeyTx(q, failedKey)) {
+        throw keyFailed(claim.idempotencyKey);
+      }
+      const seq = await complianceRepo.appendEventTx(q, {
+        kind: RESULT_KIND,
+        ...event,
+        taskId,
+        payload,
+        dedupKey: resultKey,
+      });
+      if (seq === undefined) throw new Error(`idempotency result ${resultKey} already exists`);
+    };
     try {
-      taskId = await create();
+      const taskId = await create(persistResult);
+      return { taskId, replayed: false };
     } catch (err) {
       try {
         await complianceRepo.appendEvent({
           kind: FAILED_KIND,
-          actor: claim.actor,
-          repo: claim.repo,
+          ...event,
           taskId: null,
           payload: { ...payload, error: err instanceof ApiError ? err.code : "internal" },
-          dedupKey: `${claimKey}:failed`,
+          dedupKey: failedKey,
         });
       } catch (markErr) {
         console.error(
@@ -124,15 +168,6 @@ export async function runIdempotentTaskCreate(
       }
       throw err;
     }
-    await complianceRepo.appendEvent({
-      kind: RESULT_KIND,
-      actor: claim.actor,
-      repo: claim.repo,
-      taskId,
-      payload,
-      dedupKey: `${claimKey}:task`,
-    });
-    return { taskId, replayed: false };
   }
 
   const existing = await complianceRepo.eventByDedupKey(claimKey);
@@ -146,17 +181,33 @@ export async function runIdempotentTaskCreate(
       409
     );
   }
-  for (let attempt = 0; attempt < polling.pollAttempts; attempt += 1) {
-    const taskId = await complianceRepo.eventTaskIdByDedupKey(`${claimKey}:task`);
-    if (taskId) return { taskId, replayed: true };
-    if (await complianceRepo.eventByDedupKey(`${claimKey}:failed`)) {
-      throw new ApiError(
-        "idempotency_key_failed",
-        `The first create with idempotencyKey ${claim.idempotencyKey} failed and created no task. Send a new key.`,
-        409
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, polling.pollMs));
+  // Under the claim lock: the result, the failure marker, or the claim's age.
+  // An abandoned claim gets its failure marker here.
+  const settle = () =>
+    withTransaction(async (q) => {
+      await complianceRepo.lockDedupKeyTx(q, claimKey);
+      const result = await complianceRepo.eventAgeByDedupKeyTx(q, resultKey);
+      if (result?.taskId) return { taskId: result.taskId };
+      if (await complianceRepo.eventAgeByDedupKeyTx(q, failedKey)) return { state: "failed" as const };
+      const claimRow = await complianceRepo.eventAgeByDedupKeyTx(q, claimKey);
+      if (!claimRow || claimRow.ageSeconds < opts.abandonAfterSeconds) {
+        return { state: "in_progress" as const };
+      }
+      await complianceRepo.appendEventTx(q, {
+        kind: FAILED_KIND,
+        ...event,
+        taskId: null,
+        payload: { ...payload, error: "abandoned" },
+        dedupKey: failedKey,
+      });
+      return { state: "failed" as const };
+    });
+  for (let attempt = 0; ; attempt += 1) {
+    const outcome = await settle();
+    if (outcome.taskId) return { taskId: outcome.taskId, replayed: true };
+    if (outcome.state === "failed") throw keyFailed(claim.idempotencyKey);
+    if (attempt >= opts.pollAttempts) break;
+    await new Promise((resolve) => setTimeout(resolve, opts.pollMs));
   }
   throw new ApiError(
     "idempotency_in_progress",

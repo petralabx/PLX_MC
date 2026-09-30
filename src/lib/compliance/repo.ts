@@ -102,6 +102,70 @@ export async function eventTaskIdByDedupKey(dedupKey: string): Promise<string | 
   return rows[0]?.task_id ?? null;
 }
 
+/** The event with this dedup key, or null (task-create idempotency, fleet P8b). */
+export async function eventByDedupKey(dedupKey: string): Promise<EventRow | null> {
+  const rows = await query<{
+    seq: string;
+    ts: Date | string;
+    kind: string;
+    actor: string;
+    repo: string | null;
+    task_id: string | null;
+    pr: string | null;
+    payload: Record<string, unknown>;
+  }>(
+    `SELECT seq, ts, kind, actor, repo, task_id, pr, payload
+       FROM mc_events WHERE dedup_key = $1 LIMIT 1`,
+    [dedupKey]
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    seq: String(r.seq),
+    ts: r.ts instanceof Date ? r.ts.toISOString() : String(r.ts),
+    kind: r.kind,
+    actor: r.actor,
+    repo: r.repo,
+    taskId: r.task_id,
+    pr: r.pr,
+    payload: r.payload,
+  };
+}
+
+export interface AgentReportRow {
+  seq: string;
+  ts: string;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Newest-first agent.report events (fleet P8b reader). Keyset pagination on
+ * `seq`: pass the last seq of a page as beforeSeq to read the next page.
+ */
+export async function listAgentReports(f: {
+  agentSlug: string | null;
+  loopId: string | null;
+  beforeSeq: string | null;
+  limit: number;
+}): Promise<AgentReportRow[]> {
+  const rows = await query<{ seq: string; ts: Date | string; payload: Record<string, unknown> }>(
+    `SELECT seq, ts, payload
+       FROM mc_events
+      WHERE kind = 'agent.report'
+        AND ($1::text IS NULL OR payload->>'agentSlug' = $1::text)
+        AND ($2::text IS NULL OR payload->>'loopId' = $2::text)
+        AND ($3::bigint IS NULL OR seq < $3::bigint)
+      ORDER BY seq DESC
+      LIMIT $4`,
+    [f.agentSlug, f.loopId, f.beforeSeq, f.limit]
+  );
+  return rows.map((r) => ({
+    seq: String(r.seq),
+    ts: r.ts instanceof Date ? r.ts.toISOString() : String(r.ts),
+    payload: r.payload,
+  }));
+}
+
 export async function eventsAfter(afterSeq = 0, limit = 100, kind: string | null = null): Promise<EventRow[]> {
   const rows = await query<{
     seq: string;

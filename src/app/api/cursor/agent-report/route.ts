@@ -1,32 +1,22 @@
 // POST /api/cursor/agent-report — agent fleet P8 (D12). A runner records one
 // free-form report per agent run: one append-only agent.report event in
 // mc_events, deduped on report:<agentSlug>:<runId>. Built like
-// session-telemetry. Readers use GET /api/events?kind=agent.report.
+// session-telemetry. Readers use GET /api/cursor/agent-reports (fleet P8b,
+// key auth) or GET /api/events?kind=agent.report (signed-in session).
 
 import { z } from "zod";
 import { appendEvent } from "@/lib/compliance/repo";
+import { agentSlugSchema, runKeySchema } from "@/lib/mcp/agent-reports";
 import { cursorRoute, parseCursorBody } from "@/lib/mcp/route";
 import { requireMcpActor } from "@/lib/routing/mutations/actors";
 
 /** Largest report body: 32 KB of UTF-8 markdown. */
 const AGENT_REPORT_MAX_MARKDOWN_BYTES = 32 * 1024;
 
-// Ids join into the dedup key with ":", so they may not contain one.
-const agentSlug = z
-  .string()
-  .min(1)
-  .max(120)
-  .regex(/^[a-z0-9][a-z0-9_-]*$/, "agentSlug must be a lowercase registry slug");
-const runKey = z
-  .string()
-  .min(1)
-  .max(120)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "must use letters, digits, '.', '_' or '-'");
-
 const agentReportSchema = z.object({
-  agentSlug,
-  loopId: runKey,
-  runId: runKey,
+  agentSlug: agentSlugSchema,
+  loopId: runKeySchema,
+  runId: runKeySchema,
   title: z.string().trim().min(1).max(300),
   markdown: z
     .string()

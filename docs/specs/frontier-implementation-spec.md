@@ -644,6 +644,7 @@ if grep -qxF 'outcome: second-stamp' "$PROOFS/double-checkout.md"; then
   YES_AT=$(printf '%s\n' "$HDR" | sed -nE "s/^r13_yes_at: ($TS)$/\1/p"); [ -n "$YES_AT" ] || fail "r13_yes_at is missing from the header (SC-13)"
   # round_10_done_at lives in the execution copy (README). It must equal the time the round-10 text merged to main: the committer time of the first first-parent commit that carries the round_10 line.
   R10L=$(grep -E '^round_10: done ' "$SPEC_EXEC") || fail "round_10 is not done in the execution copy (SC-13)"
+  printf '%s\n' "$HDR" | grep -qxF -- "$R10L" || fail "the execution copy's round_10 line is not the one on PLX_MC main now: an amendment changed it, so round_10_done_at must be set again from its merge (SC-13)"
   R10C=''; while read -r c; do T=$(git -C "$PLX_MC_REPO" show "$c:docs/specs/frontier-implementation-spec.md" 2>/dev/null) && printf '%s\n' "$T" | grep -qxF -- "$R10L" && { R10C=$c; break; }; done < <(git -C "$PLX_MC_REPO" log --first-parent --reverse --format=%H origin/main -- docs/specs/frontier-implementation-spec.md)
   [ -n "$R10C" ] || fail "no commit on PLX_MC main carries the execution copy's round_10 line: the round-10 text has not merged (SC-13)"
   R10_MERGED=$(TZ=UTC git -C "$PLX_MC_REPO" show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$R10C") || fail "commit time of $R10C"
@@ -1160,6 +1161,7 @@ printf '%s\n' "$HDR" | grep -qE '^round_10: done ' || fail "round 10 is not done
 YES_AT=$(printf '%s\n' "$HDR" | sed -nE "s/^r13_yes_at: ($TS)$/\1/p"); [ -n "$YES_AT" ] || fail "r13_yes_at is missing from the header (SC-13)"
 # round_10_done_at lives in the execution copy (README). It must equal the time the round-10 text merged to main: the committer time of the first first-parent commit that carries the round_10 line.
 R10L=$(grep -E '^round_10: done ' "$SPEC_EXEC") || fail "round_10 is not done in the execution copy (SC-13)"
+printf '%s\n' "$HDR" | grep -qxF -- "$R10L" || fail "the execution copy's round_10 line is not the one on PLX_MC main now: an amendment changed it, so round_10_done_at must be set again from its merge (SC-13)"
 R10C=''; while read -r c; do T=$(git -C "$PLX_MC_REPO" show "$c:docs/specs/frontier-implementation-spec.md" 2>/dev/null) && printf '%s\n' "$T" | grep -qxF -- "$R10L" && { R10C=$c; break; }; done < <(git -C "$PLX_MC_REPO" log --first-parent --reverse --format=%H origin/main -- docs/specs/frontier-implementation-spec.md)
 [ -n "$R10C" ] || fail "no commit on PLX_MC main carries the execution copy's round_10 line: the round-10 text has not merged (SC-13)"
 R10_MERGED=$(TZ=UTC git -C "$PLX_MC_REPO" show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$R10C") || fail "commit time of $R10C"
@@ -1240,7 +1242,7 @@ RAW=$(sed -n '/^## raw$/,$p' "$F"); LOGL=$(printf '%s\n' "$RAW" | awk '/^### bra
   ```
     - Whether the portal secret `COMPLIANCE_CI_TOKEN` exists (name only).
     - Which auth path the latest `plx-mc-compliance` run used, from its `auth=` log line: `oidc`, `bearer`, or `bearer-fallback`; `skipped` when the run logged "compliance gate skipped".
-- **#255 (D13):** record `pr255: merged f6d2bab7670a` (F24) and the generator's `pull_request` types (`gate_pr_types`). An r12 run of P15 does not satisfy r13. P15 runs again under r13 before P16 starts. The r12 run has no `gate_pr_types` line, so it fails the acceptance below whatever it recorded for `pr255`, and the P16 PLX_MC acceptance reads both r13 lines from `merge-queue-audit.md`. The re-run also records `spec_revision: r<n>` (n ≥ 13), `plx_mc_sha` (the PLX_MC `main` commit it audited: `fc7ceef3d123` or a descendant) and `audited_at`, later than the header's `r13_yes_at` and `round_10_done_at`, and it quotes `NAME_AND_PR_TRIGGER` verbatim under `## raw` (`scripts/generate-compliance-gate.py:58-63` at `plx_mc_sha`). It records `pr255_deployed: yes` with the orchestrator's `gate0.md` as its source, the record of the #255 production deploy (GitHub deployment 6721728347, 2026-09-28T22:11:43Z; F24): `pr255_deployed_source: gate0.md (GitHub deployment 6721728347, 2026-09-28T22:11:43Z)`, as Vince chose on 2026-09-29T19:55:37Z (the draft's section-16 item 5). The acceptance reads those lines, reads the generator at `plx_mc_sha` for the four types, and reads the header from the spec on PLX_MC `main` and `round_10_done_at` from the execution copy (checked against `main`), so an r12 file with two lines appended cannot pass.
+- **#255 (D13):** record `pr255: merged f6d2bab7670a` (F24) and the generator's `pull_request` types (`gate_pr_types`). An r12 run of P15 does not satisfy r13. P15 runs again under r13 before P16 starts. The r12 run has no `gate_pr_types` line, so it fails the acceptance below whatever it recorded for `pr255`, and the P16 PLX_MC acceptance reads both r13 lines from `merge-queue-audit.md`. The re-run also records `spec_revision: r<n>` (n ≥ 13), `plx_mc_sha` (the PLX_MC `main` commit it audited: `fc7ceef3d123` or a descendant) and `audited_at`, later than the header's `r13_yes_at` and `round_10_done_at`, and it quotes `NAME_AND_PR_TRIGGER` verbatim under `## raw` (`scripts/generate-compliance-gate.py:58-63` at `plx_mc_sha`). It records `pr255_deployed: yes` with the orchestrator's `gate0.md` as its source, the record of the #255 production deploy (GitHub deployment 6721728347, 2026-09-28T22:11:43Z; F24): `pr255_deployed_source: gate0.md (GitHub deployment 6721728347, 2026-09-28T22:11:43Z)`, as Vince chose on 2026-09-29T19:55:37Z (the draft's section-16 item 5). The acceptance reads those lines, checks that `plx_mc_sha` is on PLX_MC `main` (an unmerged descendant of `fc7ceef3d123` fails), reads the generator at `plx_mc_sha` for the four types, and reads the header from the spec on PLX_MC `main` and `round_10_done_at` from the execution copy (checked against `main`), so an r12 file with two lines appended cannot pass.
 
 Acceptance (P15):
 ```bash
@@ -1259,6 +1261,7 @@ line 'gate_pr_types: opened, synchronize, reopened, edited' "$F"
 line 'pr255_deployed: yes' "$F"; line 'pr255_deployed_source: gate0.md (GitHub deployment 6721728347, 2026-09-28T22:11:43Z)' "$F"
 rline 'spec_revision: r(1[3-9]|[2-9][0-9])' "$F"; rline 'plx_mc_sha: [0-9a-f]{40}' "$F"; rline "audited_at: $TS" "$F"
 SHA=$(sed -nE 's/^plx_mc_sha: ([0-9a-f]{40})$/\1/p' "$F")
+git -C "$PLX_MC_REPO" merge-base --is-ancestor "$SHA" origin/main || fail "plx_mc_sha is not on PLX_MC main: the audit read an unmerged commit (D13)"
 git -C "$PLX_MC_REPO" merge-base --is-ancestor fc7ceef3d123 "$SHA" || fail "the audited PLX_MC main predates #255 (D13)"
 G=$(git -C "$PLX_MC_REPO" show "$SHA:scripts/generate-compliance-gate.py") || fail "generator at plx_mc_sha"
 printf '%s\n' "$G" | grep -qF 'types: [opened, synchronize, reopened, edited]' || fail "the generator at plx_mc_sha lacks the four types (F24)"
@@ -1270,6 +1273,7 @@ printf '%s\n' "$HDR" | grep -qE '^round_10: done ' || fail "round 10 is not done
 YES_AT=$(printf '%s\n' "$HDR" | sed -nE "s/^r13_yes_at: ($TS)$/\1/p"); [ -n "$YES_AT" ] || fail "r13_yes_at is missing from the header (SC-13)"
 # round_10_done_at lives in the execution copy (README). It must equal the time the round-10 text merged to main: the committer time of the first first-parent commit that carries the round_10 line.
 R10L=$(grep -E '^round_10: done ' "$SPEC_EXEC") || fail "round_10 is not done in the execution copy (SC-13)"
+printf '%s\n' "$HDR" | grep -qxF -- "$R10L" || fail "the execution copy's round_10 line is not the one on PLX_MC main now: an amendment changed it, so round_10_done_at must be set again from its merge (SC-13)"
 R10C=''; while read -r c; do T=$(git -C "$PLX_MC_REPO" show "$c:docs/specs/frontier-implementation-spec.md" 2>/dev/null) && printf '%s\n' "$T" | grep -qxF -- "$R10L" && { R10C=$c; break; }; done < <(git -C "$PLX_MC_REPO" log --first-parent --reverse --format=%H origin/main -- docs/specs/frontier-implementation-spec.md)
 [ -n "$R10C" ] || fail "no commit on PLX_MC main carries the execution copy's round_10 line: the round-10 text has not merged (SC-13)"
 R10_MERGED=$(TZ=UTC git -C "$PLX_MC_REPO" show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$R10C") || fail "commit time of $R10C"
@@ -1347,6 +1351,7 @@ printf '%s\n' "$HDR" | grep -qE '^round_10: done ' || fail "round 10 is not done
 YES_AT=$(printf '%s\n' "$HDR" | sed -nE "s/^r13_yes_at: ($TS)$/\1/p"); [ -n "$YES_AT" ] || fail "r13_yes_at is missing from the header (SC-13)"
 # round_10_done_at lives in the execution copy (README). It must equal the time the round-10 text merged to main: the committer time of the first first-parent commit that carries the round_10 line.
 R10L=$(grep -E '^round_10: done ' "$SPEC_EXEC") || fail "round_10 is not done in the execution copy (SC-13)"
+printf '%s\n' "$HDR" | grep -qxF -- "$R10L" || fail "the execution copy's round_10 line is not the one on PLX_MC main now: an amendment changed it, so round_10_done_at must be set again from its merge (SC-13)"
 R10C=''; while read -r c; do T=$(git -C "$PLX_MC_REPO" show "$c:docs/specs/frontier-implementation-spec.md" 2>/dev/null) && printf '%s\n' "$T" | grep -qxF -- "$R10L" && { R10C=$c; break; }; done < <(git -C "$PLX_MC_REPO" log --first-parent --reverse --format=%H origin/main -- docs/specs/frontier-implementation-spec.md)
 [ -n "$R10C" ] || fail "no commit on PLX_MC main carries the execution copy's round_10 line: the round-10 text has not merged (SC-13)"
 R10_MERGED=$(TZ=UTC git -C "$PLX_MC_REPO" show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$R10C") || fail "commit time of $R10C"
@@ -1420,6 +1425,7 @@ HDR=$(printf '%s\n' "$SPEC" | awk '/^```$/{n++; next} n==1'); n() { printf '%s\n
 YES_AT=$(printf '%s\n' "$HDR" | sed -nE "s/^r13_yes_at: ($TS)$/\1/p"); [ -n "$YES_AT" ] || fail "r13_yes_at is missing from the header (SC-13)"
 # round_10_done_at lives in the execution copy (README). It must equal the time the round-10 text merged to main: the committer time of the first first-parent commit that carries the round_10 line.
 R10L=$(grep -E '^round_10: done ' "$SPEC_EXEC") || fail "round_10 is not done in the execution copy (SC-13)"
+printf '%s\n' "$HDR" | grep -qxF -- "$R10L" || fail "the execution copy's round_10 line is not the one on PLX_MC main now: an amendment changed it, so round_10_done_at must be set again from its merge (SC-13)"
 R10C=''; while read -r c; do T=$(git -C "$PLX_MC_REPO" show "$c:docs/specs/frontier-implementation-spec.md" 2>/dev/null) && printf '%s\n' "$T" | grep -qxF -- "$R10L" && { R10C=$c; break; }; done < <(git -C "$PLX_MC_REPO" log --first-parent --reverse --format=%H origin/main -- docs/specs/frontier-implementation-spec.md)
 [ -n "$R10C" ] || fail "no commit on PLX_MC main carries the execution copy's round_10 line: the round-10 text has not merged (SC-13)"
 R10_MERGED=$(TZ=UTC git -C "$PLX_MC_REPO" show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$R10C") || fail "commit time of $R10C"

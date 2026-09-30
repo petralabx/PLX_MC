@@ -1225,3 +1225,24 @@ the P15 re-run then starts, with no later yes, and records `audited_at` later th
 time; P4's code branch, P16 and P14 each start on their later yes, given after that
 time, and their `depends_on` evidence. P13 keeps its first-yes gate, and a run under
 either revision is valid.
+
+## Landing edit — round-10 PR critic (29 Sep 2026)
+
+The critic of the round-10 PR raised two blockers against the acceptance blocks. The
+builder verified both against the text and applied both fixes. Each fix tightens an
+acceptance check, so it stands under the yes on r13 (open question 6).
+
+- A stale execution copy passed the gates. Each r13-gated acceptance read the round_10
+  line from the execution copy and found it in main's history, but never compared it
+  with the header on main now. After a PR amends the round_10 line, the old copy, its
+  old `round_10_done_at` and an old later yes still passed. The P4, P14, P15, P16
+  PLX_MC and P16 portal acceptances now require the execution copy's round_10 line to
+  equal main's header line before they derive the merge time.
+- P15 did not check that `plx_mc_sha` is on main. An unmerged descendant of
+  `fc7ceef3d123` passed and supplied the generator. The P15 acceptance now requires
+  `plx_mc_sha` to be an ancestor of `origin/main`, and the #255 (D13) note says so.
+
+The builder ran both new checks against a disposable git fixture on the build host: a
+stale execution copy after an amended main fails, the current copy passes, an unmerged
+descendant fails, and a main commit passes. No default, gate, `depends_on` or `owns`
+line changed.

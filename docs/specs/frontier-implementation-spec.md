@@ -1,36 +1,75 @@
 # Frontier stack — implementation spec
 
 ```
-status: r13 draft, Vince's yes received 2026-09-29T18:09:35Z ("yes r13, D5 as r13"), pending round 10; r12 approved 28 Sep 2026, and that approval stands for every phase r13 does not change (approval_covers)
-revision: r13 (28 Sep 2026, a draft under D13, after PLX_MC PR #255 merged at 22:11 UTC as f6d2bab7670a: F1, F2, F6, F10, F11, F23 and F24 re-derived at PLX_MC fc7ceef3d123 and portal 2b656d8adf33, and F13's portal test lines re-cited; D2 and D4 re-derived with the same defaults; P4 and P16 re-derived against the merged code, and every test line they cite re-cited; the P16 portal half gains the portal mc-compliance.mdc lines that forbid the edited trigger and name three trigger types, after P8 and P10 on the portal and within P10's caps; P15 records the merged #255 and the generator's trigger types, and runs again under r13 before P16 starts, because an r12 run of P15 does not satisfy r13; the P16 PLX_MC acceptance reads P15's two r13 lines; D5, D14, F26, P13 and P14 follow swarm retirement r12 section 10: a brain key from BRAIN_API_KEYS, the address from R6a, and the R6 routes stay. r13 needs Vince's yes, because D5 is a changed default: the form is "yes r13, D5 as r13"; the phrase "D5 as r13" may instead come with the P14 later yes, and P14 records it. Round 10 reviews every r13 change, P4, P15 and P16 and D5, D14, F26, P13 and P14. The r13 changes run only after that yes and that review: P4's code branch, the P15 re-run, P16 and P14. The r12 approval stands for the phases r13 does not change, and they keep running under it. r12: swarm retirement applied, so P7 and the swarm halves of P8, P9 and P10 are withdrawn; P14 waits for the brain's own address; PLX_MC PR #255 gates P4 and P16; round 9 reviewed the r12 changes. Editorial, after approval on 28 Sep 2026: approval recorded, the spec committed to PLX_MC `docs/specs/`, and F25, F26, D10, D14 and SC-12 aligned with swarm retirement r4, where the trading lab keeps the repo and the old host; no phase, gate, acceptance or default changed. r11: adversarial review, 27 Sep 2026; D1 and D12 confirmed 28 Sep 2026. Record: frontier-review-log.md)
-approved_by: vince@petrasoap.com (r12)
-approved_at: 2026-09-28T14:23:22Z (r12)
-approval_covers: r12: every phase r13 does not change (P1, P2, P3, P5, P6, P8, P9, P10, P11, P12), and the first-yes gate of P13 and P15
-r13_yes: yes (vince@petrasoap.com, 2026-09-29T18:09:35Z, "yes r13, D5 as r13")
-d5_r13_yes: yes (the same answer includes the phrase "D5 as r13"; P14 still records it in brain-register.md)
-pending_r13_changes: P4's code branch, the P15 re-run and P16 (D13); D5, D14, F26, the P13 r13 line and P14 (retirement section 10). r13_yes and d5_r13_yes are recorded; each change still waits for round_10; P14 also for its later yes
-round_10: pending (the independent critic reviews every r13 change, blind, then the author verifies: P4, P15, P16 under D13; D5, D14, F26, P13, P14 under retirement section 10. Logged in frontier-review-log.md; its findings are applied before any pending r13 change starts)
+status: approved (r13: "yes r13, D5 as r13", 2026-09-29T18:09:35Z, round 10 applied 29 Sep 2026; r12 approved 28 Sep 2026, and that approval stands for every phase r13 does not change: approval_covers)
+revision: r13 (28 Sep 2026, written under D13; Vince's yes on 29 Sep 2026 and round 10 applied the same day, see the header lines below; r13 merged to PLX_MC main on 29 Sep 2026 as #260, 697373e00719, 21:42:13Z, with a landing edit that recorded the yes and corrected citations, which the round-10 text keeps, see the review log; after round 10's packet was cut, main gained #262 (TASK-2111, 5658c055bccc, 22:09:53Z: every block reason verifyPr records is a text) and #263 (TASK-2112, 7f79712657e3, 22:22:59Z: a bucket PRD counts only as an http(s) link; it also edited this file's step 8 on main, which the round-10 text keeps), so the round-10 text pins the P4 and P16 code citations at 7f79712657e3, corrects F17 and the P16 released-stamp case to that code, and says each builder re-checks its citations at the code of the day; after PLX_MC PR #255 merged at 22:11 UTC as f6d2bab7670a: F1, F2, F6, F10, F11, F23 and F24 re-derived at PLX_MC fc7ceef3d123 and portal 2b656d8adf33, and F13's portal test lines re-cited; D2 and D4 re-derived with the same defaults; P4 and P16 re-derived against the merged code, and every test line they cite re-cited; the P16 portal half gains the portal mc-compliance.mdc lines that forbid the edited trigger and name three trigger types, after P8 and P10 on the portal and within P10's caps; P15 records the merged #255 and the generator's trigger types, and runs again under r13 before P16 starts, because an r12 run of P15 does not satisfy r13; the P16 PLX_MC acceptance reads P15's two r13 lines; D5, D14, F26, P13 and P14 follow swarm retirement r12 section 10: a brain key from BRAIN_API_KEYS, the address from R6a, and the R6 routes stay. r13 needed Vince's yes, because D5 is a changed default; he gave it on 29 Sep 2026 as "yes r13, D5 as r13", and P14 records the phrase. Round 10 reviewed every r13 change, P4, P15 and P16 and D5, D14, F26, P13 and P14, plus the Scheduling bullet on retirement R7 and the draft critic's 37 nits, each with a disposition in the review log; it verified 27 findings: 22 fixes are in this text in full, 3 closed on Vince's answers the same day (review log, open questions 2, 3 and 6: the P16 portal half waits for P10 portal; retirement r13 leaves the Team MCP entry to P14; the round-10 gate, depends_on, stop-rule and owns changes stand under the yes on r13), and 2 (one merged pair) are applied in part, with the rest open for r14 or follow-up work (open question 8, the brain's log wording, not yet put to Vince; no phase waits on it). Vince also answered the round's other questions the same day: the 409 message names the expiry only; the later yes for P4 and P16 is given again after round_10_done_at; and the draft's section-16 items 2, 4 and 5 are accepted (the P16 portal half also deletes the "Until TASK-2011 is live" sentence, D4's two refinements are confirmed, and the P15 re-run records pr255_deployed: yes). The r13 changes start only after that yes and that review, both recorded below (round 10's time for the gates, round_10_done_at, is the merge of its text): P4's code branch, the P15 re-run, P16 and P14. The r12 approval stands for the phases r13 does not change, and they keep running under it. r12: swarm retirement applied, so P7 and the swarm halves of P8, P9 and P10 are withdrawn; P14 waits for the brain's own address; PLX_MC PR #255 gates P4 and P16; round 9 reviewed the r12 changes. Editorial, after approval on 28 Sep 2026: approval recorded, the spec committed to PLX_MC `docs/specs/`, and F25, F26, D10, D14 and SC-12 aligned with swarm retirement r4, where the trading lab keeps the repo and the old host; no phase, gate, acceptance or default changed. r11: adversarial review, 27 Sep 2026; D1 and D12 confirmed 28 Sep 2026. Record: frontier-review-log.md)
+approved_by: vince@petrasoap.com (r13; r12: vince@petrasoap.com)
+approved_at: 2026-09-29T18:09:35Z (r13); 2026-09-28T14:23:22Z (r12)
+approval_covers: r12: every phase r13 does not change (P1, P2, P3, P5, P6, P8, P9, P10, P11, P12), and the first-yes gate of P13 and P15. r13: P4's code branch, the P15 re-run, P16 and P14, as reviewed in round 10, including every change round 10 made to their gate, depends_on, stop-rule and owns lines (Vince, 2026-09-29T19:54:30Z; r13_yes)
+r13_yes: yes r13, D5 as r13 (vince@petrasoap.com, 2026-09-29T18:09:35Z; given against PR #260 head 8ed919f5e59f, before round 10. The yes named no rule for what it covers, so the round-10 text stated the author's reading and put it to Vince (review log, open question 6). Vince confirmed it at 2026-09-29T19:54:30Z, "stand under r13": the yes covers the round-10 text of P4, P15, P16 and P14, including every change round 10 made to their gate, depends_on, stop-rule and owns lines (the review log lists each one) and the VerifyPrInput type named in P16's owns (open question 9, answered by the same answer). No r14 is needed for them. Round 10 changed no default, and none of its changes lets a phase start earlier, on fewer conditions or on more files; the later yes for P4, P16 and P14 is given against this text. The rule for a later fix: it stands under the yes when it tightens an acceptance check, corrects a citation or a fact, adds an evidence line or a stop condition, or restates SC-13 or this header in a phase's own gate or depends_on lines; a fix that would change a default, let a phase start earlier or on fewer conditions, change owns (a file, a region or a symbol), or narrow forbidden goes to Vince before the affected phase starts, and lands in the next revision unless he confirms it under the yes on r13, as he did for the round-10 owns change on 2026-09-29T19:54:30Z. Round 10 found four such points. Three went to Vince, and he answered them (open questions 2, 3 and 9, the last with 6). The fourth, open question 7 (the empty-commit line in portal pr-watch-until-green.mdc:49-50, which P16 does not own), was not put to him: it stays open for r14 or follow-up work, and no phase waits on it. The two variants the r13 question offered are void)
+r13_yes_at: 2026-09-29T18:09:35Z
+d5_r13_yes: D5 as r13 (in the yes on r13, 2026-09-29T18:09:35Z)
+pending_r13_changes: none waits for r13_yes now, the round-10 review is done, and every question it put to Vince is answered, and the two points it did not put to him (review log, open questions 7 and 8) stay open for r14 or follow-up work, with no phase waiting on them, and no nit of the draft's critic is left for r14 (review log, "Nits"); each gated acceptance reads round_10_done_at from the orchestrator's execution copy, where the orchestrator sets it when the round-10 PR merges to PLX_MC main, and checks it against main's history. P4's code branch, P16 and P14 still wait for their named later yes, given against r13 or later and after round_10_done_at (SC-13; the phase evidence records later_yes and later_yes_at; the yes P4 and yes P16 of 2026-09-29T18:14:39Z came before round 10 and do not count, and Vince chose to give them again, 2026-09-29T19:50:13Z), and for their depends_on evidence: P4 for P3; P16 for the P15 re-run and the bucket PRDs (D11), and its portal half for the P8 and P10 portal PRs (no after-P8-alone path: Vince, 2026-09-29T19:55:37Z); P14 for BRAIN_URL, its pre-check and the Team MCP list's state (the brain's log line for the self-check is P14's acceptance evidence, written after the registration, not a start condition). The P15 re-run starts once round_10_done_at is set; it records audited_at later than that time
+round_10: done (29 Sep 2026: three blind critics returned 27 findings, 8 major and 19 minor; the author verified each against the code and the specs: 27 accepted, 0 rejected; 22 fixes are in this text in full, 3 closed on Vince's answers the same day (review log, open questions 2, 3 and 6), and 2 (one merged pair) are applied in part, with the rest open for r14 or follow-up work (open question 8: the brain's proof of the key tier, which needs retirement R4 to fix its log wording; no phase waits on it). Vince answered every question the round put to him on 29 Sep 2026: open questions 1 and 4 at 19:50:13Z (the 409 message names the expiry only; the later yes for P4 and P16 is given again after round_10_done_at), 3, 6 and 9 at 19:54:30Z (retirement r13 leaves the Team MCP entry to P14; the round-10 gate, depends_on, stop-rule and owns changes, VerifyPrInput among them, stand under the yes on r13), 2 and 5 at 19:55:37Z (the P16 portal half waits for P10 portal; the draft's section-16 items 2, 4 and 5 are accepted, reading confirmed at 20:03:53Z); open questions 7 and 8 were not put to him and stay open for r14 or follow-up work, and no phase waits on them; no default changed; a fourth blind pass returned no finding. Scope: P4, P15 and P16 under D13; D5, D14, F26, P13 and P14 under retirement section 10; the Scheduling bullet on retirement R7; the draft critic's 37 nits (13, 11 and 13 in rounds 1-3), each with a disposition in the review log: 3 came back as blockers (R10-3, R10-5, R10-6) and closed there, 31 are applied in the r13 or round-10 text (6 of them by the ninth check of that text), 3 are closed without a change, with the reason, and none is left for r14. After the round's packet was cut, PLX_MC main gained #262 (TASK-2111, 2026-09-29T22:09:53Z) and #263 (TASK-2112, 7f79712657e3, 22:22:59Z); a ninth check of the round-10 text (29 Sep 2026) pinned the P4 and P16 code citations at 7f79712657e3, corrected F17 (a bucket PRD counts only as an http(s) link) and the P16 released-stamp case (its reason is a text since #262), and kept #263's edit to step 8 of this file; a tenth check pinned the last bare ranges (F3, F6, F15) the same way; an eleventh check corrected the two ranges of the TASK-2008 assertions that survive the P16 portal edit, which had counted the three re-pointed lines among the survivors (the 33 pins were right). Logged in frontier-review-log.md under "Round 10". The gates take their time from round_10_done_at (below), derived from the merge that carried this line to main, not from the date in this line)
+round_10_done_at: pending in this repo copy. It is an approval field: the orchestrator sets it in its execution copy in the store, the copy that holds the approval fields (docs/specs/README.md, "Rules for these files"), when the round-10 PR merges to PLX_MC main; no second PR to main is needed. The value is the UTC committer time of the first commit in PLX_MC main's first-parent history whose header carries this file's round_10 line, which is the merge of the round-10 text: TZ=UTC git show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ <commit>. GitHub's mergedAt can differ from that time by a second, so the commit time is the one. The line reads round_10_done_at: <UTC> (PR #<n>, merge <commit>). Each r13-gated acceptance derives the same time from main and requires the execution copy's line to equal it, so a typed time counts only when it is the merge. Until it is set, every r13-gated acceptance fails, and no later yes and no P15 audited_at counts. If a later PR amends the round-10 text, it amends the round_10 line too, and the orchestrator sets this line again from that PR's merge
 accountable_human: vince@petrasoap.com
 ```
 
 Vince approved r12 on 28 Sep 2026 (the approval question is at the end). Setup runs on that yes.
 
-r13 (28 Sep 2026) is a draft revision written under D13, after PLX_MC PR #255 merged.
-It changes P4, P15 and P16, and the facts and decisions they rest on (F1, F2, F6, F10,
-F11, F23, F24, D2, D4, D13). It also applies swarm retirement r12 section 10 to D5, D14,
-F26, P13 and P14. D5 is a changed default, not a re-derived one: r12's yes covered r12's
-D5, and the rule under "Decisions a yes confirms" puts a changed default to Vince. Vince
-answered on 2026-09-29T18:09:35Z: `yes r13, D5 as r13`. The header records that yes.
-The phrase `D5 as r13` confirms D5. P14 still records it in `brain-register.md` and
-does not start without that record (D5, D14, SC-8). The header says what r13 leaves
-pending. Round 10 reviews every r13 change: P4, P15 and P16 (D13), and D5, D14, F26,
-P13 and P14 (retirement section 10). The r13 changes run only after that review:
-P4's code branch, the P15 re-run, P16 and P14 (D13, SC-13). Until then, the r12
-approval stands for the phases r13 does not change, and they run under it. P13 and P15
-keep their first-yes gate. An r12 run of P15 does not satisfy r13: P15 runs again under
-r13 before P16 starts (its D13 note), and the P16 PLX_MC acceptance reads its r13 lines.
-A P13 run under either revision is valid, because r13 changes only one fact P13 records.
-r13 adds no first-yes phase.
+r13 (28 Sep 2026) was written under D13, after PLX_MC PR #255 merged. Vince approved
+it on 29 Sep 2026, and round 10 closed the same day. It changes P4, P15 and P16, and
+the facts and decisions they rest on (F1, F2, F6, F10, F11, F23, F24, D2, D4, D13). It
+also applies swarm retirement r12 section 10 to D5, D14, F26, P13 and P14. D5 is a
+changed default, not a re-derived one: r12's yes covered r12's D5, and the rule under
+"Decisions a yes confirms" puts a changed default to Vince. So r13 needed Vince's yes,
+in the form `yes r13, D5 as r13`. Vince gave it on 29 Sep 2026 at 18:09:35 UTC, against
+PR #260 head `8ed919f5e59f` (header: `r13_yes`, `d5_r13_yes`). The phrase `D5 as r13`
+confirms D5; P14 records it in `brain-register.md` (`d5_confirmed_in: yes on r13`) and
+does not start without it (D5, D14, SC-8).
+Round 10, the blind review of every r13 change (P4, P15 and P16 under D13; D5, D14,
+F26, P13 and P14 under retirement section 10; the Scheduling bullet on retirement R7;
+and the draft critic's 37 nits, each with a disposition in the review log), closed the
+same day with 27 findings, all verified: 22 fixes are in this text in full, 3 closed on Vince's answers the same day,
+2 (one merged pair) are applied in part with the rest open for r14 or follow-up work,
+and none changes a default (header: `round_10`; record: `frontier-review-log.md`).
+After the round, PLX_MC `main` gained #262 and #263 (TASK-2111 and TASK-2112, 29 Sep
+2026), which changed files P4 and P16 cite and edit and the fact F17 states, so the
+round-10 text pins their code citations at `7f79712657e3`, corrects F17, and says that
+each builder re-checks its citations at the code of the day before it starts (facts
+preamble).
+Its time for the gates, `round_10_done_at`, is the merge of its text; the orchestrator
+sets it in its execution copy when the round-10 PR merges. The yes came before round
+10 and named no rule for what it covers, so the round-10 text stated the author's
+reading and put it to Vince (review log, open question 6). Vince confirmed it at
+19:54:30 UTC ("stand under r13"): a round-10 fix stands under the yes when it tightens
+an acceptance check, corrects a citation or a fact, adds an evidence line or a stop
+condition, or restates SC-13 or the header in a phase's own gate or `depends_on`
+lines, and the changes round 10 made to the P4, P15, P16 and P14 gate, `depends_on`,
+stop-rule and `owns` lines, listed in the review log, stand under it. A fix that would
+change a default, let a phase start earlier or on fewer conditions, change `owns` (a
+file, a region or a symbol), or narrow `forbidden` goes to Vince before the affected
+phase starts. Round 10 found four such points. Three went to him, and he answered
+them: the P16 portal half without P10 (it waits for P10 portal, 19:55:37 UTC),
+retirement R7's Team MCP step (retirement r13 leaves the entry to P14, 19:54:30 UTC)
+and the `VerifyPrInput` type in P16's `owns` (it stands under the yes on r13, 19:54:30
+UTC). The fourth, the empty-commit line in portal `pr-watch-until-green.mdc:49-50`,
+which P16 does not own, was not put to him: it is open for r14 or follow-up work
+(review log, open question 7), and no phase waits on it. Vince also accepted three items the
+draft's `CHANGES.md` section 16 left open (19:55:37 UTC, reading confirmed 20:03:53
+UTC): the P16 portal half deletes the "Until TASK-2011 is live" sentence of
+`mc-compliance.mdc`, D4's two refinements are confirmed, and the P15 re-run records
+`pr255_deployed: yes`.
+The r13 changes start only after that yes and that review: P4's code branch, P16 and
+P14 wait for their later yes, given after `round_10_done_at` (D13, SC-13), and for
+their `depends_on` evidence (P4 for P3; P16 for the P15 re-run and the bucket PRDs,
+and its portal half for the P8 and P10 portal PRs; P14 for `BRAIN_URL` and its
+pre-checks), and the P15 re-run starts once `round_10_done_at` is set. The r12 approval stands for the phases r13 does not change,
+and they run under it. P13 and P15 keep their first-yes gate. An r12 run of P15 does
+not satisfy r13: P15 runs again under r13 before P16 starts (its D13 note), and the
+P16 PLX_MC acceptance reads its r13 lines. A P13 run under either revision is valid,
+because r13 changes only one fact P13 records, and P14 takes the address from D14, not
+from `brain-audit.md`. r13 adds no first-yes phase.
 
 Operator decision on 27 Sep 2026: "I want it all." That decision puts all five
 frontier workstreams into this spec, plus the two cloud proofs. It overrides the
@@ -46,25 +85,30 @@ build the agent fleet on the portal registry (agent fleet spec r4). r12 applies 
 - P8, P9 and P10 drop their swarm halves. The context diet covers the portal, PLX_MC
   and plx_secondbrain. P5 and P6 still read the swarm as a measured baseline.
 - P14 becomes a later yes that names the brain's own address from the retirement
-  spec's R7 (D14).
+  spec's R6a (r13; R7 in r12) (D14).
 - PLX_MC PR #255 changed how stamps expire and release (F24). P4's code branch and
   P16 waited until it merged or closed (D13). It merged on 28 Sep 2026 at 22:11 UTC as
   `f6d2bab7670a`; r13 applies it.
 
 ## Does an approved plan exist?
 
-Yes. This file: r12, approved by Vince on 28 Sep 2026. The r13 draft changes to P4, P15
-and P16 (D13) and to D5, D14, F26, P13 and P14 (retirement section 10) are pending
-Vince's yes on r13 (`yes r13, D5 as r13`; D5 is a changed default) and round 10. Before
-the r12 answer, nothing in the project was an approved implementation plan. The
-documents below are not approved plans.
+Yes. This file: r12, approved by Vince on 28 Sep 2026, and r13, approved by Vince on
+29 Sep 2026 (`yes r13, D5 as r13`; D5 is a changed default) and reviewed in round 10 the
+same day. r13 changes P4, P15 and P16 (D13) and D5, D14, F26, P13 and P14 (retirement
+section 10). The four phases those changes gate wait for `round_10_done_at` (the merge
+of the round-10 text; an approval field that the orchestrator sets in its execution
+copy): the P15 re-run then starts, with no later yes; P4's code branch, P16 and P14 then
+wait for their named later yes and their `depends_on` evidence (header). P13 and the r12
+run of P15 keep their first-yes gate (SC-4, `approval_covers`), and a P13 run under
+either revision is valid (its r13 note). Before the r12 answer, nothing in the project
+was an approved implementation plan. The documents below are not approved plans.
 
 | Document | Status | What it is |
 |---|---|---|
 | `docs/jev-fleet-implementation-spec.md` | Draft. Independent review NOT_APPROVED / NO-GO on full execution. AGREE on rejecting Jev. | Context diet. This spec takes its meter, complete-order sentence, loader canary, and guide trim (r12 dropped the swarm writer lock). Skill packs and enforcement stay on that draft. |
 | `internal/frontier-package-fit.md` | Strategy note. Loop verdict NOT_APPROVED because there is no code change. | Exclusive checkout, the brain connector, and the merge-queue stall are named there. This spec is the plan that contains them. |
 | `docs/parity-plan.md`, `docs/project-context.md` | Inventory, 25 Sep 2026. | Capability matrix. They do not authorize edits. |
-| Swarm retirement spec, r12 (`docs/specs/swarm-retirement-spec.md` in PLX_MC) | D1–D13 confirmed; reviewed in seven rounds, then closed by the operator on 28 Sep 2026. | Retires the swarm; moves the brain to plx_secondbrain at `brain.plxcustomer.io`; leaves the trading lab untouched. Its section 10 lists the r12 changes and what r13 picks up. |
+| Swarm retirement spec, r13 (`docs/specs/swarm-retirement-spec.md` in PLX_MC) | D1–D13 confirmed; reviewed in seven rounds, then closed by the operator on 28 Sep 2026. r13 (29 Sep 2026) amends R7 on Vince's answer to round-10 open question 3: R7 leaves the Cursor Team MCP entry to P14 and records `team_mcp: left to frontier P14`; its B16 and the P14 bullet of its section 10 say the same, and no decision, default or other step changed. | Retires the swarm; moves the brain to plx_secondbrain at `brain.plxcustomer.io`; leaves the trading lab untouched. Its section 10 lists the r12 changes and what r13 picks up. |
 | Agent fleet spec, r13 (`docs/specs/agent-fleet-spec.md` in PLX_MC) | D1–D26 confirmed; reviewed in seven rounds plus one pass on r13 (28 Sep 2026). | Agents in the portal registry, a runner, and COS as the chief of staff. It adds no guide roster. |
 
 The first four documents live in the Cursor project store. The last two, and this spec,
@@ -76,43 +120,84 @@ Checked on 27 Sep 2026 against these heads: portal `95276888b6ed` (= `origin/sta
 PLX_MC `2faa2a2c9633`, agentic-swarm `35ed5034eddf`, plx_secondbrain `af0b3ea3c9f8`.
 A phase that finds a fact changed stops and reports. It does not work around it.
 r12 adds F24–F26, checked on 28 Sep 2026. r13 re-checks F1, F2, F6, F11, F23 and F24
-against PLX_MC `fc7ceef3d123` (the pin for this revision; it includes #255's merge commit
-`f6d2bab7670a`; later commits on `main` do not move the pin), and F10 and F13's portal test lines against portal `2b656d8adf33`
-(the pin for this revision, portal `staging` on 28 Sep 2026; later commits do not move the pin). Between `2faa2a2c9633` and `fc7ceef3d123`
-no other PLX_MC file cited in F3, F8, F13, F17, F18 or F22 changed (`git diff --stat`),
-so those citations hold. At portal `2b656d8adf33` the F14 sweep finds the same 19
-lines in the same 15 files; only `prompts/workbench-readonly-build-prompt.md:354`
-moved to `:359`. Several F14 files gained `workbench-api` in their required-checks
-line (TASK-2037), which moved no F14 line.
+against PLX_MC `fc7ceef3d123` (the pin for this revision; it includes #255's merge
+commit `f6d2bab7670a`; later commits on `main` do not move the pin), and F10 and F13's
+portal test lines against portal `2b656d8adf33` (the pin for this revision, portal
+`staging` on 28 Sep 2026; later commits do not move it). Between `2faa2a2c9633` and
+`fc7ceef3d123` no other PLX_MC file cited in F3, F8, F13, F17, F18 or F22 changed
+(`git diff --stat`), so those citations hold. Since `fc7ceef3d123`, PLX_MC `main` has
+gained #259 (`20fc262c95eb`, 18:48:26Z), #261 (`25ff88b7234b`, 21:24:23Z), this spec's
+r13 (#260, `697373e00719`, 21:42:13Z), #262 (TASK-2111, `5658c055bccc`, 22:09:53Z) and
+#263 (TASK-2112, `7f79712657e3`, 22:22:59Z), all on 29 Sep 2026. #259 and #261 changed
+two files P4 cites, `src/lib/permissions/types.ts` and `grants.ts`, which P4 therefore
+cites by symbol at `fc7ceef3d123`, and, of the other cited files, only
+`src/lib/mcp/actions.ts` and `src/lib/mcp/create-http-server.ts` (#261) and
+`config/tracked-repos-registry.json` (#259), where the lines F3, F6, F15, F17 and F18 cite
+moved or gained a neighbour and did not change, so those citations hold at their heads;
+F3, F6 and F17 also name the `7f79712657e3` position of each cited function that moved,
+and F15's lines did not move. #263 also changed one line of `docs/AGENT-PR-SOP.md`
+(`:464`, the PRD row of its fix table), below the line F14 and P8 cite (`:325`, the same
+text from `2faa2a2c9633` through `7f79712657e3`).
+#260 changed only `docs/specs/`. #262 changed `src/lib/compliance/service.ts` (28 lines
+after `:107`: a `CheckoutBlockReason` type, `CHECKOUT_BLOCK_TEXT` and
+`checkoutBlockReason`, so every block reason `verifyPr` records is a text, for example
+`checkout released — re-checkout the task`; one more line in `resolveDispatchForOpenPr`,
+where a missing task now blocks as `task_deleted`; two more in `verifyPr`) and
+`tests/compliance-server.test.ts` (18 lines in the TASK-2011 block); P4 and P16 cite
+and edit both files. #263 changed `src/lib/compliance/bucket-prd.ts`, `verify.ts` and
+`types.ts` (a bucket PRD counts as present only when it is an http(s) link; F17, D11),
+`tests/compliance-server.test.ts` again (33 lines: a `bucketsThrow` flag, a throwing
+`getBuckets` mock, three `beforeEach` lines and three cases), and one line of this file
+(step 8 of the code-phase contract, the gate's PRD messages), which the round-10 text
+keeps. Which ref each code citation uses: the facts r13 re-derived (F1, F2, F6, F11,
+F23, F24) cite `fc7ceef3d123`, the commit they were checked at, and name the position at
+`7f79712657e3` of each cited function that moved; F3 and F15 cite `2faa2a2c9633`, where
+they were checked, and F3 names the `7f79712657e3` position of `actionSelfCheck`, the
+one cited function that moved; the P4 and P16 sections cite
+`7f79712657e3`, PLX_MC `origin/main` when the round-10 text was written (the merge of
+#263), by line and by symbol, so a later commit cannot make a range point at the wrong
+lines unnoticed; F17 is re-checked at `7f79712657e3`; portal citations use
+`2b656d8adf33`. Each builder re-checks every citation of its phase at the code of the
+day before it starts (P4 and P16 both edit `service.ts`, and compliance code was still
+changing on 29 Sep 2026): a citation that no longer matches is re-derived by symbol and
+recorded in the phase evidence, and a changed fact stops the phase, as the rule above
+says. At portal
+`2b656d8adf33` the F14 sweep finds the same 19 lines in the same 15 files, and F14
+cites them at that head; only `prompts/workbench-readonly-build-prompt.md` moved, from
+`:354` at the F7 head to `:359`. Several F14 files gained `workbench-api` in their
+required-checks line (TASK-2037), which moved no F14 line. At portal `origin/staging`
+on 29 Sep 2026 (`b12dc09e396c`, then `6d3ae82e4eca`) every portal file P16 cites has the
+same blob as at `2b656d8adf33`, except `docs/runbooks/CONTRIBUTING.md`, whose cited
+lines are pinned there.
 
 | # | Fact | Evidence |
 |---|---|---|
-| F1 | `checkout()` mints a new id on every call. It does not look up a live dispatch first. `mc_dispatch` has only a non-unique `task_id` index; migration `026` adds `released_at` and `released_reason` and no constraint. Code prediction for a second call on the same task and repo: a second stamp. Re-checked at `fc7ceef3d123`, after #255. | PLX_MC `src/lib/compliance/service.ts:198-266`; `src/lib/compliance/repo.ts:198-213`; `db/migrations/008_compliance.sql:25-37`, `026_dispatch_release.sql:3-4` |
-| F2 | Nothing sets `revoked`. `complete()` validates the stamp and appends `task.completed` with `payload.checkoutId`; it rejects an unknown, revoked, released or expired stamp, and it does not release the stamp. Since #255 (TASK-2011), the PR lifecycle releases a stamp: on `closed`, `ingestPullRequest` sets `released_at` and `released_reason` (`merged` or `closed`) after attribution and projection and appends `checkout.released`; on `reopened`, it clears the release of an unrevoked, repo-matching stamp. In the ledger and the checkout listing, "live" means `NOT revoked AND released_at IS NULL AND expires_at > now()`; the TTL is still `issued_at + 480 min`. For verify, an expired, unrevoked, unreleased, repo-bound stamp still passes when GitHub shows its PR open, the live body carries the stamp, and its task exists and is not `verified`. That GitHub read happens once per PR and only on expiry; a GitHub failure fails closed. A stamp with no PR (P2, P3) has no such exception. `resolveDispatchForMerge` accepts an expired, unrevoked, repo-bound stamp when the gate passed that exact PR head for its task; it does not test release, so attribution survives release. | PLX_MC `service.ts:57-59,113-158,169-180`, `complete()` `:278-324`, `ingestPullRequest()` `:812-819,919-925`; `repo.ts:253-299,301-326`; `db/migrations/026_dispatch_release.sql`; `docs/product/SYSTEM_OF_RECORD.md:45-51` |
-| F3 | The MCP tool `mc_self_check` returns `ok`, operator, counts, and honesty fields. It returns no principal. `GET /api/cursor/self-check` returns the same `data` plus `meta.actor`, which includes `servicePrincipalId` (derived from the API key) and `repo` (echoed from the `x-mc-repo` header). `parse_error` is not a server field. Every `/api/cursor/*` call needs the headers `x-mc-operator-email` and `x-mc-repo`. `x-mc-runtime` is self-asserted and defaults to `cursor`. | PLX_MC `src/lib/mcp/actions.ts:61-72`; `src/app/api/cursor/self-check/route.ts`; `src/lib/mcp/envelope.ts:49`; `src/lib/mcp/auth.ts:120-140` |
+| F1 | `checkout()` mints a new id on every call. It does not look up a live dispatch first. `mc_dispatch` has only a non-unique `task_id` index; migration `026` adds `released_at` and `released_reason` and no constraint. Code prediction for a second call on the same task and repo: a second stamp. Re-checked at `fc7ceef3d123`, after #255. | PLX_MC `src/lib/compliance/service.ts:198-266` at `fc7ceef3d123` (`checkout()`; `:227-295` at `7f79712657e3`, same body); `src/lib/compliance/repo.ts:198-213`; `db/migrations/008_compliance.sql:25-37`, `026_dispatch_release.sql:3-4` (`repo.ts` and the migrations are unchanged through `7f79712657e3`) |
+| F2 | Nothing sets `revoked`. `complete()` validates the stamp and appends `task.completed` with `payload.checkoutId`; it rejects an unknown, revoked, released or expired stamp, and it does not release the stamp. Since #255 (TASK-2011), the PR lifecycle releases a stamp: on `closed`, `ingestPullRequest` sets `released_at` and `released_reason` (`merged` or `closed`) after attribution and projection and appends `checkout.released`; on `reopened`, it clears the release of an unrevoked, repo-matching stamp. In the ledger and the checkout listing, "live" means `NOT revoked AND released_at IS NULL AND expires_at > now()`; the TTL is still `issued_at + 480 min`. For verify, an expired, unrevoked, unreleased, repo-bound stamp still passes when GitHub shows its PR open, the live body carries the stamp, and its task exists and is not `verified`. That GitHub read happens once per PR and only on expiry; a GitHub failure fails closed. A stamp with no PR (P2, P3) has no such exception. `resolveDispatchForMerge` accepts an expired, unrevoked, repo-bound stamp when the gate passed that exact PR head for its task; it does not test release, so attribution survives release. Since #262 (TASK-2111, 29 Sep 2026) a block names its reason as a text (`CHECKOUT_BLOCK_TEXT`, `checkoutBlockReason`), for example `checkout released — re-checkout the task`, and a missing task blocks as `task deleted — re-register` (`task_deleted`) instead of `task_closed`; the pass conditions did not change. | PLX_MC `service.ts:57-59,113-158,169-180`, `complete()` `:278-324`, `ingestPullRequest()` `:812-819,919-925`, all at `fc7ceef3d123` (at `7f79712657e3`, after #262: `:57-59` unchanged; `CHECKOUT_BLOCK_TEXT` and `checkoutBlockReason` `:108-134`; `resolveDispatch` `:141-153`; `resolveDispatchForOpenPr` `:157-174`; `prDispatchResolver` `:177-187`; `resolveDispatchForMerge` `:198-209`; `complete()` `:307-353`; `ingestPullRequest()` `:843-850,950-956`); `repo.ts:253-299,301-326` (unchanged through `7f79712657e3`); `db/migrations/026_dispatch_release.sql`; `docs/product/SYSTEM_OF_RECORD.md:45-51` |
+| F3 | The MCP tool `mc_self_check` returns `ok`, operator, counts, and honesty fields. It returns no principal. `GET /api/cursor/self-check` returns the same `data` plus `meta.actor`, which includes `servicePrincipalId` (derived from the API key) and `repo` (echoed from the `x-mc-repo` header). `parse_error` is not a server field. Every `/api/cursor/*` call needs the headers `x-mc-operator-email` and `x-mc-repo`. `x-mc-runtime` is self-asserted and defaults to `cursor`. | PLX_MC `src/lib/mcp/actions.ts:61-72` at `2faa2a2c9633` (`actionSelfCheck`; the same lines at `fc7ceef3d123`; `:62-73` at `7f79712657e3`, same body, after #261 added 14 lines to the file); `src/app/api/cursor/self-check/route.ts`; `src/lib/mcp/envelope.ts:49`; `src/lib/mcp/auth.ts:120-140` (these three unchanged from `2faa2a2c9633` through `7f79712657e3`) |
 | F4 | This Claude account lists two environments. On 28 Sep 2026 the operator renamed `env_01SVX8gUwth13dQuc5G2wRDQ` (formerly `PLX`) to `PLX Portal + MC`. The other is `Default` (`env_011f8FzdosCcNnecSTiXrX2U`), which carries the runbook variables. The review session cannot read the renamed environment's variables or network policy. | `list_environments` on 27 and 28 Sep 2026; portal `docs/runbooks/CLAUDE-CODE-WEB-MC-SETUP.md:110,117-125` |
 | F5 | A multi-repo Claude web session starts in `/home/user`. That folder has no `.mcp.json`, so no PLX-MC tools load even with the key set. | Review session: six repos, `Default` environment, no `mc_*` tools |
-| F6 | The source of `~/bin/plx-mc-stamp` is not committed in any of the six repos. The runbook documents env vars and output fields only. The Codex key maps to `sp_mcp_codex`. The checkout response carries no issue or expiry time. `GET /api/cursor/checkouts?taskId=&repo=&active=` returns rows with no raw id: each has `checkoutRef` (`dsp_…` plus the id's last 4 chars), `issuedAt`, `expiresAt`, `releasedAt`, `releasedReason`, and `active`. Since #255, `active` is false for a released stamp; it is a ledger-only flag and ignores the open-PR exception (F2). | portal `docs/runbooks/CODEX-CLOUD.md:33-51`; PLX_MC `actions.ts:357-384`, `src/app/api/cursor/checkouts/route.ts:1-25`, `src/lib/mcp/read-actions.ts:47-87,203-206` |
+| F6 | The source of `~/bin/plx-mc-stamp` is not committed in any of the six repos. The runbook documents env vars and output fields only. The Codex key maps to `sp_mcp_codex`. The checkout response carries no issue or expiry time. `GET /api/cursor/checkouts?taskId=&repo=&active=` returns rows with no raw id: each has `checkoutRef` (`dsp_…` plus the id's last 4 chars), `issuedAt`, `expiresAt`, `releasedAt`, `releasedReason`, and `active`. Since #255, `active` is false for a released stamp; it is a ledger-only flag and ignores the open-PR exception (F2). | portal `docs/runbooks/CODEX-CLOUD.md:33-51` at `2b656d8adf33` (unchanged through `6d3ae82e4eca`, `origin/staging` on 29 Sep 2026); PLX_MC `src/lib/mcp/actions.ts:357-384` at `fc7ceef3d123` (`actionCheckout`; `:371-398` at `7f79712657e3`, same body, after #261 added 14 lines above it), `src/app/api/cursor/checkouts/route.ts:1-25` and `src/lib/mcp/read-actions.ts:47-87,203-206` (`checkoutRef`, `redactCheckoutIds`, `toCheckoutView` and the `mc_list_checkouts` registration) at `fc7ceef3d123`, both unchanged through `7f79712657e3` |
 | F7 | Appendix A reproduces the baseline numbers exactly: portal cursor 129113 at `b75477d9c85d`, PLX_MC cursor 52966 at `2faa2a2c9633`, and swarm codex `bytes_dropped` 44171 at `35ed5034eddf`. Portal Claude is 15862 raw bytes; the old 15861 dropped the trailing newline. At the heads above: portal cursor 130138, swarm cursor 117574 (the old 117875 had no SHA). | Appendix A run in the review session |
 | F8 | PLX_MC: `scripts/generate-governance-surfaces.py` writes one block (including "Agent Task & PR Workflow", from `agent_workflow`) into AGENTS, CLAUDE, CODEX, GROK, GEMINI, and HERMES, and rewrites `.cursor/rules/governance.mdc`. Drift is checked by `--check` in `preflight.sh:103`. **Swarm:** the same-named generator writes only CLAUDE, CODEX, GROK, GEMINI, and HERMES marker blocks (`agent_behavior` + `writing_style`) plus `governance.mdc`; it does not touch AGENTS.md. `agent_behavior` is also injected into every swarm agent's runtime prompt, and `tests/test_governance_gates.py:89` pins 12 rules. Swarm AGENTS.md's only generated part is the `sync_cursor_rules_to_agents.py` embed of every `alwaysApply` rule, whose marker line starts at byte 33026, past the 32768-byte Codex cap. The hand-written Mission Control handshake section starts near byte 466. | PLX_MC `config/governance-contract.yaml:23-31,108`; swarm `scripts/generate-governance-surfaces.py:32,202-220`, `src/governance_preamble.py:25-40`, `.github/workflows/test.yml:129-134`, `tests/test_sync_cursor_rules_to_agents.py:76-79` |
 | F9 | Swarm has two Lobster writers that push to `main` from `/home/ubuntu/agentic-swarm-8`. **(a)** `governance_repo_sync.py`: nightly at 01:30 ET, `dry_run: false`. Its allowlist permits AGENTS, CLAUDE, CODEX, GROK, GEMINI, HERMES, SOUL, TOOLS, `.cursor/rules/`, and `config/` (which includes `config/governance-contract.yaml`). **(b)** `lessons_rule_promote.py`: weekly. It writes `lessons/auto/promoted.md`, `.cursor/rules/operational-lessons.mdc` (`alwaysApply`), the `lessons:auto` blocks in CLAUDE, CODEX, GROK, and GEMINI, and `config/lessons.yaml`. `sync_to_sharepoint.py` writes SharePoint lists only. The phrase "lobster path" does not exist. Swarm CI runs on push to `main`, PRs to `main`, and `merge_group` only. | swarm `src/pipelines/governance_repo_sync.py:143-203`; `config/pipelines.yaml:421-431`; `src/pipelines/lessons_rule_promote.py:1-35,171-176`; `config/vmc-web-crontab:82`; `src/tools/sync_to_sharepoint.py:312-317`; `.github/workflows/test.yml:3-8` |
 | F10 | Portal `plx-mc-compliance.yml` triggers on `pull_request` only, types `opened, synchronize, reopened` (job `compliance`). It is the copy pinned at `GEN_SHA` `1339f1196d4e…`, which predates #255, so it has no `edited`. `compliance-merge-group.yml` (TASK-2008) emits job `compliance` on `merge_group` and calls portal-only `scripts/merge-group-prs.mjs`. Its header says: once the generator grows `merge_group`, regenerate, bump `GEN_SHA`, and delete this file. `ci-staged-gate.test.mjs:871-956` pins that stopgap layout and runs in required CI; `:20` imports `scripts/merge-group-prs.mjs` and `:958-980` tests it. `lint-typecheck-build`, `Validate ledgers` and, since 28 Sep 2026, `workbench-api` (TASK-2037) already trigger on `merge_group`. The queue is not on for ruleset `18632985`; the planned `max_entries_to_merge` is 1. The drift check runs in each consumer against a pinned `GEN_SHA`. Re-checked at portal `2b656d8adf33`. | portal `.github/workflows/plx-mc-compliance.yml:8-10`; `compliance-merge-group.yml:1-19,168`; `scripts/ci-staged-gate.test.mjs:20,871-956,958-980`; `ci.yml:98,114,216-217,248`; `mc-quality-ledger.yml:20-33`; `compliance-gate-drift.yml:22-28`; `docs/runbooks/BRANCH-PROTECTION-STAGING.md:44-46,305-385` |
-| F11 | `/api/compliance/verify` takes `repo`, `repoFullName`, `prNumber`, `headSha`, `changedPaths`, `labels`, `checkoutId` and `checkoutIds`. It takes no PR body and no `event`. OIDC tokens from events other than `pull_request` are rejected. Only `plx-mc-compliance.yml` and `compliance-gate.yml` are allowed. Bearer `COMPLIANCE_CI_TOKEN` has no binding. Since #255, `verifyPr` resolves each stamp with `prDispatchResolver`: `resolveDispatch` first (unknown, revoked, released, repo mismatch, expired, in that order); on `expired` only, one `loadPrState` GitHub read per PR, then `resolveDispatchForOpenPr` (PR open, stamp in the live body, task present and not `verified`). A GitHub failure throws, so `verifyPrOrQueue` answers `pending` and queues the verify (fail closed). The merge-queue rule in D4 is stricter and makes no GitHub read. | PLX_MC `src/app/api/compliance/verify/route.ts:24-33,51-64,88-102,137-147`; `service.ts:108-158,407-460,1010-1023`; `github-pr.ts:19-39` |
+| F11 | `/api/compliance/verify` takes `repo`, `repoFullName`, `prNumber`, `headSha`, `changedPaths`, `labels`, `checkoutId` and `checkoutIds`. It takes no PR body and no `event`. OIDC tokens from events other than `pull_request` are rejected. Only `plx-mc-compliance.yml` and `compliance-gate.yml` are allowed. Bearer `COMPLIANCE_CI_TOKEN` has no binding. Since #255, `verifyPr` resolves each stamp with `prDispatchResolver`: `resolveDispatch` first (unknown, revoked, released, repo mismatch, expired, in that order); on `expired` only, one `loadPrState` GitHub read per PR, then `resolveDispatchForOpenPr` (PR open, stamp in the live body, task present and not `verified`). A GitHub failure throws, so `verifyPrOrQueue` answers `pending` and queues the verify (fail closed). Since #262 every block reason is a text from `CHECKOUT_BLOCK_TEXT` (F2). The merge-queue rule in D4 is narrower, not a subset: it accepts an expired stamp only on a prior pass of the same head, tests neither that the PR is open nor that the live body carries the stamp, and makes no GitHub read. | PLX_MC `src/app/api/compliance/verify/route.ts:24-33,51-64,88-102,137-147` (unchanged from `fc7ceef3d123` through `7f79712657e3`); `service.ts:108-158,407-460,1010-1023` at `fc7ceef3d123` (`:136-187`, `:436-491` and `:1041-1054` at `7f79712657e3`); `github-pr.ts:19-39` (unchanged) |
 | F12 | Each of the four nested portal guides opens with "Auto-generated … by `scripts/sync-agents-md.py`. Do not edit manually." All four name retired agents, "Factory" among them (always the agent, never the plant). `components/AGENTS.md` lacks the consumer-copy banner the SOP requires. `scripts/sync-agents-md.py` still exists at the repo root; nothing in CI runs it. | portal `portal/src/*/AGENTS.md:3-10`, `portal/prisma/AGENTS.md`; `docs/runbooks/PLX-PORTAL-GOVERNANCE-SOP.md:165-173`; `scripts/audit-module-coverage.sh:211-229,333` |
 | F13 | Portal required CI (`ci.yml:139` runs all of `scripts/ci-staged-gate.test.mjs`) reads real guide text in several places. The TASK-2004 test (`:766-828` at portal `2b656d8adf33`; its loop at `:820-827` requires root AGENTS.md, CLAUDE.md, GEMINI.md, and `.cursorrules` to carry the staging-merge sentence) bans phrases in AGENTS.md, CLAUDE.md, and `mc-compliance.mdc`, and pins exact strings in `.cursor/rules/auto-merge-after-push.mdc`, `.cursor/rules/pr-watch-until-green.mdc`, and two `.cursor/skills/*/SKILL.md`. The TASK-2008 test (`:871-956`) pins `auto-merge-after-push.mdc` and the branch-protection runbook. Swarm CI (`test.yml:167,170`) runs `check-flag-doc-parity.py` (the `### Feature Flags` table in AGENTS.md) and `check-config-drift.py` (the `| Module | Owner | Criticality |` table); local preflight does not run them. PLX_MC `check-arch-parity.py` pins two AGENTS.md architecture cells. `verify-claude-web-mc-wiring.test.mjs` tests fixtures only. The real-file checker `verify-claude-web-mc-wiring.mjs` (which wants `repo: petralabx/plx-customer-portal` and no `Never Hub` in AGENTS.md) is not in CI and fails today on an unrelated check. PLX_MC `tests/test_canary.py` pins strings in AGENTS.md, CLAUDE.md, and `governance.mdc` (for example "Mission First", `MC-Checkout: pending`, `verificationCommands`). | portal `ci.yml:139,173`; `scripts/ci-staged-gate.test.mjs:766-956`; `scripts/verify-claude-web-mc-wiring.mjs:103,114`; swarm `.github/workflows/test.yml:167,170`; PLX_MC `tests/test_canary.py:60-115`, `scripts/check-arch-parity.py:28-31` |
-| F14 | Portal `.cursor/rules/mc-compliance.mdc` is 19778 bytes and holds all 7 needles. The `sweep` check (Appendix B) over every `INSTR_FILES` file (root guides, rules, skills, prompts, runbooks) in the four repos finds exactly these competing complete-order lines. No test pins any of them. **Portal (19 lines, 15 files):** `AGENTS.md:29`, `CLAUDE.md:169`, `GEMINI.md:14`, `.cursorrules:101`, `.github/copilot-instructions.md:14`, `.cursor/rules/mc-compliance.mdc:21,230,344`, `.cursor/rules/mc-delegation.mdc:24,54-55`, `.cursor/skills/babysit/SKILL.md:24`, `.cursor/skills/mc-sync/SKILL.md:30-32`, `prompts/uat-agent/v2/CONTRACT.md:15`, `prompts/uat-agent/v2/SYSTEM.md:25`, `prompts/workbench-readonly-build-prompt.md:359`, `docs/runbooks/CLAUDE-CODE-WEB-MC-SETUP.md:212`, `docs/runbooks/CLOUD-AGENT-ENVIRONMENT.md:155`, `docs/runbooks/CONTRIBUTING.md:293`. Most say "Last commit, then freeze. Completing releases the checkout."; the second sentence contradicts F2. **PLX_MC:** `docs/AGENT-PR-SOP.md:325`; `config/cloud-agent-fleet-always-apply.md:118-120` wraps across lines, so the sweep misses it and P8 checks it by name. **Swarm:** `AGENTS.md:20`, `CLAUDE.md:32`. **Secondbrain:** none. `INSTR_FILES` excludes `tasks/`: portal `tasks/lessons.md:15` ("`mc_complete_task` must land BEFORE the PR is opened") matches `COMPETING`, agrees with the locked order, and stays out of scope. | `sweep` in the review session; portal `node scripts/uat-agent/verify-agent-contract.mjs` passes today |
-| F15 | plx_secondbrain is tracked with `compliance_mode: soft` ("Stays soft; do not flip hard"), default bucket `BKT-KNOWLEDGE-HUB`, and base `main`. It has no AGENTS.md, no CLAUDE.md, and no `.cursor/rules/`. `docs/GOVERNANCE.md:14` says "**Do not duplicate** agent rules or MC-Checkout discipline in this repo." (with bold marks) | PLX_MC `config/tracked-repos-registry.json:185-205`; secondbrain tree |
+| F14 | Portal `.cursor/rules/mc-compliance.mdc` is 19778 bytes at the F7 head `b75477d9c85d` and 19795 bytes at `2b656d8adf33` (TASK-2037, `d164a52f4`, added 17 bytes; unchanged since, through `bc1272941c35`), and holds all 7 needles. The `sweep` check (Appendix B) over every `INSTR_FILES` file (root guides, rules, skills, prompts, runbooks) in the four repos finds exactly these competing complete-order lines. No test pins any of them. **Portal (19 lines, 15 files, line numbers at `2b656d8adf33`):** `AGENTS.md:29`, `CLAUDE.md:169`, `GEMINI.md:14`, `.cursorrules:101`, `.github/copilot-instructions.md:14`, `.cursor/rules/mc-compliance.mdc:21,230,344`, `.cursor/rules/mc-delegation.mdc:24,54-55`, `.cursor/skills/babysit/SKILL.md:24`, `.cursor/skills/mc-sync/SKILL.md:30-32`, `prompts/uat-agent/v2/CONTRACT.md:15`, `prompts/uat-agent/v2/SYSTEM.md:25`, `prompts/workbench-readonly-build-prompt.md:359` (`:354` at the F7 head), `docs/runbooks/CLAUDE-CODE-WEB-MC-SETUP.md:212`, `docs/runbooks/CLOUD-AGENT-ENVIRONMENT.md:155`, `docs/runbooks/CONTRIBUTING.md:293`. Most say "Last commit, then freeze. Completing releases the checkout."; the second sentence contradicts F2. **PLX_MC:** `docs/AGENT-PR-SOP.md:325`; `config/cloud-agent-fleet-always-apply.md:118-120` wraps across lines, so the sweep misses it and P8 checks it by name. **Swarm:** `AGENTS.md:20`, `CLAUDE.md:32`. **Secondbrain:** none. `INSTR_FILES` excludes `tasks/`: portal `tasks/lessons.md:15` at `2b656d8adf33` ("`mc_complete_task` must land BEFORE the PR is opened") matches `COMPETING`, agrees with the locked order, and stays out of scope. | `sweep` in the review session; portal `node scripts/uat-agent/verify-agent-contract.mjs` passes today |
+| F15 | plx_secondbrain is tracked with `compliance_mode: soft` ("Stays soft; do not flip hard"), default bucket `BKT-KNOWLEDGE-HUB`, and base `main`. It has no AGENTS.md, no CLAUDE.md, and no `.cursor/rules/`. `docs/GOVERNANCE.md:14` says "**Do not duplicate** agent rules or MC-Checkout discipline in this repo." (with bold marks) | PLX_MC `config/tracked-repos-registry.json:185-205` (the `petralabx/plx_secondbrain` entry; the same lines at `2faa2a2c9633`, `fc7ceef3d123` and `7f79712657e3`, because #259 appended the `agent-runner` entry after it); secondbrain tree |
 | F16 | The brain HTTP route exists. It exposes 11 tools, including `brain_self_check`. Two tools write: `brain_ingest` (up to 100000 chars into `memory.items`, namespace `swarm/brain-ingest`) and `brain_propose_relation` (confidence at most 0.7). Writes are limited to 30 per minute per tenant. Every valid key has the same write access. `X-Agent-Name` is self-asserted. The committed swarm `.cursor/mcp.json` and `.mcp.json`, and portal `.mcp.json` and `.cursor/mcp.json.example`, have no `plx-brain` key. | swarm `docs/runbooks/brain-mcp.md:15-42`; `apps/vmc-web/src/app/api/vmc/knowledge/mcp/route.ts`; `apps/vmc-web/src/lib/vmc/knowledge/mcp-http-{auth,server,tools}.ts` |
-| F17 | `.github/workflows/` paths are high tier by path. The label `risk:high` forces high tier. High tier needs `testRun` or `shots`, a rollback, and a bucket PRD. The gate reads the task's bucket row: `prd` set gives `present`; `prd: null` gives `absent`, which **blocks**; only a missing bucket gives `unknown` (advisory). The seed rows for `BKT-PROD` and `BKT-INFRA` have `prd: null`. `mc_update_bucket { id, prd }` sets it. | PLX_MC `src/lib/compliance/risk.ts:8-20,35-50`; `src/lib/compliance/verify.ts:36-86`; `src/lib/compliance/bucket-prd.ts:10-16`; `src/lib/mc-data/data.ts:160,164`; `src/lib/mcp/create-http-server.ts:212` |
+| F17 | `.github/workflows/` paths are high tier by path. The label `risk:high` forces high tier. High tier needs `testRun` or `shots`, a rollback, and a bucket PRD. The gate reads the task's bucket row (`bucketPrdForTask`). Since #263 (TASK-2112, merged 2026-09-29T22:22:59Z as `7f79712657e3`): `prd` counts as `present` only when it is an http(s) URL (`docLinkFromPrd`); `null` or any other value gives `absent`, which **blocks** ("high-risk change requires a linked bucket PRD"); a task with no bucket, or a bucket id the store does not hold, gives `no_bucket`, which also **blocks** ("high-risk change requires the task on an initiative with a linked bucket PRD"); only a failed bucket read gives `store_unavailable`, advisory. Before #263 any non-empty `prd` gave `present` and a missing bucket gave `unknown`, advisory. The seed rows for `BKT-PROD` and `BKT-INFRA` have `prd: null`; the live rows the r12 P15 run read on 29 Sep 2026 carry GitHub URLs (`merge-queue-audit.md`, `## raw`), which are links under #263. `mc_update_bucket { id, prd }` sets it; since #263 the initiative page also saves an https link. Re-checked at `7f79712657e3` (a fact P16 rests on through D11). | PLX_MC `src/lib/compliance/risk.ts:8-20,35-50` (unchanged through `7f79712657e3`); `src/lib/compliance/verify.ts` (`verifyCompliance`; the PRD branch is `:76-86` at `7f79712657e3`); `src/lib/compliance/bucket-prd.ts` (`bucketPrdForTask`, the whole 22-line file at `7f79712657e3`); `src/lib/mc-data/doc-links.ts` (`docLinkFromPrd`, `:46-57`); `src/lib/mc-data/data.ts:160,164`; `src/lib/mcp/create-http-server.ts` (`mc_update_bucket`: `:212` at `2faa2a2c9633`; its description line is `:249` at `7f79712657e3`) |
 | F18 | Base branches: portal `staging`; PLX_MC, swarm, and secondbrain `main`. Default buckets: portal `BKT-PROD`; PLX_MC and swarm `BKT-INFRA`; secondbrain `BKT-KNOWLEDGE-HUB`. | registry; `origin/*` refs |
 | F19 | Portal `.githooks/pre-push` blocks a push without a local stamp only for agent pushes: a `cursor/` or `cloud-agent/` branch, `CURSOR_AGENT` or `CURSOR_AGENT_PR_BODY` set, git email `cursoragent@cursor.com`, or git name "Cursor Agent". Other pushes count as human and pass. PLX_MC, swarm, and secondbrain have no `.githooks/`. | portal `scripts/lib/mc-pre-push-handshake.mjs:44-75,334-361` |
 | F20 | Swarm deploy runs after `Test` on `main` only when `vars.SWARM_DEPLOY_ENABLED == 'true'`. `deploy-swarm.sh` runs `git reset --hard origin/main` in `/home/ubuntu/agentic-swarm-8`, which leaves untracked files in place. | swarm `.github/workflows/deploy-swarm.yml:11-16,40`; `scripts/deploy-swarm.sh:65-74` |
 | F21 | 23 portal shims under `portal/src/lib` carry `module-shim — remove after 2026-09-30`. From 30 Sep 2026, `npm run audit:hygiene` prints its `Score:` line and then exits 2 ("CRITICAL: expired/invalid shim metadata detected") on unchanged `staging`. No phase in this plan owns those shims. | portal `scripts/audit-module-coverage.sh:158-202,333,370-373`; `grep -rl 'remove after 2026-09-30' portal/src/lib` |
-| F23 | PLX_MC `src/lib/compliance/service.ts:98` (`:96` before #255) and `scripts/generate-compliance-gate.py:132` carry `module-shim — remove after 2026-10-15` comments. The generated workflow copies that comment at `.github/workflows/compliance-gate.yml:77`. No PLX_MC script or CI job enforces that date. | `grep -rn 'remove after'` over PLX_MC `scripts/`, `.github/workflows/`, `src/lib/compliance/` at `fc7ceef3d123` |
+| F23 | PLX_MC `src/lib/compliance/service.ts:98` (`:96` before #255) and `scripts/generate-compliance-gate.py:132` carry `module-shim — remove after 2026-10-15` comments, and the generated `.github/workflows/compliance-gate.yml:77` carries the generator's copy. No PLX_MC script or CI job enforces that date. | `grep -rn 'remove after'` over PLX_MC `scripts/`, `.github/workflows/`, `src/lib/compliance/` at `fc7ceef3d123` (the three lines are unchanged at `7f79712657e3`) |
 | F22 | PLX_MC deploys to the Vercel project `plx-mission-control` at `https://mc.plxcustomer.io`. PLX_MC has no version route. | PLX_MC `AGENTS.md:59`; `vercel.json` |
-| F24 | PLX_MC PR #255 (TASK-2011) merged on 2026-09-28T22:11:09Z as `f6d2bab7670a` (PR head `5f0419367467`); `main` at `fc7ceef3d123` includes it. It changed 17 files. What it does: an expired stamp passes verify while GitHub shows its PR open and the live body carries it (one GitHub read per PR, on expiry only; a GitHub failure fails closed); closing or merging the PR releases the stamp (`released_at`, `released_reason`, migration `026`, event `checkout.released`) after attribution and projection; reopening clears the release; `complete()` and the active-checkout listing treat a released stamp as invalid; the gate workflow and its generator also trigger on `pull_request` type `edited`, in both variants, and `tests/test_generate_compliance_gate.py:49-55` pins the four types. The PR body records that migrations 022–026 were applied to the production `plx_mc` database. Files P4 or P16 edit or cite: `src/lib/compliance/service.ts`, `src/lib/compliance/repo.ts` (`DispatchRow` gains `releasedAt` and `releasedReason`; the active filter adds `released_at IS NULL`; new `releaseDispatches` and `unreleaseDispatches`), `src/lib/compliance/github-pr.ts` (new `loadPrState`), `scripts/generate-compliance-gate.py`, `.github/workflows/compliance-gate.yml`, `docs/modules/compliance/README.md:47-54`, `tests/compliance-server.test.ts` (a `loadPrState` mock at `:10-11`, a TASK-2011 block at `:139-251`, and `:462-473` now expects an expired stamp on an open PR to pass), `tests/test_generate_compliance_gate.py`, and `src/lib/mcp/read-actions.ts`. P2 and P3 are unaffected: they open no PR, so the open-PR exception and release never apply, and the 8-hour rule stands because `complete()` still rejects expired stamps. Whether `mc.plxcustomer.io` has deployed `f6d2bab7670a` is not verified here; no phase gate depends on it, because P4 and the P16 PLX_MC half deploy on top of it. | `gh pr view 255 --repo petralabx/PLX_MC` (`state: MERGED`, `mergeCommit: f6d2bab7670a`); `git -C PLX_MC log --oneline -3 fc7ceef3d123`; the files above at `fc7ceef3d123` |
-| F25 | The swarm is being retired (swarm retirement spec r2). After its R0 usage audit, its R1 plans to turn off both writers: `governance-repo-sync` (Lobster) and `lessons-rule-promote` (a VMC cron). The repo is not archived: at the end (S7, then T3) it is pruned of non-trading code and renamed for the trading lab. The writers write only the swarm repo, so once no phase edits the swarm they cannot undo any frontier change. P7's withdrawal rests on that, not on R1. | swarm retirement spec r4 §8 (R0, R1, S7, T3); F9 |
-| F26 | The brain moves to plx_secondbrain under the same spec, onto its own EC2 host at `brain.plxcustomer.io` (retirement D5; Q1 answered 28 Sep 2026). R6 routes the 11 key paths, `/api/vmc/knowledge/mcp` among them, on `missioncontrol.tayloralton.com` to the new service; R6a gives the brain its own name and TLS; R7 moves each caller to it. The R6 Caddy block stays for good (retirement D4): a caller left on the old host still reaches the brain, and from R11 the block forwards only requests that carry a brain key. The old host stays for the trading lab (retirement D8, S6). The brain accepts the `VMC_API_KEY` value only during the lift (retirement D3): R4 creates `BRAIN_API_KEYS` (every brain key starts with `brn_`), R7 issues each caller its `BRAIN_API_KEY`, and R11 stops accepting `VMC_API_KEY` and department keys. The frontier `BRAIN_URL` is the same value as the retirement `BRAIN_BASE_URL`. No key limits what the connector can read or write until R11 wires key scopes, which agrees with F16. | swarm retirement spec r12 (D3, D4, D5, D8, execution contract, R4, R6, R6a, R7, R11, S6, Q1, section 10) |
+| F24 | PLX_MC PR #255 (TASK-2011) merged on 2026-09-28T22:11:09Z as `f6d2bab7670a` (PR head `5f0419367467`); `main` at `fc7ceef3d123` includes it. It changed 17 files. What it does: an expired stamp passes verify while GitHub shows its PR open and the live body carries it (one GitHub read per PR, on expiry only; a GitHub failure fails closed); closing or merging the PR releases the stamp (`released_at`, `released_reason`, migration `026`, event `checkout.released`) after attribution and projection; reopening clears the release; `complete()` and the active-checkout listing treat a released stamp as invalid; the gate workflow and its generator also trigger on `pull_request` type `edited`, in both variants, and `tests/test_generate_compliance_gate.py:49-55` pins the four types. The PR body records that migrations 022–026 were applied to the production `plx_mc` database. Files P4 or P16 edit or cite: `src/lib/compliance/service.ts`, `src/lib/compliance/repo.ts` (`DispatchRow` gains `releasedAt` and `releasedReason`; the active filter adds `released_at IS NULL`; new `releaseDispatches` and `unreleaseDispatches`), `src/lib/compliance/github-pr.ts` (new `loadPrState`), `scripts/generate-compliance-gate.py`, `.github/workflows/compliance-gate.yml`, `docs/modules/compliance/README.md:47-54`, `tests/compliance-server.test.ts` (at `fc7ceef3d123`: a `loadPrState` mock at `:10-11`, a TASK-2011 block at `:139-251`, and `:462-473` now expects an expired stamp on an open PR to pass; at `7f79712657e3`, after #262 and #263, the block is `:144-274` and that case is `:513-524`), `tests/test_generate_compliance_gate.py`, and `src/lib/mcp/read-actions.ts`. P2 and P3 are unaffected: they open no PR, so the open-PR exception and release never apply, and the 8-hour rule stands because `complete()` still rejects expired stamps. The orchestrator's `gate0.md` (29 Sep 2026) records the #255 production deploy as succeeded (GitHub deployment 6721728347, 2026-09-28T22:11:43Z) and Vince's confirmation that migration 026 is applied in production; the P15 re-run records `pr255_deployed: yes` from that record (Vince, 2026-09-29T19:55:37Z). No phase gate depends on the deploy, because P4 and the P16 PLX_MC half deploy on top of it. | `gh pr view 255 --repo petralabx/PLX_MC` (`state: MERGED`, `mergeCommit: f6d2bab7670a`); `git -C PLX_MC log --oneline -3 fc7ceef3d123`; the files above at `fc7ceef3d123` |
+| F25 | The swarm is being retired (swarm retirement spec r2 at the decision on 28 Sep 2026; r12 now). After its R0 usage audit, its R1 plans to turn off both writers: `governance-repo-sync` (Lobster) and `lessons-rule-promote` (a VMC cron). The repo is not archived: at the end (S7, then T3) it is pruned of non-trading code and renamed for the trading lab. The writers write only the swarm repo, so once no phase edits the swarm they cannot undo any frontier change. P7's withdrawal rests on that, not on R1. | swarm retirement spec r12 §8 at PLX_MC `fc7ceef3d123` (R0 `:169`, R1 `:198`, T3 `:818`, S7 `:936`); F9 |
+| F26 | The brain moves to plx_secondbrain under the same spec, onto its own EC2 host at `brain.plxcustomer.io` (retirement D5; Q1 answered 28 Sep 2026). R6 routes the 11 key paths, `/api/vmc/knowledge/mcp` among them, on `missioncontrol.tayloralton.com` to the new service; R6a gives the brain its own name and TLS; R7 moves each caller to it. The R6 Caddy block stays for good (retirement D4): a caller left on the old host still reaches the brain, and from R11 the block forwards only requests that carry a brain key. The old host stays for the trading lab (retirement D8, S6). The brain accepts the `VMC_API_KEY` value only during the lift (retirement D3, as a hash: `VMC_API_KEY_SHA256`): R4 accepts, and R5 holds in the secret `prod/plx-brain`, `BRAIN_API_KEYS` (every brain key starts with `brn_`; a value changes by R5's procedure: update the secret, re-render `brain.env`, restart `plx-brain`, check `agent/status`), R7 issues each caller its `BRAIN_API_KEY`, and R11 stops accepting `VMC_API_KEY` and department keys. The frontier `BRAIN_URL` is the same value as the retirement `BRAIN_BASE_URL`. No key limits what the connector can read or write until R11 wires key scopes, which agrees with F16. | swarm retirement spec r12 (D3, D4, D5, D8, execution contract, R4, R5, R6, R6a, R7, R11, S6, Q1, section 10) |
 
 ## Mission
 
@@ -141,7 +226,7 @@ line (TASK-2037), which moved no F14 line.
 
 ## Decisions a yes confirms
 
-**Confirmed:** D1 and D12 (Vince, 28 Sep 2026), then all the defaults below with the approval on 28 Sep 2026. **Withdrawn in r12:** D6 and D10, with the swarm work. **Re-derived in r13** after #255 merged, with the same defaults: D2, D4 and D13. D4's re-derivation already includes two readings written in P16: `merge_group` never calls `loadPrState`, and a released stamp blocks. Those readings are the same default, not a new one. Round 10 reviews them. They do not need a separate yes. **Changed in r13** on the swarm retirement spec's instruction (its section 10, D3, R7, R11): D5's key source and D14's step name. D5 is a changed default. Vince answered `yes r13, D5 as r13` on 2026-09-29T18:09:35Z. P14 records that phrase, and round 10 reviews D5, D14, F26, P13 and P14 before P14 starts (D13, SC-13). D14's rule is unchanged; only its step name and its quiet window changed.
+**Confirmed:** D1 and D12 (Vince, 28 Sep 2026), then all the defaults below with the approval on 28 Sep 2026. **Withdrawn in r12:** D6 and D10, with the swarm work. **Re-derived in r13** after #255 merged, with the same defaults: D2, D4 and D13. D4's re-derivation includes two readings written in P16 (in `merge_group` mode the gate never calls `loadPrState`, and a released stamp blocks there); they are the re-derived default, not a new one, and Vince confirmed them on 29 Sep 2026 (2026-09-29T19:55:37Z, the draft's section-16 item 4). **Changed in r13** on the swarm retirement spec's instruction (its section 10, D3, R7, R11): D5's key source and D14's step name. D5 is a changed default, so the rule below applied and r13 needed Vince's yes: he gave `yes r13, D5 as r13` on 29 Sep 2026 (header `r13_yes`, `d5_r13_yes`). The phrase `D5 as r13` confirms D5; P14 records it; and round 10 reviewed D5, D14, F26, P13 and P14 on 29 Sep 2026, before P14 starts (D13, SC-13). D14's rule is unchanged; only its step name and its quiet window changed.
 
 A yes accepts every default below. To change one, answer "yes, except D<n>: …".
 That answer is still one yes. Before any phase that the exception touches runs, the
@@ -151,18 +236,18 @@ re-runs the review on the changed phases.
 | # | Decision | Default in this spec | Why |
 |---|---|---|---|
 | D1 | P1 environment | **Confirmed 28 Sep 2026.** P1 runs on `PLX Portal + MC` (`env_01SVX8gUwth13dQuc5G2wRDQ`), renamed on 28 Sep 2026. The operator confirmed it carries the runbook variables; P1 proves them live. | F4: the name is in place; its variables cannot be read from the review session. |
-| D2 | Lease contract (P4) | The lease key is task + repo. The holder is the authenticated principal recorded on the `checkout` event (`permissionActorId`; null counts as its own value), never a header. A stamp holds the lease while it is live (F2 after #255: unrevoked, unreleased, unexpired) and its task has no `task.completed` event for that stamp. So a merged or closed PR releases its stamp and frees the lease, and a reopened PR takes the lease back while its stamp is unexpired. Same holder: return the held stamp and append a `checkout.reused` event, not a second `checkout`, so checkout counts and announcements do not inflate. Different holder: HTTP 409 `checkout_held`. No migration and no revoke. **Re-derived in r13; the default is unchanged.** | F2, F3: the runtime is self-asserted, and a revoke would break merge attribution. #255 adds release, which the lease reads and never writes. |
+| D2 | Lease contract (P4) | The lease key is task + repo. The holder is the authenticated principal recorded on the `checkout` event (`permissionActorId`; null counts as its own value), never a header. A stamp holds the lease while it is live (F2 after #255: unrevoked, unreleased, unexpired) and its task has no `task.completed` event for that stamp. So the lease ends at complete or at the TTL, whichever comes first. A merged or closed PR releases its stamp and frees the lease, and a reopened PR takes the lease back while its stamp is unexpired; both matter only for a stamp not yet completed, because the contract completes the task before its PR opens (steps 6 and 7). An expired stamp on an open PR still passes verify (F2) but holds no lease. The lease compares repos as verify does (`dispatchRepoMatches` with the caller's repo as the full name): a full slug against a full slug, a bare name against either, so `evil/PLX_MC` and `petralabx/PLX_MC` are different repos. Same holder: return the held stamp and append a `checkout.reused` event, not a second `checkout`, so checkout counts and announcements do not inflate. Different holder: HTTP 409 `checkout_held`. No migration and no revoke. **Re-derived in r13; the default is unchanged.** | F2, F3: the runtime is self-asserted, and a revoke would break merge attribution. #255 adds release, which the lease reads and never writes. |
 | D3 | Second brain guides (P8) | Add the guides, and change `docs/GOVERNANCE.md:14` to point at them. | F15: the repo's own doc forbids a duplicate today. |
-| D4 | Merge queue (P15, P16) | The generator learns `merge_group` inline, with no repo-local script, and keeps the four `pull_request` types #255 set (`opened, synchronize, reopened, edited`). The verify route accepts `merge_group` OIDC with `prNumber` bound to the queue ref. In merge-group mode, verify accepts an expired stamp only when the gate already passed that PR head for its task; it makes no GitHub read, and it rejects a revoked or released stamp as `pull_request` mode does. `pull_request` mode keeps #255's open-PR exception (F11). The portal regenerates, bumps `GEN_SHA`, updates its CI test, and deletes the stopgap; `scripts/merge-group-prs.mjs` stays, because the CI test imports it (F10). Turning on the queue stays a repo-admin action outside this plan. **Re-derived in r13; the default is unchanged.** | F10, F11. Adding `merge_group` to `plx-mc-compliance.yml` alone would make two workflows emit `compliance` and fail CI. The queue only re-confirms a head that already passed, so it needs no GitHub read, and the bearer path stays safe (P16). |
-| D5 | Brain key (P14) | **Changed in r13** on the swarm retirement spec's instruction (its section 10, D3, R7, R11). Use a brain key: a `BRAIN_API_KEY` issued for the Cursor Team MCP registration, from the brain's `BRAIN_API_KEYS` (every brain key starts with `brn_`). Never the `VMC_API_KEY` value, and never a `VMC_SCOPED_API_KEYS` department key: those are VMC and trading keys, and R11 stops the brain from accepting them. Record the key name, never the value. Until R11, no key limits what the connector reads or writes. **Vince's yes, recorded:** r12's yes covered r12's default. Vince answered `yes r13, D5 as r13` on 2026-09-29T18:09:35Z (the header's `r13_yes` and `d5_r13_yes`). The yes to this change has one form, the phrase `D5 as r13` (r13 is the revision that changed D5, whatever revision the yes is given against). Vince gives it once: in a yes on r13 (`yes r13, D5 as r13`) or in the P14 later yes (`yes P14, BRAIN_URL=…, D5 as r13`). P14 records it in `brain-register.md` (`d5_confirmed`, `d5_confirmed_at`, `d5_confirmed_in`) and its acceptance checks the phrase as a fixed line; round 10 reviews D5, D14, F26, P13 and P14 first (D13, SC-13). | F26: the brain holds only hashes of VMC's keys, and its own keys rotate alone. r12's default (a VMC department key, else `VMC_API_KEY`) would send a trading-capable key to the brain's own name (retirement D3, B26). |
+| D4 | Merge queue (P15, P16) | The generator learns `merge_group` inline, with no repo-local script, and keeps the four `pull_request` types #255 set (`opened, synchronize, reopened, edited`). The verify route accepts `merge_group` OIDC with `prNumber` bound to the queue ref. In merge-group mode, verify accepts an expired stamp only when the gate already passed that PR head for its task; it makes no GitHub read, and it rejects a revoked or released stamp as `pull_request` mode does. `pull_request` mode keeps #255's open-PR exception (F11). The portal regenerates, bumps `GEN_SHA`, updates its CI test, and deletes the stopgap; `scripts/merge-group-prs.mjs` stays, because the CI test imports it (F10). Turning on the queue stays a repo-admin action outside this plan. **Re-derived in r13; the default is unchanged.** **Two refinements confirmed by Vince on 29 Sep 2026** (2026-09-29T19:55:37Z; the draft's section-16 item 4): in `merge_group` mode the gate never calls `loadPrState`, and a released stamp blocks there (with the text reason #262 gives every block: `checkout released — re-checkout the task`, F2). | F10, F11. Adding `merge_group` to `plx-mc-compliance.yml` alone would make two workflows emit `compliance` and fail CI. The queue only re-confirms a head that already passed, so it needs no GitHub read, and the bearer path stays safe (P16). |
+| D5 | Brain key (P14) | **Changed in r13** on the swarm retirement spec's instruction (its section 10, D3, R7, R11). Use a brain key: a `BRAIN_API_KEY` issued for the Cursor Team MCP registration, from the brain's `BRAIN_API_KEYS` (every brain key starts with `brn_`). Never the `VMC_API_KEY` value, and never a `VMC_SCOPED_API_KEYS` department key: those are VMC and trading keys, and R11 stops the brain from accepting them. Record the key name, never the value. Until R11, no key limits what the connector reads or writes. **Confirmed by Vince on 29 Sep 2026:** r12's yes covered r12's default, so r13 needed Vince's yes (the header's `r13_yes`). The yes to this change has one form, the phrase `D5 as r13` (r13 is the revision that changed D5, whatever revision the yes is given against), and Vince gave it in the yes on r13 (`yes r13, D5 as r13`, 2026-09-29T18:09:35Z; header `d5_r13_yes`). P14 records it in `brain-register.md` (`d5_confirmed`, `d5_confirmed_at`, `d5_confirmed_in: yes on r13`), its acceptance checks the phrase as a fixed line and against the header, and P14 records the brain's own log line for its self-check under `## raw` (key tier `brain`, step 6), where the acceptance rejects a VMC or scoped tier and pins no wording that retirement R4 does not promise; round 10 reviewed D5, D14, F26, P13 and P14 on 29 Sep 2026 (D13, SC-13). | Retirement D3 and R5: the brain holds only hashes of VMC's keys (`VMC_API_KEY_SHA256`, `BRAIN_SCOPED_KEY_SHA256`), and its own keys in `BRAIN_API_KEYS` (F26) rotate alone. r12's default (a VMC department key, else `VMC_API_KEY`) would send a trading-capable key to the brain's own name (retirement D3, B26). |
 | D6 | Writer lock scope (P7) | **Withdrawn in r12,** with P7. The retirement spec's R1 plans to turn both writers off. | F25: the writers touch only the swarm repo, which no phase edits now. |
 | D7 | High-tier bundle for P4 | P4 sends the high-tier bundle (`testRun` plus rollback) to `mc_complete_task`, even though its paths classify as standard. No PR relies on a label to set the tier. | `gh pr create` adds labels after `opened`, and the gate does not run on `labeled`, so a `risk:high` label may never reach it (F17). The P16 PRs are high tier by path (`.github/workflows/`). |
 | D8 | Failed canary | A repo whose P9 canary fails does not enter P10. Vince decides its next step separately. | A safety section on a slice that does not load cannot help. |
 | D9 | Meter views | `cursor`, `claude`, `codex`, `hermes`. `cursor-min` is dropped. | No document defines `cursor-min`, and no phase uses it. |
-| D11 | Bucket PRD for high-tier PRs (P16) | P15 records whether `BKT-INFRA` and `BKT-PROD` have a PRD (read with `mc_get_context { depth: "full" }`). If either is absent, P16 does not open that PR. Vince either sets `prd` on the bucket with `mc_update_bucket` and confirms it with the same read, (for example, a link to the approved copy of this spec), or names another path. No agent edits a bucket. | F17: `prd: null` blocks every high-tier PR, and both P16 PRs are high tier by path. |
+| D11 | Bucket PRD for high-tier PRs (P16) | P15 records whether `BKT-INFRA` and `BKT-PROD` have a PRD link (read with `mc_get_context { depth: "full" }`): since #263 the gate counts `prd` as present only when it is an http(s) URL (F17), so P15 writes `present` only for such a value and pastes the raw rows; the rows its r12 run read on 29 Sep 2026 hold GitHub URLs. If either is absent, P16 does not open that PR. Vince either sets `prd` on the bucket with `mc_update_bucket` and confirms it with the same read, (for example, a link to the approved copy of this spec), or names another path. No agent edits a bucket. | F17: `prd: null`, or a `prd` that is not an http(s) link, blocks every high-tier PR, and both P16 PRs are high tier by path. |
 | D12 | Portal complete-order fix (P8) | **Confirmed 28 Sep 2026.** P8 gains a portal half. It replaces each F14 portal line with the locked sentence, keeping the rest of that line, including on-demand skills, prompts, and runbooks. Line-scoped: no other edit. P10 then only trims. | The fix should not wait on the portal canary (D8). Two of those files (`mc-sync`, `babysit`) sit on the PR-open path. |
 | D10 | Swarm handshake carrier (P8) | **Withdrawn in r12,** with the swarm half of P8. | F25: the swarm is retiring; its own complete-order lines (F14) stay; the trading lab owns that repo after the retirement spec renames it. |
-| D13 | PLX_MC PR #255 (P4, P15, P16) | **Applied in r13.** #255 merged on 28 Sep 2026 as `f6d2bab7670a` (F24). P4's code branch and P16 start only under r13 or later, after Vince's yes on r13, and only after round 10 has reviewed the r13 changes to P4, P15 and P16 and its findings are applied. Round 10 also reviews the r13 changes that swarm retirement r12 section 10 required (D5, D14, F26, P13, P14); P14 starts only after that review, its later yes and Vince's `D5 as r13` (D5). P4's no-code branch (P3 outcome `same-stamp` or `409`) never waited. r13 re-derives F1, F2, F6, F10, F11, D2 and D4, and every test-file line P4 and P16 cite, against PLX_MC `main` `fc7ceef3d123` and portal `2b656d8adf33`. P16's former test "`pull_request` with an expired stamp still blocks" no longer holds and is replaced. The P16 portal half also owns the portal `.cursor/rules/mc-compliance.mdc` lines that say "Do not add `edited` in this repo" and name the three trigger types (`:128-131` and `:301-309` at `2b656d8adf33`), wherever P8 and P10 leave them; that half runs after P8 and P10 on the portal. Its rewrite stays within P10's caps and keeps every needle and P8's carrier rule, and its acceptance re-runs those checks, so it cannot undo either phase unseen. P15 records `pr255: merged f6d2bab7670a` and `gate_pr_types`. An r12 run of P15 does not satisfy r13: P15 runs again under r13 before P16 starts, and the P16 PLX_MC acceptance reads both r13 lines from `merge-queue-audit.md`. P4 and P16 record `pr255:` and `spec_revision:` in their evidence. | F24: #255 changed what "live" means for a stamp, and it edited files that P4 and P16 edit or cite. |
+| D13 | PLX_MC PR #255 (P4, P15, P16) | **Applied in r13.** #255 merged on 28 Sep 2026 as `f6d2bab7670a` (F24). P4's code branch and P16 start only under r13 or later, after Vince's yes on r13, and only after round 10 has reviewed the r13 changes to P4, P15 and P16 and its findings are applied (the yes given and the review closed on 29 Sep 2026: header `r13_yes_at`, and `round_10_done_at`, set when the round-10 text merges; each phase's later yes is given after both, and its acceptance checks that). Round 10 also reviews the r13 changes that swarm retirement r12 section 10 required (D5, D14, F26, P13, P14); P14 starts only after that review, its later yes and Vince's `D5 as r13` (D5). P4's no-code branch (P3 outcome `same-stamp` or `409`) never waited. r13 re-derives F1, F2, F6, F10, F11, D2 and D4, and every test-file line P4 and P16 cite, against PLX_MC `main` `fc7ceef3d123` and portal `2b656d8adf33`. P16's former test "`pull_request` with an expired stamp still blocks" no longer holds and is replaced. The P16 portal half also owns the portal `.cursor/rules/mc-compliance.mdc` lines that say "Do not add `edited` in this repo" and name the three trigger types (`:128-131` and `:301-309` at `2b656d8adf33`), and the sentence "Until TASK-2011 is live, the Hub may still block an expired stamp; do not restamp ahead of that verdict." (`:137-139`; stale since #255 deployed, F24; Vince accepted this edit on 2026-09-29T19:55:37Z, the draft's section-16 item 2), wherever P8 and P10 leave them; that half runs after P8 and P10 on the portal, with no after-P8-alone path (Vince, 2026-09-29T19:55:37Z; if the portal canary fails and P10 portal never runs, D8, the half stays blocked until he decides again). Its rewrite stays within P10's caps and keeps every needle and P8's carrier rule, and its acceptance re-runs those checks, so it cannot undo either phase unseen. P15 records `pr255: merged f6d2bab7670a` and `gate_pr_types`. An r12 run of P15 does not satisfy r13: P15 runs again under r13 before P16 starts, and the P16 PLX_MC acceptance reads both r13 lines from `merge-queue-audit.md`. P4 and P16 record `pr255:` and `spec_revision:` in their evidence. | F24: #255 changed what "live" means for a stamp, and it edited files that P4 and P16 edit or cite. |
 | D14 | Brain registration address (P14) | P14 is a later yes that names `BRAIN_URL`, the brain's own address from the retirement spec's R6a (its Q1 answered the host on 28 Sep 2026: `brain.plxcustomer.io`; `BRAIN_URL` equals the retirement `BRAIN_BASE_URL`). It registers that address, not `missioncontrol.tayloralton.com`. It starts after P13, once `brain_self_check` answers at `BRAIN_URL` with a brain key (D5); the rest of R7 (caller PRs) need not be done. **r13 names the step R6a, not R7, and drops the quiet window:** the R6 routes on the old host stay for good (F26). | F26: the brain's callers move to the new name in R7, so a registration at the old host would have to be done twice. The first yes cannot approve a host nobody has named; the later yes names it. |
 
 ## Success Criteria
@@ -182,12 +267,12 @@ re-runs the review on the changed phases.
 - **SC-5:** no repo and no home directory gains `jev-rules`, `jevgrep`, `jev-code`, or a Typesafe/Jev plugin entry.
 - **SC-6:** this spec is the contract for the meter, the complete-order sentence, the loader canary, and the guide trim. The fleet spec remains the contract for skill packs, enforcement, and the Jev rejection.
 - **SC-7:** the four nested portal AGENTS.md files name exactly the roster in root AGENTS.md (`:10` plus colleague IDEs), and no retired agent. They carry the consumer-copy banner and no "Auto-generated" header.
-- **SC-8:** the brain registration uses the name and headers in `docs/runbooks/brain-mcp.md`, the brain's own address from the retirement spec's R6a (D14), and a brain key from `BRAIN_API_KEYS` (D5, confirmed by Vince as `D5 as r13`). `brain-register.md` records the key name, the later yes that named `BRAIN_URL`, the `D5 as r13` yes and where Vince gave it, and the two write tools, and never a VMC key. The review and writing sessions do not register it.
+- **SC-8:** the brain registration takes only the server name (`plx-brain`) and the header names (`X-API-Key`, `X-MCP-Session`, `X-Agent-Name`) from swarm `docs/runbooks/brain-mcp.md:32,34-36` (at `b1117811cbd7`, the ref P14 cites). The URL comes from D14 (the retirement spec's R6a) and the header value from D5 (a brain key from `BRAIN_API_KEYS`, confirmed by Vince as `D5 as r13` on 29 Sep 2026). The runbook's auth row (`:17`), its URL row (`:33`) and the key value in its `X-API-Key` row (`:34`) name the old host and VMC keys; they are superseded for P14, while the header name in `:34` is one of the rows P14 takes, and no frontier phase edits that runbook (SC-12). `brain-register.md` records the key name and the key's sha256 prefix, the pre-check and the Team MCP list's state before registration, the later yes that named `BRAIN_URL`, the `D5 as r13` yes and where Vince gave it, the brain's own log line for the self-check (key tier `brain`), and the two write tools, and never a VMC key. The review and writing sessions do not register it.
 - **SC-9:** exactly one portal workflow defines job `compliance` and triggers on `merge_group`: the generated `plx-mc-compliance.yml`. `compliance` stays required. `COMPLIANCE_MODE` is unchanged.
 - **SC-10:** T3, Hindsight, a new agent roster, Hermes cloud, a Grok cloud environment, an AWS `--apply` bootstrap, and turning on the merge queue stay out of every phase.
 - **SC-11:** every code-phase PR carries a live `MC-Checkout: dsp_*` line at open. That stamp's `actor.repo` equals the PR's repo, and the PR's `compliance` check ends SUCCESS.
 - **SC-12:** no phase edits `petralabx/agentic-swarm`. Its own competing lines (F14: `AGENTS.md:20`, `CLAUDE.md:32`) stay: the trading lab owns that repo after the retirement spec renames it.
-- **SC-13:** P4's code branch, the P15 re-run, P14 and P16 start only under r13 or later, after Vince's yes on r13 and after round 10 has reviewed the r13 changes to P4, P15 and P16 (D13) and to D5, D14, F26, P13 and P14 (retirement section 10). P16 also waits for the P15 re-run: an r12 run of P15 does not satisfy r13. P14 also waits for the later yes that names `BRAIN_URL` and for Vince's `D5 as r13` (given in a yes on r13 or in that later yes), and `brain-register.md` records both. #255 merged on 28 Sep 2026 as `f6d2bab7670a`.
+- **SC-13:** P4's code branch, the P15 re-run, P14 and P16 start only under r13 or later, after Vince's yes on r13 and after round 10 has reviewed the r13 changes to P4, P15 and P16 (D13) and to D5, D14, F26, P13 and P14 (retirement section 10). P16 also waits for the P15 re-run: an r12 run of P15 does not satisfy r13. P14 also waits for the later yes that names `BRAIN_URL` and for Vince's `D5 as r13` (given in a yes on r13 or in that later yes), and `brain-register.md` records both. #255 merged on 28 Sep 2026 as `f6d2bab7670a`. Vince's yes on r13 (2026-09-29T18:09:35Z) and round 10 (closed 29 Sep 2026) are recorded with their UTC times: `r13_yes_at` in the header, and `round_10_done_at`, which the orchestrator sets in its execution copy in the store (the copy that holds the approval fields, `docs/specs/README.md`) to the time the round-10 text merged to PLX_MC `main`, with no second PR. The acceptance of each gated phase reads `r13_yes`, `round_10` and `r13_yes_at` from the spec on PLX_MC `main`, derives the merge time of the round-10 text from `main`'s first-parent history, fails while the execution copy's `round_10_done_at` is not set or differs from that time, and requires the phase's `later_yes_at` (P4, P16, P14) or `audited_at` (the P15 re-run) to be later than both.
 
 ## Scope
 
@@ -197,7 +282,7 @@ re-runs the review on the changed phases.
   - P3: a double-checkout record on the deployed Hub. P4: a lease in `petralabx/PLX_MC`, base `main`, only when that record is `second-stamp`.
   - Context diet on three governed repos (portal, PLX_MC, plx_secondbrain): one short root guide, and long rules load only when the task needs them. The swarm is measured only. Slices: measurement (P5), meter (P6), complete-order sentence (P8), loader canary (P9), guide trim (P10).
   - P11, P12: correct `portal/src/app/AGENTS.md`, `portal/src/components/AGENTS.md`, `portal/src/lib/AGENTS.md`, and `portal/prisma/AGENTS.md` on `petralabx/plx-customer-portal`, base `staging`.
-  - P13, P14: register Team MCP server `plx-brain`, with the name and headers from `petralabx/agentic-swarm` `docs/runbooks/brain-mcp.md`, the URL from the retirement spec's R6a (D14), and a brain key from `BRAIN_API_KEYS` (D5).
+  - P13, P14: register Team MCP server `plx-brain`, with the server name and header names from `petralabx/agentic-swarm` `docs/runbooks/brain-mcp.md` (its URL row and its key values are superseded, SC-8), the URL from the retirement spec's R6a (D14), and a brain key from `BRAIN_API_KEYS` (D5).
   - P15, P16: `merge_group` support in the PLX_MC generator and the verify service, then regenerate the portal gate and retire the stopgap.
 - **Non-goals:**
   - Jev products: `jev-rules`, `jevgrep`, `jev-code`, and Typesafe/Jev plugin entries.
@@ -227,6 +312,7 @@ PORTAL_REPO=<abs path>                  # full clone, petralabx/plx-customer-por
 PLX_MC_REPO=<abs path>                  # full clone, petralabx/PLX_MC
 SWARM_REPO=<abs path>                   # full clone, petralabx/agentic-swarm (read-only: P5, P6, P14 checks)
 SECONDBRAIN_REPO=<abs path>             # full clone, petralabx/plx_secondbrain
+SPEC_EXEC=<abs path>                    # the execution copy of this spec in the store (docs/specs/README.md); its round_10_done_at line is what the r13-gated acceptances read (SC-13)
 WT=<abs path>                           # the phase worktree (code phases)
 SLUG=<repo name>                        # P10 only: plx-customer-portal | PLX_MC
 BRAIN_URL=<https://host>                # P14 only: the brain's own address (retirement spec R6a = BRAIN_BASE_URL; D14)
@@ -259,10 +345,10 @@ Acceptance reads pinned SHAs such as portal `b75477d9c85d`.
 
 - Parallelism cap: two orchestrator agents. Operator phases, and orchestrator phases waiting on an operator, do not hold a slot.
 - First-yes queue for orchestrator slots: P5, P15, P11, P13. P5 goes first because P6 waits on it.
-- P4's code branch and the PLX_MC half of P16 waited for PLX_MC PR #255, which merged on 28 Sep 2026. Both start only under r13 or later, after Vince's yes on r13 and its round-10 review (D13, SC-13). P15 runs again under r13 on the same terms, before P16: an r12 run of P15 does not satisfy r13. P14 also starts only under r13 or later, after that yes, after round 10 has reviewed D5, D14, F26, P13 and P14, and after Vince's `D5 as r13`, given in the yes on r13 or in the P14 later yes (SC-13).
-- A swarm-retirement PR that edits the same files as a frontier phase never runs alongside it on the same repo; the second branches from base after the first merges. Known overlaps: retirement R7 edits PLX_MC `config/governance-contract.yaml` and regenerates its guides (P8 and P10 on PLX_MC); retirement S7 edits portal `CLAUDE.md` and PLX_MC guides (P8 and P10); retirement R7's portal PR edits `.cursor/rules/session-knowledge-artifact.mdc`, which P10 portal owns through `.cursor/rules/**`. Retirement R7's operator step also says to update the Cursor team MCP registration (retirement `:546`); that registration is P14's (D14, SC-8): R7 adds no `plx-brain` entry to the Team MCP list, and P14 registers it once its gate is met, so the entry exists once and never at the old host.
+- P4's code branch and the PLX_MC half of P16 waited for PLX_MC PR #255, which merged on 28 Sep 2026. Both start only under r13 or later, after Vince's yes on r13 and its round-10 review (D13, SC-13; the yes is recorded in the header, and round 10's time, `round_10_done_at`, is set when its text merges; each then waits for its later yes, given after that time). P15 runs again under r13 on the same terms, before P16: an r12 run of P15 does not satisfy r13. P14 also starts only under r13 or later, after that yes, after round 10 has reviewed D5, D14, F26, P13 and P14, and after Vince's `D5 as r13` (all three given or done on 29 Sep 2026), and then after its later yes that names `BRAIN_URL` (SC-13).
+- A swarm-retirement PR that edits the same files as a frontier phase never runs alongside it on the same repo; the second branches from base after the first merges. Known overlaps: retirement R7 edits PLX_MC `config/governance-contract.yaml` and regenerates its guides (P8 and P10 on PLX_MC); retirement S7 edits portal `CLAUDE.md` and PLX_MC guides (P8 and P10); retirement R7's portal PR edits `.cursor/rules/session-knowledge-artifact.mdc`, which P10 portal owns through `.cursor/rules/**`. Retirement R7's operator step said, through r12, to update the Cursor team MCP registration (retirement r12 `:546-547`), and only its B16 (`:50`) said that frontier P14 registers the brain. That registration is P14's (D14, SC-8). Retirement r13 (29 Sep 2026, on Vince's answer to round-10 open question 3, 2026-09-29T19:54:30Z) amends R7: it leaves the Cursor Team MCP entry to frontier P14 and records `team_mcp: left to frontier P14`, and its B16 and section 10 say the same. P14's own pre-step still guards the entry: the operator reads the Team MCP list before registration and records `team_mcp_plx_brain_before: none`; an existing `plx-brain` entry stops P14, which records `present` and registers nothing, and Vince decides. So the entry exists once, registered by P14, and never at the old host.
 - P4 and the PLX_MC half of P16 never run at the same time, because both edit `src/lib/compliance/service.ts`. Whichever starts second branches from `main` after the first merges.
-- The P8 portal half merges before P10 portal starts, because both edit root guides and rules. The P16 portal half branches from `staging` after the P8 and P10 portal PRs have merged, because all three edit `.cursor/rules/mc-compliance.mdc`, and P10 and P16 both edit `.cursor/rules/auto-merge-after-push.mdc` (D13). The P16 portal acceptance re-runs P10's cap and needle checks and P8's carrier rule on the rules it edits, so its rewrite cannot undo either phase unseen. P12 touches only the four nested guides, so it is independent of all three.
+- The P8 portal half merges before P10 portal starts, because both edit root guides and rules. The P16 portal half branches from `staging` after the P8 and P10 portal PRs have merged, because all three edit `.cursor/rules/mc-compliance.mdc`, and P10 and P16 both edit `.cursor/rules/auto-merge-after-push.mdc` (D13; no after-P8-alone path: Vince, 2026-09-29T19:55:37Z). The P16 portal acceptance re-runs P10's cap and needle checks and P8's carrier rule on the rules it edits, so its rewrite cannot undo either phase unseen. P12 touches only the four nested guides, so it is independent of all three.
 - Globs are gitignore-style, relative to the root of the repo the phase names. The Jev globs apply in every repo and in `$HOME`: `**/jev-rules/**`, `**/jevgrep/**`, `**/jev-code/**`.
 
 ### Code-phase contract (P4, P6, P8, P10, P12, P16)
@@ -278,7 +364,7 @@ Do these steps in order, once per repo the phase touches:
    5. Never invent a `dsp_*`, and never write `MC-Checkout: pending`. If the Hub tools and the HTTP fallback both fail, stop; CoS or CIP pastes `prBodyLine`.
    6. If the stamp expires before the PR opens, check out the **same** task again and use the new `prBodyLine`. Never create a new task for this. #255 does not change this: the open-PR exception starts only once the PR is open, and `complete()` still rejects an expired stamp (F2).
    7. After contract step 8, record the gate's `tier` for the PR (from the `compliance` run log) in the phase evidence file as `gate_tier: <low|standard|high>`.
-   8. If a checkout returns 409 `checkout_held` (after P4 deploys), stop and report the holder and expiry to Vince. Never create a new task to get around it.
+   8. If a checkout returns 409 `checkout_held` (after P4 deploys), stop and report the 409 message (task, repo and expiry) to Vince. The holder is the `permissionActorId` on that stamp's oldest `checkout` event, which Vince can read in Mission Control; the message does not name it (Vince: expiry only, 2026-09-29T19:50:13Z; round 10, open question 1). Never create a new task to get around it.
 3. **Failing test first.** When the phase changes existing behavior (P4, P16), commit a failing test first. Record `failing_first: <sha> fail` in the phase evidence file. New tooling (P6) and docs (P8, P10, P12) have no failing-first step.
 4. **Validate.** Run the repo validation below until it is clean. Never use `--no-verify`.
 5. **Critic.** The critic (`gpt-5.6-sol-high`) reviews the full diff at `threshold: high`, `max_iter: 3`, `strict_approve: true`. The critic brief says that pre-existing debt outside `owns` is out of scope, including the shims dated 2026-09-30 (F21) and 2026-10-15 (F23). If the critic has not approved after 3 iterations, stop, open no PR, and report to Vince.
@@ -507,18 +593,18 @@ EOF
 ### P4 — Exclusive checkout in PLX_MC
 
 - **gate:** later yes · **executor:** orchestrator (builder) · **repo:** `petralabx/PLX_MC`, base `main` · **bundle:** high-tier (`testRun`), per D7
-- **depends_on:** `[P3]`. The code branch also needs D13: #255 merged, so it runs under r13 or later, after Vince's yes on r13 and round 10. Never runs at the same time as the PLX_MC half of P16.
+- **depends_on:** `[P3]`. The code branch also needs D13: #255 merged, so it runs under r13 or later, after Vince's yes on r13 and round 10 (the yes recorded in the header; round 10's time, `round_10_done_at`, set when its text merges), and after the later yes that names P4, given after `round_10_done_at` and recorded in `lease-closeout.md` (`later_yes`, `later_yes_at`; SC-13). Never runs at the same time as the PLX_MC half of P16.
 - **branch on P3:**
   - If P3 records `outcome: same-stamp` or `outcome: 409`, write `closed: no-code` in `lease-closeout.md`. Make no product diff and open no PR.
   - If P3 records `outcome: second-stamp`, build the lease below.
 - **lease contract (D2):**
-  - Candidates come from a new unbounded query in `repo.ts`, `liveDispatchesForTask(taskId)`: rows where `task_id = $1 AND NOT revoked AND released_at IS NULL AND expires_at > now()` (the "live" test `listDispatches` uses since #255, `repo.ts:281`), ordered by `issued_at` ascending. Keep only rows where `dispatchRepoMatches(row.repo, input.repo)` is true.
+  - Candidates come from a new unbounded query in `repo.ts`, `liveDispatchesForTask(taskId)`: rows where `task_id = $1 AND NOT revoked AND released_at IS NULL AND expires_at > now()` (the "live" test `listDispatches` uses since #255, `repo.ts:281`, unchanged from `fc7ceef3d123` through `7f79712657e3`), ordered by `issued_at` ascending. Keep only rows where `dispatchRepoMatches(row.repo, input.repo, input.repo)` is true: the third argument makes a full slug bind to a full slug (`dispatchRepoMatches`, `service.ts:94-97` at `7f79712657e3`, unchanged since `fc7ceef3d123`), so a stamp minted for `evil/PLX_MC` never holds the lease for `petralabx/PLX_MC`, while a bare `PLX_MC` still matches its full name (`:100-105`), as verify treats them (the case `prefers an available full slug and rejects a same-bare-name foreign checkout`, `tests/compliance-server.test.ts:383-403` at `7f79712657e3`).
   - A candidate holds the lease unless a `task.completed` event has `payload.checkoutId` equal to its id. Read this with a new query in `repo.ts`, `completedCheckoutIds(taskId)`, which selects `payload->>'checkoutId'` from events where `task_id = $1` and `kind = 'task.completed'` (no limit, so a busy task cannot push the event out of a window).
   - The holder of a leased dispatch is `payload.permissionActorId` on its first `checkout` event. Read it with a new query, `checkoutHolder(checkoutId)`, which selects that field from the oldest `checkout` event whose `payload->>'checkoutId'` equals the id. Null counts as its own value.
   - If several dispatches hold a lease, the oldest `issued_at` wins.
   - If `input.actor?.id ?? null` equals the holder, take that holder's leased dispatch with the latest `expires_at`. If it has at least 60 minutes left, return its `checkoutId` and insert no dispatch. Otherwise mint a new stamp as today (same holder, so no 409), so a caller never gets a stamp that is about to expire. A re-mint appends a normal `checkout` event, so `checkoutHolder` finds its holder. When, and only when, an existing id is returned, append one `checkout.reused` event (same payload as `checkout`, including `door`), not a second `checkout`, so `activity.ts`, `go-live-announcer.ts`, and routing counts do not change.
   - If the holder differs, throw `ApiError("checkout_held", "<task> is checked out on <repo> by another principal until <expires_at>.", 409)`. Insert nothing.
-  - With no leased dispatch, mint as today. A released stamp (its PR merged or closed, F2) is not a candidate, so release frees the lease; a reopened PR un-releases its stamp, which then holds the lease again while it is unexpired.
+  - With no leased dispatch, mint as today. The lease ends at complete or at the TTL, whichever comes first (D2). A released stamp (its PR merged or closed, F2) is not a candidate, so release frees the lease; a reopened PR un-releases its stamp, which then holds the lease again while it is unexpired. Release and reopen change the lease only for a stamp that is not yet completed, and an expired stamp on an open PR holds no lease, although it still passes verify (F2).
   - Every door (`mc_checkout_task`, `POST /api/cursor/checkout`, `POST /api/compliance/checkout`) goes through `checkout()`, so all of them change together.
 - **known limit:** two concurrent first calls can both insert. No DB constraint prevents it, and this phase does not fix that race (see Risks).
 - **owns:**
@@ -526,23 +612,24 @@ EOF
   - `src/lib/compliance/repo.ts` (the three new queries only)
   - `tests/checkout-lease.test.ts`
   - `docs/modules/compliance/README.md` (the checkout contract section only: describe the lease)
-  - `$PROOFS/lease-closeout.md` (code branch: also `pr255: merged f6d2bab7670a` and `spec_revision: r<n>`, n ≥ 13)
+  - `$PROOFS/lease-closeout.md` (code branch: also `pr255: merged f6d2bab7670a`, `spec_revision: r<n>`, n ≥ 13, `later_yes: yes P4` in Vince's words, and `later_yes_at: <UTC>`, later than the header's `r13_yes_at` and `round_10_done_at`)
   - the `vi.mock("@/lib/compliance/repo", …)` factories in `tests/*.test.ts`: add the functions `checkout()` now calls (`liveDispatchesForTask`, `completedCheckoutIds`, `checkoutHolder`), and reset shared mock state in `beforeEach` where a test file lacks it. Never change or delete an existing `expect(`.
 - **forbidden:** any edit to `tests/checkout-shared-core.test.ts`; `db/migrations/**`; `src/app/api/compliance/verify/**`; `scripts/generate-compliance-gate.py`; `.github/workflows/**`; `plugins/**`; Jev globs
-- **tests:** commit `tests/checkout-lease.test.ts` first, using the mocked-repo pattern of `tests/compliance-server.test.ts:13-70` (its `db` and its `vi.mock("@/lib/compliance/repo", …)` factory; since #255 the dispatch rows carry `releasedAt` and `releasedReason`, and the factory mocks `releaseDispatches`, `unreleaseDispatches` and `eventTaskIdByDedupKey`). The copied `insertDispatch` (`:44-45`) sets `expiresAt` to `Date.now() + 3_600_000`, exactly 60 minutes. The "same holder gets the same id" case must set a longer expiry before the call (120 minutes is enough). If it leaves that default, less than 60 minutes remains by the time `checkout()` runs, the lease mints a new stamp, and the case fails. The under-60-minutes case sets its own shorter expiry. It covers:
+- **tests:** commit `tests/checkout-lease.test.ts` first, using the mocked-repo pattern of `tests/compliance-server.test.ts:10-142` at `7f79712657e3` (from the `github` hoist to the end of the root `beforeEach`: the `github` and `db` hoists, the `vi.mock` factories for `@/lib/compliance/repo`, `@/lib/sync/repo`, `@/lib/sync` and `@/lib/compliance/projection`, `taskish` and the root `beforeEach`; the range was `:10-137` at `fc7ceef3d123`, before #262 and #263 added a `bucketsThrow` flag, a throwing `getBuckets` mock and three `beforeEach` lines; P16 copies the same range; every line in this bullet is at `7f79712657e3`, and P4 re-checks them at the code of the day before it starts, facts preamble). The `db` and the repo factory alone are not enough: `checkout()` also calls `getEntity` (`service.ts:251`) and `patchTask` (`:254`), and `service.ts:44` imports `github-pr`. Since #255 the dispatch rows carry `releasedAt` and `releasedReason`, and the factory mocks `releaseDispatches`, `unreleaseDispatches` and `eventTaskIdByDedupKey`. The holders are `actor` objects that the policy allows for `task.checkout`, for example `{ kind: "service", id: "sp_mcp_codex", status: "active" }` and the same with `sp_mcp_cursor`: the `MCP_AGENT_CAPABILITIES` list and `SERVICE_GRANTS` in `src/lib/permissions/grants.ts` (`:51-72` at `fc7ceef3d123`) and the `MCP_AGENT_SERVICE_PRINCIPAL_IDS` array in `src/lib/permissions/types.ts` (`:131-138` at `fc7ceef3d123`; #259 added `sp_mcp_agent_runner` to it, and #261, merged 2026-09-29T21:24:23Z as `25ff88b7234b`, added `sp_mcp_portal` to it and gave that principal its own least-privilege grant in `SERVICE_GRANTS` (`PORTAL_MCP_CAPABILITIES`: `task.read` and `task.create` only, decision CG-07b), so read both files by symbol, not by line; `sp_mcp_codex` and `sp_mcp_cursor` still carry `MCP_AGENT_CAPABILITIES`, with `task.checkout`, and `sp_mcp_portal` is not a valid holder); with `input.actor` set, `checkout()` runs `authorizeStaged` (`service.ts:228-242`; `src/lib/permissions/enforcement.ts:213`, unchanged since `fc7ceef3d123`, whose decision record is fire-and-forget). The null holder is a call without `actor`; no existing checkout test passes one. The copied `insertDispatch` mock (`compliance-server.test.ts:45-46` at `7f79712657e3`; `:44-45` at `fc7ceef3d123`) sets `expiresAt` to `Date.now() + 3_600_000`, exactly 60 minutes, so a stamp it mints has under 60 minutes left by the time the next `checkout()` runs and the lease re-mints: the "same holder gets the same id" case sets a longer expiry on the held stamp before the second call (120 minutes is enough), and the under-60-minutes case sets its own shorter one. It covers:
   - the same holder gets the same id, with one `checkout.reused` event and no new dispatch
   - the same holder with under 60 minutes left gets a new stamp, recorded with a normal `checkout` event
   - after that re-mint, once the first stamp expires, the same holder's next call returns the new stamp with no 409
   - a different holder gets 409
   - a completed stamp frees the lease
-  - a released stamp (its PR merged or closed) frees the lease: the next call mints a new one. Its `it` title contains the phrase `released stamp frees the lease`. The acceptance reads that title from the last ` > ` segment of `npx vitest list` (the `it` title). A `describe` title does not count. `vitest list` prints one line per collected test and nothing from the file body. A grep of the file text cannot serve here, because the copied mock factory already contains `releasedAt`, `releasedReason`, `releaseDispatches` and `unreleaseDispatches`.
+  - a released stamp (its PR merged or closed) frees the lease: the next call mints a new one. Its `it` title contains the phrase `released stamp frees the lease`. The acceptance reads it from the last ` > ` segment of each `npx vitest list` line, which is the `it` title (a `describe` title does not count); `vitest list` prints one line per collected test and nothing from the file body. A grep of the file text cannot serve here, because the copied mock factory already contains `releasedAt`, `releasedReason`, `releaseDispatches` and `unreleaseDispatches`.
   - an expired or revoked stamp mints a new one
   - a different repo mints a new one
+  - a same-bare-name repo under another owner (a stamp for `evil/PLX_MC`, then a call for `petralabx/PLX_MC`) mints a new one. Its `it` title contains the phrase `another owner mints a new stamp`; the acceptance reads it from the `it` titles of `npx vitest list` in the same way.
   - a bare repo (`PLX_MC`) matches its full name (`petralabx/PLX_MC`)
 
-  The first commit must fail; record `failing_first: <sha> fail`. The existing provenance test (`compliance-server.test.ts:266-284`) and the TASK-2011 block (`:139-251`) must pass unchanged.
+  The first commit must fail; record `failing_first: <sha> fail`. The existing provenance test (`records door provenance on the checkout audit payload (P5)`, `compliance-server.test.ts:289-307` at `7f79712657e3`) and the TASK-2011 block (`open PR checkout lifetime (TASK-2011)`, `:144-274`) must pass unchanged.
 
-  Every case mocks `repo`, so no test reaches the SQL of `liveDispatchesForTask`. The acceptance therefore also reads the branch diff of `src/lib/compliance/repo.ts` and requires an added line that contains `released_at IS NULL`. P4 owns only the three new queries in that file, and `liveDispatchesForTask` is the only one of the three that reads `mc_dispatch` (`completedCheckoutIds` and `checkoutHolder` read events), so that line can belong only to the lease query.
+  Every case mocks `repo`, so no test reaches the SQL of `liveDispatchesForTask`. The acceptance therefore also extracts the body of `liveDispatchesForTask` from the PR head's `src/lib/compliance/repo.ts` (from its `export` line to the next `export`) and requires `released_at IS NULL` and `expires_at > now()` in it, so a comment or another line elsewhere in the file cannot satisfy the check.
 - **after merge:** CIP lands the PR. The operator confirms that `mc.plxcustomer.io` deployed the merge SHA and records `deployed_sha: <12 hex>`.
 - **rollback:** revert the P4 commits on PLX_MC `main` and redeploy. There is no schema change to undo.
 
@@ -550,6 +637,21 @@ Acceptance (P4, cwd = P4 worktree):
 ```bash
 . "$TOOLS/accept.sh"; L=$PROOFS/lease-closeout.md
 if grep -qxF 'outcome: second-stamp' "$PROOFS/double-checkout.md"; then
+  SPEC=$(git -C "$PLX_MC_REPO" show origin/main:docs/specs/frontier-implementation-spec.md) || fail "spec on PLX_MC main"
+  HDR=$(printf '%s\n' "$SPEC" | awk '/^```$/{n++; next} n==1'); n() { printf '%s\n' "$1" | sed -E 's/\.[0-9]+Z$/Z/'; }
+  printf '%s\n' "$HDR" | grep -qE '^r13_yes: yes r13, D5 as r13 ' || fail "r13_yes is not recorded on PLX_MC main (SC-13)"
+  printf '%s\n' "$HDR" | grep -qE '^round_10: done ' || fail "round 10 is not done on PLX_MC main (SC-13)"
+  YES_AT=$(printf '%s\n' "$HDR" | sed -nE "s/^r13_yes_at: ($TS)$/\1/p"); [ -n "$YES_AT" ] || fail "r13_yes_at is missing from the header (SC-13)"
+  # round_10_done_at lives in the execution copy (README). It must equal the time the round-10 text merged to main: the committer time of the first first-parent commit that carries the round_10 line.
+  R10L=$(grep -E '^round_10: done ' "$SPEC_EXEC") || fail "round_10 is not done in the execution copy (SC-13)"
+  printf '%s\n' "$HDR" | grep -qxF -- "$R10L" || fail "the execution copy's round_10 line is not the one on PLX_MC main now: an amendment changed it, so round_10_done_at must be set again from its merge (SC-13)"
+  R10C=''; while read -r c; do T=$(git -C "$PLX_MC_REPO" show "$c:docs/specs/frontier-implementation-spec.md" 2>/dev/null) && printf '%s\n' "$T" | grep -qxF -- "$R10L" && { R10C=$c; break; }; done < <(git -C "$PLX_MC_REPO" log --first-parent --reverse --format=%H origin/main -- docs/specs/frontier-implementation-spec.md)
+  [ -n "$R10C" ] || fail "no commit on PLX_MC main carries the execution copy's round_10 line: the round-10 text has not merged (SC-13)"
+  R10_MERGED=$(TZ=UTC git -C "$PLX_MC_REPO" show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$R10C") || fail "commit time of $R10C"
+  R10_AT=$(sed -nE "s/^round_10_done_at: ($TS) \(PR #[0-9]+.*\)$/\1/p" "$SPEC_EXEC"); [ -n "$R10_AT" ] || fail "round_10_done_at is not set in the execution copy (SC-13)"
+  [ "$(n "$R10_AT")" = "$R10_MERGED" ] || fail "round_10_done_at ($R10_AT) is not the time the round-10 text merged to PLX_MC main ($R10_MERGED, $R10C)"
+  rline 'later_yes: yes P4.*' "$L"; rline "later_yes_at: $TS" "$L"; LY=$(sed -nE "s/^later_yes_at: ($TS)$/\1/p" "$L")
+  [[ "$(n "$LY")" > "$(n "$YES_AT")" && "$(n "$LY")" > "$(n "$R10_AT")" ]] || fail "the P4 later yes predates the yes on r13 or round 10 (SC-13)"
   npm ci || fail "npm ci"
   [ -f tests/checkout-lease.test.ts ] || fail "no lease test"
   npx vitest run || fail "full vitest suite"
@@ -561,8 +663,14 @@ if grep -qxF 'outcome: second-stamp' "$PROOFS/double-checkout.md"; then
   rline 'failing_first: [0-9a-f]{7,40} fail' "$L"
   line 'pr255: merged f6d2bab7670a' "$L"
   rline 'spec_revision: r(1[3-9]|[2-9][0-9])' "$L"
-  npx vitest list tests/checkout-lease.test.ts 2>/dev/null | awk -F ' > ' '{print $NF}' | grep -qiF 'released stamp frees the lease' || fail "no released-stamp case in the it title (D2, F2)"
-  git diff origin/main...HEAD -- src/lib/compliance/repo.ts | grep -qE '^\+.*released_at IS NULL' || fail "liveDispatchesForTask ignores release (D2, F2)"
+  LL=$(npx vitest list tests/checkout-lease.test.ts) || fail "vitest list"
+  LT=$(printf '%s\n' "$LL" | awk -F ' > ' '{print $NF}')   # the it titles: the last " > " segment of each line; a describe title does not count
+  printf '%s\n' "$LT" | grep -qiF 'released stamp frees the lease' || fail "no released-stamp case in the lease test's it titles (D2, F2)"
+  printf '%s\n' "$LT" | grep -qiF 'another owner mints a new stamp' || fail "no foreign-owner case in the lease test's it titles (D2)"
+  Q=$(awk '/^export (async )?function liveDispatchesForTask/{p=1} p&&/^export /&&!/liveDispatchesForTask/{exit} p' src/lib/compliance/repo.ts)
+  [ -n "$Q" ] || fail "no liveDispatchesForTask in repo.ts (D2)"
+  printf '%s\n' "$Q" | grep -qF 'released_at IS NULL' || fail "liveDispatchesForTask ignores release (D2, F2)"
+  printf '%s\n' "$Q" | grep -qF 'expires_at > now()' || fail "liveDispatchesForTask ignores expiry (D2)"
 else
   line 'closed: no-code' "$L"
 fi
@@ -963,9 +1071,9 @@ hygiene_gate origin/staging
   - Quote that the route exists at `apps/vmc-web/src/app/api/vmc/knowledge/mcp/route.ts`.
   - Record the write tools and the key-parity fact (F16).
   - Record that no committed MCP file has a `plx-brain` key.
-  - Record that the swarm retirement spec's R6 routes this path to the new brain service in plx_secondbrain, R6a gives the brain its own address, and R7 moves each caller to it (F26). P14 registers that address with a brain key (D5, D14).
+  - Record that the swarm retirement spec's R4 gives the new brain service in plx_secondbrain its key check (a brain key from `BRAIN_API_KEYS`), R6 routes this path to that service, R6a gives the brain its own address, and R7 moves each caller to it (F26; the template's `moves_to` line names R4, R6 and R7, as retirement section 10 does). P14 registers that address with a brain key (D5, D14).
   - Record `registered: no`. Never paste a key.
-- **r13:** only the R6a fact above changed (retirement section 10: "P13 runs as it is"); the gate, the template and the acceptance are r12's. A P13 run under r12 stays valid for P14. Round 10 reviews this change with P14 (D13, SC-13).
+- **r13:** only the R6a fact above changed (retirement section 10: "P13 runs as it is"); the gate, the template and the acceptance are r12's, and the template's `moves_to` line keeps its r12 wording. A P13 run under r12 stays valid for P14, and an r12 run that records "R7 gives the brain its own address" is harmless: P14 takes the address from D14 (`BRAIN_URL`), never from `brain-audit.md`. Round 10 reviewed this change with P14 on 29 Sep 2026 (D13, SC-13).
 - **evidence template (`brain-audit.md`):** quotes go under `## raw`.
   ```
   name: plx-brain
@@ -993,36 +1101,49 @@ done
 
 ### P14 — Register plx-brain on the Team MCP list
 
-- **gate:** later yes that names `BRAIN_URL` (D14), given against r13 or later, after Vince's yes on r13 and round 10 (D13, SC-13), plus Vince's yes to D5 as changed in r13. The D5 yes has one form, the phrase `D5 as r13`, and Vince gives it once: in a yes on r13 (`yes r13, D5 as r13`) or in this later yes (`yes P14, BRAIN_URL=https://brain.plxcustomer.io, D5 as r13`; drop `, D5 as r13` when the yes on r13 already carried it). `r13` names the revision that changed D5, whatever revision the yes is given against, so the phrase stays the same under r14 or later and the acceptance checks it as a fixed line. The later yes is the explicit enablement this write-capable integration needs, and the D5 phrase is Vince's yes to the changed default (the rule under "Decisions a yes confirms"); r12's yes covered r12's D5 only. · **executor:** operator (cursor.com dashboard) · **recorder:** orchestrator · **repo edit:** none
-- **depends_on:** `[P13]`, plus Vince's yes on r13 and round 10 applied to the r13 changes to D5, D14, F26, P13 and P14 (D13, SC-13), plus Vince's `D5 as r13` (the gate), plus `brain_self_check` answering at `$BRAIN_URL/api/vmc/knowledge/mcp` with a brain key (retirement R6a is done; the rest of R7 need not be done), plus a `BRAIN_API_KEY` issued for the Cursor Team MCP registration (R4 creates `BRAIN_API_KEYS`; the operator adds this key to it, which does not wait for R7: retirement section 10 says P14 needs only the host answering `brain_self_check`)
+- **gate:** later yes that names `BRAIN_URL` (D14), given against r13 or later and after `round_10_done_at` (header; D13, SC-13), plus Vince's yes to D5 as changed in r13. The D5 yes has one form, the phrase `D5 as r13`, and Vince gave it once, in the yes on r13 on 29 Sep 2026 (`yes r13, D5 as r13`; header `d5_r13_yes`), so the later yes is `yes P14, BRAIN_URL=https://brain.plxcustomer.io` (it may repeat `, D5 as r13`). `r13` names the revision that changed D5, whatever revision the yes is given against, so the phrase stays the same under r14 or later and the acceptance checks it as a fixed line and against the header. The later yes is the explicit enablement this write-capable integration needs, and the D5 phrase is Vince's yes to the changed default (the rule under "Decisions a yes confirms"); r12's yes covered r12's D5 only. · **executor:** operator (cursor.com dashboard; the pre-check and the log copy from an operator machine) · **recorder:** orchestrator · **repo edit:** none
+- **depends_on:** `[P13]`, plus Vince's yes on r13 and round 10 applied to the r13 changes to D5, D14, F26, P13 and P14 (the yes given and the review closed on 29 Sep 2026; `round_10_done_at` set when the round-10 text merges; D13, SC-13), plus Vince's `D5 as r13` (given in the yes on r13), plus the pre-check of step 2: `brain_self_check` answering at `$BRAIN_URL/api/vmc/knowledge/mcp` with a brain key (retirement R6a is done; the rest of R7 need not be done), plus a `BRAIN_API_KEY` issued for the Cursor Team MCP registration: retirement R4 accepts, and R5 holds in the secret `prod/plx-brain`, `BRAIN_API_KEYS`; the operator makes the key off the brain host and off every trading host (R6a: no key material is typed on the brain host) and adds it by R5's change procedure (update the secret, re-render `brain.env`, `systemctl restart plx-brain`, check `agent/status`), which does not wait for R7 (retirement section 10 says P14 needs only the host answering `brain_self_check`), plus the Team MCP list holding no `plx-brain` entry before P14 registers one (step 3; Scheduling: retirement r13 leaves that entry to P14)
 - **owns:** `$PROOFS/brain-register.md`
 - **forbidden:** `.cursor/mcp.json`, `.mcp.json`, and any stdio `plx-brain` block in a committed file; `plugins/**`, `.github/workflows/**`; `PLX_MC_MCP_API_KEY`, the `VMC_API_KEY` value or any `VMC_SCOPED_API_KEYS` department key as the header value (D5); Jev globs
-- **stop rule:** if the runbook table is missing, or `brain_self_check` does not answer at `$BRAIN_URL/api/vmc/knowledge/mcp`, stop and register nothing.
+- **stop rule:** if one of the four runbook rows P14 takes is missing from swarm `docs/runbooks/brain-mcp.md` at `origin/main` or no longer carries its name (the server name `plx-brain`, `:32` at `b1117811cbd7`, and the header names `X-API-Key`, `:34`, `X-MCP-Session`, `:35`, and `X-Agent-Name`, `:36`; row `:34` counts by its header name only, because its value, a VMC key, is superseded for P14 by D5, so a changed value there does not stop P14; the URL row `:33` and the auth row `:17` are superseded for P14, SC-8, and do not count), if no brain key has been issued for this registration (`depends_on`: R5 holds it in `prod/plx-brain`; P14 never registers with any other key), if the pre-check (step 2) does not answer `ok` at `$BRAIN_URL/api/vmc/knowledge/mcp` with the brain key (a 401 means the brain's MCP auth path does not accept brain keys yet), or if the Team MCP list already has a `plx-brain` entry (step 3), stop and register nothing.
 - **steps:**
-  1. The orchestrator records the yeses in `brain-register.md` before anything is registered: `spec_revision: r<n>` (the revision the later yes was given against; n ≥ 13); `later_yes: yes P14, BRAIN_URL=<BRAIN_URL>` or `later_yes: yes P14, BRAIN_URL=<BRAIN_URL>, D5 as r13` (Vince's words, in the gate's form) and `later_yes_at: <UTC>`; `d5_confirmed: D5 as r13`, `d5_confirmed_at: <UTC, when Vince gave the yes that carried the phrase>` and `d5_confirmed_in: yes on r<n>` (the yes on r13, or on the revision current when he gave it) or `d5_confirmed_in: P14 later yes`. Without a yes from Vince that carries `D5 as r13`, P14 does not start.
-  2. At cursor.com/agents → MCP servers → Add server, enter name `plx-brain`, the URL `$BRAIN_URL/api/vmc/knowledge/mcp` (the R6a address), and the header `X-API-Key` set to the brain key chosen by D5 (a `brn_` key from `BRAIN_API_KEYS`). Optionally add `X-MCP-Session: plx-brain` and `X-Agent-Name: plx-brain`.
-  3. Reload MCP in a Cursor Cloud agent and run `brain_self_check`.
+  1. The orchestrator records the yeses in `brain-register.md` before anything is registered: `spec_revision: r<n>` (the revision the later yes was given against; n ≥ 13); `later_yes: yes P14, BRAIN_URL=<BRAIN_URL>` or `later_yes: yes P14, BRAIN_URL=<BRAIN_URL>, D5 as r13` (Vince's words, in the gate's form) and `later_yes_at: <UTC>`, later than the header's `r13_yes_at` and `round_10_done_at`; `d5_confirmed: D5 as r13`, `d5_confirmed_at: <UTC, when Vince gave the yes that carried the phrase>` and `d5_confirmed_in: yes on r<n>` (the yes on r13, or on the revision current when he gave it) or `d5_confirmed_in: P14 later yes`. For `yes on r13`, `d5_confirmed_at` is the header's `d5_r13_yes` time (2026-09-29T18:09:35Z), and the acceptance compares the two. Without a yes from Vince that carries `D5 as r13`, P14 does not start.
+  2. **Pre-check** (operator, from an operator machine; never the brain host, never a trading host): call `brain_self_check` at `$BRAIN_URL/api/vmc/knowledge/mcp` with `X-API-Key` set to the brain key, read from an environment variable and never typed inline, and `X-Agent-Name: plx-brain`. The route is stateless Streamable HTTP with JSON responses (swarm `apps/vmc-web/src/app/api/vmc/knowledge/mcp/route.ts:46-49` at `b1117811cbd7`, which retirement R4 copies), so an MCP client or one `POST` carrying a JSON-RPC `tools/call` for `brain_self_check` (`Accept: application/json, text/event-stream`; an `initialize` request first if the server asks for one) serves. Record `precheck_at: <UTC>` and `precheck: ok`; `brain_host_live_at` is the `precheck_at` of the first pre-check that answered. On a 401, stop and register nothing: the brain's MCP auth path resolves the key against `VMC_API_KEY` (swarm `mcp-http-auth.ts:56-61`, apart from the REST handler at `api/api-handler.ts:201,261`), which the brain never holds (retirement R4 `env.names`: `never`), so until R4 rewires that path too the route answers 401 "Server-side VMC_API_KEY is not configured" (`mcp-http-auth.ts:63-71`); report it to the retirement operator.
+  3. **The list before:** at cursor.com/agents → MCP servers, record `team_mcp_plx_brain_before: none` when the Team MCP list has no `plx-brain` entry. If one exists, record `present`, stop and register nothing; Vince decides (Scheduling).
+  4. At cursor.com/agents → MCP servers → Add server, enter the name `plx-brain` and use the header names `X-API-Key`, `X-MCP-Session` and `X-Agent-Name`: the only rows P14 takes from swarm `docs/runbooks/brain-mcp.md` (four rows: `:32`, `:34`, `:35` and `:36` at `b1117811cbd7`; SC-8). The URL is `$BRAIN_URL/api/vmc/knowledge/mcp` (the R6a address, D14), not the runbook's `:33`; the `X-API-Key` value is the brain key chosen by D5 (a `brn_` key from `BRAIN_API_KEYS`), not the value in the runbook's `:17` or `:34`, which name VMC keys. Row `:34` gives P14 its header name only; the URL row, the auth row and that value are superseded for P14, and every row stays unedited (SC-12). Set `X-Agent-Name: plx-brain` (the identity's actor, swarm `mcp-http-auth.ts:37-43`; the default actor is also `plx-brain`, `:43`, and retirement R4 does not promise that the log prints it, so this header identifies nothing in the log, step 6). Optionally add `X-MCP-Session: plx-brain`. Record `key_name: BRAIN_API_KEY:<label>` (the label the operator gave the key when it was issued; it never starts with `brn_`, so the acceptance's key-material check cannot mistake it for a key) and `key_sha256_prefix: <the first 12 hex of sha256 of the key value>`, computed off the brain host and off every trading host, so that rotation and retirement R11 can find the entry in `BRAIN_API_KEYS`; never the value.
+  5. Reload MCP in a Cursor Cloud agent and run `brain_self_check`. Record `registered_at` and `brain_self_check: ok`.
+  6. **The brain's own evidence:** copy the brain service log for the window from `registered_at` off the brain host (as retirement R6a does). Retirement R4 promises one thing about that log (`:303-304`): every request logs its key tier (the `VMC_API_KEY` value, a brain key or a scoped key), never the key. It fixes no wording, and it does not say that a line carries the agent name or the MCP tool name: the swarm route the service copies writes no request line (`mcp/route.ts:35` at `b1117811cbd7` logs unhandled errors only), and `mcp-http-auth.ts:37-43` (the same ref) reads `X-Agent-Name` into the identity, whose default actor is also `plx-brain`. So the operator identifies the line: the request in the window that is the step-5 self-check (the Cursor agent's calls to the MCP route after `registered_at`, with a brain tier). The window can hold other callers' lines, some with a VMC tier while callers still reach the brain through the R6 block; only the identified line counts. Record its time as `self_check_log_at` and its tier as `self_check_key_tier: brain`, and paste the line as the brain wrote it under `## raw`, beneath the heading `### brain log line (step 6)` (secrets removed; the line holds no key). The acceptance requires that heading under `## raw` with at least one pasted line beneath it, rejects the template placeholder, rejects the VMC and scoped tier names in those lines (`vmc_api_key`, `legacy`, `scoped`, `dept`, case-insensitive: swarm `docs/knowledge-os/KEY_TIERS.md` names the tiers "Legacy (unscoped)" and "Department-scoped"), and checks the typed lines and the time order. It pins no token that R4 does not promise, so it cannot tell the self-check's line from another brain-tier line in the window: the proof is the brain's line as the operator identified it, like every other operator phase's `## raw` evidence. A pinned proof needs a fixed log wording (tier, actor and tool) or a key source in the `brain_self_check` result, which is retirement R4 code (review log, open question 8: open, not yet put to Vince, for r14 or follow-up work; P14 does not wait on it). A tier of `VMC_API_KEY` or a scoped key fails P14 (D5). Record `service_commit: <12 hex>`, the plx_secondbrain commit the brain host serves: from `GET $BRAIN_URL/api/health` when the brain's own route reports one (retirement R4 gives the brain its own `/api/health` and does not say what it reports; VMC's route on the old host, B13, is not the brain's), else read by the operator from the brain host's deployed checkout; the acceptance requires it to be on plx_secondbrain `origin/main`.
 - **evidence template:**
   ```
   registered_name: plx-brain
   spec_revision: r<n>
   later_yes: yes P14, BRAIN_URL=<BRAIN_URL>[, D5 as r13]
-  later_yes_at: <UTC, when Vince gave that yes>
+  later_yes_at: <UTC, when Vince gave that yes; later than the header's r13_yes_at and round_10_done_at>
   d5_confirmed: D5 as r13
   d5_confirmed_at: <UTC, when Vince gave the yes that carried the phrase>
   d5_confirmed_in: <yes on r<n> | P14 later yes>
   brain_url: <BRAIN_URL>
   url: <BRAIN_URL>/api/vmc/knowledge/mcp
-  brain_host_live_at: <UTC, when brain_self_check first answered at BRAIN_URL (retirement R6a)>
-  service_commit: <12 hex of the plx_secondbrain main commit serving the route>
+  precheck_at: <UTC, step 2>
+  precheck: ok
+  brain_host_live_at: <UTC, the precheck_at of the first pre-check that answered (retirement R6a)>
+  team_mcp_plx_brain_before: none
+  service_commit: <12 hex of the plx_secondbrain main commit the brain host serves, step 6>
   key_kind: brain
-  key_name: BRAIN_API_KEY:<label the operator gave the key when it was issued>
+  key_name: BRAIN_API_KEY:<label the operator gave the key when it was issued; it never starts with brn_>
+  key_sha256_prefix: <first 12 hex of sha256 of the key value>
   registered_by: <email>
   registered_at: <UTC>
   brain_self_check: ok
+  self_check_log_at: <UTC, the brain's log line for the step-5 self-check>
+  self_check_key_tier: brain
   writes: brain_ingest, brain_propose_relation
   stdio_in_committed_mcp_json: no
   kill_switch: BRAIN_MCP_HTTP_ENABLED=0
+
+  ## raw
+  ### brain log line (step 6)
+  <the brain's log line for the step-5 self-check, as the brain wrote it; no key>
   ```
 - **rollback:** remove the server from the Team MCP list. In an emergency, set `BRAIN_MCP_HTTP_ENABLED=0` on the brain service's host. That disables brain HTTP MCP for every client.
 
@@ -1030,32 +1151,59 @@ Acceptance (P14):
 ```bash
 . "$TOOLS/accept.sh"; F=$PROOFS/brain-register.md
 for l in 'registered_name: plx-brain' 'brain_self_check: ok' 'stdio_in_committed_mcp_json: no' \
-         'writes: brain_ingest, brain_propose_relation' 'kill_switch: BRAIN_MCP_HTTP_ENABLED=0'; do line "$l" "$F"; done
+         'writes: brain_ingest, brain_propose_relation' 'kill_switch: BRAIN_MCP_HTTP_ENABLED=0' \
+         'precheck: ok' 'team_mcp_plx_brain_before: none' 'key_kind: brain' 'self_check_key_tier: brain'; do line "$l" "$F"; done
 case "$BRAIN_URL" in https://missioncontrol.tayloralton.com*) fail "BRAIN_URL is the old host (D14)" ;; https://?*) ;; *) fail "BRAIN_URL must be https" ;; esac
+SPEC=$(git -C "$PLX_MC_REPO" show origin/main:docs/specs/frontier-implementation-spec.md) || fail "spec on PLX_MC main"
+HDR=$(printf '%s\n' "$SPEC" | awk '/^```$/{n++; next} n==1'); n() { printf '%s\n' "$1" | sed -E 's/\.[0-9]+Z$/Z/'; }
+printf '%s\n' "$HDR" | grep -qE '^r13_yes: yes r13, D5 as r13 ' || fail "r13_yes is not recorded on PLX_MC main (SC-13)"
+printf '%s\n' "$HDR" | grep -qE '^round_10: done ' || fail "round 10 is not done on PLX_MC main (SC-13)"
+YES_AT=$(printf '%s\n' "$HDR" | sed -nE "s/^r13_yes_at: ($TS)$/\1/p"); [ -n "$YES_AT" ] || fail "r13_yes_at is missing from the header (SC-13)"
+# round_10_done_at lives in the execution copy (README). It must equal the time the round-10 text merged to main: the committer time of the first first-parent commit that carries the round_10 line.
+R10L=$(grep -E '^round_10: done ' "$SPEC_EXEC") || fail "round_10 is not done in the execution copy (SC-13)"
+printf '%s\n' "$HDR" | grep -qxF -- "$R10L" || fail "the execution copy's round_10 line is not the one on PLX_MC main now: an amendment changed it, so round_10_done_at must be set again from its merge (SC-13)"
+R10C=''; while read -r c; do T=$(git -C "$PLX_MC_REPO" show "$c:docs/specs/frontier-implementation-spec.md" 2>/dev/null) && printf '%s\n' "$T" | grep -qxF -- "$R10L" && { R10C=$c; break; }; done < <(git -C "$PLX_MC_REPO" log --first-parent --reverse --format=%H origin/main -- docs/specs/frontier-implementation-spec.md)
+[ -n "$R10C" ] || fail "no commit on PLX_MC main carries the execution copy's round_10 line: the round-10 text has not merged (SC-13)"
+R10_MERGED=$(TZ=UTC git -C "$PLX_MC_REPO" show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$R10C") || fail "commit time of $R10C"
+R10_AT=$(sed -nE "s/^round_10_done_at: ($TS) \(PR #[0-9]+.*\)$/\1/p" "$SPEC_EXEC"); [ -n "$R10_AT" ] || fail "round_10_done_at is not set in the execution copy (SC-13)"
+[ "$(n "$R10_AT")" = "$R10_MERGED" ] || fail "round_10_done_at ($R10_AT) is not the time the round-10 text merged to PLX_MC main ($R10_MERGED, $R10C)"
 rline 'spec_revision: r(1[3-9]|[2-9][0-9])' "$F"
 grep -qxF -e "later_yes: yes P14, BRAIN_URL=$BRAIN_URL" -e "later_yes: yes P14, BRAIN_URL=$BRAIN_URL, D5 as r13" "$F" || fail "later_yes must be Vince's P14 yes that names BRAIN_URL, with or without 'D5 as r13' (D14, D5)"
-rline "later_yes_at: $TS" "$F"
+rline "later_yes_at: $TS" "$F"; LY=$(sed -nE "s/^later_yes_at: ($TS)$/\1/p" "$F")
+[[ "$(n "$LY")" > "$(n "$YES_AT")" && "$(n "$LY")" > "$(n "$R10_AT")" ]] || fail "the P14 later yes predates the yes on r13 or round 10 (SC-13)"
 line 'd5_confirmed: D5 as r13' "$F"; rline "d5_confirmed_at: $TS" "$F"; rline 'd5_confirmed_in: (yes on r(1[3-9]|[2-9][0-9])|P14 later yes)' "$F"
-if grep -qxF 'd5_confirmed_in: P14 later yes' "$F"; then line "later_yes: yes P14, BRAIN_URL=$BRAIN_URL, D5 as r13" "$F"; fi
+if grep -qxF 'd5_confirmed_in: P14 later yes' "$F"; then line "later_yes: yes P14, BRAIN_URL=$BRAIN_URL, D5 as r13" "$F"; else
+  D5AT=$(printf '%s\n' "$HDR" | sed -nE "s/^d5_r13_yes: D5 as r13 \(in the yes on r13, ($TS)\)$/\1/p"); [ -n "$D5AT" ] || fail "the header does not record D5 as r13 in the yes on r13 (D5)"
+  line "d5_confirmed_at: $D5AT" "$F"; fi
 line "brain_url: $BRAIN_URL" "$F"; line "url: $BRAIN_URL/api/vmc/knowledge/mcp" "$F"
-rline "brain_host_live_at: $TS" "$F"; rline 'service_commit: [0-9a-f]{12}' "$F"
-line 'key_kind: brain' "$F"; rline 'key_name: BRAIN_API_KEY:[A-Za-z0-9_.-]+' "$F"
-! grep -qE 'VMC_API_KEY|VMC_SCOPED_API_KEYS|brn_[A-Za-z0-9]{5,}' "$F" || fail "a VMC key name or key material in the P14 evidence (D5)"
-rline 'registered_by: [^ ]+@[^ ]+' "$F"; rline "registered_at: $TS" "$F"
+rline "precheck_at: $TS" "$F"; rline "brain_host_live_at: $TS" "$F"
+rline 'service_commit: [0-9a-f]{12}' "$F"; SC=$(sed -nE 's/^service_commit: ([0-9a-f]{12})$/\1/p' "$F")
+git -C "$SECONDBRAIN_REPO" merge-base --is-ancestor "$SC" origin/main || fail "service_commit is not on plx_secondbrain main"
+rline 'key_name: BRAIN_API_KEY:[A-Za-z0-9_.-]+' "$F"; rline 'key_sha256_prefix: [0-9a-f]{12}' "$F"
+! grep -qE 'VMC_API_KEY|VMC_SCOPED_API_KEYS|brn_[A-Za-z0-9_-]{6,}' "$F" || fail "a VMC key name or key material in the P14 evidence (D5)"
+rline 'registered_by: [^ ]+@[^ ]+' "$F"; rline "registered_at: $TS" "$F"; rline "self_check_log_at: $TS" "$F"
+RA=$(sed -nE "s/^registered_at: ($TS)$/\1/p" "$F"); SL=$(sed -nE "s/^self_check_log_at: ($TS)$/\1/p" "$F")
+[[ "$(n "$SL")" > "$(n "$RA")" ]] || fail "the brain's self-check log line predates the registration (D5)"
+# The brain's log line (step 6). Retirement R4 fixes only that each request logs its key tier, so this pins no wording: it takes the lines pasted beneath
+# the step-6 heading under ## raw, requires one, rejects the placeholder, and rejects the VMC and scoped tier names (swarm docs/knowledge-os/KEY_TIERS.md).
+RAW=$(sed -n '/^## raw$/,$p' "$F"); LOGL=$(printf '%s\n' "$RAW" | awk '/^### brain log line \(step 6\)$/{p=1; next} /^###/{p=0} p && NF')
+[ -n "$LOGL" ] || fail "no brain log line beneath '### brain log line (step 6)' under ## raw (D5)"
+! printf '%s\n' "$LOGL" | grep -q '^<' || fail "the step-6 log line is still the template placeholder (D5)"
+! printf '%s\n' "$LOGL" | grep -qiE 'vmc_api_key|legacy|scoped|dept' || fail "the brain's log line names a VMC or scoped key tier (D5)"
 ! git -C "$SWARM_REPO" grep -q plx-brain -- .cursor/mcp.json .mcp.json || fail "plx-brain in swarm MCP config"
 ! git -C "$PORTAL_REPO" grep -q plx-brain -- .mcp.json .cursor/mcp.json.example || fail "plx-brain in portal MCP config"
 ```
 
 ### P15 — Audit the compliance merge-queue path
 
-- **gate:** first yes · **executor:** orchestrator (mechanical) for the code lines; a repo admin (operator) for the settings lines · **repo:** none (read-only)
-- **depends_on:** `[]`
+- **gate:** first yes for the r12 run. The r13 re-run waits for Vince's yes on r13 and round 10 (D13, SC-13): the yes is recorded in the header, and the re-run starts once `round_10_done_at` is set (the merge of the round-10 text) · **executor:** orchestrator (mechanical) for the code lines; a repo admin (operator) for the settings lines · **repo:** none (read-only)
+- **depends_on:** `[]` for the r12 run. For the r13 re-run: the header's `r13_yes`, `round_10` and `r13_yes_at` lines on PLX_MC `main`, and `round_10_done_at` in the execution copy, which the acceptance reads and checks against `main`; `audited_at` is later than `r13_yes_at` and `round_10_done_at`.
 - **owns:** `$PROOFS/merge-queue-audit.md`
 - **forbidden:** `.github/workflows/**`, `scripts/generate-compliance-gate.py`, `src/app/api/compliance/**`; ruleset changes; any PR; Jev globs
 - **deliverables:**
   - **Code lines (orchestrator):** record these, then release the slot.
     - The `on:` block and job id of portal `plx-mc-compliance.yml` and of the stopgap.
-    - `NAME_AND_PR_TRIGGER` from PLX_MC `scripts/generate-compliance-gate.py:58-63`, with its `pull_request` types (four since #255).
+    - `NAME_AND_PR_TRIGGER` from PLX_MC `scripts/generate-compliance-gate.py:58-63` (the same lines from `fc7ceef3d123` through `7f79712657e3`; the r13 re-run quotes them at its own `plx_mc_sha`), with its `pull_request` types (four since #255).
     - The `merge_group` triggers of `lint-typecheck-build` and `Validate ledgers`.
     - The TASK-2008 test in `ci-staged-gate.test.mjs:871-956`, and the import of `scripts/merge-group-prs.mjs` at `:20` with its test at `:958-980`.
     - The drift check's `GEN_SHA`.
@@ -1063,7 +1211,7 @@ rline 'registered_by: [^ ]+@[^ ]+' "$F"; rline "registered_at: $TS" "$F"
   - **Settings lines (admin):**
     - The required checks and "Require merge queue" state of ruleset `18632985`.
     - Org ruleset `18679471`: its rule type (for example `workflows`), the workflow path and ref it runs, and the branches it targets.
-    - The `prd` field of buckets `BKT-INFRA` and `BKT-PROD`. Read it with `mc_get_context { depth: "full" }`, which returns full bucket rows (`mc_list_buckets` omits `prd`). Paste the two raw rows under `## raw`.
+    - The `prd` field of buckets `BKT-INFRA` and `BKT-PROD`. Read it with `mc_get_context { depth: "full" }`, which returns full bucket rows (`mc_list_buckets` omits `prd`). Paste the two raw rows under `## raw`. Write `present` only when the value is an http(s) URL: since #263 (TASK-2112, 29 Sep 2026) the gate counts nothing else as a PRD (F17, D11); the rows the r12 run read hold GitHub URLs.
 - **evidence template (`merge-queue-audit.md`):** quotes go under `## raw`.
   ```
   job_id: compliance
@@ -1084,12 +1232,17 @@ rline 'registered_by: [^ ]+@[^ ]+' "$F"; rline "registered_at: $TS" "$F"
   last_run_auth: <oidc|bearer|bearer-fallback|skipped>
   gate_pr_types: opened, synchronize, reopened, edited
   pr255: merged f6d2bab7670a
+  pr255_deployed: yes
+  pr255_deployed_source: gate0.md (GitHub deployment 6721728347, 2026-09-28T22:11:43Z)
+  spec_revision: r<n>
+  plx_mc_sha: <40 hex of the PLX_MC main commit audited; fc7ceef3d123 or a descendant>
+  audited_at: <UTC>
   code_edit: no
   pr: none
   ```
     - Whether the portal secret `COMPLIANCE_CI_TOKEN` exists (name only).
     - Which auth path the latest `plx-mc-compliance` run used, from its `auth=` log line: `oidc`, `bearer`, or `bearer-fallback`; `skipped` when the run logged "compliance gate skipped".
-- **#255 (D13):** record `pr255: merged f6d2bab7670a` (F24) and the generator's `pull_request` types (`gate_pr_types`). An r12 run of P15 does not satisfy r13. P15 runs again under r13 before P16 starts. The r12 run has no `gate_pr_types` line, so it fails the acceptance below whatever it recorded for `pr255`, and the P16 PLX_MC acceptance reads both r13 lines from `merge-queue-audit.md`.
+- **#255 (D13):** record `pr255: merged f6d2bab7670a` (F24) and the generator's `pull_request` types (`gate_pr_types`). An r12 run of P15 does not satisfy r13. P15 runs again under r13 before P16 starts. The r12 run has no `gate_pr_types` line, so it fails the acceptance below whatever it recorded for `pr255`, and the P16 PLX_MC acceptance reads both r13 lines from `merge-queue-audit.md`. The re-run also records `spec_revision: r<n>` (n ≥ 13), `plx_mc_sha` (the PLX_MC `main` commit it audited: `fc7ceef3d123` or a descendant) and `audited_at`, later than the header's `r13_yes_at` and `round_10_done_at`, and it quotes `NAME_AND_PR_TRIGGER` verbatim under `## raw` (`scripts/generate-compliance-gate.py:58-63` at `plx_mc_sha`). It records `pr255_deployed: yes` with the orchestrator's `gate0.md` as its source, the record of the #255 production deploy (GitHub deployment 6721728347, 2026-09-28T22:11:43Z; F24): `pr255_deployed_source: gate0.md (GitHub deployment 6721728347, 2026-09-28T22:11:43Z)`, as Vince chose on 2026-09-29T19:55:37Z (the draft's section-16 item 5). The acceptance reads those lines, checks that `plx_mc_sha` is on PLX_MC `main` (an unmerged descendant of `fc7ceef3d123` fails), reads the generator at `plx_mc_sha` for the four types, and reads the header from the spec on PLX_MC `main` and `round_10_done_at` from the execution copy (checked against `main`), so an r12 file with two lines appended cannot pass.
 
 Acceptance (P15):
 ```bash
@@ -1105,33 +1258,56 @@ rline 'compliance_ci_token: (present|absent)' "$F"; rline 'last_run_auth: (oidc|
 rline 'gen_sha: [0-9a-f]{40}' "$F"
 line 'pr255: merged f6d2bab7670a' "$F"
 line 'gate_pr_types: opened, synchronize, reopened, edited' "$F"
+line 'pr255_deployed: yes' "$F"; line 'pr255_deployed_source: gate0.md (GitHub deployment 6721728347, 2026-09-28T22:11:43Z)' "$F"
+rline 'spec_revision: r(1[3-9]|[2-9][0-9])' "$F"; rline 'plx_mc_sha: [0-9a-f]{40}' "$F"; rline "audited_at: $TS" "$F"
+SHA=$(sed -nE 's/^plx_mc_sha: ([0-9a-f]{40})$/\1/p' "$F")
+git -C "$PLX_MC_REPO" merge-base --is-ancestor "$SHA" origin/main || fail "plx_mc_sha is not on PLX_MC main: the audit read an unmerged commit (D13)"
+git -C "$PLX_MC_REPO" merge-base --is-ancestor fc7ceef3d123 "$SHA" || fail "the audited PLX_MC main predates #255 (D13)"
+G=$(git -C "$PLX_MC_REPO" show "$SHA:scripts/generate-compliance-gate.py") || fail "generator at plx_mc_sha"
+printf '%s\n' "$G" | grep -qF 'types: [opened, synchronize, reopened, edited]' || fail "the generator at plx_mc_sha lacks the four types (F24)"
+RAW=$(sed -n '/^## raw$/,$p' "$F"); printf '%s\n' "$RAW" | grep -qF 'reopened, edited]' || fail "no raw quote of NAME_AND_PR_TRIGGER (D13)"
+SPEC=$(git -C "$PLX_MC_REPO" show origin/main:docs/specs/frontier-implementation-spec.md) || fail "spec on PLX_MC main"
+HDR=$(printf '%s\n' "$SPEC" | awk '/^```$/{n++; next} n==1'); n() { printf '%s\n' "$1" | sed -E 's/\.[0-9]+Z$/Z/'; }
+printf '%s\n' "$HDR" | grep -qE '^r13_yes: yes r13, D5 as r13 ' || fail "r13_yes is not recorded on PLX_MC main (SC-13)"
+printf '%s\n' "$HDR" | grep -qE '^round_10: done ' || fail "round 10 is not done on PLX_MC main (SC-13)"
+YES_AT=$(printf '%s\n' "$HDR" | sed -nE "s/^r13_yes_at: ($TS)$/\1/p"); [ -n "$YES_AT" ] || fail "r13_yes_at is missing from the header (SC-13)"
+# round_10_done_at lives in the execution copy (README). It must equal the time the round-10 text merged to main: the committer time of the first first-parent commit that carries the round_10 line.
+R10L=$(grep -E '^round_10: done ' "$SPEC_EXEC") || fail "round_10 is not done in the execution copy (SC-13)"
+printf '%s\n' "$HDR" | grep -qxF -- "$R10L" || fail "the execution copy's round_10 line is not the one on PLX_MC main now: an amendment changed it, so round_10_done_at must be set again from its merge (SC-13)"
+R10C=''; while read -r c; do T=$(git -C "$PLX_MC_REPO" show "$c:docs/specs/frontier-implementation-spec.md" 2>/dev/null) && printf '%s\n' "$T" | grep -qxF -- "$R10L" && { R10C=$c; break; }; done < <(git -C "$PLX_MC_REPO" log --first-parent --reverse --format=%H origin/main -- docs/specs/frontier-implementation-spec.md)
+[ -n "$R10C" ] || fail "no commit on PLX_MC main carries the execution copy's round_10 line: the round-10 text has not merged (SC-13)"
+R10_MERGED=$(TZ=UTC git -C "$PLX_MC_REPO" show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$R10C") || fail "commit time of $R10C"
+R10_AT=$(sed -nE "s/^round_10_done_at: ($TS) \(PR #[0-9]+.*\)$/\1/p" "$SPEC_EXEC"); [ -n "$R10_AT" ] || fail "round_10_done_at is not set in the execution copy (SC-13)"
+[ "$(n "$R10_AT")" = "$R10_MERGED" ] || fail "round_10_done_at ($R10_AT) is not the time the round-10 text merged to PLX_MC main ($R10_MERGED, $R10C)"
+AT=$(sed -nE "s/^audited_at: ($TS)$/\1/p" "$F")
+[[ "$(n "$AT")" > "$(n "$YES_AT")" && "$(n "$AT")" > "$(n "$R10_AT")" ]] || fail "the P15 re-run predates the yes on r13 or round 10 (SC-13)"
 ```
 
 ### P16 — merge_group in the compliance generator and verify service
 
 - **gate:** later yes · **executor:** orchestrator (builder) · **repos:** `petralabx/PLX_MC` base `main` first, then `petralabx/plx-customer-portal` base `staging`. Two MC tasks, two PRs. **Tier:** high; both PRs touch `.github/workflows/`.
-- **depends_on:** `[P15]` run under r13 (an r12 run does not satisfy r13; the PLX_MC acceptance reads P15's r13 lines), plus a bucket PRD `present` for each half's bucket (D11: `BKT-INFRA` for PLX_MC, `BKT-PROD` for portal), plus D13 (#255 merged; this half runs under r13 or later, after Vince's yes on r13 and round 10). The PLX_MC half never runs at the same time as P4. The portal half starts, and checks out, only after the PLX_MC PR is merged and deployed (8-hour rule), and only after the P8 and P10 portal PRs have merged (`cap: met repo: petralabx/plx-customer-portal` in `guide-trim.md`; D13).
+- **depends_on:** `[P15]` run under r13 (an r12 run does not satisfy r13; the PLX_MC acceptance reads P15's r13 lines), plus a bucket PRD `present` for each half's bucket (D11: `BKT-INFRA` for PLX_MC, `BKT-PROD` for portal), plus D13 (#255 merged; this half runs under r13 or later, after Vince's yes on r13 and round 10 (the yes recorded in the header; `round_10_done_at` set when the round-10 text merges), and after the later yes that names P16, given after `round_10_done_at` and recorded in `merge-group.md` as `later_yes` and `later_yes_at`; SC-13). The PLX_MC half never runs at the same time as P4. The portal half starts, and checks out, only after the PLX_MC PR is merged and deployed (8-hour rule), and only after the P8 and P10 portal PRs have merged (`cap: met repo: petralabx/plx-customer-portal` in `guide-trim.md` shows that P10 portal's acceptance passed on its PR head; the merge shows in `staging` itself, and this half's acceptance re-runs the cap and slice checks on a branch from `staging`, so an unmerged P10 fails them; D13). Vince confirmed this on 2026-09-29T19:55:37Z (round 10, open question 2: "wait for P10"): there is no after-P8-alone path. If P10 does not run for the portal (`canary: fail`, D8, or Vince declines it), the portal half stays blocked until Vince decides again.
 - **PLX_MC PR (D4):**
   - **Generator:**
-    - `NAME_AND_PR_TRIGGER` adds `merge_group:` with `types: [checks_requested]` and no `paths` filter, beside the existing `pull_request` types, which stay `[opened, synchronize, reopened, edited]` (#255; `tests/test_generate_compliance_gate.py:49-55` pins that exact list).
+    - `NAME_AND_PR_TRIGGER` adds `merge_group:` with `types: [checks_requested]` and no `paths` filter, beside the existing `pull_request` types, which stay `[opened, synchronize, reopened, edited]` (#255; `tests/test_generate_compliance_gate.py:49-55` pins that exact list, at `fc7ceef3d123` and unchanged through `7f79712657e3`).
     - The downstream job keeps id `compliance` and branches inside its shell on `$GITHUB_EVENT_NAME`. The `pull_request` branch stays the same.
     - The `merge_group` branch gets `GH_TOKEN: ${{ github.token }}`. It parses `N` from `github.event.merge_group.head_ref` (`gh-readonly-queue/<base>/pr-<N>-<sha>`). With `gh api`, inline, and no repo-local script, it reads PR `N`'s body, head SHA, labels, and changed files. It extracts the `MC-Checkout` lines and posts the existing verify payload plus `event: "merge_group"`, with `prNumber: N` and PR `N`'s head SHA.
     - When it cannot parse `N` or read the PR, it prints `merge_group: could not resolve the pull request` and joins the existing block-verdict path, which exits 1 in hard mode and prints the soft-mode notice and exits through the existing soft-mode exit otherwise. It adds no new exit.
   - **Regenerate:** regenerate PLX_MC's own `.github/workflows/compliance-gate.yml`, so `generate-compliance-gate.py --check` passes. The trigger stays inert in PLX_MC, which has no queue.
   - **Verify route:**
     - `src/app/api/compliance/verify/route.ts` accepts an optional body field `event: z.enum(["pull_request", "merge_group"]).optional()`, with no zod default, so a body without `event` is forwarded unchanged. `verifyPr` treats a missing `event` as `pull_request`.
-    - For OIDC it requires `event` to equal `claims.eventName`; a missing `event` counts as `pull_request`, and a null `eventName` claim keeps today's behavior (`route.ts:88-90`).
+    - For OIDC it requires `event` to equal `claims.eventName`. A missing `event` counts as `pull_request`. A null `eventName` claim keeps today's behavior for `pull_request` (`route.ts:88-90` at `7f79712657e3`, unchanged since `fc7ceef3d123`) and never enters `merge_group` mode: with `event: "merge_group"` and no claim, the binding fails, because null matches nothing (round-3 nit 8, closed in round 10).
     - For `merge_group` it requires `ref` to match `^refs/heads/gh-readonly-queue/[^/]+/pr-(\d+)-[0-9a-f]+$`, with that number equal to `body.prNumber`, plus the existing repo and workflow binding.
     - `pull_request` binding does not change.
     - Bearer (`COMPLIANCE_CI_TOKEN`) requests keep today's rule: the body is trusted, including `event`. This is safe because merge-group mode only re-confirms a stamp that already passed on the same head.
-  - **Service:** `verifyPr` takes `event`. For `merge_group`, it resolves each stamp with a queue resolver, not `prDispatchResolver`: `resolveDispatch` first (`service.ts:113-125`: unknown, revoked, released, repo mismatch, expired); on `expired` only, it accepts the stamp when `eventTaskIdByDedupKey(gateDedupKey(repo, prNumber, headSha, taskId, "pass"))` returns that task (the `resolveDispatchForMerge` rule, `:169-180`), else it blocks. It never calls `loadPrState` in `merge_group` mode. `pull_request` resolution does not change: it keeps #255's `prDispatchResolver` (F11).
-  - **Tests:** add cases, failing first. Route cases go in `tests/compliance-verify-route.test.ts`. Service cases go in a new `tests/compliance-merge-group.test.ts`, using the mocks of `tests/compliance-server.test.ts:10-104` (they already include `eventTaskIdByDedupKey` and a `loadPrState` mock, so the string `loadPrState` is in the new file before any case asserts on it). Every new test name contains `merge_group`. Put it, and the two fixed titles below, in the `it` title itself, not only in a `describe` title: the acceptance reads the last ` > ` segment of each `npx vitest list` line, so a `describe` titled `merge_group` does not count. A grep of the file text proves nothing here:
+  - **Service:** `verifyPr` takes `event`, so `VerifyPrInput` (`service.ts:357-367` at `7f79712657e3`; every line in this bullet is at that ref, PLX_MC `main` after #262 and #263) gains `event?: "pull_request" | "merge_group"`; `verifyPrOrQueue` queues the whole input (`:1041-1054`), so a replay verifies in the same mode. For `merge_group`, it resolves each stamp with a queue resolver, not `prDispatchResolver`: `resolveDispatch` first (`:141-153`: `unknown_checkout`, `revoked`, `released`, `repo_mismatch`, `expired`, in that order); on `expired` only, it accepts the stamp when `eventTaskIdByDedupKey(gateDedupKey(repo, prNumber, headSha, taskId, "pass"))` returns that task (the `resolveDispatchForMerge` rule, `:198-209`), else it blocks with reason `expired`. It never calls `loadPrState` in `merge_group` mode. The queue resolver returns the same `CheckoutBlockReason` values as `resolveDispatch`, and `verifyPr`'s loop turns each into its text through `checkoutBlockReason` (#262, TASK-2111: `CHECKOUT_BLOCK_TEXT`, `:108-134`; the loop, `:471-477`), so a released stamp blocks as `checkout released — re-checkout the task`; the loop's own checks after resolution, a missing task (`task_deleted`) and a `verified` task (`task_closed`), apply in both modes unchanged. `pull_request` resolution does not change: it keeps #255's `prDispatchResolver` (`:177-187`; F11). A `merge_group` verdict replaces the check row for that head and task, because `checkId` is the same in both modes (`:68-70`) and `recordCheck` upserts on it (`repo.ts:340-348`, unchanged since `fc7ceef3d123`); the gate event deduplicates on the pass key (`gateDedupKey`, `:191-193`), so the prior-pass lookup still works.
+  - **Tests:** add cases, failing first. Route cases go in `tests/compliance-verify-route.test.ts`. Service cases go in a new `tests/compliance-merge-group.test.ts`, using the mocks of `tests/compliance-server.test.ts:10-142` at `7f79712657e3` (the `github` and `db` hoists, the four `vi.mock` factories, `taskish` and the root `beforeEach`; `:10-137` at `fc7ceef3d123`, before #262 and #263; P4 also edits that file's repo factory and may run first, and compliance code was still changing on 29 Sep 2026, so every line cited here is at `7f79712657e3`, the symbol names hold when lines move, and P16 re-checks them at the code of the day before it starts, facts preamble). They already include `eventTaskIdByDedupKey` and a `loadPrState` mock, so the string `loadPrState` is in the new file before any case asserts on it. Every new test name contains `merge_group`. Put it, and the two fixed titles below, in the `it` title itself, not only in a `describe` title: the acceptance reads the last ` > ` segment of each `npx vitest list` line, the `it` title, so a `describe` titled `merge_group` does not count, and a grep of the file text proves nothing here:
     - an OIDC `merge_group` with a matching `pr-N` passes the binding; a mismatched `N` fails
-    - `event` must match the claim
-    - `merge_group: an expired stamp with a prior pass on the same head passes without loadPrState`, this exact title. The prior pass is an entry in the mock's `db.dedupKeys` equal to the gate's dedup key for that repo, PR, head, task and `pass` (`gateDedupKey`, `service.ts:162-164`; the mock `eventTaskIdByDedupKey` at `tests/compliance-server.test.ts:41-43` answers `TASK-900` for any key present, so the stamp's task is `TASK-900`). The case asserts verdict `pass` and `expect(github.loadPrState).not.toHaveBeenCalled()`, the idiom of `tests/compliance-server.test.ts:186,192`.
-    - `merge_group: an expired stamp with no prior pass blocks without loadPrState`, this exact title. The `loadPrState` mock resolves `{ open: true, checkoutIds: [<the stamp>] }`, as the copied `beforeEach` (`:128-137`) does for `dsp_old`, so a resolver that fell through to `prDispatchResolver` (`service.ts:148-158`) would pass the stamp and fail this case. The case asserts verdict `block` and `expect(github.loadPrState).not.toHaveBeenCalled()`.
-    - a released stamp blocks in `merge_group` with reason `released`
-    - `pull_request` with an expired stamp keeps #255's rule: it passes when `loadPrState` says the PR is open and carries the stamp, and blocks when the PR is closed or the stamp is not in the body (`tests/compliance-server.test.ts:139-251` pins this; the new case shows that `merge_group` support did not change it)
+    - `event` must match the claim; an OIDC token with no `event_name` claim and `event: "merge_group"` fails the binding (nit 8)
+    - `merge_group: an expired stamp with a prior pass on the same head passes without loadPrState`, this exact title. The prior pass is an entry in the mock's `db.dedupKeys` equal to the gate's dedup key for that repo, PR, head, task and `pass` (`gateDedupKey`, `service.ts:191-193` at `7f79712657e3`; the mock `eventTaskIdByDedupKey` at `tests/compliance-server.test.ts:42-44`, at `7f79712657e3`, answers `TASK-900` for any key present, so the stamp's task is `TASK-900`). The case asserts verdict `pass` and `expect(github.loadPrState).not.toHaveBeenCalled()`, the idiom of the TASK-2011 `describe` in `tests/compliance-server.test.ts` (`:196,202` at `7f79712657e3`).
+    - `merge_group: an expired stamp with no prior pass blocks without loadPrState`, this exact title. The `loadPrState` mock resolves `{ open: true, checkoutIds: [<the stamp>] }`, as the copied root `beforeEach` (`:130-142` at `7f79712657e3`) does for `dsp_old`, so a resolver that fell through to `prDispatchResolver` (`service.ts:177-187`) would pass the stamp and fail this case. The case asserts verdict `block` and `expect(github.loadPrState).not.toHaveBeenCalled()`.
+    - a released stamp blocks in `merge_group` (its `it` title contains `merge_group`): the case sets `releasedAt` on an unexpired stamp and asserts that `tasks[0].reasons` equals `["checkout released — re-checkout the task"]`, the text `checkoutBlockReason("released")` gives since #262 (`CHECKOUT_BLOCK_TEXT`, `service.ts:120-130` at `7f79712657e3`; the TASK-2011 case `blocks released unexpired checkouts without a GitHub read`, `tests/compliance-server.test.ts:199-203`, asserts the same text), not the bare word `released`, which #262 removed from the verdict, and that `loadPrState` was not called
+    - `pull_request` with an expired stamp keeps #255's rule: it passes when `loadPrState` says the PR is open and carries the stamp, and blocks when the PR is closed or the stamp is not in the body (the TASK-2011 `describe`, `tests/compliance-server.test.ts:144-274` at `7f79712657e3`, pins this; the new case shows that `merge_group` support did not change it; its `it` title also contains `merge_group`, for example `merge_group support leaves the pull_request expiry rule unchanged`, so it counts toward the title floor, round-2 nit 8)
 
     Extend `tests/test_generate_compliance_gate.py` for the new trigger; keep `test_pull_request_trigger_includes_edited_so_stamp_edits_rerun_gate` (`:49-55`).
   - After CIP lands the PR, the operator confirms that `mc.plxcustomer.io` deployed it.
@@ -1143,18 +1319,18 @@ line 'gate_pr_types: opened, synchronize, reopened, edited' "$F"
     - In `required` (`:872-877`), re-point `["compliance-merge-group.yml", "compliance"]` to `["plx-mc-compliance.yml", "compliance"]`. Keep the `workbench-api.yml` row.
     - Invert `assert.doesNotMatch(activeLines(generated), /merge_group/, …)` (`:892-896`) into `assert.match(activeLines(triggerSection(generated)), /merge_group:/)`.
     - Replace the `queueTrigger` block (`:898-905`) with an assertion that `compliance-merge-group.yml` does not exist (`existsSync` is imported at `:16`).
-    - Replace the five `compliance` stopgap assertions (`:927-932`) with three on `generated`: `/github\.event\.merge_group\.head_ref/`, `/MC-Checkout: dsp_/`, and `/gh api/`.
+    - Replace the five `compliance` stopgap assertions (`:927-932`) with three lines on `generated`: `assert.match(generated, /github\.event\.merge_group\.head_ref/);`, `assert.match(generated, /MC-Checkout: dsp_/);` and `assert.match(generated, /gh api/);`.
     - In `protection`, re-point `/1339f1196d4e56377953fb90d41f2238402e8750/` (`:943`) to the new `GEN_SHA` and `/compliance-merge-group\.yml/` (`:945`) to `/plx-mc-compliance\.yml/`.
-    - Leave every other assertion (the `ci.yml` preflight and build checks, ledger, the other runbook lines, and `autoMerge`, `:949-955`) unchanged. Leave the import at `:20` and the test at `:958-980` unchanged: `scripts/merge-group-prs.mjs` stays, as dead code, until a later cleanup removes both together (F10).
-  - Update `docs/runbooks/BRANCH-PROTECTION-STAGING.md` (the merge-queue section `:305-385` at `2b656d8adf33`: the table row `:312`, the paragraph `:316-327`, the `max_entries_to_merge` row `:346`, the PLX_MC dependency list `:360-385`, and `GEN_SHA` at `:378`) and the "Merge queue (TASK-2008)" section of `.cursor/rules/auto-merge-after-push.mdc` (`:125-144`), so neither names `compliance-merge-group` any more. Keep the `/merge_group/` mention that the CI test pins, and keep it outside the "Current set" table (`:83-92`), which that test requires to stay free of `merge_group`. The generated job verifies only PR `N` from the queue ref, so the runbook must say that `max_entries_to_merge` stays 1 and `grouping_strategy` stays `ALLGREEN`, and must drop the line "The compliance job still resolves every PR if this is raised later".
-  - **`edited` lines (D13):** in `.cursor/rules/mc-compliance.mdc`, or in the rule P10 moved them to, rewrite the restamp item that says a body-only edit does not re-run the gate, that the generated workflow "still triggers only on opened/synchronize/reopened", and "Do not add `edited` in this repo" (`:128-131` at `2b656d8adf33`), and the paragraph that says the workflow "triggers on `pull_request: [opened, synchronize, reopened]`" and tells the agent to push an empty commit (`:301-309`). After this PR the generated file triggers on `opened, synchronize, reopened, edited` and on `merge_group`, so say that a body edit re-runs the gate and that nobody hand-edits `.github/workflows/*compliance*`. Change no other line of that rule; P8 (D12) and P10 own the rest. The rewrite stays within P10's caps and keeps every needle and P8's carrier rule: the slice `.cursor/rules/mc-compliance.mdc` stays at or under 2457 bytes, `measure.py --check-caps --check-needles` still passes, and every rule this PR edits still passes `carrier` where P10 required it. The acceptance re-runs those checks.
+    - Leave every other assertion (the `ci.yml` preflight and build checks, ledger, the other runbook lines, and `autoMerge`, `:949-955`) unchanged. Leave the import at `:20` and the test at `:958-980` unchanged: `scripts/merge-group-prs.mjs` stays, as dead code, until a later cleanup removes both together (F10). The acceptance pins 33 fragments of the assertions that must survive (the three unchanged `required` rows `:873` and `:875-876`, the loop `:878-887`, `:891`, `:897`, `:907-925`, `:933-934`, `:936-942`, `:944`, `:946-955`; not `:874`, `:943` or `:945`, which the edit re-points), each unique in the file at `2b656d8adf33` (anchored to its `preflight`, `protection` or `autoMerge` subject where the regex alone repeats), and seven fragments this edit writes (the re-pointed row, the inverted trigger assertion, the three lines on `generated`, and the two re-pointed `protection` pins: the new `GEN_SHA` and `/plx-mc-compliance\.yml/`); it rejects the stopgap row, `queueTrigger`, `/gh pr view/` and the old `GEN_SHA`. So deleting a surviving assertion, or skipping part of the edit, fails the check.
+  - Update `docs/runbooks/BRANCH-PROTECTION-STAGING.md` (the merge-queue section `:305-385` at `2b656d8adf33`: the table row `:312`, the paragraph `:316-327`, the `merge_method` row `:344`, whose "which compliance uses to find every PR in the group" is false after this PR (keep the word `Squash`, which `ci-staged-gate.test.mjs:938` pins), the `max_entries_to_merge` row `:346`, the PLX_MC dependency list `:360-385`, and `GEN_SHA` at `:378`) and the "Merge queue (TASK-2008)" section of `.cursor/rules/auto-merge-after-push.mdc` (`:125-144` at `2b656d8adf33`: its three paragraphs; the rationale paragraph at `:146` follows), so neither names `compliance-merge-group` any more; that section's `:127` says "The three required checks also run on `merge_group`", and there are four since TASK-2037 (`workbench-api`; the Current set table `:85-92`), so write four (round-3 nit 12, closed in round 10). Keep the `/merge_group/` mention that the CI test pins, and keep it outside the "Current set" table (`:83-92`), which that test requires to stay free of `merge_group`. The generated job verifies only PR `N` from the queue ref, so the runbook must say that `max_entries_to_merge` stays 1 and `grouping_strategy` stays `ALLGREEN`, and must drop the line "The compliance job still resolves every PR if this is raised later".
+  - **`edited` lines (D13):** in `.cursor/rules/mc-compliance.mdc`, or in the rule P10 moved them to, rewrite the restamp item that says a body-only edit does not re-run the gate, that the generated workflow "still triggers only on opened/synchronize/reopened", and "Do not add `edited` in this repo" (`:128-131` at `2b656d8adf33`), and the paragraph that says the workflow "triggers on `pull_request: [opened, synchronize, reopened]`" and tells the agent to push an empty commit (`:301-309`). After this PR the generated file triggers on `opened, synchronize, reopened, edited` and on `merge_group`, so write the fixed line "A body edit re-runs the gate (`edited`)." in the rule, drop the instruction to push an empty commit, and say that nobody hand-edits `.github/workflows/*compliance*`; the acceptance requires that fixed line and rejects the old wording in any form, reading each rule with its whitespace squeezed so that a phrase wrapped across lines counts. It rejects, in every tracked rule, as r13 did, because only `mc-compliance.mdc` carries them today and P10 may move them: the trigger-list wording (the three-type list; `opened/synchronize/reopened` in any spelling, with or without spaces or a line break at a slash, and also when `/edited` follows it, so name the four types, if at all, as the generated file does: `opened, synchronize, reopened, edited`; a bracket trigger list without `edited`) and the sentence "A body-only edit does not re-run the gate" (`:128` at `2b656d8adf33`; false once the regenerated file carries `edited`; the landing edit of 29 Sep 2026 added this rejection); it rejects the empty-commit wording (`empty commit`, `commit (empty`, `empty is fine`) only in the rule this PR edits: `mc-compliance.mdc` and any rule that carries the fixed line. Portal `pr-watch-until-green.mdc:49-50` says "push a commit (empty is fine)"; that rule is not this PR's, and correcting it is follow-up work (Risks; round 10, open question 7). In the same PR, delete the sentence "Until TASK-2011 is live, the Hub may still block an expired stamp; do not restamp ahead of that verdict." (`mc-compliance.mdc:137-139` at `2b656d8adf33`, or the rule P10 moved it to): TASK-2011 is #255, merged and deployed (F24), so the sentence is stale. Delete only that sentence; `:134-137` describe #255 and stay. Vince accepted this edit on 2026-09-29T19:55:37Z (the draft's section-16 item 2), and the acceptance rejects `Until TASK-2011 is live` in every tracked rule, whitespace squeezed. Change no other line of `mc-compliance.mdc`; P8 (D12) and P10 own the rest. The rewrite stays within P10's caps and keeps every needle and P8's carrier rule: the slice `.cursor/rules/mc-compliance.mdc` stays at or under 2457 bytes, `measure.py --check-caps --check-needles` still passes, and every rule this PR edits still passes `carrier` where P10 required it. The acceptance re-runs those checks.
   - If P15 recorded that org ruleset `18679471` runs PLX_MC `compliance-gate.yml` on the portal's `staging`, that org workflow also gains `merge_group` from the regenerated canonical file. Both call the same verify service with the same payload. Record this in `merge-group.md` as `org_workflow_on_staging: yes`; otherwise record `no`.
   - `COMPLIANCE_MODE` does not change. The unset-`PLX_MC_BASE_URL` branch does not change. Add no `continue-on-error`, no job-level `if:`, and no new `exit 0`.
   - Other consumers keep their pinned `GEN_SHA` and do not change.
 - **owns:**
-  - PLX_MC: `scripts/generate-compliance-gate.py`, `.github/workflows/compliance-gate.yml`, `docs/modules/compliance/README.md` (the verify and merge-queue sections only), `src/app/api/compliance/verify/route.ts`, `src/lib/compliance/service.ts` (`verifyPr` and stamp resolution only), `tests/compliance-verify-route.test.ts`, `tests/compliance-merge-group.test.ts` (new), `tests/test_generate_compliance_gate.py`
-  - evidence: `$PROOFS/merge-group.md` with `pr255: merged f6d2bab7670a`, `spec_revision: r<n>` (n ≥ 13), `failing_first: <sha> fail`, `pr_plx_mc: <URL>`, `deployed_sha: <12 hex>`, `pr_portal: <URL>`, and the D11 confirmation read by Vince: `bucket_prd_confirmed: BKT-INFRA present` and `bucket_prd_confirmed: BKT-PROD present`
-  - portal: `.github/workflows/plx-mc-compliance.yml`, `.github/workflows/compliance-gate-drift.yml`, `.github/workflows/compliance-merge-group.yml` (delete), `scripts/ci-staged-gate.test.mjs` (the TASK-2008 test only), `docs/runbooks/BRANCH-PROTECTION-STAGING.md`, `.cursor/rules/auto-merge-after-push.mdc`, `.cursor/rules/mc-compliance.mdc` (the `edited` and trigger-type lines only, D13; or the rule P10 moved them to). Not owned: `scripts/merge-group-prs.mjs` stays, because `scripts/ci-staged-gate.test.mjs:20` imports it (F10).
+  - PLX_MC: `scripts/generate-compliance-gate.py`, `.github/workflows/compliance-gate.yml`, `docs/modules/compliance/README.md` (the verify and merge-queue sections only), `src/app/api/compliance/verify/route.ts`, `src/lib/compliance/service.ts` (`verifyPr`, its `VerifyPrInput` type and stamp resolution only; r13 named `verifyPr` and stamp resolution and required `verifyPr` to take `event`, which changes that type, so round 10 named the type here: an `owns` change that Vince confirmed under the yes on r13 at 2026-09-29T19:54:30Z, review log open questions 6 and 9), `tests/compliance-verify-route.test.ts`, `tests/compliance-merge-group.test.ts` (new), `tests/test_generate_compliance_gate.py`
+  - evidence: `$PROOFS/merge-group.md` with `pr255: merged f6d2bab7670a`, `spec_revision: r<n>` (n ≥ 13), `later_yes: yes P16` in Vince's words and `later_yes_at: <UTC>` (later than the header's `r13_yes_at` and `round_10_done_at`), `failing_first: <sha> fail`, `pr_plx_mc: <URL>`, `deployed_sha: <12 hex>`, `pr_portal: <URL>`, and the D11 confirmation read by Vince: `bucket_prd_confirmed: BKT-INFRA present` and `bucket_prd_confirmed: BKT-PROD present`
+  - portal: `.github/workflows/plx-mc-compliance.yml`, `.github/workflows/compliance-gate-drift.yml`, `.github/workflows/compliance-merge-group.yml` (delete), `scripts/ci-staged-gate.test.mjs` (the TASK-2008 test only), `docs/runbooks/BRANCH-PROTECTION-STAGING.md`, `.cursor/rules/auto-merge-after-push.mdc`, `.cursor/rules/mc-compliance.mdc` (the `edited` and trigger-type lines and the "Until TASK-2011 is live" sentence only, D13; or the rule P10 moved them to). Not owned: `scripts/merge-group-prs.mjs` stays, because `scripts/ci-staged-gate.test.mjs:20` imports it (F10).
 - **forbidden:** `checkout()` in `service.ts`, `src/lib/compliance/verify.ts`, `src/lib/compliance/risk.ts`, any ruleset, other consumers' workflows, `plugins/**`, Jev globs
 - **live proof:** none in this plan. `merge_group` events fire only after a repo admin turns on the queue, which is outside this plan (SC-10). The admin's first queued PR is the live proof.
 - **rollback:** revert the portal PR first. That restores the stopgap, its test, and the old `GEN_SHA`. Then revert the PLX_MC PR and redeploy. Never mark `compliance` optional.
@@ -1167,6 +1343,24 @@ line 'gate_pr_types: opened, synchronize, reopened, edited' "$PROOFS/merge-queue
 line 'pr255: merged f6d2bab7670a' "$PROOFS/merge-queue-audit.md"
 line 'pr255: merged f6d2bab7670a' "$PROOFS/merge-group.md"
 rline 'spec_revision: r(1[3-9]|[2-9][0-9])' "$PROOFS/merge-group.md"
+rline 'spec_revision: r(1[3-9]|[2-9][0-9])' "$PROOFS/merge-queue-audit.md"
+SPEC=$(git -C "$PLX_MC_REPO" show origin/main:docs/specs/frontier-implementation-spec.md) || fail "spec on PLX_MC main"
+HDR=$(printf '%s\n' "$SPEC" | awk '/^```$/{n++; next} n==1'); n() { printf '%s\n' "$1" | sed -E 's/\.[0-9]+Z$/Z/'; }
+printf '%s\n' "$HDR" | grep -qE '^r13_yes: yes r13, D5 as r13 ' || fail "r13_yes is not recorded on PLX_MC main (SC-13)"
+printf '%s\n' "$HDR" | grep -qE '^round_10: done ' || fail "round 10 is not done on PLX_MC main (SC-13)"
+YES_AT=$(printf '%s\n' "$HDR" | sed -nE "s/^r13_yes_at: ($TS)$/\1/p"); [ -n "$YES_AT" ] || fail "r13_yes_at is missing from the header (SC-13)"
+# round_10_done_at lives in the execution copy (README). It must equal the time the round-10 text merged to main: the committer time of the first first-parent commit that carries the round_10 line.
+R10L=$(grep -E '^round_10: done ' "$SPEC_EXEC") || fail "round_10 is not done in the execution copy (SC-13)"
+printf '%s\n' "$HDR" | grep -qxF -- "$R10L" || fail "the execution copy's round_10 line is not the one on PLX_MC main now: an amendment changed it, so round_10_done_at must be set again from its merge (SC-13)"
+R10C=''; while read -r c; do T=$(git -C "$PLX_MC_REPO" show "$c:docs/specs/frontier-implementation-spec.md" 2>/dev/null) && printf '%s\n' "$T" | grep -qxF -- "$R10L" && { R10C=$c; break; }; done < <(git -C "$PLX_MC_REPO" log --first-parent --reverse --format=%H origin/main -- docs/specs/frontier-implementation-spec.md)
+[ -n "$R10C" ] || fail "no commit on PLX_MC main carries the execution copy's round_10 line: the round-10 text has not merged (SC-13)"
+R10_MERGED=$(TZ=UTC git -C "$PLX_MC_REPO" show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$R10C") || fail "commit time of $R10C"
+R10_AT=$(sed -nE "s/^round_10_done_at: ($TS) \(PR #[0-9]+.*\)$/\1/p" "$SPEC_EXEC"); [ -n "$R10_AT" ] || fail "round_10_done_at is not set in the execution copy (SC-13)"
+[ "$(n "$R10_AT")" = "$R10_MERGED" ] || fail "round_10_done_at ($R10_AT) is not the time the round-10 text merged to PLX_MC main ($R10_MERGED, $R10C)"
+AT=$(sed -nE "s/^audited_at: ($TS)$/\1/p" "$PROOFS/merge-queue-audit.md"); [ -n "$AT" ] || fail "P15 audited_at"
+[[ "$(n "$AT")" > "$(n "$R10_AT")" ]] || fail "the P15 run predates round 10 (D13)"
+rline 'later_yes: yes P16.*' "$PROOFS/merge-group.md"; rline "later_yes_at: $TS" "$PROOFS/merge-group.md"; LY=$(sed -nE "s/^later_yes_at: ($TS)$/\1/p" "$PROOFS/merge-group.md")
+[[ "$(n "$LY")" > "$(n "$YES_AT")" && "$(n "$LY")" > "$(n "$R10_AT")" ]] || fail "the P16 later yes predates the yes on r13 or round 10 (SC-13)"
 grep -qF 'reopened, edited]' scripts/generate-compliance-gate.py || fail "the edited trigger from #255 was dropped"
 python3 scripts/generate-compliance-gate.py --check || fail "generator drift"
 grep -q 'merge_group:' scripts/generate-compliance-gate.py || fail "no merge_group"
@@ -1174,13 +1368,13 @@ grep -q 'merge_group:' scripts/generate-compliance-gate.py || fail "no merge_gro
 npm ci || fail "npm ci"; npx vitest run || fail "vitest"; npm run typecheck || fail typecheck
 ! git diff --quiet origin/main...HEAD -- src/app/api/compliance/verify/route.ts || fail "route unchanged"
 ! git diff --quiet origin/main...HEAD -- src/lib/compliance/service.ts || fail "verifyPr unchanged"
-L=$(npx vitest list tests/compliance-verify-route.test.ts tests/compliance-merge-group.test.ts 2>/dev/null)
-T=$(printf '%s\n' "$L" | awk -F ' > ' '{print $NF}')
+L=$(npx vitest list tests/compliance-verify-route.test.ts tests/compliance-merge-group.test.ts) || fail "vitest list"
+T=$(printf '%s\n' "$L" | awk -F ' > ' '{print $NF}')   # the it titles: the last " > " segment of each line; a describe titled merge_group does not count
 N=$(printf '%s\n' "$T" | grep -c merge_group)
 [ "$N" -ge 6 ] || fail "expected at least 6 merge_group it titles, found $N"
 for t in 'merge_group: an expired stamp with a prior pass on the same head passes without loadPrState' \
          'merge_group: an expired stamp with no prior pass blocks without loadPrState'; do
-  printf '%s\n' "$T" | grep -qF -- "$t" || fail "the merge_group it title lacks the case '$t' (D4)"
+  printf '%s\n' "$T" | grep -qF -- "$t" || fail "the merge_group it titles lack the case '$t' (D4)"
 done
 grep -qE 'loadPrState\)?\.not\.toHaveBeenCalled' tests/compliance-merge-group.test.ts || fail "the merge_group test never asserts that loadPrState was not called (D4)"
 rline 'failing_first: [0-9a-f]{7,40} fail' "$PROOFS/merge-group.md"
@@ -1208,14 +1402,94 @@ rline 'deployed_sha: [0-9a-f]{12}' "$PROOFS/merge-group.md"
 D=$(sed -nE 's/^deployed_sha: ([0-9a-f]{12})$/\1/p' "$PROOFS/merge-group.md")
 git -C "$PLX_MC_REPO" merge-base --is-ancestor "$SHA" "$D" || fail "the deployed Hub predates GEN_SHA"
 ! grep -q 'compliance-merge-group' .cursor/rules/auto-merge-after-push.mdc docs/runbooks/BRANCH-PROTECTION-STAGING.md || fail "stopgap still named"
-! grep -rqE 'Do not add `edited`|still triggers only on|opened, synchronize, reopened\]|A body-only edit does not re-run the gate|Until TASK-2011 is live' .cursor/rules/ || fail "a rule still forbids the edited trigger, names three trigger types, or keeps the pre-#255 body-edit sentences (D13)"
+# Rules wrap long lines, so each rule is read with its whitespace squeezed to one space before the wording checks, and the slash list allows a space at each slash, so a list wrapped at a slash or spaced around them counts.
+# The trigger-list wording, the sentence "A body-only edit does not re-run the gate" and the stale "Until TASK-2011 is live" sentence are rejected in every tracked rule (only mc-compliance.mdc carries them today, and P10 may move them). The empty-commit
+# wording is rejected only in the rule this PR edits: mc-compliance.mdc and any rule that carries the fixed line. pr-watch-until-green.mdc:49-50
+# says "push a commit (empty is fine)" and is not P16's (Risks).
+FIXED=0; EDITED=''
+while IFS= read -r f; do
+  J=$(tr -s '[:space:]' ' ' < "$f")
+  printf '%s\n' "$J" | grep -qiE 'Do not add `edited`|still triggers only on|opened, synchronize, reopened\]|opened ?/ ?synchronize ?/ ?reopened|body-only edit does not re-run the gate' && fail "$f still forbids the edited trigger, names three trigger types or says a body-only edit does not re-run the gate (D13)"
+  printf '%s\n' "$J" | grep -oE '\[[^][]*reopened[^][]*\]' | grep -qv 'edited' && fail "$f names a trigger list without edited (D13)"
+  printf '%s\n' "$J" | grep -qiF 'Until TASK-2011 is live' && fail "$f still says that TASK-2011 is not live (D13, F24)"
+  if printf '%s\n' "$J" | grep -qF 'A body edit re-runs the gate (`edited`).'; then FIXED=1; EDITED="$EDITED $f"; fi
+done < <(git ls-files -- .cursor/rules)
+[ "$FIXED" -eq 1 ] || fail "no rule says that a body edit re-runs the gate (D13)"
+for f in .cursor/rules/mc-compliance.mdc $EDITED; do
+  J=$(tr -s '[:space:]' ' ' < "$f") || fail "no $f"
+  printf '%s\n' "$J" | grep -qiE 'empty commit|commit \(empty|empty is (fine|enough)' && fail "$f still tells the agent to push an empty commit (D13)"
+done
+! grep -q 'three required checks' .cursor/rules/auto-merge-after-push.mdc || fail "the auto-merge rule still counts three required checks (TASK-2037; nit 12)"
+SPEC=$(git -C "$PLX_MC_REPO" show origin/main:docs/specs/frontier-implementation-spec.md) || fail "spec on PLX_MC main"
+HDR=$(printf '%s\n' "$SPEC" | awk '/^```$/{n++; next} n==1'); n() { printf '%s\n' "$1" | sed -E 's/\.[0-9]+Z$/Z/'; }
+YES_AT=$(printf '%s\n' "$HDR" | sed -nE "s/^r13_yes_at: ($TS)$/\1/p"); [ -n "$YES_AT" ] || fail "r13_yes_at is missing from the header (SC-13)"
+# round_10_done_at lives in the execution copy (README). It must equal the time the round-10 text merged to main: the committer time of the first first-parent commit that carries the round_10 line.
+R10L=$(grep -E '^round_10: done ' "$SPEC_EXEC") || fail "round_10 is not done in the execution copy (SC-13)"
+printf '%s\n' "$HDR" | grep -qxF -- "$R10L" || fail "the execution copy's round_10 line is not the one on PLX_MC main now: an amendment changed it, so round_10_done_at must be set again from its merge (SC-13)"
+R10C=''; while read -r c; do T=$(git -C "$PLX_MC_REPO" show "$c:docs/specs/frontier-implementation-spec.md" 2>/dev/null) && printf '%s\n' "$T" | grep -qxF -- "$R10L" && { R10C=$c; break; }; done < <(git -C "$PLX_MC_REPO" log --first-parent --reverse --format=%H origin/main -- docs/specs/frontier-implementation-spec.md)
+[ -n "$R10C" ] || fail "no commit on PLX_MC main carries the execution copy's round_10 line: the round-10 text has not merged (SC-13)"
+R10_MERGED=$(TZ=UTC git -C "$PLX_MC_REPO" show -s --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$R10C") || fail "commit time of $R10C"
+R10_AT=$(sed -nE "s/^round_10_done_at: ($TS) \(PR #[0-9]+.*\)$/\1/p" "$SPEC_EXEC"); [ -n "$R10_AT" ] || fail "round_10_done_at is not set in the execution copy (SC-13)"
+[ "$(n "$R10_AT")" = "$R10_MERGED" ] || fail "round_10_done_at ($R10_AT) is not the time the round-10 text merged to PLX_MC main ($R10_MERGED, $R10C)"
+rline 'later_yes: yes P16.*' "$PROOFS/merge-group.md"; LY=$(sed -nE "s/^later_yes_at: ($TS)$/\1/p" "$PROOFS/merge-group.md"); [ -n "$LY" ] || fail "later_yes_at"
+[[ "$(n "$LY")" > "$(n "$YES_AT")" && "$(n "$LY")" > "$(n "$R10_AT")" ]] || fail "the P16 later yes predates the yes on r13 or round 10 (SC-13)"
+# The assertions that survive the TASK-2008 edit (:873, :875-876, :878-887, :891, :897, :907-925, :933-934, :936-942, :944, :946-955 at 2b656d8adf33; not :874, :943 or :945, which the edit re-points). Each pin is unique in
+# scripts/ci-staged-gate.test.mjs at that commit, so deleting its assertion fails this check.
+while IFS= read -r p; do grep -qF -- "$p" scripts/ci-staged-gate.test.mjs || fail "the TASK-2008 test lost the assertion on $p"; done <<'EOF'
+["ci.yml", "lint-typecheck-build"]
+["mc-quality-ledger.yml", "Validate ledgers (vmc-quality-ledger/v1)"]
+["workbench-api.yml", "workbench-api"]
+for (const [file, check] of required)
+const group = eventBlock(src, "merge_group");
+assert.match(group, /checks_requested/
+/^\s+paths:/m.test(group),
+on.merge_group.paths would leave ${check} unreported on the queue
+assert.match(src, new RegExp(check.replace(
+activeLines(triggerSection(generated)), /pull_request:/
+jobBlocks(generated).has("compliance"), true
+github\.event\.merge_group\.head_ref \|\| github\.event\.pull_request\.number \|\| github\.ref
+github\.event\.merge_group\.base_sha
+github\.event\.merge_group\.head_sha
+preflight, /EVENT_NAME" = "merge_group"/
+git diff --name-only "\$BASE_SHA" "\$HEAD_SHA"
+EVENT_NAME" = "pull_request" \] \|\| \[ "\$EVENT_NAME" = "merge_group" \]
+EVENT_NAME" = "push"
+EVENT_NAME" != "pull_request"
+build, /github\.event\.merge_group\.head_ref/
+github\.event_name == 'push'
+protection, /18632985/
+/Squash/
+/max_entries_to_merge/
+/check_response_timeout_minutes/
+/18679471/
+protection, /petralabx\/PLX_MC/
+/compliance-gate-drift/
+/Do not hand-edit/
+/Do not apply this from a feature PR/
+autoMerge, /merge_group/
+autoMerge, /18632985/
+autoMerge.slice(autoMerge.indexOf("Current set"), autoMerge.indexOf("Reporting-only")),
+EOF
+# The lines the edit writes (the portal PR list above), and the stopgap lines it removes.
+while IFS= read -r p; do grep -qF -- "$p" scripts/ci-staged-gate.test.mjs || fail "the TASK-2008 test edit is missing $p"; done <<'EOF'
+["plx-mc-compliance.yml", "compliance"]
+activeLines(triggerSection(generated)), /merge_group:/
+generated, /github\.event\.merge_group\.head_ref/
+generated, /MC-Checkout: dsp_/
+generated, /gh api/
+/plx-mc-compliance\.yml/
+EOF
+grep -qF "/$SHA/" scripts/ci-staged-gate.test.mjs || fail "the TASK-2008 test does not pin the new GEN_SHA in the runbook"
+for p in '["compliance-merge-group.yml", "compliance"]' 'queueTrigger' '/gh pr view/' '1339f1196d4e56377953fb90d41f2238402e8750'; do ! grep -qF -- "$p" scripts/ci-staged-gate.test.mjs || fail "the TASK-2008 test still carries the stopgap line $p"; done
 python3 "$PLX_MC_REPO/scripts/agent-context/measure.py" --check-caps --check-needles "$PWD" || fail "caps or needles (P10, D13)"
 [ "$(wc -c < .cursor/rules/mc-compliance.mdc)" -le 2457 ] || fail "slice > 2457 (P10, D13)"
 for f in .cursor/rules/mc-compliance.mdc $(git diff --name-only origin/staging...HEAD -- .cursor/rules); do
   if grep -qiE "$COMPETING|$LOCKED" "$f" || [ "$f" = .cursor/rules/mc-compliance.mdc ]; then carrier "$f"; fi
 done
 ! grep -q 'still resolves every PR' docs/runbooks/BRANCH-PROTECTION-STAGING.md || fail "runbook still promises multi-PR groups"
-grep -qF '`max_entries_to_merge` | `1`' docs/runbooks/BRANCH-PROTECTION-STAGING.md || fail "runbook must keep max_entries_to_merge at 1"
+grep -qF '`max_entries_to_merge` | `1`' docs/runbooks/BRANCH-PROTECTION-STAGING.md || fail "the runbook must keep max_entries_to_merge at 1"
+! grep -q 'to find every PR in the group' docs/runbooks/BRANCH-PROTECTION-STAGING.md || fail "runbook still says compliance finds every PR from squash subjects"
+sweep . || fail "competing wording left in portal"
 rline 'org_workflow_on_staging: (yes|no)' "$PROOFS/merge-group.md"
 node --test scripts/ci-staged-gate.test.mjs || fail "ci-staged-gate"
 hygiene_gate origin/staging
@@ -1235,11 +1509,11 @@ hygiene_gate origin/staging
 - **Two complete-order wordings land in one file.** Mitigation: `carrier` rejects competing wording on the same line as the locked sentence, and `sweep` rejects it anywhere in `INSTR_FILES` (Appendix B).
 - **Team Rules in the Cursor dashboard keep the old wording.** Mitigation: the operator re-pastes after P8, and acceptance checks it.
 - **A stamp expires between checkout and PR open.** Mitigation: the 8-hour rule; the same task is checked out again if needed, never a new task.
-- **A team-wide brain registration lets every Cursor agent write to `memory.items`.** Mitigation: the writes are idempotent and rate-limited, with no delete (F16); the key follows D5, which Vince confirms as `D5 as r13` in a yes on r13 or in the P14 later yes; the registration uses the brain's own address (D14). Rollback: remove the server, or use the kill switch.
-- **The P16 rewrite of the `edited` lines grows the portal slice past P10's cap, or drops a needle or the locked sentence (D13).** Mitigation: the portal-half acceptance re-runs `measure.py --check-caps --check-needles`, the 2457-byte slice check and `carrier` on the rules it edits, and it requires P10 portal's `cap: met` line first. Rollback: revert the portal PR.
-- **PLX_MC PR #255 landed before P4 and P16 (F24).** r13 applies it: D2's lease reads release and never writes it; D4's queue rule stays stricter than #255's open-PR exception and makes no GitHub read. The "opened/synchronize/reopened only" wording is still true in the portal's `mc-compliance.mdc` (`:128-131`, `:301-309`). Portal `plx-mc-compliance.yml:10` is still `types: [opened, synchronize, reopened]`, and the drift check pins that file (F10). The wording becomes false only when the P16 portal half regenerates the workflow and edits those lines (D13). In other guides, correcting it is follow-up work outside this plan. Two of those lines are named under residual risk.
-- **A reopened PR un-releases its stamp (F2).** If another principal checked out the task while the PR was closed, two live stamps with different holders exist. D2's oldest-`issued_at` rule decides; the newer holder gets 409 until the older stamp completes, expires or is released again. The 409 message names the task, the repo and the expiry (`until <expires_at>`). It does not name the holder (P4 lease contract).
-- **A high-tier PR is blocked for a missing bucket PRD.** Mitigation: P15 reads the bucket rows at the first yes, and D11 puts the decision with Vince before P16 opens a PR.
+- **A team-wide brain registration lets every Cursor agent write to `memory.items`.** Mitigation: the writes are idempotent and rate-limited, with no delete (F16); the key follows D5, which Vince confirmed as `D5 as r13` in the yes on r13 (29 Sep 2026), and P14 records the brain's own log line for the self-check (key tier `brain`), which the acceptance checks under `## raw` for a VMC or scoped tier (retirement R4 fixes no other wording of that log; review log, open question 8, not yet put to Vince, open for r14 or follow-up work; P14 does not wait on it); the registration uses the brain's own address (D14). Rollback: remove the server, or use the kill switch.
+- **The P16 rewrite of the `edited` lines grows the portal slice past P10's cap, or drops a needle or the locked sentence (D13).** Mitigation: the portal-half acceptance re-runs `measure.py --check-caps --check-needles`, the 2457-byte slice check and `carrier` on the rules it edits, runs `sweep` over the portal (the half also edits a runbook in `INSTR_FILES`), and it requires P10 portal's `cap: met` line first. Rollback: revert the portal PR.
+- **PLX_MC PR #255 landed before P4 and P16 (F24).** r13 applies it: D2's lease reads release and never writes it; D4's queue rule is narrower than #255's open-PR exception, not a subset of it (it accepts an expired stamp only on a prior pass of the same head and tests neither the PR state nor the body), and makes no GitHub read. The portal's `mc-compliance.mdc` still says that the generated workflow triggers only on `opened/synchronize/reopened` and that a body-only edit does not re-run the gate (`:128-131`, `:301-309` at `2b656d8adf33`). That is true today: the portal's copy is pinned at `GEN_SHA` `1339f119…`, which predates #255, and `plx-mc-compliance.yml:10` still reads `types: [opened, synchronize, reopened]` (F10). It becomes false the moment the P16 portal half regenerates the workflow, so that half rewrites those lines in the same PR (D13). Its "Until TASK-2011 is live" sentence (`:137-139`) is false now, because TASK-2011 is #255, merged and deployed (F24); the same PR deletes it. Lines outside `.cursor/rules/` that say the same are follow-up work outside this plan (residual risk below; round 10, open question 7: open, not yet put to Vince; no phase waits on it).
+- **A reopened PR un-releases its stamp (F2).** If another principal checked out the task while the PR was closed, two live stamps with different holders exist. This needs a stamp that is not yet completed (D2); under the contract's order, complete before the PR opens, the stamp on a reopened PR is normally completed and holds no lease, so the case is rare. D2's oldest-`issued_at` rule decides; the newer holder gets 409 until the older stamp completes, expires or is released again. The 409 message names the task, repo and expiry, and not the holder (Vince: expiry only, 2026-09-29T19:50:13Z); the holder is on the stamp's oldest `checkout` event in Mission Control (contract step 2.8).
+- **A high-tier PR is blocked for a missing bucket PRD, or for a `prd` that is not an http(s) link (#263, F17).** Mitigation: P15 reads the bucket rows at the first yes and again in its r13 re-run, records `present` only for a link, and D11 puts the decision with Vince before P16 opens a PR; the rows read on 29 Sep 2026 hold GitHub URLs.
 - **The P16 portal half lands before the Hub deploy.** Mitigation: the portal half starts only after the deploy. The trigger stays inert until an admin turns on the queue.
 - **A `merge_group` run is "fixed" by making the job pass.** Mitigation: no `continue-on-error`, no job `if:`, no new `exit 0`, and the job id stays `compliance`. An expired stamp passes only where the same head already passed. Rollback: revert both PRs, portal first.
 - **Someone installs a Jev product during a phase.** Rollback: remove the plugin directory and any `~/.claude` enablement. Do not merge a PR that adds `jev-rules`, `jevgrep`, `jev-code`, or a Typesafe/Jev plugin entry.
@@ -1248,7 +1522,7 @@ hygiene_gate origin/staging
   - Running the portal `scripts/sync-agents-md.py` would regenerate the retired roster.
   - The Lobster pipelines commit to `main` from the EC2 checkout, which `.cursor/rules/ec2-deploy-safety.mdc:10` forbids. The swarm retirement spec's R1 plans to turn both writers off.
   - Portal `CLAUDE.md:151` still names `taylorvalton/plx-customer-portal`.
-  - After P16, two portal lines outside `.cursor/rules/` still say a body-only edit does not re-run the gate. No phase owns them: `.cursor/skills/mc-sync/SKILL.md:49-50` and `docs/runbooks/CONTRIBUTING.md:262-263` at portal `2b656d8adf33`. `CLAUDE.md:106` at that pin does not state the three-trigger rule.
+  - After P16, portal lines outside `.cursor/rules/` still say that a body-only edit does not re-run the gate, and no phase owns them (at `2b656d8adf33`): `.cursor/skills/mc-sync/SKILL.md:49-50`, `docs/runbooks/CONTRIBUTING.md:262-263` (which also says the generated workflow has no `edited` trigger) and `CLAUDE.md:106` (the gate "does not re-read edited bodies"; it names no trigger list). `pr-watch-until-green.mdc:49-50` still says "push a commit (empty is fine)" (round 10, open question 7). The landing edit of 29 Sep 2026 found the first three.
 
 ## Worktree plan
 
@@ -1283,31 +1557,37 @@ A yes on the question below approves this full plan, r12, with the defaults in
 starts P1, P2, P5, P11, P13, and P15.
 
 r13 adds no first-yes phase, so the r12 yes stands for every phase r13 does not change.
-Vince answered `yes r13, D5 as r13` on 2026-09-29T18:09:35Z. The header records it.
-P14 still records the phrase in `brain-register.md` and does not start without that
-record. Until round 10, the r13 changes wait: P4's code branch, the P15 re-run, P16
-and P14. P4, P14 and P16 are later-yes phases. The later yes that names one of them
-is given against r13, or a later revision, after round 10 (D13, SC-13).
+r13 itself needed Vince's yes, because it changes D5, an approved default: r12's yes
+covered r12's D5, and the rule under "Decisions a yes confirms" puts a changed default
+to Vince. Vince gave it on 29 Sep 2026 as `yes r13, D5 as r13`, and round 10 closed the
+same day (header; its time for the gates, `round_10_done_at`, is the merge of its
+text: an approval field that the orchestrator sets in its execution copy when the
+round-10 PR merges). The phrase `D5 as r13` confirms D5; P14 records it in `brain-register.md` and
+does not start without it. P4, P14 and P16 are later-yes phases; the later yes that
+names one of them is given against r13, or a later revision, after `round_10_done_at`
+(D13, SC-13), and the phase's evidence records it (`later_yes`, `later_yes_at`). Each
+also waits for its `depends_on` evidence. The P15 re-run starts once
+`round_10_done_at` is set. The r13 approval question below records the yes on r13.
 
 It does not start the later-yes phases:
 
 | Phase | Why it waits | Repo |
 |---|---|---|
 | P3 | May mint a second stamp; must run before P2's `expires_at` | none |
-| P4 | Edits PLX_MC `checkout()`; #255 merged, so its code branch runs under r13 after Vince's yes on r13 and round 10 (D13) | `petralabx/PLX_MC` base `main` |
+| P4 | Edits PLX_MC `checkout()`; #255 merged, so its code branch runs under r13 after Vince's yes on r13 and round 10 (the yes given and round 10 closed on 29 Sep 2026, D13); its later yes is given after `round_10_done_at`, the merge of the round-10 text | `petralabx/PLX_MC` base `main` |
 | P6 | Edits PLX_MC (meter) | `petralabx/PLX_MC` base `main` |
 | P8 | Edits PLX_MC, second brain, and portal guides (complete order only) | two repos on base `main`, portal on base `staging` |
 | P10 | Edits governed guides; name the repo | one repo per PR |
 | P12 | Edits portal guides | `petralabx/plx-customer-portal` base `staging` |
-| P14 | Registers a team-wide, write-capable connector; name `BRAIN_URL` (D14); needs Vince's `D5 as r13` (D5), given in the yes on r13 or in this later yes; after Vince's yes on r13 and round 10 (D13) | none (cursor.com dashboard) |
-| P16 | Edits the generator, the verify service, and the portal workflows; #255 merged, so it runs under r13 after Vince's yes on r13, round 10 and the P15 re-run (D13) | PLX_MC base `main`, then portal base `staging` |
+| P14 | Registers a team-wide, write-capable connector; name `BRAIN_URL` (D14); Vince's `D5 as r13` (D5) came in the yes on r13; after Vince's yes on r13 and round 10 (the yes given and round 10 closed on 29 Sep 2026, D13); its later yes is given after `round_10_done_at` | none (cursor.com dashboard) |
+| P16 | Edits the generator, the verify service, and the portal workflows; #255 merged, so it runs under r13 after Vince's yes on r13, round 10 (the yes given and round 10 closed on 29 Sep 2026) and the P15 re-run (D13); its later yes is given after `round_10_done_at` | PLX_MC base `main`, then portal base `staging` |
 
 P9 (operator canary, after the P8 close) starts when its `depends_on` evidence is on
 disk. It does not need a separate question. P7 is withdrawn.
 
 Every code phase also waits on the evidence named in its `depends_on`: P4 on P3 (and
 D13 for its code branch), P6 on P5, P8 on P6 (merged), P10 on P9, P12 on P11, and P16 on P15 (run under r13) and D13.
-P14 waits on P13, on Vince's yes on r13, on round 10 (D13), on the later yes that names `BRAIN_URL` and on Vince's `D5 as r13`.
+P14 waits on P13, on Vince's yes on r13 and round 10 (the yes given and the review closed; `round_10_done_at` set at the merge of the round-10 text, D13), on Vince's `D5 as r13` (given) and on the later yes that names `BRAIN_URL`, plus its pre-checks.
 
 Jev products stay out. The fleet draft (`docs/jev-fleet-implementation-spec.md`) stays the owner of skill packs and enforcement.
 
@@ -1324,26 +1604,21 @@ still need a later yes, because they mint a second stamp, edit PLX_MC, a complia
 workflow, or governed guides, or register the team-wide, write-capable `plx-brain`
 connector (P14 names `BRAIN_URL`, the brain's own address; since r13 it also needs Vince's `D5 as r13`).
 P4's code branch and P16 waited for PLX_MC PR #255, which merged on 28 Sep 2026; they
-run under r13 after the recorded r13 yes and its round-10 review (D13). P9 starts without a later yes
+run under r13 after Vince's yes on r13 and its round-10 review (D13). P9 starts without a later yes
 once its evidence is on disk. P7 is withdrawn, because no phase edits the swarm repo.
 Every code phase waits on the evidence named in `depends_on`.
 
 r13 changes later-yes phases (P4, P14, P16), two audits that keep their first-yes gate
 (P13, P15; P15 runs again under r13 before P16), and one default (D5). It needs no new
-first yes. Vince's yes on r13 is recorded (`yes r13, D5 as r13`, 2026-09-29T18:09:35Z).
-The later yes that names P4, P14 or P16 is given against r13, after round 10
-(D13, SC-13). D5's confirmation is the phrase `D5 as r13`, which that answer includes.
-P14 still records it.
+first yes. It needed Vince's yes on r13, because D5 is a changed default and r12's
+yes covered r12's D5 only; Vince gave it on 29 Sep 2026. The later yes that names P4,
+P14 or P16 is given against r13, after that yes and round 10 (D13, SC-13). D5's
+confirmation is the phrase `D5 as r13`, given once, in that yes (D5). The section below
+records the yes on r13.
 
-## Approval question for r13 (answered 2026-09-29T18:09:35Z)
+## Approval question for r13 (answered yes on 29 Sep 2026)
 
-Vince answered: `yes r13, D5 as r13`. The header records `r13_yes: yes` and
-`d5_r13_yes: yes`. The r13 changes still wait for round 10. P4's code branch, the
-P15 re-run, P16 and P14 do not start on this yes alone.
-
-The question that was open:
-
-r13 needs Vince's yes. It changes one approved default, D5, on the swarm retirement
+r13 needed Vince's yes. It changes one approved default, D5, on the swarm retirement
 spec's instruction (its section 10, D3, R11): P14 registers the brain with a brain key
 from `BRAIN_API_KEYS`, never the `VMC_API_KEY` value or a `VMC_SCOPED_API_KEYS`
 department key. r12's yes covered r12's D5 (a VMC department key, else `VMC_API_KEY`),
@@ -1356,56 +1631,87 @@ Do you approve r13, with D5 as r13 states it? The answer has one form:
 
 - `yes r13, D5 as r13`.
 
-Two variants exist. `yes r13` without the phrase approves the rest of r13 and leaves D5
-pending; you then give the phrase in the P14 later yes (`yes P14,
-BRAIN_URL=https://brain.plxcustomer.io, D5 as r13`), and P14 does not start without it.
-`yes r13, except D5: as r12` keeps r12's D5; give it before retirement R11, and r14 must
-then reconcile the two specs, because the brain stops accepting VMC keys at R11.
+**Answered.** Vince answered `yes r13, D5 as r13` at 2026-09-29T18:09:35Z, against PR
+#260 head `8ed919f5e59f`, in the orchestrator chat session. The header records it
+(`r13_yes`, `r13_yes_at`, `d5_r13_yes`, `approved_by`, `approved_at`), and the review
+log records it under round 10. The two variants this question offered (`yes r13` alone,
+which would have left D5 for the P14 later yes, and `yes r13, except D5: as r12`, which
+would have kept r12's D5 until r14 reconciled the two specs before retirement R11) are
+void by that answer. The second was never a safe path: it would have registered the
+`VMC_API_KEY` value or a department key at the brain's own name, which retirement D3,
+R7 and section 10 forbid and P14's forbidden list and acceptance block.
 
-When the answer arrives, the orchestrator records it in the header (`r13_yes`, and
-`d5_r13_yes` when the phrase is present) and in the review log, as an editorial update
-like the r12 approval. That record is done: `yes r13, D5 as r13` at
-2026-09-29T18:09:35Z. P14 records the phrase in `brain-register.md` (`d5_confirmed`,
-`d5_confirmed_at`, `d5_confirmed_in`).
+The yes came before round 10. Round 10 closed the same day (header `round_10`; record:
+`frontier-review-log.md`); its time for the gates, `round_10_done_at`, is the merge of
+its text, an approval field that the orchestrator sets in its execution copy when the
+round-10 PR merges. The yes named no rule for what it covers, so the round-10 text
+stated the author's reading and put it to Vince (review log, open question 6). Vince
+confirmed it at 2026-09-29T19:54:30Z ("stand under r13"): a round-10 fix stands under
+the yes when it tightens an acceptance check, corrects a citation or a fact, adds an
+evidence line or a stop condition, or restates SC-13 or the header in a phase's own
+gate or `depends_on` lines; the changes round 10 made to the P4, P15, P16 and P14
+gate, `depends_on`, stop-rule and `owns` lines, listed in the review log, stand under
+it, and round 10 changed no default. A fix that would change a default, let a phase
+start earlier or on fewer conditions, change `owns` (a file, a region or a symbol), or
+narrow `forbidden` goes to Vince before the affected phase starts. Round 10 found four
+such points. Three went to him, and he answered them: the P16 portal half when P10
+portal does not run ("wait for P10", 2026-09-29T19:55:37Z); retirement R7's Team MCP
+step ("yes", 2026-09-29T19:54:30Z: retirement r13 amends R7); and the `VerifyPrInput`
+type in P16's `owns` (with open question 6: it stands under the yes on r13). The
+fourth, the empty-commit line in portal `pr-watch-until-green.mdc:49-50`, which P16
+does not own, was not put to him: it is open for r14 or follow-up work (review log,
+open question 7), and no phase waits on it. He also accepted the draft's
+section-16 items 2, 4 and 5 at 2026-09-29T19:55:37Z (reading confirmed at
+20:03:53Z). P14 records the phrase in `brain-register.md` (`d5_confirmed`,
+`d5_confirmed_at`, `d5_confirmed_in: yes on r13`).
 
 The r12 approval stands for every phase r13 does not change (the header's
-`approval_covers`), and those phases keep running. The r13 yes is recorded. The r13
-changes still wait for round 10: the independent critic's review of every r13 change
-(P4, P15 and P16 under D13; D5, D14, F26, P13 and P14 under retirement section 10),
-logged in `frontier-review-log.md` with its findings applied. Then P15 runs again
-under r13, and the later yes for P4, P14 or P16 is given against r13 or later
-(D13, SC-13).
+`approval_covers`), and those phases keep running. The four phases the r13 changes gate
+wait for `round_10_done_at`: the P15 re-run then starts, with no later yes; P4's code
+branch, P16 and P14 then wait for their later yes (each given against r13 or later and
+after that time) and their `depends_on` evidence: P4 for P3, P16 for the P15 re-run and
+the bucket PRDs, P14 for `BRAIN_URL` and its pre-checks (D13, SC-13). P15 runs again
+under r13 before P16. P13 keeps its first-yes gate, and a run under either revision is
+valid.
 
-## Open questions left after the r13 yes
+## Questions left after the r13 yes (the draft's `CHANGES.md` section 16), and their dispositions
 
-Vince's yes answers questions 1 and 8. Questions 2–7 stay open for round 10.
-`CHANGES.md`, `gate0.md` and `r13.diff` live in the orchestrator store. They are
-not in this repo. Round 10 reads this section.
+The landing edit of 29 Sep 2026 (PR #260 head `f96a92c468d1`) copied this list into the
+spec, because `CHANGES.md`, `gate0.md` and `r13.diff` live in the orchestrator store,
+not in this repo. Round 10 read it. Every item is settled; the review log's "Round 10"
+section holds the record, under its own question numbers, which differ from these.
 
-1. **Answered.** `yes r13, D5 as r13` at 2026-09-29T18:09:35Z.
-2. **Portal `mc-compliance.mdc:128-139`.** The P16 portal acceptance now fails while
-   "A body-only edit does not re-run the gate" or "Until TASK-2011 is live" remains
-   under `.cursor/rules/`. #255 merged (F24), so the second sentence is stale. The
-   `edited` trigger makes the first sentence false. Round 10 reviews that scope.
-3. **D8 and the P16 portal half.** If the portal canary fails and P10 portal never
-   runs, does the P16 portal half go ahead after P8 alone? Pending. If the answer
-   is yes, r14 replaces P10's cap and needle checks in that acceptance with "the
-   slice is no larger than at the branch point" and keeps the `carrier` check.
-4. **D4 readings.** In `merge_group` mode the spec never calls `loadPrState`, and
-   it blocks a released stamp. Both are the re-derived D4, already written in P16.
-   They are not a second default. Round 10 reviews them. They do not need a
-   separate yes.
-5. **Deploy of `f6d2bab7670a`.** F24 does not verify that `mc.plxcustomer.io`
-   deployed that SHA, and no phase gate depends on it. Whether P15 records
-   `pr255_deployed: yes` stays open. Pending.
-6. **P14 key label.** Which label the brain key carries
-   (`key_name: BRAIN_API_KEY:<label>`), and who issues it before P14 starts.
-   Pending.
-7. **`scripts/merge-group-prs.mjs`.** After P16 the script is dead code that only
-   its test keeps alive. Removing both is outside this plan. Whether to file that
-   follow-up stays open. Pending.
-8. **Answered with question 1.** The phrase `D5 as r13` is in that yes. P14 still
-   records it and does not start without the record.
+1. **The yes on r13.** Answered: `yes r13, D5 as r13` at 2026-09-29T18:09:35Z (header
+   `r13_yes`).
+2. **Portal `mc-compliance.mdc:128-139`.** The P16 portal half rewrites the `edited`
+   lines (`:128-131`) and deletes the "Until TASK-2011 is live" sentence (`:137-139`);
+   Vince accepted the deletion at 2026-09-29T19:55:37Z (review log, question 5, item 2).
+   The P16 portal acceptance fails while "A body-only edit does not re-run the gate" or
+   "Until TASK-2011 is live" remains in any tracked rule.
+3. **D8 and the P16 portal half.** Answered "wait for P10" at 2026-09-29T19:55:37Z
+   (review log, question 2): the half starts only after the P8 and P10 portal PRs, with
+   no after-P8-alone path; if P10 portal never runs, it stays blocked until Vince
+   decides again. r14 replaces nothing in that acceptance.
+4. **D4's two readings.** They are the re-derived D4, written in P16, not a second
+   default; Vince confirmed them at 2026-09-29T19:55:37Z (review log, question 5,
+   item 4), and D4 records it.
+5. **The deploy of `f6d2bab7670a`.** The P15 re-run records `pr255_deployed: yes` and
+   `pr255_deployed_source: gate0.md (GitHub deployment 6721728347,
+   2026-09-28T22:11:43Z)`, as Vince chose at 2026-09-29T19:55:37Z (review log, question
+   5, item 5); F24 cites that record. No phase gate depends on the deploy.
+6. **The P14 key label.** Settled by P14's steps and `depends_on`: the operator makes
+   the key off the brain host and off every trading host by retirement R5's procedure,
+   labels it, and P14 records `key_name: BRAIN_API_KEY:<label>` and
+   `key_sha256_prefix`. Not a decision a phase waits on; not put to Vince.
+7. **`scripts/merge-group-prs.mjs`.** Dead code after P16, kept alive by its test (F10).
+   Removing both is follow-up work outside this plan; not put to Vince.
+8. **The phrase `D5 as r13`.** In the yes on r13 (header `d5_r13_yes`); P14 records it
+   as `d5_confirmed_in: yes on r13` and does not start without it.
+
+Round 10's own open questions 7 (the empty-commit line in portal
+`pr-watch-until-green.mdc:49-50`) and 8 (the brain's request-log wording, retirement R4)
+are a different list; they stay open for r14 or follow-up work in the review log, and no
+phase waits on them.
 
 ---
 

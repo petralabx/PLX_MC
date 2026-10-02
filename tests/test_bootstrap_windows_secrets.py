@@ -43,6 +43,7 @@ def test_cursor_principal_uses_shared_compatibility_key() -> None:
     [
         ("sp_mcp_claude_code", "claude-key"),
         ("sp_mcp_codex", "codex-key"),
+        ("sp_mcp_chatgpt", "chatgpt-key"),
         ("sp_mcp_grok", "grok-key"),
         ("sp_mcp_hermes", "hermes-key"),
         ("sp_mcp_swarm", "swarm-key"),
@@ -55,6 +56,7 @@ def test_agent_principals_use_only_the_dedicated_registry(
     registry = {
         "sp_mcp_claude_code": "claude-key",
         "sp_mcp_codex": "codex-key",
+        "sp_mcp_chatgpt": "chatgpt-key",
         "sp_mcp_grok": "grok-key",
         "sp_mcp_hermes": "hermes-key",
         "sp_mcp_swarm": "swarm-key",

@@ -51,7 +51,7 @@ Cloud user broader write access.
 | Command | `npx` |
 | Args | `tsx tools/plx-mc-mcp/index.ts` |
 | `MC_BASE_URL` | `https://mc.plxcustomer.io` |
-| `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`, `sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`, or `sp_mcp_portal` (create and search tasks only) |
+| `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_chatgpt`, `sp_mcp_grok`, `sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`, or `sp_mcp_portal` (create and search tasks only) |
 | `MC_MCP_API_KEY` | key for that exact principal: shared compatibility key only for `sp_mcp_cursor`; otherwise the matching entry in the dedicated registry |
 | `MC_OPERATOR_EMAIL` | allowlisted operator on `PLX_MC_ALLOWED_USERS` — **agents:** `cos@petrasoap.com`; **human:** `vince@petrasoap.com`. Vince-approved gmail/Proton exceptions must also appear on that CSV. |
 | `MC_REPO` | target repo slug (e.g. `petralabx/plx-customer-portal`) |
@@ -60,7 +60,7 @@ Cloud user broader write access.
 
 Known launcher runtimes map automatically: `cursor`/`cursor-cloud` →
 `sp_mcp_cursor`, `claude`/`claude-code` → `sp_mcp_claude_code`, `codex` →
-`sp_mcp_codex`, `grok` → `sp_mcp_grok`, `hermes` → `sp_mcp_hermes`, and
+`sp_mcp_codex`, `chatgpt` → `sp_mcp_chatgpt`, `grok` → `sp_mcp_grok`, `hermes` → `sp_mcp_hermes`, and
 `swarm` → `sp_mcp_swarm`. Set `MC_MCP_PRINCIPAL_ID` explicitly for generic
 runtime names such as `local`. If a dedicated principal is selected but absent
 from the registry, startup fails; it never borrows the shared Cursor key.
@@ -177,6 +177,28 @@ If Desktop lists **two** Hub/Portal rows: keep the stdio entry (**no** Logout
 link); toggle **off** the HTTP duplicate that shows Logout/Error. Cloud Agents
 still receive the Team HTTP servers. `launch.mjs` also prefers
 `~/.cursor/bin/fetch-aws-secret.py` / aws-shim over hanging `aws.exe`.
+
+## ChatGPT
+
+ChatGPT is `sp_mcp_chatgpt`, not Codex. Hydrate it on a trusted workstation:
+
+```powershell
+python scripts/bootstrap-windows-secrets.py --mcp-principal-id sp_mcp_chatgpt
+```
+
+That writes `~/.secrets-env.staging.sp_mcp_chatgpt.ps1`. Do not print the key.
+
+The Mission Control endpoint is `https://mc.plxcustomer.io/api/cursor/mcp`.
+Send `Authorization: Bearer <sp_mcp_chatgpt key>` or `x-api-key`, plus
+`x-mc-operator-email: cos@petrasoap.com`, `x-mc-repo` for the repo being
+edited, and `x-mc-runtime: chatgpt`.
+
+ChatGPT Developer mode apps accept OAuth or no authentication. They do not
+have a custom-header field. Do not put the key in the connector URL. Create
+the developer-mode app only when the form can store the bearer token above.
+Until then, API clients that can send those headers are the supported
+ChatGPT path. `mc_self_check` must report `servicePrincipalId=sp_mcp_chatgpt`
+and operator `cos@petrasoap.com`.
 
 ## Health
 

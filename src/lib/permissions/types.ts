@@ -141,6 +141,7 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
   "sp_mcp_cursor",
   "sp_mcp_claude_code",
   "sp_mcp_codex",
+  "sp_mcp_chatgpt",
   "sp_mcp_grok",
   "sp_mcp_hermes",
   "sp_mcp_swarm",

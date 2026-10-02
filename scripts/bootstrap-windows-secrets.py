@@ -54,6 +54,7 @@ MCP_PRINCIPAL_IDS = {
     MCP_CURSOR_PRINCIPAL_ID,
     "sp_mcp_claude_code",
     "sp_mcp_codex",
+    "sp_mcp_chatgpt",
     "sp_mcp_grok",
     "sp_mcp_hermes",
     "sp_mcp_swarm",

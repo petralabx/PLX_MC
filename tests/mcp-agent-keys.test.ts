@@ -30,6 +30,7 @@ beforeEach(() => {
     JSON.stringify({
       sp_mcp_claude_code: "claude-key",
       sp_mcp_codex: "codex-key",
+      sp_mcp_chatgpt: "chatgpt-key",
       sp_mcp_grok: "grok-key",
       sp_mcp_hermes: "hermes-key",
       sp_mcp_agent_runner: "runner-key",
@@ -49,6 +50,7 @@ describe("mcpAgentKeyRegistry", () => {
     const registry = mcpAgentKeyRegistry();
     expect(registry.get("sp_mcp_claude_code")).toBe("claude-key");
     expect(registry.get("sp_mcp_codex")).toBe("codex-key");
+    expect(registry.get("sp_mcp_chatgpt")).toBe("chatgpt-key");
     expect(registry.get("sp_mcp_grok")).toBe("grok-key");
     expect(registry.get("sp_mcp_hermes")).toBe("hermes-key");
     expect(registry.get("sp_mcp_agent_runner")).toBe("runner-key");
@@ -66,6 +68,7 @@ describe("resolveMcpPrincipalIdFromKey", () => {
   it("maps each per-agent key to its own principal", () => {
     expect(resolveMcpPrincipalIdFromKey("claude-key")).toBe("sp_mcp_claude_code");
     expect(resolveMcpPrincipalIdFromKey("codex-key")).toBe("sp_mcp_codex");
+    expect(resolveMcpPrincipalIdFromKey("chatgpt-key")).toBe("sp_mcp_chatgpt");
     expect(resolveMcpPrincipalIdFromKey("grok-key")).toBe("sp_mcp_grok");
     expect(resolveMcpPrincipalIdFromKey("hermes-key")).toBe("sp_mcp_hermes");
     expect(resolveMcpPrincipalIdFromKey("runner-key")).toBe("sp_mcp_agent_runner");
@@ -99,6 +102,43 @@ describe("verifyMcpRequest with per-agent keys", () => {
       id: "sp_mcp_claude_code",
       status: "active",
     });
+  });
+
+  it("authenticates the ChatGPT key as sp_mcp_chatgpt with the MCP bundle", async () => {
+    const { authorize } = await import("@/lib/permissions");
+    const identity = await verifyMcpRequest(
+      req({ "x-api-key": "chatgpt-key", ...OPERATOR_HEADERS, "x-mc-runtime": "chatgpt" })
+    );
+    expect(identity.servicePrincipalId).toBe("sp_mcp_chatgpt");
+    expect(identity.actor).toEqual({
+      kind: "service",
+      id: "sp_mcp_chatgpt",
+      status: "active",
+    });
+    expect(authorize({ actor: identity.actor, capability: "task.checkout" }).allowed).toBe(true);
+    expect(authorize({ actor: identity.actor, capability: "permissions.manage" }).allowed).toBe(
+      false
+    );
+  });
+
+  it("loads the ChatGPT principal from its migration 030 row when enforcement is on", async () => {
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED", "1");
+    const identityQuery = vi.fn(async () => [
+      { id: "sp_mcp_chatgpt", name: "PLX MC MCP ChatGPT", status: "active" },
+    ]);
+    const identity = await verifyMcpRequest(
+      req({ "x-api-key": "chatgpt-key", ...OPERATOR_HEADERS }),
+      { query: identityQuery }
+    );
+    expect(identity.actor).toEqual({
+      kind: "service",
+      id: "sp_mcp_chatgpt",
+      status: "active",
+    });
+    expect(identityQuery).toHaveBeenCalledWith(
+      expect.stringContaining("FROM service_principals"),
+      ["sp_mcp_chatgpt"]
+    );
   });
 
   it("authenticates the agent runner key as sp_mcp_agent_runner with the MCP bundle", async () => {

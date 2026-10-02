@@ -49,9 +49,9 @@ The kernel itself is pure and always callable for tests and gradual rollout.
 
 **MCP (TASK-619):** per-agent API keys (`PLX_MC_MCP_AGENT_KEYS`, JSON map of
 service principal id → key) authenticate durable per-agent principals
-(`sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`,
-`sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`, `sp_mcp_portal`). The
-legacy shared `PLX_MC_MCP_API_KEY` still resolves `sp_mcp_cursor` behind the
+(`sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_chatgpt`,
+`sp_mcp_grok`, `sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`,
+`sp_mcp_portal`). The legacy shared `PLX_MC_MCP_API_KEY` still resolves `sp_mcp_cursor` behind the
 `PLX_MC_MCP_SHARED_KEY_ENABLED` kill switch (set `0` to retire it). Ids outside
 the reviewed registry never authenticate. `X-MC-Operator-Email` is allowlisted
 audit/context only and never grants human capabilities. From `review` mode
@@ -121,6 +121,7 @@ concrete rule cannot be expressed that way.
 - `db/migrations/022_permissions_decision_log.sql` — decision audit table
 - `db/migrations/023_mcp_agent_principals.sql` — per-agent MCP principals
 - `db/migrations/025_grok_hermes_mcp_principals.sql` — Grok/Hermes MCP principals
+- `db/migrations/030_chatgpt_mcp_principal.sql` — ChatGPT MCP principal
 - `src/lib/auth/identity.ts` — Entra `oid` session helpers + enforcement mode
 
 ## Dependencies

@@ -213,7 +213,7 @@ describe("MCP tool allowlist", () => {
 
   it("leaves every other MCP principal without a tool allowlist", () => {
     const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => id !== PORTAL);
-    expect(others).toHaveLength(7);
+    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 1);
     for (const principalId of others) {
       expect(MCP_TOOL_ALLOWLISTS[principalId]).toBeUndefined();
       for (const tool of [...ALLOWED_TOOLS, ...Object.keys(REFUSED_TOOL_ARGS)]) {

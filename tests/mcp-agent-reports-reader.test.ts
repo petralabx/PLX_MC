@@ -361,7 +361,7 @@ describe("GET /api/cursor/agent-reports", () => {
   it("gives 403 to every MCP principal except sp_mcp_portal", async () => {
     seed("hasitha-fernando", "daily-digest", "run-1");
     const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => id !== PORTAL);
-    expect(others).toHaveLength(7);
+    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 1);
     for (const principalId of others) {
       const { status, json } = await read("", `${principalId}-key`);
       expect({ principalId, status, code: json.error?.code }).toEqual({

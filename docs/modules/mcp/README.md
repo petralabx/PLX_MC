@@ -197,7 +197,7 @@ Vince; an owner already on the task is never replaced.
 
 **Routing suggestion:** `mc_suggest_work` authorizes `routing.suggest` for the
 resolved durable MCP service principal (`sp_mcp_cursor`,
-`sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_grok`, `sp_mcp_hermes`,
+`sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_chatgpt`, `sp_mcp_grok`, `sp_mcp_hermes`,
 `sp_mcp_swarm`, or `sp_mcp_agent_runner`; `sp_mcp_portal` holds no
 `routing.suggest`). Operator email is admission/audit context only and never
 grants human capabilities. Returns `routingSessionId` (`rtx_*`), top

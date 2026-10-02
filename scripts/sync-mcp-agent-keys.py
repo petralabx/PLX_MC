@@ -25,6 +25,7 @@ SHARED_PRINCIPAL_ID = "sp_mcp_cursor"
 DEDICATED_PRINCIPAL_IDS = (
     CLAUDE_PRINCIPAL_ID,
     "sp_mcp_codex",
+    "sp_mcp_chatgpt",
     "sp_mcp_grok",
     "sp_mcp_hermes",
     "sp_mcp_swarm",
@@ -34,6 +35,7 @@ DEDICATED_PRINCIPAL_IDS = (
 IDENTITY_LABELS = {
     CLAUDE_PRINCIPAL_ID: "claude",
     "sp_mcp_codex": "codex",
+    "sp_mcp_chatgpt": "chatgpt",
     "sp_mcp_grok": "grok",
     "sp_mcp_hermes": "hermes",
     "sp_mcp_swarm": "swarm",

@@ -21,7 +21,7 @@ import {
 
 const stdioSource = readFileSync(join(process.cwd(), "tools/plx-mc-mcp/index.ts"), "utf8");
 
-describe("stdio wave 4 tool parity", () => {
+describe("stdio wave 4 tool parity (plus TASK-2326 release tools)", () => {
   it("registers every wave 4 tool against its cursor REST route", () => {
     const routes: Record<string, string> = {
       mc_get_task: "`/tasks/${encodeURIComponent(id)}`",
@@ -29,6 +29,8 @@ describe("stdio wave 4 tool parity", () => {
       mc_search_knowledge: "`/knowledge/search?",
       mc_verify_pr: "`/verify?",
       mc_request_approval: '"/request-approval"',
+      mc_release_checkout: '"/checkouts/release"',
+      mc_release_checkouts: '"/checkouts/release-batch"',
     };
     for (const [tool, path] of Object.entries(routes)) {
       expect(stdioSource).toContain(`"${tool}"`);

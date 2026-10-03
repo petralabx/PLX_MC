@@ -35,6 +35,7 @@ import { registerRoutingMutationTools } from "./routing-mutation-actions";
 import { registerSyncConflictTools } from "./sync-actions";
 import { registerAgentReadTools } from "./read-actions";
 import { registerApprovalTools } from "./approval-actions";
+import { registerCheckoutReleaseTools } from "./checkout-release-actions";
 
 function jsonResult(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -386,6 +387,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   // ── Wave 4: agent read tools + approval request (separate modules) ──
   registerAgentReadTools(server, identity);
   registerApprovalTools(server, identity);
+  registerCheckoutReleaseTools(server, identity);
 
   return server;
 }

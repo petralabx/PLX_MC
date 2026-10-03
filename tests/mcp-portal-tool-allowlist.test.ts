@@ -168,6 +168,8 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   mc_update_bucket: { id: "BKT-INFRA", name: "Renamed" },
   mc_create_project: { name: "New project" },
   mc_request_approval: { taskId: "TASK-1", reason: "please" },
+  mc_release_checkout: { checkoutId: "dsp_x", reason: "stray" },
+  mc_release_checkouts: { items: [{ checkoutId: "dsp_x", reason: "stray" }] },
   mc_suggest_work: { title: "x" },
   mc_create_routed_task: {
     proposalId: "rp_1",

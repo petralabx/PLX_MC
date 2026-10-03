@@ -543,6 +543,35 @@ server.tool(
   }
 );
 
+// ── TASK-2326: release stray or expired checkouts (cursor REST proxies) ──
+
+const releaseCheckoutItem = {
+  checkoutId: z.string().min(1).optional().describe("Full dsp_* checkout id"),
+  checkoutRef: z.string().min(1).optional().describe("Redacted ref dsp_…last4; needs taskId"),
+  taskId: z.string().min(1).optional().describe("TASK-* id; required with checkoutRef"),
+  reason: z.string().min(1).max(500),
+};
+
+server.tool(
+  "mc_release_checkout",
+  "Release a stray or expired checkout lease (audits checkout.released). Target the full checkoutId, or checkoutRef (dsp_…last4) plus taskId. Only the checkout's accountable human, an admin, or a Ledger/CoS steward may release. Refuses an already-released lease. Never changes the task stage or Verified.",
+  releaseCheckoutItem,
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_release_checkout");
+    return printResult(await mcFetch("/checkouts/release", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_release_checkouts",
+  "Batch form of mc_release_checkout (max 50 items), with a per-item outcome.",
+  { items: z.array(z.object(releaseCheckoutItem)).min(1).max(50) },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_release_checkouts");
+    return printResult(await mcFetch("/checkouts/release-batch", { method: "POST", body }));
+  }
+);
+
 registerRoutingTools({
   server,
   mcpEnabled: MCP_ENABLED,

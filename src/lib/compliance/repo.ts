@@ -310,38 +310,54 @@ export async function insertDispatch(d: {
   );
 }
 
+type DispatchDbRow = {
+  id: string;
+  actor_kind: ActorKind;
+  runtime: string;
+  task_id: string;
+  accountable_human: string;
+  repo: string;
+  revoked: boolean;
+  expires_at: Date;
+  released_at: Date | null;
+  released_reason: string | null;
+};
+
+const DISPATCH_COLUMNS =
+  "id, actor_kind, runtime, task_id, accountable_human, repo, revoked, expires_at, released_at, released_reason";
+
+function toDispatchRow(r: DispatchDbRow): DispatchRow {
+  return {
+    id: r.id,
+    actorKind: r.actor_kind,
+    runtime: r.runtime,
+    taskId: r.task_id,
+    accountableHuman: r.accountable_human,
+    repo: r.repo,
+    revoked: r.revoked,
+    expiresAt: r.expires_at.toISOString(),
+    releasedAt: r.released_at?.toISOString() ?? null,
+    releasedReason: r.released_reason ?? null,
+  };
+}
+
 export async function getDispatch(id: string): Promise<DispatchRow | null> {
-  const rows = await query<{
-    id: string;
-    actor_kind: ActorKind;
-    runtime: string;
-    task_id: string;
-    accountable_human: string;
-    repo: string;
-    revoked: boolean;
-    expires_at: Date;
-    released_at: Date | null;
-    released_reason: string | null;
-  }>(
-    `SELECT id, actor_kind, runtime, task_id, accountable_human, repo, revoked, expires_at, released_at, released_reason
-       FROM mc_dispatch WHERE id = $1`,
+  const rows = await query<DispatchDbRow>(
+    `SELECT ${DISPATCH_COLUMNS} FROM mc_dispatch WHERE id = $1`,
     [id]
   );
-  const r = rows[0];
-  return r
-    ? {
-        id: r.id,
-        actorKind: r.actor_kind,
-        runtime: r.runtime,
-        taskId: r.task_id,
-        accountableHuman: r.accountable_human,
-        repo: r.repo,
-        revoked: r.revoked,
-        expiresAt: r.expires_at.toISOString(),
-        releasedAt: r.released_at?.toISOString() ?? null,
-        releasedReason: r.released_reason ?? null,
-      }
-    : null;
+  return rows[0] ? toDispatchRow(rows[0]) : null;
+}
+
+/** A task's dispatches whose id ends with `suffix` — resolves a checkoutRef (dsp_…last4). */
+export async function findDispatchesBySuffix(taskId: string, suffix: string): Promise<DispatchRow[]> {
+  const rows = await query<DispatchDbRow>(
+    `SELECT ${DISPATCH_COLUMNS} FROM mc_dispatch
+      WHERE task_id = $1 AND right(id, length($2)) = $2
+      ORDER BY issued_at DESC`,
+    [taskId, suffix]
+  );
+  return rows.map(toDispatchRow);
 }
 
 export interface DispatchListRow extends DispatchRow {
@@ -415,12 +431,42 @@ export async function releaseDispatches(
   );
 }
 
+/** PR reopen undoes a merge/close release only; a manual release (mc_release_checkout) stays. */
 export async function unreleaseDispatches(ids: string[], input: { repo: string }): Promise<void> {
   await query(
     `UPDATE mc_dispatch SET released_at = NULL, released_reason = NULL
-      WHERE id = ANY($1::text[]) AND lower(repo) = lower($2) AND NOT revoked`,
+      WHERE id = ANY($1::text[]) AND lower(repo) = lower($2) AND NOT revoked
+        AND released_reason IN ('merged', 'closed')`,
     [ids, input.repo]
   );
+}
+
+/**
+ * Manual release (mc_release_checkout): set released_at/released_reason and
+ * append checkout.released in one statement. Null = nothing changed (the
+ * lease is already released or revoked), so a repeat writes no second event.
+ */
+export async function releaseDispatchManually(input: {
+  id: string;
+  releasedReason: string;
+  actor: string;
+  payload: Record<string, unknown>;
+}): Promise<{ releasedAt: string; eventSeq: string } | null> {
+  const rows = await query<{ released_at: Date; seq: string }>(
+    `WITH released AS (
+       UPDATE mc_dispatch SET released_at = now(), released_reason = $2
+        WHERE id = $1 AND NOT revoked AND released_at IS NULL
+        RETURNING repo, task_id, released_at
+     ), evt AS (
+       INSERT INTO mc_events (kind, actor, repo, task_id, payload)
+       SELECT 'checkout.released', $3, repo, task_id, $4::jsonb FROM released
+       RETURNING seq
+     )
+     SELECT released.released_at, evt.seq FROM released, evt`,
+    [input.id, input.releasedReason, input.actor, JSON.stringify(input.payload)]
+  );
+  const r = rows[0];
+  return r ? { releasedAt: r.released_at.toISOString(), eventSeq: String(r.seq) } : null;
 }
 
 // ─── Compliance check ledger ─────────────────────────────────────────────────

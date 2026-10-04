@@ -214,6 +214,42 @@ A successful tool call is not enough. Validate the returned checkout once:
   That is still a live checkout — it is not permission to open a PR with a
   placeholder stamp.
 
+### Ledger hygiene: release stray or expired checkouts
+
+A PR merge or close releases its checkout. Leases with no PR stay on the
+ledger: a run that stopped, a second checkout on the same task, or a lease that
+expired with `releasedAt: null`. Release them with `mc_release_checkout`.
+
+When to release:
+
+- The run that held the lease stopped and will not open a PR.
+- A task has more than one active lease, and only one run still works on it.
+- `mc_list_checkouts` shows `active: false`, `revoked: false` and
+  `releasedAt: null` (expired, never released).
+
+How:
+
+1. Find the lease: `mc_list_checkouts` with `taskId` (or `mc_get_task`). Copy
+   its `checkoutRef` (`dsp_…last4`).
+2. Call `mc_release_checkout` with `checkoutRef`, `taskId` and a `reason`
+   (for example, `stray lease from a stopped Claude run`). Use `checkoutId`
+   instead when you hold the full `dsp_*` id. For several leases, use
+   `mc_release_checkouts` with `items`; each item reports its own outcome.
+3. If the tool returns `ambiguous_checkout_ref`, two leases on the task share
+   the last 4 characters. Ask the accountable human for the full `checkoutId`.
+
+Rules:
+
+- Only the lease's accountable human, an admin, or a Ledger/CoS steward
+  (`cos@petrasoap.com`) may release. Anyone else gets `forbidden`, and MC
+  records a `checkout.release_denied` event with the reasonCode.
+- A release changes only the lease. It never moves the task stage and never
+  marks it Verified.
+- Never release a lease that an open PR still stamps. That PR's gate then
+  fails with `checkout released`, and only a new checkout fixes it.
+- `already_released` means there is nothing to do. MC writes no second event.
+- A PR reopen does not undo a manual release.
+
 ### Fallback: capture hook / HTTP
 
 ```bash

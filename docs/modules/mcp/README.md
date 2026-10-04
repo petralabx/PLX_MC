@@ -37,6 +37,8 @@ dispatch logic.
 | `mc_search_knowledge` | `GET /api/cursor/knowledge/search?q=&limit=` | `task.read` | Ask the Brain hits with provenance (`id`, `source`, `namespace`, `score`) + honest `status` |
 | `mc_verify_pr` | `GET /api/cursor/verify?repo=&pr=` | `task.read` | the `/api/compliance/verify` verdict from GitHub PR stamps/labels/files; `recorded: false` (no check row, no `gate.*` event) |
 | `mc_request_approval` | `POST /api/cursor/request-approval` | `approval.request` (write) | `gateId`, `status: pending`, `inputRequired: true` |
+| `mc_release_checkout` | `POST /api/cursor/checkouts/release` | `task.checkout` + project ACL + accountable human / admin / Ledger-CoS steward (write) | releases one lease by `checkoutId`, or by `checkoutRef` + `taskId`; returns `checkoutRef`, `releasedAt`, `releasedReason` (`manual: …`), `authz` |
+| `mc_release_checkouts` | `POST /api/cursor/checkouts/release-batch` | same, per item | `results[]` with `ok` + `data` or `ok: false` + `error`; `released`, `failed` |
 
 `mc_list_buckets` now needs only `task.read` (was `bucket.create`), so
 read-only principals can discover `BKT-*` ids without a create grant.
@@ -48,6 +50,21 @@ or verify reasons. They return `checkoutRef` (`dsp_…` + last 4). An agent
 completes with the id from its own `mc_checkout_task` receipt.
 `mc_request_approval` applies the same restricted-project guard
 (`assertTaskProjectAccess`) as the other task writes.
+
+**Checkout release (TASK-2326):** `mc_release_checkout` and
+`mc_release_checkouts` (`src/lib/mcp/checkout-release-actions.ts`) end a stray
+or expired lease. One SQL statement sets `released_at` and `released_reason`
+(`manual: <reason>`) and appends `checkout.released` with the actor, reason,
+`checkoutRef` and authz `reasonCode`. The principal needs `task.checkout`. The
+operator must then be the lease's accountable human, a directory owner/admin,
+or a Ledger/CoS steward (`CHECKOUT_RELEASE_STEWARDS`, today `cos@petrasoap.com`;
+MC has no separate Ledger or CoS service principal). Anyone else gets 403 and a
+`checkout.release_denied` event. An already-released lease returns
+`already_released` and writes no second event. A revoked lease returns
+`checkout_revoked`. A `checkoutRef` needs `taskId`, and two matching leases
+return `ambiguous_checkout_ref`. A release never touches the task. A PR reopen
+undoes only a `merged`/`closed` release, never a manual one. SOP:
+`docs/AGENT-PR-SOP.md` (Ledger hygiene).
 
 **Enable (opt-in):**
 

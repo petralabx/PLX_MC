@@ -23,6 +23,8 @@ composed swarm delegation.
 | `mc_search_knowledge` | Ask the Brain search; hits carry provenance (read-only) |
 | `mc_verify_pr` | Compliance-gate verdict for `repo` + `pr`, not recorded (read-only) |
 | `mc_request_approval` | Raise a runtime approval gate on a task |
+| `mc_release_checkout` | Release a stray or expired lease by `checkoutId`, or `checkoutRef` + `taskId`, with a `reason`; never changes the task |
+| `mc_release_checkouts` | Batch form of `mc_release_checkout` with per-item outcomes |
 | `dispatch_to_swarm` | COS swarm delegation |
 | `list_swarm_teams` / `swarm_health` | Swarm helpers |
 

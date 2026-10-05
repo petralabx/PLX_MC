@@ -601,6 +601,8 @@ export interface PatchTaskInput {
 }
 
 export interface PatchTaskOptions {
+  /** Join an existing transaction; the caller holds the task row lock. */
+  query?: TxQuery;
   /** Compliance PR projection may promote to merged without a complete evidence bundle. */
   complianceProjection?: boolean;
   /** Durable actor attribution for dirty routing fields (P8 / P4 residual). */
@@ -615,8 +617,7 @@ export interface PatchTaskOptions {
 //       lookup → Roadmap item id). A patch touching any of these re-queues the
 //       entity for push.
 //   DB  (jsonb-only, NOT pushed): labels, coassignees, comments, humanOnly.
-//       labels promote to SP once a Labels column exists; comments stay app-only
-//       (EN-001 decision).
+//       labels stay DB-only; comments stay app-only (EN-001 decision).
 const PUSHED_FIELDS = [
   "title",
   "stage",
@@ -639,7 +640,7 @@ export async function patchTask(
   opts: PatchTaskOptions = {}
 ): Promise<Task | null> {
   await ensureSeeded();
-  const row = await repo.getEntity("task", id);
+  const row = await repo.getEntity("task", id, opts.query);
   if (!row) return null;
 
   const { activityLine, ...taskPatch } = patch;
@@ -715,7 +716,7 @@ export async function patchTask(
     syncState: pushedDirty.length > 0 ? "pending" : undefined,
     dirtyFields: dirty,
     fieldAttribution,
-  });
+  }, opts.query);
 
   if ("assignee" in taskPatch) {
     await repo.appendAudit(
@@ -723,15 +724,16 @@ export async function patchTask(
       taskPatch.assignee === null
         ? `Unassigned ${id} — clearing Assigned To on the next SharePoint sync.`
         : `Reassigned ${id} — Assigned To mirrors to SharePoint on the next sync.`,
-      "pending"
+      "pending",
+      opts.query
     );
   }
   // The remaining pushed fields (incl. Accountable Owner / Reporter) log the
   // honest pending-push trail; assignee already has its own line above.
   const loggable = pushedDirty.filter((k) => k !== "assignee");
   if (loggable.length > 0) {
-    await repo.appendAudit(actor, `Edited ${id} (${loggable.join(", ")}) — pending push.`, "pending");
+    await repo.appendAudit(actor, `Edited ${id} (${loggable.join(", ")}) — pending push.`, "pending", opts.query);
   }
-  const updated = await repo.getEntity("task", id);
+  const updated = await repo.getEntity("task", id, opts.query);
   return (updated?.data ?? null) as Task | null;
 }

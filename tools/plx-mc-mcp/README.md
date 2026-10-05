@@ -17,6 +17,8 @@ composed swarm delegation.
 | `mc_create_task` | Create task (SharePoint mirror) |
 | `mc_checkout_task` | Checkout + `MC-Checkout: dsp_*` stamp |
 | `mc_report_progress` | Stage/notes updates |
+| `mc_update_task` | Audited `{taskId, patch}` metadata edit; labels stay DB-only |
+| `mc_update_tasks` | Batch metadata edits, 1–100 `{taskId, patch}` items with independent outcomes |
 | `mc_complete_task` | Complete with evidence |
 | `mc_get_task` | One task + accountable owner, evidence, checkouts, recent events; checkout ids redacted to `checkoutRef` (read-only) |
 | `mc_list_checkouts` | Checkouts as `checkoutRef` (`dsp_…` + last 4, never the usable id) filtered by `repo` (owner/name), `taskId`, `active` (read-only) |
@@ -68,3 +70,38 @@ Register `https://mc.plxcustomer.io/api/cursor/mcp` (Streamable HTTP) — see
 ## Governance
 
 Ships **disabled by default**. Module contract: `docs/modules/mcp/README.md`.
+
+## Task metadata edits (Hub only)
+
+`mc_update_task({taskId, patch})` accepts `labels` (replace) or
+`addLabels` / `removeLabels` (incremental), `description` (replace/clear) or
+`appendDescription` (non-empty, two-newline append), `title` and `priority`
+(`urgent | high | medium | low`). Mutually exclusive forms cannot mix.
+Labels are trimmed and deduplicated, max 128 characters each and 100 per list
+and final set; title is non-empty after trimming, max 255 characters;
+description max 32,000 characters after append. Exactly one non-empty
+`lane:*` must remain: remove an old lane in the same call when adding a new
+one, and supply a lane when editing an unlabeled legacy task.
+
+Unknown fields, stage/Verified, evidence and checkout fields are rejected.
+Auth is the existing MCP principal/operator admission, `task.progress` and
+project ACL; portal/consumer allowlists do not admit these tools. Each update
+uses the normal task patch path and commits a `task.updated` event with
+`actor`, `task_id`, `repo` and `{servicePrincipalId, workerId, diff}` in its
+payload. Diff entries contain only changed fields as `{before, after}`;
+no-ops have an empty diff. The response includes `eventSeq`.
+
+**Labels stay DB-only** in the task JSONB. Labels-only edits audit successfully
+without adding a SharePoint push; title, description and priority use the
+existing ToDos pending/dirty sync path. No Labels column or outbound mapping
+change is needed.
+
+`mc_update_tasks({items:[{taskId, patch}]})` accepts 1–100 items. Items run in
+order, each in its own transaction, and return `{index, ok, data}` or
+`{index, ok:false, error}` plus `updated` and `failed` totals. Invalid patches,
+unknown tasks (REST 404), denied tasks and internal failures do not abort
+siblings. Empty/oversized batches are rejected. Inspect each outcome; inspect
+current description before retrying an uncertain append (appends are not
+idempotent). The stdio client proxies to `/api/cursor/tasks/update` and
+`/api/cursor/tasks/update-batch`; HTTP MCP calls the same actions. See
+`docs/AGENT-PR-SOP.md` for Ledger backfill hygiene.

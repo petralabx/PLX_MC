@@ -19,6 +19,7 @@ export const MCP_TOOL_ALLOWLISTS: Readonly<
   // The portal's COS delegate tool creates tasks (an agent: assignee
   // included) and searches them. The portal also reads agent reports through
   // GET /api/cursor/agent-reports (fleet P8b). Nothing else.
+  // mc_update_task / mc_update_tasks remain Hub-only, like progress/release.
   [PORTAL_MCP_SERVICE_PRINCIPAL_ID]: ["mc_create_task", "mc_search_tasks", "mc_list_agent_reports"],
 };
 

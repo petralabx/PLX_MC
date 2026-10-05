@@ -214,6 +214,35 @@ A successful tool call is not enough. Validate the returned checkout once:
   That is still a live checkout — it is not permission to open a PR with a
   placeholder stamp.
 
+### Ledger: labels and description hygiene
+
+Use the Hub tools `mc_update_task({taskId, patch})` or
+`mc_update_tasks({items:[{taskId, patch}]})` for metadata cleanup. A batch
+accepts 1–100 items and reports each result independently; inspect every
+`ok:false` outcome before retrying. Never encode new lane/dependency metadata
+only in progress notes.
+
+For the 99-task backfill, read each existing note in the form
+`Lane: lane:… · Depends on: …`, preserve its task ids and lane verbatim, then
+use `patch.addLabels` with that lane and the Ledger's dependency label
+convention (for example `depends-on:TASK-n`). Do not guess missing lane or
+dependency values. Preserve existing unrelated labels; remove an existing
+different `lane:*` in the same call. Exactly one lane must remain, including
+when editing an unlabeled legacy task.
+
+Use `description` to replace or clear text, or `appendDescription` to append
+with two newlines, never both. Inspect the current task before retrying an
+uncertain append to avoid duplicating text. `labels` replaces the entire set
+and cannot mix with `addLabels`/`removeLabels`. The tools also accept `title`
+and model priorities; they refuse stage, Verified, evidence, checkout and
+unknown fields. The returned `diff` and `eventSeq` identify the `task.updated`
+audit record. Full limits and error behavior: `docs/modules/mcp/README.md`.
+
+**Labels stay DB-only.** Description, title and priority follow normal ToDos
+sync; labels-only edits are audited and do not enqueue a SharePoint write.
+There is no ToDos Labels column or label sync mapping. These tools are
+Hub-only (`task.progress` + project ACL); the portal allowlist stays unchanged.
+
 ### Ledger hygiene: release stray or expired checkouts
 
 A PR merge or close releases its checkout. Leases with no PR stay on the

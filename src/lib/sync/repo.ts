@@ -95,8 +95,13 @@ export async function getEntities(type?: EntityType): Promise<EntityRow[]> {
   }));
 }
 
-export async function getEntity(type: EntityType, id: string): Promise<EntityRow | null> {
-  const rows = await query<{
+export async function getEntity(
+  type: EntityType,
+  id: string,
+  q: TxQuery = query,
+  forUpdate = false
+): Promise<EntityRow | null> {
+  const rows = await q<{
     entity_type: EntityType;
     id: string;
     data: EntityData;
@@ -107,7 +112,7 @@ export async function getEntity(type: EntityType, id: string): Promise<EntityRow
   }>(
     `SELECT entity_type, id, data, sync_state, sp_item_id, dirty_fields,
             COALESCE(field_attribution, '{}'::jsonb) AS field_attribution
-       FROM entities WHERE entity_type = $1 AND id = $2`,
+       FROM entities WHERE entity_type = $1 AND id = $2${forUpdate ? " FOR UPDATE" : ""}`,
     [type, id]
   );
   const r = rows[0];
@@ -150,9 +155,10 @@ export async function updateEntity(
     dirtyFields?: string[];
     fieldAttribution?: Record<string, FieldAttribution>;
     syncExtras?: Record<string, string | undefined>; // wsVal / spVal / reason
-  }
+  },
+  q: TxQuery = query
 ): Promise<void> {
-  const row = await getEntity(type, id);
+  const row = await getEntity(type, id, q);
   if (!row) return;
   const data = { ...row.data, ...(opts.patch ?? {}) };
   const prevSync = (row.data.sync ?? {}) as Record<string, unknown>;
@@ -186,7 +192,7 @@ export async function updateEntity(
     }
   }
 
-  await query(
+  await q(
     `UPDATE entities
         SET data = $3,
             sync_state = $4,

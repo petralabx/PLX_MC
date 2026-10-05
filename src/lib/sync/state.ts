@@ -639,7 +639,9 @@ export async function patchTask(
   actor: string,
   opts: PatchTaskOptions = {}
 ): Promise<Task | null> {
-  await ensureSeeded();
+  // Transaction callers already hold an existing row; bootstrap would borrow
+  // a second pool connection and can starve concurrent transactions.
+  if (!opts.query) await ensureSeeded();
   const row = await repo.getEntity("task", id, opts.query);
   if (!row) return null;
 

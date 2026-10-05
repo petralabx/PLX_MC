@@ -16,23 +16,19 @@ const h = vi.hoisted(() => ({
 
 vi.mock("@/lib/permissions/decision-log", () => ({ recordPermissionDecision: vi.fn(async () => true) }));
 vi.mock("@/lib/mcp/audit", () => ({ recordMcpToolCall: h.invocation }));
-vi.mock("@/lib/sync/engine", async (original) => ({
-  ...(await original<typeof import("@/lib/sync/engine")>()),
-  ensureSeeded: vi.fn(async () => true),
-}));
-vi.mock("@/lib/sync/repo", async (original) => ({
-  ...(await original<typeof import("@/lib/sync/repo")>()),
-  getBuckets: vi.fn(async () => [
-    { id: "BKT-OPEN", project: null },
-    { id: "BKT-SECRET", project: "PRJ-SECRET" },
-  ]),
-  getProjects: vi.fn(async () => [
-    { id: "PRJ-SECRET", visibility: "restricted", members: ["someone-else@petrasoap.com"] },
-  ]),
-}));
 vi.mock("@/lib/db", () => {
   async function execute(sql: string, params: unknown[] = [], transaction = false) {
     h.queries.push({ sql, transaction });
+    if (!transaction) throw new Error("Update requested a second pool connection");
+    if (sql.includes("FROM buckets ORDER BY")) return [
+      { id: "BKT-OPEN", data: { id: "BKT-OPEN", project: null } },
+      { id: "BKT-PROJECT", data: { id: "BKT-PROJECT", project: "PRJ-OPEN" } },
+      { id: "BKT-SECRET", data: { id: "BKT-SECRET", project: "PRJ-SECRET" } },
+    ];
+    if (sql.includes("FROM projects ORDER BY")) return [
+      { id: "PRJ-OPEN", data: { id: "PRJ-OPEN", visibility: "shared", members: [] } },
+      { id: "PRJ-SECRET", data: { id: "PRJ-SECRET", visibility: "restricted", members: ["someone-else@petrasoap.com"] } },
+    ];
     if (sql.includes("FROM entities WHERE")) {
       const row = h.rows.get(String(params[1]));
       return row ? [structuredClone(row)] : [];
@@ -350,6 +346,14 @@ for (const transport of ["MCP", "REST"] as const) {
 }
 
 describe("update authorization and locked incremental edits", () => {
+  it("keeps task, hierarchy and audit queries on one transaction connection", async () => {
+    seed("TASK-1", { bucket: "BKT-PROJECT" });
+    await expect(actionUpdateTask(identity, { taskId: "TASK-1", patch: { title: "Single connection" } })).resolves.toMatchObject({ taskId: "TASK-1" });
+    expect(h.queries.every((query) => query.transaction)).toBe(true);
+    expect(h.queries.some((query) => query.sql.includes("FROM projects"))).toBe(true);
+    expect(h.events).toHaveLength(1);
+  });
+
   it("refuses revoked and ungranted service actors before opening a transaction", async () => {
     for (const actor of [
       { kind: "service", id: "sp_mcp_codex", status: "revoked" },

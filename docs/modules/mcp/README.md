@@ -91,7 +91,8 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   excluded by its existing tool allowlist; no capability grants were added.
   Unknown task ids return `not_found` (REST 404).
 - The locked task row, normal `patchTask` mutation and `appendEventTx` commit
-  together. `mc_events.kind = task.updated`, `actor = runtime:operatorEmail`,
+  together. Task/project ACL reads reuse that transaction connection; the
+  existing-row edit skips fixture bootstrap to avoid borrowing another connection. `mc_events.kind = task.updated`, `actor = runtime:operatorEmail`,
   `repo`, `task_id`, and payload `{servicePrincipalId, workerId, diff}`.
   `diff` contains only changed fields as `{field: {before, after}}`; a no-op
   still writes an event with `diff: {}`. Responses include `eventSeq`, `diff`,

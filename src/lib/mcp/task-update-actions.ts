@@ -74,7 +74,7 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
   return withTransaction(async (q) => {
     const row = await getEntity("task", taskId, q, true);
     if (!row) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
-    await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
+    await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity), q);
     const before = row.data as unknown as Task;
 
     // Removals happen first so a lane can be replaced in one incremental call.

@@ -863,8 +863,8 @@ interface BucketRow {
   project_id: string | null;
 }
 
-export async function getBuckets(): Promise<Bucket[]> {
-  const rows = await query<BucketRow>("SELECT id, data, project_id FROM buckets ORDER BY created_at, id");
+export async function getBuckets(q: TxQuery = query): Promise<Bucket[]> {
+  const rows = await q<BucketRow>("SELECT id, data, project_id FROM buckets ORDER BY created_at, id");
   // The relational FK is authoritative for the parent (the 011 backfill set it
   // without rewriting jsonb) — fold it into the shape when data.project is unset.
   return rows.map((r) => (r.data.project === undefined ? { ...r.data, project: r.project_id } : r.data));
@@ -1033,8 +1033,8 @@ interface ProjectRow {
   data: Project;
 }
 
-export async function getProjects(): Promise<Project[]> {
-  const rows = await query<ProjectRow>("SELECT id, data FROM projects ORDER BY created_at, id");
+export async function getProjects(q: TxQuery = query): Promise<Project[]> {
+  const rows = await q<ProjectRow>("SELECT id, data FROM projects ORDER BY created_at, id");
   return rows.map((r) => r.data);
 }
 

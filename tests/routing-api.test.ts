@@ -26,6 +26,11 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
   aclPrincipalFromSession: async () => ({ tokens: [] }),
 }));
 
+vi.mock("@/lib/permissions/project-acl-guard", () => ({
+  assertTaskProjectAccess: async () => undefined,
+  assertBucketProjectAccess: async () => undefined,
+}));
+
 vi.mock("@/app/api/routing/inbox/_lib/queries", () => ({
   listInboxProposals: mocks.listInboxProposals,
   getInboxProposalDetail: mocks.getInboxProposalDetail,

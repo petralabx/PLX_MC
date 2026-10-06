@@ -1,6 +1,7 @@
 // Server-only project ACL loaders. Import from routes/actions, not the
 // permissions barrel (keeps `pg` out of the browser bundle).
 
+import type { TxQuery } from "@/lib/db";
 import { ApiError } from "@/lib/api/route";
 import type { Bucket, Project, Task } from "@/lib/mc-data/types";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
@@ -30,10 +31,11 @@ export async function loadProjectAclMaps(): Promise<{
 
 export async function assertProjectIdAccess(
   projectId: string | null | undefined,
-  principal: ProjectAclPrincipal
+  principal: ProjectAclPrincipal,
+  q?: TxQuery
 ): Promise<void> {
   if (!projectId) return;
-  const projects = await getProjects();
+  const projects = await getProjects(q);
   const project = projects.find((row) => row.id === projectId);
   if (!project) {
     throw new ApiError("not_found", `unknown project ${projectId}`, 404);
@@ -43,22 +45,24 @@ export async function assertProjectIdAccess(
 
 export async function assertBucketProjectAccess(
   bucketId: string,
-  principal: ProjectAclPrincipal
+  principal: ProjectAclPrincipal,
+  q?: TxQuery
 ): Promise<void> {
-  const buckets = await getBuckets();
+  const buckets = await getBuckets(q);
   const bucket = buckets.find((row) => row.id === bucketId);
   if (!bucket) return;
-  await assertProjectIdAccess(bucket.project, principal);
+  await assertProjectIdAccess(bucket.project, principal, q);
 }
 
 export async function assertTaskProjectAccess(
   taskId: string,
-  principal: ProjectAclPrincipal
+  principal: ProjectAclPrincipal,
+  q?: TxQuery
 ): Promise<void> {
-  const row = await getEntity("task", taskId);
+  const row = await getEntity("task", taskId, q);
   if (!row) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
   const task = row.data as unknown as Task;
-  await assertBucketProjectAccess(task.bucket, principal);
+  await assertBucketProjectAccess(task.bucket, principal, q);
 }
 
 export function scopeHierarchy<TTask extends { bucket: string }, TBucket extends Bucket, TProject extends Project>(

@@ -713,3 +713,16 @@
 - **Rule going forward:** All repo tooling I/O pins `encoding="utf-8"` (and
   `newline="\n"` on writes). Fixed in
   `scripts/generate-governance-surfaces.py`.
+
+## 2026-10-06 — TASK-2328: audit rows and batch responses are side channels
+
+- **What happened:** Astra flagged that `task.updated` diffs in `mc_events` were
+  exported by `GET /api/events` with no project ACL, and that the 100-item
+  `mc_update_tasks` response (full fields + diff per item) could exceed
+  Vercel's 4.5 MB cap after the writes had committed.
+- **Root cause:** ACL was applied at write time only; the new event kind was
+  not checked against the existing read surfaces, and batch output was not
+  sized against the worst-case input.
+- **Rule going forward:** A new event kind carrying task content needs the
+  read-side ACL check on every export (`filterEventsByProjectAcl`). Batch
+  tools return compact receipts and are tested at max input size.

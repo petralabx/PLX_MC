@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   ACTORS,
@@ -216,6 +216,11 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState("");
 
+  useEffect(() => {
+    if (route.focus !== "evidence") return;
+    document.getElementById("task-evidence")?.scrollIntoView({ block: "start" });
+  }, [route.focus, taskId]);
+
   if (!task) {
     return (
       <div className="mc-main" data-testid="task-detail-screen">
@@ -410,7 +415,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
           </div>
 
           {task.evidence && (
-            <div className="blk">
+            <div className="blk" id="task-evidence">
               <div className="bh">
                 <span className="kk">
                   / Evidence bundle · <b>{progress.done}</b>/{progress.total}

@@ -355,6 +355,16 @@ export async function getDispatch(id: string): Promise<DispatchRow | null> {
   return rows[0] ? toDispatchRow(rows[0]) : null;
 }
 
+/** Durable checkout→task lookup (read-only) for checkout ids outside the sampled event window. */
+export async function taskIdsByDispatchIds(ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const rows = await query<{ id: string; task_id: string }>(
+    `SELECT id, task_id FROM mc_dispatch WHERE id = ANY($1::text[])`,
+    [ids]
+  );
+  return new Map(rows.map((r) => [r.id, r.task_id]));
+}
+
 /** A task's dispatches whose id ends with `suffix` — resolves a checkoutRef (dsp_…last4). */
 export async function findDispatchesBySuffix(taskId: string, suffix: string): Promise<DispatchRow[]> {
   const rows = await query<DispatchDbRow>(

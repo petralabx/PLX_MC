@@ -48,6 +48,8 @@ export interface Route {
   diagram?: string;
   /** Brain Ask open: `/?screen=brain-ask&node=<id>`. */
   node?: string;
+  /** Task evidence section: `/?screen=task&taskId=<id>&focus=evidence`. */
+  focus?: "evidence";
   // Module E (SPEC §3.B.3): an Insights chart segment click navigates to the
   // board carrying a FilterState here; WorkViews adopts it on mount/route change
   // through F's sanitizeFilterState. Optional, so all existing nav() sites carry
@@ -79,6 +81,7 @@ export function routeToUrl(route: Route): string {
     const value = route[key];
     if (value) params.set(key, value);
   }
+  if (route.focus === "evidence") params.set("focus", "evidence");
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
 }
@@ -99,5 +102,6 @@ export function urlToRoute(url: string): Route {
     const value = params.get(key);
     if (value) route[key] = value;
   }
+  if (params.get("focus") === "evidence") route.focus = "evidence";
   return route;
 }

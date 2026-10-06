@@ -26,6 +26,16 @@ describe("routeToUrl (P3)", () => {
     );
   });
 
+  it("carries an evidence focus onto the task screen and drops any other focus value", () => {
+    const route: Route = { screen: "task", taskId: "TASK-227", focus: "evidence" };
+    expect(routeToUrl(route)).toBe("/?screen=task&taskId=TASK-227&focus=evidence");
+    expect(urlToRoute(routeToUrl(route))).toEqual(route);
+    expect(urlToRoute("/?screen=task&taskId=TASK-227&focus=nope")).toEqual({
+      screen: "task",
+      taskId: "TASK-227",
+    });
+  });
+
   it("does NOT serialize the transient filter field", () => {
     const url = routeToUrl({ screen: "board", filter: { text: "wms", priority: ["urgent"] } });
     expect(url).toBe("/?screen=board");

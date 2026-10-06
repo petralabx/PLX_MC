@@ -237,6 +237,12 @@ export interface Evidence {
   rollback?: string | null;
 }
 
+/** Inbox pointer at a task's existing evidence bundle (TASK-631). Derived at read time — not a stored column. */
+export interface ApprovalEvidenceRef {
+  summary: string;
+  itemKeys: string[];
+}
+
 export interface Task {
   id: string;
   title: string;

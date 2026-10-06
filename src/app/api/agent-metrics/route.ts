@@ -8,12 +8,13 @@
 import { z } from "zod";
 
 import { ApiError, route } from "@/lib/api/route";
+import { loadCostRollup } from "@/lib/routing/cost-rollup";
 import {
   MAX_WINDOW_DAYS,
   loadAgentOutcomes,
   loadPrincipalOutcomes,
 } from "@/lib/routing/outcomes";
-import { requireSessionActor } from "@/lib/routing/mutations/actors";
+import { aclPrincipalFromSession, requireSessionActor } from "@/lib/routing/mutations/actors";
 
 export const dynamic = "force-dynamic";
 
@@ -33,5 +34,11 @@ export const GET = route(async (req) => {
     loadAgentOutcomes({ windowDays }),
     loadPrincipalOutcomes({ windowDays }),
   ]);
-  return { outcomes, principals, windowDays: windowDays ?? null, truncated };
+  const body = { outcomes, principals, windowDays: windowDays ?? null, truncated };
+  // ?rollup=cost adds per-runtime and per-bucket cost-per-completed-task
+  // (not bounded by windowDays).
+  if (new URL(req.url).searchParams.get("rollup") === "cost") {
+    return { ...body, cost: await loadCostRollup(await aclPrincipalFromSession()) };
+  }
+  return body;
 });

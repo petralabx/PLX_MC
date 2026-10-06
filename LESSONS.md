@@ -741,3 +741,15 @@
 - **Rule going forward:** A new event kind carrying task content needs the
   read-side ACL check on every export (`filterEventsByProjectAcl`). Batch
   tools return compact receipts and are tested at max input size.
+
+## 2026-10-06 — Cost roll-up skipped the project ACL (TASK-633)
+
+- **What went wrong:** `?rollup=cost` aggregated an unfiltered `snapshot()` and
+  event sample, exposing restricted-project bucket ids, costs and completions to
+  any `task.read` session. Checkout-only telemetry outside the newest-5000 event
+  window also fell into `unbucketed`.
+- **Root cause:** A new read surface derived from tasks/events was not checked
+  against the existing read surfaces (`/api/state`, `/api/events`).
+- **Rule going forward:** Any new aggregate over tasks or events takes the caller
+  principal and scopes through `scopeHierarchy` before aggregating; resolve
+  references from durable tables, not from a sampled window.

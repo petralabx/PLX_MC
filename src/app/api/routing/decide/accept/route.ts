@@ -3,6 +3,8 @@
 import { z } from "zod";
 import { parseBody, route } from "@/lib/api/route";
 import { confirmExistingTask } from "@/lib/routing";
+import { aclPrincipalFromAuthorized } from "@/lib/routing/mutations/actors";
+import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import {
   assertSameOriginMutation,
   requireInboxActor,
@@ -36,6 +38,7 @@ export const POST = route(async (req) => {
     type: "routing",
     id: body.proposalId,
   });
+  await assertTaskProjectAccess(body.taskId, aclPrincipalFromAuthorized(authorized));
 
   return confirmExistingTask(authorized, {
     proposalId: body.proposalId,

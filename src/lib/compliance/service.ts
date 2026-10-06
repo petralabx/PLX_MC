@@ -261,6 +261,13 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
       );
     }
   } else if (permissionsEnforcementEnabled()) {
+    recordUnresolvedActorDenial({
+      site: "compliance.checkout",
+      capability: "task.checkout",
+      actorKind: "service",
+      actorId: input.runtime || "missing-actor",
+      resource: { type: "task", id: input.taskId },
+    });
     throw new ApiError(
       "forbidden",
       "task.checkout requires a durable authorized actor.",
@@ -348,6 +355,13 @@ export async function complete(input: CompleteInput): Promise<{ ok: true }> {
       );
     }
   } else if (permissionsEnforcementEnabled()) {
+    recordUnresolvedActorDenial({
+      site: "compliance.complete",
+      capability: "task.complete",
+      actorKind: "service",
+      actorId: d.runtime || "missing-actor",
+      resource: { type: "task", id: d.taskId },
+    });
     throw new ApiError(
       "forbidden",
       "task.complete requires a durable authorized actor.",

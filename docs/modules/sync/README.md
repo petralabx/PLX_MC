@@ -78,13 +78,20 @@ Routing mutations fail closed when required registers are stale.
   (`config/certs/aws-rds-global-bundle.pem`); override via
   `PLX_MC_DB_CA_CERT` / `PLX_MC_DB_CA_CERT_PATH`; break-glass
   `PLX_MC_DB_TLS_INSECURE=1` (loud).
-- **Missed-tick watchdog** (`src/lib/sync/health.ts`): the reconcile cron
-  (independent schedule) alerts when no register completed inbound within
-  15 min — one deduped `sync.missed_tick` event per hour-long episode plus an
-  optional `PLX_MC_ALERT_WEBHOOK_URL` POST. Fail-open by contract.
+- **Missed-tick watchdog** (`src/lib/sync/health.ts`,
+  `GET /api/cron/missed-tick`): alerts when no register completed inbound
+  within 15 min — one deduped `sync.missed_tick` event per hour-long episode
+  plus an optional `PLX_MC_ALERT_WEBHOOK_URL` POST. Fail-open by contract.
+  GitHub Actions (`.github/workflows/sweep-redundancy.yml`) is the scheduler
+  for this route. `vercel.json` does not list it, so a Vercel Cron outage
+  still raises the alert. `GET /api/cron/reconcile` evaluates the same check
+  while that Vercel cron is alive; both callers share the dedupe.
 - **Cadence redundancy**: `.github/workflows/sweep-redundancy.yml` triggers
-  the sweep every 15 min from GitHub Actions (secret `PLX_MC_CRON_SECRET`) so
-  Vercel Cron is no longer a single point of failure.
+  `GET /api/cron/sweep` every 15 min from GitHub Actions (secret
+  `PLX_MC_CRON_SECRET`; absent secret → the job no-ops) against production
+  (`https://mc.plxcustomer.io`) and, when repo variable
+  `PLX_MC_STAGING_SWEEP_URL` is set, staging. The same job then calls
+  `GET /api/cron/missed-tick` on each armed target.
 
 ### Kill switch / fallback
 

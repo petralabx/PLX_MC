@@ -1,5 +1,8 @@
 // TASK-624 — missed-tick detection: threshold evaluation, deduped alerting,
-// fail-open contract for the hosting cron.
+// fail-open contract, and the independent (non-Vercel-Cron) scheduler.
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -8,6 +11,9 @@ import {
   evaluateSweepHealth,
   MISSED_TICK_ALERT_DEDUP_MS,
   MISSED_TICK_THRESHOLD_MS,
+  MISSED_TICK_WATCHDOG_PATH,
+  SWEEP_REDUNDANCY_PRODUCTION_ORIGIN,
+  SWEEP_REDUNDANCY_STAGING_URL_VAR,
 } from "@/lib/sync/health";
 
 const NOW = new Date("2026-07-23T12:00:00Z");
@@ -112,5 +118,61 @@ describe("checkMissedTick", () => {
       },
     });
     expect(result).toMatchObject({ stale: false, alerted: false });
+  });
+
+  it("dedupes a second caller in the same episode (reconcile cron and the independent watchdog share one alert)", async () => {
+    let lastAlert: string | null = null;
+    const append = vi.fn(async () => {
+      lastAlert = NOW.toISOString();
+    });
+    const notify = vi.fn(async () => true);
+    const shared = {
+      now: NOW,
+      loadCompletions: async () => stampsAgo(30 * 60_000),
+      latestAlertAt: async () => lastAlert,
+      append,
+      notify,
+    };
+    const first = await checkMissedTick(shared);
+    const second = await checkMissedTick(shared);
+    expect(first).toMatchObject({ stale: true, alerted: true });
+    expect(second).toMatchObject({ stale: true, alerted: false });
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("independent missed-tick scheduler", () => {
+  const root = join(import.meta.dirname, "..");
+  const workflow = readFileSync(join(root, ".github/workflows/sweep-redundancy.yml"), "utf8");
+  const vercel = JSON.parse(readFileSync(join(root, "vercel.json"), "utf8")) as {
+    crons: Array<{ path: string }>;
+  };
+
+  it("GitHub Actions calls the watchdog on production and a configurable staging URL", () => {
+    expect(workflow).toContain(SWEEP_REDUNDANCY_PRODUCTION_ORIGIN);
+    expect(workflow).toContain(SWEEP_REDUNDANCY_STAGING_URL_VAR);
+    expect(workflow).toContain(`trigger "${MISSED_TICK_WATCHDOG_PATH}"`);
+    expect(workflow).toContain('trigger "/api/cron/sweep"');
+    // Absent secret stays a quiet no-op (forks and unarmed clones).
+    expect(workflow).toContain("PLX_MC_CRON_SECRET not configured — redundancy tick skipped.");
+    expect(workflow).toContain("exit 0");
+    // Outage drill: watchdog mode must not sweep, and must still call the watchdog.
+    expect(workflow).toContain('if [ "$mode" != "watchdog" ]; then');
+  });
+
+  it("the watchdog route is reachable without a Vercel Cron schedule", () => {
+    expect(vercel.crons.map((c) => c.path)).not.toContain(MISSED_TICK_WATCHDOG_PATH);
+    // Sweep and reconcile stay on Vercel Cron; the watchdog must not join them.
+    expect(vercel.crons.map((c) => c.path)).toEqual(
+      expect.arrayContaining(["/api/cron/sweep", "/api/cron/reconcile"])
+    );
+    const route = readFileSync(
+      join(root, "src", "app", ...MISSED_TICK_WATCHDOG_PATH.split("/").filter(Boolean), "route.ts"),
+      "utf8"
+    );
+    expect(route).toContain("checkMissedTick");
+    const reconcile = readFileSync(join(root, "src/app/api/cron/reconcile/route.ts"), "utf8");
+    expect(reconcile).toContain("checkMissedTick");
   });
 });

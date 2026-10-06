@@ -1,9 +1,14 @@
 // Missed-tick detection + alerting (TASK-624). The sweep cannot detect its
-// own absence, so the independently-scheduled reconcile cron evaluates sweep
-// health each tick: if no register has completed an inbound delta within the
-// threshold, one `sync.missed_tick` event is appended (deduped per episode)
-// and the operator alert webhook is notified. Everything here is fail-open —
-// alerting must never break the cron that hosts it.
+// own absence. Callers:
+//   1. GET /api/cron/missed-tick — GitHub Actions sweep-redundancy.yml.
+//      That workflow is the independent scheduler. It is the path that still
+//      raises the alert when Vercel Cron is down. The route is intentionally
+//      absent from vercel.json.
+//   2. GET /api/cron/reconcile — Vercel Cron observer. Covers the case where
+//      the Actions secret is unset; it goes silent with Vercel Cron.
+// Both callers share checkMissedTick, so one sync.missed_tick episode stays
+// deduped. Everything here is fail-open — alerting must never break the
+// caller.
 
 import { appendEvent, latestEventAt } from "@/lib/compliance/repo";
 import { getRegisterInboundCompletions } from "./repo";
@@ -13,6 +18,21 @@ export const MISSED_TICK_THRESHOLD_MS = 15 * 60_000;
 
 /** One alert per stale episode per hour — re-alerts if the outage persists. */
 export const MISSED_TICK_ALERT_DEDUP_MS = 60 * 60_000;
+
+/**
+ * Watchdog route. GitHub Actions calls it; vercel.json must not schedule it,
+ * or a Vercel Cron outage would silence the alert again.
+ */
+export const MISSED_TICK_WATCHDOG_PATH = "/api/cron/missed-tick";
+
+/** Production origin the redundancy workflow always pings. */
+export const SWEEP_REDUNDANCY_PRODUCTION_ORIGIN = "https://mc.plxcustomer.io";
+
+/**
+ * GitHub Actions repo variable. Empty/unset → the staging leg no-ops.
+ * Expected value: https://mc-staging.plxcustomer.io (no path).
+ */
+export const SWEEP_REDUNDANCY_STAGING_URL_VAR = "PLX_MC_STAGING_SWEEP_URL";
 
 const HEALTH_ACTOR = "scribe";
 
@@ -100,7 +120,7 @@ export async function checkMissedTick(opts: MissedTickOptions = {}): Promise<Mis
       health.ageMs == null ? "never" : `${Math.round(health.ageMs / 60_000)} min ago`;
     const text = `PLX MC sync missed-tick: last complete inbound sweep ${ageText} (threshold ${
       MISSED_TICK_THRESHOLD_MS / 60_000
-    } min). Check Vercel Cron + /api/cron/sweep.`;
+    } min). Check Vercel Cron, the sweep-redundancy workflow, and /api/cron/sweep.`;
     await (opts.append ?? appendEvent)({
       kind: "sync.missed_tick",
       actor: HEALTH_ACTOR,

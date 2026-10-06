@@ -1,19 +1,39 @@
 # Sweep cadence redundancy (TASK-624) — a second, independent scheduler for
-# the SharePoint mirror sweep so Vercel Cron is no longer a single point of
-# failure. The sweep endpoint is idempotent and rate-bounded by its own
-# freshness stamps; an extra tick is harmless, a missed Vercel tick is now
-# covered within 15 minutes from different infrastructure.
+# the SharePoint mirror sweep AND the missed-tick watchdog, so a Vercel Cron
+# outage neither stops sweeps nor silences the alert.
 #
-# Requires the repo secret PLX_MC_CRON_SECRET (same value as the Vercel
-# CRON_SECRET env). Absent secret → the job no-ops instead of failing, so
-# forks and staging clones stay quiet.
+# Targets (matrix):
+# - production is pinned to https://mc.plxcustomer.io
+# - staging is the repo variable PLX_MC_STAGING_SWEEP_URL
+#   (expected: https://mc-staging.plxcustomer.io, origin only, no path).
+#   Unset/empty → that leg no-ops. A set URL must be on the allowlist below.
+#
+# Each armed target receives:
+#   GET /api/cron/sweep        (unless workflow_dispatch mode=watchdog)
+#   GET /api/cron/missed-tick  (always; this route is not a Vercel Cron)
+# Scheduled runs always do both. workflow_dispatch mode=watchdog is the
+# outage drill: call the watchdog without performing a sweep.
+#
+# Requires the repo secret PLX_MC_CRON_SECRET (same value as the deployment
+# CRON_SECRET). Absent secret → the job no-ops instead of failing, so forks
+# stay quiet. 503 from a target means that deployment has no CRON_SECRET;
+# that is not a failure of this redundancy path.
 
 name: sweep-redundancy
 
 on:
   schedule:
     - cron: "7,22,37,52 * * * *" # every 15 min, offset from Vercel's */5 ticks
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "both = sweep then watchdog (scheduled default); watchdog = missed-tick only (outage drill)"
+        type: choice
+        required: false
+        default: both
+        options:
+          - both
+          - watchdog
 
 permissions: {}
 
@@ -21,24 +41,66 @@ jobs:
   sweep:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: production
+            base_url: https://mc.plxcustomer.io
+          - name: staging
+            base_url: ${{ vars.PLX_MC_STAGING_SWEEP_URL }}
     steps:
-      - name: Trigger sweep (redundant scheduler)
+      - name: Trigger sweep and missed-tick watchdog
         env:
           CRON_SECRET: ${{ secrets.PLX_MC_CRON_SECRET }}
+          BASE_URL: ${{ matrix.base_url }}
+          TARGET: ${{ matrix.name }}
+          # schedule has no inputs; empty dispatch mode falls through to both.
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'both' }}
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "PLX_MC_CRON_SECRET not configured — redundancy tick skipped."
             exit 0
           fi
-          status=$(curl -sS -o /tmp/sweep-body -w "%{http_code}" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            --max-time 90 \
-            "https://mc.plxcustomer.io/api/cron/sweep") || status=000
-          echo "sweep endpoint returned HTTP $status"
-          cat /tmp/sweep-body || true
-          # 503 = cron intentionally unconfigured on the deployment; not a failure
-          # of the redundancy path itself.
-          case "$status" in
-            200|503) exit 0 ;;
-            *) exit 1 ;;
+          base=$(printf '%s' "$BASE_URL" | tr -d '[:space:]')
+          base="${base%/}"
+          if [ -z "$base" ]; then
+            echo "No base URL for ${TARGET} — tick skipped (set repo variable PLX_MC_STAGING_SWEEP_URL to arm staging)."
+            exit 0
+          fi
+          case "$base" in
+            https://mc.plxcustomer.io|https://mc-staging.plxcustomer.io|https://plx-mission-control*.vercel.app)
+              ;;
+            *)
+              echo "Refusing ${TARGET} base URL outside the PLX MC allowlist."
+              exit 1
+              ;;
           esac
+          mode="${MODE:-both}"
+          if [ "$mode" != "both" ] && [ "$mode" != "watchdog" ]; then
+            echo "Unknown mode: ${mode}"
+            exit 1
+          fi
+          trigger() {
+            path="$1"
+            label="$2"
+            body=$(mktemp)
+            status=$(curl -sS -o "$body" -w "%{http_code}" \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              --max-time 90 \
+              "${base}${path}") || status=000
+            echo "${TARGET} ${label} returned HTTP ${status}"
+            cat "$body" || true
+            echo
+            rm -f "$body"
+            case "$status" in
+              200|503) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+          fail=0
+          if [ "$mode" != "watchdog" ]; then
+            trigger "/api/cron/sweep" "sweep" || fail=1
+          fi
+          trigger "/api/cron/missed-tick" "missed-tick" || fail=1
+          exit "$fail"

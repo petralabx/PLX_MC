@@ -30,8 +30,10 @@ export const GET = route(async (req) => {
       `[compliance] reconcile ok — processed=${result.processed} resolved=${result.resolved} failed=${result.failed}`
     );
   }
-  // Missed-tick watchdog (TASK-624): this cron is scheduled independently of
-  // the sweep cron, so it can see the sweep's absence. Fail-open by contract.
+  // Vercel-hosted observer only. The independent scheduler is GitHub Actions
+  // sweep-redundancy.yml calling GET /api/cron/missed-tick (not a vercel.json
+  // cron). Both paths share checkMissedTick, so the episode stays deduped.
+  // Fail-open by contract.
   const missedTick = await checkMissedTick();
   if (missedTick.stale) {
     console.error(

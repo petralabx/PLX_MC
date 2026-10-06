@@ -33,6 +33,7 @@ describe("stdio wave 4 tool parity (plus TASK-2326 release tools)", () => {
       mc_update_tasks: '"/tasks/update-batch"',
       mc_release_checkout: '"/checkouts/release"',
       mc_release_checkouts: '"/checkouts/release-batch"',
+      mc_report_session_telemetry: '"/session-telemetry"',
     };
     for (const [tool, path] of Object.entries(routes)) {
       expect(stdioSource).toContain(`"${tool}"`);

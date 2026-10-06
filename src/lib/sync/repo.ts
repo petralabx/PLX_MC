@@ -152,6 +152,7 @@ export async function updateEntity(
     patch?: EntityData;
     syncState?: SyncState;
     spItemId?: string;
+    clearSpItemId?: boolean; // drop the SharePoint link (TASK-1534)
     dirtyFields?: string[];
     fieldAttribution?: Record<string, FieldAttribution>;
     syncExtras?: Record<string, string | undefined>; // wsVal / spVal / reason
@@ -197,7 +198,7 @@ export async function updateEntity(
         SET data = $3,
             sync_state = $4,
             sync_ts = now(),
-            sp_item_id = COALESCE($5, sp_item_id),
+            sp_item_id = CASE WHEN $8::boolean THEN NULL ELSE COALESCE($5, sp_item_id) END,
             dirty_fields = COALESCE($6, dirty_fields),
             field_attribution = COALESCE($7, field_attribution),
             updated_at = now()
@@ -210,6 +211,7 @@ export async function updateEntity(
       opts.spItemId ?? null,
       opts.dirtyFields ? JSON.stringify(opts.dirtyFields) : null,
       opts.dirtyFields || opts.fieldAttribution ? JSON.stringify(attribution) : null,
+      opts.clearSpItemId === true,
     ]
   );
 }
@@ -970,7 +972,7 @@ export async function updateBucket(
     syncState?: SyncState;
     dirtyFields?: string[];
     fieldAttribution?: Record<string, FieldAttribution>;
-    spItemId?: string;
+    spItemId?: string | null; // null clears the SharePoint link (TASK-1534)
   }
 ): Promise<void> {
   const sets: string[] = ["updated_at = now()"];
@@ -1124,7 +1126,7 @@ export async function updateProject(
     syncState?: SyncState;
     dirtyFields?: string[];
     fieldAttribution?: Record<string, FieldAttribution>;
-    spItemId?: string;
+    spItemId?: string | null; // null clears the SharePoint link (TASK-1534)
   }
 ): Promise<void> {
   const sets: string[] = ["updated_at = now()"];

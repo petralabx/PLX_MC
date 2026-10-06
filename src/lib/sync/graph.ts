@@ -224,6 +224,28 @@ export async function patchListItemFields(
   });
 }
 
+// Surgical tombstone: one DELETE of one known item. Never by query/filter/range.
+// SharePoint list item ids are numeric strings, so anything else is refused
+// (also keeps path separators out of the URL). 404 = already gone.
+export async function deleteListItem(
+  ctx: SiteContext,
+  listKey: string,
+  spItemId: string
+): Promise<"deleted" | "already_gone"> {
+  if (typeof spItemId !== "string" || !/^\d+$/.test(spItemId)) {
+    throw new Error(`deleteListItem refused: spItemId must be a non-empty numeric id (got ${JSON.stringify(spItemId)})`);
+  }
+  const listId = ctx.listIds[listKey];
+  if (!listId) throw new Error(`deleteListItem refused: list "${listKey}" is not resolved`);
+  try {
+    await graphFetch(`/sites/${ctx.siteId}/lists/${listId}/items/${spItemId}`, { method: "DELETE" });
+    return "deleted";
+  } catch (err) {
+    if (err instanceof GraphError && err.status === 404) return "already_gone";
+    throw err;
+  }
+}
+
 export async function findItemByField(
   ctx: SiteContext,
   listKey: string,

@@ -235,6 +235,12 @@ export function documentsSyncEnabled(): boolean {
   return (process.env.PLX_MC_DOCUMENTS_SYNC_ENABLED ?? "0").trim() === "1";
 }
 
+// Graph tombstone for restrict-after-push mirror rows (TASK-1534). Default OFF:
+// with the gate off the sweep only logs what it would delete.
+export function restrictedTombstoneEnabled(): boolean {
+  return (process.env.PLX_MC_SP_RESTRICTED_TOMBSTONE ?? "0").trim() === "1";
+}
+
 // CI auth for the compliance verify endpoint (EN-007 review #3). The GitHub
 // status-check workflow calls POST /api/compliance/verify with
 // `Authorization: Bearer $COMPLIANCE_CI_TOKEN`; the route rejects anything that

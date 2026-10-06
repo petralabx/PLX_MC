@@ -4,7 +4,9 @@
 // bucket comes from the task's current bucket, passed in as a taskId→bucket
 // map. Kept apart from outcomes.ts so the metrics shape there is untouched.
 
-import { eventsByKinds, type EventRow } from "@/lib/compliance/repo";
+import { eventsByKinds, taskIdsByDispatchIds, type EventRow } from "@/lib/compliance/repo";
+import { scopeHierarchy } from "@/lib/permissions/project-acl-guard";
+import type { ProjectAclPrincipal } from "@/lib/permissions/project-acl";
 import { snapshot } from "@/lib/sync";
 import { OUTCOME_EVENT_KINDS, type AgentTelemetrySummary } from "./outcomes";
 
@@ -58,13 +60,17 @@ function finish(a: Acc): CostRollup {
 /**
  * Pure: fold outcome events (any order) into per-runtime and per-bucket cost
  * roll-ups. A telemetry row is attributed to its own taskId, else to the task
- * of its checkoutId. Rows tied to no known task land in the "unbucketed" group.
+ * of its checkoutId (checkout events, else `durableCheckoutTask`). Rows tied to
+ * no known task land in the "unbucketed" group; rows tied to a task in
+ * `hiddenTasks` (restricted project the caller cannot see) are dropped.
  */
 export function computeCostRollup(
   events: EventRow[],
-  taskBucket: ReadonlyMap<string, string>
+  taskBucket: ReadonlyMap<string, string>,
+  hiddenTasks: ReadonlySet<string> = new Set(),
+  durableCheckoutTask: ReadonlyMap<string, string> = new Map()
 ): CostRollupResult {
-  const checkoutTask = new Map<string, string>();
+  const checkoutTask = new Map(durableCheckoutTask);
   for (const ev of events) {
     const id = ev.payload?.checkoutId;
     if (ev.kind === "checkout" && ev.taskId && typeof id === "string") checkoutTask.set(id, ev.taskId);
@@ -88,13 +94,14 @@ export function computeCostRollup(
     if (ev.kind === "agent.session_telemetry") {
       const checkoutId = ev.payload?.checkoutId;
       const taskId = ev.taskId ?? (typeof checkoutId === "string" ? checkoutTask.get(checkoutId) ?? null : null);
+      if (taskId && hiddenTasks.has(taskId)) continue;
       for (const a of slot(runtime, taskId)) {
         a.sessions += 1;
         a.tokensIn += num(ev.payload?.tokensIn);
         a.tokensOut += num(ev.payload?.tokensOut);
         a.costCents += num(ev.payload?.costCents);
       }
-    } else if (ev.kind === "task.completed" && ev.taskId) {
+    } else if (ev.kind === "task.completed" && ev.taskId && !hiddenTasks.has(ev.taskId)) {
       for (const a of slot(runtime, ev.taskId)) a.completed.add(ev.taskId);
     }
   }
@@ -122,8 +129,30 @@ export function computeCostRollup(
   };
 }
 
-/** Load events + the task→bucket map and compute the roll-up. */
-export async function loadCostRollup(): Promise<CostRollupResult> {
+/**
+ * Load events + the task→bucket map and compute the roll-up for `principal`:
+ * tasks in restricted projects the caller cannot access are excluded, as in
+ * /api/state. Checkout ids missing from the event sample (newest 5000) are
+ * resolved from the durable dispatch ledger.
+ */
+export async function loadCostRollup(principal: ProjectAclPrincipal): Promise<CostRollupResult> {
   const [events, snap] = await Promise.all([eventsByKinds([...OUTCOME_EVENT_KINDS]), snapshot()]);
-  return computeCostRollup(events, new Map(snap.tasks.map((t) => [t.id, t.bucket])));
+  const visible = scopeHierarchy({ tasks: snap.tasks, buckets: snap.buckets, projects: snap.projects, principal });
+  const visibleIds = new Set(visible.tasks.map((t) => t.id));
+  const hiddenTasks = new Set(snap.tasks.filter((t) => !visibleIds.has(t.id)).map((t) => t.id));
+
+  const sampled = new Set<string>();
+  for (const ev of events) {
+    const id = ev.payload?.checkoutId;
+    if (ev.kind === "checkout" && typeof id === "string") sampled.add(id);
+  }
+  const unresolved = new Set<string>();
+  for (const ev of events) {
+    const id = ev.payload?.checkoutId;
+    if (ev.kind === "agent.session_telemetry" && !ev.taskId && typeof id === "string" && !sampled.has(id)) {
+      unresolved.add(id);
+    }
+  }
+  const durable = await taskIdsByDispatchIds([...unresolved]);
+  return computeCostRollup(events, new Map(visible.tasks.map((t) => [t.id, t.bucket])), hiddenTasks, durable);
 }

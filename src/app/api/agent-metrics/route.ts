@@ -14,7 +14,7 @@ import {
   loadAgentOutcomes,
   loadPrincipalOutcomes,
 } from "@/lib/routing/outcomes";
-import { requireSessionActor } from "@/lib/routing/mutations/actors";
+import { aclPrincipalFromSession, requireSessionActor } from "@/lib/routing/mutations/actors";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ export const GET = route(async (req) => {
   // ?rollup=cost adds per-runtime and per-bucket cost-per-completed-task
   // (not bounded by windowDays).
   if (new URL(req.url).searchParams.get("rollup") === "cost") {
-    return { ...body, cost: await loadCostRollup() };
+    return { ...body, cost: await loadCostRollup(await aclPrincipalFromSession()) };
   }
   return body;
 });

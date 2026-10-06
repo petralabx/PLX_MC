@@ -340,6 +340,13 @@ export async function documentsDriveId(ctx: SiteContext): Promise<string | null>
   return drive?.id ?? null;
 }
 
+// Root folder id of a drive — delta items omit parentReference.path, so folder
+// ancestry is resolved by id and needs to know where the chain ends.
+export async function driveRootId(driveId: string): Promise<string | null> {
+  const root = await graphFetch<{ id?: string }>(`/drives/${driveId}/root?$select=id`);
+  return root?.id ?? null;
+}
+
 // Walk a drive root delta to completion (SHAREPOINT_INTEGRATION.md §6 —
 // document library inbound uses /drives/{drive-id}/root/delta).
 export async function driveDelta(

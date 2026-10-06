@@ -71,7 +71,11 @@ Routing mutations fail closed when required registers are stale.
     bucket's `prd` (`buckets.data` JSON) and re-queues the Roadmap push so
     `PRDLink` reaches SharePoint. A PRD link set by hand is never replaced —
     only an empty one or one the mirror wrote. `/Shared` and unknown folders
-    stay unlinked. Test: `tests/sync-documents.test.ts` (fake drive delta →
+    stay unlinked. Graph's drive delta omits `parentReference.path`, so folder
+    ancestry is resolved by `parentReference.id` through stored folder rows +
+    the delta batch (unresolvable chain → unlinked, never guessed); a moved file
+    has its links cleared. Known limit: renaming/moving a *folder* re-links its
+    children only when they next appear in a delta. Test: `tests/sync-documents.test.ts` (fake drive delta →
     real `runSweep`).
 
 ### Reliability (Phase 2 — TASK-622/623/624)

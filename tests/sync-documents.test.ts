@@ -35,6 +35,7 @@ vi.mock("@/lib/sync/graph", () => {
     }),
     listDelta: async () => ({ items: [], deltaLink: "dl" }),
     documentsDriveId: async () => "drive-1",
+    driveRootId: async () => "root-id",
     driveDelta: async () => ({ items: h.driveItems, deltaLink: "dl-documents" }),
     patchListItemFields: async (_ctx: unknown, list: string, itemId: string, fields: Record<string, unknown>) => {
       if (list === "roadmap") h.roadmapPatches.push({ itemId, fields });
@@ -58,14 +59,16 @@ vi.mock("@/lib/sync/repo", () => ({
     if (type === "file") h.files.set(id, data);
   },
   updateEntity: async (type: string, id: string, opts: { patch?: Record<string, unknown> }) => {
-    if (type === "file" && opts.patch) h.files.set(id, opts.patch);
+    // Real repo.updateEntity merges the patch into the stored data.
+    if (type === "file" && opts.patch) h.files.set(id, { ...h.files.get(id), ...opts.patch });
   },
   insertConflict: async () => {},
   insertPushError: async () => {},
   appendAudit: async (_actor: string, body: string) => {
     h.audits.push(body);
   },
-  getEntities: async () => [],
+  getEntities: async (type: string) =>
+    type === "file" ? [...h.files.entries()].map(([id, data]) => ({ id, data })) : [],
   getDeltaLink: async () => null,
   saveDeltaLink: async () => {},
   countsByList: async () => ({}),
@@ -102,6 +105,15 @@ function bucket(id: string, name: string, prd: string | null = null) {
   };
 }
 
+// Graph's drive delta returns folders as items and children with only
+// parentReference.id (no path) — ancestry must be resolved by id.
+const folderItems = [
+  { id: "f-cpv2", name: "Customer Portal v2", folder: {}, parentReference: { id: "root-id" } },
+  { id: "f-cpv2-prd", name: "PRD", folder: {}, parentReference: { id: "f-cpv2" } },
+  { id: "f-cpv2-ev", name: "Evidence", folder: {}, parentReference: { id: "f-cpv2" } },
+  { id: "f-shared", name: "Shared", folder: {}, parentReference: { id: "root-id" } },
+];
+
 function prdItem(over: Record<string, unknown> = {}) {
   return {
     id: "di-prd",
@@ -110,7 +122,7 @@ function prdItem(over: Record<string, unknown> = {}) {
     size: 49152,
     webUrl: PRD_URL,
     lastModifiedDateTime: "2026-10-05T10:00:00Z",
-    parentReference: { id: "di-prd-folder", path: "/drives/drive-1/root:/Customer%20Portal%20v2/PRD" },
+    parentReference: { id: "f-cpv2-prd" },
     ...over,
   };
 }
@@ -127,7 +139,7 @@ beforeEach(() => {
 
 describe("Project Documents → initiative links (TASK-628)", () => {
   it("a PRD uploaded under its initiative folder is linked on that initiative after a sweep", async () => {
-    h.driveItems = [prdItem()];
+    h.driveItems = [...folderItems, prdItem()];
     await runSweep();
     expect(h.files.get("file-sp-di-prd")).toMatchObject({ bucket: "BKT-CPV2", docType: "PRD", webUrl: PRD_URL });
     expect(h.buckets.find((b) => b.bucket.id === "BKT-CPV2")?.bucket.prd).toBe(PRD_URL);
@@ -139,7 +151,7 @@ describe("Project Documents → initiative links (TASK-628)", () => {
   });
 
   it("is idempotent: a second sweep neither re-links nor re-pushes", async () => {
-    h.driveItems = [prdItem()];
+    h.driveItems = [...folderItems, prdItem()];
     await runSweep();
     h.roadmapPatches.length = 0;
     await runSweep();
@@ -149,28 +161,29 @@ describe("Project Documents → initiative links (TASK-628)", () => {
 
   it("never replaces a PRD link a human set by hand", async () => {
     h.buckets = [bucket("BKT-CPV2", "Customer Portal v2", "https://example.com/hand-set")];
-    h.driveItems = [prdItem()];
+    h.driveItems = [...folderItems, prdItem()];
     await runSweep();
     expect(h.buckets[0].bucket.prd).toBe("https://example.com/hand-set");
     expect(h.files.get("file-sp-di-prd")).toMatchObject({ bucket: "BKT-CPV2", docType: "PRD" });
   });
 
   it("follows a re-uploaded PRD (new URL) when the link was written by the mirror", async () => {
-    h.driveItems = [prdItem()];
+    h.driveItems = [...folderItems, prdItem()];
     await runSweep();
     const v2 = `${PRD_URL}?v=2`;
-    h.driveItems = [prdItem({ webUrl: v2 })];
+    h.driveItems = [prdItem({ webUrl: v2 })]; // folders now come from the stored rows
     await runSweep();
     expect(h.buckets[0].bucket.prd).toBe(v2);
   });
 
   it("links an evidence bundle to its initiative and task without touching bucket.prd", async () => {
     h.driveItems = [
+      ...folderItems,
       prdItem({
         id: "di-ev",
         name: "TASK-628-evidence.zip",
         webUrl: "https://x/ev.zip",
-        parentReference: { path: "/drives/drive-1/root:/BKT-CPV2/Evidence" },
+        parentReference: { id: "f-cpv2-ev" },
       }),
     ];
     await runSweep();
@@ -179,11 +192,31 @@ describe("Project Documents → initiative links (TASK-628)", () => {
   });
 
   it("leaves files outside an initiative folder unlinked", async () => {
-    h.driveItems = [prdItem({ id: "di-s", parentReference: { path: "/drives/drive-1/root:/Shared" } })];
+    h.driveItems = [...folderItems, prdItem({ id: "di-s", parentReference: { id: "f-shared" } })];
     await runSweep();
     const entry = h.files.get("file-sp-di-s");
     expect(entry).toBeDefined();
     expect(entry).not.toHaveProperty("bucket");
+    expect(h.buckets[0].bucket.prd).toBeNull();
+  });
+});
+
+describe("link maintenance", () => {
+  it("unlinks a file moved out of its initiative folder (merge-patch clears stale fields)", async () => {
+    h.driveItems = [...folderItems, prdItem()];
+    await runSweep();
+    expect(h.files.get("file-sp-di-prd")).toMatchObject({ bucket: "BKT-CPV2", docType: "PRD" });
+    h.driveItems = [prdItem({ parentReference: { id: "f-shared" } })];
+    await runSweep();
+    const entry = h.files.get("file-sp-di-prd");
+    expect(entry?.bucket ?? null).toBeNull();
+    expect(entry?.docType ?? null).toBeNull();
+  });
+
+  it("does not guess an initiative when the folder chain cannot be resolved", async () => {
+    h.driveItems = [prdItem({ parentReference: { id: "f-unknown" } })];
+    await runSweep();
+    expect(h.files.get("file-sp-di-prd")?.bucket ?? null).toBeNull();
     expect(h.buckets[0].bucket.prd).toBeNull();
   });
 });

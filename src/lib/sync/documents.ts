@@ -38,15 +38,42 @@ export interface DocumentLink {
   task?: string;
 }
 
-/** Folder segments of the item's parent, relative to the drive root. */
-function parentSegments(item: DriveItem): string[] {
+export interface FolderRef {
+  name: string;
+  parent: string | null; // parent driveItem id
+}
+
+/**
+ * Folder segments of the item's parent, relative to the drive root. Graph's
+ * drive *delta* omits `parentReference.path`, so ancestry is resolved by
+ * walking `parentReference.id` through known folders (the mirrored folder
+ * rows plus this delta batch). A path, when present, wins. Returns null when
+ * the chain cannot be resolved to the drive root — callers then leave the
+ * file unlinked rather than guess an initiative.
+ */
+export function parentSegments(
+  item: DriveItem,
+  folders: ReadonlyMap<string, FolderRef> = new Map(),
+  rootId?: string | null
+): string[] | null {
   const path = item.parentReference?.path;
-  if (!path) return [];
-  const rel = path.includes("root:") ? path.slice(path.indexOf("root:") + 5) : "";
-  return rel
-    .split("/")
-    .map((s) => decodeURIComponent(s).trim())
-    .filter(Boolean);
+  if (path && path.includes("root:")) {
+    return path
+      .slice(path.indexOf("root:") + 5)
+      .split("/")
+      .map((s) => decodeURIComponent(s).trim())
+      .filter(Boolean);
+  }
+  const segments: string[] = [];
+  let id = item.parentReference?.id;
+  for (let depth = 0; id && depth < 32; depth += 1) {
+    if (id === rootId) return segments;
+    const folder = folders.get(id);
+    if (!folder) return null;
+    segments.unshift(folder.name);
+    id = folder.parent ?? undefined;
+  }
+  return null;
 }
 
 /**
@@ -56,9 +83,13 @@ function parentSegments(item: DriveItem): string[] {
  * `TASK-n` token in the file name or any folder segment. Folders and files
  * outside an initiative folder (e.g. /Shared) carry no link.
  */
-export function documentLinkFor(item: DriveItem, buckets: Pick<Bucket, "id" | "name">[]): DocumentLink {
-  if (item.folder) return {};
-  const [initiative, typeFolder, ...rest] = parentSegments(item);
+export function documentLinkFor(
+  item: DriveItem,
+  buckets: Pick<Bucket, "id" | "name">[],
+  segments: string[] | null = parentSegments(item)
+): DocumentLink {
+  if (item.folder || !segments) return {};
+  const [initiative, typeFolder, ...rest] = segments;
   const link: DocumentLink = {};
   if (initiative) {
     const needle = initiative.toLowerCase();
@@ -126,7 +157,8 @@ export function humanFileSize(bytes: number | undefined): string | undefined {
  */
 export function fileEntryFromDriveItem(
   item: DriveItem,
-  buckets: Pick<Bucket, "id" | "name">[] = []
+  buckets: Pick<Bucket, "id" | "name">[] = [],
+  segments?: string[] | null
 ): FileEntry | null {
   if (item.deleted) return null;
   const name = item.name?.trim();
@@ -141,7 +173,7 @@ export function fileEntryFromDriveItem(
     modified: item.lastModifiedDateTime,
     modifiedBy: item.lastModifiedBy?.user?.displayName,
     size: isFolder ? undefined : humanFileSize(item.size),
-    ...documentLinkFor(item, buckets),
+    ...(segments === undefined ? documentLinkFor(item, buckets) : documentLinkFor(item, buckets, segments)),
     ...(item.webUrl ? { webUrl: item.webUrl } : {}),
     sync: {
       state: "synced",

@@ -22,6 +22,7 @@ import {
 import {
   createListItem,
   documentsDriveId,
+  driveRootId,
   driveDelta,
   findItemByField,
   GraphError,
@@ -65,7 +66,7 @@ import {
   type TaskPersonMc,
 } from "./mapping";
 import { documentsSyncEnabled } from "@/lib/secrets";
-import { fileEntryFromDriveItem, type DriveItem } from "./documents";
+import { fileEntryFromDriveItem, fileEntryIdForDriveItem, parentSegments, type DriveItem, type FolderRef } from "./documents";
 import { evaluateSyncFreshness, type SyncFreshnessResult } from "./freshness";
 import {
   clearPushRetry,
@@ -859,6 +860,26 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
   const { items, deltaLink } = await driveDelta(driveId, stored);
   const bucketRows = await repo.getBucketRows();
   const buckets = bucketRows.map((r) => r.bucket);
+  // Folder ancestry for link derivation: stored folder rows overlaid with this
+  // batch (so renames/moves in the batch win).
+  const rootId = await driveRootId(driveId);
+  const folders = new Map<string, FolderRef>();
+  const prefix = fileEntryIdForDriveItem("");
+  for (const row of await repo.getEntities("file")) {
+    const f = row.data as unknown as FileEntry;
+    if (f.kind === "folder" && row.id.startsWith(prefix)) {
+      folders.set(row.id.slice(prefix.length), {
+        name: f.name,
+        parent: f.parent?.startsWith(prefix) ? f.parent.slice(prefix.length) : null,
+      });
+    }
+  }
+  for (const raw of items) {
+    const f = raw as unknown as DriveItem;
+    if (f?.id && f.folder && !f.deleted && f.name) {
+      folders.set(f.id, { name: f.name, parent: f.parentReference?.id ?? null });
+    }
+  }
   for (const raw of items) {
     const item = raw as unknown as DriveItem & { root?: object };
     if (!item?.id || item.root) continue; // malformed page rows / the drive root
@@ -871,15 +892,22 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
       result.skipped += 1;
       continue;
     }
-    const entry = fileEntryFromDriveItem(item, buckets);
+    const entry = fileEntryFromDriveItem(item, buckets, parentSegments(item, folders, rootId));
     if (!entry) {
       result.skipped += 1;
       continue;
     }
     const existing = await repo.getEntity("file", entry.id);
     if (existing) {
+      // Merge-patch: derived links are nulled explicitly so a file moved out
+      // of an initiative/type folder (or that lost its task token) is unlinked.
       await repo.updateEntity("file", entry.id, {
-        patch: entry as unknown as EntityData,
+        patch: {
+          ...entry,
+          bucket: entry.bucket ?? null,
+          docType: entry.docType ?? null,
+          task: entry.task ?? null,
+        } as unknown as EntityData,
         syncState: "synced",
       });
     } else {

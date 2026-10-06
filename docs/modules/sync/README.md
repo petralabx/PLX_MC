@@ -78,6 +78,14 @@ Routing mutations fail closed when required registers are stale.
     children only when they next appear in a delta. Test: `tests/sync-documents.test.ts` (fake drive delta →
     real `runSweep`).
 
+- **Restricted tombstone (TASK-1534)**: a project marked restricted after it
+  was pushed keeps its mirrored Projects/Roadmap/ToDos items. With
+  `PLX_MC_SP_RESTRICTED_TOMBSTONE=1` (default off) the sweep deletes exactly
+  those items by recorded `spItemId` (`deleteListItem`: one Graph DELETE per
+  id; 404 = already gone; 429/5xx deferred via the push retry ledger) and
+  clears the local link. Gate off: only logs what it would delete. Local rows
+  are never deleted. Test: `tests/sync-restricted-tombstone.test.ts`.
+
 ### Reliability (Phase 2 — TASK-622/623/624)
 
 - **Outbound push retry queue** (`outbound_push_retries`, migration 024): a

@@ -77,6 +77,7 @@ import {
   type PushEntityKind,
 } from "./push-queue";
 import * as repo from "./repo";
+import { tombstoneRestrictedMirrors } from "./restricted-tombstone";
 import { SYNC_INBOUND_SERVICE_PRINCIPAL_ID, type PermissionActor } from "@/lib/permissions";
 import {
   authorizeStaged,
@@ -1316,6 +1317,9 @@ export async function runSweep(actor: string = SYNC_ACTOR): Promise<SweepResult>
   // Entities still inside their transient-failure backoff window are skipped
   // this tick instead of hammering a throttled/unavailable Graph (TASK-622).
   const deferredSet = await getDeferredPushSet();
+  // Restrict-after-push: delete the already-mirrored items of restricted
+  // projects (gated, default OFF — see restricted-tombstone.ts; TASK-1534).
+  pushDeferred += (await tombstoneRestrictedMirrors(ctx, SYNC_ACTOR)).deferred;
   for (const register of [pushRepoRegistry, pushProjectsMirror, pushBucketRoadmap]) {
     const r = await register(ctx, deferredSet);
     pushed += r.pushed;

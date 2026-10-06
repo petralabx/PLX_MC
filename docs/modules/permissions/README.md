@@ -81,9 +81,11 @@ throws 403 in `actionCreateTask` and `PATCH /api/tasks/[id]`.
 `reasonCode`, and `policyVersion` to `permissions_decision_log` (migration 022)
 via `src/lib/permissions/enforcement.ts` + `decision-log.ts`, including the
 enforcement mode and — during staged rollout — the shadow (real-identity)
-verdict. Recording is fail-open and a no-op in mode `off`. UI affordance
-checks (e.g. the `isApprover` display shim) are not enforcement and are not
-recorded.
+verdict. Recording is fail-open and a no-op in mode `off`. The same sink
+covers MCP auth denials (missing or revoked principal), tool-allowlist
+denials, checkout-release verdicts, agent-assignee decisions, restricted-project
+ACL decisions, and routing-session transfer verdicts. UI affordance checks
+(e.g. the `isApprover` display shim) are not enforcement and are not recorded.
 
 **Project ACL (TASK-1527 / TASK-1548):** restricted projects are a resource
 allowlist, not a new capability. `src/lib/permissions/project-acl.ts` is the

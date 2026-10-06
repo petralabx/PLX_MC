@@ -5,14 +5,37 @@ import type { TxQuery } from "@/lib/db";
 import { ApiError } from "@/lib/api/route";
 import type { Bucket, Project, Task } from "@/lib/mc-data/types";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
+import { recordPermissionDecision } from "./decision-log";
 import {
   assertCanAccessProject,
+  canAccessProject,
   filterBucketsByAcl,
   filterProjectsByAcl,
   filterTasksByAcl,
   indexById,
+  isRestrictedProject,
   type ProjectAclPrincipal,
 } from "./project-acl";
+import { POLICY_VERSION } from "./types";
+
+function recordRestrictedProjectDecision(
+  projectId: string,
+  principal: ProjectAclPrincipal,
+  allowed: boolean
+): void {
+  const actorId = principal.tokens[0] ?? "unknown";
+  void recordPermissionDecision({
+    site: "permissions.project-acl",
+    actorKind: actorId.startsWith("sp_") ? "service" : "human",
+    actorId,
+    capability: "project.access",
+    resourceType: "project",
+    resourceId: projectId,
+    allowed,
+    reasonCode: allowed ? "allowed" : "context_denied",
+    policyVersion: POLICY_VERSION,
+  });
+}
 
 export async function loadProjectAclMaps(): Promise<{
   projects: Project[];
@@ -39,6 +62,9 @@ export async function assertProjectIdAccess(
   const project = projects.find((row) => row.id === projectId);
   if (!project) {
     throw new ApiError("not_found", `unknown project ${projectId}`, 404);
+  }
+  if (isRestrictedProject(project)) {
+    recordRestrictedProjectDecision(projectId, principal, canAccessProject(project, principal));
   }
   assertCanAccessProject(project, principal);
 }

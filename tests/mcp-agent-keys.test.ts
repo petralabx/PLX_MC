@@ -3,7 +3,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/permissions/decision-log", () => ({
+  recordPermissionDecision: vi.fn(async () => true),
+}));
+
 import { ApiError } from "@/lib/api/route";
+import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 import {
   mcpAgentKeyRegistry,
   resolveMcpPrincipalIdFromKey,
@@ -256,6 +261,14 @@ describe("verifyMcpRequest with per-agent keys", () => {
         query: identityQuery,
       })
     ).rejects.toMatchObject({ code: "mcp_service_principal_revoked", status: 403 });
+    expect(recordPermissionDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        site: "mcp.auth",
+        allowed: false,
+        reasonCode: "actor_revoked",
+        actorId: "sp_mcp_claude_code",
+      })
+    );
   });
 
   it("every agent principal carries the reviewed MCP bundle, never human grants", async () => {

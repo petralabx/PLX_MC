@@ -74,7 +74,7 @@ Routing mutations fail closed when required registers are stale.
     stay unlinked. Graph's drive delta omits `parentReference.path`, so folder
     ancestry is resolved by `parentReference.id` through stored folder rows +
     the delta batch (unresolvable chain → unlinked, never guessed); a moved file
-    has its links cleared. Known limit: renaming/moving a *folder* re-links its
+    has its links cleared (and a mirror-owned bucket `prd` with them; MC-side only — the push omits an empty `PRDLink`, so SharePoint's column keeps the stale URL until overwritten). Known limit: renaming/moving a *folder* re-links its
     children only when they next appear in a delta. Test: `tests/sync-documents.test.ts` (fake drive delta →
     real `runSweep`).
 

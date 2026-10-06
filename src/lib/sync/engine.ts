@@ -842,6 +842,37 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
 
 const DOCUMENTS_DELTA_KEY = "documents";
 
+// Set (or clear, to=null) a bucket's mirror-owned PRD link. `owned` is the URL
+// the mirror previously wrote for this file: the bucket is only touched when
+// its prd is empty (set) or equals `owned` (set/clear).
+async function setMirroredPrd(
+  rows: repo.BucketWithSync[],
+  bucketId: string,
+  owned: string | undefined,
+  to: string | null,
+  fileName: string
+): Promise<void> {
+  const row = rows.find((r) => r.bucket.id === bucketId);
+  if (!row || row.bucket.prd === to) return;
+  if (row.bucket.prd && row.bucket.prd !== owned) return;
+  await repo.updateBucket(bucketId, {
+    patch: { prd: to },
+    // Re-queue the Roadmap push so PRDLink reaches SharePoint, and mark prd
+    // dirty so a Roadmap delta cannot overwrite it before it is pushed. A
+    // bucket held in conflict/error keeps its state.
+    ...(row.syncState === "synced" ? { syncState: "pending" as const } : {}),
+    dirtyFields: [...new Set([...row.dirtyFields, "prd"])],
+  });
+  row.bucket.prd = to;
+  await repo.appendAudit(
+    SYNC_ACTOR,
+    to
+      ? `Project Documents PRD linked — ${fileName} → ${bucketId}.`
+      : `Project Documents PRD unlinked — ${fileName} no longer a PRD of ${bucketId}.`,
+    "synced"
+  );
+}
+
 // Inbound-only mirror of the Project Documents drive. SharePoint is
 // authoritative for files; MC never pushes them. Deletions are audited and
 // skipped (engine never deletes — TOOLS.md guardrail).
@@ -916,24 +947,16 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
     result.pulled += 1;
     // A PRD in an initiative's folder becomes that initiative's PRD link (the
     // bucket's data.prd, pushed out as Roadmap PRDLink). A PRD link a human set
-    // by hand is never replaced; only an empty one or one this mirror wrote.
-    if (entry.docType === "PRD" && entry.bucket && entry.webUrl) {
-      const row = bucketRows.find((r) => r.bucket.id === entry.bucket);
-      const prev = (existing?.data as Partial<FileEntry> | undefined)?.webUrl;
-      if (row && row.bucket.prd !== entry.webUrl && (!row.bucket.prd || row.bucket.prd === prev)) {
-        await repo.updateBucket(row.bucket.id, {
-          patch: { prd: entry.webUrl },
-          // Re-queue the Roadmap push so PRDLink reaches SharePoint; never
-          // clobber a bucket held in conflict/error.
-          ...(row.syncState === "synced" ? { syncState: "pending" as const } : {}),
-        });
-        row.bucket.prd = entry.webUrl;
-        await repo.appendAudit(
-          SYNC_ACTOR,
-          `Project Documents PRD linked — ${entry.name} → ${entry.bucket}.`,
-          "synced"
-        );
-      }
+    // by hand is never replaced or cleared; only an empty one or one this
+    // mirror wrote (matched by the file's previously mirrored URL).
+    const before = existing?.data as Partial<FileEntry> | undefined;
+    const wasPrd = before?.docType === "PRD" && before.bucket && before.webUrl;
+    const isPrd = entry.docType === "PRD" && entry.bucket && entry.webUrl;
+    if (wasPrd && !(isPrd && entry.bucket === before.bucket)) {
+      await setMirroredPrd(bucketRows, before.bucket!, before.webUrl!, null, entry.name);
+    }
+    if (isPrd) {
+      await setMirroredPrd(bucketRows, entry.bucket!, before?.webUrl, entry.webUrl!, entry.name);
     }
   }
   if (result.pulled > 0) {

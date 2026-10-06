@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   audits: [] as string[],
   files: new Map<string, Record<string, unknown>>(),
-  buckets: [] as { bucket: Record<string, unknown>; syncState: string; spItemId: string | null }[],
+  buckets: [] as { bucket: Record<string, unknown>; syncState: string; spItemId: string | null; dirtyFields: string[] }[],
   driveItems: [] as Record<string, unknown>[],
   roadmapPatches: [] as { itemId: string; fields: Record<string, unknown> }[],
 }));
@@ -75,11 +75,15 @@ vi.mock("@/lib/sync/repo", () => ({
   seedRepos: async () => {},
   getRepos: async () => [],
   getProjectRows: async () => [],
-  getBucketRows: async () => h.buckets.map((b) => ({ ...b, dirtyFields: [] })),
+  getBucketRows: async () => h.buckets.map((b) => ({ ...b, bucket: { ...b.bucket } })),
   getBucketBySpItemId: async () => null,
-  updateBucket: async (id: string, opts: { patch?: Record<string, unknown>; syncState?: string }) => {
+  updateBucket: async (
+    id: string,
+    opts: { patch?: Record<string, unknown>; syncState?: string; dirtyFields?: string[] }
+  ) => {
     const row = h.buckets.find((b) => b.bucket.id === id);
     if (!row) return;
+    if (opts.dirtyFields) row.dirtyFields = opts.dirtyFields;
     row.bucket = { ...row.bucket, ...(opts.patch ?? {}) };
     if (opts.syncState) row.syncState = opts.syncState;
   },
@@ -102,6 +106,7 @@ function bucket(id: string, name: string, prd: string | null = null) {
     bucket: { id, name, owner: "vince", health: "track", target: "", started: "", desc: "", repos: [], prd, sync: {} },
     syncState: "synced",
     spItemId: `sp-${id}`,
+    dirtyFields: [] as string[],
   };
 }
 
@@ -144,6 +149,8 @@ describe("Project Documents → initiative links (TASK-628)", () => {
     expect(h.files.get("file-sp-di-prd")).toMatchObject({ bucket: "BKT-CPV2", docType: "PRD", webUrl: PRD_URL });
     expect(h.buckets.find((b) => b.bucket.id === "BKT-CPV2")?.bucket.prd).toBe(PRD_URL);
     expect(h.buckets.find((b) => b.bucket.id === "BKT-OTHER")?.bucket.prd).toBeNull();
+    // prd is dirty until pushed, so a Roadmap delta cannot overwrite it.
+    expect(h.buckets.find((b) => b.bucket.id === "BKT-CPV2")?.dirtyFields).toContain("prd");
     // The re-queued bucket pushes PRDLink out to the Roadmap list in the same sweep.
     expect(h.roadmapPatches).toEqual([
       { itemId: "sp-BKT-CPV2", fields: expect.objectContaining({ PRDLink: PRD_URL }) },
@@ -211,6 +218,17 @@ describe("link maintenance", () => {
     const entry = h.files.get("file-sp-di-prd");
     expect(entry?.bucket ?? null).toBeNull();
     expect(entry?.docType ?? null).toBeNull();
+    // The mirror-owned PRD link on the old initiative is cleared with it.
+    expect(h.buckets[0].bucket.prd).toBeNull();
+  });
+
+  it("keeps a hand-set PRD link when the mirrored file moves away", async () => {
+    h.buckets = [bucket("BKT-CPV2", "Customer Portal v2", "https://example.com/hand-set")];
+    h.driveItems = [...folderItems, prdItem()];
+    await runSweep();
+    h.driveItems = [prdItem({ parentReference: { id: "f-shared" } })];
+    await runSweep();
+    expect(h.buckets[0].bucket.prd).toBe("https://example.com/hand-set");
   });
 
   it("does not guess an initiative when the folder chain cannot be resolved", async () => {

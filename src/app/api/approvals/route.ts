@@ -9,6 +9,13 @@ export const dynamic = "force-dynamic";
 
 export const GET = route(async () => {
   await requireSessionActor("task.read");
-  const approvals = await listPendingApprovals();
+  const approvals = (await listPendingApprovals()).map((row) => ({
+    taskId: row.taskId,
+    taskTitle: row.taskTitle,
+    stage: row.stage,
+    gate: row.gate,
+    // Pointer at the task's existing evidence bundle. No new column.
+    evidence: row.evidence,
+  }));
   return { approvals };
 });

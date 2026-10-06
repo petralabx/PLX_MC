@@ -58,6 +58,13 @@
   flex: 1;
 }
 
+.ap-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
 .ap-task {
   background: transparent;
   border: none;
@@ -66,6 +73,19 @@
   font-weight: 600;
   cursor: pointer;
   text-align: left;
+}
+
+.ap-evidence {
+  color: var(--p-muted);
+  font-family: var(--mono);
+  font-size: var(--p-text-kicker);
+  text-decoration: underline;
+}
+
+.ap-evidence:hover,
+.ap-evidence:focus-visible {
+  color: var(--p-ink);
+  outline: none;
 }
 
 .ap-task:hover,

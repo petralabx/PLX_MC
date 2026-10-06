@@ -168,6 +168,39 @@ describe("listPendingApprovals", () => {
     });
     const rows = await listPendingApprovals();
     expect(rows.map((r) => r.gate.id)).toEqual(["apg_b", "apg_a"]);
-    expect(rows[0]).toMatchObject({ taskId: "TASK-2", stage: "progress" });
+    expect(rows[0]).toMatchObject({ taskId: "TASK-2", stage: "progress", evidence: null });
+  });
+
+  it("projects the task's existing evidence bundle and leaves it null when there is none", async () => {
+    seedTask("TASK-1", {
+      evidence: {
+        summary: "  ",
+        items: [],
+      },
+      approvalGates: [
+        { id: "apg_empty", reason: "blank", requestedBy: "x", requestedAt: "2026-07-23T00:00:00Z", status: "pending" },
+      ],
+    });
+    seedTask("TASK-2", {
+      evidence: {
+        summary: "Shipped the gate",
+        items: [{ key: "qa", label: "QA", done: true }],
+      },
+      approvalGates: [
+        { id: "apg_ev", reason: "look", requestedBy: "x", requestedAt: "2026-07-23T01:00:00Z", status: "pending" },
+      ],
+    });
+    seedTask("TASK-3", {
+      approvalGates: [
+        { id: "apg_none", reason: "none", requestedBy: "x", requestedAt: "2026-07-23T02:00:00Z", status: "pending" },
+      ],
+    });
+    const rows = await listPendingApprovals();
+    expect(rows.find((r) => r.taskId === "TASK-1")?.evidence).toBeNull();
+    expect(rows.find((r) => r.taskId === "TASK-2")?.evidence).toEqual({
+      summary: "Shipped the gate",
+      itemKeys: ["qa"],
+    });
+    expect(rows.find((r) => r.taskId === "TASK-3")?.evidence).toBeNull();
   });
 });

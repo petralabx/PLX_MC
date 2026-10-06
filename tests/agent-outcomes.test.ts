@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { computeAgentOutcomes } from "@/lib/routing/outcomes";
+import { computeAgentOutcomes, computePrincipalOutcomes, windowSince } from "@/lib/routing/outcomes";
 import type { EventRow } from "@/lib/compliance/repo";
 
 let seq = 0;
@@ -97,5 +97,85 @@ describe("computeAgentOutcomes", () => {
     ];
     const [m] = computeAgentOutcomes(events);
     expect(m.telemetry).toEqual({ sessions: 1, tokensIn: 0, tokensOut: 0, costCents: 0 });
+  });
+});
+
+describe("computePrincipalOutcomes (TASK-632)", () => {
+  const co = (rt: string, ts: string, task: string, id: string, principal: string | null) =>
+    ev("checkout", rt, ts, task, { checkoutId: id, permissionActorId: principal });
+  const done = (rt: string, ts: string, task: string, id: string) =>
+    ev("task.completed", rt, ts, task, { checkoutId: id });
+  const gate = (kind: string, rt: string, ts: string, task: string, actorKind = "agent") =>
+    ev(kind, rt, ts, task, { actorKind });
+
+  it("keys by principal, not runtime label, with median cycle", () => {
+    const [a, b] = computePrincipalOutcomes([
+      co("cursor", "2026-10-01T00:00:00Z", "T1", "d1", "sp_a"),
+      done("cursor", "2026-10-01T02:00:00Z", "T1", "d1"),
+      co("cursor", "2026-10-01T00:00:00Z", "T2", "d2", "sp_b"),
+    ]);
+    expect(a.principal).toBe("sp_a");
+    expect(a.runtimes).toEqual(["cursor"]);
+    expect(a.successRate).toBe(1);
+    expect(a.medianCycleMs).toBe(2 * 3600_000);
+    expect(b.principal).toBe("sp_b");
+    expect(b.successRate).toBe(0);
+  });
+
+  it("buckets checkouts without a principal as unattributed", () => {
+    const [m] = computePrincipalOutcomes([co("codex", "2026-10-01T00:00:00Z", "T1", "d1", null)]);
+    expect(m.principal).toBe("unattributed");
+  });
+
+  it("counts agent gate outcomes per principal and ignores operator gates", () => {
+    const [m] = computePrincipalOutcomes([
+      co("cursor", "2026-10-01T00:00:00Z", "T1", "d1", "sp_a"),
+      gate("gate.blocked", "cursor", "2026-10-01T01:00:00Z", "T1"),
+      gate("gate.passed", "cursor", "2026-10-01T02:00:00Z", "T1"),
+      gate("gate.passed", "someone", "2026-10-01T02:00:00Z", "T1", "operator"),
+      ev("approval.decided", "human", "2026-10-01T03:00:00Z", "T1", { decision: "rejected" }),
+    ]);
+    expect(m.gatePassed).toBe(1);
+    expect(m.gateBlocked).toBe(1);
+    expect(m.gatePassRate).toBe(0.5);
+    expect(m.approvalsRejected).toBe(1);
+  });
+
+  it("counts a stage reopen once and charges it to the completing principal", () => {
+    const [m] = computePrincipalOutcomes([
+      co("cursor", "2026-10-01T00:00:00Z", "T1", "d1", "sp_a"),
+      done("cursor", "2026-10-01T01:00:00Z", "T1", "d1"),
+      ev("task.progress", "cursor:x@y", "2026-10-01T02:00:00Z", "T1", { stage: "progress" }),
+      ev("task.progress", "cursor:x@y", "2026-10-01T03:00:00Z", "T1", { stage: "review" }),
+    ]);
+    expect(m.reopens).toBe(1);
+    expect(m.reworkRate).toBe(1);
+  });
+
+  it("does not double count a re-checkout followed by progress", () => {
+    const [m] = computePrincipalOutcomes([
+      co("cursor", "2026-10-01T00:00:00Z", "T1", "d1", "sp_a"),
+      done("cursor", "2026-10-01T01:00:00Z", "T1", "d1"),
+      co("cursor", "2026-10-01T02:00:00Z", "T1", "d2", "sp_a"),
+      ev("task.progress", "cursor:x@y", "2026-10-01T03:00:00Z", "T1", { stage: "progress" }),
+    ]);
+    expect(m.reworkCheckouts).toBe(1);
+    expect(m.reopens).toBe(0);
+  });
+
+  it("does not treat progress at a done-band stage as a reopen", () => {
+    const [m] = computePrincipalOutcomes([
+      co("cursor", "2026-10-01T00:00:00Z", "T1", "d1", "sp_a"),
+      done("cursor", "2026-10-01T01:00:00Z", "T1", "d1"),
+      ev("task.progress", "cursor:x@y", "2026-10-01T02:00:00Z", "T1", { stage: "verified" }),
+    ]);
+    expect(m.reopens).toBe(0);
+  });
+});
+
+describe("rolling window", () => {
+  it("windowSince is undefined when unbounded and now-minus-days otherwise", () => {
+    expect(windowSince(undefined)).toBeUndefined();
+    expect(windowSince(7, Date.parse("2026-10-08T00:00:00Z"))).toBe("2026-10-01T00:00:00.000Z");
   });
 });

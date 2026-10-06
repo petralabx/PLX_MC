@@ -32,6 +32,7 @@ vi.mock("@/lib/sync/graph", () => {
       return { items: [], deltaLink: `dl-${listKey}` };
     },
     documentsDriveId: async () => h.driveId,
+    driveRootId: async () => "di-root",
     driveDelta: async () => ({ items: h.driveItems, deltaLink: "dl-documents" }),
     patchListItemFields: async () => {},
     createListItem: async () => "new-item",

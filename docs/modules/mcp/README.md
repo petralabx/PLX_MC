@@ -39,6 +39,7 @@ dispatch logic.
 | `mc_request_approval` | `POST /api/cursor/request-approval` | `approval.request` (write) | `gateId`, `status: pending`, `inputRequired: true` |
 | `mc_release_checkout` | `POST /api/cursor/checkouts/release` | `task.checkout` + project ACL + accountable human / admin / Ledger-CoS steward (write) | releases one lease by `checkoutId`, or by `checkoutRef` + `taskId`; returns `checkoutRef`, `releasedAt`, `releasedReason` (`manual: …`), `authz` |
 | `mc_release_checkouts` | `POST /api/cursor/checkouts/release-batch` | same, per item | `results[]` with `ok` + `data` or `ok: false` + `error`; `released`, `failed` |
+| `mc_report_session_telemetry` | `POST /api/cursor/session-telemetry` | `telemetry.report` (write) | appends one `agent.session_telemetry` event per `sessionId` (replays are no-ops); read back per runtime and per bucket via `GET /api/agent-metrics?rollup=cost` (`src/lib/routing/cost-rollup.ts`); the roll-up applies the caller's project ACL (restricted-project tasks and their telemetry are dropped) and resolves checkout ids missing from the newest-5000 event sample from the `mc_dispatch` ledger. Remaining limit: a task's own `task.completed`/telemetry events older than that sample are not counted |
 
 `mc_list_buckets` now needs only `task.read` (was `bucket.create`), so
 read-only principals can discover `BKT-*` ids without a create grant.

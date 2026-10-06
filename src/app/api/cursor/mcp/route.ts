@@ -24,7 +24,10 @@ async function handleMcpRequest(req: Request): Promise<Response> {
     return transport.handleRequest(req);
   } catch (err) {
     if (err instanceof ApiError) {
-      return Response.json({ error: { code: err.code, message: err.message } }, { status: err.status });
+      return Response.json({ error: { code: err.code, message: err.message } }, {
+        status: err.status,
+        headers: err.status === 401 ? { "WWW-Authenticate": "Bearer" } : undefined,
+      });
     }
     console.error("[cursor/mcp] unhandled error:", err);
     return Response.json({ error: { code: "internal", message: "Internal error." } }, { status: 500 });

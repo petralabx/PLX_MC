@@ -5,6 +5,8 @@
 import { z } from "zod";
 import { ApiError, parseBody, route } from "@/lib/api/route";
 import { query, withTransaction } from "@/lib/db";
+import { POLICY_VERSION } from "@/lib/permissions";
+import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 import {
   recordDecision,
   upsertRoutingSession,
@@ -62,7 +64,29 @@ export const POST = route(async (req) => {
     authorized.actor.kind === "human" &&
     (authorized.actor.role === "owner" || authorized.actor.role === "admin");
   const ownsSession = sessionActorId === authorized.actorId;
+  const toActorId = body.toActorId?.trim() || sessionActorId;
 
+  let transferAllowed = true;
+  let transferReason = "allowed";
+  if (!ownsSession && !isOwner) {
+    transferAllowed = false;
+    transferReason = "not_session_actor";
+  } else if (toActorId !== sessionActorId && !isOwner) {
+    transferAllowed = false;
+    transferReason = "transfer_requires_admin";
+  }
+  void recordPermissionDecision({
+    site: "routing.transfer",
+    actorKind: authorized.actorKind,
+    actorId: authorized.actorId,
+    capability: "routing.resolve",
+    resourceType: "routing",
+    resourceId: body.sessionId,
+    allowed: transferAllowed,
+    reasonCode: transferReason,
+    policyVersion: POLICY_VERSION,
+    auditLabel: authorized.auditLabel,
+  });
   if (!ownsSession && !isOwner) {
     throw new ApiError(
       "forbidden",
@@ -70,8 +94,6 @@ export const POST = route(async (req) => {
       403
     );
   }
-
-  const toActorId = body.toActorId?.trim() || sessionActorId;
   if (toActorId !== sessionActorId && !isOwner) {
     throw new ApiError(
       "forbidden",

@@ -237,7 +237,7 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
   });
   // Only a signed-in person or sp_mcp_portal may set an `agent:` assignee
   // (agent fleet P8, D16). This covers the MCP tool and POST /api/cursor/tasks.
-  assertAgentAssigneeAllowed(identity.actor, input.assignee);
+  assertAgentAssigneeAllowed(identity.actor, input.assignee, { capability: "task.create" });
   const principal = aclPrincipalFromMcp(identity);
   await assertBucketProjectAccess(input.bucket, principal);
   const create = (options?: Parameters<typeof createTask>[2]) =>

@@ -2,6 +2,7 @@
 // seam is loaded lazily so importing permissions/auth with enforcement off
 // never loads database configuration or opens a connection.
 
+import { loadDbQuery } from "@/lib/db/load-query";
 import type {
   AccessRole,
   ActorStatus,
@@ -17,7 +18,7 @@ async function defaultIdentityQuery(
   text: string,
   params: unknown[] = []
 ): Promise<Record<string, unknown>[]> {
-  const { query } = await import("@/lib/db");
+  const query = await loadDbQuery();
   return query(text, params);
 }
 

@@ -109,9 +109,18 @@ export async function actionGetTask(identity: McpIdentity, id: string) {
     accountableOwner: task.accountableOwner,
     evidence: task.evidence ?? null,
     checkouts: checkouts.map((row) => toCheckoutView(row)),
-    events,
+    events: events.map(compactTaskUpdatedEvent),
     link: taskLink(taskId),
   });
+}
+
+// A task.updated diff carries full before/after descriptions (up to 64 KB per
+// event); 25 of them could pass Vercel's 4.5 MB cap. History shows the changed
+// fields only; the full diff stays in the mc_events row / GET /api/events.
+function compactTaskUpdatedEvent<E extends { kind: string; payload: Record<string, unknown> }>(event: E): E {
+  if (event.kind !== "task.updated") return event;
+  const { diff, ...rest } = event.payload;
+  return { ...event, payload: { ...rest, changed: Object.keys((diff ?? {}) as object) } };
 }
 
 // ─── mc_list_checkouts ───────────────────────────────────────────────────────

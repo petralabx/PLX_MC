@@ -66,6 +66,52 @@ return `ambiguous_checkout_ref`. A release never touches the task. A PR reopen
 undoes only a `merged`/`closed` release, never a manual one. SOP:
 `docs/AGENT-PR-SOP.md` (Ledger hygiene).
 
+**Task metadata edits (TASK-2328):** `mc_update_task({taskId, patch})` and
+`mc_update_tasks({items:[{taskId, patch}]})` share
+`src/lib/mcp/task-update-actions.ts`. Both HTTP MCP and stdio support them;
+stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
+
+- Patch fields: `labels` replaces the entire set; `addLabels` / `removeLabels`
+  are incremental and cannot accompany `labels`. Removals happen before adds.
+  Labels are trimmed, non-empty and deduplicated; max 128 characters per label,
+  100 entries per input list and 100 labels in the final set.
+- Exactly one non-empty, case-sensitive `lane:*` label must remain. To change
+  lanes, remove the old lane and add the new one in the same call (or replace
+  the label set). An unlabeled legacy task must receive a lane in its edit.
+- `description` replaces (empty string clears); `appendDescription` appends
+  trimmed non-empty text, separated from existing text by two newlines. These
+  forms cannot mix. Maximum final description length: 32,000 characters.
+  `title` is trimmed, non-empty, max 255 characters. `priority` is
+  `urgent | high | medium | low`.
+- Empty patches and unknown fields are rejected, including all stage,
+  Verified, evidence and checkout fields, at the root and within `patch`.
+  The tools never change stage, evidence or checkouts.
+- Auth: existing MCP key/operator checks, `task.progress` and the task's
+  restricted-project ACL. **Hub only**: the portal/consumer principal remains
+  excluded by its existing tool allowlist; no capability grants were added.
+  Unknown task ids return `not_found` (REST 404).
+- The locked task row, normal `patchTask` mutation and `appendEventTx` commit
+  together. Task/project ACL reads reuse that transaction connection; the
+  existing-row edit skips fixture bootstrap to avoid borrowing another connection. `mc_events.kind = task.updated`, `actor = runtime:operatorEmail`,
+  `repo`, `task_id`, and payload `{servicePrincipalId, workerId, diff}`.
+  `diff` contains only changed fields as `{field: {before, after}}`; a no-op
+  still writes an event with `diff: {}`. Responses include `eventSeq`, `diff`,
+  the four editable `fields`, `taskId` and a task link. Every invocation also
+  uses the existing `mcp.tool.invoked` audit wrapper.
+- **Labels stay DB-only.** `patchTask` stores them in `entities.data`; a
+  labels-only patch succeeds and audits without marking labels dirty or
+  enqueueing a SharePoint push. Title, description and priority use the
+  existing `PUSHED_FIELDS`, pending/dirty bookkeeping and normal ToDos sweep.
+  Existing pending fields stay queued. No Labels column, mapping change,
+  schema migration or alternate Graph write path is introduced.
+- Batch cap: **1–100 items**, processed in input order. Validation, ACL,
+  not-found and internal errors are per item; each item has its own transaction.
+  Results contain a compact receipt `{index, ok, taskId, changed, eventSeq}` (full diff: `task.updated` event) or `{index, ok:false, error}`, plus
+  `updated` (successful items, including no-ops) and `failed` counts. A bad
+  item never aborts siblings; an invalid outer envelope is rejected.
+  Appends are not idempotent: inspect task state before retrying an uncertain
+  append response. Incremental label additions are safe to replay.
+
 **Enable (opt-in):**
 
 ```bash

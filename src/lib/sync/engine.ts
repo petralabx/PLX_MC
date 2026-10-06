@@ -929,6 +929,21 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
       continue;
     }
     const existing = await repo.getEntity("file", entry.id);
+    // Bucket links first, file row last: if a bucket update throws, the delta
+    // replays with the previous file row still available to identify the old
+    // owner/URL. A PRD in an initiative's folder becomes that initiative's PRD
+    // link (bucket data.prd, pushed as Roadmap PRDLink). A hand-set PRD link is
+    // never replaced or cleared; only an empty one or one this mirror wrote
+    // (matched by the file's previously mirrored URL).
+    const before = existing?.data as Partial<FileEntry> | undefined;
+    const wasPrd = before?.docType === "PRD" && before.bucket && before.webUrl;
+    const isPrd = entry.docType === "PRD" && entry.bucket && entry.webUrl;
+    if (wasPrd && !(isPrd && entry.bucket === before.bucket)) {
+      await setMirroredPrd(bucketRows, before.bucket!, before.webUrl!, null, entry.name);
+    }
+    if (isPrd) {
+      await setMirroredPrd(bucketRows, entry.bucket!, before?.webUrl, entry.webUrl!, entry.name);
+    }
     if (existing) {
       // Merge-patch: derived links are nulled explicitly so a file moved out
       // of an initiative/type folder (or that lost its task token) is unlinked.
@@ -945,19 +960,6 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
       await repo.insertEntity("file", entry.id, entry as unknown as EntityData, "synced", []);
     }
     result.pulled += 1;
-    // A PRD in an initiative's folder becomes that initiative's PRD link (the
-    // bucket's data.prd, pushed out as Roadmap PRDLink). A PRD link a human set
-    // by hand is never replaced or cleared; only an empty one or one this
-    // mirror wrote (matched by the file's previously mirrored URL).
-    const before = existing?.data as Partial<FileEntry> | undefined;
-    const wasPrd = before?.docType === "PRD" && before.bucket && before.webUrl;
-    const isPrd = entry.docType === "PRD" && entry.bucket && entry.webUrl;
-    if (wasPrd && !(isPrd && entry.bucket === before.bucket)) {
-      await setMirroredPrd(bucketRows, before.bucket!, before.webUrl!, null, entry.name);
-    }
-    if (isPrd) {
-      await setMirroredPrd(bucketRows, entry.bucket!, before?.webUrl, entry.webUrl!, entry.name);
-    }
   }
   if (result.pulled > 0) {
     await repo.appendAudit(

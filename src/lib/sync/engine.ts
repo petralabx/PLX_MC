@@ -12,7 +12,7 @@
 // (TASK-628; see docs/modules/sync/README.md).
 
 import { ACTORS, BUCKETS, FILES, HUMANS, PROJECTS, REPOS, RISKS, SP_CONFLICTS, SP_ERRORS, TASKS } from "@/lib/mc-data/data";
-import type { Bucket, SyncState, Task } from "@/lib/mc-data/types";
+import type { Bucket, FileEntry, SyncState, Task } from "@/lib/mc-data/types";
 import {
   isRestrictedProject,
   RESTRICTED_MIRROR_SP,
@@ -857,6 +857,8 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
   }
   const stored = await repo.getDeltaLink(DOCUMENTS_DELTA_KEY);
   const { items, deltaLink } = await driveDelta(driveId, stored);
+  const bucketRows = await repo.getBucketRows();
+  const buckets = bucketRows.map((r) => r.bucket);
   for (const raw of items) {
     const item = raw as unknown as DriveItem & { root?: object };
     if (!item?.id || item.root) continue; // malformed page rows / the drive root
@@ -869,7 +871,7 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
       result.skipped += 1;
       continue;
     }
-    const entry = fileEntryFromDriveItem(item);
+    const entry = fileEntryFromDriveItem(item, buckets);
     if (!entry) {
       result.skipped += 1;
       continue;
@@ -884,6 +886,27 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
       await repo.insertEntity("file", entry.id, entry as unknown as EntityData, "synced", []);
     }
     result.pulled += 1;
+    // A PRD in an initiative's folder becomes that initiative's PRD link (the
+    // bucket's data.prd, pushed out as Roadmap PRDLink). A PRD link a human set
+    // by hand is never replaced; only an empty one or one this mirror wrote.
+    if (entry.docType === "PRD" && entry.bucket && entry.webUrl) {
+      const row = bucketRows.find((r) => r.bucket.id === entry.bucket);
+      const prev = (existing?.data as Partial<FileEntry> | undefined)?.webUrl;
+      if (row && row.bucket.prd !== entry.webUrl && (!row.bucket.prd || row.bucket.prd === prev)) {
+        await repo.updateBucket(row.bucket.id, {
+          patch: { prd: entry.webUrl },
+          // Re-queue the Roadmap push so PRDLink reaches SharePoint; never
+          // clobber a bucket held in conflict/error.
+          ...(row.syncState === "synced" ? { syncState: "pending" as const } : {}),
+        });
+        row.bucket.prd = entry.webUrl;
+        await repo.appendAudit(
+          SYNC_ACTOR,
+          `Project Documents PRD linked — ${entry.name} → ${entry.bucket}.`,
+          "synced"
+        );
+      }
+    }
   }
   if (result.pulled > 0) {
     await repo.appendAudit(

@@ -63,6 +63,16 @@ Routing mutations fail closed when required registers are stale.
   behind `PLX_MC_DOCUMENTS_SYNC_ENABLED` (default off). Deletions are audited
   and skipped — the mirror never deletes; a documents failure never breaks
   the core sweep.
+  - **Initiative/task links**: files under `/{Initiative}/{PRD|Evidence|Deeds|
+    Reports}/…` are linked from the folder path alone (no new column, no
+    SharePoint metadata): `file.bucket` (folder matches a bucket id, a `BKT-*`
+    token, or the bucket name), `file.docType`, `file.task` (a `TASK-n` token in
+    the file name or folder) and `file.webUrl`. A mirrored PRD also sets the
+    bucket's `prd` (`buckets.data` JSON) and re-queues the Roadmap push so
+    `PRDLink` reaches SharePoint. A PRD link set by hand is never replaced —
+    only an empty one or one the mirror wrote. `/Shared` and unknown folders
+    stay unlinked. Test: `tests/sync-documents.test.ts` (fake drive delta →
+    real `runSweep`).
 
 ### Reliability (Phase 2 — TASK-622/623/624)
 

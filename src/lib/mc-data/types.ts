@@ -446,6 +446,10 @@ export interface FileEntry {
   parent: string | null;
   bucket?: string;
   docType?: DocType;
+  // SharePoint-mirrored files only (TASK-628): the MC task the file belongs to
+  // (TASK-n in the file name / folder) and the document's SharePoint URL.
+  task?: string;
+  webUrl?: string;
   modified?: string;
   modifiedBy?: string;
   size?: string;

@@ -5,6 +5,7 @@
 // dev/builds stay DB-free.
 
 import { permissionsEnforcementMode } from "@/lib/auth/identity";
+import { loadDbQuery } from "@/lib/db/load-query";
 import type { IdentityQuery } from "./types";
 
 export interface PermissionDecisionLogEntry {
@@ -29,7 +30,7 @@ async function defaultDecisionQuery(
   text: string,
   params: unknown[] = []
 ): Promise<Record<string, unknown>[]> {
-  const { query } = await import("@/lib/db");
+  const query = await loadDbQuery();
   return query(text, params);
 }
 

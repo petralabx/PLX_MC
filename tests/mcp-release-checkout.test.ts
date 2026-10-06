@@ -84,6 +84,7 @@ import { POST as mcpPost } from "@/app/api/cursor/mcp/route";
 import { POST as releaseRoute } from "@/app/api/cursor/checkouts/release/route";
 import { POST as releaseBatchRoute } from "@/app/api/cursor/checkouts/release-batch/route";
 import { authorizeCheckoutRelease } from "@/lib/mcp/checkout-release-actions";
+import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 
 const FUTURE = new Date(Date.now() + 3_600_000).toISOString();
 const PAST = new Date(Date.now() - 3_600_000).toISOString();
@@ -259,6 +260,13 @@ for (const [transport, call] of TRANSPORTS) {
           }),
         },
       ]);
+      expect(recordPermissionDecision).toHaveBeenCalledWith(
+        expect.objectContaining({
+          site: "mcp.release-checkout",
+          allowed: true,
+          reasonCode: "accountable_human",
+        })
+      );
       // Only the lease changes: the task stage and Verified are never written.
       expect(h.patchTask).not.toHaveBeenCalled();
     });
@@ -293,6 +301,13 @@ for (const [transport, call] of TRANSPORTS) {
           payload: expect.objectContaining({ checkoutRef: "dsp_…1234", reasonCode: "not_accountable" }),
         }),
       ]);
+      expect(recordPermissionDecision).toHaveBeenCalledWith(
+        expect.objectContaining({
+          site: "mcp.release-checkout",
+          allowed: false,
+          reasonCode: "not_accountable",
+        })
+      );
     });
 
     it("refuses an already-released lease without a second event", async () => {

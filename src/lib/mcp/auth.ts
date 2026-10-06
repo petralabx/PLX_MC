@@ -10,10 +10,12 @@ import { isAllowedUser } from "@/lib/auth/gate";
 import {
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
   MCP_SERVICE_PRINCIPAL_ID,
+  POLICY_VERSION,
   type IdentityQuery,
   type McpAgentServicePrincipalId,
   type PermissionActor,
 } from "@/lib/permissions";
+import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 import { resolveStagedServicePrincipal } from "@/lib/permissions/enforcement";
 
 export { MCP_SERVICE_PRINCIPAL_ID };
@@ -30,6 +32,10 @@ export interface McpIdentity extends McpOperatorContext {
   servicePrincipalId: McpAgentServicePrincipalId;
   /** Authorization actor — always the service principal, never the operator. */
   actor: PermissionActor;
+  /** Real-status actor when log-only still applies an assumed-active principal. */
+  shadowActor?: PermissionActor | null;
+  /** Lookup ran and found no principal row (log-only). */
+  shadowMissing?: boolean;
 }
 
 export interface McpAuthOptions {
@@ -140,17 +146,38 @@ export function parseOperatorContext(req: Request): McpOperatorContext {
   return { operatorEmail, runtime, workerId, repo };
 }
 
+function recordMcpAuthDenial(
+  principalId: string,
+  reasonCode: "unknown_actor" | "actor_revoked"
+): void {
+  void recordPermissionDecision({
+    site: "mcp.auth",
+    actorKind: "service",
+    actorId: principalId,
+    capability: "mcp.authenticate",
+    allowed: false,
+    reasonCode,
+    policyVersion: POLICY_VERSION,
+  });
+}
+
 /**
  * Resolve a durable MCP agent service principal. Staged enforcement decides
  * whether durable records gate the actor: revocation/existence fail closed
  * from "review" onward, log-only stays fail-open, off stays DB-free.
+ * Missing and revoked principals record a denial before the throw.
  */
 export async function resolveMcpServicePrincipal(
   principalId: McpAgentServicePrincipalId = MCP_SERVICE_PRINCIPAL_ID,
   options: McpAuthOptions = {}
-): Promise<PermissionActor> {
+): Promise<{
+  actor: PermissionActor;
+  shadowActor: PermissionActor | null;
+  shadowMissing: boolean;
+}> {
   const staged = await resolveStagedServicePrincipal(principalId, options.query);
   if (!staged.actor) {
+    recordMcpAuthDenial(principalId, "unknown_actor");
     throw new ApiError(
       "mcp_service_principal_missing",
       "The MCP service principal is not configured.",
@@ -158,13 +185,18 @@ export async function resolveMcpServicePrincipal(
     );
   }
   if (staged.actor.status !== "active") {
+    recordMcpAuthDenial(principalId, "actor_revoked");
     throw new ApiError(
       "mcp_service_principal_revoked",
       "The MCP service principal is revoked.",
       403
     );
   }
-  return staged.actor;
+  return {
+    actor: staged.actor,
+    shadowActor: staged.shadowActor,
+    shadowMissing: staged.shadowMissing,
+  };
 }
 
 export async function verifyMcpRequest(
@@ -185,10 +217,12 @@ export async function verifyMcpRequest(
     throw new ApiError("invalid_api_key", "Invalid or missing MCP API key.", 401);
   }
   const operator = parseOperatorContext(req);
-  const actor = await resolveMcpServicePrincipal(principalId, options);
+  const resolved = await resolveMcpServicePrincipal(principalId, options);
   return {
     ...operator,
     servicePrincipalId: principalId,
-    actor,
+    actor: resolved.actor,
+    shadowActor: resolved.shadowActor,
+    shadowMissing: resolved.shadowMissing,
   };
 }

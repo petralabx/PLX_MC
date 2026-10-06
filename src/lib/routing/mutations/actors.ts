@@ -111,6 +111,8 @@ export function requireMcpActor(
     context,
     auditLabel: identity.operatorEmail,
     appliedActor: identity.actor,
+    shadowActor: identity.shadowActor,
+    shadowMissing: identity.shadowMissing,
   });
   if (!decision.allowed) {
     throw new ApiError(

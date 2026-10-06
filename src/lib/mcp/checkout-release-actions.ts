@@ -18,7 +18,8 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import * as complianceRepo from "@/lib/compliance/repo";
 import { HUMANS } from "@/lib/mc-data/data";
-import { directoryRoleToAccessRole } from "@/lib/permissions";
+import { directoryRoleToAccessRole, POLICY_VERSION } from "@/lib/permissions";
+import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import type { McpIdentity } from "./auth";
@@ -129,6 +130,18 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
   const actor = `${identity.runtime}:${identity.operatorEmail}`;
 
   const authz = authorizeCheckoutRelease(identity.operatorEmail, dispatch);
+  void recordPermissionDecision({
+    site: "mcp.release-checkout",
+    actorKind: identity.actor.kind,
+    actorId: identity.actor.id,
+    capability: "task.checkout",
+    resourceType: "task",
+    resourceId: dispatch.taskId,
+    allowed: authz.allowed,
+    reasonCode: authz.reasonCode,
+    policyVersion: POLICY_VERSION,
+    auditLabel: identity.operatorEmail,
+  });
   if (!authz.allowed) {
     await complianceRepo.appendEvent({
       kind: "checkout.release_denied",

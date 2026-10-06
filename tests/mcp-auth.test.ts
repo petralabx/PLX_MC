@@ -3,12 +3,17 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/permissions/decision-log", () => ({
+  recordPermissionDecision: vi.fn(async () => true),
+}));
+
 vi.stubEnv("PLX_MC_MCP_ENABLED", "1");
 vi.stubEnv("PLX_MC_MCP_API_KEY", "test-mcp-key");
 vi.stubEnv("PLX_MC_ALLOWED_USERS", "vince@petrasoap.com");
 
 import { ApiError } from "@/lib/api/route";
 import { authorize } from "@/lib/permissions";
+import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 import {
   MCP_SERVICE_PRINCIPAL_ID,
   parseOperatorContext,
@@ -205,6 +210,14 @@ describe("MCP service principal auth", () => {
       code: "mcp_service_principal_missing",
       status: 503,
     });
+    expect(recordPermissionDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        site: "mcp.auth",
+        allowed: false,
+        reasonCode: "unknown_actor",
+        actorId: "sp_mcp_cursor",
+      })
+    );
   });
 
   it("rejects a revoked MCP service principal when enforcement is on", async () => {
@@ -226,5 +239,13 @@ describe("MCP service principal auth", () => {
       code: "mcp_service_principal_revoked",
       status: 403,
     });
+    expect(recordPermissionDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        site: "mcp.auth",
+        allowed: false,
+        reasonCode: "actor_revoked",
+        actorId: "sp_mcp_cursor",
+      })
+    );
   });
 });

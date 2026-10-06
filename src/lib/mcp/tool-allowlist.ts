@@ -9,9 +9,11 @@
 
 import { ApiError } from "@/lib/api/route";
 import {
+  POLICY_VERSION,
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   type McpAgentServicePrincipalId,
 } from "@/lib/permissions";
+import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 
 export const MCP_TOOL_ALLOWLISTS: Readonly<
   Partial<Record<McpAgentServicePrincipalId, readonly string[]>>
@@ -30,10 +32,20 @@ export function isMcpToolAllowed(principalId: string, tool: string): boolean {
 }
 
 export function assertMcpToolAllowed(
-  identity: { servicePrincipalId: string },
+  identity: { servicePrincipalId: string; operatorEmail?: string },
   tool: string
 ): void {
   if (isMcpToolAllowed(identity.servicePrincipalId, tool)) return;
+  void recordPermissionDecision({
+    site: "mcp.tool-allowlist",
+    actorKind: "service",
+    actorId: identity.servicePrincipalId,
+    capability: tool,
+    allowed: false,
+    reasonCode: "tool_not_allowlisted",
+    policyVersion: POLICY_VERSION,
+    auditLabel: identity.operatorEmail,
+  });
   throw new ApiError(
     "forbidden",
     `${tool} is denied for ${identity.servicePrincipalId}. It may call only: ${(

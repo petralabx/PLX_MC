@@ -16,6 +16,21 @@
 
 ## Lessons
 
+### 2026-07-16 (ET) — Compliance failed because evidence lived only in the PR body
+
+- **What happened:** A stamped agent PR carried its summary, verification and
+  rollback in the PR body, and the `compliance` check still blocked it for
+  missing evidence. (Landed in LESSONS 2026-10-06; the incident is dated
+  2026-07-16.)
+- **Root cause:** The verifier (`src/lib/compliance/verify.ts`,
+  `evidenceCompleteForTier`) reads `task.evidence` on the checked-out task, which
+  only `mc_complete_task` writes. The PR body is never evidence of record.
+- **Rule going forward:** Before opening the PR, call `mc_complete_task` on the
+  checkout with `summary`, non-empty `verificationCommands` and `rollback`, plus
+  `testRun` or `shots` where the risk tier needs proof. If the MCP tool is
+  missing, `POST /api/cursor/complete` with `X-MC-Operator-Email` and
+  `X-MC-Repo`. Promoted to step 5 of `.cursor/rules/mc-plan-hygiene-on-pr.mdc`.
+
 ### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
 
 - **What happened:** On the first CI run of MC responsive PR 1 (petralabx/PLX_MC#254), "a dormant live column never mounts or fetches" failed (expected 2 `/api/approvals` requests, got 1). It had passed every local run.

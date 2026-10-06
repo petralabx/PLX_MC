@@ -21,6 +21,7 @@ function req(headers: Record<string, string>): Request {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("MCP service principal auth", () => {
@@ -29,6 +30,41 @@ describe("MCP service principal auth", () => {
     vi.stubEnv("PLX_MC_MCP_API_KEY", "test-mcp-key");
     vi.stubEnv("PLX_MC_ALLOWED_USERS", "vince@petrasoap.com");
   });
+
+  it.each(["petralabx/PLX_MC", "petralabx/plx_secondbrain", "PETRALABX/PLX_MC"])(
+    "accepts active repo header %s silently",
+    (repo) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect(parseOperatorContext(req({
+        "x-mc-operator-email": "vince@petrasoap.com",
+        "x-mc-repo": repo,
+      })).repo).toBe(repo);
+      expect(warn).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["petralabx/unknown-repo", "petralabx/test-perms-check", "misplaced-secret"])(
+    "logs and admits unallowlisted repo header %s in log-only mode without leaking headers",
+    async (repo) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED", "0");
+      const identity = await verifyMcpRequest(req({
+        "x-api-key": "test-mcp-key",
+        "x-mc-operator-email": "vince@petrasoap.com",
+        "x-mc-repo": repo,
+      }));
+      expect(identity.repo).toBe(repo);
+      expect(identity.servicePrincipalId).toBe(MCP_SERVICE_PRINCIPAL_ID);
+      expect(warn).toHaveBeenCalledExactlyOnceWith("[mcp] repo header validation", {
+        event: "mcp.repo_not_allowlisted",
+        code: "repo_not_allowlisted",
+        mode: "log-only",
+        source: "x-mc-repo",
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(repo);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("test-mcp-key");
+    }
+  );
 
   it("resolves the durable MCP service principal from a valid API key", async () => {
     const identity = await verifyMcpRequest(

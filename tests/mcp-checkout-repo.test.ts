@@ -77,6 +77,7 @@ describe("resolveCheckoutRepo", () => {
       expect(MCP_CHECKOUT_REPO_ALLOWLIST).toContain(slug);
     }
     expect(MCP_CHECKOUT_REPO_ALLOWLIST).toContain("petralabx/plx-customer-portal");
+    expect(MCP_CHECKOUT_REPO_ALLOWLIST).toContain("petralabx/PLX_MC");
   });
 
   it("registry repos missing from the old hard-coded list become allowed (plx_secondbrain)", () => {

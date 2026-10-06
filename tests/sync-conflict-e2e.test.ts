@@ -42,6 +42,10 @@ const h = vi.hoisted(() => ({
   deltas: {} as Record<string, { items: unknown[]; deltaLink: string }>,
 }));
 
+// The push-queue retry ledger reads Postgres directly (bypassing the repo mock);
+// keep the suite hermetic regardless of PLX_MC_DATABASE_URL.
+vi.mock("@/lib/db", () => ({ query: async () => [] }));
+
 vi.mock("@/lib/sync/graph", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/sync/graph")>();
   return {

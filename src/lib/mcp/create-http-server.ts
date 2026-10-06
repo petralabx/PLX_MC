@@ -36,6 +36,8 @@ import { registerSyncConflictTools } from "./sync-actions";
 import { registerAgentReadTools } from "./read-actions";
 import { registerApprovalTools } from "./approval-actions";
 import { registerCheckoutReleaseTools } from "./checkout-release-actions";
+import { registerTaskUpdateTools } from "./task-update-actions";
+import { registerSessionTelemetryTools } from "./session-telemetry-actions";
 
 function jsonResult(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -66,38 +68,41 @@ function auditIds(result: ToolResult): { taskId?: string; checkoutId?: string } 
 // audit trail. Wrapping registration (before any tool is added) covers the
 // routing and sync helper modules that register on this server too.
 function auditToolCalls(server: McpServer, identity: McpIdentity): void {
-  const register = server.tool.bind(server) as (...args: unknown[]) => unknown;
-  server.tool = ((...args: unknown[]) => {
-    const tool = String(args[0]);
-    const handler = args[args.length - 1] as (...handlerArgs: unknown[]) => Promise<ToolResult>;
-    args[args.length - 1] = async (...handlerArgs: unknown[]) => {
-      const started = Date.now();
-      const requestId = randomUUID();
-      try {
-        const result = await handler(...handlerArgs);
-        await recordMcpToolCall({
-          tool,
-          identity,
-          requestId,
-          ...auditIds(result),
-          ok: !result.isError,
-          durationMs: Date.now() - started,
-        });
-        return result;
-      } catch (err) {
-        await recordMcpToolCall({
-          tool,
-          identity,
-          requestId,
-          ok: false,
-          durationMs: Date.now() - started,
-          error: err instanceof ApiError ? err.message : "internal",
-        }).catch(() => {});
-        throw err;
-      }
+  const registrars = server as unknown as Record<"tool" | "registerTool", (...args: unknown[]) => unknown>;
+  for (const method of ["tool", "registerTool"] as const) {
+    const register = registrars[method].bind(server);
+    registrars[method] = (...args: unknown[]) => {
+      const tool = String(args[0]);
+      const handler = args[args.length - 1] as (...handlerArgs: unknown[]) => Promise<ToolResult>;
+      args[args.length - 1] = async (...handlerArgs: unknown[]) => {
+        const started = Date.now();
+        const requestId = randomUUID();
+        try {
+          const result = await handler(...handlerArgs);
+          await recordMcpToolCall({
+            tool,
+            identity,
+            requestId,
+            ...auditIds(result),
+            ok: !result.isError,
+            durationMs: Date.now() - started,
+          });
+          return result;
+        } catch (err) {
+          await recordMcpToolCall({
+            tool,
+            identity,
+            requestId,
+            ok: false,
+            durationMs: Date.now() - started,
+            error: err instanceof ApiError ? err.message : "internal",
+          }).catch(() => {});
+          throw err;
+        }
+      };
+      return register(...args);
     };
-    return register(...args);
-  }) as typeof server.tool;
+  }
 }
 
 // A principal with a tool allowlist (sp_mcp_portal, decision CG-07b) gets
@@ -388,6 +393,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   registerAgentReadTools(server, identity);
   registerApprovalTools(server, identity);
   registerCheckoutReleaseTools(server, identity);
+  registerTaskUpdateTools(server, identity);
+  registerSessionTelemetryTools(server, identity);
 
   return server;
 }

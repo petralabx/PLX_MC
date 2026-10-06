@@ -12,7 +12,7 @@
 // (TASK-628; see docs/modules/sync/README.md).
 
 import { ACTORS, BUCKETS, FILES, HUMANS, PROJECTS, REPOS, RISKS, SP_CONFLICTS, SP_ERRORS, TASKS } from "@/lib/mc-data/data";
-import type { Bucket, SyncState, Task } from "@/lib/mc-data/types";
+import type { Bucket, FileEntry, SyncState, Task } from "@/lib/mc-data/types";
 import {
   isRestrictedProject,
   RESTRICTED_MIRROR_SP,
@@ -22,6 +22,7 @@ import {
 import {
   createListItem,
   documentsDriveId,
+  driveRootId,
   driveDelta,
   findItemByField,
   GraphError,
@@ -65,7 +66,7 @@ import {
   type TaskPersonMc,
 } from "./mapping";
 import { documentsSyncEnabled } from "@/lib/secrets";
-import { fileEntryFromDriveItem, type DriveItem } from "./documents";
+import { fileEntryFromDriveItem, fileEntryIdForDriveItem, parentSegments, type DriveItem, type FolderRef } from "./documents";
 import { evaluateSyncFreshness, type SyncFreshnessResult } from "./freshness";
 import {
   clearPushRetry,
@@ -841,6 +842,37 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
 
 const DOCUMENTS_DELTA_KEY = "documents";
 
+// Set (or clear, to=null) a bucket's mirror-owned PRD link. `owned` is the URL
+// the mirror previously wrote for this file: the bucket is only touched when
+// its prd is empty (set) or equals `owned` (set/clear).
+async function setMirroredPrd(
+  rows: repo.BucketWithSync[],
+  bucketId: string,
+  owned: string | undefined,
+  to: string | null,
+  fileName: string
+): Promise<void> {
+  const row = rows.find((r) => r.bucket.id === bucketId);
+  if (!row || row.bucket.prd === to) return;
+  if (row.bucket.prd && row.bucket.prd !== owned) return;
+  await repo.updateBucket(bucketId, {
+    patch: { prd: to },
+    // Re-queue the Roadmap push so PRDLink reaches SharePoint, and mark prd
+    // dirty so a Roadmap delta cannot overwrite it before it is pushed. A
+    // bucket held in conflict/error keeps its state.
+    ...(row.syncState === "synced" ? { syncState: "pending" as const } : {}),
+    dirtyFields: [...new Set([...row.dirtyFields, "prd"])],
+  });
+  row.bucket.prd = to;
+  await repo.appendAudit(
+    SYNC_ACTOR,
+    to
+      ? `Project Documents PRD linked — ${fileName} → ${bucketId}.`
+      : `Project Documents PRD unlinked — ${fileName} no longer a PRD of ${bucketId}.`,
+    "synced"
+  );
+}
+
 // Inbound-only mirror of the Project Documents drive. SharePoint is
 // authoritative for files; MC never pushes them. Deletions are audited and
 // skipped (engine never deletes — TOOLS.md guardrail).
@@ -857,6 +889,28 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
   }
   const stored = await repo.getDeltaLink(DOCUMENTS_DELTA_KEY);
   const { items, deltaLink } = await driveDelta(driveId, stored);
+  const bucketRows = await repo.getBucketRows();
+  const buckets = bucketRows.map((r) => r.bucket);
+  // Folder ancestry for link derivation: stored folder rows overlaid with this
+  // batch (so renames/moves in the batch win).
+  const rootId = await driveRootId(driveId);
+  const folders = new Map<string, FolderRef>();
+  const prefix = fileEntryIdForDriveItem("");
+  for (const row of await repo.getEntities("file")) {
+    const f = row.data as unknown as FileEntry;
+    if (f.kind === "folder" && row.id.startsWith(prefix)) {
+      folders.set(row.id.slice(prefix.length), {
+        name: f.name,
+        parent: f.parent?.startsWith(prefix) ? f.parent.slice(prefix.length) : null,
+      });
+    }
+  }
+  for (const raw of items) {
+    const f = raw as unknown as DriveItem;
+    if (f?.id && f.folder && !f.deleted && f.name) {
+      folders.set(f.id, { name: f.name, parent: f.parentReference?.id ?? null });
+    }
+  }
   for (const raw of items) {
     const item = raw as unknown as DriveItem & { root?: object };
     if (!item?.id || item.root) continue; // malformed page rows / the drive root
@@ -869,15 +923,37 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
       result.skipped += 1;
       continue;
     }
-    const entry = fileEntryFromDriveItem(item);
+    const entry = fileEntryFromDriveItem(item, buckets, parentSegments(item, folders, rootId));
     if (!entry) {
       result.skipped += 1;
       continue;
     }
     const existing = await repo.getEntity("file", entry.id);
+    // Bucket links first, file row last: if a bucket update throws, the delta
+    // replays with the previous file row still available to identify the old
+    // owner/URL. A PRD in an initiative's folder becomes that initiative's PRD
+    // link (bucket data.prd, pushed as Roadmap PRDLink). A hand-set PRD link is
+    // never replaced or cleared; only an empty one or one this mirror wrote
+    // (matched by the file's previously mirrored URL).
+    const before = existing?.data as Partial<FileEntry> | undefined;
+    const wasPrd = before?.docType === "PRD" && before.bucket && before.webUrl;
+    const isPrd = entry.docType === "PRD" && entry.bucket && entry.webUrl;
+    if (wasPrd && !(isPrd && entry.bucket === before.bucket)) {
+      await setMirroredPrd(bucketRows, before.bucket!, before.webUrl!, null, entry.name);
+    }
+    if (isPrd) {
+      await setMirroredPrd(bucketRows, entry.bucket!, before?.webUrl, entry.webUrl!, entry.name);
+    }
     if (existing) {
+      // Merge-patch: derived links are nulled explicitly so a file moved out
+      // of an initiative/type folder (or that lost its task token) is unlinked.
       await repo.updateEntity("file", entry.id, {
-        patch: entry as unknown as EntityData,
+        patch: {
+          ...entry,
+          bucket: entry.bucket ?? null,
+          docType: entry.docType ?? null,
+          task: entry.task ?? null,
+        } as unknown as EntityData,
         syncState: "synced",
       });
     } else {

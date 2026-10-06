@@ -57,7 +57,12 @@ export interface EventRow {
 // Keyset pagination on the monotonic `seq` — the clean export cursor. Optional
 // `kind` filter for a typed consumer (e.g. only gate.* or pr.* events).
 /** Newest-first events of the given kinds — evaluation-loop source (TASK-632). */
-export async function eventsByKinds(kinds: string[], limit = 5000): Promise<EventRow[]> {
+export async function eventsByKinds(
+  kinds: string[],
+  limit = 5000,
+  /** Rolling window (TASK-632): only events at or after this ISO instant. */
+  sinceIso?: string
+): Promise<EventRow[]> {
   const rows = await query<{
     seq: string;
     ts: Date;
@@ -71,8 +76,9 @@ export async function eventsByKinds(kinds: string[], limit = 5000): Promise<Even
     `SELECT seq, ts, kind, actor, repo, task_id, pr, payload
        FROM mc_events
       WHERE kind = ANY($1::text[])
+        AND ($3::timestamptz IS NULL OR ts >= $3::timestamptz)
       ORDER BY seq DESC LIMIT $2`,
-    [kinds, limit]
+    [kinds, limit, sinceIso ?? null]
   );
   return rows.map((r) => ({
     seq: String(r.seq),
@@ -347,6 +353,16 @@ export async function getDispatch(id: string): Promise<DispatchRow | null> {
     [id]
   );
   return rows[0] ? toDispatchRow(rows[0]) : null;
+}
+
+/** Durable checkout→task lookup (read-only) for checkout ids outside the sampled event window. */
+export async function taskIdsByDispatchIds(ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const rows = await query<{ id: string; task_id: string }>(
+    `SELECT id, task_id FROM mc_dispatch WHERE id = ANY($1::text[])`,
+    [ids]
+  );
+  return new Map(rows.map((r) => [r.id, r.task_id]));
 }
 
 /** A task's dispatches whose id ends with `suffix` — resolves a checkoutRef (dsp_…last4). */

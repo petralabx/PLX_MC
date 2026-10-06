@@ -160,6 +160,7 @@ export function MissionControlShell() {
           bucketId: current.bucketId,
           projectId: current.projectId,
           taskId: extra.taskId,
+          ...(extra.focus === "evidence" ? { focus: "evidence" as const } : {}),
         });
         return;
       }
@@ -404,7 +405,18 @@ export function MissionControlShell() {
             onClose={closePane}
             onOpenPage={openTaskPage}
           >
-            {selected ? <TaskDetailView route={{ screen: "task", taskId: selected }} nav={nav} /> : <PaneEmpty />}
+            {selected ? (
+              <TaskDetailView
+                route={{
+                  screen: "task",
+                  taskId: selected,
+                  ...(route.focus === "evidence" ? { focus: "evidence" as const } : {}),
+                }}
+                nav={nav}
+              />
+            ) : (
+              <PaneEmpty />
+            )}
           </ContextPane>
         ) : null}
         {showLive ? (

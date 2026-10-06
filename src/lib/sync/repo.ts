@@ -95,8 +95,13 @@ export async function getEntities(type?: EntityType): Promise<EntityRow[]> {
   }));
 }
 
-export async function getEntity(type: EntityType, id: string): Promise<EntityRow | null> {
-  const rows = await query<{
+export async function getEntity(
+  type: EntityType,
+  id: string,
+  q: TxQuery = query,
+  forUpdate = false
+): Promise<EntityRow | null> {
+  const rows = await q<{
     entity_type: EntityType;
     id: string;
     data: EntityData;
@@ -107,7 +112,7 @@ export async function getEntity(type: EntityType, id: string): Promise<EntityRow
   }>(
     `SELECT entity_type, id, data, sync_state, sp_item_id, dirty_fields,
             COALESCE(field_attribution, '{}'::jsonb) AS field_attribution
-       FROM entities WHERE entity_type = $1 AND id = $2`,
+       FROM entities WHERE entity_type = $1 AND id = $2${forUpdate ? " FOR UPDATE" : ""}`,
     [type, id]
   );
   const r = rows[0];
@@ -150,9 +155,10 @@ export async function updateEntity(
     dirtyFields?: string[];
     fieldAttribution?: Record<string, FieldAttribution>;
     syncExtras?: Record<string, string | undefined>; // wsVal / spVal / reason
-  }
+  },
+  q: TxQuery = query
 ): Promise<void> {
-  const row = await getEntity(type, id);
+  const row = await getEntity(type, id, q);
   if (!row) return;
   const data = { ...row.data, ...(opts.patch ?? {}) };
   const prevSync = (row.data.sync ?? {}) as Record<string, unknown>;
@@ -186,7 +192,7 @@ export async function updateEntity(
     }
   }
 
-  await query(
+  await q(
     `UPDATE entities
         SET data = $3,
             sync_state = $4,
@@ -857,8 +863,8 @@ interface BucketRow {
   project_id: string | null;
 }
 
-export async function getBuckets(): Promise<Bucket[]> {
-  const rows = await query<BucketRow>("SELECT id, data, project_id FROM buckets ORDER BY created_at, id");
+export async function getBuckets(q: TxQuery = query): Promise<Bucket[]> {
+  const rows = await q<BucketRow>("SELECT id, data, project_id FROM buckets ORDER BY created_at, id");
   // The relational FK is authoritative for the parent (the 011 backfill set it
   // without rewriting jsonb) — fold it into the shape when data.project is unset.
   return rows.map((r) => (r.data.project === undefined ? { ...r.data, project: r.project_id } : r.data));
@@ -1027,8 +1033,8 @@ interface ProjectRow {
   data: Project;
 }
 
-export async function getProjects(): Promise<Project[]> {
-  const rows = await query<ProjectRow>("SELECT id, data FROM projects ORDER BY created_at, id");
+export async function getProjects(q: TxQuery = query): Promise<Project[]> {
+  const rows = await q<ProjectRow>("SELECT id, data FROM projects ORDER BY created_at, id");
   return rows.map((r) => r.data);
 }
 

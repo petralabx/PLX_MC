@@ -572,6 +572,57 @@ server.tool(
   }
 );
 
+// Hub metadata tools: keep strict objects so forbidden fields are never stripped.
+// The REST action owns semantic validation and per-item batch outcomes.
+const taskUpdatePatch = z.object({
+  labels: z.array(z.string().trim().min(1).max(128)).max(100).optional(),
+  addLabels: z.array(z.string().trim().min(1).max(128)).max(100).optional(),
+  removeLabels: z.array(z.string().trim().min(1).max(128)).max(100).optional(),
+  description: z.string().max(32_000).optional(),
+  appendDescription: z.string().trim().min(1).max(32_000).optional(),
+  title: z.string().trim().min(1).max(255).optional(),
+  priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
+}).strict();
+
+server.registerTool("mc_update_task", {
+  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority. Mutually exclusive forms cannot mix. Exactly one lane:* must remain. Stage, evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
+  inputSchema: z.object({
+    taskId: z.string().trim().min(1).max(128),
+    patch: taskUpdatePatch,
+  }).strict(),
+}, async (body) => {
+  if (!MCP_ENABLED) return disabledTool("mc_update_task");
+  return printResult(await mcFetch("/tasks/update", { method: "POST", body }));
+});
+
+server.registerTool("mc_update_tasks", {
+  description: "Batch mc_update_task: {items:[{taskId, patch}]}, 1–100 items. Each item returns its own outcome, including validation errors. Same fields, lane rule and DB-only labels as mc_update_task.",
+  inputSchema: z.object({
+    items: z.array(z.unknown().describe("One {taskId, patch} object using mc_update_task fields.")).min(1).max(100),
+  }).strict(),
+}, async (body) => {
+  if (!MCP_ENABLED) return disabledTool("mc_update_tasks");
+  return printResult(await mcFetch("/tasks/update-batch", { method: "POST", body }));
+});
+
+server.tool(
+  "mc_report_session_telemetry",
+  "Report this agent session's token usage and cost estimate (cents) at close. One row per sessionId; a replay is a no-op. Feeds per-runtime and per-bucket cost-per-completed-task in /api/agent-metrics?rollup=cost.",
+  {
+    sessionId: z.string().min(1).max(120),
+    taskId: z.string().min(1).optional(),
+    checkoutId: z.string().min(1).optional(),
+    model: z.string().max(120).optional(),
+    tokensIn: z.number().int().min(0),
+    tokensOut: z.number().int().min(0),
+    costCents: z.number().int().min(0).optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_report_session_telemetry");
+    return printResult(await mcFetch("/session-telemetry", { method: "POST", body }));
+  }
+);
+
 registerRoutingTools({
   server,
   mcpEnabled: MCP_ENABLED,

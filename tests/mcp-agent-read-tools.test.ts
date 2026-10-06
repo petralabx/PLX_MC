@@ -280,7 +280,10 @@ describe("tool registry", () => {
     }
     expect(names).toContain("mc_dismiss_conflict");
     expect(names).toContain("mc_dismiss_conflicts");
-    expect(names).toHaveLength(31);
+    expect(names).toContain("mc_update_task");
+    expect(names).toContain("mc_update_tasks");
+    expect(names).toContain("mc_report_session_telemetry");
+    expect(names).toHaveLength(34);
   });
 });
 
@@ -316,6 +319,18 @@ describe("mc_get_task", () => {
       expect.objectContaining({ excludeKinds: ["mcp.tool.invoked"] })
     );
     expect(m.listDispatches).toHaveBeenCalledWith(expect.objectContaining({ taskId: "TASK-100" }));
+  });
+
+  it("compacts task.updated diffs in task history to the changed field names", async () => {
+    const big = "x".repeat(32_000);
+    m.eventsForTask.mockResolvedValue([{
+      seq: "50", ts: "2026-10-06T10:00:00.000Z", kind: "task.updated", actor: "codex:v@x.com",
+      repo: "petralabx/PLX_MC", taskId: "TASK-100", pr: null,
+      payload: { workerId: "w", diff: { description: { before: big, after: big + "y" }, title: { before: "a", after: "b" } } },
+    }]);
+    const { body } = await callTool("mc_get_task", { id: "TASK-100" });
+    expect(body.data.events[0].payload).toEqual({ workerId: "w", changed: ["description", "title"] });
+    expect(JSON.stringify(body).length).toBeLessThan(20_000);
   });
 
   it("never returns a usable dsp_* credential — checkouts or event payloads", async () => {

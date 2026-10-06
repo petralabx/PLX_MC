@@ -3,6 +3,8 @@
 import { z } from "zod";
 import { parseBody, route } from "@/lib/api/route";
 import { createConfirmedTask } from "@/lib/routing";
+import { aclPrincipalFromAuthorized } from "@/lib/routing/mutations/actors";
+import { assertBucketProjectAccess } from "@/lib/permissions/project-acl-guard";
 import {
   assertSameOriginMutation,
   requireInboxActor,
@@ -41,6 +43,7 @@ export const POST = route(async (req) => {
     type: "routing",
     id: body.proposalId,
   });
+  await assertBucketProjectAccess(body.bucketId, aclPrincipalFromAuthorized(authorized));
 
   return createConfirmedTask(authorized, {
     proposalId: body.proposalId,

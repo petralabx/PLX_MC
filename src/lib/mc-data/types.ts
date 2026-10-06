@@ -237,6 +237,12 @@ export interface Evidence {
   rollback?: string | null;
 }
 
+/** Inbox pointer at a task's existing evidence bundle (TASK-631). Derived at read time — not a stored column. */
+export interface ApprovalEvidenceRef {
+  summary: string;
+  itemKeys: string[];
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -446,6 +452,10 @@ export interface FileEntry {
   parent: string | null;
   bucket?: string;
   docType?: DocType;
+  // SharePoint-mirrored files only (TASK-628): the MC task the file belongs to
+  // (TASK-n in the file name / folder) and the document's SharePoint URL.
+  task?: string;
+  webUrl?: string;
   modified?: string;
   modifiedBy?: string;
   size?: string;

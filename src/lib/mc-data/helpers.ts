@@ -10,7 +10,7 @@ import {
   SYNC_REGISTERS,
   TASKS,
 } from "./data";
-import type { Band, Confidence, Evidence, Health, StageKey, Task } from "./types";
+import type { ApprovalEvidenceRef, Band, Confidence, Evidence, Health, StageKey, Task } from "./types";
 
 const PETRA_EMAIL = /^[^@\s]+@(petralabx|petrasoap)\.com$/i;
 
@@ -24,6 +24,15 @@ export function tasksInBucket(bucketId: string): Task[] {
 
 export function evidenceComplete(ev?: Evidence): boolean {
   return !!ev && ev.items.every((i) => i.done);
+}
+
+/** Project a task's existing evidence bundle into the approvals-inbox ref. Null when there is nothing to open. */
+export function approvalEvidenceRef(evidence: Evidence | undefined): ApprovalEvidenceRef | null {
+  if (!evidence) return null;
+  const summary = evidence.summary.trim();
+  const itemKeys = evidence.items.map((item) => item.key);
+  if (!summary && itemKeys.length === 0) return null;
+  return { summary, itemKeys };
 }
 
 export interface SyncCounts {

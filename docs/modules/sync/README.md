@@ -63,6 +63,20 @@ Routing mutations fail closed when required registers are stale.
   behind `PLX_MC_DOCUMENTS_SYNC_ENABLED` (default off). Deletions are audited
   and skipped — the mirror never deletes; a documents failure never breaks
   the core sweep.
+  - **Initiative/task links**: files under `/{Initiative}/{PRD|Evidence|Deeds|
+    Reports}/…` are linked from the folder path alone (no new column, no
+    SharePoint metadata): `file.bucket` (folder matches a bucket id, a `BKT-*`
+    token, or the bucket name), `file.docType`, `file.task` (a `TASK-n` token in
+    the file name or folder) and `file.webUrl`. A mirrored PRD also sets the
+    bucket's `prd` (`buckets.data` JSON) and re-queues the Roadmap push so
+    `PRDLink` reaches SharePoint. A PRD link set by hand is never replaced —
+    only an empty one or one the mirror wrote. `/Shared` and unknown folders
+    stay unlinked. Graph's drive delta omits `parentReference.path`, so folder
+    ancestry is resolved by `parentReference.id` through stored folder rows +
+    the delta batch (unresolvable chain → unlinked, never guessed); a moved file
+    has its links cleared (and a mirror-owned bucket `prd` with them; MC-side only — the push omits an empty `PRDLink`, so SharePoint's column keeps the stale URL until overwritten). Known limit: renaming/moving a *folder* re-links its
+    children only when they next appear in a delta. Test: `tests/sync-documents.test.ts` (fake drive delta →
+    real `runSweep`).
 
 ### Reliability (Phase 2 — TASK-622/623/624)
 
@@ -78,13 +92,25 @@ Routing mutations fail closed when required registers are stale.
   (`config/certs/aws-rds-global-bundle.pem`); override via
   `PLX_MC_DB_CA_CERT` / `PLX_MC_DB_CA_CERT_PATH`; break-glass
   `PLX_MC_DB_TLS_INSECURE=1` (loud).
-- **Missed-tick watchdog** (`src/lib/sync/health.ts`): the reconcile cron
-  (independent schedule) alerts when no register completed inbound within
-  15 min — one deduped `sync.missed_tick` event per hour-long episode plus an
-  optional `PLX_MC_ALERT_WEBHOOK_URL` POST. Fail-open by contract.
+- **Missed-tick watchdog** (`src/lib/sync/health.ts`,
+  `GET /api/cron/missed-tick`): alerts when no register completed inbound
+  within 15 min — one deduped `sync.missed_tick` event per hour-long episode
+  plus an optional `PLX_MC_ALERT_WEBHOOK_URL` POST. Fail-open by contract.
+  GitHub Actions (`.github/workflows/sweep-redundancy.yml`) is the scheduler
+  for this route and calls it before the recovery sweep, so an extended gap
+  is still visible. That pre-sweep call adds a 5-minute grace
+  (`beforeSweep=1`) because the Actions cadence equals the 15-minute
+  threshold. `vercel.json` does not list the route, so a Vercel Cron outage
+  still raises the alert. `GET /api/cron/reconcile` evaluates the strict
+  15-minute check while that Vercel cron is alive; both callers share the
+  dedupe. Watchdog-only dispatch (`mode=watchdog`) uses the strict threshold
+  and does not sweep.
 - **Cadence redundancy**: `.github/workflows/sweep-redundancy.yml` triggers
-  the sweep every 15 min from GitHub Actions (secret `PLX_MC_CRON_SECRET`) so
-  Vercel Cron is no longer a single point of failure.
+  `GET /api/cron/sweep` every 15 min from GitHub Actions (secret
+  `PLX_MC_CRON_SECRET`; absent secret → the job no-ops) against production
+  (`https://mc.plxcustomer.io`) and, when repo variable
+  `PLX_MC_STAGING_SWEEP_URL` is set, staging. The same job then calls
+  `GET /api/cron/missed-tick` on each armed target.
 
 ### Kill switch / fallback
 

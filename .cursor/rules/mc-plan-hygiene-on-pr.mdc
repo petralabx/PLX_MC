@@ -19,6 +19,16 @@ Mission Control as part of the delivery — not an afterthought.
 4. **Follow-ups** — Before marking the primary task done / opening the PR,
    file explicit MC tasks for deferred work (fleet rollout, secret retirement,
    Phase 2, docs debt). Do not leave follow-ups only in chat or PR prose.
+5. **Evidence on the task, before the PR** — The compliance gate reads
+   `task.evidence`, not the PR body. File it on the checkout with
+   `mc_complete_task` BEFORE opening the PR: `checkoutId`, `summary`, non-empty
+   `verificationCommands`, and `rollback`; add `testRun` (`suite`, `passed`,
+   `failed`) or `shots` where the risk tier needs proof (migrations, auth,
+   infra, workflows). A PR-body `## Rollback Plan` or test log is not the
+   evidence of record. HTTP fallback when the MCP tool is unavailable:
+   `POST /api/cursor/complete` (or `node scripts/mc.mjs complete`) with headers
+   `X-MC-Operator-Email`, `X-MC-Repo` (full slug, e.g. `petralabx/PLX_MC`) and
+   the API key in `x-api-key`; the body takes the same fields as the tool.
 
 ## Required at PR merge / cutover complete
 

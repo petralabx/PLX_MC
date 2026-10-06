@@ -8,6 +8,7 @@
 import { isOverdue } from "@/lib/mc-data/insights";
 import {
   PRIORITY,
+  approvalEvidenceRef,
   hasHumanAccountableOwner,
   pendingApprovalGates,
   tasksForUser,
@@ -59,6 +60,7 @@ export function pendingApprovalRows(tasks: Task[]): PendingApprovalRow[] {
       taskTitle: task.title,
       stage: task.stage,
       gate,
+      evidence: approvalEvidenceRef(task.evidence),
     }))
   );
 }

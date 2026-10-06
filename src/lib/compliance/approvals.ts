@@ -7,7 +7,7 @@
 import { randomBytes } from "node:crypto";
 
 import { ApiError } from "@/lib/api/route";
-import type { ApprovalGate, Task } from "@/lib/mc-data";
+import { approvalEvidenceRef, type ApprovalEvidenceRef, type ApprovalGate, type Task } from "@/lib/mc-data";
 import { pendingApprovalGates } from "@/lib/mc-data/policy";
 import { patchTask } from "@/lib/sync";
 import { getEntities, getEntity } from "@/lib/sync/repo";
@@ -147,6 +147,8 @@ export interface PendingApprovalRow {
   taskTitle: string;
   stage: string;
   gate: ApprovalGate;
+  /** The task's existing evidence bundle, or null when the task has none. */
+  evidence: ApprovalEvidenceRef | null;
 }
 
 /** Approvals inbox source (TASK-631): every pending gate across all tasks. */
@@ -156,7 +158,13 @@ export async function listPendingApprovals(): Promise<PendingApprovalRow[]> {
   for (const row of rows) {
     const task = row.data as unknown as Task;
     for (const gate of pendingApprovalGates(task)) {
-      out.push({ taskId: task.id, taskTitle: task.title, stage: task.stage, gate });
+      out.push({
+        taskId: task.id,
+        taskTitle: task.title,
+        stage: task.stage,
+        gate,
+        evidence: approvalEvidenceRef(task.evidence),
+      });
     }
   }
   out.sort((a, b) => a.gate.requestedAt.localeCompare(b.gate.requestedAt));

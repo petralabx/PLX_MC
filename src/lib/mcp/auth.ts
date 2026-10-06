@@ -7,6 +7,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { ApiError } from "@/lib/api/route";
 import { isAllowedUser } from "@/lib/auth/gate";
+import { ACTIVE_TRACKED_REPO_SLUGS } from "@/lib/compliance";
 import {
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
   MCP_SERVICE_PRINCIPAL_ID,
@@ -63,6 +64,7 @@ export function sharedMcpKeyEnabled(): boolean {
 }
 
 const AGENT_PRINCIPAL_IDS = new Set<string>(MCP_AGENT_SERVICE_PRINCIPAL_IDS);
+const ACTIVE_REPOS_BY_LOWER = new Set(ACTIVE_TRACKED_REPO_SLUGS.map((repo) => repo.toLowerCase()));
 
 /**
  * Per-agent key registry from PLX_MC_MCP_AGENT_KEYS (JSON object mapping
@@ -142,6 +144,17 @@ export function parseOperatorContext(req: Request): McpOperatorContext {
   }
   if (!repo || repo === "unknown") {
     throw new ApiError("missing_repo", "X-MC-Repo is required (e.g. petralabx/PLX_MC).", 400);
+  }
+  if (!ACTIVE_REPOS_BY_LOWER.has(repo.toLowerCase())) {
+    // TASK-1958 staged rollout: log-only. Follow-up enforcement must throw
+    // ApiError("repo_not_allowlisted", ..., 403) only after operator review.
+    // Never log raw header values: even X-MC-Repo can contain a misplaced key.
+    console.warn("[mcp] repo header validation", {
+      event: "mcp.repo_not_allowlisted",
+      code: "repo_not_allowlisted",
+      mode: "log-only",
+      source: "x-mc-repo",
+    });
   }
   return { operatorEmail, runtime, workerId, repo };
 }

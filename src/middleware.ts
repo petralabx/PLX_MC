@@ -31,7 +31,9 @@ export const config = {
   // + operator allowlist server-side (same pattern as VMC cursor routes).
   // `/api/routing/propose` is exact — do not broaden to `/api/routing/*`.
   // `/api/sync/webhook` is exact — do not broaden to `/api/sync/*`.
+  // Only the two exact OAuth discovery paths are public: resource metadata
+  // and the no-issuer JSON response (header-key auth only, TASK-1958).
   matcher: [
-    "/((?!api/auth|api/cron|api/sync/webhook|api/compliance/webhook|api/compliance/verify|api/routing/propose|api/cursor|_next/static|_next/image|favicon.ico|signin|brand|fonts|presentations).*)",
+    "/((?!\\.well-known/oauth-protected-resource$|\\.well-known/oauth-authorization-server$|api/auth|api/cron|api/sync/webhook|api/compliance/webhook|api/compliance/verify|api/routing/propose|api/cursor|_next/static|_next/image|favicon.ico|signin|brand|fonts|presentations).*)",
   ],
 };

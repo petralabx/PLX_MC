@@ -336,6 +336,19 @@ for (const transport of ["MCP", "REST"] as const) {
       expect([...h.rows.values()].every((row) => row.sync_state === "synced" && row.dirty_fields.length === 0)).toBe(true);
       expect(h.syncAudits).toEqual([]);
     });
+    it("returns compact receipts so a 100-item batch of large descriptions stays under the response cap", async () => {
+      const big = "x".repeat(32_000);
+      const items = Array.from({ length: 100 }, (_, i) => {
+        seed("TASK-" + (i + 1), { description: "" });
+        return { taskId: "TASK-" + (i + 1), patch: { description: big } };
+      });
+      const out = await call(transport, "mc_update_tasks", { items });
+      expect(out.body.data).toMatchObject({ updated: 100, failed: 0 });
+      expect(out.body.data.results[0]).toEqual({ index: 0, ok: true, taskId: "TASK-1", changed: ["description"], eventSeq: "1" });
+      // Vercel caps responses at 4.5 MB; the full diff lives in the task.updated event.
+      expect(JSON.stringify(out.body).length).toBeLessThan(100_000);
+      expect(h.events[0].payload.diff).toMatchObject({ description: { after: big } });
+    });
     it("rejects empty and over-limit batches before writes", async () => {
       for (const items of [[], Array(101).fill({ taskId: "TASK-1", patch: { title: "No" } })]) {
         expect((await call(transport, "mc_update_tasks", { items })).ok).toBe(false);

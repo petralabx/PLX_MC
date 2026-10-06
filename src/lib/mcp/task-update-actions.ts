@@ -130,9 +130,14 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
   });
 }
 
+// Batch items return receipts, not the full fields/diff: 100 items carrying
+// 32 KB descriptions plus before/after would pass Vercel's 4.5 MB response cap
+// after the writes have committed. The full diff stays in the task.updated event.
 export type UpdateTaskItemOutcome =
-  | { index: number; ok: true; data: Awaited<ReturnType<typeof actionUpdateTask>> }
+  | { index: number; ok: true; taskId: string; changed: string[]; eventSeq: string | undefined }
   | { index: number; ok: false; error: { code: string; message: string } };
+
+const BATCH_ERROR_MESSAGE_MAX = 500;
 
 export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
   assertMcpToolAllowed(identity, "mc_update_tasks");
@@ -141,14 +146,15 @@ export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
   const results: UpdateTaskItemOutcome[] = [];
   for (const [index, item] of items.entries()) {
     try {
-      results.push({ index, ok: true, data: await actionUpdateTask(identity, item) });
+      const data = await actionUpdateTask(identity, item);
+      results.push({ index, ok: true, taskId: data.taskId, changed: Object.keys(data.diff), eventSeq: data.eventSeq });
     } catch (err) {
       if (!(err instanceof ApiError)) console.error("[mcp] mc_update_tasks item %d failed:", index, err);
       results.push({
         index,
         ok: false,
         error: err instanceof ApiError
-          ? { code: err.code, message: err.message }
+          ? { code: err.code, message: err.message.slice(0, BATCH_ERROR_MESSAGE_MAX) }
           : { code: "internal", message: "Internal error." },
       });
     }
@@ -164,7 +170,7 @@ export function registerTaskUpdateTools(server: McpServer, identity: McpIdentity
     inputSchema: updateTaskSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateTask(identity, args) }));
   server.registerTool("mc_update_tasks", {
-    description: "Batch mc_update_task: {items:[{taskId, patch}]}, 1–100 items. Same patch fields and constraints as mc_update_task. Each item commits independently and returns index, ok + data or ok:false + error; one invalid item never aborts the others.",
+    description: "Batch mc_update_task: {items:[{taskId, patch}]}, 1–100 items. Same patch fields and constraints as mc_update_task. Each item commits independently and returns a compact receipt {index, ok, taskId, changed[], eventSeq} or ok:false + error (full diff is in the task.updated event; use mc_update_task for it); one invalid item never aborts the others.",
     inputSchema: updateTasksSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateTasks(identity, args) }));
 }

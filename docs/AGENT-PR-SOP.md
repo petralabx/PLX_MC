@@ -218,7 +218,7 @@ A successful tool call is not enough. Validate the returned checkout once:
 
 Use the Hub tools `mc_update_task({taskId, patch})` or
 `mc_update_tasks({items:[{taskId, patch}]})` for metadata cleanup. A batch
-accepts 1–100 items and reports each result independently; inspect every
+accepts 1–100 items and reports each result independently as a compact receipt (`taskId`, `changed` fields, `eventSeq`; the full diff is in the `task.updated` event); inspect every
 `ok:false` outcome before retrying. Never encode new lane/dependency metadata
 only in progress notes.
 

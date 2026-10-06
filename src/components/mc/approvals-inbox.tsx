@@ -8,14 +8,46 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api, ApiClientError } from "@/lib/api";
-import type { ApprovalGate } from "@/lib/mc-data";
-import type { ScreenProps } from "@/components/mc/route";
+import type { ApprovalEvidenceRef, ApprovalGate } from "@/lib/mc-data";
+import { isPlainLeftClick, navHref } from "@/components/mc/nav-model";
+import type { Nav, ScreenProps } from "@/components/mc/route";
 
 export interface PendingApprovalRow {
   taskId: string;
   taskTitle: string;
   stage: string;
   gate: ApprovalGate;
+  /** The task's existing evidence bundle, or null/absent when the task has none. */
+  evidence?: ApprovalEvidenceRef | null;
+}
+
+/** Accessible name for the per-row evidence link. Uses the bundle summary when the task has one. */
+export function approvalEvidenceLabel(row: Pick<PendingApprovalRow, "taskId" | "evidence">): string {
+  const summary = row.evidence?.summary?.trim();
+  return summary ? `Evidence: ${summary}` : `Evidence for ${row.taskId}`;
+}
+
+export function ApprovalRowLinks({ row, nav }: { row: PendingApprovalRow; nav: Nav }) {
+  const evidenceTarget = { taskId: row.taskId, focus: "evidence" as const };
+  return (
+    <div className="ap-links">
+      <button type="button" className="ap-task" onClick={() => nav("task", { taskId: row.taskId })}>
+        {row.taskId} · {row.taskTitle}
+      </button>
+      <a
+        className="ap-evidence"
+        href={navHref({ screen: "task", ...evidenceTarget })}
+        aria-label={approvalEvidenceLabel(row)}
+        onClick={(event) => {
+          if (!isPlainLeftClick(event)) return;
+          event.preventDefault();
+          nav("task", evidenceTarget);
+        }}
+      >
+        Evidence
+      </a>
+    </div>
+  );
 }
 
 interface ApprovalsResponse {
@@ -141,7 +173,7 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
   const rows = queue.status === "ready" ? queue.rows : [];
 
   return (
-    <div className="ap-page">
+    <div className="ap-page" data-testid="approvals-screen">
       <div className="ap-head">
         <h1 className="ap-title">Approvals</h1>
         <p className="ap-sub">
@@ -156,13 +188,7 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
           {rows.map((row) => (
             <li key={row.gate.id} className="ap-item">
               <div className="ap-item-main">
-                <button
-                  type="button"
-                  className="ap-task"
-                  onClick={() => nav("task", { taskId: row.taskId })}
-                >
-                  {row.taskId} · {row.taskTitle}
-                </button>
+                <ApprovalRowLinks row={row} nav={nav} />
                 <div className="ap-reason">{row.gate.reason}</div>
                 <div className="ap-meta">
                   requested by {row.gate.requestedBy}

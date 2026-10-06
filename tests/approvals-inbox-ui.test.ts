@@ -7,8 +7,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
+  ApprovalRowLinks,
   ApprovalsInboxView,
   ApprovalsStatus,
+  approvalEvidenceLabel,
   approvalsView,
   type ApprovalsLoad,
 } from "@/components/mc/approvals-inbox";
@@ -73,5 +75,33 @@ describe("ApprovalsStatus rendering", () => {
     expect(html).toContain("Loading");
     expect(html).not.toContain(EMPTY_COPY);
     expect(html).not.toContain("ap-error");
+  });
+});
+
+describe("approval evidence link", () => {
+  it("names the link from the task's existing evidence summary", () => {
+    expect(approvalEvidenceLabel({ ...ROW, evidence: { summary: "Proof bundle", itemKeys: ["qa"] } })).toBe(
+      "Evidence: Proof bundle"
+    );
+    expect(approvalEvidenceLabel(ROW)).toBe("Evidence for TASK-221");
+  });
+
+  it("puts an evidence link next to the task link on every row", () => {
+    const withBundle = renderToStaticMarkup(
+      createElement(ApprovalRowLinks, {
+        row: { ...ROW, evidence: { summary: "Proof bundle", itemKeys: ["qa"] } },
+        nav: () => {},
+      })
+    );
+    expect(withBundle).toContain("TASK-221 · WMS integration");
+    expect(withBundle).toContain('href="/?screen=task&amp;taskId=TASK-221&amp;focus=evidence"');
+    expect(withBundle).toContain("Evidence: Proof bundle");
+
+    const withoutBundle = renderToStaticMarkup(
+      createElement(ApprovalRowLinks, { row: ROW, nav: () => {} })
+    );
+    expect(withoutBundle).toContain("TASK-221 · WMS integration");
+    expect(withoutBundle).toContain('href="/?screen=task&amp;taskId=TASK-221&amp;focus=evidence"');
+    expect(withoutBundle).toContain("Evidence for TASK-221");
   });
 });

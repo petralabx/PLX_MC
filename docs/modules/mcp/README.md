@@ -106,7 +106,7 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   schema migration or alternate Graph write path is introduced.
 - Batch cap: **1–100 items**, processed in input order. Validation, ACL,
   not-found and internal errors are per item; each item has its own transaction.
-  Results contain `{index, ok, data}` or `{index, ok:false, error}`, plus
+  Results contain a compact receipt `{index, ok, taskId, changed, eventSeq}` (full diff: `task.updated` event) or `{index, ok:false, error}`, plus
   `updated` (successful items, including no-ops) and `failed` counts. A bad
   item never aborts siblings; an invalid outer envelope is rejected.
   Appends are not idempotent: inspect task state before retrying an uncertain

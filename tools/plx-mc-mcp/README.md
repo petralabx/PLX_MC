@@ -97,7 +97,7 @@ existing ToDos pending/dirty sync path. No Labels column or outbound mapping
 change is needed.
 
 `mc_update_tasks({items:[{taskId, patch}]})` accepts 1–100 items. Items run in
-order, each in its own transaction, and return `{index, ok, data}` or
+order, each in its own transaction, and return a compact receipt `{index, ok, taskId, changed, eventSeq}` or
 `{index, ok:false, error}` plus `updated` and `failed` totals. Invalid patches,
 unknown tasks (REST 404), denied tasks and internal failures do not abort
 siblings. Empty/oversized batches are rejected. Inspect each outcome; inspect

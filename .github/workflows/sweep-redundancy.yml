@@ -8,11 +8,12 @@
 #   (expected: https://mc-staging.plxcustomer.io, origin only, no path).
 #   Unset/empty → that leg no-ops. A set URL must be on the allowlist below.
 #
-# Each armed target receives:
-#   GET /api/cron/sweep        (unless workflow_dispatch mode=watchdog)
-#   GET /api/cron/missed-tick  (always; this route is not a Vercel Cron)
-# Scheduled runs always do both. workflow_dispatch mode=watchdog is the
-# outage drill: call the watchdog without performing a sweep.
+# Each armed target receives, in order:
+#   GET /api/cron/missed-tick?beforeSweep=1  (observe a gap before recovery)
+#   GET /api/cron/sweep                        (unless mode=watchdog)
+# The watchdog route is not a Vercel Cron. Scheduled runs always do both.
+# workflow_dispatch mode=watchdog is the outage drill: the strict 15-minute
+# check, with no sweep afterward.
 #
 # Requires the repo secret PLX_MC_CRON_SECRET (same value as the deployment
 # CRON_SECRET). Absent secret → the job no-ops instead of failing, so forks
@@ -63,19 +64,48 @@ jobs:
             exit 0
           fi
           base=$(printf '%s' "$BASE_URL" | tr -d '[:space:]')
-          base="${base%/}"
           if [ -z "$base" ]; then
             echo "No base URL for ${TARGET} — tick skipped (set repo variable PLX_MC_STAGING_SWEEP_URL to arm staging)."
             exit 0
           fi
-          case "$base" in
-            https://mc.plxcustomer.io|https://mc-staging.plxcustomer.io|https://plx-mission-control*.vercel.app)
-              ;;
-            *)
-              echo "Refusing ${TARGET} base URL outside the PLX MC allowlist."
-              exit 1
-              ;;
-          esac
+          # Parse the origin. A shell glob matches userinfo and paths, which
+          # would send the cron bearer to a host the variable did not name.
+          base=$(BASE_URL="$base" python3 - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlsplit
+
+          raw = os.environ.get("BASE_URL", "").strip()
+          parsed = urlsplit(raw)
+          host = (parsed.hostname or "").lower()
+          label = host[: -len(".vercel.app")] if host.endswith(".vercel.app") else ""
+          preview = (
+              host.startswith("plx-mission-control-")
+              and host.endswith(".vercel.app")
+              and "." not in label
+          )
+          allowed = host in {
+              "mc.plxcustomer.io",
+              "mc-staging.plxcustomer.io",
+              "plx-mission-control.vercel.app",
+          }
+          if (
+              parsed.scheme != "https"
+              or parsed.username
+              or parsed.password
+              or parsed.query
+              or parsed.fragment
+              or parsed.path not in ("", "/")
+              or parsed.port not in (None, 443)
+              or not (allowed or preview)
+          ):
+              sys.exit(1)
+          sys.stdout.write(f"https://{host}")
+          PY
+          ) || {
+            echo "Refusing ${TARGET} base URL outside the PLX MC allowlist."
+            exit 1
+          }
           mode="${MODE:-both}"
           if [ "$mode" != "both" ] && [ "$mode" != "watchdog" ]; then
             echo "Unknown mode: ${mode}"
@@ -98,9 +128,15 @@ jobs:
               *) return 1 ;;
             esac
           }
+          # Observe first. A recovery sweep refreshes inbound stamps, which would
+          # hide an extended gap from the watchdog in this same run.
+          watchdog_path="/api/cron/missed-tick"
+          if [ "$mode" != "watchdog" ]; then
+            watchdog_path="/api/cron/missed-tick?beforeSweep=1"
+          fi
           fail=0
+          trigger "$watchdog_path" "missed-tick" || fail=1
           if [ "$mode" != "watchdog" ]; then
             trigger "/api/cron/sweep" "sweep" || fail=1
           fi
-          trigger "/api/cron/missed-tick" "missed-tick" || fail=1
           exit "$fail"

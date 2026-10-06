@@ -1,6 +1,7 @@
 // TASK-624 — missed-tick detection: threshold evaluation, deduped alerting,
 // fail-open contract, and the independent (non-Vercel-Cron) scheduler.
 
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -10,6 +11,7 @@ import {
   checkMissedTick,
   evaluateSweepHealth,
   MISSED_TICK_ALERT_DEDUP_MS,
+  MISSED_TICK_REDUNDANCY_GRACE_MS,
   MISSED_TICK_THRESHOLD_MS,
   MISSED_TICK_WATCHDOG_PATH,
   SWEEP_REDUNDANCY_PRODUCTION_ORIGIN,
@@ -140,6 +142,35 @@ describe("checkMissedTick", () => {
     expect(append).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledTimes(1);
   });
+
+  it("the pre-sweep grace does not treat the 15-minute redundancy cadence as an outage", async () => {
+    const append = vi.fn(async () => {});
+    const result = await checkMissedTick({
+      now: NOW,
+      thresholdMs: MISSED_TICK_THRESHOLD_MS + MISSED_TICK_REDUNDANCY_GRACE_MS,
+      loadCompletions: async () => stampsAgo(MISSED_TICK_THRESHOLD_MS + 60_000),
+      latestAlertAt: async () => null,
+      append,
+      notify: vi.fn(async () => true),
+    });
+    expect(result).toMatchObject({ stale: false, alerted: false });
+    expect(append).not.toHaveBeenCalled();
+  });
+
+  it("the pre-sweep grace still alerts on an extended gap", async () => {
+    const append = vi.fn(async () => {});
+    const result = await checkMissedTick({
+      now: NOW,
+      thresholdMs: MISSED_TICK_THRESHOLD_MS + MISSED_TICK_REDUNDANCY_GRACE_MS,
+      loadCompletions: async () =>
+        stampsAgo(MISSED_TICK_THRESHOLD_MS + MISSED_TICK_REDUNDANCY_GRACE_MS + 1),
+      latestAlertAt: async () => null,
+      append,
+      notify: vi.fn(async () => true),
+    });
+    expect(result).toMatchObject({ stale: true, alerted: true });
+    expect(append).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("independent missed-tick scheduler", () => {
@@ -152,13 +183,54 @@ describe("independent missed-tick scheduler", () => {
   it("GitHub Actions calls the watchdog on production and a configurable staging URL", () => {
     expect(workflow).toContain(SWEEP_REDUNDANCY_PRODUCTION_ORIGIN);
     expect(workflow).toContain(SWEEP_REDUNDANCY_STAGING_URL_VAR);
-    expect(workflow).toContain(`trigger "${MISSED_TICK_WATCHDOG_PATH}"`);
-    expect(workflow).toContain('trigger "/api/cron/sweep"');
+    expect(workflow).toContain(`watchdog_path="${MISSED_TICK_WATCHDOG_PATH}"`);
+    expect(workflow).toContain("beforeSweep=1");
+    const observe = workflow.indexOf('trigger "$watchdog_path" "missed-tick"');
+    const recover = workflow.indexOf('trigger "/api/cron/sweep" "sweep"');
+    expect(observe).toBeGreaterThan(-1);
+    expect(recover).toBeGreaterThan(observe);
     // Absent secret stays a quiet no-op (forks and unarmed clones).
     expect(workflow).toContain("PLX_MC_CRON_SECRET not configured — redundancy tick skipped.");
     expect(workflow).toContain("exit 0");
     // Outage drill: watchdog mode must not sweep, and must still call the watchdog.
     expect(workflow).toContain('if [ "$mode" != "watchdog" ]; then');
+  });
+
+  it("rejects a credentialized staging URL before the cron secret is attached", () => {
+    const lines = workflow.split("\n");
+    const start = lines.findIndex((line) => line.trim() === "import os");
+    const end = lines.findIndex((line, index) => index > start && line.trim() === "PY");
+    const body = lines.slice(start, end);
+    const pad = Math.min(
+      ...body.filter((line) => line.trim()).map((line) => line.match(/^ */)?.[0].length ?? 0)
+    );
+    const script = body.map((line) => line.slice(pad)).join("\n");
+    const classify = (url: string) => {
+      try {
+        const origin = execFileSync("python3", ["-c", script], {
+          env: { ...process.env, BASE_URL: url },
+          encoding: "utf8",
+        });
+        return { ok: true, origin: origin.trim() };
+      } catch {
+        return { ok: false, origin: "" };
+      }
+    };
+    expect(classify("https://mc.plxcustomer.io")).toEqual({
+      ok: true,
+      origin: "https://mc.plxcustomer.io",
+    });
+    expect(classify("https://mc-staging.plxcustomer.io/")).toEqual({
+      ok: true,
+      origin: "https://mc-staging.plxcustomer.io",
+    });
+    expect(classify("https://plx-mission-control-git-foo.vercel.app")).toEqual({
+      ok: true,
+      origin: "https://plx-mission-control-git-foo.vercel.app",
+    });
+    expect(classify("https://plx-mission-control@attacker.example/path/.vercel.app").ok).toBe(false);
+    expect(classify("https://mc.plxcustomer.io.evil.com").ok).toBe(false);
+    expect(classify("http://mc.plxcustomer.io").ok).toBe(false);
   });
 
   it("the watchdog route is reachable without a Vercel Cron schedule", () => {

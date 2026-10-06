@@ -34,6 +34,16 @@ export const SWEEP_REDUNDANCY_PRODUCTION_ORIGIN = "https://mc.plxcustomer.io";
  */
 export const SWEEP_REDUNDANCY_STAGING_URL_VAR = "PLX_MC_STAGING_SWEEP_URL";
 
+/**
+ * Added only on the pre-sweep redundancy call. The Actions cadence is the
+ * same 15 minutes as the outage threshold, so checking immediately before
+ * that tick would report a healthy redundancy-only interval as an outage.
+ * One extra 5-minute Vercel slot separates "our last redundancy sweep" from
+ * "neither scheduler has run". The strict 15-minute threshold still applies
+ * to the reconcile cron and to watchdog-only drill calls.
+ */
+export const MISSED_TICK_REDUNDANCY_GRACE_MS = 5 * 60_000;
+
 const HEALTH_ACTOR = "scribe";
 
 export interface SweepHealth {
@@ -94,6 +104,8 @@ export interface MissedTickCheck {
 
 export interface MissedTickOptions {
   now?: Date;
+  /** Defaults to MISSED_TICK_THRESHOLD_MS. The pre-sweep caller adds the grace. */
+  thresholdMs?: number;
   loadCompletions?: () => Promise<Record<string, Date | null>>;
   latestAlertAt?: (kind: string) => Promise<string | null>;
   append?: (e: Parameters<typeof appendEvent>[0]) => Promise<unknown>;
@@ -106,9 +118,10 @@ export interface MissedTickOptions {
  */
 export async function checkMissedTick(opts: MissedTickOptions = {}): Promise<MissedTickCheck> {
   const now = opts.now ?? new Date();
+  const thresholdMs = opts.thresholdMs ?? MISSED_TICK_THRESHOLD_MS;
   try {
     const completions = await (opts.loadCompletions ?? getRegisterInboundCompletions)();
-    const health = evaluateSweepHealth(completions, now);
+    const health = evaluateSweepHealth(completions, now, thresholdMs);
     if (!health.stale) return { stale: false, alerted: false, ageMs: health.ageMs };
 
     const lastAlert = await (opts.latestAlertAt ?? latestEventAt)("sync.missed_tick");
@@ -119,7 +132,7 @@ export async function checkMissedTick(opts: MissedTickOptions = {}): Promise<Mis
     const ageText =
       health.ageMs == null ? "never" : `${Math.round(health.ageMs / 60_000)} min ago`;
     const text = `PLX MC sync missed-tick: last complete inbound sweep ${ageText} (threshold ${
-      MISSED_TICK_THRESHOLD_MS / 60_000
+      thresholdMs / 60_000
     } min). Check Vercel Cron, the sweep-redundancy workflow, and /api/cron/sweep.`;
     await (opts.append ?? appendEvent)({
       kind: "sync.missed_tick",
@@ -127,7 +140,7 @@ export async function checkMissedTick(opts: MissedTickOptions = {}): Promise<Mis
       payload: {
         ageMs: health.ageMs,
         lastCompleteAt: health.lastCompleteAt,
-        thresholdMs: MISSED_TICK_THRESHOLD_MS,
+        thresholdMs,
       },
     });
     await (opts.notify ?? postAlertWebhook)(text);

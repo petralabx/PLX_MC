@@ -7,7 +7,11 @@
 
 import { ApiError, route } from "@/lib/api/route";
 import { cronConfigured, cronSecret } from "@/lib/secrets";
-import { checkMissedTick } from "@/lib/sync/health";
+import {
+  checkMissedTick,
+  MISSED_TICK_REDUNDANCY_GRACE_MS,
+  MISSED_TICK_THRESHOLD_MS,
+} from "@/lib/sync/health";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -23,7 +27,14 @@ export const GET = route(async (req) => {
   if (req.headers.get("authorization") !== `Bearer ${cronSecret()}`) {
     throw new ApiError("unauthorized", "Invalid or missing cron authorization.", 401);
   }
-  const missedTick = await checkMissedTick();
+  // beforeSweep=1 is the redundancy workflow's pre-recovery observation.
+  // It keeps the 15-minute cadence from alerting on itself; an extended gap
+  // still alerts before the following sweep refreshes the stamps.
+  const beforeSweep = new URL(req.url).searchParams.get("beforeSweep") === "1";
+  const thresholdMs = beforeSweep
+    ? MISSED_TICK_THRESHOLD_MS + MISSED_TICK_REDUNDANCY_GRACE_MS
+    : MISSED_TICK_THRESHOLD_MS;
+  const missedTick = await checkMissedTick({ thresholdMs });
   if (missedTick.stale) {
     console.error(
       `[sync] missed-tick — last complete sweep ageMs=${missedTick.ageMs ?? "never"} alerted=${missedTick.alerted}`

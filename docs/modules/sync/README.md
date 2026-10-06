@@ -83,9 +83,14 @@ Routing mutations fail closed when required registers are stale.
   within 15 min — one deduped `sync.missed_tick` event per hour-long episode
   plus an optional `PLX_MC_ALERT_WEBHOOK_URL` POST. Fail-open by contract.
   GitHub Actions (`.github/workflows/sweep-redundancy.yml`) is the scheduler
-  for this route. `vercel.json` does not list it, so a Vercel Cron outage
-  still raises the alert. `GET /api/cron/reconcile` evaluates the same check
-  while that Vercel cron is alive; both callers share the dedupe.
+  for this route and calls it before the recovery sweep, so an extended gap
+  is still visible. That pre-sweep call adds a 5-minute grace
+  (`beforeSweep=1`) because the Actions cadence equals the 15-minute
+  threshold. `vercel.json` does not list the route, so a Vercel Cron outage
+  still raises the alert. `GET /api/cron/reconcile` evaluates the strict
+  15-minute check while that Vercel cron is alive; both callers share the
+  dedupe. Watchdog-only dispatch (`mode=watchdog`) uses the strict threshold
+  and does not sweep.
 - **Cadence redundancy**: `.github/workflows/sweep-redundancy.yml` triggers
   `GET /api/cron/sweep` every 15 min from GitHub Actions (secret
   `PLX_MC_CRON_SECRET`; absent secret → the job no-ops) against production

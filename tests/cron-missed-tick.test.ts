@@ -10,8 +10,13 @@ const m = vi.hoisted(() => ({
   cronSecret: vi.fn(),
 }));
 
-vi.mock("@/lib/sync/health", () => ({ checkMissedTick: m.checkMissedTick }));
+vi.mock("@/lib/sync/health", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sync/health")>()),
+  checkMissedTick: m.checkMissedTick,
+}));
 vi.mock("@/lib/secrets", () => ({ cronConfigured: m.cronConfigured, cronSecret: m.cronSecret }));
+
+import { MISSED_TICK_REDUNDANCY_GRACE_MS, MISSED_TICK_THRESHOLD_MS } from "@/lib/sync/health";
 
 import { GET } from "@/app/api/cron/missed-tick/route";
 
@@ -51,6 +56,19 @@ describe("GET /api/cron/missed-tick", () => {
     expect(await resp.json()).toMatchObject({
       data: { missedTick: { stale: true, alerted: true, ageMs: 1_800_000 } },
     });
-    expect(m.checkMissedTick).toHaveBeenCalledTimes(1);
+    expect(m.checkMissedTick).toHaveBeenCalledWith({ thresholdMs: MISSED_TICK_THRESHOLD_MS });
+  });
+
+  it("adds one cadence of grace only when the redundancy workflow observes before sweeping", async () => {
+    const resp = await GET(
+      new Request("http://test/api/cron/missed-tick?beforeSweep=1", {
+        headers: { authorization: "Bearer topsecret" },
+      }),
+      ctx
+    );
+    expect(resp.status).toBe(200);
+    expect(m.checkMissedTick).toHaveBeenCalledWith({
+      thresholdMs: MISSED_TICK_THRESHOLD_MS + MISSED_TICK_REDUNDANCY_GRACE_MS,
+    });
   });
 });

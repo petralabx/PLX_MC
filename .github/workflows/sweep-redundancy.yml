@@ -78,13 +78,10 @@ jobs:
           raw = os.environ.get("BASE_URL", "").strip()
           parsed = urlsplit(raw)
           host = (parsed.hostname or "").lower()
-          label = host[: -len(".vercel.app")] if host.endswith(".vercel.app") else ""
-          preview = (
-              host.startswith("plx-mission-control-")
-              and host.endswith(".vercel.app")
-              and "." not in label
-          )
-          allowed = host in {
+          # Exact origins only. A plx-mission-control-* prefix on vercel.app is
+          # not reserved to this team, so a prefix match would send the bearer
+          # to an unrelated deployment.
+          allowed = {
               "mc.plxcustomer.io",
               "mc-staging.plxcustomer.io",
               "plx-mission-control.vercel.app",
@@ -97,7 +94,7 @@ jobs:
               or parsed.fragment
               or parsed.path not in ("", "/")
               or parsed.port not in (None, 443)
-              or not (allowed or preview)
+              or host not in allowed
           ):
               sys.exit(1)
           sys.stdout.write(f"https://{host}")

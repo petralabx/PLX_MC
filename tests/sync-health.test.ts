@@ -224,10 +224,11 @@ describe("independent missed-tick scheduler", () => {
       ok: true,
       origin: "https://mc-staging.plxcustomer.io",
     });
-    expect(classify("https://plx-mission-control-git-foo.vercel.app")).toEqual({
+    expect(classify("https://plx-mission-control.vercel.app")).toEqual({
       ok: true,
-      origin: "https://plx-mission-control-git-foo.vercel.app",
+      origin: "https://plx-mission-control.vercel.app",
     });
+    expect(classify("https://plx-mission-control-attacker-owned.vercel.app").ok).toBe(false);
     expect(classify("https://plx-mission-control@attacker.example/path/.vercel.app").ok).toBe(false);
     expect(classify("https://mc.plxcustomer.io.evil.com").ok).toBe(false);
     expect(classify("http://mc.plxcustomer.io").ok).toBe(false);

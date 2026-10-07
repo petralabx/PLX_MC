@@ -106,3 +106,13 @@ current description before retrying an uncertain append (appends are not
 idempotent). The stdio client proxies to `/api/cursor/tasks/update` and
 `/api/cursor/tasks/update-batch`; HTTP MCP calls the same actions. See
 `docs/AGENT-PR-SOP.md` for Ledger backfill hygiene.
+
+Task search supports `cursor`/`limit` (default 50, max 200), exact `label`,
+`searchComments` or explicit `in: ["title", "description", "comments", "notes"]`,
+and `fields: "compact"`. Both MCP transports return `data.nextCursor` (null at
+end) and the exact visible filtered `data.total`. Reuse the returned cursor
+with unchanged filters/identity; numeric task-ID ordering and the first-page
+insert boundary prevent new tasks from shifting pages. Discussion matches
+full-text words; title/description and IDs keep substring matching. Query
+results include `matchFields`. See the [Hub search contract](../../docs/modules/mcp/README.md#task-search-pagination-and-discussion-search)
+for REST encoding, cursor limitations and compact timestamp behavior.

@@ -70,3 +70,5 @@ export {
   type PatchTaskInput,
   type StateSnapshot,
 } from "./state";
+
+export { searchTaskPage, type TaskSearchFilter, type SearchTaskRow, type CompactTask } from "./task-search";

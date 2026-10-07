@@ -2,7 +2,8 @@
 // idempotent. Fixture-driven; a tiny in-memory client stands in for pg, so
 // nothing here touches a database.
 import { describe, expect, it } from "vitest";
-import { formatReport, planReopen, runReopen } from "../scripts/reopen-cancelled-tasks.mjs";
+import { parseApprovedSpec } from "../scripts/lib/db-identity.mjs";
+import { formatReport, planReopen, runGuarded, runReopen } from "../scripts/reopen-cancelled-tasks.mjs";
 
 type Row = { id: string; data: { stage: string }; cancellation: Record<string, unknown> | null };
 
@@ -100,5 +101,79 @@ describe("runReopen", () => {
     expect(update).toMatch(/sync_state = 'pending'/);
     expect(update).toMatch(/entity_type = 'task'/);
     expect(update).not.toMatch(/completed_at/);
+  });
+});
+
+// P1 (Astra): the label + URL-substring check passed the TOOLS.md runtime DB
+// (plx_mc on plx-postgres-staging) for `--env staging`. Identity is now verified.
+describe("runGuarded — positive non-production database identity", () => {
+  const UAT_URL = "postgres://u:p@plx-uat-db.example.internal:5432/plx_mc_uat";
+  const RUNTIME_URL = "postgres://u:p@plx-postgres-staging.abc.us-east-1.rds.amazonaws.com:5432/plx_mc";
+
+  // fakeDb plus a server that reports current_database().
+  function identityDb(name: string | null) {
+    const db = fakeDb();
+    const inner = db.query.bind(db);
+    const seen: string[] = [];
+    return Object.assign(db, {
+      seen,
+      query: async (sql: string, params: unknown[] = []) => {
+        seen.push(sql);
+        if (/current_database\(\)/.test(sql)) return { rows: name ? [{ db: name, addr: "10.0.0.5" }] : [], rowCount: 1 };
+        return inner(sql, params);
+      },
+    });
+  }
+
+  it("refuses the runtime DB even though its URL has no 'prod' and the run is labelled staging", async () => {
+    const db = identityDb("plx_mc");
+    await expect(
+      runGuarded(db, { url: RUNTIME_URL, approvedDb: parseApprovedSpec("plx_mc@plx-postgres-staging.abc.us-east-1.rds.amazonaws.com"), apply: true })
+    ).rejects.toThrow(/runtime database/);
+    expect(db.writes).toEqual([]);
+    expect(db.seen.some((s) => /entities|mc_events|UPDATE/.test(s))).toBe(false);
+  });
+
+  it("refuses when the approved identity is missing or malformed", async () => {
+    for (const approvedDb of [undefined, {}]) {
+      const db = identityDb("plx_mc_uat");
+      await expect(runGuarded(db, { url: UAT_URL, approvedDb, apply: true })).rejects.toThrow(/approved-db/);
+      expect(db.writes).toEqual([]);
+    }
+    for (const raw of ["", "plx_mc_uat", "a@b@c"]) expect(() => parseApprovedSpec(raw)).toThrow(/approved-db/);
+  });
+
+  it("refuses when the URL host differs from the approved host", async () => {
+    const db = identityDb("plx_mc_uat");
+    await expect(
+      runGuarded(db, { url: RUNTIME_URL, approvedDb: parseApprovedSpec("plx_mc_uat@plx-uat-db.example.internal"), apply: true })
+    ).rejects.toThrow(/runtime database|not the approved/);
+    expect(db.writes).toEqual([]);
+  });
+
+  it("refuses when the server reports a different database than approved", async () => {
+    const db = identityDb("plx_mc");
+    await expect(
+      runGuarded(db, { url: UAT_URL, approvedDb: parseApprovedSpec("plx_mc_uat@plx-uat-db.example.internal"), apply: true })
+    ).rejects.toThrow(/not the approved/);
+    expect(db.writes).toEqual([]);
+  });
+
+  it("refuses when the identity cannot be read", async () => {
+    const db = identityDb(null);
+    await expect(
+      runGuarded(db, { url: UAT_URL, approvedDb: parseApprovedSpec("plx_mc_uat@plx-uat-db.example.internal"), apply: true })
+    ).rejects.toThrow(/Cannot establish DB identity/);
+    expect(db.writes).toEqual([]);
+  });
+
+  it("accepts an approved identity; dry run stays the default and --apply writes", async () => {
+    const approvedDb = parseApprovedSpec("plx_mc_uat@plx-uat-db.example.internal");
+    const dry = identityDb("plx_mc_uat");
+    const report = await runGuarded(dry, { url: UAT_URL, approvedDb });
+    expect(report.apply).toBe(false);
+    expect(dry.writes).toEqual([]);
+    const live = identityDb("plx_mc_uat");
+    expect((await runGuarded(live, { url: UAT_URL, approvedDb, apply: true })).updated).toBe(4);
   });
 });

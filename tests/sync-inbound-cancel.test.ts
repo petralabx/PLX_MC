@@ -11,6 +11,24 @@ const s = vi.hoisted(() => ({
   updates: [] as { id: string; opts: Record<string, unknown> }[],
   conflicts: [] as Record<string, unknown>[],
   audits: [] as string[],
+  events: [] as Record<string, unknown>[],
+  txOrder: [] as string[],
+}));
+
+vi.mock("@/lib/db", () => ({
+  withTransaction: async (fn: (q: unknown) => Promise<unknown>) => {
+    s.txOrder.push("begin");
+    const out = await fn("tx");
+    s.txOrder.push("commit");
+    return out;
+  },
+}));
+vi.mock("@/lib/compliance/repo", () => ({
+  appendEventTx: async (q: unknown, e: Record<string, unknown>) => {
+    s.txOrder.push(`event:${String(q)}`);
+    s.events.push(e);
+    return "1";
+  },
 }));
 
 vi.mock("@/lib/sync/graph", () => ({
@@ -41,7 +59,10 @@ vi.mock("@/lib/sync/repo", () => ({
   saveDeltaLink: async () => undefined,
   markRegisterInboundComplete: async () => undefined,
   insertConflict: async (c: Record<string, unknown>) => { s.conflicts.push(c); },
-  updateEntity: async (_t: string, id: string, opts: Record<string, unknown>) => { s.updates.push({ id, opts }); },
+  updateEntity: async (_t: string, id: string, opts: Record<string, unknown>, q?: unknown) => {
+    s.updates.push({ id, opts });
+    s.txOrder.push(`update:${String(q)}`);
+  },
   appendAudit: async (_a: string, body: string) => { s.audits.push(body); },
   getBucketBySpItemId: async () => null,
 }));
@@ -60,7 +81,7 @@ const item = (fields: Record<string, unknown>) => {
 };
 
 beforeEach(() => {
-  s.updates.length = 0; s.conflicts.length = 0; s.audits.length = 0; s.items = [];
+  s.updates.length = 0; s.events.length = 0; s.txOrder.length = 0; s.conflicts.length = 0; s.audits.length = 0; s.items = [];
   seed("progress");
 });
 
@@ -97,5 +118,47 @@ describe("inbound Status=Cancelled", () => {
     await runScopedListDelta("todos");
     expect(s.conflicts).toEqual([]);
     for (const u of s.updates) expect(u.opts.cancellation).toBeUndefined();
+  });
+});
+
+describe("inbound cancel event and reopen mirror clear (Astra P2s)", () => {
+  it("a valid SharePoint cancel appends task.cancelled with the real previousStage, atomically with the write", async () => {
+    seed("review");
+    item({ Status: "Cancelled", CancelReason: "Duplicate", ReplacedBy: "TASK-2341" });
+    await runScopedListDelta("todos");
+    expect(s.events).toHaveLength(1);
+    expect(s.events[0]).toMatchObject({
+      kind: "task.cancelled",
+      taskId: "TASK-2360",
+      payload: { previousStage: "review", reason: "duplicate", replacedBy: "TASK-2341", source: "sharepoint" },
+    });
+    // update and event ran on the same transaction handle, inside begin/commit.
+    expect(s.txOrder).toEqual(["begin", "update:tx", "event:tx", "commit"]);
+  });
+
+  it("no event for an invalid cancel or an already-cancelled row", async () => {
+    item({ Status: "Cancelled" });
+    await runScopedListDelta("todos");
+    seed("cancelled");
+    item({ Status: "Cancelled", CancelReason: "Obsolete" });
+    await runScopedListDelta("todos");
+    expect(s.events).toEqual([]);
+  });
+
+  it("an inbound reopen queues the CancelReason/ReplacedBy clear and re-queues the row", async () => {
+    seed("cancelled");
+    item({ Status: "In Progress", CancelReason: "Obsolete" });
+    await runScopedListDelta("todos");
+    const write = s.updates.find((u) => (u.opts.patch as Record<string, unknown> | undefined)?.stage === "progress")!;
+    expect(write.opts.dirtyFields).toContain("cancellation");
+    expect(write.opts.syncState).toBe("pending");
+    expect(s.events).toEqual([]);
+  });
+
+  it("an ordinary inbound edit does not mark cancellation dirty", async () => {
+    seed("progress");
+    item({ Status: "In Progress", Priority: "High" });
+    await runScopedListDelta("todos");
+    for (const u of s.updates) expect((u.opts.dirtyFields as string[] | undefined) ?? []).not.toContain("cancellation");
   });
 });

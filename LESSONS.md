@@ -793,3 +793,18 @@
 - **Rule going forward:** Mock external APIs with their real omission behaviour,
   enumerate every writer of a column (create, inbound, backfill) before calling a
   write rule done, and never infer a transition without a known previous state.
+
+## 2026-10-07 — Rollback script trusted a label and a URL substring (TASK-2529)
+
+- **What went wrong:** `reopen-cancelled-tasks.mjs` accepted `--env staging` plus
+  a URL without "prod" as proof of a non-production target. The runtime DB
+  (`plx_mc` on `plx-postgres-staging`, TOOLS.md) passes that, so `--apply` would
+  have reopened every cancelled production task. A SharePoint-side cancel also
+  wrote the stage without the `task.cancelled` event that reopen restores from.
+- **Root cause:** Environment was inferred from caller-supplied strings, and one
+  of two writers of a state transition skipped the event the reader depends on.
+- **Rule going forward:** A destructive ops script verifies the connected
+  database identity (`scripts/lib/db-identity.mjs`: approved `database@host`
+  matches URL host and `current_database()`, never the runtime DB) before any
+  read or write. Every writer of a stage transition appends its event in the
+  same transaction.

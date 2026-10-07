@@ -9,14 +9,18 @@
 // only entity_type = 'task'. The `cancellation` column itself stays; it is owned
 // and dropped only by the task 2528 down migration.
 //
-// UAT and staging only; a production run is a separate, explicitly approved step
-// and the script refuses a production-looking URL.
+// Non-production only. The target is verified, not labelled: --approved-db
+// database@host must match the URL host and the server's current_database(), and
+// can never be the TOOLS.md runtime database (scripts/lib/db-identity.mjs). A
+// production run is a separate, explicitly approved step. The check runs before
+// the dry-run read too, so nothing is read from an unverified database.
 //
 // Env:   PLX_MC_DATABASE_URL
-// Usage: node scripts/reopen-cancelled-tasks.mjs --env uat|staging [--apply]
+// Usage: node scripts/reopen-cancelled-tasks.mjs --env uat|staging --approved-db database@host [--apply]
 // Exit:  0 — ok, 1 — failure or refused.
 
 import { pathToFileURL } from "node:url";
+import { DbIdentityError, assertApprovedNonProdDb, checkUrlAgainstApproved, parseApprovedDb } from "./lib/db-identity.mjs";
 
 // Keep in step with isClosedStage / TERMINAL_STAGES in src/lib/mc-data/policy.ts.
 const TERMINAL_STAGES = ["merged", "verified", "cancelled"];
@@ -99,6 +103,12 @@ export async function runReopen(db, { apply = false } = {}) {
   return { plan, apply, updated };
 }
 
+/** Verifies the target identity first; nothing is read or written on a refusal. `approvedDb` is a parsed { database, host }. */
+export async function runGuarded(db, { url, approvedDb, apply = false, env = process.env }) {
+  await assertApprovedNonProdDb(db, url, approvedDb, env);
+  return runReopen(db, { apply });
+}
+
 export function formatReport(report, env) {
   const lines = [
     `reopen cancelled tasks — env=${env} — ${report.apply ? "APPLY" : "DRY RUN"}`,
@@ -122,22 +132,27 @@ async function main(argv) {
     console.error("PLX_MC_DATABASE_URL is not set.");
     return 1;
   }
-  if (/prod/i.test(url)) {
-    console.error("Refusing: database URL looks like production.");
-    return 1;
-  }
-  const { Client } = await import("pg");
-  const { resolveDbSsl } = await import("./lib/db-ssl.mjs");
-  const client = new Client({
-    connectionString: url.replace(/([?&])sslmode=[^&]+&?/, "$1").replace(/[?&]$/, ""),
-    ssl: resolveDbSsl(),
-  });
-  await client.connect();
   try {
-    console.log(formatReport(await runReopen(client, { apply }), env));
-    return 0;
-  } finally {
-    await client.end();
+    const approvedDb = parseApprovedDb(argv);
+    // Refuse before connecting; the client is built from this exact validated
+    // target (never the raw URL), so overrides in the URL cannot redirect it.
+    const { host, port, database, user, password } = checkUrlAgainstApproved(url, approvedDb);
+    const { Client } = await import("pg");
+    const { resolveDbSsl } = await import("./lib/db-ssl.mjs");
+    const client = new Client({ host, port, database, user, password, ssl: resolveDbSsl() });
+    await client.connect();
+    try {
+      console.log(formatReport(await runGuarded(client, { url, approvedDb, apply }), env));
+      return 0;
+    } finally {
+      await client.end();
+    }
+  } catch (err) {
+    if (err instanceof DbIdentityError) {
+      console.error(err.message);
+      return 1;
+    }
+    throw err;
   }
 }
 

@@ -14,6 +14,8 @@
 import { ACTORS, BUCKETS, FILES, HUMANS, PROJECTS, REPOS, RISKS, SP_CONFLICTS, SP_ERRORS, TASKS } from "@/lib/mc-data/data";
 import type { Bucket, FileEntry, SyncState, Task } from "@/lib/mc-data/types";
 import type { Cancellation } from "@/lib/mc-data/cancellation";
+import { appendEventTx } from "@/lib/compliance/repo";
+import { withTransaction, type TxQuery } from "@/lib/db";
 import { inboundCancellation } from "./cancel-validate";
 import {
   isRestrictedProject,
@@ -838,12 +840,45 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
       const nextAttr = { ...row.field_attribution };
       for (const f of clearedDirty) delete nextAttr[f];
       for (const f of Object.keys(apply)) delete nextAttr[f];
-      await repo.updateEntity(type, row.id, {
-        patch: apply,
-        dirtyFields: nextDirty,
-        fieldAttribution: nextAttr,
-        cancellation: inboundCancel,
-      });
+      // Leaving cancelled in SharePoint: queue the CancelReason/ReplacedBy clear (a
+      // row already in conflict keeps its state), as patchTask does for MC reopens.
+      const reopens = type === "task" && row.data.stage === "cancelled" && !!apply.stage && apply.stage !== "cancelled";
+      if (reopens && !nextDirty.includes("cancellation")) nextDirty.push("cancellation");
+      const write = (q?: TxQuery) =>
+        repo.updateEntity(
+          type,
+          row.id,
+          {
+            patch: apply,
+            dirtyFields: nextDirty,
+            fieldAttribution: nextAttr,
+            cancellation: inboundCancel,
+            ...(reopens && conflicts.length === 0 && row.sync_state !== "conflict" ? { syncState: "pending" as const } : {}),
+          },
+          q
+        );
+      if (inboundCancel) {
+        // The cancel event carries the real previousStage that reopen restores from;
+        // it commits atomically with the stage + cancellation write.
+        await withTransaction(async (q) => {
+          await write(q);
+          await appendEventTx(q, {
+            kind: "task.cancelled",
+            actor: "runtime:sync",
+            taskId: row.id,
+            payload: {
+              source: "sharepoint",
+              reason: inboundCancel!.reason,
+              replacedBy: inboundCancel!.replacedBy,
+              previousStage: row.data.stage,
+              cancelledBy: SYNC_ACTOR,
+              note: inboundCancel!.note ?? null,
+            },
+          });
+        });
+      } else {
+        await write();
+      }
       if (Object.keys(apply).length > 0) {
         await repo.appendAudit(
           SYNC_ACTOR,

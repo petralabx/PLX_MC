@@ -102,7 +102,7 @@ stored in the jsonb payload.
 - Generic writes (REST PATCH, JSON saves, SharePoint re-sync) never write the
   column: `updateEntity` preserves it, refuses `stage: cancelled` without a
   validated object, and clears it when a task leaves `cancelled` by any path.
-- Rollback: run `scripts/reopen-cancelled-tasks.mjs --env uat|staging` (dry run;
+- Rollback: run `scripts/reopen-cancelled-tasks.mjs --env uat|staging --approved-db database@host` (dry run;
   `--apply` writes) BEFORE reverting the code PR; the `cancellation` column
   stays until task 2528's down migration.
 

@@ -173,6 +173,14 @@ async function resolveDispatchForOpenPr(
   return { dispatch: d };
 }
 
+// A PR that references a cancelled task is not blocked, but it must not read as
+// delivery: the projection skips promotion and the check says so (TASK-2529).
+function cancelledTaskWarning(task: Task): string {
+  const c = task.cancellation;
+  const why = c ? ` (${c.reason}${c.replacedBy ? ` → ${c.replacedBy}` : ""})` : "";
+  return `warning: ${task.id} is cancelled${why} — this PR will not promote it; reopen the task or retarget the PR`;
+}
+
 // One lazy GitHub read per PR, and only if a checkout failed solely on expiry.
 function prDispatchResolver(input: PrIdentity) {
   let state: Promise<PrState> | undefined;
@@ -277,6 +285,13 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
 
   const taskRow = await getEntity("task", input.taskId);
   const task = taskRow?.data as Task | undefined;
+  if (task?.stage === "cancelled") {
+    throw new ApiError(
+      "task_cancelled",
+      `Task ${input.taskId} is cancelled${task.cancellation ? ` (${task.cancellation.reason}${task.cancellation.replacedBy ? ` → ${task.cancellation.replacedBy}` : ""})` : ""}; it cannot be checked out. Reopen it first, or check out the replacement task.`,
+      409
+    );
+  }
   if (task && !task.accountableOwner) {
     await patchTask(
       input.taskId,
@@ -510,7 +525,9 @@ export async function verifyPr(
         ? { verdict: "block", reasons: [checkoutBlockReason("task_deleted")] }
         : task.stage === "verified"
           ? { verdict: "block", reasons: [checkoutBlockReason("task_closed")] }
-          : verifyCompliance({ task, actor: "agent", tier, bucketPrd });
+          : task.stage === "cancelled"
+            ? { verdict: "pass", reasons: [cancelledTaskWarning(task)] }
+            : verifyCompliance({ task, actor: "agent", tier, bucketPrd });
     if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, result, taskId ?? cid);
     tasks.push({ checkoutId: cid, taskId, verdict: result.verdict, reasons: result.reasons });
   }

@@ -17,6 +17,7 @@ import {
   actionGetContext,
   actionListBuckets,
   actionProgress,
+  progressSchemaShape,
   actionSearchTasks,
   actionSelfCheck,
 } from "./actions";
@@ -179,7 +180,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_search_tasks",
-    "Search/list tasks by query (alias: q), bucket, stage, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt. Applied filters are echoed in meta.filter.",
+    "Search/list tasks by query (alias: q), bucket, stage, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt and cancellation (stage=cancelled lists cancelled tasks). Applied filters are echoed in meta.filter.",
     {
       q: z.string().optional().describe("Search text (alias of query)"),
       query: z.string().optional().describe("Search text (alias of q)"),
@@ -320,15 +321,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_report_progress",
-    "Report progress on a checked-out task (stage, notes).",
-    {
-      taskId: z.string().min(1),
-      stage: z
-        .enum(["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified"])
-        .optional(),
-      notes: z.string().optional(),
-      progressPct: z.number().min(0).max(100).optional(),
-    },
+    "Report progress on a checked-out task (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; accountable owner, admin or Ledger/CoS steward only. A cancelled task must be reopened with mc_update_task {reopen} first.",
+    progressSchemaShape,
     async (body) => jsonResult(await actionProgress(identity, body))
   );
 

@@ -13,6 +13,8 @@
 
 import { ACTORS, BUCKETS, FILES, HUMANS, PROJECTS, REPOS, RISKS, SP_CONFLICTS, SP_ERRORS, TASKS } from "@/lib/mc-data/data";
 import type { Bucket, FileEntry, SyncState, Task } from "@/lib/mc-data/types";
+import type { Cancellation } from "@/lib/mc-data/cancellation";
+import { inboundCancellation } from "./cancel-validate";
 import {
   isRestrictedProject,
   RESTRICTED_MIRROR_SP,
@@ -786,6 +788,25 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
         routingFields: type === "task" ? ROUTING_TASK_FIELDS : undefined,
       }
     );
+    // An inbound edit to Cancelled must carry a valid reason (TASK-2529). Otherwise
+    // the stage is not applied and the row raises a Sync conflict instead.
+    let inboundCancel: Cancellation | undefined;
+    if (type === "task" && "stage" in apply && apply.stage === "cancelled" && row.data.stage !== "cancelled") {
+      const verdict = await inboundCancellation(row.id, item.fields, SYNC_ACTOR);
+      if (verdict.ok) {
+        inboundCancel = verdict.cancellation;
+      } else {
+        delete apply.stage;
+        const idx = clearedDirty.indexOf("stage");
+        if (idx >= 0) clearedDirty.splice(idx, 1);
+        conflicts.push({
+          field: "stage",
+          mcVal: displayValue(row.data.stage),
+          spVal: displayValue("cancelled"),
+          note: `Set to Cancelled in SharePoint without a valid cancellation: ${verdict.error}`,
+        });
+      }
+    }
     for (const ev of attributionEvents) {
       await repo.appendAudit(
         SYNC_ACTOR,
@@ -803,7 +824,7 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
         mcVal: c.mcVal,
         spVal: c.spVal,
         by: SYNC_ACTOR,
-        note: "Edited in SharePoint while Mission Control also changed it.",
+        note: c.note ?? "Edited in SharePoint while Mission Control also changed it.",
       });
       await repo.updateEntity(type, row.id, {
         syncState: "conflict",
@@ -821,6 +842,7 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
         patch: apply,
         dirtyFields: nextDirty,
         fieldAttribution: nextAttr,
+        cancellation: inboundCancel,
       });
       if (Object.keys(apply).length > 0) {
         await repo.appendAudit(

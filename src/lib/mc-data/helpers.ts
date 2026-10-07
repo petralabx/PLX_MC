@@ -82,6 +82,7 @@ export function tasksForUser(userId: string, tasks: Task[] = TASKS): Task[] {
 
 // One quiet read per task: ready / building / gap / blocked.
 export function confidenceOf(task: Task): Confidence {
+  if (task.stage === "cancelled") return { state: "gap", label: "Cancelled", pct: 0 };
   if (task.blocked) return { state: "blocked", label: "Blocked", pct: 0 };
   if (task.stage === "verified" || task.stage === "merged") {
     return { state: "ready", label: task.stage === "verified" ? "Verified" : "Merged", pct: 100 };

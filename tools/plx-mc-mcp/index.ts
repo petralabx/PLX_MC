@@ -121,7 +121,7 @@ server.tool(
 
 server.tool(
   "mc_search_tasks",
-  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt. Applied filters are echoed in meta.filter.",
+  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt and cancellation (stage=cancelled lists cancelled tasks). Applied filters are echoed in meta.filter.",
   {
     q: z.string().optional().describe("Search text (alias of query)"),
     query: z.string().optional().describe("Search text (alias of q)"),
@@ -291,12 +291,15 @@ server.tool(
 
 server.tool(
   "mc_report_progress",
-  "Report task progress (stage, notes).",
+  "Report task progress (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; accountable owner, admin or Ledger/CoS steward only.",
   {
     taskId: z.string().min(1),
     stage: z.string().optional(),
     notes: z.string().optional(),
     progressPct: z.number().min(0).max(100).optional(),
+    cancelReason: z.string().optional(),
+    replacedBy: z.string().nullable().optional(),
+    note: z.string().max(2000).optional(),
   },
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_report_progress");
@@ -586,10 +589,19 @@ const taskUpdatePatch = z.object({
   appendDescription: z.string().trim().min(1).max(32_000).optional(),
   title: z.string().trim().min(1).max(255).optional(),
   priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
+  cancel: z.object({
+    reason: z.string().trim().min(1).describe("duplicate | obsolete | superseded | delivered_without_pr"),
+    replacedBy: z.string().trim().nullable().optional().describe("TASK-n; required for duplicate and superseded"),
+    note: z.string().trim().max(2000).optional(),
+  }).strict().optional(),
+  reopen: z.object({
+    stage: z.enum(["backlog", "specced", "approved", "planned", "progress", "qa", "review"]).optional(),
+    note: z.string().trim().max(2000).optional(),
+  }).strict().optional(),
 }).strict();
 
 server.registerTool("mc_update_task", {
-  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority. Mutually exclusive forms cannot mix. Exactly one lane:* must remain. Stage, evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
+  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority. Mutually exclusive forms cannot mix. Exactly one lane:* must remain. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; accountable owner, admin or Ledger/CoS steward only; audit task.cancelled / task.reopened. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
   inputSchema: z.object({
     taskId: z.string().trim().min(1).max(128),
     patch: taskUpdatePatch,

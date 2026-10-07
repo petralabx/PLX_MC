@@ -6,7 +6,7 @@
 // (tests inject todayDay) and honest to the existing fixed-June grid that dueDay()
 // already uses — see the INSIGHTS_TODAY_DAY note below and SPEC §1.1.
 
-import { ACTORS, BANDS, BUCKETS, PRIORITY, STAGES, bandOf } from "@/lib/mc-data";
+import { ACTORS, BANDS, BUCKETS, PRIORITY, STAGES, bandOf, isClosedStage } from "@/lib/mc-data";
 import type { Band, Bucket, PriorityKey, Task } from "@/lib/mc-data";
 import {
   UNASSIGNED_KEY,
@@ -63,7 +63,7 @@ function stagesForBand(band: Band) {
 // "Done" is explicit and tested: done = stage ∈ {merged, verified} (band `done`).
 // Overdue EXCLUDES done; an undated task (dueDay → null) is never overdue.
 export function isOverdue(task: Task, todayDay = INSIGHTS_TODAY_DAY): boolean {
-  if (task.stage === "merged" || task.stage === "verified") return false; // done excluded
+  if (isClosedStage(task.stage)) return false; // done and cancelled excluded
   const d = dueDay(task.due);
   return d !== null && d < todayDay;
 }
@@ -95,14 +95,18 @@ export function buildInsights(
   // (EN-005) so user-created initiatives chart once they hold tasks.
   buckets: Bucket[] = BUCKETS
 ): InsightsModel {
+  // Cancelled work is neither open nor done: every dashboard count skips it
+  // (TASK-2529). The Cancelled stage filter lists it separately.
+  tasks = tasks.filter((task) => task.stage !== "cancelled");
   // ── Status (band) — the donut. BANDS order; bandOf maps each stage to a band,
   // so the partition is disjoint + complete over `tasks`. ──────────────────────
-  const bandCounts = new Map<Band, number>(BANDS.map((b) => [b.key, 0]));
+  const statusBands = BANDS.filter((b) => b.key !== "cancelled");
+  const bandCounts = new Map<Band, number>(statusBands.map((b) => [b.key, 0]));
   for (const task of tasks) {
     const band = bandOf(task.stage);
     bandCounts.set(band, (bandCounts.get(band) ?? 0) + 1);
   }
-  const byStatus: ChartSlice[] = BANDS.map((band) => ({
+  const byStatus: ChartSlice[] = statusBands.map((band) => ({
     key: band.key,
     label: band.name,
     value: bandCounts.get(band.key) ?? 0,

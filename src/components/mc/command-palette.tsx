@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { AGENTS } from "@/lib/mc-data";
+import { AGENTS, isClosedStage } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   allTasks,
@@ -155,7 +155,7 @@ export function CommandPalette({
           run: () => nav("task", { taskId: task.id }),
         },
       ];
-      const isDone = task.stage === "verified" || task.stage === "merged";
+      const isDone = isClosedStage(task.stage);
       if (!isDone) {
         commands.push({
           key: `task-done:${task.id}`,
@@ -188,7 +188,7 @@ export function CommandPalette({
       hint: agent.model,
       run: () => {
         const open = tasks.find(
-          (t) => !t.assignee && !t.humanOnly && t.stage !== "merged" && t.stage !== "verified"
+          (t) => !t.assignee && !t.humanOnly && !isClosedStage(t.stage)
         );
         if (open) reassignTask(open.id, agent.id);
         else pushNotice(`No open, agent-eligible task to assign to ${agent.name}.`, "info");

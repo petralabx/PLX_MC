@@ -29,10 +29,10 @@ describe("Help glossary content", () => {
     expect(GLOSSARY.map((entry) => entry.term)).toEqual(TERMS);
   });
 
-  it("lists the nine lifecycle stages straight from the data model, in order", () => {
+  it("lists the nine lifecycle stages plus Cancelled straight from the data model, in order", () => {
     const stage = GLOSSARY.find((entry) => entry.term === "Stage");
     expect(stage?.list).toEqual(STAGES.map((s) => s.name));
-    expect(stage?.list).toHaveLength(9);
+    expect(stage?.list).toHaveLength(10); // nine lifecycle stages + the Cancelled end stage
     // The gated stages are named from STAGES too, so the copy can't drift.
     for (const gated of STAGES.filter((s) => s.gate)) {
       expect(stage?.definition).toContain(`${gated.gate} gate on ${gated.name}`);

@@ -91,6 +91,7 @@ async function setProgress(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task || DONE_STAGES.includes(task.stage)) return;
   if (task.stage === "progress") return;
+  if (await skipCancelled(task, evt)) return;
 
   await requireProjectionAuthorized(
     "task.progress",
@@ -118,9 +119,26 @@ function validIso(value: string | null | undefined): string | undefined {
   return Number.isNaN(ms) ? undefined : new Date(ms).toISOString();
 }
 
+// A PR never reopens or promotes a cancelled task (TASK-2529); it leaves a
+// task.promotion_skipped event so the PR check and the task history both show why.
+async function skipCancelled(task: Task, evt: PrEvent): Promise<boolean> {
+  if (task.stage !== "cancelled") return false;
+  await complianceRepo.appendEvent({
+    kind: "task.promotion_skipped",
+    actor: PROJECTION_ACTOR,
+    repo: evt.repo,
+    taskId: task.id,
+    pr: String(evt.prNumber),
+    payload: { reason: "task_cancelled", cancellation: task.cancellation ?? null },
+    dedupKey: `task.promotion_skipped:${evt.repo}:${evt.prNumber}:${evt.headSha}:${task.id}`,
+  });
+  return true;
+}
+
 async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task) return;
+  if (await skipCancelled(task, evt)) return;
 
   await requireProjectionAuthorized(
     "task.link",

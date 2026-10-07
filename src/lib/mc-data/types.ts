@@ -4,7 +4,9 @@
 // the in-memory fixtures (data.ts) are replaced by the API + SharePoint mirror
 // (docs/product/SHAREPOINT_INTEGRATION.md).
 
-export type Band = "todo" | "doing" | "done";
+import type { Cancellation } from "./cancellation";
+
+export type Band = "todo" | "doing" | "done" | "cancelled";
 
 export type StageKey =
   | "backlog"
@@ -15,7 +17,8 @@ export type StageKey =
   | "qa"
   | "review"
   | "merged"
-  | "verified";
+  | "verified"
+  | "cancelled";
 
 export interface Stage {
   n: string;
@@ -290,6 +293,9 @@ export interface Task {
   // ISO-8601 first entry into a terminal stage. Read-only: merged in from
   // entities.completed_at on read, never stored in the jsonb payload (TASK-2528).
   completedAt?: string;
+  // Why the task will never ship (TASK-2529). Read-only like completedAt: merged in from
+  // entities.cancellation on read, never stored in the jsonb payload; null/absent unless stage is cancelled.
+  cancellation?: Cancellation;
   userCreated?: boolean;
 }
 

@@ -23,6 +23,12 @@ describe("validateInboundAdoptionRow", () => {
     expect(v).toEqual({ ok: true, id: "TASK-9001", errors: [] });
   });
 
+  it("will not adopt a brand-new row that arrives already Cancelled (no task to hold the reason)", () => {
+    const v = validateInboundAdoptionRow("task", { TaskID: "TASK-9002", Title: "x", Status: "Cancelled", CancelReason: "Obsolete" });
+    expect(v.ok).toBe(false);
+    expect(v.errors).toEqual(["cancelled_not_adoptable"]);
+  });
+
   it("rejects invalid Task IDs and enums (audit path)", () => {
     expect(validateInboundAdoptionRow("task", { Title: "x" }).errors).toContain(
       "invalid_or_missing_task_id"

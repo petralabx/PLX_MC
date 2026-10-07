@@ -5,6 +5,7 @@
 
 import { ApiError } from "@/lib/api/route";
 import { OPERATOR_ID, HUMANS, SP_LISTS } from "@/lib/mc-data/data";
+import type { Cancellation } from "@/lib/mc-data/cancellation";
 import { normalizeBucketPrd } from "@/lib/mc-data/doc-links";
 import {
   isRestrictedProject,
@@ -615,6 +616,8 @@ export interface PatchTaskOptions {
   attribution?: MutationAttribution;
   /** ISO time for completed_at on first terminal entry (PR merge time); updateEntity defaults to now. */
   completedAt?: string;
+  /** Validated cancellation object; required when the patch moves the task into `cancelled` (TASK-2529). */
+  cancellation?: Cancellation;
 }
 
 // Persistence tiers:
@@ -689,6 +692,10 @@ export async function patchTask(
   }
 
   const pushedDirty = entries.map(([k]) => k).filter((k) => PUSHED_FIELDS.includes(k));
+  // Leaving cancelled clears CancelReason/ReplacedBy in ToDos on the next push.
+  if (current.stage === "cancelled" && taskPatch.stage && taskPatch.stage !== "cancelled") {
+    pushedDirty.push("cancellation");
+  }
   const dirty = Array.from(new Set([...row.dirty_fields, ...pushedDirty]));
 
   const dataPatch: EntityData = Object.fromEntries(entries);
@@ -722,6 +729,7 @@ export async function patchTask(
   await repo.updateEntity("task", id, {
     patch: dataPatch,
     completedAt: opts.completedAt,
+    cancellation: opts.cancellation,
     // Person columns are pushed now (Item 1), so a person-only patch re-queues
     // the entity for the next outbound sweep.
     syncState: pushedDirty.length > 0 ? "pending" : undefined,
@@ -741,7 +749,7 @@ export async function patchTask(
   }
   // The remaining pushed fields (incl. Accountable Owner / Reporter) log the
   // honest pending-push trail; assignee already has its own line above.
-  const loggable = pushedDirty.filter((k) => k !== "assignee");
+  const loggable = pushedDirty.filter((k) => k !== "assignee" && k !== "cancellation");
   if (loggable.length > 0) {
     await repo.appendAudit(actor, `Edited ${id} (${loggable.join(", ")}) — pending push.`, "pending", opts.query);
   }

@@ -10,7 +10,7 @@ import { allTasks, bucketsForProject, projectById, pushNotice, updateProject } f
 import { Avatar, HealthPill, SyncTick } from "./atoms";
 import { PeoplePicker } from "./people-picker";
 import { ProjectOverview } from "./project-overview";
-import { projectProgress, rollupForProject } from "./project-overview.helpers";
+import { isCountedStage, projectProgress, rollupForProject } from "./project-overview.helpers";
 import type { ScreenProps } from "./route";
 
 const FALLBACK_PROJECT = PROJECTS[0];
@@ -217,7 +217,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
           </div>
           <div className="f">
             <span className="k">Tasks</span>
-            <span className="v">{tasks.length}</span>
+            <span className="v">{progress.total}</span>
           </div>
           {/* Whole-project progress — one spine segment per task (the .spine
               skin), done = ink, in-flight = accent; counts from projectProgress
@@ -279,7 +279,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
               ) : (
                 <div className="init-grid">
                   {buckets.map((bucket) => {
-                    const bucketTasks = tasks.filter((t) => t.bucket === bucket.id);
+                    const bucketTasks = tasks.filter((t) => t.bucket === bucket.id && isCountedStage(t));
                     const done = bucketTasks.filter(
                       (t) => STAGES[STAGE_IDX[t.stage]].band === "done"
                     ).length;

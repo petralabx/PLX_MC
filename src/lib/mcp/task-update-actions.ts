@@ -9,9 +9,11 @@ import type { Task } from "@/lib/mc-data/types";
 import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import { patchTask } from "@/lib/sync";
+import { cancelTaskTx, reopenTaskTx } from "@/lib/sync/cancel";
 import { getEntity } from "@/lib/sync/repo";
 import type { McpIdentity } from "./auth";
 import { mcpJsonResult, taskLink } from "./envelope";
+import { assertMayCloseOrReopen, cancelContextFor, cancelPatchSchema, reopenPatchSchema } from "./task-cancel-actions";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 
 export const UPDATE_TASK_BATCH_MAX = 100;
@@ -31,9 +33,18 @@ export const taskUpdatePatchSchema = z.object({
   appendDescription: z.string().trim().min(1).max(TASK_DESCRIPTION_MAX).optional(),
   title: z.string().trim().min(1).max(255).optional(),
   priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
+  cancel: cancelPatchSchema.optional(),
+  reopen: reopenPatchSchema.optional(),
 }).strict().superRefine((patch, ctx) => {
   if (Object.values(patch).every((value) => value === undefined)) {
     ctx.addIssue({ code: "custom", message: "At least one patch field is required." });
+  }
+  if ((patch.cancel !== undefined || patch.reopen !== undefined)
+    && Object.entries(patch).some(([key, value]) => value !== undefined && key !== "cancel" && key !== "reopen")) {
+    ctx.addIssue({ code: "custom", message: "cancel and reopen are stage changes and cannot be combined with other patch fields." });
+  }
+  if (patch.cancel !== undefined && patch.reopen !== undefined) {
+    ctx.addIssue({ code: "custom", message: "cancel cannot be combined with reopen." });
   }
   if (patch.labels !== undefined && (patch.addLabels !== undefined || patch.removeLabels !== undefined)) {
     ctx.addIssue({ code: "custom", message: "labels cannot be combined with addLabels or removeLabels." });
@@ -56,7 +67,7 @@ export const updateTasksSchema = z.object({
 }).strict();
 
 type EditableFields = Pick<Task, "labels" | "description" | "title" | "priority">;
-type TaskDiff = Partial<Record<keyof EditableFields, { before: unknown; after: unknown }>>;
+type TaskDiff = Partial<Record<keyof EditableFields | "stage", { before: unknown; after: unknown }>>;
 
 function parseInput<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
   const parsed = schema.safeParse(input);
@@ -71,11 +82,35 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
   assertMcpToolAllowed(identity, "mc_update_task");
   const { taskId, patch } = parseInput(updateTaskSchema, input);
   const authorized = requireMcpActor(identity, "task.progress", { type: "task", id: taskId });
+  if (patch.cancel || patch.reopen) {
+    // Authorize before the transaction: a denial is audited on its own connection
+    // and must survive the rollback an exception would trigger inside it.
+    const current = await getEntity("task", taskId);
+    if (!current) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
+    await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
+    await assertMayCloseOrReopen(identity, current.data as unknown as Task, patch.cancel ? "cancel" : "reopen");
+  }
   return withTransaction(async (q) => {
     const row = await getEntity("task", taskId, q, true);
     if (!row) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
     await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity), q);
     const before = row.data as unknown as Task;
+
+    // Stage changes with their own audited event; the lane/label rules below are
+    // for metadata edits and must not block closing an old, unlabeled task.
+    if (patch.cancel || patch.reopen) {
+      const ctx = cancelContextFor(identity, authorized.actorId);
+      const done = patch.cancel
+        ? await cancelTaskTx(q, taskId, patch.cancel, ctx)
+        : await reopenTaskTx(q, taskId, patch.reopen!, ctx);
+      return {
+        taskId,
+        fields: { labels: done.task.labels, description: done.task.description ?? "", title: done.task.title, priority: done.task.priority },
+        diff: { stage: { before: before.stage, after: done.task.stage } } as TaskDiff,
+        eventSeq: done.eventSeq,
+        link: taskLink(taskId),
+      };
+    }
 
     // Removals happen first so a lane can be replaced in one incremental call.
     const labels = parseInput(labelsSchema, patch.labels ?? [...new Set([
@@ -166,11 +201,11 @@ export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
 export function registerTaskUpdateTools(server: McpServer, identity: McpIdentity): void {
   // Full strict schemas preserve unknown-field rejection at the MCP boundary.
   server.registerTool("mc_update_task", {
-    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority. Exactly one lane:* must remain; labels cannot mix with incremental fields, nor description with appendDescription. Rejects all other fields, including stage, evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. Hub only.",
+    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority. Exactly one lane:* must remain; labels cannot mix with incremental fields, nor description with appendDescription. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy?: TASK-n (required for duplicate/superseded), note?} and reopen {stage?, note?} (default: the stage before the cancel; clears cancellation, keeps completedAt): stage changes that cannot be combined with other fields; only the accountable owner, an admin or a Ledger/CoS steward may use them; audits task.cancelled / task.reopened. Rejects all other fields, including evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. Hub only.",
     inputSchema: updateTaskSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateTask(identity, args) }));
   server.registerTool("mc_update_tasks", {
-    description: "Batch mc_update_task: {items:[{taskId, patch}]}, 1–100 items. Same patch fields and constraints as mc_update_task. Each item commits independently and returns a compact receipt {index, ok, taskId, changed[], eventSeq} or ok:false + error (full diff is in the task.updated event; use mc_update_task for it); one invalid item never aborts the others.",
+    description: "Batch mc_update_task: {items:[{taskId, patch}]}, 1–100 items. Same patch fields (including cancel/reopen) and constraints as mc_update_task. Each item commits independently and returns a compact receipt {index, ok, taskId, changed[], eventSeq} or ok:false + error (full diff is in the task.updated event; use mc_update_task for it); one invalid item never aborts the others.",
     inputSchema: updateTasksSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateTasks(identity, args) }));
 }

@@ -35,7 +35,7 @@ export type CompactTask = Pick<Task, "id" | "title" | "stage" | "bucket" | "labe
 };
 export type SearchTaskRow = (Task | CompactTask) & { matchFields?: string[] };
 
-// Immutable expression shared verbatim with migration 031's GIN index.
+// Immutable expression shared verbatim with migration 032's GIN index.
 export const TASK_DISCUSSION_VECTOR = `jsonb_to_tsvector('simple'::regconfig,
   jsonb_path_query_array(data, '$.comments[*].body') ||
   jsonb_path_query_array(data, '$.activity[*].what'), '["string"]'::jsonb)`;

@@ -354,7 +354,7 @@ ID matching remains enabled for compatibility. `comments` includes comment
 bodies and activity `what` text. `notes` includes the `mcp-*` comments written
 by `mc_report_progress`. Discussion uses PostgreSQL `simple` full-text word
 matching (all query words, ignoring punctuation; no stemming or prefix
-matching), backed by migration `031_task_search_indexes.sql`. Search does not
+matching), backed by migration `032_task_search_indexes.sql`. Search does not
 match authors or activity metadata. With a non-empty query, each returned row
 includes `matchFields` (`id`, `title`, `description`, `comments`, `activity`,
 `notes`) explaining its match. For example:

@@ -116,7 +116,7 @@ describe("task search repository (offline bound-input fixtures + SQL contract)",
     expect(sql).toContain("strpos(lower(id)");
   });
   it("migration indexes the actual discussion expression and numeric IDs without destructive DDL", () => {
-    const migration = readFileSync("db/migrations/031_task_search_indexes.sql", "utf8");
+    const migration = readFileSync("db/migrations/032_task_search_indexes.sql", "utf8");
     const normalize = (text: string) => text.replace(/\s+/g, " ");
     expect(normalize(migration)).toContain(normalize(TASK_DISCUSSION_VECTOR));
     expect(migration).toContain("USING gin");

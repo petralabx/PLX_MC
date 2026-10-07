@@ -35,10 +35,22 @@ function mockClient(liveDb: string | null | Error) {
   };
 }
 
-async function runMain(argv: string[], url: string, client: ReturnType<typeof mockClient>) {
+async function runMain(
+  argv: string[],
+  url: string,
+  client: ReturnType<typeof mockClient>,
+  env: Record<string, string> = {},
+  created: unknown[] = []
+) {
   const err = vi.spyOn(console, "error").mockImplementation(() => {});
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  const code = await main(argv, { env: { PLX_MC_DATABASE_URL: url }, createClient: () => client });
+  const code = await main(argv, {
+    env: { PLX_MC_DATABASE_URL: url, ...env },
+    createClient: (target: unknown) => {
+      created.push(target);
+      return client;
+    },
+  });
   return { code, stderr: err.mock.calls.flat().join("\n"), stdout: log.mock.calls.flat().join("\n") };
 }
 
@@ -159,6 +171,91 @@ describe("backfill identity guard", () => {
     const r = await runMain(["--env", "uat", "--apply"], urlOf("plx_mc_uat", UAT_HOST), client);
     expect(r.code).toBe(1);
     expect(client.queries).toEqual([]);
+  });
+});
+
+describe("effective connection target (host-override hole)", () => {
+  const approvedArgs = ["--env", "uat", "--apply", "--approved-db", "plx_mc@uat"];
+
+  it("refuses the Astra URL: approved plx_mc@uat but ?host= points at the runtime RDS", async () => {
+    const client = mockClient("plx_mc");
+    const created: unknown[] = [];
+    const url = `postgres://user:pass@uat/plx_mc?host=${RUNTIME_HOST}`;
+    const r = await runMain(approvedArgs, url, client, {}, created);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/"host" can override/);
+    expect(client.queries).toEqual([]);
+    expect(created).toEqual([]);
+  });
+
+  it.each(["host", "hostaddr", "port", "dbname", "database", "service", "options", "sslrootcert", "user", "passfile"])(
+    "refuses the %s query override",
+    async (param) => {
+      const client = mockClient("plx_mc_uat");
+      const created: unknown[] = [];
+      const r = await runMain(
+        ["--env", "uat", "--approved-db", `plx_mc_uat@${UAT_HOST}`],
+        `${urlOf("plx_mc_uat", UAT_HOST)}?${param}=x`,
+        client,
+        {},
+        created
+      );
+      expect(r.code).toBe(1);
+      expect(r.stderr).toMatch(new RegExp(`"${param}" can override`));
+      expect(created).toEqual([]);
+      expect(client.queries).toEqual([]);
+    }
+  );
+
+  it.each(["PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGSERVICE", "PGSERVICEFILE"])(
+    "refuses when %s is set in the environment",
+    async (name) => {
+      const client = mockClient("plx_mc_uat");
+      const created: unknown[] = [];
+      const r = await runMain(
+        ["--env", "uat", "--approved-db", `plx_mc_uat@${UAT_HOST}`],
+        urlOf("plx_mc_uat", UAT_HOST),
+        client,
+        { [name]: "x" },
+        created
+      );
+      expect(r.code).toBe(1);
+      expect(r.stderr).toMatch(new RegExp(name));
+      expect(created).toEqual([]);
+      expect(client.queries).toEqual([]);
+    }
+  );
+
+  it.each([
+    ["multiple hosts", `postgres://u:p@${UAT_HOST},${RUNTIME_HOST}/plx_mc_uat`],
+    ["unix socket via encoded host", "postgres://u:p@%2Fvar%2Frun%2Fpostgresql/plx_mc_uat"],
+    ["missing user", `postgres://${UAT_HOST}/plx_mc_uat`],
+    ["non-postgres scheme", `http://u:p@${UAT_HOST}/plx_mc_uat`],
+  ])("refuses %s", async (_n, url) => {
+    const client = mockClient("plx_mc_uat");
+    const created: unknown[] = [];
+    const r = await runMain(["--env", "uat", "--approved-db", `plx_mc_uat@${UAT_HOST}`], url, client, {}, created);
+    expect(r.code).toBe(1);
+    expect(created).toEqual([]);
+    expect(client.queries).toEqual([]);
+  });
+
+  it("a clean approved URL (sslmode allowed) passes dry run and apply, and the client is built from the validated target", async () => {
+    for (const flags of [[], ["--apply"]]) {
+      const client = mockClient("plx_mc_uat");
+      const created: unknown[] = [];
+      const r = await runMain(
+        ["--env", "uat", ...flags, "--approved-db", `plx_mc_uat@${UAT_HOST}`],
+        `${urlOf("plx_mc_uat", UAT_HOST)}?sslmode=require`,
+        client,
+        {},
+        created
+      );
+      expect(r.code).toBe(0);
+      expect(created).toEqual([
+        { host: UAT_HOST, port: 5432, database: "plx_mc_uat", user: "plx_mc_app", password: "s3cret" },
+      ]);
+    }
   });
 });
 

@@ -164,7 +164,7 @@ export function formatReport(report, env) {
 
 /**
  * @param {string[]} argv
- * @param {{ env?: Record<string, string | undefined>, createClient?: (url: string) => any }} [opts] test seams
+ * @param {{ env?: Record<string, string | undefined>, createClient?: (target: { host: string, port: number, database: string, user: string, password: string }) => any }} [opts] test seams
  */
 export async function main(argv, { env: processEnv = process.env, createClient } = {}) {
   const apply = argv.includes("--apply");
@@ -182,11 +182,13 @@ export async function main(argv, { env: processEnv = process.env, createClient }
   let client;
   try {
     const approved = parseApprovedDb(argv);
-    checkUrlAgainstApproved(url, approved); // refuse before connecting
-    client = createClient ? createClient(url) : await defaultClient(url);
+    // Refuse before connecting; the client is built from this exact validated
+    // target (never the raw URL), so overrides in the URL cannot redirect it.
+    const target = checkUrlAgainstApproved(url, approved, processEnv);
+    client = createClient ? createClient(target) : await defaultClient(target);
     await client.connect();
     try {
-      await assertApprovedNonProdDb(client, url, approved); // before any read or write
+      await assertApprovedNonProdDb(client, url, approved, processEnv); // before any read or write
       console.log(formatReport(await runBackfill(client, { apply }), env));
       return 0;
     } finally {
@@ -201,11 +203,15 @@ export async function main(argv, { env: processEnv = process.env, createClient }
   }
 }
 
-async function defaultClient(url) {
+async function defaultClient({ host, port, database, user, password }) {
   const { Client } = await import("pg");
   const { resolveDbSsl } = await import("./lib/db-ssl.mjs");
   return new Client({
-    connectionString: url.replace(/([?&])sslmode=[^&]+&?/, "$1").replace(/[?&]$/, ""),
+    host,
+    port,
+    database,
+    user,
+    password,
     ssl: resolveDbSsl(),
   });
 }

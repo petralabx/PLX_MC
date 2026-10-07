@@ -51,32 +51,64 @@ export function parseApprovedDb(argv) {
   return parseApprovedSpec(idx >= 0 ? argv[idx + 1] : undefined);
 }
 
-/** Host + database from a postgres connection URL; throws when not derivable. */
-export function parseConnectionIdentity(connectionUrl) {
+// Env vars libpq/pg would use to fill or redirect a connection target.
+const TARGET_ENV_VARS = ["PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGSERVICE", "PGSERVICEFILE"];
+// The only query param accepted: it never changes the target (the script's own
+// resolveDbSsl() decides TLS). Every other param (host, hostaddr, port, dbname,
+// database, service, options, ...) can redirect or rewrite the connection.
+const ALLOWED_QUERY_PARAMS = new Set(["sslmode"]);
+
+/**
+ * The effective connection target from a postgres URL: { host, port, database,
+ * user, password }. Fails closed on anything that could make the driver connect
+ * elsewhere than the URL authority: query-param overrides, multiple hosts,
+ * unix-socket hosts, a missing host/database/user, and PG* target env vars.
+ * Callers must build the client from this object (never from the raw URL), so
+ * what is validated is exactly what connects.
+ */
+export function parseConnectionIdentity(connectionUrl, env = process.env) {
   let url;
   try {
     url = new URL(connectionUrl);
   } catch {
     throw new DbIdentityError("Cannot establish DB identity: connection URL is not parseable.");
   }
-  const host = normalizeHost(url.hostname);
-  const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
-  if (!host || !database) {
-    throw new DbIdentityError("Cannot establish DB identity: connection URL has no host or database.");
+  if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
+    throw new DbIdentityError("Cannot establish DB identity: connection URL is not a postgres URL.");
   }
-  return { host, database };
+  for (const key of new Set(url.searchParams.keys())) {
+    if (!ALLOWED_QUERY_PARAMS.has(key)) {
+      throw new DbIdentityError(`Refusing: connection URL parameter "${key}" can override the connection target.`);
+    }
+  }
+  const set = TARGET_ENV_VARS.filter((name) => env?.[name]);
+  if (set.length > 0) {
+    throw new DbIdentityError(`Refusing: ${set.join(", ")} can override the connection target; unset it.`);
+  }
+  const host = normalizeHost(url.hostname);
+  if (host.includes(",") || host.includes("%") || host.includes("/") || host.startsWith("[")) {
+    throw new DbIdentityError("Refusing: multiple, socket or non-DNS connection hosts are not allowed.");
+  }
+  const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
+  const user = decodeURIComponent(url.username);
+  if (!host || !database || !user || database.includes("/")) {
+    throw new DbIdentityError("Cannot establish DB identity: connection URL has no host, database or user.");
+  }
+  const port = url.port ? Number(url.port) : 5432;
+  return { host, port, database, user, password: decodeURIComponent(url.password) };
 }
 
 /**
- * Pure URL-level check; run it before connecting. Returns the URL identity.
+ * Pure URL-level check; run it before connecting. Returns the effective
+ * connection target (see parseConnectionIdentity) to build the client from.
  * Refuses the runtime identity (in the URL or the approved spec) and any mismatch.
  */
-export function checkUrlAgainstApproved(connectionUrl, approved) {
+export function checkUrlAgainstApproved(connectionUrl, approved, env = process.env) {
   const spec = approved ?? {};
   if (!spec.database || !spec.host) {
     throw new DbIdentityError("--approved-db <database>@<host> is required.");
   }
-  const fromUrl = parseConnectionIdentity(connectionUrl);
+  const fromUrl = parseConnectionIdentity(connectionUrl, env);
   if (isRuntimeIdentity(spec) || isRuntimeIdentity(fromUrl)) {
     throw new DbIdentityError(
       `Refusing: ${RUNTIME_DB_NAME} on ${RUNTIME_DB_HOST_PREFIX}* is the runtime database and is never an approved target.`
@@ -95,8 +127,8 @@ export function checkUrlAgainstApproved(connectionUrl, approved) {
  * approved database. Returns { database, host, serverAddr } on success;
  * throws DbIdentityError otherwise. Reads nothing but identity.
  */
-export async function assertApprovedNonProdDb(client, connectionUrl, approved) {
-  const fromUrl = checkUrlAgainstApproved(connectionUrl, approved);
+export async function assertApprovedNonProdDb(client, connectionUrl, approved, env = process.env) {
+  const fromUrl = checkUrlAgainstApproved(connectionUrl, approved, env);
   let row;
   try {
     row = (await client.query("SELECT current_database() AS db, inet_server_addr()::text AS addr")).rows?.[0];

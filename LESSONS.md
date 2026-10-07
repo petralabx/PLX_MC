@@ -29,6 +29,18 @@
   (`scripts/lib/db-identity.mjs`) before any read or write; URL and live
   `current_database()` must both match, and the runtime DB is always refused.
 
+### 2026-10-07 (ET) — DB identity guard checked the URL authority, not the effective target
+
+- **What happened:** `postgres://u:p@uat/plx_mc?host=<runtime RDS>` passed approval
+  for `plx_mc@uat`, but `pg` connects to the `host` query parameter; the live
+  `current_database()` also matched, so `--apply` could reach the runtime DB (Astra P1).
+- **Root cause:** The guard validated the URL authority while the driver parsed the
+  whole URL (query overrides, `PG*` env) — validated target != connected target.
+- **Rule going forward:** Validate the effective target and connect from that same
+  object: refuse any query param except `sslmode`, multiple/socket hosts, and
+  `PGHOST`/`PGHOSTADDR`/`PGPORT`/`PGDATABASE`/`PGUSER`/`PGSERVICE`/`PGSERVICEFILE`;
+  build the client from `{host,port,database,user,password}`, never the raw URL.
+
 ### 2026-07-16 (ET) — Compliance failed because evidence lived only in the PR body
 
 - **What happened:** A stamped agent PR carried its summary, verification and

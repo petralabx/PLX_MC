@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { taskSearchShape } from "../../src/lib/mcp/task-search-schema";
+import { taskSearchShape } from "./task-search-schema";
 /**
  * PLX-MC MCP Server (stdio)
  *

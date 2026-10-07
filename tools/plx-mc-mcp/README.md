@@ -59,6 +59,12 @@ cd tools/plx-mc-mcp && npm install
 PLX_MC_MCP_ENABLED=1 MC_MCP_PRINCIPAL_ID=sp_mcp_claude_code MC_MCP_API_KEY=... MC_OPERATOR_EMAIL=... MC_REPO=petralabx/PLX_MC npx tsx index.ts
 ```
 
+The shared search schema lives in `task-search-schema.ts`; the web MCP module
+re-exports it. Zod resolves from this tool install (via the SDK dependency) or
+from the repository root in a web-only install. From the repository root, run
+`node scripts/check-mcp-stdio-standalone.mjs` to check startup and search-tool
+registration with an isolated tool-only `npm ci` under `/tmp`.
+
 `launch.mjs` uses `prod/ec2-secrets` only for `sp_mcp_cursor`. Dedicated
 principals are selected from `plx/prod/mc/mcp-agent-keys/v1`; a missing entry
 fails closed without shared-key fallback.

@@ -33,6 +33,8 @@ const upsertRoutingSession = vi.hoisted(() =>
 );
 
 const createTask = vi.hoisted(() => vi.fn());
+const eventsByKinds = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
+const extraTasks = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 const appendWorkLink = vi.hoisted(() => vi.fn());
 const runShadowRouting = vi.hoisted(() =>
   vi.fn(async () => ({
@@ -82,6 +84,11 @@ const runShadowRouting = vi.hoisted(() =>
   }))
 );
 
+vi.mock("@/lib/compliance/repo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/compliance/repo")>()),
+  eventsByKinds,
+}));
+
 vi.mock("@/lib/routing/repo", () => ({
   upsertRoutingSession,
   appendWorkLink,
@@ -99,6 +106,7 @@ vi.mock("@/lib/sync", () => ({
         repos: ["plx-mc"],
         labels: ["routing"],
       },
+      ...extraTasks,
     ],
     buckets: [{ id: "BKT-INFRA", repos: ["plx-mc"], project: "PRJ-PORTAL-GOLIVE" }],
     repos: [{ id: "plx-mc", name: "PLX_MC" }],
@@ -163,6 +171,7 @@ function mcpIdentity(overrides: Partial<McpIdentity> = {}): McpIdentity {
 describe("routing suggest (P5)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    extraTasks.length = 0;
     vi.stubEnv("PLX_MC_ROUTING_SHADOW_ENABLED", "1");
     vi.stubEnv("PLX_MC_ROUTING_SUGGEST_ENABLED", "1");
     vi.stubEnv("PLX_MC_ROUTING_INBOX_ENABLED", "1");
@@ -303,5 +312,51 @@ describe("routing suggest (P5)", () => {
     expect(upsertRoutingSession).toHaveBeenCalledWith(
       expect.objectContaining({ id: "rtx_existing123" })
     );
+  });
+
+  it("carries a neutral outcome component and keeps engine order with no history (TASK-634)", async () => {
+    eventsByKinds.mockResolvedValue([]);
+    const result = await actionSuggestWork(mcpIdentity(), { title: "x" });
+    expect(result.candidates.map((c) => [c.rank, c.taskId])).toEqual([
+      [1, "TASK-439"],
+      [2, "TASK-100"],
+    ]);
+    for (const c of result.candidates) {
+      expect(c.outcomeScore).toMatchObject({ points: 0, applied: false, status: "insufficient_history" });
+    }
+  });
+
+  it("re-ranks fuzzy candidates toward buckets where the runtime historically succeeds (TASK-634)", async () => {
+    const at = (h: number) => new Date(Date.parse("2026-09-01T00:00:00Z") + h * 3_600_000).toISOString();
+    const events: unknown[] = [];
+    let seq = 0;
+    const push = (kind: string, actor: string, taskId: string, ts: string, checkoutId: string) =>
+      events.push({ seq: String(++seq), ts, kind, actor, repo: null, taskId, pr: null, payload: { checkoutId } });
+    for (const [actor, bucket, done] of [
+      ["cursor", "BKT-UI", 4],
+      ["codex", "BKT-UI", 1],
+    ] as const) {
+      for (let i = 0; i < 4; i++) {
+        const taskId = `H-${actor}-${i}`;
+        extraTasks.push({ id: taskId, title: "h", bucket, stage: "done", repos: [], labels: [] });
+        push("checkout", actor, taskId, at(i * 24), `dsp_${actor}_${i}`);
+        if (i < done) push("task.completed", actor, taskId, at(i * 24 + 2), `dsp_${actor}_${i}`);
+      }
+    }
+    eventsByKinds.mockResolvedValue(events);
+    runShadowRouting.mockResolvedValueOnce({
+      ...(await runShadowRouting()),
+      candidates: [
+        { rank: 1, taskId: "TASK-200", bucketId: "BKT-INFRA", projectId: null, matchScore: 50, authorizationTrust: "fuzzy" as const, reasons: [] },
+        { rank: 2, taskId: "TASK-201", bucketId: "BKT-UI", projectId: null, matchScore: 48, authorizationTrust: "fuzzy" as const, reasons: [] },
+      ],
+    } as never);
+
+    const result = await actionSuggestWork(mcpIdentity({ runtime: "cursor" }), { title: "x" });
+    expect(result.candidates.map((c) => c.taskId)).toEqual(["TASK-201", "TASK-200"]);
+    const top = result.candidates[0].outcomeScore;
+    expect(top).toMatchObject({ status: "scored", applied: true });
+    expect(top.points).toBeGreaterThan(2);
+    expect(top.evidence).toMatchObject({ runtime: "cursor", bucketId: "BKT-UI", checkouts: 4, completed: 4, peerCheckouts: 8 });
   });
 });

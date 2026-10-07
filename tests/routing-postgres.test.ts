@@ -96,6 +96,17 @@ describe("routing postgres harness", () => {
     expect(routingContainers()).toBe("");
   }, 180_000);
 
+  it("applies migrations through 033: task-only CHECK, partial index, idempotent, clean rollback", () => {
+    const result = runHarness(["--through", "033", "--completed-at"]);
+    if (result.status !== 0) {
+      console.error(result.stdout);
+      console.error(result.stderr);
+    }
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/completed_at assertions passed/i);
+    expect(routingContainers()).toBe("");
+  }, 180_000);
+
   it("refuses configured staging/production database URLs", () => {
     const result = runHarness(["--through", "018"], {
       PLX_MC_DATABASE_URL:

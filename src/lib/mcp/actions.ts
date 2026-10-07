@@ -17,7 +17,13 @@ import {
   type PatchBucketInput,
 } from "@/lib/sync";
 import { getEntity } from "@/lib/sync/repo";
-import { resolveHumanAccountableOwner, type Evidence, type Task } from "@/lib/mc-data";
+import {
+  resolveHumanAccountableOwner,
+  TERMINAL_STAGES,
+  type Evidence,
+  type StageKey,
+  type Task,
+} from "@/lib/mc-data";
 import {
   aclPrincipalFromMcp,
   requireMcpActor,
@@ -84,6 +90,10 @@ export type SearchTasksInput = {
   stage?: string;
   /** Exact assignee id, e.g. `agent:hasitha-fernando` or a person id. */
   assignee?: string;
+  /** ISO-8601 instant; keep tasks with completedAt >= this (inclusive). */
+  completedAfter?: string;
+  /** ISO-8601 instant; keep tasks with completedAt < this (exclusive). */
+  completedBefore?: string;
   limit?: number;
 };
 
@@ -92,6 +102,8 @@ export type SearchTasksFilter = {
   bucket?: string;
   stage?: string;
   assignee?: string;
+  completedAfter?: string;
+  completedBefore?: string;
   limit: number;
 };
 
@@ -124,13 +136,27 @@ export function resolveSearchFilter(input: SearchTasksInput): SearchTasksFilter 
   const query = resolveSearchQueryText(input);
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
   const assignee = (input.assignee ?? "").trim();
+  const completedAfter = normalizeInstant("completedAfter", input.completedAfter);
+  const completedBefore = normalizeInstant("completedBefore", input.completedBefore);
   return {
     ...(query ? { query } : {}),
     ...(input.bucket ? { bucket: input.bucket } : {}),
     ...(input.stage ? { stage: input.stage } : {}),
     ...(assignee ? { assignee } : {}),
+    ...(completedAfter ? { completedAfter } : {}),
+    ...(completedBefore ? { completedBefore } : {}),
     limit,
   };
+}
+
+function normalizeInstant(name: string, value: string | undefined): string | undefined {
+  const raw = (value ?? "").trim();
+  if (!raw) return undefined;
+  const ms = Date.parse(raw);
+  if (Number.isNaN(ms)) {
+    throw new ApiError("invalid_request", `${name} must be an ISO-8601 date or timestamp; got "${raw}".`);
+  }
+  return new Date(ms).toISOString();
 }
 
 export function resolveContextFilter(input: GetContextInput = {}): GetContextFilter {
@@ -219,6 +245,17 @@ export async function actionSearchTasks(input: SearchTasksInput = {}, identity?:
     // A runner finds the tasks assigned to its agents (agent fleet P8).
     const wanted = filter.assignee.toLowerCase();
     tasks = tasks.filter((t) => (t.assignee ?? "").trim().toLowerCase() === wanted);
+  }
+  if (filter.completedAfter || filter.completedBefore) {
+    // Same predicate as the reporting SQL: completed_at >= after AND < before.
+    // A task with no completedAt never matches a completion-date filter.
+    const after = filter.completedAfter ? Date.parse(filter.completedAfter) : -Infinity;
+    const before = filter.completedBefore ? Date.parse(filter.completedBefore) : Infinity;
+    tasks = tasks.filter((t) => {
+      if (!t.completedAt) return false;
+      const at = Date.parse(t.completedAt);
+      return at >= after && at < before;
+    });
   }
   return { tasks: tasks.slice(0, filter.limit), total: tasks.length, filter };
 }
@@ -505,6 +542,9 @@ export async function actionProgress(
     payload: {
       workerId: identity.workerId,
       stage: patch.stage ?? task.stage,
+      ...(patch.stage && TERMINAL_STAGES.includes(patch.stage as StageKey)
+        ? { completionSource: "stage_event" }
+        : {}),
       progressPct: input.progressPct ?? null,
       notes: input.notes ?? null,
     },

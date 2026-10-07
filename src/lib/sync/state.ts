@@ -607,6 +607,8 @@ export interface PatchTaskOptions {
   complianceProjection?: boolean;
   /** Durable actor attribution for dirty routing fields (P8 / P4 residual). */
   attribution?: MutationAttribution;
+  /** ISO time for completed_at on first terminal entry (PR merge time); updateEntity defaults to now. */
+  completedAt?: string;
 }
 
 // Persistence tiers:
@@ -713,6 +715,7 @@ export async function patchTask(
 
   await repo.updateEntity("task", id, {
     patch: dataPatch,
+    completedAt: opts.completedAt,
     // Person columns are pushed now (Item 1), so a person-only patch re-queues
     // the entity for the next outbound sweep.
     syncState: pushedDirty.length > 0 ? "pending" : undefined,

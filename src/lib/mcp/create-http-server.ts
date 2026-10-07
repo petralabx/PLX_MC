@@ -179,7 +179,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_search_tasks",
-    "Search/list tasks by query (alias: q), bucket, stage, or assignee. Applied filters are echoed in meta.filter.",
+    "Search/list tasks by query (alias: q), bucket, stage, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt. Applied filters are echoed in meta.filter.",
     {
       q: z.string().optional().describe("Search text (alias of query)"),
       query: z.string().optional().describe("Search text (alias of q)"),
@@ -189,6 +189,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         .string()
         .optional()
         .describe("Exact assignee id, e.g. agent:hasitha-fernando or a person id"),
+      completedAfter: z.string().optional().describe("ISO-8601; completedAt >= this (inclusive)"),
+      completedBefore: z.string().optional().describe("ISO-8601; completedAt < this (exclusive)"),
       limit: z.number().int().min(1).max(200).optional(),
     },
     async (args) => {

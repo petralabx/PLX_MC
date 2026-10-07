@@ -58,6 +58,17 @@ Routing mutations fail closed when required registers are stale.
   (`PLX_MC_GRAPH_NOTIFICATION_INLINE_DRAIN`, default on when the webhook is
   enabled; =0 falls back to the hourly cron drain). Edit-to-UI target <60s;
   the 5-minute sweep remains the correctness recovery path.
+- **Task completion date (TASK-2528)**: `entities.completed_at` (task rows only;
+  CHECK-enforced) is stamped once by `updateEntity` on the first move from a
+  non-terminal into a terminal stage (`TERMINAL_STAGES`, `src/lib/mc-data/policy.ts`)
+  — covering UI, MCP, compliance projection (PR merge time) and SharePoint
+  inbound stage changes. It is write-once (`COALESCE`), merged into the task as
+  `completedAt` on read, and stripped from the jsonb payload on every write. The
+  ToDos `CompletedAt` column is outbound-only (not in `inboundPatches`), so a
+  SharePoint edit is ignored and never raises a conflict. The `cancellation`
+  column ships in the same migration for the cancelled-stage task. Existing rows
+  are filled by `scripts/backfill-task-completed-at.mjs` (dry run by default;
+  UAT/staging only).
 - **Project Documents increment (TASK-628)**: inbound-only mirror of the
   Project Documents drive (`/drives/{id}/root/delta`) into `file` entities,
   behind `PLX_MC_DOCUMENTS_SYNC_ENABLED` (default off). Deletions are audited

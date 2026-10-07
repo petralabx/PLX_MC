@@ -121,7 +121,7 @@ server.tool(
 
 server.tool(
   "mc_search_tasks",
-  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, or assignee. Applied filters are echoed in meta.filter.",
+  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt. Applied filters are echoed in meta.filter.",
   {
     q: z.string().optional().describe("Search text (alias of query)"),
     query: z.string().optional().describe("Search text (alias of q)"),
@@ -131,6 +131,8 @@ server.tool(
       .string()
       .optional()
       .describe("Exact assignee id, e.g. agent:hasitha-fernando or a person id"),
+    completedAfter: z.string().optional().describe("ISO-8601; completedAt >= this (inclusive)"),
+    completedBefore: z.string().optional().describe("ISO-8601; completedAt < this (exclusive)"),
     limit: z.number().int().optional(),
   },
   async (args) => {
@@ -141,6 +143,8 @@ server.tool(
     if (args.bucket) qs.set("bucket", args.bucket);
     if (args.stage) qs.set("stage", args.stage);
     if (args.assignee) qs.set("assignee", args.assignee);
+    if (args.completedAfter) qs.set("completedAfter", args.completedAfter);
+    if (args.completedBefore) qs.set("completedBefore", args.completedBefore);
     if (args.limit) qs.set("limit", String(args.limit));
     return printResult(await mcFetch(`/tasks?${qs.toString()}`));
   }

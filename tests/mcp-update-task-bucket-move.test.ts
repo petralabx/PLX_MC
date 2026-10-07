@@ -145,6 +145,14 @@ describe("lane rule for closure labels (TASK-2533)", () => {
     seed("TASK-1", { stage: "merged", labels: ["lane:codex"] });
     await expect(update({ addLabels: ["lane:cos"] })).rejects.toThrow();
   });
+  it("rejects a closure label combined with title, description or priority on a lane-less task", async () => {
+    for (const other of [{ title: "Changed" }, { description: "d" }, { appendDescription: "d" }, { priority: "high" }, { bucket: "BKT-OTHER" }] as const) {
+      seed("TASK-1");
+      await expect(update({ addLabels: ["closed:obsolete"], ...other })).rejects.toThrow(/exactly one non-empty lane/);
+      expect(h.rows.get("TASK-1")!.data.labels).toEqual([]);
+      expect(h.rows.get("TASK-1")!.data.title).not.toBe("Changed");
+    }
+  });
   it("does not let a laned task drop its lane via a closure label", async () => {
     seed("TASK-1", { labels: ["lane:codex"] });
     await expect(update({ removeLabels: ["lane:codex"], addLabels: ["closed:obsolete"] })).rejects.toThrow();

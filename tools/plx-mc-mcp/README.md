@@ -83,7 +83,7 @@ and final set; title is non-empty after trimming, max 255 characters;
 description max 32,000 characters after append. Exactly one non-empty
 `lane:*` must remain: remove an old lane in the same call when adding a new
 one, and supply a lane when editing an unlabeled legacy task. Exceptions: a
-lane-less task may only gain/lose closure labels (`closed:duplicate`,
+lane-less task may only gain/lose closure labels in a label-only patch (`closed:duplicate`,
 `closed:obsolete`, `closed:superseded`, `closed:delivered`, `closed:wontfix`,
 `not-needed`), be moved by `bucket` alone, or be `merged`/`verified`.
 `patch.bucket` (`BKT-*`, optional `note`) moves the task and audits `task.moved`.

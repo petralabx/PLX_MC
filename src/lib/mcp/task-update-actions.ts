@@ -100,12 +100,14 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
     const lanes = labels.filter((label) => label.startsWith("lane:"));
     const delta = [...labels.filter((label) => !(before.labels ?? []).includes(label)),
       ...(before.labels ?? []).filter((label) => !labels.includes(label))];
-    const closureOnly = delta.length > 0 && delta.every((label) => CLOSURE_LABELS.includes(label));
-    const bucketOnly = Object.keys(patch).every((key) => key === "bucket" || key === "note");
+    const sent = Object.entries(patch).filter(([, value]) => value !== undefined).map(([key]) => key);
+    const closureOnly = delta.length > 0 && delta.every((label) => CLOSURE_LABELS.includes(label))
+      && sent.every((key) => key === "labels" || key === "addLabels" || key === "removeLabels");
+    const bucketOnly = sent.every((key) => key === "bucket" || key === "note");
     const laneOptional = TERMINAL_TASK_STAGES.includes(before.stage) || closureOnly || bucketOnly;
     if (lanes.length > 1 || (lanes.length === 1 && !lanes[0].slice("lane:".length).trim())
       || (lanes.length === 0 && !laneOptional)) {
-      throw new ApiError("invalid_request", "The resulting labels must contain exactly one non-empty lane:* label. Add a lane for an unlabeled task; remove the old lane when replacing it. Lane-less tasks may only gain or lose closure labels (" + CLOSURE_LABELS.join(", ") + "), be moved by bucket alone, or be in a terminal stage.", 400);
+      throw new ApiError("invalid_request", "The resulting labels must contain exactly one non-empty lane:* label. Add a lane for an unlabeled task; remove the old lane when replacing it. Lane-less tasks may only gain or lose closure labels in a label-only patch (" + CLOSURE_LABELS.join(", ") + "), be moved by bucket alone, or be in a terminal stage.", 400);
     }
 
     if (patch.bucket !== undefined && patch.bucket !== before.bucket) {

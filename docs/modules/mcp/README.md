@@ -78,11 +78,13 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   100 entries per input list and 100 labels in the final set.
 - More than one `lane:*` is always rejected. Exactly one non-empty,
   case-sensitive `lane:*` must remain, except a lane-less task may (a) only
-  gain/lose a closure label (`CLOSURE_LABELS` in `task-update-actions.ts`:
+  gain/lose a closure label in a label-only patch (no title, description,
+  priority or other field; `CLOSURE_LABELS` in `task-update-actions.ts`:
   `closed:duplicate|obsolete|superseded|delivered|wontfix`, legacy
   `not-needed`), (b) be moved by `bucket` alone, or (c) be in a terminal stage
   (`merged`, `verified`). Any other label change on a lane-less non-terminal
-  task still needs a lane (TASK-2533).
+  task still needs a lane, and a closure label combined with any other field
+  change (title, description, priority) is rejected (TASK-2533).
 - `bucket` (`BKT-*`, optional `note`) moves the task. The target must exist,
   must not be archived or in a closed project (each guard enforces once the
   record exposes an `archived`/`archivedAt` flag or project `status:"closed"`),

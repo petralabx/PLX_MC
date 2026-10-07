@@ -785,6 +785,29 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
               `Inbound ToDos bucket change refused on ${row.id} → ${hit.bucket.id}: ${violation}.`,
               "error"
             );
+            // The disagreement is not consumed with the delta cursor: record it
+            // as an open conflict and hold outbound pushes (sweep only sends
+            // "pending" rows) until a human resolves it.
+            await repo.insertConflict({
+              id: `cf-${row.id.toLowerCase()}-bucket-${Date.now()}`,
+              entityType: type,
+              entityId: row.id,
+              field: displayFieldFor(type, "bucket") ?? "bucket",
+              mcVal: String((row.data as unknown as Task).bucket ?? ""),
+              spVal: hit.bucket.id,
+              by: SYNC_ACTOR,
+              note: `SharePoint moved this task to a bucket Mission Control refuses: ${violation}.`,
+            });
+            await repo.updateEntity(type, row.id, {
+              syncState: "conflict",
+              syncExtras: { wsVal: String((row.data as unknown as Task).bucket ?? ""), spVal: hit.bucket.id },
+            });
+            await repo.appendAudit(
+              SYNC_ACTOR,
+              `Conflict detected on ${row.id} · ${displayFieldFor(type, "bucket") ?? "bucket"} (rejected inbound move).`,
+              "conflict"
+            );
+            result.conflicts += 1;
           } else {
             patches.bucket = hit.bucket.id;
           }

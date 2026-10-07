@@ -753,3 +753,9 @@
 - **Rule going forward:** Any new aggregate over tasks or events takes the caller
   principal and scopes through `scopeHierarchy` before aggregating; resolve
   references from durable tables, not from a sampled window.
+
+### 2026-10-07 (ET) — TASK-2533: rejected inbound move was audited but consumed; closure exception ignored other fields
+
+- **What went wrong:** An inbound SharePoint bucket move refused by the guard only wrote an audit line, so the delta cursor advanced and a dirty local bucket could later overwrite SharePoint. The lane exception also checked only the label delta, so title/description/priority edits rode along with a closure label.
+- **Root cause:** A new inbound validation path refused silently instead of using the existing conflict register; an exception predicate was scoped to one field of the patch.
+- **Rule going forward:** Any inbound refusal of a SharePoint value records an open `sync_conflicts` row and sets the task `conflict` (outbound holds) — never audit-only. Exceptions to a validation rule must test the whole patch, not just the field they target.

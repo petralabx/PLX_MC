@@ -65,6 +65,7 @@ import {
   type SyncConflictSubject,
   type TaskPersonMc,
 } from "./mapping";
+import { bucketMoveTargetViolation } from "./bucket-move";
 import { documentsSyncEnabled } from "@/lib/secrets";
 import { fileEntryFromDriveItem, fileEntryIdForDriveItem, parentSegments, type DriveItem, type FolderRef } from "./documents";
 import { evaluateSyncFreshness, type SyncFreshnessResult } from "./freshness";
@@ -770,7 +771,26 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
       const initRaw = item.fields.InitiativeLookupId;
       if (initRaw !== undefined && initRaw !== null && initRaw !== "") {
         const hit = await repo.getBucketBySpItemId(String(initRaw));
-        if (hit) patches.bucket = hit.bucket.id;
+        if (hit && hit.bucket.id !== (row.data as unknown as Task).bucket) {
+          // An inbound move is validated like mc_update_task's bucket move;
+          // the service actor holds no project membership, so restricted
+          // targets are refused (fail closed).
+          const project = (await repo.getProjects()).find((p) => p.id === hit.bucket.project);
+          const violation =
+            bucketMoveTargetViolation(hit.bucket, project) ??
+            (isRestrictedProject(project) ? `project ${project!.id} is restricted` : null);
+          if (violation) {
+            await repo.appendAudit(
+              SYNC_ACTOR,
+              `Inbound ToDos bucket change refused on ${row.id} → ${hit.bucket.id}: ${violation}.`,
+              "error"
+            );
+          } else {
+            patches.bucket = hit.bucket.id;
+          }
+        } else if (hit) {
+          patches.bucket = hit.bucket.id;
+        }
       } else if (initRaw === null || initRaw === "") {
         patches.bucket = null;
       }

@@ -76,9 +76,21 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   are incremental and cannot accompany `labels`. Removals happen before adds.
   Labels are trimmed, non-empty and deduplicated; max 128 characters per label,
   100 entries per input list and 100 labels in the final set.
-- Exactly one non-empty, case-sensitive `lane:*` label must remain. To change
-  lanes, remove the old lane and add the new one in the same call (or replace
-  the label set). An unlabeled legacy task must receive a lane in its edit.
+- More than one `lane:*` is always rejected. Exactly one non-empty,
+  case-sensitive `lane:*` must remain, except a lane-less task may (a) only
+  gain/lose a closure label (`CLOSURE_LABELS` in `task-update-actions.ts`:
+  `closed:duplicate|obsolete|superseded|delivered|wontfix`, legacy
+  `not-needed`), (b) be moved by `bucket` alone, or (c) be in a terminal stage
+  (`merged`, `verified`). Any other label change on a lane-less non-terminal
+  task still needs a lane (TASK-2533).
+- `bucket` (`BKT-*`, optional `note`) moves the task. The target must exist,
+  must not be archived or in a closed project (each guard enforces once the
+  record exposes an `archived`/`archivedAt` flag or project `status:"closed"`),
+  and the actor needs project ACL on source and target. Stage, labels, PRs and
+  checkouts are unchanged; `task.moved` `{from, to, actor, note}` is audited
+  next to `task.updated`; `bucket` is a pushed ToDos field (Initiative lookup
+  syncs outbound). Inbound SharePoint Initiative changes use the same target
+  check (restricted targets refused). Batch items fail independently.
 - `description` replaces (empty string clears); `appendDescription` appends
   trimmed non-empty text, separated from existing text by two newlines. These
   forms cannot mix. Maximum final description length: 32,000 characters.

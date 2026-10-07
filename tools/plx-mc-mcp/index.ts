@@ -582,10 +582,12 @@ const taskUpdatePatch = z.object({
   appendDescription: z.string().trim().min(1).max(32_000).optional(),
   title: z.string().trim().min(1).max(255).optional(),
   priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
+  bucket: z.string().trim().regex(/^BKT-[A-Z0-9-]+$/).optional(),
+  note: z.string().trim().min(1).max(500).optional(),
 }).strict();
 
 server.registerTool("mc_update_task", {
-  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority. Mutually exclusive forms cannot mix. Exactly one lane:* must remain. Stage, evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
+  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one lane:* must remain, unless a lane-less task only gains/loses closed:* closure labels (or not-needed), is moved by bucket alone, or is merged/verified. Stage, evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
   inputSchema: z.object({
     taskId: z.string().trim().min(1).max(128),
     patch: taskUpdatePatch,

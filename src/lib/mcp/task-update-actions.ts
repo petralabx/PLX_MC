@@ -6,10 +6,12 @@ import { ApiError } from "@/lib/api/route";
 import { withTransaction } from "@/lib/db";
 import { appendEventTx } from "@/lib/compliance/repo";
 import type { Task } from "@/lib/mc-data/types";
-import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
+import { assertProjectIdAccess, assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import { patchTask } from "@/lib/sync";
-import { getEntity } from "@/lib/sync/repo";
+import { bucketMoveTargetViolation } from "@/lib/sync/bucket-move";
+import { BUCKET_ID_RE } from "@/lib/sync/mapping";
+import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
 import type { McpIdentity } from "./auth";
 import { mcpJsonResult, taskLink } from "./envelope";
 import { assertMcpToolAllowed } from "./tool-allowlist";
@@ -18,6 +20,14 @@ export const UPDATE_TASK_BATCH_MAX = 100;
 export const TASK_LABEL_MAX = 128;
 export const TASK_LABEL_COUNT_MAX = 100;
 export const TASK_DESCRIPTION_MAX = 32_000;
+
+// Labels a lane-less task may gain or lose without receiving a lane (legacy
+// closure; stopgap until the cancelled stage ships).
+export const CLOSURE_LABELS: readonly string[] = [
+  "closed:duplicate", "closed:obsolete", "closed:superseded", "closed:delivered", "closed:wontfix", "not-needed",
+];
+// Tasks in these stages never need a lane.
+export const TERMINAL_TASK_STAGES: readonly string[] = ["merged", "verified"];
 
 const labelsSchema = z.array(z.string().trim().min(1).max(TASK_LABEL_MAX))
   .max(TASK_LABEL_COUNT_MAX)
@@ -31,6 +41,8 @@ export const taskUpdatePatchSchema = z.object({
   appendDescription: z.string().trim().min(1).max(TASK_DESCRIPTION_MAX).optional(),
   title: z.string().trim().min(1).max(255).optional(),
   priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
+  bucket: z.string().trim().regex(BUCKET_ID_RE, "bucket must be a BKT-* id").optional(),
+  note: z.string().trim().min(1).max(500).optional(),
 }).strict().superRefine((patch, ctx) => {
   if (Object.values(patch).every((value) => value === undefined)) {
     ctx.addIssue({ code: "custom", message: "At least one patch field is required." });
@@ -40,6 +52,9 @@ export const taskUpdatePatchSchema = z.object({
   }
   if (patch.description !== undefined && patch.appendDescription !== undefined) {
     ctx.addIssue({ code: "custom", message: "description cannot be combined with appendDescription." });
+  }
+  if (patch.note !== undefined && patch.bucket === undefined) {
+    ctx.addIssue({ code: "custom", message: "note is only valid with bucket." });
   }
 });
 
@@ -55,7 +70,7 @@ export const updateTasksSchema = z.object({
   )).min(1).max(UPDATE_TASK_BATCH_MAX),
 }).strict();
 
-type EditableFields = Pick<Task, "labels" | "description" | "title" | "priority">;
+type EditableFields = Pick<Task, "labels" | "description" | "title" | "priority" | "bucket">;
 type TaskDiff = Partial<Record<keyof EditableFields, { before: unknown; after: unknown }>>;
 
 function parseInput<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
@@ -83,13 +98,30 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
       ...(patch.addLabels ?? []),
     ].map((label) => label.trim()))]);
     const lanes = labels.filter((label) => label.startsWith("lane:"));
-    if (lanes.length !== 1 || !lanes[0].slice("lane:".length).trim()) {
-      throw new ApiError("invalid_request", "The resulting labels must contain exactly one non-empty lane:* label. Add a lane for an unlabeled task; remove the old lane when replacing it.", 400);
+    const delta = [...labels.filter((label) => !(before.labels ?? []).includes(label)),
+      ...(before.labels ?? []).filter((label) => !labels.includes(label))];
+    const closureOnly = delta.length > 0 && delta.every((label) => CLOSURE_LABELS.includes(label));
+    const bucketOnly = Object.keys(patch).every((key) => key === "bucket" || key === "note");
+    const laneOptional = TERMINAL_TASK_STAGES.includes(before.stage) || closureOnly || bucketOnly;
+    if (lanes.length > 1 || (lanes.length === 1 && !lanes[0].slice("lane:".length).trim())
+      || (lanes.length === 0 && !laneOptional)) {
+      throw new ApiError("invalid_request", "The resulting labels must contain exactly one non-empty lane:* label. Add a lane for an unlabeled task; remove the old lane when replacing it. Lane-less tasks may only gain or lose closure labels (" + CLOSURE_LABELS.join(", ") + "), be moved by bucket alone, or be in a terminal stage.", 400);
+    }
+
+    if (patch.bucket !== undefined && patch.bucket !== before.bucket) {
+      const [buckets, projects] = [await getBuckets(q), await getProjects(q)];
+      const target = buckets.find((bucket) => bucket.id === patch.bucket);
+      const project = projects.find((candidate) => candidate.id === target?.project);
+      const violation = bucketMoveTargetViolation(target, project);
+      if (violation) throw new ApiError("invalid_request", `Cannot move ${taskId} to ${patch.bucket}: ${violation}.`, 400);
+      // Source access was asserted above; moving into a restricted project needs the same.
+      await assertProjectIdAccess(target!.project, aclPrincipalFromMcp(identity), q);
     }
 
     const requested: Partial<EditableFields> = { labels };
     if (patch.title !== undefined) requested.title = patch.title;
     if (patch.priority !== undefined) requested.priority = patch.priority;
+    if (patch.bucket !== undefined) requested.bucket = patch.bucket;
     if (patch.description !== undefined) requested.description = patch.description;
     if (patch.appendDescription !== undefined) {
       requested.description = parseInput(z.string().max(TASK_DESCRIPTION_MAX),
@@ -120,9 +152,22 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
         diff,
       },
     });
+    if (diff.bucket) {
+      await appendEventTx(q, {
+        kind: "task.moved",
+        actor: `${identity.runtime}:${identity.operatorEmail}`,
+        repo: identity.repo,
+        taskId,
+        payload: {
+          from: diff.bucket.before, to: diff.bucket.after, note: patch.note ?? null,
+          actor: `${identity.runtime}:${identity.operatorEmail}`,
+          servicePrincipalId: identity.servicePrincipalId, workerId: identity.workerId,
+        },
+      });
+    }
     return {
       taskId,
-      fields: { labels: task.labels, description: task.description ?? "", title: task.title, priority: task.priority },
+      fields: { labels: task.labels, description: task.description ?? "", title: task.title, priority: task.priority, bucket: task.bucket },
       diff,
       eventSeq,
       link: taskLink(taskId),
@@ -166,7 +211,7 @@ export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
 export function registerTaskUpdateTools(server: McpServer, identity: McpIdentity): void {
   // Full strict schemas preserve unknown-field rejection at the MCP boundary.
   server.registerTool("mc_update_task", {
-    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority. Exactly one lane:* must remain; labels cannot mix with incremental fields, nor description with appendDescription. Rejects all other fields, including stage, evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. Hub only.",
+    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority, bucket (move to a BKT-* id; optional note; audits task.moved). Exactly one lane:* must remain, except lane-less tasks may gain/lose closed:duplicate|obsolete|superseded|delivered|wontfix or not-needed, be moved by bucket alone, or be in a terminal stage; labels cannot mix with incremental fields, nor description with appendDescription. Moves reject unknown, archived or closed-project targets and restricted projects without access; stage, labels, PRs and checkouts are untouched and the ToDos bucket syncs outbound. Rejects all other fields, including stage, evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. Hub only.",
     inputSchema: updateTaskSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateTask(identity, args) }));
   server.registerTool("mc_update_tasks", {

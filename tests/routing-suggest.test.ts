@@ -358,5 +358,7 @@ describe("routing suggest (P5)", () => {
     expect(top).toMatchObject({ status: "scored", applied: true });
     expect(top.points).toBeGreaterThan(2);
     expect(top.evidence).toMatchObject({ runtime: "cursor", bucketId: "BKT-UI", checkouts: 4, completed: 4, peerCheckouts: 8 });
+    // derivedProjectId follows the new top candidate, null included.
+    expect(result.derivedProjectId).toBeNull();
   });
 });

@@ -7,10 +7,11 @@
 // Neutral by construction: too little history, no peers, or a metrics outage
 // gives 0 points, so suggestion order with no history is unchanged. Exact
 // references never move; only fuzzy candidates re-rank, and the component is
-// capped well below the gap between fuzzy and exact scores.
+// capped at OUTCOME_MAX_POINTS. Runtimes that report no cost drop out of the
+// cost comparison instead of looking free.
 
 import { eventsByKinds, type EventRow } from "@/lib/compliance/repo";
-import { computeCostRollup, type CostRollup } from "./cost-rollup";
+import { computeCostRollup, resolveTelemetryCheckouts, type CostRollup } from "./cost-rollup";
 import {
   MAX_WINDOW_DAYS,
   OUTCOME_EVENT_KINDS,
@@ -70,7 +71,8 @@ interface BucketOutcomes {
   byRuntime: Map<string, AgentOutcomeMetrics>;
   pool: AgentOutcomeMetrics | null;
   runtimeCount: number;
-  cost: CostRollup | null;
+  /** Cost per completion across runtimes that reported any cost; null if none did. */
+  peerCostPerCompletedTaskCents: number | null;
   costByRuntime: Map<string, CostRollup>;
 }
 
@@ -79,7 +81,8 @@ export type OutcomeIndex = Map<string, BucketOutcomes>;
 /** Pure: group outcome events by the bucket of their task. */
 export function buildOutcomeIndex(
   events: EventRow[],
-  taskBucket: ReadonlyMap<string, string>
+  taskBucket: ReadonlyMap<string, string>,
+  durableCheckoutTask: ReadonlyMap<string, string> = new Map()
 ): OutcomeIndex {
   const eventsByBucket = new Map<string, EventRow[]>();
   for (const ev of events) {
@@ -95,20 +98,24 @@ export function buildOutcomeIndex(
   const hidden = new Set<string>();
   for (const ev of events) if (ev.taskId && !taskBucket.has(ev.taskId)) hidden.add(ev.taskId);
   const costByBucket = new Map(
-    computeCostRollup(events, taskBucket, hidden).byBucket.map((b) => [b.bucket, b])
+    computeCostRollup(events, taskBucket, hidden, durableCheckoutTask).byBucket.map((b) => [b.bucket, b])
   );
 
   const index: OutcomeIndex = new Map();
   for (const [bucket, list] of eventsByBucket) {
     const byRuntime = new Map(computeAgentOutcomes(list).map((o) => [o.runtime, o]));
     const pool = computeAgentOutcomes(list.map((ev) => ({ ...ev, actor: POOL })))[0] ?? null;
-    const cost = costByBucket.get(bucket);
+    const reported = (costByBucket.get(bucket)?.runtimes ?? []).filter((r) => r.costCents > 0);
+    const reportedCompletions = reported.reduce((n, r) => n + r.completedTasks, 0);
     index.set(bucket, {
       byRuntime,
       pool,
       runtimeCount: byRuntime.size,
-      cost: cost ?? null,
-      costByRuntime: new Map((cost?.runtimes ?? []).map((r) => [r.runtime, r])),
+      peerCostPerCompletedTaskCents:
+        reportedCompletions > 0
+          ? reported.reduce((n, r) => n + r.costCents, 0) / reportedCompletions
+          : null,
+      costByRuntime: new Map(reported.map((r) => [r.runtime, r])),
     });
   }
   return index;
@@ -153,7 +160,7 @@ export function scoreOutcome(
     peerCheckouts: pool?.checkouts ?? 0,
     peerPassRate: pool?.successRate ?? null,
     peerMedianCycleMs: pool?.medianCycleMs ?? null,
-    peerCostPerCompletedTaskCents: bucket?.cost?.costPerCompletedTaskCents ?? null,
+    peerCostPerCompletedTaskCents: bucket?.peerCostPerCompletedTaskCents ?? null,
   };
   if (!bucket || !mine || !pool || mine.checkouts < OUTCOME_MIN_SAMPLE) {
     return neutral("insufficient_history", evidence);
@@ -191,9 +198,9 @@ export type OutcomeScoredCandidate<T extends RoutingCandidateRecord> = T & {
 
 /**
  * Pure: attach the outcome component to every candidate and re-rank. Exact
- * references keep their order at the top. Fuzzy candidates sort by
- * matchScore + points, ties keep the engine order. All-neutral input keeps
- * the engine order exactly.
+ * references keep their engine slots. Fuzzy candidates re-sort among the
+ * fuzzy slots by matchScore + points, ties keep the engine order. With every
+ * component neutral the engine order is returned unchanged.
  */
 export function applyOutcomeScores<T extends RoutingCandidateRecord>(
   candidates: T[],
@@ -205,7 +212,6 @@ export function applyOutcomeScores<T extends RoutingCandidateRecord>(
     const applied = c.authorizationTrust === "fuzzy" && component.points !== 0;
     return { c, order, component: { ...component, applied } };
   });
-  const exact = scored.filter((s) => s.c.authorizationTrust !== "fuzzy");
   const fuzzy = scored
     .filter((s) => s.c.authorizationTrust === "fuzzy")
     .sort((a, b) => {
@@ -214,7 +220,11 @@ export function applyOutcomeScores<T extends RoutingCandidateRecord>(
         (a.c.matchScore + (a.component.applied ? a.component.points : 0));
       return diff !== 0 ? diff : a.order - b.order;
     });
-  return [...exact, ...fuzzy].map(({ c, component }, i) => ({
+  let next = 0;
+  const ordered = scored.some((s) => s.component.applied)
+    ? scored.map((s) => (s.c.authorizationTrust === "fuzzy" ? fuzzy[next++] : s))
+    : scored;
+  return ordered.map(({ c, component }, i) => ({
     ...c,
     rank: i + 1,
     reasons: component.applied
@@ -231,5 +241,5 @@ export async function loadOutcomeIndex(taskBucket: ReadonlyMap<string, string>):
     undefined,
     windowSince(OUTCOME_WINDOW_DAYS)
   );
-  return buildOutcomeIndex(events, taskBucket);
+  return buildOutcomeIndex(events, taskBucket, await resolveTelemetryCheckouts(events));
 }

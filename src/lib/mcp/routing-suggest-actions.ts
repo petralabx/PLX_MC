@@ -277,7 +277,7 @@ export async function actionSuggestWork(
     failureReason: shadow.failureReason,
     candidates,
     reasons: shadow.reasons,
-    derivedProjectId: ranked[0]?.projectId ?? shadow.derivedProjectId,
+    derivedProjectId: ranked[0]?.projectId ?? null,
     policyVersion: shadow.policyVersion,
     scoringVersion: shadow.scoringVersion,
     deepLinks: {

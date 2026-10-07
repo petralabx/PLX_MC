@@ -114,6 +114,43 @@ describe("routing outcome score (TASK-634)", () => {
     expect(ranked.map((c) => c.taskId)).toEqual(["TASK-X", "TASK-U"]);
     expect(ranked[0].outcomeScore.applied).toBe(false);
     expect(ranked[0].reasons).toEqual(["title_overlap"]);
+
+    // The engine can rank a fuzzy candidate (internal score above 100, shown
+    // capped at 99) ahead of an exact one; both slots hold, with or without history.
+    const fuzzyFirst = [
+      candidate(1, "TASK-U", "BKT-UI", 99),
+      candidate(2, "TASK-X", "BKT-API", 100, false),
+      candidate(3, "TASK-A", "BKT-API", 99),
+    ];
+    for (const idx of [null, buildOutcomeIndex([], new Map())]) {
+      expect(applyOutcomeScores(fuzzyFirst, "cursor", idx).map((c) => c.taskId)).toEqual(["TASK-U", "TASK-X", "TASK-A"]);
+    }
+    // claude-cli is better on BKT-API: the fuzzy slots swap, the exact slot stays.
+    expect(applyOutcomeScores(fuzzyFirst, "claude-cli", index).map((c) => c.taskId)).toEqual(["TASK-A", "TASK-X", "TASK-U"]);
+  });
+
+  it("leaves cost out when a runtime reports none, instead of treating it as free", () => {
+    const parts = [history("cursor", "BKT-UI", 4, 4, 2, 0), history("codex", "BKT-UI", 4, 4, 2, 100)];
+    const index = buildOutcomeIndex(parts.flatMap((p) => p.events), new Map(parts.flatMap((p) => p.tasks)));
+    const silent = scoreOutcome(index, "cursor", "BKT-UI");
+    expect(silent.evidence?.costPerCompletedTaskCents).toBeNull();
+    expect(silent.points).toBe(0);
+    expect(scoreOutcome(index, "codex", "BKT-UI")).toMatchObject({ points: 0 });
+    expect(scoreOutcome(index, "codex", "BKT-UI").evidence?.peerCostPerCompletedTaskCents).toBe(100);
+  });
+
+  it("attributes checkout-only telemetry through the durable checkout map", () => {
+    const parts = [history("cursor", "BKT-UI", 4, 4, 2, 100), history("codex", "BKT-UI", 4, 4, 2, 100)];
+    // Telemetry for an extra cursor completion whose checkout fell out of the sample.
+    const extra: EventRow[] = [
+      ev("agent.session_telemetry", "cursor", null as unknown as string, "2026-09-20T00:00:00Z", { checkoutId: "dsp_old", costCents: 900 }),
+    ];
+    const taskBucket = new Map(parts.flatMap((p) => p.tasks));
+    const events = [...parts.flatMap((p) => p.events), ...extra];
+    const without = buildOutcomeIndex(events, taskBucket);
+    const withDurable = buildOutcomeIndex(events, taskBucket, new Map([["dsp_old", "BKT-UI-cursor-0"]]));
+    expect(scoreOutcome(without, "cursor", "BKT-UI").evidence?.costPerCompletedTaskCents).toBe(100);
+    expect(scoreOutcome(withDurable, "cursor", "BKT-UI").evidence?.costPerCompletedTaskCents).toBe(325);
   });
 
   it("is neutral with no history and keeps the engine order unchanged", () => {

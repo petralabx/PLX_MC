@@ -68,7 +68,11 @@ Routing mutations fail closed when required registers are stale.
   SharePoint edit is ignored and never raises a conflict. The `cancellation`
   column ships in the same migration for the cancelled-stage task. Existing rows
   are filled by `scripts/backfill-task-completed-at.mjs` (dry run by default;
-  UAT/staging only).
+  UAT/staging only). Required: `--env uat|staging` (report label only) and
+  `--approved-db <database>@<host>`. Before any read or write the shared guard
+  `scripts/lib/db-identity.mjs` (`assertApprovedNonProdDb`) requires the URL
+  host/database and the live `current_database()` to equal `--approved-db`, and
+  always refuses the runtime database (`plx_mc` on `plx-postgres-staging*`).
 - **Project Documents increment (TASK-628)**: inbound-only mirror of the
   Project Documents drive (`/drives/{id}/root/delta`) into `file` entities,
   behind `PLX_MC_DOCUMENTS_SYNC_ENABLED` (default off). Deletions are audited

@@ -17,13 +17,19 @@
 //        stage — re-syncs — are ignored)    -> source stage_event
 //
 // UAT and staging only. A production run is a separate, explicitly approved
-// step; the script refuses a production-looking URL.
+// step. Before ANY read or write (dry run included) the DB identity is
+// verified (scripts/lib/db-identity.mjs): --approved-db <database>@<host> must
+// match both the URL host/database and the live current_database(); the
+// runtime database (plx_mc on plx-postgres-staging*, TOOLS.md) is always
+// refused. The --env label is a report label only and authorizes nothing.
 //
 // Env:   PLX_MC_DATABASE_URL
-// Usage: node scripts/backfill-task-completed-at.mjs --env uat|staging [--apply]
+// Usage: node scripts/backfill-task-completed-at.mjs --env uat|staging \
+//          --approved-db <database>@<host> [--apply]
 // Exit:  0 — ok, 1 — failure or refused.
 
 import { pathToFileURL } from "node:url";
+import { DbIdentityError, assertApprovedNonProdDb, checkUrlAgainstApproved, parseApprovedDb } from "./lib/db-identity.mjs";
 
 // Keep in step with TERMINAL_STAGES in src/lib/mc-data/policy.ts.
 export const TERMINAL_STAGES = ["merged", "verified"];
@@ -156,7 +162,11 @@ export function formatReport(report, env) {
   return lines.join("\n");
 }
 
-async function main(argv) {
+/**
+ * @param {string[]} argv
+ * @param {{ env?: Record<string, string | undefined>, createClient?: (url: string) => any }} [opts] test seams
+ */
+export async function main(argv, { env: processEnv = process.env, createClient } = {}) {
   const apply = argv.includes("--apply");
   const envIdx = argv.indexOf("--env");
   const env = envIdx >= 0 ? argv[envIdx + 1] : undefined;
@@ -164,28 +174,40 @@ async function main(argv) {
     console.error("--env uat|staging is required (production backfill is a separate approved run).");
     return 1;
   }
-  const url = process.env.PLX_MC_DATABASE_URL;
+  const url = processEnv.PLX_MC_DATABASE_URL;
   if (!url) {
     console.error("PLX_MC_DATABASE_URL is not set.");
     return 1;
   }
-  if (/prod/i.test(url)) {
-    console.error("Refusing: database URL looks like production.");
-    return 1;
+  let client;
+  try {
+    const approved = parseApprovedDb(argv);
+    checkUrlAgainstApproved(url, approved); // refuse before connecting
+    client = createClient ? createClient(url) : await defaultClient(url);
+    await client.connect();
+    try {
+      await assertApprovedNonProdDb(client, url, approved); // before any read or write
+      console.log(formatReport(await runBackfill(client, { apply }), env));
+      return 0;
+    } finally {
+      await client.end();
+    }
+  } catch (err) {
+    if (err instanceof DbIdentityError) {
+      console.error(err.message);
+      return 1;
+    }
+    throw err;
   }
+}
+
+async function defaultClient(url) {
   const { Client } = await import("pg");
   const { resolveDbSsl } = await import("./lib/db-ssl.mjs");
-  const client = new Client({
+  return new Client({
     connectionString: url.replace(/([?&])sslmode=[^&]+&?/, "$1").replace(/[?&]$/, ""),
     ssl: resolveDbSsl(),
   });
-  await client.connect();
-  try {
-    console.log(formatReport(await runBackfill(client, { apply }), env));
-    return 0;
-  } finally {
-    await client.end();
-  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

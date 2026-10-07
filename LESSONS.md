@@ -16,6 +16,19 @@
 
 ## Lessons
 
+### 2026-10-07 (ET) — Backfill "non-production only" guard was a substring check
+
+- **What happened:** `backfill-task-completed-at.mjs` refused only URLs containing
+  `prod` plus a caller-supplied `--env` label. The runtime database (`plx_mc` on
+  `plx-postgres-staging`) has no `prod` in its credentials, so `--env staging
+  --apply` would have updated production (Astra P1).
+- **Root cause:** Environment was inferred from a label and a string pattern, not
+  verified against the database actually connected to.
+- **Rule going forward:** Any ops script that writes data requires an explicit
+  `--approved-db <database>@<host>` and calls `assertApprovedNonProdDb`
+  (`scripts/lib/db-identity.mjs`) before any read or write; URL and live
+  `current_database()` must both match, and the runtime DB is always refused.
+
 ### 2026-07-16 (ET) — Compliance failed because evidence lived only in the PR body
 
 - **What happened:** A stamped agent PR carried its summary, verification and

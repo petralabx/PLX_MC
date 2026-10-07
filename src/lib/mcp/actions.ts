@@ -29,7 +29,12 @@ import {
   assertTaskProjectAccess,
   loadProjectAclMaps,
 } from "@/lib/permissions/project-acl-guard";
-import { filterBucketsByAcl, filterTasksByAcl, indexById } from "@/lib/permissions/project-acl";
+import {
+  filterBucketsByAcl,
+  filterProjectsByAcl,
+  filterTasksByAcl,
+  indexById,
+} from "@/lib/permissions/project-acl";
 import type { McpIdentity } from "./auth";
 import { resolveCheckoutRepo } from "./checkout-repo";
 import { taskLink } from "./envelope";
@@ -160,6 +165,9 @@ export async function actionGetContext(
   const visibleTasks = principal
     ? filterTasksByAcl(snap.tasks, bucketsById, projectsById, principal)
     : snap.tasks;
+  const visibleProjects = principal
+    ? filterProjectsByAcl(snap.projects ?? [], principal)
+    : (snap.projects ?? []);
   const idSet = filter.taskIds ? new Set(filter.taskIds) : null;
 
   if (filter.depth === "full") {
@@ -169,6 +177,7 @@ export async function actionGetContext(
     return {
       tasks,
       buckets: visibleBuckets,
+      projects: visibleProjects,
       conflicts: snap.conflicts.length,
       errors: snap.errors.length,
       lastSweep: snap.lastSweep,
@@ -183,6 +192,7 @@ export async function actionGetContext(
     taskCount: visibleTasks.length,
     activeCount: active.length,
     buckets: visibleBuckets.map((b) => ({ id: b.id, name: b.name })),
+    projects: visibleProjects.map((p) => ({ id: p.id, name: p.name, status: p.status ?? "active" })),
     topTasks: active.slice(0, 15).map((t) => ({
       id: t.id,
       title: t.title,

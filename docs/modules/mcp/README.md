@@ -17,7 +17,7 @@ dispatch logic.
 | Surface | Path |
 |---------|------|
 | REST cursor API | `src/app/api/cursor/*` — self-auth via per-agent keys (`PLX_MC_MCP_AGENT_KEYS`) or the legacy shared `PLX_MC_MCP_API_KEY` (retire via `PLX_MC_MCP_SHARED_KEY_ENABLED=0`) + operator headers |
-| Planning hierarchy | `mc_create_project` + `mc_create_bucket` + `mc_update_bucket` — capability-gated writes queued through the existing Projects/Roadmap SharePoint mirrors |
+| Planning hierarchy | `mc_create_project` + `mc_create_bucket` + `mc_update_bucket` + `mc_update_project` + `mc_list_projects` — capability-gated writes queued through the existing Projects/Roadmap SharePoint mirrors |
 | Routing suggest | `POST /api/cursor/routing/suggest` — `mc_suggest_work` (`routing.suggest`) |
 | Streamable HTTP MCP | `GET/POST/DELETE /api/cursor/mcp` — remote team registration |
 | Stdio MCP client | `tools/plx-mc-mcp/index.ts` — local Cursor + Cloud Agents |
@@ -204,6 +204,25 @@ principal + existing `bucket.update` (same grant as Entra `PATCH /api/buckets/{i
 not a new capability. Unknown ids return 404; principals without the grant
 return 403. Use this to set a missing `prd` on an existing `BKT-*` without
 the Entra UI.
+
+**Project status and steward edits (TASK-2530):** projects carry a lifecycle
+`status` (`active` default | `closed`), with `closedAt` / `closedBy` stamped on
+close and cleared on reopen. It is separate from `health`, and the health=off
+nav filter is unchanged. `mc_update_project` (`PATCH /api/cursor/projects`) takes
+`projectId` plus at least one of `status`, `owner`, `description`, `name`, and an
+optional `note`. Auth is the MCP principal's `project.update` grant (the
+reviewed agent bundle; `sp_mcp_portal` and `sp_sync_inbound` get 403) plus the
+restricted-project ACL. `owner` must be a known person (id or email), agent or
+service principal, otherwise 422 `invalid_owner`. Each change writes a
+`project.updated` event in `mc_events` with `before` / `after`, and queues the
+Projects mirror (status itself is MC-side only until a SharePoint column is
+provisioned). `mc_list_projects` (`GET /api/cursor/projects?status=&q=`) takes
+`status` `active` (default) | `closed` | `all`, and returns id, name, owner,
+status, health, `bucketCount`, `openTaskCount`, `doneTaskCount` (merged or
+verified) and `closedAt`. Creating a bucket or task in a closed project fails
+with 409 `project_closed`; reopen with `status=active`. Closed projects leave
+the sidebar/palette (and their buckets do too) and the default project pickers,
+but stay reachable by id. `mc_get_context` now returns `projects` with `status`.
 
 **Restricted projects (TASK-1527):** `mc_create_project` accepts optional
 `visibility` (`shared` | `restricted`) and `members[]` (emails, Entra oids,

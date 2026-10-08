@@ -169,6 +169,8 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   mc_create_bucket: { name: "New bucket" },
   mc_update_bucket: { id: "BKT-INFRA", name: "Renamed" },
   mc_create_project: { name: "New project" },
+  mc_update_project: { projectId: "PRJ-PORTAL-GOLIVE", status: "closed" },
+  mc_list_projects: {},
   mc_request_approval: { taskId: "TASK-1", reason: "please" },
   mc_update_task: { taskId: "TASK-1", patch: { addLabels: ["lane:codex"] } },
   mc_update_tasks: { items: [{ taskId: "TASK-1", patch: { addLabels: ["lane:codex"] } }] },

@@ -129,6 +129,7 @@ const FULL_MCP_BUNDLE = [
   "bucket.create",
   "bucket.update",
   "project.create",
+  "project.update",
   "routing.suggest",
   "routing.propose",
   "routing.resolve",
@@ -287,6 +288,8 @@ describe("sp_mcp_portal through the MCP tools", () => {
     ["mc_create_bucket", { name: "New bucket" }],
     ["mc_update_bucket", { id: "BKT-INFRA", name: "Renamed" }],
     ["mc_create_project", { name: "New project" }],
+    ["mc_update_project", { projectId: "PRJ-PORTAL-GOLIVE", status: "closed" }],
+    ["mc_list_projects", {}],
     ["mc_request_approval", { taskId: "TASK-1", reason: "please" }],
     ["mc_suggest_work", { title: "x" }],
     [

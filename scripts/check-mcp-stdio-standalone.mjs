@@ -46,4 +46,7 @@ assert(search, "mc_search_tasks registration missing");
 for (const field of ["cursor", "limit", "label", "searchComments", "in", "fields"]) {
   assert(search.inputSchema.properties[field], `Search field ${field} missing`);
 }
-console.log(`PASS: tool-only npm ci; stdio initialized; ${tools.length} tools registered; shared search controls present`);
+for (const name of ["mc_list_projects", "mc_update_project"]) {
+  assert(tools.some((item) => item.name === name), `${name} registration missing`);
+}
+console.log(`PASS: tool-only npm ci; stdio initialized; ${tools.length} tools registered; mc_search_tasks controls: cursor, limit, label, searchComments, in, fields; mc_list_projects and mc_update_project registered`);

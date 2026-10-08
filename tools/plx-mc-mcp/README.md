@@ -12,6 +12,8 @@ composed swarm delegation.
 | `mc_search_tasks` | List/search tasks |
 | `mc_suggest_work` | Suggest existing Tasks + `routingSessionId` (no create/link) |
 | `mc_create_project` | Create project (SharePoint Projects mirror) |
+| `mc_list_projects` | List projects by `status` (active default, closed, all) with owner, health and bucket/task counts |
+| `mc_update_project` | Steward edit of a project (`status` active/closed, owner, description, name, note) |
 | `mc_create_bucket` | Create bucket/initiative, optionally under a project (SharePoint Roadmap mirror) |
 | `mc_update_bucket` | Patch an existing bucket (`prd`, health, owner, description, name, target, repos, project) |
 | `mc_create_task` | Create task (SharePoint mirror) |

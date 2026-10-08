@@ -1,4 +1,4 @@
-name: DB Migrate (UAT + staging)
+name: DB Migrate (UAT, staging when configured)
 
 on:
   push:
@@ -49,7 +49,7 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           {
-            printf '## DB Migrate (UAT then staging)\n\nTrigger: `%s`\n\nSHA: `%s`\n\n' "$TRIGGER" "$SHA"
+            printf '## DB Migrate (UAT, then staging when configured)\n\nTrigger: `%s`\n\nSHA: `%s`\n\n' "$TRIGGER" "$SHA"
             if [ -f "$RUNNER_TEMP/db-migrate-summary.md" ]; then
               cat "$RUNNER_TEMP/db-migrate-summary.md"
             else

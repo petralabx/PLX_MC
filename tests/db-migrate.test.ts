@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { Client as PgClient } from "pg";
 import { main } from "../scripts/migrate.mjs";
+import { buildPlan, redactedTarget, verify } from "../scripts/db-migrate-live.mjs";
 import { assertApprovedNonProdDb, checkUrlAgainstApproved, parseApprovedSpec } from "../scripts/lib/db-identity.mjs";
 
 const scratch: string[] = [];
@@ -206,5 +207,113 @@ if [ "$MODE" = status-only ]; then printf 'pending 033_fixture.sql\\n'; else pri
       expect(summary).toContain("### STAGING: failed");
     }
     if (mode === "status-only" && !failure) expect(summary).toContain("pending 033_fixture.sql");
+  });
+});
+
+const SKIP_LINE = "STAGING: skipped (MC_STAGING_DATABASE_URL and MC_STAGING_APPROVED_DB unset; UAT only; live plx_mc is not migrated here)";
+function runShell(stagingUrl: string, stagingApproved: string, mode = "deploy") {
+  const dir = temp();
+  const npm = join(dir, "npm");
+  // Fake npm mirrors the real guard's refusal of the live identity; no pg connection exists.
+  writeFileSync(npm, `#!/usr/bin/env bash
+set -eu
+printf '%s\\n' "$PLX_MC_DATABASE_URL" >> "$RUNNER_TEMP/calls"
+case "$*" in *plx_mc@plx-postgres-staging*) echo 'Refusing: runtime database' >&2; exit 1;; esac
+printf 'apply  033_fixture.sql\\n'
+`);
+  chmodSync(npm, 0o700);
+  const proc = spawnSync("bash", [resolve("scripts/dual-db-migrate.sh")], {
+    encoding: "utf8", env: {
+      ...testEnv, PATH: `${dir}:/usr/bin:/bin`, RUNNER_TEMP: dir, MODE: mode,
+      MC_UAT_DATABASE_URL: "uat", MC_UAT_APPROVED_DB: "mc_test@uat.example.invalid",
+      MC_STAGING_DATABASE_URL: stagingUrl, MC_STAGING_APPROVED_DB: stagingApproved,
+    },
+  });
+  const calls = readFileSync(join(dir, "calls"), "utf8").trim().split("\n");
+  return { proc, calls, summary: readFileSync(join(dir, "db-migrate-summary.md"), "utf8") };
+}
+
+describe("UAT-only when staging is unset", () => {
+  it("both staging values unset: exit 0, skip line logged, staging not invoked, UAT ran", () => {
+    const { proc, calls, summary } = runShell("", "");
+    expect(proc.status, proc.stderr).toBe(0);
+    expect(proc.stdout).toContain(SKIP_LINE);
+    expect(calls).toEqual(["uat"]);
+    expect(summary).toContain("### UAT: deploy succeeded");
+    expect(summary).toContain("### STAGING: skipped");
+    expect(summary).not.toContain("STAGING: failed");
+  });
+  it.each([["staging", ""], ["", "mc_test@staging.example.invalid"]])("exactly one staging value set (%j, %j) fails and is not a skip", (u, a) => {
+    const { proc, summary } = runShell(u, a);
+    expect(proc.status).toBe(1);
+    expect(proc.stdout).not.toContain("STAGING: skipped");
+    expect(summary).toContain("### STAGING: failed");
+    expect(summary).toContain("### UAT: deploy succeeded");
+  });
+  it("a configured staging target that is the live plx_mc identity fails the job, not a skip", () => {
+    const { proc, calls, summary } = runShell("postgres://u:p@plx-postgres-staging.example.invalid/plx_mc", "plx_mc@plx-postgres-staging.example.invalid");
+    expect(proc.status).toBe(1);
+    expect(proc.stdout).not.toContain("STAGING: skipped");
+    expect(calls).toHaveLength(2);
+    expect(summary).toContain("### STAGING: failed");
+    expect(summary).toContain("### UAT: deploy succeeded");
+  });
+  it("automatic workflow is renamed, never uses the live environment or live secrets", () => {
+    const text = readFileSync(".github/workflows/db-migrate.yml", "utf8");
+    expect(text).toContain("name: DB Migrate (UAT, staging when configured)");
+    expect(text).not.toMatch(/mc-live-release|MC_LIVE_|environment:/);
+  });
+});
+
+describe("live release workflow (separate, gated)", () => {
+  const parsed = spawnSync("python3", ["-c", "import yaml,json; d=yaml.safe_load(open('.github/workflows/db-migrate-live.yml')); d['on']=d.pop(True); print(json.dumps(d))"], { encoding: "utf8" });
+  const wf = JSON.parse(parsed.stdout || "{}");
+  const raw = readFileSync(".github/workflows/db-migrate-live.yml", "utf8");
+  it("is workflow_dispatch only with plan as the default mode and a string confirm", () => {
+    expect(parsed.status, parsed.stderr).toBe(0);
+    expect(wf.name).toBe("DB Migrate (live release)");
+    expect(Object.keys(wf.on)).toEqual(["workflow_dispatch"]);
+    expect(wf.on.workflow_dispatch.inputs.mode).toMatchObject({ type: "choice", default: "plan", options: ["plan", "apply"] });
+    expect(wf.on.workflow_dispatch.inputs.confirm).toMatchObject({ type: "string", default: "" });
+    expect(raw).not.toContain("MC_STAGING_");
+  });
+  it("plan job has no environment and no write steps; apply is gated and in mc-live-release", () => {
+    expect(wf.jobs.plan).not.toHaveProperty("environment");
+    expect(wf.jobs.plan.if).toContain("refs/heads/main");
+    expect(wf.jobs.plan.if).toContain("!(inputs.mode == 'apply' && inputs.confirm == 'MIGRATE_LIVE')");
+    const planText = JSON.stringify(wf.jobs.plan);
+    expect(planText).not.toMatch(/npm run migrate|--apply|verify|PLX_MC_DATABASE_URL|MICROSOFT_GRAPH/);
+    expect(wf.jobs.apply.environment).toBe("mc-live-release");
+    expect(wf.jobs.apply.if).toContain("inputs.mode == 'apply'");
+    expect(wf.jobs.apply.if).toContain("inputs.confirm == 'MIGRATE_LIVE'");
+    const steps = wf.jobs.apply.steps.map((s: { run?: string }) => s.run ?? "");
+    const idx = (needle: string) => steps.findIndex((r: string) => r.includes(needle));
+    expect(idx("db-migrate-live.mjs verify")).toBeLessThan(idx("npm run migrate"));
+    expect(idx("npm run migrate")).toBeLessThan(idx("--env staging --apply"));
+    expect(idx("--env staging --apply")).toBe(idx("--env production --apply"));
+    expect(steps[idx("--env staging --apply")].indexOf("--env staging")).toBeLessThan(steps[idx("--env staging --apply")].indexOf("--env production"));
+  });
+  it("plan prints pending files, redacted host/database and SharePoint columns; no credentials", () => {
+    const { dir, names } = migrationFiles();
+    const secret = "postgres://livesecretuser:hunter2pw@db.example.invalid:5432/plx_mc?sslmode=require&x=1";
+    const plan = buildPlan({ env: { ...testEnv, MC_LIVE_DATABASE_URL: secret }, migrationsDir: dir });
+    for (const n of names) expect(plan).toContain(n);
+    expect(plan).toContain("host=db.example.invalid database=plx_mc");
+    for (const leak of ["livesecretuser", "hunter2pw", "sslmode", "postgres://", ":5432"]) expect(plan).not.toContain(leak);
+    expect(plan).toContain("ProjectID");
+    expect(plan.indexOf("/sites/plx-mission-control-dev")).toBeLessThan(plan.indexOf("/sites/plx-mission-control\n"));
+    expect(buildPlan({ env: { ...testEnv }, migrationsDir: dir })).toContain("secret unset");
+    expect(redactedTarget("not a url hunter2")).not.toContain("hunter2");
+  });
+  it("apply verification refuses a different database and any non-live identity", async () => {
+    const live = "postgres://u:p@plx-postgres-staging.example.invalid/plx_mc";
+    const ok = harness({ live: "plx_mc" });
+    await expect(verify({ env: { ...testEnv, MC_LIVE_DATABASE_URL: live, MC_LIVE_APPROVED_DB: "plx_mc@plx-postgres-staging.example.invalid" }, ClientClass: ok.Client })).resolves.toMatchObject({ database: "plx_mc" });
+    const wrongLive = harness({ live: "other" });
+    await expect(verify({ env: { ...testEnv, MC_LIVE_DATABASE_URL: live, MC_LIVE_APPROVED_DB: "plx_mc@plx-postgres-staging.example.invalid" }, ClientClass: wrongLive.Client })).rejects.toThrow(/Refusing/);
+    const none = harness();
+    await expect(verify({ env: { ...testEnv, MC_LIVE_DATABASE_URL: url, MC_LIVE_APPROVED_DB: "mc_test@uat.example.invalid" }, ClientClass: none.Client })).rejects.toThrow(/not the documented live/);
+    await expect(verify({ env: { ...testEnv, MC_LIVE_DATABASE_URL: "postgres://u:p@other.invalid/plx_mc", MC_LIVE_APPROVED_DB: "plx_mc@plx-postgres-staging.example.invalid" }, ClientClass: none.Client })).rejects.toThrow(/does not match/);
+    expect(none.connects).toBe(0);
   });
 });

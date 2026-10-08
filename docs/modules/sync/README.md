@@ -73,6 +73,16 @@ Routing mutations fail closed when required registers are stale.
   `scripts/lib/db-identity.mjs` (`assertApprovedNonProdDb`) requires the URL
   host/database and the live `current_database()` to equal `--approved-db`, and
   always refuses the runtime database (`plx_mc` on `plx-postgres-staging*`).
+  **Deploy order:** at deploy, before this PR's code goes live, run
+  `scripts/provision-sharepoint.py` with MC's own sync identity (the same app
+  identity the sync engine uses, `MICROSOFT_GRAPH_*`; not a personal account),
+  first against /sites/plx-mission-control-dev (staging), then
+  /sites/plx-mission-control (production). The script creates `CompletedAt` as an
+  optional date-and-time column with no default, hidden from the edit form, or
+  updates an existing one to that definition (idempotent). Per site: dry run
+  `python scripts/provision-sharepoint.py --env <staging|production>`, apply
+  `python scripts/provision-sharepoint.py --env <staging|production> --apply`,
+  check `python scripts/provision-sharepoint.py --env <staging|production> --verify`.
 - **Project Documents increment (TASK-628)**: inbound-only mirror of the
   Project Documents drive (`/drives/{id}/root/delta`) into `file` entities,
   behind `PLX_MC_DOCUMENTS_SYNC_ENABLED` (default off). Deletions are audited

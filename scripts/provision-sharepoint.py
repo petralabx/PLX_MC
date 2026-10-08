@@ -82,6 +82,13 @@ class Graph:
         return r
 
 
+    def patch(self, url: str, body: dict[str, Any]) -> requests.Response:
+        r = self.s.patch(url, json=body, timeout=60)
+        if r.status_code >= 400:
+            fail(f"PATCH {url} -> {r.status_code} {r.text[:500]}")
+        return r
+
+
 # ─── Column rendering: schema entry -> Graph columnDefinition ─────────────────
 
 
@@ -95,6 +102,8 @@ def column_definition(
         "required": bool(col.get("required")),
         "enforceUniqueValues": bool(col.get("unique")),
     }
+    if col.get("hidden"):
+        out["hidden"] = True
     ctype = col["type"]
     if ctype == "text":
         out["text"] = {}
@@ -112,7 +121,10 @@ def column_definition(
             "chooseFromType": "peopleOnly",
         }
     elif ctype == "dateTime":
-        out["dateTime"] = {"displayAs": "default", "format": "dateTime"}
+        out["dateTime"] = {
+            "displayAs": "default",
+            "format": "dateTime" if col.get("includeTime", True) else "dateOnly",
+        }
     elif ctype == "number":
         out["number"] = {"decimalPlaces": "automatic"}
     elif ctype == "boolean":
@@ -143,6 +155,22 @@ def column_kind(definition: dict[str, Any]) -> str:
         if kind in definition and definition[kind] is not None:
             return kind
     return "unknown"
+
+
+def column_drift(col: dict[str, Any], actual: dict[str, Any]) -> bool:
+    """True when an existing column differs from a schema entry that opts in
+    with "reconcile": true (required / hidden / no default / dateTime format)."""
+    want = column_definition(col, {})
+    if bool(actual.get("required")) != want["required"]:
+        return True
+    if bool(actual.get("hidden")) != bool(want.get("hidden")):
+        return True
+    if actual.get("defaultValue"):
+        return True
+    return (
+        col["type"] == "dateTime"
+        and actual.get("dateTime", {}).get("format") != want["dateTime"]["format"]
+    )
 
 
 # ─── Provisioning steps ───────────────────────────────────────────────────────
@@ -225,15 +253,28 @@ def ensure_columns(
     apply: bool,
 ) -> None:
     data = g.get(
-        f"{GRAPH}/sites/{site_id}/lists/{list_id}/columns?$select=name,displayName"
+        f"{GRAPH}/sites/{site_id}/lists/{list_id}/columns"
     )
     assert data is not None
-    have = {c["name"] for c in data.get("value", [])} | {
-        c["displayName"] for c in data.get("value", [])
-    }
+    existing = data.get("value", [])
+    have = {c["name"] for c in existing} | {c["displayName"] for c in existing}
     for col in spec["columns"]:
         if col["name"] in have or col["displayName"] in have:
             print(f"    column exists: {spec['displayName']}.{col['displayName']}")
+            actual = next(
+                c
+                for c in existing
+                if col["name"] in (c["name"], c["displayName"])
+                or col["displayName"] in (c["name"], c["displayName"])
+            )
+            if col.get("reconcile") and column_drift(col, actual):
+                print(f"    column DRIFT: {col['displayName']}")
+                if apply:
+                    g.patch(
+                        f"{GRAPH}/sites/{site_id}/lists/{list_id}/columns/{actual['id']}",
+                        {**column_definition(col, list_ids), "defaultValue": None},
+                    )
+                    print(f"    column updated: {col['displayName']}")
             continue
         if col["type"] == "lookup" and col["lookupList"] not in list_ids:
             print(f"    column DEFERRED (lookup target missing): {col['displayName']}")

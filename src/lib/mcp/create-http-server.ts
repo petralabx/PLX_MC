@@ -1,3 +1,4 @@
+import { taskSearchShape } from "./task-search-schema";
 // Builds the in-process PLX-MC MCP server (HTTP transport + shared tool logic).
 
 import { randomUUID } from "node:crypto";
@@ -37,6 +38,7 @@ import { registerAgentReadTools } from "./read-actions";
 import { registerApprovalTools } from "./approval-actions";
 import { registerCheckoutReleaseTools } from "./checkout-release-actions";
 import { registerTaskUpdateTools } from "./task-update-actions";
+import { registerProjectTools } from "./project-actions";
 import { registerSessionTelemetryTools } from "./session-telemetry-actions";
 
 function jsonResult(payload: unknown) {
@@ -179,27 +181,15 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_search_tasks",
-    "Search/list tasks by query (alias: q), bucket, stage, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt. Applied filters are echoed in meta.filter.",
-    {
-      q: z.string().optional().describe("Search text (alias of query)"),
-      query: z.string().optional().describe("Search text (alias of q)"),
-      bucket: z.string().optional(),
-      stage: z.string().optional(),
-      assignee: z
-        .string()
-        .optional()
-        .describe("Exact assignee id, e.g. agent:hasitha-fernando or a person id"),
-      completedAfter: z.string().optional().describe("ISO-8601; completedAt >= this (inclusive)"),
-      completedBefore: z.string().optional().describe("ISO-8601; completedAt < this (exclusive)"),
-      limit: z.number().int().min(1).max(200).optional(),
-    },
+    "Search/list tasks by query (alias: q), bucket, stage, label, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt. Page with nextCursor; searchComments/in includes discussion; fields=compact reduces payload. Applied filters are echoed in meta.filter.",
+    taskSearchShape,
     async (args) => {
       const result = await actionSearchTasks(args, identity);
       // meta.actor names the calling principal, as GET /api/cursor/tasks does.
       // Key rotation verifies sp_mcp_portal through this search, because its
       // tool allowlist denies mc_self_check (decision CG-07b).
       return jsonResult({
-        data: { tasks: result.tasks, total: result.total },
+        data: { tasks: result.tasks, total: result.total, nextCursor: result.nextCursor },
         meta: {
           filter: result.filter,
           actor: { servicePrincipalId: identity.servicePrincipalId },
@@ -396,6 +386,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   registerApprovalTools(server, identity);
   registerCheckoutReleaseTools(server, identity);
   registerTaskUpdateTools(server, identity);
+  registerProjectTools(server, identity);
   registerSessionTelemetryTools(server, identity);
 
   return server;

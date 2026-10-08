@@ -8,7 +8,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "provision-sharepoint.py"
-SCHEMA = json.loads((REPO_ROOT / "config" / "sharepoint-schema.json").read_text("utf-8"))
+SCHEMA = json.loads(
+    (REPO_ROOT / "config" / "sharepoint-schema.json").read_text("utf-8")
+)
 
 
 def _load():
@@ -40,7 +42,14 @@ class FakeGraph:
 
 
 def _ensure(g, apply=True):
-    prov.ensure_columns(g, "site", "list", {"displayName": "ToDos", "columns": [COMPLETED_AT]}, {}, apply)
+    prov.ensure_columns(
+        g,
+        "site",
+        "list",
+        {"displayName": "ToDos", "columns": [COMPLETED_AT]},
+        {},
+        apply,
+    )
 
 
 def test_schema_declares_completed_at_exactly():
@@ -59,7 +68,7 @@ def test_no_task_2529_columns_or_status_change():
 def test_create_plan_is_datetime_with_time_optional_no_default_hidden():
     g = FakeGraph([])
     _ensure(g)
-    (_, body), = g.posts
+    ((_, body),) = g.posts
     assert body["dateTime"]["format"] == "dateTime"
     assert body["required"] is False
     assert body["hidden"] is True
@@ -74,12 +83,18 @@ def test_other_date_columns_unchanged():
 
 
 def test_existing_old_definition_is_updated():
-    old = {"id": "c14", "name": "CompletedAt", "displayName": "Completed At",
-           "required": False, "dateTime": {"format": "dateOnly"}, "defaultValue": {"value": "[today]"}}
+    old = {
+        "id": "c14",
+        "name": "CompletedAt",
+        "displayName": "Completed At",
+        "required": False,
+        "dateTime": {"format": "dateOnly"},
+        "defaultValue": {"value": "[today]"},
+    }
     g = FakeGraph([old])
     _ensure(g)
     assert not g.posts
-    (url, body), = g.patches
+    ((url, body),) = g.patches
     assert url.endswith("/columns/c14")
     assert body["dateTime"]["format"] == "dateTime"
     assert body["hidden"] is True and body["required"] is False
@@ -87,8 +102,14 @@ def test_existing_old_definition_is_updated():
 
 
 def test_existing_matching_definition_is_left_alone_and_dry_run_never_writes():
-    good = {"id": "c14", "name": "CompletedAt", "displayName": "Completed At",
-            "required": False, "hidden": True, "dateTime": {"format": "dateTime"}}
+    good = {
+        "id": "c14",
+        "name": "CompletedAt",
+        "displayName": "Completed At",
+        "required": False,
+        "hidden": True,
+        "dateTime": {"format": "dateTime"},
+    }
     g = FakeGraph([good])
     _ensure(g)
     assert not g.posts and not g.patches
@@ -107,7 +128,15 @@ class HiddenAwareGraph(FakeGraph):
 
     def get(self, url, ok404=False):
         if url.endswith("/lists?$select=id,displayName,list"):
-            return {"value": [{"id": "list", "displayName": "ToDos", "list": {"template": "genericList"}}]}
+            return {
+                "value": [
+                    {
+                        "id": "list",
+                        "displayName": "ToDos",
+                        "list": {"template": "genericList"},
+                    }
+                ]
+            }
         assert "/columns" in url
         select = url.split("$select=", 1)[1].split(",") if "$select=" in url else []
         show_hidden = "hidden" in select
@@ -124,11 +153,28 @@ def test_apply_after_creation_does_not_recreate_hidden_column_and_verify_finds_i
     assert len(g.posts) == 1
     _ensure(g)  # second --apply: hidden CompletedAt must be rediscovered
     assert len(g.posts) == 1
-    schema = {"lists": [{"displayName": "ToDos", "template": "genericList", "columns": [COMPLETED_AT]}]}
+    schema = {
+        "lists": [
+            {
+                "displayName": "ToDos",
+                "template": "genericList",
+                "columns": [COMPLETED_AT],
+            }
+        ]
+    }
     assert prov.verify(g, "site", schema) == []
 
 
 def test_column_listing_selects_hidden_with_every_inspected_property():
     select = prov.COLUMN_SELECT.split(",")
-    for prop in ("hidden", "required", "defaultValue", "name", "displayName", "id", "dateTime", "choice"):
+    for prop in (
+        "hidden",
+        "required",
+        "defaultValue",
+        "name",
+        "displayName",
+        "id",
+        "dateTime",
+        "choice",
+    ):
         assert prop in select

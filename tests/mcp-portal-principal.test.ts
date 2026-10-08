@@ -1,3 +1,4 @@
+import { legacySearchFixture } from "./helpers/task-search-fixture";
 // Fleet P8, decision CG-07b: sp_mcp_portal holds a least-privilege grant. It
 // may create tasks (an agent: assignee included) and search tasks. It may not
 // check out, report progress, complete, touch buckets or projects, or use any
@@ -14,6 +15,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/sync", () => ({
+  searchTaskPage: vi.fn(async (filter, hidden) => legacySearchFixture(h.tasks as unknown as Task[], filter, hidden)),
   createTask: vi.fn(async (input: CreateTaskInput) => {
     h.writes.push("createTask");
     const task = { id: `TASK-${900 + h.tasks.length}`, stage: "backlog", ...input };
@@ -127,6 +129,7 @@ const FULL_MCP_BUNDLE = [
   "bucket.create",
   "bucket.update",
   "project.create",
+  "project.update",
   "routing.suggest",
   "routing.propose",
   "routing.resolve",
@@ -285,6 +288,8 @@ describe("sp_mcp_portal through the MCP tools", () => {
     ["mc_create_bucket", { name: "New bucket" }],
     ["mc_update_bucket", { id: "BKT-INFRA", name: "Renamed" }],
     ["mc_create_project", { name: "New project" }],
+    ["mc_update_project", { projectId: "PRJ-PORTAL-GOLIVE", status: "closed" }],
+    ["mc_list_projects", {}],
     ["mc_request_approval", { taskId: "TASK-1", reason: "please" }],
     ["mc_suggest_work", { title: "x" }],
     [

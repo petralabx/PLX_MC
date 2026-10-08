@@ -12,6 +12,8 @@ composed swarm delegation.
 | `mc_search_tasks` | List/search tasks (filters incl. `completedAfter`/`completedBefore`; rows carry `completedAt`) |
 | `mc_suggest_work` | Suggest existing Tasks + `routingSessionId` (no create/link) |
 | `mc_create_project` | Create project (SharePoint Projects mirror) |
+| `mc_list_projects` | List projects by `status` (active default, closed, all) with owner, health and bucket/task counts |
+| `mc_update_project` | Steward edit of a project (`status` active/closed, owner, description, name, note) |
 | `mc_create_bucket` | Create bucket/initiative, optionally under a project (SharePoint Roadmap mirror) |
 | `mc_update_bucket` | Patch an existing bucket (`prd`, health, owner, description, name, target, repos, project) |
 | `mc_create_task` | Create task (SharePoint mirror) |
@@ -58,6 +60,12 @@ Confirmed mutation tools will register through the same seam in a later phase.
 cd tools/plx-mc-mcp && npm install
 PLX_MC_MCP_ENABLED=1 MC_MCP_PRINCIPAL_ID=sp_mcp_claude_code MC_MCP_API_KEY=... MC_OPERATOR_EMAIL=... MC_REPO=petralabx/PLX_MC npx tsx index.ts
 ```
+
+The shared search schema lives in `task-search-schema.ts`; the web MCP module
+re-exports it. Zod resolves from this tool install (via the SDK dependency) or
+from the repository root in a web-only install. From the repository root, run
+`node scripts/check-mcp-stdio-standalone.mjs` to check startup and search-tool
+registration with an isolated tool-only `npm ci` under `/tmp`.
 
 `launch.mjs` uses `prod/ec2-secrets` only for `sp_mcp_cursor`. Dedicated
 principals are selected from `plx/prod/mc/mcp-agent-keys/v1`; a missing entry
@@ -106,3 +114,13 @@ current description before retrying an uncertain append (appends are not
 idempotent). The stdio client proxies to `/api/cursor/tasks/update` and
 `/api/cursor/tasks/update-batch`; HTTP MCP calls the same actions. See
 `docs/AGENT-PR-SOP.md` for Ledger backfill hygiene.
+
+Task search supports `cursor`/`limit` (default 50, max 200), exact `label`,
+`searchComments` or explicit `in: ["title", "description", "comments", "notes"]`,
+and `fields: "compact"`. Both MCP transports return `data.nextCursor` (null at
+end) and the exact visible filtered `data.total`. Reuse the returned cursor
+with unchanged filters/identity; numeric task-ID ordering and the first-page
+insert boundary prevent new tasks from shifting pages. Discussion matches
+full-text words; title/description and IDs keep substring matching. Query
+results include `matchFields`. See the [Hub search contract](../../docs/modules/mcp/README.md#task-search-pagination-and-discussion-search)
+for REST encoding, cursor limitations and compact timestamp behavior.

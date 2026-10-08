@@ -1,3 +1,4 @@
+import { legacySearchFixture } from "./helpers/task-search-fixture";
 // mc_search_tasks / mc_get_context must honour query/taskIds (not silently
 // strip them) and echo the applied filter. Before this, callers that passed
 // `query` or `taskIds` got the unfiltered head of the task list with a
@@ -61,10 +62,8 @@ const tasks: Task[] = [
   } as Task,
 ];
 
-vi.mock("@/lib/sync", () => ({
-  createTask: vi.fn(),
-  patchTask: vi.fn(),
-  snapshot: vi.fn(async () => ({
+function fixtureSnapshot() {
+  return {
     tasks,
     buckets: [
       { id: "BKT-MISSION-CONTROL-OPS", name: "Mission Control / Ops" },
@@ -81,10 +80,19 @@ vi.mock("@/lib/sync", () => ({
     conflicts: [],
     errors: [],
     lastSweep: "now",
-  })),
+  };
+}
+
+vi.mock("@/lib/sync", () => ({
+  searchTaskPage: vi.fn(async (filter, hidden) => legacySearchFixture(tasks, filter, hidden)),
+  createTask: vi.fn(),
+  patchTask: vi.fn(),
+  snapshot: vi.fn(async () => fixtureSnapshot()),
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
+  getBuckets: vi.fn(async () => fixtureSnapshot().buckets),
+  getProjects: vi.fn(async () => fixtureSnapshot().projects),
   getEntity: vi.fn(async () => null),
 }));
 

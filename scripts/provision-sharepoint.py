@@ -81,7 +81,6 @@ class Graph:
             fail(f"POST {url} -> {r.status_code} {r.text[:500]}")
         return r
 
-
     def patch(self, url: str, body: dict[str, Any]) -> requests.Response:
         r = self.s.patch(url, json=body, timeout=60)
         if r.status_code >= 400:

@@ -11,6 +11,8 @@ import {
   patchBucket,
   patchTask,
   snapshot,
+  searchTaskPage,
+  type TaskSearchFilter,
   type CreateBucketInput,
   type CreateProjectInput,
   type CreateTaskInput,
@@ -35,8 +37,16 @@ import {
   assertTaskProjectAccess,
   loadProjectAclMaps,
 } from "@/lib/permissions/project-acl-guard";
-import { filterBucketsByAcl, filterTasksByAcl, indexById } from "@/lib/permissions/project-acl";
+import {
+  canAccessBucket,
+  filterBucketsByAcl,
+  filterProjectsByAcl,
+  filterTasksByAcl,
+  indexById,
+} from "@/lib/permissions/project-acl";
 import type { McpIdentity } from "./auth";
+import { taskSearchSchema, type SearchTasksInput } from "./task-search-schema";
+export type { SearchTasksInput } from "./task-search-schema";
 import { resolveCheckoutRepo } from "./checkout-repo";
 import { taskLink } from "./envelope";
 import { buildHonestyFields } from "./honesty";
@@ -81,31 +91,7 @@ export async function actionSelfCheck(identity: McpIdentity) {
   };
 }
 
-export type SearchTasksInput = {
-  /** Canonical search text. */
-  q?: string;
-  /** Alias for `q` — agents commonly pass this name; must not conflict with `q`. */
-  query?: string;
-  bucket?: string;
-  stage?: string;
-  /** Exact assignee id, e.g. `agent:hasitha-fernando` or a person id. */
-  assignee?: string;
-  /** ISO-8601 instant; keep tasks with completedAt >= this (inclusive). */
-  completedAfter?: string;
-  /** ISO-8601 instant; keep tasks with completedAt < this (exclusive). */
-  completedBefore?: string;
-  limit?: number;
-};
-
-export type SearchTasksFilter = {
-  query?: string;
-  bucket?: string;
-  stage?: string;
-  assignee?: string;
-  completedAfter?: string;
-  completedBefore?: string;
-  limit: number;
-};
+export type SearchTasksFilter = TaskSearchFilter;
 
 export type GetContextInput = {
   depth?: "compact" | "full";
@@ -133,8 +119,10 @@ export function resolveSearchQueryText(input: { q?: string; query?: string }): s
 }
 
 export function resolveSearchFilter(input: SearchTasksInput): SearchTasksFilter {
+  const parsed = taskSearchSchema.safeParse(input);
+  if (!parsed.success) throw new ApiError("invalid_request", parsed.error.message);
   const query = resolveSearchQueryText(input);
-  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const limit = input.limit ?? 50;
   const assignee = (input.assignee ?? "").trim();
   const completedAfter = normalizeInstant("completedAfter", input.completedAfter);
   const completedBefore = normalizeInstant("completedBefore", input.completedBefore);
@@ -145,6 +133,11 @@ export function resolveSearchFilter(input: SearchTasksInput): SearchTasksFilter 
     ...(assignee ? { assignee } : {}),
     ...(completedAfter ? { completedAfter } : {}),
     ...(completedBefore ? { completedBefore } : {}),
+    ...(input.label ? { label: input.label } : {}),
+    ...(input.cursor ? { cursor: input.cursor } : {}),
+    ...(input.searchComments !== undefined ? { searchComments: input.searchComments } : {}),
+    ...(input.in ? { in: [...new Set(input.in)].sort() } : {}),
+    ...(input.fields ? { fields: input.fields } : {}),
     limit,
   };
 }
@@ -186,6 +179,9 @@ export async function actionGetContext(
   const visibleTasks = principal
     ? filterTasksByAcl(snap.tasks, bucketsById, projectsById, principal)
     : snap.tasks;
+  const visibleProjects = principal
+    ? filterProjectsByAcl(snap.projects ?? [], principal)
+    : (snap.projects ?? []);
   const idSet = filter.taskIds ? new Set(filter.taskIds) : null;
 
   if (filter.depth === "full") {
@@ -195,6 +191,7 @@ export async function actionGetContext(
     return {
       tasks,
       buckets: visibleBuckets,
+      projects: visibleProjects,
       conflicts: snap.conflicts.length,
       errors: snap.errors.length,
       lastSweep: snap.lastSweep,
@@ -209,6 +206,7 @@ export async function actionGetContext(
     taskCount: visibleTasks.length,
     activeCount: active.length,
     buckets: visibleBuckets.map((b) => ({ id: b.id, name: b.name })),
+    projects: visibleProjects.map((p) => ({ id: p.id, name: p.name, status: p.status ?? "active" })),
     topTasks: active.slice(0, 15).map((t) => ({
       id: t.id,
       title: t.title,
@@ -223,41 +221,16 @@ export async function actionGetContext(
 
 export async function actionSearchTasks(input: SearchTasksInput = {}, identity?: McpIdentity) {
   const filter = resolveSearchFilter(input);
-  const snap = await snapshot();
   const principal = identity ? aclPrincipalFromMcp(identity) : undefined;
-  const projectsById = indexById(snap.projects ?? []);
-  const bucketsById = indexById(snap.buckets ?? []);
-  let tasks = principal
-    ? filterTasksByAcl(snap.tasks, bucketsById, projectsById, principal)
-    : snap.tasks;
-  const q = (filter.query ?? "").toLowerCase();
-  if (q) {
-    tasks = tasks.filter(
-      (t) =>
-        t.id.toLowerCase().includes(q) ||
-        t.title.toLowerCase().includes(q) ||
-        (t.description ?? "").toLowerCase().includes(q)
-    );
+  const hiddenBuckets: string[] = [];
+  if (principal) {
+    const { buckets, projectsById } = await loadProjectAclMaps();
+    for (const bucket of buckets) {
+      if (!canAccessBucket(bucket, projectsById, principal)) hiddenBuckets.push(bucket.id);
+    }
   }
-  if (filter.bucket) tasks = tasks.filter((t) => t.bucket === filter.bucket);
-  if (filter.stage) tasks = tasks.filter((t) => t.stage === filter.stage);
-  if (filter.assignee) {
-    // A runner finds the tasks assigned to its agents (agent fleet P8).
-    const wanted = filter.assignee.toLowerCase();
-    tasks = tasks.filter((t) => (t.assignee ?? "").trim().toLowerCase() === wanted);
-  }
-  if (filter.completedAfter || filter.completedBefore) {
-    // Same predicate as the reporting SQL: completed_at >= after AND < before.
-    // A task with no completedAt never matches a completion-date filter.
-    const after = filter.completedAfter ? Date.parse(filter.completedAfter) : -Infinity;
-    const before = filter.completedBefore ? Date.parse(filter.completedBefore) : Infinity;
-    tasks = tasks.filter((t) => {
-      if (!t.completedAt) return false;
-      const at = Date.parse(t.completedAt);
-      return at >= after && at < before;
-    });
-  }
-  return { tasks: tasks.slice(0, filter.limit), total: tasks.length, filter };
+  const result = await searchTaskPage(filter, hiddenBuckets, principal?.tokens.slice().sort().join("|") ?? "");
+  return { ...result, filter };
 }
 
 export type CreateTaskActionInput = CreateTaskInput & {

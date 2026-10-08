@@ -283,7 +283,9 @@ describe("tool registry", () => {
     expect(names).toContain("mc_update_task");
     expect(names).toContain("mc_update_tasks");
     expect(names).toContain("mc_report_session_telemetry");
-    expect(names).toHaveLength(34);
+    expect(names).toContain("mc_update_project");
+    expect(names).toContain("mc_list_projects");
+    expect(names).toHaveLength(36);
   });
 });
 

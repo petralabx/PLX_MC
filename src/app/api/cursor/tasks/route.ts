@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { ApiError } from "@/lib/api/route";
+import { taskSearchSchema } from "@/lib/mcp/task-search-schema";
 import { cursorRoute, parseCursorBody } from "@/lib/mcp/route";
 import { actionCreateTask, actionSearchTasks } from "@/lib/mcp/actions";
 import { taskLink } from "@/lib/mcp/envelope";
@@ -24,21 +26,28 @@ const createSchema = z.object({
 
 export const GET = cursorRoute("mc_search_tasks", async (req, _ctx, identity) => {
   const sp = new URL(req.url).searchParams;
-  const result = await actionSearchTasks(
-    {
-      q: sp.get("q") ?? undefined,
-      query: sp.get("query") ?? undefined,
-      bucket: sp.get("bucket") ?? undefined,
-      stage: sp.get("stage") ?? undefined,
-      assignee: sp.get("assignee") ?? undefined,
-      completedAfter: sp.get("completedAfter") ?? undefined,
-      completedBefore: sp.get("completedBefore") ?? undefined,
-      limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
-    },
-    identity
-  );
+  const parsed = taskSearchSchema.safeParse({
+    q: sp.get("q") ?? undefined,
+    query: sp.get("query") ?? undefined,
+    bucket: sp.get("bucket") ?? undefined,
+    stage: sp.get("stage") ?? undefined,
+    assignee: sp.get("assignee") ?? undefined,
+    completedAfter: sp.get("completedAfter") ?? undefined,
+    completedBefore: sp.get("completedBefore") ?? undefined,
+    label: sp.get("label") ?? undefined,
+    cursor: sp.get("cursor") ?? undefined,
+    fields: sp.get("fields") ?? undefined,
+    searchComments: sp.has("searchComments")
+      ? sp.get("searchComments") === "true" ? true
+        : sp.get("searchComments") === "false" ? false : sp.get("searchComments")
+      : undefined,
+    in: sp.has("in") ? sp.getAll("in").flatMap((value) => value.split(",")) : undefined,
+    limit: sp.has("limit") ? Number(sp.get("limit")) : undefined,
+  });
+  if (!parsed.success) throw new ApiError("invalid_request", parsed.error.message);
+  const result = await actionSearchTasks(parsed.data, identity);
   return {
-    data: { tasks: result.tasks, total: result.total },
+    data: { tasks: result.tasks, total: result.total, nextCursor: result.nextCursor },
     meta: { filter: result.filter },
   };
 });

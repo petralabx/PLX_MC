@@ -16,7 +16,7 @@ composed swarm delegation.
 | `mc_update_bucket` | Patch an existing bucket (`prd`, health, owner, description, name, target, repos, project) |
 | `mc_create_task` | Create task (SharePoint mirror) |
 | `mc_checkout_task` | Checkout + `MC-Checkout: dsp_*` stamp |
-| `mc_report_progress` | Stage/notes updates; `stage=cancelled` + `cancelReason` / `replacedBy` / `note` cancels (steward, admin or accountable owner) |
+| `mc_report_progress` | Stage/notes updates; `stage=cancelled` + `cancelReason` / `replacedBy` / `note` cancels (needs `task.cancel`; reopen needs `task.reopen`) |
 | `mc_update_task` | Audited `{taskId, patch}` metadata edit; labels stay DB-only; `patch.cancel` / `patch.reopen` end or restore a task (audited `task.cancelled` / `task.reopened`) |
 | `mc_update_tasks` | Batch metadata edits, 1–100 `{taskId, patch}` items with independent outcomes |
 | `mc_complete_task` | Complete with evidence |

@@ -26,6 +26,17 @@ const h = vi.hoisted(() => ({
 const rows = () => h.rows as Map<string, Row>;
 const events = () => h.events as Ev[];
 
+// sp_mcp_codex stands in for the principal an operator grants task.cancel /
+// task.reopen (none holds them in the reviewed registry today); every other
+// principal keeps its real grants.
+vi.mock("@/lib/permissions/grants", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/permissions/grants")>();
+  return {
+    ...real,
+    capabilitiesForServicePrincipal: (id: string) =>
+      id === "sp_mcp_codex" ? [...real.capabilitiesForServicePrincipal(id), "task.cancel", "task.reopen"] : real.capabilitiesForServicePrincipal(id),
+  };
+});
 vi.mock("@/lib/permissions/decision-log", () => ({ recordPermissionDecision: vi.fn(async () => true) }));
 vi.mock("@/lib/compliance/go-live-announcer", () => ({ announceGoLiveEventSafe: vi.fn(async () => undefined) }));
 vi.mock("@/lib/db", () => {
@@ -78,20 +89,28 @@ vi.mock("@/lib/db", () => {
 import { ApiError } from "@/lib/api/route";
 import { actionProgress } from "@/lib/mcp/actions";
 import { actionUpdateTask, actionUpdateTasks, updateTaskSchema } from "@/lib/mcp/task-update-actions";
-import { authorizeTaskClose } from "@/lib/mcp/task-cancel-actions";
 import { cancelInputViolation } from "@/lib/mc-data/cancellation";
 import { getEntity, updateEntity } from "@/lib/sync/repo";
 import { outboundFields, parseFieldValue } from "@/lib/sync/mapping";
 import { inboundCancellation } from "@/lib/sync/cancel-validate";
 
-const identityFor = (operatorEmail: string): McpIdentity => ({
+const identityFor = (operatorEmail: string, principal: "sp_mcp_codex" | "sp_mcp_grok" = "sp_mcp_codex"): McpIdentity => ({
   operatorEmail, runtime: "codex", workerId: "cancel-test", repo: "petralabx/PLX_MC",
-  servicePrincipalId: "sp_mcp_codex",
-  actor: { kind: "service", id: "sp_mcp_codex", status: "active" },
+  servicePrincipalId: principal,
+  actor: { kind: "service", id: principal, status: "active" },
 });
 const steward = identityFor("cos@petrasoap.com");
 const owner = identityFor("vince@petrasoap.com");
-const outsider = identityFor("ross@petrasoap.com");
+// Holds only the shared agent bundle (task.progress, no task.cancel / task.reopen)
+// and forges the header of an allowlisted admin: the header must grant nothing.
+const outsider = identityFor("vince@petrasoap.com", "sp_mcp_grok");
+// Console / Entra session path: a human admin actor.
+const consoleAdmin: McpIdentity = {
+  ...identityFor("vince@petrasoap.com"),
+  servicePrincipalId: "sp_mcp_codex",
+  actor: { kind: "human", id: "oid-admin", role: "admin", status: "active" },
+};
+const consoleMember: McpIdentity = { ...consoleAdmin, actor: { kind: "human", id: "oid-member", role: "member", status: "active" } };
 
 function seed(id: string, stage = "progress", extra: Record<string, unknown> = {}, completedAt: Date | null = null) {
   rows().set(id, {
@@ -210,15 +229,37 @@ describe("reopen (acceptance 4)", () => {
 });
 
 describe("who may cancel", () => {
-  it("allows the accountable owner, an admin and a steward; denies anyone else with an audit event", async () => {
-    expect(authorizeTaskClose("greg.m@petrasoap.com", { accountableOwner: "greg" })).toMatchObject({ allowed: true, reasonCode: "accountable_owner" });
-    expect(authorizeTaskClose("vince@petrasoap.com", { accountableOwner: "greg" })).toMatchObject({ allowed: true, reasonCode: "admin" });
-    expect(authorizeTaskClose("cos@petrasoap.com", { accountableOwner: "greg" })).toMatchObject({ allowed: true, reasonCode: "steward" });
+  it("authorizes from the authenticated principal's capabilities, never the operator email; denial leaves an audit event", async () => {
+    // Forged allowlisted admin email on a principal without task.cancel: refused.
     await expect(
       actionUpdateTask(outsider, { taskId: "TASK-1544", patch: { cancel: { reason: "obsolete" } } })
     ).rejects.toMatchObject({ code: "forbidden", status: 403 });
     expect(row("TASK-1544").data.stage).toBe("qa");
     expect(events().map((e) => e.kind)).toEqual(["task.cancel_denied"]);
+    // An unrelated email on a principal granted task.cancel is allowed.
+    await actionUpdateTask(identityFor("nobody@example.com"), { taskId: "TASK-1544", patch: { cancel: { reason: "obsolete" } } });
+    expect(row("TASK-1544").data.stage).toBe("cancelled");
+  });
+
+  it("refuses reopen without task.reopen even with a forged admin email; task.reopen reopens", async () => {
+    await cancelled("TASK-1544", { reason: "obsolete" });
+    events().length = 0;
+    await expect(
+      actionUpdateTask(outsider, { taskId: "TASK-1544", patch: { reopen: {} } })
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+    expect(row("TASK-1544").data.stage).toBe("cancelled");
+    expect(events().map((e) => e.kind)).toEqual(["task.reopen_denied"]);
+    await actionUpdateTask(identityFor("nobody@example.com"), { taskId: "TASK-1544", patch: { reopen: {} } });
+    expect(row("TASK-1544").data.stage).not.toBe("cancelled");
+  });
+
+  it("a human admin session (Console path) may cancel and reopen; a member may not", async () => {
+    await actionUpdateTask(consoleAdmin, { taskId: "TASK-1544", patch: { cancel: { reason: "obsolete" } } });
+    expect(row("TASK-1544").data.stage).toBe("cancelled");
+    await expect(actionUpdateTask(consoleMember, { taskId: "TASK-1544", patch: { reopen: {} } })).rejects.toMatchObject({ code: "forbidden" });
+    await actionUpdateTask(consoleAdmin, { taskId: "TASK-1544", patch: { reopen: {} } });
+    expect(row("TASK-1544").data.stage).not.toBe("cancelled");
+    await expect(actionUpdateTask(consoleMember, { taskId: "TASK-1544", patch: { cancel: { reason: "obsolete" } } })).rejects.toMatchObject({ code: "forbidden" });
   });
 
   it("the batch tool cancels per item and reports a bad item without aborting siblings (acceptance 9)", async () => {
@@ -257,7 +298,7 @@ describe("mc_report_progress (acceptance 9)", () => {
     expect(row("TASK-2360").data.stage).toBe("cancelled");
   });
 
-  it("an outsider cannot cancel through progress either", async () => {
+  it("a forged admin email without task.cancel cannot cancel through progress either", async () => {
     await expect(actionProgress(outsider, { taskId: "TASK-2360", stage: "cancelled", cancelReason: "obsolete" })).rejects.toMatchObject({ code: "forbidden" });
     expect(row("TASK-2360").data.stage).toBe("progress");
   });

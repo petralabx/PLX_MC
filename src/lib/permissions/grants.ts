@@ -24,6 +24,7 @@ const MEMBER_CAPABILITIES: readonly Capability[] = [
 const ADMIN_CAPABILITIES: readonly Capability[] = [
   ...MEMBER_CAPABILITIES,
   "task.reopen",
+  "task.cancel",
   "bucket.create",
   "bucket.update",
   "project.create",
@@ -49,6 +50,9 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
 // + bucket.update + sync.resolve (via sync.mutate) bundle; per-agent identity
 // isolates credentials and audit, not capabilities. Console sweep/retry stay
 // Entra-gated. project.update remains human-only.
+// task.cancel / task.reopen are deliberately absent: any agent holding them could
+// cancel any task. They are granted per principal in SERVICE_GRANTS (none today,
+// TASK-2529) and to the human admin/owner roles.
 const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "task.read",
   "task.create",

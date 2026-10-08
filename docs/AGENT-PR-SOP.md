@@ -289,8 +289,9 @@ picked by `mc_suggest_work`. Give it the `cancelled` stage instead:
   `note`. `reason` is one of `duplicate`, `obsolete`, `superseded`,
   `delivered_without_pr`. `duplicate` and `superseded` need `replacedBy`, an
   existing `TASK-n` other than the task itself.
-- Only the task's accountable owner, an admin, or a Ledger/CoS steward may cancel
-  or reopen. No checkout is needed. Anyone else gets `forbidden` and a
+- Cancel needs the `task.cancel` capability and reopen `task.reopen`, held by the
+  authenticated principal (human admin/owner roles; no agent principal today
+  unless an operator grants one). The operator email header grants nothing. No checkout is needed. Anyone else gets `forbidden` and a
   `task.cancel_denied` event.
 - `patch: {reopen: {stage?, note?}}` restores the task (default: the stage before
   the cancel) and clears the cancellation. `completedAt` is not cleared.

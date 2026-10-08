@@ -91,9 +91,13 @@ stored in the jsonb payload.
   cancel (from the latest `task.cancelled` event, else `backlog`); terminal
   stages are refused. It sets `cancellation` to NULL, leaves `completed_at`
   untouched and appends `task.reopened`. Cancelling again writes a new object.
-- Who: the task's accountable owner, a directory owner/admin, or a Ledger/CoS
-  steward (`CHECKOUT_RELEASE_STEWARDS`); no checkout is needed. Anyone else gets
-  403 and a `task.cancel_denied` / `task.reopen_denied` event.
+- Who: cancel needs `task.cancel` and reopen `task.reopen`, evaluated on the
+  authenticated principal (`requireMcpActor`; capabilities from
+  `src/lib/permissions/grants.ts`). `X-MC-Operator-Email` is audit context only
+  and never authorizes. Human admin/owner roles hold both; no service principal
+  does until an operator grants one, and the shared agent bundle never carries
+  them. No checkout is needed. Anyone else gets 403 and a
+  `task.cancel_denied` / `task.reopen_denied` event.
 - `mc_report_progress` on a cancelled task (other than notes/subtasks) returns
   `task_cancelled`: it never silently reopens. `mc_checkout_task` refuses a
   cancelled task (`task_cancelled`, 409). A PR that references a cancelled task

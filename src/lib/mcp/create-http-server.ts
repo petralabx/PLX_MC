@@ -321,7 +321,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_report_progress",
-    "Report progress on a checked-out task (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; accountable owner, admin or Ledger/CoS steward only. A cancelled task must be reopened with mc_update_task {reopen} first.",
+    "Report progress on a checked-out task (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing. A cancelled task must be reopened with mc_update_task {reopen} first.",
     progressSchemaShape,
     async (body) => jsonResult(await actionProgress(identity, body))
   );

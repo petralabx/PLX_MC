@@ -808,3 +808,15 @@
   matches URL host and `current_database()`, never the runtime DB) before any
   read or write. Every writer of a stage transition appends its event in the
   same transaction.
+
+## 2026-10-08 — Cancel/reopen trusted a caller-supplied email (TASK-2529)
+
+- **What went wrong:** cancel and reopen were authorized from the
+  `X-MC-Operator-Email` header (owner / admin / steward by email). Any MCP caller
+  holding `task.progress` could forge an allowlisted admin address.
+- **Root cause:** The header was treated as an identity although the permissions
+  README already says it is audit context only; no capability existed for cancel.
+- **Rule going forward:** Authorize privileged actions from the authenticated
+  principal's registry capabilities (`requireMcpActor`), never from a header.
+  Add a reviewed capability (`task.cancel`) and keep it out of the shared agent
+  bundle. Test the forged-header case on every transport.

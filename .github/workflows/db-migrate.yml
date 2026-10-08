@@ -1,0 +1,58 @@
+name: DB Migrate (UAT + staging)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'db/migrations/**'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'deploy applies pending files; status-only reports without writes'
+        type: choice
+        required: true
+        default: deploy
+        options: [deploy, status-only]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-migrate-plx-mc
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    # Dispatch on arbitrary branches must not gain access to migration credentials.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Guard and migrate UAT, then staging
+        env:
+          MC_UAT_DATABASE_URL: ${{ secrets.MC_UAT_DATABASE_URL }}
+          MC_STAGING_DATABASE_URL: ${{ secrets.MC_STAGING_DATABASE_URL }}
+          MC_UAT_APPROVED_DB: ${{ vars.MC_UAT_APPROVED_DB }}
+          MC_STAGING_APPROVED_DB: ${{ vars.MC_STAGING_APPROVED_DB }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'deploy' }}
+        run: bash scripts/dual-db-migrate.sh
+      - name: Summary
+        if: always()
+        env:
+          TRIGGER: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          {
+            printf '## DB Migrate (UAT then staging)\n\nTrigger: `%s`\n\nSHA: `%s`\n\n' "$TRIGGER" "$SHA"
+            if [ -f "$RUNNER_TEMP/db-migrate-summary.md" ]; then
+              cat "$RUNNER_TEMP/db-migrate-summary.md"
+            else
+              printf 'UAT: not attempted\n\nStaging: not attempted (setup failed)\n'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

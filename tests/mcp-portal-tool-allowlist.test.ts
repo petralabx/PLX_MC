@@ -1,3 +1,4 @@
+import { legacySearchFixture } from "./helpers/task-search-fixture";
 // Fleet P8, decision CG-07b: sp_mcp_portal may call exactly two MC actions,
 // mc_create_task and mc_search_tasks. Its task.read capability would also
 // admit read tools such as mc_list_buckets, mc_list_conflicts and
@@ -19,6 +20,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/sync", () => ({
+  searchTaskPage: vi.fn(async (filter, hidden) => legacySearchFixture(h.tasks as unknown as Task[], filter, hidden)),
   createTask: vi.fn(async (input: CreateTaskInput) => {
     h.writes.push("createTask");
     const task = { id: `TASK-${900 + h.tasks.length}`, stage: "backlog", ...input };
@@ -418,5 +420,47 @@ describe("sp_mcp_portal through the cursor REST routes", () => {
       ])
     );
     expect(h.writes).toEqual([]);
+  });
+});
+
+
+describe("task-search additive transport contract", () => {
+  it("REST forwards search controls and returns nextCursor", async () => {
+    const { searchTaskPage } = await import("@/lib/sync");
+    const response = await cursorTasksGet(new Request(
+      "http://localhost/api/cursor/tasks?label=odd&limit=200&cursor=opaque&fields=compact&searchComments=true&in=comments,notes",
+      { headers: headers("portal-key") }
+    ), { params: Promise.resolve({}) });
+    expect(response.status).toBe(200);
+    expect(vi.mocked(searchTaskPage).mock.calls.at(-1)?.[0]).toEqual({
+      label: "odd", limit: 200, cursor: "opaque", fields: "compact", searchComments: true, in: ["comments", "notes"],
+    });
+    expect((await response.json()).data).toHaveProperty("nextCursor", null);
+  });
+  it("HTTP MCP forwards the same controls and returns nextCursor", async () => {
+    const { searchTaskPage } = await import("@/lib/sync");
+    const result = await callTool("portal-key", "mc_search_tasks", {
+      label: "odd", limit: 200, cursor: "opaque", fields: "compact", searchComments: true, in: ["comments", "notes"],
+    });
+    expect(result.isError).not.toBe(true);
+    expect(vi.mocked(searchTaskPage).mock.calls.at(-1)?.[0]).toEqual({
+      label: "odd", limit: 200, cursor: "opaque", fields: "compact", searchComments: true, in: ["comments", "notes"],
+    });
+    const data = result.body.data;
+    expect(data).toHaveProperty("nextCursor", null);
+  });
+  it("REST rejects malformed additive parameters", async () => {
+    for (const qs of ["limit=0", "limit=201", "limit=NaN", "limit=1.5", "fields=nope", "searchComments=1", "in=activity", "cursor="]) {
+      const response = await cursorTasksGet(new Request(`http://localhost/api/cursor/tasks?${qs}`, {
+        headers: headers("portal-key"),
+      }), { params: Promise.resolve({}) });
+      expect(response.status, qs).toBe(400);
+      expect((await response.json()).error.code).toBe("invalid_request");
+    }
+  });
+  it("HTTP MCP rejects malformed additive parameters", async () => {
+    for (const args of [{ limit: 201 }, { fields: "nope" }, { searchComments: "true" }, { in: ["activity"] }]) {
+      expect((await callTool("portal-key", "mc_search_tasks", args)).isError).toBe(true);
+    }
   });
 });

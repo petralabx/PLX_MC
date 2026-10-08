@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { taskSearchShape } from "./task-search-schema";
 /**
  * PLX-MC MCP Server (stdio)
  *
@@ -121,18 +122,8 @@ server.tool(
 
 server.tool(
   "mc_search_tasks",
-  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, or assignee. Applied filters are echoed in meta.filter.",
-  {
-    q: z.string().optional().describe("Search text (alias of query)"),
-    query: z.string().optional().describe("Search text (alias of q)"),
-    bucket: z.string().optional(),
-    stage: z.string().optional(),
-    assignee: z
-      .string()
-      .optional()
-      .describe("Exact assignee id, e.g. agent:hasitha-fernando or a person id"),
-    limit: z.number().int().optional(),
-  },
+  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, label, or assignee; page with nextCursor. Use searchComments/in for discussion and fields=compact. Applied filters are echoed in meta.filter.",
+  taskSearchShape,
   async (args) => {
     if (!MCP_ENABLED) return disabledTool("mc_search_tasks");
     const qs = new URLSearchParams();
@@ -142,6 +133,11 @@ server.tool(
     if (args.stage) qs.set("stage", args.stage);
     if (args.assignee) qs.set("assignee", args.assignee);
     if (args.limit) qs.set("limit", String(args.limit));
+    if (args.label) qs.set("label", args.label);
+    if (args.cursor) qs.set("cursor", args.cursor);
+    if (args.fields) qs.set("fields", args.fields);
+    if (args.searchComments !== undefined) qs.set("searchComments", String(args.searchComments));
+    for (const field of args.in ?? []) qs.append("in", field);
     return printResult(await mcFetch(`/tasks?${qs.toString()}`));
   }
 );

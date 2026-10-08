@@ -340,3 +340,51 @@ same transaction. Missing or already-closed IDs return a clear error (batch:
 per-ID failure and `dismissedCount`). Batches accept 1–500 IDs and reasons
 1–2000 characters. Each successful ID commits independently; retrying a batch
 cannot dismiss an already-closed row again.
+
+### Task search pagination and discussion search
+
+`mc_search_tasks` and `GET /api/cursor/tasks` share these optional parameters:
+`q` (alias `query`), `bucket`, `stage`, `assignee` (case-insensitive exact),
+`label` (exact), `limit` (integer 1–200, default 50), `cursor`,
+`searchComments` (boolean, default false), `in` (array of `title`,
+`description`, `comments`, `notes`), and `fields` (`full` default or `compact`).
+REST accepts `searchComments=true|false` and repeated `in` parameters or a
+comma-separated `in=comments,notes`. Conflicting q/query and invalid options
+return `invalid_request`.
+
+The response is `{ data: { tasks, total, nextCursor }, meta: { filter, ... } }`.
+`total` counts the entire visible filtered set, including on an empty page.
+Keep filters and identity fixed and pass `nextCursor` unchanged until it is
+null. `limit` and `fields` may change between pages. Cursors are opaque,
+versioned and bound to filters, ACL exclusions and caller identity. Restart
+without a cursor if filters or permissions change.
+
+Tasks sort by numeric `TASK-` suffix, then ID in PostgreSQL C order. Legacy
+non-numeric IDs sort at numeric key zero. Paging uses a strict keyset boundary,
+a first-page creation-time cutoff and an upper ID boundary: later inserts do
+not shift pages or enter the original result set. Page and exact count come
+from one SQL statement. This is not an immutable snapshot across requests;
+edits/deletions to existing tasks can change the matching set and total.
+Search is read-only against `entities` and does not seed data or call Graph.
+
+ID/title/description preserve case-insensitive literal substring matching.
+`in` explicitly selects text fields and takes precedence over `searchComments`;
+ID matching remains enabled for compatibility. `comments` includes comment
+bodies and activity `what` text. `notes` includes the `mcp-*` comments written
+by `mc_report_progress`. Discussion uses PostgreSQL `simple` full-text word
+matching (all query words, ignoring punctuation; no stemming or prefix
+matching), backed by migration `032_task_search_indexes.sql`. Search does not
+match authors or activity metadata. With a non-empty query, each returned row
+includes `matchFields` (`id`, `title`, `description`, `comments`, `activity`,
+`notes`) explaining its match. For example:
+
+```json
+{"bucket":"BKT-PROD","stage":"merged","limit":200,"fields":"compact"}
+{"q":"CLOSED (obsolete","searchComments":true,"fields":"compact"}
+```
+
+Compact rows contain `id`, `title`, `stage`, `bucket`, `labels`, `prs` and the
+mirror row's UTC `updatedAt`; `completedAt` is copied only when already present
+in the JSONB payload. This change does not create completion timestamps.
+Descriptions, activity and comment arrays are omitted. Payload size depends
+on titles, labels and PRs; 200 representative fixture rows fit under 100 KB.

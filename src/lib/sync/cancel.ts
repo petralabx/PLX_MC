@@ -102,7 +102,7 @@ export async function reopenTaskTx(q: TxQuery, taskId: string, input: ReopenInpu
     taskId,
     { stage, activityLine: { who: ctx.actor, what: `reopened to ${stage}`, kind: "move" } },
     ctx.actor,
-    { query: q, attribution: ctx.attribution }
+    { query: q, attribution: ctx.attribution, reopen: true }
   );
   if (!task) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
   const note = input.note?.trim() || null;

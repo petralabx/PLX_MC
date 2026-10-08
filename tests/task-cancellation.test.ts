@@ -90,6 +90,8 @@ import { ApiError } from "@/lib/api/route";
 import { actionProgress } from "@/lib/mcp/actions";
 import { actionUpdateTask, actionUpdateTasks, updateTaskSchema } from "@/lib/mcp/task-update-actions";
 import { cancelInputViolation } from "@/lib/mc-data/cancellation";
+import { withTransaction } from "@/lib/db";
+import { patchTask } from "@/lib/sync";
 import { getEntity, updateEntity } from "@/lib/sync/repo";
 import { outboundFields, parseFieldValue } from "@/lib/sync/mapping";
 import { inboundCancellation } from "@/lib/sync/cancel-validate";
@@ -214,6 +216,14 @@ describe("reopen (acceptance 4)", () => {
     expect(row("TASK-1544").data.stage).toBe("cancelled");
     await actionUpdateTask(steward, { taskId: "TASK-1544", patch: { reopen: { stage: "backlog" } } });
     expect(row("TASK-1544").data.stage).toBe("backlog");
+  });
+
+  it("a generic stage patch cannot leave cancelled: only the reopen service can", async () => {
+    await cancelled("TASK-1544", { reason: "obsolete" });
+    await expect(withTransaction((q) => patchTask("TASK-1544", { stage: "backlog" }, "member@petrasoap.com", { query: q }))).rejects.toMatchObject({ code: "reopen_required", status: 409 });
+    expect(row("TASK-1544").data.stage).toBe("cancelled");
+    expect(row("TASK-1544").cancellation).toMatchObject({ reason: "obsolete" });
+    expect(events().map((e) => e.kind)).toEqual(["task.cancelled"]);
   });
 
   it("cancelling again after a reopen writes a new cancellation object", async () => {

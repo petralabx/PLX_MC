@@ -809,6 +809,20 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
         });
       }
     }
+    // Leaving Cancelled needs task.reopen on an authenticated principal, which an
+    // inbound edit does not carry: refuse it and raise a Sync conflict (TASK-2529).
+    if (type === "task" && row.data.stage === "cancelled" && "stage" in apply && apply.stage !== "cancelled") {
+      const requested = apply.stage;
+      delete apply.stage;
+      const idx = clearedDirty.indexOf("stage");
+      if (idx >= 0) clearedDirty.splice(idx, 1);
+      conflicts.push({
+        field: "stage",
+        mcVal: displayValue("cancelled"),
+        spVal: displayValue(requested),
+        note: "Moved out of Cancelled in SharePoint; reopening needs task.reopen in Mission Control, so the Status was not applied.",
+      });
+    }
     for (const ev of attributionEvents) {
       await repo.appendAudit(
         SYNC_ACTOR,
@@ -840,10 +854,6 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
       const nextAttr = { ...row.field_attribution };
       for (const f of clearedDirty) delete nextAttr[f];
       for (const f of Object.keys(apply)) delete nextAttr[f];
-      // Leaving cancelled in SharePoint: queue the CancelReason/ReplacedBy clear (a
-      // row already in conflict keeps its state), as patchTask does for MC reopens.
-      const reopens = type === "task" && row.data.stage === "cancelled" && !!apply.stage && apply.stage !== "cancelled";
-      if (reopens && !nextDirty.includes("cancellation")) nextDirty.push("cancellation");
       const write = (q?: TxQuery) =>
         repo.updateEntity(
           type,
@@ -853,7 +863,6 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
             dirtyFields: nextDirty,
             fieldAttribution: nextAttr,
             cancellation: inboundCancel,
-            ...(reopens && conflicts.length === 0 && row.sync_state !== "conflict" ? { syncState: "pending" as const } : {}),
           },
           q
         );
@@ -1698,6 +1707,8 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
   if (winner === "sp") {
     const value = parseFieldValue(subject, mcField, conflict.spVal);
     if (value === undefined) return false;
+    // Keep-SP must not reopen a cancelled task: that needs task.reopen (TASK-2529).
+    if (subject === "task" && mcField === "stage" && entityRow?.data.stage === "cancelled" && value !== "cancelled") return false;
     if (entityRow) {
       await repo.updateEntity(subject as EntityType, conflict.entityId, {
         patch: { [mcField]: value },

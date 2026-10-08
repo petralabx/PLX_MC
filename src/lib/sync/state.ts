@@ -618,6 +618,8 @@ export interface PatchTaskOptions {
   completedAt?: string;
   /** Validated cancellation object; required when the patch moves the task into `cancelled` (TASK-2529). */
   cancellation?: Cancellation;
+  /** Set only by the reopen service (lib/sync/cancel.ts), after task.reopen is authorized; required to leave `cancelled`. */
+  reopen?: boolean;
 }
 
 // Persistence tiers:
@@ -677,6 +679,15 @@ export async function patchTask(
   // patch that sets both owner and stage is evaluated against the new owner.
   const current = row.data as unknown as Task;
   const effective = { ...current, ...taskPatch } as Task;
+  // Leaving cancelled is a capability-gated, audited reopen (TASK-2529): a generic
+  // stage patch must never clear the cancellation on its own.
+  if (current.stage === "cancelled" && taskPatch.stage && taskPatch.stage !== "cancelled" && !opts.reopen) {
+    throw new ApiError(
+      "reopen_required",
+      `${id} is cancelled; it can only leave that stage through the reopen service (task.reopen).`,
+      409
+    );
+  }
   if ("assignee" in taskPatch) {
     const violation = assignmentViolation(effective, taskPatch.assignee ?? null);
     if (violation) throw new ApiError("human_only_violation", violation, 409);

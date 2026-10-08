@@ -112,6 +112,20 @@ describe("inbound Status=Cancelled", () => {
     }
   });
 
+  it("an inbound move out of Cancelled records a Sync conflict and keeps the cancellation (no task.reopen path)", async () => {
+    seed("cancelled");
+    item({ Status: "In Progress" });
+    const res = await runScopedListDelta("todos");
+    expect(res).toMatchObject({ conflicts: 1 });
+    expect(s.conflicts).toHaveLength(1);
+    expect(s.conflicts[0]).toMatchObject({ entityId: "TASK-2360", field: "Status" });
+    expect(String(s.conflicts[0].note)).toMatch(/task\.reopen/);
+    for (const u of s.updates) {
+      expect((u.opts.patch as Record<string, unknown> | undefined)?.stage).toBeUndefined();
+      expect(u.opts.dirtyFields ?? []).not.toContain("cancellation");
+    }
+  });
+
   it("an unchanged Cancelled row re-synced from SharePoint writes no cancellation", async () => {
     seed("cancelled");
     item({ Status: "Cancelled", CancelReason: "Obsolete" });
@@ -142,16 +156,6 @@ describe("inbound cancel event and reopen mirror clear (Astra P2s)", () => {
     seed("cancelled");
     item({ Status: "Cancelled", CancelReason: "Obsolete" });
     await runScopedListDelta("todos");
-    expect(s.events).toEqual([]);
-  });
-
-  it("an inbound reopen queues the CancelReason/ReplacedBy clear and re-queues the row", async () => {
-    seed("cancelled");
-    item({ Status: "In Progress", CancelReason: "Obsolete" });
-    await runScopedListDelta("todos");
-    const write = s.updates.find((u) => (u.opts.patch as Record<string, unknown> | undefined)?.stage === "progress")!;
-    expect(write.opts.dirtyFields).toContain("cancellation");
-    expect(write.opts.syncState).toBe("pending");
     expect(s.events).toEqual([]);
   });
 

@@ -9,7 +9,10 @@ import {
 } from "@/lib/routing/mutations/actors";
 import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
 import { assertBucketProjectAccess, assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
+import * as complianceRepo from "@/lib/compliance/repo";
 import { patchTask } from "@/lib/sync";
+import { reopenTask } from "@/lib/sync/cancel";
+import { getEntity } from "@/lib/sync/repo";
 
 const STAGES = ["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified"] as const;
 
@@ -70,7 +73,38 @@ export const PATCH = route(async (req, ctx) => {
   if (patch.bucket) {
     await assertBucketProjectAccess(patch.bucket, principal);
   }
-  const task = await patchTask(id, patch, authorized.auditLabel, {
+  // Leaving cancelled is a reopen: it needs task.reopen on the session principal,
+  // runs through the reopen service (clears cancellation, emits task.reopened) and
+  // is never a silent side effect of a generic stage change (TASK-2529).
+  const { stage, ...rest } = patch;
+  let reopened = false;
+  if (stage) {
+    const current = await getEntity("task", id);
+    if (current?.data.stage === "cancelled") {
+      let reopener;
+      try {
+        reopener = await requireSessionActor("task.reopen", { type: "task", id });
+      } catch (err) {
+        if (err instanceof ApiError && err.code === "forbidden") {
+          await complianceRepo.appendEvent({
+            kind: "task.reopen_denied",
+            actor: `human:${authorized.auditLabel}`,
+            taskId: id,
+            payload: { capability: "task.reopen", requestedStage: stage },
+          });
+        }
+        throw err;
+      }
+      await reopenTask(id, { stage }, {
+        actor: reopener.auditLabel,
+        actorId: reopener.actorId,
+        eventActor: `human:${reopener.auditLabel}`,
+        attribution: { source: "human", actorId: reopener.actorId },
+      });
+      reopened = true;
+    }
+  }
+  const task = await patchTask(id, reopened ? rest : patch, authorized.auditLabel, {
     attribution: { source: "human", actorId: authorized.actorId },
   });
   if (!task) throw new ApiError("not_found", `unknown task ${id}`, 404);

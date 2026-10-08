@@ -11,7 +11,14 @@ const mocks = vi.hoisted(() => ({
   assertBucketProjectAccess: vi.fn(async () => undefined),
   assertTaskProjectAccess: vi.fn(async () => undefined),
   assertProjectIdAccess: vi.fn(async () => undefined),
+  getEntity: vi.fn(),
+  reopenTask: vi.fn(),
+  appendEvent: vi.fn(),
 }));
+
+vi.mock("@/lib/sync/repo", () => ({ getEntity: mocks.getEntity }));
+vi.mock("@/lib/sync/cancel", () => ({ reopenTask: mocks.reopenTask }));
+vi.mock("@/lib/compliance/repo", () => ({ appendEvent: mocks.appendEvent }));
 
 vi.mock("@/lib/routing/mutations/actors", () => ({
   requireSessionActor: mocks.requireSessionActor,
@@ -53,6 +60,8 @@ describe("task authorization routes", () => {
       actorKind: "human",
       auditLabel: "vince@example.com",
     });
+    mocks.getEntity.mockResolvedValue({ data: { stage: "progress" } });
+    mocks.reopenTask.mockResolvedValue({ stage: "backlog" });
     mocks.createTask.mockResolvedValue({ id: "TASK-1", title: "t" });
     mocks.patchTask.mockResolvedValue({ id: "TASK-1", stage: "progress" });
     mocks.checkout.mockResolvedValue({ checkoutId: "dsp_x" });
@@ -99,6 +108,59 @@ describe("task authorization routes", () => {
       "vince@example.com",
       expect.objectContaining({ attribution: { source: "human", actorId: "oid-1" } })
     );
+  });
+
+  describe("stage changes into or out of cancelled (TASK-2529)", () => {
+    const patchStage = async (stage: string) => {
+      const { PATCH } = await import("@/app/api/tasks/[id]/route");
+      return PATCH(
+        new Request("http://localhost/api/tasks/TASK-1", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ stage }),
+        }),
+        { params: Promise.resolve({ id: "TASK-1" }) }
+      );
+    };
+    const member = { actor: { kind: "human", id: "oid-1" }, actorId: "oid-1", actorKind: "human", auditLabel: "vince@example.com" };
+
+    it("refuses a member holding only task.progress: 403, task.reopen_denied audit, no reopen, no patch", async () => {
+      const { ApiError } = await import("@/lib/api/route");
+      mocks.getEntity.mockResolvedValue({ data: { stage: "cancelled" } });
+      mocks.requireSessionActor.mockImplementation(async (capability: string) => {
+        if (capability === "task.reopen") throw new ApiError("forbidden", "task.reopen denied (no_grant).", 403);
+        return member;
+      });
+      await expect(patchStage("backlog")).rejects.toMatchObject({ code: "forbidden", status: 403 });
+      expect(mocks.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "task.reopen_denied", taskId: "TASK-1" })
+      );
+      expect(mocks.reopenTask).not.toHaveBeenCalled();
+      expect(mocks.patchTask).not.toHaveBeenCalled();
+    });
+
+    it("lets a principal with task.reopen reopen through the reopen service (not a bare patch)", async () => {
+      mocks.getEntity.mockResolvedValue({ data: { stage: "cancelled" } });
+      await patchStage("backlog");
+      expect(mocks.requireSessionActor).toHaveBeenCalledWith("task.reopen", { type: "task", id: "TASK-1" });
+      expect(mocks.reopenTask).toHaveBeenCalledWith(
+        "TASK-1",
+        { stage: "backlog" },
+        expect.objectContaining({ actorId: "oid-1", eventActor: "human:vince@example.com" })
+      );
+      expect(mocks.patchTask).toHaveBeenCalledWith("TASK-1", {}, "vince@example.com", expect.anything());
+    });
+
+    it("does not require task.reopen for a stage change on a task that is not cancelled", async () => {
+      await patchStage("qa");
+      expect(mocks.requireSessionActor).not.toHaveBeenCalledWith("task.reopen", expect.anything());
+      expect(mocks.reopenTask).not.toHaveBeenCalled();
+    });
+
+    it("refuses entering cancelled through PATCH (schema rejects it; only the cancel service enters)", async () => {
+      await expect(patchStage("cancelled")).rejects.toMatchObject({ status: 400 });
+      expect(mocks.patchTask).not.toHaveBeenCalled();
+    });
   });
 
   it("PATCH /api/tasks/{id} lets a signed-in person set an agent: assignee", async () => {

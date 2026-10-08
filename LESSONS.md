@@ -820,3 +820,15 @@
   principal's registry capabilities (`requireMcpActor`), never from a header.
   Add a reviewed capability (`task.cancel`) and keep it out of the shared agent
   bundle. Test the forged-header case on every transport.
+
+## 2026-10-08 — Generic stage change bypassed task.reopen (TASK-2529)
+
+- **What went wrong:** `PATCH /api/tasks/{id}` (`task.progress` only) and the
+  lifecycle buttons could move a cancelled task to another stage; `patchTask`
+  cleared the cancellation with no `task.reopen` check and no `task.reopened` event.
+  SharePoint inbound and conflict keep-SP could do the same.
+- **Root cause:** Authorization sat on the new MCP entry points, not on the shared
+  stage-change code the older paths also call.
+- **Rule going forward:** Put the invariant in the shared write path. `patchTask`
+  refuses to leave `cancelled` unless the reopen service passed `reopen: true`;
+  callers authorize first. Inbound edits that would leave it raise a Sync conflict.

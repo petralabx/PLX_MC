@@ -64,6 +64,7 @@
         { "name": "TargetEnvironment", "displayName": "Target Environment", "type": "choice", "choices": ["Staging", "Production"] },
         { "name": "EvidenceComplete", "displayName": "Evidence Complete", "type": "boolean" },
         { "name": "Description", "displayName": "Description", "type": "multiline" },
+        { "name": "CompletedAt", "displayName": "Completed At", "type": "dateTime", "includeTime": true, "required": false, "hidden": true, "reconcile": true, "$comment": "TASK-2528 — outbound-only mirror of entities.completed_at. MC is authoritative; never read back, so an SP edit is ignored and never raises a Sync conflict." },
         { "name": "Subtasks", "displayName": "Sub-tasks", "type": "multiline", "$comment": "Item 3 — push-only human-readable mirror of the DB-only Subtask[] (one line per sub-task). MC is authoritative; never read back." }
       ]
     },

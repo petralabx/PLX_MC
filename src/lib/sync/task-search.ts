@@ -12,6 +12,8 @@ export type TaskSearchFilter = {
   stage?: string;
   assignee?: string;
   label?: string;
+  completedAfter?: string;
+  completedBefore?: string;
   limit: number;
   cursor?: string;
   searchComments?: boolean;
@@ -46,6 +48,7 @@ export async function searchTaskPage(filter: TaskSearchFilter, hiddenBuckets: st
   const criteria = {
     query: filter.query, bucket: filter.bucket, stage: filter.stage,
     assignee: filter.assignee, label: filter.label,
+    completedAfter: filter.completedAfter, completedBefore: filter.completedBefore,
     searchComments: filter.searchComments, in: filter.in,
   };
   const scope = createHash("sha256").update(JSON.stringify([criteria, [...hiddenBuckets].sort(), actorScope])).digest("hex");
@@ -70,6 +73,9 @@ export async function searchTaskPage(filter: TaskSearchFilter, hiddenBuckets: st
       : `data->>'${field}' = ${bind(filter[field])}`);
   }
   if (filter.assignee) where.push(`lower(btrim(COALESCE(data->>'assignee', ''))) = lower(${bind(filter.assignee)})`);
+
+  if (filter.completedAfter) where.push(`completed_at >= ${bind(filter.completedAfter)}::timestamptz`);
+  if (filter.completedBefore) where.push(`completed_at < ${bind(filter.completedBefore)}::timestamptz`);
 
   const matches: string[] = [];
   if (filter.query) {
@@ -104,9 +110,10 @@ export async function searchTaskPage(filter: TaskSearchFilter, hiddenBuckets: st
     ? `jsonb_build_object('id', id, 'title', data->'title', 'stage', data->'stage',
         'bucket', data->'bucket', 'labels', COALESCE(data->'labels', '[]'::jsonb),
         'prs', COALESCE(data->'prs', '[]'::jsonb),
-        'updatedAt', to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
-        || CASE WHEN data ? 'completedAt' THEN jsonb_build_object('completedAt', data->'completedAt') ELSE '{}'::jsonb END`
+        'updatedAt', to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))`
     : "data";
+  const completionProjection = `CASE WHEN completed_at IS NOT NULL THEN jsonb_build_object('completedAt',
+    to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) ELSE '{}'::jsonb END`;
   const rows = await query<{
     total: string;
     at: string;
@@ -115,7 +122,7 @@ export async function searchTaskPage(filter: TaskSearchFilter, hiddenBuckets: st
   }>(`WITH horizon AS (
       SELECT COALESCE(${at}::timestamptz, statement_timestamp()) AS at
     ), filtered AS MATERIALIZED (
-      SELECT id, ${numericId} AS n, ${projection}${matches.length ? ` || jsonb_build_object('matchFields', array_remove(ARRAY[${matches.join(", ")}], NULL))` : ""} AS task
+      SELECT id, ${numericId} AS n, ${projection} || ${completionProjection}${matches.length ? ` || jsonb_build_object('matchFields', array_remove(ARRAY[${matches.join(", ")}], NULL))` : ""} AS task
       FROM entities, horizon
       WHERE ${where.join(" AND ")} AND created_at <= horizon.at
         ${upper ? `AND (${numericId}, id COLLATE "C") <= (${upper})` : ""}

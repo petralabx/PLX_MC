@@ -778,3 +778,18 @@
 - **Rule going forward:** Any new aggregate over tasks or events takes the caller
   principal and scopes through `scopeHierarchy` before aggregating; resolve
   references from durable tables, not from a sampled window.
+
+## 2026-10-08 — TASK-2528: hidden columns, terminal creates and outbound queueing
+- **What went wrong:** Hiding `CompletedAt` made Graph omit it from the column
+  listing (hidden columns need `hidden` in `$select`), so re-apply would recreate
+  it and `--verify` reported it missing. Stage writes also had side doors: a task
+  created straight into a terminal stage, an inbound SharePoint move and the
+  backfill set `completed_at` without queueing the outbound `CompletedAt` write,
+  and the backfill treated a terminal snapshot with no known previous stage as a
+  transition.
+- **Root cause:** Each fix was verified against the happy path only; the mocked
+  Graph returned every column regardless of `$select`, and only the UI/MCP stage
+  path was traced for write rules.
+- **Rule going forward:** Mock external APIs with their real omission behaviour,
+  enumerate every writer of a column (create, inbound, backfill) before calling a
+  write rule done, and never infer a transition without a known previous state.

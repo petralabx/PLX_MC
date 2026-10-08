@@ -96,3 +96,39 @@ def test_existing_matching_definition_is_left_alone_and_dry_run_never_writes():
     g = FakeGraph([stale])
     _ensure(g, apply=False)
     assert not g.posts and not g.patches
+
+
+class HiddenAwareGraph(FakeGraph):
+    """Mimics Graph: hidden columns are listed only when `hidden` is in $select."""
+
+    def __init__(self, existing: list[dict]):
+        super().__init__(existing)
+        self.stored = list(existing)
+
+    def get(self, url, ok404=False):
+        if url.endswith("/lists?$select=id,displayName,list"):
+            return {"value": [{"id": "list", "displayName": "ToDos", "list": {"template": "genericList"}}]}
+        assert "/columns" in url
+        select = url.split("$select=", 1)[1].split(",") if "$select=" in url else []
+        show_hidden = "hidden" in select
+        return {"value": [c for c in self.stored if show_hidden or not c.get("hidden")]}
+
+    def post(self, url, body):
+        super().post(url, body)
+        self.stored.append({**body, "id": "new"})
+
+
+def test_apply_after_creation_does_not_recreate_hidden_column_and_verify_finds_it():
+    g = HiddenAwareGraph([])
+    _ensure(g)
+    assert len(g.posts) == 1
+    _ensure(g)  # second --apply: hidden CompletedAt must be rediscovered
+    assert len(g.posts) == 1
+    schema = {"lists": [{"displayName": "ToDos", "template": "genericList", "columns": [COMPLETED_AT]}]}
+    assert prov.verify(g, "site", schema) == []
+
+
+def test_column_listing_selects_hidden_with_every_inspected_property():
+    select = prov.COLUMN_SELECT.split(",")
+    for prop in ("hidden", "required", "defaultValue", "name", "displayName", "id", "dateTime", "choice"):
+        assert prop in select

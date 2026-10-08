@@ -89,6 +89,19 @@ class Graph:
         return r
 
 
+# Graph omits hidden column definitions from a column listing unless `hidden`
+# is named in $select, so every listing provisioning or --verify relies on
+# selects it together with every property those code paths inspect.
+COLUMN_SELECT = (
+    "id,name,displayName,hidden,required,defaultValue,"
+    "text,choice,personOrGroup,dateTime,number,boolean,hyperlinkOrPicture,lookup"
+)
+
+
+def columns_url(site_id: str, list_id: str) -> str:
+    return f"{GRAPH}/sites/{site_id}/lists/{list_id}/columns?$select={COLUMN_SELECT}"
+
+
 # ─── Column rendering: schema entry -> Graph columnDefinition ─────────────────
 
 
@@ -252,9 +265,7 @@ def ensure_columns(
     list_ids: dict[str, str],
     apply: bool,
 ) -> None:
-    data = g.get(
-        f"{GRAPH}/sites/{site_id}/lists/{list_id}/columns"
-    )
+    data = g.get(columns_url(site_id, list_id))
     assert data is not None
     existing = data.get("value", [])
     have = {c["name"] for c in existing} | {c["displayName"] for c in existing}
@@ -356,7 +367,7 @@ def verify(g: Graph, site_id: str, schema: dict[str, Any]) -> list[str]:
         template = by_name[name].get("list", {}).get("template")
         if template != spec["template"]:
             problems.append(f"{name}: template {template} != {spec['template']}")
-        cols = g.get(f"{GRAPH}/sites/{site_id}/lists/{by_name[name]['id']}/columns")
+        cols = g.get(columns_url(site_id, by_name[name]["id"]))
         assert cols is not None
         col_by_name = {c["name"]: c for c in cols.get("value", [])}
         col_by_display = {c["displayName"]: c for c in cols.get("value", [])}

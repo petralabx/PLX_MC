@@ -132,6 +132,54 @@ describe("updateEntity completed_at write rules", () => {
   });
 });
 
+describe("outbound queueing of a first completion (inbound SharePoint move)", () => {
+  const params = () => {
+    const u = db.updates.at(-1)!.params;
+    return { state: u[3], dirty: JSON.parse(String(u[5])) as string[] };
+  };
+
+  it("queues completedAt as the only dirty field and marks the row pending", async () => {
+    seed("review");
+    await updateEntity("task", "TASK-1", { patch: { stage: "merged" }, dirtyFields: [] });
+    expect(params()).toEqual({ state: "pending", dirty: ["completedAt"] });
+  });
+
+  it("keeps other dirty fields and never duplicates completedAt", async () => {
+    seed("review");
+    db.row!.dirty_fields = ["priority", "completedAt"];
+    await updateEntity("task", "TASK-1", { patch: { stage: "verified" } });
+    expect(params().dirty).toEqual(["priority", "completedAt"]);
+  });
+
+  it("does not turn a conflicted row into pending (no Sync conflict is raised or cleared)", async () => {
+    seed("review");
+    db.row!.sync_state = "conflict";
+    await updateEntity("task", "TASK-1", { patch: { stage: "merged" }, dirtyFields: ["stage"] });
+    expect(params()).toEqual({ state: "conflict", dirty: ["stage", "completedAt"] });
+  });
+
+  it.each([
+    ["an already completed task", "review", new Date("2026-07-23T00:00:00Z")],
+    ["a move that is not a first terminal entry", "merged", null],
+  ])("queues nothing for %s", async (_n, from, done) => {
+    seed(from, done);
+    await updateEntity("task", "TASK-1", { patch: { stage: from === "merged" ? "verified" : "merged" }, dirtyFields: [] });
+    expect(params()).toEqual({ state: "synced", dirty: [] });
+  });
+
+  it("queues nothing for a non-terminal move", async () => {
+    seed("backlog");
+    await updateEntity("task", "TASK-1", { patch: { stage: "review" }, dirtyFields: [] });
+    expect(params().dirty).toEqual([]);
+  });
+
+  it("the outbound mapping writes CompletedAt for a completedAt-only dirty set", async () => {
+    const { outboundFields } = await import("@/lib/sync/mapping");
+    const out = outboundFields("task", { id: "TASK-1", stage: "merged", title: "t", completedAt: "2026-07-23T00:00:00.000Z" }, { only: ["completedAt"] });
+    expect(out).toEqual({ CompletedAt: "2026-07-23T00:00:00.000Z" });
+  });
+});
+
 describe("migration 033", () => {
   const sql = readFileSync(
     path.join(process.cwd(), "db/migrations/033_entities_completed_at_cancellation.sql"),

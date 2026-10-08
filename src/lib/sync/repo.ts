@@ -192,8 +192,14 @@ export async function updateEntity(
     nextStage !== undefined &&
     TERMINAL_STAGES.includes(nextStage) &&
     !TERMINAL_STAGES.includes(row.data.stage as StageKey);
+  // First population of completed_at (e.g. an inbound SharePoint move): queue it as an outbound dirty field so the sweep writes
+  // CompletedAt. It is outbound-only, so this can never raise a Sync conflict.
+  const firstCompletion = entersTerminal && row.data.completedAt == null;
+  const dirtyFields = firstCompletion
+    ? [...new Set([...(opts.dirtyFields ?? row.dirty_fields), "completedAt"])]
+    : opts.dirtyFields;
   const prevSync = (row.data.sync ?? {}) as Record<string, unknown>;
-  const nextState = opts.syncState ?? row.sync_state;
+  const nextState = opts.syncState ?? (firstCompletion && row.sync_state === "synced" ? "pending" : row.sync_state);
   const sync: Record<string, unknown> = {
     ...prevSync,
     state: nextState,
@@ -212,14 +218,14 @@ export async function updateEntity(
     attribution = { ...attribution, ...opts.fieldAttribution };
   }
   // Default any newly-dirty field without attribution to unknown (ambiguous → manual).
-  if (opts.dirtyFields) {
+  if (dirtyFields) {
     const nowIso = new Date().toISOString();
-    for (const f of opts.dirtyFields) {
+    for (const f of dirtyFields) {
       if (!attribution[f]) attribution[f] = { source: "unknown", at: nowIso };
     }
     // Drop attribution for fields no longer dirty.
     for (const key of Object.keys(attribution)) {
-      if (!opts.dirtyFields.includes(key)) delete attribution[key];
+      if (!dirtyFields.includes(key)) delete attribution[key];
     }
   }
 
@@ -242,8 +248,8 @@ export async function updateEntity(
       JSON.stringify(data),
       nextState,
       opts.spItemId ?? null,
-      opts.dirtyFields ? JSON.stringify(opts.dirtyFields) : null,
-      opts.dirtyFields || opts.fieldAttribution ? JSON.stringify(attribution) : null,
+      dirtyFields ? JSON.stringify(dirtyFields) : null,
+      dirtyFields || opts.fieldAttribution ? JSON.stringify(attribution) : null,
       opts.clearSpItemId === true,
       entersTerminal ? (opts.completedAt ?? new Date().toISOString()) : null,
     ]

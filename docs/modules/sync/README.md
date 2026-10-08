@@ -62,13 +62,18 @@ Routing mutations fail closed when required registers are stale.
   CHECK-enforced) is stamped once by `updateEntity` on the first move from a
   non-terminal into a terminal stage (`TERMINAL_STAGES`, `src/lib/mc-data/policy.ts`)
   — covering UI, MCP, compliance projection (PR merge time) and SharePoint
-  inbound stage changes. It is write-once (`COALESCE`), merged into the task as
+  inbound stage changes — and also at creation for a task created directly in a
+  terminal stage. It is write-once (`COALESCE`), merged into the task as
   `completedAt` on read, and stripped from the jsonb payload on every write. The
   ToDos `CompletedAt` column is outbound-only (not in `inboundPatches`), so a
-  SharePoint edit is ignored and never raises a conflict. The `cancellation`
+  SharePoint edit is ignored and never raises a conflict. A first population
+  (inbound move or backfill `--apply`) queues `completedAt` as an outbound dirty
+  field, so the next sweep writes only that column. The `cancellation`
   column ships in the same migration for the cancelled-stage task. Existing rows
   are filled by `scripts/backfill-task-completed-at.mjs` (dry run by default;
-  UAT/staging only). Required: `--env uat|staging` (report label only) and
+  UAT/staging only; it dates a task only from a PR merge or an observed
+  transition from a known non-terminal stage, and lists the rest as unresolved).
+  Required: `--env uat|staging` (report label only) and
   `--approved-db <database>@<host>`. Before any read or write the shared guard
   `scripts/lib/db-identity.mjs` (`assertApprovedNonProdDb`) requires the URL
   host/database and the live `current_database()` to equal `--approved-db`, and
@@ -79,7 +84,8 @@ Routing mutations fail closed when required registers are stale.
   first against /sites/plx-mission-control-dev (staging), then
   /sites/plx-mission-control (production). The script creates `CompletedAt` as an
   optional date-and-time column with no default, hidden from the edit form, or
-  updates an existing one to that definition (idempotent). Per site: dry run
+  updates an existing one to that definition (idempotent; column listings select `hidden`, which Graph otherwise omits).
+  Per site: dry run
   `python scripts/provision-sharepoint.py --env <staging|production>`, apply
   `python scripts/provision-sharepoint.py --env <staging|production> --apply`,
   check `python scripts/provision-sharepoint.py --env <staging|production> --verify`.

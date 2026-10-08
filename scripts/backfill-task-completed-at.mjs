@@ -13,8 +13,10 @@
 //     late promotion / bulk promotion is exactly what this backfill corrects).
 //   No PR:
 //     3. earliest event that CHANGED the stage into a terminal stage
-//        (replayed per task in seq order; events repeating the current
-//        stage — re-syncs — are ignored)    -> source stage_event
+//        from a KNOWN non-terminal stage (replayed per task in seq order;
+//        events repeating the current stage — re-syncs — and terminal
+//        snapshots with an unknown previous stage are ignored)
+//                                           -> source stage_event
 //
 // UAT and staging only. A production run is a separate, explicitly approved
 // step. Before ANY read or write (dry run included) the DB identity is
@@ -72,7 +74,10 @@ export function resolveCompletions(tasks, events) {
     const prev = lastStage.get(ev.task_id);
     lastStage.set(ev.task_id, stage);
     if (stage === prev) continue; // no stage change (re-sync / repeat)
-    if (TERMINAL_STAGES.includes(stage) && !TERMINAL_STAGES.includes(prev)) {
+    // Only a visible move from a KNOWN non-terminal stage is a completion. A
+    // terminal snapshot with no known previous stage (e.g. a notes-only
+    // task.progress carrying task.stage) is not evidence — never guess.
+    if (TERMINAL_STAGES.includes(stage) && typeof prev === "string" && !TERMINAL_STAGES.includes(prev)) {
       wasTerminal.add(ev.task_id);
       if (!stageChange.has(ev.task_id)) stageChange.set(ev.task_id, ts);
     }
@@ -109,7 +114,7 @@ export function resolveCompletions(tasks, events) {
       counts.stage_event += 1;
       continue;
     }
-    unresolved.push({ id: task.id, reason: "no PR and no stage-change event into a terminal stage" });
+    unresolved.push({ id: task.id, reason: "no PR and no observed transition from a known non-terminal stage into a terminal stage" });
   }
   return { resolved, unresolved, counts };
 }
@@ -135,7 +140,15 @@ export async function runBackfill(db, { apply = false } = {}) {
     try {
       for (const r of plan.resolved) {
         const res = await db.query(
-          `UPDATE entities SET completed_at = $2::timestamptz
+          // Also queue CompletedAt for the outbound sweep (outbound-only dirty
+          // field; a conflicted row keeps its state), as updateEntity does.
+          `UPDATE entities
+              SET completed_at = $2::timestamptz,
+                  sync_state = CASE WHEN sync_state = 'synced' THEN 'pending' ELSE sync_state END,
+                  dirty_fields = CASE WHEN dirty_fields @> '"completedAt"'::jsonb
+                                      THEN dirty_fields
+                                      ELSE dirty_fields || '"completedAt"'::jsonb END,
+                  updated_at = now()
             WHERE entity_type = 'task' AND id = $1 AND completed_at IS NULL`,
           [r.id, r.completedAt]
         );

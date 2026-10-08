@@ -14,7 +14,7 @@ import {
   RESTRICTED_MIRROR_SP,
   type ProjectVisibility,
 } from "@/lib/permissions/project-acl";
-import { assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
+import { TERMINAL_STAGES, assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
 import {
   formatRepoNotAllowedMessage,
   normalizeRepoInputs,
@@ -558,11 +558,17 @@ export async function createTask(
 
     const inserted = await q<{ id: string }>(
       `INSERT INTO entities (
-         entity_type, id, data, sync_state, sync_ts, dirty_fields, field_attribution
-       ) VALUES ('task', $1, $2::jsonb, 'pending', now(), '[]'::jsonb, $3::jsonb)
+         entity_type, id, data, sync_state, sync_ts, dirty_fields, field_attribution, completed_at
+       ) VALUES ('task', $1, $2::jsonb, 'pending', now(), '[]'::jsonb, $3::jsonb, $4::timestamptz)
        ON CONFLICT (entity_type, id) DO NOTHING
        RETURNING id`,
-      [id, JSON.stringify(task), JSON.stringify(fieldAttribution)]
+      [
+        id,
+        JSON.stringify(task),
+        JSON.stringify(fieldAttribution),
+        // Created straight into a terminal stage is a first entry (TASK-2528).
+        TERMINAL_STAGES.includes(task.stage) ? new Date().toISOString() : null,
+      ]
     );
     if (!inserted[0]) {
       throw new ApiError("conflict", `Task ${id} already exists.`, 409);

@@ -1,7 +1,8 @@
 // Verified non-production DB identity guard for ops scripts that write data
 // (TASK-2528). A `--env` label or "the URL does not contain prod" proves
 // nothing: the documented runtime database (TOOLS.md: Postgres `plx_mc` on
-// staging RDS `plx-postgres-staging`) carries no "prod" in its name. Instead
+// `plx-postgres-staging*`) IS production. WARNING: "staging" in the host name
+// is historical; never infer environment from a host name. Instead
 // the operator names the intended UAT/staging database with
 // `--approved-db <database>@<host>` and this guard requires BOTH the
 // connection URL (host + database) AND the live `current_database()` to match
@@ -15,7 +16,9 @@
 // `client` is anything with query(sql) -> {rows}; a pg Client in production.
 
 // TOOLS.md Postgres row / AGENTS.md "Database Safety": the runtime database
-// `plx_mc` lives on staging RDS instance `plx-postgres-staging`.
+// `plx_mc` on `plx-postgres-staging*` IS production, so this non-prod guard
+// always refuses it. WARNING: "staging" is historical; never infer environment
+// from a host name.
 export const RUNTIME_DB_NAME = "plx_mc";
 export const RUNTIME_DB_HOST_PREFIX = "plx-postgres-staging";
 
@@ -25,7 +28,11 @@ function normalizeHost(host) {
   return String(host).trim().toLowerCase();
 }
 
-/** True for the documented runtime/production identity (db `plx_mc` on `plx-postgres-staging*`). */
+/**
+ * True for production: `plx_mc` on `plx-postgres-staging*`; always refused by
+ * the non-prod guard. WARNING: "staging" is historical; never infer environment
+ * from a host name.
+ */
 export function isRuntimeIdentity({ database, host }) {
   return (
     String(database).toLowerCase() === RUNTIME_DB_NAME &&

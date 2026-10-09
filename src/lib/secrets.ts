@@ -1,9 +1,12 @@
 // The one shared secrets accessor (TOOLS.md "Secrets Source of Truth").
 // General dev secrets reach env via AWS Secrets Manager (prod/ec2-secrets,
-// loaded by ~/load-secrets.ps1). Production Mission Control uses Vercel project
-// plx-mission-control's Production PLX_MC_DATABASE_URL; its upstream source is
-// to be confirmed by Vince. The prod/ec2-secrets PLX_MC_DATABASE_URL points to
-// plx_mc on plx-postgres-staging (stopped at migration 030), not the live DB.
+// loaded by ~/load-secrets.ps1). Vercel plx-mission-control Production uses
+// plx_mc on plx-postgres-staging.c2b8m8isksqt.us-east-1.rds.amazonaws.com
+// (sysid 7543096909140343566), for mc.plxcustomer.io and mc-staging.plxcustomer.io.
+// AWS SM prod/ec2-secrets PLX_MC_DATABASE_URL and plx/mc/live-database-url
+// identify the same DB as Vercel Production PLX_MC_DATABASE_URL.
+// WARNING: "staging" in the host name is historical; this IS production.
+// Never infer environment from a host name.
 // No other module reads process.env for credentials. Server-side only — never
 // import from client components.
 

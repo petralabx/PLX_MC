@@ -18,11 +18,20 @@ succeeded. Exactly one of the two set is a partial config and fails the job.
 When both are set the target is still guarded and a failure still fails the job
 (UAT evidence is still reported); a staging URL that is the live plx_mc identity
 is refused and fails the job, never skipped. The non-production guard still
-denies plx_mc on plx-postgres-staging, but that is NOT the live Mission Control
-DB: the AWS SM prod/ec2-secrets PLX_MC_DATABASE_URL points there and stopped at
-migration 030. The live DB is whatever Vercel project plx-mission-control's
-Production PLX_MC_DATABASE_URL points to; its upstream source is to be confirmed
-by Vince. Keep staging config unset until a human confirms the intended target.
+denies `plx_mc` on `plx-postgres-staging.c2b8m8isksqt.us-east-1.rds.amazonaws.com` precisely
+because it IS the live Mission Control database (system identifier
+`7543096909140343566`). Vercel project `plx-mission-control` Production uses it
+for both `mc.plxcustomer.io` and `mc-staging.plxcustomer.io`. AWS SM
+`prod/ec2-secrets` `PLX_MC_DATABASE_URL` and `plx/mc/live-database-url` identify
+the same DB as Vercel Production `PLX_MC_DATABASE_URL`.
+WARNING: the host name contains "staging" for historical reasons; it IS
+production. Never infer environment from a host name.
+As of 2026-10-09 ET, live schema is at migration 030. Migrations 031 and 032
+were never applied anywhere; production code does not need them (031 project
+status lives in `projects.data` JSON; 032 adds indexes only). Migration 033's
+`completed_at` column is required by the code from #286, which broke production
+and was reverted by #290. Keep staging config unset until a human confirms
+the intended non-production target.
 Live migration is not this workflow; see "Live release" below.
 Agents never provision these.
 
@@ -158,21 +167,26 @@ variable **`MC_LIVE_EXPECTED_IDENTITY`**. If the old variable is present in the
 script environment, plan prints one retirement note; an admin may delete it.
 The non-production path retains its existing variables and guards.
 
-A human must derive the expected identity from the exact host (lowercase) and
-database in Vercel project `plx-mission-control`'s **Production** sensitive
-`PLX_MC_DATABASE_URL`, after confirming that production actually reads that
-value. Its upstream source is to be confirmed by Vince. Format:
+A human must set the repo variable from the verified production identity:
+`plx_mc` on `plx-postgres-staging.c2b8m8isksqt.us-east-1.rds.amazonaws.com`, system identifier
+`7543096909140343566`. Vercel project `plx-mission-control`'s **Production**
+sensitive `PLX_MC_DATABASE_URL`, AWS SM `prod/ec2-secrets` `PLX_MC_DATABASE_URL`,
+and AWS SM `plx/mc/live-database-url` identify the same DB, used by both
+`mc.plxcustomer.io` and `mc-staging.plxcustomer.io`. Format:
 `<database>@<host>` or `<database>@<host>#sysid=<digits>` (1–20 digits, PostgreSQL
-system_identifier). Example: `plx_mc@production-host.example.invalid#sysid=12345`.
+system_identifier). Example:
+`plx_mc@plx-postgres-staging.c2b8m8isksqt.us-east-1.rds.amazonaws.com#sysid=7543096909140343566`.
+WARNING: the host name contains "staging" for historical reasons; it IS
+production. Never infer environment from a host name.
 With the expected variable unset, a first read-only plan prints actual identity
 and a suggested value. After confirming the URL is the production database,
 a human can copy the suggestion, including sysid where available, into the repo
-variable. Never infer the live target from the database name or staging host.
+variable. Never infer the live target from the database name or host name.
 
-An admin deleted repo secret **`MC_LIVE_DATABASE_URL`** after the near-miss on
-2026-10-09. An admin must re-add that same secret name with the Vercel Production
-value before release. AWS SM `prod/ec2-secrets` `PLX_MC_DATABASE_URL` is not the
-live DB; it points to the staging database stopped at migration 030.
+An admin deleted repo secret **`MC_LIVE_DATABASE_URL`** on 2026-10-09. An admin
+must re-add that same secret name with the value of AWS SM
+`plx/mc/live-database-url` / Vercel Production `PLX_MC_DATABASE_URL` before
+release; both identify the same live database. Never print a URL or credential.
 Agents never set or delete these repo secrets, variables or environments. This
 change creates none. Existing Graph secrets remain required for both sources:
 

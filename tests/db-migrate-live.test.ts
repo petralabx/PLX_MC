@@ -44,7 +44,7 @@ function db({ ledger = true, applied = localFiles, live = "plx_mc", fail = "", s
   }
   return { ClientClass, queries, get connects() { return connects; }, get ends() { return ends; }, get config() { return config; } };
 }
-function graph({ columns = ["Title", "CompletedAt"], status = 200, missingList = false, pagination = false, evilLink = false } = {}) {
+function graph({ columns = ["Title", "CompletedAt"], status = 200, missingList = false, pagination = false, evilLink = false, hiddenColumns = [] as string[] } = {}) {
   const calls: { url: string; method: string }[] = [];
   const fetchImpl: typeof fetch = async (input, options) => {
     const url = String(input);
@@ -52,7 +52,10 @@ function graph({ columns = ["Title", "CompletedAt"], status = 200, missingList =
     calls.push({ url, method });
     let data: Record<string, unknown> = {};
     if (url.startsWith("https://login.microsoftonline.com")) data = { access_token: "never-print-token" };
-    else if (url.includes("/columns")) data = { value: columns.map(name => ({ name, displayName: name })) };
+    else if (url.includes("/columns")) {
+      const selectsHidden = (new URL(url).searchParams.get("$select") ?? "").split(",").includes("hidden");
+      data = { value: [...columns.map(name => ({ name, displayName: name })), ...(selectsHidden ? hiddenColumns.map(name => ({ name, displayName: name, hidden: true })) : [])] };
+    }
     else if (url.includes("/lists")) data = { value: missingList ? [] : [{ id: "list-id", displayName: "ToDos" }] };
     else data = { id: "site-id" };
     if (pagination && url.includes("/columns?") && !url.includes("skiptoken")) data = { value: [], "@odata.nextLink": evilLink ? "https://evil.invalid/v1.0/token" : `${url}&skiptoken=page2` };
@@ -219,6 +222,15 @@ describe("plan and post-apply safety", () => {
   it("configured DB read failure exits one with sanitized error class and keeps SharePoint output", async () => {
     const p = await buildPlan(options({ ClientClass: db({ fail: "connect" }).ClientClass, fetchImpl: graph({ columns: ["Title"] }).fetchImpl }));
     expect(p.exitCode).toBe(1); expect(p.output).toContain("DatabaseReadError"); expect(p.output).not.toContain("secret connection details"); expect(p.output).toContain("ToDos: CompletedAt");
+  });
+  it("hidden columns are only returned by Graph when $select names hidden, and the plan sees them", async () => {
+    const g = graph({ columns: ["Title"], hiddenColumns: ["CompletedAt"] });
+    const p = await buildPlan(options({ fetchImpl: g.fetchImpl }));
+    const columnCalls = g.calls.filter(c => c.url.includes("/columns"));
+    expect(columnCalls.length).toBeGreaterThan(0);
+    for (const c of columnCalls) expect(new URL(c.url).searchParams.get("$select")?.split(",")).toContain("hidden");
+    expect(p.output).not.toContain("ToDos: CompletedAt");
+    expect(await runCommand(options({ command: "post-apply", fetchImpl: g.fetchImpl, log: () => {} }))).toBe(0);
   });
   it("post-apply passes empty pending and refuses remaining or unreadable items", async () => {
     expect(await runCommand(options({ command: "post-apply", log: () => {} }))).toBe(0);

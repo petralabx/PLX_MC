@@ -36,6 +36,7 @@ import type {
   SpError,
   Task,
 } from "@/lib/mc-data/types";
+import { assertMoveTargetProjectOpen } from "./bucket-move";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import type { TxQuery } from "@/lib/db";
 import type { EntityData, FieldAttribution } from "./mapping";
@@ -286,7 +287,15 @@ export async function patchBucket(id: string, patch: PatchBucketInput, actor: st
     if (!prd.ok) throw new ApiError("invalid_request", "PRD link must be an http or https URL.", 422);
     patch = { ...patch, prd: prd.value };
   }
-  if (patch.project) await assertProjectExists(patch.project);
+  if (patch.project) {
+    await assertProjectExists(patch.project);
+    if (patch.project !== existing.project) {
+      assertMoveTargetProjectOpen(
+        (await repo.getProjects()).find((p) => p.id === patch.project),
+        `bucket ${id}`
+      );
+    }
+  }
   const defined = definedEntries(patch);
   const next: Bucket = { ...existing, ...defined };
   const pushedDirty = Object.keys(defined).filter((k) => BUCKET_PUSHED_FIELDS.includes(k));

@@ -108,9 +108,9 @@ test.describe("shell — nav form per width", () => {
     await expect(page.locator("nav.mc-tabs")).toBeHidden();
     await expect(page.getByTestId("nav-drawer-toggle")).toBeVisible();
     // Labels are visually hidden, not removed: every item keeps its name.
-    await expect(rail.getByRole("link", { name: "Board" })).toHaveAttribute("aria-current", "page");
+    await expect(rail.getByRole("link", { name: "Board", exact: true })).toHaveAttribute("aria-current", "page");
     await expect(rail.getByRole("link", { name: "Repos" })).toBeVisible();
-    const label = await rail.getByRole("link", { name: "Board" }).locator(".nm").boundingBox();
+    const label = await rail.getByRole("link", { name: "Board", exact: true }).locator(".nm").boundingBox();
     expect(label!.width).toBeLessThanOrEqual(1);
     await expect(page.locator(".mc-top .search")).toBeVisible();
   });
@@ -119,7 +119,7 @@ test.describe("shell — nav form per width", () => {
     await open(page, 1440, "/?screen=board");
     const side = page.locator("nav.mc-side");
     expect(Math.round((await side.boundingBox())!.width)).toBe(240);
-    await expect(side.getByRole("link", { name: "Board" }).locator(".nm")).toBeVisible();
+    await expect(side.getByRole("link", { name: "Board", exact: true }).locator(".nm")).toBeVisible();
     await expect(page.getByTestId("nav-drawer-toggle")).toBeHidden();
     await expect(page.locator("nav.mc-tabs")).toBeHidden();
     // No persistent pane below 1600.
@@ -284,7 +284,7 @@ test.describe("shell — review round 1 regressions", () => {
 
   test("desktop marks the current item with one 2px accent rule, not the rail's extra inset", async ({ page }) => {
     await open(page, 1440, "/?screen=board");
-    const item = page.locator("nav.mc-side").getByRole("link", { name: "Board" });
+    const item = page.locator("nav.mc-side").getByRole("link", { name: "Board", exact: true });
     await expect(item).toHaveCSS("box-shadow", "none");
     await expect(item).toHaveCSS("border-left-width", "2px");
   });

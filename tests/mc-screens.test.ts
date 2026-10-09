@@ -12,6 +12,7 @@ import { SCREENS } from "@/components/mc/screens";
 // updating the list — the runtime exhaustiveness assertion below stays honest.
 const EXPECTED_SCREENS = {
   home: true,
+  dashboard: true,
   board: true,
   list: true,
   timeline: true,

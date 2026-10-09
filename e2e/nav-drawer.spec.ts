@@ -24,7 +24,7 @@ async function expectDrawerProtocol(page: Page, vp: { width: number; height: num
   const box = await drawer.boundingBox();
   expect(box, "drawer box").not.toBeNull();
   expect(box!.width).toBeLessThanOrEqual(Math.min(320, vp.width * 0.85) + 1);
-  const item = await drawer.getByRole("link", { name: "Board" }).boundingBox();
+  const item = await drawer.getByRole("link", { name: "Board", exact: true }).boundingBox();
   expect(item!.height, "nav item touch target").toBeGreaterThanOrEqual(44);
   // Projects and initiatives live in the drawer (spec Q2).
   await expect(drawer.getByRole("group", { name: "Initiatives" })).toBeVisible();

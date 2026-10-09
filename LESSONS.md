@@ -22,6 +22,12 @@
 - **Root cause:** The spec cited a merged PR without checking it was still on main.
 - **Rule going forward:** Before relying on a cited PR's behavior, check `git log` for a revert of it. Say plainly in the PR when a spec dependency is absent.
 
+### 2026-10-09 (ET) — A Claude dashboard over PLX-MC-Hub rendered blank for its reader
+
+- **What happened:** A claude.ai Dashboard artifact (the PLX Project Tracker) stored live queries on `PLX-MC-Hub`. In the reader's browser every source came back "absent" and the page showed nothing.
+- **Root cause:** `PLX-MC-Hub` is this repo's project `.mcp.json` server (API-key header), which only Claude Code sessions load. An artifact can call only the viewer's own claude.ai connectors, and the Hub cannot be one until it has an OAuth front door (TASK-1463).
+- **Rule going forward:** Before wiring an artifact to live data, confirm the connector exists on the viewer's claude.ai account, not just in the session. For Mission Control data, use the in-app Dashboard (TASK-2565), or save results into the artifact and say on it that they are not live.
+
 ### 2026-10-09 (ET) — Live database identity was judged by its host name
 
 - **What happened:** #293 was written on the belief that the live plan from #292 targeted a staging DB outside production. A later read-only investigation matched recent production events/writes and active production-app connections to `plx_mc` on `plx-postgres-staging.c2b8m8isksqt.us-east-1.rds.amazonaws.com` (system identifier `7543096909140343566`): the plan had targeted the real production DB. Vercel `plx-mission-control` Production uses it for both `mc.plxcustomer.io` and `mc-staging.plxcustomer.io`; AWS SM `prod/ec2-secrets` `PLX_MC_DATABASE_URL` and `plx/mc/live-database-url` identify that same DB. The docs merged in #293 were wrong and are corrected here. WARNING: "staging" in the host name is historical; it IS production. Never infer environment from a host name. As of 2026-10-09 ET, live schema is at 030; 031/032 were never applied anywhere and production code does not need them (031 status lives in `projects.data` JSON; 032 is indexes only). The 033 `completed_at` column is required by #286's code, which broke production and was reverted by #290.
@@ -811,3 +817,13 @@
 - **Rule going forward:** Mock external APIs with their real omission behaviour,
   enumerate every writer of a column (create, inbound, backfill) before calling a
   write rule done, and never infer a transition without a known previous state.
+
+## 2026-10-09 — TASK-2558: closed-project rule had three side doors
+- **What went wrong:** The closed-project rule shipped on create paths and on
+  MCP/inbound bucket moves, but REST task update, bucket re-parenting and
+  keep-SharePoint conflict resolution moved work into closed projects unchecked.
+- **Root cause:** The rule was added per entry point; the other writers of
+  `task.bucket` / `bucket.project` were never enumerated.
+- **Rule going forward:** When adding a state-based guard, list every writer of
+  the guarded column and route each through the shared check in
+  `src/lib/sync/bucket-move.ts` (`assertMoveTargetProjectOpen`).

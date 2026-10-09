@@ -43,12 +43,14 @@ describe("nav model — grouped by task", () => {
     expect(NAV_GROUPS.map((g) => g.label)).toEqual(["My work", "Plan", "Knowledge", "Admin & health"]);
   });
 
-  it("puts personal work first: Home, My tasks, Approvals", () => {
-    expect(screensOf(OFF, "my-work")).toEqual(["home", "mine", "approvals"]);
-    const home = NAV_GROUPS[0].items[0];
+  it("puts personal work first: Home, Dashboard, My tasks, Approvals", () => {
+    expect(screensOf(OFF, "my-work")).toEqual(["home", "dashboard", "mine", "approvals"]);
+    const [home, dashboard] = NAV_GROUPS[0].items;
     expect(home.label).toBe("Home");
     expect(home.badge).toBe("needs");
-    expect(NAV_GROUPS[0].items[2].badge).toBe("approvals");
+    // The Dashboard sits directly under Home (TASK-2565).
+    expect(dashboard.label).toBe("Dashboard");
+    expect(NAV_GROUPS[0].items.find((i) => i.screen === "approvals")!.badge).toBe("approvals");
   });
 
   it("plans with the four views plus the live project and initiative lists", () => {
@@ -246,7 +248,7 @@ describe("phone tabs — one per group, derived from the model", () => {
 
   it("gives each tab's group strip that group's visible items; More has none", () => {
     expect(tabScreens("plan", OFF).map((i) => i.screen)).toEqual(["board", "list", "timeline", "insights"]);
-    expect(tabScreens("my-work", OFF).map((i) => i.screen)).toEqual(["home", "mine", "approvals"]);
+    expect(tabScreens("my-work", OFF).map((i) => i.screen)).toEqual(["home", "dashboard", "mine", "approvals"]);
     expect(tabScreens("more", ON)).toEqual([]);
   });
 

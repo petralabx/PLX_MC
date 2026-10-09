@@ -31,8 +31,8 @@ export function cursorRoute(toolName: string, handler: CursorHandler) {
     let identity: McpIdentity | null = null;
     let requestId = "";
     try {
-      if (databaseConfigured()) await assertSchemaReady();
       identity = await verifyMcpRequest(req);
+      if (databaseConfigured()) await assertSchemaReady();
       // A principal with a tool allowlist (sp_mcp_portal) gets 403 for any
       // other route before the handler reads the body or any data.
       assertMcpToolAllowed(identity, toolName);

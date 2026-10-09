@@ -17,8 +17,8 @@ export const runtime = "nodejs";
 
 async function handleMcpRequest(req: Request): Promise<Response> {
   try {
-    if (databaseConfigured()) await assertSchemaReady();
     const identity = await verifyMcpRequest(req);
+    if (databaseConfigured()) await assertSchemaReady();
     const server = createPlxMcMcpServer(identity);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

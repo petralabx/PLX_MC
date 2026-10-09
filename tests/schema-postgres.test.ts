@@ -14,7 +14,14 @@ import { main as migrate } from "../scripts/migrate.mjs";
 const state = vi.hoisted(() => ({ url: "" }));
 vi.mock("@/lib/secrets", () => ({ databaseUrl: () => state.url, databaseConfigured: () => true, entraAuthConfigured: () => false }));
 vi.mock("@/lib/db/tls", () => ({ resolveDbSsl: () => false }));
-vi.mock("@/lib/mcp/auth", () => ({ verifyMcpRequest: vi.fn() }));
+vi.mock("@/lib/mcp/auth", () => ({ verifyMcpRequest: vi.fn(async () => ({
+  servicePrincipalId: "sp_mcp_cursor",
+  actor: { kind: "service", id: "sp_mcp_cursor", status: "active" },
+  operatorEmail: "vince@petrasoap.com",
+  runtime: "cursor",
+  workerId: "schema-test",
+  repo: "petralabx/PLX_MC",
+})) }));
 vi.mock("@/lib/mcp/audit", () => ({ recordMcpToolCall: vi.fn() }));
 import { POST as mcpPost } from "@/app/api/cursor/mcp/route";
 import { route } from "@/lib/api/route";

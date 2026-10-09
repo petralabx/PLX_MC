@@ -1,3 +1,4 @@
+import { legacySearchFixture } from "./helpers/task-search-fixture";
 // Fleet P8 (D15, D16): a task's assignee may name an agent as `agent:<slug>`.
 // Only a signed-in person or sp_mcp_portal may set one. Every other MCP
 // principal gets 403 through the MCP tool (POST /api/cursor/mcp) and through
@@ -16,6 +17,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/sync", () => ({
+  searchTaskPage: vi.fn(async (filter, hidden) => legacySearchFixture(h.tasks as unknown as Task[], filter, hidden)),
   createTask: vi.fn(async (input: CreateTaskInput) => {
     const task = { id: `TASK-${900 + h.tasks.length}`, stage: "backlog", ...input };
     h.created.push(input as unknown as Record<string, unknown>);

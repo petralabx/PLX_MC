@@ -295,20 +295,20 @@ export const bucketById = (id: string): Bucket | undefined => state.buckets[id];
 export const allProjects = (): Project[] => Object.values(state.projects);
 export const projectById = (id: string): Project | undefined => state.projects[id];
 export const bucketsForProject = (projectId: string): Bucket[] =>
-  allBuckets().filter((b) => b.project === projectId);
-// Nav surfaces only — health=off records remain in allProjects/allBuckets.
+  allBuckets().filter((b) => b.project === projectId && isNavVisible(b));
+// Archived records remain readable in allProjects/allBuckets.
 // Closed projects (TASK-2530) leave nav along with their buckets; both stay
 // reachable by deep link.
 export const navProjects = (): Project[] =>
   allProjects().filter((p) => isNavVisible(p) && !isProjectClosed(p));
 export const navBuckets = (): Bucket[] =>
   allBuckets().filter(
-    (b) => isNavVisible(b) && !(b.project && isProjectClosed(state.projects[b.project]))
+    (b) => isNavVisible(b) && !(b.project && (!isNavVisible(state.projects[b.project] ?? {}) || isProjectClosed(state.projects[b.project])))
   );
 // Default project pickers: open projects only, plus the one already selected
 // so an existing assignment to a closed project still renders.
 export const pickerProjects = (selectedId?: string | null): Project[] =>
-  allProjects().filter((p) => !isProjectClosed(p) || p.id === selectedId);
+  allProjects().filter((p) => (isNavVisible(p) && !isProjectClosed(p)) || p.id === selectedId);
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 

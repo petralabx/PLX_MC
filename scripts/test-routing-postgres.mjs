@@ -51,6 +51,7 @@ function parseArgs(argv) {
     agentRunnerPrincipal: false,
     portalPrincipal: false,
     completedAt: false,
+    containerArchive: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -63,9 +64,10 @@ function parseArgs(argv) {
     else if (arg === "--revision-atomicity") out.revisionAtomicity = true;
     else if (arg === "--agent-runner-principal") out.agentRunnerPrincipal = true;
     else if (arg === "--portal-principal") out.portalPrincipal = true;
+    else if (arg === "--container-archive") out.containerArchive = true;
     else if (arg === "--completed-at") out.completedAt = true;
     else if (arg === "--help" || arg === "-h") {
-      console.log(`Usage: node scripts/test-routing-postgres.mjs --through NNN [--schema] [--idempotency] [--sequence] [--concurrency] [--revision-atomicity] [--agent-runner-principal] [--portal-principal] [--completed-at]`);
+      console.log(`Usage: node scripts/test-routing-postgres.mjs --through NNN [--schema] [--idempotency] [--sequence] [--concurrency] [--revision-atomicity] [--agent-runner-principal] [--portal-principal] [--completed-at] [--container-archive]`);
       process.exit(0);
     } else {
       throw new Error(`unknown argument: ${arg}`);
@@ -83,7 +85,8 @@ function parseArgs(argv) {
     !out.revisionAtomicity &&
     !out.agentRunnerPrincipal &&
     !out.portalPrincipal &&
-    !out.completedAt
+    !out.completedAt &&
+    !out.containerArchive
   ) {
     out.schema = true;
     out.idempotency = true;
@@ -670,6 +673,45 @@ async function assertPortalPrincipal(client, files) {
   console.log(`portal principal assertions passed (${rows[0].id} ${rows[0].status})`);
 }
 
+
+async function assertContainerArchive(client, files) {
+  const filename = "035_container_archive.sql";
+  if (!files.includes(filename)) throw new Error("--container-archive requires migration 035");
+  const sql = await readFile(path.join(MIGRATIONS_DIR, filename), "utf8");
+  await client.query("INSERT INTO projects (id, data) VALUES ($1, $2), ($3, $4)", ["PRJ-ARCHIVE", { id: "PRJ-ARCHIVE", health: "off" }, "PRJ-ACTIVE", { id: "PRJ-ACTIVE", health: "track" }]);
+  await client.query("INSERT INTO buckets (id, project_id, data) VALUES ($1, $2, $3), ($4, $5, $6)", ["BKT-ARCHIVE", "PRJ-ARCHIVE", { id: "BKT-ARCHIVE", project: "PRJ-ARCHIVE", health: "off" }, "BKT-ACTIVE", "PRJ-ACTIVE", { id: "BKT-ACTIVE", project: "PRJ-ACTIVE", health: "track" }]);
+  const task = { id: "TASK-ARCHIVE", bucket: "BKT-ARCHIVE", stage: "progress" };
+  await client.query("INSERT INTO entities (entity_type, id, data) VALUES ('task', $1, $2)", [task.id, task]);
+  const before = (await client.query("SELECT id FROM projects WHERE data->>'health' <> 'off' ORDER BY id")).rows;
+  await client.query(sql);
+  const after = (await client.query("SELECT id FROM projects WHERE archived_at IS NULL ORDER BY id")).rows;
+  if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error("migration changed nav membership");
+  const archived = (await client.query("SELECT archived_at, archived_by, archive_reason, data->>'health' AS health FROM buckets WHERE id = $1", ["BKT-ARCHIVE"])).rows[0];
+  if (!archived.archived_at || archived.archived_by !== "migration:035" || archived.archive_reason !== "migrated from health=off" || archived.health !== "off") throw new Error("archive migration stamps drifted");
+  const eventCount = (await client.query("SELECT count(*) AS n FROM mc_events WHERE actor = 'migration:035'")).rows[0].n;
+  await client.query(sql);
+  if ((await client.query("SELECT count(*) AS n FROM mc_events WHERE actor = 'migration:035'")).rows[0].n !== eventCount) throw new Error("migration audit is not idempotent");
+  if (JSON.stringify((await client.query("SELECT data FROM entities WHERE id = $1", [task.id])).rows[0].data) !== JSON.stringify(task)) {
+    // JSONB key order differs from JS insertion order; compare field values.
+    const stored = (await client.query("SELECT data FROM entities WHERE id = $1", [task.id])).rows[0].data;
+    if (Object.keys(stored).length !== Object.keys(task).length || Object.entries(task).some(([k, v]) => stored[k] !== v)) throw new Error("migration modified task");
+  }
+  for (const statement of [
+    ["INSERT INTO entities (entity_type, id, data) VALUES ('task', $1, $2)", ["TASK-ARCHIVE-NEW", { bucket: "BKT-ARCHIVE" }]],
+    ["INSERT INTO buckets (id, project_id, data) VALUES ($1, $2, $3)", ["BKT-ARCHIVE-NEW", "PRJ-ARCHIVE", {}]],
+  ]) {
+    let refused = false;
+    try { await client.query(...statement); } catch (error) { refused = error.code === "23514"; }
+    if (!refused) throw new Error("archived container accepted new work");
+  }
+  // ON CONFLICT updates for existing archived tasks are still allowed.
+  await client.query("INSERT INTO entities (entity_type, id, data) VALUES ('task', $1, $2) ON CONFLICT (entity_type, id) DO UPDATE SET data = EXCLUDED.data", [task.id, task]);
+  await client.query("UPDATE projects SET data = data || $2::jsonb WHERE id = $1", ["PRJ-ARCHIVE", { archivedAt: null }]);
+  await client.query("UPDATE buckets SET data = data || $2::jsonb WHERE id = $1", ["BKT-ARCHIVE", { archivedAt: null }]);
+  await client.query("INSERT INTO entities (entity_type, id, data) VALUES ('task', $1, $2)", ["TASK-ARCHIVE-NEW", { bucket: "BKT-ARCHIVE" }]);
+  console.log("container archive migration, nav parity, idempotent audit, retained task and create-guard assertions passed");
+}
+
 // TASK-2528: migration 033 adds entities.completed_at + cancellation, the
 // task-only CHECK and the partial index. Proves the CHECK, idempotent re-apply,
 // index use, and the documented rollback SQL.
@@ -807,6 +849,7 @@ async function main() {
     if (args.agentRunnerPrincipal) await assertAgentRunnerPrincipal(client, files);
     if (args.portalPrincipal) await assertPortalPrincipal(client, files);
     if (args.completedAt) await assertCompletedAt(client, files);
+    if (args.containerArchive) await assertContainerArchive(client, files);
 
     console.log("routing postgres harness OK");
     return 0;

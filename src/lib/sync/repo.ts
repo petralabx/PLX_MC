@@ -929,20 +929,22 @@ export async function seedBuckets(buckets: Bucket[]): Promise<void> {
 // Upsert a bucket (create or edit). An edit re-queues the Roadmap mirror
 // (sync_state -> pending), preserving the prior sp_item_id. The relational
 // project_id FK moves with data.project in the same statement (one write path).
+// Archive stamps are preserved from the current row so stale metadata writes
+// cannot undo a concurrent retirement. Only archiveContainer changes them.
 // `dirtyFields` (when provided) replaces the dirty set used for inbound conflict
 // detection on Gantt fields.
 export async function upsertBucket(b: Bucket, dirtyFields?: string[]): Promise<void> {
   if (dirtyFields) {
     await query(
       `INSERT INTO buckets (id, data, sync_state, project_id, dirty_fields) VALUES ($1, $2, 'pending', $3, $4::jsonb)
-       ON CONFLICT (id) DO UPDATE SET data = $2, sync_state = 'pending', project_id = $3, dirty_fields = $4::jsonb, updated_at = now()`,
+       ON CONFLICT (id) DO UPDATE SET data = $2 || jsonb_build_object('archivedAt', buckets.data->'archivedAt', 'archivedBy', buckets.data->'archivedBy', 'archiveReason', buckets.data->'archiveReason'), sync_state = 'pending', project_id = $3, dirty_fields = $4::jsonb, updated_at = now()`,
       [b.id, JSON.stringify(b), b.project ?? null, JSON.stringify(dirtyFields)]
     );
     return;
   }
   await query(
     `INSERT INTO buckets (id, data, sync_state, project_id) VALUES ($1, $2, 'pending', $3)
-     ON CONFLICT (id) DO UPDATE SET data = $2, sync_state = 'pending', project_id = $3, updated_at = now()`,
+     ON CONFLICT (id) DO UPDATE SET data = $2 || jsonb_build_object('archivedAt', buckets.data->'archivedAt', 'archivedBy', buckets.data->'archivedBy', 'archiveReason', buckets.data->'archiveReason'), sync_state = 'pending', project_id = $3, updated_at = now()`,
     [b.id, JSON.stringify(b), b.project ?? null]
   );
 }
@@ -1126,11 +1128,12 @@ export async function seedProjects(projects: Project[]): Promise<void> {
 }
 
 // Upsert a project (create or edit). An edit re-queues the push-only Projects
-// mirror (sync_state -> pending), preserving the prior sp_item_id.
+// mirror (sync_state -> pending), preserving the prior sp_item_id and the
+// current archive stamps (metadata edits cannot undo concurrent retirement).
 export async function upsertProject(p: Project): Promise<void> {
   await query(
     `INSERT INTO projects (id, data, sync_state) VALUES ($1, $2, 'pending')
-     ON CONFLICT (id) DO UPDATE SET data = $2, sync_state = 'pending', updated_at = now()`,
+     ON CONFLICT (id) DO UPDATE SET data = $2 || jsonb_build_object('archivedAt', projects.data->'archivedAt', 'archivedBy', projects.data->'archivedBy', 'archiveReason', projects.data->'archiveReason'), sync_state = 'pending', updated_at = now()`,
     [p.id, JSON.stringify(p)]
   );
 }

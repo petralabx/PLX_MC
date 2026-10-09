@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/route";
 
 const mocks = vi.hoisted(() => ({
+  archiveContainer: vi.fn(async () => ({ id: "BKT-A", action: "archive" })),
   patchBucket: vi.fn(),
   assertBucketProjectAccess: vi.fn(async () => undefined),
   assertProjectIdAccess: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/sync", () => ({
+  archiveContainer: mocks.archiveContainer,
   createBucket: vi.fn(),
   createProject: vi.fn(),
   createTask: vi.fn(),
@@ -159,5 +161,19 @@ describe("actionUpdateBucket", () => {
       code: "invalid_request",
     });
     expect(mocks.patchBucket).not.toHaveBeenCalled();
+  });
+});
+
+describe("bucket retirement actions", () => {
+  it("archives using the existing capability and ACL guard with the actor and reason", async () => {
+    await actionUpdateBucket(mcpIdentity, { id: "BKT-A", action: "archive", reason: "retired", force: true });
+    expect(mocks.assertBucketProjectAccess).toHaveBeenCalled();
+    expect(mocks.archiveContainer).toHaveBeenCalledWith(expect.objectContaining({ entityType: "bucket", id: "BKT-A", actor: "vince@petrasoap.com", reason: "retired", force: true }));
+    expect(mocks.patchBucket).not.toHaveBeenCalled();
+  });
+  it("refuses archive metadata mixing and reason/force without action", async () => {
+    await expect(actionUpdateBucket(mcpIdentity, { id: "BKT-A", action: "archive", reason: "r", name: "mixed" })).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(actionUpdateBucket(mcpIdentity, { id: "BKT-A", force: true })).rejects.toMatchObject({ code: "invalid_request" });
+    expect(mocks.archiveContainer).not.toHaveBeenCalled();
   });
 });

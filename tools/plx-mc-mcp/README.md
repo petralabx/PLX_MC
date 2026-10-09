@@ -128,3 +128,12 @@ insert boundary prevent new tasks from shifting pages. Discussion matches
 full-text words; title/description and IDs keep substring matching. Query
 results include `matchFields`. See the [Hub search contract](../../docs/modules/mcp/README.md#task-search-pagination-and-discussion-search)
 for REST encoding, cursor limitations and compact timestamp behavior.
+
+
+Project/bucket retirement: `mc_update_project` accepts `{projectId, action:
+"archive" | "unarchive", reason, force?}` and `mc_update_bucket` accepts
+`{id, action, reason, force?}`. Project actions cascade to all buckets. Open
+tasks require `force:true` with a reason; no task is modified. Archive cannot
+mix with metadata edits. List tools accept `includeArchived:true`; projects
+also need `status:"all"` to include closed ones. Deep links/task reads remain
+available. Health is independent of archive. See `docs/modules/mcp/README.md`.

@@ -119,12 +119,13 @@ describe("updateProject (P2)", () => {
     expect(activeNotices().some((n) => /rolled back/i.test(n.body))).toBe(true);
   });
 
-  it("drops health=off from navProjects while keeping the record", async () => {
+  it("drops archived records from navProjects while keeping the record", async () => {
     const visible = addProject({ name: "Live Ops" });
     const archived = addProject({ name: "Credential Smoke" });
     __setProjectUpdateMirrorForTests(async (id, patch) => ({
       ...projectById(id)!,
       ...patch,
+      archivedAt: "2026-10-09T00:00:00Z",
     }));
     await updateProject(archived.id, { health: "off" });
     await __projectUpdateSettled();

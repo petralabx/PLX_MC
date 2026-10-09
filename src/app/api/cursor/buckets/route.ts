@@ -16,6 +16,9 @@ const createBucketSchema = z.object({
 
 const updateBucketSchema = z
   .object({
+    action: z.enum(["archive", "unarchive"]).optional(),
+    reason: z.string().trim().min(1).max(2000).optional(),
+    force: z.boolean().optional(),
     id: z.string().min(1),
     name: z.string().min(1).optional(),
     description: z.string().optional(),
@@ -29,6 +32,7 @@ const updateBucketSchema = z
   })
   .refine(
     (body) =>
+      body.action !== undefined ||
       body.name !== undefined ||
       body.description !== undefined ||
       body.owner !== undefined ||
@@ -60,6 +64,7 @@ export const PATCH = cursorRoute("mc_update_bucket", async (req, _ctx, identity)
 export const GET = cursorRoute("mc_list_buckets", async (req, _ctx, identity) => {
   const params = new URL(req.url).searchParams;
   const result = await actionListBuckets(identity, {
+    includeArchived: params.get("includeArchived") === "true",
     q: params.get("q") ?? undefined,
     project: params.get("project") ?? undefined,
   });

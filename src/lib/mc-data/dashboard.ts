@@ -11,7 +11,7 @@
 // Tasks whose bucket is unknown, or has no project, are reported as `unfiled`
 // so the screen can say why its totals differ from the raw task count.
 
-import { STAGES, bandOf, isProjectClosed } from "@/lib/mc-data";
+import { STAGES, bandOf, isProjectClosed, isArchived } from "@/lib/mc-data";
 import type { Band, Bucket, Project, StageKey, Task } from "@/lib/mc-data";
 
 /** Which projects the figures cover: open ones, closed ones, or all of them. */
@@ -121,6 +121,10 @@ export function buildDashboard(
   buckets: readonly Bucket[],
   projects: readonly Project[]
 ): DashboardModel {
+  const archivedBuckets = new Set(buckets.filter((b) => isArchived(b) || isArchived(projects.find((p) => p.id === b.project))).map((b) => b.id));
+  tasks = tasks.filter((t) => !archivedBuckets.has(t.bucket));
+  buckets = buckets.filter((b) => !archivedBuckets.has(b.id));
+  projects = projects.filter((p) => !isArchived(p));
   const projectById = new Map(projects.map((p) => [p.id, p]));
   const filedBuckets = buckets.filter((b) => b.project && projectById.has(b.project));
   const tasksByBucket = new Map<string, Task[]>(filedBuckets.map((b) => [b.id, []]));

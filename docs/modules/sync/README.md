@@ -30,8 +30,8 @@ Routing mutations fail closed when required registers are stale.
 
 | Register | Two-way fields | MC-push-only (preserved) |
 |---|---|---|
-| Projects | name, health, started, target, desc | Owner, PRD Link |
-| Roadmap | name, health, started, target, progress, project | Owner, PRD Link |
+| Projects | name, health, started, target, desc | Owner, PRD Link, Archived |
+| Roadmap | name, health, started, target, progress, project | Owner, PRD Link, Archived |
 | ToDos | title, stage, assignee, priority, due, bucket, description | Accountable Owner, Reporter, reqs, estimate, repos, targetEnv, evidence, subtasks |
 
 - Human-created SharePoint rows with valid unique IDs (`PRJ-*`, `BKT-*`,
@@ -232,3 +232,19 @@ Vince
 ## Criticality
 
 Critical
+
+
+### Container retirement
+
+Migration 035 exposes `archived_at`, `archived_by`, `archive_reason` as stored
+columns derived from existing JSON `archivedAt`, `archivedBy`, `archiveReason`
+(the same single-authority pattern as project status). Archive/unarchive uses
+`archiveContainer`, exported through the sync barrel. It serializes hierarchy
+and task writes for the guard/cascade transaction, queues Projects/Roadmap and
+appends per-container MC events in that transaction. There are no task writes.
+AFTER INSERT guards close creation races and cover non-MCP creation paths;
+ON CONFLICT updates of existing tasks continue syncing in archived buckets.
+Inbound Projects/Roadmap fields never overwrite the outbound-only `Archived`.
+Owner: Vince. Reverting the app restores the former health filter; additive
+columns stay. Operators can unarchive before rollback if they also need to
+allow new records in containers (database insert guards remain after code revert).

@@ -18,11 +18,13 @@ import {
   type CreateTaskInput,
   type PatchBucketInput,
 } from "@/lib/sync";
+import { cancelTask } from "@/lib/sync/cancel";
 import { getEntity } from "@/lib/sync/repo";
 import {
   resolveHumanAccountableOwner,
   STAGE_IDX,
   TERMINAL_STAGES,
+  isClosedStage,
   type Evidence,
   type StageKey,
   type Task,
@@ -51,6 +53,7 @@ export type { SearchTasksInput } from "./task-search-schema";
 import { TERMINAL_TASK_STAGES } from "./task-update-actions";
 import { resolveCheckoutRepo } from "./checkout-repo";
 import { taskLink } from "./envelope";
+import { assertMayCloseOrReopen, cancelContextFor } from "./task-cancel-actions";
 import { buildHonestyFields } from "./honesty";
 import { syncMetaForTask } from "./sync-meta";
 import { runIdempotentTaskCreate, taskCreatePayloadHash } from "./task-create-idempotency";
@@ -201,7 +204,7 @@ export async function actionGetContext(
     };
   }
 
-  let active = visibleTasks.filter((t) => !["merged", "verified"].includes(t.stage));
+  let active = visibleTasks.filter((t) => !isClosedStage(t.stage));
   if (filter.bucket) active = active.filter((t) => t.bucket === filter.bucket);
   if (idSet) active = active.filter((t) => idSet.has(t.id));
   return {
@@ -469,6 +472,19 @@ export async function actionCheckout(
   };
 }
 
+// One input shape serves the HTTP MCP tool and the REST route so they cannot disagree.
+export const progressSchemaShape = {
+  taskId: z.string().min(1),
+  stage: z
+    .enum(["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified", "cancelled"])
+    .optional(),
+  notes: z.string().optional(),
+  progressPct: z.number().min(0).max(100).optional(),
+  cancelReason: z.string().optional(),
+  replacedBy: z.string().nullable().optional(),
+  note: z.string().max(2000).optional(),
+};
+
 export async function actionProgress(
   identity: McpIdentity,
   input: {
@@ -477,6 +493,10 @@ export async function actionProgress(
     notes?: string;
     subtasks?: Task["subtasks"];
     progressPct?: number;
+    /** Cancel details (stage "cancelled"): reason enum, replacedBy TASK-n, free-text note (TASK-2529). */
+    cancelReason?: string;
+    replacedBy?: string | null;
+    note?: string;
   }
 ) {
   const authorized = requireMcpActor(identity, "task.progress", {
@@ -487,6 +507,13 @@ export async function actionProgress(
   const row = await getEntity("task", input.taskId);
   if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
   const current = row.data as unknown as Task;
+  const cancelling = input.stage === "cancelled";
+  if (!cancelling && (input.cancelReason !== undefined || input.replacedBy != null || input.note !== undefined)) {
+    throw new ApiError("invalid_request", "cancelReason, replacedBy and note apply only with stage \"cancelled\".", 400);
+  }
+  if (current?.stage === "cancelled" && !cancelling && (input.stage || (!input.notes && !input.subtasks))) {
+    throw new ApiError("task_cancelled", `${input.taskId} is cancelled; reopen it with mc_update_task {reopen} before changing its stage.`, 409);
+  }
   // A bare call changes nothing: report the current stage, write nothing.
   if (!input.stage && !input.notes && !input.subtasks) {
     return {
@@ -520,7 +547,18 @@ export async function actionProgress(
     );
   }
   const patch: Record<string, unknown> = {};
-  if (input.stage) patch.stage = input.stage;
+  let cancelResult: Awaited<ReturnType<typeof cancelTask>> | undefined;
+  if (cancelling) {
+    if (!current) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+    await assertMayCloseOrReopen(identity, current, "cancel");
+    cancelResult = await cancelTask(
+      input.taskId,
+      { reason: input.cancelReason, replacedBy: input.replacedBy, note: input.note },
+      cancelContextFor(identity, authorized.actorId)
+    );
+  } else if (input.stage) {
+    patch.stage = input.stage;
+  }
   if (input.notes) {
     const comment = {
       id: `mcp-${Date.now().toString(36)}`,
@@ -532,12 +570,14 @@ export async function actionProgress(
     patch.comments = [...(current.comments ?? []), comment];
   }
   if (input.subtasks) patch.subtasks = input.subtasks;
-  const task = await patchTask(
-    input.taskId,
-    patch as Parameters<typeof patchTask>[1],
-    identity.operatorEmail,
-    { attribution: { source: "service", actorId: authorized.actorId } }
-  );
+  const task = Object.keys(patch).length === 0 && cancelResult
+    ? cancelResult.task
+    : await patchTask(
+        input.taskId,
+        patch as Parameters<typeof patchTask>[1],
+        identity.operatorEmail,
+        { attribution: { source: "service", actorId: authorized.actorId } }
+      );
   if (!task) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
   await complianceRepo.appendEvent({
     kind: "task.progress",

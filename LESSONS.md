@@ -791,6 +791,64 @@
   principal and scopes through `scopeHierarchy` before aggregating; resolve
   references from durable tables, not from a sampled window.
 
+## 2026-10-08 — TASK-2528: hidden columns, terminal creates and outbound queueing
+- **What went wrong:** Hiding `CompletedAt` made Graph omit it from the column
+  listing (hidden columns need `hidden` in `$select`), so re-apply would recreate
+  it and `--verify` reported it missing. Stage writes also had side doors: a task
+  created straight into a terminal stage, an inbound SharePoint move and the
+  backfill set `completed_at` without queueing the outbound `CompletedAt` write,
+  and the backfill treated a terminal snapshot with no known previous stage as a
+  transition.
+- **Root cause:** Each fix was verified against the happy path only; the mocked
+  Graph returned every column regardless of `$select`, and only the UI/MCP stage
+  path was traced for write rules.
+- **Rule going forward:** Mock external APIs with their real omission behaviour,
+  enumerate every writer of a column (create, inbound, backfill) before calling a
+  write rule done, and never infer a transition without a known previous state.
+
+## 2026-10-07 — Rollback script trusted a label and a URL substring (TASK-2529)
+
+- **What went wrong:** `reopen-cancelled-tasks.mjs` accepted `--env staging` plus
+  a URL without "prod" as proof of a non-production target. The runtime DB
+  (`plx_mc` on `plx-postgres-staging`, TOOLS.md) passes that, so `--apply` would
+  have reopened every cancelled production task. A SharePoint-side cancel also
+  wrote the stage without the `task.cancelled` event that reopen restores from.
+- **Root cause:** Environment was inferred from caller-supplied strings, and one
+  of two writers of a state transition skipped the event the reader depends on.
+- **Rule going forward:** A destructive ops script verifies the connected
+  database identity (`scripts/lib/db-identity.mjs`: approved `database@host`
+  matches URL host and `current_database()`, never the runtime DB) before any
+  read or write. Every writer of a stage transition appends its event in the
+  same transaction.
+
+## 2026-10-08 — Cancel/reopen trusted a caller-supplied email (TASK-2529)
+
+- **What went wrong:** cancel and reopen were authorized from the
+  `X-MC-Operator-Email` header (owner / admin / steward by email). Any MCP caller
+  holding `task.progress` could forge an allowlisted admin address.
+- **Root cause:** The header was treated as an identity although the permissions
+  README already says it is audit context only; no capability existed for cancel.
+- **Rule going forward:** Authorize privileged actions from the authenticated
+  principal's registry capabilities (`requireMcpActor`), never from a header.
+  Add a reviewed capability (`task.cancel`) and keep it out of the shared agent
+  bundle. Test the forged-header case on every transport.
+
+## 2026-10-08 — Generic stage change bypassed task.reopen (TASK-2529)
+
+- **What went wrong:** `PATCH /api/tasks/{id}` (`task.progress` only) and the
+  lifecycle buttons could move a cancelled task to another stage; `patchTask`
+  cleared the cancellation with no `task.reopen` check and no `task.reopened` event.
+  SharePoint inbound and conflict keep-SP could do the same.
+- **Root cause:** Authorization sat on the new MCP entry points, not on the shared
+  stage-change code the older paths also call.
+- **Rule going forward:** Put the invariant in the shared write path. `patchTask`
+  refuses to leave `cancelled` unless the reopen service passed `reopen: true`;
+  callers authorize first. Inbound edits that would leave it raise a Sync conflict.
+- **Follow-up (Astra P1):** the guard read the row without a lock, so a cancel
+  committing before the write was undone. A guard and the write it protects share
+  one transaction and one `FOR UPDATE`; `patchTask` now opens that itself when the
+  caller passes no `query`.
+
 ### 2026-10-07 (ET) — TASK-2533: rejected inbound move was audited but consumed; closure exception ignored other fields
 
 - **What went wrong:** An inbound SharePoint bucket move refused by the guard only wrote an audit line, so the delta cursor advanced and a dirty local bucket could later overwrite SharePoint. The lane exception also checked only the label delta, so title/description/priority edits rode along with a closure label.
@@ -802,6 +860,22 @@
 - **What went wrong:** 35 s after the compliance projection promoted a task to Merged, a `mc_report_progress` call with no stage/notes/subtasks defaulted the stage to `progress` and moved it back to In Progress. The call held no checkout.
 - **Root cause:** `actionProgress` defaulted a missing stage, accepted any stage whatever the current one, and authorized on the shared principal and project access alone, with no per-task lease check.
 - **Rule going forward:** A mutating MCP tool never defaults a missing input into a write. Terminal stages (merged/verified) are moved back only by the compliance projection. A task write needs an active checkout bound to the authenticated principal (`permissionActorId`), never the operator header.
+
+### 2026-10-09 — Application deployed before the live schema migration
+
+- **Incident:** PR #286 deployed on October 8 at 18:56 ET with queries for
+  `completed_at`, but migration 033 was not applied to the live database.
+  API and MCP calls returned generic 500s for about 13.5 hours, until revert
+  PR #290 deployed October 9 at 08:24 ET. The earlier portal
+  `department_roles` incident had the same missing-target-migration cause.
+- **Root cause:** CI migrated a fresh disposable DB; Vercel's automatic deploy
+  did not compare the code's migration set with the actual target ledger.
+  The separate approved live migration workflow had not run.
+- **Rule:** Live migrations land before the code that needs them. Every Vercel
+  environment checks its own target ledger read-only before building/promoting;
+  every local migration must be present, even when the DB's latest version is
+  higher. Runtime mismatches fail visibly with schema-specific 503s and
+  self-check diagnostics. Never apply migrations from the deploy check.
 
 ## 2026-10-08 — TASK-2528: hidden columns, terminal creates and outbound queueing
 - **What went wrong:** Hiding `CompletedAt` made Graph omit it from the column
@@ -817,6 +891,40 @@
 - **Rule going forward:** Mock external APIs with their real omission behaviour,
   enumerate every writer of a column (create, inbound, backfill) before calling a
   write rule done, and never infer a transition without a known previous state.
+
+## 2026-10-09 — Cancel guards must live where the write happens (TASK-2529)
+
+- **What went wrong:** The reopen guard was fixed on `patchTask` only. Inbound
+  sync and conflict keep-SP checked a snapshot read earlier, so a cancel that
+  committed in between was cleared by `updateEntity` without `task.reopen`.
+- **Root cause:** The invariant was enforced per caller on stale reads, not at the
+  single write path under the row lock.
+- **Rule going forward:** Enforce a state-transition invariant inside the one
+  function that writes it, on a row read `FOR UPDATE` in the same transaction;
+  callers translate the refusal (e.g. into a Sync conflict).
+
+## 2026-10-09 — Lock every task read-modify-write, not just stage writes (TASK-2529)
+
+- **What went wrong:** Row locking was added for stage writes only. A priority or
+  sync-state write still read unlocked and replaced the whole JSON payload, so a
+  cancel committing in between was half-undone (stage restored, cancellation kept).
+  The patch transaction also read the repo registry on the global pool, which can
+  starve the 5-connection pool.
+- **Root cause:** The lock was scoped to the symptom (stage) instead of the class
+  (any write that rewrites `data` from a read).
+- **Rule going forward:** In `updateEntity`, every task write reads `FOR UPDATE`
+  in its own transaction and merges onto that row. Inside a transaction, pass `q`
+  to every read; seed/resolve anything that needs the pool before opening it.
+
+## 2026-10-09 — Adding a stage or band means updating the board e2e column counts (TASK-2529)
+
+- **What went wrong:** Adding the `cancelled` stage and band made the board render 4 band
+  columns and 10 stage columns, but the e2e specs still asserted 3 and 9. Unit tests and
+  typecheck passed; only Playwright in CI caught it (7 failures).
+- **Root cause:** Column counts are hardcoded in `e2e/` (board, group-by, drag,
+  saved-views, timeline-filter) and nobody grepped for them when `STAGES`/`BANDS` changed.
+- **Rule going forward:** When `STAGES` or `BANDS` change, grep `e2e/` for
+  `toHaveCount(<n>)` on `.bcol` / `boardColumns` and run `npm run test:e2e` locally before push.
 
 ## 2026-10-09 — TASK-2558: closed-project rule had three side doors
 - **What went wrong:** The closed-project rule shipped on create paths and on

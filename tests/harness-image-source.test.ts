@@ -7,15 +7,22 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const harness = readFileSync(path.join(root, "scripts", "test-routing-postgres.mjs"), "utf8");
+const read = (...parts: string[]) => readFileSync(path.join(root, ...parts), "utf8");
+const shared = read("scripts", "lib", "postgres-image.mjs");
+const consumers = {
+  harness: read("scripts", "test-routing-postgres.mjs"),
+  schemaPostgres: read("tests", "schema-postgres.test.ts"),
+};
 
 describe("test harness image source", () => {
-  it("pulls postgres from the ECR public mirror", () => {
-    expect(harness).toContain('"public.ecr.aws/docker/library/postgres:16-alpine"');
+  it("defines the postgres image once, on the ECR public mirror", () => {
+    expect(shared).toContain('"public.ecr.aws/docker/library/postgres:16-alpine"');
   });
 
-  it("has no bare or docker.io postgres image reference", () => {
-    expect(harness).not.toMatch(/(^|[^/\w.-])postgres:\d/m);
-    expect(harness).not.toMatch(/docker\.io/);
+  it.each(Object.entries(consumers))("%s uses the shared image with no bare or Docker Hub reference", (_name, source) => {
+    expect(source).toContain("POSTGRES_IMAGE");
+    expect(source).toContain("postgres-image.mjs");
+    expect(source).not.toMatch(/(^|[^/\w.-])postgres:\d/m);
+    expect(source).not.toMatch(/docker\.io/);
   });
 });

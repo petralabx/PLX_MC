@@ -42,7 +42,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   },
   {
     term: "Stage",
-    definition: `Where a task is in its lifecycle. There are nine, in order. The board marks each quality checkpoint: ${gatedStages}.`,
+    definition: `Where a task is in its lifecycle. There are nine, in order, then Cancelled for work that will never ship (it needs a reason and is excluded from open counts). The board marks each quality checkpoint: ${gatedStages}.`,
     list: STAGES.map((s) => s.name),
   },
   {

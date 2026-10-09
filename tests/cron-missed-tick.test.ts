@@ -14,7 +14,7 @@ vi.mock("@/lib/sync/health", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sync/health")>()),
   checkMissedTick: m.checkMissedTick,
 }));
-vi.mock("@/lib/secrets", () => ({ cronConfigured: m.cronConfigured, cronSecret: m.cronSecret }));
+vi.mock("@/lib/secrets", () => ({ databaseConfigured: () => false, cronConfigured: m.cronConfigured, cronSecret: m.cronSecret }));
 
 import { MISSED_TICK_REDUNDANCY_GRACE_MS, MISSED_TICK_THRESHOLD_MS } from "@/lib/sync/health";
 

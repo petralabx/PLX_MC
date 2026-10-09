@@ -119,6 +119,13 @@ function assertRepoEligible(task: Task, repoId: string): void {
 }
 
 function assertNotSilentVerifiedReopen(task: Task): void {
+  if (task.stage === "cancelled") {
+    throw new ApiError(
+      "task_cancelled",
+      `Task ${task.id} is cancelled — linking work to it requires an explicit reopen (mc_update_task reopen), not a silent one.`,
+      409
+    );
+  }
   if (task.stage === "verified") {
     throw new ApiError(
       "verified_locked",

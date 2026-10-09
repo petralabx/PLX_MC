@@ -6,6 +6,7 @@
 import type {
   Agent,
   AgentMode,
+  Band,
   Bucket,
   Project,
   Cycle,
@@ -46,16 +47,22 @@ export const STAGES: Stage[] = [
   { n: "07", key: "review", name: "In Review", band: "doing" },
   { n: "08", key: "merged", name: "Merged", band: "done" },
   { n: "09", key: "verified", name: "Verified", band: "done" },
+  { n: "10", key: "cancelled", name: "Cancelled", band: "cancelled" },
 ];
+
+// The stages a task moves through on the way to done. Cancelled is an end stage
+// reached only by cancelling with a reason, never a step on the spine (TASK-2529).
+export const WORKFLOW_STAGES: Stage[] = STAGES.filter((s) => s.key !== "cancelled");
 
 export const STAGE_IDX: Record<string, number> = Object.fromEntries(
   STAGES.map((s, i) => [s.key, i])
 );
 
-export const BANDS: { key: "todo" | "doing" | "done"; name: string }[] = [
+export const BANDS: { key: Band; name: string }[] = [
   { key: "todo", name: "To do" },
   { key: "doing", name: "In progress" },
   { key: "done", name: "Done" },
+  { key: "cancelled", name: "Cancelled" },
 ];
 
 export const PRIORITY: Record<PriorityKey, PriorityConfig> = {
@@ -402,6 +409,8 @@ export const SP_LISTS: SpListDef[] = [
       { name: "Target Environment", type: "Choice", mc: "targetEnv", dir: "push", note: "Staging/Production" },
       { name: "Evidence Complete", type: "Yes/No", mc: "evidence", dir: "push" },
       { name: "Description", type: "Multi line of text", mc: "description", dir: "two-way" },
+      { name: "Cancel Reason", type: "Choice", mc: "cancellation.reason", dir: "two-way", note: "TASK-2529 — read back only with an inbound Status=Cancelled edit; invalid → Sync conflict" },
+      { name: "Replaced By", type: "Single line of text", mc: "cancellation.replacedBy", dir: "two-way", note: "TASK-2529 — TASK-n; required for Duplicate/Superseded" },
       { name: "Completed At", type: "Date and time", mc: "completedAt", dir: "push", note: "TASK-2528 — outbound-only; inbound edits ignored" },
       { name: "Sub-tasks", type: "Multi line of text", mc: "subtasks", dir: "push", note: "Item 3 — serialized push-only mirror" },
     ],

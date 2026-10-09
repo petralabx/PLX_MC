@@ -23,12 +23,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { Client } from "pg";
+import { POSTGRES_IMAGE } from "./lib/postgres-image.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = path.join(ROOT, "db", "migrations");
 const NAME_RE = /^(\d{3})_[a-z0-9_]+\.sql$/;
-// AWS ECR public mirror of the Docker Hub official image (avoids Docker Hub pull rate limits).
-const POSTGRES_IMAGE = "public.ecr.aws/docker/library/postgres:16-alpine";
 const WAIT_TIMEOUT_MS = 60_000;
 const WAIT_POLL_MS = 500;
 
@@ -705,6 +704,20 @@ async function assertCompletedAt(client, files) {
     `INSERT INTO entities (entity_type, id, data, completed_at)
      VALUES ('task', 'TASK-9001', '{}'::jsonb, '2026-07-23T12:00:00Z')`
   );
+  // Task search (src/lib/sync/task-search.ts) filters and projects the dedicated
+  // columns: a row with completed_at only in the column must match and merge.
+  await client.query(`UPDATE entities SET cancellation = '{"reason":"duplicate"}'::jsonb WHERE id = 'TASK-9001'`);
+  const searched = await client.query(
+    `SELECT (data - 'completedAt' - 'cancellation')
+        || CASE WHEN completed_at IS NOT NULL THEN jsonb_build_object('completedAt', to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) ELSE '{}'::jsonb END
+        || CASE WHEN cancellation IS NOT NULL THEN jsonb_build_object('cancellation', cancellation) ELSE '{}'::jsonb END AS task
+       FROM entities
+      WHERE entity_type = 'task' AND completed_at >= '2026-07-01'::timestamptz AND completed_at < '2026-08-01'::timestamptz`
+  );
+  const found = searched.rows[0]?.task;
+  if (searched.rowCount !== 1 || found.completedAt !== "2026-07-23T12:00:00.000Z" || found.cancellation?.reason !== "duplicate") {
+    throw new Error(`column-only completed_at/cancellation not searchable or merged: ${JSON.stringify(searched.rows)}`);
+  }
   for (const col of ["completed_at", "cancellation"]) {
     const value = col === "completed_at" ? "now()" : `'{"reason":"duplicate"}'::jsonb`;
     let rejected = false;

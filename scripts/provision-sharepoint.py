@@ -153,6 +153,14 @@ def column_definition(
     return out
 
 
+def merged_choices(actual: list[str], wanted: list[str]) -> list[str]:
+    """Existing choices keep their order; schema choices missing from the column are appended.
+
+    Never removes a choice: rows already carrying a value would lose it.
+    """
+    return list(actual) + [c for c in wanted if c not in actual]
+
+
 def column_kind(definition: dict[str, Any]) -> str:
     for kind in (
         "text",
@@ -256,6 +264,49 @@ def ensure_lists(
     return list_ids
 
 
+def ensure_choices(
+    g: Graph,
+    site_id: str,
+    list_id: str,
+    spec: dict[str, Any],
+    col: dict[str, Any],
+    existing: list[dict[str, Any]],
+    apply: bool,
+) -> None:
+    """Append schema choices that an existing choice column lacks (e.g. ToDos Status 'Cancelled')."""
+    if col["type"] != "choice":
+        return
+    actual = next(
+        (
+            c
+            for c in existing
+            if c["name"] == col["name"] or c["displayName"] == col["displayName"]
+        ),
+        None,
+    )
+    if not actual:
+        return
+    have = actual.get("choice", {}).get("choices", [])
+    missing = [c for c in col["choices"] if c not in have]
+    if not missing:
+        return
+    print(
+        f"    choices MISSING: {spec['displayName']}.{col['displayName']} -> {', '.join(missing)}"
+    )
+    if not apply:
+        return
+    g.patch(
+        f"{GRAPH}/sites/{site_id}/lists/{list_id}/columns/{actual['id']}",
+        {
+            "choice": {
+                **actual["choice"],
+                "choices": merged_choices(have, col["choices"]),
+            }
+        },
+    )
+    print(f"    choices added: {col['displayName']}")
+
+
 def ensure_columns(
     g: Graph,
     site_id: str,
@@ -285,6 +336,7 @@ def ensure_columns(
                         {**column_definition(col, list_ids), "defaultValue": None},
                     )
                     print(f"    column updated: {col['displayName']}")
+            ensure_choices(g, site_id, list_id, spec, col, existing, apply)
             continue
         if col["type"] == "lookup" and col["lookupList"] not in list_ids:
             print(f"    column DEFERRED (lookup target missing): {col['displayName']}")

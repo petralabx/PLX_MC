@@ -60,9 +60,11 @@ def test_schema_declares_completed_at_exactly():
     assert "default" not in COMPLETED_AT and "defaultValue" not in COMPLETED_AT
 
 
-def test_no_task_2529_columns_or_status_change():
+def test_cancellation_columns_are_the_task_2529_pair_only():
+    # TASK-2529 adds CancelReason + ReplacedBy next to CompletedAt, nothing else.
     names = {c["name"] for c in TODOS["columns"]}
-    assert not names & {"Cancelled", "CancelReason", "ReplacedBy", "CancelledAt"}
+    assert {"CancelReason", "ReplacedBy"} <= names
+    assert not names & {"Cancelled", "CancelledAt"}
 
 
 def test_create_plan_is_datetime_with_time_optional_no_default_hidden():

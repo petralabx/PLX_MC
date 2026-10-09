@@ -126,6 +126,8 @@ export function buildDashboard(
   const tasksByBucket = new Map<string, Task[]>(filedBuckets.map((b) => [b.id, []]));
   const unfiled: Task[] = [];
   for (const task of tasks) {
+    // Cancelled tasks drop out of open/remaining counts and progress denominators (as in the project overview).
+    if (task.stage === "cancelled") continue;
     const list = tasksByBucket.get(task.bucket);
     if (list) list.push(task);
     else unfiled.push(task);
@@ -192,7 +194,7 @@ export function buildDashboard(
 export function openStageCounts(rows: readonly RemainingTask[]): StageCount[] {
   const counts = new Map<string, number>();
   for (const row of rows) counts.set(row.task.stage, (counts.get(row.task.stage) ?? 0) + 1);
-  return STAGES.filter((s) => s.band !== "done").map((s) => ({
+  return STAGES.filter((s) => s.band !== "done" && s.band !== "cancelled").map((s) => ({
     stage: s.key,
     name: s.name,
     band: s.band,

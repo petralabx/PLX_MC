@@ -34,7 +34,7 @@ export function ProjectOverview({
 
   return (
     <div className="pv-roll">
-      {rollups.map(({ bucket, tasks, done, pct }) => {
+      {rollups.map(({ bucket, tasks, done, total, pct }) => {
         const isCollapsed = !!collapsed[bucket.id];
         const barStyle = { "--pct": `${pct}%` } as CSSProperties;
         return (
@@ -57,7 +57,7 @@ export function ProjectOverview({
                     <span className="fill" />
                   </span>
                   <span className="ct">
-                    {tasks.length === 0 ? "No tasks yet" : `${done} / ${tasks.length} done`}
+                    {tasks.length === 0 ? "No tasks yet" : `${done} / ${total} done`}
                   </span>
                 </span>
                 <HealthPill h={bucket.health} />

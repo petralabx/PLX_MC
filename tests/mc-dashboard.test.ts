@@ -138,6 +138,21 @@ describe("openStageCounts", () => {
   });
 });
 
+describe("cancelled tasks", () => {
+  it("drop out of totals, remaining and unfiled, as in the project overview", () => {
+    const base = buildDashboard(tasks, [b1, b2, b3, loose], [open, shut]);
+    const withCancelled = buildDashboard(
+      [...tasks, task({ bucket: b1.id, stage: "cancelled" }), task({ bucket: loose.id, stage: "cancelled" })],
+      [b1, b2, b3, loose],
+      [open, shut]
+    );
+    expect(withCancelled.scopes.all).toEqual(base.scopes.all);
+    expect(withCancelled.remaining).toHaveLength(base.remaining.length);
+    expect(withCancelled.unfiled).toEqual(base.unfiled);
+    expect(openStageCounts(withCancelled.remaining).map((c) => c.stage)).not.toContain("cancelled");
+  });
+});
+
 describe("buildDashboard on the seed data", () => {
   const seed = buildDashboard(TASKS, BUCKETS, PROJECTS);
 

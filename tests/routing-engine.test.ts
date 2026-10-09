@@ -401,6 +401,35 @@ describe("completed Task linkability", () => {
   });
 });
 
+describe("cancelled Tasks (TASK-2529)", () => {
+  it("never surface as fuzzy suggestions (mc_suggest_work candidates) but stay linkable by exact reference", async () => {
+    const cancelledTask = {
+      id: "TASK-70",
+      title: "Cancelled infra cleanup",
+      description: "Obsolete",
+      bucket: "BKT-INFRA",
+      stage: "cancelled",
+      repos: ["plx-mc"],
+      labels: ["infra"],
+      prs: [],
+      due: "2026-06-01",
+    };
+    const fuzzy = evidenceFor({ title: "infra cleanup", labels: ["infra"], paths: ["scripts/cleanup.sh"], body: "no exact refs" });
+    const result = await shadow({
+      evidence: fuzzy.evidence, markers: fuzzy.markers, branchTaskIds: fuzzy.branchTaskIds,
+      tasks: [...TASKS, cancelledTask],
+    });
+    expect(result.candidates.some((c) => c.taskId === "TASK-70")).toBe(false);
+
+    const exact = evidenceFor({ body: "MC-Task: TASK-70" });
+    const named = await shadow({
+      evidence: exact.evidence, markers: exact.markers, branchTaskIds: exact.branchTaskIds,
+      tasks: [...TASKS, cancelledTask],
+    });
+    expect(named.candidates.some((c) => c.taskId === "TASK-70")).toBe(true);
+  });
+});
+
 describe("shadow metrics", () => {
   it("increments counters for exact hits and fuzzy candidates", async () => {
     const normalized = evidenceFor({

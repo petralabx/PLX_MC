@@ -39,6 +39,7 @@ import {
 import { Avatar, AvatarStack, HealthPill, PMark, ReqChip, SyncTick } from "./atoms";
 import type { ScreenProps } from "./route";
 import { Timeline } from "./timeline";
+import { isCountedStage } from "./project-overview.helpers";
 
 // A static fallback (first fixture initiative) so the detail view always
 // resolves to a real bucket; live resolution goes through bucketById (EN-005).
@@ -292,7 +293,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
           <PrdLinkField key={`${bucket.id}:${bucket.prd ?? ""}`} bucketId={bucket.id} prd={bucket.prd} />
           <div className="f">
             <span className="k">Tasks</span>
-            <span className="v">{rollups.tasks.length}</span>
+            <span className="v">{rollups.tasks.filter(isCountedStage).length}</span>
           </div>
         </div>
 

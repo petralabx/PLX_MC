@@ -1,3 +1,6 @@
+import { assertSchemaReady } from "@/lib/db";
+import { databaseConfigured } from "@/lib/secrets";
+import { SchemaMismatchError } from "../../../scripts/lib/schema-version.mjs";
 // Shared cursor route wrapper — MCP auth, envelope, audit on every call.
 
 import { NextResponse } from "next/server";
@@ -29,6 +32,7 @@ export function cursorRoute(toolName: string, handler: CursorHandler) {
     let requestId = "";
     try {
       identity = await verifyMcpRequest(req);
+      if (databaseConfigured()) await assertSchemaReady();
       // A principal with a tool allowlist (sp_mcp_portal) gets 403 for any
       // other route before the handler reads the body or any data.
       assertMcpToolAllowed(identity, toolName);
@@ -54,6 +58,9 @@ export function cursorRoute(toolName: string, handler: CursorHandler) {
       if (eventSeq) merged.audit.eventSeq = eventSeq;
       return NextResponse.json(wrapMcpResponse(result.data, merged));
     } catch (err) {
+      if (err instanceof SchemaMismatchError) {
+        return NextResponse.json({ error: { code: err.code, message: err.message, schema: err.schema } }, { status: 503 });
+      }
       if (identity) {
         await recordMcpToolCall({
           tool: toolName,

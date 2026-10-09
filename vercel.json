@@ -29,5 +29,6 @@
       "path": "/api/cron/github-backfill",
       "schedule": "23 7 * * *"
     }
-  ]
+  ],
+  "buildCommand": "npm run build"
 }

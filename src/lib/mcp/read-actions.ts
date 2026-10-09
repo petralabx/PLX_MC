@@ -205,7 +205,7 @@ export async function actionVerifyPr(identity: McpIdentity, input: { repo: strin
 export function registerAgentReadTools(server: McpServer, identity: McpIdentity): void {
   server.tool(
     "mc_get_task",
-    "Read one MC task: the task (as mc_get_context depth:full), its accountable owner and evidence, its checkouts, and its recent mc_events history (newest first; excludes mcp.tool.invoked audit rows). Checkout ids are redacted to checkoutRef (dsp_…last4) everywhere — use your own mc_checkout_task receipt to complete. Read-only; restricted-project tasks return not_found.",
+    "Read one MC task: the task (as mc_get_context depth:full), its completedAt and cancellation (reason, replacedBy), its accountable owner and evidence, its checkouts, and its recent mc_events history (newest first; excludes mcp.tool.invoked audit rows). Checkout ids are redacted to checkoutRef (dsp_…last4) everywhere — use your own mc_checkout_task receipt to complete. Read-only; restricted-project tasks return not_found.",
     { id: z.string().min(1).describe("TASK-* id") },
     async ({ id }) => mcpJsonResult({ data: await actionGetTask(identity, id) })
   );

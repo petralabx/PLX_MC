@@ -35,7 +35,7 @@ const DEFAULT_POLICY: RoutingPolicy = {
   suggestionLimit: 3,
   detailLimit: 10,
   fuzzyAutoLinkEnabled: false,
-  completedStages: ["merged", "verified"],
+  completedStages: ["merged", "verified", "cancelled"],
   weights: {
     exactReference: 100,
     repoMatch: 25,

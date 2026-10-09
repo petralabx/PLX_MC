@@ -151,10 +151,10 @@ test.describe("saved views & filter persistence", () => {
 
     await gotoBoard(page);
     // Loads clean at defaults: cards render, no active filter chip, default Band
-    // axis (3 columns). The corrupt blob degraded to defaults, never threw.
+    // axis (4 columns). The corrupt blob degraded to defaults, never threw.
     await expect(page.locator(".mc .tcard").first()).toBeVisible();
     await expect(page.locator(".filterbar .fb-chip")).toHaveCount(0);
-    await expect(page.locator(".mc .board .bcol")).toHaveCount(3);
+    await expect(page.locator(".mc .board .bcol")).toHaveCount(4);
 
     expect(pageErrors, `unexpected uncaught page errors: ${pageErrors.join(" | ")}`).toEqual([]);
     expect(consoleErrors, `unexpected console errors: ${consoleErrors.join(" | ")}`).toEqual([]);

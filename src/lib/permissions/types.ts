@@ -12,6 +12,7 @@ export const CAPABILITIES = [
   "task.create",
   "task.link",
   "task.reopen",
+  "task.cancel",
   "task.checkout",
   "task.progress",
   "task.complete",

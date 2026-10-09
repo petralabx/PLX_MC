@@ -62,9 +62,9 @@ Deployment order:
    before provisioning and verify it at both sites. This is an operator step,
    outside the DB Action; the Action has no Graph identity and adds no secrets.
 5. Deploy the app only after schema and SharePoint verification. Main currently
-   has an automatic Vercel deployment connection: the operator must coordinate
-   the release so application activation waits for these steps; this workflow
-   does not disable or gate that separate deployment integration.
+   has an automatic Vercel deployment connection: the read-only build gate
+   below blocks application promotion until the target ledger is ready.
+   SharePoint verification remains an operator release prerequisite.
 
 Safety: credentials are scoped to the migration step; only main may dispatch.
 The runner rejects target overrides (URL query parameters and PG target env
@@ -200,3 +200,62 @@ Rollback: revert the workflow/helper change to remove this automation. Reverting
 code does not undo schema or SharePoint changes; use each applied migration's
 rollback header and inspect provisioning results before an operator rollback.
 Never mark unapplied migrations applied to bypass a failure.
+
+## Read-only application deployment gate
+
+Owner: Vince. Live migrations must land **before** the code that needs them.
+On 2026-10-08, PR #286 deployed code reading `completed_at` before migration
+033 was applied to the live DB. API/MCP calls returned generic 500s for about
+13.5 hours; revert PR #290 restored service on October 9. A fresh CI database
+proved the migration could run, but could not prove the target had run it.
+
+Vercel's committed `buildCommand` uses `npm run build`, which runs
+`node scripts/check-deploy-schema.mjs --build` before Next. The check is never
+skipped in Production or any non-preview Vercel build: it fails closed on
+either missing database URL, an unreadable ledger, or any local
+`db/migrations/*.sql` filename absent from `public.schema_migrations`.
+Only `VERCEL_ENV=preview` with an unset/empty `PLX_MC_DATABASE_URL` skips
+without connecting, logging one loud warning that production stays fail-closed.
+`PLX_MC_SCHEMA_CHECK_DATABASE_URL` remains required even for that preview skip.
+Previews with a runtime database URL run the full check and fail closed.
+The DB may be ahead, provided every local filename is present. This stops the
+build before production alias assignment; it never applies a migration.
+Do not override Vercel's build command or promote prebuilt artifacts that
+bypass this gate. Other deployment platforms must run
+`node scripts/check-deploy-schema.mjs` against their target before promotion.
+Ordinary local `npm run build` without `VERCEL=1` does not connect to a DB.
+
+An admin must add **`PLX_MC_SCHEMA_CHECK_DATABASE_URL`** separately in each
+Vercel environment. It must be a dedicated read-only role for that environment's
+runtime database, with CONNECT, public schema USAGE and SELECT on
+`public.schema_migrations` only; no CREATE, table writes or migration privilege.
+Its host, port and database must match the existing `PLX_MC_DATABASE_URL`.
+No new variable or environment is required. Agents create no credentials.
+The check runs in `BEGIN READ ONLY`, uses bounded connection/query timeouts,
+rolls back and closes, and never logs URLs or raw driver errors. Existing DB
+TLS settings and the vendored CA bundle still apply.
+
+The runtime checks the same filename set before DB queries/transactions and
+before configured API/MCP handlers, caching success for 30 seconds. A mismatch
+logs `[db] SCHEMA MISMATCH` and returns HTTP 503 with `error.code=schema_behind`,
+expected/applied versions and missing filenames. The `mc_self_check` REST
+surface reports that same explicit schema diagnostic even if MCP principal
+lookup cannot run. Failed checks are not cached: applying the missing
+migration through the approved runner allows requests to recover immediately.
+The runtime uses its existing database credential for read-only SELECTs.
+The build regenerates `src/lib/db/migration-manifest.json` from the migration
+directory and bundles it into runtime code, including the Edge import graph.
+After adding a migration, regenerate with `node scripts/lib/migration-manifest.mjs`;
+the manifest parity unit test prevents a stale committed manifest.
+
+Release order: land schema → use the existing approved migration workflow →
+verify its target ledger → rebuild/promote application. If a schema-only commit
+is blocked while awaiting approval, that is intentional; rebuild after the
+migration lands. Never insert fake ledger entries to unblock deployment.
+The gate does not change PR #289's gated apply behavior or environment approvals.
+
+Verification: `npx vitest run tests/schema-version.test.ts tests/schema-postgres.test.ts`
+uses a disposable local PostgreSQL 16 container. It proves missing-latest
+blocking, API/self-check 503s, no migration writes, equal/ahead acceptance and
+runtime recovery. The full CI/pre-push suite runs these tests automatically.
+Rollback: revert this PR; no schema or data rollback is needed for the check.

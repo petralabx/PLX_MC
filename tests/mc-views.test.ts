@@ -182,7 +182,8 @@ describe("drag-to-mutate axis → field resolution (Module B)", () => {
 
   it("maps the band axis to each band's documented ENTRY stage", () => {
     // SPEC §5 Module B: todo→backlog, doing→progress, done→merged.
-    expect(BAND_ENTRY_STAGE).toEqual({ todo: "backlog", doing: "progress", done: "merged" });
+    // cancelled→cancelled: the store refuses that drop (a cancel needs a reason).
+    expect(BAND_ENTRY_STAGE).toEqual({ todo: "backlog", doing: "progress", done: "merged", cancelled: "cancelled" });
     expect(resolveColumnDrop("band", "todo")).toEqual({ field: "stage", value: "backlog" });
     expect(resolveColumnDrop("band", "doing")).toEqual({ field: "stage", value: "progress" });
     expect(resolveColumnDrop("band", "done")).toEqual({ field: "stage", value: "merged" });

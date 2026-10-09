@@ -5,7 +5,7 @@ import { boardColumns, gotoBoard } from "./helpers";
 // SPEC §6 #1 — Switching GroupBy re-pivots the board columns across all five
 // axes (band/stage/bucket/priority/assignee); enabling swimlanes then moving to
 // a non-{band,stage} axis RESETS swimlanes off (sub-lanes vanish, not just the
-// toggle); and the 9-column stage axis introduces NO horizontal page overflow
+// toggle); and the 10-column stage axis introduces NO horizontal page overflow
 // (the compact-column layout keeps it inside the board's own scroll region).
 
 const groupBySegButton = (label: string) =>
@@ -19,17 +19,17 @@ test.describe("group-by re-pivots the board", () => {
   test("each axis relabels the columns and every task appears exactly once", async ({ page }) => {
     const seg = page.locator(".tb .seg").first();
 
-    // band (default) → 3 columns.
-    await expect(boardColumns(page)).toHaveCount(3);
+    // band (default) → 4 columns (To do / In progress / Done / Cancelled).
+    await expect(boardColumns(page)).toHaveCount(4);
 
     // The total card count is invariant across axes (single-cell partition:
     // each task lands in exactly one column on every axis).
     const total = await page.locator(".mc .tcard").count();
     expect(total).toBeGreaterThan(0);
 
-    // stage → 9 lifecycle columns.
+    // stage → 9 lifecycle columns plus Cancelled.
     await seg.locator("button", groupBySegButton("Stage")).click();
-    await expect(boardColumns(page)).toHaveCount(9);
+    await expect(boardColumns(page)).toHaveCount(10);
     await expect(page.locator(".mc .tcard")).toHaveCount(total);
 
     // bucket ("Initiative") → 8 go-live initiatives.
@@ -75,9 +75,9 @@ test.describe("group-by re-pivots the board", () => {
     await expect(page.locator(".mc .board .swlabel")).toHaveCount(0);
   });
 
-  test("the 9-column stage axis introduces no horizontal page overflow", async ({ page }) => {
+  test("the 10-column stage axis introduces no horizontal page overflow", async ({ page }) => {
     await page.locator(".tb .seg").first().locator("button", groupBySegButton("Stage")).click();
-    await expect(boardColumns(page)).toHaveCount(9);
+    await expect(boardColumns(page)).toHaveCount(10);
 
     // The board absorbs its width via its own overflow-x:auto region; the PAGE
     // must not gain a horizontal scrollbar. Allow 1px for sub-pixel rounding.

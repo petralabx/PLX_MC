@@ -683,6 +683,8 @@ export async function patchTask(
   // a second pool connection and can starve concurrent transactions.
   if (!opts.query) {
     await ensureSeeded();
+    // Seed the registry on the pool before the transaction holds a connection.
+    if (patch.repos) await ensureReposSeeded();
     // Lock the row across the cancelled-stage guard and the write, so a
     // concurrent cancel cannot commit between them and be silently undone.
     return withTransaction(async (q) => {
@@ -698,8 +700,7 @@ export async function patchTask(
   // Allow-list enforcement on edit (EN-005): normalize + validate repos before
   // building the persisted patch so slugs never land in entities.data.
   if (taskPatch.repos) {
-    await ensureReposSeeded();
-    const registry = await repo.getRepos();
+    const registry = await repo.getRepos(opts.query);
     const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
     taskPatch.repos = requireRegistryRepos(taskPatch.repos, registryMap);
   }

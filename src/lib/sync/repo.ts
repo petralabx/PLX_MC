@@ -198,14 +198,14 @@ export async function updateEntity(
   },
   q: TxQuery = query
 ): Promise<void> {
-  // A stage write on a task locks the row and validates against the locked state in
-  // one transaction, so no caller can act on a stale read and clear a cancellation
-  // that committed in between (TASK-2529).
-  const locksStage = type === "task" && opts.patch?.stage !== undefined;
-  if (locksStage && q === query) {
+  // Every task write reads the row FOR UPDATE and merges onto it in one transaction,
+  // so no caller (stage or not) can write back a stale payload over a stage or
+  // cancellation that committed in between (TASK-2529).
+  const locks = type === "task";
+  if (locks && q === query) {
     return withTransaction((tx) => updateEntity(type, id, opts, tx));
   }
-  const row = await getEntity(type, id, q, locksStage);
+  const row = await getEntity(type, id, q, locks);
   if (!row) return;
   const data = { ...row.data, ...(opts.patch ?? {}) };
   delete data.completedAt; // column is the source of truth; never persist into jsonb
@@ -833,8 +833,8 @@ const toRepoWithSync = (r: RepoRow): RepoWithSync => ({
   spItemId: r.sp_item_id,
 });
 
-export async function getRepos(): Promise<RepoWithSync[]> {
-  const rows = await query<RepoRow>(
+export async function getRepos(q: TxQuery = query): Promise<RepoWithSync[]> {
+  const rows = await q<RepoRow>(
     `SELECT id, name, lang, def_branch, owner, visibility, scope, sync_state, sp_item_id
        FROM repos ORDER BY id`
   );

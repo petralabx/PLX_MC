@@ -874,3 +874,16 @@
 - **Rule going forward:** Enforce a state-transition invariant inside the one
   function that writes it, on a row read `FOR UPDATE` in the same transaction;
   callers translate the refusal (e.g. into a Sync conflict).
+
+## 2026-10-09 — Lock every task read-modify-write, not just stage writes (TASK-2529)
+
+- **What went wrong:** Row locking was added for stage writes only. A priority or
+  sync-state write still read unlocked and replaced the whole JSON payload, so a
+  cancel committing in between was half-undone (stage restored, cancellation kept).
+  The patch transaction also read the repo registry on the global pool, which can
+  starve the 5-connection pool.
+- **Root cause:** The lock was scoped to the symptom (stage) instead of the class
+  (any write that rewrites `data` from a read).
+- **Rule going forward:** In `updateEntity`, every task write reads `FOR UPDATE`
+  in its own transaction and merges onto that row. Inside a transaction, pass `q`
+  to every read; seed/resolve anything that needs the pool before opening it.

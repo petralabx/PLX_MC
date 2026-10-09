@@ -397,6 +397,7 @@ describe("update authorization and locked incremental edits", () => {
     expect(h.events[1].payload.diff).toMatchObject({
       labels: { before: ["lane:codex", "old", "first"], after: ["lane:codex", "old", "first", "second"] },
     });
-    expect(h.queries.filter((q) => q.sql.endsWith("FOR UPDATE"))).toHaveLength(2);
+    // Per edit: the action's predecessor lock, then updateEntity's own row lock (same transaction).
+    expect(h.queries.filter((q) => q.sql.endsWith("FOR UPDATE"))).toHaveLength(4);
   });
 });

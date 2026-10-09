@@ -27,6 +27,9 @@ const h = vi.hoisted(() => ({
   onRowLock: null as null | (() => void),
   // The hook's writes were committed by another transaction, so a rollback here must keep them.
   committed: null as null | (() => void),
+  // Transactions open now, and global-pool queries issued while one was open.
+  txOpen: 0,
+  poolQueriesInTx: [] as string[],
 }));
 const rows = () => h.rows as Map<string, Row>;
 const events = () => h.events as Ev[];
@@ -49,6 +52,10 @@ vi.mock("@/lib/db", () => {
   async function execute(sql: string, params: unknown[] = []) {
     if (sql.includes("FROM buckets ORDER BY")) return [{ id: "BKT-OPEN", data: { id: "BKT-OPEN", project: null } }];
     if (sql.includes("FROM projects ORDER BY")) return [];
+    if (sql.startsWith("INSERT INTO repos")) return [];
+    if (sql.includes("FROM repos ORDER BY")) {
+      return [{ id: "PLX_MC", name: "PLX_MC", lang: "ts", def_branch: "main", owner: "petralabx", visibility: "private", scope: "x", sync_state: "synced", sp_item_id: null }];
+    }
     if (sql.includes("FROM entities WHERE")) {
       if (sql.includes("FOR UPDATE")) {
         const hook = h.onRowLock;
@@ -84,9 +91,13 @@ vi.mock("@/lib/db", () => {
     throw new Error("Unexpected SQL: " + sql);
   }
   return {
-    query: (sql: string, params?: unknown[]) => execute(sql, params),
+    query: (sql: string, params?: unknown[]) => {
+      if (h.txOpen > 0) h.poolQueriesInTx.push(sql);
+      return execute(sql, params);
+    },
     withTransaction: async <T,>(fn: (q: TxQuery) => Promise<T>): Promise<T> => {
       const snapshot = { rows: structuredClone(rows()), events: structuredClone(events()) };
+      h.txOpen += 1;
       try {
         return await fn(((sql: string, params?: unknown[]) => execute(sql, params)) as TxQuery);
       } catch (err) {
@@ -95,6 +106,8 @@ vi.mock("@/lib/db", () => {
         h.committed?.();
         h.committed = null;
         throw err;
+      } finally {
+        h.txOpen -= 1;
       }
     },
   };
@@ -141,7 +154,7 @@ const cancelled = (id: string, patch: Record<string, unknown>) => actionUpdateTa
 
 beforeEach(() => {
   vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT", "off");
-  rows().clear(); events().length = 0; h.updates.length = 0; h.onRowLock = null; h.committed = null;
+  rows().clear(); events().length = 0; h.updates.length = 0; h.onRowLock = null; h.committed = null; h.txOpen = 0; h.poolQueriesInTx.length = 0;
   seed("TASK-2360"); seed("TASK-2341"); seed("TASK-1544", "qa");
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -261,6 +274,29 @@ describe("reopen (acceptance 4)", () => {
     await expect(updateEntity("task", "TASK-1544", { patch: { stage: "review" } })).rejects.toMatchObject({ code: "reopen_required", status: 409 });
     expect(row("TASK-1544").data.stage).toBe("cancelled");
     expect(row("TASK-1544").cancellation).toMatchObject({ reason: "obsolete" });
+  });
+
+  it("a non-stage write (priority, sync state) racing a cancel keeps the stage and the cancellation", async () => {
+    for (const write of [
+      () => patchTask("TASK-1544", { priority: "high" }, "member@petrasoap.com"),
+      () => updateEntity("task", "TASK-1544", { patch: { priority: "high" } }),
+      () => updateEntity("task", "TASK-1544", { syncState: "pending" }),
+    ]) {
+      seed("TASK-1544", "progress");
+      h.onRowLock = () => {
+        row("TASK-1544").data.stage = "cancelled";
+        row("TASK-1544").cancellation = { reason: "obsolete" };
+      };
+      await write();
+      expect(row("TASK-1544").data.stage).toBe("cancelled");
+      expect(row("TASK-1544").cancellation).toMatchObject({ reason: "obsolete" });
+    }
+  });
+
+  it("concurrent patches never borrow a pool connection while holding the transaction", async () => {
+    await Promise.all(["TASK-2360", "TASK-2341", "TASK-1544"].map((id) => patchTask(id, { repos: ["PLX_MC"] }, "member@petrasoap.com")));
+    expect(h.poolQueriesInTx).toEqual([]);
+    expect(row("TASK-2360").data.repos).toEqual(["PLX_MC"]);
   });
 
   it("updateEntity leaves cancelled only for the reopen service", async () => {

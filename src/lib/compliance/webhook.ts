@@ -20,8 +20,6 @@ export interface PrEvent {
   headSha: string;
   /** Merge commit SHA when closed+merged; otherwise null. */
   mergeSha?: string | null;
-  /** GitHub pr.merged_at (ISO-8601) when closed+merged — the task completion time. */
-  mergedAt?: string | null;
   branch: string;
   baseBranch?: string;
   title: string;
@@ -103,7 +101,6 @@ export function parsePullRequestEvent(payload: unknown): PrEvent | null {
     prNumber: num,
     headSha: asStr(head.sha),
     mergeSha: merged && mergeCommitSha ? mergeCommitSha : null,
-    mergedAt: merged && asStr(pr.merged_at) ? asStr(pr.merged_at) : null,
     branch: asStr(head.ref),
     baseBranch: asStr(base.ref) || "main",
     title: asStr(pr.title),

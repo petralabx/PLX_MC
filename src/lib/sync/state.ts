@@ -15,7 +15,7 @@ import {
   RESTRICTED_MIRROR_SP,
   type ProjectVisibility,
 } from "@/lib/permissions/project-acl";
-import { TERMINAL_STAGES, assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
+import { assignmentViolation, isAgentId, stageAdvanceViolation } from "@/lib/mc-data/policy";
 import {
   formatRepoNotAllowedMessage,
   normalizeRepoInputs,
@@ -585,17 +585,11 @@ export async function createTask(
 
     const inserted = await q<{ id: string }>(
       `INSERT INTO entities (
-         entity_type, id, data, sync_state, sync_ts, dirty_fields, field_attribution, completed_at
-       ) VALUES ('task', $1, $2::jsonb, 'pending', now(), '[]'::jsonb, $3::jsonb, $4::timestamptz)
+         entity_type, id, data, sync_state, sync_ts, dirty_fields, field_attribution
+       ) VALUES ('task', $1, $2::jsonb, 'pending', now(), '[]'::jsonb, $3::jsonb)
        ON CONFLICT (entity_type, id) DO NOTHING
        RETURNING id`,
-      [
-        id,
-        JSON.stringify(task),
-        JSON.stringify(fieldAttribution),
-        // Created straight into a terminal stage is a first entry (TASK-2528).
-        TERMINAL_STAGES.includes(task.stage) ? new Date().toISOString() : null,
-      ]
+      [id, JSON.stringify(task), JSON.stringify(fieldAttribution)]
     );
     if (!inserted[0]) {
       throw new ApiError("conflict", `Task ${id} already exists.`, 409);
@@ -640,8 +634,6 @@ export interface PatchTaskOptions {
   complianceProjection?: boolean;
   /** Durable actor attribution for dirty routing fields (P8 / P4 residual). */
   attribution?: MutationAttribution;
-  /** ISO time for completed_at on first terminal entry (PR merge time); updateEntity defaults to now. */
-  completedAt?: string;
 }
 
 // Persistence tiers:
@@ -748,7 +740,6 @@ export async function patchTask(
 
   await repo.updateEntity("task", id, {
     patch: dataPatch,
-    completedAt: opts.completedAt,
     // Person columns are pushed now (Item 1), so a person-only patch re-queues
     // the entity for the next outbound sweep.
     syncState: pushedDirty.length > 0 ? "pending" : undefined,

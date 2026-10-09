@@ -38,27 +38,6 @@ describe("task search repository (offline bound-input fixtures + SQL contract)",
     expect(sql).toContain("count(*)::text FROM filtered");
     expect(sql).toContain("substring(id FROM '^TASK-([0-9]+)$')::numeric");
   });
-  it("filters completion bounds before totals and paging and binds cursors to those bounds", async () => {
-    tasks = [
-      { ...make(200), completed_at: "2026-10-07T00:00:00Z" },
-      { ...make(201), completed_at: "2026-10-08T00:00:00Z" },
-      { ...make(202), completed_at: "2026-10-09T00:00:00Z" },
-      make(203),
-    ];
-    const filters = { completedAfter: "2026-10-07T00:00:00Z", completedBefore: "2026-10-09T00:00:00Z", limit: 1 };
-    const first = await searchTaskPage(filters);
-    expect(first.total).toBe(2);
-    expect(first.tasks.map((t) => t.id)).toEqual(["TASK-200"]);
-    const second = await searchTaskPage({ ...filters, cursor: first.nextCursor! });
-    expect(second.total).toBe(2);
-    expect(second.tasks.map((t) => t.id)).toEqual(["TASK-201"]);
-    expect(second.nextCursor).toBeNull();
-    const sql = vi.mocked(query).mock.calls.at(-1)![0];
-    expect(sql).toContain("completed_at >= $");
-    expect(sql).toContain("completed_at < $");
-    await expect(searchTaskPage({ ...filters, completedBefore: "2026-10-08T00:00:00Z", cursor: first.nextCursor! })).rejects.toThrow("Invalid search cursor");
-    expect((await searchTaskPage(filters, ["BKT-PROD"])).total).toBe(0);
-  });
   it("excludes tasks created mid-pagination including a lower ID", async () => {
     const first = await searchTaskPage({ limit: 200 });
     tasks.push({ ...make(199), createdAt: "2026-10-07T23:01:00.000000Z" }, make(1000));
@@ -92,16 +71,14 @@ describe("task search repository (offline bound-input fixtures + SQL contract)",
     tasks[0].comments![0].id = "human-comment";
     expect((await searchTaskPage({ query: "obsolete", in: ["notes"], limit: 50 })).total).toBe(0);
   });
-  it("keeps default full rows, returns compact 200-row payload below 100 KB, and projects stored completed_at", async () => {
-    tasks[0].completed_at = "2026-10-07T22:00:00Z";
+  it("keeps default full rows, returns compact 200-row payload below 100 KB, and only copies existing completedAt", async () => {
+    tasks[0].completedAt = "2026-10-07T22:00:00Z";
     const full = await searchTaskPage({ limit: 50 });
     expect(full.tasks).toHaveLength(50);
     expect(full.tasks[0]).toHaveProperty("description");
     const compact = await searchTaskPage({ limit: 200, fields: "compact" });
     expect(Buffer.byteLength(JSON.stringify(compact))).toBeLessThan(100_000);
-    expect(compact.tasks[0].completedAt).toBe("2026-10-07T22:00:00.000Z");
-    expect(full.tasks[0].completedAt).toBe("2026-10-07T22:00:00.000Z");
-    expect(vi.mocked(query).mock.calls.at(-1)![0]).toContain("CASE WHEN completed_at IS NOT NULL");
+    expect(compact.tasks[0]).toHaveProperty("completedAt");
     expect(compact.tasks[1]).not.toHaveProperty("completedAt");
     expect(compact.tasks[1]).not.toHaveProperty("description");
     expect(compact.tasks[1]).not.toHaveProperty("activity");

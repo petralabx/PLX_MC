@@ -17,7 +17,6 @@ const store = vi.hoisted(() => {
     events,
     dedupTaskIds,
     taskSeq: 0,
-    completedAtArgs: [] as (string | undefined)[],
     enforcement: false,
     principalStatus: "active" as "active" | "revoked",
     principalPresent: true,
@@ -94,11 +93,10 @@ vi.mock("@/lib/sync/repo", () => ({
   async updateEntity(
     type: string,
     id: string,
-    opts: { patch?: Record<string, unknown>; syncState?: string; dirtyFields?: string[]; completedAt?: string }
+    opts: { patch?: Record<string, unknown>; syncState?: string; dirtyFields?: string[] }
   ) {
     const row = store.rows.get(`${type}:${id}`);
     if (!row) return;
-    store.completedAtArgs.push(opts.completedAt);
     row.data = { ...row.data, ...(opts.patch ?? {}) };
     if (opts.syncState !== undefined) row.sync_state = opts.syncState;
     if (opts.dirtyFields !== undefined) row.dirty_fields = opts.dirtyFields;
@@ -181,7 +179,6 @@ beforeEach(() => {
   store.events.length = 0;
   store.dedupTaskIds.clear();
   store.taskSeq = 0;
-  store.completedAtArgs.length = 0;
   store.enforcement = false;
   store.principalStatus = "active";
   store.principalPresent = true;
@@ -256,28 +253,6 @@ describe("projectPullRequest", () => {
     expect(task.merge).toMatchObject({ sha: "deadbeef" });
     expect(store.events.some((e) => e.kind === "task.promoted" && e.taskId === "TASK-200")).toBe(true);
     expect(store.authorizeCalls.some((c) => c.capability === "task.link")).toBe(true);
-  });
-
-  it("stamps completed_at with the PR merge time, not the projection run time", async () => {
-    seedTask({ id: "TASK-201", stage: "progress" });
-    await projectPullRequest(
-      prEvt({ action: "closed", merged: true, mergeSha: "cafe", mergedAt: "2026-07-23T15:04:05Z" }),
-      { actorKind: "agent", actorIdentity: "dsp_abc", taskIds: ["TASK-201"], sparse: false }
-    );
-    expect(store.completedAtArgs).toEqual(["2026-07-23T15:04:05.000Z"]);
-    const promoted = store.events.find((e) => e.kind === "task.promoted");
-    expect(promoted?.payload).toMatchObject({ stage: "merged", completionSource: "pr_merge" });
-  });
-
-  it("does not pass a completion time on PR open", async () => {
-    seedTask({ id: "TASK-202", stage: "planned" });
-    await projectPullRequest(prEvt({ action: "opened", mergedAt: "2026-07-23T15:04:05Z" }), {
-      actorKind: "agent",
-      actorIdentity: "dsp_abc",
-      taskIds: ["TASK-202"],
-      sparse: false,
-    });
-    expect(store.completedAtArgs).toEqual([undefined]);
   });
 
   it("does NOT create a sparse task for operator PRs with no checkout (retired)", async () => {

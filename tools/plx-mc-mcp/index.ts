@@ -122,7 +122,7 @@ server.tool(
 
 server.tool(
   "mc_search_tasks",
-  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, label, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt; page with nextCursor. Use searchComments/in for discussion and fields=compact. Applied filters are echoed in meta.filter.",
+  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, label, or assignee; page with nextCursor. Use searchComments/in for discussion and fields=compact. Applied filters are echoed in meta.filter.",
   taskSearchShape,
   async (args) => {
     if (!MCP_ENABLED) return disabledTool("mc_search_tasks");
@@ -132,8 +132,6 @@ server.tool(
     if (args.bucket) qs.set("bucket", args.bucket);
     if (args.stage) qs.set("stage", args.stage);
     if (args.assignee) qs.set("assignee", args.assignee);
-    if (args.completedAfter) qs.set("completedAfter", args.completedAfter);
-    if (args.completedBefore) qs.set("completedBefore", args.completedBefore);
     if (args.limit) qs.set("limit", String(args.limit));
     if (args.label) qs.set("label", args.label);
     if (args.cursor) qs.set("cursor", args.cursor);

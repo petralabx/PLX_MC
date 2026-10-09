@@ -74,14 +74,6 @@ describe("parsePullRequestEvent", () => {
     expect(evt.labels).toEqual(["go-live"]);
   });
 
-  it("carries merged_at as mergedAt only for merged PRs", () => {
-    const merged = parsePullRequestEvent(
-      prPayload({ action: "closed" }, { merged: true, merged_at: "2026-07-23T15:04:05Z", merge_commit_sha: "m1" })
-    )!;
-    expect(merged.mergedAt).toBe("2026-07-23T15:04:05Z");
-    expect(parsePullRequestEvent(prPayload({ action: "closed" }, { merged_at: "2026-07-23T15:04:05Z" }))!.mergedAt).toBeNull();
-  });
-
   it("returns null for a non-pull_request payload", () => {
     expect(parsePullRequestEvent({ action: "push" })).toBeNull();
     expect(parsePullRequestEvent(null)).toBeNull();

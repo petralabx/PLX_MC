@@ -32,8 +32,6 @@ export const GET = cursorRoute("mc_search_tasks", async (req, _ctx, identity) =>
     bucket: sp.get("bucket") ?? undefined,
     stage: sp.get("stage") ?? undefined,
     assignee: sp.get("assignee") ?? undefined,
-    completedAfter: sp.get("completedAfter") ?? undefined,
-    completedBefore: sp.get("completedBefore") ?? undefined,
     label: sp.get("label") ?? undefined,
     cursor: sp.get("cursor") ?? undefined,
     fields: sp.get("fields") ?? undefined,

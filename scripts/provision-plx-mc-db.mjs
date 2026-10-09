@@ -1,12 +1,17 @@
 #!/usr/bin/env node
-// Provision the dedicated plx_mc database + app role on the staging RDS
+// Provision the dedicated plx_mc database + app role on the production RDS
 // instance. Mirrors the evidence discipline of provision-sharepoint.py:
 // dry-run by default, --apply to mutate, idempotent (safe to re-run).
 //
 // The app NEVER uses the instance admin or any other database's credentials
 // at runtime — it gets its own `plx_mc_app` role scoped to the `plx_mc`
-// database. The runtime URL lives in AWS Secrets Manager (prod/ec2-secrets,
-// key PLX_MC_DATABASE_URL) per TOOLS.md "Secrets Source of Truth".
+// database. Production plx-mission-control (mc.plxcustomer.io and
+// mc-staging.plxcustomer.io) uses plx_mc on
+// plx-postgres-staging.c2b8m8isksqt.us-east-1.rds.amazonaws.com (sysid 7543096909140343566).
+// AWS SM prod/ec2-secrets PLX_MC_DATABASE_URL and plx/mc/live-database-url
+// identify the same DB as Vercel Production PLX_MC_DATABASE_URL.
+// WARNING: "staging" in the host name is historical; this IS production.
+// Never infer environment from a host name.
 //
 // Env:
 //   PLX_MC_PROVISION_ADMIN_URL  admin connection URL (CREATEDB/CREATEROLE)

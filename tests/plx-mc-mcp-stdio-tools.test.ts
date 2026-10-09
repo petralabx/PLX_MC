@@ -31,6 +31,8 @@ describe("stdio wave 4 tool parity (plus TASK-2326 release tools)", () => {
       mc_request_approval: '"/request-approval"',
       mc_update_task: '"/tasks/update"',
       mc_update_tasks: '"/tasks/update-batch"',
+      mc_update_project: '"/projects"',
+      mc_list_projects: '`/projects${query}`',
       mc_release_checkout: '"/checkouts/release"',
       mc_release_checkouts: '"/checkouts/release-batch"',
       mc_report_session_telemetry: '"/session-telemetry"',

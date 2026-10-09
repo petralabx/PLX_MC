@@ -25,12 +25,12 @@ import {
   allRepos,
   allRisks,
   allTasks,
-  allProjects,
   bucketById,
   commentsForBucket,
   deleteBucketComment,
   editBucketComment,
   mentionables,
+  pickerProjects,
   projectById,
   updateBucket,
   viewerId,
@@ -282,7 +282,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                 onChange={(event) => updateBucket(bucket.id, { project: event.target.value || null })}
               >
                 <option value="">No project</option>
-                {allProjects().map((project) => (
+                {pickerProjects(bucket.project).map((project) => (
                   <option key={project.id} value={project.id}>
                     {project.name}
                   </option>

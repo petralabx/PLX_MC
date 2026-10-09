@@ -79,7 +79,7 @@ describe("MCP bucket.update grant", () => {
     }
   });
 
-  it("still denies project.update and bucket.update for the inbound sync principal", () => {
+  it("denies project.update and bucket.update for the inbound sync principal", () => {
     expect(
       authorize({
         actor: { kind: "service", id: "sp_sync_inbound", status: "active" },
@@ -89,7 +89,7 @@ describe("MCP bucket.update grant", () => {
     ).toBe(false);
     expect(
       authorize({
-        actor: { kind: "service", id: "sp_mcp_cursor", status: "active" },
+        actor: { kind: "service", id: "sp_sync_inbound", status: "active" },
         capability: "project.update",
       }).allowed
     ).toBe(false);

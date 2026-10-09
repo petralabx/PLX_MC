@@ -227,7 +227,7 @@ describe("service-principal separation", () => {
     );
     expect(mcpCaps).not.toContain("repo.approve");
     expect(mcpCaps).not.toContain("permissions.manage");
-    expect(mcpCaps).not.toContain("project.update");
+    expect(mcpCaps).toContain("project.update");
 
     const actor = service("sp_mcp_cursor");
     expect(authorize({ actor, capability: "task.create" }).allowed).toBe(true);
@@ -236,7 +236,7 @@ describe("service-principal separation", () => {
     expect(authorize({ actor, capability: "task.link" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "sync.mutate" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "bucket.update" }).allowed).toBe(true);
-    expect(authorize({ actor, capability: "project.update" }).allowed).toBe(false);
+    expect(authorize({ actor, capability: "project.update" }).allowed).toBe(true);
     expect(authorize({ actor, capability: "repo.approve" }).allowed).toBe(false);
   });
 

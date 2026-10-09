@@ -277,7 +277,11 @@ def ensure_choices(
     if col["type"] != "choice":
         return
     actual = next(
-        (c for c in existing if c["name"] == col["name"] or c["displayName"] == col["displayName"]),
+        (
+            c
+            for c in existing
+            if c["name"] == col["name"] or c["displayName"] == col["displayName"]
+        ),
         None,
     )
     if not actual:
@@ -293,7 +297,12 @@ def ensure_choices(
         return
     g.patch(
         f"{GRAPH}/sites/{site_id}/lists/{list_id}/columns/{actual['id']}",
-        {"choice": {**actual["choice"], "choices": merged_choices(have, col["choices"])}},
+        {
+            "choice": {
+                **actual["choice"],
+                "choices": merged_choices(have, col["choices"]),
+            }
+        },
     )
     print(f"    choices added: {col['displayName']}")
 

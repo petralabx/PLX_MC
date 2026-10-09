@@ -10,7 +10,7 @@ import {
   SYNC_REGISTERS,
   TASKS,
 } from "./data";
-import type { ApprovalEvidenceRef, Band, Confidence, Evidence, Health, StageKey, Task } from "./types";
+import type { ApprovalEvidenceRef, Band, Confidence, Evidence, Health, ProjectStatus, StageKey, Task } from "./types";
 
 const PETRA_EMAIL = /^[^@\s]+@(petralabx|petrasoap)\.com$/i;
 
@@ -116,4 +116,10 @@ export function domainOf(email: string): string {
 // flag exists — health is the archive switch.
 export function isNavVisible(item: { health: Health }): boolean {
   return item.health !== "off";
+}
+
+// Project lifecycle (TASK-2530): a project with no status is active. Closed
+// projects leave nav, counts and pickers but stay reachable by id.
+export function isProjectClosed(project: { status?: ProjectStatus } | null | undefined): boolean {
+  return project?.status === "closed";
 }

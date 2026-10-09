@@ -1,0 +1,112 @@
+name: DB Migrate (live release)
+
+# Manual live plx_mc release. Plan is the default and changes nothing. Apply needs
+# mode=apply, confirm=MIGRATE_LIVE and the mc-live-release environment approval.
+# Uses its own MC_LIVE_* pair, separate from the automatic path; see docs/runbooks/db-migrate.md.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'plan lists and changes nothing; apply migrates then provisions SharePoint'
+        type: choice
+        required: true
+        default: plan
+        options: [plan, apply]
+      confirm:
+        description: 'Type MIGRATE_LIVE with mode=apply to run apply'
+        type: string
+        required: false
+        default: ''
+
+      plan_sha:
+        description: 'Exact plan_commit_sha from the plan on this ref'
+        type: string
+        required: false
+        default: ''
+      pending_hash:
+        description: 'Exact pending_hash from that plan'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-migrate-plx-mc
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: ${{ !(inputs.mode == 'apply' && inputs.confirm == 'MIGRATE_LIVE') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Plan (read-only, pending items only)
+        env:
+          MC_LIVE_DATABASE_URL: ${{ secrets.MC_LIVE_DATABASE_URL }}
+          MC_LIVE_EXPECTED_IDENTITY: ${{ vars.MC_LIVE_EXPECTED_IDENTITY }}
+          MICROSOFT_GRAPH_TENANT_ID: ${{ secrets.MICROSOFT_GRAPH_TENANT_ID }}
+          MICROSOFT_GRAPH_CLIENT_ID: ${{ secrets.MICROSOFT_GRAPH_CLIENT_ID }}
+          MICROSOFT_GRAPH_CLIENT_SECRET: ${{ secrets.MICROSOFT_GRAPH_CLIENT_SECRET }}
+        run: node scripts/db-migrate-live.mjs plan
+
+  apply:
+    if: inputs.mode == 'apply' && inputs.confirm == 'MIGRATE_LIVE'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: mc-live-release
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: python3 -m pip install requests==2.32.5
+      - name: Preflight apply (SHA, identity, pending hash, both sources readable)
+        env:
+          MC_LIVE_DATABASE_URL: ${{ secrets.MC_LIVE_DATABASE_URL }}
+          MC_LIVE_EXPECTED_IDENTITY: ${{ vars.MC_LIVE_EXPECTED_IDENTITY }}
+          MICROSOFT_GRAPH_TENANT_ID: ${{ secrets.MICROSOFT_GRAPH_TENANT_ID }}
+          MICROSOFT_GRAPH_CLIENT_ID: ${{ secrets.MICROSOFT_GRAPH_CLIENT_ID }}
+          MICROSOFT_GRAPH_CLIENT_SECRET: ${{ secrets.MICROSOFT_GRAPH_CLIENT_SECRET }}
+          PLAN_SHA: ${{ inputs.plan_sha }}
+          PENDING_HASH: ${{ inputs.pending_hash }}
+        run: node scripts/db-migrate-live.mjs preflight-apply
+      - name: Migrate live database
+        env:
+          PLX_MC_DATABASE_URL: ${{ secrets.MC_LIVE_DATABASE_URL }}
+        run: npm run migrate
+      - name: Provision SharePoint (dev site)
+        env:
+          MICROSOFT_GRAPH_TENANT_ID: ${{ secrets.MICROSOFT_GRAPH_TENANT_ID }}
+          MICROSOFT_GRAPH_CLIENT_ID: ${{ secrets.MICROSOFT_GRAPH_CLIENT_ID }}
+          MICROSOFT_GRAPH_CLIENT_SECRET: ${{ secrets.MICROSOFT_GRAPH_CLIENT_SECRET }}
+        run: python3 scripts/provision-sharepoint.py --env staging --apply
+      - name: Provision SharePoint (production site)
+        env:
+          MICROSOFT_GRAPH_TENANT_ID: ${{ secrets.MICROSOFT_GRAPH_TENANT_ID }}
+          MICROSOFT_GRAPH_CLIENT_ID: ${{ secrets.MICROSOFT_GRAPH_CLIENT_ID }}
+          MICROSOFT_GRAPH_CLIENT_SECRET: ${{ secrets.MICROSOFT_GRAPH_CLIENT_SECRET }}
+        run: python3 scripts/provision-sharepoint.py --env production --apply
+      - name: Post-apply (remaining pending items must be empty)
+        env:
+          MC_LIVE_DATABASE_URL: ${{ secrets.MC_LIVE_DATABASE_URL }}
+          MC_LIVE_EXPECTED_IDENTITY: ${{ vars.MC_LIVE_EXPECTED_IDENTITY }}
+          MICROSOFT_GRAPH_TENANT_ID: ${{ secrets.MICROSOFT_GRAPH_TENANT_ID }}
+          MICROSOFT_GRAPH_CLIENT_ID: ${{ secrets.MICROSOFT_GRAPH_CLIENT_ID }}
+          MICROSOFT_GRAPH_CLIENT_SECRET: ${{ secrets.MICROSOFT_GRAPH_CLIENT_SECRET }}
+        run: node scripts/db-migrate-live.mjs post-apply

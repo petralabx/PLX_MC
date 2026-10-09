@@ -16,6 +16,12 @@ import {
 import { upsertRoutingSession } from "@/lib/routing/repo";
 import { resolveAutonomyLevel, type ResolvedAutonomy } from "@/lib/routing/autonomy";
 import { loadAgentOutcomes, type AgentOutcomeMetrics } from "@/lib/routing/outcomes";
+import {
+  applyOutcomeScores,
+  loadOutcomeIndex,
+  type OutcomeIndex,
+  type OutcomeScoreComponent,
+} from "@/lib/routing/outcome-score";
 import { resolveRepoCohortRuntimeState } from "@/lib/routing/rollout";
 import type {
   RoutingCandidateRecord,
@@ -50,6 +56,8 @@ export interface SuggestWorkInput {
 
 export interface SuggestWorkCandidate extends RoutingCandidateRecord {
   link: string;
+  /** Evidence-backed outcome component (TASK-634); neutral without history. */
+  outcomeScore: OutcomeScoreComponent;
 }
 
 export interface SuggestWorkResult {
@@ -248,7 +256,11 @@ export async function actionSuggestWork(
     typeof input.detailLimit === "number" && input.detailLimit > 0
       ? Math.min(input.detailLimit, 10)
       : shadow.candidates.length;
-  const sliced = shadow.candidates.slice(0, limit);
+  // Re-rank on historical outcomes before the detail slice.
+  const outcomeIndex =
+    shadow.candidates.length > 0 ? await loadRuntimeOutcomeIndex(visibleTasks) : null;
+  const ranked = applyOutcomeScores(shadow.candidates, identity.runtime, outcomeIndex);
+  const sliced = ranked.slice(0, limit);
 
   const candidates: SuggestWorkCandidate[] = sliced.map((c) => ({
     ...c,
@@ -265,7 +277,7 @@ export async function actionSuggestWork(
     failureReason: shadow.failureReason,
     candidates,
     reasons: shadow.reasons,
-    derivedProjectId: shadow.derivedProjectId,
+    derivedProjectId: ranked[0]?.projectId ?? null,
     policyVersion: shadow.policyVersion,
     scoringVersion: shadow.scoringVersion,
     deepLinks: {
@@ -291,6 +303,22 @@ async function loadRuntimeOutcomes(runtime: string): Promise<AgentOutcomeMetrics
   } catch (err) {
     console.error(
       "[routing] outcome metrics unavailable for suggest envelope (fail-open): %s",
+      err instanceof Error ? err.message : String(err)
+    );
+    return null;
+  }
+}
+
+// Outcome score index (TASK-634) over visible tasks only — fail-open: null
+// makes every component neutral ("metrics_unavailable").
+async function loadRuntimeOutcomeIndex(
+  tasks: Array<{ id: string; bucket: string }>
+): Promise<OutcomeIndex | null> {
+  try {
+    return await loadOutcomeIndex(new Map(tasks.map((t) => [t.id, t.bucket])));
+  } catch (err) {
+    console.error(
+      "[routing] outcome score unavailable for suggest ranking (fail-open): %s",
       err instanceof Error ? err.message : String(err)
     );
     return null;

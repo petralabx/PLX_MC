@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { taskSearchShape } from "./task-search-schema";
 /**
  * PLX-MC MCP Server (stdio)
  *
@@ -121,20 +122,8 @@ server.tool(
 
 server.tool(
   "mc_search_tasks",
-  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt and cancellation (stage=cancelled lists cancelled tasks). Applied filters are echoed in meta.filter.",
-  {
-    q: z.string().optional().describe("Search text (alias of query)"),
-    query: z.string().optional().describe("Search text (alias of q)"),
-    bucket: z.string().optional(),
-    stage: z.string().optional(),
-    assignee: z
-      .string()
-      .optional()
-      .describe("Exact assignee id, e.g. agent:hasitha-fernando or a person id"),
-    completedAfter: z.string().optional().describe("ISO-8601; completedAt >= this (inclusive)"),
-    completedBefore: z.string().optional().describe("ISO-8601; completedAt < this (exclusive)"),
-    limit: z.number().int().optional(),
-  },
+  "Search/list MC tasks. `query` and `q` are aliases. Filter by bucket, stage, label, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt and cancellation (stage=cancelled lists cancelled tasks). Page with nextCursor. Use searchComments/in for discussion and fields=compact. Applied filters are echoed in meta.filter.",
+  taskSearchShape,
   async (args) => {
     if (!MCP_ENABLED) return disabledTool("mc_search_tasks");
     const qs = new URLSearchParams();
@@ -146,6 +135,11 @@ server.tool(
     if (args.completedAfter) qs.set("completedAfter", args.completedAfter);
     if (args.completedBefore) qs.set("completedBefore", args.completedBefore);
     if (args.limit) qs.set("limit", String(args.limit));
+    if (args.label) qs.set("label", args.label);
+    if (args.cursor) qs.set("cursor", args.cursor);
+    if (args.fields) qs.set("fields", args.fields);
+    if (args.searchComments !== undefined) qs.set("searchComments", String(args.searchComments));
+    for (const field of args.in ?? []) qs.append("in", field);
     return printResult(await mcFetch(`/tasks?${qs.toString()}`));
   }
 );
@@ -598,10 +592,42 @@ const taskUpdatePatch = z.object({
     stage: z.enum(["backlog", "specced", "approved", "planned", "progress", "qa", "review"]).optional(),
     note: z.string().trim().max(2000).optional(),
   }).strict().optional(),
+  bucket: z.string().trim().regex(/^BKT-[A-Z0-9-]+$/).optional(),
+  note: z.string().trim().min(1).max(500).optional(),
 }).strict();
 
+server.registerTool("mc_update_project", {
+  description: "Steward edit of a Mission Control project: {projectId, status?, owner?, description?, name?, note?}, at least one field. status=closed removes the project from active nav, counts and pickers and blocks new tasks/buckets in it; status=active reopens. owner must be a known person, agent or service principal. Audits project.updated with before/after. health is not changed here.",
+  inputSchema: z.object({
+    projectId: z.string().trim().min(1).max(128),
+    status: z.enum(["active", "closed"]).optional(),
+    owner: z.string().trim().min(1).max(320).optional(),
+    description: z.string().max(32_000).optional(),
+    name: z.string().trim().min(1).max(255).optional(),
+    note: z.string().trim().max(2_000).optional(),
+  }).strict(),
+}, async (body) => {
+  if (!MCP_ENABLED) return disabledTool("mc_update_project");
+  return printResult(await mcFetch("/projects", { method: "PATCH", body }));
+});
+
+server.registerTool("mc_list_projects", {
+  description: "List projects with id, name, owner, status, health, bucketCount, openTaskCount, doneTaskCount and closedAt. status: active (default) | closed | all; q matches id or name.",
+  inputSchema: z.object({
+    status: z.enum(["active", "closed", "all"]).optional(),
+    q: z.string().trim().max(200).optional(),
+  }).strict(),
+}, async ({ status, q }) => {
+  if (!MCP_ENABLED) return disabledTool("mc_list_projects");
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (q) params.set("q", q);
+  const query = params.size ? `?${params.toString()}` : "";
+  return printResult(await mcFetch(`/projects${query}`));
+});
+
 server.registerTool("mc_update_task", {
-  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority. Mutually exclusive forms cannot mix. Exactly one lane:* must remain. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
+  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one lane:* must remain, unless a lane-less task only gains/loses closed:* closure labels (or not-needed) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
   inputSchema: z.object({
     taskId: z.string().trim().min(1).max(128),
     patch: taskUpdatePatch,

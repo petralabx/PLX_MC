@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-09 (ET) — Live database identity was judged by its host name
+
+- **What happened:** #293 was written on the belief that the live plan from #292 targeted a staging DB outside production. A later read-only investigation matched recent production events/writes and active production-app connections to `plx_mc` on `plx-postgres-staging.c2b8m8isksqt.us-east-1.rds.amazonaws.com` (system identifier `7543096909140343566`): the plan had targeted the real production DB. Vercel `plx-mission-control` Production uses it for both `mc.plxcustomer.io` and `mc-staging.plxcustomer.io`; AWS SM `prod/ec2-secrets` `PLX_MC_DATABASE_URL` and `plx/mc/live-database-url` identify that same DB. The docs merged in #293 were wrong and are corrected here. WARNING: "staging" in the host name is historical; it IS production. Never infer environment from a host name. As of 2026-10-09 ET, live schema is at 030; 031/032 were never applied anywhere and production code does not need them (031 status lives in `projects.data` JSON; 032 is indexes only). The 033 `completed_at` column is required by #286's code, which broke production and was reverted by #290.
+- **Root cause:** The database was judged by its host name ("staging") instead of evidence.
+- **Rule going forward:** Verify database identity by matching live evidence: recent production events/writes, active connections from the production app, and `system_identifier`. Never use host names or naming conventions to infer environment. The human-set `MC_LIVE_EXPECTED_IDENTITY` guard (`db@host#sysid`) stays as enforcement; plan reports MATCH/MISMATCH/UNSET.
+
 ### 2026-10-07 (ET) — Backfill "non-production only" guard was a substring check
 
 - **What happened:** `backfill-task-completed-at.mjs` refused only URLs containing
@@ -832,3 +838,9 @@
 - **Rule going forward:** Put the invariant in the shared write path. `patchTask`
   refuses to leave `cancelled` unless the reopen service passed `reopen: true`;
   callers authorize first. Inbound edits that would leave it raise a Sync conflict.
+
+### 2026-10-07 (ET) — TASK-2533: rejected inbound move was audited but consumed; closure exception ignored other fields
+
+- **What went wrong:** An inbound SharePoint bucket move refused by the guard only wrote an audit line, so the delta cursor advanced and a dirty local bucket could later overwrite SharePoint. The lane exception also checked only the label delta, so title/description/priority edits rode along with a closure label.
+- **Root cause:** A new inbound validation path refused silently instead of using the existing conflict register; an exception predicate was scoped to one field of the patch.
+- **Rule going forward:** Any inbound refusal of a SharePoint value records an open `sync_conflicts` row and sets the task `conflict` (outbound holds) — never audit-only. Exceptions to a validation rule must test the whole patch, not just the field they target.

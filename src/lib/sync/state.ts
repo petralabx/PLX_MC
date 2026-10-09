@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api/route";
 import { OPERATOR_ID, HUMANS, SP_LISTS } from "@/lib/mc-data/data";
 import type { Cancellation } from "@/lib/mc-data/cancellation";
 import { normalizeBucketPrd } from "@/lib/mc-data/doc-links";
+import { isProjectClosed } from "@/lib/mc-data/helpers";
 import {
   isRestrictedProject,
   normalizeProjectMembers,
@@ -27,6 +28,7 @@ import type {
   Comment,
   FileEntry,
   Project,
+  ProjectStatus,
   PullRequest,
   Repo,
   RepoRequest,
@@ -169,6 +171,16 @@ async function defaultProjectId(): Promise<string | null> {
   return portal?.id ?? projects[0]?.id ?? null;
 }
 
+/** Reject new work under a closed project (TASK-2530); reopen with status=active. */
+function assertProjectOpen(project: Project | undefined, what: string): void {
+  if (!project || !isProjectClosed(project)) return;
+  throw new ApiError(
+    "project_closed",
+    `Project ${project.id} is closed — cannot create a ${what} in it. Reopen it first (mc_update_project status=active).`,
+    409
+  );
+}
+
 export interface CreateBucketInput {
   name: string;
   owner?: string;
@@ -224,6 +236,7 @@ export async function createBucket(
   const parent = projectId
     ? (await repo.getProjects()).find((project) => project.id === projectId)
     : undefined;
+  assertProjectOpen(parent, "bucket");
   if (isRestrictedProject(parent)) {
     bucket.sync = { state: "synced", ts: repo.stamp(), sp: RESTRICTED_MIRROR_SP.roadmap };
   }
@@ -412,6 +425,7 @@ export interface PatchProjectInput {
   prd?: string | null;
   visibility?: ProjectVisibility;
   members?: string[];
+  status?: ProjectStatus;
 }
 
 export async function patchProject(id: string, patch: PatchProjectInput, actor: string): Promise<Project | null> {
@@ -426,6 +440,12 @@ export async function patchProject(id: string, patch: PatchProjectInput, actor: 
   }
   const defined = definedEntries(patch);
   const next: Project = { ...existing, ...defined };
+  // Lifecycle stamps move with status; a no-op status leaves them untouched.
+  if (patch.status !== undefined && patch.status !== (existing.status ?? "active")) {
+    const closing = patch.status === "closed";
+    next.closedAt = closing ? new Date().toISOString() : null;
+    next.closedBy = closing ? actor : null;
+  }
   const acl = resolveProjectAcl({
     visibility: next.visibility,
     members: next.members,
@@ -501,8 +521,15 @@ export async function createTask(
 
   // Bucket must already exist — never invent hierarchy (P8).
   const buckets = await repo.getBuckets();
-  if (!buckets.some((b) => b.id === input.bucket)) {
+  const parentBucket = buckets.find((b) => b.id === input.bucket);
+  if (!parentBucket) {
     throw new ApiError("invalid_bucket", `Bucket ${input.bucket} does not exist.`, 422);
+  }
+  if (parentBucket.project) {
+    assertProjectOpen(
+      (await repo.getProjects()).find((p) => p.id === parentBucket.project),
+      "task"
+    );
   }
 
   const { withTransaction } = await import("@/lib/db");

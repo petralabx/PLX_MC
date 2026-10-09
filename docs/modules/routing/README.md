@@ -112,9 +112,17 @@ rolloutHealth(); // pilots + fuzzy-off invariant
   deduped per sessionId.
 - **Metrics → suggestions** (TASK-634): every `mc_suggest_work` response
   carries an `evaluation` envelope — the effective autonomy level and the
-  requesting runtime's outcome metrics (fail-open). Scoring weights are
-  unchanged; evaluation context informs the operator/agent, demotion still
-  goes through rollout thresholds.
+  requesting runtime's outcome metrics (fail-open). Each candidate also
+  carries an `outcomeScore` component (`src/lib/routing/outcome-score.ts`):
+  the requesting runtime's pass rate, median cycle time, and cost per
+  completed task on tasks in the candidate's bucket, compared with all
+  runtimes in that bucket over a 90-day window (weights 0.6 / 0.2 / 0.2,
+  capped at ±10 matchScore points). It re-ranks fuzzy candidates only;
+  exact references keep their position. Fewer than 3 runtime checkouts in
+  the bucket, no peer runtime, or a metrics outage gives 0 points with a
+  `status` that says why, so order is unchanged without history. Engine
+  weights in the routing policy are unchanged; demotion still goes through
+  rollout thresholds.
 - **Autonomy dial** (TASK-635, `src/lib/routing/autonomy.ts` +
   `config/autonomy-dial.json`): per-repo/per-bucket operator dial that can
   only LOWER effective autonomy below the pilot cohort mode

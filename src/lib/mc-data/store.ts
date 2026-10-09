@@ -35,7 +35,7 @@ import {
   TASKS,
 } from "./data";
 import { parseMentions } from "./collab";
-import { domainOf, isNavVisible, isPetraEmail } from "./helpers";
+import { domainOf, isNavVisible, isPetraEmail, isProjectClosed } from "./helpers";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "./policy";
 import { allowedReposOnly, disallowedRepos, isAllowedRepoOrg, isApprover, repoFromRequest } from "./repos";
 import type {
@@ -297,8 +297,18 @@ export const projectById = (id: string): Project | undefined => state.projects[i
 export const bucketsForProject = (projectId: string): Bucket[] =>
   allBuckets().filter((b) => b.project === projectId);
 // Nav surfaces only — health=off records remain in allProjects/allBuckets.
-export const navProjects = (): Project[] => allProjects().filter(isNavVisible);
-export const navBuckets = (): Bucket[] => allBuckets().filter(isNavVisible);
+// Closed projects (TASK-2530) leave nav along with their buckets; both stay
+// reachable by deep link.
+export const navProjects = (): Project[] =>
+  allProjects().filter((p) => isNavVisible(p) && !isProjectClosed(p));
+export const navBuckets = (): Bucket[] =>
+  allBuckets().filter(
+    (b) => isNavVisible(b) && !(b.project && isProjectClosed(state.projects[b.project]))
+  );
+// Default project pickers: open projects only, plus the one already selected
+// so an existing assignment to a closed project still renders.
+export const pickerProjects = (selectedId?: string | null): Project[] =>
+  allProjects().filter((p) => !isProjectClosed(p) || p.id === selectedId);
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -1398,7 +1408,7 @@ export function addProject(input: NewProjectInput): Project {
 }
 
 export type ProjectPatch = Partial<
-  Pick<Project, "name" | "owner" | "health" | "target" | "started" | "desc" | "repos" | "prd">
+  Pick<Project, "name" | "owner" | "health" | "target" | "started" | "desc" | "repos" | "prd" | "status">
 >;
 
 type ProjectUpdateMirror = (id: string, patch: ProjectPatch) => Promise<Project>;

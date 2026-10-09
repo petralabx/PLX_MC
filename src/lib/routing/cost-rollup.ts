@@ -141,6 +141,12 @@ export async function loadCostRollup(principal: ProjectAclPrincipal): Promise<Co
   const visibleIds = new Set(visible.tasks.map((t) => t.id));
   const hiddenTasks = new Set(snap.tasks.filter((t) => !visibleIds.has(t.id)).map((t) => t.id));
 
+  const durable = await resolveTelemetryCheckouts(events);
+  return computeCostRollup(events, new Map(visible.tasks.map((t) => [t.id, t.bucket])), hiddenTasks, durable);
+}
+
+/** Task ids, from the durable dispatch ledger, for telemetry whose checkout is outside the sample. */
+export async function resolveTelemetryCheckouts(events: EventRow[]): Promise<Map<string, string>> {
   const sampled = new Set<string>();
   for (const ev of events) {
     const id = ev.payload?.checkoutId;
@@ -153,6 +159,5 @@ export async function loadCostRollup(principal: ProjectAclPrincipal): Promise<Co
       unresolved.add(id);
     }
   }
-  const durable = await taskIdsByDispatchIds([...unresolved]);
-  return computeCostRollup(events, new Map(visible.tasks.map((t) => [t.id, t.bucket])), hiddenTasks, durable);
+  return taskIdsByDispatchIds([...unresolved]);
 }

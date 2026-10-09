@@ -27,6 +27,17 @@ describe("MCP project and bucket creation capability", () => {
     }
   });
 
+  it("registers project status tools in both MCP transports", () => {
+    const projectActionsSource = readFileSync(
+      join(process.cwd(), "src/lib/mcp/project-actions.ts"),
+      "utf8"
+    );
+    for (const tool of ["mc_update_project", "mc_list_projects"]) {
+      expect(projectActionsSource).toContain(`"${tool}"`);
+      expect(stdioMcpSource).toContain(`"${tool}"`);
+    }
+  });
+
   it("provides authenticated cursor API routes for the stdio transport", () => {
     expect(
       existsSync(join(process.cwd(), "src/app/api/cursor/projects/route.ts"))

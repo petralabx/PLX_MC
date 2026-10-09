@@ -702,6 +702,9 @@ async function assertCompletedAt(client, files) {
   await client.query("BEGIN");
   try {
     await client.query("SET LOCAL enable_seqscan = off");
+    // On a one-row table the planner may tie-break to migration 032's task-id
+    // index; drop it (rolled back below) so the plan can only use ours.
+    await client.query("DROP INDEX IF EXISTS entities_task_numeric_id_idx");
     const plan = await client.query(
       `EXPLAIN SELECT id FROM entities
         WHERE entity_type = 'task' AND completed_at >= '2026-07-01' AND completed_at < '2026-08-01'`

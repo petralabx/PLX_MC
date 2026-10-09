@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Bucket } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { actorById, addBucket, allProjects, allRepos, ownerOrViewerDefault } from "@/lib/mc-data/store";
+import { actorById, addBucket, allRepos, pickerProjects, ownerOrViewerDefault } from "@/lib/mc-data/store";
 
 import { Avatar } from "./atoms";
 import { PeoplePicker } from "./people-picker";
@@ -26,7 +26,7 @@ export function NewInitiativeModal({
   projectId?: string;
 }) {
   useMcVersion();
-  const projects = allProjects();
+  const projects = pickerProjects(projectId);
   const defaultProjectId = projectId ?? projects.find((p) => p.id === "PRJ-PORTAL-GOLIVE")?.id ?? projects[0]?.id ?? null;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");

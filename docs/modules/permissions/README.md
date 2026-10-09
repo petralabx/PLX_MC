@@ -59,8 +59,9 @@ onward, MCP authentication loads the principal from `service_principals` and
 rejects missing or revoked records. Service capabilities always come from the
 reviewed versioned registry; callers cannot inject a capability list. The
 shared agent bundle includes project and bucket creation, bucket updates
-(`mc_update_bucket` / `bucket.update`), plus `sync.mutate` (conflict resolve
-via MCP) but not project updates, repository approval, or permission
+(`mc_update_bucket` / `bucket.update`), steward project edits
+(`mc_update_project` / `project.update`, TASK-2530), plus `sync.mutate`
+(conflict resolve via MCP) but not repository approval or permission
 management. Console sweep/retry remain Entra-gated.
 
 **Cancel / reopen (TASK-2529):** `task.cancel` and `task.reopen` authorize

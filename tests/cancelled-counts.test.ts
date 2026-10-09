@@ -3,6 +3,7 @@
 // as merged or verified; mc_search_tasks stage=cancelled lists it with its reason.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
+import { legacySearchFixture } from "./helpers/task-search-fixture";
 
 const cancellation = {
   reason: "obsolete" as const, replacedBy: null, cancelledAt: "2026-10-07T00:00:00.000Z", cancelledBy: "sp_mcp_codex",
@@ -20,6 +21,7 @@ const tasks: Task[] = [
 vi.mock("@/lib/sync", () => ({
   createTask: vi.fn(),
   patchTask: vi.fn(),
+  searchTaskPage: vi.fn(async (filter, hidden) => legacySearchFixture(tasks, filter, hidden)),
   snapshot: vi.fn(async () => ({
     tasks, buckets: [{ id: "BKT-A", name: "A" }], projects: [], conflicts: [], errors: [], lastSweep: "now",
   })),

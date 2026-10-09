@@ -36,6 +36,11 @@ export function cursorRoute(toolName: string, handler: CursorHandler) {
       requestId = baseMeta.requestId;
       const result = await handler(req, ctx, identity, baseMeta);
       const merged = buildMeta(identity, result.meta);
+      // A no-op call (e.g. a bare mc_report_progress) changed nothing and writes no audit row.
+      if ((result.data as { noop?: boolean })?.noop === true) {
+        merged.audit = { ...merged.audit, kinds: [toolName] };
+        return NextResponse.json(wrapMcpResponse(result.data, merged));
+      }
       merged.audit = { ...merged.audit, kinds: [toolName, "mcp.tool.invoked"] };
       const eventSeq = await recordMcpToolCall({
         tool: toolName,

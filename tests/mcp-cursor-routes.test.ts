@@ -145,6 +145,27 @@ describe("async cursor route wrapper", () => {
   });
 });
 
+describe("cursor route no-op results", () => {
+  const headers = {
+    "x-api-key": "test-mcp-key",
+    "x-mc-operator-email": "vince@petrasoap.com",
+    "x-mc-repo": "petralabx/PLX_MC",
+  };
+
+  it("appends no mcp.tool.invoked row for a noop result, and does for a normal one", async () => {
+    const { recordMcpToolCall } = await import("@/lib/mcp/audit");
+    const record = vi.mocked(recordMcpToolCall);
+    record.mockClear();
+    const noop = cursorRoute("mc_report_progress", async () => ({ data: { ok: true, noop: true, taskId: "TASK-1" } }));
+    const res = await noop(req(headers), { params: Promise.resolve({}) });
+    expect(res.status).toBe(200);
+    expect(record).not.toHaveBeenCalled();
+    const normal = cursorRoute("mc_report_progress", async () => ({ data: { ok: true, taskId: "TASK-1" } }));
+    await normal(req(headers), { params: Promise.resolve({}) });
+    expect(record).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("routing suggest cursor route", () => {
   it("registers POST /api/cursor/routing/suggest behind cursorRoute auth", async () => {
     vi.stubEnv("PLX_MC_ROUTING_SUGGEST_ENABLED", "1");

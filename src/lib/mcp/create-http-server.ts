@@ -49,7 +49,7 @@ type ToolResult = { content?: { type: string; text?: string }[]; isError?: boole
 
 // The task/checkout ids a JSON tool result carries, bare or under `data` — the
 // same fields the REST wrapper (route.ts) records from its handler data.
-function auditIds(result: ToolResult): { taskId?: string; checkoutId?: string } {
+function auditIds(result: ToolResult): { taskId?: string; checkoutId?: string; noop?: boolean } {
   const text = result.content?.find((c) => c.type === "text")?.text;
   if (!text) return {};
   let parsed: Record<string, unknown>;
@@ -63,6 +63,7 @@ function auditIds(result: ToolResult): { taskId?: string; checkoutId?: string } 
   return {
     taskId: str(parsed.taskId) ?? str(data.taskId),
     checkoutId: str(parsed.checkoutId) ?? str(data.checkoutId),
+    noop: parsed.noop === true || data.noop === true,
   };
 }
 
@@ -81,11 +82,14 @@ function auditToolCalls(server: McpServer, identity: McpIdentity): void {
         const requestId = randomUUID();
         try {
           const result = await handler(...handlerArgs);
+          const { noop, ...ids } = auditIds(result);
+          // A no-op call (e.g. a bare mc_report_progress) changed nothing and writes no audit row.
+          if (noop) return result;
           await recordMcpToolCall({
             tool,
             identity,
             requestId,
-            ...auditIds(result),
+            ...ids,
             ok: !result.isError,
             durationMs: Date.now() - started,
           });

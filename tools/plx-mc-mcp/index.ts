@@ -286,7 +286,9 @@ server.tool(
   "Report task progress (stage, notes).",
   {
     taskId: z.string().min(1),
-    stage: z.string().optional(),
+    stage: z
+      .enum(["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified"])
+      .optional(),
     notes: z.string().optional(),
     progressPct: z.number().min(0).max(100).optional(),
   },

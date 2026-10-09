@@ -72,9 +72,10 @@ export async function searchTaskPage(filter: TaskSearchFilter, hiddenBuckets: st
       ? `COALESCE(data->'labels', '[]'::jsonb) ? ${bind(filter.label)}`
       : `data->>'${field}' = ${bind(filter[field])}`);
   }
-  // A task with no completedAt never matches a completion-date filter.
-  if (filter.completedAfter) where.push(`(data->>'completedAt')::timestamptz >= ${bind(filter.completedAfter)}::timestamptz`);
-  if (filter.completedBefore) where.push(`(data->>'completedAt')::timestamptz < ${bind(filter.completedBefore)}::timestamptz`);
+  // updateEntity keeps completedAt in entities.completed_at, not the jsonb payload.
+  // A task with no completed_at never matches a completion-date filter.
+  if (filter.completedAfter) where.push(`completed_at >= ${bind(filter.completedAfter)}::timestamptz`);
+  if (filter.completedBefore) where.push(`completed_at < ${bind(filter.completedBefore)}::timestamptz`);
   if (filter.assignee) where.push(`lower(btrim(COALESCE(data->>'assignee', ''))) = lower(${bind(filter.assignee)})`);
 
   const matches: string[] = [];
@@ -106,13 +107,17 @@ export async function searchTaskPage(filter: TaskSearchFilter, hiddenBuckets: st
   const upper = cursor ? `${bind(cursor.upper[0])}::numeric, ${bind(cursor.upper[1])}::text COLLATE "C"` : null;
   const after = cursor ? `${bind(cursor.after[0])}::numeric, ${bind(cursor.after[1])}::text COLLATE "C"` : null;
   const pageLimit = bind(filter.limit + 1);
+  // Same ISO-8601 millisecond shape repo.ts withTaskColumns returns.
+  const completedIso = `to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
   const projection = filter.fields === "compact"
     ? `jsonb_build_object('id', id, 'title', data->'title', 'stage', data->'stage',
         'bucket', data->'bucket', 'labels', COALESCE(data->'labels', '[]'::jsonb),
         'prs', COALESCE(data->'prs', '[]'::jsonb),
         'updatedAt', to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
-        || CASE WHEN data ? 'completedAt' THEN jsonb_build_object('completedAt', data->'completedAt') ELSE '{}'::jsonb END`
-    : "data";
+        || CASE WHEN completed_at IS NOT NULL THEN jsonb_build_object('completedAt', ${completedIso}) ELSE '{}'::jsonb END`
+    : `(data - 'completedAt' - 'cancellation')
+        || CASE WHEN completed_at IS NOT NULL THEN jsonb_build_object('completedAt', ${completedIso}) ELSE '{}'::jsonb END
+        || CASE WHEN cancellation IS NOT NULL THEN jsonb_build_object('cancellation', cancellation) ELSE '{}'::jsonb END`;
   const rows = await query<{
     total: string;
     at: string;

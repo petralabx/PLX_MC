@@ -32,8 +32,8 @@ export function fixtureQuery(tasks: FixtureTask[], sql: string, params: unknown[
   const bucket = value(/data->>'bucket' = \$(\d+)/);
   const stage = value(/data->>'stage' = \$(\d+)/);
   const label = value(/'\[\]'::jsonb\) \? \$(\d+)/);
-  const completedAfter = value(/\(data->>'completedAt'\)::timestamptz >= \$(\d+)/) as string | undefined;
-  const completedBefore = value(/\(data->>'completedAt'\)::timestamptz < \$(\d+)/) as string | undefined;
+  const completedAfter = value(/completed_at >= \$(\d+)/) as string | undefined;
+  const completedBefore = value(/completed_at < \$(\d+)/) as string | undefined;
   const assignee = value(/= lower\(\$(\d+)\)/) as string | undefined;
   const q = value(/strpos\(lower\(id\), \$(\d+)\)/) as string | undefined;
   const upperMatch = sql.match(/<= \(\$(\d+)::numeric, \$(\d+)::text/);

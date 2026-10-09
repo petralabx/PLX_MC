@@ -84,6 +84,19 @@ describe("task search repository (offline bound-input fixtures + SQL contract)",
     expect(compact.tasks[1]).not.toHaveProperty("activity");
     expect(compact.tasks[1]).toHaveProperty("updatedAt");
   });
+  it("completion-date search reads entities.completed_at and merges completedAt/cancellation columns", async () => {
+    tasks[0].completedAt = "2026-10-07T22:00:00.000Z";
+    (tasks[0] as unknown as { cancellation: unknown }).cancellation = { reason: "duplicate" };
+    const result = await searchTaskPage({ completedAfter: "2026-10-07T00:00:00Z", completedBefore: "2026-10-08T00:00:00Z", limit: 50 });
+    expect(result.tasks.map((t) => t.id)).toEqual(["TASK-200"]);
+    expect(result.tasks[0]).toMatchObject({ completedAt: "2026-10-07T22:00:00.000Z", cancellation: { reason: "duplicate" } });
+    const sql = vi.mocked(query).mock.calls.at(-1)![0];
+    expect(sql).toContain("completed_at >= $");
+    expect(sql).toContain("completed_at < $");
+    expect(sql).not.toContain("data->>'completedAt'");
+    expect(sql).toContain("(data - 'completedAt' - 'cancellation')");
+    expect(sql).toContain("jsonb_build_object('cancellation', cancellation)");
+  });
   it("applies ACL exclusions before count and pagination and binds cursors to filters/actor", async () => {
     const first = await searchTaskPage({ limit: 1 }, [], "caller-a");
     await expect(searchTaskPage({ limit: 1, cursor: first.nextCursor!, bucket: "other" }, [], "caller-a")).rejects.toThrow("Invalid search cursor");

@@ -23,12 +23,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { Client } from "pg";
+import { POSTGRES_IMAGE } from "./lib/postgres-image.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = path.join(ROOT, "db", "migrations");
 const NAME_RE = /^(\d{3})_[a-z0-9_]+\.sql$/;
-// AWS ECR public mirror of the Docker Hub official image (avoids Docker Hub pull rate limits).
-const POSTGRES_IMAGE = "public.ecr.aws/docker/library/postgres:16-alpine";
 const WAIT_TIMEOUT_MS = 60_000;
 const WAIT_POLL_MS = 500;
 

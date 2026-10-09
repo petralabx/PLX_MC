@@ -10,6 +10,7 @@ import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { expectedMigrations } from "../scripts/lib/migration-manifest.mjs";
 import { main as deployCheck } from "../scripts/check-deploy-schema.mjs";
 import { main as migrate } from "../scripts/migrate.mjs";
+import { POSTGRES_IMAGE } from "../scripts/lib/postgres-image.mjs";
 
 const state = vi.hoisted(() => ({ url: "" }));
 vi.mock("@/lib/secrets", () => ({ databaseUrl: () => state.url, databaseConfigured: () => true, entraAuthConfigured: () => false }));
@@ -49,7 +50,7 @@ beforeAll(async () => {
   const port = (server.address() as { port: number }).port;
   await new Promise<void>(resolve => server.close(() => resolve()));
   const password = randomBytes(12).toString("hex");
-  const run = spawnSync("docker", ["run", "-d", "--name", name, "-e", `POSTGRES_PASSWORD=${password}`, "-p", `127.0.0.1:${port}:5432`, "postgres:16-alpine"], { encoding: "utf8" });
+  const run = spawnSync("docker", ["run", "-d", "--name", name, "-e", `POSTGRES_PASSWORD=${password}`, "-p", `127.0.0.1:${port}:5432`, POSTGRES_IMAGE], { encoding: "utf8" });
   expect(run.status, run.stderr).toBe(0);
   started = true;
   state.url = `postgres://postgres:${password}@127.0.0.1:${port}/postgres`;

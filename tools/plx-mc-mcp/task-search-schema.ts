@@ -7,8 +7,6 @@ export const taskSearchShape = {
   bucket: z.string().optional(),
   stage: z.string().optional(),
   assignee: z.string().optional(),
-  completedAfter: z.string().optional().describe("ISO-8601; completedAt >= this (inclusive)"),
-  completedBefore: z.string().optional().describe("ISO-8601; completedAt < this (exclusive)"),
   label: z.string().optional().describe("Exact label"),
   limit: z.number().int().min(1).max(200).optional(),
   cursor: z.string().min(1).max(4096).optional(),

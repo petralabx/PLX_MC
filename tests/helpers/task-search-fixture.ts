@@ -10,13 +10,11 @@ export function legacySearchFixture(tasks: Task[], filter: TaskSearchFilter, hid
     && (!filter.stage || t.stage === filter.stage)
     && (!filter.label || t.labels?.includes(filter.label))
     && (!filter.assignee || t.assignee?.trim().toLowerCase() === filter.assignee.toLowerCase())
-    && (!filter.completedAfter || !!t.completedAt && Date.parse(t.completedAt) >= Date.parse(filter.completedAfter))
-    && (!filter.completedBefore || !!t.completedAt && Date.parse(t.completedAt) < Date.parse(filter.completedBefore))
     && (!q || [t.id, t.title, t.description ?? ""].some((text) => text.toLowerCase().includes(q))));
   return { tasks: matched.slice(0, filter.limit), total: matched.length, nextCursor: null };
 }
 
-export type FixtureTask = Task & { createdAt: string; updatedAt: string; completed_at?: string | null };
+export type FixtureTask = Task & { createdAt: string; updatedAt: string; completedAt?: string | null };
 const key = (task: Task): [string, string] => [task.id.match(/^TASK-(\d+)$/)?.[1] ?? "0", task.id];
 const compare = (a: [string, string], b: [string, string]) => {
   const n = BigInt(a[0]) - BigInt(b[0]);
@@ -34,8 +32,6 @@ export function fixtureQuery(tasks: FixtureTask[], sql: string, params: unknown[
   const label = value(/'\[\]'::jsonb\) \? \$(\d+)/);
   const assignee = value(/= lower\(\$(\d+)\)/) as string | undefined;
   const q = value(/strpos\(lower\(id\), \$(\d+)\)/) as string | undefined;
-  const completedAfter = value(/completed_at >= \$(\d+)::timestamptz/) as string | undefined;
-  const completedBefore = value(/completed_at < \$(\d+)::timestamptz/) as string | undefined;
   const upperMatch = sql.match(/<= \(\$(\d+)::numeric, \$(\d+)::text/);
   const afterMatch = sql.match(/> \(\$(\d+)::numeric, \$(\d+)::text/);
   const readKey = (m: RegExpMatchArray): [string, string] => [String(params[Number(m[1]) - 1]), String(params[Number(m[2]) - 1])];
@@ -49,8 +45,6 @@ export function fixtureQuery(tasks: FixtureTask[], sql: string, params: unknown[
     if (hidden.includes(t.bucket) || t.createdAt > at || bucket && t.bucket !== bucket
       || stage && t.stage !== stage || label && !t.labels.includes(String(label))
       || assignee && t.assignee?.trim().toLowerCase() !== assignee.toLowerCase()
-      || completedAfter && (!t.completed_at || Date.parse(t.completed_at!) < Date.parse(completedAfter))
-      || completedBefore && (!t.completed_at || Date.parse(t.completed_at!) >= Date.parse(completedBefore))
       || upperMatch && compare(key(t), readKey(upperMatch)) > 0) return [];
     const matchFields: string[] = [];
     if (q) {
@@ -64,8 +58,8 @@ export function fixtureQuery(tasks: FixtureTask[], sql: string, params: unknown[
       if (!matchFields.length) return [];
     }
     const task = sql.includes("'updatedAt', to_char")
-      ? { id: t.id, title: t.title, stage: t.stage, bucket: t.bucket, labels: t.labels, prs: t.prs, updatedAt: t.updatedAt, ...(t.completed_at ? { completedAt: new Date(t.completed_at).toISOString() } : {}) }
-      : { ...t, ...(t.completed_at ? { completedAt: new Date(t.completed_at).toISOString() } : {}) };
+      ? { id: t.id, title: t.title, stage: t.stage, bucket: t.bucket, labels: t.labels, prs: t.prs, updatedAt: t.updatedAt, ...("completedAt" in t ? { completedAt: t.completedAt } : {}) }
+      : { ...t };
     return [{ task: { ...task, ...(q ? { matchFields } : {}) }, key: key(t) }];
   }).sort((a, b) => compare(a.key, b.key));
   const pageLimit = Number(value(/LIMIT \$(\d+)/));

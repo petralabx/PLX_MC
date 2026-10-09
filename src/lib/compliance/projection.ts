@@ -112,12 +112,6 @@ async function setProgress(taskId: string, evt: PrEvent): Promise<void> {
   );
 }
 
-function validIso(value: string | null | undefined): string | undefined {
-  if (!value) return undefined;
-  const ms = Date.parse(value);
-  return Number.isNaN(ms) ? undefined : new Date(ms).toISOString();
-}
-
 async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task) return;
@@ -150,8 +144,7 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
       },
     },
     PROJECTION_ACTOR,
-    // completed_at is the PR merge time, not this projection run (TASK-2528).
-    { complianceProjection: true, completedAt: validIso(evt.mergedAt) }
+    { complianceProjection: true }
   );
 
   await complianceRepo.appendEvent({
@@ -160,7 +153,7 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
     repo: evt.repo,
     taskId,
     pr: String(evt.prNumber),
-    payload: { sha: mergeSha, stage: "merged", completionSource: "pr_merge" },
+    payload: { sha: mergeSha, stage: "merged" },
     dedupKey: `task.promoted:${evt.repo}:${evt.prNumber}:${mergeSha}:${taskId}`,
   });
 }

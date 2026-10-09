@@ -145,16 +145,6 @@ delegate through MC. The rule lives in `actionCreateTask`; the session route
 stays open to every principal. `mc_search_tasks` (`GET /api/cursor/tasks?assignee=`)
 filters by exact assignee, so a runner finds the tasks assigned to its agents.
 
-**Completion date (TASK-2528):** every task returned by `mc_get_task`,
-`mc_get_context` `depth:full`, `mc_search_tasks` and the REST task routes carries
-`completedAt` (ISO-8601, absent until the task first reaches a terminal stage).
-It is read from `entities.completed_at`, never from the jsonb payload.
-`mc_search_tasks` (`GET /api/cursor/tasks?completedAfter=&completedBefore=`)
-filters on it: `completedAfter` is inclusive, `completedBefore` exclusive, both
-ISO-8601; tasks with no `completedAt` never match; a malformed date is rejected
-with `invalid_request`. Reporting SQL uses the partial index
-`entities_task_completed_at_idx`.
-
 **Portal principal (agent fleet P8):** `sp_mcp_portal` is the key the portal's
 COS delegate tool uses. Its grant is least privilege (decision CG-07b): it may
 create tasks (with an `agent:` assignee) and search tasks. Its grant holds only
@@ -394,9 +384,7 @@ includes `matchFields` (`id`, `title`, `description`, `comments`, `activity`,
 ```
 
 Compact rows contain `id`, `title`, `stage`, `bucket`, `labels`, `prs` and the
-mirror row's UTC `updatedAt`; full and compact rows include `completedAt` only
-when stored in `entities.completed_at`. Completion bounds are applied after
-project ACL and before the exact count and cursor page; they also bind the
-cursor scope. Search does not create completion timestamps.
+mirror row's UTC `updatedAt`; `completedAt` is copied only when already present
+in the JSONB payload. This change does not create completion timestamps.
 Descriptions, activity and comment arrays are omitted. Payload size depends
 on titles, labels and PRs; 200 representative fixture rows fit under 100 KB.

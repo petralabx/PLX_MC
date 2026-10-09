@@ -162,9 +162,6 @@ export function outboundFields(
     if (include("repos")) out.Repos = (t.repos ?? []).join("\n");
     if (include("targetEnv")) out.TargetEnvironment = capitalize(t.targetEnv ?? "staging");
     if (include("evidence")) out.EvidenceComplete = evidenceComplete(t.evidence);
-    // Outbound-only (TASK-2528): never read back, so an SP edit can't conflict.
-    // Rides along with stage because that is when completed_at first appears.
-    if ((include("completedAt") || include("stage")) && t.completedAt) out.CompletedAt = t.completedAt;
     if (include("subtasks")) out.Subtasks = serializeSubtasks(t.subtasks); // Item 3 — push-only
     // Person columns: emit `<sp>LookupId` from the pre-resolved `persons` map.
     // A number sets the person, `null` clears it; a field absent from the map is

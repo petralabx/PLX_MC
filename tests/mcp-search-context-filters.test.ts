@@ -41,16 +41,6 @@ const tasks: Task[] = [
     stage: "merged",
     bucket: "BKT-WMS",
     priority: "medium",
-    completedAt: "2026-07-23T00:00:00.000Z",
-  } as Task,
-  {
-    id: "TASK-222",
-    title: "WMS follow-up",
-    description: "completed later",
-    stage: "verified",
-    bucket: "BKT-WMS",
-    priority: "medium",
-    completedAt: "2026-08-01T00:00:00.000Z",
   } as Task,
   {
     id: "TASK-SECRET",
@@ -161,28 +151,6 @@ describe("actionSearchTasks filter honouring", () => {
     expect(result.tasks).toEqual([]);
     expect(result.total).toBe(0);
     expect(result.filter.query).toBe("no-such-task-zzzz");
-  });
-});
-
-describe("actionSearchTasks completion-date filters (TASK-2528)", () => {
-  const ids = async (input: Parameters<typeof actionSearchTasks>[0]) =>
-    (await actionSearchTasks(input)).tasks.map((t) => t.id);
-
-  it("completedAfter is inclusive, completedBefore is exclusive", async () => {
-    expect(await ids({ completedAfter: "2026-07-23T00:00:00Z", completedBefore: "2026-08-01T00:00:00Z" })).toEqual([
-      "TASK-221",
-    ]);
-    expect(await ids({ completedAfter: "2026-08-01" })).toEqual(["TASK-222"]);
-  });
-
-  it("excludes tasks with no completedAt and echoes the normalized filter", async () => {
-    const result = await actionSearchTasks({ completedBefore: "2027-01-01" });
-    expect(result.tasks.map((t) => t.id).sort()).toEqual(["TASK-221", "TASK-222"]);
-    expect(result.filter.completedBefore).toBe("2027-01-01T00:00:00.000Z");
-  });
-
-  it("rejects a malformed date instead of silently ignoring it", async () => {
-    await expect(actionSearchTasks({ completedAfter: "last tuesday" })).rejects.toBeInstanceOf(ApiError);
   });
 });
 

@@ -15,11 +15,9 @@ import type {
   RepoVisibility,
   SpConflict,
   SpError,
-  StageKey,
   SyncState,
   Task,
 } from "@/lib/mc-data/types";
-import { TERMINAL_STAGES } from "@/lib/mc-data/policy";
 import type {
   EntityData,
   EntityType,
@@ -64,19 +62,6 @@ function parseAttribution(raw: unknown): Record<string, FieldAttribution> {
   return out;
 }
 
-// completed_at is the source of truth for task completion (TASK-2528). It is
-// merged into the in-memory task as `completedAt` on read and never persisted
-// back into the jsonb payload (updateEntity strips it) — no drift between the two.
-function withCompletedAt(
-  type: EntityType,
-  data: EntityData,
-  completedAt: Date | string | null | undefined
-): EntityData {
-  if (type !== "task" || completedAt == null) return data;
-  const iso = completedAt instanceof Date ? completedAt.toISOString() : new Date(completedAt).toISOString();
-  return { ...data, completedAt: iso };
-}
-
 export async function entityCount(): Promise<number> {
   const rows = await query<{ n: string }>("SELECT count(*) AS n FROM entities");
   return Number(rows[0].n);
@@ -91,10 +76,9 @@ export async function getEntities(type?: EntityType): Promise<EntityRow[]> {
     sp_item_id: string | null;
     dirty_fields: string[];
     field_attribution: unknown;
-    completed_at: Date | string | null;
   }>(
     `SELECT entity_type, id, data, sync_state, sp_item_id, dirty_fields,
-            COALESCE(field_attribution, '{}'::jsonb) AS field_attribution, completed_at
+            COALESCE(field_attribution, '{}'::jsonb) AS field_attribution
        FROM entities
       WHERE $1::text IS NULL OR entity_type = $1
       ORDER BY id`,
@@ -103,7 +87,7 @@ export async function getEntities(type?: EntityType): Promise<EntityRow[]> {
   return rows.map((r) => ({
     entity_type: r.entity_type,
     id: r.id,
-    data: withCompletedAt(r.entity_type, r.data, r.completed_at),
+    data: r.data,
     sync_state: r.sync_state,
     sp_item_id: r.sp_item_id,
     dirty_fields: r.dirty_fields,
@@ -125,10 +109,9 @@ export async function getEntity(
     sp_item_id: string | null;
     dirty_fields: string[];
     field_attribution: unknown;
-    completed_at: Date | string | null;
   }>(
     `SELECT entity_type, id, data, sync_state, sp_item_id, dirty_fields,
-            COALESCE(field_attribution, '{}'::jsonb) AS field_attribution, completed_at
+            COALESCE(field_attribution, '{}'::jsonb) AS field_attribution
        FROM entities WHERE entity_type = $1 AND id = $2${forUpdate ? " FOR UPDATE" : ""}`,
     [type, id]
   );
@@ -137,7 +120,7 @@ export async function getEntity(
   return {
     entity_type: r.entity_type,
     id: r.id,
-    data: withCompletedAt(r.entity_type, r.data, r.completed_at),
+    data: r.data,
     sync_state: r.sync_state,
     sp_item_id: r.sp_item_id,
     dirty_fields: r.dirty_fields,
@@ -173,33 +156,14 @@ export async function updateEntity(
     dirtyFields?: string[];
     fieldAttribution?: Record<string, FieldAttribution>;
     syncExtras?: Record<string, string | undefined>; // wsVal / spVal / reason
-    // Time to record if this patch moves a task from a non-terminal into a
-    // terminal stage (default: now). Ignored otherwise (TASK-2528).
-    completedAt?: string;
   },
   q: TxQuery = query
 ): Promise<void> {
   const row = await getEntity(type, id, q);
   if (!row) return;
   const data = { ...row.data, ...(opts.patch ?? {}) };
-  delete data.completedAt; // column is the source of truth; never persist into jsonb
-  // Every stage change — UI, MCP, projection, SharePoint inbound — lands here, so
-  // this is the one place completion is stamped. The UPDATE below is write-once
-  // (COALESCE): a bounce back into a terminal stage never moves an existing date.
-  const nextStage = opts.patch?.stage as StageKey | undefined;
-  const entersTerminal =
-    type === "task" &&
-    nextStage !== undefined &&
-    TERMINAL_STAGES.includes(nextStage) &&
-    !TERMINAL_STAGES.includes(row.data.stage as StageKey);
-  // First population of completed_at (e.g. an inbound SharePoint move): queue it as an outbound dirty field so the sweep writes
-  // CompletedAt. It is outbound-only, so this can never raise a Sync conflict.
-  const firstCompletion = entersTerminal && row.data.completedAt == null;
-  const dirtyFields = firstCompletion
-    ? [...new Set([...(opts.dirtyFields ?? row.dirty_fields), "completedAt"])]
-    : opts.dirtyFields;
   const prevSync = (row.data.sync ?? {}) as Record<string, unknown>;
-  const nextState = opts.syncState ?? (firstCompletion && row.sync_state === "synced" ? "pending" : row.sync_state);
+  const nextState = opts.syncState ?? row.sync_state;
   const sync: Record<string, unknown> = {
     ...prevSync,
     state: nextState,
@@ -218,14 +182,14 @@ export async function updateEntity(
     attribution = { ...attribution, ...opts.fieldAttribution };
   }
   // Default any newly-dirty field without attribution to unknown (ambiguous → manual).
-  if (dirtyFields) {
+  if (opts.dirtyFields) {
     const nowIso = new Date().toISOString();
-    for (const f of dirtyFields) {
+    for (const f of opts.dirtyFields) {
       if (!attribution[f]) attribution[f] = { source: "unknown", at: nowIso };
     }
     // Drop attribution for fields no longer dirty.
     for (const key of Object.keys(attribution)) {
-      if (!dirtyFields.includes(key)) delete attribution[key];
+      if (!opts.dirtyFields.includes(key)) delete attribution[key];
     }
   }
 
@@ -237,9 +201,6 @@ export async function updateEntity(
             sp_item_id = CASE WHEN $8::boolean THEN NULL ELSE COALESCE($5, sp_item_id) END,
             dirty_fields = COALESCE($6, dirty_fields),
             field_attribution = COALESCE($7, field_attribution),
-            completed_at = CASE WHEN entity_type = 'task'
-                                THEN COALESCE(completed_at, $9::timestamptz)
-                                ELSE completed_at END,
             updated_at = now()
       WHERE entity_type = $1 AND id = $2`,
     [
@@ -248,10 +209,9 @@ export async function updateEntity(
       JSON.stringify(data),
       nextState,
       opts.spItemId ?? null,
-      dirtyFields ? JSON.stringify(dirtyFields) : null,
-      dirtyFields || opts.fieldAttribution ? JSON.stringify(attribution) : null,
+      opts.dirtyFields ? JSON.stringify(opts.dirtyFields) : null,
+      opts.dirtyFields || opts.fieldAttribution ? JSON.stringify(attribution) : null,
       opts.clearSpItemId === true,
-      entersTerminal ? (opts.completedAt ?? new Date().toISOString()) : null,
     ]
   );
 }

@@ -293,9 +293,6 @@ export interface Task {
   blocked?: boolean;
   blockedReason?: string;
   merge?: { sha: string; on: string };
-  // ISO-8601 first entry into a terminal stage. Read-only: merged in from
-  // entities.completed_at on read, never stored in the jsonb payload (TASK-2528).
-  completedAt?: string;
   userCreated?: boolean;
 }
 

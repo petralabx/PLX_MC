@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// No migration writes; this check must succeed before Next/Vercel promotion.
+// No migration writes; Production always checks before Next/Vercel promotion.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
@@ -12,6 +12,10 @@ export async function main({ env = process.env, ClientClass = Client, migrations
   if (!env.PLX_MC_SCHEMA_CHECK_DATABASE_URL) {
     log("deploy blocked: PLX_MC_SCHEMA_CHECK_DATABASE_URL is required (dedicated read-only target credential)");
     return 1;
+  }
+  if (env.VERCEL_ENV === "preview" && !env.PLX_MC_DATABASE_URL) {
+    log("WARNING: schema deploy check SKIPPED on Vercel preview: PLX_MC_DATABASE_URL is not set (production stays fail-closed)");
+    return 0;
   }
   let client;
   try {
@@ -41,9 +45,9 @@ export async function main({ env = process.env, ClientClass = Client, migrations
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  // Ordinary local builds need no database. Vercel builds cannot opt out.
+  // Local builds need no DB; only Vercel previews without a runtime DB skip.
   if (process.argv.includes("--build") && process.env.VERCEL !== "1") {
-    console.log("schema deploy check: local build (target check runs on every Vercel build)");
+    console.log("schema deploy check: local build (Production always checks; previews without a runtime DB skip)");
   } else {
     main().then(code => { process.exitCode = code; }, () => {
       console.error("deploy blocked: schema check failed (details withheld)");

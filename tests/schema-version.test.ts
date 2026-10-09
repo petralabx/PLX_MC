@@ -34,6 +34,37 @@ describe("schema version contract", () => {
   it("fails closed without a read-only credential", async () => {
     expect(await main({ env: { NODE_ENV: "test" }, log: vi.fn() })).toBe(1);
   });
+  it.each([undefined, ""])("skips preview without a runtime URL (%j) with one warning and no client", async (runtimeUrl) => {
+    const log = vi.fn();
+    const connect = vi.fn();
+    const ClientClass = vi.fn(function () { return { connect }; });
+    expect(await main({ env: { NODE_ENV: "test", VERCEL_ENV: "preview", PLX_MC_SCHEMA_CHECK_DATABASE_URL: url, PLX_MC_DATABASE_URL: runtimeUrl }, ClientClass: ClientClass as never, log })).toBe(0);
+    expect(log.mock.calls).toEqual([["WARNING: schema deploy check SKIPPED on Vercel preview: PLX_MC_DATABASE_URL is not set (production stays fail-closed)"]]);
+    expect(ClientClass).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+    expect(JSON.stringify(log.mock.calls)).not.toContain(url);
+  });
+  it.each(["production", "development", undefined])("fails closed without a runtime URL in non-preview Vercel builds (%j)", async (vercelEnv) => {
+    expect(await main({ env: { NODE_ENV: "test", VERCEL: "1", VERCEL_ENV: vercelEnv, PLX_MC_SCHEMA_CHECK_DATABASE_URL: url }, log: vi.fn() })).toBe(1);
+  });
+  it.each(["production", "preview"])("requires the schema-check URL in %s even without a runtime URL", async (vercelEnv) => {
+    const log = vi.fn();
+    expect(await main({ env: { NODE_ENV: "test", VERCEL_ENV: vercelEnv }, log })).toBe(1);
+    expect(log).toHaveBeenCalledExactlyOnceWith("deploy blocked: PLX_MC_SCHEMA_CHECK_DATABASE_URL is required (dedicated read-only target credential)");
+  });
+  it("runs the full read-only check on preview with a runtime URL", async () => {
+    const connect = vi.fn();
+    const query = vi.fn(async (sql: string) => ({ rows: sql.includes("to_regclass") ? [{ ledger: "schema_migrations" }] : sql.includes("SELECT filename") ? migrationManifest.map(filename => ({ filename })) : [] }));
+    const end = vi.fn();
+    class FakeClient { connect = connect; query = query; end = end; }
+    const log = vi.fn();
+    expect(await main({ env: { NODE_ENV: "test", VERCEL_ENV: "preview", PLX_MC_SCHEMA_CHECK_DATABASE_URL: url, PLX_MC_DATABASE_URL: url }, ClientClass: FakeClient as never, log })).toBe(0);
+    expect(connect).toHaveBeenCalledOnce();
+    expect(query).toHaveBeenCalledWith("BEGIN READ ONLY");
+    expect(query).toHaveBeenCalledWith("ROLLBACK");
+    expect(end).toHaveBeenCalledOnce();
+    expect(JSON.stringify(log.mock.calls)).not.toContain("SKIPPED");
+  });
   it("refuses a reader credential targeting a different runtime DB", async () => {
     const connect = vi.fn();
     class FakeClient { connect = connect; }

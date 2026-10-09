@@ -210,10 +210,14 @@ On 2026-10-08, PR #286 deployed code reading `completed_at` before migration
 proved the migration could run, but could not prove the target had run it.
 
 Vercel's committed `buildCommand` uses `npm run build`, which runs
-`node scripts/check-deploy-schema.mjs --build` before Next. On every Vercel
-build (Production, Preview/UAT, staging/custom environments), the check fails
-closed on missing configuration, an unreadable ledger, or any local
+`node scripts/check-deploy-schema.mjs --build` before Next. The check is never
+skipped in Production or any non-preview Vercel build: it fails closed on
+either missing database URL, an unreadable ledger, or any local
 `db/migrations/*.sql` filename absent from `public.schema_migrations`.
+Only `VERCEL_ENV=preview` with an unset/empty `PLX_MC_DATABASE_URL` skips
+without connecting, logging one loud warning that production stays fail-closed.
+`PLX_MC_SCHEMA_CHECK_DATABASE_URL` remains required even for that preview skip.
+Previews with a runtime database URL run the full check and fail closed.
 The DB may be ahead, provided every local filename is present. This stops the
 build before production alias assignment; it never applies a migration.
 Do not override Vercel's build command or promote prebuilt artifacts that

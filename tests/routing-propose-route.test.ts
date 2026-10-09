@@ -39,7 +39,7 @@ const m = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/secrets", () => ({
+vi.mock("@/lib/secrets", () => ({ databaseConfigured: () => false,
   complianceOidcEnabled: () => m.oidcEnabled,
   complianceOidcConfigured: () => m.oidcConfigured,
 }));

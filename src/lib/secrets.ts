@@ -24,6 +24,10 @@ function firstSecret(...names: string[]): string | undefined {
   return undefined;
 }
 
+export function databaseConfigured(): boolean {
+  return Boolean(process.env.PLX_MC_DATABASE_URL);
+}
+
 export function databaseUrl(): string {
   return requireSecret("PLX_MC_DATABASE_URL");
 }

@@ -1,3 +1,6 @@
+import { assertSchemaReady } from "@/lib/db";
+import { databaseConfigured } from "@/lib/secrets";
+import { SchemaMismatchError } from "../../../../../scripts/lib/schema-version.mjs";
 // Streamable HTTP MCP endpoint — team-registered remote transport at /api/cursor/mcp.
 
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -14,6 +17,7 @@ export const runtime = "nodejs";
 
 async function handleMcpRequest(req: Request): Promise<Response> {
   try {
+    if (databaseConfigured()) await assertSchemaReady();
     const identity = await verifyMcpRequest(req);
     const server = createPlxMcMcpServer(identity);
     const transport = new WebStandardStreamableHTTPServerTransport({
@@ -23,6 +27,9 @@ async function handleMcpRequest(req: Request): Promise<Response> {
     await server.connect(transport);
     return transport.handleRequest(req);
   } catch (err) {
+    if (err instanceof SchemaMismatchError) {
+      return Response.json({ error: { code: err.code, message: err.message, schema: err.schema } }, { status: 503 });
+    }
     if (err instanceof ApiError) {
       return Response.json({ error: { code: err.code, message: err.message } }, {
         status: err.status,

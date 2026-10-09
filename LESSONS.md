@@ -765,3 +765,19 @@
 - **What went wrong:** An inbound SharePoint bucket move refused by the guard only wrote an audit line, so the delta cursor advanced and a dirty local bucket could later overwrite SharePoint. The lane exception also checked only the label delta, so title/description/priority edits rode along with a closure label.
 - **Root cause:** A new inbound validation path refused silently instead of using the existing conflict register; an exception predicate was scoped to one field of the patch.
 - **Rule going forward:** Any inbound refusal of a SharePoint value records an open `sync_conflicts` row and sets the task `conflict` (outbound holds) — never audit-only. Exceptions to a validation rule must test the whole patch, not just the field they target.
+
+### 2026-10-09 — Application deployed before the live schema migration
+
+- **Incident:** PR #286 deployed on October 8 at 18:56 ET with queries for
+  `completed_at`, but migration 033 was not applied to the live database.
+  API and MCP calls returned generic 500s for about 13.5 hours, until revert
+  PR #290 deployed October 9 at 08:24 ET. The earlier portal
+  `department_roles` incident had the same missing-target-migration cause.
+- **Root cause:** CI migrated a fresh disposable DB; Vercel's automatic deploy
+  did not compare the code's migration set with the actual target ledger.
+  The separate approved live migration workflow had not run.
+- **Rule:** Live migrations land before the code that needs them. Every Vercel
+  environment checks its own target ledger read-only before building/promoting;
+  every local migration must be present, even when the DB's latest version is
+  higher. Runtime mismatches fail visibly with schema-specific 503s and
+  self-check diagnostics. Never apply migrations from the deploy check.

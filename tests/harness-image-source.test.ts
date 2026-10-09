@@ -19,7 +19,7 @@ describe("test harness image source", () => {
     expect(shared).toContain('"public.ecr.aws/docker/library/postgres:16-alpine"');
   });
 
-  it.each(Object.entries(consumers))("%s uses the shared image with no bare or docker.io reference", (_name, source) => {
+  it.each(Object.entries(consumers))("%s uses the shared image with no bare or Docker Hub reference", (_name, source) => {
     expect(source).toContain("POSTGRES_IMAGE");
     expect(source).toContain("postgres-image.mjs");
     expect(source).not.toMatch(/(^|[^/\w.-])postgres:\d/m);

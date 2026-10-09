@@ -537,10 +537,42 @@ server.tool(
   {
     taskId: z.string().min(1),
     reason: z.string().min(1).max(500),
+    checkoutId: z.string().min(1).optional().describe("Full dsp_* id; blocks that checkout until approved"),
+    proposal: z
+      .object({
+        summary: z.string().min(1).max(1000),
+        action: z.string().min(1).max(500).optional(),
+        diff: z.string().max(32768).optional(),
+        plan: z.string().max(32768).optional(),
+        risk: z.enum(["low", "medium", "high", "critical"]).optional(),
+      })
+      .strict()
+      .optional()
+      .describe("Structured proposal for the reviewer (32 KB total cap)"),
   },
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_request_approval");
     return printResult(await mcFetch("/request-approval", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_get_approval_gate",
+  "Read an approval gate (pending/approved/rejected, decider, decidedAt, note) by checkoutId or taskId. waitSeconds (max 25) long-polls and returns early on a decision. Only the principal that raised the gate may read it.",
+  {
+    checkoutId: z.string().min(1).optional(),
+    taskId: z.string().min(1).optional(),
+    gateId: z.string().min(1).optional(),
+    waitSeconds: z.number().min(0).max(25).optional(),
+  },
+  async ({ checkoutId, taskId, gateId, waitSeconds }) => {
+    if (!MCP_ENABLED) return disabledTool("mc_get_approval_gate");
+    const qs = new URLSearchParams();
+    if (checkoutId) qs.set("checkoutId", checkoutId);
+    if (taskId) qs.set("taskId", taskId);
+    if (gateId) qs.set("gateId", gateId);
+    if (waitSeconds !== undefined) qs.set("waitSeconds", String(waitSeconds));
+    return printResult(await mcFetch(`/approval-gate?${qs.toString()}`));
   }
 );
 

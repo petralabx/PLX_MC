@@ -7,11 +7,17 @@
 import { randomBytes } from "node:crypto";
 
 import { ApiError } from "@/lib/api/route";
-import { approvalEvidenceRef, type ApprovalEvidenceRef, type ApprovalGate, type Task } from "@/lib/mc-data";
-import { pendingApprovalGates } from "@/lib/mc-data/policy";
+import {
+  approvalEvidenceRef,
+  type ApprovalEvidenceRef,
+  type ApprovalGate,
+  type ApprovalProposal,
+  type Task,
+} from "@/lib/mc-data";
+import { APPROVAL_WAIT_MAX_MS, pendingApprovalGates } from "@/lib/mc-data/policy";
 import { patchTask } from "@/lib/sync";
 import { getEntities, getEntity } from "@/lib/sync/repo";
-import { appendEvent } from "./repo";
+import { appendEvent, blockDispatchOnApproval } from "./repo";
 
 export interface RequestApprovalInput {
   taskId: string;
@@ -20,6 +26,10 @@ export interface RequestApprovalInput {
   requestedBy: string;
   /** Agent runtime (mcp context), recorded on the gate + event. */
   runtime?: string;
+  /** Active checkout (dsp_*) to mark blocked-on-approval; validated by the caller. */
+  checkoutId?: string;
+  /** Structured proposal, already validated (approvalProposalSchema). */
+  proposal?: ApprovalProposal;
 }
 
 export async function requestApprovalGate(
@@ -32,6 +42,8 @@ export async function requestApprovalGate(
   const gate: ApprovalGate = {
     id: `apg_${randomBytes(8).toString("hex")}`,
     reason: input.reason,
+    ...(input.checkoutId ? { checkoutId: input.checkoutId } : {}),
+    ...(input.proposal ? { proposal: input.proposal } : {}),
     requestedBy: input.requestedBy,
     requestedRuntime: input.runtime,
     requestedAt: new Date().toISOString(),
@@ -53,12 +65,18 @@ export async function requestApprovalGate(
   );
   if (!updated) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
 
+  if (input.checkoutId && !(await blockDispatchOnApproval(input.checkoutId, gate.id))) {
+    throw new ApiError("invalid_checkout", "Checkout is revoked, released, or unknown.", 409);
+  }
+
   await appendEvent({
     kind: "approval.requested",
     actor: input.requestedBy,
     taskId: input.taskId,
     payload: {
       gateId: gate.id,
+      checkoutId: input.checkoutId ?? null,
+      hasProposal: !!input.proposal,
       reason: gate.reason,
       runtime: input.runtime ?? null,
     },
@@ -140,6 +158,69 @@ export async function decideApprovalGate(
     },
   });
   return { gate: decided, task: updated };
+}
+
+const APPROVAL_POLL_INTERVAL_MS = 1_000;
+
+export interface ApprovalGateState {
+  taskId: string;
+  checkoutId: string | null;
+  gateId: string;
+  status: ApprovalGate["status"];
+  reason: string;
+  proposal: ApprovalProposal | null;
+  requestedBy: string;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  note: string | null;
+  /** True when this call returned on the wait cap with the gate still pending. */
+  timedOut: boolean;
+}
+
+function gateState(taskId: string, gate: ApprovalGate, timedOut: boolean): ApprovalGateState {
+  return {
+    taskId,
+    checkoutId: gate.checkoutId ?? null,
+    gateId: gate.id,
+    status: gate.status,
+    reason: gate.reason,
+    proposal: gate.proposal ?? null,
+    requestedBy: gate.requestedBy,
+    requestedAt: gate.requestedAt,
+    decidedBy: gate.decidedBy ?? null,
+    decidedAt: gate.decidedAt ?? null,
+    note: gate.note ?? null,
+    timedOut,
+  };
+}
+
+export interface GetApprovalGateInput {
+  taskId: string;
+  gateId: string;
+  /** Long-poll budget; clamped to APPROVAL_WAIT_MAX_MS. 0/omitted = single read. */
+  waitMs?: number;
+  /** Test seam: poll interval. */
+  pollIntervalMs?: number;
+}
+
+/** Read a gate; when still pending, poll until decided or the (capped) wait elapses. */
+export async function getApprovalGateState(input: GetApprovalGateInput): Promise<ApprovalGateState> {
+  const waitMs = Math.min(Math.max(input.waitMs ?? 0, 0), APPROVAL_WAIT_MAX_MS);
+  const interval = input.pollIntervalMs ?? APPROVAL_POLL_INTERVAL_MS;
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const row = await getEntity("task", input.taskId);
+    if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+    const task = row.data as unknown as Task;
+    const gate = (task.approvalGates ?? []).find((g) => g.id === input.gateId);
+    if (!gate) throw new ApiError("not_found", `unknown approval gate ${input.gateId}`, 404);
+    const remaining = deadline - Date.now();
+    if (gate.status !== "pending" || remaining <= 0) {
+      return gateState(task.id, gate, gate.status === "pending" && waitMs > 0);
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(interval, remaining)));
+  }
 }
 
 export interface PendingApprovalRow {

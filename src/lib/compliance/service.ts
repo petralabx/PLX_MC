@@ -346,6 +346,24 @@ export interface CompleteInput {
   actor?: PermissionActor;
 }
 
+/**
+ * A checkout blocked on an approval gate cannot complete until a human approves it.
+ * Rule for a rejected gate: the checkout stays blocked (it cannot complete); the agent
+ * either raises a new gate on the same checkout (which re-points the block) or releases it.
+ * A gate that cannot be found fails closed.
+ */
+async function assertCheckoutApprovalCleared(taskId: string, gateId: string): Promise<void> {
+  const task = await loadTask(taskId);
+  const gate = task?.approvalGates?.find((g) => g.id === gateId);
+  if (gate?.status === "approved") return;
+  const state = gate?.status ?? "missing";
+  throw new ApiError(
+    state === "rejected" ? "approval_rejected" : "approval_pending",
+    `Checkout is blocked on approval gate ${gateId} (${state}); it cannot complete until a human approves the gate.`,
+    409
+  );
+}
+
 export async function complete(input: CompleteInput): Promise<{ ok: true }> {
   // Validate the credential strictly — a bogus/expired/revoked id must not append
   // an orphan task.completed to the canonical log (review S4).
@@ -383,6 +401,8 @@ export async function complete(input: CompleteInput): Promise<{ ok: true }> {
       403
     );
   }
+
+  if (d.approvalGateId) await assertCheckoutApprovalCleared(d.taskId, d.approvalGateId);
 
   await repo.appendEvent({
     kind: "task.completed",

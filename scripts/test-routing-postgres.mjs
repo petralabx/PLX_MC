@@ -52,6 +52,7 @@ function parseArgs(argv) {
     agentRunnerPrincipal: false,
     portalPrincipal: false,
     completedAt: false,
+    dispatchApproval: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -65,8 +66,9 @@ function parseArgs(argv) {
     else if (arg === "--agent-runner-principal") out.agentRunnerPrincipal = true;
     else if (arg === "--portal-principal") out.portalPrincipal = true;
     else if (arg === "--completed-at") out.completedAt = true;
+    else if (arg === "--dispatch-approval") out.dispatchApproval = true;
     else if (arg === "--help" || arg === "-h") {
-      console.log(`Usage: node scripts/test-routing-postgres.mjs --through NNN [--schema] [--idempotency] [--sequence] [--concurrency] [--revision-atomicity] [--agent-runner-principal] [--portal-principal] [--completed-at]`);
+      console.log(`Usage: node scripts/test-routing-postgres.mjs --through NNN [--schema] [--idempotency] [--sequence] [--concurrency] [--revision-atomicity] [--agent-runner-principal] [--portal-principal] [--completed-at] [--dispatch-approval]`);
       process.exit(0);
     } else {
       throw new Error(`unknown argument: ${arg}`);
@@ -775,6 +777,45 @@ async function assertCompletedAt(client, files) {
   console.log("completed_at assertions passed");
 }
 
+// TASK-629: migration 036 adds mc_dispatch.approval_gate_id / approval_blocked_at.
+// Proves the columns exist, re-apply is a no-op, and the block UPDATE used by
+// compliance/repo blockDispatchOnApproval marks only an active lease.
+const DISPATCH_APPROVAL_MIGRATION = "036_checkout_approval_block.sql";
+
+async function assertDispatchApproval(client, files) {
+  if (!files.includes(DISPATCH_APPROVAL_MIGRATION)) {
+    throw new Error(`--dispatch-approval needs ${DISPATCH_APPROVAL_MIGRATION} (use --through 036 or later)`);
+  }
+  const sql = await readFile(path.join(MIGRATIONS_DIR, DISPATCH_APPROVAL_MIGRATION), "utf8");
+  await client.query(sql); // re-apply must be a no-op
+  const cols = await client.query(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'mc_dispatch' AND column_name IN ('approval_gate_id', 'approval_blocked_at')`
+  );
+  if (cols.rows.length !== 2) throw new Error(`mc_dispatch approval columns missing: ${JSON.stringify(cols.rows)}`);
+  for (const id of ["dsp_active", "dsp_released"]) {
+    await client.query(
+      `INSERT INTO mc_dispatch (id, actor_kind, runtime, task_id, accountable_human, repo, expires_at)
+       VALUES ($1, 'agent', 'claude', 'TASK-9002', 'vince', 'petralabx/PLX_MC', now() + interval '1 hour')`,
+      [id]
+    );
+  }
+  await client.query(`UPDATE mc_dispatch SET released_at = now(), released_reason = 'manual' WHERE id = 'dsp_released'`);
+  const block = (id) =>
+    client.query(
+      `UPDATE mc_dispatch SET approval_gate_id = $2, approval_blocked_at = now()
+        WHERE id = $1 AND NOT revoked AND released_at IS NULL RETURNING id`,
+      [id, "apg_test"]
+    );
+  if ((await block("dsp_active")).rowCount !== 1) throw new Error("active lease was not blocked");
+  if ((await block("dsp_released")).rowCount !== 0) throw new Error("released lease must not be blocked");
+  const blocked = await client.query(`SELECT approval_gate_id, approval_blocked_at FROM mc_dispatch WHERE id = 'dsp_active'`);
+  if (blocked.rows[0].approval_gate_id !== "apg_test" || !blocked.rows[0].approval_blocked_at) {
+    throw new Error(`block not persisted: ${JSON.stringify(blocked.rows)}`);
+  }
+  console.log("dispatch approval assertions passed");
+}
+
 async function main() {
   refuseConfiguredUrls();
   const args = parseArgs(process.argv.slice(2));
@@ -822,6 +863,7 @@ async function main() {
     if (args.agentRunnerPrincipal) await assertAgentRunnerPrincipal(client, files);
     if (args.portalPrincipal) await assertPortalPrincipal(client, files);
     if (args.completedAt) await assertCompletedAt(client, files);
+    if (args.dispatchApproval) await assertDispatchApproval(client, files);
 
     console.log("routing postgres harness OK");
     return 0;

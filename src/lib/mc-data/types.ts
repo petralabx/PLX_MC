@@ -309,11 +309,24 @@ export interface Task {
 
 export type ApprovalGateStatus = "pending" | "approved" | "rejected";
 
+/** Structured proposal an agent attaches to a gate (all fields optional except summary). */
+export interface ApprovalProposal {
+  summary: string;
+  action?: string;
+  diff?: string;
+  plan?: string;
+  risk?: "low" | "medium" | "high" | "critical";
+}
+
 export interface ApprovalGate {
   /** apg_* id. */
   id: string;
   /** What the agent needs a human to decide. */
   reason: string;
+  /** Checkout (dsp_*) the gate blocks; complete() refuses until approved. */
+  checkoutId?: string;
+  /** Structured proposal payload; stored exactly as validated. */
+  proposal?: ApprovalProposal;
   /** Audit label of the requesting operator/agent session — never a grant input. */
   requestedBy: string;
   /** Agent runtime that raised the gate (mcp context). */

@@ -26,7 +26,8 @@ composed swarm delegation.
 | `mc_list_checkouts` | Checkouts as `checkoutRef` (`dsp_…` + last 4, never the usable id) filtered by `repo` (owner/name), `taskId`, `active` (read-only) |
 | `mc_search_knowledge` | Ask the Brain search; hits carry provenance (read-only) |
 | `mc_verify_pr` | Compliance-gate verdict for `repo` + `pr`, not recorded (read-only) |
-| `mc_request_approval` | Raise a runtime approval gate on a task |
+| `mc_request_approval` | Raise a runtime approval gate on a task (optional `checkoutId` block + structured `proposal`) |
+| `mc_get_approval_gate` | Read a gate's state; optional `waitSeconds` (max 25) long-poll |
 | `mc_release_checkout` | Release a stray or expired lease by `checkoutId`, or `checkoutRef` + `taskId`, with a `reason`; never changes the task |
 | `mc_release_checkouts` | Batch form of `mc_release_checkout` with per-item outcomes |
 | `mc_report_session_telemetry` | Report session token usage and cost (cents) at close; one row per `sessionId` |

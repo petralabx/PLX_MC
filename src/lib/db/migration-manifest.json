@@ -31,5 +31,6 @@
   "030_chatgpt_mcp_principal.sql",
   "031_project_status.sql",
   "032_task_search_indexes.sql",
-  "033_entities_completed_at_cancellation.sql"
+  "033_entities_completed_at_cancellation.sql",
+  "036_checkout_approval_block.sql"
 ]

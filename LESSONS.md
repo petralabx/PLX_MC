@@ -929,3 +929,12 @@
 - **Rule going forward:** When adding a state-based guard, list every writer of
   the guarded column and route each through the shared check in
   `src/lib/sync/bucket-move.ts` (`assertMoveTargetProjectOpen`).
+
+## 2026-10-09 — TASK-629: schema-postgres test hardcoded the latest migration number
+- **What went wrong:** Adding migration 036 failed `tests/schema-postgres.test.ts`, which
+  asserted the literal text `expected 033, db at 032`; every new migration PR would
+  have to edit it and collide with other open migration PRs.
+- **Root cause:** The expected/actual prefixes were typed in instead of derived from the
+  migration file list the test already loads.
+- **Rule going forward:** Derive migration prefixes from `files` (latest and previous)
+  in schema tests; never hardcode them.

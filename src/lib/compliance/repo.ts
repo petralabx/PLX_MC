@@ -297,6 +297,8 @@ export interface DispatchRow {
   expiresAt: string;
   releasedAt: string | null;
   releasedReason: string | null;
+  /** Gate (apg_*) this checkout is blocked on; null/undefined = not blocked (TASK-629). */
+  approvalGateId?: string | null;
 }
 
 export async function insertDispatch(d: {
@@ -327,10 +329,11 @@ type DispatchDbRow = {
   expires_at: Date;
   released_at: Date | null;
   released_reason: string | null;
+  approval_gate_id: string | null;
 };
 
 const DISPATCH_COLUMNS =
-  "id, actor_kind, runtime, task_id, accountable_human, repo, revoked, expires_at, released_at, released_reason";
+  "id, actor_kind, runtime, task_id, accountable_human, repo, revoked, expires_at, released_at, released_reason, approval_gate_id";
 
 function toDispatchRow(r: DispatchDbRow): DispatchRow {
   return {
@@ -344,6 +347,7 @@ function toDispatchRow(r: DispatchDbRow): DispatchRow {
     expiresAt: r.expires_at.toISOString(),
     releasedAt: r.released_at?.toISOString() ?? null,
     releasedReason: r.released_reason ?? null,
+    approvalGateId: r.approval_gate_id ?? null,
   };
 }
 
@@ -353,6 +357,17 @@ export async function getDispatch(id: string): Promise<DispatchRow | null> {
     [id]
   );
   return rows[0] ? toDispatchRow(rows[0]) : null;
+}
+
+/** Mark an active checkout blocked-on-approval by `gateId` (TASK-629). False = lease not active. */
+export async function blockDispatchOnApproval(id: string, gateId: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `UPDATE mc_dispatch SET approval_gate_id = $2, approval_blocked_at = now()
+      WHERE id = $1 AND NOT revoked AND released_at IS NULL
+      RETURNING id`,
+    [id, gateId]
+  );
+  return rows.length > 0;
 }
 
 /** Durable checkout→task lookup (read-only) for checkout ids outside the sampled event window. */

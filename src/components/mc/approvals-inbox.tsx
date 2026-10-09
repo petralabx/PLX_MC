@@ -195,6 +195,17 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
                   {row.gate.requestedRuntime ? ` via ${row.gate.requestedRuntime}` : ""} ·{" "}
                   {new Date(row.gate.requestedAt).toLocaleString()} · stage {row.stage}
                 </div>
+                {row.gate.proposal ? (
+                  <details className="ap-proposal" data-testid="approval-proposal">
+                    <summary>
+                      {row.gate.proposal.summary}
+                      {row.gate.proposal.risk ? ` · risk ${row.gate.proposal.risk}` : ""}
+                    </summary>
+                    {row.gate.proposal.action ? <p>Action: {row.gate.proposal.action}</p> : null}
+                    {row.gate.proposal.plan ? <pre>{row.gate.proposal.plan}</pre> : null}
+                    {row.gate.proposal.diff ? <pre>{row.gate.proposal.diff}</pre> : null}
+                  </details>
+                ) : null}
                 <input
                   className="ap-note"
                   placeholder="Optional decision note"

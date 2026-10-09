@@ -10,6 +10,8 @@ import {
 import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
 import { assertBucketProjectAccess, assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { patchTask } from "@/lib/sync";
+import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
+import { assertMoveTargetProjectOpen } from "@/lib/sync/bucket-move";
 
 const STAGES = ["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified"] as const;
 
@@ -69,6 +71,12 @@ export const PATCH = route(async (req, ctx) => {
   await assertTaskProjectAccess(id, principal);
   if (patch.bucket) {
     await assertBucketProjectAccess(patch.bucket, principal);
+    // Closed-project rule: only a real move into a bucket is checked (a no-op re-send passes).
+    const before = await getEntity("task", id);
+    if (before && (before.data as { bucket?: string }).bucket !== patch.bucket) {
+      const target = (await getBuckets()).find((b) => b.id === patch.bucket);
+      assertMoveTargetProjectOpen((await getProjects()).find((p) => p.id === target?.project), `${id} to ${patch.bucket}`);
+    }
   }
   const task = await patchTask(id, patch, authorized.auditLabel, {
     attribution: { source: "human", actorId: authorized.actorId },

@@ -811,3 +811,13 @@
 - **Rule going forward:** Mock external APIs with their real omission behaviour,
   enumerate every writer of a column (create, inbound, backfill) before calling a
   write rule done, and never infer a transition without a known previous state.
+
+## 2026-10-09 — TASK-2558: closed-project rule had three side doors
+- **What went wrong:** The closed-project rule shipped on create paths and on
+  MCP/inbound bucket moves, but REST task update, bucket re-parenting and
+  keep-SharePoint conflict resolution moved work into closed projects unchecked.
+- **Root cause:** The rule was added per entry point; the other writers of
+  `task.bucket` / `bucket.project` were never enumerated.
+- **Rule going forward:** When adding a state-based guard, list every writer of
+  the guarded column and route each through the shared check in
+  `src/lib/sync/bucket-move.ts` (`assertMoveTargetProjectOpen`).

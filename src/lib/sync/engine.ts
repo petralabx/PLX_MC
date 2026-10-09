@@ -65,7 +65,7 @@ import {
   type SyncConflictSubject,
   type TaskPersonMc,
 } from "./mapping";
-import { bucketMoveTargetViolation } from "./bucket-move";
+import { assertMoveTargetProjectOpen, bucketMoveTargetViolation } from "./bucket-move";
 import { documentsSyncEnabled } from "@/lib/secrets";
 import { fileEntryFromDriveItem, fileEntryIdForDriveItem, parentSegments, type DriveItem, type FolderRef } from "./documents";
 import { evaluateSyncFreshness, type SyncFreshnessResult } from "./freshness";
@@ -1684,6 +1684,29 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
   if (winner === "sp") {
     const value = parseFieldValue(subject, mcField, conflict.spVal);
     if (value === undefined) return false;
+    // Closed-project rule (TASK-2530): SharePoint cannot move work into a closed
+    // project. Refuse before any write, leave the conflict open, and say why.
+    const targetProjectId =
+      subject === "task" && mcField === "bucket"
+        ? (await repo.getBuckets()).find((b) => b.id === value)?.project
+        : subject === "bucket" && mcField === "project"
+          ? (value as string | null)
+          : null;
+    if (targetProjectId) {
+      try {
+        assertMoveTargetProjectOpen(
+          (await repo.getProjects()).find((p) => p.id === targetProjectId),
+          `${conflict.entityId} (${conflict.field})`
+        );
+      } catch (err) {
+        await repo.appendAudit(
+          actor,
+          `Conflict on ${conflict.entityId} · ${conflict.field} left unresolved — SharePoint value refused: ${(err as Error).message}`,
+          "error"
+        );
+        throw err;
+      }
+    }
     if (entityRow) {
       await repo.updateEntity(subject as EntityType, conflict.entityId, {
         patch: { [mcField]: value },

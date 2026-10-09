@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-09 (ET) — A spec's "completed_at" dependency had been reverted on main
+
+- **What happened:** TASK-2559 assumed the merged-PR projection sets completed_at (from #286). #286 was reverted by #290, so main's projection does not set it.
+- **Root cause:** The spec cited a merged PR without checking it was still on main.
+- **Rule going forward:** Before relying on a cited PR's behavior, check `git log` for a revert of it. Say plainly in the PR when a spec dependency is absent.
+
 ### 2026-10-09 (ET) — Live release identity followed the wrong database source
 
 - **What happened:** The live plan from #289/#292 targeted a staging database at migration 030 that production does not use. Docs named the wrong source, and the guard hard-coded the staging host.

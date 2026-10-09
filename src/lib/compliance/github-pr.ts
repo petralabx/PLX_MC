@@ -125,3 +125,44 @@ export async function loadPrVerifyInput(
     truncated,
   };
 }
+
+export interface MergedPrFacts {
+  merged: boolean;
+  state: "open" | "closed";
+  headSha: string;
+  mergeSha: string;
+  title: string;
+  /** Base repository full name (owner/name) as GitHub reports it. */
+  repoFullName: string;
+}
+
+/** Merge facts for one PR, read from GitHub only (mc_link_merged_pr). Never returns the body. */
+export async function loadMergedPrFacts(repoFullName: string, prNumber: number): Promise<MergedPrFacts> {
+  const [owner, name] = repoFullName.split("/");
+  if (!owner || !name) throw new ApiError("github_unavailable", "A full repository slug is required to read PR state.", 503);
+  const token = await resolveGithubToken({ repoOwner: owner });
+  if (!token) throw new ApiError("github_unavailable", "No GitHub auth configured - the PR cannot be read.", 503);
+  const pr = (await githubGet(
+    `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${prNumber}`,
+    token
+  )) as {
+    state?: string;
+    number?: number;
+    merged?: boolean;
+    title?: string;
+    head?: { sha?: string };
+    merge_commit_sha?: string | null;
+    base?: { repo?: { full_name?: string } };
+  };
+  if (pr?.number !== prNumber || !["open", "closed"].includes(pr.state ?? "")) {
+    throw new ApiError("github_error", "GitHub returned an unrecognized pull request payload.", 502);
+  }
+  return {
+    merged: pr.merged === true,
+    state: pr.state as "open" | "closed",
+    headSha: pr.head?.sha ?? "",
+    mergeSha: pr.merge_commit_sha ?? "",
+    title: pr.title ?? "",
+    repoFullName: pr.base?.repo?.full_name ?? repoFullName,
+  };
+}

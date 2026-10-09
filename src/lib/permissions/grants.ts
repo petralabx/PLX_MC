@@ -4,6 +4,7 @@ import type { AccessRole, Capability } from "./types";
 import {
   COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
   GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
+  LEDGER_MCP_SERVICE_PRINCIPAL_ID,
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
@@ -69,6 +70,13 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "sync.mutate",
 ];
 
+// sp_mcp_ledger is the one steward principal: the agent bundle plus
+// task.link_merged_pr (mc_link_merged_pr). No other principal holds it.
+const LEDGER_MCP_CAPABILITIES: readonly Capability[] = [
+  ...MCP_AGENT_CAPABILITIES,
+  "task.link_merged_pr",
+];
+
 // sp_mcp_portal (agent fleet P8) is least privilege (decision CG-07b): it
 // creates tasks, an `agent:` assignee included, and searches them. No
 // checkout, progress, complete, bucket, project, routing or approval action.
@@ -87,7 +95,11 @@ const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
   ...Object.fromEntries(
     MCP_AGENT_SERVICE_PRINCIPAL_IDS.map((id) => [
       id,
-      id === PORTAL_MCP_SERVICE_PRINCIPAL_ID ? PORTAL_MCP_CAPABILITIES : MCP_AGENT_CAPABILITIES,
+      id === PORTAL_MCP_SERVICE_PRINCIPAL_ID
+        ? PORTAL_MCP_CAPABILITIES
+        : id === LEDGER_MCP_SERVICE_PRINCIPAL_ID
+          ? LEDGER_MCP_CAPABILITIES
+          : MCP_AGENT_CAPABILITIES,
     ])
   ),
   [SYNC_INBOUND_SERVICE_PRINCIPAL_ID]: ["sync.service.write", "task.read"],

@@ -64,6 +64,15 @@ shared agent bundle includes project and bucket creation, bucket updates
 (conflict resolve via MCP) but not repository approval or permission
 management. Console sweep/retry remain Entra-gated.
 
+**Cancel / reopen (TASK-2529):** `task.cancel` and `task.reopen` authorize
+moving a task to and from the `cancelled` end stage (`mc_update_task`
+`patch.cancel` / `patch.reopen`, `mc_report_progress` `stage:"cancelled"`, over
+HTTP MCP, the cursor REST routes and the stdio client). They are evaluated on
+the authenticated principal; `X-MC-Operator-Email` is recorded as audit context
+only. Admin and owner roles hold both. No service principal holds either today,
+and `MCP_AGENT_CAPABILITIES` never includes them (every agent would then cancel
+any task); an operator grants one to a named principal in `SERVICE_GRANTS`.
+
 **Portal principal (agent fleet P8, decision CG-07b):** `sp_mcp_portal`
 (migration 028) does not get the shared agent bundle. Its grant is
 `task.create` and `task.read` only. The MCP tool allowlist

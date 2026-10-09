@@ -34,7 +34,7 @@ import { pathToFileURL } from "node:url";
 import { DbIdentityError, assertApprovedNonProdDb, checkUrlAgainstApproved, parseApprovedDb } from "./lib/db-identity.mjs";
 
 // Keep in step with TERMINAL_STAGES in src/lib/mc-data/policy.ts.
-export const TERMINAL_STAGES = ["merged", "verified"];
+export const TERMINAL_STAGES = ["merged", "verified", "cancelled"];
 const EVENT_KINDS = ["pr.merged", "task.promoted", "task.progress"];
 
 function toIso(value) {

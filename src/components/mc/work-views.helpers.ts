@@ -1,4 +1,4 @@
-import { ACTORS, BANDS, BUCKETS, PRIORITY, STAGES, bandOf } from "@/lib/mc-data";
+import { ACTORS, BANDS, BUCKETS, PRIORITY, STAGES, bandOf, isClosedStage } from "@/lib/mc-data";
 import type { Band, Bucket, PriorityKey, StageKey, Task } from "@/lib/mc-data";
 
 // Buckets are INJECTED (default = fixture) so these stay pure, deterministic
@@ -97,6 +97,7 @@ export const BAND_ENTRY_STAGE: Record<Band, StageKey> = {
   todo: "backlog",
   doing: "progress",
   done: "merged",
+  cancelled: "cancelled", // a drop here is refused by the store: cancelling needs a reason (TASK-2529)
 };
 
 // Which Task field a drop on the given axis mutates. Used both to ENABLE drag
@@ -383,7 +384,7 @@ export function timelineSegmentClass(
   buckets: Bucket[] = BUCKETS
 ): "seg-track" | "seg-risk" | "seg-blocked" | "seg-done" {
   if (task.blocked) return "seg-blocked";
-  if (task.stage === "verified" || task.stage === "merged") return "seg-done";
+  if (isClosedStage(task.stage)) return "seg-done";
   const bucket = buckets.find((b) => b.id === task.bucket);
   if (task.priority === "urgent" || bucket?.health === "risk") return "seg-risk";
   return "seg-track";

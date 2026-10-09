@@ -5,6 +5,7 @@
 
 import { ApiError } from "@/lib/api/route";
 import { OPERATOR_ID, HUMANS, SP_LISTS } from "@/lib/mc-data/data";
+import type { Cancellation } from "@/lib/mc-data/cancellation";
 import { normalizeBucketPrd } from "@/lib/mc-data/doc-links";
 import { isArchived, isProjectClosed } from "@/lib/mc-data/helpers";
 import {
@@ -36,8 +37,9 @@ import type {
   SpError,
   Task,
 } from "@/lib/mc-data/types";
+import { assertMoveTargetProjectOpen } from "./bucket-move";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
-import type { TxQuery } from "@/lib/db";
+import { withTransaction, type TxQuery } from "@/lib/db";
 import type { EntityData, FieldAttribution } from "./mapping";
 import * as repo from "./repo";
 
@@ -287,7 +289,15 @@ export async function patchBucket(id: string, patch: PatchBucketInput, actor: st
     if (!prd.ok) throw new ApiError("invalid_request", "PRD link must be an http or https URL.", 422);
     patch = { ...patch, prd: prd.value };
   }
-  if (patch.project) await assertProjectExists(patch.project);
+  if (patch.project) {
+    await assertProjectExists(patch.project);
+    if (patch.project !== existing.project) {
+      assertMoveTargetProjectOpen(
+        (await repo.getProjects()).find((p) => p.id === patch.project),
+        `bucket ${id}`
+      );
+    }
+  }
   const defined = definedEntries(patch);
   const next: Bucket = { ...existing, ...defined };
   const pushedDirty = Object.keys(defined).filter((k) => BUCKET_PUSHED_FIELDS.includes(k));
@@ -644,6 +654,12 @@ export interface PatchTaskOptions {
   attribution?: MutationAttribution;
   /** ISO time for completed_at on first terminal entry (PR merge time); updateEntity defaults to now. */
   completedAt?: string;
+  /** Validated cancellation object; required when the patch moves the task into `cancelled` (TASK-2529). */
+  cancellation?: Cancellation;
+  /** Set only by the reopen service (lib/sync/cancel.ts), after task.reopen is authorized; required to leave `cancelled`. */
+  reopen?: boolean;
+  /** Refuse a bucket move into a closed project, checked inside the locked transaction (TASK-2558). */
+  enforceClosedProject?: boolean;
 }
 
 // Persistence tiers:
@@ -678,7 +694,17 @@ export async function patchTask(
 ): Promise<Task | null> {
   // Transaction callers already hold an existing row; bootstrap would borrow
   // a second pool connection and can starve concurrent transactions.
-  if (!opts.query) await ensureSeeded();
+  if (!opts.query) {
+    await ensureSeeded();
+    // Seed the registry on the pool before the transaction holds a connection.
+    if (patch.repos) await ensureReposSeeded();
+    // Lock the row across the cancelled-stage guard and the write, so a
+    // concurrent cancel cannot commit between them and be silently undone.
+    return withTransaction(async (q) => {
+      if (!(await repo.getEntity("task", id, q, true))) return null;
+      return patchTask(id, patch, actor, { ...opts, query: q });
+    });
+  }
   const row = await repo.getEntity("task", id, opts.query);
   if (!row) return null;
 
@@ -687,8 +713,7 @@ export async function patchTask(
   // Allow-list enforcement on edit (EN-005): normalize + validate repos before
   // building the persisted patch so slugs never land in entities.data.
   if (taskPatch.repos) {
-    await ensureReposSeeded();
-    const registry = await repo.getRepos();
+    const registry = await repo.getRepos(opts.query);
     const registryMap = Object.fromEntries(registry.map((r) => [r.id, r]));
     taskPatch.repos = requireRegistryRepos(taskPatch.repos, registryMap);
   }
@@ -703,6 +728,23 @@ export async function patchTask(
   // patch that sets both owner and stage is evaluated against the new owner.
   const current = row.data as unknown as Task;
   const effective = { ...current, ...taskPatch } as Task;
+  // Closed-project rule (TASK-2558), re-checked under the row lock; only a real move is refused.
+  if (opts.enforceClosedProject && taskPatch.bucket && taskPatch.bucket !== current.bucket) {
+    const target = (await repo.getBuckets(opts.query)).find((b) => b.id === taskPatch.bucket);
+    assertMoveTargetProjectOpen(
+      (await repo.getProjects(opts.query)).find((p) => p.id === target?.project),
+      `${id} to ${taskPatch.bucket}`
+    );
+  }
+  // Leaving cancelled is a capability-gated, audited reopen (TASK-2529): a generic
+  // stage patch must never clear the cancellation on its own.
+  if (current.stage === "cancelled" && taskPatch.stage && taskPatch.stage !== "cancelled" && !opts.reopen) {
+    throw new ApiError(
+      "reopen_required",
+      `${id} is cancelled; it can only leave that stage through the reopen service (task.reopen).`,
+      409
+    );
+  }
   if ("assignee" in taskPatch) {
     const violation = assignmentViolation(effective, taskPatch.assignee ?? null);
     if (violation) throw new ApiError("human_only_violation", violation, 409);
@@ -718,6 +760,10 @@ export async function patchTask(
   }
 
   const pushedDirty = entries.map(([k]) => k).filter((k) => PUSHED_FIELDS.includes(k));
+  // Leaving cancelled clears CancelReason/ReplacedBy in ToDos on the next push.
+  if (current.stage === "cancelled" && taskPatch.stage && taskPatch.stage !== "cancelled") {
+    pushedDirty.push("cancellation");
+  }
   const dirty = Array.from(new Set([...row.dirty_fields, ...pushedDirty]));
 
   const dataPatch: EntityData = Object.fromEntries(entries);
@@ -751,6 +797,8 @@ export async function patchTask(
   await repo.updateEntity("task", id, {
     patch: dataPatch,
     completedAt: opts.completedAt,
+    cancellation: opts.cancellation,
+    reopen: opts.reopen,
     // Person columns are pushed now (Item 1), so a person-only patch re-queues
     // the entity for the next outbound sweep.
     syncState: pushedDirty.length > 0 ? "pending" : undefined,
@@ -770,7 +818,7 @@ export async function patchTask(
   }
   // The remaining pushed fields (incl. Accountable Owner / Reporter) log the
   // honest pending-push trail; assignee already has its own line above.
-  const loggable = pushedDirty.filter((k) => k !== "assignee");
+  const loggable = pushedDirty.filter((k) => k !== "assignee" && k !== "cancellation");
   if (loggable.length > 0) {
     await repo.appendAudit(actor, `Edited ${id} (${loggable.join(", ")}) — pending push.`, "pending", opts.query);
   }

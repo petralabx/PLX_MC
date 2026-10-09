@@ -16,6 +16,7 @@
 // exactly the bug class the error queue exists to surface.
 
 import { ACTORS, HUMANS, PRIORITY, STAGES } from "@/lib/mc-data/data";
+import { CANCEL_REASON_LABEL } from "@/lib/mc-data/cancellation";
 import { evidenceComplete } from "@/lib/mc-data/helpers";
 import type { Bucket, Project, Repo, Risk, StageKey, Subtask, Task } from "@/lib/mc-data/types";
 
@@ -151,6 +152,17 @@ export function outboundFields(
     if (opts.creating) out.TaskID = t.id;
     if (include("title")) out.Title = t.title;
     if (include("stage")) out.Status = STAGE_TO_STATUS[t.stage] ?? capitalize(t.stage);
+    // Mirror of entities.cancellation (TASK-2529). Written with stage while
+    // cancelled; a reopen marks "cancellation" dirty to clear both columns. Never
+    // emitted otherwise, so a list that is not provisioned yet is not hit by
+    // every ordinary push.
+    if (t.cancellation && (include("cancellation") || include("stage"))) {
+      out.CancelReason = CANCEL_REASON_LABEL[t.cancellation.reason];
+      out.ReplacedBy = t.cancellation.replacedBy;
+    } else if (opts.only?.includes("cancellation")) {
+      out.CancelReason = null;
+      out.ReplacedBy = null;
+    }
     if (include("priority")) out.Priority = PRIORITY[t.priority]?.label ?? capitalize(t.priority);
     if (include("due")) {
       const iso = dueToIso(t.due);
@@ -407,6 +419,9 @@ export function validateInboundAdoptionRow(
     if (typeof fields.Status === "string" && !(fields.Status in STATUS_TO_STAGE)) {
       errors.push("invalid_status");
     }
+    // A brand-new row cannot be adopted already cancelled: there is no MC task to
+    // hold a validated cancellation (TASK-2529). Cancel it in MC after adoption.
+    if (fields.Status === STAGE_TO_STATUS.cancelled) errors.push("cancelled_not_adoptable");
     if (typeof fields.Priority === "string" && !(fields.Priority.toLowerCase() in PRIORITY)) {
       errors.push("invalid_priority");
     }
@@ -569,6 +584,8 @@ export function parseFieldValue(
         // actor id — validate it against the directory, never guess.
         return raw in ACTORS ? raw : undefined;
       case "stage":
+        // Keep-SP can't apply a cancel: it carries no validated reason (TASK-2529).
+        if (raw === "cancelled" || STATUS_TO_STAGE[raw] === "cancelled") return undefined;
         if (raw in STAGE_TO_STATUS) return raw;
         return STATUS_TO_STAGE[raw];
       case "priority": {
@@ -687,7 +704,7 @@ export interface ReconcileInboundOpts {
 
 export interface ReconcileInboundResult {
   apply: EntityData;
-  conflicts: { field: string; mcVal: string; spVal: string }[];
+  conflicts: { field: string; mcVal: string; spVal: string; note?: string }[];
   /** Dirty fields cleared because a newer human SharePoint edit won. */
   clearedDirty: string[];
   attributionEvents: {
@@ -727,7 +744,7 @@ export function reconcileInbound(
   opts?: ReconcileInboundOpts
 ): ReconcileInboundResult {
   const apply: EntityData = {};
-  const conflicts: { field: string; mcVal: string; spVal: string }[] = [];
+  const conflicts: { field: string; mcVal: string; spVal: string; note?: string }[] = [];
   const clearedDirty: string[] = [];
   const attributionEvents: ReconcileInboundResult["attributionEvents"] = [];
   for (const [field, spVal] of Object.entries(patches)) {

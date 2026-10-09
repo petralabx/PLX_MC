@@ -224,3 +224,29 @@ describe("verifyPr — multi-task PRs (checkoutIds)", () => {
     expect(r.reasons.some((x) => /advisory/.test(x))).toBe(false);
   });
 });
+
+describe("cancelled tasks (TASK-2529)", () => {
+  it("mc_checkout_task refuses a cancelled task and mints no checkout", async () => {
+    db.tasks.set("TASK-5", taskish({
+      id: "TASK-5", stage: "cancelled",
+      cancellation: { reason: "duplicate", replacedBy: "TASK-9", cancelledAt: "2026-10-07T00:00:00.000Z", cancelledBy: "sp_mcp_codex" },
+    }));
+    await expect(checkout({ taskId: "TASK-5", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" }))
+      .rejects.toMatchObject({ code: "task_cancelled", status: 409, message: expect.stringContaining("duplicate → TASK-9") });
+    expect(db.dispatches.size).toBe(0);
+  });
+
+  it("a PR whose task was cancelled after checkout passes with a warning instead of blocking or promoting", async () => {
+    db.tasks.set("TASK-6", taskish({ id: "TASK-6", accountableOwner: "greg", evidence: complete }));
+    const a = await checkout({ taskId: "TASK-6", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
+    db.tasks.set("TASK-6", taskish({
+      id: "TASK-6", stage: "cancelled", evidence: incomplete,
+      cancellation: { reason: "obsolete", replacedBy: null, cancelledAt: "2026-10-07T00:00:00.000Z", cancelledBy: "x" },
+    }));
+
+    const r = await verifyPr({ repo: "PLX_MC", prNumber: 60, headSha: "sha60", changedPaths: ["src/x.ts"], checkoutIds: [a.checkoutId] });
+
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons).toEqual([expect.stringMatching(/^TASK-6: warning: TASK-6 is cancelled \(obsolete\) — this PR will not promote it/)]);
+  });
+});

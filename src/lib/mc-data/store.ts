@@ -906,6 +906,12 @@ export function patchTaskFields(
   // Accountability policy (EN-003): block a stage advance that would orphan the
   // task past `planned` without a human owner, or mark it done with incomplete
   // evidence. Surface the reason and leave state untouched (no optimistic apply).
+  // Cancelling needs a reason (and replacedBy for duplicate/superseded), which a
+  // drag or stage click cannot supply: it goes through mc_update_task cancel (TASK-2529).
+  if (patch.stage === "cancelled") {
+    pushNotice(`${t.id}: cancel it with mc_update_task (cancel: {reason, replacedBy}) — a reason is required.`);
+    return;
+  }
   if (patch.stage !== undefined) {
     const reason = stageAdvanceViolation(t, patch.stage);
     if (reason) {

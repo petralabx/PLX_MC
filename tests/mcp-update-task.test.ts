@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   syncAudits: [] as unknown[][],
   queries: [] as { sql: string; transaction: boolean }[],
   failEvent: false,
+  allowPool: false,
   invocation: vi.fn(async () => "1000"),
 }));
 
@@ -19,7 +20,7 @@ vi.mock("@/lib/mcp/audit", () => ({ recordMcpToolCall: h.invocation }));
 vi.mock("@/lib/db", () => {
   async function execute(sql: string, params: unknown[] = [], transaction = false) {
     h.queries.push({ sql, transaction });
-    if (!transaction) throw new Error("Update requested a second pool connection");
+    if (!transaction && !h.allowPool) throw new Error("Update requested a second pool connection");
     if (sql.includes("FROM buckets ORDER BY")) return [
       { id: "BKT-OPEN", data: { id: "BKT-OPEN", project: null } },
       { id: "BKT-PROJECT", data: { id: "BKT-PROJECT", project: "PRJ-OPEN" } },
@@ -51,7 +52,7 @@ vi.mock("@/lib/db", () => {
       return [];
     }
     if (sql.startsWith("INSERT INTO mc_events")) {
-      if (!transaction) throw new Error("Event escaped transaction");
+      if (!transaction && !h.allowPool) throw new Error("Event escaped transaction");
       if (h.failEvent) { h.failEvent = false; throw new Error("Simulated audit failure"); }
       h.events.push({
         kind: String(params[0]), actor: String(params[1]), repo: String(params[2]),
@@ -152,7 +153,7 @@ beforeEach(() => {
   vi.stubEnv("PLX_MC_ALLOWED_USERS", "vince@petrasoap.com");
   vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT", "off");
   h.rows.clear(); h.events.length = 0; h.syncAudits.length = 0; h.queries.length = 0;
-  h.failEvent = false; h.invocation.mockClear();
+  h.failEvent = false; h.allowPool = false; h.invocation.mockClear();
   seed();
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -183,6 +184,16 @@ for (const transport of ["MCP", "REST"] as const) {
       expect(h.queries.some((q) => q.transaction && q.sql.endsWith("FOR UPDATE"))).toBe(true);
       expect(h.invocation).toHaveBeenCalledWith(expect.objectContaining({ tool: "mc_update_task", ok: true, taskId: "TASK-1" }));
       expect(outboundFields("task", row.data, { only: row.dirty_fields })).not.toHaveProperty("Labels");
+    });
+    it("refuses cancel and reopen from a task.progress-only principal that forges an allowlisted admin email (TASK-2529)", async () => {
+      h.allowPool = true; // a denial is audited on its own connection, before any transaction
+      for (const patch of [{ cancel: { reason: "obsolete" } }, { reopen: {} }]) {
+        const result = await update(patch);
+        expect(result.ok).toBe(false);
+        expect(JSON.stringify(result.body)).toMatch(/forbidden|denied/);
+      }
+      expect(h.rows.get("TASK-1")!.data.stage).toBe("planned");
+      expect(h.events.map((e) => e.kind)).toEqual(["task.cancel_denied", "task.reopen_denied"]);
     });
     it("adds, removes, trims and deduplicates labels without queuing SharePoint", async () => {
       expect((await update({ addLabels: [" new ", "new"], removeLabels: [" old "] })).ok).toBe(true);
@@ -386,6 +397,7 @@ describe("update authorization and locked incremental edits", () => {
     expect(h.events[1].payload.diff).toMatchObject({
       labels: { before: ["lane:codex", "old", "first"], after: ["lane:codex", "old", "first", "second"] },
     });
-    expect(h.queries.filter((q) => q.sql.endsWith("FOR UPDATE"))).toHaveLength(2);
+    // Per edit: the action's predecessor lock, then updateEntity's own row lock (same transaction).
+    expect(h.queries.filter((q) => q.sql.endsWith("FOR UPDATE"))).toHaveLength(4);
   });
 });

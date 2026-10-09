@@ -282,6 +282,26 @@ Rules:
 - `already_released` means there is nothing to do. MC writes no second event.
 - A PR reopen does not undo a manual release.
 
+### Ledger hygiene: cancel work that will never ship
+
+A task closed only by a comment stays open, inflates open counts and gets
+picked by `mc_suggest_work`. Give it the `cancelled` stage instead:
+
+- `mc_update_task` with `patch: {cancel: {reason, replacedBy?, note?}}`, or
+  `mc_report_progress` with `stage: "cancelled"`, `cancelReason`, `replacedBy`,
+  `note`. `reason` is one of `duplicate`, `obsolete`, `superseded`,
+  `delivered_without_pr`. `duplicate` and `superseded` need `replacedBy`, an
+  existing `TASK-n` other than the task itself.
+- Cancel needs the `task.cancel` capability and reopen `task.reopen`, held by the
+  authenticated principal (human admin/owner roles; no agent principal today
+  unless an operator grants one). The operator email header grants nothing. No checkout is needed. Anyone else gets `forbidden` and a
+  `task.cancel_denied` event.
+- `patch: {reopen: {stage?, note?}}` restores the task (default: the stage before
+  the cancel) and clears the cancellation. `completedAt` is not cleared.
+- A cancelled task is not open work: it leaves open counts and `mc_suggest_work`,
+  `mc_checkout_task` refuses it, and a PR that references it gets a compliance
+  warning instead of promoting it. Reopen it first, or check out the replacement.
+
 ### Fallback: capture hook / HTTP
 
 ```bash

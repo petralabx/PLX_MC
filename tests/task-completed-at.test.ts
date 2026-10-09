@@ -10,17 +10,19 @@ const db = vi.hoisted(() => ({
   updates: [] as { sql: string; params: unknown[] }[],
 }));
 
-vi.mock("@/lib/db", () => ({
-  query: vi.fn(async (sql: string, params: unknown[] = []) => {
+vi.mock("@/lib/db", () => {
+  const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     if (/^\s*UPDATE entities/.test(sql)) {
       db.updates.push({ sql, params });
       return [];
     }
     if (/FROM entities WHERE entity_type = \$1 AND id = \$2/.test(sql)) return db.row ? [db.row] : [];
     return [];
-  }),
-  withTransaction: vi.fn(),
-}));
+  });
+  // A stage write opens its own transaction; the stub runs it on a distinct handle over the same query.
+  const tx = (sql: string, params?: unknown[]) => query(sql, params);
+  return { query, withTransaction: vi.fn(async (fn: (q: typeof tx) => Promise<unknown>) => fn(tx)) };
+});
 
 import { getEntity, updateEntity } from "@/lib/sync/repo";
 

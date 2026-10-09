@@ -63,6 +63,13 @@ vi.mock("@/lib/permissions/enforcement", () => ({
   recordUnresolvedActorDenial: () => {},
 }));
 
+// patchTask runs in a row-locked transaction; the repo seam is mocked, so the
+// transaction only needs to hand through a query function.
+vi.mock("@/lib/db", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/db")>()),
+  withTransaction: async <T,>(fn: (q: never) => Promise<T>) => fn((async () => []) as never),
+}));
+
 vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
   ensureReposSeeded: vi.fn(async () => true),
@@ -256,6 +263,21 @@ describe("projectPullRequest", () => {
     expect(task.merge).toMatchObject({ sha: "deadbeef" });
     expect(store.events.some((e) => e.kind === "task.promoted" && e.taskId === "TASK-200")).toBe(true);
     expect(store.authorizeCalls.some((c) => c.capability === "task.link")).toBe(true);
+  });
+
+  it("never promotes or reopens a cancelled task; it records task.promotion_skipped instead (TASK-2529)", async () => {
+    seedTask({ id: "TASK-210", stage: "cancelled" });
+    await projectPullRequest(prEvt({ action: "opened" }), { actorKind: "agent", actorIdentity: "dsp_abc", taskIds: ["TASK-210"], sparse: false });
+    await projectPullRequest(
+      prEvt({ action: "closed", merged: true, headSha: "deadbeef", mergeSha: "deadbeef" }),
+      { actorKind: "agent", actorIdentity: "dsp_abc", taskIds: ["TASK-210"], sparse: false }
+    );
+    const task = store.rows.get("task:TASK-210")!.data as unknown as Task;
+    expect(task.stage).toBe("cancelled");
+    expect(task.prs).toEqual([]);
+    expect(store.completedAtArgs).toEqual([]);
+    expect(store.events.filter((e) => e.kind === "task.promotion_skipped").map((e) => e.taskId)).toEqual(["TASK-210", "TASK-210"]);
+    expect(store.events.some((e) => e.kind === "task.promoted")).toBe(false);
   });
 
   it("stamps completed_at with the PR merge time, not the projection run time", async () => {

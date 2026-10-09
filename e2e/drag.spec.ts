@@ -49,7 +49,7 @@ test.describe("drag-to-mutate", () => {
     await gotoBoard(page);
     // Group by stage so each column is a single stage (the active axis = stage).
     await page.locator(".tb .seg").first().locator("button", { hasText: /^Stage$/ }).click();
-    await expect(page.locator(".mc .board .bcol")).toHaveCount(9);
+    await expect(page.locator(".mc .board .bcol")).toHaveCount(10);
 
     // TASK-221 (WMS integration) seeds in stage "planned" → the "Planned" column.
     const planned = boardColumnByName(page, "Planned");

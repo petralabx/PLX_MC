@@ -14,7 +14,7 @@ vi.mock("@/lib/sync/engine", () => ({
   runSweep: m.runSweep,
   requireSyncServiceWrite: m.requireSyncServiceWrite,
 }));
-vi.mock("@/lib/secrets", () => ({
+vi.mock("@/lib/secrets", () => ({ databaseConfigured: () => false,
   cronConfigured: m.cronConfigured,
   cronSecret: m.cronSecret,
   entraAuthConfigured: () => false,

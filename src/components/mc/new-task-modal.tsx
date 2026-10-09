@@ -8,6 +8,7 @@ import {
   STAGES,
   STAGE_IDX,
   TARGET_ENV,
+  WORKFLOW_STAGES,
   type PriorityKey,
   type StageKey,
   type TargetEnv,
@@ -340,7 +341,7 @@ export function NewTaskModal({
               <span className="k">Stage</span>
               <div className="ntm-select-wrap">
                 <select value={stage} onChange={(event) => setStage(event.target.value as StageKey)}>
-                  {STAGES.map((stageOption) => (
+                  {WORKFLOW_STAGES.map((stageOption) => (
                     <option key={stageOption.key} value={stageOption.key}>
                       {stageOption.n} · {stageOption.name}
                     </option>

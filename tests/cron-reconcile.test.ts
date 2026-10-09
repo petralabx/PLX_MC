@@ -12,7 +12,7 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/compliance/service", () => ({ reconcileSweep: m.reconcileSweep }));
-vi.mock("@/lib/secrets", () => ({ cronConfigured: m.cronConfigured, cronSecret: m.cronSecret }));
+vi.mock("@/lib/secrets", () => ({ databaseConfigured: () => false, cronConfigured: m.cronConfigured, cronSecret: m.cronSecret }));
 
 // Imported AFTER the mocks so the route's imports resolve to them.
 import { GET } from "@/app/api/cron/reconcile/route";

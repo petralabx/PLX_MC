@@ -16,7 +16,7 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/compliance/service", () => ({ verifyPrOrQueue: m.verifyPrOrQueue }));
-vi.mock("@/lib/secrets", () => ({
+vi.mock("@/lib/secrets", () => ({ databaseConfigured: () => false,
   complianceCiTokenConfigured: m.complianceCiTokenConfigured,
   complianceCiToken: m.complianceCiToken,
   complianceOidcEnabled: m.complianceOidcEnabled,

@@ -1,3 +1,6 @@
+import { assertSchemaReady } from "@/lib/db";
+import { databaseConfigured } from "@/lib/secrets";
+import { SchemaMismatchError } from "../../../scripts/lib/schema-version.mjs";
 // The one shared API route wrapper (governance: no ad hoc handler
 // boilerplate). Every route handler goes through `route()`, which enforces
 // the standard envelope: { data } on success, { error: { code, message } }
@@ -28,12 +31,16 @@ type Handler = (req: Request, ctx: RouteContext) => Promise<unknown>;
 export function route(handler: Handler) {
   return async (req: Request, ctx: RouteContext): Promise<Response> => {
     try {
+      if (databaseConfigured()) await assertSchemaReady();
       const data = await handler(req, ctx);
       if (data instanceof Response) {
         return data;
       }
       return NextResponse.json({ data });
     } catch (err) {
+      if (err instanceof SchemaMismatchError) {
+        return Response.json({ error: { code: err.code, message: err.message, schema: err.schema } }, { status: 503 });
+      }
       if (err instanceof ApiError) {
         return NextResponse.json(
           { error: { code: err.code, message: err.message } },

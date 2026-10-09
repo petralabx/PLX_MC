@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/lib/migration-manifest.mjs && node scripts/check-deploy-schema.mjs --build && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

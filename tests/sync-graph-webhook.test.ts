@@ -14,7 +14,7 @@ const m = vi.hoisted(() => ({
   drain: vi.fn(async () => ({ claimed: 0, processed: 0, failed: 0 })),
 }));
 
-vi.mock("@/lib/secrets", () => ({
+vi.mock("@/lib/secrets", () => ({ databaseConfigured: () => false,
   graphWebhookEnabled: () => m.enabled,
   graphWebhookConfigured: () => m.configured,
   graphWebhookClientState: () => m.clientState,

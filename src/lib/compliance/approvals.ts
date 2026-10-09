@@ -17,7 +17,7 @@ import {
 import { APPROVAL_WAIT_MAX_MS, pendingApprovalGates } from "@/lib/mc-data/policy";
 import { patchTask } from "@/lib/sync";
 import { getEntities, getEntity } from "@/lib/sync/repo";
-import { appendEvent, blockDispatchOnApproval } from "./repo";
+import { appendEvent, blockDispatchOnApproval, getDispatch } from "./repo";
 
 export interface RequestApprovalInput {
   taskId: string;
@@ -26,8 +26,15 @@ export interface RequestApprovalInput {
   requestedBy: string;
   /** Agent runtime (mcp context), recorded on the gate + event. */
   runtime?: string;
-  /** Active checkout (dsp_*) to mark blocked-on-approval; validated by the caller. */
+  /** Authenticated service principal (API-key identity); bound to the gate for requester-only reads. */
+  requestedByPrincipal: string;
+  /**
+   * Active checkout (dsp_*) to mark blocked-on-approval; validated by the caller. Bearer credential:
+   * used only to set mc_dispatch.approval_gate_id, never stored on the task or in events.
+   */
   checkoutId?: string;
+  /** Redacted ref of `checkoutId` (dsp_…last4); the only form that reaches the gate and events. */
+  checkoutRef?: string;
   /** Structured proposal, already validated (approvalProposalSchema). */
   proposal?: ApprovalProposal;
 }
@@ -42,31 +49,60 @@ export async function requestApprovalGate(
   const gate: ApprovalGate = {
     id: `apg_${randomBytes(8).toString("hex")}`,
     reason: input.reason,
-    ...(input.checkoutId ? { checkoutId: input.checkoutId } : {}),
+    ...(input.checkoutRef ? { checkoutRef: input.checkoutRef } : {}),
     ...(input.proposal ? { proposal: input.proposal } : {}),
     requestedBy: input.requestedBy,
+    requestedByPrincipal: input.requestedByPrincipal,
     requestedRuntime: input.runtime,
     requestedAt: new Date().toISOString(),
     status: "pending",
   };
 
-  const updated = await patchTask(
-    input.taskId,
-    {
-      approvalGates: [...(task.approvalGates ?? []), gate],
-      activityLine: {
-        who: input.runtime ?? input.requestedBy,
-        what: `raised an approval gate — ${gate.reason}`,
-        kind: "gate",
-      },
-    },
-    input.requestedBy,
-    { attribution: { source: "service", actorId: input.requestedBy } }
-  );
-  if (!updated) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+  // Block the checkout BEFORE persisting the gate (compare-and-set on the current block): a
+  // checkout released mid-request, or a concurrent second gate, fails here with no gate stored
+  // and no task frozen. A checkout whose current gate is still pending cannot take a new gate
+  // (approving only the newer one would otherwise clear the older); a rejected/approved one can.
+  let priorBlock: string | null = null;
+  if (input.checkoutId) {
+    const d = await getDispatch(input.checkoutId);
+    priorBlock = d?.approvalGateId ?? null;
+    if (priorBlock && task.approvalGates?.some((g) => g.id === priorBlock && g.status === "pending")) {
+      throw new ApiError(
+        "approval_pending",
+        "Checkout already has a pending approval gate; wait for its decision before raising another.",
+        409
+      );
+    }
+    if (!(await blockDispatchOnApproval(input.checkoutId, gate.id, priorBlock))) {
+      throw new ApiError("invalid_checkout", "Checkout is revoked, released, or changed during the request.", 409);
+    }
+  }
 
-  if (input.checkoutId && !(await blockDispatchOnApproval(input.checkoutId, gate.id))) {
-    throw new ApiError("invalid_checkout", "Checkout is revoked, released, or unknown.", 409);
+  const unblock = async () => {
+    if (input.checkoutId) await blockDispatchOnApproval(input.checkoutId, priorBlock, gate.id);
+  };
+  let updated: Task | null | undefined;
+  try {
+    updated = await patchTask(
+      input.taskId,
+      {
+        approvalGates: [...(task.approvalGates ?? []), gate],
+        activityLine: {
+          who: input.runtime ?? input.requestedBy,
+          what: `raised an approval gate — ${gate.reason}`,
+          kind: "gate",
+        },
+      },
+      input.requestedBy,
+      { attribution: { source: "service", actorId: input.requestedBy } }
+    );
+  } catch (err) {
+    await unblock();
+    throw err;
+  }
+  if (!updated) {
+    await unblock();
+    throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
   }
 
   await appendEvent({
@@ -75,7 +111,7 @@ export async function requestApprovalGate(
     taskId: input.taskId,
     payload: {
       gateId: gate.id,
-      checkoutId: input.checkoutId ?? null,
+      checkoutRef: input.checkoutRef ?? null,
       hasProposal: !!input.proposal,
       reason: gate.reason,
       runtime: input.runtime ?? null,
@@ -164,7 +200,8 @@ const APPROVAL_POLL_INTERVAL_MS = 1_000;
 
 export interface ApprovalGateState {
   taskId: string;
-  checkoutId: string | null;
+  /** Redacted (dsp_…last4); the usable checkout id is never returned. */
+  checkoutRef: string | null;
   gateId: string;
   status: ApprovalGate["status"];
   reason: string;
@@ -181,7 +218,7 @@ export interface ApprovalGateState {
 function gateState(taskId: string, gate: ApprovalGate, timedOut: boolean): ApprovalGateState {
   return {
     taskId,
-    checkoutId: gate.checkoutId ?? null,
+    checkoutRef: gate.checkoutRef ?? null,
     gateId: gate.id,
     status: gate.status,
     reason: gate.reason,
@@ -198,6 +235,8 @@ function gateState(taskId: string, gate: ApprovalGate, timedOut: boolean): Appro
 export interface GetApprovalGateInput {
   taskId: string;
   gateId: string;
+  /** Only this authenticated principal may read the gate; checked before any wait. */
+  requesterPrincipal?: string;
   /** Long-poll budget; clamped to APPROVAL_WAIT_MAX_MS. 0/omitted = single read. */
   waitMs?: number;
   /** Test seam: poll interval. */
@@ -215,6 +254,9 @@ export async function getApprovalGateState(input: GetApprovalGateInput): Promise
     const task = row.data as unknown as Task;
     const gate = (task.approvalGates ?? []).find((g) => g.id === input.gateId);
     if (!gate) throw new ApiError("not_found", `unknown approval gate ${input.gateId}`, 404);
+    if (input.requesterPrincipal !== undefined && gate.requestedByPrincipal !== input.requesterPrincipal) {
+      throw new ApiError("forbidden", "approval gate was raised by another principal.", 403);
+    }
     const remaining = deadline - Date.now();
     if (gate.status !== "pending" || remaining <= 0) {
       return gateState(task.id, gate, gate.status === "pending" && waitMs > 0);

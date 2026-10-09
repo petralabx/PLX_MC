@@ -597,6 +597,7 @@ describe("mc_request_approval", () => {
       taskId: "TASK-100",
       reason: "Needs a human to approve the prod migration",
       requestedBy: "vince@petrasoap.com",
+      requestedByPrincipal: "sp_mcp_cursor",
       runtime: "cursor",
     });
     expect(body.data).toMatchObject({

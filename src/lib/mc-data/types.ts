@@ -323,8 +323,13 @@ export interface ApprovalGate {
   id: string;
   /** What the agent needs a human to decide. */
   reason: string;
-  /** Checkout (dsp_*) the gate blocks; complete() refuses until approved. */
-  checkoutId?: string;
+  /**
+   * Redacted ref (dsp_…last4) of the checkout the gate blocks. Never the usable dsp_* id: that
+   * bearer credential binds only through mc_dispatch.approval_gate_id (TOOLS.md credential boundary).
+   */
+  checkoutRef?: string;
+  /** Authenticated service principal that raised the gate; the only principal that may read it. */
+  requestedByPrincipal?: string;
   /** Structured proposal payload; stored exactly as validated. */
   proposal?: ApprovalProposal;
   /** Audit label of the requesting operator/agent session — never a grant input. */

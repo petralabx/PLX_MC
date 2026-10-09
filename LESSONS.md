@@ -938,3 +938,14 @@
   migration file list the test already loads.
 - **Rule going forward:** Derive migration prefixes from `files` (latest and previous)
   in schema tests; never hardcode them.
+
+## 2026-10-09 — TASK-629: bearer checkout id stored on a task-visible gate; ownership checked on a header
+- **What went wrong:** The first cut stored the full `dsp_*` checkout id on `task.approvalGates`
+  (readable through `mc_get_context` depth full) and gated gate reads on `X-MC-Operator-Email`,
+  which the caller controls. Astra flagged both as P1.
+- **Root cause:** A bearer credential was treated as a join key, and an audit label as an identity.
+  TOOLS.md already says read surfaces never return a usable checkout id.
+- **Rule going forward:** Bind a checkout to other records only through `mc_dispatch` columns and
+  expose `checkoutRef` (`dsp_…last4`). Compare ownership on the authenticated principal
+  (`identity.servicePrincipalId`), never on operator headers. Test by reading the task through every
+  read surface and asserting the full id is absent.

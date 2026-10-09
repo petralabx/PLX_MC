@@ -359,13 +359,23 @@ export async function getDispatch(id: string): Promise<DispatchRow | null> {
   return rows[0] ? toDispatchRow(rows[0]) : null;
 }
 
-/** Mark an active checkout blocked-on-approval by `gateId` (TASK-629). False = lease not active. */
-export async function blockDispatchOnApproval(id: string, gateId: string): Promise<boolean> {
+/**
+ * Compare-and-set the checkout's approval block (TASK-629): `gateId` null clears it. The gate id
+ * stays here, never on the task jsonb. False = lease not active or the block is no longer `expected`.
+ */
+export async function blockDispatchOnApproval(
+  id: string,
+  gateId: string | null,
+  expected: string | null
+): Promise<boolean> {
   const rows = await query<{ id: string }>(
-    `UPDATE mc_dispatch SET approval_gate_id = $2, approval_blocked_at = now()
+    `UPDATE mc_dispatch
+        SET approval_gate_id = $2::text,
+            approval_blocked_at = CASE WHEN $2::text IS NULL THEN NULL ELSE now() END
       WHERE id = $1 AND NOT revoked AND released_at IS NULL
+        AND approval_gate_id IS NOT DISTINCT FROM $3::text
       RETURNING id`,
-    [id, gateId]
+    [id, gateId, expected]
   );
   return rows.length > 0;
 }

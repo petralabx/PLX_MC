@@ -61,6 +61,7 @@ describe("requestApprovalGate", () => {
       taskId: "TASK-700",
       reason: "prod deploy needs a human",
       requestedBy: "vince@petrasoap.com",
+      requestedByPrincipal: "sp_mcp_claude_code",
       runtime: "claude-code",
     });
     expect(gate.id).toMatch(/^apg_/);
@@ -75,7 +76,12 @@ describe("requestApprovalGate", () => {
 
   it("404s an unknown task", async () => {
     await expect(
-      requestApprovalGate({ taskId: "TASK-999", reason: "x", requestedBy: "a@b.c" })
+      requestApprovalGate({
+        taskId: "TASK-999",
+        reason: "x",
+        requestedBy: "a@b.c",
+        requestedByPrincipal: "sp_mcp_claude_code",
+      })
     ).rejects.toMatchObject({ code: "not_found", status: 404 });
   });
 });

@@ -801,18 +801,26 @@ async function assertDispatchApproval(client, files) {
     );
   }
   await client.query(`UPDATE mc_dispatch SET released_at = now(), released_reason = 'manual' WHERE id = 'dsp_released'`);
-  const block = (id) =>
+  // Same compare-and-set as blockDispatchOnApproval in src/lib/compliance/repo.ts.
+  const block = (id, gateId, expected) =>
     client.query(
-      `UPDATE mc_dispatch SET approval_gate_id = $2, approval_blocked_at = now()
-        WHERE id = $1 AND NOT revoked AND released_at IS NULL RETURNING id`,
-      [id, "apg_test"]
+      `UPDATE mc_dispatch
+          SET approval_gate_id = $2::text,
+              approval_blocked_at = CASE WHEN $2::text IS NULL THEN NULL ELSE now() END
+        WHERE id = $1 AND NOT revoked AND released_at IS NULL
+          AND approval_gate_id IS NOT DISTINCT FROM $3::text
+        RETURNING id`,
+      [id, gateId, expected]
     );
-  if ((await block("dsp_active")).rowCount !== 1) throw new Error("active lease was not blocked");
-  if ((await block("dsp_released")).rowCount !== 0) throw new Error("released lease must not be blocked");
+  if ((await block("dsp_active", "apg_test", null)).rowCount !== 1) throw new Error("active lease was not blocked");
+  if ((await block("dsp_released", "apg_test", null)).rowCount !== 0) throw new Error("released lease must not be blocked");
   const blocked = await client.query(`SELECT approval_gate_id, approval_blocked_at FROM mc_dispatch WHERE id = 'dsp_active'`);
   if (blocked.rows[0].approval_gate_id !== "apg_test" || !blocked.rows[0].approval_blocked_at) {
     throw new Error(`block not persisted: ${JSON.stringify(blocked.rows)}`);
   }
+  if ((await block("dsp_active", "apg_other", null)).rowCount !== 0) throw new Error("stale expected block must not replace the gate");
+  if ((await block("dsp_active", "apg_next", "apg_test")).rowCount !== 1) throw new Error("matching expected block was not replaced");
+  if ((await block("dsp_active", null, "apg_next")).rowCount !== 1) throw new Error("block was not cleared");
   console.log("dispatch approval assertions passed");
 }
 

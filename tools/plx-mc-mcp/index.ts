@@ -558,7 +558,7 @@ server.tool(
 
 server.tool(
   "mc_get_approval_gate",
-  "Read an approval gate (pending/approved/rejected, decider, decidedAt, note) by checkoutId or taskId. waitSeconds (max 25) long-polls and returns early on a decision. Only the principal that raised the gate may read it.",
+  "Read an approval gate (pending/approved/rejected, decider, decidedAt, note) by checkoutId or taskId. waitSeconds (max 25) long-polls and returns early on a decision. Only the service principal that raised the gate may read it; returns checkoutRef, never the usable checkout id.",
   {
     checkoutId: z.string().min(1).optional(),
     taskId: z.string().min(1).optional(),

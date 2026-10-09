@@ -680,7 +680,24 @@ async function assertCompletedAt(client, files) {
     throw new Error(`--completed-at needs ${COMPLETED_AT_MIGRATION} (use --through 033 or later)`);
   }
   const sql = await readFile(path.join(MIGRATIONS_DIR, COMPLETED_AT_MIGRATION), "utf8");
+  const expectedIndexDefinition = "CREATE INDEX entities_task_completed_at_idx ON public.entities USING btree (completed_at) WHERE ((entity_type = 'task'::text) AND (completed_at IS NOT NULL))";
+  async function assertCompletionIndex() {
+    const { rows } = await client.query(
+      `SELECT i.indisvalid, i.indisready, pg_get_indexdef(i.indexrelid) AS definition
+         FROM pg_index i
+         JOIN pg_class c ON c.oid = i.indexrelid
+        WHERE i.indrelid = 'public.entities'::regclass
+          AND c.relname = 'entities_task_completed_at_idx'`
+    );
+    if (rows.length !== 1 || !rows[0].indisvalid || !rows[0].indisready ||
+        rows[0].definition !== expectedIndexDefinition) {
+      throw new Error(`completed_at index missing, invalid, not ready, or incorrectly defined: ${JSON.stringify(rows)}`);
+    }
+  }
+  // Check before re-apply too: IF NOT EXISTS must not mask a missing index.
+  await assertCompletionIndex();
   await client.query(sql); // re-apply must be a no-op
+  await assertCompletionIndex();
 
   await client.query(
     `INSERT INTO entities (entity_type, id, data, completed_at)
@@ -715,18 +732,26 @@ async function assertCompletedAt(client, files) {
 
   await client.query("BEGIN");
   try {
-    await client.query("SET LOCAL enable_seqscan = off");
-    // On a one-row table the planner may tie-break to migration 032's task-id
-    // index; drop it (rolled back below) so the plan can only use ours.
-    await client.query("DROP INDEX IF EXISTS entities_task_numeric_id_idx");
+    // A selective month among decades of dates makes the completion index
+    // cheaper than 032's task-wide numeric-id index with normal planner settings.
+    // Fixture rows are rolled back; ANALYZE only touches the disposable database.
+    await client.query(
+      `INSERT INTO entities (entity_type, id, data, completed_at)
+       SELECT 'task', 'TASK-' || (100000 + n), '{}'::jsonb,
+              CASE WHEN n % 5 = 0 THEN NULL
+                   ELSE '2000-01-01T00:00:00Z'::timestamptz + n * interval '1 day' END
+         FROM generate_series(1, 20000) AS fixture(n)`
+    );
+    await client.query("ANALYZE entities");
     const plan = await client.query(
       `EXPLAIN SELECT id FROM entities
         WHERE entity_type = 'task' AND completed_at >= '2026-07-01' AND completed_at < '2026-08-01'`
     );
     const text = plan.rows.map((r) => r["QUERY PLAN"]).join("\n");
-    if (!/entities_task_completed_at_idx/.test(text)) {
+    if (!/(?:Index Scan|Index Only Scan|Bitmap Index Scan) (?:using|on) entities_task_completed_at_idx\b/.test(text)) {
       throw new Error(`date-range query did not use the partial index:\n${text}`);
     }
+    console.log(`completed_at date-range plan:\n${text}`);
   } finally {
     await client.query("ROLLBACK");
   }

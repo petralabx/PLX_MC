@@ -452,7 +452,9 @@ includes `matchFields` (`id`, `title`, `description`, `comments`, `activity`,
 ```
 
 Compact rows contain `id`, `title`, `stage`, `bucket`, `labels`, `prs` and the
-mirror row's UTC `updatedAt`; `completedAt` is copied only when already present
-in the JSONB payload. This change does not create completion timestamps.
+mirror row's UTC `updatedAt`; full and compact rows include `completedAt` only
+when stored in `entities.completed_at`. Completion bounds are applied after
+project ACL and before the exact count and cursor page; they also bind the
+cursor scope. Search does not create completion timestamps.
 Descriptions, activity and comment arrays are omitted. Payload size depends
 on titles, labels and PRs; 200 representative fixture rows fit under 100 KB.

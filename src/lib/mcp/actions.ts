@@ -554,7 +554,7 @@ export async function actionProgress(
     payload: {
       workerId: identity.workerId,
       stage: patch.stage ?? task.stage,
-      ...(input.stage && TERMINAL_STAGES.includes(input.stage as StageKey)
+      ...(patch.stage && TERMINAL_STAGES.includes(patch.stage as StageKey)
         ? { completionSource: "stage_event" }
         : {}),
       progressPct: input.progressPct ?? null,

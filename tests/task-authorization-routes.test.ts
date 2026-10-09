@@ -16,7 +16,11 @@ const mocks = vi.hoisted(() => ({
   appendEvent: vi.fn(),
 }));
 
-vi.mock("@/lib/sync/repo", () => ({ getEntity: mocks.getEntity }));
+vi.mock("@/lib/sync/repo", () => ({
+  getEntity: mocks.getEntity,
+  getBuckets: async () => [],
+  getProjects: async () => [],
+}));
 vi.mock("@/lib/sync/cancel", () => ({ reopenTask: mocks.reopenTask }));
 vi.mock("@/lib/compliance/repo", () => ({ appendEvent: mocks.appendEvent }));
 
@@ -34,12 +38,6 @@ vi.mock("@/lib/permissions/project-acl-guard", () => ({
 vi.mock("@/lib/sync", () => ({
   createTask: mocks.createTask,
   patchTask: mocks.patchTask,
-}));
-
-vi.mock("@/lib/sync/repo", () => ({
-  getEntity: async () => null,
-  getBuckets: async () => [],
-  getProjects: async () => [],
 }));
 
 vi.mock("@/lib/compliance/service", () => ({

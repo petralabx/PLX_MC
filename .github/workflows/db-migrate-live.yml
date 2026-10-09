@@ -52,7 +52,7 @@ jobs:
       - name: Plan (read-only, pending items only)
         env:
           MC_LIVE_DATABASE_URL: ${{ secrets.MC_LIVE_DATABASE_URL }}
-          MC_LIVE_APPROVED_DB: ${{ vars.MC_LIVE_APPROVED_DB }}
+          MC_LIVE_EXPECTED_IDENTITY: ${{ vars.MC_LIVE_EXPECTED_IDENTITY }}
           MICROSOFT_GRAPH_TENANT_ID: ${{ secrets.MICROSOFT_GRAPH_TENANT_ID }}
           MICROSOFT_GRAPH_CLIENT_ID: ${{ secrets.MICROSOFT_GRAPH_CLIENT_ID }}
           MICROSOFT_GRAPH_CLIENT_SECRET: ${{ secrets.MICROSOFT_GRAPH_CLIENT_SECRET }}
@@ -79,7 +79,7 @@ jobs:
       - name: Preflight apply (SHA, identity, pending hash, both sources readable)
         env:
           MC_LIVE_DATABASE_URL: ${{ secrets.MC_LIVE_DATABASE_URL }}
-          MC_LIVE_APPROVED_DB: ${{ vars.MC_LIVE_APPROVED_DB }}
+          MC_LIVE_EXPECTED_IDENTITY: ${{ vars.MC_LIVE_EXPECTED_IDENTITY }}
           MICROSOFT_GRAPH_TENANT_ID: ${{ secrets.MICROSOFT_GRAPH_TENANT_ID }}
           MICROSOFT_GRAPH_CLIENT_ID: ${{ secrets.MICROSOFT_GRAPH_CLIENT_ID }}
           MICROSOFT_GRAPH_CLIENT_SECRET: ${{ secrets.MICROSOFT_GRAPH_CLIENT_SECRET }}
@@ -105,7 +105,7 @@ jobs:
       - name: Post-apply (remaining pending items must be empty)
         env:
           MC_LIVE_DATABASE_URL: ${{ secrets.MC_LIVE_DATABASE_URL }}
-          MC_LIVE_APPROVED_DB: ${{ vars.MC_LIVE_APPROVED_DB }}
+          MC_LIVE_EXPECTED_IDENTITY: ${{ vars.MC_LIVE_EXPECTED_IDENTITY }}
           MICROSOFT_GRAPH_TENANT_ID: ${{ secrets.MICROSOFT_GRAPH_TENANT_ID }}
           MICROSOFT_GRAPH_CLIENT_ID: ${{ secrets.MICROSOFT_GRAPH_CLIENT_ID }}
           MICROSOFT_GRAPH_CLIENT_SECRET: ${{ secrets.MICROSOFT_GRAPH_CLIENT_SECRET }}

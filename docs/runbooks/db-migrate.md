@@ -17,9 +17,13 @@ records staging as skipped (not failed) in the summary, and exits 0 if UAT
 succeeded. Exactly one of the two set is a partial config and fails the job.
 When both are set the target is still guarded and a failure still fails the job
 (UAT evidence is still reported); a staging URL that is the live plx_mc identity
-is refused and fails the job, never skipped. The only plx_mc on
-plx-postgres-staging is the live Mission Control DB, so those two stay unset.
-Live plx_mc migration is not this workflow; see "Live release" below.
+is refused and fails the job, never skipped. The non-production guard still
+denies plx_mc on plx-postgres-staging, but that is NOT the live Mission Control
+DB: the AWS SM prod/ec2-secrets PLX_MC_DATABASE_URL points there and stopped at
+migration 030. The live DB is whatever Vercel project plx-mission-control's
+Production PLX_MC_DATABASE_URL points to; its upstream source is to be confirmed
+by Vince. Keep staging config unset until a human confirms the intended target.
+Live migration is not this workflow; see "Live release" below.
 Agents never provision these.
 
 Deployment order:
@@ -66,25 +70,68 @@ Owner: Vince. Workflow **DB Migrate (live release)** is manual only and separate
 from the automatic non-production path. This change creates no secrets.
 
 The default `mode=plan` job has no environment approval and may run on any ref.
-It reads `schema_migrations(filename)` in a READ ONLY transaction with a short
-statement timeout, verifies live database identity, then rolls back. A missing
-ledger table means every local migration is pending. It reads SharePoint sites,
-lists and columns using Graph GET only; the client-credentials token POST to
-login.microsoftonline.com is the only non-GET. No migration or provisioning
-write runs in plan. Missing lists are identified and all configured columns
-on those lists are pending. Dev is reported before production.
+It validates the URL with target overrides refused, then compares URL database
+and exact hostname against human-set `MC_LIVE_EXPECTED_IDENTITY`. A URL mismatch
+refuses before connection. Inside `BEGIN READ ONLY`, with a 5-second statement
+timeout, it reads `current_database()` and attempts `pg_control_system()` under
+a savepoint. Any fingerprint read error rolls back to that savepoint and reports
+`sysid=unavailable`; it does not fail the plan. The connected database must match,
+and a configured sysid must be readable and equal. Only MATCH permits ledger and
+schema reads. All paths roll back and close the connection.
 
-Stdout and the step summary start with `plan_commit_sha=<40 lowercase hex>`,
-`pending_hash=sha256:<64 lowercase hex>`, and `apply_ready=yes|no (<reasons>)`,
-then `target: host=<host> database=<db>` (never credentials, port or query).
-Sections are `### Pending migrations (<n>)`, `### SharePoint columns missing`
-with each site path, and `### Ledger anomalies`. Only pending files, missing
-columns/lists and orphan ledger entries appear; empty sections say `none`.
-Unreadable sections say `unknown`, never `none`. The canonical pending hash
-sorts keys and pending sets and includes unavailable-source and missing-list
-markers. It cannot confuse unreadable data with an empty pending set.
-Missing credentials or rejected URL identity produce `apply_ready=no` and a
-successful plan exit; a configured source that fails to read exits 1.
+Identity UNSET or INVALID FORMAT still reads actual identity and prints a
+`suggested MC_LIVE_EXPECTED_IDENTITY=...` line for human confirmation, but reads
+neither ledger nor schema. Malformed expected input is never echoed (only its
+length). Missing URL prints DB: NOT READ and identity NOT CHECKED. UNSET,
+INVALID FORMAT and MISMATCH return plan exit 0 with apply_ready=no; configured
+read failures return exit 1. Verify exits 1 unless MATCH. Preflight-apply refuses
+with `preflight-apply refused: identity <VERDICT>` before any write, and
+post-apply also requires MATCH.
+
+A missing ledger means every local migration is pending. SharePoint sites,
+lists and columns use Graph GET only; the token POST to login.microsoftonline.com
+is the only non-GET. No writes run in plan. Missing lists include all configured
+columns. Dev is reported before production.
+
+Stdout and step summary start with `plan_commit_sha=<40 lowercase hex>`,
+`pending_hash=sha256:<64 lowercase hex>`, and `apply_ready=yes|no (<reasons>)`.
+Immediately after apply_ready, the prominent identity block is:
+
+```text
+======== IDENTITY: MATCH ========
+expected: <database>@<host>[#sysid=<digits>]   actual: <database>@<host> sysid=<digits|unavailable>
+```
+
+The verdict may also be MISMATCH, UNSET, INVALID FORMAT or NOT CHECKED; missing
+identities say unavailable. Reasons name the identity problem. Target output is
+host/database only, never credentials, port or URL query. Pending migrations,
+SharePoint columns missing, and ledger anomalies retain their sections. Unknown
+sources never say none. The canonical pending hash sorts keys and pending sets
+and includes unavailable-source and missing-list markers. **Any identity other
+than MATCH makes DB unavailable for hashing**, so a refused plan cannot share
+a hash with a MATCH preflight.
+
+### Schema sanity (advisory)
+
+Inside the same READ ONLY transaction, after the ledger read, select the newest
+ledgered migration with a local SQL file by filename sort. Mention newer ledger
+entries without local files. Strip SQL comments and extract up to 50 key tables,
+ADD COLUMN clauses (including multiple clauses), indexes, views and functions,
+including schema-qualified and quoted names. Parameterized existence queries
+check relations and columns; functions are skipped with a note because overloads
+need manual inspection. Example:
+
+```text
+### Schema sanity (newest ledgered: 0xx_name.sql)
+- OK table foo
+- MISSING column bar.baz
+WARNING: ledger says 0xx_name.sql is applied but 1 key object(s) are missing; ledger and schema disagree
+```
+
+Empty extraction says `no checkable objects found in 0xx_name.sql`. Unread DB
+says `unknown (DB not read)`; refused identity says `skipped (identity not MATCH)`.
+**This warning does not change apply_ready or pending_hash.** Existence alone
+cannot establish complete schema equivalence; Vince reviews warnings before apply.
 
 Vince plans the intended ref, copies both first-line values, then dispatches
 on the same ref with `mode=apply`, `confirm=MIGRATE_LIVE`,
@@ -104,16 +151,36 @@ Order: preflight-apply → `npm run migrate` → provisioning dev (`--env stagin
 Each failure stops later steps. Post-apply requires readable sources, no pending
 migrations/columns/lists. Ledger anomalies remain reported separately.
 
-The DB path uses existing secret `MC_LIVE_DATABASE_URL` and variable
-`MC_LIVE_APPROVED_DB` (`plx_mc@<exact runtime host>`). An admin must add these
-repository secrets for both read and apply, using the same app as provisioning:
+### BREAKING CHANGE and human configuration
+
+`MC_LIVE_APPROVED_DB` is no longer read by live release; it is replaced by repo
+variable **`MC_LIVE_EXPECTED_IDENTITY`**. If the old variable is present in the
+script environment, plan prints one retirement note; an admin may delete it.
+The non-production path retains its existing variables and guards.
+
+A human must derive the expected identity from the exact host (lowercase) and
+database in Vercel project `plx-mission-control`'s **Production** sensitive
+`PLX_MC_DATABASE_URL`, after confirming that production actually reads that
+value. Its upstream source is to be confirmed by Vince. Format:
+`<database>@<host>` or `<database>@<host>#sysid=<digits>` (1–20 digits, PostgreSQL
+system_identifier). Example: `plx_mc@production-host.example.invalid#sysid=12345`.
+With the expected variable unset, a first read-only plan prints actual identity
+and a suggested value. After confirming the URL is the production database,
+a human can copy the suggestion, including sysid where available, into the repo
+variable. Never infer the live target from the database name or staging host.
+
+An admin deleted repo secret **`MC_LIVE_DATABASE_URL`** after the near-miss on
+2026-10-09. An admin must re-add that same secret name with the Vercel Production
+value before release. AWS SM `prod/ec2-secrets` `PLX_MC_DATABASE_URL` is not the
+live DB; it points to the staging database stopped at migration 030.
+Agents never set or delete these repo secrets, variables or environments. This
+change creates none. Existing Graph secrets remain required for both sources:
 
 - `MICROSOFT_GRAPH_TENANT_ID`
 - `MICROSOFT_GRAPH_CLIENT_ID`
 - `MICROSOFT_GRAPH_CLIENT_SECRET`
 
-No other secret or variable name is introduced. `PLAN_SHA` and `PENDING_HASH`
-are step-local values from dispatch inputs, not credentials.
+`PLAN_SHA` and `PENDING_HASH` are step-local dispatch values, not credentials.
 
 Rollback: revert the workflow/helper change to remove this automation. Reverting
 code does not undo schema or SharePoint changes; use each applied migration's

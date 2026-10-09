@@ -253,7 +253,7 @@ export async function readLiveSharepoint({ env = process.env, schema, fetchImpl 
       const actual = lists.find(l => l.displayName === list.displayName);
       if (!actual) continue;
       if (typeof actual.id !== "string" || !actual.id) throw new GraphReadError("Graph list response malformed");
-      const columns = await collection(`${base}/lists/${encodeURIComponent(actual.id)}/columns?$select=name,displayName`);
+      const columns = await collection(`${base}/lists/${encodeURIComponent(actual.id)}/columns?$select=name,displayName,hidden`);
       if (columns.some(c => typeof c?.name !== "string" || typeof c?.displayName !== "string")) throw new GraphReadError("Graph column response malformed");
       columnsByList[list.displayName] = [...new Set(columns.flatMap(c => [c.name, c.displayName]))];
     }

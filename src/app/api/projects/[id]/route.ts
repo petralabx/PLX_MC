@@ -1,5 +1,5 @@
 // PATCH /api/projects/{id} — edit a project (P2): owner, health, target,
-// started, description, attached repos (allow-list-clamped), PRD link.
+// started, description, status (active|closed), attached repos (allow-list-clamped), PRD link.
 // Persisted in the plx_mc DB; the Projects SharePoint mirror is a later increment.
 
 import { z } from "zod";
@@ -22,6 +22,7 @@ const patchProjectSchema = z.object({
   desc: z.string().optional(),
   repos: z.array(z.string()).optional(),
   prd: z.string().nullable().optional(),
+  status: z.enum(["active", "closed"]).optional(),
   visibility: z.enum(["shared", "restricted"]).optional(),
   members: z.array(z.string().trim().min(1).max(320)).max(200).optional(),
 });

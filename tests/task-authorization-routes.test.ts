@@ -29,6 +29,12 @@ vi.mock("@/lib/sync", () => ({
   patchTask: mocks.patchTask,
 }));
 
+vi.mock("@/lib/sync/repo", () => ({
+  getEntity: async () => null,
+  getBuckets: async () => [],
+  getProjects: async () => [],
+}));
+
 vi.mock("@/lib/compliance/service", () => ({
   checkout: mocks.checkout,
   complete: mocks.complete,

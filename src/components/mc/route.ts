@@ -9,6 +9,7 @@ import type { FilterState } from "./work-views.helpers";
 // The Screen type is derived from it — same union as before, single source.
 export const SCREEN_VALUES = [
   "home",
+  "dashboard",
   "board",
   "list",
   "timeline",

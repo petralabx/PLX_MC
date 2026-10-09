@@ -52,6 +52,8 @@ vi.mock("@/lib/db", () => {
   async function execute(sql: string, params: unknown[] = []) {
     if (sql.includes("FROM buckets ORDER BY")) return [{ id: "BKT-OPEN", data: { id: "BKT-OPEN", project: null } }];
     if (sql.includes("FROM projects ORDER BY")) return [];
+    // The principal holds an active checkout (actionProgress requires one, TASK-2560).
+    if (sql.includes("FROM mc_dispatch d")) return [{ id: "dsp_test" }];
     if (sql.startsWith("INSERT INTO repos")) return [];
     if (sql.includes("FROM repos ORDER BY")) {
       return [{ id: "PLX_MC", name: "PLX_MC", lang: "ts", def_branch: "main", owner: "petralabx", visibility: "private", scope: "x", sync_state: "synced", sp_item_id: null }];

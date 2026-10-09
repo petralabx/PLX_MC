@@ -27,6 +27,8 @@ import { Client } from "pg";
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = path.join(ROOT, "db", "migrations");
 const NAME_RE = /^(\d{3})_[a-z0-9_]+\.sql$/;
+// AWS ECR public mirror of the Docker Hub official image (avoids Docker Hub pull rate limits).
+const POSTGRES_IMAGE = "public.ecr.aws/docker/library/postgres:16-alpine";
 const WAIT_TIMEOUT_MS = 60_000;
 const WAIT_POLL_MS = 500;
 
@@ -796,7 +798,7 @@ async function main() {
       `POSTGRES_PASSWORD=${password}`,
       "-p",
       `127.0.0.1:${port}:5432`,
-      "postgres:16-alpine",
+      POSTGRES_IMAGE,
     ]);
     if (run.status !== 0) {
       console.error(run.stderr || run.stdout);

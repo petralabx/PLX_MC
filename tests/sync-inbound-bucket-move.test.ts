@@ -44,6 +44,7 @@ vi.mock("@/lib/sync/repo", () => ({
   }],
   getBucketBySpItemId: async (id: string) => (h.buckets.has(id) ? { bucket: h.buckets.get(id) } : null),
   getProjects: async () => h.projects,
+  getBuckets: async () => [...h.buckets.values()],
   appendAudit: async (_a: string, body: string) => { h.audits.push(body); },
   updateEntity: async (_t: string, _id: string, opts: { patch?: Record<string, unknown> }) => {
     h.updates.push(opts);

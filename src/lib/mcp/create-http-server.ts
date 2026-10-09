@@ -185,7 +185,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_search_tasks",
-    "Search/list tasks by query (alias: q), bucket, stage, label, or assignee. Page with nextCursor; searchComments/in includes discussion; fields=compact reduces payload. Applied filters are echoed in meta.filter.",
+    "Search/list tasks by query (alias: q), bucket, stage, label, assignee, or completion date (completedAfter inclusive / completedBefore exclusive, ISO-8601). Rows carry completedAt. Page with nextCursor; searchComments/in includes discussion; fields=compact reduces payload. Applied filters are echoed in meta.filter.",
     taskSearchShape,
     async (args) => {
       const result = await actionSearchTasks(args, identity);

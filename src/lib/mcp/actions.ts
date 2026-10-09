@@ -19,7 +19,14 @@ import {
   type PatchBucketInput,
 } from "@/lib/sync";
 import { getEntity } from "@/lib/sync/repo";
-import { resolveHumanAccountableOwner, STAGE_IDX, type Evidence, type Task } from "@/lib/mc-data";
+import {
+  resolveHumanAccountableOwner,
+  STAGE_IDX,
+  TERMINAL_STAGES,
+  type Evidence,
+  type StageKey,
+  type Task,
+} from "@/lib/mc-data";
 import {
   aclPrincipalFromMcp,
   requireMcpActor,
@@ -119,11 +126,15 @@ export function resolveSearchFilter(input: SearchTasksInput): SearchTasksFilter 
   const query = resolveSearchQueryText(input);
   const limit = input.limit ?? 50;
   const assignee = (input.assignee ?? "").trim();
+  const completedAfter = normalizeInstant("completedAfter", input.completedAfter);
+  const completedBefore = normalizeInstant("completedBefore", input.completedBefore);
   return {
     ...(query ? { query } : {}),
     ...(input.bucket ? { bucket: input.bucket } : {}),
     ...(input.stage ? { stage: input.stage } : {}),
     ...(assignee ? { assignee } : {}),
+    ...(completedAfter ? { completedAfter } : {}),
+    ...(completedBefore ? { completedBefore } : {}),
     ...(input.label ? { label: input.label } : {}),
     ...(input.cursor ? { cursor: input.cursor } : {}),
     ...(input.searchComments !== undefined ? { searchComments: input.searchComments } : {}),
@@ -131,6 +142,16 @@ export function resolveSearchFilter(input: SearchTasksInput): SearchTasksFilter 
     ...(input.fields ? { fields: input.fields } : {}),
     limit,
   };
+}
+
+function normalizeInstant(name: string, value: string | undefined): string | undefined {
+  const raw = (value ?? "").trim();
+  if (!raw) return undefined;
+  const ms = Date.parse(raw);
+  if (Number.isNaN(ms)) {
+    throw new ApiError("invalid_request", `${name} must be an ISO-8601 date or timestamp; got "${raw}".`);
+  }
+  return new Date(ms).toISOString();
 }
 
 export function resolveContextFilter(input: GetContextInput = {}): GetContextFilter {
@@ -526,6 +547,9 @@ export async function actionProgress(
     payload: {
       workerId: identity.workerId,
       stage: patch.stage ?? task.stage,
+      ...(patch.stage && TERMINAL_STAGES.includes(patch.stage as StageKey)
+        ? { completionSource: "stage_event" }
+        : {}),
       progressPct: input.progressPct ?? null,
       notes: input.notes ?? null,
     },

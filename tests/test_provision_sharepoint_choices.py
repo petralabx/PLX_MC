@@ -6,13 +6,23 @@ import json
 import sys
 import types
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load():
     # The script imports requests at module load; the helpers under test never use it.
-    sys.modules.setdefault("requests", types.ModuleType("requests"))
+    # Stub only if requests is genuinely missing, and never leave the stub in sys.modules.
+    with mock.patch.dict(sys.modules):
+        try:
+            import requests  # noqa: F401
+        except ImportError:
+            sys.modules["requests"] = types.ModuleType("requests")
+        return _exec_script()
+
+
+def _exec_script():
     spec = importlib.util.spec_from_file_location(
         "provision_sharepoint", ROOT / "scripts" / "provision-sharepoint.py"
     )

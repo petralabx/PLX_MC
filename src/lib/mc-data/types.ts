@@ -120,6 +120,9 @@ export type SyncState = "synced" | "pending" | "conflict" | "error";
 /** Project ACL visibility. Omitted / shared = org-visible default. */
 export type ProjectVisibility = "shared" | "restricted";
 
+/** Project lifecycle (TASK-2530). Orthogonal to health; omitted = active. */
+export type ProjectStatus = "active" | "closed";
+
 export interface SyncRef {
   state: SyncState;
   ts: string;
@@ -146,6 +149,9 @@ export interface Project {
   // fail-closed to `members` (emails, Entra oids, directory ids, sp_* ids).
   visibility?: ProjectVisibility;
   members?: string[];
+  status?: ProjectStatus;
+  closedAt?: string | null;
+  closedBy?: string | null;
 }
 
 export interface Bucket {

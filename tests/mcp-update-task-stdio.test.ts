@@ -9,7 +9,7 @@ let client: Client;
 let server: McpServer;
 const requests: { url: string; body: unknown }[] = [];
 const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
-  requests.push({ url, body: JSON.parse(String(init.body)) });
+  requests.push({ url, body: init.body ? JSON.parse(String(init.body)) : undefined });
   return new Response(JSON.stringify({ data: { accepted: true } }), { status: 200 });
 });
 
@@ -72,6 +72,31 @@ describe("actual stdio metadata tool registrations", () => {
     const count = requests.length;
     const result = await client.callTool({ name: "mc_update_tasks", arguments: { items: Array(101).fill(null) } });
     expect(result.isError).toBe(true);
+    expect(requests).toHaveLength(count);
+  });
+});
+
+
+describe("actual stdio task-search registration", () => {
+  it("forwards every additive search parameter to REST", async () => {
+    const result = await client.callTool({ name: "mc_search_tasks", arguments: {
+      q: "CLOSED (obsolete", bucket: "BKT-PROD", stage: "merged", assignee: "agent:runner", label: "lane:codex",
+      limit: 200, cursor: "opaque", searchComments: true, in: ["comments", "notes"], fields: "compact",
+    } });
+    expect(result.isError).not.toBe(true);
+    const url = new URL(requests.at(-1)!.url);
+    expect(url.pathname).toBe("/api/cursor/tasks");
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      q: "CLOSED (obsolete", bucket: "BKT-PROD", stage: "merged", assignee: "agent:runner", label: "lane:codex",
+      limit: "200", cursor: "opaque", searchComments: "true", fields: "compact",
+    });
+    expect(url.searchParams.getAll("in")).toEqual(["comments", "notes"]);
+  });
+  it("rejects invalid limits and fields before any network call", async () => {
+    const count = requests.length;
+    for (const args of [{ limit: 0 }, { limit: 201 }, { limit: 1.5 }, { fields: "invalid" }, { searchComments: "true" }]) {
+      expect((await client.callTool({ name: "mc_search_tasks", arguments: args })).isError).toBe(true);
+    }
     expect(requests).toHaveLength(count);
   });
 });

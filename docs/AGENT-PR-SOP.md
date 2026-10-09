@@ -158,7 +158,8 @@ MC_REPO=petralabx/PLX_MC   # full slug for the repo you are pushing to
 | Create project | `mc_create_project` | Only on a search miss. Set `owner=vince@petrasoap.com`. `repos[]` uses MC registry **ids** (`portal-web`, `plx-mc`), never GitHub slugs. Optional `visibility=restricted` + `members[]` for ACL-private projects (TASK-1527) |
 | Create bucket | `mc_create_bucket` | Only on a search miss. Optional `project` parent. Same owner and `repos[]` rules as project create |
 | Patch bucket | `mc_update_bucket` | Existing `BKT-*` only. Required `id` plus at least one of `prd`, `health`, `owner`, `description`, `name`, `target`, `started`, `repos`, `project`. Same `repos[]` registry-id rule. |
-| Find work | `mc_search_tasks` | Filter by `query` (alias `q`), `bucket`, `stage`, `limit`; `meta.filter` echoes what was applied |
+| List / patch project | `mc_list_projects`, `mc_update_project` | `mc_list_projects` takes `status` (`active` default, `closed`, `all`) and `q`. `mc_update_project` takes `projectId` plus at least one of `status` (`active`/`closed`), `owner` (known person, agent or principal), `description`, `name`, and an optional `note`. Closed projects reject new tasks and buckets; reopen with `status=active`. |
+| Find work | `mc_search_tasks` | Filter by `query` (alias `q`), `bucket`, `stage`, `assignee`, `label`; page with `limit` + `cursor` until `data.nextCursor=null`; `data.total` is the exact visible filtered count. Optional `searchComments` / `in` searches discussion; `fields=compact` reduces payload; `meta.filter` echoes what was applied |
 | Create task | `mc_create_task` | Only on a search miss in that bucket. Requires `title` + `bucket`; optional `description`, `priority`, `repos` (registry **ids**, not GitHub slugs — see table below). Default `bucket` from `config/tracked-repos-registry.json` `default_bucket` for the repo under edit — do **not** hardcode `BKT-PROD` |
 | Start | `mc_checkout_task` | Live repo-scoped checkout. Confirm `data.taskId` is a non-null string. Copy `prBodyLine` / `meta.links.checkoutStamp` exactly. Never invent a `dsp_*`. Never write `MC-Checkout: pending`. |
 
@@ -228,7 +229,9 @@ use `patch.addLabels` with that lane and the Ledger's dependency label
 convention (for example `depends-on:TASK-n`). Do not guess missing lane or
 dependency values. Preserve existing unrelated labels; remove an existing
 different `lane:*` in the same call. Exactly one lane must remain, including
-when editing an unlabeled legacy task.
+when editing an unlabeled legacy task. Legacy lane-less tasks may instead be
+closed with a closure-label-only patch (`closed:duplicate|obsolete|superseded|delivered|wontfix`)
+and relocated with `patch.bucket` (audited `task.moved`); do not invent a lane.
 
 Use `description` to replace or clear text, or `appendDescription` to append
 with two newlines, never both. Inspect the current task before retrying an

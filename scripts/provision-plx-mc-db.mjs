@@ -5,8 +5,10 @@
 //
 // The app NEVER uses the instance admin or any other database's credentials
 // at runtime — it gets its own `plx_mc_app` role scoped to the `plx_mc`
-// database. The runtime URL lives in AWS Secrets Manager (prod/ec2-secrets,
-// key PLX_MC_DATABASE_URL) per TOOLS.md "Secrets Source of Truth".
+// database. This staging URL is in prod/ec2-secrets PLX_MC_DATABASE_URL and
+// stopped at migration 030; it is not the live Mission Control database.
+// Production uses Vercel project plx-mission-control's Production
+// PLX_MC_DATABASE_URL; its upstream source is to be confirmed by Vince.
 //
 // Env:
 //   PLX_MC_PROVISION_ADMIN_URL  admin connection URL (CREATEDB/CREATEROLE)

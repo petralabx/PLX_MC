@@ -17,7 +17,7 @@ dispatch logic.
 | Surface | Path |
 |---------|------|
 | REST cursor API | `src/app/api/cursor/*` — self-auth via per-agent keys (`PLX_MC_MCP_AGENT_KEYS`) or the legacy shared `PLX_MC_MCP_API_KEY` (retire via `PLX_MC_MCP_SHARED_KEY_ENABLED=0`) + operator headers |
-| Planning hierarchy | `mc_create_project` + `mc_create_bucket` + `mc_update_bucket` — capability-gated writes queued through the existing Projects/Roadmap SharePoint mirrors |
+| Planning hierarchy | `mc_create_project` + `mc_create_bucket` + `mc_update_bucket` + `mc_update_project` + `mc_list_projects` — capability-gated writes queued through the existing Projects/Roadmap SharePoint mirrors |
 | Routing suggest | `POST /api/cursor/routing/suggest` — `mc_suggest_work` (`routing.suggest`) |
 | Streamable HTTP MCP | `GET/POST/DELETE /api/cursor/mcp` — remote team registration |
 | Stdio MCP client | `tools/plx-mc-mcp/index.ts` — local Cursor + Cloud Agents |
@@ -76,9 +76,23 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   are incremental and cannot accompany `labels`. Removals happen before adds.
   Labels are trimmed, non-empty and deduplicated; max 128 characters per label,
   100 entries per input list and 100 labels in the final set.
-- Exactly one non-empty, case-sensitive `lane:*` label must remain. To change
-  lanes, remove the old lane and add the new one in the same call (or replace
-  the label set). An unlabeled legacy task must receive a lane in its edit.
+- More than one `lane:*` is always rejected. Exactly one non-empty,
+  case-sensitive `lane:*` must remain, except a lane-less task may (a) only
+  gain/lose a closure label in a label-only patch (no title, description,
+  priority or other field; `CLOSURE_LABELS` in `task-update-actions.ts`:
+  `closed:duplicate|obsolete|superseded|delivered|wontfix`, legacy
+  `not-needed`), (b) be moved by `bucket` alone, or (c) be in a terminal stage
+  (`merged`, `verified`). Any other label change on a lane-less non-terminal
+  task still needs a lane, and a closure label combined with any other field
+  change (title, description, priority) is rejected (TASK-2533).
+- `bucket` (`BKT-*`, optional `note`) moves the task. The target must exist,
+  must not be archived or in a closed project (each guard enforces once the
+  record exposes an `archived`/`archivedAt` flag or project `status:"closed"`),
+  and the actor needs project ACL on source and target. Stage, labels, PRs and
+  checkouts are unchanged; `task.moved` `{from, to, actor, note}` is audited
+  next to `task.updated`; `bucket` is a pushed ToDos field (Initiative lookup
+  syncs outbound). Inbound SharePoint Initiative changes use the same target
+  check (restricted targets refused). Batch items fail independently.
 - `description` replaces (empty string clears); `appendDescription` appends
   trimmed non-empty text, separated from existing text by two newlines. These
   forms cannot mix. Maximum final description length: 32,000 characters.
@@ -205,6 +219,25 @@ not a new capability. Unknown ids return 404; principals without the grant
 return 403. Use this to set a missing `prd` on an existing `BKT-*` without
 the Entra UI.
 
+**Project status and steward edits (TASK-2530):** projects carry a lifecycle
+`status` (`active` default | `closed`), with `closedAt` / `closedBy` stamped on
+close and cleared on reopen. It is separate from `health`, and the health=off
+nav filter is unchanged. `mc_update_project` (`PATCH /api/cursor/projects`) takes
+`projectId` plus at least one of `status`, `owner`, `description`, `name`, and an
+optional `note`. Auth is the MCP principal's `project.update` grant (the
+reviewed agent bundle; `sp_mcp_portal` and `sp_sync_inbound` get 403) plus the
+restricted-project ACL. `owner` must be a known person (id or email), agent or
+service principal, otherwise 422 `invalid_owner`. Each change writes a
+`project.updated` event in `mc_events` with `before` / `after`, and queues the
+Projects mirror (status itself is MC-side only until a SharePoint column is
+provisioned). `mc_list_projects` (`GET /api/cursor/projects?status=&q=`) takes
+`status` `active` (default) | `closed` | `all`, and returns id, name, owner,
+status, health, `bucketCount`, `openTaskCount`, `doneTaskCount` (merged or
+verified) and `closedAt`. Creating a bucket or task in a closed project fails
+with 409 `project_closed`; reopen with `status=active`. Closed projects leave
+the sidebar/palette (and their buckets do too) and the default project pickers,
+but stay reachable by id. `mc_get_context` now returns `projects` with `status`.
+
 **Restricted projects (TASK-1527):** `mc_create_project` accepts optional
 `visibility` (`shared` | `restricted`) and `members[]` (emails, Entra oids,
 directory ids, or reviewed `sp_mcp_*` ids). Restricted projects fail-close
@@ -321,3 +354,51 @@ same transaction. Missing or already-closed IDs return a clear error (batch:
 per-ID failure and `dismissedCount`). Batches accept 1–500 IDs and reasons
 1–2000 characters. Each successful ID commits independently; retrying a batch
 cannot dismiss an already-closed row again.
+
+### Task search pagination and discussion search
+
+`mc_search_tasks` and `GET /api/cursor/tasks` share these optional parameters:
+`q` (alias `query`), `bucket`, `stage`, `assignee` (case-insensitive exact),
+`label` (exact), `limit` (integer 1–200, default 50), `cursor`,
+`searchComments` (boolean, default false), `in` (array of `title`,
+`description`, `comments`, `notes`), and `fields` (`full` default or `compact`).
+REST accepts `searchComments=true|false` and repeated `in` parameters or a
+comma-separated `in=comments,notes`. Conflicting q/query and invalid options
+return `invalid_request`.
+
+The response is `{ data: { tasks, total, nextCursor }, meta: { filter, ... } }`.
+`total` counts the entire visible filtered set, including on an empty page.
+Keep filters and identity fixed and pass `nextCursor` unchanged until it is
+null. `limit` and `fields` may change between pages. Cursors are opaque,
+versioned and bound to filters, ACL exclusions and caller identity. Restart
+without a cursor if filters or permissions change.
+
+Tasks sort by numeric `TASK-` suffix, then ID in PostgreSQL C order. Legacy
+non-numeric IDs sort at numeric key zero. Paging uses a strict keyset boundary,
+a first-page creation-time cutoff and an upper ID boundary: later inserts do
+not shift pages or enter the original result set. Page and exact count come
+from one SQL statement. This is not an immutable snapshot across requests;
+edits/deletions to existing tasks can change the matching set and total.
+Search is read-only against `entities` and does not seed data or call Graph.
+
+ID/title/description preserve case-insensitive literal substring matching.
+`in` explicitly selects text fields and takes precedence over `searchComments`;
+ID matching remains enabled for compatibility. `comments` includes comment
+bodies and activity `what` text. `notes` includes the `mcp-*` comments written
+by `mc_report_progress`. Discussion uses PostgreSQL `simple` full-text word
+matching (all query words, ignoring punctuation; no stemming or prefix
+matching), backed by migration `032_task_search_indexes.sql`. Search does not
+match authors or activity metadata. With a non-empty query, each returned row
+includes `matchFields` (`id`, `title`, `description`, `comments`, `activity`,
+`notes`) explaining its match. For example:
+
+```json
+{"bucket":"BKT-PROD","stage":"merged","limit":200,"fields":"compact"}
+{"q":"CLOSED (obsolete","searchComments":true,"fields":"compact"}
+```
+
+Compact rows contain `id`, `title`, `stage`, `bucket`, `labels`, `prs` and the
+mirror row's UTC `updatedAt`; `completedAt` is copied only when already present
+in the JSONB payload. This change does not create completion timestamps.
+Descriptions, activity and comment arrays are omitted. Payload size depends
+on titles, labels and PRs; 200 representative fixture rows fit under 100 KB.

@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-09 (ET) — Live release identity followed the wrong database source
+
+- **What happened:** The live plan from #289/#292 targeted a staging database at migration 030 that production does not use. Docs named the wrong source, and the guard hard-coded the staging host.
+- **Root cause:** Identity was a name/URL convention, never compared against what production actually reads.
+- **Rule going forward:** Live release requires a human-set expected identity, including a server fingerprint where available. Plan prints MATCH/MISMATCH. Verify the source of Vercel Production's environment value before naming a database "live" in docs.
+
 ### 2026-07-16 (ET) — Compliance failed because evidence lived only in the PR body
 
 - **What happened:** A stamped agent PR carried its summary, verification and
@@ -753,3 +759,9 @@
 - **Rule going forward:** Any new aggregate over tasks or events takes the caller
   principal and scopes through `scopeHierarchy` before aggregating; resolve
   references from durable tables, not from a sampled window.
+
+### 2026-10-07 (ET) — TASK-2533: rejected inbound move was audited but consumed; closure exception ignored other fields
+
+- **What went wrong:** An inbound SharePoint bucket move refused by the guard only wrote an audit line, so the delta cursor advanced and a dirty local bucket could later overwrite SharePoint. The lane exception also checked only the label delta, so title/description/priority edits rode along with a closure label.
+- **Root cause:** A new inbound validation path refused silently instead of using the existing conflict register; an exception predicate was scoped to one field of the patch.
+- **Rule going forward:** Any inbound refusal of a SharePoint value records an open `sync_conflicts` row and sets the task `conflict` (outbound holds) — never audit-only. Exceptions to a validation rule must test the whole patch, not just the field they target.

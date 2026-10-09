@@ -229,7 +229,9 @@ use `patch.addLabels` with that lane and the Ledger's dependency label
 convention (for example `depends-on:TASK-n`). Do not guess missing lane or
 dependency values. Preserve existing unrelated labels; remove an existing
 different `lane:*` in the same call. Exactly one lane must remain, including
-when editing an unlabeled legacy task.
+when editing an unlabeled legacy task. Legacy lane-less tasks may instead be
+closed with a closure-label-only patch (`closed:duplicate|obsolete|superseded|delivered|wontfix`)
+and relocated with `patch.bucket` (audited `task.moved`); do not invent a lane.
 
 Use `description` to replace or clear text, or `appendDescription` to append
 with two newlines, never both. Inspect the current task before retrying an

@@ -61,7 +61,7 @@ describe("archived inbound adoption", () => {
     expect(h.audits.filter((a) => a.includes("archived container"))).toHaveLength(2);
     expect(h.audits.join("\n")).toContain("TASK-2 spItem=new-task");
     expect(h.audits.join("\n")).toContain("BKT-NEW spItem=new-bucket");
-    expect(h.update).toHaveBeenCalledWith("task", "TASK-1", expect.objectContaining({ patch: { description: "existing task still syncs" } }));
+    expect(h.update).toHaveBeenCalledWith("task", "TASK-1", expect.objectContaining({ patch: { description: "existing task still syncs" } }), undefined);
     expect(h.push).toHaveBeenCalledWith(expect.anything(), "todos", "3", expect.anything());
   });
   it("audits archive race rejections and still advances both cursors and pushes", async () => {

@@ -288,7 +288,9 @@ server.tool(
   "Report task progress (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing.",
   {
     taskId: z.string().min(1),
-    stage: z.string().optional(),
+    stage: z
+      .enum(["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified"])
+      .optional(),
     notes: z.string().optional(),
     progressPct: z.number().min(0).max(100).optional(),
     cancelReason: z.string().optional(),

@@ -20,6 +20,7 @@ vi.mock("@/lib/db", () => ({
 
 import {
   findDispatchesBySuffix,
+  hasActiveCheckoutForPrincipal,
   releaseDispatchManually,
   unreleaseDispatches,
 } from "@/lib/compliance/repo";
@@ -79,5 +80,23 @@ describe("findDispatchesBySuffix", () => {
     await findDispatchesBySuffix("TASK-2279", "bn4y");
     expect(squash(h.calls[0].text)).toContain("WHERE task_id = $1 AND right(id, length($2)) = $2");
     expect(h.calls[0].params).toEqual(["TASK-2279", "bn4y"]);
+  });
+});
+
+describe("hasActiveCheckoutForPrincipal", () => {
+  it("binds an active lease to the checkout event's permissionActorId", async () => {
+    h.rows = [{ id: "dsp_abc1234" }];
+    expect(await hasActiveCheckoutForPrincipal("TASK-1", "sp_mcp_cursor")).toBe(true);
+    const sql = squash(h.calls[0].text);
+    expect(sql).toContain("d.task_id = $1");
+    expect(sql).toContain("NOT d.revoked AND d.released_at IS NULL AND d.expires_at > now()");
+    expect(sql).toContain("e.payload->>'checkoutId' = d.id");
+    expect(sql).toContain("e.payload->>'permissionActorId' = $2");
+    expect(h.calls[0].params).toEqual(["TASK-1", "sp_mcp_cursor"]);
+  });
+
+  it("is false when no active lease matches", async () => {
+    h.rows = [];
+    expect(await hasActiveCheckoutForPrincipal("TASK-1", "sp_mcp_cursor")).toBe(false);
   });
 });

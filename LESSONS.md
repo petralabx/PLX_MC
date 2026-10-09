@@ -855,6 +855,12 @@
 - **Root cause:** A new inbound validation path refused silently instead of using the existing conflict register; an exception predicate was scoped to one field of the patch.
 - **Rule going forward:** Any inbound refusal of a SharePoint value records an open `sync_conflicts` row and sets the task `conflict` (outbound holds) — never audit-only. Exceptions to a validation rule must test the whole patch, not just the field they target.
 
+### 2026-10-09 (ET) — TASK-2560: a bare progress post regressed a merged task
+
+- **What went wrong:** 35 s after the compliance projection promoted a task to Merged, a `mc_report_progress` call with no stage/notes/subtasks defaulted the stage to `progress` and moved it back to In Progress. The call held no checkout.
+- **Root cause:** `actionProgress` defaulted a missing stage, accepted any stage whatever the current one, and authorized on the shared principal and project access alone, with no per-task lease check.
+- **Rule going forward:** A mutating MCP tool never defaults a missing input into a write. Terminal stages (merged/verified) are moved back only by the compliance projection. A task write needs an active checkout bound to the authenticated principal (`permissionActorId`), never the operator header.
+
 ### 2026-10-09 — Application deployed before the live schema migration
 
 - **Incident:** PR #286 deployed on October 8 at 18:56 ET with queries for

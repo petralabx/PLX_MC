@@ -62,32 +62,60 @@ Production SQL is a separate, explicitly approved release step (below).
 
 ## Live release (separate, gated)
 
-Workflow **DB Migrate (live release)**, `.github/workflows/db-migrate-live.yml`,
-`workflow_dispatch` only, main only. It does not share secrets with the automatic
-path: Vince adds secret `MC_LIVE_DATABASE_URL` and variable `MC_LIVE_APPROVED_DB`
-(`plx_mc@<exact host>`) later, plus the existing `MICROSOFT_GRAPH_*` secrets for
-apply. This change does not create the environment, secrets or variables.
+Owner: Vince. Workflow **DB Migrate (live release)** is manual only and separate
+from the automatic non-production path. This change creates no secrets.
 
-- **plan** (default `mode=plan`; no environment) changes nothing: it lists the
-  pending migration files an apply would run (local `db/migrations`, including
-  031–035 when present), the target as redacted host and database name only
-  (never user, password, URL or query; "secret unset" if the secret is absent,
-  which does not fail the run), and the SharePoint columns from
-  `config/sharepoint-schema.json` for `/sites/plx-mission-control-dev` first, then
-  `/sites/plx-mission-control`. No database or Graph call is made.
-- **apply** needs `mode=apply`, `confirm=MIGRATE_LIVE`, and approval on GitHub
-  environment `mc-live-release`. Vince or an org admin must create that
-  environment and its required reviewers before apply can run. It first verifies
-  the URL, `MC_LIVE_APPROVED_DB` and live `current_database()` are the documented
-  live plx_mc (refusing any other database), then runs `npm run migrate`, then
-  `provision-sharepoint.py --env staging --apply` (dev site) and
-  `--env production --apply`. Anything other than a confirmed apply runs plan.
+The default `mode=plan` job has no environment approval and may run on any ref.
+It reads `schema_migrations(filename)` in a READ ONLY transaction with a short
+statement timeout, verifies live database identity, then rolls back. A missing
+ledger table means every local migration is pending. It reads SharePoint sites,
+lists and columns using Graph GET only; the client-credentials token POST to
+login.microsoftonline.com is the only non-GET. No migration or provisioning
+write runs in plan. Missing lists are identified and all configured columns
+on those lists are pending. Dev is reported before production.
 
-Rollback: revert this PR to remove automation. If a run partially applied SQL,
-follow each applied migration's rollback header; reverting the workflow does
-not undo schema. A failed run's summary retains applied files; inspect runner
-logs for the failed file and use status-only to inventory remaining files.
-Never mark an unapplied migration applied to get past a failure.
+Stdout and the step summary start with `plan_commit_sha=<40 lowercase hex>`,
+`pending_hash=sha256:<64 lowercase hex>`, and `apply_ready=yes|no (<reasons>)`,
+then `target: host=<host> database=<db>` (never credentials, port or query).
+Sections are `### Pending migrations (<n>)`, `### SharePoint columns missing`
+with each site path, and `### Ledger anomalies`. Only pending files, missing
+columns/lists and orphan ledger entries appear; empty sections say `none`.
+Unreadable sections say `unknown`, never `none`. The canonical pending hash
+sorts keys and pending sets and includes unavailable-source and missing-list
+markers. It cannot confuse unreadable data with an empty pending set.
+Missing credentials or rejected URL identity produce `apply_ready=no` and a
+successful plan exit; a configured source that fails to read exits 1.
 
-The helper `scripts/lib/db-identity.mjs` shares the pending completedAt branch's
-export contract; reconcile that overlapping file when merging both branches.
+Vince plans the intended ref, copies both first-line values, then dispatches
+on the same ref with `mode=apply`, `confirm=MIGRATE_LIVE`,
+`plan_sha=<plan_commit_sha>` and `pending_hash=<pending_hash>`, and approves the
+`mc-live-release` environment. The existing environment has a required reviewer.
+Branch refs are allowed only through the SHA pin; an admin may additionally
+add a deployment-branch policy to the environment.
+
+Apply checks out the exact dispatch SHA. Before any write, preflight refuses a
+malformed SHA/hash, a plan SHA different from HEAD or GITHUB_SHA, a URL or
+connected database identity mismatch, either source unreadable, or a freshly
+computed pending hash different from the supplied hash. If HEAD changed or
+pending work changed, run another plan and use its values. Inputs are passed
+via environment variables, never interpolated into shell commands.
+Order: preflight-apply → `npm run migrate` → provisioning dev (`--env staging
+--apply`) → production (`--env production --apply`) → post-apply live recompute.
+Each failure stops later steps. Post-apply requires readable sources, no pending
+migrations/columns/lists. Ledger anomalies remain reported separately.
+
+The DB path uses existing secret `MC_LIVE_DATABASE_URL` and variable
+`MC_LIVE_APPROVED_DB` (`plx_mc@<exact runtime host>`). An admin must add these
+repository secrets for both read and apply, using the same app as provisioning:
+
+- `MICROSOFT_GRAPH_TENANT_ID`
+- `MICROSOFT_GRAPH_CLIENT_ID`
+- `MICROSOFT_GRAPH_CLIENT_SECRET`
+
+No other secret or variable name is introduced. `PLAN_SHA` and `PENDING_HASH`
+are step-local values from dispatch inputs, not credentials.
+
+Rollback: revert the workflow/helper change to remove this automation. Reverting
+code does not undo schema or SharePoint changes; use each applied migration's
+rollback header and inspect provisioning results before an operator rollback.
+Never mark unapplied migrations applied to bypass a failure.

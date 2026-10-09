@@ -38,7 +38,7 @@ import type {
   Task,
 } from "@/lib/mc-data/types";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
-import type { TxQuery } from "@/lib/db";
+import { withTransaction, type TxQuery } from "@/lib/db";
 import type { EntityData, FieldAttribution } from "./mapping";
 import * as repo from "./repo";
 
@@ -681,7 +681,15 @@ export async function patchTask(
 ): Promise<Task | null> {
   // Transaction callers already hold an existing row; bootstrap would borrow
   // a second pool connection and can starve concurrent transactions.
-  if (!opts.query) await ensureSeeded();
+  if (!opts.query) {
+    await ensureSeeded();
+    // Lock the row across the cancelled-stage guard and the write, so a
+    // concurrent cancel cannot commit between them and be silently undone.
+    return withTransaction(async (q) => {
+      if (!(await repo.getEntity("task", id, q, true))) return null;
+      return patchTask(id, patch, actor, { ...opts, query: q });
+    });
+  }
   const row = await repo.getEntity("task", id, opts.query);
   if (!row) return null;
 

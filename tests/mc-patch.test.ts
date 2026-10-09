@@ -23,6 +23,13 @@ const store = vi.hoisted(() => {
   return { rows, audits };
 });
 
+// patchTask runs in a row-locked transaction; the repo seam is mocked, so the
+// transaction only needs to hand through a query function.
+vi.mock("@/lib/db", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/db")>()),
+  withTransaction: async <T,>(fn: (q: never) => Promise<T>) => fn((async () => []) as never),
+}));
+
 vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
   ensureReposSeeded: vi.fn(async () => true),

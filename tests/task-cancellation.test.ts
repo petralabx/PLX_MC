@@ -22,6 +22,11 @@ const h = vi.hoisted(() => ({
   rows: new Map<string, unknown>(),
   events: [] as unknown[],
   updates: [] as { sql: string; params: unknown[] }[],
+  // Runs when a SELECT ... FOR UPDATE is issued, before it reads: stands in for a
+  // concurrent transaction that commits while this one waits on the row lock.
+  onRowLock: null as null | (() => void),
+  // The hook's writes were committed by another transaction, so a rollback here must keep them.
+  committed: null as null | (() => void),
 }));
 const rows = () => h.rows as Map<string, Row>;
 const events = () => h.events as Ev[];
@@ -37,6 +42,7 @@ vi.mock("@/lib/permissions/grants", async (importOriginal) => {
       id === "sp_mcp_codex" ? [...real.capabilitiesForServicePrincipal(id), "task.cancel", "task.reopen"] : real.capabilitiesForServicePrincipal(id),
   };
 });
+vi.mock("@/lib/sync/engine", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/sync/engine")>()), ensureSeeded: vi.fn(async () => undefined) }));
 vi.mock("@/lib/permissions/decision-log", () => ({ recordPermissionDecision: vi.fn(async () => true) }));
 vi.mock("@/lib/compliance/go-live-announcer", () => ({ announceGoLiveEventSafe: vi.fn(async () => undefined) }));
 vi.mock("@/lib/db", () => {
@@ -44,6 +50,12 @@ vi.mock("@/lib/db", () => {
     if (sql.includes("FROM buckets ORDER BY")) return [{ id: "BKT-OPEN", data: { id: "BKT-OPEN", project: null } }];
     if (sql.includes("FROM projects ORDER BY")) return [];
     if (sql.includes("FROM entities WHERE")) {
+      if (sql.includes("FOR UPDATE")) {
+        const hook = h.onRowLock;
+        h.onRowLock = null;
+        hook?.();
+        h.committed = hook ?? null;
+      }
       const row = rows().get(String(params[1]));
       return row ? [structuredClone(row)] : [];
     }
@@ -80,6 +92,8 @@ vi.mock("@/lib/db", () => {
       } catch (err) {
         h.rows = snapshot.rows;
         h.events = snapshot.events;
+        h.committed?.();
+        h.committed = null;
         throw err;
       }
     },
@@ -127,7 +141,7 @@ const cancelled = (id: string, patch: Record<string, unknown>) => actionUpdateTa
 
 beforeEach(() => {
   vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT", "off");
-  rows().clear(); events().length = 0; h.updates.length = 0;
+  rows().clear(); events().length = 0; h.updates.length = 0; h.onRowLock = null; h.committed = null;
   seed("TASK-2360"); seed("TASK-2341"); seed("TASK-1544", "qa");
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -224,6 +238,18 @@ describe("reopen (acceptance 4)", () => {
     expect(row("TASK-1544").data.stage).toBe("cancelled");
     expect(row("TASK-1544").cancellation).toMatchObject({ reason: "obsolete" });
     expect(events().map((e) => e.kind)).toEqual(["task.cancelled"]);
+  });
+
+  it("a progress patch racing a cancel cannot undo it: the guard re-reads under the row lock", async () => {
+    seed("TASK-1544", "progress");
+    // The cancel commits after the patch starts but before it holds the row lock.
+    h.onRowLock = () => {
+      row("TASK-1544").data.stage = "cancelled";
+      row("TASK-1544").cancellation = { reason: "obsolete" };
+    };
+    await expect(patchTask("TASK-1544", { stage: "review" }, "member@petrasoap.com")).rejects.toMatchObject({ code: "reopen_required", status: 409 });
+    expect(row("TASK-1544").data.stage).toBe("cancelled");
+    expect(row("TASK-1544").cancellation).toMatchObject({ reason: "obsolete" });
   });
 
   it("cancelling again after a reopen writes a new cancellation object", async () => {

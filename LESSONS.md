@@ -838,6 +838,10 @@
 - **Rule going forward:** Put the invariant in the shared write path. `patchTask`
   refuses to leave `cancelled` unless the reopen service passed `reopen: true`;
   callers authorize first. Inbound edits that would leave it raise a Sync conflict.
+- **Follow-up (Astra P1):** the guard read the row without a lock, so a cancel
+  committing before the write was undone. A guard and the write it protects share
+  one transaction and one `FOR UPDATE`; `patchTask` now opens that itself when the
+  caller passes no `query`.
 
 ### 2026-10-07 (ET) — TASK-2533: rejected inbound move was audited but consumed; closure exception ignored other fields
 

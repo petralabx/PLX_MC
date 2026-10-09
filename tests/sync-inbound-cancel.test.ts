@@ -13,6 +13,10 @@ const s = vi.hoisted(() => ({
   audits: [] as string[],
   events: [] as Record<string, unknown>[],
   txOrder: [] as string[],
+  // Stands in for a cancel that commits after the pull's snapshot: updateEntity re-reads
+  // the locked row, sees cancelled, and refuses any stage write that is not a reopen.
+  cancelledUnderLock: false,
+  resolved: [] as string[],
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -59,7 +63,14 @@ vi.mock("@/lib/sync/repo", () => ({
   saveDeltaLink: async () => undefined,
   markRegisterInboundComplete: async () => undefined,
   insertConflict: async (c: Record<string, unknown>) => { s.conflicts.push(c); },
+  getConflict: async (id: string) => (id === "cf-1" ? { id, entityType: "task", entityId: "TASK-2360", field: "Status", mcVal: "Cancelled", spVal: "In Progress" } : null),
+  resolveConflictRow: async (id: string) => { s.resolved.push(id); },
   updateEntity: async (_t: string, id: string, opts: Record<string, unknown>, q?: unknown) => {
+    const patch = opts.patch as Record<string, unknown> | undefined;
+    if (s.cancelledUnderLock && patch?.stage !== undefined && patch.stage !== "cancelled") {
+      const { ApiError } = await import("@/lib/api/route");
+      throw new ApiError("reopen_required", "cancelled", 409);
+    }
     s.updates.push({ id, opts });
     s.txOrder.push(`update:${String(q)}`);
   },
@@ -67,7 +78,7 @@ vi.mock("@/lib/sync/repo", () => ({
   getBucketBySpItemId: async () => null,
 }));
 
-import { runScopedListDelta } from "@/lib/sync/engine";
+import { resolveConflict, runScopedListDelta } from "@/lib/sync/engine";
 
 function seed(stage: string) {
   s.row = {
@@ -81,7 +92,7 @@ const item = (fields: Record<string, unknown>) => {
 };
 
 beforeEach(() => {
-  s.updates.length = 0; s.events.length = 0; s.txOrder.length = 0; s.conflicts.length = 0; s.audits.length = 0; s.items = [];
+  s.updates.length = 0; s.events.length = 0; s.txOrder.length = 0; s.conflicts.length = 0; s.audits.length = 0; s.items = []; s.cancelledUnderLock = false; s.resolved.length = 0;
   seed("progress");
 });
 
@@ -164,5 +175,29 @@ describe("inbound cancel event and reopen mirror clear (Astra P2s)", () => {
     item({ Status: "In Progress", Priority: "High" });
     await runScopedListDelta("todos");
     for (const u of s.updates) expect((u.opts.dirtyFields as string[] | undefined) ?? []).not.toContain("cancellation");
+  });
+});
+
+describe("a cancel committing after the snapshot (Astra P1: re-check under the row lock)", () => {
+  it("an inbound stage move is refused at the locked write: Sync conflict, other fields still applied, no reopen", async () => {
+    seed("progress"); // the pull's snapshot predates the cancel
+    s.cancelledUnderLock = true;
+    item({ Status: "In Review", Priority: "High" });
+    const res = await runScopedListDelta("todos");
+    expect(res).toMatchObject({ conflicts: 1 });
+    expect(s.conflicts).toHaveLength(1);
+    expect(s.conflicts[0]).toMatchObject({ entityId: "TASK-2360", field: "Status" });
+    expect(String(s.conflicts[0].note)).toMatch(/task\.reopen/);
+    const applied = s.updates.filter((u) => u.opts.patch).map((u) => u.opts.patch as Record<string, unknown>);
+    expect(applied).toHaveLength(1);
+    expect(applied[0]).toMatchObject({ priority: "high" });
+    expect(applied[0]).not.toHaveProperty("stage");
+  });
+
+  it("conflict resolution keep-SP is refused when the locked write finds the task cancelled", async () => {
+    seed("progress");
+    s.cancelledUnderLock = true;
+    expect(await resolveConflict("cf-1", "sp", "tester")).toBe(false);
+    expect(s.resolved).toEqual([]);
   });
 });

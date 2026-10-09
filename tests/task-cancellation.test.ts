@@ -252,6 +252,25 @@ describe("reopen (acceptance 4)", () => {
     expect(row("TASK-1544").cancellation).toMatchObject({ reason: "obsolete" });
   });
 
+  it("updateEntity refuses a stage write that clears a cancellation committed after the caller's read", async () => {
+    seed("TASK-1544", "progress"); // the caller's snapshot says progress
+    h.onRowLock = () => {
+      row("TASK-1544").data.stage = "cancelled";
+      row("TASK-1544").cancellation = { reason: "obsolete" };
+    };
+    await expect(updateEntity("task", "TASK-1544", { patch: { stage: "review" } })).rejects.toMatchObject({ code: "reopen_required", status: 409 });
+    expect(row("TASK-1544").data.stage).toBe("cancelled");
+    expect(row("TASK-1544").cancellation).toMatchObject({ reason: "obsolete" });
+  });
+
+  it("updateEntity leaves cancelled only for the reopen service", async () => {
+    await cancelled("TASK-1544", { reason: "obsolete" });
+    await expect(updateEntity("task", "TASK-1544", { patch: { stage: "progress" } })).rejects.toMatchObject({ code: "reopen_required" });
+    expect(row("TASK-1544").cancellation).toMatchObject({ reason: "obsolete" });
+    await actionUpdateTask(steward, { taskId: "TASK-1544", patch: { reopen: {} } });
+    expect(row("TASK-1544").cancellation).toBeNull();
+  });
+
   it("cancelling again after a reopen writes a new cancellation object", async () => {
     await cancelled("TASK-1544", { reason: "obsolete" });
     await actionUpdateTask(steward, { taskId: "TASK-1544", patch: { reopen: {} } });
@@ -385,9 +404,9 @@ describe("entities write rules (acceptance 5, 6)", () => {
     expect(row("R-1").cancellation).toBeNull();
   });
 
-  it("leaving cancelled by any path (e.g. SharePoint) clears the column", async () => {
+  it("leaving cancelled through the reopen service clears the column", async () => {
     await cancelled("TASK-1544", { reason: "obsolete" });
-    await updateEntity("task", "TASK-1544", { patch: { stage: "progress" } });
+    await updateEntity("task", "TASK-1544", { patch: { stage: "progress" }, reopen: true });
     expect(row("TASK-1544").cancellation).toBeNull();
   });
 });

@@ -892,7 +892,7 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
       await repo.appendAudit(SYNC_ACTOR, `Conflict detected on ${row.id} · ${display} (edited both sides).`, "conflict");
       result.conflicts += 1;
     }
-    if (Object.keys(apply).length > 0 || clearedDirty.length > 0) {
+    const applyInbound = async () => {
       const nextDirty = row.dirty_fields.filter((f) => !clearedDirty.includes(f) && !(f in apply));
       const nextAttr = { ...row.field_attribution };
       for (const f of clearedDirty) delete nextAttr[f];
@@ -930,6 +930,38 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
         });
       } else {
         await write();
+      }
+    };
+    if (Object.keys(apply).length > 0 || clearedDirty.length > 0) {
+      try {
+        await applyInbound();
+      } catch (err) {
+        // updateEntity re-reads the row under its lock: a cancel that committed after
+        // this pull's snapshot refuses the inbound stage move. Raise a Sync conflict
+        // (never a silent reopen) and still apply the remaining fields (TASK-2529).
+        if (!(err instanceof ApiError) || err.code !== "reopen_required") throw err;
+        const requested = apply.stage;
+        delete apply.stage;
+        const idx = clearedDirty.indexOf("stage");
+        if (idx >= 0) clearedDirty.splice(idx, 1);
+        const note = "Moved out of Cancelled in SharePoint; reopening needs task.reopen in Mission Control, so the Status was not applied.";
+        await repo.insertConflict({
+          id: `cf-${row.id.toLowerCase()}-stage-${Date.now()}`,
+          entityType: type,
+          entityId: row.id,
+          field: displayFieldFor(type, "stage") ?? "stage",
+          mcVal: displayValue("cancelled"),
+          spVal: displayValue(requested),
+          by: SYNC_ACTOR,
+          note,
+        });
+        await repo.updateEntity(type, row.id, {
+          syncState: "conflict",
+          syncExtras: { wsVal: displayValue("cancelled"), spVal: displayValue(requested) },
+        });
+        await repo.appendAudit(SYNC_ACTOR, `Conflict detected on ${row.id} · ${displayFieldFor(type, "stage") ?? "stage"} (edited both sides).`, "conflict");
+        result.conflicts += 1;
+        if (Object.keys(apply).length > 0 || clearedDirty.length > 0) await applyInbound();
       }
       if (Object.keys(apply).length > 0) {
         await repo.appendAudit(
@@ -1753,12 +1785,18 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
     // Keep-SP must not reopen a cancelled task: that needs task.reopen (TASK-2529).
     if (subject === "task" && mcField === "stage" && entityRow?.data.stage === "cancelled" && value !== "cancelled") return false;
     if (entityRow) {
-      await repo.updateEntity(subject as EntityType, conflict.entityId, {
-        patch: { [mcField]: value },
-        syncState: remainingDirty.length > 0 ? "pending" : "synced",
-        dirtyFields: remainingDirty,
-        fieldAttribution: attribution,
-      });
+      try {
+        await repo.updateEntity(subject as EntityType, conflict.entityId, {
+          patch: { [mcField]: value },
+          syncState: remainingDirty.length > 0 ? "pending" : "synced",
+          dirtyFields: remainingDirty,
+          fieldAttribution: attribution,
+        });
+      } catch (err) {
+        // The row was cancelled after entityRow was read: the locked write refused it.
+        if (err instanceof ApiError && err.code === "reopen_required") return false;
+        throw err;
+      }
     } else if (planningRow) {
       await updatePlanningConflictRow(planningRow, {
         patch: { [mcField]: value },

@@ -776,6 +776,7 @@ export async function patchTask(
     patch: dataPatch,
     completedAt: opts.completedAt,
     cancellation: opts.cancellation,
+    reopen: opts.reopen,
     // Person columns are pushed now (Item 1), so a person-only patch re-queues
     // the entity for the next outbound sweep.
     syncState: pushedDirty.length > 0 ? "pending" : undefined,

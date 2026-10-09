@@ -192,10 +192,20 @@ export async function updateEntity(
     // Omitted otherwise: every other write preserves the column, and leaving
     // `cancelled` clears it.
     cancellation?: Cancellation;
+    // Set only by the reopen service: the one caller allowed to move a cancelled
+    // task to another stage.
+    reopen?: boolean;
   },
   q: TxQuery = query
 ): Promise<void> {
-  const row = await getEntity(type, id, q);
+  // A stage write on a task locks the row and validates against the locked state in
+  // one transaction, so no caller can act on a stale read and clear a cancellation
+  // that committed in between (TASK-2529).
+  const locksStage = type === "task" && opts.patch?.stage !== undefined;
+  if (locksStage && q === query) {
+    return withTransaction((tx) => updateEntity(type, id, opts, tx));
+  }
+  const row = await getEntity(type, id, q, locksStage);
   if (!row) return;
   const data = { ...row.data, ...(opts.patch ?? {}) };
   delete data.completedAt; // column is the source of truth; never persist into jsonb
@@ -222,6 +232,9 @@ export async function updateEntity(
   const wasCancelled = row.data.stage === "cancelled";
   const entersCancelled = type === "task" && nextStage === "cancelled" && !wasCancelled;
   const leavesCancelled = type === "task" && wasCancelled && nextStage !== undefined && nextStage !== "cancelled";
+  if (leavesCancelled && !opts.reopen) {
+    throw new ApiError("reopen_required", `${id} is cancelled; it can only leave that stage through the reopen service (task.reopen).`, 409);
+  }
   if (entersCancelled && !opts.cancellation) {
     throw new ApiError(
       "invalid_request",

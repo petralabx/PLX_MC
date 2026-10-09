@@ -863,3 +863,14 @@
 - **Rule going forward:** Mock external APIs with their real omission behaviour,
   enumerate every writer of a column (create, inbound, backfill) before calling a
   write rule done, and never infer a transition without a known previous state.
+
+## 2026-10-09 — Cancel guards must live where the write happens (TASK-2529)
+
+- **What went wrong:** The reopen guard was fixed on `patchTask` only. Inbound
+  sync and conflict keep-SP checked a snapshot read earlier, so a cancel that
+  committed in between was cleared by `updateEntity` without `task.reopen`.
+- **Root cause:** The invariant was enforced per caller on stale reads, not at the
+  single write path under the row lock.
+- **Rule going forward:** Enforce a state-transition invariant inside the one
+  function that writes it, on a row read `FOR UPDATE` in the same transaction;
+  callers translate the refusal (e.g. into a Sync conflict).

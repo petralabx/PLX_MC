@@ -186,7 +186,11 @@ export async function openSidebar(page: Page, label: string): Promise<void> {
     await adminToggle.click();
     await expect(adminToggle).toHaveAttribute("aria-expanded", "true");
   }
-  await nav.locator(".item", { hasText: label }).first().click();
+  // Prefer the item whose label is exactly `label` ("Board", not "Dashboard"),
+  // then fall back to a substring match ("Sync" → "SharePoint sync issues").
+  const exact = nav.locator(".item").filter({ has: page.locator(".nm").getByText(label, { exact: true }) });
+  const target = (await exact.count()) > 0 ? exact : nav.locator(".item", { hasText: label });
+  await target.first().click();
 }
 
 // A sidebar link inside one labelled nav group ("My work", "Plan",

@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-09 (ET) — A Claude dashboard over PLX-MC-Hub rendered blank for its reader
+
+- **What happened:** A claude.ai Dashboard artifact (the PLX Project Tracker) stored live queries on `PLX-MC-Hub`. In the reader's browser every source came back "absent" and the page showed nothing.
+- **Root cause:** `PLX-MC-Hub` is this repo's project `.mcp.json` server (API-key header), which only Claude Code sessions load. An artifact can call only the viewer's own claude.ai connectors, and the Hub cannot be one until it has an OAuth front door (TASK-1463).
+- **Rule going forward:** Before wiring an artifact to live data, confirm the connector exists on the viewer's claude.ai account, not just in the session. For Mission Control data, use the in-app Dashboard (TASK-2565), or save results into the artifact and say on it that they are not live.
+
 ### 2026-10-09 (ET) — Live release identity followed the wrong database source
 
 - **What happened:** The live plan from #289/#292 targeted a staging database at migration 030 that production does not use. Docs named the wrong source, and the guard hard-coded the staging host.

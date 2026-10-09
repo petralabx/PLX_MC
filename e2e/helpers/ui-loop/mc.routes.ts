@@ -12,6 +12,7 @@ export const mcShellRoutes = [
     sidebar: "Approvals",
     testId: "approvals-screen",
   },
+  { path: "/?screen=dashboard", name: "dashboard", sidebar: "Dashboard", testId: "dashboard-screen" },
   { path: "/", name: "board", sidebar: "Board", testId: "board-screen" },
   { path: "/", name: "insights", sidebar: "Insights", testId: "insights-screen" },
   { path: "/", name: "ai-spend", sidebar: "AI Spend", testId: "ai-spend-screen" },

@@ -1,0 +1,407 @@
+/* Dashboard screen (TASK-2565) — imported into the mc.screens layer (ADR-005):
+   phone-first, wider tiers by @container main, hover under (hover: hover),
+   --p-* tokens only, nothing moves. The KPI strip, chart cards and bar list come
+   from the Insights lane (mc-charts.css) through the .insights wrapper; this
+   file adds the progress rows, bucket groups, filters and the task table. */
+
+.mc .dash {
+  padding: 18px var(--p-gutter) 80px;
+  max-width: calc(var(--p-content-max) + 2 * var(--p-gutter));
+}
+
+/* Card headings are real headings here; keep the Insights title look. */
+.mc .dash h2.chartcard-title {
+  margin: 0 0 6px;
+  font-weight: 400;
+}
+
+.mc .dash .dash-note {
+  margin: 0 0 12px;
+  max-width: var(--p-read-max);
+  font-size: var(--p-text-small);
+  line-height: 1.5;
+  color: var(--p-muted);
+}
+
+.mc .dash .dash-empty {
+  margin: 0;
+  padding: 12px 0;
+  font-size: var(--p-text-small);
+  color: var(--p-muted);
+}
+
+/* ─── Needs attention ─────────────────────────────────────────────────────── */
+.mc .dash .dash-attn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.mc .dash .dash-attn .lbl {
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .dash .dash-attn button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  font-size: var(--p-text-small);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mc .dash .dash-attn button[aria-pressed="true"] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+}
+
+/* ─── KPI additions: a progress bar and a sub-line under the label ────────── */
+.mc .dash .kpi .dash-sub {
+  font-size: var(--p-text-small);
+  color: var(--p-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.mc .dash .kpi .dash-sub .warn {
+  color: var(--p-warn-text);
+}
+
+.mc .dash .kpi .dash-sub .hot {
+  color: var(--p-hot-text);
+}
+
+/* ─── Progress bar (the project overview's thin track) ────────────────────── */
+.mc .dash .dash-bar {
+  display: block;
+  height: 4px;
+  min-width: 48px;
+  border-radius: 2px;
+  background: var(--p-grid-2);
+  overflow: hidden;
+}
+
+.mc .dash .dash-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--p-accent);
+}
+
+/* ─── Card grid: one column, then projects beside stages + attention ──────── */
+.mc .dash .dash-grid,
+.mc .dash .dash-side {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+}
+
+@container main (min-width: 64rem) {
+  .mc .dash .dash-grid {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  }
+}
+
+/* ─── Progress rows (projects and buckets) ────────────────────────────────── */
+.mc .dash .dash-rows {
+  display: grid;
+  gap: 2px;
+}
+
+/* A fixed right column keeps every bar the same length, so rows compare. */
+.mc .dash .dash-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5rem;
+  grid-template-areas:
+    "nm pill"
+    "bar pct"
+    "meta meta";
+  align-items: center;
+  gap: 6px 12px;
+  width: 100%;
+  padding: 10px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--p-radius-sm);
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mc .dash .dash-row[aria-pressed="true"] {
+  border-color: var(--p-accent);
+  background: var(--p-accent-soft);
+}
+
+.mc .dash .dash-row .nm {
+  grid-area: nm;
+  min-width: 0;
+  font-size: var(--p-text-lede);
+  overflow-wrap: anywhere;
+}
+
+.mc .dash .dash-row .pill {
+  grid-area: pill;
+  justify-self: end;
+}
+
+.mc .dash .dash-row .dash-bar {
+  grid-area: bar;
+}
+
+.mc .dash .dash-row .pct {
+  grid-area: pct;
+  justify-self: end;
+  min-width: 4ch;
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.mc .dash .dash-row .meta {
+  grid-area: meta;
+  font-size: var(--p-text-small);
+  color: var(--p-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Bucket groups: one column, two when there is room ───────────────────── */
+.mc .dash .dash-groups {
+  display: grid;
+  gap: 18px;
+}
+
+@container main (min-width: 64rem) {
+  .mc .dash .dash-groups:not(.single) {
+    display: block;
+    columns: 2;
+    column-gap: 28px;
+  }
+  .mc .dash .dash-groups:not(.single) .dash-group {
+    break-inside: avoid;
+    margin-bottom: 18px;
+  }
+}
+
+.mc .dash .dash-group-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 8px 6px;
+  border-bottom: 1px solid var(--p-grid);
+  margin-bottom: 4px;
+}
+
+.mc .dash .dash-group-h h3 {
+  margin: 0;
+  font-size: var(--p-text-lede);
+  font-weight: 500;
+  color: var(--p-ink);
+}
+
+/* ─── Filters ─────────────────────────────────────────────────────────────── */
+.mc .dash .dash-focus,
+.mc .dash .dash-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.mc .dash .dash-focus {
+  margin-top: 12px;
+}
+
+.mc .dash .dash-tools {
+  margin-bottom: 12px;
+}
+
+.mc .dash .dash-search {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 26rem;
+  min-height: var(--p-touch);
+  padding: 6px 10px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper);
+  color: var(--p-ink);
+  font: inherit;
+  font-size: var(--p-text-small);
+}
+
+.mc .dash .dash-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid var(--p-accent);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-accent-soft);
+  color: var(--p-ink);
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* ─── Remaining tasks table ───────────────────────────────────────────────── */
+.mc .dash .dash-table-wrap {
+  max-height: 32rem;
+  overflow: auto;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+}
+
+.mc .dash .dash-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--p-text-small);
+}
+
+.mc .dash .dash-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0;
+  border-bottom: 1px solid var(--p-grid);
+  background: var(--p-card);
+  text-align: left;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.mc .dash .dash-table th button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--p-muted);
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mc .dash .dash-table th[aria-sort] button {
+  color: var(--p-ink);
+}
+
+.mc .dash .dash-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--p-grid);
+  vertical-align: top;
+}
+
+.mc .dash .dash-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.mc .dash .dash-table .c-id {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+
+.mc .dash .dash-table td.c-title {
+  min-width: 12rem;
+}
+
+.mc .dash .dash-table td:is(.c-bucket, .c-project) {
+  min-width: 9rem;
+}
+
+.mc .dash .dash-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Phone: task, title, stage and priority; bucket and project join when wider. */
+.mc .dash .dash-table .c-bucket,
+.mc .dash .dash-table .c-project {
+  display: none;
+}
+
+@container main (min-width: 48rem) {
+  .mc .dash .dash-table .c-bucket,
+  .mc .dash .dash-table .c-project {
+    display: table-cell;
+  }
+}
+
+/* ─── Notes ───────────────────────────────────────────────────────────────── */
+.mc .dash .dash-notes {
+  max-width: var(--p-read-max);
+  font-size: var(--p-text-small);
+  line-height: 1.5;
+  color: var(--p-muted);
+}
+
+.mc .dash .dash-notes h2 {
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: var(--p-text-kicker);
+  font-weight: 400;
+  letter-spacing: var(--p-track-meta);
+  text-transform: uppercase;
+  color: var(--p-ink);
+}
+
+.mc .dash .dash-notes ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* ─── Interaction states ──────────────────────────────────────────────────── */
+.mc .dash :is(.dash-row, .dash-attn button, .dash-filter, .dash-link, .dash-table th button):focus-visible,
+.mc .dash .dash-search:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .mc .dash .dash-row:hover,
+  .mc .dash .dash-attn button:hover {
+    background: var(--p-paper-2);
+  }
+  .mc .dash .dash-row[aria-pressed="true"]:hover,
+  .mc .dash .dash-attn button[aria-pressed="true"]:hover {
+    background: var(--p-accent-soft);
+  }
+  .mc .dash .dash-link:hover {
+    color: var(--p-accent);
+    text-decoration: underline;
+  }
+  .mc .dash .dash-table th button:hover {
+    color: var(--p-ink);
+  }
+  .mc .dash .dash-filter:hover {
+    border-color: var(--p-ink);
+  }
+}

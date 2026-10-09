@@ -21,7 +21,7 @@ export type NavList = "projects" | "initiatives";
  * components in nav-icon.tsx so this model stays React-free.
  */
 export type NavIconName =
-  | "House" | "CircleUser" | "SquareCheck" | "SquareKanban" | "List" | "CalendarRange" | "ChartPie"
+  | "House" | "LayoutDashboard" | "CircleUser" | "SquareCheck" | "SquareKanban" | "List" | "CalendarRange" | "ChartPie"
   | "BookOpen" | "ClipboardList" | "Wrench" | "Network" | "CircleHelp" | "GitBranch" | "Activity"
   | "File" | "RefreshCw" | "FileText" | "CircleDollarSign" | "Grid3x3" | "Radio" | "Inbox" | "Route"
   | "Ellipsis";
@@ -61,6 +61,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: "My work",
     items: [
       { screen: "home", label: "Home", icon: "⌂", lucide: "House", hint: "what needs me", badge: "needs" },
+      { screen: "dashboard", label: "Dashboard", icon: "▤", lucide: "LayoutDashboard", hint: "project and initiative progress" },
       { screen: "mine", label: "My tasks", icon: "☉", lucide: "CircleUser" },
       { screen: "approvals", label: "Approvals", icon: "✓", lucide: "SquareCheck", badge: "approvals" },
     ],

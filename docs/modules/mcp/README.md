@@ -67,6 +67,49 @@ return `ambiguous_checkout_ref`. A release never touches the task. A PR reopen
 undoes only a `merged`/`closed` release, never a manual one. SOP:
 `docs/AGENT-PR-SOP.md` (Ledger hygiene).
 
+**Cancelled end stage (TASK-2529):** `cancelled` is a task stage for work that
+will never ship. It is terminal (`TERMINAL_STAGES`) but is never "done": it is
+excluded from open/remaining counts (dashboard, project and bucket progress,
+`mc_get_context` active counts, `mc_suggest_work` candidates) and never counts as
+merged or verified. The reason lives in `entities.cancellation` (column from
+migration 033; task rows only):
+`{reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy: TASK-n|null, cancelledAt, cancelledBy, note?}`.
+Like `completedAt`, `mc_get_task`, `mc_get_context` `depth:full` and
+`mc_search_tasks` (`stage=cancelled` works) return it as `cancellation`; it is never
+stored in the jsonb payload.
+
+- Cancel: `mc_update_task({taskId, patch:{cancel:{reason, replacedBy?, note?}}})`
+  or `mc_report_progress({taskId, stage:"cancelled", cancelReason, replacedBy?, note?})`.
+  `reason` is required and must be in the enum; `duplicate` and `superseded`
+  require `replacedBy`, which must be an existing, different `TASK-n`. One
+  transaction (`src/lib/sync/cancel.ts`) locks the row, sets the stage, writes
+  `cancellation`, stamps `completed_at` (write-once) and appends `task.cancelled`
+  (reason, replacedBy, previousStage, cancelledBy). `cancel` and `reopen` cannot
+  be combined with other patch fields, so cancelling an old unlabeled task needs
+  no lane label.
+- Reopen: `patch:{reopen:{stage?, note?}}`. Default stage is the one before the
+  cancel (from the latest `task.cancelled` event, else `backlog`); terminal
+  stages are refused. It sets `cancellation` to NULL, leaves `completed_at`
+  untouched and appends `task.reopened`. Cancelling again writes a new object.
+- Who: cancel needs `task.cancel` and reopen `task.reopen`, evaluated on the
+  authenticated principal (`requireMcpActor`; capabilities from
+  `src/lib/permissions/grants.ts`). `X-MC-Operator-Email` is audit context only
+  and never authorizes. Human admin/owner roles hold both; no service principal
+  does until an operator grants one, and the shared agent bundle never carries
+  them. No checkout is needed. Anyone else gets 403 and a
+  `task.cancel_denied` / `task.reopen_denied` event.
+- `mc_report_progress` on a cancelled task (other than notes/subtasks) returns
+  `task_cancelled`: it never silently reopens. `mc_checkout_task` refuses a
+  cancelled task (`task_cancelled`, 409). A PR that references a cancelled task
+  passes the compliance check with a `warning:` reason and the projection records
+  `task.promotion_skipped` instead of promoting it.
+- Generic writes (REST PATCH, JSON saves, SharePoint re-sync) never write the
+  column: `updateEntity` preserves it, refuses `stage: cancelled` without a
+  validated object, and clears it when a task leaves `cancelled` by any path.
+- Rollback: run `scripts/reopen-cancelled-tasks.mjs --env uat|staging --approved-db database@host` (dry run;
+  `--apply` writes) BEFORE reverting the code PR; the `cancellation` column
+  stays until task 2528's down migration.
+
 **Task metadata edits (TASK-2328):** `mc_update_task({taskId, patch})` and
 `mc_update_tasks({items:[{taskId, patch}]})` share
 `src/lib/mcp/task-update-actions.ts`. Both HTTP MCP and stdio support them;
@@ -100,7 +143,8 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   `urgent | high | medium | low`.
 - Empty patches and unknown fields are rejected, including all stage,
   Verified, evidence and checkout fields, at the root and within `patch`.
-  The tools never change stage, evidence or checkouts.
+  The tools never change evidence or checkouts, and change stage only through
+  `cancel` / `reopen` (next section).
 - Auth: existing MCP key/operator checks, `task.progress` and the task's
   restricted-project ACL. **Hub only**: the portal/consumer principal remains
   excluded by its existing tool allowlist; no capability grants were added.

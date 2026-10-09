@@ -10,6 +10,7 @@ import {
   PRIORITY,
   approvalEvidenceRef,
   hasHumanAccountableOwner,
+  isClosedStage,
   pendingApprovalGates,
   tasksForUser,
   type Human,
@@ -106,7 +107,7 @@ export function overdueFor(viewer: Pick<Human, "id">, tasks: Task[], todayDay: n
 }
 
 const PRIORITY_RANK = Object.keys(PRIORITY);
-const isDone = (t: Task) => t.stage === "merged" || t.stage === "verified";
+const isDone = (t: Task) => isClosedStage(t.stage); // done or cancelled: no longer needs anyone
 
 /** Open tasks with no human accountable owner — owners/admins only (null otherwise). */
 export function unownedTasks(viewer: Pick<Human, "role">, tasks: Task[]): Task[] | null {

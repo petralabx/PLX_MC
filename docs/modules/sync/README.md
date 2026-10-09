@@ -58,6 +58,20 @@ Routing mutations fail closed when required registers are stale.
   (`PLX_MC_GRAPH_NOTIFICATION_INLINE_DRAIN`, default on when the webhook is
   enabled; =0 falls back to the hourly cron drain). Edit-to-UI target <60s;
   the 5-minute sweep remains the correctness recovery path.
+- **Cancelled stage (TASK-2529)**: ToDos `Status` gains `Cancelled`, and two
+  columns mirror `entities.cancellation`: `CancelReason` (choice: Duplicate,
+  Obsolete, Superseded, Delivered without PR) and `ReplacedBy` (text, `TASK-n`).
+  Outbound writes them with `Status` while cancelled; a reopen marks
+  `cancellation` dirty so both are cleared on the next push. Inbound, an edit to
+  `Cancelled` is validated like `mc_update_task cancel` (`inboundCancellation`):
+  valid → stage and `cancellation` are applied together; invalid (missing/unknown
+  reason, duplicate or superseded without `ReplacedBy`, unknown `ReplacedBy`) →
+  the stage is NOT applied and a Sync conflict is raised; keep-SharePoint on that
+  conflict is refused (`parseFieldValue`). A new row cannot be adopted already
+  Cancelled. Provisioning: `scripts/provision-sharepoint.py --apply` creates the
+  two columns and appends the missing `Cancelled` choice to the existing `Status`
+  column (never removes a choice) — run it BEFORE deploying, or pushes of
+  cancelled tasks are rejected by Graph.
 - **Task completion date (TASK-2528)**: `entities.completed_at` (task rows only;
   CHECK-enforced) is stamped once by `updateEntity` on the first move from a
   non-terminal into a terminal stage (`TERMINAL_STAGES`, `src/lib/mc-data/policy.ts`)

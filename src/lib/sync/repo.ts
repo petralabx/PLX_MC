@@ -20,6 +20,8 @@ import type {
   Task,
 } from "@/lib/mc-data/types";
 import { TERMINAL_STAGES } from "@/lib/mc-data/policy";
+import type { Cancellation } from "@/lib/mc-data/cancellation";
+import { ApiError } from "@/lib/api/route";
 import type {
   EntityData,
   EntityType,
@@ -64,17 +66,25 @@ function parseAttribution(raw: unknown): Record<string, FieldAttribution> {
   return out;
 }
 
-// completed_at is the source of truth for task completion (TASK-2528). It is
-// merged into the in-memory task as `completedAt` on read and never persisted
-// back into the jsonb payload (updateEntity strips it) — no drift between the two.
-function withCompletedAt(
+// completed_at and cancellation are the source of truth for task completion
+// (TASK-2528) and cancellation (TASK-2529). Both are merged into the in-memory
+// task on read and never persisted back into the jsonb payload (updateEntity
+// strips them) — no drift between the column and the payload.
+function withTaskColumns(
   type: EntityType,
   data: EntityData,
-  completedAt: Date | string | null | undefined
+  completedAt: Date | string | null | undefined,
+  cancellation: Cancellation | null | undefined
 ): EntityData {
-  if (type !== "task" || completedAt == null) return data;
-  const iso = completedAt instanceof Date ? completedAt.toISOString() : new Date(completedAt).toISOString();
-  return { ...data, completedAt: iso };
+  if (type !== "task") return data;
+  const out: EntityData = { ...data };
+  delete out.completedAt;
+  delete out.cancellation;
+  if (completedAt != null) {
+    out.completedAt = completedAt instanceof Date ? completedAt.toISOString() : new Date(completedAt).toISOString();
+  }
+  if (cancellation != null) out.cancellation = cancellation;
+  return out;
 }
 
 export async function entityCount(): Promise<number> {
@@ -92,9 +102,10 @@ export async function getEntities(type?: EntityType): Promise<EntityRow[]> {
     dirty_fields: string[];
     field_attribution: unknown;
     completed_at: Date | string | null;
+    cancellation: Cancellation | null;
   }>(
     `SELECT entity_type, id, data, sync_state, sp_item_id, dirty_fields,
-            COALESCE(field_attribution, '{}'::jsonb) AS field_attribution, completed_at
+            COALESCE(field_attribution, '{}'::jsonb) AS field_attribution, completed_at, cancellation
        FROM entities
       WHERE $1::text IS NULL OR entity_type = $1
       ORDER BY id`,
@@ -103,7 +114,7 @@ export async function getEntities(type?: EntityType): Promise<EntityRow[]> {
   return rows.map((r) => ({
     entity_type: r.entity_type,
     id: r.id,
-    data: withCompletedAt(r.entity_type, r.data, r.completed_at),
+    data: withTaskColumns(r.entity_type, r.data, r.completed_at, r.cancellation),
     sync_state: r.sync_state,
     sp_item_id: r.sp_item_id,
     dirty_fields: r.dirty_fields,
@@ -126,9 +137,10 @@ export async function getEntity(
     dirty_fields: string[];
     field_attribution: unknown;
     completed_at: Date | string | null;
+    cancellation: Cancellation | null;
   }>(
     `SELECT entity_type, id, data, sync_state, sp_item_id, dirty_fields,
-            COALESCE(field_attribution, '{}'::jsonb) AS field_attribution, completed_at
+            COALESCE(field_attribution, '{}'::jsonb) AS field_attribution, completed_at, cancellation
        FROM entities WHERE entity_type = $1 AND id = $2${forUpdate ? " FOR UPDATE" : ""}`,
     [type, id]
   );
@@ -137,7 +149,7 @@ export async function getEntity(
   return {
     entity_type: r.entity_type,
     id: r.id,
-    data: withCompletedAt(r.entity_type, r.data, r.completed_at),
+    data: withTaskColumns(r.entity_type, r.data, r.completed_at, r.cancellation),
     sync_state: r.sync_state,
     sp_item_id: r.sp_item_id,
     dirty_fields: r.dirty_fields,
@@ -176,13 +188,28 @@ export async function updateEntity(
     // Time to record if this patch moves a task from a non-terminal into a
     // terminal stage (default: now). Ignored otherwise (TASK-2528).
     completedAt?: string;
+    // Cancellation object to store on first entry into `cancelled` (TASK-2529).
+    // Omitted otherwise: every other write preserves the column, and leaving
+    // `cancelled` clears it.
+    cancellation?: Cancellation;
+    // Set only by the reopen service: the one caller allowed to move a cancelled
+    // task to another stage.
+    reopen?: boolean;
   },
   q: TxQuery = query
 ): Promise<void> {
-  const row = await getEntity(type, id, q);
+  // Every task write reads the row FOR UPDATE and merges onto it in one transaction,
+  // so no caller (stage or not) can write back a stale payload over a stage or
+  // cancellation that committed in between (TASK-2529).
+  const locks = type === "task";
+  if (locks && q === query) {
+    return withTransaction((tx) => updateEntity(type, id, opts, tx));
+  }
+  const row = await getEntity(type, id, q, locks);
   if (!row) return;
   const data = { ...row.data, ...(opts.patch ?? {}) };
   delete data.completedAt; // column is the source of truth; never persist into jsonb
+  delete data.cancellation;
   // Every stage change — UI, MCP, projection, SharePoint inbound — lands here, so
   // this is the one place completion is stamped. The UPDATE below is write-once
   // (COALESCE): a bounce back into a terminal stage never moves an existing date.
@@ -198,6 +225,27 @@ export async function updateEntity(
   const dirtyFields = firstCompletion
     ? [...new Set([...(opts.dirtyFields ?? row.dirty_fields), "completedAt"])]
     : opts.dirtyFields;
+  // cancellation <=> stage cancelled. This is the one write path (UI, MCP,
+  // SharePoint inbound, conflict keep-SP), so the invariant is held here: entering
+  // cancelled needs a validated object, leaving it clears the column, and a
+  // generic rewrite of an already-cancelled task leaves the column untouched.
+  const wasCancelled = row.data.stage === "cancelled";
+  const entersCancelled = type === "task" && nextStage === "cancelled" && !wasCancelled;
+  const leavesCancelled = type === "task" && wasCancelled && nextStage !== undefined && nextStage !== "cancelled";
+  if (leavesCancelled && !opts.reopen) {
+    throw new ApiError("reopen_required", `${id} is cancelled; it can only leave that stage through the reopen service (task.reopen).`, 409);
+  }
+  if (entersCancelled && !opts.cancellation) {
+    throw new ApiError(
+      "invalid_request",
+      `${id} cannot enter the cancelled stage without a cancellation reason; use mc_update_task cancel or mc_report_progress cancelReason.`,
+      400
+    );
+  }
+  if (opts.cancellation && !entersCancelled) {
+    throw new ApiError("invalid_request", `${id}: cancellation is only written when a task enters the cancelled stage.`, 400);
+  }
+  const writeCancellation = entersCancelled || leavesCancelled;
   const prevSync = (row.data.sync ?? {}) as Record<string, unknown>;
   const nextState = opts.syncState ?? (firstCompletion && row.sync_state === "synced" ? "pending" : row.sync_state);
   const sync: Record<string, unknown> = {
@@ -240,6 +288,9 @@ export async function updateEntity(
             completed_at = CASE WHEN entity_type = 'task'
                                 THEN COALESCE(completed_at, $9::timestamptz)
                                 ELSE completed_at END,
+            cancellation = CASE WHEN entity_type = 'task' AND $10::boolean
+                                THEN $11::jsonb
+                                ELSE cancellation END,
             updated_at = now()
       WHERE entity_type = $1 AND id = $2`,
     [
@@ -252,6 +303,8 @@ export async function updateEntity(
       dirtyFields || opts.fieldAttribution ? JSON.stringify(attribution) : null,
       opts.clearSpItemId === true,
       entersTerminal ? (opts.completedAt ?? new Date().toISOString()) : null,
+      writeCancellation,
+      entersCancelled ? JSON.stringify(opts.cancellation) : null,
     ]
   );
 }
@@ -780,8 +833,8 @@ const toRepoWithSync = (r: RepoRow): RepoWithSync => ({
   spItemId: r.sp_item_id,
 });
 
-export async function getRepos(): Promise<RepoWithSync[]> {
-  const rows = await query<RepoRow>(
+export async function getRepos(q: TxQuery = query): Promise<RepoWithSync[]> {
+  const rows = await q<RepoRow>(
     `SELECT id, name, lang, def_branch, owner, visibility, scope, sync_state, sp_item_id
        FROM repos ORDER BY id`
   );

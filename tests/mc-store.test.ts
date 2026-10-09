@@ -247,6 +247,13 @@ describe("patchTaskFields (the shared mutation spine)", () => {
     expect(JSON.stringify(taskById("TASK-221"))).toBe(before);
   });
 
+  it("refuses a drag/click into cancelled: a cancel needs a reason, so it says so and changes nothing (TASK-2529)", () => {
+    const before = taskById("TASK-221")?.stage;
+    setTaskStage("TASK-221", "cancelled");
+    expect(taskById("TASK-221")?.stage).toBe(before);
+    expect(activeNotices().some((n) => /mc_update_task/.test(n.body) && /reason is required/.test(n.body))).toBe(true);
+  });
+
   it("setTaskStage / setTaskPriority / setTaskBucket apply optimistically", () => {
     setTaskStage("TASK-221", "merged");
     setTaskPriority("TASK-221", "urgent");

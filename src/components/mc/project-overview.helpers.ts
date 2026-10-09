@@ -10,11 +10,18 @@ export interface InitiativeRollup {
   bucket: Bucket;
   tasks: Task[];
   done: number;
+  /** Tasks that still count toward progress: every task except cancelled (TASK-2529). */
+  total: number;
   pct: number;
 }
 
 export function isDoneStage(task: Task): boolean {
   return STAGES[STAGE_IDX[task.stage]].band === "done";
+}
+
+// Cancelled tasks drop out of open/remaining counts and progress denominators.
+export function isCountedStage(task: Task): boolean {
+  return task.stage !== "cancelled";
 }
 
 export function isDoingStage(task: Task): boolean {
@@ -26,17 +33,19 @@ export function isDoingStage(task: Task): boolean {
 export function rollupForProject(buckets: Bucket[], tasks: Task[]): InitiativeRollup[] {
   return buckets.map((bucket) => {
     const bucketTasks = tasks.filter((t) => t.bucket === bucket.id);
-    const done = bucketTasks.filter(isDoneStage).length;
-    const pct = bucketTasks.length > 0 ? Math.round((done / bucketTasks.length) * 100) : 0;
-    return { bucket, tasks: bucketTasks, done, pct };
+    const counted = bucketTasks.filter(isCountedStage);
+    const done = counted.filter(isDoneStage).length;
+    const pct = counted.length > 0 ? Math.round((done / counted.length) * 100) : 0;
+    return { bucket, tasks: bucketTasks, done, total: counted.length, pct };
   });
 }
 
 // Whole-project counts for the facts-strip progress cell.
 export function projectProgress(tasks: Task[]): { done: number; doing: number; total: number; pct: number } {
-  const done = tasks.filter(isDoneStage).length;
-  const doing = tasks.filter(isDoingStage).length;
-  const total = tasks.length;
+  const counted = tasks.filter(isCountedStage);
+  const done = counted.filter(isDoneStage).length;
+  const doing = counted.filter(isDoingStage).length;
+  const total = counted.length;
   return { done, doing, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
 }
 
@@ -45,6 +54,7 @@ export function projectProgress(tasks: Task[]): { done: number; doing: number; t
 export function stageChipTone(task: Task): "muted" | "info" | "acc" | "warn" | "ok" {
   const stage = STAGES[STAGE_IDX[task.stage]];
   if (stage.band === "done") return "ok";
+  if (stage.band === "cancelled") return "muted";
   if (stage.key === "qa") return "warn";
   if (stage.band === "doing") return "acc";
   if (stage.key === "backlog") return "muted";

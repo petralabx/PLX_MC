@@ -111,9 +111,13 @@ export async function searchTaskPage(filter: TaskSearchFilter, hiddenBuckets: st
         'bucket', data->'bucket', 'labels', COALESCE(data->'labels', '[]'::jsonb),
         'prs', COALESCE(data->'prs', '[]'::jsonb),
         'updatedAt', to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))`
-    : "data";
+    : "(data - 'cancellation')";
   const completionProjection = `CASE WHEN completed_at IS NOT NULL THEN jsonb_build_object('completedAt',
     to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) ELSE '{}'::jsonb END`;
+  // Cancellation lives in its own column (TASK-2529); merge it in like completedAt, full rows only.
+  const cancellationProjection = filter.fields === "compact"
+    ? ""
+    : ` || CASE WHEN cancellation IS NOT NULL THEN jsonb_build_object('cancellation', cancellation) ELSE '{}'::jsonb END`;
   const rows = await query<{
     total: string;
     at: string;
@@ -122,7 +126,7 @@ export async function searchTaskPage(filter: TaskSearchFilter, hiddenBuckets: st
   }>(`WITH horizon AS (
       SELECT COALESCE(${at}::timestamptz, statement_timestamp()) AS at
     ), filtered AS MATERIALIZED (
-      SELECT id, ${numericId} AS n, ${projection} || ${completionProjection}${matches.length ? ` || jsonb_build_object('matchFields', array_remove(ARRAY[${matches.join(", ")}], NULL))` : ""} AS task
+      SELECT id, ${numericId} AS n, ${projection} || ${completionProjection}${cancellationProjection}${matches.length ? ` || jsonb_build_object('matchFields', array_remove(ARRAY[${matches.join(", ")}], NULL))` : ""} AS task
       FROM entities, horizon
       WHERE ${where.join(" AND ")} AND created_at <= horizon.at
         ${upper ? `AND (${numericId}, id COLLATE "C") <= (${upper})` : ""}

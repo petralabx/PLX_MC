@@ -13,6 +13,10 @@
 
 import { ACTORS, BUCKETS, FILES, HUMANS, PROJECTS, REPOS, RISKS, SP_CONFLICTS, SP_ERRORS, TASKS } from "@/lib/mc-data/data";
 import type { Bucket, FileEntry, SyncState, Task } from "@/lib/mc-data/types";
+import type { Cancellation } from "@/lib/mc-data/cancellation";
+import { appendEventTx } from "@/lib/compliance/repo";
+import { withTransaction, type TxQuery } from "@/lib/db";
+import { inboundCancellation } from "./cancel-validate";
 import {
   isRestrictedProject,
   RESTRICTED_MIRROR_SP,
@@ -829,6 +833,39 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
         routingFields: type === "task" ? ROUTING_TASK_FIELDS : undefined,
       }
     );
+    // An inbound edit to Cancelled must carry a valid reason (TASK-2529). Otherwise
+    // the stage is not applied and the row raises a Sync conflict instead.
+    let inboundCancel: Cancellation | undefined;
+    if (type === "task" && "stage" in apply && apply.stage === "cancelled" && row.data.stage !== "cancelled") {
+      const verdict = await inboundCancellation(row.id, item.fields, SYNC_ACTOR);
+      if (verdict.ok) {
+        inboundCancel = verdict.cancellation;
+      } else {
+        delete apply.stage;
+        const idx = clearedDirty.indexOf("stage");
+        if (idx >= 0) clearedDirty.splice(idx, 1);
+        conflicts.push({
+          field: "stage",
+          mcVal: displayValue(row.data.stage),
+          spVal: displayValue("cancelled"),
+          note: `Set to Cancelled in SharePoint without a valid cancellation: ${verdict.error}`,
+        });
+      }
+    }
+    // Leaving Cancelled needs task.reopen on an authenticated principal, which an
+    // inbound edit does not carry: refuse it and raise a Sync conflict (TASK-2529).
+    if (type === "task" && row.data.stage === "cancelled" && "stage" in apply && apply.stage !== "cancelled") {
+      const requested = apply.stage;
+      delete apply.stage;
+      const idx = clearedDirty.indexOf("stage");
+      if (idx >= 0) clearedDirty.splice(idx, 1);
+      conflicts.push({
+        field: "stage",
+        mcVal: displayValue("cancelled"),
+        spVal: displayValue(requested),
+        note: "Moved out of Cancelled in SharePoint; reopening needs task.reopen in Mission Control, so the Status was not applied.",
+      });
+    }
     for (const ev of attributionEvents) {
       await repo.appendAudit(
         SYNC_ACTOR,
@@ -846,7 +883,7 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
         mcVal: c.mcVal,
         spVal: c.spVal,
         by: SYNC_ACTOR,
-        note: "Edited in SharePoint while Mission Control also changed it.",
+        note: c.note ?? "Edited in SharePoint while Mission Control also changed it.",
       });
       await repo.updateEntity(type, row.id, {
         syncState: "conflict",
@@ -855,16 +892,77 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Pr
       await repo.appendAudit(SYNC_ACTOR, `Conflict detected on ${row.id} · ${display} (edited both sides).`, "conflict");
       result.conflicts += 1;
     }
-    if (Object.keys(apply).length > 0 || clearedDirty.length > 0) {
+    const applyInbound = async () => {
       const nextDirty = row.dirty_fields.filter((f) => !clearedDirty.includes(f) && !(f in apply));
       const nextAttr = { ...row.field_attribution };
       for (const f of clearedDirty) delete nextAttr[f];
       for (const f of Object.keys(apply)) delete nextAttr[f];
-      await repo.updateEntity(type, row.id, {
-        patch: apply,
-        dirtyFields: nextDirty,
-        fieldAttribution: nextAttr,
-      });
+      const write = (q?: TxQuery) =>
+        repo.updateEntity(
+          type,
+          row.id,
+          {
+            patch: apply,
+            dirtyFields: nextDirty,
+            fieldAttribution: nextAttr,
+            cancellation: inboundCancel,
+          },
+          q
+        );
+      if (inboundCancel) {
+        // The cancel event carries the real previousStage that reopen restores from;
+        // it commits atomically with the stage + cancellation write.
+        await withTransaction(async (q) => {
+          await write(q);
+          await appendEventTx(q, {
+            kind: "task.cancelled",
+            actor: "runtime:sync",
+            taskId: row.id,
+            payload: {
+              source: "sharepoint",
+              reason: inboundCancel!.reason,
+              replacedBy: inboundCancel!.replacedBy,
+              previousStage: row.data.stage,
+              cancelledBy: SYNC_ACTOR,
+              note: inboundCancel!.note ?? null,
+            },
+          });
+        });
+      } else {
+        await write();
+      }
+    };
+    if (Object.keys(apply).length > 0 || clearedDirty.length > 0) {
+      try {
+        await applyInbound();
+      } catch (err) {
+        // updateEntity re-reads the row under its lock: a cancel that committed after
+        // this pull's snapshot refuses the inbound stage move. Raise a Sync conflict
+        // (never a silent reopen) and still apply the remaining fields (TASK-2529).
+        if (!(err instanceof ApiError) || err.code !== "reopen_required") throw err;
+        const requested = apply.stage;
+        delete apply.stage;
+        const idx = clearedDirty.indexOf("stage");
+        if (idx >= 0) clearedDirty.splice(idx, 1);
+        const note = "Moved out of Cancelled in SharePoint; reopening needs task.reopen in Mission Control, so the Status was not applied.";
+        await repo.insertConflict({
+          id: `cf-${row.id.toLowerCase()}-stage-${Date.now()}`,
+          entityType: type,
+          entityId: row.id,
+          field: displayFieldFor(type, "stage") ?? "stage",
+          mcVal: displayValue("cancelled"),
+          spVal: displayValue(requested),
+          by: SYNC_ACTOR,
+          note,
+        });
+        await repo.updateEntity(type, row.id, {
+          syncState: "conflict",
+          syncExtras: { wsVal: displayValue("cancelled"), spVal: displayValue(requested) },
+        });
+        await repo.appendAudit(SYNC_ACTOR, `Conflict detected on ${row.id} · ${displayFieldFor(type, "stage") ?? "stage"} (edited both sides).`, "conflict");
+        result.conflicts += 1;
+        if (Object.keys(apply).length > 0 || clearedDirty.length > 0) await applyInbound();
+      }
       if (Object.keys(apply).length > 0) {
         await repo.appendAudit(
           SYNC_ACTOR,
@@ -1684,6 +1782,8 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
   if (winner === "sp") {
     const value = parseFieldValue(subject, mcField, conflict.spVal);
     if (value === undefined) return false;
+    // Keep-SP must not reopen a cancelled task: that needs task.reopen (TASK-2529).
+    if (subject === "task" && mcField === "stage" && entityRow?.data.stage === "cancelled" && value !== "cancelled") return false;
     // Closed-project rule (TASK-2530): SharePoint cannot move work into a closed
     // project. Refuse before any write, leave the conflict open, and say why.
     const targetProjectId =
@@ -1708,12 +1808,18 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
       }
     }
     if (entityRow) {
-      await repo.updateEntity(subject as EntityType, conflict.entityId, {
-        patch: { [mcField]: value },
-        syncState: remainingDirty.length > 0 ? "pending" : "synced",
-        dirtyFields: remainingDirty,
-        fieldAttribution: attribution,
-      });
+      try {
+        await repo.updateEntity(subject as EntityType, conflict.entityId, {
+          patch: { [mcField]: value },
+          syncState: remainingDirty.length > 0 ? "pending" : "synced",
+          dirtyFields: remainingDirty,
+          fieldAttribution: attribution,
+        });
+      } catch (err) {
+        // The row was cancelled after entityRow was read: the locked write refused it.
+        if (err instanceof ApiError && err.code === "reopen_required") return false;
+        throw err;
+      }
     } else if (planningRow) {
       await updatePlanningConflictRow(planningRow, {
         patch: { [mcField]: value },

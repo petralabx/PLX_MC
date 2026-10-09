@@ -13,6 +13,7 @@ export const STATUS_COLOR_VAR: Record<Band, string> = {
   todo: "var(--p-info)",
   doing: "var(--p-warn)",
   done: "var(--p-ok)",
+  cancelled: "var(--p-muted)",
 };
 
 // Priority bars — mirrors PRIORITY[*].cls so the chart speaks the same visual

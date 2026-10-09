@@ -14,8 +14,14 @@ import type { ApprovalGate, StageKey, Task } from "./types";
 export const ACCOUNTABLE_GATE_STAGE: StageKey = "planned";
 
 // Terminal stages: first entry into any of these stamps entities.completed_at
-// (TASK-2528). ONE shared set — the cancelled stage (task 2529) adds 'cancelled' here.
-export const TERMINAL_STAGES: readonly StageKey[] = ["merged", "verified"];
+// (TASK-2528). ONE shared set; cancelled is terminal but never "done" (TASK-2529).
+export const TERMINAL_STAGES: readonly StageKey[] = ["merged", "verified", "cancelled"];
+
+// Stages that no longer count as open work: done or cancelled. Counts, suggestions
+// and sweeps use this one predicate so cancelled never reads as open.
+export function isClosedStage(stage: StageKey): boolean {
+  return TERMINAL_STAGES.includes(stage);
+}
 
 // Stages that mean "done" for the completion contract.
 const DONE_STAGES: StageKey[] = ["merged", "verified"];
@@ -82,6 +88,9 @@ export function stageAdvanceViolation(
   >,
   nextStage: StageKey
 ): string | null {
+  // Cancelling closes work; it needs no owner/approval and is validated by the
+  // cancel service (reason, replacedBy), not by the advance gates (TASK-2529).
+  if (nextStage === "cancelled") return null;
   const nextIdx = STAGE_IDX[nextStage];
   if (nextIdx > STAGE_IDX[ACCOUNTABLE_GATE_STAGE] && !hasHumanAccountableOwner(task)) {
     return `${task.id} needs a human accountable owner before it can move past Planned.`;

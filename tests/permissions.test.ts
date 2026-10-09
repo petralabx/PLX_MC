@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MCP_AGENT_SERVICE_PRINCIPAL_IDS,
   POLICY_VERSION,
   authorize,
   capabilitiesForRole,
@@ -54,6 +55,7 @@ describe("role grant matrix", () => {
       ],
       denied: [
         "task.reopen",
+        "task.cancel",
         "bucket.create",
         "bucket.update",
         "project.create",
@@ -74,6 +76,7 @@ describe("role grant matrix", () => {
         "task.create",
         "task.link",
         "task.reopen",
+        "task.cancel",
         "task.checkout",
         "task.progress",
         "task.complete",
@@ -96,6 +99,7 @@ describe("role grant matrix", () => {
         "task.create",
         "task.link",
         "task.reopen",
+        "task.cancel",
         "task.checkout",
         "task.progress",
         "task.complete",
@@ -189,6 +193,19 @@ describe("service-principal separation", () => {
       allowed: false,
       reasonCode: "capability_not_granted",
     });
+  });
+
+  it("task.cancel / task.reopen are human admin/owner only: no service principal holds them (TASK-2529)", () => {
+    for (const role of ["admin", "owner"] as const) {
+      expect(capabilitiesForRole(role)).toEqual(expect.arrayContaining(["task.cancel", "task.reopen"]));
+    }
+    expect(capabilitiesForRole("member")).not.toContain("task.cancel");
+    for (const id of MCP_AGENT_SERVICE_PRINCIPAL_IDS) {
+      expect(capabilitiesForServicePrincipal(id)).not.toContain("task.cancel");
+      expect(capabilitiesForServicePrincipal(id)).not.toContain("task.reopen");
+    }
+    expect(authorize({ actor: { kind: "service", id: "sp_mcp_cursor", status: "active" }, capability: "task.cancel" }))
+      .toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
   });
 
   it("grants only explicit MCP service capabilities", () => {

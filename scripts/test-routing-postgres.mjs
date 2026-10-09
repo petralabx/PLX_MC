@@ -705,6 +705,20 @@ async function assertCompletedAt(client, files) {
     `INSERT INTO entities (entity_type, id, data, completed_at)
      VALUES ('task', 'TASK-9001', '{}'::jsonb, '2026-07-23T12:00:00Z')`
   );
+  // Task search (src/lib/sync/task-search.ts) filters and projects the dedicated
+  // columns: a row with completed_at only in the column must match and merge.
+  await client.query(`UPDATE entities SET cancellation = '{"reason":"duplicate"}'::jsonb WHERE id = 'TASK-9001'`);
+  const searched = await client.query(
+    `SELECT (data - 'completedAt' - 'cancellation')
+        || CASE WHEN completed_at IS NOT NULL THEN jsonb_build_object('completedAt', to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) ELSE '{}'::jsonb END
+        || CASE WHEN cancellation IS NOT NULL THEN jsonb_build_object('cancellation', cancellation) ELSE '{}'::jsonb END AS task
+       FROM entities
+      WHERE entity_type = 'task' AND completed_at >= '2026-07-01'::timestamptz AND completed_at < '2026-08-01'::timestamptz`
+  );
+  const found = searched.rows[0]?.task;
+  if (searched.rowCount !== 1 || found.completedAt !== "2026-07-23T12:00:00.000Z" || found.cancellation?.reason !== "duplicate") {
+    throw new Error(`column-only completed_at/cancellation not searchable or merged: ${JSON.stringify(searched.rows)}`);
+  }
   for (const col of ["completed_at", "cancellation"]) {
     const value = col === "completed_at" ? "now()" : `'{"reason":"duplicate"}'::jsonb`;
     let rejected = false;

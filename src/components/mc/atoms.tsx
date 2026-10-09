@@ -3,7 +3,7 @@
 // SHARED ACROSS SCREEN LANES — extend only at integration, never per-lane.
 import type { CSSProperties, MouseEventHandler } from "react";
 
-import { ACTORS, PRIORITY, STAGES, STAGE_IDX, confidenceOf } from "@/lib/mc-data";
+import { ACTORS, PRIORITY, STAGES, STAGE_IDX, WORKFLOW_STAGES, confidenceOf } from "@/lib/mc-data";
 import type { Actor, Health, PriorityKey, SyncRef, Task } from "@/lib/mc-data";
 import { allRepos } from "@/lib/mc-data/store";
 
@@ -156,6 +156,7 @@ export function Priority({ p }: { p: PriorityKey }) {
 export function Spine({ task }: { task: Task }) {
   const idx = STAGE_IDX[task.stage];
   const cls = (i: number) => {
+    if (task.stage === "cancelled") return ""; // off the spine: no segment lit
     if (task.stage === "verified") return i <= idx ? "done" : "";
     if (i < idx) return "done";
     if (i === idx) return `now${task.blocked ? " blocked" : ""}`;
@@ -163,7 +164,7 @@ export function Spine({ task }: { task: Task }) {
   };
   return (
     <div className="spine" title={`${STAGES[idx].n} · ${STAGES[idx].name}`}>
-      {STAGES.map((s, i) => (
+      {WORKFLOW_STAGES.map((s, i) => (
         <span key={s.key} className={cls(i)} />
       ))}
     </div>

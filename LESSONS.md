@@ -22,6 +22,31 @@
 - **Root cause:** The database was judged by its host name ("staging") instead of evidence.
 - **Rule going forward:** Verify database identity by matching live evidence: recent production events/writes, active connections from the production app, and `system_identifier`. Never use host names or naming conventions to infer environment. The human-set `MC_LIVE_EXPECTED_IDENTITY` guard (`db@host#sysid`) stays as enforcement; plan reports MATCH/MISMATCH/UNSET.
 
+### 2026-10-07 (ET) — Backfill "non-production only" guard was a substring check
+
+- **What happened:** `backfill-task-completed-at.mjs` refused only URLs containing
+  `prod` plus a caller-supplied `--env` label. The runtime database (`plx_mc` on
+  `plx-postgres-staging`) has no `prod` in its credentials, so `--env staging
+  --apply` would have updated production (Astra P1).
+- **Root cause:** Environment was inferred from a label and a string pattern, not
+  verified against the database actually connected to.
+- **Rule going forward:** Any ops script that writes data requires an explicit
+  `--approved-db <database>@<host>` and calls `assertApprovedNonProdDb`
+  (`scripts/lib/db-identity.mjs`) before any read or write; URL and live
+  `current_database()` must both match, and the runtime DB is always refused.
+
+### 2026-10-07 (ET) — DB identity guard checked the URL authority, not the effective target
+
+- **What happened:** `postgres://u:p@uat/plx_mc?host=<runtime RDS>` passed approval
+  for `plx_mc@uat`, but `pg` connects to the `host` query parameter; the live
+  `current_database()` also matched, so `--apply` could reach the runtime DB (Astra P1).
+- **Root cause:** The guard validated the URL authority while the driver parsed the
+  whole URL (query overrides, `PG*` env) — validated target != connected target.
+- **Rule going forward:** Validate the effective target and connect from that same
+  object: refuse any query param except `sslmode`, multiple/socket hosts, and
+  `PGHOST`/`PGHOSTADDR`/`PGPORT`/`PGDATABASE`/`PGUSER`/`PGSERVICE`/`PGSERVICEFILE`;
+  build the client from `{host,port,database,user,password}`, never the raw URL.
+
 ### 2026-07-16 (ET) — Compliance failed because evidence lived only in the PR body
 
 - **What happened:** A stamped agent PR carried its summary, verification and
@@ -765,3 +790,18 @@
 - **What went wrong:** An inbound SharePoint bucket move refused by the guard only wrote an audit line, so the delta cursor advanced and a dirty local bucket could later overwrite SharePoint. The lane exception also checked only the label delta, so title/description/priority edits rode along with a closure label.
 - **Root cause:** A new inbound validation path refused silently instead of using the existing conflict register; an exception predicate was scoped to one field of the patch.
 - **Rule going forward:** Any inbound refusal of a SharePoint value records an open `sync_conflicts` row and sets the task `conflict` (outbound holds) — never audit-only. Exceptions to a validation rule must test the whole patch, not just the field they target.
+
+## 2026-10-08 — TASK-2528: hidden columns, terminal creates and outbound queueing
+- **What went wrong:** Hiding `CompletedAt` made Graph omit it from the column
+  listing (hidden columns need `hidden` in `$select`), so re-apply would recreate
+  it and `--verify` reported it missing. Stage writes also had side doors: a task
+  created straight into a terminal stage, an inbound SharePoint move and the
+  backfill set `completed_at` without queueing the outbound `CompletedAt` write,
+  and the backfill treated a terminal snapshot with no known previous stage as a
+  transition.
+- **Root cause:** Each fix was verified against the happy path only; the mocked
+  Graph returned every column regardless of `$select`, and only the UI/MCP stage
+  path was traced for write rules.
+- **Rule going forward:** Mock external APIs with their real omission behaviour,
+  enumerate every writer of a column (create, inbound, backfill) before calling a
+  write rule done, and never infer a transition without a known previous state.

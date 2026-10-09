@@ -58,6 +58,37 @@ Routing mutations fail closed when required registers are stale.
   (`PLX_MC_GRAPH_NOTIFICATION_INLINE_DRAIN`, default on when the webhook is
   enabled; =0 falls back to the hourly cron drain). Edit-to-UI target <60s;
   the 5-minute sweep remains the correctness recovery path.
+- **Task completion date (TASK-2528)**: `entities.completed_at` (task rows only;
+  CHECK-enforced) is stamped once by `updateEntity` on the first move from a
+  non-terminal into a terminal stage (`TERMINAL_STAGES`, `src/lib/mc-data/policy.ts`)
+  — covering UI, MCP, compliance projection (PR merge time) and SharePoint
+  inbound stage changes — and also at creation for a task created directly in a
+  terminal stage. It is write-once (`COALESCE`), merged into the task as
+  `completedAt` on read, and stripped from the jsonb payload on every write. The
+  ToDos `CompletedAt` column is outbound-only (not in `inboundPatches`), so a
+  SharePoint edit is ignored and never raises a conflict. A first population
+  (inbound move or backfill `--apply`) queues `completedAt` as an outbound dirty
+  field, so the next sweep writes only that column. The `cancellation`
+  column ships in the same migration for the cancelled-stage task. Existing rows
+  are filled by `scripts/backfill-task-completed-at.mjs` (dry run by default;
+  UAT/staging only; it dates a task only from a PR merge or an observed
+  transition from a known non-terminal stage, and lists the rest as unresolved).
+  Required: `--env uat|staging` (report label only) and
+  `--approved-db <database>@<host>`. Before any read or write the shared guard
+  `scripts/lib/db-identity.mjs` (`assertApprovedNonProdDb`) requires the URL
+  host/database and the live `current_database()` to equal `--approved-db`, and
+  always refuses the runtime database (`plx_mc` on `plx-postgres-staging*`).
+  **Deploy order:** at deploy, before this PR's code goes live, run
+  `scripts/provision-sharepoint.py` with MC's own sync identity (the same app
+  identity the sync engine uses, `MICROSOFT_GRAPH_*`; not a personal account),
+  first against /sites/plx-mission-control-dev (staging), then
+  /sites/plx-mission-control (production). The script creates `CompletedAt` as an
+  optional date-and-time column with no default, hidden from the edit form, or
+  updates an existing one to that definition (idempotent; column listings select `hidden`, which Graph otherwise omits).
+  Per site: dry run
+  `python scripts/provision-sharepoint.py --env <staging|production>`, apply
+  `python scripts/provision-sharepoint.py --env <staging|production> --apply`,
+  check `python scripts/provision-sharepoint.py --env <staging|production> --verify`.
 - **Project Documents increment (TASK-628)**: inbound-only mirror of the
   Project Documents drive (`/drives/{id}/root/delta`) into `file` entities,
   behind `PLX_MC_DOCUMENTS_SYNC_ENABLED` (default off). Deletions are audited

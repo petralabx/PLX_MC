@@ -682,12 +682,19 @@ async function assertContainerArchive(client, files) {
   await client.query("INSERT INTO buckets (id, project_id, data) VALUES ($1, $2, $3), ($4, $5, $6)", ["BKT-ARCHIVE", "PRJ-ARCHIVE", { id: "BKT-ARCHIVE", project: "PRJ-ARCHIVE", health: "off" }, "BKT-ACTIVE", "PRJ-ACTIVE", { id: "BKT-ACTIVE", project: "PRJ-ACTIVE", health: "track" }]);
   const task = { id: "TASK-ARCHIVE", bucket: "BKT-ARCHIVE", stage: "progress" };
   await client.query("INSERT INTO entities (entity_type, id, data) VALUES ('task', $1, $2)", [task.id, task]);
+  // Retirement must retain manual conflict holds, including backfilled rows.
+  await client.query("UPDATE projects SET sync_state = 'conflict' WHERE id = $1", ["PRJ-ARCHIVE"]);
+  await client.query("UPDATE buckets SET sync_state = 'conflict' WHERE id = $1", ["BKT-ARCHIVE"]);
   const before = (await client.query("SELECT id FROM projects WHERE data->>'health' <> 'off' ORDER BY id")).rows;
   await client.query(sql);
   const after = (await client.query("SELECT id FROM projects WHERE archived_at IS NULL ORDER BY id")).rows;
   if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error("migration changed nav membership");
   const archived = (await client.query("SELECT archived_at, archived_by, archive_reason, data->>'health' AS health FROM buckets WHERE id = $1", ["BKT-ARCHIVE"])).rows[0];
   if (!archived.archived_at || archived.archived_by !== "migration:035" || archived.archive_reason !== "migrated from health=off" || archived.health !== "off") throw new Error("archive migration stamps drifted");
+  for (const table of ["projects", "buckets"]) {
+    const id = table === "projects" ? "PRJ-ARCHIVE" : "BKT-ARCHIVE";
+    if ((await client.query(`SELECT sync_state FROM ${table} WHERE id = $1`, [id])).rows[0].sync_state !== "conflict") throw new Error("archive backfill cleared a conflict hold");
+  }
   const eventCount = (await client.query("SELECT count(*) AS n FROM mc_events WHERE actor = 'migration:035'")).rows[0].n;
   await client.query(sql);
   if ((await client.query("SELECT count(*) AS n FROM mc_events WHERE actor = 'migration:035'")).rows[0].n !== eventCount) throw new Error("migration audit is not idempotent");

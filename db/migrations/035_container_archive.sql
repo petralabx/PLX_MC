@@ -11,7 +11,7 @@ ALTER TABLE buckets ADD COLUMN IF NOT EXISTS archive_reason text GENERATED ALWAY
 -- Preserve the former health=off nav exclusions; cascade retired projects.
 -- Keep health unchanged so it resumes its health meaning on unarchive.
 WITH retired AS (
-  UPDATE projects SET data = data || jsonb_build_object('archivedAt', now()::text, 'archivedBy', 'migration:035', 'archiveReason', 'migrated from health=off'), sync_state = 'pending'
+  UPDATE projects SET data = data || jsonb_build_object('archivedAt', now()::text, 'archivedBy', 'migration:035', 'archiveReason', 'migrated from health=off'), sync_state = CASE WHEN sync_state = 'conflict' THEN 'conflict' ELSE 'pending' END
   WHERE data->>'health' = 'off' AND archived_at IS NULL
   RETURNING id
 )
@@ -19,7 +19,7 @@ INSERT INTO mc_events (kind, actor, payload)
 SELECT 'project.archived', 'migration:035', jsonb_build_object('projectId', id, 'reason', 'migrated from health=off') FROM retired;
 
 WITH retired AS (
-  UPDATE buckets SET data = data || jsonb_build_object('archivedAt', now()::text, 'archivedBy', 'migration:035', 'archiveReason', 'migrated from health=off'), sync_state = 'pending'
+  UPDATE buckets SET data = data || jsonb_build_object('archivedAt', now()::text, 'archivedBy', 'migration:035', 'archiveReason', 'migrated from health=off'), sync_state = CASE WHEN sync_state = 'conflict' THEN 'conflict' ELSE 'pending' END
   WHERE archived_at IS NULL AND (data->>'health' = 'off' OR project_id IN (SELECT id FROM projects WHERE archived_at IS NOT NULL))
   RETURNING id, project_id
 )

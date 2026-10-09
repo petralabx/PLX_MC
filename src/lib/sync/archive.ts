@@ -49,7 +49,7 @@ export async function archiveContainer(input: ArchiveInput) {
     ];
     for (const target of targets) {
       const table = target.type === "project" ? "projects" : "buckets";
-      await q(`UPDATE ${table} SET data = data || $2::jsonb, sync_state = 'pending', updated_at = now() WHERE id = $1`, [target.id, JSON.stringify(patch)]);
+      await q(`UPDATE ${table} SET data = data || $2::jsonb, sync_state = CASE WHEN sync_state = 'conflict' THEN 'conflict' ELSE 'pending' END, updated_at = now() WHERE id = $1`, [target.id, JSON.stringify(patch)]);
       await appendEventTx(q, {
         kind: `${target.type}.${archived ? "archived" : "unarchived"}`,
         actor: input.actor,

@@ -244,6 +244,11 @@ and task writes for the guard/cascade transaction, queues Projects/Roadmap and
 appends per-container MC events in that transaction. There are no task writes.
 AFTER INSERT guards close creation races and cover non-MCP creation paths;
 ON CONFLICT updates of existing tasks continue syncing in archived buckets.
+New inbound tasks/buckets beneath archived containers are audited and skipped
+before insertion; archive guard race rejections are also audited and skipped so
+cursors advance and outbound work continues. Existing records continue syncing.
+Archive/unarchive (including migration backfill) preserves conflict holds; the
+Archived flag waits for human conflict resolution before outbound mirroring.
 Inbound Projects/Roadmap fields never overwrite the outbound-only `Archived`.
 Owner: Vince. Reverting the app restores the former health filter; additive
 columns stay. Operators can unarchive before rollback if they also need to

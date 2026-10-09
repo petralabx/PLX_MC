@@ -158,7 +158,7 @@ test.describe("timeline respects the shared filter", () => {
     // Group by stage so the move to "Verified" (band=done) is observable as a
     // column change. TASK-221 seeds in "Planned".
     await page.locator(".tb .seg").first().locator("button", { hasText: /^Stage$/ }).click();
-    await expect(page.locator(".mc .board .bcol")).toHaveCount(9);
+    await expect(page.locator(".mc .board .bcol")).toHaveCount(10);
     await expect(
       page
         .locator(".mc .board .bcol")

@@ -887,3 +887,13 @@
 - **Rule going forward:** In `updateEntity`, every task write reads `FOR UPDATE`
   in its own transaction and merges onto that row. Inside a transaction, pass `q`
   to every read; seed/resolve anything that needs the pool before opening it.
+
+## 2026-10-09 — Adding a stage or band means updating the board e2e column counts (TASK-2529)
+
+- **What went wrong:** Adding the `cancelled` stage and band made the board render 4 band
+  columns and 10 stage columns, but the e2e specs still asserted 3 and 9. Unit tests and
+  typecheck passed; only Playwright in CI caught it (7 failures).
+- **Root cause:** Column counts are hardcoded in `e2e/` (board, group-by, drag,
+  saved-views, timeline-filter) and nobody grepped for them when `STAGES`/`BANDS` changed.
+- **Rule going forward:** When `STAGES` or `BANDS` change, grep `e2e/` for
+  `toHaveCount(<n>)` on `.bcol` / `boardColumns` and run `npm run test:e2e` locally before push.

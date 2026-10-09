@@ -37,6 +37,7 @@ import type {
   SpError,
   Task,
 } from "@/lib/mc-data/types";
+import { assertMoveTargetProjectOpen } from "./bucket-move";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import { withTransaction, type TxQuery } from "@/lib/db";
 import type { EntityData, FieldAttribution } from "./mapping";
@@ -287,7 +288,15 @@ export async function patchBucket(id: string, patch: PatchBucketInput, actor: st
     if (!prd.ok) throw new ApiError("invalid_request", "PRD link must be an http or https URL.", 422);
     patch = { ...patch, prd: prd.value };
   }
-  if (patch.project) await assertProjectExists(patch.project);
+  if (patch.project) {
+    await assertProjectExists(patch.project);
+    if (patch.project !== existing.project) {
+      assertMoveTargetProjectOpen(
+        (await repo.getProjects()).find((p) => p.id === patch.project),
+        `bucket ${id}`
+      );
+    }
+  }
   const defined = definedEntries(patch);
   const next: Bucket = { ...existing, ...defined };
   const pushedDirty = Object.keys(defined).filter((k) => BUCKET_PUSHED_FIELDS.includes(k));
@@ -647,6 +656,8 @@ export interface PatchTaskOptions {
   cancellation?: Cancellation;
   /** Set only by the reopen service (lib/sync/cancel.ts), after task.reopen is authorized; required to leave `cancelled`. */
   reopen?: boolean;
+  /** Refuse a bucket move into a closed project, checked inside the locked transaction (TASK-2558). */
+  enforceClosedProject?: boolean;
 }
 
 // Persistence tiers:
@@ -715,6 +726,14 @@ export async function patchTask(
   // patch that sets both owner and stage is evaluated against the new owner.
   const current = row.data as unknown as Task;
   const effective = { ...current, ...taskPatch } as Task;
+  // Closed-project rule (TASK-2558), re-checked under the row lock; only a real move is refused.
+  if (opts.enforceClosedProject && taskPatch.bucket && taskPatch.bucket !== current.bucket) {
+    const target = (await repo.getBuckets(opts.query)).find((b) => b.id === taskPatch.bucket);
+    assertMoveTargetProjectOpen(
+      (await repo.getProjects(opts.query)).find((p) => p.id === target?.project),
+      `${id} to ${taskPatch.bucket}`
+    );
+  }
   // Leaving cancelled is a capability-gated, audited reopen (TASK-2529): a generic
   // stage patch must never clear the cancellation on its own.
   if (current.stage === "cancelled" && taskPatch.stage && taskPatch.stage !== "cancelled" && !opts.reopen) {

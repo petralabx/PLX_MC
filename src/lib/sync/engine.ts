@@ -69,7 +69,7 @@ import {
   type SyncConflictSubject,
   type TaskPersonMc,
 } from "./mapping";
-import { bucketMoveTargetViolation } from "./bucket-move";
+import { assertMoveTargetProjectOpen, bucketMoveTargetViolation } from "./bucket-move";
 import { documentsSyncEnabled } from "@/lib/secrets";
 import { fileEntryFromDriveItem, fileEntryIdForDriveItem, parentSegments, type DriveItem, type FolderRef } from "./documents";
 import { evaluateSyncFreshness, type SyncFreshnessResult } from "./freshness";
@@ -1784,6 +1784,29 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
     if (value === undefined) return false;
     // Keep-SP must not reopen a cancelled task: that needs task.reopen (TASK-2529).
     if (subject === "task" && mcField === "stage" && entityRow?.data.stage === "cancelled" && value !== "cancelled") return false;
+    // Closed-project rule (TASK-2530): SharePoint cannot move work into a closed
+    // project. Refuse before any write, leave the conflict open, and say why.
+    const targetProjectId =
+      subject === "task" && mcField === "bucket"
+        ? (await repo.getBuckets()).find((b) => b.id === value)?.project
+        : subject === "bucket" && mcField === "project"
+          ? (value as string | null)
+          : null;
+    if (targetProjectId) {
+      try {
+        assertMoveTargetProjectOpen(
+          (await repo.getProjects()).find((p) => p.id === targetProjectId),
+          `${conflict.entityId} (${conflict.field})`
+        );
+      } catch (err) {
+        await repo.appendAudit(
+          actor,
+          `Conflict on ${conflict.entityId} · ${conflict.field} left unresolved — SharePoint value refused: ${(err as Error).message}`,
+          "error"
+        );
+        throw err;
+      }
+    }
     if (entityRow) {
       try {
         await repo.updateEntity(subject as EntityType, conflict.entityId, {

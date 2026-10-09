@@ -5,6 +5,7 @@ import { ActivityView } from "./activity-view";
 import { AiSpendView } from "./vendor-spend";
 import { AgentFeed } from "./agent-feed";
 import { BucketDetail } from "./bucket-detail";
+import { DashboardView } from "./dashboard";
 import { ProjectDetail } from "./project-detail";
 import { FilesView } from "./files-view";
 import { ArchitectureView } from "./architecture";
@@ -27,6 +28,7 @@ import { WorkViews } from "./work-views";
 
 export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   home: InboxView,
+  dashboard: DashboardView,
   board: WorkViews,
   list: WorkViews,
   timeline: WorkViews,

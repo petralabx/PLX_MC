@@ -6,11 +6,12 @@ The Next.js (App Router) application shell — the Mission Control UI. Screens
 from the design handoff are built (Inbox, Board/List/Timeline, Traceability,
 Agent activity, Initiative/Bucket detail, Task detail, Sync console, Files,
 Repos) plus surfaces added since the handoff: **Project detail**, **My Tasks**,
-**Insights**, **Meeting Intake**, **Loop Ledgers**, **Governance SOPs**,
+**Dashboard** (project and initiative progress, under Home), **Insights**,
+**Meeting Intake**, **Loop Ledgers**, **Governance SOPs**,
 **Skills Directory**, **Architecture**, **AI Spend**, and **Ask the Brain** — along with the ⌘K
 command palette, New Task / New Initiative / New Project modals, and
 PeoplePicker (Petra domain rule enforced in the UI). The screen registry
-(`src/components/mc/screens.tsx`) maps twenty-four `Screen` keys to components;
+(`src/components/mc/screens.tsx`) maps twenty-six `Screen` keys to components;
 Board, List, Timeline, and My Tasks share `WorkViews`. State flows through the runtime store
 (`src/lib/mc-data/store.ts`) — since 2026-06-11 a client cache over the sync
 module's API: it hydrates from `GET /api/state` after mount (the signed-in

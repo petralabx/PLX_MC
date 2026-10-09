@@ -288,7 +288,13 @@ provisioned). `mc_list_projects` (`GET /api/cursor/projects?status=&q=`) takes
 `status` `active` (default) | `closed` | `all`, and returns id, name, owner,
 status, health, `bucketCount`, `openTaskCount`, `doneTaskCount` (merged or
 verified) and `closedAt`. Creating a bucket or task in a closed project fails
-with 409 `project_closed`; reopen with `status=active`. Closed projects leave
+with 409 `project_closed`; reopen with `status=active`. The same 409 covers
+every path that moves work into a closed project (TASK-2558): REST
+`PATCH /api/tasks/{id}` with a new `bucket`, bucket re-parenting
+(`patchBucket` / `mc_update_bucket` `project`), and keeping the SharePoint value
+on a task `bucket` or bucket `project` sync conflict (the conflict stays open,
+nothing is written, and an error audit line records why). `mc_update_task(s)` and
+inbound SharePoint moves keep their existing refusals. Closed projects leave
 the sidebar/palette (and their buckets do too) and the default project pickers,
 but stay reachable by id. `mc_get_context` now returns `projects` with `status`.
 

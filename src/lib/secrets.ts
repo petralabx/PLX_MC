@@ -1,8 +1,11 @@
 // The one shared secrets accessor (TOOLS.md "Secrets Source of Truth").
-// Secrets reach the process env via AWS Secrets Manager (prod/ec2-secrets,
-// loaded by ~/load-secrets.ps1 on the dev box); no other module reads
-// process.env for credentials. Server-side only — never import from
-// client components.
+// General dev secrets reach env via AWS Secrets Manager (prod/ec2-secrets,
+// loaded by ~/load-secrets.ps1). Production Mission Control uses Vercel project
+// plx-mission-control's Production PLX_MC_DATABASE_URL; its upstream source is
+// to be confirmed by Vince. The prod/ec2-secrets PLX_MC_DATABASE_URL points to
+// plx_mc on plx-postgres-staging (stopped at migration 030), not the live DB.
+// No other module reads process.env for credentials. Server-side only — never
+// import from client components.
 
 function requireSecret(name: string): string {
   const value = process.env[name];

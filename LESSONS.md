@@ -16,11 +16,11 @@
 
 ## Lessons
 
-### 2026-10-09 (ET) — Live release identity followed the wrong database source
+### 2026-10-09 (ET) — Live database identity was judged by its host name
 
-- **What happened:** The live plan from #289/#292 targeted a staging database at migration 030 that production does not use. Docs named the wrong source, and the guard hard-coded the staging host.
-- **Root cause:** Identity was a name/URL convention, never compared against what production actually reads.
-- **Rule going forward:** Live release requires a human-set expected identity, including a server fingerprint where available. Plan prints MATCH/MISMATCH. Verify the source of Vercel Production's environment value before naming a database "live" in docs.
+- **What happened:** #293 was written on the belief that the live plan from #292 targeted a staging DB outside production. A later read-only investigation matched recent production events/writes and active production-app connections to `plx_mc` on `plx-postgres-staging.c2b8m8isksqt.us-east-1.rds.amazonaws.com` (system identifier `7543096909140343566`): the plan had targeted the real production DB. Vercel `plx-mission-control` Production uses it for both `mc.plxcustomer.io` and `mc-staging.plxcustomer.io`; AWS SM `prod/ec2-secrets` `PLX_MC_DATABASE_URL` and `plx/mc/live-database-url` identify that same DB. The docs merged in #293 were wrong and are corrected here. WARNING: "staging" in the host name is historical; it IS production. Never infer environment from a host name. As of 2026-10-09 ET, live schema is at 030; 031/032 were never applied anywhere and production code does not need them (031 status lives in `projects.data` JSON; 032 is indexes only). The 033 `completed_at` column is required by #286's code, which broke production and was reverted by #290.
+- **Root cause:** The database was judged by its host name ("staging") instead of evidence.
+- **Rule going forward:** Verify database identity by matching live evidence: recent production events/writes, active connections from the production app, and `system_identifier`. Never use host names or naming conventions to infer environment. The human-set `MC_LIVE_EXPECTED_IDENTITY` guard (`db@host#sysid`) stays as enforcement; plan reports MATCH/MISMATCH/UNSET.
 
 ### 2026-10-07 (ET) — Backfill "non-production only" guard was a substring check
 

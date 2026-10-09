@@ -50,6 +50,7 @@ function parseArgs(argv) {
     revisionAtomicity: false,
     agentRunnerPrincipal: false,
     portalPrincipal: false,
+    completedAt: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -62,8 +63,9 @@ function parseArgs(argv) {
     else if (arg === "--revision-atomicity") out.revisionAtomicity = true;
     else if (arg === "--agent-runner-principal") out.agentRunnerPrincipal = true;
     else if (arg === "--portal-principal") out.portalPrincipal = true;
+    else if (arg === "--completed-at") out.completedAt = true;
     else if (arg === "--help" || arg === "-h") {
-      console.log(`Usage: node scripts/test-routing-postgres.mjs --through NNN [--schema] [--idempotency] [--sequence] [--concurrency] [--revision-atomicity] [--agent-runner-principal] [--portal-principal]`);
+      console.log(`Usage: node scripts/test-routing-postgres.mjs --through NNN [--schema] [--idempotency] [--sequence] [--concurrency] [--revision-atomicity] [--agent-runner-principal] [--portal-principal] [--completed-at]`);
       process.exit(0);
     } else {
       throw new Error(`unknown argument: ${arg}`);
@@ -80,7 +82,8 @@ function parseArgs(argv) {
     !out.concurrency &&
     !out.revisionAtomicity &&
     !out.agentRunnerPrincipal &&
-    !out.portalPrincipal
+    !out.portalPrincipal &&
+    !out.completedAt
   ) {
     out.schema = true;
     out.idempotency = true;
@@ -667,6 +670,96 @@ async function assertPortalPrincipal(client, files) {
   console.log(`portal principal assertions passed (${rows[0].id} ${rows[0].status})`);
 }
 
+// TASK-2528: migration 033 adds entities.completed_at + cancellation, the
+// task-only CHECK and the partial index. Proves the CHECK, idempotent re-apply,
+// index use, and the documented rollback SQL.
+const COMPLETED_AT_MIGRATION = "033_entities_completed_at_cancellation.sql";
+
+async function assertCompletedAt(client, files) {
+  if (!files.includes(COMPLETED_AT_MIGRATION)) {
+    throw new Error(`--completed-at needs ${COMPLETED_AT_MIGRATION} (use --through 033 or later)`);
+  }
+  const sql = await readFile(path.join(MIGRATIONS_DIR, COMPLETED_AT_MIGRATION), "utf8");
+  const expectedIndexDefinition = "CREATE INDEX entities_task_completed_at_idx ON public.entities USING btree (completed_at) WHERE ((entity_type = 'task'::text) AND (completed_at IS NOT NULL))";
+  async function assertCompletionIndex() {
+    const { rows } = await client.query(
+      `SELECT i.indisvalid, i.indisready, pg_get_indexdef(i.indexrelid) AS definition
+         FROM pg_index i
+         JOIN pg_class c ON c.oid = i.indexrelid
+        WHERE i.indrelid = 'public.entities'::regclass
+          AND c.relname = 'entities_task_completed_at_idx'`
+    );
+    if (rows.length !== 1 || !rows[0].indisvalid || !rows[0].indisready ||
+        rows[0].definition !== expectedIndexDefinition) {
+      throw new Error(`completed_at index missing, invalid, not ready, or incorrectly defined: ${JSON.stringify(rows)}`);
+    }
+  }
+  // Check before re-apply too: IF NOT EXISTS must not mask a missing index.
+  await assertCompletionIndex();
+  await client.query(sql); // re-apply must be a no-op
+  await assertCompletionIndex();
+
+  await client.query(
+    `INSERT INTO entities (entity_type, id, data, completed_at)
+     VALUES ('task', 'TASK-9001', '{}'::jsonb, '2026-07-23T12:00:00Z')`
+  );
+  for (const col of ["completed_at", "cancellation"]) {
+    const value = col === "completed_at" ? "now()" : `'{"reason":"duplicate"}'::jsonb`;
+    let rejected = false;
+    try {
+      await client.query(
+        `INSERT INTO entities (entity_type, id, data, ${col}) VALUES ('risk', 'RISK-9001-${col}', '{}'::jsonb, ${value})`
+      );
+    } catch (err) {
+      rejected = err.code === "23514";
+    }
+    if (!rejected) throw new Error(`CHECK did not reject ${col} on a non-task row`);
+  }
+
+  await client.query("BEGIN");
+  try {
+    // A selective month among decades of dates makes the completion index
+    // cheaper than 032's task-wide numeric-id index with normal planner settings.
+    // Fixture rows are rolled back; ANALYZE only touches the disposable database.
+    await client.query(
+      `INSERT INTO entities (entity_type, id, data, completed_at)
+       SELECT 'task', 'TASK-' || (100000 + n), '{}'::jsonb,
+              CASE WHEN n % 5 = 0 THEN NULL
+                   ELSE '2000-01-01T00:00:00Z'::timestamptz + n * interval '1 day' END
+         FROM generate_series(1, 20000) AS fixture(n)`
+    );
+    await client.query("ANALYZE entities");
+    const plan = await client.query(
+      `EXPLAIN SELECT id FROM entities
+        WHERE entity_type = 'task' AND completed_at >= '2026-07-01' AND completed_at < '2026-08-01'`
+    );
+    const text = plan.rows.map((r) => r["QUERY PLAN"]).join("\n");
+    if (!/(?:Index Scan|Index Only Scan|Bitmap Index Scan) (?:using|on) entities_task_completed_at_idx\b/.test(text)) {
+      throw new Error(`date-range query did not use the partial index:\n${text}`);
+    }
+    console.log(`completed_at date-range plan:\n${text}`);
+  } finally {
+    await client.query("ROLLBACK");
+  }
+
+  // Documented rollback (migration header) drops everything cleanly.
+  await client.query("BEGIN");
+  try {
+    await client.query(`DROP INDEX IF EXISTS entities_task_completed_at_idx`);
+    await client.query(`ALTER TABLE entities DROP CONSTRAINT IF EXISTS entities_task_only_completion_chk`);
+    await client.query(`ALTER TABLE entities DROP COLUMN IF EXISTS cancellation`);
+    await client.query(`ALTER TABLE entities DROP COLUMN IF EXISTS completed_at`);
+    const left = await client.query(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'entities' AND column_name IN ('completed_at', 'cancellation')`
+    );
+    if (left.rows.length !== 0) throw new Error("rollback left columns behind");
+  } finally {
+    await client.query("ROLLBACK");
+  }
+  console.log("completed_at assertions passed");
+}
+
 async function main() {
   refuseConfiguredUrls();
   const args = parseArgs(process.argv.slice(2));
@@ -713,6 +806,7 @@ async function main() {
     if (args.revisionAtomicity) await assertRevisionAtomicity(client, url);
     if (args.agentRunnerPrincipal) await assertAgentRunnerPrincipal(client, files);
     if (args.portalPrincipal) await assertPortalPrincipal(client, files);
+    if (args.completedAt) await assertCompletedAt(client, files);
 
     console.log("routing postgres harness OK");
     return 0;

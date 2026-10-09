@@ -402,6 +402,7 @@ export const SP_LISTS: SpListDef[] = [
       { name: "Target Environment", type: "Choice", mc: "targetEnv", dir: "push", note: "Staging/Production" },
       { name: "Evidence Complete", type: "Yes/No", mc: "evidence", dir: "push" },
       { name: "Description", type: "Multi line of text", mc: "description", dir: "two-way" },
+      { name: "Completed At", type: "Date and time", mc: "completedAt", dir: "push", note: "TASK-2528 — outbound-only; inbound edits ignored" },
       { name: "Sub-tasks", type: "Multi line of text", mc: "subtasks", dir: "push", note: "Item 3 — serialized push-only mirror" },
     ],
   },

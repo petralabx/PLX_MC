@@ -168,6 +168,20 @@ describe("outbound task mapping", () => {
   });
 });
 
+describe("outbound CompletedAt (TASK-2528)", () => {
+  const done = { ...task, stage: "merged", completedAt: "2026-07-23T15:04:05.000Z" } as Task;
+
+  it("pushes completedAt alongside a stage push and on full pushes", () => {
+    expect(outboundFields("task", done as never, { only: ["stage"] }).CompletedAt).toBe("2026-07-23T15:04:05.000Z");
+    expect(outboundFields("task", done as never).CompletedAt).toBe("2026-07-23T15:04:05.000Z");
+  });
+
+  it("omits it for unrelated dirty fields and for tasks with no completion date", () => {
+    expect(outboundFields("task", done as never, { only: ["title"] })).not.toHaveProperty("CompletedAt");
+    expect(outboundFields("task", task as never)).not.toHaveProperty("CompletedAt");
+  });
+});
+
 describe("serializeSubtasks (Item 3 — push-only sub-task mirror)", () => {
   it("renders one stable human-readable line per sub-task with executor/due/status", () => {
     const out = serializeSubtasks([
@@ -215,6 +229,10 @@ describe("inbound direction filtering", () => {
       Title: "ok",
     });
     expect(patches).toEqual({ title: "ok" });
+  });
+
+  it("ignores a CompletedAt edit inbound (outbound-only, TASK-2528)", () => {
+    expect(inboundPatches("task", { CompletedAt: "2030-01-01T00:00:00Z", Title: "ok" })).toEqual({ title: "ok" });
   });
 
   it("maps Status labels back to stage keys and skips unknown values", () => {

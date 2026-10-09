@@ -13,6 +13,10 @@ import type { ApprovalGate, StageKey, Task } from "./types";
 // The last stage a task may occupy without a human accountable owner.
 export const ACCOUNTABLE_GATE_STAGE: StageKey = "planned";
 
+// Terminal stages: first entry into any of these stamps entities.completed_at
+// (TASK-2528). ONE shared set — the cancelled stage (task 2529) adds 'cancelled' here.
+export const TERMINAL_STAGES: readonly StageKey[] = ["merged", "verified"];
+
 // Stages that mean "done" for the completion contract.
 const DONE_STAGES: StageKey[] = ["merged", "verified"];
 

@@ -22,6 +22,12 @@ and Office Nested App Auth are different registrations. Fleet policy:
   `ChannelMessage.Send`, `Directory.*`. Site provisioning
   (`scripts/provision-sharepoint.py`, needs `Sites.Create.All`) must use a
   separate short-lived registration, not the runtime credential.
+  Column-only runs against an existing site (e.g. the ToDos `CompletedAt`
+  column) use MC's own sync identity instead: at deploy, before this PR's code
+  goes live, run `scripts/provision-sharepoint.py --env staging --apply`
+  (/sites/plx-mission-control-dev), then `--env production --apply`
+  (/sites/plx-mission-control), with the same app identity the sync engine
+  uses, not a personal account.
 
 ## Migration steps (Azure portal or Graph API, tenant admin)
 

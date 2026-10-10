@@ -9,7 +9,8 @@
 //
 // Reuses the Insights lane (KPI strip, chart cards, CategoryBar) through the
 // .insights wrapper, HealthPill, the project overview's stage chips and the
-// Priority atom; mc-dashboard.css adds only what those don't cover.
+// Priority atom; mc-dashboard.css adds only what those don't cover. The live
+// In flight panel and activity strip (TASK-2592) live in dashboard-live.tsx.
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -31,6 +32,7 @@ import { allBuckets, allProjects, allTasks } from "@/lib/mc-data/store";
 import { HealthPill, Priority } from "./atoms";
 import { CategoryBar, type ChartSlice } from "./charts";
 import { STATUS_COLOR_VAR } from "./charts/chart-tokens";
+import { DashboardLive } from "./dashboard-live";
 import { stageChipTone } from "./project-overview.helpers";
 import type { ScreenProps } from "./route";
 
@@ -269,9 +271,12 @@ export function DashboardView({ nav }: ScreenProps) {
           </div>
         )}
 
+        {/* Each value is keyed on itself, so a change re-mounts it and replays the tick animation. */}
         <div className="kpis">
           <div className="kpi">
-            <span className="v">{fmt(summary.done)}</span>
+            <span className="v" key={summary.done}>
+              {fmt(summary.done)}
+            </span>
             <span className="k">Tasks complete</span>
             <span className="dash-bar" aria-hidden="true">
               <span style={{ width: widthOf(summary.pctDone) }} />
@@ -281,21 +286,27 @@ export function DashboardView({ nav }: ScreenProps) {
             </span>
           </div>
           <div className="kpi">
-            <span className="v">{fmt(summary.remaining)}</span>
+            <span className="v" key={summary.remaining}>
+              {fmt(summary.remaining)}
+            </span>
             <span className="k">Tasks remaining</span>
             <span className="dash-sub">
               {fmt(summary.inProgress)} in progress · {fmt(summary.notStarted)} not started
             </span>
           </div>
           <div className="kpi">
-            <span className="v">{fmt(summary.projects)}</span>
+            <span className="v" key={summary.projects}>
+              {fmt(summary.projects)}
+            </span>
             <span className="k">Projects</span>
             <span className="dash-sub">
               <HealthLine atRisk={summary.projectsAtRisk} offTrack={summary.projectsOffTrack} />
             </span>
           </div>
           <div className="kpi">
-            <span className="v">{fmt(summary.buckets)}</span>
+            <span className="v" key={summary.buckets}>
+              {fmt(summary.buckets)}
+            </span>
             <span className="k">Initiatives</span>
             <span className="dash-sub">
               <HealthLine atRisk={summary.bucketsAtRisk} offTrack={summary.bucketsOffTrack} />
@@ -303,14 +314,16 @@ export function DashboardView({ nav }: ScreenProps) {
           </div>
         </div>
 
+        <DashboardLive projectId={focus?.project.id ?? null} nav={nav} />
+
         <div className="dash-grid">
           <section className="chartcard" aria-labelledby="dash-projects-title">
             <h2 className="chartcard-title" id="dash-projects-title">
               Project progress
             </h2>
             <p className="dash-note">
-              Share of each project’s tasks that are complete, most remaining work first. Select a project to focus the
-              stages, initiatives and task list on it.
+              Share of each project’s tasks that are complete, most remaining work first. Select a project to focus In
+              flight, the stages, initiatives and task list on it.
             </p>
             <div className="dash-rows">
               {projects.length === 0 ? (
@@ -493,6 +506,13 @@ export function DashboardView({ nav }: ScreenProps) {
               <b>Not started</b> means Backlog, Specced, Approved or Planned.
             </li>
             <li>A project’s figures are the sum of its initiatives. Closed projects appear under Closed and All.</li>
+            <li>
+              <b>In flight</b> lists every task an agent has checked out. A checkout ends when it’s released (usually when
+              its pull request merges or closes) or after 8 hours, so it doesn’t prove an agent is still working: each
+              task shows its latest activity, and one with no activity for 2 hours or more is flagged. In flight and Live
+              activity refresh every 20 seconds while this page is open; the other figures reload when a task changes, at
+              most every 2 minutes.
+            </li>
             {model.unfiled.tasks > 0 && (
               <li>
                 {plural(model.unfiled.tasks, "task", "tasks")} ({fmt(model.unfiled.open)} still open){" "}

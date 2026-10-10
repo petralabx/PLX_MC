@@ -51,7 +51,7 @@ export function projectProgress(tasks: Task[]): { done: number; doing: number; t
 
 // Stage → chip tone for the rollup task table. Uses the dedicated status TEXT
 // tokens (brand contrast remediation) so chips hold WCAG AA on 12% fills.
-export function stageChipTone(task: Task): "muted" | "info" | "acc" | "warn" | "ok" {
+export function stageChipTone(task: Pick<Task, "stage">): "muted" | "info" | "acc" | "warn" | "ok" {
   const stage = STAGES[STAGE_IDX[task.stage]];
   if (stage.band === "done") return "ok";
   if (stage.band === "cancelled") return "muted";

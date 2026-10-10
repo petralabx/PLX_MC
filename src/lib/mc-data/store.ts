@@ -506,6 +506,13 @@ export function hydrate(): Promise<void> {
   return Promise.all([loadState(), loadViewer()]).then(() => undefined);
 }
 
+// Re-read the server snapshot alone (the Dashboard's live poll calls this when
+// the server reports a task written since the last look). Same load path and
+// failure handling as hydrate's.
+export function refreshState(): Promise<void> {
+  return loadState();
+}
+
 export function nextTaskId(): string {
   const nums = state.tasks.map((t) => parseInt((String(t.id).match(/(\d+)/) ?? [])[1] ?? "0", 10));
   return `TASK-${Math.max(0, ...nums) + 1}`;

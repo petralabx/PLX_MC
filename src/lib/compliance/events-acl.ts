@@ -2,22 +2,28 @@
 // restricted project (e.g. task.updated before/after diffs) is withheld from
 // principals outside that project. Events with no task, or for a task the Hub
 // does not hold, are not project-scoped and pass through.
-import type { Task } from "@/lib/mc-data/types";
+import type { Bucket, Project, Task } from "@/lib/mc-data/types";
 import { loadProjectAclMaps } from "@/lib/permissions/project-acl-guard";
 import { canAccessBucket, canAccessProject, canAccessTask, type ProjectAclPrincipal } from "@/lib/permissions/project-acl";
 import { getEntities } from "@/lib/sync/repo";
 import type { EventRow } from "./repo";
 
+/** ACL maps a caller already holds; taskById must cover every task the events name. */
+export interface ProjectAclPreload {
+  projectsById: Map<string, Project>;
+  bucketsById: Map<string, Bucket>;
+  taskById: Map<string, { bucket: string }>;
+}
+
 export async function filterEventsByProjectAcl(
   events: readonly EventRow[],
-  principal: ProjectAclPrincipal
+  principal: ProjectAclPrincipal,
+  // The Dashboard's In flight poll passes its own maps, so a poll every 20 s
+  // never reads the whole task table.
+  preload?: ProjectAclPreload
 ): Promise<EventRow[]> {
   if (!events.some((event) => event.taskId || event.payload.projectId || event.payload.bucketId)) return [...events];
-  const [{ projectsById, bucketsById }, tasks] = await Promise.all([
-    loadProjectAclMaps(),
-    getEntities("task"),
-  ]);
-  const taskById = new Map(tasks.map((row) => [row.id, row.data as unknown as Task]));
+  const { projectsById, bucketsById, taskById } = preload ?? (await loadAclMaps());
   return events.filter((event) => {
     if (typeof event.payload.projectId === "string") {
       const project = projectsById.get(event.payload.projectId);
@@ -30,4 +36,16 @@ export async function filterEventsByProjectAcl(
     const task = event.taskId ? taskById.get(event.taskId) : undefined;
     return !task || canAccessTask(task, bucketsById, projectsById, principal);
   });
+}
+
+async function loadAclMaps(): Promise<ProjectAclPreload> {
+  const [{ projectsById, bucketsById }, tasks] = await Promise.all([
+    loadProjectAclMaps(),
+    getEntities("task"),
+  ]);
+  return {
+    projectsById,
+    bucketsById,
+    taskById: new Map(tasks.map((row) => [row.id, row.data as unknown as Task])),
+  };
 }

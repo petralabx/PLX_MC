@@ -157,6 +157,27 @@ export async function getEntity(
   };
 }
 
+/** Title, stage and bucket of the given tasks, without loading the full payloads. */
+export async function getTaskSummaries(
+  ids: string[]
+): Promise<{ id: string; title: string; stage: StageKey; bucket: string }[]> {
+  if (ids.length === 0) return [];
+  return query<{ id: string; title: string; stage: StageKey; bucket: string }>(
+    `SELECT id, data->>'title' AS title, data->>'stage' AS stage, data->>'bucket' AS bucket
+       FROM entities
+      WHERE entity_type = 'task' AND id = ANY($1::text[])`,
+    [ids]
+  );
+}
+
+/** When any task row was last written (ISO), or null with no tasks. */
+export async function latestTaskWriteAt(): Promise<string | null> {
+  const rows = await query<{ at: Date | null }>(
+    "SELECT max(updated_at) AS at FROM entities WHERE entity_type = 'task'"
+  );
+  return rows[0]?.at ? rows[0].at.toISOString() : null;
+}
+
 export async function insertEntity(
   type: EntityType,
   id: string,

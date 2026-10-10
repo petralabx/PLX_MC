@@ -105,13 +105,13 @@ it("blocks deploy and returns explicit API/self-check 503 before handlers agains
     await expect(reader.query("DELETE FROM schema_migrations WHERE filename = $1", [files.at(-1)])).rejects.toMatchObject({ code: "42501" });
   } finally { await reader.end(); }
   expect(await check()).toBe(1);
-  expect(logs.join("\n")).toContain("schema behind: expected 035, db at 033");
+  expect(logs.join("\n")).toContain(`schema behind: expected ${files.at(-1)!.slice(0, 3)}, db at ${files.at(-2)!.slice(0, 3)}`);
   const handler = vi.fn();
   const ctx = { params: Promise.resolve({}) };
   for (const wrapped of [route(handler), cursorRoute("mc_self_check", handler)]) {
     const response = await wrapped(new Request("http://localhost/api/cursor/self-check"), ctx);
     expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ error: { code: "schema_behind", message: expect.stringContaining("schema behind: expected 035, db at 033"), schema: { missing: [files.at(-1)], ok: false } } });
+    expect(await response.json()).toMatchObject({ error: { code: "schema_behind", message: expect.stringContaining(`schema behind: expected ${files.at(-1)!.slice(0, 3)}, db at ${files.at(-2)!.slice(0, 3)}`), schema: { missing: [files.at(-1)], ok: false } } });
   }
   const remote = await mcpPost(new Request("http://localhost/api/cursor/mcp", { method: "POST" }));
   expect(remote.status).toBe(503);

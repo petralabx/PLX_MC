@@ -274,6 +274,7 @@ describe("tool registry", () => {
       "mc_search_knowledge",
       "mc_verify_pr",
       "mc_request_approval",
+      "mc_get_approval_gate",
       "mc_list_buckets",
     ]) {
       expect(names).toContain(tool);
@@ -286,7 +287,7 @@ describe("tool registry", () => {
     expect(names).toContain("mc_update_project");
     expect(names).toContain("mc_link_merged_pr");
     expect(names).toContain("mc_list_projects");
-    expect(names).toHaveLength(37);
+    expect(names).toHaveLength(38);
   });
 });
 
@@ -609,6 +610,7 @@ describe("mc_request_approval", () => {
       taskId: "TASK-100",
       reason: "Needs a human to approve the prod migration",
       requestedBy: "vince@petrasoap.com",
+      requestedByPrincipal: "sp_mcp_cursor",
       runtime: "cursor",
     });
     expect(body.data).toMatchObject({

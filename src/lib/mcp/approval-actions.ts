@@ -5,18 +5,59 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { requestApprovalGate } from "@/lib/compliance/approvals";
+import { ApiError } from "@/lib/api/route";
+import { getApprovalGateState, requestApprovalGate } from "@/lib/compliance/approvals";
+import * as complianceRepo from "@/lib/compliance/repo";
+import { dispatchRepoMatches } from "@/lib/compliance/service";
+import { getEntity } from "@/lib/sync/repo";
+import type { Task } from "@/lib/mc-data";
+import { APPROVAL_WAIT_MAX_MS } from "@/lib/mc-data/policy";
 import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import type { McpIdentity } from "./auth";
+import { resolveCheckoutRepo } from "./checkout-repo";
 import { mcpJsonResult, taskLink } from "./envelope";
+import { checkoutRef } from "./read-actions";
+
+export const PROPOSAL_MAX_BYTES = 32 * 1024;
+
+// Structured proposal an agent attaches to a gate. Strict: unknown keys are rejected so the
+// stored payload round-trips exactly. Total serialized size is capped at PROPOSAL_MAX_BYTES.
+export const approvalProposalSchema = z
+  .object({
+    summary: z.string().min(1).max(1000),
+    action: z.string().min(1).max(500).optional(),
+    diff: z.string().max(PROPOSAL_MAX_BYTES).optional(),
+    plan: z.string().max(PROPOSAL_MAX_BYTES).optional(),
+    risk: z.enum(["low", "medium", "high", "critical"]).optional(),
+  })
+  .strict()
+  .refine((p) => Buffer.byteLength(JSON.stringify(p), "utf8") <= PROPOSAL_MAX_BYTES, {
+    message: `proposal exceeds ${PROPOSAL_MAX_BYTES} bytes`,
+  });
 
 export const requestApprovalSchema = z.object({
   taskId: z.string().min(1),
   reason: z.string().min(1).max(500),
+  checkoutId: z.string().min(1).optional(),
+  proposal: approvalProposalSchema.optional(),
 });
 
 export type RequestApprovalActionInput = z.infer<typeof requestApprovalSchema>;
+
+// A checkout may carry a Hub-connector `repo` override (AGENTS.md), so its repo can differ from
+// identity.repo. Same policy as mc_checkout_task: the default repo, or an allowlisted slug, and the
+// principal must hold `capability` on that repo. Anything else fails closed.
+function authorizeCheckoutRepo(
+  identity: McpIdentity,
+  dispatchRepo: string,
+  capability: "approval.request" | "task.read",
+  taskId: string
+): void {
+  if (dispatchRepoMatches(dispatchRepo, identity.repo, identity.repo)) return;
+  const repo = resolveCheckoutRepo(identity.repo, dispatchRepo);
+  requireMcpActor(identity, capability, { type: "task", id: taskId }, { repositoryId: repo });
+}
 
 export async function actionRequestApproval(
   identity: McpIdentity,
@@ -31,14 +72,29 @@ export async function actionRequestApproval(
   // Same restricted-project guard as every other MCP task write (progress,
   // checkout, complete): no gates on a task the principal cannot see.
   await assertTaskProjectAccess(input.taskId, aclPrincipalFromMcp(identity));
+  if (input.checkoutId) {
+    const d = await complianceRepo.getDispatch(input.checkoutId);
+    if (!d || d.revoked || d.releasedAt || new Date(d.expiresAt).getTime() <= Date.now()) {
+      throw new ApiError("invalid_checkout", "Unknown, revoked, released, or expired checkout.", 409);
+    }
+    if (d.taskId !== input.taskId) {
+      throw new ApiError("checkout_mismatch", "Checkout does not belong to this task.", 409);
+    }
+    authorizeCheckoutRepo(identity, d.repo, "approval.request", input.taskId);
+  }
   const { gate } = await requestApprovalGate({
     taskId: input.taskId,
     reason: input.reason,
     requestedBy: identity.operatorEmail,
+    requestedByPrincipal: identity.servicePrincipalId,
     runtime: identity.runtime,
+    checkoutId: input.checkoutId,
+    checkoutRef: input.checkoutId ? checkoutRef(input.checkoutId) : undefined,
+    proposal: input.proposal,
   });
   return {
     taskId: input.taskId,
+    checkoutRef: input.checkoutId ? checkoutRef(input.checkoutId) : null,
     gateId: gate.id,
     status: gate.status,
     inputRequired: true,
@@ -46,11 +102,73 @@ export async function actionRequestApproval(
   };
 }
 
+export const getApprovalGateSchema = z
+  .object({
+    checkoutId: z.string().min(1).optional(),
+    taskId: z.string().min(1).optional(),
+    gateId: z.string().min(1).optional(),
+    waitSeconds: z
+      .number()
+      .min(0)
+      .max(APPROVAL_WAIT_MAX_MS / 1000)
+      .optional()
+      .describe(`Optional long-poll, returns early on decision; hard cap ${APPROVAL_WAIT_MAX_MS / 1000}s`),
+  })
+  .refine((v) => !!v.checkoutId !== !!v.taskId, {
+    message: "provide exactly one of checkoutId or taskId",
+  });
+
+export type GetApprovalGateActionInput = z.infer<typeof getApprovalGateSchema>;
+
+// mc_get_approval_gate: the agent resume signal. Read-only (task.read). The caller must be the
+// authenticated service principal that raised the gate (not the spoofable operator-email header),
+// and a checkoutId must be in a repo the principal may use; anyone else gets 403 and learns nothing.
+// Output carries checkoutRef only: the usable dsp_* id is never returned.
+export async function actionGetApprovalGate(
+  identity: McpIdentity,
+  input: GetApprovalGateActionInput
+) {
+  requireMcpActor(identity, "task.read", undefined, { repositoryId: identity.repo });
+  let taskId = input.taskId;
+  let gateId = input.gateId;
+  if (input.checkoutId) {
+    const d = await complianceRepo.getDispatch(input.checkoutId);
+    if (!d) throw new ApiError("not_found", `unknown checkout ${input.checkoutId}`, 404);
+    authorizeCheckoutRepo(identity, d.repo, "task.read", d.taskId);
+    taskId = d.taskId;
+    gateId ??= d.approvalGateId ?? undefined;
+    if (!gateId) throw new ApiError("not_found", "checkout has no approval gate.", 404);
+  }
+  if (!taskId) throw new ApiError("invalid_request", "taskId or checkoutId required.", 400);
+  await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
+  if (!gateId) {
+    const row = await getEntity("task", taskId);
+    const gates = (row?.data as unknown as Task | undefined)?.approvalGates ?? [];
+    gateId = gates[gates.length - 1]?.id;
+    if (!gateId) throw new ApiError("not_found", `task ${taskId} has no approval gate.`, 404);
+  }
+  const state = await getApprovalGateState({
+    taskId,
+    gateId,
+    // Bound to the authenticated API-key principal, not the caller-supplied operator header.
+    requesterPrincipal: identity.servicePrincipalId,
+    waitMs: (input.waitSeconds ?? 0) * 1000,
+  });
+  return { ...state, link: taskLink(taskId) };
+}
+
 export function registerApprovalTools(server: McpServer, identity: McpIdentity): void {
   server.tool(
     "mc_request_approval",
-    "Raise a runtime approval gate on a task (approval.request). The task freezes input-required until a human other than the requester approves or rejects it in the Approvals inbox. Agents never decide gates.",
+    "Raise a runtime approval gate on a task (approval.request). Pass checkoutId to block that checkout until approved (mc_complete_task refuses); pass proposal {summary, action?, diff?, plan?, risk?} for the human reviewer. The task freezes input-required until a human other than the requester approves or rejects it in the Approvals inbox. Agents never decide gates.",
     requestApprovalSchema.shape,
     async (args) => mcpJsonResult({ data: await actionRequestApproval(identity, args) })
+  );
+  server.tool(
+    "mc_get_approval_gate",
+    `Read an approval gate's state (pending/approved/rejected, decider, decidedAt, note) by checkoutId or taskId. waitSeconds (max ${APPROVAL_WAIT_MAX_MS / 1000}) long-polls and returns early on a decision. Only the service principal that raised the gate may read it. Never returns the usable checkout id (checkoutRef only).`,
+    getApprovalGateSchema.shape,
+    async (args) =>
+      mcpJsonResult({ data: await actionGetApprovalGate(identity, getApprovalGateSchema.parse(args)) })
   );
 }

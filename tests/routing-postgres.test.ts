@@ -107,7 +107,6 @@ describe("routing postgres harness", () => {
     expect(routingContainers()).toBe("");
   }, 180_000);
 
-
   it("applies archive migration 035 with nav parity, retained records, create guards and idempotent audit", () => {
     const result = runHarness(["--through", "035", "--container-archive"]);
     if (result.status !== 0) { console.error(result.stdout); console.error(result.stderr); }
@@ -121,6 +120,18 @@ describe("routing postgres harness", () => {
     expect(result.stderr).toMatch(/requires migration 035/);
     expect(routingContainers()).toBe("");
   }, 180_000);
+
+  it("applies migrations through 036: checkout approval block columns, idempotent, active-lease-only update", () => {
+    const result = runHarness(["--through", "036", "--dispatch-approval"]);
+    if (result.status !== 0) {
+      console.error(result.stdout);
+      console.error(result.stderr);
+    }
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/dispatch approval assertions passed/i);
+    expect(routingContainers()).toBe("");
+  }, 180_000);
+
   it("refuses configured staging/production database URLs", () => {
     const result = runHarness(["--through", "018"], {
       PLX_MC_DATABASE_URL:

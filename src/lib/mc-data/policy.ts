@@ -69,6 +69,9 @@ export function agentRunApprovalNeeded(
   return !!executor && executor.mode === "approve" && !task.agentRunApproved;
 }
 
+/** Hard cap on an mc_get_approval_gate long-poll; keeps the route inside the serverless budget. */
+export const APPROVAL_WAIT_MAX_MS = 25_000;
+
 // Runtime approval gates (TASK-629): the A2A input-required state.
 export function pendingApprovalGates(
   task: Pick<Task, "approvalGates">

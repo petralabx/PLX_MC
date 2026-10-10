@@ -173,6 +173,7 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   mc_link_merged_pr: { taskId: "TASK-1", repo: "petralabx/PLX_MC", prNumber: 1, reason: "x" },
   mc_list_projects: {},
   mc_request_approval: { taskId: "TASK-1", reason: "please" },
+  mc_get_approval_gate: { taskId: "TASK-1" },
   mc_update_task: { taskId: "TASK-1", patch: { addLabels: ["lane:codex"] } },
   mc_update_tasks: { items: [{ taskId: "TASK-1", patch: { addLabels: ["lane:codex"] } }] },
   mc_release_checkout: { checkoutId: "dsp_x", reason: "stray" },

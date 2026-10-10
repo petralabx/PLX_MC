@@ -34,6 +34,7 @@ import {
   TARGET_ENV,
   TASKS,
 } from "./data";
+import type { CancelReason } from "./cancellation";
 import { parseMentions } from "./collab";
 import { domainOf, isNavVisible, isPetraEmail, isProjectClosed } from "./helpers";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "./policy";
@@ -909,7 +910,7 @@ export function patchTaskFields(
   // Cancelling needs a reason (and replacedBy for duplicate/superseded), which a
   // drag or stage click cannot supply: it goes through mc_update_task cancel (TASK-2529).
   if (patch.stage === "cancelled") {
-    pushNotice(`${t.id}: cancel it with mc_update_task (cancel: {reason, replacedBy}) — a reason is required.`);
+    pushNotice(`${t.id}: open the task and click Cancelled in its lifecycle rail — a reason is required.`);
     return;
   }
   if (patch.stage !== undefined) {
@@ -973,6 +974,32 @@ export const setTaskStage = (taskId: string, stage: Task["stage"]) =>
   // Stage display name via the existing STAGES/STAGE_IDX pattern (no
   // STAGE_IDX_NAME map exists — do not invent one, Pillar 3).
   patchTaskFields(taskId, { stage }, { activity: `moved to ${STAGES[STAGE_IDX[stage]].name} — pending push` });
+
+export interface CancelTaskRequest {
+  reason: CancelReason;
+  replacedBy?: string | null;
+  note?: string;
+}
+
+// Not optimistic: the server validates the reason and the caller's task.cancel
+// (admin/owner), so the task only moves once PATCH {cancel} succeeds (TASK-2598).
+export async function cancelTaskWithReason(taskId: string, request: CancelTaskRequest): Promise<boolean> {
+  try {
+    const updated = await api<Task>(`/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ cancel: request }),
+    });
+    const i = state.tasks.findIndex((x) => x.id === taskId);
+    if (i !== -1) {
+      state.tasks[i] = updated;
+      emit();
+    }
+    return true;
+  } catch (err) {
+    pushNotice(`Couldn't cancel ${taskId}. ${err instanceof Error ? err.message : "The server rejected the cancel."}`);
+    return false;
+  }
+}
 
 export const setTaskPriority = (taskId: string, priority: Task["priority"]) =>
   patchTaskFields(taskId, { priority }, { activity: `set priority to ${PRIORITY[priority].label} — pending push` });

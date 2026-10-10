@@ -10,8 +10,9 @@ import {
 import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
 import { assertBucketProjectAccess, assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import * as complianceRepo from "@/lib/compliance/repo";
+import { cancelPatchSchema } from "@/lib/mcp/task-cancel-actions";
 import { patchTask } from "@/lib/sync";
-import { reopenTask } from "@/lib/sync/cancel";
+import { cancelTask, reopenTask } from "@/lib/sync/cancel";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
 import { assertMoveTargetProjectOpen } from "@/lib/sync/bucket-move";
 
@@ -56,11 +57,18 @@ export const patchTaskSchema = z.object({
   repos: z.array(z.string()).max(50).optional(),
   targetEnv: z.enum(["staging", "production"]).optional(),
   agentRunApproved: z.boolean().optional(),
+  // Entering cancelled: {reason, replacedBy?, note?}, alone (TASK-2598).
+  cancel: cancelPatchSchema.optional(),
+}).superRefine((patch, ctx) => {
+  if (patch.cancel !== undefined
+    && Object.entries(patch).some(([key, value]) => value !== undefined && key !== "cancel" && key !== "actor")) {
+    ctx.addIssue({ code: "custom", message: "cancel is a stage change and cannot be combined with other fields." });
+  }
 });
 
 export const PATCH = route(async (req, ctx) => {
   const { id } = await ctx.params;
-  const { actor: _ignored, ...patch } = await parseBody(req, patchTaskSchema);
+  const { actor: _ignored, cancel, ...patch } = await parseBody(req, patchTaskSchema);
   const capability =
     patch.stage === "verified" || patch.stage === "merged"
       ? "task.complete"
@@ -79,6 +87,32 @@ export const PATCH = route(async (req, ctx) => {
       const target = (await getBuckets()).find((b) => b.id === patch.bucket);
       assertMoveTargetProjectOpen((await getProjects()).find((p) => p.id === target?.project), `${id} to ${patch.bucket}`);
     }
+  }
+  // Entering cancelled needs task.cancel on the session principal (admin/owner)
+  // and runs through the cancel service, which validates the reason and appends
+  // task.cancelled in the same transaction (TASK-2529).
+  if (cancel) {
+    let canceller;
+    try {
+      canceller = await requireSessionActor("task.cancel", { type: "task", id });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "forbidden") {
+        await complianceRepo.appendEvent({
+          kind: "task.cancel_denied",
+          actor: `human:${authorized.auditLabel}`,
+          taskId: id,
+          payload: { capability: "task.cancel" },
+        });
+      }
+      throw err;
+    }
+    const { task } = await cancelTask(id, cancel, {
+      actor: canceller.auditLabel,
+      actorId: canceller.actorId,
+      eventActor: `human:${canceller.auditLabel}`,
+      attribution: { source: "human", actorId: canceller.actorId },
+    });
+    return task;
   }
   // Leaving cancelled is a reopen: it needs task.reopen on the session principal,
   // runs through the reopen service (clears cancellation, emits task.reopened) and

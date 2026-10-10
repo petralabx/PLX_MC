@@ -3,7 +3,7 @@
 // reassignment. Conflict/error resolution semantics live in the engine
 // (tests/sync-mapping.test.ts + the live evidence bundles); the store-side
 // invariants here are the optimistic-local behaviors.
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   __setPatchMirrorForTests,
@@ -14,6 +14,7 @@ import {
   addTask,
   allTasks,
   auditLog,
+  cancelTaskWithReason,
   dismissNotice,
   inboxNotifications,
   invitePerson,
@@ -251,7 +252,39 @@ describe("patchTaskFields (the shared mutation spine)", () => {
     const before = taskById("TASK-221")?.stage;
     setTaskStage("TASK-221", "cancelled");
     expect(taskById("TASK-221")?.stage).toBe(before);
-    expect(activeNotices().some((n) => /mc_update_task/.test(n.body) && /reason is required/.test(n.body))).toBe(true);
+    expect(activeNotices().some((n) => /lifecycle rail/.test(n.body) && /reason is required/.test(n.body))).toBe(true);
+  });
+
+  it("cancelTaskWithReason sends PATCH {cancel} and adopts the server's cancelled task (TASK-2598)", async () => {
+    const before = taskById("TASK-221")!;
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ data: { ...before, stage: "cancelled", cancellation: { reason: "obsolete", replacedBy: null, cancelledAt: "2026-10-10T00:00:00Z", cancelledBy: "oid-1" } } }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await expect(cancelTaskWithReason("TASK-221", { reason: "obsolete", replacedBy: null })).resolves.toBe(true);
+      expect(fetchMock).toHaveBeenCalledWith("/api/tasks/TASK-221", expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ cancel: { reason: "obsolete", replacedBy: null } }),
+      }));
+      expect(taskById("TASK-221")?.stage).toBe("cancelled");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("cancelTaskWithReason leaves the task alone and says why when the server refuses (TASK-2598)", async () => {
+    const before = taskById("TASK-221")?.stage;
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify({ error: { code: "forbidden", message: "task.cancel denied (no_grant)." } }), { status: 403 })
+    ));
+    try {
+      await expect(cancelTaskWithReason("TASK-221", { reason: "obsolete" })).resolves.toBe(false);
+      expect(taskById("TASK-221")?.stage).toBe(before);
+      expect(activeNotices().some((n) => /Couldn't cancel TASK-221/.test(n.body) && /no_grant/.test(n.body))).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("setTaskStage / setTaskPriority / setTaskBucket apply optimistically", () => {

@@ -79,6 +79,10 @@
   `testRun` or `shots` where the risk tier needs proof. If the MCP tool is
   missing, `POST /api/cursor/complete` with `X-MC-Operator-Email` and
   `X-MC-Repo`. Promoted to step 5 of `.cursor/rules/mc-plan-hygiene-on-pr.mdc`.
+- **Recurred 2026-10-10 (TASK-2592, PR #304):**
+  - **What happened:** the PR was opened about 30 s before `mc_complete_task`. The gate runs within seconds of `opened`, so it blocked on missing evidence.
+  - **Order to follow:** call `mc_complete_task` first, then open the PR. Once the PR exists, `mc_verify_pr` shows the verdict.
+  - **If it happens anyway:** hand in the evidence. The next push or PR edit re-runs the gate. Never push an empty commit to re-run it.
 
 ### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
 

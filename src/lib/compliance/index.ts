@@ -16,3 +16,4 @@ export type {
   RepoActivityRow,
 } from "./activity";
 export type { UnattributedPr } from "./backfill";
+export type { InFlightCheckout, InFlightReport, InFlightTask, LiveEvent } from "./in-flight";

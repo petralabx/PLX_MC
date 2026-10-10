@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-10 (ET) — Typecheck failed on a generated file after `next dev` was stopped
+
+- **What happened:** TASK-2565 and TASK-2592 each stopped a local `next dev` (port 3950) after a browser check. The next `tsc` / preflight then failed with "Unterminated string literal" in `.next/dev/types/validator.ts`.
+- **Root cause:** `next dev` regenerates the git-ignored `.next/dev/types` while it runs. Stopping it mid-write left a truncated file, and `tsconfig` includes it.
+- **Rule going forward:** After stopping a local `next dev`, delete `.next/dev` before typecheck or preflight. It is git-ignored build output, and the next dev run regenerates it. A TS error under `.next/` is environment state, not the change under test.
+
 ### 2026-10-09 (ET) — A spec's "completed_at" dependency had been reverted on main
 
 - **What happened:** TASK-2559 assumed the merged-PR projection sets completed_at (from #286). #286 was reverted by #290, so main's projection does not set it.
@@ -73,6 +79,10 @@
   `testRun` or `shots` where the risk tier needs proof. If the MCP tool is
   missing, `POST /api/cursor/complete` with `X-MC-Operator-Email` and
   `X-MC-Repo`. Promoted to step 5 of `.cursor/rules/mc-plan-hygiene-on-pr.mdc`.
+- **Recurred 2026-10-10 (TASK-2592, PR #304):**
+  - **What happened:** the PR was opened about 30 s before `mc_complete_task`. The gate runs within seconds of `opened`, so it blocked on missing evidence.
+  - **Order to follow:** call `mc_complete_task` first, then open the PR. Once the PR exists, `mc_verify_pr` shows the verdict.
+  - **If it happens anyway:** hand in the evidence. The next push or PR edit re-runs the gate. Never push an empty commit to re-run it.
 
 ### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
 

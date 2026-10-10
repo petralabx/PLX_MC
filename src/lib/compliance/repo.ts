@@ -271,6 +271,47 @@ export async function eventsForTask(
   }));
 }
 
+/**
+ * The newest event of the given kinds for each task, at or after `sinceIso`
+ * (the Dashboard's In flight panel, TASK-2592). mc_events has no task_id
+ * index, so the kind + ts bound keeps this on mc_events_kind_ts_idx.
+ */
+export async function latestEventsForTasks(
+  taskIds: string[],
+  kinds: string[],
+  sinceIso: string
+): Promise<EventRow[]> {
+  if (taskIds.length === 0) return [];
+  const rows = await query<{
+    seq: string;
+    ts: Date;
+    kind: string;
+    actor: string;
+    repo: string | null;
+    task_id: string | null;
+    pr: string | null;
+    payload: Record<string, unknown>;
+  }>(
+    `SELECT DISTINCT ON (task_id) seq, ts, kind, actor, repo, task_id, pr, payload
+       FROM mc_events
+      WHERE kind = ANY($1::text[])
+        AND ts >= $2::timestamptz
+        AND task_id = ANY($3::text[])
+      ORDER BY task_id, seq DESC`,
+    [kinds, sinceIso, taskIds]
+  );
+  return rows.map((r) => ({
+    seq: String(r.seq),
+    ts: r.ts instanceof Date ? r.ts.toISOString() : String(r.ts),
+    kind: r.kind,
+    actor: r.actor,
+    repo: r.repo,
+    taskId: r.task_id,
+    pr: r.pr,
+    payload: r.payload,
+  }));
+}
+
 /** Most recent checkout audit door (`mcp` | `compliance`), or null if none. */
 export async function latestCheckoutDoor(): Promise<string | null> {
   const rows = await query<{ door: string | null }>(

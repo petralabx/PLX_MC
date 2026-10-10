@@ -1,8 +1,11 @@
 /* Dashboard screen (TASK-2565) — imported into the mc.screens layer (ADR-005):
    phone-first, wider tiers by @container main, hover under (hover: hover),
-   --p-* tokens only, nothing moves. The KPI strip, chart cards and bar list come
-   from the Insights lane (mc-charts.css) through the .insights wrapper; this
-   file adds the progress rows, bucket groups, filters and the task table. */
+   --p-* tokens only. The KPI strip, chart cards and bar list come from the
+   Insights lane (mc-charts.css) through the .insights wrapper; this file adds
+   the progress rows, bucket groups, filters, the task table and the live
+   In flight / Live activity cards (TASK-2592). Everything renders its final
+   state; the motion block at the end runs only under
+   prefers-reduced-motion: no-preference. */
 
 .mc .dash {
   padding: 18px var(--p-gutter) 80px;
@@ -353,6 +356,224 @@
   }
 }
 
+/* ─── Live: In flight beside Live activity (TASK-2592) ────────────────────── */
+.mc .dash .dash-live {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+}
+
+@container main (min-width: 64rem) {
+  .mc .dash .dash-live {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  }
+}
+
+.mc .dash .dash-live-h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.mc .dash .dash-livebadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.mc .dash .dash-livebadge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--p-grid);
+}
+
+.mc .dash .dash-livebadge.on .dot {
+  background: var(--p-ok);
+}
+
+.mc .dash .dash-livebadge.off {
+  color: var(--p-warn-text);
+}
+
+.mc .dash .dash-livebadge.off .dot {
+  background: var(--p-warn);
+}
+
+.mc .dash .dash-live-error {
+  margin: 0 0 10px;
+  font-size: var(--p-text-small);
+  color: var(--p-warn-text);
+}
+
+.mc .dash .dash-flight,
+.mc .dash .dash-feed {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mc .dash .dash-flight-row,
+.mc .dash .dash-feed-item {
+  border-top: 1px solid var(--p-grid-2);
+  border-radius: var(--p-radius-sm);
+}
+
+.mc .dash .dash-flight-row:first-child,
+.mc .dash .dash-feed-item:first-child {
+  border-top: 0;
+}
+
+.mc .dash .dash-flight-row {
+  display: grid;
+  gap: 3px;
+  padding: 10px 8px;
+}
+
+.mc .dash .dash-flight-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+
+.mc .dash .dash-agents {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--p-ink);
+}
+
+.mc .dash .dash-flight-title {
+  font-size: var(--p-text-lede);
+  overflow-wrap: anywhere;
+}
+
+.mc .dash .dash-flight-title .id {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  color: var(--p-muted);
+}
+
+.mc .dash .dash-flight-where,
+.mc .dash .dash-flight-last {
+  font-size: var(--p-text-small);
+  overflow-wrap: anywhere;
+}
+
+.mc .dash .dash-flight-where {
+  color: var(--p-muted);
+}
+
+.mc .dash .dash-flight-last {
+  color: var(--p-ink-2);
+}
+
+.mc .dash :is(.dash-flight-last, .dash-feed-item) time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mc .dash .dash-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.mc .dash .dash-flag {
+  padding: 1px 7px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .dash .dash-flag.warn {
+  border-color: color-mix(in srgb, var(--p-warn) 55%, transparent);
+  background: color-mix(in srgb, var(--p-warn) 12%, transparent);
+  color: var(--p-warn-text);
+}
+
+.mc .dash .dash-feed-item {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 10px;
+  padding: 8px 6px;
+  font-size: var(--p-text-small);
+}
+
+.mc .dash .dash-feed-item .dot {
+  width: 6px;
+  height: 6px;
+  margin-top: 0.45em;
+  border-radius: 50%;
+  background: var(--p-grid);
+}
+
+.mc .dash .dash-feed-item.t-acc .dot {
+  background: var(--p-accent);
+}
+
+.mc .dash .dash-feed-item.t-info .dot {
+  background: var(--p-info);
+}
+
+.mc .dash .dash-feed-item.t-ok .dot {
+  background: var(--p-ok);
+}
+
+.mc .dash .dash-feed-item.t-warn .dot {
+  background: var(--p-warn);
+}
+
+.mc .dash .dash-feed-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mc .dash .dash-feed-line {
+  color: var(--p-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.mc .dash .dash-feed-line b {
+  font-weight: 500;
+  color: var(--p-ink);
+}
+
+.mc .dash .dash-feed-task {
+  color: var(--p-muted);
+  overflow-wrap: anywhere;
+}
+
+.mc .dash .dash-feed-item time {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  color: var(--p-muted);
+}
+
+.mc .dash .dash-more {
+  margin-top: 8px;
+}
+
 /* ─── Notes ───────────────────────────────────────────────────────────────── */
 .mc .dash .dash-notes {
   max-width: var(--p-read-max);
@@ -403,5 +624,57 @@
   }
   .mc .dash .dash-filter:hover {
     border-color: var(--p-ink);
+  }
+}
+
+/* ─── Motion (TASK-2592) — only when the viewer hasn't asked for less ─────── */
+@media (prefers-reduced-motion: no-preference) {
+  /* A row or event that arrived with the latest poll slides in and glows briefly. */
+  .mc .dash .dash-new {
+    animation: dash-arrive 2.4s var(--p-ease) both;
+  }
+  /* Tile values are keyed on themselves, so a change replays this. */
+  .mc .dash .kpi .v {
+    animation: dash-tick var(--p-dur-slow) var(--p-ease) both;
+  }
+  .mc .dash .dash-bar > span {
+    transition: width var(--p-dur-slow) var(--p-ease);
+  }
+  .mc .dash .dash-livebadge.on .dot {
+    animation: dash-pulse 2s ease-in-out infinite;
+  }
+  @keyframes dash-arrive {
+    0% {
+      opacity: 0;
+      transform: translateY(-4px);
+      background-color: var(--p-accent-soft);
+    }
+    15% {
+      opacity: 1;
+      transform: none;
+      background-color: var(--p-accent-soft);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+  @keyframes dash-tick {
+    from {
+      opacity: 0.35;
+      transform: translateY(3px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes dash-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
   }
 }

@@ -6,7 +6,8 @@ The Next.js (App Router) application shell — the Mission Control UI. Screens
 from the design handoff are built (Inbox, Board/List/Timeline, Traceability,
 Agent activity, Initiative/Bucket detail, Task detail, Sync console, Files,
 Repos) plus surfaces added since the handoff: **Project detail**, **My Tasks**,
-**Dashboard** (project and initiative progress, under Home), **Insights**,
+**Dashboard** (project and initiative progress under Home, with a live In flight
+panel and activity strip polled from `GET /api/in-flight`), **Insights**,
 **Meeting Intake**, **Loop Ledgers**, **Governance SOPs**,
 **Skills Directory**, **Architecture**, **AI Spend**, and **Ask the Brain** — along with the ⌘K
 command palette, New Task / New Initiative / New Project modals, and

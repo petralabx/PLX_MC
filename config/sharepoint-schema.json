@@ -21,6 +21,7 @@
       "columns": [
         { "name": "ProjectID", "displayName": "Project ID", "type": "text", "required": true, "indexed": true, "unique": true },
         { "name": "Owner", "displayName": "Owner", "type": "person" },
+        { "name": "Archived", "displayName": "Archived", "type": "boolean", "$comment": "MC outbound-only retirement flag; tasks keep syncing." },
         { "name": "Health", "displayName": "Health", "type": "choice", "choices": ["On track", "At risk", "Off track"] },
         { "name": "StartDate", "displayName": "Start Date", "type": "dateTime" },
         { "name": "TargetDate", "displayName": "Target Date", "type": "dateTime" },
@@ -37,6 +38,7 @@
         { "name": "InitiativeID", "displayName": "Initiative ID", "type": "text", "required": true, "indexed": true, "unique": true },
         { "name": "Project", "displayName": "Project", "type": "lookup", "lookupList": "projects" },
         { "name": "Owner", "displayName": "Owner", "type": "person" },
+        { "name": "Archived", "displayName": "Archived", "type": "boolean", "$comment": "MC outbound-only retirement flag; tasks keep syncing." },
         { "name": "Health", "displayName": "Health", "type": "choice", "choices": ["On track", "At risk", "Off track"] },
         { "name": "StartDate", "displayName": "Start Date", "type": "dateTime" },
         { "name": "TargetDate", "displayName": "Target Date", "type": "dateTime" },

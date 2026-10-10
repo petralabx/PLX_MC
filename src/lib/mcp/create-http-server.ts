@@ -226,7 +226,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     "mc_list_buckets",
     "Discover valid BKT-* bucket ids and minimal ownership/project metadata before creating tasks or buckets.",
     {
-      q: z.string().optional().describe("Case-insensitive match against bucket id or name"),
+      includeArchived: z.boolean().optional(),
+    q: z.string().optional().describe("Case-insensitive match against bucket id or name"),
       project: z.string().optional().describe("Exact parent project id"),
     },
     async (args) => jsonResult(await actionListBuckets(identity, args))
@@ -251,9 +252,12 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_update_bucket",
-    "Patch fields on an existing Mission Control bucket/initiative (prd, health, owner, description, name, target, started, repos, project). Queues the SharePoint Roadmap mirror.",
+    "Archive/unarchive with {id, action, reason, force?}. Refuses open tasks unless forced; cannot mix with metadata. Patch fields on an existing Mission Control bucket/initiative (prd, health, owner, description, name, target, started, repos, project). Queues the SharePoint Roadmap mirror.",
     {
-      id: z.string().min(1).describe("Existing BKT-* bucket id"),
+      action: z.enum(["archive", "unarchive"]).optional(),
+    reason: z.string().trim().min(1).max(2000).optional(),
+    force: z.boolean().optional(),
+    id: z.string().min(1).describe("Existing BKT-* bucket id"),
       name: z.string().min(1).optional(),
       description: z.string().optional(),
       owner: z.string().min(1).optional(),

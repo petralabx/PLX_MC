@@ -39,6 +39,7 @@ export const GET = cursorRoute("mc_list_projects", async (req, _ctx, identity) =
   const q = params.get("q");
   return {
     data: await actionListProjects(identity, {
+      includeArchived: params.get("includeArchived") === "true",
       ...(status ? { status } : {}),
       ...(q ? { q } : {}),
     }),

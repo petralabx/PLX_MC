@@ -69,6 +69,7 @@ import {
   type SyncConflictSubject,
   type TaskPersonMc,
 } from "./mapping";
+import { isArchived } from "@/lib/mc-data/helpers";
 import { assertMoveTargetProjectOpen, bucketMoveTargetViolation } from "./bucket-move";
 import { documentsSyncEnabled } from "@/lib/secrets";
 import { fileEntryFromDriveItem, fileEntryIdForDriveItem, parentSegments, type DriveItem, type FolderRef } from "./documents";
@@ -704,6 +705,18 @@ interface InboundResult {
   adopted: number;
 }
 
+// Catch only the archive INSERT guard; unrelated database failures still fail visibly.
+function isArchiveCreateRejection(err: unknown): boolean {
+  return err instanceof Error && "code" in err && err.code === "23514" &&
+    /^(bucket|project) is archived$/.test(err.message);
+}
+
+async function auditArchivedAdoption(list: string, item: SpListItem, id: string): Promise<void> {
+  await repo.appendAudit(SYNC_ACTOR,
+    `Inbound ${list} row skipped (archived container) — ${id} spItem=${item.id}; no local row inserted.`,
+    "error");
+}
+
 async function adoptUnknownTask(ctx: SiteContext, item: SpListItem): Promise<"adopted" | "invalid" | "skipped"> {
   if (!item.fields) return "skipped";
   const validation = validateInboundAdoptionRow("task", item.fields);
@@ -720,6 +733,13 @@ async function adoptUnknownTask(ctx: SiteContext, item: SpListItem): Promise<"ad
   if (initRaw !== undefined && initRaw !== null && initRaw !== "") {
     const hit = await repo.getBucketBySpItemId(String(initRaw));
     bucket = hit?.bucket.id ?? undefined;
+    const project = hit?.bucket.project
+      ? (await repo.getProjects()).find((p) => p.id === hit.bucket.project)
+      : undefined;
+    if (isArchived(hit?.bucket) || isArchived(project)) {
+      await auditArchivedAdoption("ToDos", item, validation.id);
+      return "skipped";
+    }
   } else if (initRaw === null || initRaw === "") {
     bucket = null;
   }
@@ -730,7 +750,14 @@ async function adoptUnknownTask(ctx: SiteContext, item: SpListItem): Promise<"ad
     assignee = email ? actorIdByEmail(email) : null;
   }
   const task = buildAdoptedTask(validation.id, item.fields, { bucket, assignee });
-  const inserted = await repo.insertAdoptedTask(task, item.id);
+  let inserted: boolean;
+  try {
+    inserted = await repo.insertAdoptedTask(task, item.id);
+  } catch (err) {
+    if (!isArchiveCreateRejection(err)) throw err;
+    await auditArchivedAdoption("ToDos", item, task.id);
+    return "skipped";
+  }
   if (!inserted) return "skipped";
   await repo.appendAudit(
     SYNC_ACTOR,
@@ -1152,11 +1179,24 @@ async function pullRoadmap(ctx: SiteContext): Promise<InboundResult> {
       if (projRaw !== undefined && projRaw !== null && projRaw !== "") {
         const hit = (await repo.getProjectRows()).find((p) => p.spItemId === String(projRaw));
         project = hit?.project.id ?? undefined;
+        if (isArchived(hit?.project)) {
+          await auditArchivedAdoption("Roadmap", item, validation.id);
+          result.skipped += 1;
+          continue;
+        }
       } else if (projRaw === null || projRaw === "") {
         project = null;
       }
       const bucket = buildAdoptedBucket(validation.id, item.fields, { project });
-      const inserted = await repo.insertAdoptedBucket(bucket, item.id);
+      let inserted: boolean;
+      try {
+        inserted = await repo.insertAdoptedBucket(bucket, item.id);
+      } catch (err) {
+        if (!isArchiveCreateRejection(err)) throw err;
+        await auditArchivedAdoption("Roadmap", item, bucket.id);
+        result.skipped += 1;
+        continue;
+      }
       if (!inserted) {
         result.skipped += 1;
         continue;

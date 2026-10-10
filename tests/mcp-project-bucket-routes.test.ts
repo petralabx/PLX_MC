@@ -129,7 +129,7 @@ describe("cursor project and bucket creation routes", () => {
 
   it("lists buckets through the authenticated envelope and forwards filters", async () => {
     const response = await listBuckets(
-      new Request("http://localhost/api/cursor/buckets?q=alpha&project=PRJ-MAIN", {
+      new Request("http://localhost/api/cursor/buckets?q=alpha&project=PRJ-MAIN&includeArchived=true", {
         headers: {
           "x-api-key": "test-mcp-key",
           "x-mc-operator-email": "vince@petrasoap.com",
@@ -144,7 +144,7 @@ describe("cursor project and bucket creation routes", () => {
     expect(response.status).toBe(200);
     expect(mocks.listBuckets).toHaveBeenCalledWith(
       expect.objectContaining({ servicePrincipalId: "sp_mcp_cursor" }),
-      { q: "alpha", project: "PRJ-MAIN" }
+      { q: "alpha", project: "PRJ-MAIN", includeArchived: true }
     );
     await expect(response.json()).resolves.toMatchObject({
       data: { count: 1, buckets: [{ id: "BKT-ALPHA" }] },
@@ -180,6 +180,21 @@ describe("cursor project and bucket creation routes", () => {
       cursorRequest("http://localhost/api/cursor/buckets", "PATCH", { id: "BKT-1" }),
       ctx
     );
+    expect(response.status).toBe(400);
+    expect(mocks.updateBucket).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("archive request validation", () => {
+  it("forwards archive reason and force through the existing bucket route", async () => {
+    const body = { id: "BKT-A", action: "archive", reason: "retired", force: true };
+    const response = await updateBucket(cursorRequest("http://localhost/api/cursor/buckets", "PATCH", body), ctx);
+    expect(response.status).toBe(200);
+    expect(mocks.updateBucket).toHaveBeenCalledWith(expect.anything(), body);
+  });
+  it("rejects an empty archive reason before mutation", async () => {
+    const response = await updateBucket(cursorRequest("http://localhost/api/cursor/buckets", "PATCH", { id: "BKT-A", action: "archive", reason: " " }), ctx);
     expect(response.status).toBe(400);
     expect(mocks.updateBucket).not.toHaveBeenCalled();
   });

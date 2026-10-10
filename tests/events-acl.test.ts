@@ -49,6 +49,13 @@ describe("filterEventsByProjectAcl", () => {
     );
     expect(out.map((e) => e.seq)).toEqual(["1"]);
   });
+
+  it("withholds project and bucket archive reasons from non-members", async () => {
+    const project = { ...ev("1", "project.archived", null), payload: { projectId: "PRJ-SECRET", reason: "private" } };
+    const bucket = { ...ev("2", "bucket.unarchived", null), payload: { bucketId: "BKT-SECRET", reason: "private" } };
+    expect(await filterEventsByProjectAcl([project, bucket], principalFromTokens("outsider@petrasoap.com"))).toEqual([]);
+    expect(await filterEventsByProjectAcl([project, bucket], principalFromTokens("vince@petrasoap.com"))).toHaveLength(2);
+  });
   it("keeps them for members", async () => {
     const out = await filterEventsByProjectAcl([ev("2", "task.updated", "TASK-SECRET")], principalFromTokens("vince@petrasoap.com"));
     expect(out).toHaveLength(1);

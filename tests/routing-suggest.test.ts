@@ -34,6 +34,7 @@ const upsertRoutingSession = vi.hoisted(() =>
 
 const createTask = vi.hoisted(() => vi.fn());
 const eventsByKinds = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
+const archiveFlags = vi.hoisted(() => ({ bucket: false, project: false }));
 const extraTasks = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 const appendWorkLink = vi.hoisted(() => vi.fn());
 const runShadowRouting = vi.hoisted(() =>
@@ -108,7 +109,7 @@ vi.mock("@/lib/sync", () => ({
       },
       ...extraTasks,
     ],
-    buckets: [{ id: "BKT-INFRA", repos: ["plx-mc"], project: "PRJ-PORTAL-GOLIVE" }],
+    buckets: [{ id: "BKT-INFRA", repos: ["plx-mc"], project: "PRJ-PORTAL-GOLIVE", archivedAt: archiveFlags.bucket ? "2026-10-09" : null }],
     repos: [{ id: "plx-mc", name: "PLX_MC" }],
     risks: [],
     files: [],
@@ -118,7 +119,7 @@ vi.mock("@/lib/sync", () => ({
     counts: {},
     repoRequests: [],
     bucketComments: {},
-    projects: [],
+    projects: [{ id: "PRJ-PORTAL-GOLIVE", archivedAt: archiveFlags.project ? "2026-10-09" : null }],
     lastSweep: new Date().toISOString(),
   })),
   createTask,
@@ -170,6 +171,8 @@ function mcpIdentity(overrides: Partial<McpIdentity> = {}): McpIdentity {
 
 describe("routing suggest (P5)", () => {
   beforeEach(() => {
+    archiveFlags.bucket = false;
+    archiveFlags.project = false;
     vi.clearAllMocks();
     extraTasks.length = 0;
     vi.stubEnv("PLX_MC_ROUTING_SHADOW_ENABLED", "1");
@@ -360,5 +363,22 @@ describe("routing suggest (P5)", () => {
     expect(top.evidence).toMatchObject({ runtime: "cursor", bucketId: "BKT-UI", checkouts: 4, completed: 4, peerCheckouts: 8 });
     // derivedProjectId follows the new top candidate, null included.
     expect(result.derivedProjectId).toBeNull();
+  });
+});
+
+describe("archived work is never suggested", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    extraTasks.length = 0;
+    archiveFlags.bucket = false;
+    archiveFlags.project = false;
+    vi.stubEnv("PLX_MC_ROUTING_SHADOW_ENABLED", "1");
+    vi.stubEnv("PLX_MC_ROUTING_SUGGEST_ENABLED", "1");
+    vi.stubEnv("PLX_MC_ROUTING_INBOX_ENABLED", "1");
+  });
+  it.each(["bucket", "project"] as const)("removes archived %s work before routing scores candidates", async (kind) => {
+    archiveFlags[kind] = true;
+    await actionSuggestWork(mcpIdentity(), { title: "work" });
+    expect(runShadowRouting).toHaveBeenCalledWith(expect.objectContaining({ tasks: [], buckets: [] }));
   });
 });

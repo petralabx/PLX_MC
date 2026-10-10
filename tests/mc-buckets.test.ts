@@ -110,12 +110,13 @@ describe("updateBucket (EN-005) — optimistic + reconcile/rollback", () => {
     expect(activeNotices().some((n) => /rolled back/i.test(n.body))).toBe(true);
   });
 
-  it("drops health=off from navBuckets while keeping the record", async () => {
+  it("drops archived records from navBuckets while keeping the record", async () => {
     const visible = addBucket({ name: "Live Ops Lane" });
     const archived = addBucket({ name: "Credential Smoke Lane" });
     __setBucketUpdateMirrorForTests(async (id, patch) => ({
       ...bucketById(id)!,
       ...patch,
+      archivedAt: "2026-10-09T00:00:00Z",
     }));
     await updateBucket(archived.id, { health: "off" });
     await __bucketUpdateSettled();

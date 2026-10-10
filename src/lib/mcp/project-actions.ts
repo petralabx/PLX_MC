@@ -7,13 +7,13 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { appendEvent } from "@/lib/compliance/repo";
 import { AGENTS, HUMANS } from "@/lib/mc-data/data";
-import { isProjectClosed } from "@/lib/mc-data/helpers";
+import { isArchived, isProjectClosed } from "@/lib/mc-data/helpers";
 import type { Project, StageKey } from "@/lib/mc-data/types";
 import { isKnownServicePrincipal } from "@/lib/permissions";
 import { assertProjectIdAccess } from "@/lib/permissions/project-acl-guard";
 import { filterProjectsByAcl } from "@/lib/permissions/project-acl";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
-import { patchProject, snapshot } from "@/lib/sync";
+import { archiveContainer, patchProject, snapshot } from "@/lib/sync";
 import { getProjects } from "@/lib/sync/repo";
 import type { McpIdentity } from "./auth";
 import { mcpJsonResult } from "./envelope";
@@ -24,6 +24,9 @@ const DONE_STAGES: readonly StageKey[] = ["merged", "verified"];
 export const updateProjectSchema = z
   .object({
     projectId: z.string().trim().min(1).max(128),
+    action: z.enum(["archive", "unarchive"]).optional(),
+    reason: z.string().trim().min(1).max(2000).optional(),
+    force: z.boolean().optional(),
     status: z.enum(["active", "closed"]).optional().describe("closed hides the project from nav, counts and pickers and blocks new tasks/buckets; active reopens it"),
     owner: z.string().trim().min(1).max(320).optional().describe("Known person id/email, agent id or MCP service principal id"),
     description: z.string().max(32_000).optional(),
@@ -33,6 +36,7 @@ export const updateProjectSchema = z
   .strict()
   .refine(
     (body) =>
+      body.action !== undefined ||
       body.status !== undefined ||
       body.owner !== undefined ||
       body.description !== undefined ||
@@ -42,6 +46,7 @@ export const updateProjectSchema = z
 
 export const listProjectsSchema = z
   .object({
+    includeArchived: z.boolean().optional(),
     status: z.enum(["active", "closed", "all"]).optional().describe("Default active"),
     q: z.string().trim().max(200).optional().describe("Case-insensitive match against project id or name"),
   })
@@ -83,6 +88,13 @@ export async function actionUpdateProject(identity: McpIdentity, input: unknown)
   await assertProjectIdAccess(body.projectId, aclPrincipalFromMcp(identity));
   const existing = (await getProjects()).find((p) => p.id === body.projectId);
   if (!existing) throw new ApiError("not_found", `unknown project ${body.projectId}`, 404);
+
+  if (body.action) {
+    if (body.status !== undefined || body.owner !== undefined || body.description !== undefined || body.name !== undefined) throw new ApiError("invalid_request", "Archive actions cannot mix with metadata edits.", 400);
+    const receipt = await archiveContainer({ entityType: "project", id: body.projectId, action: body.action, reason: body.reason ?? "", force: body.force, actor: authorized.auditLabel, repo: identity.repo });
+    return { projectId: body.projectId, project: { ...existing, archivedAt: receipt.archivedAt, archivedBy: receipt.archivedBy, archiveReason: receipt.archiveReason }, changed: ["archivedAt"], ...receipt };
+  }
+  if (body.force !== undefined || body.reason !== undefined) throw new ApiError("invalid_request", "force/reason requires an archive action.", 400);
 
   let owner: string | undefined;
   if (body.owner !== undefined) {
@@ -145,14 +157,14 @@ export async function actionUpdateProject(identity: McpIdentity, input: unknown)
 
 export async function actionListProjects(identity: McpIdentity, input: unknown = {}) {
   assertMcpToolAllowed(identity, "mc_list_projects");
-  const { status = "active", q } = parseInput(listProjectsSchema, input ?? {});
+  const { status = "active", q, includeArchived = false } = parseInput(listProjectsSchema, input ?? {});
   requireMcpActor(identity, "task.read");
   const snap = await snapshot();
   const query = q?.toLowerCase();
   const visible = filterProjectsByAcl(snap.projects ?? [], aclPrincipalFromMcp(identity));
   const bucketsByProject = new Map<string, string[]>();
   for (const bucket of snap.buckets ?? []) {
-    if (!bucket.project) continue;
+    if (!bucket.project || (!includeArchived && isArchived(bucket))) continue;
     bucketsByProject.set(bucket.project, [...(bucketsByProject.get(bucket.project) ?? []), bucket.id]);
   }
   const tasksByBucket = new Map<string, { open: number; done: number }>();
@@ -164,6 +176,7 @@ export async function actionListProjects(identity: McpIdentity, input: unknown =
   }
   const projects = visible
     .filter((project) => {
+      if (!includeArchived && isArchived(project)) return false;
       if (status !== "all" && (isProjectClosed(project) ? "closed" : "active") !== status) return false;
       return !query || project.id.toLowerCase().includes(query) || project.name.toLowerCase().includes(query);
     })
@@ -187,6 +200,9 @@ export async function actionListProjects(identity: McpIdentity, input: unknown =
         openTaskCount: counts.open,
         doneTaskCount: counts.done,
         closedAt: project.closedAt ?? null,
+        archivedAt: project.archivedAt ?? null,
+        archivedBy: project.archivedBy ?? null,
+        archiveReason: project.archiveReason ?? null,
       };
     });
   return { projects, count: projects.length, filter: { status, ...(query ? { q } : {}) } };
@@ -194,11 +210,11 @@ export async function actionListProjects(identity: McpIdentity, input: unknown =
 
 export function registerProjectTools(server: McpServer, identity: McpIdentity): void {
   server.registerTool("mc_update_project", {
-    description: "Steward edit of a Mission Control project: {projectId, status?, owner?, description?, name?, note?}, at least one field. status=closed removes the project from active nav, counts and pickers and blocks new tasks/buckets in it; status=active reopens. owner must be a known person, agent or service principal. Audits project.updated with before/after; queues the Projects mirror (status is MC-side only). health is not changed here.",
+    description: "Archive/unarchive with {projectId, action, reason, force?}; archives cascade to buckets, refuses open tasks unless forced. Metadata edits cannot mix with archive actions. Steward edit of a Mission Control project: {projectId, status?, owner?, description?, name?, note?}, at least one field. status=closed removes the project from active nav, counts and pickers and blocks new tasks/buckets in it; status=active reopens. owner must be a known person, agent or service principal. Audits project.updated with before/after; queues the Projects mirror (status is MC-side only). health is not changed here.",
     inputSchema: updateProjectSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateProject(identity, args) }));
   server.registerTool("mc_list_projects", {
-    description: "List projects with id, name, owner, status, health, bucketCount, openTaskCount, doneTaskCount and closedAt. status: active (default) | closed | all; q matches id or name. Restricted projects stay hidden by ACL.",
+    description: "Archived projects are excluded by default; includeArchived=true includes them. List projects with id, name, owner, status, health, bucketCount, openTaskCount, doneTaskCount and closedAt. status: active (default) | closed | all; q matches id or name. Restricted projects stay hidden by ACL.",
     inputSchema: listProjectsSchema,
   }, async (args) => mcpJsonResult({ data: await actionListProjects(identity, args) }));
 }

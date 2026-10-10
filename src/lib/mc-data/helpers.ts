@@ -111,11 +111,13 @@ export function domainOf(email: string): string {
   return (String(email ?? "").split("@")[1] ?? "").toLowerCase();
 }
 
-// Soft-archive: health=off stays in the store (evidence retained) but leaves
-// sidebar/nav and the command-palette jump lists. No unused archived/hidden
-// flag exists — health is the archive switch.
-export function isNavVisible(item: { health: Health }): boolean {
-  return item.health !== "off";
+// Archive is independent of health and closure. Missing archive stamps are active.
+export function isArchived(item: { archivedAt?: string | null } | null | undefined): boolean {
+  return Boolean(item?.archivedAt);
+}
+
+export function isNavVisible(item: { health?: Health; archivedAt?: string | null }): boolean {
+  return !isArchived(item);
 }
 
 // Project lifecycle (TASK-2530): a project with no status is active. Closed

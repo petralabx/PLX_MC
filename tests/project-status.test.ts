@@ -113,6 +113,22 @@ describe("patchProject status (TASK-2530)", () => {
   });
 });
 
+
+describe("archived containers block new work", () => {
+  it("rejects tasks in archived buckets without modifying tasks or allocating ids", async () => {
+    store.buckets[0].archivedAt = "2026-10-09";
+    await expect(createTask({ title: "New", bucket: "BKT-DONE", reporter: "vince" })).rejects.toMatchObject({ code: "bucket_archived", status: 409 });
+    expect(store.bucketUpserts).toHaveLength(0);
+  });
+  it("rejects both tasks and buckets in an archived project, then allows after unarchive", async () => {
+    store.projects[0].archivedAt = "2026-10-09";
+    await expect(createTask({ title: "New", bucket: "BKT-DONE", reporter: "vince" })).rejects.toMatchObject({ code: "project_archived" });
+    await expect(createBucket({ name: "New", project: "PRJ-DONE" })).rejects.toMatchObject({ code: "project_archived" });
+    store.projects[0].archivedAt = null;
+    expect((await createBucket({ name: "New", project: "PRJ-DONE" })).project).toBe("PRJ-DONE");
+    expect((await createTask({ title: "New", bucket: "BKT-DONE", reporter: "vince" })).id).toBe("TASK-9001");
+  });
+});
 describe("closed project blocks new work", () => {
   it("rejects createBucket and createTask under a closed project, then allows both after reopen", async () => {
     await patchProject("PRJ-DONE", { status: "closed" }, "vince");

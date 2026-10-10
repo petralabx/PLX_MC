@@ -172,3 +172,19 @@ describe("buildDashboard on the seed data", () => {
     }
   });
 });
+
+
+describe("archive exclusion", () => {
+  it("hides archived buckets and their tasks from totals without reclassifying them as unfiled", () => {
+    const archived = buildDashboard(tasks, [{ ...b1, archivedAt: "2026-10-09" }, b2, b3, loose], [open, shut]);
+    expect(archived.scopes.active).toMatchObject({ projects: 1, buckets: 1, total: 3 });
+    expect(archived.unfiled).toEqual(model.unfiled);
+    expect(archived.remaining.some((r) => r.bucket.id === b1.id)).toBe(false);
+  });
+  it("hides archived projects across every scope, then restores counts on unarchive", () => {
+    const archived = buildDashboard(tasks, [b1, b2, b3, loose], [{ ...open, archivedAt: "2026-10-09" }, shut]);
+    expect(archived.scopes.active.projects).toBe(0);
+    expect(archived.scopes.all.projects).toBe(1);
+    expect(buildDashboard(tasks, [b1, b2, b3, loose], [{ ...open, archivedAt: null }, shut]).scopes).toEqual(model.scopes);
+  });
+});

@@ -44,6 +44,14 @@ describe("stdio wave 4 tool parity (plus TASK-2326 release tools)", () => {
     }
   });
 
+  it("types mc_report_progress stage with the stage enum, not any string", () => {
+    const block = stdioSource.slice(stdioSource.indexOf('"mc_report_progress"'));
+    const stage = block.slice(block.indexOf("stage:"), block.indexOf("notes:"));
+    expect(stage).toContain("z\n      .enum([");
+    expect(stage).toContain('"merged", "verified"');
+    expect(stage).not.toContain("z.string()");
+  });
+
   it("installs the error envelope and keeps REST error codes", () => {
     expect(stdioSource).toContain("installToolErrorEnvelope(server);");
     expect(stdioSource).toContain("throw restErrorFromResponse(res.status, json);");

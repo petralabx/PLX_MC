@@ -13,6 +13,7 @@ import {
   type StageKey,
   type TargetEnv,
 } from "@/lib/mc-data";
+import { isArchived } from "@/lib/mc-data/helpers";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   actorById,
@@ -21,6 +22,7 @@ import {
   allRepos,
   bucketById,
   nextTaskId,
+  projectById,
   ownerOrViewerDefault,
   viewerId,
 } from "@/lib/mc-data/store";
@@ -78,7 +80,10 @@ export function NewTaskModal({
   nav: Nav;
 }) {
   useMcVersion();
-  const startingBucketId = ctx?.bucketId ?? allBuckets()[0]?.id ?? "";
+  const eligibleBuckets = allBuckets().filter((b) =>
+    !isArchived(b) && !isArchived(b.project ? projectById(b.project) : undefined));
+  const eligibleBucketIds = eligibleBuckets.map((b) => b.id);
+  const startingBucketId = eligibleBuckets.find((b) => b.id === ctx?.bucketId)?.id ?? eligibleBuckets[0]?.id ?? "";
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [bucketId, setBucketId] = useState(startingBucketId);
@@ -123,7 +128,7 @@ export function NewTaskModal({
     return Object.keys(registry);
   }, [bucket, registry]);
 
-  const canCreate = title.trim().length > 0 && !!bucketId;
+  const canCreate = title.trim().length > 0 && eligibleBucketIds.includes(bucketId);
   const handleBucketChange = (nextBucketId: string) => {
     setBucketId(nextBucketId);
     const nextBucket = bucketById(nextBucketId) ?? null;
@@ -144,7 +149,9 @@ export function NewTaskModal({
   };
 
   const submit = useCallback(() => {
-    if (!canCreate || !bucketId) return;
+    const selectedBucket = bucketById(bucketId);
+    if (!title.trim() || !selectedBucket || isArchived(selectedBucket) ||
+      isArchived(selectedBucket.project ? projectById(selectedBucket.project) : undefined)) return;
     const created = addTask({
       title,
       description,
@@ -166,7 +173,6 @@ export function NewTaskModal({
     nav("board", { bucketId: created.bucket });
   }, [
     bucketId,
-    canCreate,
     description,
     dueISO,
     estimate,
@@ -235,8 +241,9 @@ export function NewTaskModal({
             <label className="ntm-fact">
               <span className="k">Initiative</span>
               <div className="ntm-select-wrap">
-                <select value={bucketId} onChange={(event) => handleBucketChange(event.target.value)}>
-                  {allBuckets().map((bucketOption) => (
+                <select value={eligibleBucketIds.includes(bucketId) ? bucketId : ""} disabled={!eligibleBuckets.length} onChange={(event) => handleBucketChange(event.target.value)}>
+                  {!eligibleBucketIds.includes(bucketId) ? <option value="">{eligibleBuckets.length ? "Choose an initiative" : "No eligible initiatives"}</option> : null}
+                  {eligibleBuckets.map((bucketOption) => (
                     <option key={bucketOption.id} value={bucketOption.id}>
                       {bucketOption.name}
                     </option>

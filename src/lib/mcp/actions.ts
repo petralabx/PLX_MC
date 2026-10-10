@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/api/route";
 import { checkout, complete } from "@/lib/compliance/service";
 import * as complianceRepo from "@/lib/compliance/repo";
 import {
+  archiveContainer,
   createBucket,
   createProject,
   createTask,
@@ -21,7 +22,9 @@ import {
 import { cancelTask } from "@/lib/sync/cancel";
 import { getEntity } from "@/lib/sync/repo";
 import {
+  isArchived,
   resolveHumanAccountableOwner,
+  STAGE_IDX,
   TERMINAL_STAGES,
   isClosedStage,
   type Evidence,
@@ -49,6 +52,7 @@ import {
 import type { McpIdentity } from "./auth";
 import { taskSearchSchema, type SearchTasksInput } from "./task-search-schema";
 export type { SearchTasksInput } from "./task-search-schema";
+import { TERMINAL_TASK_STAGES } from "./task-update-actions";
 import { resolveCheckoutRepo } from "./checkout-repo";
 import { taskLink } from "./envelope";
 import { assertMayCloseOrReopen, cancelContextFor } from "./task-cancel-actions";
@@ -176,16 +180,22 @@ export async function actionGetContext(
   const principal = identity ? aclPrincipalFromMcp(identity) : undefined;
   const projectsById = indexById(snap.projects ?? []);
   const bucketsById = indexById(snap.buckets ?? []);
-  const visibleBuckets = principal
+  let visibleBuckets = principal
     ? filterBucketsByAcl(snap.buckets ?? [], projectsById, principal)
     : (snap.buckets ?? []);
-  const visibleTasks = principal
+  let visibleTasks = principal
     ? filterTasksByAcl(snap.tasks, bucketsById, projectsById, principal)
     : snap.tasks;
-  const visibleProjects = principal
+  let visibleProjects = principal
     ? filterProjectsByAcl(snap.projects ?? [], principal)
     : (snap.projects ?? []);
   const idSet = filter.taskIds ? new Set(filter.taskIds) : null;
+  if (!idSet && !filter.bucket) {
+    const retired = new Set(visibleBuckets.filter((b) => isArchived(b) || isArchived(projectsById.get(b.project ?? ""))).map((b) => b.id));
+    visibleBuckets = visibleBuckets.filter((b) => !retired.has(b.id));
+    visibleProjects = visibleProjects.filter((p) => !isArchived(p));
+    visibleTasks = visibleTasks.filter((t) => !retired.has(t.bucket));
+  }
 
   if (filter.depth === "full") {
     let tasks = visibleTasks;
@@ -366,7 +376,7 @@ export async function actionCreateBucket(
 
 export async function actionListBuckets(
   identity: McpIdentity,
-  input: { q?: string; project?: string } = {}
+  input: { q?: string; project?: string; includeArchived?: boolean } = {}
 ) {
   // Discovery is a read: task.read, like mc_list_conflicts. Read-only
   // principals must not need a create grant (or a TASK-0 workaround) to find a
@@ -382,6 +392,7 @@ export async function actionListBuckets(
   );
   const buckets = visible
     .filter((bucket) => {
+      if (!input.includeArchived && (isArchived(bucket) || isArchived(maps.projectsById.get(bucket.project ?? "")))) return false;
       const matchesQuery =
         !query ||
         bucket.id.toLowerCase().includes(query) ||
@@ -390,12 +401,15 @@ export async function actionListBuckets(
       return matchesQuery && matchesProject;
     })
     .sort((left, right) => left.id.localeCompare(right.id))
-    .map(({ id, name, owner, health, project }) => ({
+    .map(({ id, name, owner, health, project, archivedAt, archivedBy, archiveReason }) => ({
       id,
       name,
       owner,
       health,
       project: project ?? null,
+      archivedAt: archivedAt ?? null,
+      archivedBy: archivedBy ?? null,
+      archiveReason: archiveReason ?? null,
     }));
 
   return { buckets, count: buckets.length };
@@ -403,6 +417,9 @@ export async function actionListBuckets(
 
 export type UpdateBucketActionInput = {
   id: string;
+  action?: "archive" | "unarchive";
+  reason?: string;
+  force?: boolean;
   name?: string;
   description?: string;
   owner?: string;
@@ -427,7 +444,15 @@ export async function actionUpdateBucket(
   if (typeof input.project === "string" && input.project.trim()) {
     await assertProjectIdAccess(input.project, principal);
   }
+  if (input.action) {
+    if (Object.entries(input).some(([key, value]) => !["id", "action", "reason", "force"].includes(key) && value !== undefined)) throw new ApiError("invalid_request", "Archive actions cannot mix with metadata edits.", 400);
+    return { bucketId: input.id, ...await archiveContainer({ entityType: "bucket", id: input.id, action: input.action, reason: input.reason ?? "", force: input.force, actor: authorized.auditLabel, repo: identity.repo }) };
+  }
+  if (input.force !== undefined || input.reason !== undefined) throw new ApiError("invalid_request", "force/reason requires an archive action.", 400);
   const { id, description, ...rest } = input;
+  delete rest.action;
+  delete rest.reason;
+  delete rest.force;
   const patch: PatchBucketInput = {
     ...rest,
     ...(description !== undefined ? { desc: description } : {}),
@@ -502,8 +527,9 @@ export async function actionProgress(
     id: input.taskId,
   });
   await assertTaskProjectAccess(input.taskId, aclPrincipalFromMcp(identity));
-  const patch: Record<string, unknown> = {};
-  const current = (await getEntity("task", input.taskId))?.data as Task | undefined;
+  const row = await getEntity("task", input.taskId);
+  if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+  const current = row.data as unknown as Task;
   const cancelling = input.stage === "cancelled";
   if (!cancelling && (input.cancelReason !== undefined || input.replacedBy != null || input.note !== undefined)) {
     throw new ApiError("invalid_request", "cancelReason, replacedBy and note apply only with stage \"cancelled\".", 400);
@@ -511,6 +537,39 @@ export async function actionProgress(
   if (current?.stage === "cancelled" && !cancelling && (input.stage || (!input.notes && !input.subtasks))) {
     throw new ApiError("task_cancelled", `${input.taskId} is cancelled; reopen it with mc_update_task {reopen} before changing its stage.`, 409);
   }
+  // A bare call changes nothing: report the current stage, write nothing.
+  if (!input.stage && !input.notes && !input.subtasks) {
+    return {
+      ok: true,
+      noop: true,
+      taskId: input.taskId,
+      stage: current.stage,
+      link: taskLink(input.taskId),
+      sync: await syncMetaForTask(input.taskId),
+    };
+  }
+  // Only the compliance projection moves a task back from merged/verified.
+  if (
+    input.stage &&
+    TERMINAL_TASK_STAGES.includes(current.stage) &&
+    STAGE_IDX[input.stage] < STAGE_IDX[current.stage]
+  ) {
+    throw new ApiError(
+      "stage_regression",
+      `Task ${input.taskId} is ${current.stage}; a progress post cannot move it back to ${input.stage}.`,
+      409
+    );
+  }
+  // The authenticated principal must hold an active checkout of this task.
+  // X-MC-Operator-Email is audit context only and never authorizes.
+  if (!(await complianceRepo.hasActiveCheckoutForPrincipal(input.taskId, identity.actor.id))) {
+    throw new ApiError(
+      "forbidden",
+      `No active checkout of ${input.taskId} held by this principal. Check the task out (mc_checkout_task) before reporting progress.`,
+      403
+    );
+  }
+  const patch: Record<string, unknown> = {};
   let cancelResult: Awaited<ReturnType<typeof cancelTask>> | undefined;
   if (cancelling) {
     if (!current) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
@@ -531,12 +590,9 @@ export async function actionProgress(
       ts: new Date().toISOString(),
       mentions: [] as string[],
     };
-    patch.comments = [...(current?.comments ?? []), comment];
+    patch.comments = [...(current.comments ?? []), comment];
   }
   if (input.subtasks) patch.subtasks = input.subtasks;
-  if (!input.stage && !input.notes && !input.subtasks) {
-    patch.stage = "progress";
-  }
   const task = Object.keys(patch).length === 0 && cancelResult
     ? cancelResult.task
     : await patchTask(

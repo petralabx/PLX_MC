@@ -137,7 +137,13 @@ export interface SyncRef {
 
 // Project — the optional parent above Bucket (P2). Operators organize initiatives
 // (buckets) under a Project; the FK is nullable so it is purely additive.
-export interface Project {
+export interface ArchiveFields {
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
+}
+
+export interface Project extends ArchiveFields {
   id: string;
   name: string;
   owner: string;
@@ -157,7 +163,7 @@ export interface Project {
   closedBy?: string | null;
 }
 
-export interface Bucket {
+export interface Bucket extends ArchiveFields {
   id: string;
   name: string;
   owner: string;

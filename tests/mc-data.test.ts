@@ -178,8 +178,9 @@ describe("nav visibility (soft-archive)", () => {
     expect(isNavVisible({ health: "risk" })).toBe(true);
   });
 
-  it("hides health=off items from nav", () => {
-    expect(isNavVisible({ health: "off" })).toBe(false);
+  it("hides archived items while keeping off-track health visible", () => {
+    expect(isNavVisible({ health: "off" })).toBe(true);
+    expect(isNavVisible({ health: "track", archivedAt: "2026-10-09" })).toBe(false);
   });
 });
 

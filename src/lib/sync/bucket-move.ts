@@ -1,7 +1,7 @@
 // Shared target check for moving a task to another bucket (TASK-2533): used by
 // mc_update_task(s) and by inbound SharePoint Initiative changes.
-// Archived buckets (task 2532) and closed projects (task 2530) are not on this
-// base, so each guard only fires when the record exposes its flag today.
+// Archived buckets/projects (task 2532), retirement and project closure (task 2530)
+// all refuse new task placements.
 import { ApiError } from "@/lib/api/route";
 import type { Bucket, Project } from "@/lib/mc-data/types";
 
@@ -31,6 +31,7 @@ export function bucketMoveTargetViolation(
   if (!bucket) return "unknown bucket";
   const archived = bucket as ArchivableBucket;
   if (archived.archived === true || archived.archivedAt) return `bucket ${bucket.id} is archived`;
+  if (project?.archivedAt) return `project ${project.id} is archived`;
   if (bucket.project && !project) return `unknown project ${bucket.project}`;
   return closedProjectViolation(project);
 }

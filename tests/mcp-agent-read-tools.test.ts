@@ -285,12 +285,25 @@ describe("tool registry", () => {
     expect(names).toContain("mc_update_tasks");
     expect(names).toContain("mc_report_session_telemetry");
     expect(names).toContain("mc_update_project");
+    expect(names).toContain("mc_link_merged_pr");
     expect(names).toContain("mc_list_projects");
-    expect(names).toHaveLength(37);
+    expect(names).toHaveLength(38);
   });
 });
 
 describe("mc_get_task", () => {
+  it("reads archived-container tasks by id while default context hides their work", async () => {
+    const snap = await m.snapshot();
+    const task = snap.tasks.find((t: { id: string }) => t.id === "TASK-100");
+    m.snapshot.mockResolvedValue({ ...snap, buckets: snap.buckets.map((b: { id: string }) => b.id === task.bucket ? { ...b, archivedAt: "2026-10-09" } : b) });
+    const { isError, body } = await callTool("mc_get_task", { id: "TASK-100" });
+    expect(isError).toBe(false);
+    expect(body.data.task.id).toBe("TASK-100");
+    const { actionGetContext } = await import("@/lib/mcp/actions");
+    const context = await actionGetContext("full");
+    expect("tasks" in context && context.tasks?.some((t) => t.id === "TASK-100")).toBe(false);
+  });
+
   it("returns the task with events, checkouts, accountable owner and evidence", async () => {
     const { isError, body } = await callTool("mc_get_task", { id: "TASK-100" });
     expect(isError).toBe(false);

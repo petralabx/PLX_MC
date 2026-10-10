@@ -183,8 +183,8 @@ describe("MCP planning hierarchy creation actions", () => {
     expect(mocks.requireMcpActor).toHaveBeenCalledWith(identity, "task.read");
     expect(result).toEqual({
       buckets: [
-        { id: "BKT-ALPHA", name: "Alpha initiative", owner: "alice", health: "track", project: "PRJ-MAIN" },
-        { id: "BKT-BETA", name: "Beta work", owner: "bob", health: "risk", project: null },
+        { id: "BKT-ALPHA", name: "Alpha initiative", owner: "alice", health: "track", project: "PRJ-MAIN", archivedAt: null, archivedBy: null, archiveReason: null },
+        { id: "BKT-BETA", name: "Beta work", owner: "bob", health: "risk", project: null, archivedAt: null, archivedBy: null, archiveReason: null },
       ],
       count: 2,
     });
@@ -206,4 +206,12 @@ describe("MCP planning hierarchy creation actions", () => {
     });
     await expect(actionListBuckets(identity, { q: "bkt-beta", project: "PRJ-MAIN" })).resolves.toEqual({ buckets: [], count: 0 });
   });
+  it("excludes archived buckets from default discovery and includes them on request", async () => {
+    const buckets = await mocks.getBuckets();
+    mocks.getBuckets.mockResolvedValueOnce(buckets.map((b: { id: string }) => ({ ...b, archivedAt: "2026-10-09" })));
+    expect((await actionListBuckets(identity)).count).toBe(0);
+    mocks.getBuckets.mockResolvedValueOnce(buckets.map((b: { id: string }) => ({ ...b, archivedAt: "2026-10-09" })));
+    expect((await actionListBuckets(identity, { includeArchived: true })).count).toBe(2);
+  });
+
 });

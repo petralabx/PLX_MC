@@ -453,6 +453,25 @@ export async function listDispatches(f: ListDispatchesFilter): Promise<DispatchL
   }));
 }
 
+/**
+ * True when `principalId` holds an unrevoked, unreleased, unexpired checkout of
+ * `taskId`. The principal is the checkout event's permissionActorId (the
+ * authenticated service principal at checkout), never an operator header.
+ */
+export async function hasActiveCheckoutForPrincipal(taskId: string, principalId: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `SELECT d.id
+       FROM mc_dispatch d
+       JOIN mc_events e ON e.kind = 'checkout' AND e.payload->>'checkoutId' = d.id
+      WHERE d.task_id = $1
+        AND NOT d.revoked AND d.released_at IS NULL AND d.expires_at > now()
+        AND e.payload->>'permissionActorId' = $2
+      LIMIT 1`,
+    [taskId, principalId]
+  );
+  return rows.length > 0;
+}
+
 /** Release and audit atomically; a repeated close is a no-op. */
 export async function releaseDispatches(
   ids: string[],

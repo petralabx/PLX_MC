@@ -40,6 +40,7 @@ import { registerApprovalTools } from "./approval-actions";
 import { registerCheckoutReleaseTools } from "./checkout-release-actions";
 import { registerTaskUpdateTools } from "./task-update-actions";
 import { registerProjectTools } from "./project-actions";
+import { registerLinkMergedPrTools } from "./link-merged-pr-actions";
 import { registerSessionTelemetryTools } from "./session-telemetry-actions";
 
 function jsonResult(payload: unknown) {
@@ -50,7 +51,7 @@ type ToolResult = { content?: { type: string; text?: string }[]; isError?: boole
 
 // The task/checkout ids a JSON tool result carries, bare or under `data` — the
 // same fields the REST wrapper (route.ts) records from its handler data.
-function auditIds(result: ToolResult): { taskId?: string; checkoutId?: string } {
+function auditIds(result: ToolResult): { taskId?: string; checkoutId?: string; noop?: boolean } {
   const text = result.content?.find((c) => c.type === "text")?.text;
   if (!text) return {};
   let parsed: Record<string, unknown>;
@@ -64,6 +65,7 @@ function auditIds(result: ToolResult): { taskId?: string; checkoutId?: string } 
   return {
     taskId: str(parsed.taskId) ?? str(data.taskId),
     checkoutId: str(parsed.checkoutId) ?? str(data.checkoutId),
+    noop: parsed.noop === true || data.noop === true,
   };
 }
 
@@ -82,11 +84,14 @@ function auditToolCalls(server: McpServer, identity: McpIdentity): void {
         const requestId = randomUUID();
         try {
           const result = await handler(...handlerArgs);
+          const { noop, ...ids } = auditIds(result);
+          // A no-op call (e.g. a bare mc_report_progress) changed nothing and writes no audit row.
+          if (noop) return result;
           await recordMcpToolCall({
             tool,
             identity,
             requestId,
-            ...auditIds(result),
+            ...ids,
             ok: !result.isError,
             durationMs: Date.now() - started,
           });
@@ -221,7 +226,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     "mc_list_buckets",
     "Discover valid BKT-* bucket ids and minimal ownership/project metadata before creating tasks or buckets.",
     {
-      q: z.string().optional().describe("Case-insensitive match against bucket id or name"),
+      includeArchived: z.boolean().optional(),
+    q: z.string().optional().describe("Case-insensitive match against bucket id or name"),
       project: z.string().optional().describe("Exact parent project id"),
     },
     async (args) => jsonResult(await actionListBuckets(identity, args))
@@ -246,9 +252,12 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_update_bucket",
-    "Patch fields on an existing Mission Control bucket/initiative (prd, health, owner, description, name, target, started, repos, project). Queues the SharePoint Roadmap mirror.",
+    "Archive/unarchive with {id, action, reason, force?}. Refuses open tasks unless forced; cannot mix with metadata. Patch fields on an existing Mission Control bucket/initiative (prd, health, owner, description, name, target, started, repos, project). Queues the SharePoint Roadmap mirror.",
     {
-      id: z.string().min(1).describe("Existing BKT-* bucket id"),
+      action: z.enum(["archive", "unarchive"]).optional(),
+    reason: z.string().trim().min(1).max(2000).optional(),
+    force: z.boolean().optional(),
+    id: z.string().min(1).describe("Existing BKT-* bucket id"),
       name: z.string().min(1).optional(),
       description: z.string().optional(),
       owner: z.string().min(1).optional(),
@@ -381,6 +390,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   registerCheckoutReleaseTools(server, identity);
   registerTaskUpdateTools(server, identity);
   registerProjectTools(server, identity);
+  registerLinkMergedPrTools(server, identity);
   registerSessionTelemetryTools(server, identity);
 
   return server;

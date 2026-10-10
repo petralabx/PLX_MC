@@ -1,3 +1,4 @@
+import { isArchived } from "@/lib/mc-data";
 // MCP routing suggestion action — audited, authorize(routing.suggest), no
 // Task/link/SharePoint mutation. Operator email is audit context only.
 
@@ -205,8 +206,11 @@ export async function actionSuggestWork(
   const principal = aclPrincipalFromMcp(identity);
   const projectsById = indexById(snap.projects ?? []);
   const bucketsById = indexById(snap.buckets ?? []);
-  const visibleTasks = filterTasksByAcl(snap.tasks, bucketsById, projectsById, principal);
-  const visibleBuckets = filterBucketsByAcl(snap.buckets ?? [], projectsById, principal);
+  const visibleTasks = filterTasksByAcl(snap.tasks, bucketsById, projectsById, principal).filter((t) => {
+    const bucket = bucketsById.get(t.bucket);
+    return !isArchived(bucket) && !isArchived(projectsById.get(bucket?.project ?? ""));
+  });
+  const visibleBuckets = filterBucketsByAcl(snap.buckets ?? [], projectsById, principal).filter((b) => !isArchived(b) && !isArchived(projectsById.get(b.project ?? "")));
   const trackedRepos = (
     (trackedReposRegistry as { repos?: Array<Record<string, unknown>> }).repos ?? []
   ).map((entry) => ({

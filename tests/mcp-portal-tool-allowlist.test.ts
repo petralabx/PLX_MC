@@ -170,6 +170,7 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   mc_update_bucket: { id: "BKT-INFRA", name: "Renamed" },
   mc_create_project: { name: "New project" },
   mc_update_project: { projectId: "PRJ-PORTAL-GOLIVE", status: "closed" },
+  mc_link_merged_pr: { taskId: "TASK-1", repo: "petralabx/PLX_MC", prNumber: 1, reason: "x" },
   mc_list_projects: {},
   mc_request_approval: { taskId: "TASK-1", reason: "please" },
   mc_get_approval_gate: { taskId: "TASK-1" },

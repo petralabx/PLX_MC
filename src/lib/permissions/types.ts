@@ -11,6 +11,8 @@ export const CAPABILITIES = [
   "task.read",
   "task.create",
   "task.link",
+  // Steward-only: mc_link_merged_pr attaches an already-merged PR to a task.
+  "task.link_merged_pr",
   "task.reopen",
   "task.cancel",
   "task.checkout",
@@ -148,7 +150,14 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
   "sp_mcp_swarm",
   "sp_mcp_agent_runner",
   "sp_mcp_portal",
+  "sp_mcp_ledger",
 ] as const;
+
+/**
+ * Ledger steward principal. The only MCP principal holding task.link_merged_pr
+ * (mc_link_merged_pr); otherwise it carries the normal agent bundle.
+ */
+export const LEDGER_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_ledger" as const;
 
 export type McpAgentServicePrincipalId =
   (typeof MCP_AGENT_SERVICE_PRINCIPAL_IDS)[number];

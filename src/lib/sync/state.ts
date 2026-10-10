@@ -7,7 +7,7 @@ import { ApiError } from "@/lib/api/route";
 import { OPERATOR_ID, HUMANS, SP_LISTS } from "@/lib/mc-data/data";
 import type { Cancellation } from "@/lib/mc-data/cancellation";
 import { normalizeBucketPrd } from "@/lib/mc-data/doc-links";
-import { isProjectClosed } from "@/lib/mc-data/helpers";
+import { isArchived, isProjectClosed } from "@/lib/mc-data/helpers";
 import {
   isRestrictedProject,
   normalizeProjectMembers,
@@ -174,6 +174,7 @@ async function defaultProjectId(): Promise<string | null> {
 
 /** Reject new work under a closed project (TASK-2530); reopen with status=active. */
 function assertProjectOpen(project: Project | undefined, what: string): void {
+  if (isArchived(project)) throw new ApiError("project_archived", `Project ${project!.id} is archived — unarchive it before creating a ${what}.`, 409);
   if (!project || !isProjectClosed(project)) return;
   throw new ApiError(
     "project_closed",
@@ -534,6 +535,7 @@ export async function createTask(
   if (!parentBucket) {
     throw new ApiError("invalid_bucket", `Bucket ${input.bucket} does not exist.`, 422);
   }
+  if (isArchived(parentBucket)) throw new ApiError("bucket_archived", `Bucket ${parentBucket.id} is archived.`, 409);
   if (parentBucket.project) {
     assertProjectOpen(
       (await repo.getProjects()).find((p) => p.id === parentBucket.project),

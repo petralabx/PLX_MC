@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "@/lib/mc-data";
 
 const mocks = vi.hoisted(() => ({
+  archiveContainer: vi.fn(async () => ({ archivedAt: "2026-10-09", archivedBy: "vince", archiveReason: "retired" })),
   patchProject: vi.fn(),
   snapshot: vi.fn(),
   getProjects: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/sync", () => ({
+  archiveContainer: mocks.archiveContainer,
   patchProject: mocks.patchProject,
   snapshot: mocks.snapshot,
 }));
@@ -62,6 +64,13 @@ beforeEach(() => {
 });
 
 describe("actionUpdateProject", () => {
+
+  it("routes archive to the shared cascade with the authorized actor and reason", async () => {
+    await actionUpdateProject(steward, { projectId: "PRJ-COS-COMPANION", action: "archive", reason: "retired", force: true });
+    expect(mocks.archiveContainer).toHaveBeenCalledWith(expect.objectContaining({ entityType: "project", action: "archive", reason: "retired", force: true, actor: "vince@petrasoap.com" }));
+    expect(mocks.patchProject).not.toHaveBeenCalled();
+    await expect(actionUpdateProject(steward, { projectId: "PRJ-COS-COMPANION", action: "archive", reason: "retired", status: "closed" })).rejects.toMatchObject({ code: "invalid_request" });
+  });
   it("closes a project, audits before/after on project.updated and passes the operator as actor", async () => {
     const result = await actionUpdateProject(steward, {
       projectId: "PRJ-COS-COMPANION",
@@ -189,6 +198,16 @@ describe("actionListProjects", () => {
     });
   });
 
+
+  it("hides archived projects and buckets from default counts; includeArchived restores discovery", async () => {
+    const snap = await mocks.snapshot();
+    snap.projects[0].archivedAt = "2026-10-09";
+    expect((await actionListProjects(steward, { status: "all" })).projects.map((p) => p.id)).toEqual(["PRJ-B"]);
+    expect((await actionListProjects(steward, { status: "all", includeArchived: true })).projects.map((p) => p.id)).toEqual(["PRJ-A", "PRJ-B"]);
+    snap.projects[0].archivedAt = null;
+    snap.buckets[0].archivedAt = "2026-10-09";
+    expect((await actionListProjects(steward)).projects[0].bucketCount).toBe(1);
+  });
   it("returns active projects by default with accurate counts and hides restricted ones", async () => {
     const result = await actionListProjects(steward, {});
     expect(result.projects).toEqual([
@@ -202,6 +221,7 @@ describe("actionListProjects", () => {
         openTaskCount: 1,
         doneTaskCount: 2,
         closedAt: null,
+        archivedAt: null, archivedBy: null, archiveReason: null,
       },
     ]);
   });

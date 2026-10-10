@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-09 (ET) — A spec's "completed_at" dependency had been reverted on main
+
+- **What happened:** TASK-2559 assumed the merged-PR projection sets completed_at (from #286). #286 was reverted by #290, so main's projection does not set it.
+- **Root cause:** The spec cited a merged PR without checking it was still on main.
+- **Rule going forward:** Before relying on a cited PR's behavior, check `git log` for a revert of it. Say plainly in the PR when a spec dependency is absent.
+
 ### 2026-10-09 (ET) — A Claude dashboard over PLX-MC-Hub rendered blank for its reader
 
 - **What happened:** A claude.ai Dashboard artifact (the PLX Project Tracker) stored live queries on `PLX-MC-Hub`. In the reader's browser every source came back "absent" and the page showed nothing.
@@ -854,6 +860,12 @@
 - **What went wrong:** An inbound SharePoint bucket move refused by the guard only wrote an audit line, so the delta cursor advanced and a dirty local bucket could later overwrite SharePoint. The lane exception also checked only the label delta, so title/description/priority edits rode along with a closure label.
 - **Root cause:** A new inbound validation path refused silently instead of using the existing conflict register; an exception predicate was scoped to one field of the patch.
 - **Rule going forward:** Any inbound refusal of a SharePoint value records an open `sync_conflicts` row and sets the task `conflict` (outbound holds) — never audit-only. Exceptions to a validation rule must test the whole patch, not just the field they target.
+
+### 2026-10-09 (ET) — TASK-2560: a bare progress post regressed a merged task
+
+- **What went wrong:** 35 s after the compliance projection promoted a task to Merged, a `mc_report_progress` call with no stage/notes/subtasks defaulted the stage to `progress` and moved it back to In Progress. The call held no checkout.
+- **Root cause:** `actionProgress` defaulted a missing stage, accepted any stage whatever the current one, and authorized on the shared principal and project access alone, with no per-task lease check.
+- **Rule going forward:** A mutating MCP tool never defaults a missing input into a write. Terminal stages (merged/verified) are moved back only by the compliance projection. A task write needs an active checkout bound to the authenticated principal (`permissionActorId`), never the operator header.
 
 ### 2026-10-09 — Application deployed before the live schema migration
 

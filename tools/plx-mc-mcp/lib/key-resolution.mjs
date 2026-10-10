@@ -8,6 +8,7 @@ const SUPPORTED_MCP_PRINCIPAL_IDS = new Set([
   "sp_mcp_swarm",
   "sp_mcp_agent_runner",
   "sp_mcp_portal",
+  "sp_mcp_ledger",
 ]);
 
 const RUNTIME_PRINCIPAL_IDS = new Map([

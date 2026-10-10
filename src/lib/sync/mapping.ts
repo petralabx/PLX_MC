@@ -249,6 +249,7 @@ export function mcDateToIso(value: string | undefined): string | null {
 export function projectOutboundFields(project: Project, opts: { creating?: boolean } = {}): Record<string, unknown> {
   const out: Record<string, unknown> = {
     Title: project.name,
+    Archived: Boolean(project.archivedAt),
     Health: HEALTH_TO_SP[project.health] ?? "On track",
     Description: project.desc || undefined,
     PRDLink: project.prd || undefined,
@@ -269,6 +270,7 @@ export function bucketOutboundFields(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {
     Title: bucket.name,
+    Archived: Boolean(bucket.archivedAt),
     Health: HEALTH_TO_SP[bucket.health] ?? "On track",
     PRDLink: bucket.prd || undefined,
   };

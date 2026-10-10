@@ -167,14 +167,16 @@ server.tool(
   "mc_list_buckets",
   "Discover valid BKT-* bucket ids and minimal ownership/project metadata before creating tasks or buckets.",
   {
+    includeArchived: z.boolean().optional(),
     q: z.string().optional().describe("Case-insensitive match against bucket id or name"),
     project: z.string().optional().describe("Exact parent project id"),
   },
-  async ({ q, project }) => {
+  async ({ q, project, includeArchived }) => {
     if (!MCP_ENABLED) return disabledTool("mc_list_buckets");
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (project) params.set("project", project);
+    if (includeArchived !== undefined) params.set("includeArchived", String(includeArchived));
     const query = params.size ? `?${params.toString()}` : "";
     return printResult(await mcFetch(`/buckets${query}`));
   }
@@ -202,8 +204,11 @@ server.tool(
 
 server.tool(
   "mc_update_bucket",
-  "Patch fields on an existing Mission Control bucket/initiative (prd, health, owner, description, name, target, started, repos, project). Queues the SharePoint Roadmap mirror.",
+  "Archive/unarchive with {id, action, reason, force?}. Refuses open tasks unless forced; cannot mix with metadata. Patch fields on an existing Mission Control bucket/initiative (prd, health, owner, description, name, target, started, repos, project). Queues the SharePoint Roadmap mirror.",
   {
+    action: z.enum(["archive", "unarchive"]).optional(),
+    reason: z.string().trim().min(1).max(2000).optional(),
+    force: z.boolean().optional(),
     id: z.string().min(1).describe("Existing BKT-* bucket id"),
     name: z.string().min(1).optional(),
     description: z.string().optional(),
@@ -288,7 +293,9 @@ server.tool(
   "Report task progress (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing.",
   {
     taskId: z.string().min(1),
-    stage: z.string().optional(),
+    stage: z
+      .enum(["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified"])
+      .optional(),
     notes: z.string().optional(),
     progressPct: z.number().min(0).max(100).optional(),
     cancelReason: z.string().optional(),
@@ -629,9 +636,12 @@ const taskUpdatePatch = z.object({
 }).strict();
 
 server.registerTool("mc_update_project", {
-  description: "Steward edit of a Mission Control project: {projectId, status?, owner?, description?, name?, note?}, at least one field. status=closed removes the project from active nav, counts and pickers and blocks new tasks/buckets in it; status=active reopens. owner must be a known person, agent or service principal. Audits project.updated with before/after. health is not changed here.",
+  description: "Archive/unarchive with {projectId, action, reason, force?}; cascades buckets, refuses open tasks unless forced. Steward edit of a Mission Control project: {projectId, status?, owner?, description?, name?, note?}, at least one field. status=closed removes the project from active nav, counts and pickers and blocks new tasks/buckets in it; status=active reopens. owner must be a known person, agent or service principal. Audits project.updated with before/after. health is not changed here.",
   inputSchema: z.object({
     projectId: z.string().trim().min(1).max(128),
+    action: z.enum(["archive", "unarchive"]).optional(),
+    reason: z.string().trim().min(1).max(2000).optional(),
+    force: z.boolean().optional(),
     status: z.enum(["active", "closed"]).optional(),
     owner: z.string().trim().min(1).max(320).optional(),
     description: z.string().max(32_000).optional(),
@@ -646,13 +656,15 @@ server.registerTool("mc_update_project", {
 server.registerTool("mc_list_projects", {
   description: "List projects with id, name, owner, status, health, bucketCount, openTaskCount, doneTaskCount and closedAt. status: active (default) | closed | all; q matches id or name.",
   inputSchema: z.object({
+    includeArchived: z.boolean().optional(),
     status: z.enum(["active", "closed", "all"]).optional(),
     q: z.string().trim().max(200).optional(),
   }).strict(),
-}, async ({ status, q }) => {
+}, async ({ status, q, includeArchived }) => {
   if (!MCP_ENABLED) return disabledTool("mc_list_projects");
   const params = new URLSearchParams();
   if (status) params.set("status", status);
+  if (includeArchived !== undefined) params.set("includeArchived", String(includeArchived));
   if (q) params.set("q", q);
   const query = params.size ? `?${params.toString()}` : "";
   return printResult(await mcFetch(`/projects${query}`));

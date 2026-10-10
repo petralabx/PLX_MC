@@ -18,6 +18,7 @@ dispatch logic.
 |---------|------|
 | REST cursor API | `src/app/api/cursor/*` — self-auth via per-agent keys (`PLX_MC_MCP_AGENT_KEYS`) or the legacy shared `PLX_MC_MCP_API_KEY` (retire via `PLX_MC_MCP_SHARED_KEY_ENABLED=0`) + operator headers |
 | Planning hierarchy | `mc_create_project` + `mc_create_bucket` + `mc_update_bucket` + `mc_update_project` + `mc_list_projects` — capability-gated writes queued through the existing Projects/Roadmap SharePoint mirrors |
+| Merged-PR link | `mc_link_merged_pr` (Hub HTTP MCP only) — steward-only (`task.link_merged_pr`, held only by `sp_mcp_ledger`; operator email is audit context). Reads merged state, head SHA and merge SHA from GitHub, records `task.prs`, audits `task.pr.linked`, applies only the normal merged-PR promotion, never Verified, no checkout, no PR-body edit. Refuses unmerged PRs and PRs linked to another task unless `override` + `overrideReason`. Separate from routing confirm/attach (`PLX_MC_ROUTING_CONFIRM_ENABLED` unchanged) |
 | Routing suggest | `POST /api/cursor/routing/suggest` — `mc_suggest_work` (`routing.suggest`) |
 | Streamable HTTP MCP | `GET/POST/DELETE /api/cursor/mcp` — remote team registration |
 | Stdio MCP client | `tools/plx-mc-mcp/index.ts` — local Cursor + Cloud Agents |
@@ -276,8 +277,8 @@ the Entra UI.
 
 **Project status and steward edits (TASK-2530):** projects carry a lifecycle
 `status` (`active` default | `closed`), with `closedAt` / `closedBy` stamped on
-close and cleared on reopen. It is separate from `health`, and the health=off
-nav filter is unchanged. `mc_update_project` (`PATCH /api/cursor/projects`) takes
+close and cleared on reopen. It is separate from `health` and retirement (`archivedAt`). Health no longer
+controls nav visibility. `mc_update_project` (`PATCH /api/cursor/projects`) takes
 `projectId` plus at least one of `status`, `owner`, `description`, `name`, and an
 optional `note`. Auth is the MCP principal's `project.update` grant (the
 reviewed agent bundle; `sp_mcp_portal` and `sp_sync_inbound` get 403) plus the
@@ -465,3 +466,37 @@ project ACL and before the exact count and cursor page; they also bind the
 cursor scope. Search does not create completion timestamps.
 Descriptions, activity and comment arrays are omitted. Payload size depends
 on titles, labels and PRs; 200 representative fixture rows fit under 100 KB.
+
+
+### Project and bucket retirement (TASK-2532)
+
+Owner: Vince (vince@petrasoap.com). Extend the existing `mc_update_project`
+(`project.update`) and `mc_update_bucket` (`bucket.update`) tools with
+`action: "archive" | "unarchive"`, a required non-empty `reason` (max 2000),
+and optional `force: true`. Archive actions cannot mix with metadata edits.
+REST and both MCP transports use the same actions and existing project ACL.
+
+Archive refuses non-terminal tasks unless forced with a reason. It never
+changes tasks. Project archive cascades to every bucket; project unarchive
+restores all its buckets (including buckets previously retired separately).
+A bucket cannot unarchive while its parent is archived. Every successful call,
+including repeats, writes `project.archived`, `bucket.archived`, or the
+corresponding `.unarchived` event per affected container with actor and reason,
+atomically with the stamps. Restricted-project events are ACL-filtered on export.
+
+`mc_list_projects` and `mc_list_buckets` hide retired containers by default;
+`includeArchived: true` (REST `?includeArchived=true`) includes them with
+`archivedAt`, `archivedBy`, `archiveReason`. The existing project status filter
+still applies; use `status: "all"` to discover closed archived projects.
+Default context, suggestions, nav, pickers, dashboard and hierarchy counts
+exclude retired work. `mc_get_task`, explicit context task/bucket filters and
+deep links retain the records subject to the same ACL. Closed projects remain
+available in closed/history views; archived projects leave every dashboard scope.
+New tasks/buckets in retired containers are rejected; existing tasks continue syncing.
+
+Migration `035_container_archive.sql` exposes JSON-authoritative archive stamps
+as generated SQL columns and migrates previous `health=off` exclusions, preserving
+health. Deploy schema before app; coordinate migration numbering after #297.
+Projects/Roadmap push `Archived` as an outbound-only boolean. Provision and verify
+that column via the existing operator runbook before deploy; no Graph operation
+is part of this implementation. Production retirement is a separate steward action.

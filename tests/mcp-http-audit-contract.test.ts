@@ -24,6 +24,7 @@ vi.mock("@/lib/mcp/actions", async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import("@/lib/mcp/actions")>()),
     actionSelfCheck: vi.fn(async () => ({ ok: true })),
+    actionProgress: vi.fn(async () => ({ ok: true, noop: true, taskId: "TASK-7", stage: "merged" })),
     actionCheckout: vi.fn(async () => {
       throw new ApiError("repo_not_allowlisted", "Repo is not on the Hub allowlist.", 403);
     }),
@@ -133,5 +134,19 @@ describe("mc_complete_task contract", () => {
     );
     expect(rest.status).toBe(200);
     expect(calls.completes).toBe(2);
+  });
+});
+
+describe("no-op calls", () => {
+  it("HTTP MCP appends no mcp.tool.invoked row for a no-op result", async () => {
+    const client = await connect();
+    await client.callTool({ name: "mc_report_progress", arguments: { taskId: "TASK-7" } });
+    expect(calls.audit).toEqual([]);
+  });
+
+  it("HTTP MCP rejects a stage outside the enum", async () => {
+    const client = await connect();
+    const res = await client.callTool({ name: "mc_report_progress", arguments: { taskId: "TASK-7", stage: "done" } });
+    expect(res.isError).toBe(true);
   });
 });

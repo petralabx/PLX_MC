@@ -30,6 +30,9 @@ vi.mock("@/lib/permissions/enforcement", async () => {
 });
 vi.mock("@/lib/permissions/decision-log", () => ({ recordPermissionDecision: vi.fn(async () => true) }));
 vi.mock("@/lib/permissions/project-acl-guard", () => ({ assertTaskProjectAccess: vi.fn(async () => undefined) }));
+vi.mock("@/lib/db", () => ({
+  withTransaction: async (fn: (q: unknown) => Promise<unknown>) => fn(async () => []),
+}));
 vi.mock("@/lib/sync/engine", () => ({
   ensureSeeded: vi.fn(async () => true),
   ensureReposSeeded: vi.fn(async () => true),

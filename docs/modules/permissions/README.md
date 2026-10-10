@@ -134,6 +134,7 @@ concrete rule cannot be expressed that way.
 - `db/migrations/023_mcp_agent_principals.sql` — per-agent MCP principals
 - `db/migrations/025_grok_hermes_mcp_principals.sql` — Grok/Hermes MCP principals
 - `db/migrations/030_chatgpt_mcp_principal.sql` — ChatGPT MCP principal
+- `db/migrations/034_ledger_mcp_principal.sql` — Ledger steward MCP principal (`task.link_merged_pr`)
 - `src/lib/auth/identity.ts` — Entra `oid` session helpers + enforcement mode
 
 ## Dependencies

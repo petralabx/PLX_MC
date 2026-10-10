@@ -18,6 +18,7 @@ dispatch logic.
 |---------|------|
 | REST cursor API | `src/app/api/cursor/*` — self-auth via per-agent keys (`PLX_MC_MCP_AGENT_KEYS`) or the legacy shared `PLX_MC_MCP_API_KEY` (retire via `PLX_MC_MCP_SHARED_KEY_ENABLED=0`) + operator headers |
 | Planning hierarchy | `mc_create_project` + `mc_create_bucket` + `mc_update_bucket` + `mc_update_project` + `mc_list_projects` — capability-gated writes queued through the existing Projects/Roadmap SharePoint mirrors |
+| Merged-PR link | `mc_link_merged_pr` (Hub HTTP MCP only) — steward-only (`task.link_merged_pr`, held only by `sp_mcp_ledger`; operator email is audit context). Reads merged state, head SHA and merge SHA from GitHub, records `task.prs`, audits `task.pr.linked`, applies only the normal merged-PR promotion, never Verified, no checkout, no PR-body edit. Refuses unmerged PRs and PRs linked to another task unless `override` + `overrideReason`. Separate from routing confirm/attach (`PLX_MC_ROUTING_CONFIRM_ENABLED` unchanged) |
 | Routing suggest | `POST /api/cursor/routing/suggest` — `mc_suggest_work` (`routing.suggest`) |
 | Streamable HTTP MCP | `GET/POST/DELETE /api/cursor/mcp` — remote team registration |
 | Stdio MCP client | `tools/plx-mc-mcp/index.ts` — local Cursor + Cloud Agents |

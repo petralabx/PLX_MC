@@ -40,6 +40,7 @@ import { registerApprovalTools } from "./approval-actions";
 import { registerCheckoutReleaseTools } from "./checkout-release-actions";
 import { registerTaskUpdateTools } from "./task-update-actions";
 import { registerProjectTools } from "./project-actions";
+import { registerLinkMergedPrTools } from "./link-merged-pr-actions";
 import { registerSessionTelemetryTools } from "./session-telemetry-actions";
 
 function jsonResult(payload: unknown) {
@@ -385,6 +386,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   registerCheckoutReleaseTools(server, identity);
   registerTaskUpdateTools(server, identity);
   registerProjectTools(server, identity);
+  registerLinkMergedPrTools(server, identity);
   registerSessionTelemetryTools(server, identity);
 
   return server;

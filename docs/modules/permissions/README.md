@@ -72,6 +72,11 @@ the authenticated principal; `X-MC-Operator-Email` is recorded as audit context
 only. Admin and owner roles hold both. No service principal holds either today,
 and `MCP_AGENT_CAPABILITIES` never includes them (every agent would then cancel
 any task); an operator grants one to a named principal in `SERVICE_GRANTS`.
+Humans cancel from the task detail (click **Cancelled** in the lifecycle rail,
+pick a reason): `PATCH /api/tasks/{id}` with `{cancel: {reason, replacedBy?,
+note?}}` alone, authorized as `task.cancel` on the Entra session (TASK-2598);
+a refusal appends `task.cancel_denied`. Clicking any other stage on a cancelled
+task reopens it through `task.reopen`.
 
 **Portal principal (agent fleet P8, decision CG-07b):** `sp_mcp_portal`
 (migration 028) does not get the shared agent bundle. Its grant is

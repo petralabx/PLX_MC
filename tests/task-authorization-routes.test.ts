@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   assertProjectIdAccess: vi.fn(async () => undefined),
   getEntity: vi.fn(),
   reopenTask: vi.fn(),
+  cancelTask: vi.fn(),
   appendEvent: vi.fn(),
 }));
 
@@ -21,7 +22,7 @@ vi.mock("@/lib/sync/repo", () => ({
   getBuckets: async () => [],
   getProjects: async () => [],
 }));
-vi.mock("@/lib/sync/cancel", () => ({ reopenTask: mocks.reopenTask }));
+vi.mock("@/lib/sync/cancel", () => ({ reopenTask: mocks.reopenTask, cancelTask: mocks.cancelTask }));
 vi.mock("@/lib/compliance/repo", () => ({ appendEvent: mocks.appendEvent }));
 
 vi.mock("@/lib/routing/mutations/actors", () => ({
@@ -66,6 +67,7 @@ describe("task authorization routes", () => {
     });
     mocks.getEntity.mockResolvedValue({ data: { stage: "progress" } });
     mocks.reopenTask.mockResolvedValue({ stage: "backlog" });
+    mocks.cancelTask.mockResolvedValue({ task: { id: "TASK-1", stage: "cancelled" } });
     mocks.createTask.mockResolvedValue({ id: "TASK-1", title: "t" });
     mocks.patchTask.mockResolvedValue({ id: "TASK-1", stage: "progress" });
     mocks.checkout.mockResolvedValue({ checkoutId: "dsp_x" });
@@ -164,6 +166,57 @@ describe("task authorization routes", () => {
     it("refuses entering cancelled through PATCH (schema rejects it; only the cancel service enters)", async () => {
       await expect(patchStage("cancelled")).rejects.toMatchObject({ status: 400 });
       expect(mocks.patchTask).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("PATCH {cancel} from a signed-in person (TASK-2598)", () => {
+    const patchBody = async (body: unknown) => {
+      const { PATCH } = await import("@/app/api/tasks/[id]/route");
+      return PATCH(
+        new Request("http://localhost/api/tasks/TASK-1", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ id: "TASK-1" }) }
+      );
+    };
+
+    it("lets an admin/owner holding task.cancel cancel through the cancel service, with replacedBy null", async () => {
+      const result = await patchBody({ actor: "ignored", cancel: { reason: "obsolete", replacedBy: null } });
+      expect(mocks.requireSessionActor).toHaveBeenCalledWith("task.cancel", { type: "task", id: "TASK-1" });
+      expect(mocks.assertTaskProjectAccess).toHaveBeenCalledWith("TASK-1", expect.anything());
+      expect(mocks.cancelTask).toHaveBeenCalledWith(
+        "TASK-1",
+        { reason: "obsolete", replacedBy: null },
+        expect.objectContaining({
+          actorId: "oid-1",
+          eventActor: "human:vince@example.com",
+          attribution: { source: "human", actorId: "oid-1" },
+        })
+      );
+      expect(mocks.patchTask).not.toHaveBeenCalled();
+      expect(result).toEqual({ id: "TASK-1", stage: "cancelled" });
+    });
+
+    it("refuses a member without task.cancel: 403, task.cancel_denied audit, no cancel", async () => {
+      const { ApiError } = await import("@/lib/api/route");
+      mocks.requireSessionActor.mockImplementation(async (capability: string) => {
+        if (capability === "task.cancel") throw new ApiError("forbidden", "task.cancel denied (no_grant).", 403);
+        return { actor: { kind: "human", id: "oid-1" }, actorId: "oid-1", actorKind: "human", auditLabel: "vince@example.com" };
+      });
+      await expect(patchBody({ cancel: { reason: "obsolete" } })).rejects.toMatchObject({ code: "forbidden", status: 403 });
+      expect(mocks.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "task.cancel_denied", taskId: "TASK-1", actor: "human:vince@example.com" })
+      );
+      expect(mocks.cancelTask).not.toHaveBeenCalled();
+      expect(mocks.patchTask).not.toHaveBeenCalled();
+    });
+
+    it("rejects cancel combined with other fields (400) before any authorization", async () => {
+      await expect(patchBody({ cancel: { reason: "obsolete" }, priority: "low" })).rejects.toMatchObject({ status: 400 });
+      expect(mocks.requireSessionActor).not.toHaveBeenCalled();
+      expect(mocks.cancelTask).not.toHaveBeenCalled();
     });
   });
 

@@ -961,3 +961,14 @@
   expose `checkoutRef` (`dsp_…last4`). Compare ownership on the authenticated principal
   (`identity.servicePrincipalId`), never on operator headers. Test by reading the task through every
   read surface and asserting the full id is absent.
+
+## 2026-10-10 — TASK-2598: a capability with no door for the principals that hold it
+- **What went wrong:** TASK-2529 gave `task.cancel` to the human admin/owner roles only, but the
+  only cancel entry points were MCP tools, which authorize service principals. The session route
+  rejected `cancelled` and the UI pointed people at `mc_update_task`. Nobody could cancel: Vince
+  had no button, and `sp_mcp_cursor` was correctly denied (10 `task.cancel_denied` on TASK-2229).
+- **Root cause:** The capability was granted where the transport was missing, and tests covered
+  the deny path and a test-only granted principal, never a real holder of the grant.
+- **Rule going forward:** When adding a capability, list each role/principal that holds it and
+  the entry point it uses. Test the allow path through that entry point, not only through a
+  principal granted in a test.

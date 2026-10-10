@@ -16,12 +16,14 @@ import {
   type TargetEnv,
   type Task,
 } from "@/lib/mc-data";
+import { CANCEL_REASONS, CANCEL_REASON_LABEL, type CancelReason } from "@/lib/mc-data/cancellation";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   addComment,
   allBuckets,
   allTasks,
   bucketById,
+  cancelTaskWithReason,
   deleteComment,
   editComment,
   markAllSynced,
@@ -204,6 +206,73 @@ function RepoFact({ task }: { task: Task }) {
   );
 }
 
+const NEEDS_REPLACEMENT: readonly CancelReason[] = ["duplicate", "superseded"];
+
+// Cancel needs a reason (and replacedBy for duplicate/superseded); the server
+// checks task.cancel, which admins and owners hold (TASK-2598).
+function CancelTaskForm({ task, onClose }: { task: Task; onClose: () => void }) {
+  const [reason, setReason] = useState<CancelReason>("obsolete");
+  const [replacedBy, setReplacedBy] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const needsReplacement = NEEDS_REPLACEMENT.includes(reason);
+  const ready = !busy && (!needsReplacement || replacedBy.trim() !== "");
+
+  const submit = async () => {
+    setBusy(true);
+    const ok = await cancelTaskWithReason(task.id, {
+      reason,
+      replacedBy: replacedBy.trim() || null,
+      ...(note.trim() ? { note: note.trim() } : {}),
+    });
+    setBusy(false);
+    if (ok) onClose();
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 6, marginTop: 8 }} data-testid="cancel-task-form">
+      <label className="rfact-select">
+        <select
+          value={reason}
+          onChange={(event) => setReason(event.target.value as CancelReason)}
+          aria-label="Cancel reason"
+        >
+          {CANCEL_REASONS.map((key) => (
+            <option key={key} value={key}>
+              {CANCEL_REASON_LABEL[key]}
+            </option>
+          ))}
+        </select>
+        <span className="caret" aria-hidden="true">▾</span>
+      </label>
+      {needsReplacement && (
+        <input
+          className="le-input"
+          value={replacedBy}
+          onChange={(event) => setReplacedBy(event.target.value)}
+          placeholder="Replaced by (TASK-n)"
+          aria-label="Replaced by task id"
+        />
+      )}
+      <input
+        className="le-input"
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        placeholder="Note (optional)"
+        aria-label="Cancel note"
+      />
+      <span>
+        <button type="button" className="btn sm" disabled={!ready} onClick={submit}>
+          {busy ? "Cancelling…" : `Cancel ${task.id}`}
+        </button>{" "}
+        <button type="button" className="btn ghost sm" disabled={busy} onClick={onClose}>
+          Keep task
+        </button>
+      </span>
+    </div>
+  );
+}
+
 export function TaskDetailView({ route, nav }: ScreenProps) {
   useMcVersion();
   const taskId = route.taskId ?? allTasks()[0]?.id ?? "";
@@ -215,6 +284,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
   const [reassigned, setReassigned] = useState<{ taskId: string; actorId: string } | null>(null);
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState("");
+  const [cancelFormFor, setCancelFormFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (route.focus !== "evidence") return;
@@ -595,7 +665,9 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                     className={`s ${cls}`}
                     key={stage.key}
                     onClick={() => {
-                      if (!isCurrent) setTaskStage(task.id, stage.key);
+                      if (isCurrent) return;
+                      if (stage.key === "cancelled") setCancelFormFor(task.id);
+                      else setTaskStage(task.id, stage.key);
                     }}
                     aria-current={isCurrent ? "step" : undefined}
                     aria-label={`Set stage to ${stage.name}`}
@@ -616,6 +688,16 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                 );
               })}
             </div>
+            {cancelFormFor === task.id && task.stage !== "cancelled" && (
+              <CancelTaskForm task={task} onClose={() => setCancelFormFor(null)} />
+            )}
+            {task.stage === "cancelled" && task.cancellation && (
+              <div className="kk" style={{ marginTop: 8 }} data-testid="task-cancellation">
+                Cancelled · {CANCEL_REASON_LABEL[task.cancellation.reason]}
+                {task.cancellation.replacedBy ? ` → ${task.cancellation.replacedBy}` : ""}
+                {task.cancellation.note ? ` · ${task.cancellation.note}` : ""}
+              </div>
+            )}
           </div>
 
           <div className="blk">

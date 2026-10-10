@@ -295,7 +295,9 @@ picked by `mc_suggest_work`. Give it the `cancelled` stage instead:
 - Cancel needs the `task.cancel` capability and reopen `task.reopen`, held by the
   authenticated principal (human admin/owner roles; no agent principal today
   unless an operator grants one). The operator email header grants nothing. No checkout is needed. Anyone else gets `forbidden` and a
-  `task.cancel_denied` event.
+  `task.cancel_denied` event. An agent that cannot cancel hands the task to its
+  accountable human, who cancels it in the MC UI (task detail → **Cancelled** in
+  the lifecycle rail → reason).
 - `patch: {reopen: {stage?, note?}}` restores the task (default: the stage before
   the cancel) and clears the cancellation. `completedAt` is not cleared.
 - A cancelled task is not open work: it leaves open counts and `mc_suggest_work`,

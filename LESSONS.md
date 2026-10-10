@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-10 (ET) — Typecheck failed on a generated file after `next dev` was stopped
+
+- **What happened:** TASK-2565 and TASK-2592 each stopped a local `next dev` (port 3950) after a browser check. The next `tsc` / preflight then failed with "Unterminated string literal" in `.next/dev/types/validator.ts`.
+- **Root cause:** `next dev` regenerates the git-ignored `.next/dev/types` while it runs. Stopping it mid-write left a truncated file, and `tsconfig` includes it.
+- **Rule going forward:** After stopping a local `next dev`, delete `.next/dev` before typecheck or preflight. It is git-ignored build output, and the next dev run regenerates it. A TS error under `.next/` is environment state, not the change under test.
+
 ### 2026-10-09 (ET) — A spec's "completed_at" dependency had been reverted on main
 
 - **What happened:** TASK-2559 assumed the merged-PR projection sets completed_at (from #286). #286 was reverted by #290, so main's projection does not set it.

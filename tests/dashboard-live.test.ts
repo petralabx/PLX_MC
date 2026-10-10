@@ -301,6 +301,16 @@ describe("LivePanels", () => {
     expect(out).not.toContain("PR #5 merged");
   });
 
+  it("names a task the snapshot doesn't hold yet from the live report", () => {
+    const fresh = report({
+      tasks: [flight("TASK-9999", { title: "Brand-new task", bucketId: "BKT-WMS" })],
+      events: [event(3, { taskId: "TASK-9999" })],
+    });
+    const out = text(render(view({ report: fresh, at: NOW }), "PRJ-PORTAL-GOLIVE"));
+    expect(out).toContain("TASK-9999 Brand-new task");
+    expect(out).toContain("TASK-9999 · Brand-new task");
+  });
+
   it("keeps the last report on screen when a later poll fails", () => {
     const out = text(render(view({ report: busy, at: NOW - 2 * MIN, error: "HTTP 502" })));
     expect(out).toContain("Paused · updated 2 min ago");

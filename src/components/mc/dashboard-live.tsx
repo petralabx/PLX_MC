@@ -292,8 +292,13 @@ export function LivePanels({
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [showAllEvents, setShowAllEvents] = useState(false);
 
+  // The store's snapshot can predate a task an agent just created; the live
+  // report carries the title and initiative of every task in flight.
+  const flight = new Map((live.report?.tasks ?? []).map((t) => [t.taskId, t]));
   const projectOf = (bucketId: string | null | undefined) => (bucketId ? (bucketById(bucketId)?.project ?? null) : null);
-  const bucketOfTask = (taskId: string | null) => (taskId ? taskIndex.get(taskId)?.bucket : undefined);
+  const bucketOfTask = (taskId: string | null) =>
+    taskId ? (taskIndex.get(taskId)?.bucket ?? flight.get(taskId)?.bucketId ?? undefined) : undefined;
+  const titleOf = (taskId: string) => taskIndex.get(taskId)?.title ?? flight.get(taskId)?.title ?? undefined;
   const focusName = projectId ? (projectById(projectId)?.name ?? projectId) : null;
 
   const tasks = (live.report?.tasks ?? []).filter(
@@ -345,7 +350,12 @@ export function LivePanels({
           </ul>
         )}
         {tasks.length > TASKS_SHOWN && (
-          <button type="button" className="tl-link dash-more" onClick={() => setShowAllTasks((v) => !v)}>
+          <button
+            type="button"
+            className="tl-link dash-more"
+            aria-expanded={showAllTasks}
+            onClick={() => setShowAllTasks((v) => !v)}
+          >
             {showAllTasks ? "Show fewer" : `Show all ${fmt(tasks.length)} tasks`}
           </button>
         )}
@@ -361,7 +371,7 @@ export function LivePanels({
         ) : (
           <ol className="dash-feed">
             {events.slice(0, showAllEvents ? undefined : EVENTS_SHOWN).map((e) => {
-              const title = e.taskId ? taskIndex.get(e.taskId)?.title : undefined;
+              const title = e.taskId ? titleOf(e.taskId) : undefined;
               return (
                 <li
                   key={e.seq}
@@ -390,7 +400,12 @@ export function LivePanels({
           </ol>
         )}
         {events.length > EVENTS_SHOWN && (
-          <button type="button" className="tl-link dash-more" onClick={() => setShowAllEvents((v) => !v)}>
+          <button
+            type="button"
+            className="tl-link dash-more"
+            aria-expanded={showAllEvents}
+            onClick={() => setShowAllEvents((v) => !v)}
+          >
             {showAllEvents ? "Show fewer" : `Show all ${fmt(events.length)} events`}
           </button>
         )}

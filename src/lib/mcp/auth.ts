@@ -3,7 +3,9 @@
 // resolves sp_mcp_cursor behind a retirement kill switch. Operator email is
 // allowlisted audit/context only and never grants human capabilities.
 
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
+
+import { z } from "zod";
 
 import { ApiError } from "@/lib/api/route";
 import { isAllowedUser } from "@/lib/auth/gate";
@@ -86,7 +88,7 @@ export function mcpAgentKeyRegistry(): ReadonlyMap<McpAgentServicePrincipalId, s
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return registry;
   for (const [principalId, key] of Object.entries(parsed as Record<string, unknown>)) {
     if (!AGENT_PRINCIPAL_IDS.has(principalId)) {
-      console.error("[mcp] ignoring unknown MCP agent principal id in key registry: %s", principalId);
+      console.error("[mcp] ignoring unknown MCP agent principal id in key registry.");
       continue;
     }
     if (typeof key === "string" && key.trim()) {
@@ -96,30 +98,65 @@ export function mcpAgentKeyRegistry(): ReadonlyMap<McpAgentServicePrincipalId, s
   return registry;
 }
 
-function keysMatch(provided: string, expected: string): boolean {
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+const rotationSchema = z.record(z.string(), z.object({
+  next: z.string().trim().min(1).optional(),
+  currentEnabled: z.boolean().default(true),
+  nextEnabled: z.boolean().default(true),
+}).strict());
+
+function keyCredentials(): Array<{
+  principalId: McpAgentServicePrincipalId;
+  key: string;
+  enabled: boolean;
+}> {
+  const raw = (process.env.PLX_MC_MCP_AGENT_KEY_ROTATIONS ?? "").trim();
+  let rotations: z.infer<typeof rotationSchema> = {};
+  if (raw) {
+    try {
+      rotations = rotationSchema.parse(JSON.parse(raw));
+    } catch {
+      // Never fall back to accepting a key whose disable flag could not be read.
+      throw new ApiError("mcp_key_config_invalid", "MCP key rotation configuration is invalid.", 503);
+    }
+  }
+  const credentials = [];
+  for (const [principalId, key] of mcpAgentKeyRegistry()) {
+    const rotation = rotations[principalId];
+    credentials.push({ principalId, key, enabled: rotation?.currentEnabled ?? true });
+    if (rotation?.next) {
+      credentials.push({ principalId, key: rotation.next, enabled: rotation.nextEnabled });
+    }
+  }
+  const shared = expectedMcpApiKey();
+  if (shared) {
+    credentials.push({ principalId: MCP_SERVICE_PRINCIPAL_ID, key: shared, enabled: sharedMcpKeyEnabled() });
+  }
+  return credentials;
 }
 
-/**
- * Resolve the presented API key to a durable per-agent principal id.
- * Per-agent keys win; the legacy shared key maps to sp_mcp_cursor while its
- * kill switch is on. Null = no configured key matched.
- */
+function keysMatch(provided: string, expected: string): boolean {
+  // Fixed-size digests avoid leaking credential length through the comparison.
+  const digest = (key: string) => createHash("sha256").update(key).digest();
+  return timingSafeEqual(digest(provided), digest(expected));
+}
+
+function resolveKey(provided: string, credentials: ReturnType<typeof keyCredentials>) {
+  const matches = credentials.filter(({ key }) => keysMatch(provided, key));
+  // A disabled slot wins even if its key was accidentally reused in an enabled
+  // slot. Multiple principals sharing a credential fail closed as ambiguous.
+  const principalIds = new Set(matches.map(({ principalId }) => principalId));
+  const principalId = principalIds.size === 1 ? matches[0].principalId : null;
+  const disabled = matches.some(({ enabled }) => !enabled);
+  return { principalId, disabled };
+}
+
+/** Resolve only enabled, unambiguous keys; legacy remains enabled by default. */
 export function resolveMcpPrincipalIdFromKey(
   provided: string
 ): McpAgentServicePrincipalId | null {
   if (!provided) return null;
-  for (const [principalId, key] of mcpAgentKeyRegistry()) {
-    if (keysMatch(provided, key)) return principalId;
-  }
-  const shared = expectedMcpApiKey();
-  if (shared && sharedMcpKeyEnabled() && keysMatch(provided, shared)) {
-    return MCP_SERVICE_PRINCIPAL_ID;
-  }
-  return null;
+  const resolved = resolveKey(provided, keyCredentials());
+  return resolved.disabled ? null : resolved.principalId;
 }
 
 export function mcpEnabled(): boolean {
@@ -161,7 +198,7 @@ export function parseOperatorContext(req: Request): McpOperatorContext {
 
 function recordMcpAuthDenial(
   principalId: string,
-  reasonCode: "unknown_actor" | "actor_revoked"
+  reasonCode: "unknown_actor" | "actor_revoked" | "key_revoked"
 ): void {
   void recordPermissionDecision({
     site: "mcp.auth",
@@ -219,14 +256,18 @@ export async function verifyMcpRequest(
   if (!mcpEnabled()) {
     throw new ApiError("mcp_disabled", "PLX MC MCP is disabled (PLX_MC_MCP_ENABLED != 1).", 503);
   }
-  const anyKeyConfigured =
-    mcpAgentKeyRegistry().size > 0 || (sharedMcpKeyEnabled() && !!expectedMcpApiKey());
-  if (!anyKeyConfigured) {
+  const credentials = keyCredentials();
+  const provided = readApiKey(req);
+  const { principalId, disabled } = resolveKey(provided, credentials);
+  if (principalId && disabled) {
+    recordMcpAuthDenial(principalId, "key_revoked");
+    // Keep the public auth envelope stable; the decision audit carries reasonCode.
+    throw new ApiError("invalid_api_key", "Invalid or missing MCP API key.", 401);
+  }
+  if (!credentials.some(({ enabled }) => enabled)) {
     throw new ApiError("mcp_key_not_configured", "No MCP API key is configured on the server.", 503);
   }
-  const provided = readApiKey(req);
-  const principalId = resolveMcpPrincipalIdFromKey(provided);
-  if (!principalId) {
+  if (!principalId || disabled) {
     throw new ApiError("invalid_api_key", "Invalid or missing MCP API key.", 401);
   }
   const operator = parseOperatorContext(req);

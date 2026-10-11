@@ -15,13 +15,16 @@ export async function recordMcpToolCall(input: {
 }): Promise<string | undefined> {
   return repo.appendEvent({
     kind: "mcp.tool.invoked",
-    actor: `${input.identity.runtime}:${input.identity.operatorEmail}`,
+    actor: input.identity.servicePrincipalId,
     repo: input.identity.repo,
     taskId: input.taskId ?? null,
     payload: {
       tool: input.tool,
       requestId: input.requestId,
       checkoutId: input.checkoutId ?? null,
+      servicePrincipalId: input.identity.servicePrincipalId,
+      operatorEmail: input.identity.operatorEmail,
+      runtime: input.identity.runtime,
       workerId: input.identity.workerId,
       ok: input.ok,
       durationMs: input.durationMs,

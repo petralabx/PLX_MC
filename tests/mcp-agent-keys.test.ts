@@ -7,6 +7,12 @@ vi.mock("@/lib/permissions/decision-log", () => ({
   recordPermissionDecision: vi.fn(async () => true),
 }));
 
+vi.mock("@/lib/compliance/repo", () => ({
+  appendEvent: vi.fn(async () => "4242"),
+}));
+
+import { appendEvent } from "@/lib/compliance/repo";
+import { recordMcpToolCall } from "@/lib/mcp/audit";
 import { ApiError } from "@/lib/api/route";
 import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 import {
@@ -28,6 +34,10 @@ const OPERATOR_HEADERS = {
 };
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED", "0");
+  vi.stubEnv("PLX_MC_MCP_AGENT_KEY_ROTATIONS", "");
+  vi.stubEnv("PLX_MC_MCP_SHARED_KEY_ENABLED", "1");
   vi.stubEnv("PLX_MC_MCP_ENABLED", "1");
   vi.stubEnv("PLX_MC_ALLOWED_USERS", "vince@petrasoap.com");
   vi.stubEnv(
@@ -293,5 +303,91 @@ describe("verifyMcpRequest with per-agent keys", () => {
         })
       )
     ).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+
+describe("MCP credential rotation and event attribution", () => {
+  function rotate(overrides = {}) {
+    vi.stubEnv("PLX_MC_MCP_AGENT_KEY_ROTATIONS", JSON.stringify({
+      sp_mcp_claude_code: { next: "fake-next-key", ...overrides },
+    }));
+  }
+
+  it("accepts current and next keys during overlap as the same principal", async () => {
+    rotate();
+    for (const key of ["claude-key", "fake-next-key"]) {
+      const identity = await verifyMcpRequest(req({ "x-api-key": key, ...OPERATOR_HEADERS }));
+      expect(identity.servicePrincipalId).toBe("sp_mcp_claude_code");
+      expect(identity.actor.id).toBe("sp_mcp_claude_code");
+    }
+  });
+
+  it.each([
+    [{ currentEnabled: false }, "claude-key", "fake-next-key"],
+    [{ nextEnabled: false }, "fake-next-key", "claude-key"],
+  ])("rejects a disabled rotation slot with key_revoked, keeping the other usable: %j", async (flags, disabled, enabled) => {
+    rotate(flags);
+    await expect(verifyMcpRequest(req({ "x-api-key": disabled, ...OPERATOR_HEADERS })))
+      .rejects.toMatchObject({ code: "invalid_api_key", status: 401 });
+    expect(resolveMcpPrincipalIdFromKey(disabled)).toBeNull();
+    expect(recordPermissionDecision).toHaveBeenCalledWith(expect.objectContaining({
+      site: "mcp.auth", actorId: "sp_mcp_claude_code", allowed: false, reasonCode: "key_revoked",
+    }));
+    expect((await verifyMcpRequest(req({ "x-api-key": enabled, ...OPERATOR_HEADERS }))).actor.id)
+      .toBe("sp_mcp_claude_code");
+  });
+
+  it("records key_revoked when the legacy shared key is disabled", async () => {
+    vi.stubEnv("PLX_MC_MCP_SHARED_KEY_ENABLED", "0");
+    await expect(verifyMcpRequest(req({ "x-api-key": "shared-key", ...OPERATOR_HEADERS })))
+      .rejects.toMatchObject({ code: "invalid_api_key", status: 401 });
+    expect(recordPermissionDecision).toHaveBeenCalledWith(expect.objectContaining({
+      actorId: "sp_mcp_cursor", reasonCode: "key_revoked", allowed: false,
+    }));
+  });
+
+  it.each(["{bad-json", '{"sp_mcp_claude_code":{"currentEnabled":"false"}}'])
+    ("fails closed on malformed rotation config without leaking it: %s", async (config) => {
+      vi.stubEnv("PLX_MC_MCP_AGENT_KEY_ROTATIONS", config);
+      await expect(verifyMcpRequest(req({ "x-api-key": "claude-key", ...OPERATOR_HEADERS })))
+        .rejects.toMatchObject({ code: "mcp_key_config_invalid", status: 503 });
+    });
+
+  it("rejects a credential shared by two principals instead of choosing the first", async () => {
+    vi.stubEnv("PLX_MC_MCP_AGENT_KEYS", JSON.stringify({
+      sp_mcp_claude_code: "fake-duplicate", sp_mcp_codex: "fake-duplicate",
+    }));
+    await expect(verifyMcpRequest(req({ "x-api-key": "fake-duplicate", ...OPERATOR_HEADERS })))
+      .rejects.toMatchObject({ code: "invalid_api_key", status: 401 });
+  });
+
+  it("a disabled key cannot be re-enabled by reusing it in the next slot", async () => {
+    rotate({ next: "claude-key", currentEnabled: false });
+    expect(resolveMcpPrincipalIdFromKey("claude-key")).toBeNull();
+  });
+
+  it("emits two distinct principals for two keys despite identical operator and runtime headers", async () => {
+    for (const [index, key] of ["claude-key", "codex-key"].entries()) {
+      const identity = await verifyMcpRequest(req({ "x-api-key": key, ...OPERATOR_HEADERS }));
+      await recordMcpToolCall({ tool: "mc_self_check", identity, requestId: `fake-req-${index}`, ok: index === 0, durationMs: 1 });
+    }
+    expect(vi.mocked(appendEvent).mock.calls.map(([event]) => event.actor))
+      .toEqual(["sp_mcp_claude_code", "sp_mcp_codex"]);
+    for (const [event] of vi.mocked(appendEvent).mock.calls) {
+      expect(event.kind).toBe("mcp.tool.invoked");
+      expect(event.payload).toMatchObject({
+        servicePrincipalId: event.actor, workerId: "w1", runtime: "claude-code", operatorEmail: "vince@petrasoap.com",
+      });
+      expect(JSON.stringify(event)).not.toMatch(/claude-key|codex-key/);
+    }
+  });
+
+  it("never logs unreviewed registry property names that may contain misplaced credentials", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubEnv("PLX_MC_MCP_AGENT_KEYS", '{"fake-misplaced-secret":"fake-key"}');
+    expect(mcpAgentKeyRegistry().size).toBe(0);
+    expect(JSON.stringify(error.mock.calls)).not.toContain("fake-misplaced-secret");
+    error.mockRestore();
   });
 });

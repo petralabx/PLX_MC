@@ -500,3 +500,49 @@ health. Deploy schema before app; coordinate migration numbering after #297.
 Projects/Roadmap push `Archived` as an outbound-only boolean. Provision and verify
 that column via the existing operator runbook before deploy; no Graph operation
 is part of this implementation. Production retirement is a separate steward action.
+
+
+### MCP credential rotation and audit attribution
+
+Owner: Vince / CoS. `PLX_MC_MCP_AGENT_KEYS` remains the reviewed principal-to-key
+JSON string map. Optional `PLX_MC_MCP_AGENT_KEY_ROTATIONS` configures a next key
+and slot enablement without changing that map or the database schema:
+
+```json
+{"sp_mcp_claude_code":{"next":"fake-next-key","currentEnabled":true,"nextEnabled":true}}
+```
+
+Both flags default to true. Both keys resolve to the same principal during an
+operator-managed overlap window. Set `currentEnabled=false` to reject the old
+key; set `nextEnabled=false` to disable the next key. Promote next into the base
+map and remove the rotation entry once every caller has switched. Rotation
+entries apply only to principals present in the reviewed base map. The existing
+secret sync/launcher tools keep using that map; operators distribute the next
+key separately during overlap. Provision rotation config through the approved
+Secrets Manager/Vercel process and redeploy; never commit real values.
+
+Malformed rotation configuration rejects authentication with
+`mcp_key_config_invalid` (503) rather than ignoring disable flags. Disabled keys
+return the existing `invalid_api_key` (401) envelope and record `key_revoked` in
+the permissions decision audit (subject to its existing enforcement-mode switch;
+off records no decision rows). Remove a registry entry to reject an unknown key.
+Duplicate keys across principals are rejected; a disabled slot wins over an
+identical enabled slot. Comparisons use constant-time SHA-256 digest comparison.
+
+The legacy `PLX_MC_MCP_API_KEY` still maps to `sp_mcp_cursor` by default. Retire
+it with `PLX_MC_MCP_SHARED_KEY_ENABLED=0`; this PR does not revoke it. Durable
+principal existence/status continues through the permissions kernel: review and
+enforce fail closed, log-only shadows status, off stays DB-free. Operator email
+is allowlisted context and does not grant human capabilities. Runtime and worker
+headers remain caller-supplied context, not authenticated identity.
+
+For REST and HTTP MCP tool calls, `mcp.tool.invoked` now stores the authenticated
+principal in `mc_events.actor` and `payload.servicePrincipalId`; operator email,
+runtime and worker ID remain in the payload. Historical rows are unchanged.
+Consumers grouping new tool events by actor must use principal IDs; operator
+filters should read the payload. Other business-event actor formats are unchanged.
+
+After merge, operators mint/store/distribute real keys, configure any overlap,
+verify two real sessions with distinct principals in `mc_events`, then retire the
+shared key and confirm rejection. These live steps are required for rollout
+completion; local fake-key tests do not prove live adoption.

@@ -35,3 +35,32 @@ jobs:
 
       - name: Full suite (same command as pre-push)
         run: ./scripts/preflight.sh --mode pre-push
+
+  mcp-wrapper:
+    name: MCP wrapper (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        # Supported lines: 22 (maintenance LTS) and 24 (active LTS, = .nvmrc),
+        # plus "current" (26 at time of writing) to catch breakage early.
+        # 20 is EOL. Keep in step with engines in tools/plx-mc-mcp/package.json.
+        node: ["22", "24", "current"]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install wrapper dependencies
+        working-directory: tools/plx-mc-mcp
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: ESM and CommonJS import check (offline)
+        run: node tools/plx-mc-mcp/check-imports.mjs
+
+      - name: Launcher smoke (offline handshake, placeholder key, no secrets)
+        run: node tools/plx-mc-mcp/smoke-launch.mjs

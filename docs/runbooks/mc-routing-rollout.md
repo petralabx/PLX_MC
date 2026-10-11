@@ -6,7 +6,8 @@ or killing a routing surface.
 **Module:** `docs/modules/routing/README.md` · **Declaration:** `config/integrations.yaml` → `mc-routing`
 
 > TASK-456 completed the central production cutover. `PLX_MC`,
-> `plx-customer-portal`, `skills`, and `for-and-against` are active; every other
+> `plx-customer-portal`, `skills`, and `for-and-against` have recorded activation
+> labels; current live activation health requires section 6 evidence. Every other
 > downstream repo remains pending its own activation PR, task, and live proof.
 
 ---
@@ -58,7 +59,7 @@ agent checkout/evidence compliance remains unchanged.
 
 ## 2. Pilots
 
-| Cohort / repo | Tier | Branch | Default Bucket | Mode | Activation | MC task | Accountable owner |
+| Cohort / repo | Tier | Branch | Default Bucket | Configured mode | Recorded activation label | MC task | Accountable owner |
 |---------------|------|--------|----------------|------|------------|---------|-------------------|
 | `petralabx/PLX_MC` | hub | `main` | `BKT-INFRA` | suggestion | **active** | `TASK-452` | `vince@petrasoap.com` |
 | `petralabx/plx-customer-portal` | product_app | `staging` | `BKT-PROD` | suggestion | **active** | `TASK-447` | `vince@petrasoap.com` |
@@ -78,7 +79,8 @@ The eight rows above are the routing fleet. The pending-adoption sandbox
 `pilots===8`; the independent fuzzy-promotion research threshold remains
 `minRepos===5`.
 
-The table is the authoritative routing activation map and mirrors
+The table records descriptor activation labels, not a current live activation
+health probe. Use section 6 for evidence requirements. It mirrors
 `config/tracked-repos-registry.json`. Marketing repos are `tooling`, not a new
 tier. These are the actual MC Task IDs; owner is Vince for every row.
 
@@ -334,21 +336,42 @@ import { rolloutHealth, killSwitchSnapshot } from "@/lib/routing";
 rolloutHealth(); // pilots===8, fuzzyAutoLinkEnabled===false
 ```
 
-- `rolloutHealth()` returns `scope: "descriptor_config"` and is
-  **descriptor-valid/config health only**. `ok` means: eight unique enabled
-  pilots exactly intersect the active non-sandbox registry; configured modes
-  are 5 suggestion / 3 shadow / 0 confirmation; descriptor tier/default Bucket
-  match the registry; and fuzzy is off. `reasons[]` names count, duplicate,
-  intersection, mode-distribution, tier, Bucket, or fuzzy mismatches. It does
-  not prove a downstream workflow is live.
+- **Descriptor/config validity** means pilot descriptors and repository manifests
+  parse and agree. `rolloutHealth()` retains `scope: "descriptor_config"`; legacy
+  `ok` proves only central descriptor/registry checks: enabled pilots are unique
+  and belong to the active non-sandbox registry, configured modes are 5 suggestion /
+  3 shadow / 0 confirmation, tier/default Bucket match, and fuzzy is off.
+  `reasons[]` names mismatches. Extra fleet-active repos need not be routing pilots.
+  This function does not load downstream manifests; per-repo
+  `activation[].descriptorConfig.manifests` and `status` default to `unknown`.
+  Inspect the pilot's local/workflow manifest paths, parse both manifests and
+  compare repo, schema, policy version, default Bucket, fuzzy-off and workflow
+  declarations before supplying `descriptorManifestsAgree: true`. A missing or
+  disagreeing manifest is `false`, never validity proof. This HEAD has no copied
+  `.github/plx-mc-routing-manifest.json`; the template alone cannot prove agreement.
+- **Live activation health** is separate: `activation[]` reports
+  `scope: "live_activation"`, `live`, `status`, `effectiveMode`, and evidence with
+  named `present`, `missing`, `unknown` lists. A collector may supply evidence as
+  the third argument (`{ "petralabx/PLX_MC": { ... } }`). Defaults are unknown/not
+  checked; the function makes no GitHub or DB requests. Collect all of:
+  - `githubMetadataVariable`: effective GitHub repo variable
+    `PLX_MC_ROUTING_METADATA_ENABLED=1` (including repo overrides).
+  - `oidcTrust`: successful full-slug OIDC/repository binding.
+  - `workflowPresent`: generated workflow at the target ref.
+  - `workflowRunning`: successful same-repo, non-Dependabot run with run ID.
+  - `proposalRecorded`: recorded MC proposal linked to that run/PR/head.
+  - `auditRecorded`: matching `routing.proposal.upserted` audit event.
+  - `effectiveMode`: observed shadow/suggestion/confirmation after flags/demotion.
+  All seven plus descriptor/config validity are required for `status: "live"`.
+  False checks are missing; omitted checks are unknown. Neither configured modes,
+  descriptor `activation.status: "active"`, selected variable membership alone,
+  nor MC process flags prove live activation. Keep evidence for the same repo,
+  target ref/run and observation window; historical evidence is not a current probe.
+- `mc_self_check` covers MCP/mirror health, not routing live activation.
+- Inbox visibility and cron `enabled`/demotion counts cover those capabilities,
+  not live activation. Cron returns 503 without `CRON_SECRET`, 401 on bad bearer,
+  and 403 for a missing principal under permissions enforcement.
 - Rollout research config intentionally remains `thresholds.minRepos===5`.
-- MCP: `mc_self_check`
-- Inbox: UI hidden when `PLX_MC_ROUTING_INBOX_ENABLED != 1`
-- Cron: 503 if `CRON_SECRET` unset; 401 on bad bearer; 403 if principal missing
-  under permissions enforcement
-- Live activation health additionally requires selected variables, successful
-  full-slug OIDC/repository binding, the copied generated workflow at the target
-  ref, and a recorded proposal/run ID plus matching MC audit evidence.
 
 ---
 
@@ -395,7 +418,7 @@ audit family, and rollback. Do not broaden the App silently.
 - **Per-repo rollback proof:** set repository
   `PLX_MC_ROUTING_METADATA_ENABLED=0`, close/reopen the activation PR, and
   capture the skipped routing job while compliance still runs. Restore the
-  intended variable, close/reopen again, and capture a healthy proposal before
+  intended variable, close/reopen again, and capture a recorded proposal and matching audit event plus effective mode before
   calling activation complete.
 - **Fleet rollback order:** first disable suggestion and Inbox exposure, then
   set routing metadata to `0` for affected repositories. Leave the compliance
@@ -417,8 +440,8 @@ For each pending pilot:
    workflow to a reusable workflow.
 4. Configure selected-repo Actions variables and verify the exact URL/OIDC
    contract; keep the repository `0` override ready
-5. Verify the PR is same-repository and non-Dependabot, then record live health
-   evidence and all warning run IDs for replay
+5. Verify the PR is same-repository and non-Dependabot, then record every live activation health
+   evidence item listed in section 6 (including effective mode) and all warning run IDs for replay
 6. Enable/verify Inbox before suggestion visibility
 7. Only then update activation status; confirmation and fuzzy remain off
 

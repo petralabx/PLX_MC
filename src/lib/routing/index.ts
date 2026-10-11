@@ -103,6 +103,8 @@ export {
   type RolloutMode,
   type RolloutConfig,
   type RolloutHealth,
+  type RoutingActivationEvidence,
+  type RoutingActivationHealth,
   type PilotDescriptor,
   type CohortMetrics,
   type RollingDecision,

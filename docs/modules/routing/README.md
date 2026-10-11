@@ -45,9 +45,9 @@ bodies. Human PRs remain normal and non-blocking.
   `config/routing-pilots/*`): shadow/suggestion/confirmation modes, research
   thresholds, Wilson CI lower bound, per-cohort + rolling-window evaluation,
   automatic demotion to suggestion-only, kill-switch snapshot, `rolloutHealth()`.
-  Eight enabled cohorts are descriptor-valid/config healthy; three are suggestion
-  (`PLX_MC`, portal, swarm) and five are shadow (skills, local-inference,
-  `1hr-after`, Furgenics, For & Against). `minRepos` remains the independent
+  Eight enabled cohorts pass central descriptor/registry checks; five have configured
+  suggestion mode (`PLX_MC`, portal, swarm, skills, For & Against) and three have
+  configured shadow mode (local-inference, `1hr-after`, Furgenics). `minRepos` remains the independent
   research threshold of five. Confirmation and fuzzy auto-link are off.
 - **Visibility contract**: Inbox must be enabled and verified before suggestion.
   Suggestion-mode GitHub output is a generic authenticated MC link only;
@@ -62,12 +62,26 @@ bodies. Human PRs remain normal and non-blocking.
   detail; never delete final typed links or append-only audit events.
 - **Maintenance cron** (`/api/cron/routing-maintenance`): `CRON_SECRET` +
   durable `sp_routing_maintenance` + `routing.maintain` only.
-- **Health semantics**: `rolloutHealth()` proves descriptor/config health only
-  (`scope: "descriptor_config"`; registry intersection, 3/5/0 modes,
-  tier/default-Bucket parity, fuzzy off). Its `reasons[]` reports configuration
-  mismatches. Live activation additionally requires selected variables,
-  full-slug OIDC binding, the copied workflow, and recorded run/proposal/audit
-  evidence.
+- **Descriptor/config validity**: pilot descriptors and repository manifests parse
+  and agree. `rolloutHealth().ok` retains its narrower central descriptor/registry
+  meaning (`scope: "descriptor_config"`; registry intersection, 5/3/0 configured
+  suggestion/shadow/confirmation modes, tier/default-Bucket parity, fuzzy off).
+  `reasons[]` names central configuration mismatches. Repository manifest agreement
+  is not checked by this code; `activation[].descriptorConfig` defaults to
+  `status: "unknown", manifests: "unknown"`. A collector must verify the local and
+  workflow manifests against the pilot before supplying `descriptorManifestsAgree`.
+- **Live activation health**: `activation[]` has `scope: "live_activation"`,
+  `live`, `status` (`live`, `not_live`, or `unknown`), and named `present`, `missing`,
+  and `unknown` evidence lists. All seven live checks must be present: the repo's
+  effective GitHub `PLX_MC_ROUTING_METADATA_ENABLED=1` variable, successful full-slug
+  OIDC trust/binding, generated workflow present at the target ref, workflow running
+  successfully on a same-repo non-Dependabot PR, recorded proposal, matching audit
+  event, and effective mode. Valid descriptor/config evidence is also required.
+  The optional third argument to `rolloutHealth` supplies repository-keyed evidence;
+  no GitHub or DB requests run here. Omitted checks remain unknown/not checked.
+  `configuredModes`, descriptor `activation.status`, and MC `killSwitches` never
+  prove live activation. Effective mode may be shadow after capability flags or
+  demotion; live evidence does not imply suggestion or confirmation is enabled.
 
 ```ts
 import { parseRoutingMarkers, upsertRoutingProposal, rolloutHealth } from "@/lib/routing";
@@ -78,7 +92,7 @@ await withTransaction(async (q) => {
   await upsertRoutingProposal(input, q);
   // P8: lockProposalForUpdate → allocateNextTaskId → insertCreationIntent …
 });
-rolloutHealth(); // pilots + fuzzy-off invariant
+rolloutHealth(); // central checks; activation evidence is unknown/not checked
 ```
 
 ### Key Files

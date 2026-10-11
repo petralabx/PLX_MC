@@ -11,6 +11,7 @@ import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/ac
 import { patchTask } from "@/lib/sync";
 import { bucketMoveTargetViolation } from "@/lib/sync/bucket-move";
 import { cancelTaskTx, reopenTaskTx } from "@/lib/sync/cancel";
+import { TASK_KIND_DEFAULT, assertValidKinds, isKindLabel, kindsOf } from "@/lib/tasks/kind";
 import { BUCKET_ID_RE } from "@/lib/sync/mapping";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
 import type { McpIdentity } from "./auth";
@@ -128,21 +129,28 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
     }
 
     // Removals happen first so a lane can be replaced in one incremental call.
-    const labels = parseInput(labelsSchema, patch.labels ?? [...new Set([
+    const requestedLabels = parseInput(labelsSchema, patch.labels ?? [...new Set([
       ...(before.labels ?? []).filter((label) => !(patch.removeLabels ?? []).includes(label.trim())),
       ...(patch.addLabels ?? []),
     ].map((label) => label.trim()))]);
+    // Exactly one valid kind:* stays on the task. If the patch removes the only
+    // kind the task had, kind:needs-review takes its place. A legacy kind-less
+    // task is not given one by unrelated label edits; the kind backfill owns that.
+    const requestedKinds = kindsOf(requestedLabels);
+    assertValidKinds(requestedKinds);
+    const labels = requestedKinds.length === 0 && kindsOf(before.labels ?? []).length > 0
+      ? [...requestedLabels, TASK_KIND_DEFAULT] : requestedLabels;
     const lanes = labels.filter((label) => label.startsWith("lane:"));
     const delta = [...labels.filter((label) => !(before.labels ?? []).includes(label)),
       ...(before.labels ?? []).filter((label) => !labels.includes(label))];
     const sent = Object.entries(patch).filter(([, value]) => value !== undefined).map(([key]) => key);
-    const closureOnly = delta.length > 0 && delta.every((label) => CLOSURE_LABELS.includes(label))
+    const closureOnly = delta.length > 0 && delta.every((label) => CLOSURE_LABELS.includes(label) || isKindLabel(label))
       && sent.every((key) => key === "labels" || key === "addLabels" || key === "removeLabels");
     const bucketOnly = sent.every((key) => key === "bucket" || key === "note");
     const laneOptional = TERMINAL_TASK_STAGES.includes(before.stage) || closureOnly || bucketOnly;
     if (lanes.length > 1 || (lanes.length === 1 && !lanes[0].slice("lane:".length).trim())
       || (lanes.length === 0 && !laneOptional)) {
-      throw new ApiError("invalid_request", "The resulting labels must contain exactly one non-empty lane:* label. Add a lane for an unlabeled task; remove the old lane when replacing it. Lane-less tasks may only gain or lose closure labels in a label-only patch (" + CLOSURE_LABELS.join(", ") + "), be moved by bucket alone, or be in a terminal stage.", 400);
+      throw new ApiError("invalid_request", "The resulting labels must contain exactly one non-empty lane:* label. Add a lane for an unlabeled task; remove the old lane when replacing it. Lane-less tasks may only gain or lose kind:* or closure labels in a label-only patch (" + CLOSURE_LABELS.join(", ") + "), be moved by bucket alone, or be in a terminal stage.", 400);
     }
 
     if (patch.bucket !== undefined && patch.bucket !== before.bucket) {
@@ -248,11 +256,11 @@ export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
 export function registerTaskUpdateTools(server: McpServer, identity: McpIdentity): void {
   // Full strict schemas preserve unknown-field rejection at the MCP boundary.
   server.registerTool("mc_update_task", {
-    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority, bucket (move to a BKT-* id; optional note; audits task.moved). Exactly one lane:* must remain, except lane-less tasks may gain/lose closed:duplicate|obsolete|superseded|delivered|wontfix or not-needed, be moved by bucket alone, or be in a terminal stage; labels cannot mix with incremental fields, nor description with appendDescription. Moves reject unknown, archived or closed-project targets and restricted projects without access; stage, labels, PRs and checkouts are untouched and the ToDos bucket syncs outbound. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy?: TASK-n (required for duplicate/superseded), note?} and reopen {stage?, note?} (default: the stage before the cancel; clears cancellation, keeps completedAt): stage changes that cannot be combined with other fields; cancel needs the task.cancel capability and reopen task.reopen, granted to the authenticated principal (the operator email grants nothing); audits task.cancelled / task.reopened. Rejects all other fields, including evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. Hub only.",
+    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority, bucket (move to a BKT-* id; optional note; audits task.moved). Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, and removing the only kind leaves kind:needs-review; swap with removeLabels:[old], addLabels:[new] in one call. Exactly one lane:* must remain, except lane-less tasks may gain/lose kind:* labels, closed:duplicate|obsolete|superseded|delivered|wontfix or not-needed, be moved by bucket alone, or be in a terminal stage; labels cannot mix with incremental fields, nor description with appendDescription. Moves reject unknown, archived or closed-project targets and restricted projects without access; stage, labels, PRs and checkouts are untouched and the ToDos bucket syncs outbound. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy?: TASK-n (required for duplicate/superseded), note?} and reopen {stage?, note?} (default: the stage before the cancel; clears cancellation, keeps completedAt): stage changes that cannot be combined with other fields; cancel needs the task.cancel capability and reopen task.reopen, granted to the authenticated principal (the operator email grants nothing); audits task.cancelled / task.reopened. Rejects all other fields, including evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. Hub only.",
     inputSchema: updateTaskSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateTask(identity, args) }));
   server.registerTool("mc_update_tasks", {
-    description: "Batch mc_update_task: {items:[{taskId, patch}]}, 1–100 items. Same patch fields (including cancel/reopen) and constraints as mc_update_task. Each item commits independently and returns a compact receipt {index, ok, taskId, changed[], eventSeq} or ok:false + error (full diff is in the task.updated event; use mc_update_task for it); one invalid item never aborts the others.",
+    description: "Batch mc_update_task: {items:[{taskId, patch}]}, 1–100 items. Same patch fields (including cancel/reopen) and constraints as mc_update_task, including the one-kind:* rule. Each item commits independently and returns a compact receipt {index, ok, taskId, changed[], eventSeq} or ok:false + error (full diff is in the task.updated event; use mc_update_task for it); one invalid item never aborts the others.",
     inputSchema: updateTasksSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateTasks(identity, args) }));
 }

@@ -14,6 +14,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { randomBytes } from "node:crypto";
 import os from "node:os";
 import { z } from "zod";
+import { TASK_KINDS } from "./task-kind-schema";
 import { callSwarmTool } from "./lib/swarm-client.mjs";
 import { installToolErrorEnvelope, restErrorFromResponse } from "./lib/tool-errors.mjs";
 import { registerRoutingTools } from "./routing-suggest-tools";
@@ -228,7 +229,7 @@ server.tool(
 
 server.tool(
   "mc_create_task",
-  "Create a new MC task. repos[] items are MC registry ids (portal-web, plx-mc, agentic-swarm) — not GitHub slugs. MC_REPO / X-MC-Repo stays the full GitHub slug for checkout/compliance and is a different namespace from repos[].",
+  "Create a new MC task. repos[] items are MC registry ids (portal-web, plx-mc, agentic-swarm) — not GitHub slugs. MC_REPO / X-MC-Repo stays the full GitHub slug for checkout/compliance and is a different namespace from repos[]. Pass kind; omitted kind defaults to kind:needs-review.",
   {
     title: z.string().min(1),
     bucket: z.string().min(1),
@@ -248,6 +249,8 @@ server.tool(
       .describe(
         "Optional executor: a person id, or agent:<slug> for an agent. Only sp_mcp_portal may set an agent: assignee; any other MCP principal gets forbidden (403)."
       ),
+    labels: z.array(z.string().trim().min(1).max(128)).max(100).optional(),
+    kind: z.enum(TASK_KINDS).optional().describe("Task kind. Omitted defaults to kind:needs-review; must agree with any kind:* label."),
     idempotencyKey: z
       .string()
       .min(1)
@@ -671,7 +674,7 @@ server.registerTool("mc_list_projects", {
 });
 
 server.registerTool("mc_update_task", {
-  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one lane:* must remain, unless a lane-less task only gains/loses closed:* closure labels (or not-needed) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
+  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, removing the only kind leaves kind:needs-review, swap with removeLabels:[old], addLabels:[new]. Exactly one lane:* must remain, unless a lane-less task only gains/loses kind:* or closed:* closure labels (or not-needed) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
   inputSchema: z.object({
     taskId: z.string().trim().min(1).max(128),
     patch: taskUpdatePatch,
@@ -682,7 +685,7 @@ server.registerTool("mc_update_task", {
 });
 
 server.registerTool("mc_update_tasks", {
-  description: "Batch mc_update_task: {items:[{taskId, patch}]}, 1–100 items. Each item returns its own outcome, including validation errors. Same fields, lane rule and DB-only labels as mc_update_task.",
+  description: "Batch mc_update_task: {items:[{taskId, patch}]}, 1–100 items. Each item returns its own outcome, including validation errors. Same fields, kind rule, lane rule and DB-only labels as mc_update_task (exactly one kind:*; lane-less tasks may gain/lose kind:* in a label-only patch).",
   inputSchema: z.object({
     items: z.array(z.unknown().describe("One {taskId, patch} object using mc_update_task fields.")).min(1).max(100),
   }).strict(),

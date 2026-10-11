@@ -28,7 +28,8 @@ import {
 } from "@/lib/mc-data/store";
 
 import { Avatar } from "./atoms";
-import { LabelEditor } from "./label-editor";
+import { TASK_KIND_DEFAULT } from "@/lib/tasks/kind-labels";
+import { KindSelect, LabelEditor } from "./label-editor";
 import { NotifyTrail, PeoplePicker } from "./people-picker";
 import type { Nav } from "./route";
 
@@ -100,7 +101,7 @@ export function NewTaskModal({
   const [dueISO, setDueISO] = useState("");
   const [requirements, setRequirements] = useState<string[]>([]);
   const [repos, setRepos] = useState<string[]>([]);
-  const [labels, setLabels] = useState<string[]>([]);
+  const [labels, setLabels] = useState<string[]>([TASK_KIND_DEFAULT]);
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
@@ -336,6 +337,14 @@ export function NewTaskModal({
                 }))}
               />
             </div>
+
+            <label className="ntm-fact">
+              <span className="k">Kind</span>
+              <div className="ntm-select-wrap">
+                <KindSelect labels={labels} onChange={setLabels} />
+                <span className="caret">▾</span>
+              </div>
+            </label>
 
             <label className="ntm-fact">
               <span className="k">Stage</span>

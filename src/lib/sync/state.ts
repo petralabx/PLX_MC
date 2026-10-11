@@ -37,6 +37,7 @@ import type {
   SpError,
   Task,
 } from "@/lib/mc-data/types";
+import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
 import { assertMoveTargetProjectOpen } from "./bucket-move";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import { withTransaction, type TxQuery } from "@/lib/db";
@@ -498,6 +499,8 @@ export interface CreateTaskInput {
   targetEnv?: Task["targetEnv"];
   estimate?: Task["estimate"];
   labels?: string[];
+  /** Merged into labels as kind:<kind>; omitted defaults to kind:needs-review. */
+  kind?: TaskKind;
   due?: string;
 }
 
@@ -568,7 +571,7 @@ export async function createTask(
       repos,
       targetEnv: input.targetEnv ?? "staging",
       estimate: input.estimate ?? "M",
-      labels: input.labels ?? [],
+      labels: createLabelsWithKind(input.labels, input.kind),
       prs: [],
       due: input.due || "—",
       sync: { state: "pending", ts: repo.stamp(), sp: `ToDos · item ${numeric}` },

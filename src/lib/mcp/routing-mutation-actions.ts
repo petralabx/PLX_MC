@@ -3,6 +3,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { TASK_KINDS, type TaskKind } from "@/lib/tasks/kind";
 import type { McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
@@ -109,6 +110,7 @@ export async function actionCreateRoutedTask(
     headSha?: string;
     mergeSha?: string;
     labels?: string[];
+    kind?: TaskKind;
     priority?: "urgent" | "high" | "medium" | "low";
     authorizationTrust?:
       | "credentialed_checkout"
@@ -135,6 +137,7 @@ export async function actionCreateRoutedTask(
     headSha: input.headSha,
     mergeSha: input.mergeSha,
     labels: input.labels,
+    kind: input.kind,
     priority: input.priority,
     authorizationTrust: input.authorizationTrust,
   });
@@ -217,6 +220,7 @@ export function registerRoutingMutationTools(
       headSha: z.string().optional(),
       mergeSha: z.string().optional(),
       labels: z.array(z.string()).optional(),
+      kind: z.enum(TASK_KINDS).optional().describe("Task kind; omitted defaults to kind:needs-review."),
       priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
       authorizationTrust: z
         .enum([

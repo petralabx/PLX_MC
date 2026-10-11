@@ -90,6 +90,14 @@ try {
     console.log(`registered as expected: ${REQUIRED_TOOLS.join(", ")}`);
   }
 
+  const createTask = tools.find((t) => t.name === "mc_create_task");
+  const kindParam = createTask?.inputSchema?.properties?.kind;
+  if (!kindParam) {
+    fail("mc_create_task does not list the kind param");
+  } else {
+    console.log(`mc_create_task lists kind: ${(kindParam.enum ?? []).join(", ")}`);
+  }
+
   if (withAuth) {
     const result = await client.callTool({ name: "mc_self_check", arguments: {} });
     const text = result.content?.map((c) => c.text ?? "").join("") ?? "";

@@ -234,3 +234,57 @@ describe("bucketMoveTargetViolation feature guards", () => {
     expect(bucketMoveTargetViolation(undefined, undefined)).toMatch(/unknown bucket/);
   });
 });
+
+describe("kind rule on task update (TASK-2634)", () => {
+  const labelsOf = (id = "TASK-1") => h.rows.get(id)!.data.labels;
+  it("lets a lane-less backlog task gain a kind (alone or with a closure label) but still blocks other labels", async () => {
+    await expect(update({ addLabels: ["kind:code"] })).resolves.toMatchObject({ taskId: "TASK-1" });
+    expect(labelsOf()).toEqual(["kind:code"]);
+    seed("TASK-1");
+    await expect(update({ addLabels: ["kind:decision", "closed:obsolete"] })).resolves.toMatchObject({ taskId: "TASK-1" });
+    seed("TASK-1");
+    await expect(update({ addLabels: ["kind:code", "needs-vince"] })).rejects.toThrow(/exactly one non-empty lane/);
+    await expect(update({ addLabels: ["kind:code"], title: "x" })).rejects.toThrow(/exactly one non-empty lane/);
+    expect(labelsOf()).toEqual([]);
+  });
+  it("rejects two kinds and an unknown kind with 400 and writes nothing", async () => {
+    seed("TASK-1", { labels: ["lane:dev", "kind:code"] });
+    await expect(update({ addLabels: ["kind:decision"] })).rejects.toMatchObject({ code: "invalid_request", status: 400 });
+    await expect(update({ addLabels: ["kind:banana"], removeLabels: ["kind:code"] })).rejects.toMatchObject({ code: "invalid_request", status: 400 });
+    expect(labelsOf()).toEqual(["lane:dev", "kind:code"]);
+    expect(h.events).toEqual([]);
+  });
+  it("swaps a kind in one call", async () => {
+    seed("TASK-1", { labels: ["lane:dev", "kind:code"] });
+    await update({ removeLabels: ["kind:code"], addLabels: ["kind:decision"] });
+    expect(labelsOf()).toEqual(["lane:dev", "kind:decision"]);
+  });
+  it("leaves kind:needs-review when the only kind is removed, via incremental or replace", async () => {
+    seed("TASK-1", { labels: ["lane:dev", "kind:code"] });
+    await update({ removeLabels: ["kind:code"] });
+    expect(labelsOf()).toEqual(["lane:dev", "kind:needs-review"]);
+    seed("TASK-1", { labels: ["lane:dev", "kind:code"] });
+    await update({ labels: ["lane:dev", "x"] });
+    expect(labelsOf()).toEqual(["lane:dev", "x", "kind:needs-review"]);
+  });
+  it("does not give a legacy kind-less task a kind on an unrelated label edit", async () => {
+    seed("TASK-1", { labels: ["lane:dev"] });
+    await update({ addLabels: ["x"] });
+    expect(labelsOf()).toEqual(["lane:dev", "x"]);
+  });
+  it("reports per-item results for a mixed batch of 100", async () => {
+    const items = Array.from({ length: 100 }, (_, index) => {
+      const id = `TASK-B${index}`;
+      seed(id);
+      if (index % 4 === 0) return { taskId: id, patch: { addLabels: ["kind:banana"] } };
+      if (index % 4 === 1) return { taskId: id, patch: { addLabels: ["kind:code", "kind:decision"] } };
+      if (index % 4 === 2) return { taskId: id, patch: { addLabels: ["needs-vince"] } };
+      return { taskId: id, patch: { addLabels: ["kind:code"] } };
+    });
+    const out = await actionUpdateTasks(identity, { items });
+    expect(out).toMatchObject({ updated: 25, failed: 75 });
+    expect(out.results.map((r) => r.ok)).toEqual(items.map((_, index) => index % 4 === 3));
+    expect(labelsOf("TASK-B3")).toEqual(["kind:code"]);
+    expect(labelsOf("TASK-B0")).toEqual([]);
+  });
+});

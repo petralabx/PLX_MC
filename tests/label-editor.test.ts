@@ -34,6 +34,15 @@ describe("addLabelTo", () => {
     expect(addLabelTo(labels, "go-live")).toBe(labels);
   });
 
+  it("replaces an existing kind:* label instead of appending a second one", () => {
+    expect(addLabelTo(["api", "kind:needs-review"], " Kind:Code ")).toEqual(["api", "kind:code"]);
+  });
+
+  it("returns the same reference when the kind is already set", () => {
+    const labels = ["kind:code"];
+    expect(addLabelTo(labels, "kind:code")).toBe(labels);
+  });
+
   it("does not mutate the input array", () => {
     const labels = ["api"];
     addLabelTo(labels, "finance");

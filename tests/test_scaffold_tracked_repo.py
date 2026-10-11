@@ -50,7 +50,9 @@ def _run(target: Path, *, repo: str, tier: str, branch: str):
     )
 
 
-def _run_full(target: Path, *, repo: str, tier: str, branch: str):
+def _run_full(
+    target: Path, *, repo: str, tier: str, branch: str, mode: str | None = None
+):
     return subprocess.run(
         [
             _bash(),
@@ -63,6 +65,7 @@ def _run_full(target: Path, *, repo: str, tier: str, branch: str):
             branch,
             "--target",
             target.as_posix(),
+            *([mode] if mode else []),
         ],
         cwd=REPO_ROOT,
         capture_output=True,
@@ -195,3 +198,115 @@ def test_full_scaffold_also_emits_local_routing_manifest(tmp_path: Path):
     assert local_manifest["repo"] == "petralabx/skills"
     assert local_manifest["default_bucket"] == "BKT-INFRA"
     assert local_manifest["path_rules"] == []
+
+
+WORKFLOW_FILES = {
+    ".github/workflows/plx-mc-compliance.yml",
+    ".github/workflows/mc-routing-metadata.yml",
+    ".github/workflows/compliance-gate-drift.yml",
+    "scripts/compliance-pr-verify.mjs",
+    "scripts/compliance-checkout.mjs",
+}
+HUB_FULL_FILES = WORKFLOW_FILES | ROUTING_FILES | {"docs/GOVERNANCE.md"}
+ALL_SCAFFOLD_FILES = HUB_FULL_FILES | {"CONTRIBUTING.md"}
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        ("--routing-only", ROUTING_FILES),
+        ("--workflows-only", WORKFLOW_FILES),
+        (None, HUB_FULL_FILES),
+    ],
+    ids=["routing-only", "workflows-only", "full"],
+)
+@pytest.mark.parametrize("existing", [False, True], ids=["create", "overwrite"])
+def test_hub_scaffold_exact_file_contract(
+    tmp_path: Path, mode: str | None, expected: set[str], existing: bool
+):
+    # Existing output candidates and an unrelated file expose accidental writes
+    # as well as the full hub's deliberate CONTRIBUTING skip.
+    sentinels = ALL_SCAFFOLD_FILES | {"operator-notes.txt"} if existing else set()
+    for relative in sentinels:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("operator-owned sentinel\n", encoding="utf-8")
+
+    result = _run_full(
+        tmp_path, repo="petralabx/PLX_MC", tier="hub", branch="main", mode=mode
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert _files(tmp_path) == expected | sentinels
+    changed = {
+        relative
+        for relative in _files(tmp_path)
+        if (tmp_path / relative).read_text(encoding="utf-8")
+        != "operator-owned sentinel\n"
+    }
+    assert changed == expected
+    if mode is None:
+        assert "skip CONTRIBUTING scaffold" in result.stderr
+        assert "Tier: `hub`" in (tmp_path / "docs/GOVERNANCE.md").read_text()
+    if mode != "--workflows-only":
+        assert json.loads((tmp_path / ".plx/mc-routing.json").read_text())["repo"] == (
+            "petralabx/PLX_MC"
+        )
+
+
+@pytest.mark.parametrize(
+    ("repo", "tier", "branch"),
+    [
+        ("petralabx/plx-customer-portal", "product_app", "staging"),
+        ("petralabx/agentic-swarm", "product_platform", "main"),
+        ("petralabx/skills", "skills", "main"),
+        ("petralabx/local-inference", "tooling", "main"),
+    ],
+)
+def test_full_non_hub_scaffold_exact_file_contract(
+    tmp_path: Path, repo: str, tier: str, branch: str
+):
+    result = _run_full(tmp_path, repo=repo, tier=tier, branch=branch)
+
+    assert result.returncode == 0, result.stderr
+    assert _files(tmp_path) == ALL_SCAFFOLD_FILES
+
+
+@pytest.mark.parametrize(
+    "mode", [None, "--workflows-only"], ids=["full", "workflows-only"]
+)
+def test_sandbox_scaffold_current_file_contract(tmp_path: Path, mode: str | None):
+    # The registered sandbox has no routing pilot: full mode fails after the
+    # first five writes, whereas workflows-only returns successfully earlier.
+    result = _run_full(
+        tmp_path,
+        repo="petralabx/test-perms-check",
+        tier="sandbox",
+        branch="main",
+        mode=mode,
+    )
+
+    assert _files(tmp_path) == WORKFLOW_FILES
+    if mode is None:
+        assert result.returncode != 0
+        assert "found 0" in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+
+
+def test_scaffold_help_describes_hub_and_restricted_modes():
+    result = subprocess.run(
+        [_bash(), SCAFFOLD.as_posix(), "--help"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    # Preserve the script's existing usage exit status; only text changes.
+    assert result.returncode == 1
+    assert "full hub scaffold is NOT a no-op" in result.stdout
+    assert "Hub skips only CONTRIBUTING.md" in result.stdout
+    assert "--routing-only:" in result.stdout
+    assert "--workflows-only:" in result.stdout
+    assert "scripts/compliance-checkout.mjs (5 files)" in result.stdout

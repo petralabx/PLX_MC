@@ -6,6 +6,20 @@
 #   ./scripts/scaffold-tracked-repo.sh --repo petralabx/skills --tier skills --branch main --target ../skills --workflows-only
 #   ./scripts/scaffold-tracked-repo.sh --repo petralabx/skills --tier skills --branch main --target ../skills --routing-only
 #
+# Outputs (existing files are overwritten; full hub scaffold is NOT a no-op):
+#   --routing-only: .github/workflows/mc-routing-metadata.yml,
+#     .github/plx-mc-routing-manifest.json, .plx/mc-routing.json (3 files).
+#   --workflows-only: all 3 workflows (mc-routing-metadata.yml,
+#     plx-mc-compliance.yml, compliance-gate-drift.yml) under .github/workflows/,
+#     scripts/compliance-pr-verify.mjs, scripts/compliance-checkout.mjs (5 files).
+#   Full, all tiers: workflows-only outputs + both routing manifests above
+#     + docs/GOVERNANCE.md (8 files). Hub skips only CONTRIBUTING.md;
+#     product_app, product_platform, skills, tooling, sandbox also overwrite
+#     CONTRIBUTING.md (9 files); tier changes its content, not the file set.
+# Creates parent directories; attempts chmod +x on both copied helper scripts.
+# Reads source git HEAD, registry and pilot descriptors; no git writes,
+# network calls or registry writes. Full scaffold may leave partial files on
+# validation failure; routing-only validates before writing. See REPO-ONBOARDING.
 # Requires: python (3.x), a PLX_MC clone (run from repo root).
 
 set -euo pipefail
@@ -17,7 +31,7 @@ WORKFLOWS_ONLY=0
 ROUTING_ONLY=0
 
 usage() {
-  sed -n '2,8p' "$0"
+  sed -n '2,/^# Requires:/p' "$0"
   exit 1
 }
 

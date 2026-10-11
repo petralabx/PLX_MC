@@ -36,11 +36,53 @@ Consumer repos get thin layers only — **never copy the contract**:
 - `.github/workflows/mc-routing-metadata.yml` — generated metadata-only routing
 - `.github/plx-mc-routing-manifest.json` — copied routing declaration/digest
 - `.plx/mc-routing.json` — minimal non-authoritative local routing declaration
+- `scripts/compliance-pr-verify.mjs` and `scripts/compliance-checkout.mjs` —
+  copied compliance helpers
 
-For non-hub tiers, full normal scaffold writes these seven files.
-`--workflows-only` writes only the three workflow files. `--routing-only` writes
-exactly the routing workflow, workflow manifest, and local manifest; it never
-touches governance, contributing, compliance, or drift files.
+### Scaffold file contract
+
+Each **write** creates or unconditionally overwrites the named file; **skip**
+leaves an existing file untouched. These sets describe successful runs:
+
+| Target-relative file | `--routing-only` (3) | `--workflows-only` (5) | Full `hub` (8) | Full other tiers (9) |
+|---|---|---|---|---|
+| `.github/workflows/mc-routing-metadata.yml` | write | write | write | write |
+| `.github/workflows/plx-mc-compliance.yml` | skip | write | write | write |
+| `.github/workflows/compliance-gate-drift.yml` | skip | write | write | write |
+| `scripts/compliance-pr-verify.mjs` | skip | write | write | write |
+| `scripts/compliance-checkout.mjs` | skip | write | write | write |
+| `.github/plx-mc-routing-manifest.json` | write | skip | write | write |
+| `.plx/mc-routing.json` | write | skip | write | write |
+| `docs/GOVERNANCE.md` | skip | skip | write | write |
+| `CONTRIBUTING.md` | skip | skip | skip | write |
+
+Other full tiers are `product_app`, `product_platform`, `skills`, `tooling`,
+and `sandbox`; they share the nine-file set, with tier-specific CONTRIBUTING
+content. **Hub full scaffold is not a no-op**: it writes eight files before
+exiting the tier switch, skipping only CONTRIBUTING. Both restricted modes
+return before the tier switch, so their file sets are the same for every
+eligible tier. The two mode flags are mutually exclusive.
+
+The script creates missing parent directories and attempts `chmod +x` on the
+two copied helper scripts (chmod failures are ignored). All modes read the
+source clone's git HEAD; the drift workflow embeds it as `GEN_SHA`. There is
+no target git initialization, commit, push, network call, GitHub operation,
+registry write or pilot-descriptor write. Generated workflows and copied
+helpers can call external services when subsequently run; scaffolding only
+writes them.
+
+Full and routing-only modes read the local registry and require matching repo,
+tier and integration branch plus exactly one enabled, fuzzy-off pilot descriptor
+with a nonempty policy version. Routing-only additionally requires active,
+non-sandbox registration and validates before any target writes. Full scaffold
+writes the five workflows-only files first (and creates `docs/`) before this
+validation, so a failed run can leave partial output. Workflows-only does not
+validate registry/pilot entries and does not write either routing manifest.
+The current registered sandbox has no pilot descriptor: its full scaffold
+fails after the first five writes, while workflows-only succeeds. A successful
+sandbox full run would use the nine-file non-hub set.
+The target must already be a directory. No files are removed; unrelated files
+are untouched. Review existing target files before running any mode.
 
 ---
 
@@ -205,8 +247,8 @@ From a PLX_MC clone root, with the target repo cloned locally:
   --routing-only
 ```
 
-- `--workflows-only` refreshes the copied generated workflow surfaces (use when
-  a generator changes and you need to re-sync a fleet repo).
+- `--workflows-only` overwrites three workflows and both helper scripts (five
+  files); it skips governance, CONTRIBUTING and both routing manifests.
 - `--routing-only` validates the repo is active/non-sandbox, tier and branch
   match the registry, and one enabled/fuzzy-off pilot descriptor exists. It is
   idempotent and writes only the three routing files.
@@ -216,14 +258,14 @@ From a PLX_MC clone root, with the target repo cloned locally:
   check. Commit from a PLX_MC checkout that is on `main` (or the merged hub
   commit) so the pinned SHA is fetchable from GitHub raw.
 - **Hub warning:** full `--tier hub` is not a no-op. Before its tier switch exits,
-  it overwrites the three generated workflows, both routing manifests, and
-  `docs/GOVERNANCE.md`; it only skips `CONTRIBUTING.md`. Do not use full scaffold
+  it overwrites the three generated workflows, both helper scripts, both routing
+  manifests, and `docs/GOVERNANCE.md`; it only skips `CONTRIBUTING.md`. Do not use full scaffold
   against PLX_MC. Hub governance uses the central files directly; for a hub
   routing-artifact refresh, use validated `--routing-only`.
 
 ## 3. Open the adoption PR on the consumer repo
 
-For a non-hub consumer, commit the seven full-scaffold files on a branch
+For a non-hub consumer, commit the nine full-scaffold files on a branch
 (`chore/adopt-plx-governance`), open a PR to
 the integration branch. Review that CONTRIBUTING's validation commands match
 the repo's real test/build entry points — edit them; that section is

@@ -97,7 +97,25 @@ Cursor MCP child processes do not inherit PowerShell env vars. Use the repo laun
    "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/run-plx-mc-mcp.ps1"]
    ```
 
-   The script dot-sources `~/.secrets-env.staging.ps1` and starts the stdio client.
+   The script dot-sources the loader and starts the stdio client. Loader path:
+   `-LoaderPath`, then `$env:PLX_SECRETS_LOADER`, then `$HOME\.secrets-env.staging.ps1`.
+   It exits non-zero **before starting node** if the loader is missing, throws,
+   does not report `$global:PlxSecretsLoaderStatus -eq 'ok'`, or leaves
+   `MC_MCP_API_KEY` empty (TASK-614). The message names variables and paths, never values.
+
+   **Regenerate existing loaders (operator step, each machine, after the TASK-614
+   change merges).** Loaders generated before it hydrate partially after a failed
+   Graph fetch and have no status marker, so the launcher rejects them:
+
+   ```powershell
+   python scripts/bootstrap-windows-secrets.py            # and each --mcp-principal-id variant in use
+   python scripts/check-workstation-loader-drift.py       # expect OK
+   ```
+
+   The generated loader stages every value, validates all required names, then sets
+   `$env:*` in one block. On any failure it sets nothing and throws
+   `PLX secrets loader failed: missing <NAMES>`. Optional names
+   (`PETRALABX_GITHUB_TOKEN`, `SWARM_API_KEY`) are exported only when non-empty.
 
 3. Reload Cursor MCP servers after bootstrap or key rotation.
 

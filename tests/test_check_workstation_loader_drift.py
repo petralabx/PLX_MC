@@ -31,6 +31,7 @@ GOOD_LOADER = f"""\
 
 $env:GITHUB_TOKEN = 'x'
 
+$global:PlxSecretsLoaderStatus = 'failed'
 try {{
   $__graph = & $__awsCli secretsmanager get-secret-value --region us-east-1 \
 --secret-id plx/prod/m365/cursor-graph/v1 --query SecretString --output text | ConvertFrom-Json
@@ -39,7 +40,7 @@ try {{
   $env:MICROSOFT_GRAPH_CLIENT_ID     = $__graph.clientId
   $env:MICROSOFT_GRAPH_CLIENT_SECRET = $__graph.clientSecret
 }} catch {{
-  Write-Warning "Graph credential unavailable"
+  throw "PLX secrets loader failed"
 }}
 """
 
@@ -147,3 +148,17 @@ def test_aws_txt_fallback_is_rejected() -> None:
     findings: list[str] = []
     check.check_no_aws_txt_fallback('Get-Content "$HOME\\.aws\\SOME_KEY.txt"', findings)
     assert any("TASK-756" in f for f in findings)
+
+
+def test_warn_and_continue_loader_is_rejected(tmp_path: Path) -> None:
+    legacy = GOOD_LOADER.replace(
+        'throw "PLX secrets loader failed"', 'Write-Warning "Graph unavailable"'
+    )
+    assert run_on(tmp_path, legacy) == 1
+
+
+def test_loader_without_status_marker_is_rejected() -> None:
+    check = load_script()
+    findings: list[str] = []
+    check.check_atomic_hydration("$env:X = 'y'", findings)
+    assert any("PlxSecretsLoaderStatus" in f for f in findings)

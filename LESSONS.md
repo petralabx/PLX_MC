@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-11 (ET) — Workstation loader warned and continued with a partial environment
+
+- **What happened:** The generated `~/.secrets-env.staging.ps1` wrapped the Graph fetch in try/catch that only called `Write-Warning`, then exported `AZURE_*` from the empty `MICROSOFT_GRAPH_*` values. `run-plx-mc-mcp.ps1` also silently skipped a missing loader.
+- **Root cause:** Hydration was assign-as-you-go with no validation step, and the launcher treated the loader as optional.
+- **Rule going forward:** Loaders stage, validate every required name, then assign once; on failure assign nothing and throw names (never values). Launchers must resolve the loader path deterministically and abort before starting the child on a missing loader, failed status marker, or empty required env (TASK-614).
+
 ### 2026-10-10 (ET) — Typecheck failed on a generated file after `next dev` was stopped
 
 - **What happened:** TASK-2565 and TASK-2592 each stopped a local `next dev` (port 3950) after a browser check. The next `tsc` / preflight then failed with "Unterminated string literal" in `.next/dev/types/validator.ts`.

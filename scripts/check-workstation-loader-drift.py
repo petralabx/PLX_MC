@@ -19,7 +19,9 @@ Checks (on the loader at $HOME/.secrets-env.staging.ps1 unless --loader given):
   3. Graph key casing — reads camelCase tenantId/clientId/clientSecret, and
      never the snake_case or SCREAMING_CASE spellings the secret does not use.
   4. Matched set — all three Graph values come from one secret id.
-  5. Byte parity (--strict) — sha256 equals freshly generated output.
+  5. Atomic hydrate (TASK-614) — status marker present, no Write-Warning
+     warn-and-continue.
+  6. Byte parity (--strict) — sha256 equals freshly generated output.
 
 Run on a workstation:
     python scripts/check-workstation-loader-drift.py
@@ -160,6 +162,22 @@ def check_matched_set(code: str, findings: list[str]) -> None:
                 )
 
 
+def check_atomic_hydration(code: str, findings: list[str]) -> None:
+    """TASK-614: the loader must stage, validate, then assign, and fail closed."""
+    if "PlxSecretsLoaderStatus" not in code:
+        _fail(
+            findings,
+            "atomic hydrate: loader has no PlxSecretsLoaderStatus failure marker "
+            "(pre-TASK-614 template). Regenerate it.",
+        )
+    if "Write-Warning" in code:
+        _fail(
+            findings,
+            "atomic hydrate: loader uses Write-Warning, i.e. warns and continues "
+            "with a partial environment. Regenerate it.",
+        )
+
+
 def check_byte_parity(loader: Path, findings: list[str]) -> None:
     """Regenerate into a scratch HOME and compare sha256."""
     if not GENERATOR.exists():
@@ -229,6 +247,7 @@ def main() -> int:
     check_no_aws_txt_fallback(code, findings)
     check_graph_key_casing(code, findings)
     check_matched_set(code, findings)
+    check_atomic_hydration(code, findings)
     if args.strict:
         check_byte_parity(loader, findings)
 

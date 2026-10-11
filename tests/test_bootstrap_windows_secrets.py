@@ -270,7 +270,7 @@ def test_pwsh_loader_assigns_nothing_when_payload_is_partial(tmp_path: Path) -> 
 
 def test_task_614_fixtures_hold_no_secret_looking_values() -> None:
     suspicious = re.compile(
-        r"AKIA[0-9A-Z]{16}|['\"][A-Za-z0-9+/=]{32,}['\"]|ghp_\w+|-----BEGIN"
+        r"AKIA[0-9A-Z]{16}|['\"][A-Za-z0-9+/=]{32,}['\"]|ghp_\w+|-----" "BEGIN"
     )
     for name in (
         "test_bootstrap_windows_secrets.py",

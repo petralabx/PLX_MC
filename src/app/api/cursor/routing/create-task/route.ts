@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TASK_KINDS } from "@/lib/tasks/kind";
 import { cursorRoute, parseCursorBody } from "@/lib/mcp/route";
 import { actionCreateRoutedTask } from "@/lib/mcp/routing-mutation-actions";
 import { taskLink } from "@/lib/mcp/envelope";
@@ -14,6 +15,7 @@ const createTaskSchema = z.object({
   headSha: z.string().optional(),
   mergeSha: z.string().optional(),
   labels: z.array(z.string()).optional(),
+  kind: z.enum(TASK_KINDS).optional(),
   priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
   authorizationTrust: z
     .enum([

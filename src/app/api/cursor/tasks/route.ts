@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TASK_KINDS } from "@/lib/tasks/kind";
 import { ApiError } from "@/lib/api/route";
 import { taskSearchSchema } from "@/lib/mcp/task-search-schema";
 import { cursorRoute, parseCursorBody } from "@/lib/mcp/route";
@@ -19,6 +20,8 @@ const createSchema = z.object({
   reporter: z.string().min(1).optional(),
   accountableOwner: z.string().nullable().optional(),
   repos: z.array(z.string()).optional(),
+  labels: z.array(z.string().trim().min(1).max(128)).max(100).optional(),
+  kind: z.enum(TASK_KINDS).optional(),
   targetEnv: z.enum(["staging", "production"]).optional(),
   // Fleet P8b: a repeat with the same key returns the original task.
   idempotencyKey: idempotencyKeySchema.optional(),

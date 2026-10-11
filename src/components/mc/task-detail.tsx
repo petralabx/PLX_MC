@@ -60,7 +60,7 @@ import {
   Slate,
   SyncTick,
 } from "./atoms";
-import { LabelEditor } from "./label-editor";
+import { KindSelect, LabelEditor } from "./label-editor";
 import { NotifyTrail, PeoplePicker } from "./people-picker";
 import { repoEditMode } from "./record-logic";
 import { RepoEditor } from "./repo-editor";
@@ -853,6 +853,12 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
               </div>
               {/* Labels — editable inline (DB-only, no sync claim). Shares the
                   LabelEditor with the New Task modal (Pillar 3). */}
+              <div className="rfact">
+                <span className="k">Kind</span>
+                <span className="v">
+                  <KindSelect labels={task.labels} onChange={(labels) => setTaskLabels(task.id, labels)} />
+                </span>
+              </div>
               <div className="rfact">
                 <span className="k">Labels</span>
                 <span className="v">

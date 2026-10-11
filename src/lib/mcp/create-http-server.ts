@@ -4,6 +4,7 @@ import { taskSearchShape } from "./task-search-schema";
 import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { TASK_KINDS } from "@/lib/tasks/kind";
 import { ApiError } from "@/lib/api/route";
 import { SKILL_ID_PATTERN } from "@/lib/skills-directory";
 import type { McpIdentity } from "./auth";
@@ -273,7 +274,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_create_task",
-    "Create a new MC task (SharePoint ToDos mirror). repos[] = MC registry ids (portal-web, plx-mc, agentic-swarm), not GitHub slugs. MC_REPO / X-MC-Repo remains the full GitHub slug for checkout/compliance — a different namespace from repos[].",
+    "Create a new MC task (SharePoint ToDos mirror). repos[] = MC registry ids (portal-web, plx-mc, agentic-swarm), not GitHub slugs. MC_REPO / X-MC-Repo remains the full GitHub slug for checkout/compliance — a different namespace from repos[]. Pass kind; omitted kind defaults to kind:needs-review.",
     {
       title: z.string().min(1),
       bucket: z.string().min(1),
@@ -293,6 +294,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         .describe(
           "Optional executor: a person id, or agent:<slug> for an agent. Only sp_mcp_portal may set an agent: assignee; any other MCP principal gets forbidden (403)."
         ),
+      labels: z.array(z.string().trim().min(1).max(128)).max(100).optional(),
+      kind: z.enum(TASK_KINDS).optional().describe("Task kind. Omitted defaults to kind:needs-review; must agree with any kind:* label."),
       idempotencyKey: idempotencyKeySchema
         .optional()
         .describe(

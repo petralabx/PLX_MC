@@ -357,6 +357,16 @@ describe("POST /api/cursor/tasks with an idempotency key", () => {
     ]);
   });
 
+  it("gives 409 for a replay with a different kind (TASK-2634) and creates nothing", async () => {
+    await restCreate({ ...TASK, kind: "code", idempotencyKey: "kind-run-1" });
+    const changed = await restCreate({ ...TASK, kind: "decision", idempotencyKey: "kind-run-1" });
+    expect(changed.status).toBe(409);
+    expect(changed.json.error?.code).toBe("idempotency_key_reused");
+    const same = await restCreate({ ...TASK, kind: "code", idempotencyKey: "kind-run-1" });
+    expect(same.json.data?.replayed).toBe(true);
+    expect(h.createInputs).toHaveLength(1);
+  });
+
   it("gives 409 for the same key with a different payload and creates nothing", async () => {
     await restCreate({ ...TASK, idempotencyKey: "cos-run-42" });
     const changed = await restCreate({ ...TASK, title: "Another title", idempotencyKey: "cos-run-42" });

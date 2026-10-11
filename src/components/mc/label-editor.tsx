@@ -11,6 +11,7 @@
 // `.ntm`-scoped and not reusable.
 
 import { useState } from "react";
+import { KIND_PREFIX, KIND_LABELS, TASK_KIND_DEFAULT, isKindLabel, kindsOf, withKind } from "@/lib/tasks/kind-labels";
 
 // Pure normalize used by the draft-add path — exported so the rule (trim +
 // lowercase, drop blanks, dedupe) is unit-testable without rendering React
@@ -25,6 +26,8 @@ export function normalizeLabel(raw: string): string {
 export function addLabelTo(labels: string[], raw: string): string[] {
   const normalized = normalizeLabel(raw);
   if (!normalized || labels.includes(normalized)) return labels;
+  // One kind per task: a new kind:* label replaces the existing one.
+  if (isKindLabel(normalized)) return withKind(labels, normalized);
   return [...labels, normalized];
 }
 
@@ -80,5 +83,26 @@ export function LabelEditor({
         aria-label="Add a label"
       />
     </div>
+  );
+}
+
+const kindName = (label: string) => {
+  const name = label.slice(KIND_PREFIX.length).replace(/-/g, " ");
+  return name.charAt(0).toUpperCase() + name.slice(1);
+};
+
+// Required Kind select: swaps the task's kind:* label instead of appending a
+// second one. Shows the default when the task carries no kind yet.
+export function KindSelect({ labels, onChange }: { labels: string[]; onChange: (next: string[]) => void }) {
+  return (
+    <select
+      value={kindsOf(labels)[0] ?? TASK_KIND_DEFAULT}
+      onChange={(event) => onChange(withKind(labels, event.target.value))}
+      aria-label="Task kind"
+    >
+      {KIND_LABELS.map((label) => (
+        <option key={label} value={label}>{kindName(label)}</option>
+      ))}
+    </select>
   );
 }

@@ -4,6 +4,7 @@
  */
 
 import { z } from "zod";
+import { TASK_KINDS } from "./task-kind-schema";
 
 type PrintResult = (result: unknown) => {
   content: Array<{ type: "text"; text: string }>;
@@ -104,6 +105,7 @@ export function registerRoutingMutationTools(opts: {
       headSha: z.string().optional(),
       mergeSha: z.string().optional(),
       labels: z.array(z.string()).optional(),
+      kind: z.enum(TASK_KINDS).optional().describe("Task kind; omitted defaults to kind:needs-review."),
       priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
       authorizationTrust: trustEnum,
     },

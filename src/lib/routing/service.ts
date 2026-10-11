@@ -3,6 +3,7 @@
 // event → proposal resolution. Fuzzy trust cannot mutate.
 
 import { ApiError } from "@/lib/api/route";
+import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
 import { withTransaction, type TxQuery } from "@/lib/db";
 import { assertAutonomyAllowsConfirmation } from "@/lib/routing/autonomy";
 import {
@@ -75,6 +76,7 @@ export interface CreateRoutedTaskInput {
   mergeSha?: string | null;
   authorizationTrust?: AuthorizationTrust;
   labels?: string[];
+  kind?: TaskKind;
   priority?: Task["priority"];
   evidence?: Record<string, unknown>;
 }
@@ -595,7 +597,7 @@ export async function createConfirmedTask(
           repos,
           targetEnv: "staging",
           estimate: "M",
-          labels: input.labels ?? [],
+          labels: createLabelsWithKind(input.labels, input.kind),
           prs: [],
           due: "—",
           sync: {

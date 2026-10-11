@@ -9,6 +9,7 @@ const txState = vi.hoisted(() => ({
   proposals: new Map<string, Record<string, unknown>>(),
   intents: [] as { proposal_id: string; creation_intent_hash: string; task_id: string; id: string }[],
   entities: new Set<string>(),
+  entityData: new Map<string, { labels: string[] }>(),
   seq: 100,
   decisions: 0,
   links: 0,
@@ -68,6 +69,7 @@ vi.mock("@/lib/db", () => ({
       }
       if (text.includes("INSERT INTO entities")) {
         txState.entities.add(String(params[0]));
+        txState.entityData.set(String(params[0]), JSON.parse(String(params[1])));
         return [{ id: params[0] }];
       }
       if (text.includes("INSERT INTO routing_decisions")) {
@@ -148,6 +150,7 @@ beforeEach(() => {
   txState.proposals.clear();
   txState.intents.length = 0;
   txState.entities.clear();
+  txState.entityData.clear();
   txState.seq = 100;
   txState.decisions = 0;
   txState.links = 0;
@@ -228,6 +231,37 @@ describe("createConfirmedTask", () => {
     expect(second.taskId).toBe(first.taskId);
     expect(second.replayed).toBe(true);
     expect(txState.seq).toBe(seqBefore);
+  });
+
+  it("defaults the kind to kind:needs-review and keeps other labels", async () => {
+    const result = await createConfirmedTask(human, {
+      proposalId: "prop-create",
+      bucketId: "BKT-OPS",
+      title: "Kindless",
+      accountableOwnerId: "oid-1",
+      labels: ["Lane:Dev "],
+    });
+    expect(txState.entityData.get(result.taskId)?.labels).toEqual(["lane:dev", "kind:needs-review"]);
+  });
+
+  it("merges the kind param into labels and rejects a disagreeing kind label", async () => {
+    const result = await createConfirmedTask(human, {
+      proposalId: "prop-create",
+      bucketId: "BKT-OPS",
+      title: "Coded",
+      accountableOwnerId: "oid-1",
+      kind: "code",
+    });
+    expect(txState.entityData.get(result.taskId)?.labels).toEqual(["kind:code"]);
+    txState.proposals.get("prop-create")!.state = "action_required";
+    await expect(createConfirmedTask(human, {
+      proposalId: "prop-create",
+      bucketId: "BKT-OPS",
+      title: "Conflict",
+      accountableOwnerId: "oid-1",
+      kind: "code",
+      labels: ["kind:decision"],
+    })).rejects.toMatchObject({ code: "invalid_request", status: 400 });
   });
 
   it("requires accountable owner", async () => {

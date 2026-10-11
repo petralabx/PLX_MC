@@ -5,6 +5,7 @@
 // suggest availability and again at confirm-time (defense in depth).
 
 import autonomyDialConfig from "../../../config/autonomy-dial.json";
+import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import type { RolloutMode } from "./rollout";
 
@@ -27,6 +28,27 @@ export function parseDialMode(value: unknown): RolloutMode | null {
 
 export function loadAutonomyDial(): AutonomyDialConfig {
   return autonomyDialConfig as AutonomyDialConfig;
+}
+
+const completionDialSchema = z.object({
+  repos: z.record(z.string(), z.enum(["shadow", "suggestion", "confirmation"])),
+  buckets: z.record(z.string(), z.enum(["shadow", "suggestion", "confirmation"])),
+});
+
+/** Routing modes all reserve mutations for human review. Undialed completes
+ * remain autonomous; completion validates strictly without changing routing's
+ * existing tolerance of unknown modes. A malformed/unreadable dial fails closed.
+ */
+export function resolveCompletionAutonomy(repoId: string, bucketId: string) {
+  let dial: z.infer<typeof completionDialSchema>;
+  try {
+    dial = completionDialSchema.parse(loadAutonomyDial());
+  } catch {
+    throw new ApiError("autonomy_approval_required", "Autonomy dial is unreadable or invalid; completion is refused.", 403);
+  }
+  const repoMode = dial.repos?.[repoId] ?? null;
+  const bucketMode = dial.buckets?.[bucketId] ?? null;
+  return { requiresApproval: repoMode !== null || bucketMode !== null, repoMode, bucketMode };
 }
 
 export interface ResolvedAutonomy {

@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
+import { resolveCompletionAutonomy } from "@/lib/routing";
 import { checkout, complete } from "@/lib/compliance/service";
 import * as complianceRepo from "@/lib/compliance/repo";
 import {
@@ -670,6 +671,23 @@ export async function actionComplete(
   if (existingDispatch?.taskId) {
     await assertTaskProjectAccess(existingDispatch.taskId, aclPrincipalFromMcp(identity));
   }
+  let autonomy: ReturnType<typeof resolveCompletionAutonomy> | undefined;
+  if (existingDispatch?.taskId) {
+    const row = await getEntity("task", existingDispatch.taskId);
+    const task = row?.data as unknown as Task | undefined;
+    if (!task || typeof task.bucket !== "string" || typeof existingDispatch.repo !== "string") {
+      throw new ApiError("autonomy_approval_required", "Checkout autonomy scope cannot be read; completion is refused.", 403);
+    }
+    autonomy = resolveCompletionAutonomy(existingDispatch.repo, task.bucket);
+    const gate = task.approvalGates?.find((g) => g.id === existingDispatch.approvalGateId);
+    if (autonomy.requiresApproval && gate?.status !== "approved") {
+      throw new ApiError(
+        "autonomy_approval_required",
+        "Completion requires human approval: request a P4 runtime approval gate with this checkoutId and wait for approval.",
+        403
+      );
+    }
+  }
   await complete({
     checkoutId: input.checkoutId,
     summary: input.summary,
@@ -677,6 +695,19 @@ export async function actionComplete(
     prUrl: input.prUrl,
     actor: identity.actor,
   });
+  if (autonomy && existingDispatch) {
+    await complianceRepo.appendEvent({
+      kind: "task.completion.autonomy",
+      actor: `${identity.runtime}:${identity.operatorEmail}`,
+      repo: existingDispatch.repo,
+      taskId: existingDispatch.taskId,
+      payload: {
+        ...autonomy,
+        level: autonomy.requiresApproval ? "approval-required" : "autonomous-with-audit",
+        approvalGateId: existingDispatch.approvalGateId ?? null,
+      },
+    });
+  }
   const dispatch = await complianceRepo.getDispatch(input.checkoutId);
   const taskId = dispatch?.taskId ?? "";
 

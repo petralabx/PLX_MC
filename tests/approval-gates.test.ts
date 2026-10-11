@@ -27,7 +27,7 @@ import {
   requestApprovalSchema,
 } from "@/lib/mcp/approval-actions";
 import type { McpIdentity } from "@/lib/mcp/auth";
-import { actionGetContext } from "@/lib/mcp/actions";
+import { actionComplete, actionGetContext } from "@/lib/mcp/actions";
 import { actionGetTask, checkoutRef } from "@/lib/mcp/read-actions";
 
 // In-memory seams (same technique as tests/compliance-server.test.ts): the real
@@ -40,6 +40,10 @@ const mem = vi.hoisted(() => ({
   afterGetDispatch: undefined as undefined | ((reads: number) => void),
   dispatchReads: 0,
 }));
+
+const dial = vi.hoisted(() => ({ repos: {} as Record<string, string>, buckets: {} as Record<string, string> }));
+vi.mock("../config/autonomy-dial.json", () => ({ default: dial }));
+vi.mock("@/lib/mcp/sync-meta", () => ({ syncMetaForTask: async () => ({ status: "queued" }) }));
 
 vi.mock("@/lib/sync/repo", () => ({
   getEntity: async (_t: string, id: string) =>
@@ -211,13 +215,70 @@ function seedCheckout(over: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  dial.repos = {};
+  dial.buckets = {};
   mem.tasks.clear();
   mem.dispatches.clear();
   mem.events.length = 0;
   mem.afterGetDispatch = undefined;
   mem.dispatchReads = 0;
-  mem.tasks.set("TASK-700", { id: "TASK-700", title: "t", stage: "progress", approvalGates: [] });
+  mem.tasks.set("TASK-700", { id: "TASK-700", title: "t", bucket: "BKT-TEST", stage: "progress", approvalGates: [] });
   seedCheckout();
+});
+
+describe("mc_complete_task autonomy dial", () => {
+  const input = { checkoutId: "dsp_a", summary: "done", verificationCommands: ["vitest"], rollback: "revert" };
+
+  it.each(["shadow", "suggestion", "confirmation"])("bucket %s refuses without approval and leaves task unchanged", async (mode) => {
+    dial.buckets["BKT-TEST"] = mode;
+    const before = structuredClone(mem.tasks.get("TASK-700"));
+    await expect(actionComplete(IDENTITY, input)).rejects.toMatchObject({ status: 403, code: "autonomy_approval_required" });
+    expect(mem.tasks.get("TASK-700")).toEqual(before);
+    expect(mem.events).toHaveLength(0);
+  });
+
+  it("succeeds after a human approves the P4 gate for the same checkout", async () => {
+    dial.buckets["BKT-TEST"] = "confirmation";
+    const requested = await actionRequestApproval(IDENTITY, { taskId: "TASK-700", checkoutId: "dsp_a", reason: "complete?" });
+    await expect(actionComplete(IDENTITY, input)).rejects.toMatchObject({ status: 403, code: "autonomy_approval_required" });
+    await decideApprovalGate({ taskId: "TASK-700", gateId: requested.gateId, decision: "approved", decidedBy: "human@example.com" });
+    await expect(actionComplete(IDENTITY, input)).resolves.toMatchObject({ ok: true });
+    expect(mem.events).toContainEqual(expect.objectContaining({ kind: "task.completed" }));
+    expect(mem.events).toContainEqual(expect.objectContaining({ kind: "task.completion.autonomy", payload: expect.objectContaining({ level: "approval-required", approvalGateId: requested.gateId }) }));
+  });
+
+  it.each(["pending", "rejected", "missing", "other-checkout"])("repo dial refuses a %s gate", async (status) => {
+    dial.repos["petralabx/PLX_MC"] = "suggestion";
+    mem.tasks.get("TASK-700")!.approvalGates = status === "missing" ? [] : [gate({ status: status === "other-checkout" ? "approved" : status as "pending" | "rejected" })];
+    mem.dispatches.get("dsp_a")!.approvalGateId = status === "other-checkout" ? "apg_other" : "apg_1";
+    await expect(actionComplete(IDENTITY, input)).rejects.toMatchObject({ status: 403, code: "autonomy_approval_required" });
+    expect(mem.events).toHaveLength(0);
+    expect(mem.tasks.get("TASK-700")!.stage).toBe("progress");
+  });
+
+  it("undialed scopes complete normally with an audit event even when other scopes are dialed", async () => {
+    dial.repos.other = "shadow";
+    dial.buckets.other = "confirmation";
+    await expect(actionComplete(IDENTITY, input)).resolves.toMatchObject({ ok: true });
+    expect(mem.events).toContainEqual(expect.objectContaining({ kind: "task.completion.autonomy", payload: expect.objectContaining({ level: "autonomous-with-audit" }) }));
+  });
+
+  it("fails closed on an invalid dial", async () => {
+    dial.buckets["BKT-TEST"] = "typo";
+    await expect(actionComplete(IDENTITY, input)).rejects.toMatchObject({ status: 403, code: "autonomy_approval_required" });
+    expect(mem.events).toHaveLength(0);
+  });
+
+  it("fails closed when reading the dial throws", async () => {
+    Object.defineProperty(dial, "buckets", { configurable: true, get: () => { throw new Error("unreadable"); } });
+    try {
+      await expect(actionComplete(IDENTITY, input)).rejects.toMatchObject({ status: 403, code: "autonomy_approval_required" });
+      expect(mem.tasks.get("TASK-700")!.stage).toBe("progress");
+      expect(mem.events).toHaveLength(0);
+    } finally {
+      Object.defineProperty(dial, "buckets", { configurable: true, writable: true, value: {} });
+    }
+  });
 });
 
 describe("checkout-level approval gate (TASK-629 gap 1)", () => {

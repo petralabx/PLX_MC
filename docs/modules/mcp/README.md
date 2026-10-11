@@ -14,6 +14,16 @@ dispatch logic.
 
 ## How
 
+`mc_complete_task` checks `config/autonomy-dial.json` using the checkout's
+repository and the task's current bucket. Any configured `shadow`, `suggestion`,
+or `confirmation` mode requires the checkout-bound P4 runtime approval gate to
+be approved by a human; otherwise it returns 403 `autonomy_approval_required`
+before writing completion or evidence. These routing modes all reserve mutations
+for human review. Undialed scopes remain autonomous. Successful completions append
+`task.completion.autonomy` with the effective policy and gate ID, alongside the
+existing completion event. Invalid/unreadable config or scope refuses completion.
+Routing behavior is unchanged; owner: Vince. No migration is needed.
+
 | Surface | Path |
 |---------|------|
 | REST cursor API | `src/app/api/cursor/*` — self-auth via per-agent keys (`PLX_MC_MCP_AGENT_KEYS`) or the legacy shared `PLX_MC_MCP_API_KEY` (retire via `PLX_MC_MCP_SHARED_KEY_ENABLED=0`) + operator headers |

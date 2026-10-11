@@ -112,6 +112,11 @@ describe("mc_link_merged_pr authorization (acceptance 1)", () => {
     expect(result).toMatchObject({ linked: true });
   });
 
+  it("admits sp_mcp_cos (the Chief of Staff steward principal)", async () => {
+    const result = await actionLinkMergedPr(identity("sp_mcp_cos"), input(), facts());
+    expect(result).toMatchObject({ linked: true });
+  });
+
   it("rejects caller-supplied SHAs (they are read from GitHub only)", async () => {
     await expect(actionLinkMergedPr(ledger, input({ headSha: "x" }), facts())).rejects.toMatchObject({ status: 400 });
   });
@@ -210,9 +215,9 @@ describe("PR already linked to another task (acceptance 7)", () => {
 });
 
 describe("grant", () => {
-  it("only sp_mcp_ledger holds task.link_merged_pr", async () => {
+  it("only sp_mcp_ledger and sp_mcp_cos hold task.link_merged_pr", async () => {
     const { MCP_AGENT_SERVICE_PRINCIPAL_IDS, capabilitiesForServicePrincipal } = await import("@/lib/permissions");
     const holders = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => capabilitiesForServicePrincipal(id).includes("task.link_merged_pr"));
-    expect(holders).toEqual(["sp_mcp_ledger"]);
+    expect(holders).toEqual(["sp_mcp_ledger", "sp_mcp_cos"]);
   });
 });

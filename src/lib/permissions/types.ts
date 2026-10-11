@@ -151,13 +151,21 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
   "sp_mcp_agent_runner",
   "sp_mcp_portal",
   "sp_mcp_ledger",
+  "sp_mcp_cos",
 ] as const;
 
 /**
- * Ledger steward principal. The only MCP principal holding task.link_merged_pr
- * (mc_link_merged_pr); otherwise it carries the normal agent bundle.
+ * Ledger steward principal. With sp_mcp_cos, one of two MCP principals holding
+ * task.link_merged_pr (mc_link_merged_pr); otherwise it carries the normal agent bundle.
  */
 export const LEDGER_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_ledger" as const;
+
+/**
+ * Chief of Staff steward principal. The only MCP principal holding task.cancel,
+ * and with sp_mcp_ledger the only one holding task.link_merged_pr. Its key goes
+ * only to the Chief of Staff runtime.
+ */
+export const COS_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_cos" as const;
 
 export type McpAgentServicePrincipalId =
   (typeof MCP_AGENT_SERVICE_PRINCIPAL_IDS)[number];

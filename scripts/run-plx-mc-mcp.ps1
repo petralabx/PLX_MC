@@ -1,11 +1,16 @@
 #!/usr/bin/env pwsh
 # Launch PLX-MC stdio MCP with machine-local secrets loaded.
 # Requires ~/.secrets-env.staging.ps1 (see scripts/bootstrap-windows-secrets.py).
+# Loader path: -LoaderPath, then $env:PLX_SECRETS_LOADER, then $HOME default.
+# Aborts (exit 1) before starting node if the loader is missing or hydration is partial.
+param([string]$LoaderPath)
 $ErrorActionPreference = 'Stop'
-$loader = Join-Path $HOME '.secrets-env.staging.ps1'
-if (Test-Path $loader) { . $loader }
-if (-not $env:MC_MCP_API_KEY) {
-  throw 'MC_MCP_API_KEY missing — run: python scripts/bootstrap-windows-secrets.py'
+. (Join-Path $PSScriptRoot 'lib/plx-secrets-loader.ps1')
+try {
+  Import-PlxSecretsLoader -LoaderPath $LoaderPath -RequiredEnv @('MC_MCP_API_KEY')
+} catch {
+  [Console]::Error.WriteLine("[run-plx-mc-mcp] $($_.Exception.Message)")
+  exit 1
 }
 if (-not $env:MC_OPERATOR_EMAIL) { $env:MC_OPERATOR_EMAIL = 'cos@petrasoap.com' }
 if (-not $env:PLX_MC_MCP_ENABLED) { $env:PLX_MC_MCP_ENABLED = '0' }

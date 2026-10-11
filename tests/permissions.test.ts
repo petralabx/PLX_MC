@@ -195,17 +195,34 @@ describe("service-principal separation", () => {
     });
   });
 
-  it("task.cancel / task.reopen are human admin/owner only: no service principal holds them (TASK-2529)", () => {
+  it("task.cancel is held by sp_mcp_cos only; task.reopen by no service principal (TASK-2529)", () => {
     for (const role of ["admin", "owner"] as const) {
       expect(capabilitiesForRole(role)).toEqual(expect.arrayContaining(["task.cancel", "task.reopen"]));
     }
     expect(capabilitiesForRole("member")).not.toContain("task.cancel");
     for (const id of MCP_AGENT_SERVICE_PRINCIPAL_IDS) {
-      expect(capabilitiesForServicePrincipal(id)).not.toContain("task.cancel");
       expect(capabilitiesForServicePrincipal(id)).not.toContain("task.reopen");
+      if (id === "sp_mcp_cos") continue;
+      expect(capabilitiesForServicePrincipal(id)).not.toContain("task.cancel");
     }
-    expect(authorize({ actor: { kind: "service", id: "sp_mcp_cursor", status: "active" }, capability: "task.cancel" }))
+    expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.cancel" }))
       .toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
+  });
+
+  it("sp_mcp_cos is the agent bundle plus exactly task.cancel and task.link_merged_pr", () => {
+    const cursor = capabilitiesForServicePrincipal("sp_mcp_cursor");
+    expect([...capabilitiesForServicePrincipal("sp_mcp_cos")].sort()).toEqual(
+      [...cursor, "task.cancel", "task.link_merged_pr"].sort()
+    );
+    for (const capability of ["task.cancel", "task.link_merged_pr"] as const) {
+      expect(authorize({ actor: service("sp_mcp_cos"), capability }).allowed).toBe(true);
+    }
+    for (const capability of ["task.reopen", "permissions.manage", "approval.decide", "sync.service.write"] as const) {
+      expect(authorize({ actor: service("sp_mcp_cos"), capability })).toMatchObject({
+        allowed: false,
+        reasonCode: "capability_not_granted",
+      });
+    }
   });
 
   it("grants only explicit MCP service capabilities", () => {

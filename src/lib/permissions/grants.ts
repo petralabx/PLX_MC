@@ -3,6 +3,7 @@
 import type { AccessRole, Capability } from "./types";
 import {
   COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
+  COS_MCP_SERVICE_PRINCIPAL_ID,
   GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
   LEDGER_MCP_SERVICE_PRINCIPAL_ID,
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
@@ -53,8 +54,8 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
 // credentials and audit, not capabilities. Console sweep/retry stay
 // Entra-gated.
 // task.cancel / task.reopen are deliberately absent: any agent holding them could
-// cancel any task. They are granted per principal in SERVICE_GRANTS (none today,
-// TASK-2529) and to the human admin/owner roles.
+// cancel any task. They are granted per principal in SERVICE_GRANTS (task.cancel: only
+// sp_mcp_cos; task.reopen: none today, TASK-2529) and to the human admin/owner roles.
 const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "task.read",
   "task.create",
@@ -75,9 +76,17 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
 ];
 
 // sp_mcp_ledger is the one steward principal: the agent bundle plus
-// task.link_merged_pr (mc_link_merged_pr). No other principal holds it.
+// task.link_merged_pr (mc_link_merged_pr). Only sp_mcp_cos also holds it.
 const LEDGER_MCP_CAPABILITIES: readonly Capability[] = [
   ...MCP_AGENT_CAPABILITIES,
+  "task.link_merged_pr",
+];
+
+// sp_mcp_cos (Vince 2026-10-11 13:56 ET): Chief of Staff steward lane.
+// The agent bundle plus exactly task.cancel and task.link_merged_pr.
+const COS_MCP_CAPABILITIES: readonly Capability[] = [
+  ...MCP_AGENT_CAPABILITIES,
+  "task.cancel",
   "task.link_merged_pr",
 ];
 
@@ -103,7 +112,9 @@ const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
         ? PORTAL_MCP_CAPABILITIES
         : id === LEDGER_MCP_SERVICE_PRINCIPAL_ID
           ? LEDGER_MCP_CAPABILITIES
-          : MCP_AGENT_CAPABILITIES,
+          : id === COS_MCP_SERVICE_PRINCIPAL_ID
+            ? COS_MCP_CAPABILITIES
+            : MCP_AGENT_CAPABILITIES,
     ])
   ),
   [SYNC_INBOUND_SERVICE_PRINCIPAL_ID]: ["sync.service.write", "task.read"],

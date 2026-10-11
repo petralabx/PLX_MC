@@ -32,6 +32,7 @@ DEDICATED_PRINCIPAL_IDS = (
     "sp_mcp_agent_runner",
     "sp_mcp_portal",
     "sp_mcp_ledger",
+    "sp_mcp_cos",
 )
 IDENTITY_LABELS = {
     CLAUDE_PRINCIPAL_ID: "claude",
@@ -43,6 +44,7 @@ IDENTITY_LABELS = {
     "sp_mcp_agent_runner": "agent_runner",
     "sp_mcp_portal": "portal",
     "sp_mcp_ledger": "ledger",
+    "sp_mcp_cos": "cos",
 }
 # The MCP tool allowlist denies mc_self_check to these principals (decision
 # CG-07b). The sync verifies them through the task search they may call:

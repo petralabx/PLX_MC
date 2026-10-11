@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 
 const db = vi.hoisted(() => ({
-  dispatches: new Map<string, { taskId: string; accountableHuman: string }>(),
+  dispatches: new Map<string, { taskId: string; accountableHuman: string; repo: string }>(),
   patched: [] as { taskId: string; patch: Record<string, unknown> }[],
 }));
 
@@ -20,6 +20,7 @@ vi.mock("@/lib/compliance/service", () => ({
 
 vi.mock("@/lib/compliance/repo", () => ({
   getDispatch: vi.fn(async (id: string) => db.dispatches.get(id) ?? null),
+  appendEvent: vi.fn(),
 }));
 
 vi.mock("@/lib/sync", () => ({
@@ -66,7 +67,7 @@ const identity: McpIdentity = {
 beforeEach(() => {
   db.dispatches.clear();
   db.patched.length = 0;
-  db.dispatches.set("dsp_test", { taskId: "TASK-900", accountableHuman: "vince" });
+  db.dispatches.set("dsp_test", { taskId: "TASK-900", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 });
 
 describe("actionComplete evidence (P0d)", () => {

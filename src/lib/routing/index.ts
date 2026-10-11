@@ -27,6 +27,7 @@ export type {
 } from "./types";
 
 export type { RoutingQuery } from "./repo";
+export { resolveCompletionAutonomy } from "./autonomy";
 
 export {
   MAX_ROUTING_BODY_BYTES,

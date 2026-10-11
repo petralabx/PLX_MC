@@ -244,20 +244,16 @@ or required-workflow policy in this rollout.
 
 ## 2c. Full-slug compliance migration
 
-Generated compliance workflows prefer `repoFullName` (`petralabx/<repo>`) and
-also send the legacy bare repository name under
-`module-shim — remove after 2026-10-15`.
-`PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` defaults to `1`: when both the
-signed caller and checkout dispatch carry full slugs, matching is exact and
-case-insensitive. OIDC rejects a supplied `repoFullName` that differs from its
-signed repository claim and replaces/sets the request value from that claim.
-Legacy bare dispatch rows remain accepted by the dated shim.
-
-Setting the flag to `0` downgrades checkout matching to bare repository names.
-That is a temporary emergency migration escape hatch, not normal rollout.
-Retire the bare fallback only after all eight fleet compliance gates are
-regenerated/refreshed and old checkout dispatches from pre-refresh workflows
-have expired.
+Repository binding requires matching full `owner/name` identities, compared
+case-insensitively. Bare dispatch identities and callers supplying only a bare
+name fail closed. Generated workflows retain the bare `repo` display/event key
+and send `repoFullName`; OIDC binds the latter to its signed repository claim.
+`PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` remains readable and defaults to
+`1`, preferring `repoFullName` (or a full `repo` when absent). With `0`, only the
+`repo` field is used, and it must still be a full identity; disabling the flag
+cannot restore the retired bare-name shim. Before merging this removal, operators
+must confirm every fleet compliance gate is refreshed, all pre-refresh dispatches
+have expired, and the flag remains on. These are runtime rollout preconditions.
 
 ---
 
@@ -273,7 +269,7 @@ have expired.
 | `PLX_MC_ROUTING_METADATA_ENABLED` | `1` | Skip metadata submission; compliance unchanged |
 | `PLX_MC_ROUTING_INBOX_ENABLED` | `0` | Hide UI/session APIs; keep proposal/audit data |
 | `PLX_MC_ROUTING_MAINTENANCE_ENABLED` | `1` | Cron no-ops retention/demotion writers |
-| `PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` | `1` | `0` temporarily downgrades checkout matching to legacy bare names; compliance still runs |
+| `PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` | `1` | `0` uses only the `repo` field; full identities are still required |
 | `PLX_MC_GRAPH_WEBHOOK_ENABLED` | `0` | Disable subscriptions; keep 5-min delta recovery |
 | `PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED` | `0` | Admission-only until centralized auth is on |
 

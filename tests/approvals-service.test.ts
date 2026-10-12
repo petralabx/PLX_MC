@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   tasks: new Map<string, Record<string, unknown>>(),
   patches: [] as { id: string; patch: Record<string, unknown>; actor: string }[],
   events: [] as Record<string, unknown>[],
+  stored: [] as unknown[],
 }));
 
 vi.mock("@/lib/sync", () => ({
@@ -32,10 +33,13 @@ vi.mock("@/lib/compliance/repo", () => ({
   appendEvent: async (e: Record<string, unknown>) => {
     h.events.push(e);
   },
+  eventsByKinds: async () => h.stored,
 }));
 
 import {
   decideApprovalGate,
+  listApprovalAudit,
+  pairApprovalEvents,
   listPendingApprovals,
   requestApprovalGate,
 } from "@/lib/compliance/approvals";
@@ -52,6 +56,7 @@ beforeEach(() => {
   h.tasks.clear();
   h.patches.length = 0;
   h.events.length = 0;
+  h.stored = [];
 });
 
 describe("requestApprovalGate", () => {
@@ -129,7 +134,16 @@ describe("decideApprovalGate", () => {
         decidedBy: "vince@petrasoap.com",
       })
     ).rejects.toMatchObject({ code: "separation_of_duties", status: 403 });
-    expect(h.events).toHaveLength(0);
+    // Exactly one audit denial, attributed to the attempter; the gate is unchanged.
+    expect(h.events).toHaveLength(1);
+    expect(h.events[0]).toMatchObject({
+      kind: "approval.denied",
+      actor: "vince@petrasoap.com",
+      taskId: "TASK-700",
+      payload: { gateId: "apg_1", reasonCode: "separation_of_duties", attemptedDecision: "approved" },
+    });
+    expect(h.patches).toHaveLength(0);
+    expect((h.tasks.get("TASK-700")!.data as Task).approvalGates).toEqual([pending]);
   });
 
   it("an already-decided gate is a 409, not a silent overwrite", async () => {
@@ -208,5 +222,43 @@ describe("listPendingApprovals", () => {
       itemKeys: ["qa"],
     });
     expect(rows.find((r) => r.taskId === "TASK-3")?.evidence).toBeNull();
+  });
+});
+
+describe("approval audit export (TASK-630)", () => {
+  const ev = (seq: string, kind: string, actor: string, payload: Record<string, unknown>) => ({
+    seq, ts: `2026-10-11T00:00:0${seq}.000Z`, kind, actor, repo: null, taskId: "TASK-700", pr: null, payload,
+  });
+
+  it("pairs proposal and decision by gateId with distinct actors; undecided is pending", () => {
+    const rows = pairApprovalEvents([
+      ev("3", "approval.decided", "greg@petrasoap.com", { gateId: "apg_1", decision: "rejected", note: "no" }),
+      ev("1", "approval.requested", "agent-a", { gateId: "apg_1", reason: "deploy", runtime: "claude" }),
+      ev("2", "approval.requested", "agent-b", { gateId: "apg_2", reason: "spend" }),
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      gateId: "apg_1", taskId: "TASK-700", proposer: "agent-a", decider: "greg@petrasoap.com",
+      decision: "rejected", reason: "deploy", note: "no", runtime: "claude",
+      requestedAt: "2026-10-11T00:00:01.000Z", decidedAt: "2026-10-11T00:00:03.000Z",
+    });
+    expect(rows[1]).toMatchObject({ gateId: "apg_2", proposer: "agent-b", decider: null, decision: "pending", decidedAt: null });
+  });
+
+  it("surfaces a self-approval denial with its reasonCode on the gate's row", () => {
+    const [row] = pairApprovalEvents([
+      ev("1", "approval.requested", "vince@petrasoap.com", { gateId: "apg_1", reason: "x" }),
+      ev("2", "approval.denied", "vince@petrasoap.com", { gateId: "apg_1", reasonCode: "separation_of_duties", attemptedDecision: "approved" }),
+    ]);
+    expect(row.decision).toBe("pending");
+    expect(row.denials).toEqual([
+      { actor: "vince@petrasoap.com", ts: "2026-10-11T00:00:02.000Z", reasonCode: "separation_of_duties", attemptedDecision: "approved" },
+    ]);
+  });
+
+  it("listApprovalAudit applies the caller's ACL filter before pairing", async () => {
+    h.stored = [ev("1", "approval.requested", "agent-a", { gateId: "apg_1", reason: "x" })];
+    expect(await listApprovalAudit({ filter: async () => [] })).toEqual([]);
+    expect(await listApprovalAudit()).toHaveLength(1);
   });
 });

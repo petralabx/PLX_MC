@@ -17,7 +17,7 @@ import {
 import { APPROVAL_WAIT_MAX_MS, pendingApprovalGates } from "@/lib/mc-data/policy";
 import { patchTask } from "@/lib/sync";
 import { getEntities, getEntity } from "@/lib/sync/repo";
-import { appendEvent, blockDispatchOnApproval, getDispatch } from "./repo";
+import { appendEvent, blockDispatchOnApproval, eventsByKinds, getDispatch, type EventRow } from "./repo";
 
 export interface RequestApprovalInput {
   taskId: string;
@@ -157,7 +157,21 @@ export async function decideApprovalGate(
     );
   }
   const violation = separationOfDutiesViolation(gate, input.decidedBy);
-  if (violation) throw new ApiError("separation_of_duties", violation, 403);
+  if (violation) {
+    // The rejected attempt is itself audit evidence; the gate is left untouched.
+    await appendEvent({
+      kind: "approval.denied",
+      actor: input.decidedBy,
+      taskId: input.taskId,
+      payload: {
+        gateId: gate.id,
+        reasonCode: "separation_of_duties",
+        attemptedDecision: input.decision,
+        requestedBy: gate.requestedBy,
+      },
+    });
+    throw new ApiError("separation_of_duties", violation, 403);
+  }
 
   const decided: ApprovalGate = {
     ...gate,
@@ -292,4 +306,74 @@ export async function listPendingApprovals(): Promise<PendingApprovalRow[]> {
   }
   out.sort((a, b) => a.gate.requestedAt.localeCompare(b.gate.requestedAt));
   return out;
+}
+
+export interface ApprovalAuditRow {
+  gateId: string;
+  taskId: string | null;
+  /** Agent proposal side (approval.requested). */
+  proposer: string | null;
+  requestedAt: string | null;
+  reason: string | null;
+  runtime: string | null;
+  /** Human decision side (approval.decided); null while pending. */
+  decider: string | null;
+  decision: "approved" | "rejected" | "pending";
+  decidedAt: string | null;
+  note: string | null;
+  /** Rejected decide attempts on this gate (approval.denied), oldest first. */
+  denials: { actor: string; ts: string; reasonCode: string; attemptedDecision: string | null }[];
+}
+
+const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+
+/** Join approval.requested / approval.decided / approval.denied events by gateId. Pure. */
+export function pairApprovalEvents(events: readonly EventRow[]): ApprovalAuditRow[] {
+  const rows = new Map<string, ApprovalAuditRow>();
+  const rowFor = (gateId: string, taskId: string | null): ApprovalAuditRow => {
+    let row = rows.get(gateId);
+    if (!row) {
+      row = {
+        gateId, taskId, proposer: null, requestedAt: null, reason: null, runtime: null,
+        decider: null, decision: "pending", decidedAt: null, note: null, denials: [],
+      };
+      rows.set(gateId, row);
+    }
+    return row;
+  };
+  for (const e of [...events].sort((a, b) => Number(BigInt(a.seq) - BigInt(b.seq)))) {
+    const gateId = str(e.payload.gateId);
+    if (!gateId) continue;
+    const row = rowFor(gateId, e.taskId);
+    if (e.kind === "approval.requested") {
+      row.proposer = e.actor;
+      row.requestedAt = e.ts;
+      row.reason = str(e.payload.reason);
+      row.runtime = str(e.payload.runtime);
+    } else if (e.kind === "approval.decided") {
+      row.decider = e.actor;
+      row.decision = e.payload.decision === "rejected" ? "rejected" : "approved";
+      row.decidedAt = e.ts;
+      row.note = str(e.payload.note);
+      row.reason ??= str(e.payload.reason);
+    } else if (e.kind === "approval.denied") {
+      row.denials.push({
+        actor: e.actor,
+        ts: e.ts,
+        reasonCode: str(e.payload.reasonCode) ?? "unknown",
+        attemptedDecision: str(e.payload.attemptedDecision),
+      });
+    }
+  }
+  return [...rows.values()].sort((a, b) => (a.requestedAt ?? "").localeCompare(b.requestedAt ?? ""));
+}
+
+export const APPROVAL_AUDIT_KINDS = ["approval.requested", "approval.decided", "approval.denied"];
+
+/** Audit export of proposal+decision pairs. `filter` lets the caller apply project ACLs to the raw events. */
+export async function listApprovalAudit(
+  opts: { limit?: number; filter?: (events: EventRow[]) => Promise<EventRow[]> } = {}
+): Promise<ApprovalAuditRow[]> {
+  const events = await eventsByKinds(APPROVAL_AUDIT_KINDS, opts.limit ?? 5000);
+  return pairApprovalEvents(opts.filter ? await opts.filter(events) : events);
 }

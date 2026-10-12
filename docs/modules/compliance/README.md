@@ -138,6 +138,15 @@ with `approval.decide` — never the requester (separation of duties, 403) —
 decides it via `POST /api/approvals/decide`. Transitions append
 `approval.requested` / `approval.decided` to `mc_events`; the Approvals inbox
 (`/?screen=approvals`) lists pending gates from `GET /api/approvals`.
+A self-approval attempt still returns 403 `separation_of_duties` and now also
+appends one `approval.denied` event (actor = the attempting identity, payload
+`gateId`, `reasonCode: "separation_of_duties"`, `attemptedDecision`,
+`requestedBy`) without changing the gate. `GET /api/approvals/audit`
+(`task.read`, project-ACL filtered; read-only, no new permission) is the audit
+export: `approval.requested` joined to `approval.decided` by `gateId` into
+proposal+decision rows (proposer, decider, decision, reason, timestamps,
+`pending` when undecided) with each gate's `denials` attached
+(`pairApprovalEvents` / `listApprovalAudit`).
 Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 
 ### Key Files

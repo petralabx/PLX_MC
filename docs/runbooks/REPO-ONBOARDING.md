@@ -269,8 +269,16 @@ The eight routing cohorts are `PLX_MC`, `plx-customer-portal`,
 organization variables are provisioned for the eight-repo fleet, but each
 consumer still requires its own activation PR to install the generated routing
 workflow and prove consumption. `plx-customer-portal`, `skills`, and
-`for-and-against` are active downstream; `agentic-swarm`, `local-inference`,
+`for-and-against` have recorded downstream activation labels; `agentic-swarm`, `local-inference`,
 `1hr-after`, and `furgenics` remain pending.
+
+Descriptor/config validity requires the pilot and copied repository manifests to
+parse and agree. Live activation health separately requires the effective GitHub
+repo `PLX_MC_ROUTING_METADATA_ENABLED=1` variable, successful full-slug OIDC trust,
+workflow present and running successfully, a recorded proposal and matching audit
+event, and effective mode. Record present/missing/unknown evidence per
+[the routing health runbook](mc-routing-rollout.md#6-health-checks); provisioning,
+scaffold output, and recorded activation labels alone are not live health proof.
 
 For a **downstream** pilot:
 
@@ -293,7 +301,7 @@ For a **downstream** pilot:
    `plx-mc-compliance-verify`, 20-second warn-only timeout, metadata-only
    execution, and fork/Dependabot skip behavior.
 7. Enable and verify Routing Inbox before any suggestion-mode exposure.
-8. Prove live health before calling the pilot “active.” Confirmation and fuzzy
+8. Prove live activation health with all section 6 evidence before calling the pilot “live.” Confirmation and fuzzy
    auto-link remain off.
 
 Activation task map (owner Vince): `TASK-452` central, `TASK-447` portal

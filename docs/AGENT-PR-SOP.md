@@ -476,7 +476,12 @@ Never `--no-verify`. Use the consumer's pre-push handshake when present.
 
 ## 11a. Routing suggestions (pre-checkout)
 
-For a suggestion-enabled cohort with a healthy suggestion service, a missing
+Service availability and configured mode are capability checks. Descriptor/config
+validity requires pilot and manifest agreement; live activation health requires
+GitHub variable, OIDC, workflow presence/successful run, proposal, matching audit,
+and effective mode evidence ([runbook](runbooks/mc-routing-rollout.md#6-health-checks)).
+
+For a suggestion-enabled cohort with an available suggestion service, a missing
 Task ID calls `mc_suggest_work` (or the checkout adapter) **before any repo
 edit**, then the agent searches existing work and creates only on a miss
 (see §5). For a shadow cohort, unknown cohort, or unavailable suggestion

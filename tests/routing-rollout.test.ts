@@ -18,6 +18,7 @@ import {
   type RollingDecision,
   type PilotDescriptor,
   type TrackedRepoEntry,
+  type RoutingActivationEvidence,
 } from "@/lib/routing/rollout";
 import { FUZZY_AUTOLINK_ENABLED } from "@/lib/routing/config";
 
@@ -429,5 +430,70 @@ describe("kill switches", () => {
     expect(clamped.configuredMode).toBe("confirmation");
     expect(clamped.effectiveMode).toBe("shadow");
     expect(clamped.demotionReasons).toContain("suggest_kill_switch");
+  });
+});
+
+
+describe("routing live activation evidence", () => {
+  const repo = "petralabx/PLX_MC";
+  const complete: Required<RoutingActivationEvidence> = {
+    descriptorManifestsAgree: true,
+    githubMetadataVariable: true,
+    oidcTrust: true,
+    workflowPresent: true,
+    workflowRunning: true,
+    proposalRecorded: true,
+    auditRecorded: true,
+    effectiveMode: "shadow",
+  };
+  const health = (evidence?: RoutingActivationEvidence) =>
+    rolloutHealth(undefined, undefined, evidence ? { [repo]: evidence } : {})
+      .activation.find((entry) => entry.repo === repo)!;
+
+  it("does not report descriptor validity or recorded active labels as live", () => {
+    expect(rolloutHealth().ok).toBe(true);
+    const result = health({ descriptorManifestsAgree: true });
+    expect(result.descriptorConfig.status).toBe("valid");
+    expect(result.live).toBe(false);
+    expect(result.status).toBe("unknown");
+    expect(result.unknown).toEqual([
+      "githubMetadataVariable", "oidcTrust", "workflowPresent", "workflowRunning",
+      "proposalRecorded", "auditRecorded", "effectiveMode",
+    ]);
+    expect(health().descriptorConfig.manifests).toBe("unknown");
+  });
+
+  it("reports live only with every evidence item and records the effective mode", () => {
+    const result = health(complete);
+    expect(result.status).toBe("live");
+    expect(result.live).toBe(true);
+    expect(result.effectiveMode).toBe("shadow");
+    expect(result.missing).toEqual([]);
+    expect(result.unknown).toEqual([]);
+    expect(rolloutHealth(undefined, undefined, { [repo]: complete }).activation
+      .filter((entry) => entry.repo !== repo).every((entry) => !entry.live)).toBe(true);
+  });
+
+  it.each([
+    "githubMetadataVariable", "oidcTrust", "workflowPresent", "workflowRunning",
+    "proposalRecorded", "auditRecorded", "effectiveMode",
+  ] as const)("names missing and unchecked %s evidence and never reports live", (check) => {
+    const missing = health({ ...complete, [check]: check === "effectiveMode" ? null : false });
+    expect(missing.status).toBe("not_live");
+    expect(missing.live).toBe(false);
+    expect(missing.missing).toEqual([check]);
+    const unknown = health({ ...complete, [check]: undefined });
+    expect(unknown.status).toBe("unknown");
+    expect(unknown.live).toBe(false);
+    expect(unknown.unknown).toEqual([check]);
+  });
+
+  it("requires descriptor/manifest agreement as well as live evidence", () => {
+    expect(health({ ...complete, descriptorManifestsAgree: false }))
+      .toMatchObject({ live: false, status: "not_live", descriptorConfig: { status: "invalid", manifests: "missing" } });
+    expect(health({ ...complete, descriptorManifestsAgree: undefined }))
+      .toMatchObject({ live: false, status: "unknown", descriptorConfig: { status: "unknown", manifests: "unknown" } });
+    const pilots = listPilotDescriptors().map((pilot) => ({ ...pilot, fuzzyAutoLinkEnabled: true }));
+    expect(rolloutHealth(pilots, undefined, { [repo]: complete }).activation[0].live).toBe(false);
   });
 });

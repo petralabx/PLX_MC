@@ -639,8 +639,89 @@ export function killSwitchSnapshot(): Record<string, { env: string; enabled: boo
   };
 }
 
+/** Evidence supplied by an operator/collector for this repository and target ref.
+ * No network checks run here. Descriptor activation labels and MC env flags are
+ * declarations, not evidence of GitHub configuration or a successful run.
+ */
+export interface RoutingActivationEvidence {
+  descriptorManifestsAgree?: boolean;
+  githubMetadataVariable?: boolean;
+  oidcTrust?: boolean;
+  workflowPresent?: boolean;
+  workflowRunning?: boolean;
+  proposalRecorded?: boolean;
+  auditRecorded?: boolean;
+  effectiveMode?: RolloutMode | null;
+}
+
+const ACTIVATION_CHECKS = [
+  "githubMetadataVariable", // PLX_MC_ROUTING_METADATA_ENABLED=1 in this repo
+  "oidcTrust", // successful full-slug repository binding
+  "workflowPresent",
+  "workflowRunning", // successful same-repo, non-Dependabot run
+  "proposalRecorded",
+  "auditRecorded", // matching routing.proposal.upserted event
+  "effectiveMode",
+] as const;
+
+type ActivationCheck = (typeof ACTIVATION_CHECKS)[number];
+
+export interface RoutingActivationHealth {
+  repo: string;
+  descriptorConfig: {
+    scope: "descriptor_config";
+    status: "valid" | "invalid" | "unknown";
+    manifests: "present" | "missing" | "unknown";
+  };
+  scope: "live_activation";
+  status: "live" | "not_live" | "unknown";
+  live: boolean;
+  effectiveMode: RolloutMode | null;
+  evidence: Record<ActivationCheck, "present" | "missing" | "unknown">;
+  present: ActivationCheck[];
+  missing: ActivationCheck[];
+  unknown: ActivationCheck[];
+}
+
+function activationHealth(
+  pilot: PilotDescriptor,
+  configOk: boolean,
+  input: RoutingActivationEvidence = {}
+): RoutingActivationHealth {
+  const effectiveMode = input.effectiveMode ?? null;
+  const evidence = Object.fromEntries(ACTIVATION_CHECKS.map((check) => {
+    const value = check === "effectiveMode"
+      ? input.effectiveMode === undefined ? undefined :
+        effectiveMode !== null && ["shadow", "suggestion", "confirmation"].includes(effectiveMode)
+      : input[check];
+    return [check, value === undefined ? "unknown" : value ? "present" : "missing"];
+  })) as RoutingActivationHealth["evidence"];
+  const present = ACTIVATION_CHECKS.filter((check) => evidence[check] === "present");
+  const missing = ACTIVATION_CHECKS.filter((check) => evidence[check] === "missing");
+  const unknown = ACTIVATION_CHECKS.filter((check) => evidence[check] === "unknown");
+  const manifests = input.descriptorManifestsAgree === undefined ? "unknown"
+    : input.descriptorManifestsAgree ? "present" : "missing";
+  const descriptorStatus = !configOk || !pilot.enabled || manifests === "missing"
+    ? "invalid" : manifests === "unknown" ? "unknown" : "valid";
+  const live = descriptorStatus === "valid" && present.length === ACTIVATION_CHECKS.length;
+  return {
+    repo: pilot.repo,
+    descriptorConfig: { scope: "descriptor_config", status: descriptorStatus, manifests },
+    scope: "live_activation",
+    status: live ? "live" : descriptorStatus === "invalid" || missing.length ? "not_live" : "unknown",
+    live,
+    effectiveMode,
+    evidence,
+    present,
+    missing,
+    unknown,
+  };
+}
+
 export interface RolloutHealth {
+  /** Legacy ok covers the central descriptor/registry checks only. */
   ok: boolean;
+  activation: RoutingActivationHealth[];
   pilots: number;
   reasons: string[];
   configuredModes: Record<RolloutMode, number>;
@@ -652,7 +733,8 @@ export interface RolloutHealth {
 
 export function rolloutHealth(
   pilots: PilotDescriptor[] = listPilotDescriptors(),
-  trackedRepos: TrackedRepoEntry[] = TRACKED_REPO_ENTRIES
+  trackedRepos: TrackedRepoEntry[] = TRACKED_REPO_ENTRIES,
+  activationEvidence: Record<string, RoutingActivationEvidence> = {}
 ): RolloutHealth {
   const enrolled = pilots.filter((pilot) => pilot.enabled);
   const reasons: string[] = [];
@@ -717,6 +799,9 @@ export function rolloutHealth(
 
   return {
     ok: reasons.length === 0,
+    activation: pilots.map((pilot) => activationHealth(
+      pilot, reasons.length === 0, activationEvidence[pilot.repo]
+    )),
     pilots: enrolled.length,
     reasons,
     configuredModes,

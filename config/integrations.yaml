@@ -134,16 +134,16 @@ integrations:
     criticality: High
     scope: >-
       Runtime control plane plus copied generated metadata workflows. Eight
-      active fleet cohorts are declared; PLX_MC, plx-customer-portal, skills,
-      and for-and-against are active. Every other downstream activation remains
+      configured fleet cohorts are declared; PLX_MC, plx-customer-portal, skills,
+      and for-and-against have recorded activation labels, not current live probes. Every other downstream activation remains
       a separate task/PR.
     autonomous: false # advisory routing only; humans explicitly select/create and their PRs remain non-blocking
     default_state: >-
       Code defaults are mixed: proposals, metadata, and maintenance are on unless
       explicitly set to 0; shadow, suggest, confirm, and Inbox are off unless set
       to 1; fuzzy auto-link is forced off. Committed pilot descriptors declare
-      suggestion for PLX_MC/portal/agentic-swarm and shadow for skills/
-      local-inference/1hr-after/furgenics/for-and-against. Operator rollout
+      suggestion for PLX_MC/portal/agentic-swarm/skills/for-and-against and shadow
+      for local-inference/1hr-after/furgenics. Operator rollout
       enables Inbox before suggestions and uses selected-repo metadata variables.
       TASK-456 production has shadow/suggest/Inbox/proposals/metadata/maintenance
       on, confirmation/fuzzy off. Compliance full-repo binding defaults on unless
@@ -154,7 +154,7 @@ integrations:
       PLX_MC_ROUTING_METADATA_ENABLED, PLX_MC_ROUTING_INBOX_ENABLED,
       PLX_MC_ROUTING_MAINTENANCE_ENABLED; fuzzy PLX_MC_ROUTING_FUZZY_AUTOLINK_ENABLED
       remains forced off for every pilot (config/mc-routing-rollout.json +
-      src/lib/routing/rollout.ts). Inbox must be enabled/healthy before
+      src/lib/routing/rollout.ts). Inbox must be enabled and verified before
       suggestions. Consumer workflows use selected-repo Actions variables
       PLX_MC_BASE_URL and PLX_MC_ROUTING_METADATA_ENABLED.
       PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED defaults to 1.
@@ -176,11 +176,15 @@ integrations:
       - Routing maintenance principal sp_routing_maintenance (cron retention/demotion)
       - Compliance projection principal sp_compliance_projection (merge/link projection)
     health_check: >-
-      rolloutHealth() is descriptor/config health only (eight enabled pilots,
+      rolloutHealth().ok is central descriptor/registry validity only (eight enabled pilots,
       fuzzy off, kill-switch snapshot; thresholds.minRepos remains five), not
-      proof of live activation. Live health additionally requires selected
-      variables, full-slug OIDC/repository binding, the copied workflow, and a
-      recorded proposal/run ID plus matching audit evidence. mc_self_check covers MCP; Routing Inbox flag probe before suggestion;
+      proof of descriptor/manifest agreement or live activation health. activation[]
+      separately reports descriptor/config validity and live activation health with
+      present/missing/unknown evidence; unchecked items default to unknown. Live
+      requires manifest agreement, the effective GitHub repo variable
+      PLX_MC_ROUTING_METADATA_ENABLED=1, full-slug OIDC/repository binding, the copied
+      workflow present and running successfully, recorded proposal and matching
+      audit event, and effective mode. mc_self_check covers MCP; Routing Inbox flag probe before suggestion;
       cron /api/cron/routing-maintenance returns enabled + demotion counts when
       CRON_SECRET + sp_routing_maintenance are configured. Activation health
       uses a same-repo, non-Dependabot PR; fork/Dependabot skip paths do not count.

@@ -262,7 +262,12 @@ Full fleet enrollment remains [`REPO-ONBOARDING.md`](REPO-ONBOARDING.md) +
    merge queue once L0+L1 are stable.
 9. Activate in the registry (`status: active`) only after a green L0 PR.
 
-Hub warning: do not run full scaffold against `PLX_MC` — see REPO-ONBOARDING.
+Hub full scaffold is not a no-op: it overwrites three workflows, two helper
+scripts, both routing manifests and `docs/GOVERNANCE.md` (eight files), skipping
+only `CONTRIBUTING.md`. Do not run full scaffold against `PLX_MC`. For routing
+refreshes use `--routing-only` (three routing files); `--workflows-only` writes
+three workflows and two helpers (five files). Full non-hub scaffold writes nine
+files. See the [exact file contract](REPO-ONBOARDING.md#scaffold-file-contract).
 
 Agent PRs must not serialize on shared markdown indexes (review-links lists,
 milestone registers). Put review URLs in the PR body; stamp registers after

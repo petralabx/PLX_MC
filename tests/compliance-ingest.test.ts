@@ -103,7 +103,7 @@ describe("parsePullRequestEvent", () => {
 
 describe("ingestPullRequest", () => {
   it("records an agent PR open against its checked-out task", async () => {
-    db.dispatches.set("dsp_x", { id: "dsp_x", actorKind: "agent", taskId: "TASK-900", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    db.dispatches.set("dsp_x", { id: "dsp_x", actorKind: "agent", taskId: "TASK-900", revoked: false, repo: "petralabx/PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
     const evt = parsePullRequestEvent(prPayload({}, { body: "x\nMC-Checkout: dsp_x" }))!;
     const r = await ingestPullRequest(evt);
     expect(r).toMatchObject({ actorKind: "agent", taskId: "TASK-900", recorded: true });
@@ -124,7 +124,7 @@ describe("ingestPullRequest", () => {
   });
 
   it("emits pr.merged + a task.promotion.requested seam on merge", async () => {
-    db.dispatches.set("dsp_x", { id: "dsp_x", actorKind: "agent", taskId: "TASK-900", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    db.dispatches.set("dsp_x", { id: "dsp_x", actorKind: "agent", taskId: "TASK-900", revoked: false, repo: "petralabx/PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
     const evt = parsePullRequestEvent(prPayload({ action: "closed" }, { merged: true, body: "x\nMC-Checkout: dsp_x" }))!;
     await ingestPullRequest(evt);
     expect(db.events.map((e) => e.kind)).toEqual(expect.arrayContaining(["pr.merged", "task.promotion.requested"]));
@@ -134,7 +134,7 @@ describe("ingestPullRequest", () => {
   // passed the gate in time but merged after the credential expired.
   describe("merge after the checkout TTL", () => {
     const expired = (over: Partial<{ revoked: boolean; repo: string }> = {}) => ({
-      id: "dsp_old", actorKind: "agent" as const, taskId: "TASK-901", revoked: false, repo: "PLX_MC",
+      id: "dsp_old", actorKind: "agent" as const, taskId: "TASK-901", revoked: false, repo: "petralabx/PLX_MC",
       expiresAt: new Date(Date.now() - 24 * 3_600_000).toISOString(), ...over,
     });
     const gatePassed = (taskId: string) =>
@@ -188,8 +188,8 @@ describe("ingestPullRequest", () => {
 
   // Multi-task parity: a PR completing N tasks attributes ALL of them.
   it("attributes every checked-out task on a multi-task PR open", async () => {
-    db.dispatches.set("dsp_a", { id: "dsp_a", actorKind: "agent", taskId: "TASK-1", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
-    db.dispatches.set("dsp_b", { id: "dsp_b", actorKind: "agent", taskId: "TASK-2", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    db.dispatches.set("dsp_a", { id: "dsp_a", actorKind: "agent", taskId: "TASK-1", revoked: false, repo: "petralabx/PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    db.dispatches.set("dsp_b", { id: "dsp_b", actorKind: "agent", taskId: "TASK-2", revoked: false, repo: "petralabx/PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
     const evt = parsePullRequestEvent(prPayload({}, { body: "two\nMC-Checkout: dsp_a\nMC-Checkout: dsp_b" }))!;
     const r = await ingestPullRequest(evt);
     expect(r).toMatchObject({ actorKind: "agent", taskId: "TASK-1", recorded: true });
@@ -199,8 +199,8 @@ describe("ingestPullRequest", () => {
   });
 
   it("emits one task.promotion.requested per task on a multi-task merge", async () => {
-    db.dispatches.set("dsp_a", { id: "dsp_a", actorKind: "agent", taskId: "TASK-1", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
-    db.dispatches.set("dsp_b", { id: "dsp_b", actorKind: "agent", taskId: "TASK-2", revoked: false, repo: "PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    db.dispatches.set("dsp_a", { id: "dsp_a", actorKind: "agent", taskId: "TASK-1", revoked: false, repo: "petralabx/PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    db.dispatches.set("dsp_b", { id: "dsp_b", actorKind: "agent", taskId: "TASK-2", revoked: false, repo: "petralabx/PLX_MC", expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
     const evt = parsePullRequestEvent(prPayload({ action: "closed" }, { merged: true, body: "two\nMC-Checkout: dsp_a\nMC-Checkout: dsp_b" }))!;
     await ingestPullRequest(evt);
     const promo = db.events.filter((e) => e.kind === "task.promotion.requested");

@@ -101,10 +101,10 @@ describe("verifyPr — multi-task PRs (checkoutIds)", () => {
   it("passes only when EVERY checked-out task has a complete bundle", async () => {
     db.tasks.set("TASK-1", taskish({ id: "TASK-1", accountableOwner: "greg", evidence: complete }));
     db.tasks.set("TASK-2", taskish({ id: "TASK-2", accountableOwner: "greg", evidence: complete }));
-    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
-    const b = await checkout({ taskId: "TASK-2", runtime: "claude", accountableHuman: "vince", repo: "PLX_MC" });
+    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    const b = await checkout({ taskId: "TASK-2", runtime: "claude", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 30, headSha: "sha30", changedPaths: ["src/lib/x.ts"], checkoutIds: [a.checkoutId, b.checkoutId] });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 30, headSha: "sha30", changedPaths: ["src/lib/x.ts"], checkoutIds: [a.checkoutId, b.checkoutId] });
 
     expect(r.actorKind).toBe("agent");
     expect(r.verdict).toBe("pass");
@@ -118,10 +118,10 @@ describe("verifyPr — multi-task PRs (checkoutIds)", () => {
   it("blocks the WHOLE PR if any one task's bundle is incomplete, naming that task", async () => {
     db.tasks.set("TASK-1", taskish({ id: "TASK-1", accountableOwner: "greg", evidence: complete }));
     db.tasks.set("TASK-2", taskish({ id: "TASK-2", accountableOwner: "greg", evidence: incomplete }));
-    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
-    const b = await checkout({ taskId: "TASK-2", runtime: "claude", accountableHuman: "vince", repo: "PLX_MC" });
+    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    const b = await checkout({ taskId: "TASK-2", runtime: "claude", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 31, headSha: "sha31", changedPaths: ["src/lib/x.ts"], checkoutIds: [a.checkoutId, b.checkoutId] });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 31, headSha: "sha31", changedPaths: ["src/lib/x.ts"], checkoutIds: [a.checkoutId, b.checkoutId] });
 
     expect(r.verdict).toBe("block");
     // Per-task detail: TASK-1 passes, TASK-2 blocks.
@@ -138,9 +138,9 @@ describe("verifyPr — multi-task PRs (checkoutIds)", () => {
 
   it("dedups a repeated stamp — the same checkout listed twice counts once", async () => {
     db.tasks.set("TASK-1", taskish({ id: "TASK-1", accountableOwner: "greg", evidence: complete }));
-    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
+    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 32, headSha: "sha32", changedPaths: ["src/lib/x.ts"], checkoutIds: [a.checkoutId, a.checkoutId] });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 32, headSha: "sha32", changedPaths: ["src/lib/x.ts"], checkoutIds: [a.checkoutId, a.checkoutId] });
 
     expect(r.verdict).toBe("pass");
     expect(r.tasks.length).toBe(1);
@@ -149,9 +149,9 @@ describe("verifyPr — multi-task PRs (checkoutIds)", () => {
 
   it("treats a single checkoutId as the one-task subset (back-compat)", async () => {
     db.tasks.set("TASK-1", taskish({ id: "TASK-1", accountableOwner: "greg", evidence: complete }));
-    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
+    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 33, headSha: "sha33", changedPaths: ["src/lib/x.ts"], checkoutId: a.checkoutId });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 33, headSha: "sha33", changedPaths: ["src/lib/x.ts"], checkoutId: a.checkoutId });
 
     expect(r.verdict).toBe("pass");
     expect(r.taskId).toBe("TASK-1");
@@ -161,9 +161,9 @@ describe("verifyPr — multi-task PRs (checkoutIds)", () => {
   it("is idempotent on replay — same (repo, pr, sha) over N tasks dedups checks + events (S3)", async () => {
     db.tasks.set("TASK-1", taskish({ id: "TASK-1", accountableOwner: "greg", evidence: complete }));
     db.tasks.set("TASK-2", taskish({ id: "TASK-2", accountableOwner: "greg", evidence: complete }));
-    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
-    const b = await checkout({ taskId: "TASK-2", runtime: "claude", accountableHuman: "vince", repo: "PLX_MC" });
-    const args = { repo: "PLX_MC", prNumber: 34, headSha: "sha34", changedPaths: ["src/x.ts"], checkoutIds: [a.checkoutId, b.checkoutId] };
+    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    const b = await checkout({ taskId: "TASK-2", runtime: "claude", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    const args = { repo: "petralabx/PLX_MC", prNumber: 34, headSha: "sha34", changedPaths: ["src/x.ts"], checkoutIds: [a.checkoutId, b.checkoutId] };
 
     await verifyPr(args);
     await verifyPr(args); // reconciliation replay
@@ -177,13 +177,13 @@ describe("verifyPr — multi-task PRs (checkoutIds)", () => {
     // checkout id (not the shared null task), so they are two distinct check rows.
     const expired = (id: string, taskId: string) => ({
       id, actorKind: "agent" as const, runtime: "cursor", taskId,
-      accountableHuman: "vince", repo: "PLX_MC", revoked: false,
+      accountableHuman: "vince", repo: "petralabx/PLX_MC", revoked: false,
       expiresAt: new Date(Date.now() - 1000).toISOString(),
     });
     db.dispatches.set("dsp_x", expired("dsp_x", "TASK-1"));
     db.dispatches.set("dsp_y", expired("dsp_y", "TASK-2"));
 
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 35, headSha: "sha35", changedPaths: ["src/x.ts"], checkoutIds: ["dsp_x", "dsp_y"] });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 35, headSha: "sha35", changedPaths: ["src/x.ts"], checkoutIds: ["dsp_x", "dsp_y"] });
 
     expect(r.verdict).toBe("block");
     expect(r.tasks.length).toBe(2);
@@ -194,10 +194,10 @@ describe("verifyPr — multi-task PRs (checkoutIds)", () => {
 
   it("blocks a high-risk agent PR when the task bucket has no PRD", async () => {
     db.tasks.set("TASK-1", taskish({ id: "TASK-1", bucket: "BKT-WMS", accountableOwner: "greg", evidence: highComplete }));
-    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
+    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
     const r = await verifyPr({
-      repo: "PLX_MC",
+      repo: "petralabx/PLX_MC",
       prNumber: 36,
       headSha: "sha36",
       changedPaths: ["db/migrations/006.sql"],
@@ -210,10 +210,10 @@ describe("verifyPr — multi-task PRs (checkoutIds)", () => {
 
   it("passes a high-risk agent PR when the task bucket has a PRD", async () => {
     db.tasks.set("TASK-1", taskish({ id: "TASK-1", bucket: "BKT-PRD", accountableOwner: "greg", evidence: highComplete }));
-    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
+    const a = await checkout({ taskId: "TASK-1", runtime: "cursor", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
     const r = await verifyPr({
-      repo: "PLX_MC",
+      repo: "petralabx/PLX_MC",
       prNumber: 37,
       headSha: "sha37",
       changedPaths: ["db/migrations/006.sql"],
@@ -231,20 +231,20 @@ describe("cancelled tasks (TASK-2529)", () => {
       id: "TASK-5", stage: "cancelled",
       cancellation: { reason: "duplicate", replacedBy: "TASK-9", cancelledAt: "2026-10-07T00:00:00.000Z", cancelledBy: "sp_mcp_codex" },
     }));
-    await expect(checkout({ taskId: "TASK-5", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" }))
+    await expect(checkout({ taskId: "TASK-5", runtime: "cursor", accountableHuman: "vince", repo: "petralabx/PLX_MC" }))
       .rejects.toMatchObject({ code: "task_cancelled", status: 409, message: expect.stringContaining("duplicate → TASK-9") });
     expect(db.dispatches.size).toBe(0);
   });
 
   it("a PR whose task was cancelled after checkout passes with a warning instead of blocking or promoting", async () => {
     db.tasks.set("TASK-6", taskish({ id: "TASK-6", accountableOwner: "greg", evidence: complete }));
-    const a = await checkout({ taskId: "TASK-6", runtime: "cursor", accountableHuman: "vince", repo: "PLX_MC" });
+    const a = await checkout({ taskId: "TASK-6", runtime: "cursor", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
     db.tasks.set("TASK-6", taskish({
       id: "TASK-6", stage: "cancelled", evidence: incomplete,
       cancellation: { reason: "obsolete", replacedBy: null, cancelledAt: "2026-10-07T00:00:00.000Z", cancelledBy: "x" },
     }));
 
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 60, headSha: "sha60", changedPaths: ["src/x.ts"], checkoutIds: [a.checkoutId] });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 60, headSha: "sha60", changedPaths: ["src/x.ts"], checkoutIds: [a.checkoutId] });
 
     expect(r.verdict).toBe("pass");
     expect(r.reasons).toEqual([expect.stringMatching(/^TASK-6: warning: TASK-6 is cancelled \(obsolete\) — this PR will not promote it/)]);

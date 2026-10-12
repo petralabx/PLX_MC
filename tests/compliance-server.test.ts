@@ -97,7 +97,7 @@ vi.mock("@/lib/sync", () => ({
 
 // Imported AFTER the mocks so the service's `import * as repo` + sync getEntity
 // resolve to the mocked modules.
-import { checkout, complete, ingestPullRequest, verifyPr } from "@/lib/compliance/service";
+import { checkout, complete, dispatchRepoMatches, ingestPullRequest, verifyPr } from "@/lib/compliance/service";
 
 const projection = vi.hoisted(() => ({ projectPullRequest: vi.fn() }));
 vi.mock("@/lib/compliance/projection", () => ({
@@ -142,7 +142,7 @@ beforeEach(() => {
 });
 
 describe("open PR checkout lifetime (TASK-2011)", () => {
-  const input = { repo: "PLX_MC", repoFullName: "petralabx/PLX_MC", prNumber: 2011, headSha: "head", changedPaths: ["src/x.ts"], checkoutId: "dsp_old" };
+  const input = { repo: "petralabx/PLX_MC", repoFullName: "petralabx/PLX_MC", prNumber: 2011, headSha: "head", changedPaths: ["src/x.ts"], checkoutId: "dsp_old" };
   const event = (over: Partial<PrEvent> = {}): PrEvent => ({
     ...input, action: "synchronize", merged: false, branch: "fix", title: "fix",
     author: "agent", labels: [], checkoutIds: ["dsp_old"], ...over,
@@ -165,7 +165,7 @@ describe("open PR checkout lifetime (TASK-2011)", () => {
   it.each([
     ["revoked", "checkout revoked — re-checkout the task"],
     ["released", "checkout released — re-checkout the task"],
-    ["repo", "checkout is bound to another repo"],
+    ["repo", "checkout requires matching full owner/name identities; bare names are rejected"],
     ["closed", "pull request is not open"],
     ["stamp", "checkout stamp is not in the pull request body"],
     ["verified", "task is already verified"],
@@ -279,7 +279,7 @@ describe("checkout", () => {
       taskId: "TASK-900",
       runtime: "cursor-cloud",
       accountableHuman: "vince",
-      repo: "PLX_MC",
+      repo: "petralabx/PLX_MC",
     });
     expect(checkoutId).toMatch(/^dsp_/);
     expect(db.dispatches.get(checkoutId)).toMatchObject({ taskId: "TASK-900", actorKind: "agent", accountableHuman: "vince" });
@@ -291,7 +291,7 @@ describe("checkout", () => {
       taskId: "TASK-900",
       runtime: "cursor",
       accountableHuman: "vince",
-      repo: "PLX_MC",
+      repo: "petralabx/PLX_MC",
       door: "mcp",
     });
     expect(db.events.at(-1)?.payload).toMatchObject({ door: "mcp", actorKind: "agent" });
@@ -300,7 +300,7 @@ describe("checkout", () => {
       taskId: "TASK-900",
       runtime: "cursor",
       accountableHuman: "vince",
-      repo: "PLX_MC",
+      repo: "petralabx/PLX_MC",
       door: "compliance",
     });
     expect(db.events.at(-1)?.payload).toMatchObject({ door: "compliance" });
@@ -313,7 +313,7 @@ describe("checkout", () => {
       taskId: "TASK-900",
       runtime: "cursor",
       accountableHuman: "greg.m@petrasoap.com",
-      repo: "PLX_MC",
+      repo: "petralabx/PLX_MC",
     });
 
     expect(db.tasks.get("TASK-900")?.accountableOwner).toBe("greg");
@@ -326,7 +326,7 @@ describe("checkout", () => {
       taskId: "TASK-900",
       runtime: "cursor",
       accountableHuman: "greg.m@petrasoap.com",
-      repo: "PLX_MC",
+      repo: "petralabx/PLX_MC",
     });
 
     expect(db.tasks.get("TASK-900")?.accountableOwner).toBe("stephen");
@@ -339,7 +339,7 @@ describe("checkout", () => {
       taskId: "TASK-900",
       runtime: "cursor",
       accountableHuman: "cos@petrasoap.com",
-      repo: "PLX_MC",
+      repo: "petralabx/PLX_MC",
     });
 
     expect(db.tasks.get("TASK-900")?.accountableOwner).toBe("vince");
@@ -349,9 +349,9 @@ describe("checkout", () => {
 describe("verifyPr — resolves actor/task from the checkout, not git", () => {
   it("blocks an agent PR whose task has an incomplete bundle, and records it", async () => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "x", items: [{ key: "a", label: "a", done: false }] } }));
-    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 7, headSha: "abc", changedPaths: ["src/lib/x.ts"], checkoutId });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 7, headSha: "abc", changedPaths: ["src/lib/x.ts"], checkoutId });
     expect(r.actorKind).toBe("agent");
     expect(r.tier).toBe("standard");
     expect(r.verdict).toBe("block");
@@ -361,38 +361,39 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
 
   it("passes an agent PR with a complete standard bundle + human owner", async () => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
-    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 8, headSha: "def", changedPaths: ["src/lib/x.ts"], checkoutId });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 8, headSha: "def", changedPaths: ["src/lib/x.ts"], checkoutId });
     expect(r.verdict).toBe("pass");
     expect(db.events.some((e) => e.kind === "gate.passed")).toBe(true);
   });
 
-  it("resolves a checkout minted with the full owner/name slug against the gate's bare repo name (P0c)", async () => {
-    // The gate sends repo = github.event.repository.name ("PLX_MC"); a stamp
-    // minted with MC_REPO="petralabx/PLX_MC" (the runbook/mcp.json form) must
-    // still resolve its task — else taskId=null wrongly blocks a valid agent PR.
+  it("rejects a gate that supplies only a bare repo name", async () => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
     const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
     const r = await verifyPr({ repo: "PLX_MC", prNumber: 11, headSha: "slug", changedPaths: ["src/lib/x.ts"], checkoutId });
-    expect(r.taskId).toBe("TASK-900");
-    expect(r.verdict).toBe("pass");
+    expect(r.taskId).toBeNull();
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.join(" ")).toContain("bare names are rejected");
   });
 
-  it("prefers an available full slug and rejects a same-bare-name foreign checkout", async () => {
+  it.each([
+    ["evil/PLX_MC", "petralabx/PLX_MC"],
+    ["petralabx/PLX_MC", "evil/PLX_MC"],
+  ])("rejects a same-name checkout from %s for %s", async (dispatchRepo, callerRepo) => {
     process.env.PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED = "1";
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
     const { checkoutId } = await checkout({
       taskId: "TASK-900",
       runtime: "cursor",
       accountableHuman: "vince",
-      repo: "evil/PLX_MC",
+      repo: dispatchRepo,
     });
 
     const result = await verifyPr({
       repo: "PLX_MC",
-      repoFullName: "petralabx/PLX_MC",
+      repoFullName: callerRepo,
       prNumber: 12,
       headSha: "full-slug",
       changedPaths: ["src/lib/x.ts"],
@@ -402,7 +403,7 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
     expect(result.verdict).toBe("block");
   });
 
-  it("keeps legacy bare checkout records valid when a full slug is supplied", async () => {
+  it("rejects legacy bare checkout records when a full slug is supplied", async () => {
     process.env.PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED = "1";
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
     const { checkoutId } = await checkout({
@@ -413,22 +414,22 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
     });
 
     const result = await verifyPr({
-      repo: "PLX_MC",
+      repo: "petralabx/PLX_MC",
       repoFullName: "petralabx/PLX_MC",
       prNumber: 13,
       headSha: "legacy-bare",
       changedPaths: ["src/lib/x.ts"],
       checkoutId,
     });
-    expect(result.taskId).toBe("TASK-900");
-    expect(result.verdict).toBe("pass");
+    expect(result.taskId).toBeNull();
+    expect(result.verdict).toBe("block");
   });
 
   it("blocks a high-risk agent PR when the task bucket has no PRD", async () => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert", shots: [{ label: "ui", cap: "x" }] } }));
-    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 9, headSha: "ghi", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 9, headSha: "ghi", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
     expect(r.tier).toBe("high");
     expect(r.verdict).toBe("block");
     expect(r.reasons.some((x) => /bucket PRD/.test(x))).toBe(true);
@@ -436,9 +437,9 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
 
   it("passes a high-risk agent PR when the bucket has a PRD and bundle is complete", async () => {
     db.tasks.set("TASK-900", taskish({ bucket: "BKT-PRD", accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert", shots: [{ label: "ui", cap: "x" }] } }));
-    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 91, headSha: "ghi2", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 91, headSha: "ghi2", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
     expect(r.tier).toBe("high");
     expect(r.verdict).toBe("pass");
   });
@@ -447,8 +448,8 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
     const bucket = db.buckets.find((row) => row.id === "BKT-PRD");
     if (bucket) bucket.prd = "PRD-001";
     db.tasks.set("TASK-900", taskish({ bucket: "BKT-PRD", accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert", shots: [{ label: "ui", cap: "x" }] } }));
-    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 92, headSha: "junk", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 92, headSha: "junk", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
     expect(r.verdict).toBe("block");
     expect(r.reasons.some((reason) => reason.includes("linked bucket PRD"))).toBe(true);
     expect(r.reasons.join(" ")).not.toMatch(/approved/);
@@ -456,8 +457,8 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
 
   it("blocks a high-risk agent PR when the task has no initiative", async () => {
     db.tasks.set("TASK-900", taskish({ bucket: "", accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert", shots: [{ label: "ui", cap: "x" }] } }));
-    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 93, headSha: "nobucket", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 93, headSha: "nobucket", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
     expect(r.verdict).toBe("block");
     expect(r.reasons.some((reason) => reason.includes("on an initiative"))).toBe(true);
   });
@@ -465,16 +466,16 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
   it("keeps the PRD check advisory when the bucket store cannot be read", async () => {
     db.bucketsThrow = true;
     db.tasks.set("TASK-900", taskish({ bucket: "BKT-PRD", accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert", shots: [{ label: "ui", cap: "x" }] } }));
-    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 94, headSha: "storedown", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 94, headSha: "storedown", changedPaths: ["db/migrations/006_x.sql"], checkoutId });
     expect(r.verdict).toBe("pass");
     expect(r.reasons.some((reason) => reason.includes("advisory"))).toBe(true);
   });
 
   it("is idempotent on replay — same (repo, pr, sha) yields one check + one gate event (S3)", async () => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
-    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
-    const args = { repo: "PLX_MC", prNumber: 20, headSha: "sha20", changedPaths: ["src/x.ts"], checkoutId };
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    const args = { repo: "petralabx/PLX_MC", prNumber: 20, headSha: "sha20", changedPaths: ["src/x.ts"], checkoutId };
     await verifyPr(args);
     await verifyPr(args); // reconciliation replay of the same work
     expect(db.checks.filter((c) => c.id.includes("_20_")).length).toBe(1);
@@ -483,16 +484,16 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
 
   it("computes the same verdict without writing the ledger when record is false (mc_verify_pr)", async () => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
-    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
     const checksBefore = db.checks.length;
     const eventsBefore = db.events.length;
 
     const agent = await verifyPr(
-      { repo: "PLX_MC", prNumber: 21, headSha: "sha21", changedPaths: ["src/x.ts"], checkoutId },
+      { repo: "petralabx/PLX_MC", prNumber: 21, headSha: "sha21", changedPaths: ["src/x.ts"], checkoutId },
       { record: false }
     );
     const operator = await verifyPr(
-      { repo: "PLX_MC", prNumber: 22, headSha: "sha22", changedPaths: ["src/x.ts"] },
+      { repo: "petralabx/PLX_MC", prNumber: 22, headSha: "sha22", changedPaths: ["src/x.ts"] },
       { record: false }
     );
 
@@ -503,7 +504,7 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
   });
 
   it("treats a PR with no checkout as operator work and passes it", async () => {
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 10, headSha: "jkl", changedPaths: ["db/migrations/007_x.sql"] });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 10, headSha: "jkl", changedPaths: ["db/migrations/007_x.sql"] });
     expect(r.actorKind).toBe("operator");
     expect(r.verdict).toBe("pass");
   });
@@ -514,10 +515,10 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert" } }));
     db.dispatches.set("dsp_old", {
       id: "dsp_old", actorKind: "agent", runtime: "cursor", taskId: "TASK-900",
-      accountableHuman: "vince", repo: "PLX_MC", revoked: false,
+      accountableHuman: "vince", repo: "petralabx/PLX_MC", revoked: false,
       expiresAt: new Date(Date.now() - 1000).toISOString(),
     });
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 11, headSha: "x", changedPaths: ["src/x.ts"], checkoutId: "dsp_old" });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 11, headSha: "x", changedPaths: ["src/x.ts"], checkoutId: "dsp_old" });
     expect(r.actorKind).toBe("agent");
     expect(r.verdict).toBe("pass");
     expect(r.taskId).toBe("TASK-900");
@@ -530,7 +531,7 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
       accountableHuman: "vince", repo: "agentic-swarm", revoked: false,
       expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
     });
-    const r = await verifyPr({ repo: "PLX_MC", prNumber: 12, headSha: "y", changedPaths: ["src/x.ts"], checkoutId: "dsp_other" });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 12, headSha: "y", changedPaths: ["src/x.ts"], checkoutId: "dsp_other" });
     expect(r.actorKind).toBe("agent");
     expect(r.verdict).toBe("block");
   });
@@ -538,7 +539,7 @@ describe("verifyPr — resolves actor/task from the checkout, not git", () => {
 
 describe("complete", () => {
   it("emits a task.completed event tied to the dispatch", async () => {
-    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "PLX_MC" });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
     await complete({ checkoutId, summary: "shipped", commitSha: "deadbeef", prUrl: "https://github.com/x/y/pull/1" });
     const ev = db.events.find((e) => e.kind === "task.completed");
     expect(ev).toBeTruthy();
@@ -549,10 +550,26 @@ describe("complete", () => {
     await expect(complete({ checkoutId: "dsp_bogus", summary: "x" })).rejects.toMatchObject({ code: "invalid_checkout" });
     db.dispatches.set("dsp_exp", {
       id: "dsp_exp", actorKind: "agent", runtime: "cursor", taskId: "TASK-900",
-      accountableHuman: "vince", repo: "PLX_MC", revoked: false,
+      accountableHuman: "vince", repo: "petralabx/PLX_MC", revoked: false,
       expiresAt: new Date(Date.now() - 1000).toISOString(),
     });
     await expect(complete({ checkoutId: "dsp_exp", summary: "x" })).rejects.toMatchObject({ code: "invalid_checkout" });
     expect(db.events.some((e) => e.kind === "task.completed")).toBe(false);
+  });
+});
+
+
+describe("strict dispatch repository identity", () => {
+  it.each([undefined, "1", "0"])("requires full slugs with binding flag %s", (flag) => {
+    if (flag !== undefined) process.env.PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED = flag;
+    expect(dispatchRepoMatches("x", "x", "a/x")).toBe(false);
+    expect(dispatchRepoMatches("a/x", "x")).toBe(false);
+    expect(dispatchRepoMatches("a/x", "a/x", "x")).toBe(flag === "0");
+    expect(dispatchRepoMatches("a/x/y", "a/x/y")).toBe(false);
+    expect(dispatchRepoMatches("a/x", "a/x")).toBe(true);
+    expect(dispatchRepoMatches("A/X", "a/x", "a/x")).toBe(true);
+    expect(dispatchRepoMatches("a/x", "b/x", "b/x")).toBe(false);
+    expect(dispatchRepoMatches("b/x", "a/x", "a/x")).toBe(false);
+    expect(dispatchRepoMatches("a/x", "x", "a/x")).toBe(flag !== "0");
   });
 });

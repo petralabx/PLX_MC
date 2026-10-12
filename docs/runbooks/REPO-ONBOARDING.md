@@ -300,15 +300,16 @@ Activation task map (owner Vince): `TASK-452` central, `TASK-447` portal
 (complete), `TASK-448` swarm, `TASK-449` skills, `TASK-450` local-inference,
 `TASK-453` 1hr-after, `TASK-454` furgenics, and `TASK-455` for-and-against.
 
-**Repository slug migration:** generated compliance sends preferred
-`repoFullName=petralabx/<repo>` plus the legacy bare `repo` under
-`module-shim — remove after 2026-10-15`.
-`PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` defaults to `1`; OIDC binds
-`repoFullName` to its signed repository claim and exact full-slug matching is
-preferred when dispatches also carry full slugs. Legacy bare dispatch rows
-remain shim-compatible. Setting the flag to `0` is a temporary emergency
-bare-name downgrade. Remove the bare fallback only after every fleet compliance
-gate refreshes and all pre-refresh dispatches expire.
+Repository binding requires matching full `owner/name` identities, compared
+case-insensitively. Bare dispatch identities and callers supplying only a bare
+name fail closed. Generated workflows retain the bare `repo` display/event key
+and send `repoFullName`; OIDC binds the latter to its signed repository claim.
+`PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` remains readable and defaults to
+`1`, preferring `repoFullName` (or a full `repo` when absent). With `0`, only the
+`repo` field is used, and it must still be a full identity; disabling the flag
+cannot restore the retired bare-name shim. Before merging this removal, operators
+must confirm every fleet compliance gate is refreshed, all pre-refresh dispatches
+have expired, and the flag remains on. These are runtime rollout preconditions.
 
 Full kill switches, thresholds, retention, and demotion:
 [`docs/runbooks/mc-routing-rollout.md`](mc-routing-rollout.md).

@@ -326,16 +326,16 @@ curl -sS -X POST https://mc.plxcustomer.io/api/compliance/checkout \
 
 ### Repository identity migration
 
-Always send the strict full slug (`petralabx/<repo>`) in `MC_REPO` and checkout
-calls. Generated compliance workflows now send both `repoFullName` and a legacy
-bare `repo` under the dated `module-shim — remove after 2026-10-15` contract.
-`PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` defaults to `1`; OIDC binds
-`repoFullName` to its signed repository claim, and checkout matching prefers an
-exact full slug when the dispatch also has one. Legacy bare dispatch rows remain
-shim-compatible. Setting the flag to `0` is a temporary emergency migration
-downgrade to bare-name matching, not normal operation. Retire the bare fallback
-only after every fleet compliance gate is refreshed and all pre-refresh
-dispatches have expired.
+Repository binding requires matching full `owner/name` identities, compared
+case-insensitively. Bare dispatch identities and callers supplying only a bare
+name fail closed. Generated workflows retain the bare `repo` display/event key
+and send `repoFullName`; OIDC binds the latter to its signed repository claim.
+`PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` remains readable and defaults to
+`1`, preferring `repoFullName` (or a full `repo` when absent). With `0`, only the
+`repo` field is used, and it must still be a full identity; disabling the flag
+cannot restore the retired bare-name shim. Before merging this removal, operators
+must confirm every fleet compliance gate is refreshed, all pre-refresh dispatches
+have expired, and the flag remains on. These are runtime rollout preconditions.
 
 ---
 

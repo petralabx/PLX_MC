@@ -199,7 +199,7 @@ describe("verifyPr in merge_group mode (frontier P16)", () => {
 
   it.each([
     ["revoked", "checkout revoked — re-checkout the task"],
-    ["repo", "checkout is bound to another repo"],
+    ["repo", "checkout requires matching full owner/name identities; bare names are rejected"],
     ["unknown", "unknown checkout — re-checkout the task"],
   ])("merge_group: a %s stamp blocks before the prior-pass lookup", async (condition, reason) => {
     db.dedupKeys.add(priorPass);

@@ -73,13 +73,8 @@ function checkId(repoName: string, prNumber: number, headSha: string, taskId?: s
 // returning the dispatch it points at, or null. A present checkoutId always means
 // an agent run; an invalid one yields null so the gate blocks the agent PR (never
 // a silent downgrade to operator). Hardening: security review CRITICAL #1/#5/#6.
-// Existing gates send the bare GitHub name, while newer callers may also send
-// owner/name. Prefer exact full-slug binding when both sides have it, while
-// retaining bare-name compatibility for old callers and legacy dispatch rows.
-function bareRepo(r: string): string {
-  return r.includes("/") ? r.slice(r.lastIndexOf("/") + 1) : r;
-}
-
+// Gate/event repo names are display keys; binding requires owner/name on both
+// sides. The flag selects the full-identity field, never a bare-name fallback.
 function fullRepoBindingEnabled(): boolean {
   return (
     process.env.PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED ?? "1"
@@ -91,18 +86,12 @@ export function dispatchRepoMatches(
   repoName: string,
   repoFullName?: string
 ): boolean {
-  if (fullRepoBindingEnabled() && repoFullName?.includes("/")) {
-    if (dispatchRepo.includes("/")) {
-      return dispatchRepo.toLowerCase() === repoFullName.toLowerCase();
-    }
-    // module-shim — remove after 2026-10-15: legacy dispatch rows store bare repo names.
-    // Migration compatibility: old dispatch rows stored only the bare name.
-    return (
-      bareRepo(dispatchRepo).toLowerCase() ===
-      bareRepo(repoFullName).toLowerCase()
-    );
-  }
-  return bareRepo(dispatchRepo).toLowerCase() === bareRepo(repoName).toLowerCase();
+  const callerRepo = fullRepoBindingEnabled() ? repoFullName ?? repoName : repoName;
+  const fullSlug = /^[^/\s]+\/[^/\s]+$/;
+  return (
+    fullSlug.test(dispatchRepo) && fullSlug.test(callerRepo) &&
+    dispatchRepo.toLowerCase() === callerRepo.toLowerCase()
+  );
 }
 
 type CheckoutBlockReason =
@@ -121,7 +110,7 @@ const CHECKOUT_BLOCK_TEXT: Record<CheckoutBlockReason, string> = {
   unknown_checkout: "unknown checkout — re-checkout the task",
   revoked: "checkout revoked — re-checkout the task",
   released: "checkout released — re-checkout the task",
-  repo_mismatch: "checkout is bound to another repo",
+  repo_mismatch: "checkout requires matching full owner/name identities; bare names are rejected",
   expired: "checkout expired — re-checkout",
   pr_not_open: "pull request is not open",
   stamp_not_in_pr: "checkout stamp is not in the pull request body",

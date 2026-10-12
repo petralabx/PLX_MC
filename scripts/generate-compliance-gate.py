@@ -162,8 +162,8 @@ jobs:
             # verify still gates the PR during the deploy window (back-compat); the
             # multi-task verify prefers checkoutIds and ignores it.
             checkout=$(printf '%s' "$checkoutIds" | jq -r '.[0] // ""')
-            # module-shim — remove after 2026-10-15: keep bare repo until all
-            # fleet workflows and verify callers send repoFullName.
+            # repo is the display/event key; repoFullName is the binding identity.
+            # Bare names alone cannot bind a checkout.
             body=$(jq -n \
               --arg repo "$REPO_NAME" \
               --arg repoFullName "$REPO_FULL_NAME" \

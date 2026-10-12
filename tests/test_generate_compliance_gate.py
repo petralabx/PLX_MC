@@ -37,7 +37,7 @@ def test_compliance_generator_emit_matches_canonical_workflow():
     assert result.stdout == WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_canonical_and_downstream_send_full_and_legacy_repo_names():
+def test_canonical_and_downstream_send_full_identity_and_display_name():
     for variant in ("canonical", "downstream"):
         workflow = _run("--emit", variant).stdout
 
@@ -48,7 +48,8 @@ def test_canonical_and_downstream_send_full_and_legacy_repo_names():
             "{repo:$repo, repoFullName:$repoFullName, "
             "prNumber:$prNumber, headSha:$headSha"
         ) in workflow
-        assert "module-shim — remove after 2026-10-15" in workflow
+        assert "repoFullName is the binding identity" in workflow
+        assert "module-shim" not in workflow
 
 
 def test_pull_request_trigger_includes_edited_so_stamp_edits_rerun_gate():

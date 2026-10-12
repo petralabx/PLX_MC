@@ -35,6 +35,16 @@ truth table is proven before any plumbing exists.
   PRs pass (recorded, ungated); an agent PR with no checked-out task is blocked;
   agent PRs must carry a human accountable owner (EN-003) + the tier bundle. The
   soft-vs-hard (warn vs block) decision belongs to the caller.
+- Repository binding requires matching full `owner/name` identities, compared
+  case-insensitively. Bare dispatch identities and callers supplying only a bare
+  name fail closed. Generated workflows retain the bare `repo` display/event key
+  and send `repoFullName`; OIDC binds the latter to its signed repository claim.
+  `PLX_MC_COMPLIANCE_FULL_REPO_BINDING_ENABLED` remains readable and defaults to
+  `1`, preferring `repoFullName` (or a full `repo` when absent). With `0`, only the
+  `repo` field is used, and it must still be a full identity; disabling the flag
+  cannot restore the retired bare-name shim. Before merging this removal, operators
+  must confirm every fleet compliance gate is refreshed, all pre-refresh dispatches
+  have expired, and the flag remains on. These are runtime rollout preconditions.
 - `verifyPr` (service) wraps the pure verdict for a PR: it reads **every**
   `MC-Checkout` stamp, verifies each checked-out task, and passes only if **all**
   pass — one incomplete task blocks the PR (a PR may complete N related tasks).

@@ -10,6 +10,7 @@ import {
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
   SYNC_INBOUND_SERVICE_PRINCIPAL_ID,
+  WORKBENCH_MCP_SERVICE_PRINCIPAL_ID,
 } from "./types";
 
 const MEMBER_CAPABILITIES: readonly Capability[] = [
@@ -48,7 +49,7 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
   owner: OWNER_CAPABILITIES,
 };
 
-// Every per-agent MCP principal except sp_mcp_portal carries the same reviewed task/planning/routing
+// Every per-agent MCP principal except sp_mcp_portal and sp_mcp_workbench carries the same reviewed task/planning/routing
 // + bucket.update + project.update (steward edits, mc_update_project) +
 // sync.resolve (via sync.mutate) bundle; per-agent identity isolates
 // credentials and audit, not capabilities. Console sweep/retry stay
@@ -104,6 +105,11 @@ const PORTAL_MCP_CAPABILITIES: readonly Capability[] = [
   "agent_report.read",
 ];
 
+// sp_mcp_workbench (PLX Agent Workbench, tswaterloo/OntologyProject): read-only,
+// least privilege; owner Tanush 2026-10-13. task.read only, and
+// src/lib/mcp/tool-allowlist.ts limits it to its six read tools.
+const WORKBENCH_MCP_CAPABILITIES: readonly Capability[] = ["task.read"];
+
 const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
   ...Object.fromEntries(
     MCP_AGENT_SERVICE_PRINCIPAL_IDS.map((id) => [
@@ -114,7 +120,9 @@ const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
           ? LEDGER_MCP_CAPABILITIES
           : id === COS_MCP_SERVICE_PRINCIPAL_ID
             ? COS_MCP_CAPABILITIES
-            : MCP_AGENT_CAPABILITIES,
+            : id === WORKBENCH_MCP_SERVICE_PRINCIPAL_ID
+              ? WORKBENCH_MCP_CAPABILITIES
+              : MCP_AGENT_CAPABILITIES,
     ])
   ),
   [SYNC_INBOUND_SERVICE_PRINCIPAL_ID]: ["sync.service.write", "task.read"],

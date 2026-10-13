@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
+  WORKBENCH_MCP_SERVICE_PRINCIPAL_ID,
   authorize,
   capabilitiesForServicePrincipal,
 } from "@/lib/permissions";
@@ -48,9 +49,9 @@ describe("MCP project and bucket creation capability", () => {
   });
 
   it("grants project and bucket creation to every full-bundle MCP agent principal", () => {
-    // sp_mcp_portal holds a least-privilege grant (decision CG-07b).
+    // sp_mcp_portal and sp_mcp_workbench hold least-privilege grants (decision CG-07b).
     for (const principalId of MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
-      (id) => id !== PORTAL_MCP_SERVICE_PRINCIPAL_ID
+      (id) => id !== PORTAL_MCP_SERVICE_PRINCIPAL_ID && id !== WORKBENCH_MCP_SERVICE_PRINCIPAL_ID
     )) {
       const capabilities = capabilitiesForServicePrincipal(principalId);
       expect(capabilities).toEqual(

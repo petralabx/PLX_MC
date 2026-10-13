@@ -241,6 +241,8 @@ other principal holds that capability. The portal's existing MC key does not cha
 `meta.actor.servicePrincipalId`. Key rotation uses that search to verify the
 portal key, because `mc_self_check` stays forbidden to it.
 
+**Workbench principal:** `sp_mcp_workbench` (PLX Agent Workbench, `tswaterloo/OntologyProject`; migration 038; owner Tanush) is read-only: its grant is `task.read` only, and its allowlist is `mc_self_check`, `mc_get_context`, `mc_list_buckets`, `mc_search_knowledge`, `mc_search_tasks` and `mc_get_task`; every write tool gives 403.
+
 **Agent reports (agent fleet P8, D12):** `POST /api/cursor/agent-report`
 records one free-form report per agent run as an `agent.report` event in
 `mc_events`. The body is `agentSlug`, `loopId`, `runId`, `title` and `markdown`

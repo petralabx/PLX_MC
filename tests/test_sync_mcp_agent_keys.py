@@ -114,6 +114,20 @@ def test_registry_accepts_portal_principal() -> None:
     assert sync.IDENTITY_LABELS["sp_mcp_portal"] == "portal"
 
 
+def test_registry_accepts_workbench_principal() -> None:
+    sync = load_script()
+    registry = sync.validate_registry(
+        json.dumps(
+            {
+                "sp_mcp_claude_code": "claude-secret",
+                "sp_mcp_workbench": "workbench-secret",
+            }
+        )
+    )
+    assert registry["sp_mcp_workbench"] == "workbench-secret"
+    assert sync.IDENTITY_LABELS["sp_mcp_workbench"] == "workbench"
+
+
 def search_response(principal_id: str) -> FakeResponse:
     return FakeResponse(
         200,

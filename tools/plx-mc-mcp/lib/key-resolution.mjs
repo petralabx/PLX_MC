@@ -10,6 +10,7 @@ const SUPPORTED_MCP_PRINCIPAL_IDS = new Set([
   "sp_mcp_portal",
   "sp_mcp_ledger",
   "sp_mcp_cos",
+  "sp_mcp_workbench",
 ]);
 
 const RUNTIME_PRINCIPAL_IDS = new Map([

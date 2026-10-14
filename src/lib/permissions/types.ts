@@ -152,6 +152,7 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
   "sp_mcp_portal",
   "sp_mcp_ledger",
   "sp_mcp_cos",
+  "sp_mcp_workbench",
 ] as const;
 
 /**
@@ -166,6 +167,13 @@ export const LEDGER_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_ledger" as const;
  * only to the Chief of Staff runtime.
  */
 export const COS_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_cos" as const;
+
+/**
+ * PLX Agent Workbench principal (tswaterloo/OntologyProject). Read-only and
+ * least privilege like sp_mcp_portal: task.read only, and the MCP tool
+ * allowlist limits it to its read tools.
+ */
+export const WORKBENCH_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_workbench" as const;
 
 export type McpAgentServicePrincipalId =
   (typeof MCP_AGENT_SERVICE_PRINCIPAL_IDS)[number];

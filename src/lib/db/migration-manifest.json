@@ -35,5 +35,6 @@
   "034_ledger_mcp_principal.sql",
   "035_container_archive.sql",
   "036_checkout_approval_block.sql",
-  "037_cos_mcp_principal.sql"
+  "037_cos_mcp_principal.sql",
+  "038_workbench_mcp_principal.sql"
 ]

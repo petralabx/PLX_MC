@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api/route";
 import {
   POLICY_VERSION,
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
+  WORKBENCH_MCP_SERVICE_PRINCIPAL_ID,
   type McpAgentServicePrincipalId,
 } from "@/lib/permissions";
 import { recordPermissionDecision } from "@/lib/permissions/decision-log";
@@ -23,6 +24,15 @@ export const MCP_TOOL_ALLOWLISTS: Readonly<
   // GET /api/cursor/agent-reports (fleet P8b). Nothing else.
   // mc_update_task / mc_update_tasks remain Hub-only, like progress/release.
   [PORTAL_MCP_SERVICE_PRINCIPAL_ID]: ["mc_create_task", "mc_search_tasks", "mc_list_agent_reports"],
+  // The PLX Agent Workbench (tswaterloo/OntologyProject) only reads.
+  [WORKBENCH_MCP_SERVICE_PRINCIPAL_ID]: [
+    "mc_self_check",
+    "mc_get_context",
+    "mc_list_buckets",
+    "mc_search_knowledge",
+    "mc_search_tasks",
+    "mc_get_task",
+  ],
 };
 
 export function isMcpToolAllowed(principalId: string, tool: string): boolean {

@@ -103,9 +103,21 @@ const ALLOWED_TOOLS = ["mc_create_task", "mc_search_tasks"];
 // Allowlist names that are cursor REST routes only (fleet P8b).
 const ALLOWED_ROUTE_NAMES = ["mc_list_agent_reports"];
 
+// sp_mcp_workbench (PLX Agent Workbench) may call only these read tools.
+const WORKBENCH = "sp_mcp_workbench";
+const WORKBENCH_TOOLS = [
+  "mc_self_check",
+  "mc_get_context",
+  "mc_list_buckets",
+  "mc_search_knowledge",
+  "mc_search_tasks",
+  "mc_get_task",
+];
+
 const KEYS: Record<string, string> = {
   sp_mcp_claude_code: "claude-key",
   sp_mcp_portal: "portal-key",
+  sp_mcp_workbench: "workbench-key",
 };
 
 function headers(key: string): Record<string, string> {
@@ -222,9 +234,15 @@ describe("MCP tool allowlist", () => {
     expect(isMcpToolAllowed(PORTAL, "mc_tool_added_later")).toBe(false);
   });
 
+  it("lets sp_mcp_workbench call only its six read tools", () => {
+    expect([...(MCP_TOOL_ALLOWLISTS[WORKBENCH] ?? [])].sort()).toEqual([...WORKBENCH_TOOLS].sort());
+    expect(isMcpToolAllowed(WORKBENCH, "mc_create_task")).toBe(false);
+    expect(isMcpToolAllowed(WORKBENCH, "mc_tool_added_later")).toBe(false);
+  });
+
   it("leaves every other MCP principal without a tool allowlist", () => {
-    const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => id !== PORTAL);
-    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 1);
+    const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => id !== PORTAL && id !== WORKBENCH);
+    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 2);
     for (const principalId of others) {
       expect(MCP_TOOL_ALLOWLISTS[principalId]).toBeUndefined();
       for (const tool of [...ALLOWED_TOOLS, ...Object.keys(REFUSED_TOOL_ARGS)]) {
@@ -293,6 +311,76 @@ describe("sp_mcp_portal through HTTP MCP (POST /api/cursor/mcp)", () => {
       const result = await callTool("claude-key", tool, REFUSED_TOOL_ARGS[tool]);
       expect({ tool, isError: result.isError }).toEqual({ tool, isError: false });
     }
+  });
+});
+
+describe("sp_mcp_workbench through HTTP MCP and the cursor REST routes", () => {
+  it("initializes and lists tools", async () => {
+    const init = await rpc("workbench-key", "initialize", {
+      protocolVersion: "2025-03-26",
+      capabilities: {},
+      clientInfo: { name: "plx-agent-workbench", version: "0" },
+    });
+    expect(init.result).toMatchObject({ serverInfo: { name: "PLX-MC" } });
+    const list = await rpc("workbench-key", "tools/list", {});
+    const names = (list.result.tools as { name: string }[]).map((t) => t.name);
+    expect(names).toEqual(expect.arrayContaining(WORKBENCH_TOOLS));
+  });
+
+  it("calls its allowlisted read tools", async () => {
+    h.tasks.push({ id: "TASK-1", title: "Ontology", stage: "backlog", bucket: "BKT-INFRA" });
+    const search = await callTool("workbench-key", "mc_search_tasks", { q: "ontology" });
+    expect(search.isError).toBe(false);
+    expect(search.body).toMatchObject({
+      data: { total: 1 },
+      meta: { actor: { servicePrincipalId: WORKBENCH } },
+    });
+    for (const tool of ["mc_get_context", "mc_list_buckets"]) {
+      const result = await callTool("workbench-key", tool, REFUSED_TOOL_ARGS[tool]);
+      expect({ tool, isError: result.isError }).toEqual({ tool, isError: false });
+    }
+    // The allowlist never refuses the other read tools; their own result may vary here.
+    for (const tool of ["mc_self_check", "mc_search_knowledge", "mc_get_task"]) {
+      const result = await callTool("workbench-key", tool, REFUSED_TOOL_ARGS[tool]);
+      expect({ tool, body: result.body }).not.toMatchObject({ tool, body: { error: { code: "forbidden" } } });
+    }
+    expect(h.writes).toEqual([]);
+  });
+
+  it("refuses mc_create_task and every other non-read tool with forbidden", async () => {
+    const args: Record<string, Record<string, unknown>> = {
+      ...REFUSED_TOOL_ARGS,
+      mc_create_task: { title: "Should not exist", bucket: "BKT-INFRA", reporter: "cos@petrasoap.com" },
+    };
+    for (const [tool, toolArgs] of Object.entries(args)) {
+      if (WORKBENCH_TOOLS.includes(tool)) continue;
+      const result = await callTool("workbench-key", tool, toolArgs);
+      expect({ tool, isError: result.isError, body: result.body }).toMatchObject({
+        tool,
+        isError: true,
+        body: { error: { code: "forbidden" } },
+      });
+    }
+    expect(h.writes).toEqual([]);
+  });
+
+  it("searches through GET /api/cursor/tasks and gets 403 on POST /api/cursor/tasks", async () => {
+    const search = await cursorTasksGet(
+      new Request("http://localhost/api/cursor/tasks?limit=1", { headers: headers("workbench-key") }),
+      { params: Promise.resolve({}) }
+    );
+    expect(search.status).toBe(200);
+    const create = await cursorTasksPost(
+      new Request("http://localhost/api/cursor/tasks", {
+        method: "POST",
+        headers: headers("workbench-key"),
+        body: JSON.stringify({ title: "Should not exist", bucket: "BKT-INFRA" }),
+      }),
+      { params: Promise.resolve({}) }
+    );
+    expect(create.status).toBe(403);
+    expect(((await create.json()) as { error: { code: string } }).error.code).toBe("forbidden");
+    expect(h.writes).toEqual([]);
   });
 });
 

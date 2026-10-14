@@ -14,7 +14,7 @@ import { Client, type ClientConfig, type Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { main as migrate } from "../scripts/migrate.mjs";
-import { POSTGRES_IMAGE } from "../scripts/lib/postgres-image.mjs";
+import { POSTGRES_IMAGE, ensurePostgresImage } from "../scripts/lib/postgres-image.mjs";
 
 const h = vi.hoisted(() => ({
   mcUrl: "",
@@ -75,6 +75,7 @@ beforeAll(async () => {
   const port = (server.address() as { port: number }).port;
   await new Promise<void>((resolve) => server.close(() => resolve()));
   const password = randomBytes(12).toString("hex");
+  expect(ensurePostgresImage()).toMatchObject({ ok: true });
   const run = spawnSync("docker", ["run", "-d", "--name", NAME, "-e", `POSTGRES_PASSWORD=${password}`, "-p", `127.0.0.1:${port}:5432`, POSTGRES_IMAGE], { encoding: "utf8" });
   expect(run.status, run.stderr).toBe(0);
   started = true;
@@ -508,6 +509,28 @@ describe("import: preview, then confirm", () => {
     expect((await confirm({ importId: second.data.importId, token: "nope" })).status).toBe(400);
     signedIn(EDITOR);
     expect((await confirm({ importId: second.data.importId, token: second.data.token })).status).toBe(200);
+  });
+
+  it("stores a preview under the entries lock, so two at once can't both stay open", async () => {
+    await enterFixtures();
+    const bytes = await entriesWorkbook(await exportedRows());
+    // Hold the lock every entry write takes, as a confirm or an edit would.
+    await db.query("BEGIN");
+    await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["reporting-goals-entries"]);
+    let stored = false;
+    const pending = preview(bytes).then((result) => {
+      stored = true;
+      return result;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    expect(stored, "the preview waits for the lock").toBe(false);
+    await db.query("COMMIT");
+    expect((await pending).status).toBe(200);
+    const open = await sql<{ n: string }>(
+      `SELECT count(*)::text AS n FROM report_manual_import WHERE uploaded_by = $1 AND status = 'previewed'`,
+      [EDITOR.toLowerCase()]
+    );
+    expect(open[0].n).toBe("1");
   });
 
   it("applies in one transaction: a failure part-way leaves every entry as it was", async () => {

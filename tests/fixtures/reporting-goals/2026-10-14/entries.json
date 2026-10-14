@@ -1,0 +1,69 @@
+[
+ {
+  "entryId": "M001",
+  "type": "Batch",
+  "date": "2026-10-13",
+  "reference": "BC-26286C",
+  "kg": "10050",
+  "product": "Terra Pure - Desert Breeze - Shampoo",
+  "note": "M1: open in FileMaker"
+ },
+ {
+  "entryId": "M002",
+  "type": "Batch",
+  "date": "2026-10-14",
+  "reference": "BC-26290X",
+  "kg": "9000",
+  "note": "M2: not in FileMaker"
+ },
+ {
+  "entryId": "M003",
+  "type": "Shipment",
+  "date": "2026-10-14",
+  "reference": "PO0104001",
+  "customer": "A1 American",
+  "productValue": "24500",
+  "freight": "1250",
+  "currency": "USD",
+  "note": "M3: full load"
+ },
+ {
+  "entryId": "M004",
+  "type": "Shipment",
+  "date": "2026-10-13",
+  "reference": "IN1000180418",
+  "customer": "K18 Inc",
+  "productValue": "84500",
+  "freight": "3156",
+  "currency": "USD",
+  "note": "M4: already in Sage"
+ },
+ {
+  "entryId": "M005",
+  "type": "Batch",
+  "date": "2026-10-09",
+  "reference": "BC-26280E",
+  "kg": "11127",
+  "note": "M5: already Realized"
+ },
+ {
+  "entryId": "M006",
+  "type": "Shipment",
+  "date": "2026-09-30",
+  "reference": "PSP-0930",
+  "customer": "Pet Supplies Plus",
+  "productValue": "12000",
+  "currency": "USD",
+  "note": "M6: not this month"
+ },
+ {
+  "entryId": "M007",
+  "type": "Shipment",
+  "date": "2026-10-14",
+  "reference": "INV-PENDING-7",
+  "customer": "Sahajan Inc.",
+  "productValue": "5000",
+  "currency": "CAD",
+  "note": "M7: CAD, not a truckload customer"
+ }
+]

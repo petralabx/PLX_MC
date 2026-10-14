@@ -1,0 +1,376 @@
+{
+ "today": "2026-10-14",
+ "rate": "1.4219",
+ "workingDays": {
+  "month": 21,
+  "throughToday": 9,
+  "remaining": 13
+ },
+ "largeBatches": {
+  "done": 6,
+  "dueSoFar": 18,
+  "monthTarget": 42,
+  "openFromToday": 11,
+  "openPastDate": 7,
+  "ifAllRun": 24,
+  "neededPerDay": "2.8",
+  "status": "behind"
+ },
+ "completedBySize": {
+  "total": 30,
+  "~10,000": 4,
+  "5,000–8,999": 3,
+  "Under 5,000": 22,
+  "Over 11,000": 1,
+  "notQcReleased": 2
+ },
+ "truckloads": {
+  "thisMonth": {
+   "full": 2,
+   "partial": 0,
+   "byCustomerUsd": {
+    "A1TEXT11": "31394.40",
+    "DIVE11": "22705.92"
+   }
+  },
+  "lastMonth": {
+   "full": 7,
+   "partial": 5,
+   "productUsd": "215065.66"
+  }
+ },
+ "revenue": {
+  "cadInvoices": 57,
+  "cad": "121837.71",
+  "usdInvoices": 13,
+  "usd": "172428.76",
+  "totalCad": "367014.16",
+  "dueSoFar": "428571.43",
+  "dueSoFarDisplay": "$428,571",
+  "neededPerDay": "48691.22",
+  "neededPerDayDisplay": "$48,691",
+  "lastMonthCad": "1007365.11",
+  "status": "behind"
+ },
+ "withAllEntries": {
+  "largeDone": 8,
+  "ifAllRun": 25,
+  "neededPerDay": "2.6",
+  "fullLoads": 3,
+  "revenueCad": "408628.08",
+  "neededPerDay$": "45490.15",
+  "neededPerDayDisplay": "$45,490"
+ },
+ "dailyFromPrototype": [
+  {
+   "day": "2026-10-01",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 47619,
+   "lastMonthToDate": 104355
+  },
+  {
+   "day": "2026-10-02",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "26981.20",
+   "usdInvoiced": "0.00",
+   "targetToDate": 95238,
+   "lastMonthToDate": 112103
+  },
+  {
+   "day": "2026-10-03",
+   "isWorkingDay": false,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 95238,
+   "lastMonthToDate": 147160
+  },
+  {
+   "day": "2026-10-04",
+   "isWorkingDay": false,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 95238,
+   "lastMonthToDate": 183556
+  },
+  {
+   "day": "2026-10-05",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 2,
+   "largeStillScheduled": 1,
+   "cadInvoiced": "38627.73",
+   "usdInvoiced": "10270.40",
+   "targetToDate": 142857,
+   "lastMonthToDate": 183556
+  },
+  {
+   "day": "2026-10-06",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "2081.15",
+   "usdInvoiced": "0.00",
+   "targetToDate": 190476,
+   "lastMonthToDate": 183556
+  },
+  {
+   "day": "2026-10-07",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 1,
+   "largeStillScheduled": 1,
+   "cadInvoiced": "48774.32",
+   "usdInvoiced": "0.00",
+   "targetToDate": 238095,
+   "lastMonthToDate": 183588
+  },
+  {
+   "day": "2026-10-08",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 1,
+   "largeStillScheduled": 1,
+   "cadInvoiced": "1527.13",
+   "usdInvoiced": "1008.04",
+   "targetToDate": 285714,
+   "lastMonthToDate": 205292
+  },
+  {
+   "day": "2026-10-09",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 1,
+   "largeStillScheduled": 1,
+   "cadInvoiced": "3846.18",
+   "usdInvoiced": "73494.32",
+   "targetToDate": 333333,
+   "lastMonthToDate": 228944
+  },
+  {
+   "day": "2026-10-10",
+   "isWorkingDay": false,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 333333,
+   "lastMonthToDate": 238239
+  },
+  {
+   "day": "2026-10-11",
+   "isWorkingDay": false,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 333333,
+   "lastMonthToDate": 270219
+  },
+  {
+   "day": "2026-10-12",
+   "isWorkingDay": false,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 333333,
+   "lastMonthToDate": 270219
+  },
+  {
+   "day": "2026-10-13",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 3,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "87656.00",
+   "targetToDate": 380952,
+   "lastMonthToDate": 270219
+  },
+  {
+   "day": "2026-10-14",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 1,
+   "largeStillScheduled": 4,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 428571,
+   "lastMonthToDate": 418659
+  },
+  {
+   "day": "2026-10-15",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 4,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 476190,
+   "lastMonthToDate": 460801
+  },
+  {
+   "day": "2026-10-16",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 2,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 523810,
+   "lastMonthToDate": 518630
+  },
+  {
+   "day": "2026-10-17",
+   "isWorkingDay": false,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 523810,
+   "lastMonthToDate": 541431
+  },
+  {
+   "day": "2026-10-18",
+   "isWorkingDay": false,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 523810,
+   "lastMonthToDate": 595777
+  },
+  {
+   "day": "2026-10-19",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 571429,
+   "lastMonthToDate": 595777
+  },
+  {
+   "day": "2026-10-20",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 619048,
+   "lastMonthToDate": 595777
+  },
+  {
+   "day": "2026-10-21",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 666667,
+   "lastMonthToDate": 612933
+  },
+  {
+   "day": "2026-10-22",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 714286,
+   "lastMonthToDate": 684582
+  },
+  {
+   "day": "2026-10-23",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 761905,
+   "lastMonthToDate": 702534
+  },
+  {
+   "day": "2026-10-24",
+   "isWorkingDay": false,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 761905,
+   "lastMonthToDate": 721363
+  },
+  {
+   "day": "2026-10-25",
+   "isWorkingDay": false,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 761905,
+   "lastMonthToDate": 751011
+  },
+  {
+   "day": "2026-10-26",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 809524,
+   "lastMonthToDate": 751011
+  },
+  {
+   "day": "2026-10-27",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 857143,
+   "lastMonthToDate": 751011
+  },
+  {
+   "day": "2026-10-28",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 1,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 904762,
+   "lastMonthToDate": 770281
+  },
+  {
+   "day": "2026-10-29",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 952381,
+   "lastMonthToDate": 820744
+  },
+  {
+   "day": "2026-10-30",
+   "isWorkingDay": true,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 1000000,
+   "lastMonthToDate": 1007365
+  },
+  {
+   "day": "2026-10-31",
+   "isWorkingDay": false,
+   "largeDoneFileMaker": 0,
+   "largeStillScheduled": 0,
+   "cadInvoiced": "0.00",
+   "usdInvoiced": "0.00",
+   "targetToDate": 1000000,
+   "lastMonthToDate": 1007365
+  }
+ ]
+}

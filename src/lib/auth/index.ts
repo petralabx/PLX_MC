@@ -12,11 +12,12 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import { entraAuthConfigured, entraAuthCredentials } from "@/lib/secrets";
 
 import { basicGate, isAllowedUser, isPublicAsset } from "./gate";
-import { extractEntraOid, toSessionIdentity, type EntraProfileClaims } from "./identity";
+import { extractEntraOid, extractEntraRoles, toSessionIdentity, type EntraProfileClaims } from "./identity";
 
 export { basicGate, isAllowedUser } from "./gate";
 export {
   extractEntraOid,
+  extractEntraRoles,
   hydrateMcUserByOid,
   permissionsEnforcementEnabled,
   permissionsEnforcementMode,
@@ -65,6 +66,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
           if (oid) token.oid = oid;
           const email = (claims.email ?? claims.preferred_username)?.trim().toLowerCase();
           if (email) token.email = email;
+          // App roles (e.g. Goals.Viewer / Goals.Editor), assigned to groups on
+          // the sign-in app. Refreshed at each sign-in.
+          token.roles = extractEntraRoles(claims);
         }
         return token;
       },
@@ -78,6 +82,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
         if (session.user) {
           session.user.oid = identity.oid ?? null;
           if (identity.email) session.user.email = identity.email;
+          session.user.roles = Array.isArray(token.roles) ? token.roles : [];
         }
         return session;
       },

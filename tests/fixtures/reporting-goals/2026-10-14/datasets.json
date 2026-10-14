@@ -1,0 +1,4558 @@
+{
+ "today": "2026-10-14",
+ "cutoffs": {
+  "productionCutoff": "2026-10-14",
+  "sageCutoff": "2026-10-14"
+ },
+ "goalSummary": {
+  "largeDone": 6,
+  "largeScheduledAhead": 11,
+  "largeOpenPastDate": 7
+ },
+ "daily": [
+  {
+   "day": "2026-10-01",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "32863.12",
+   "usdLast": "50279.12"
+  },
+  {
+   "day": "2026-10-02",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "26981.20",
+   "usdThis": "0.00",
+   "cadLast": "7748.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-03",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "35057.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-04",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "807.09",
+   "usdLast": "25029.12"
+  },
+  {
+   "day": "2026-10-05",
+   "largeDone": 2,
+   "largeOpen": 1,
+   "cadThis": "38627.73",
+   "usdThis": "10270.40",
+   "cadLast": "0.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-06",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "2081.15",
+   "usdThis": "0.00",
+   "cadLast": "0.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-07",
+   "largeDone": 1,
+   "largeOpen": 1,
+   "cadThis": "48774.32",
+   "usdThis": "0.00",
+   "cadLast": "32.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-08",
+   "largeDone": 1,
+   "largeOpen": 1,
+   "cadThis": "1527.13",
+   "usdThis": "1008.04",
+   "cadLast": "21704.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-09",
+   "largeDone": 1,
+   "largeOpen": 1,
+   "cadThis": "3846.18",
+   "usdThis": "73494.32",
+   "cadLast": "23652.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-10",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "9295.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-11",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "31980.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-12",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "0.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-13",
+   "largeDone": 0,
+   "largeOpen": 3,
+   "cadThis": "0.00",
+   "usdThis": "87656.00",
+   "cadLast": "0.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-14",
+   "largeDone": 1,
+   "largeOpen": 4,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "58914.16",
+   "usdLast": "62962.12"
+  },
+  {
+   "day": "2026-10-15",
+   "largeDone": 0,
+   "largeOpen": 4,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "42142.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-16",
+   "largeDone": 0,
+   "largeOpen": 2,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "8957.30",
+   "usdLast": "34370.70"
+  },
+  {
+   "day": "2026-10-17",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "22801.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-18",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "11743.60",
+   "usdLast": "29961.60"
+  },
+  {
+   "day": "2026-10-19",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "0.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-20",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "0.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-21",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "17156.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-22",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "35390.55",
+   "usdLast": "25500.00"
+  },
+  {
+   "day": "2026-10-23",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "17952.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-24",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "18829.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-25",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "29648.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-26",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "0.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-27",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "0.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-28",
+   "largeDone": 0,
+   "largeOpen": 1,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "19270.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-29",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "50463.00",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-30",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "186621.12",
+   "usdLast": "0.00"
+  },
+  {
+   "day": "2026-10-31",
+   "largeDone": 0,
+   "largeOpen": 0,
+   "cadThis": "0.00",
+   "usdThis": "0.00",
+   "cadLast": "0.00",
+   "usdLast": "0.00"
+  }
+ ],
+ "truckloads": [
+  {
+   "code": "A1TEXT11",
+   "shipment": "SH1000084901",
+   "shipDate": "2026-09-01",
+   "productUsd": "24000.00",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "DIVE11",
+   "shipment": "SH1000084902",
+   "shipDate": "2026-09-01",
+   "productUsd": "22725.12",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "DIVE11",
+   "shipment": "SH1000084935",
+   "shipDate": "2026-09-04",
+   "productUsd": "22725.12",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "A1TEXT11",
+   "shipment": "SH1000085111",
+   "shipDate": "2026-09-14",
+   "productUsd": "26000.00",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "DIVE11",
+   "shipment": "SH1000085110",
+   "shipDate": "2026-09-14",
+   "productUsd": "22725.12",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "PETSUP10",
+   "shipment": "SH1000085112",
+   "shipDate": "2026-09-14",
+   "productUsd": "10608.00",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "A1TEXT11",
+   "shipment": "SH1000085140",
+   "shipDate": "2026-09-16",
+   "productUsd": "22512.70",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "PETSUP10",
+   "shipment": "SH1000085141",
+   "shipDate": "2026-09-16",
+   "productUsd": "10608.00",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "1SHOP11",
+   "shipment": "SH1000085171",
+   "shipDate": "2026-09-18",
+   "productUsd": "18553.60",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "PETSUP10",
+   "shipment": "SH1000085172",
+   "shipDate": "2026-09-18",
+   "productUsd": "10608.00",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "1SHOP11",
+   "shipment": "SH1000085231",
+   "shipDate": "2026-09-22",
+   "productUsd": "8000.00",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "A1TEXT11",
+   "shipment": "SH1000085230",
+   "shipDate": "2026-09-22",
+   "productUsd": "16000.00",
+   "productCad": "0.00",
+   "thisMonth": false
+  },
+  {
+   "code": "A1TEXT11",
+   "shipment": "SH1000085508",
+   "shipDate": "2026-10-09",
+   "productUsd": "31394.40",
+   "productCad": "0.00",
+   "thisMonth": true
+  },
+  {
+   "code": "DIVE11",
+   "shipment": "SH1000085509",
+   "shipDate": "2026-10-09",
+   "productUsd": "22705.92",
+   "productCad": "0.00",
+   "thisMonth": true
+  }
+ ],
+ "revenue": [
+  {
+   "currency": "CAD",
+   "thisMonth": true,
+   "invoices": 57,
+   "netBeforeTax": "121837.71"
+  },
+  {
+   "currency": "USD",
+   "thisMonth": true,
+   "invoices": 13,
+   "netBeforeTax": "172428.76"
+  },
+  {
+   "currency": "CAD",
+   "thisMonth": false,
+   "invoices": 25,
+   "netBeforeTax": "683025.94"
+  },
+  {
+   "currency": "USD",
+   "thisMonth": false,
+   "invoices": 14,
+   "netBeforeTax": "228102.66"
+  }
+ ],
+ "shipments": [
+  {
+   "invoice": "IN1000180352",
+   "shipment": "SH1000085448",
+   "orderNo": "OR1000152228",
+   "po": "TCP0160",
+   "customerCode": "THECAR10",
+   "customer": "The Care Principle / Dina Pugliese Productions Inc.",
+   "shipDate": "2026-10-02",
+   "currency": "CAD",
+   "productValue": "10393.20",
+   "otherCharges": "0.00",
+   "netBeforeTax": "10393.20"
+  },
+  {
+   "invoice": "IN1000180353",
+   "shipment": "SH1000085447",
+   "orderNo": "OR1000152027",
+   "po": "TCP0158",
+   "customerCode": "THECAR10",
+   "customer": "The Care Principle / Dina Pugliese Productions Inc.",
+   "shipDate": "2026-10-02",
+   "currency": "CAD",
+   "productValue": "16588.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "16588.00"
+  },
+  {
+   "invoice": "IN1000180349",
+   "shipment": "SH1000085444",
+   "orderNo": "OR1000154070",
+   "po": "PUR-ORD-2026-00016",
+   "customerCode": "LUNAIN10",
+   "customer": "Luna Inc",
+   "shipDate": "2026-10-05",
+   "currency": "USD",
+   "productValue": "10270.40",
+   "otherCharges": "0.00",
+   "netBeforeTax": "10270.40"
+  },
+  {
+   "invoice": "IN1000180354",
+   "shipment": "SH1000085474",
+   "orderNo": "OR1000153772",
+   "po": "081926-01",
+   "customerCode": "MARGIN10",
+   "customer": "MARGIN GLOBAL INC.",
+   "shipDate": "2026-10-05",
+   "currency": "CAD",
+   "productValue": "5672.73",
+   "otherCharges": "0.00",
+   "netBeforeTax": "5672.73"
+  },
+  {
+   "invoice": "IN1000180407",
+   "shipment": "SH1000085507",
+   "orderNo": "OR1000153252",
+   "po": "PO-00001344",
+   "customerCode": "SAHAJA10",
+   "customer": "Sahajan Inc.",
+   "shipDate": "2026-10-05",
+   "currency": "CAD",
+   "productValue": "32955.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "32955.00"
+  },
+  {
+   "invoice": "IN1000180356",
+   "shipment": "SH1000085451",
+   "orderNo": "W1000005397",
+   "po": "PO-REF-001",
+   "customerCode": "OASISA10",
+   "customer": "OASIS AQUA LOUNGE",
+   "shipDate": "2026-10-06",
+   "currency": "CAD",
+   "productValue": "483.80",
+   "otherCharges": "50.00",
+   "netBeforeTax": "533.80"
+  },
+  {
+   "invoice": "IN1000180369",
+   "shipment": "SH1000085449",
+   "orderNo": "OR1000154006",
+   "po": "92",
+   "customerCode": "ONTARI10",
+   "customer": "Ontario Racquet Club",
+   "shipDate": "2026-10-06",
+   "currency": "CAD",
+   "productValue": "274.50",
+   "otherCharges": "0.00",
+   "netBeforeTax": "274.50"
+  },
+  {
+   "invoice": "IN1000180370",
+   "shipment": "SH1000085450",
+   "orderNo": "OR1000154002",
+   "po": "PO#09222026",
+   "customerCode": "STEAMW10",
+   "customer": "STEAMWORKS",
+   "shipDate": "2026-10-06",
+   "currency": "CAD",
+   "productValue": "241.90",
+   "otherCharges": "19.35",
+   "netBeforeTax": "261.25"
+  },
+  {
+   "invoice": "IN1000180393",
+   "shipment": "SH1000085452",
+   "orderNo": "W1000005416",
+   "po": "50208",
+   "customerCode": "CALGAR10",
+   "customer": "Calgary Winter Club",
+   "shipDate": "2026-10-06",
+   "currency": "CAD",
+   "productValue": "1011.60",
+   "otherCharges": "0.00",
+   "netBeforeTax": "1011.60"
+  },
+  {
+   "invoice": "IN1000180355",
+   "shipment": "SH1000085472",
+   "orderNo": "W1000005444",
+   "po": "PO-REF-002",
+   "customerCode": "MOVATI10",
+   "customer": "Movati Athletic",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "720.00",
+   "otherCharges": "172.40",
+   "netBeforeTax": "892.40"
+  },
+  {
+   "invoice": "IN1000180357",
+   "shipment": "SH1000085467",
+   "orderNo": "W1000005441",
+   "po": "PO-REF-003",
+   "customerCode": "MOVATI11",
+   "customer": "Movati Club - Burlington",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "1878.50",
+   "otherCharges": "50.00",
+   "netBeforeTax": "1928.50"
+  },
+  {
+   "invoice": "IN1000180358",
+   "shipment": "SH1000085473",
+   "orderNo": "W1000005442",
+   "po": "PO-REF-004",
+   "customerCode": "MOVATI12",
+   "customer": "Movati Athletic - Barrhaven",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "2707.00",
+   "otherCharges": "50.00",
+   "netBeforeTax": "2757.00"
+  },
+  {
+   "invoice": "IN1000180359",
+   "shipment": "SH1000085469",
+   "orderNo": "W1000005443",
+   "po": "PO-REF-005",
+   "customerCode": "MOVATI13",
+   "customer": "Movati Athletic - Richmond Hill",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "2124.50",
+   "otherCharges": "50.00",
+   "netBeforeTax": "2174.50"
+  },
+  {
+   "invoice": "IN1000180360",
+   "shipment": "SH1000085476",
+   "orderNo": "W1000005445",
+   "po": "PO-REF-006",
+   "customerCode": "MOVATI10",
+   "customer": "Movati Athletic",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "2572.00",
+   "otherCharges": "50.00",
+   "netBeforeTax": "2622.00"
+  },
+  {
+   "invoice": "IN1000180361",
+   "shipment": "SH1000085468",
+   "orderNo": "W1000005446",
+   "po": "PO-REF-007",
+   "customerCode": "MOVATI10",
+   "customer": "Movati Athletic",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "1292.50",
+   "otherCharges": "50.00",
+   "netBeforeTax": "1342.50"
+  },
+  {
+   "invoice": "IN1000180362",
+   "shipment": "SH1000085477",
+   "orderNo": "W1000005448",
+   "po": "PO-REF-008",
+   "customerCode": "MOVATI14",
+   "customer": "Movati - Windsor",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "959.00",
+   "otherCharges": "230.00",
+   "netBeforeTax": "1189.00"
+  },
+  {
+   "invoice": "IN1000180363",
+   "shipment": "SH1000085491",
+   "orderNo": "W1000005449",
+   "po": "PO-REF-009",
+   "customerCode": "MOVATI10",
+   "customer": "Movati Athletic",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "1681.00",
+   "otherCharges": "50.00",
+   "netBeforeTax": "1731.00"
+  },
+  {
+   "invoice": "IN1000180364",
+   "shipment": "SH1000085470",
+   "orderNo": "OR1000154022",
+   "po": "1033781",
+   "customerCode": "PURITY10",
+   "customer": "Purity Life Health - Acton",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "0.00",
+   "otherCharges": "160.00",
+   "netBeforeTax": "160.00"
+  },
+  {
+   "invoice": "IN1000180365",
+   "shipment": "SH1000085471",
+   "orderNo": "OR1000154068",
+   "po": "8021182",
+   "customerCode": "PURITY11",
+   "customer": "Purity Life Health - Calgary",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "0.00",
+   "otherCharges": "406.36",
+   "netBeforeTax": "406.36"
+  },
+  {
+   "invoice": "IN1000180366",
+   "shipment": "SH1000085465",
+   "orderNo": "OR1000154074",
+   "po": "PO-REF-010",
+   "customerCode": "PHILLI10",
+   "customer": "PHILLIP ADAM INC (NA)",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "0.00",
+   "otherCharges": "23.65",
+   "netBeforeTax": "23.65"
+  },
+  {
+   "invoice": "IN1000180367",
+   "shipment": "SH1000085459",
+   "orderNo": "OR1000154067",
+   "po": null,
+   "customerCode": "CROWNG10",
+   "customer": "CROWN GROOMING LTD",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "5477.65",
+   "otherCharges": "0.00",
+   "netBeforeTax": "5477.65"
+  },
+  {
+   "invoice": "IN1000180368",
+   "shipment": "SH1000085464",
+   "orderNo": "OR1000153871",
+   "po": "1544",
+   "customerCode": "DISPEN10",
+   "customer": "DISPENSER AMENITIES (OFFICE) (NA)",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "7164.80",
+   "otherCharges": "0.00",
+   "netBeforeTax": "7164.80"
+  },
+  {
+   "invoice": "IN1000180371",
+   "shipment": "SH1000085462",
+   "orderNo": "OR1000154023",
+   "po": "62325",
+   "customerCode": "GLENCO10",
+   "customer": "Glencoe Health Club",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "680.40",
+   "otherCharges": "0.00",
+   "netBeforeTax": "680.40"
+  },
+  {
+   "invoice": "IN1000180372",
+   "shipment": "SH1000085466",
+   "orderNo": "OR1000154043",
+   "po": "PO#09292026",
+   "customerCode": "STEAMW10",
+   "customer": "STEAMWORKS",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "362.85",
+   "otherCharges": "29.03",
+   "netBeforeTax": "391.88"
+  },
+  {
+   "invoice": "IN1000180373",
+   "shipment": "SH1000085463",
+   "orderNo": "OR1000154028",
+   "po": "260919282",
+   "customerCode": "LTFCLU10",
+   "customer": "LTF Club Operations Company Canada, Inc.",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "152.58",
+   "otherCharges": "0.00",
+   "netBeforeTax": "152.58"
+  },
+  {
+   "invoice": "IN1000180374",
+   "shipment": "SH1000085457",
+   "orderNo": "OR1000154079",
+   "po": "260922287",
+   "customerCode": "LTFCLU10",
+   "customer": "LTF Club Operations Company Canada, Inc.",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "967.20",
+   "otherCharges": "77.38",
+   "netBeforeTax": "1044.58"
+  },
+  {
+   "invoice": "IN1000180375",
+   "shipment": "SH1000085453",
+   "orderNo": "OR1000154080",
+   "po": "261000131",
+   "customerCode": "LTFCLU10",
+   "customer": "LTF Club Operations Company Canada, Inc.",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "384.00",
+   "otherCharges": "30.72",
+   "netBeforeTax": "414.72"
+  },
+  {
+   "invoice": "IN1000180376",
+   "shipment": "SH1000085458",
+   "orderNo": "OR1000154076",
+   "po": "PO-REF-011",
+   "customerCode": "BODYSO10",
+   "customer": "Body & Soul Fitness",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "62.10",
+   "otherCharges": "22.00",
+   "netBeforeTax": "84.10"
+  },
+  {
+   "invoice": "IN1000180377",
+   "shipment": "SH1000085455",
+   "orderNo": "OR1000154077",
+   "po": "PO-REF-012",
+   "customerCode": "ALLURE10",
+   "customer": "ALLURE FITNESS",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "365.70",
+   "otherCharges": "29.26",
+   "netBeforeTax": "394.96"
+  },
+  {
+   "invoice": "IN1000180378",
+   "shipment": "SH1000085460",
+   "orderNo": "OR1000154081",
+   "po": "DC00062567",
+   "customerCode": "GLENCO10",
+   "customer": "Glencoe Health Club",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "890.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "890.00"
+  },
+  {
+   "invoice": "IN1000180379",
+   "shipment": "SH1000085480",
+   "orderNo": "OR1000154078",
+   "po": "46449-ABCA",
+   "customerCode": "IMPERI10",
+   "customer": "Imperial Dade Canada Inc",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "6555.20",
+   "otherCharges": "524.42",
+   "netBeforeTax": "7079.62"
+  },
+  {
+   "invoice": "IN1000180380",
+   "shipment": "SH1000085456",
+   "orderNo": "OR1000154082",
+   "po": "PO-REF-013",
+   "customerCode": "DAMIAN10",
+   "customer": "Damian Warner Fitness Center - South",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "173.80",
+   "otherCharges": "30.00",
+   "netBeforeTax": "203.80"
+  },
+  {
+   "invoice": "IN1000180381",
+   "shipment": "SH1000085478",
+   "orderNo": "OR1000154085",
+   "po": "PO-REF-014",
+   "customerCode": "THENAT10",
+   "customer": "The National Club",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "157.20",
+   "otherCharges": "22.00",
+   "netBeforeTax": "179.20"
+  },
+  {
+   "invoice": "IN1000180382",
+   "shipment": "SH1000085486",
+   "orderNo": "OR1000154086",
+   "po": "PO-REF-015",
+   "customerCode": "BAYVIE10",
+   "customer": "Bayview Golf and Country Club",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "452.50",
+   "otherCharges": "22.63",
+   "netBeforeTax": "475.13"
+  },
+  {
+   "invoice": "IN1000180383",
+   "shipment": "SH1000085481",
+   "orderNo": "OR1000154087",
+   "po": "PO-REF-016",
+   "customerCode": "EAGLES10",
+   "customer": "Eagle's Nest Golf Club",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "210.90",
+   "otherCharges": "0.00",
+   "netBeforeTax": "210.90"
+  },
+  {
+   "invoice": "IN1000180384",
+   "shipment": "SH1000085489",
+   "orderNo": "OR1000154094",
+   "po": "PO-REF-017",
+   "customerCode": "THECUR10",
+   "customer": "The Current - CIBC Square",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "367.00",
+   "otherCharges": "30.00",
+   "netBeforeTax": "397.00"
+  },
+  {
+   "invoice": "IN1000180385",
+   "shipment": "SH1000085484",
+   "orderNo": "OR1000154095",
+   "po": "PO-REF-018",
+   "customerCode": "YMCAOF10",
+   "customer": "YMCA of the National Capital Region",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "823.40",
+   "otherCharges": "79.59",
+   "netBeforeTax": "902.99"
+  },
+  {
+   "invoice": "IN1000180386",
+   "shipment": "SH1000085488",
+   "orderNo": "OR1000154103",
+   "po": "PO-REF-019",
+   "customerCode": "SPAEXC10",
+   "customer": "Spa Excess",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "542.50",
+   "otherCharges": "93.40",
+   "netBeforeTax": "635.90"
+  },
+  {
+   "invoice": "IN1000180387",
+   "shipment": "SH1000085479",
+   "orderNo": "OR1000154106",
+   "po": "PO#10072026",
+   "customerCode": "STEAMW10",
+   "customer": "STEAMWORKS",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "770.90",
+   "otherCharges": "61.67",
+   "netBeforeTax": "832.57"
+  },
+  {
+   "invoice": "IN1000180388",
+   "shipment": "SH1000085483",
+   "orderNo": "OR1000154099",
+   "po": "PO-REF-020",
+   "customerCode": "ORANGE10",
+   "customer": "Orangetheory - Bedford",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "89.00",
+   "otherCharges": "55.00",
+   "netBeforeTax": "144.00"
+  },
+  {
+   "invoice": "IN1000180389",
+   "shipment": "SH1000085482",
+   "orderNo": "OR1000154105",
+   "po": "PO-REF-021",
+   "customerCode": "ORANGE11",
+   "customer": "Orangetheory - Bloor",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "95.00",
+   "otherCharges": "27.50",
+   "netBeforeTax": "122.50"
+  },
+  {
+   "invoice": "IN1000180390",
+   "shipment": "SH1000085485",
+   "orderNo": "OR1000154101",
+   "po": "PO-REF-022",
+   "customerCode": "AEROCE10",
+   "customer": "AeroCentre Fitness",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "270.00",
+   "otherCharges": "20.00",
+   "netBeforeTax": "290.00"
+  },
+  {
+   "invoice": "IN1000180391",
+   "shipment": "SH1000085490",
+   "orderNo": "OR1000154092",
+   "po": "62325",
+   "customerCode": "GLENCO10",
+   "customer": "Glencoe Health Club",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "2137.50",
+   "otherCharges": "0.00",
+   "netBeforeTax": "2137.50"
+  },
+  {
+   "invoice": "IN1000180392",
+   "shipment": "SH1000085487",
+   "orderNo": "OR1000154091",
+   "po": "261002344",
+   "customerCode": "LTFCLU10",
+   "customer": "LTF Club Operations Company Canada, Inc.",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "1553.31",
+   "otherCharges": "174.27",
+   "netBeforeTax": "1727.58"
+  },
+  {
+   "invoice": "IN1000180394",
+   "shipment": "SH1000085454",
+   "orderNo": "W1000005438",
+   "po": "PO-REF-023",
+   "customerCode": "LONDON10",
+   "customer": "LONDON HUNT CLUB",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "558.60",
+   "otherCharges": "26.00",
+   "netBeforeTax": "584.60"
+  },
+  {
+   "invoice": "IN1000180395",
+   "shipment": "SH1000085475",
+   "orderNo": "OR1000153870",
+   "po": "2026-01",
+   "customerCode": "HEALTH10",
+   "customer": "Healthy Options, Ontario",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "0.00",
+   "otherCharges": "540.05",
+   "netBeforeTax": "540.05"
+  },
+  {
+   "invoice": "IN1000180404",
+   "shipment": "SH1000085461",
+   "orderNo": "OR1000154083",
+   "po": "PO-REF-024",
+   "customerCode": "THEOAK10",
+   "customer": "The Oakville Golf Club",
+   "shipDate": "2026-10-07",
+   "currency": "CAD",
+   "productValue": "248.40",
+   "otherCharges": "140.00",
+   "netBeforeTax": "388.40"
+  },
+  {
+   "invoice": "IN1000180396",
+   "shipment": "SH1000085493",
+   "orderNo": "OR1000154117",
+   "po": "SEPTEMBER 2026",
+   "customerCode": "DANDYL10",
+   "customer": "DANDYLION PET INC",
+   "shipDate": "2026-10-08",
+   "currency": "CAD",
+   "productValue": "0.00",
+   "otherCharges": "1294.52",
+   "netBeforeTax": "1294.52"
+  },
+  {
+   "invoice": "IN1000180397",
+   "shipment": "SH1000085494",
+   "orderNo": "OR1000154118",
+   "po": "SEPTEMBER 2026",
+   "customerCode": "UNITED10",
+   "customer": "United Scents LLC",
+   "shipDate": "2026-10-08",
+   "currency": "USD",
+   "productValue": "0.00",
+   "otherCharges": "1008.04",
+   "netBeforeTax": "1008.04"
+  },
+  {
+   "invoice": "IN1000180400",
+   "shipment": "SH1000085495",
+   "orderNo": "OR1000154051",
+   "po": "065093645",
+   "customerCode": "UNFIRI10",
+   "customer": "UNFI - Ridgefield, WA",
+   "shipDate": "2026-10-08",
+   "currency": "CAD",
+   "productValue": "0.00",
+   "otherCharges": "122.15",
+   "netBeforeTax": "122.15"
+  },
+  {
+   "invoice": "IN1000180401",
+   "shipment": "SH1000085496",
+   "orderNo": "OR1000154053",
+   "po": "014565833",
+   "customerCode": "UNFIRO10",
+   "customer": "UNFI - Rocklin",
+   "shipDate": "2026-10-08",
+   "currency": "CAD",
+   "productValue": "0.00",
+   "otherCharges": "67.56",
+   "netBeforeTax": "67.56"
+  },
+  {
+   "invoice": "IN1000180408",
+   "shipment": "SH1000085497",
+   "orderNo": "OR1000154115",
+   "po": "ORDER #1020",
+   "customerCode": "FURGEN10",
+   "customer": "FURGENICS \" Canada\"",
+   "shipDate": "2026-10-08",
+   "currency": "CAD",
+   "productValue": "28.00",
+   "otherCharges": "14.90",
+   "netBeforeTax": "42.90"
+  },
+  {
+   "invoice": "IN1000180398",
+   "shipment": "SH1000085508",
+   "orderNo": "OR1000154102",
+   "po": "PO0101005 /0103435",
+   "customerCode": "A1TEXT11",
+   "customer": "Tiger Hospitality LLC DBA of A1 American",
+   "shipDate": "2026-10-09",
+   "currency": "USD",
+   "productValue": "31394.40",
+   "otherCharges": "1250.00",
+   "netBeforeTax": "32644.40"
+  },
+  {
+   "invoice": "IN1000180399",
+   "shipment": "SH1000085509",
+   "orderNo": "OR1000153596",
+   "po": "8735",
+   "customerCode": "DIVE11",
+   "customer": "Diversified Hospitality Solutions, Ltd.",
+   "shipDate": "2026-10-09",
+   "currency": "USD",
+   "productValue": "22705.92",
+   "otherCharges": "2304.00",
+   "netBeforeTax": "25009.92"
+  },
+  {
+   "invoice": "IN1000180402",
+   "shipment": "SH1000085498",
+   "orderNo": "OR1000154111",
+   "po": null,
+   "customerCode": "CROWNG10",
+   "customer": "CROWN GROOMING LTD",
+   "shipDate": "2026-10-09",
+   "currency": "CAD",
+   "productValue": "592.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "592.00"
+  },
+  {
+   "invoice": "IN1000180403",
+   "shipment": "SH1000085505",
+   "orderNo": "OR1000154122",
+   "po": null,
+   "customerCode": "CROWNG10",
+   "customer": "CROWN GROOMING LTD",
+   "shipDate": "2026-10-09",
+   "currency": "CAD",
+   "productValue": "409.50",
+   "otherCharges": "0.00",
+   "netBeforeTax": "409.50"
+  },
+  {
+   "invoice": "IN1000180405",
+   "shipment": "SH1000085511",
+   "orderNo": "OR1000154127",
+   "po": "47383-BCVA",
+   "customerCode": "IMPERI10",
+   "customer": "Imperial Dade Canada Inc",
+   "shipDate": "2026-10-09",
+   "currency": "CAD",
+   "productValue": "738.00",
+   "otherCharges": "59.04",
+   "netBeforeTax": "797.04"
+  },
+  {
+   "invoice": "IN1000180406",
+   "shipment": "SH1000085512",
+   "orderNo": "OR1000154123",
+   "po": "46872-ABCA",
+   "customerCode": "IMPERI10",
+   "customer": "Imperial Dade Canada Inc",
+   "shipDate": "2026-10-09",
+   "currency": "CAD",
+   "productValue": "513.80",
+   "otherCharges": "41.10",
+   "netBeforeTax": "554.90"
+  },
+  {
+   "invoice": "IN1000180409",
+   "shipment": "SH1000085513",
+   "orderNo": "OR1000154128",
+   "po": "PO-REF-025",
+   "customerCode": "WILLIA10",
+   "customer": "WIlliam Lutsky YMCA",
+   "shipDate": "2026-10-09",
+   "currency": "CAD",
+   "productValue": "669.20",
+   "otherCharges": "53.54",
+   "netBeforeTax": "722.74"
+  },
+  {
+   "invoice": "IN1000180410",
+   "shipment": "SH1000085514",
+   "orderNo": "OR1000153822",
+   "po": "PO20330069",
+   "customerCode": "REMCOD10",
+   "customer": "REMCODA LLC",
+   "shipDate": "2026-10-09",
+   "currency": "USD",
+   "productValue": "3168.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "3168.00"
+  },
+  {
+   "invoice": "IN1000180411",
+   "shipment": "SH1000085515",
+   "orderNo": "OR1000153823",
+   "po": "PO20330003",
+   "customerCode": "REMCOD10",
+   "customer": "REMCODA LLC",
+   "shipDate": "2026-10-09",
+   "currency": "USD",
+   "productValue": "4752.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "4752.00"
+  },
+  {
+   "invoice": "IN1000180412",
+   "shipment": "SH1000085516",
+   "orderNo": "OR1000153824",
+   "po": "PO20330011",
+   "customerCode": "REMCOD10",
+   "customer": "REMCODA LLC",
+   "shipDate": "2026-10-09",
+   "currency": "USD",
+   "productValue": "4752.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "4752.00"
+  },
+  {
+   "invoice": "IN1000180413",
+   "shipment": "SH1000085517",
+   "orderNo": "OR1000153825",
+   "po": "PO20330022",
+   "customerCode": "REMCOD10",
+   "customer": "REMCODA LLC",
+   "shipDate": "2026-10-09",
+   "currency": "USD",
+   "productValue": "792.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "792.00"
+  },
+  {
+   "invoice": "IN1000180414",
+   "shipment": "SH1000085518",
+   "orderNo": "OR1000153826",
+   "po": "PO20330054",
+   "customerCode": "REMCOD10",
+   "customer": "REMCODA LLC",
+   "shipDate": "2026-10-09",
+   "currency": "USD",
+   "productValue": "1188.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "1188.00"
+  },
+  {
+   "invoice": "IN1000180415",
+   "shipment": "SH1000085519",
+   "orderNo": "OR1000153827",
+   "po": "PO20330068",
+   "customerCode": "REMCOD10",
+   "customer": "REMCODA LLC",
+   "shipDate": "2026-10-09",
+   "currency": "USD",
+   "productValue": "1188.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "1188.00"
+  },
+  {
+   "invoice": "IN1000180419",
+   "shipment": "SH1000085500",
+   "orderNo": "OR1000154107",
+   "po": "261002306  MAY CHANGE",
+   "customerCode": "LTFCLU10",
+   "customer": "LTF Club Operations Company Canada, Inc.",
+   "shipDate": "2026-10-09",
+   "currency": "CAD",
+   "productValue": "385.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "385.00"
+  },
+  {
+   "invoice": "IN1000180420",
+   "shipment": "SH1000085501",
+   "orderNo": "OR1000154108",
+   "po": "260920962  MAY CHANGE",
+   "customerCode": "LTFCLU10",
+   "customer": "LTF Club Operations Company Canada, Inc.",
+   "shipDate": "2026-10-09",
+   "currency": "CAD",
+   "productValue": "385.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "385.00"
+  },
+  {
+   "invoice": "IN1000180416",
+   "shipment": "SH1000085522",
+   "orderNo": "OR1000153822",
+   "po": "PO20330069",
+   "customerCode": "REMCOD10",
+   "customer": "REMCODA LLC",
+   "shipDate": "2026-10-13",
+   "currency": "USD",
+   "productValue": "0.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "0.00"
+  },
+  {
+   "invoice": "IN1000180417",
+   "shipment": "SH1000085523",
+   "orderNo": "OR1000153825",
+   "po": "PO20330022",
+   "customerCode": "REMCOD10",
+   "customer": "REMCODA LLC",
+   "shipDate": "2026-10-13",
+   "currency": "USD",
+   "productValue": "0.00",
+   "otherCharges": "0.00",
+   "netBeforeTax": "0.00"
+  },
+  {
+   "invoice": "IN1000180418",
+   "shipment": "SH1000085526",
+   "orderNo": "OR1000154140",
+   "po": "POK180000093",
+   "customerCode": "K18INC10",
+   "customer": "K18 Inc",
+   "shipDate": "2026-10-13",
+   "currency": "USD",
+   "productValue": "84500.00",
+   "otherCharges": "3156.00",
+   "netBeforeTax": "87656.00"
+  }
+ ],
+ "batches": [
+  {
+   "id": "260002",
+   "batch": "BC-26261B",
+   "product": "Oceania Lotion",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "5",
+   "date": "2026-10-01",
+   "kg": "4005.000"
+  },
+  {
+   "id": "260001",
+   "batch": "BC-26265C",
+   "product": "Eucalyptus Conc. Inhalant",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "10",
+   "date": "2026-10-01",
+   "kg": "7139.000"
+  },
+  {
+   "id": "260003",
+   "batch": "BC-26266D",
+   "product": "Sahajan Golden Milk Cleanser",
+   "status": "Realized",
+   "statusQc": "QC On-Hold",
+   "line": "4",
+   "date": "2026-10-01",
+   "kg": "769.000"
+  },
+  {
+   "id": "260005",
+   "batch": "BC-26267D",
+   "product": "AHA Cream",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "8",
+   "date": "2026-10-01",
+   "kg": "28.000"
+  },
+  {
+   "id": "260004",
+   "batch": "BC-26273A",
+   "product": "Gleamin Vitamin C Clay Mask",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "DB001",
+   "date": "2026-10-01",
+   "kg": "639.000"
+  },
+  {
+   "id": "260006",
+   "batch": "BC-26272D",
+   "product": "Eco Botanicals – White Tea & Honey – Nourishing Shampoo",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "5",
+   "date": "2026-10-02",
+   "kg": "4022.000"
+  },
+  {
+   "id": "260075",
+   "batch": "BC-26277A",
+   "product": "Saint Jo Defend Serum",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "1",
+   "date": "2026-10-04",
+   "kg": "115.000"
+  },
+  {
+   "id": "260007",
+   "batch": "BC-26271C",
+   "product": "Oceania Shampoo",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "10",
+   "date": "2026-10-05",
+   "kg": "10011.000"
+  },
+  {
+   "id": "260008",
+   "batch": "BC-26273B",
+   "product": "Diversified Wild Citus (Panama Jack) Shampoo",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "10",
+   "date": "2026-10-05",
+   "kg": "8013.000"
+  },
+  {
+   "id": "260010",
+   "batch": "BC-26273C",
+   "product": "Sure Thik Holding Spray",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "8",
+   "date": "2026-10-05",
+   "kg": "86.000"
+  },
+  {
+   "id": "260078",
+   "batch": "BC-26278A",
+   "product": "BR Shampoo/Conditioner",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "3",
+   "date": "2026-10-05",
+   "kg": "460.000"
+  },
+  {
+   "id": "260077",
+   "batch": "BC-26278B",
+   "product": "Hy-Spray Cooling Foot Spray",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "4",
+   "date": "2026-10-05",
+   "kg": "1000.000"
+  },
+  {
+   "id": "260076",
+   "batch": "BC-26278D",
+   "product": "ACV Shampoo",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-05",
+   "kg": "10200.000"
+  },
+  {
+   "id": "260009",
+   "batch": "BC-26278F",
+   "product": "For & Against Body Wash Campfire",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "Empty",
+   "date": "2026-10-05",
+   "kg": "1880.000"
+  },
+  {
+   "id": "260014",
+   "batch": "BC-26271A",
+   "product": "Intense Hydration",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "8",
+   "date": "2026-10-06",
+   "kg": "40.000"
+  },
+  {
+   "id": "260012",
+   "batch": "BC-26275A",
+   "product": "Gleamin Vitamin C Clay Mask",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "DB001",
+   "date": "2026-10-06",
+   "kg": "631.000"
+  },
+  {
+   "id": "260013",
+   "batch": "BC-26275B",
+   "product": "Niu Body Glow Luminizing Facial Serum",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "Miscellaneous",
+   "date": "2026-10-06",
+   "kg": "156.000"
+  },
+  {
+   "id": "260011",
+   "batch": "BC-26279A",
+   "product": "Infuse – Lavender & Mint – Shampoo",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "5",
+   "date": "2026-10-06",
+   "kg": "3029.000"
+  },
+  {
+   "id": "260018",
+   "batch": "BC-26267E",
+   "product": "Sahajan Balance Toner",
+   "status": "Realized",
+   "statusQc": "QC On-Hold",
+   "line": "4",
+   "date": "2026-10-07",
+   "kg": "755.000"
+  },
+  {
+   "id": "260020",
+   "batch": "BC-26268C",
+   "product": "Persons of Interest Satsuma Hand Soap",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "3",
+   "date": "2026-10-07",
+   "kg": "446.000"
+  },
+  {
+   "id": "260015",
+   "batch": "BC-26278E",
+   "product": "Infuse – Lavender & Mint – Shampoo",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "10",
+   "date": "2026-10-07",
+   "kg": "10099.000"
+  },
+  {
+   "id": "260080",
+   "batch": "BC-26280B",
+   "product": "Three Ships Jelly Drops",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "4",
+   "date": "2026-10-07",
+   "kg": "800.000"
+  },
+  {
+   "id": "260079",
+   "batch": "BC-26280C",
+   "product": "Infuse – White Tea & Coconut - Shampoo",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-07",
+   "kg": "11000.000"
+  },
+  {
+   "id": "260017",
+   "batch": "BC-26280G",
+   "product": "Fit! Shampoo",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "Empty",
+   "date": "2026-10-07",
+   "kg": "4009.000"
+  },
+  {
+   "id": "260019",
+   "batch": "BC-26280H",
+   "product": "The Spa Dr Hair Serum",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "Empty",
+   "date": "2026-10-07",
+   "kg": "525.000"
+  },
+  {
+   "id": "260016",
+   "batch": "BC-26281A",
+   "product": "Infuse – White Tea & Coconut - Shampoo",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "5",
+   "date": "2026-10-07",
+   "kg": "6036.000"
+  },
+  {
+   "id": "260021",
+   "batch": "BC-26279B",
+   "product": "Terra Pure - Desert Breeze - Shampoo",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "10",
+   "date": "2026-10-08",
+   "kg": "10121.000"
+  },
+  {
+   "id": "260081",
+   "batch": "BC-26281C",
+   "product": "Infuse – White Tea & Coconut – Body Wash",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-08",
+   "kg": "11000.000"
+  },
+  {
+   "id": "260024",
+   "batch": "BC-26260C",
+   "product": "TCP Cleanser Foam",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "4",
+   "date": "2026-10-09",
+   "kg": "755.000"
+  },
+  {
+   "id": "260025",
+   "batch": "BC-26278C",
+   "product": "Gleamin Vitamin C Clay Mask",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "DB001",
+   "date": "2026-10-09",
+   "kg": "635.000"
+  },
+  {
+   "id": "260022",
+   "batch": "BC-26280E",
+   "product": "Infuse – White Tea & Coconut - Shampoo",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "10",
+   "date": "2026-10-09",
+   "kg": "11127.000"
+  },
+  {
+   "id": "260028",
+   "batch": "BC-26280F",
+   "product": "FD&C Blue # 1 (1% Solution) CI 42090",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "Miscellaneous",
+   "date": "2026-10-09",
+   "kg": "20.000"
+  },
+  {
+   "id": "260026",
+   "batch": "BC-26281D",
+   "product": "Citric Acid (50% Solution)",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "Miscellaneous",
+   "date": "2026-10-09",
+   "kg": "199.000"
+  },
+  {
+   "id": "260085",
+   "batch": "BC-26282A",
+   "product": "Intensive Anti Aging Eye Treatment",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "8",
+   "date": "2026-10-09",
+   "kg": "26.000"
+  },
+  {
+   "id": "260083",
+   "batch": "BC-26282B",
+   "product": "Dandylion Dematting Coat Spray (Smooth Coat)",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-09",
+   "kg": "2500.000"
+  },
+  {
+   "id": "260023",
+   "batch": "BC-26282C",
+   "product": "Infuse – Lavender & Mint – Body Wash",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "5",
+   "date": "2026-10-09",
+   "kg": "4044.000"
+  },
+  {
+   "id": "260082",
+   "batch": "BC-26282D",
+   "product": "Infuse – White Tea & Coconut – Body Wash",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-09",
+   "kg": "10000.000"
+  },
+  {
+   "id": "260027",
+   "batch": "BC-26282E",
+   "product": "Persons of Interest Footwear Spray/ Room Spray",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "Miscellaneous",
+   "date": "2026-10-09",
+   "kg": "185.000"
+  },
+  {
+   "id": "260084",
+   "batch": "BC-26282F",
+   "product": "Citric Acid (50% Solution)",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "Miscellaneous",
+   "date": "2026-10-09",
+   "kg": "200.000"
+  },
+  {
+   "id": "260086",
+   "batch": "BC-26285A",
+   "product": "Pearvanilla Super Concentrate",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-12",
+   "kg": "6740.000"
+  },
+  {
+   "id": "260087",
+   "batch": "BC-26285C",
+   "product": "Infuse – Lavender & Mint – Conditioner",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-12",
+   "kg": "4000.000"
+  },
+  {
+   "id": "260094",
+   "batch": "BC-26286A",
+   "product": "Biophora Hydra Blu",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "8",
+   "date": "2026-10-13",
+   "kg": "40.000"
+  },
+  {
+   "id": "260088",
+   "batch": "BC-26286C",
+   "product": "Terra Pure - Desert Breeze - Shampoo",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-13",
+   "kg": "10000.000"
+  },
+  {
+   "id": "260091",
+   "batch": "BC-26286D",
+   "product": "Infuse – Lavender & Mint – Body Lotion",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-13",
+   "kg": "4000.000"
+  },
+  {
+   "id": "260093",
+   "batch": "BC-26286E",
+   "product": "Niu Body Radiance",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "1",
+   "date": "2026-10-13",
+   "kg": "180.000"
+  },
+  {
+   "id": "260092",
+   "batch": "BC-26286F",
+   "product": "PA-ACV Conditioner",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "4",
+   "date": "2026-10-13",
+   "kg": "2000.000"
+  },
+  {
+   "id": "260089",
+   "batch": "BC-26286G",
+   "product": "Infuse – Lavender & Mint – Conditioner",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-13",
+   "kg": "10000.000"
+  },
+  {
+   "id": "260090",
+   "batch": "BC-26286H",
+   "product": "Eco Botanicals – White Tea & Honey – Refreshing Body Wash",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-13",
+   "kg": "8000.000"
+  },
+  {
+   "id": "260030",
+   "batch": "BC-26280A",
+   "product": "UANS Moisture Conditioner Luscious Frag.",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "1",
+   "date": "2026-10-14",
+   "kg": "150.000"
+  },
+  {
+   "id": "260029",
+   "batch": "BC-26281B",
+   "product": "Infuse – White Tea & Coconut – Body Wash",
+   "status": "Realized",
+   "statusQc": "QC Released",
+   "line": "10",
+   "date": "2026-10-14",
+   "kg": "10106.000"
+  },
+  {
+   "id": "260032",
+   "batch": "BC-26287A",
+   "product": "Zogics Citrus & Aloe 3-in-1 Shampoo, Body Wash & Hand Soap",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-14",
+   "kg": "11000.000"
+  },
+  {
+   "id": "260035",
+   "batch": "BC-26287B",
+   "product": "Zogics Citrus & Aloe 3-in-1 Shampoo, Body Wash & Hand Soap",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-14",
+   "kg": "4000.000"
+  },
+  {
+   "id": "260038",
+   "batch": "BC-26287C",
+   "product": "Multi Vitamin Freeze Mask",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "8",
+   "date": "2026-10-14",
+   "kg": "60.000"
+  },
+  {
+   "id": "260031",
+   "batch": "BC-26287D",
+   "product": "Terra Pure - Desert Breeze  - Hand & Body Wash",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-14",
+   "kg": "11000.000"
+  },
+  {
+   "id": "260033",
+   "batch": "BC-26287E",
+   "product": "Terra Pure - Desert Breeze  - Hand & Body Wash",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-14",
+   "kg": "11000.000"
+  },
+  {
+   "id": "260034",
+   "batch": "BC-26287F",
+   "product": "Oceania Body Wash",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-14",
+   "kg": "10000.000"
+  },
+  {
+   "id": "260036",
+   "batch": "BC-26287G",
+   "product": "Infuse – White Tea & Coconut - Conditioner",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-14",
+   "kg": "3000.000"
+  },
+  {
+   "id": "260037",
+   "batch": "BC-26287H",
+   "product": "Margin Global Deodorant - Veridian",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "DB001",
+   "date": "2026-10-14",
+   "kg": "170.000"
+  },
+  {
+   "id": "260039",
+   "batch": "BC-26287I",
+   "product": "D&C Yellow # 10 (0.5% Solution)",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "Miscellaneous",
+   "date": "2026-10-14",
+   "kg": "4.000"
+  },
+  {
+   "id": "260042",
+   "batch": "BC-26288A",
+   "product": "Zogics Citrus & Aloe 3-in-1 Shampoo, Body Wash & Hand Soap",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-15",
+   "kg": "10000.000"
+  },
+  {
+   "id": "260040",
+   "batch": "BC-26288C",
+   "product": "Terra Pure - Desert Breeze  - Hand & Body Wash",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-15",
+   "kg": "11000.000"
+  },
+  {
+   "id": "260043",
+   "batch": "BC-26288D",
+   "product": "Terra Pure - Desert Breeze - Conditioner",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-15",
+   "kg": "10000.000"
+  },
+  {
+   "id": "260041",
+   "batch": "BC-26288E",
+   "product": "Diversified Wild Citrus (Panama Jack) Body Lotion",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-15",
+   "kg": "10000.000"
+  },
+  {
+   "id": "260045",
+   "batch": "BC-26288F",
+   "product": "Crown Shave Cream",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "2",
+   "date": "2026-10-15",
+   "kg": "180.000"
+  },
+  {
+   "id": "260044",
+   "batch": "BC-26288G",
+   "product": "Play On Oatmeal Shampoo",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-15",
+   "kg": "6000.000"
+  },
+  {
+   "id": "260046",
+   "batch": "BC-26288H",
+   "product": "Margin Global Deodorant - Warm Water",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "DB001",
+   "date": "2026-10-15",
+   "kg": "170.000"
+  },
+  {
+   "id": "260048",
+   "batch": "BC-26289A",
+   "product": "Zogics Citrus & Aloe Conditioner",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-16",
+   "kg": "8000.000"
+  },
+  {
+   "id": "260050",
+   "batch": "BC-26289B",
+   "product": "Diversified Ammenities Eucalyptus Spray",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "4",
+   "date": "2026-10-16",
+   "kg": "3000.000"
+  },
+  {
+   "id": "260053",
+   "batch": "BC-26289D",
+   "product": "Mask",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "8",
+   "date": "2026-10-16",
+   "kg": "60.000"
+  },
+  {
+   "id": "260047",
+   "batch": "BC-26289E",
+   "product": "Diversified Wild Citus (Panama Jack) Shampoo",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-16",
+   "kg": "8000.000"
+  },
+  {
+   "id": "260051",
+   "batch": "BC-26289F",
+   "product": "Village Craft & Candle Liquid Soap (Hand/Bodywash) Base",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "4",
+   "date": "2026-10-16",
+   "kg": "900.000"
+  },
+  {
+   "id": "260049",
+   "batch": "BC-26289G",
+   "product": "Play On 2 in 1 Shampoo",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-16",
+   "kg": "5000.000"
+  },
+  {
+   "id": "260052",
+   "batch": "BC-26289H",
+   "product": "Margin Global Deodorant - Garden Leave",
+   "status": "Committed",
+   "statusQc": null,
+   "line": "DB001",
+   "date": "2026-10-16",
+   "kg": "170.000"
+  },
+  {
+   "id": "260054",
+   "batch": "BC-26291A",
+   "product": "Sahajan Essential Cleansing Oil",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "4",
+   "date": "2026-10-18",
+   "kg": "600.000"
+  },
+  {
+   "id": "260056",
+   "batch": "BC-26291B",
+   "product": "UANS Regular Paste-Revised",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "8",
+   "date": "2026-10-18",
+   "kg": "80.000"
+  },
+  {
+   "id": "260055",
+   "batch": "BC-26291C",
+   "product": "Vitagel",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "1",
+   "date": "2026-10-18",
+   "kg": "155.000"
+  },
+  {
+   "id": "260057",
+   "batch": "BC-26292B",
+   "product": "SIDIA Muse Body Mist",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "6",
+   "date": "2026-10-19",
+   "kg": "275.000"
+  },
+  {
+   "id": "260060",
+   "batch": "BC-26294A",
+   "product": "Platinum Face Lift",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "Miscellaneous",
+   "date": "2026-10-21",
+   "kg": "17.000"
+  },
+  {
+   "id": "260059",
+   "batch": "BC-26294B",
+   "product": "Playon Puppy Shampoo",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-21",
+   "kg": "4000.000"
+  },
+  {
+   "id": "260058",
+   "batch": "BC-26294C",
+   "product": "Athleticare Hand Soap",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-21",
+   "kg": "4000.000"
+  },
+  {
+   "id": "260061",
+   "batch": "BC-26295A",
+   "product": "Playon Hypoallergenic Shampoo",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-22",
+   "kg": "5000.000"
+  },
+  {
+   "id": "260062",
+   "batch": "BC-26295B",
+   "product": "Foaming Ready To Use Combo",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-22",
+   "kg": "4000.000"
+  },
+  {
+   "id": "260063",
+   "batch": "BC-26298A",
+   "product": "Dandylion Foaming Paw Cleanser",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-25",
+   "kg": "5500.000"
+  },
+  {
+   "id": "260067",
+   "batch": "BC-26300B",
+   "product": "No Pong Original",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "1",
+   "date": "2026-10-27",
+   "kg": "140.000"
+  },
+  {
+   "id": "260066",
+   "batch": "BC-26300C",
+   "product": "Pina Colada Super Conc.",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-27",
+   "kg": "2520.000"
+  },
+  {
+   "id": "260064",
+   "batch": "BC-26300D",
+   "product": "\"Clear \" & Non Fragrance Super Conc",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-27",
+   "kg": "5055.000"
+  },
+  {
+   "id": "260065",
+   "batch": "BC-26300E",
+   "product": "Body Wash Aloe/Green Tea Platinum Concentrate",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-27",
+   "kg": "2535.000"
+  },
+  {
+   "id": "260068",
+   "batch": "BC-26300F",
+   "product": "Solution I",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "Miscellaneous",
+   "date": "2026-10-27",
+   "kg": "70.000"
+  },
+  {
+   "id": "260071",
+   "batch": "BC-26301B",
+   "product": "No Pong Original",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "1",
+   "date": "2026-10-28",
+   "kg": "140.000"
+  },
+  {
+   "id": "260070",
+   "batch": "BC-26301C",
+   "product": "AC Hand & Body Lotion",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "5",
+   "date": "2026-10-28",
+   "kg": "4000.000"
+  },
+  {
+   "id": "260069",
+   "batch": "BC-26301D",
+   "product": "Dash Glass Spray Cleaner",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "10",
+   "date": "2026-10-28",
+   "kg": "10000.000"
+  },
+  {
+   "id": "260072",
+   "batch": "BC-26301E",
+   "product": "Solution II",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "Miscellaneous",
+   "date": "2026-10-28",
+   "kg": "70.000"
+  },
+  {
+   "id": "260073",
+   "batch": "BC-26302A",
+   "product": "No Pong Original",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "1",
+   "date": "2026-10-29",
+   "kg": "140.000"
+  },
+  {
+   "id": "260074",
+   "batch": "BC-26304A",
+   "product": "Ste. Anne's Eye Cream",
+   "status": "Allocated",
+   "statusQc": null,
+   "line": "8",
+   "date": "2026-10-31",
+   "kg": "33.000"
+  }
+ ],
+ "batchHistory": [
+  {
+   "id": "260101",
+   "batch": "BC-26101A",
+   "date": "2026-07-03",
+   "kg": "10050.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260102",
+   "batch": "BC-26102B",
+   "date": "2026-07-08",
+   "kg": "4020.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260103",
+   "batch": "BC-26103C",
+   "date": "2026-07-15",
+   "kg": "8010.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260104",
+   "batch": "BC-26104D",
+   "date": "2026-07-22",
+   "kg": "650.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260105",
+   "batch": "BC-26105E",
+   "date": "2026-07-29",
+   "kg": "11400.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260106",
+   "batch": "BC-26106F",
+   "date": "2026-07-31",
+   "kg": "9000.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260107",
+   "batch": "BC-26151A",
+   "date": "2026-08-05",
+   "kg": "9990.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260108",
+   "batch": "BC-26152B",
+   "date": "2026-08-12",
+   "kg": "5000.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260109",
+   "batch": "BC-26153C",
+   "date": "2026-08-19",
+   "kg": "2500.000",
+   "statusQc": "QC On-Hold"
+  },
+  {
+   "id": "260110",
+   "batch": "BC-26154D",
+   "date": "2026-08-26",
+   "kg": "11000.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260111",
+   "batch": "BC-26155E",
+   "date": "2026-08-31",
+   "kg": "12100.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260112",
+   "batch": "BC-26201A",
+   "date": "2026-09-02",
+   "kg": "10120.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260113",
+   "batch": "BC-26202B",
+   "date": "2026-09-09",
+   "kg": "8999.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260114",
+   "batch": "BC-26203C",
+   "date": "2026-09-16",
+   "kg": "7499.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260115",
+   "batch": "BC-26204D",
+   "date": "2026-09-23",
+   "kg": "140.000",
+   "statusQc": "QC Released"
+  },
+  {
+   "id": "260116",
+   "batch": "BC-26205E",
+   "date": "2026-09-30",
+   "kg": "10010.000",
+   "statusQc": "QC Released"
+  }
+ ],
+ "references": [
+  {
+   "kind": "filemaker",
+   "ref": "bc-25001a"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26100z"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26101a"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26102b"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26103c"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26104d"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26105e"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26106f"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26151a"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26152b"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26153c"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26154d"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26155e"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26201a"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26202b"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26203c"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26204d"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26205e"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26260c"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26261b"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26265c"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26266d"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26267d"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26267e"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26268c"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26271a"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26271c"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26272d"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26273a"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26273b"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26273c"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26275a"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26275b"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26278c"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26278e"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26278f"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26279a"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26279b"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26280a"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26280e"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26280f"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26280g"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26280h"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26281a"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26281b"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26281d"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26282c"
+  },
+  {
+   "kind": "filemaker",
+   "ref": "bc-26282e"
+  },
+  {
+   "kind": "sage",
+   "ref": "014565833"
+  },
+  {
+   "kind": "sage",
+   "ref": "065093645"
+  },
+  {
+   "kind": "sage",
+   "ref": "081926-01"
+  },
+  {
+   "kind": "sage",
+   "ref": "1033781"
+  },
+  {
+   "kind": "sage",
+   "ref": "1544"
+  },
+  {
+   "kind": "sage",
+   "ref": "2026-01"
+  },
+  {
+   "kind": "sage",
+   "ref": "260919282"
+  },
+  {
+   "kind": "sage",
+   "ref": "260920962  may change"
+  },
+  {
+   "kind": "sage",
+   "ref": "260922287"
+  },
+  {
+   "kind": "sage",
+   "ref": "261000131"
+  },
+  {
+   "kind": "sage",
+   "ref": "261002306  may change"
+  },
+  {
+   "kind": "sage",
+   "ref": "261002344"
+  },
+  {
+   "kind": "sage",
+   "ref": "46449-abca"
+  },
+  {
+   "kind": "sage",
+   "ref": "46872-abca"
+  },
+  {
+   "kind": "sage",
+   "ref": "47383-bcva"
+  },
+  {
+   "kind": "sage",
+   "ref": "50208"
+  },
+  {
+   "kind": "sage",
+   "ref": "62325"
+  },
+  {
+   "kind": "sage",
+   "ref": "8021182"
+  },
+  {
+   "kind": "sage",
+   "ref": "8735"
+  },
+  {
+   "kind": "sage",
+   "ref": "92"
+  },
+  {
+   "kind": "sage",
+   "ref": "aug-1"
+  },
+  {
+   "kind": "sage",
+   "ref": "dc00062567"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000179001"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180101"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180102"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180103"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180104"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180105"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180106"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180107"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180108"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180109"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180110"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180111"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180112"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180113"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180114"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180115"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180116"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180117"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180118"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180119"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180120"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180121"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180122"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180123"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180124"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180125"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180126"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180127"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180128"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180129"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180130"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180131"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180132"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180133"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180134"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180135"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180136"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180137"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180138"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180139"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180349"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180352"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180353"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180354"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180355"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180356"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180357"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180358"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180359"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180360"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180361"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180362"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180363"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180364"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180365"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180366"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180367"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180368"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180369"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180370"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180371"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180372"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180373"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180374"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180375"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180376"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180377"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180378"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180379"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180380"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180381"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180382"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180383"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180384"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180385"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180386"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180387"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180388"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180389"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180390"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180391"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180392"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180393"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180394"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180395"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180396"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180397"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180398"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180399"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180400"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180401"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180402"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180403"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180404"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180405"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180406"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180407"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180408"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180409"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180410"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180411"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180412"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180413"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180414"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180415"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180416"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180417"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180418"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180419"
+  },
+  {
+   "kind": "sage",
+   "ref": "in1000180420"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000149001"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150001"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150002"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150003"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150004"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150005"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150006"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150007"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150008"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150009"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150010"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150011"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150012"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150013"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000150014"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151015"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151016"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151017"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151018"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151019"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151020"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151021"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151022"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151023"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151024"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151025"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151026"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151027"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151028"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151029"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151030"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151031"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151032"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151033"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151034"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151035"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151036"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151037"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151038"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000151039"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000152027"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000152228"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153252"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153596"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153772"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153822"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153823"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153824"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153825"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153826"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153827"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153870"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000153871"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154002"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154006"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154022"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154023"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154028"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154043"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154051"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154053"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154067"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154068"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154070"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154074"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154076"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154077"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154078"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154079"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154080"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154081"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154082"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154083"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154085"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154086"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154087"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154091"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154092"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154094"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154095"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154099"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154101"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154102"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154103"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154105"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154106"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154107"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154108"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154111"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154115"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154117"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154118"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154122"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154123"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154127"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154128"
+  },
+  {
+   "kind": "sage",
+   "ref": "or1000154140"
+  },
+  {
+   "kind": "sage",
+   "ref": "order #1020"
+  },
+  {
+   "kind": "sage",
+   "ref": "p010"
+  },
+  {
+   "kind": "sage",
+   "ref": "p020"
+  },
+  {
+   "kind": "sage",
+   "ref": "p030"
+  },
+  {
+   "kind": "sage",
+   "ref": "p040"
+  },
+  {
+   "kind": "sage",
+   "ref": "p070"
+  },
+  {
+   "kind": "sage",
+   "ref": "p080"
+  },
+  {
+   "kind": "sage",
+   "ref": "p090"
+  },
+  {
+   "kind": "sage",
+   "ref": "p100"
+  },
+  {
+   "kind": "sage",
+   "ref": "p110"
+  },
+  {
+   "kind": "sage",
+   "ref": "p140"
+  },
+  {
+   "kind": "sage",
+   "ref": "p141"
+  },
+  {
+   "kind": "sage",
+   "ref": "p150"
+  },
+  {
+   "kind": "sage",
+   "ref": "p160"
+  },
+  {
+   "kind": "sage",
+   "ref": "p170"
+  },
+  {
+   "kind": "sage",
+   "ref": "p180"
+  },
+  {
+   "kind": "sage",
+   "ref": "p210"
+  },
+  {
+   "kind": "sage",
+   "ref": "p220"
+  },
+  {
+   "kind": "sage",
+   "ref": "p230"
+  },
+  {
+   "kind": "sage",
+   "ref": "p240"
+  },
+  {
+   "kind": "sage",
+   "ref": "p250"
+  },
+  {
+   "kind": "sage",
+   "ref": "p280"
+  },
+  {
+   "kind": "sage",
+   "ref": "p290"
+  },
+  {
+   "kind": "sage",
+   "ref": "p291"
+  },
+  {
+   "kind": "sage",
+   "ref": "p300"
+  },
+  {
+   "kind": "sage",
+   "ref": "p301"
+  },
+  {
+   "kind": "sage",
+   "ref": "po#09222026"
+  },
+  {
+   "kind": "sage",
+   "ref": "po#09292026"
+  },
+  {
+   "kind": "sage",
+   "ref": "po#10072026"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-00001344"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-84901"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-84902"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-84935"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-85110"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-85111"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-85112"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-85113"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-85140"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-85141"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-85171"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-85172"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-85230"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-85231"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-001"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-002"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-003"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-004"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-005"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-006"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-007"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-008"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-009"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-010"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-011"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-012"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-013"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-014"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-015"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-016"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-017"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-018"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-019"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-020"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-021"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-022"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-023"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-024"
+  },
+  {
+   "kind": "sage",
+   "ref": "po-ref-025"
+  },
+  {
+   "kind": "sage",
+   "ref": "po0101005 /0103435"
+  },
+  {
+   "kind": "sage",
+   "ref": "po20330003"
+  },
+  {
+   "kind": "sage",
+   "ref": "po20330011"
+  },
+  {
+   "kind": "sage",
+   "ref": "po20330022"
+  },
+  {
+   "kind": "sage",
+   "ref": "po20330054"
+  },
+  {
+   "kind": "sage",
+   "ref": "po20330068"
+  },
+  {
+   "kind": "sage",
+   "ref": "po20330069"
+  },
+  {
+   "kind": "sage",
+   "ref": "pok180000093"
+  },
+  {
+   "kind": "sage",
+   "ref": "pur-ord-2026-00016"
+  },
+  {
+   "kind": "sage",
+   "ref": "september 2026"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000084001"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000084901"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000084902"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000084935"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850115"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850116"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850117"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850118"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850119"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850120"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850121"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850122"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850123"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850124"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850125"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850126"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850127"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850128"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850129"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850130"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850131"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850132"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850133"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850134"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850135"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850136"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850137"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850138"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh10000850139"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085110"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085111"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085112"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085113"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085140"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085141"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085171"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085172"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085230"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085231"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085444"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085447"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085448"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085449"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085450"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085451"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085452"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085453"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085454"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085455"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085456"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085457"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085458"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085459"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085460"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085461"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085462"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085463"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085464"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085465"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085466"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085467"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085468"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085469"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085470"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085471"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085472"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085473"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085474"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085475"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085476"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085477"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085478"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085479"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085480"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085481"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085482"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085483"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085484"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085485"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085486"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085487"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085488"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085489"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085490"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085491"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085493"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085494"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085495"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085496"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085497"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085498"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085500"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085501"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085505"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085507"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085508"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085509"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085511"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085512"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085513"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085514"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085515"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085516"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085517"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085518"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085519"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085522"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085523"
+  },
+  {
+   "kind": "sage",
+   "ref": "sh1000085526"
+  },
+  {
+   "kind": "sage",
+   "ref": "tcp0158"
+  },
+  {
+   "kind": "sage",
+   "ref": "tcp0160"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005397"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005416"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005438"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005441"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005442"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005443"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005444"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005445"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005446"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005448"
+  },
+  {
+   "kind": "sage",
+   "ref": "w1000005449"
+  }
+ ],
+ "customers": [
+  {
+   "code": "1SHOP11",
+   "name": "1-Shoppe",
+   "currency": "USD"
+  },
+  {
+   "code": "A1TEXT11",
+   "name": "Tiger Hospitality LLC DBA of A1 American",
+   "currency": "USD"
+  },
+  {
+   "code": "AEROCE10",
+   "name": "AeroCentre Fitness",
+   "currency": "CAD"
+  },
+  {
+   "code": "ALLURE10",
+   "name": "ALLURE FITNESS",
+   "currency": "CAD"
+  },
+  {
+   "code": "BAYVIE10",
+   "name": "Bayview Golf and Country Club",
+   "currency": "CAD"
+  },
+  {
+   "code": "BODYSO10",
+   "name": "Body & Soul Fitness",
+   "currency": "CAD"
+  },
+  {
+   "code": "CALGAR10",
+   "name": "Calgary Winter Club",
+   "currency": "CAD"
+  },
+  {
+   "code": "CROWNG10",
+   "name": "CROWN GROOMING LTD",
+   "currency": "CAD"
+  },
+  {
+   "code": "DAMIAN10",
+   "name": "Damian Warner Fitness Center - South",
+   "currency": "CAD"
+  },
+  {
+   "code": "DANDYL10",
+   "name": "DANDYLION PET INC",
+   "currency": "CAD"
+  },
+  {
+   "code": "DISPEN10",
+   "name": "DISPENSER AMENITIES (OFFICE) (NA)",
+   "currency": "CAD"
+  },
+  {
+   "code": "DIVE11",
+   "name": "Diversified Hospitality Solutions, Ltd.",
+   "currency": "USD"
+  },
+  {
+   "code": "EAGLES10",
+   "name": "Eagle's Nest Golf Club",
+   "currency": "CAD"
+  },
+  {
+   "code": "FURGEN10",
+   "name": "FURGENICS \" Canada\"",
+   "currency": "CAD"
+  },
+  {
+   "code": "GLENCO10",
+   "name": "Glencoe Health Club",
+   "currency": "CAD"
+  },
+  {
+   "code": "HEALTH10",
+   "name": "Healthy Options, Ontario",
+   "currency": "CAD"
+  },
+  {
+   "code": "IMPERI10",
+   "name": "Imperial Dade Canada Inc",
+   "currency": "CAD"
+  },
+  {
+   "code": "K18INC10",
+   "name": "K18 Inc",
+   "currency": "USD"
+  },
+  {
+   "code": "LONDON10",
+   "name": "LONDON HUNT CLUB",
+   "currency": "CAD"
+  },
+  {
+   "code": "LTFCLU10",
+   "name": "LTF Club Operations Company Canada, Inc.",
+   "currency": "CAD"
+  },
+  {
+   "code": "LUNAIN10",
+   "name": "Luna Inc",
+   "currency": "USD"
+  },
+  {
+   "code": "MARGIN10",
+   "name": "MARGIN GLOBAL INC.",
+   "currency": "CAD"
+  },
+  {
+   "code": "MOVATI10",
+   "name": "Movati Athletic",
+   "currency": "CAD"
+  },
+  {
+   "code": "MOVATI11",
+   "name": "Movati Club - Burlington",
+   "currency": "CAD"
+  },
+  {
+   "code": "MOVATI12",
+   "name": "Movati Athletic - Barrhaven",
+   "currency": "CAD"
+  },
+  {
+   "code": "MOVATI13",
+   "name": "Movati Athletic - Richmond Hill",
+   "currency": "CAD"
+  },
+  {
+   "code": "MOVATI14",
+   "name": "Movati - Windsor",
+   "currency": "CAD"
+  },
+  {
+   "code": "OASISA10",
+   "name": "OASIS AQUA LOUNGE",
+   "currency": "CAD"
+  },
+  {
+   "code": "ONTARI10",
+   "name": "Ontario Racquet Club",
+   "currency": "CAD"
+  },
+  {
+   "code": "ORANGE10",
+   "name": "Orangetheory - Bedford",
+   "currency": "CAD"
+  },
+  {
+   "code": "ORANGE11",
+   "name": "Orangetheory - Bloor",
+   "currency": "CAD"
+  },
+  {
+   "code": "PETSUP10",
+   "name": "Pet Supplies Plus",
+   "currency": "USD"
+  },
+  {
+   "code": "PHILLI10",
+   "name": "PHILLIP ADAM INC (NA)",
+   "currency": "CAD"
+  },
+  {
+   "code": "PURITY10",
+   "name": "Purity Life Health - Acton",
+   "currency": "CAD"
+  },
+  {
+   "code": "PURITY11",
+   "name": "Purity Life Health - Calgary",
+   "currency": "CAD"
+  },
+  {
+   "code": "REMCOD10",
+   "name": "REMCODA LLC",
+   "currency": "USD"
+  },
+  {
+   "code": "SAHAJA10",
+   "name": "Sahajan Inc.",
+   "currency": "CAD"
+  },
+  {
+   "code": "SOAP11",
+   "name": "Soapbox",
+   "currency": "USD"
+  },
+  {
+   "code": "SPAEXC10",
+   "name": "Spa Excess",
+   "currency": "CAD"
+  },
+  {
+   "code": "STEAMW10",
+   "name": "STEAMWORKS",
+   "currency": "CAD"
+  },
+  {
+   "code": "THECAR10",
+   "name": "The Care Principle / Dina Pugliese Productions Inc.",
+   "currency": "CAD"
+  },
+  {
+   "code": "THECUR10",
+   "name": "The Current - CIBC Square",
+   "currency": "CAD"
+  },
+  {
+   "code": "THENAT10",
+   "name": "The National Club",
+   "currency": "CAD"
+  },
+  {
+   "code": "THEOAK10",
+   "name": "The Oakville Golf Club",
+   "currency": "CAD"
+  },
+  {
+   "code": "UNFIRI10",
+   "name": "UNFI - Ridgefield, WA",
+   "currency": "CAD"
+  },
+  {
+   "code": "UNFIRO10",
+   "name": "UNFI - Rocklin",
+   "currency": "CAD"
+  },
+  {
+   "code": "UNITED10",
+   "name": "United Scents LLC",
+   "currency": "USD"
+  },
+  {
+   "code": "WILLIA10",
+   "name": "WIlliam Lutsky YMCA",
+   "currency": "CAD"
+  },
+  {
+   "code": "YMCAOF10",
+   "name": "YMCA of the National Capital Region",
+   "currency": "CAD"
+  }
+ ]
+}

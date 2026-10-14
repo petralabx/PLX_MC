@@ -1,0 +1,383 @@
+// Goals & Production against real Postgres: migration 039 on a disposable PG16,
+// a synthetic reporting replica (silver.batches as a view, Sage columns as
+// space-padded text) loaded from the 2026-10-14 fixtures, and the shipped
+// read-only grant script. Disposable local PG16 only: no external URLs or
+// credentials are consumed.
+
+import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { createServer } from "node:net";
+import path from "node:path";
+
+import { Client, type ClientConfig, type Pool } from "pg";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+import { main as migrate } from "../scripts/migrate.mjs";
+import { POSTGRES_IMAGE } from "../scripts/lib/postgres-image.mjs";
+
+const state = vi.hoisted(() => ({ mcUrl: "", reportingUrl: "" }));
+vi.mock("@/lib/secrets", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/secrets")>()),
+  databaseUrl: () => state.mcUrl,
+  databaseConfigured: () => true,
+  reportingDatabaseUrl: () => state.reportingUrl,
+  reportingDatabaseConfigured: () => true,
+}));
+vi.mock("@/lib/db/tls", () => ({ resolveDbSsl: () => false }));
+
+import {
+  centsToDecimal,
+  loadConfig,
+  loadGoalsView,
+  normalizeRef,
+  readDatasets,
+  runRefresh,
+  startRefresh,
+  toCents,
+  type Datasets,
+  type RefreshRun,
+} from "@/lib/reporting/goals";
+
+import { DATASETS, TODAY } from "./reporting-goals-helpers";
+import source from "./fixtures/reporting-goals/2026-10-14/source.json";
+import entries from "./fixtures/reporting-goals/2026-10-14/entries.json";
+
+class LocalClient extends Client {
+  constructor(options: ClientConfig) {
+    super({ ...options, ssl: false });
+  }
+}
+
+const NAME = `plx-mc-goals-pg-${randomBytes(4).toString("hex")}`;
+const RATE = [{ date: TODAY, rate: "1.4219" }];
+const fetchRates = async () => RATE;
+const noSleep = async () => {};
+const money = (cents: number) => centsToDecimal(cents);
+let started = false;
+let adminUrl = "";
+let admin: Client;
+let reportingAdmin: Client;
+
+async function connect(url: string): Promise<Client> {
+  for (let attempt = 0; ; attempt++) {
+    const client = new LocalClient({ connectionString: url });
+    try {
+      await client.connect();
+      return client;
+    } catch {
+      await client.end().catch(() => undefined);
+      if (attempt >= 60) throw new Error("local PG16 unavailable");
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+}
+
+async function loadReplica(db: Client): Promise<void> {
+  await db.query(`
+    CREATE SCHEMA silver;
+    CREATE SCHEMA sage;
+    CREATE TABLE public.batch (
+      id bigint PRIMARY KEY, display_batch_number text, status text, status_qc text, line text,
+      date_completed date, date_scheduled date, planned_qty numeric, actual_qty numeric,
+      cal_title text, updated_at timestamptz, unit_cost numeric
+    );
+    CREATE VIEW silver.batches AS SELECT * FROM public.batch;
+    CREATE TABLE sage.oe_invoice_header (
+      invnumber text, shinumber text, ordnumber text, ponumber text, customer text, bilname text,
+      shipdate text, invdate text, insourcurr text, invitmtot text, invdiscamt text, invmisc text,
+      invnetnotx text, audtdate text, inrate text DEFAULT '1.25'
+    );
+    CREATE TABLE sage.ar_customer (idcust text, namecust text, codecurn text, swactv text DEFAULT '1');
+  `);
+  for (const b of source.batches) {
+    await db.query(
+      `INSERT INTO public.batch (id, display_batch_number, status, status_qc, line, date_completed, date_scheduled,
+         planned_qty, actual_qty, cal_title, updated_at, unit_cost)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, 1.23)`,
+      [b.id, b.display_batch_number, b.status, b.status_qc, b.line, b.date_completed, b.date_scheduled,
+        b.planned_qty, b.actual_qty, b.cal_title, b.updated_at]
+    );
+  }
+  for (const i of source.invoices) {
+    await db.query(
+      `INSERT INTO sage.oe_invoice_header (invnumber, shinumber, ordnumber, ponumber, customer, bilname, shipdate,
+         invdate, insourcurr, invitmtot, invdiscamt, invmisc, invnetnotx, audtdate)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [i.invnumber, i.shinumber, i.ordnumber, i.ponumber, i.customer, i.bilname, i.shipdate, i.invdate,
+        i.insourcurr, i.invitmtot, i.invdiscamt, i.invmisc, i.invnetnotx, i.audtdate]
+    );
+  }
+  for (const c of source.customers) {
+    await db.query(`INSERT INTO sage.ar_customer (idcust, namecust, codecurn) VALUES ($1, $2, $3)`, [c.idcust, c.namecust, c.codecurn]);
+  }
+  // The shipped grant script, as a DBA would run it (psql variable filled in).
+  const grants = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants.sql"), "utf8");
+  await db.query(grants.replace(":'password'", "'disposable-test-password'"));
+}
+
+async function mcQuery<R>(text: string, params: unknown[] = []): Promise<R[]> {
+  return (await admin.query(text, params)).rows as R[];
+}
+
+async function allowNextUserRefresh(): Promise<void> {
+  await mcQuery(`UPDATE report_refresh_run SET started_at = started_at - interval '10 minutes'`);
+}
+
+beforeAll(async () => {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as { port: number }).port;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  const password = randomBytes(12).toString("hex");
+  const run = spawnSync("docker", ["run", "-d", "--name", NAME, "-e", `POSTGRES_PASSWORD=${password}`, "-p", `127.0.0.1:${port}:5432`, POSTGRES_IMAGE], { encoding: "utf8" });
+  expect(run.status, run.stderr).toBe(0);
+  started = true;
+  adminUrl = `postgres://postgres:${password}@127.0.0.1:${port}/postgres`;
+  const bootstrap = await connect(adminUrl);
+  await bootstrap.query("CREATE DATABASE mc_goals");
+  await bootstrap.query("CREATE DATABASE reporting_goals");
+  await bootstrap.end();
+
+  state.mcUrl = adminUrl.replace(/\/postgres$/, "/mc_goals");
+  expect(await migrate({ env: { NODE_ENV: "test", PLX_MC_DATABASE_URL: state.mcUrl }, ClientClass: LocalClient, log: () => {} })).toBe(0);
+  admin = await connect(state.mcUrl);
+
+  reportingAdmin = await connect(adminUrl.replace(/\/postgres$/, "/reporting_goals"));
+  await loadReplica(reportingAdmin);
+  state.reportingUrl = `postgres://mc_goals_ro:disposable-test-password@127.0.0.1:${port}/reporting_goals`;
+}, 120_000);
+
+afterAll(async () => {
+  const pools = globalThis as typeof globalThis & { __plxMcPool?: Pool; __plxReportingPool?: Pool };
+  await pools.__plxMcPool?.end();
+  await pools.__plxReportingPool?.end();
+  delete pools.__plxMcPool;
+  delete pools.__plxReportingPool;
+  await admin?.end();
+  await reportingAdmin?.end();
+  if (started) expect(spawnSync("docker", ["rm", "-f", NAME]).status).toBe(0);
+});
+
+/**
+ * Compare datasets with money and kg as exact values (Sage keeps three
+ * decimals), independent of collation-dependent ordering of equal sort keys.
+ */
+function canonical(d: Datasets) {
+  const cents = (v: string) => toCents(v);
+  const sorted = <T>(rows: T[]) => rows.map((r) => JSON.stringify(r)).sort();
+  return {
+    cutoffs: d.cutoffs,
+    goalSummary: d.goalSummary,
+    daily: d.daily.map((r) => ({ ...r, cadThis: cents(r.cadThis), usdThis: cents(r.usdThis), cadLast: cents(r.cadLast), usdLast: cents(r.usdLast) })),
+    truckloads: sorted(d.truckloads.map((r) => ({ ...r, productUsd: cents(r.productUsd), productCad: cents(r.productCad) }))),
+    revenue: sorted(d.revenue.map((r) => ({ ...r, netBeforeTax: cents(r.netBeforeTax) }))),
+    shipments: sorted(d.shipments.map((r) => ({ ...r, productValue: cents(r.productValue), otherCharges: cents(r.otherCharges), netBeforeTax: cents(r.netBeforeTax) }))),
+    batches: sorted(d.batches.map((r) => ({ ...r, kg: Number(r.kg) }))),
+    batchHistory: sorted(d.batchHistory.map((r) => ({ ...r, kg: Number(r.kg) }))),
+    references: d.references.map((r) => `${r.kind}:${normalizeRef(r.ref)}`).sort(),
+    customers: sorted(d.customers),
+  };
+}
+
+describe("reporting replica access", () => {
+  it("reads only the granted columns and never writes", async () => {
+    const ro = await connect(state.reportingUrl);
+    try {
+      await expect(ro.query("SELECT inrate FROM sage.oe_invoice_header LIMIT 1")).rejects.toMatchObject({ code: "42501" });
+      await expect(ro.query("SELECT unit_cost FROM silver.batches LIMIT 1")).rejects.toMatchObject({ code: "42501" });
+      await expect(ro.query("INSERT INTO sage.ar_customer (idcust) VALUES ('X')")).rejects.toMatchObject({ code: "25006" });
+    } finally {
+      await ro.end();
+    }
+  });
+
+  it("returns the fixture datasets for 2026-10-14 through the read-only login", async () => {
+    const datasets = await readDatasets(TODAY, await loadConfig());
+    expect(canonical(datasets)).toEqual(canonical(DATASETS));
+    // The today-overlap regression: with the production cutoff at today, today's
+    // batches count as scheduled ahead only (11 + 7, not 28).
+    expect(datasets.cutoffs.productionCutoff).toBe(TODAY);
+    expect(datasets.goalSummary).toEqual({ largeDone: 6, largeScheduledAhead: 11, largeOpenPastDate: 7 });
+  });
+});
+
+describe("refresh and page model", () => {
+  let first: RefreshRun;
+
+  it("stores a snapshot the page reproduces exactly", async () => {
+    const claim = await startRefresh("cron", "cron", new Date("2026-10-14T10:00:00Z"));
+    expect(claim.kind).toBe("claimed");
+    first = await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+    expect(first).toMatchObject({ status: "succeeded", today: TODAY, productionCutoff: TODAY, sageCutoff: TODAY, fxRate: "1.421900", fxRateDate: TODAY, fxSource: "boc", error: null });
+    expect(first.rowCounts).toMatchObject({ batches: 94, shipments: 70, daily: 31, batchHistory: 16 });
+
+    const view = await loadGoalsView();
+    expect(view.state).toBe("ready");
+    expect(view.run?.id).toBe(first.id);
+    const model = view.model!;
+    expect(model.largeBatches).toMatchObject({ total: 6, dueSoFar: 18, target: 42, openFromToday: 11, openPastDate: 7, ifAllRun: 24 });
+    expect(model.truckloads.full.total).toBe(2);
+    expect(model.truckloads.lastMonth).toMatchObject({ full: 7, partial: 5 });
+    expect(money(model.revenue.totalCents)).toBe("367014.16");
+    expect(money(model.revenue.dueSoFarCents)).toBe("428571.43");
+    expect(money(model.revenue.neededPerDayCents)).toBe("48691.22");
+    expect(money(model.revenue.lastMonthCadCents)).toBe("1007365.11");
+    expect(model.takeaway).toBe("6 large batches against 18 due so far, 2 full truckloads, and $367,014 of the $428,571 revenue due so far.");
+
+    const events = await mcQuery<{ kind: string; actor: string }>(`SELECT kind, actor FROM mc_events WHERE kind LIKE 'reporting.goals.%' ORDER BY seq`);
+    expect(events).toEqual([{ kind: "reporting.goals.refresh.succeeded", actor: "cron:reporting-goals" }]);
+  });
+
+  it("counts manual entries live against the stored references", async () => {
+    for (const e of entries as Array<Record<string, string | undefined>>) {
+      await mcQuery(
+        `INSERT INTO report_manual_entry (entry_id, type, day, reference, customer, product, kg, product_value, freight,
+           currency, note, entered_by, updated_by, source)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'vince@petrasoap.com','vince@petrasoap.com','ui')`,
+        [e.entryId, e.type, e.date, e.reference, e.customer ?? null, e.product ?? null, e.kg ?? null,
+          e.productValue ?? null, e.freight ?? null, e.currency ?? null, e.note ?? null]
+      );
+    }
+    const model = (await loadGoalsView()).model!;
+    expect(Object.fromEntries(model.entries.map((e) => [e.entryId, e.status]))).toEqual({
+      M001: "counted", M002: "counted", M003: "counted", M004: "in_sage", M005: "in_filemaker", M006: "not_this_month", M007: "counted",
+    });
+    expect(model.largeBatches).toMatchObject({ total: 8, ifAllRun: 25 });
+    expect(model.largeBatches.neededPerDay.toFixed(1)).toBe("2.6");
+    expect(model.truckloads.full.total).toBe(3);
+    expect(money(model.revenue.totalCents)).toBe("408628.08");
+    expect(money(model.revenue.neededPerDayCents)).toBe("45490.15");
+    // A soft-deleted entry stops counting.
+    await mcQuery(`UPDATE report_manual_entry SET deleted_at = now(), deleted_by = 'vince@petrasoap.com' WHERE entry_id = 'M007'`);
+    expect(money((await loadGoalsView()).model!.revenue.totalCents)).toBe("403628.08");
+  });
+
+  it("keeps the last good snapshot when a refresh fails, and records why", async () => {
+    await reportingAdmin.query("REVOKE SELECT ON sage.oe_invoice_header FROM mc_goals_ro");
+    try {
+      await allowNextUserRefresh();
+      const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T15:00:00Z"));
+      expect(claim.kind).toBe("claimed");
+      const failed = await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+      expect(failed.status).toBe("failed");
+      expect(failed.error).toMatch(/^42501: permission denied for table oe_invoice_header/);
+      const view = await loadGoalsView();
+      expect(view.run?.id).toBe(first.id);
+      expect(view.latestAttempt).toMatchObject({ id: failed.id, status: "failed" });
+      expect(money(view.model!.revenue.inSystemCents)).toBe("367014.16");
+      const [event] = await mcQuery<{ actor: string; payload: { code: string } }>(
+        `SELECT actor, payload FROM mc_events WHERE kind = 'reporting.goals.refresh.failed' ORDER BY seq DESC LIMIT 1`
+      );
+      expect(event).toMatchObject({ actor: "human:vince@petrasoap.com", payload: { code: "42501" } });
+    } finally {
+      await reportingAdmin.query(`GRANT SELECT (invnumber, shinumber, ordnumber, ponumber, customer, bilname, shipdate, insourcurr,
+        invitmtot, invdiscamt, invmisc, invnetnotx, audtdate) ON sage.oe_invoice_header TO mc_goals_ro`);
+    }
+  });
+
+  it("retries a transient error twice at most, and only within the time budget", async () => {
+    const real = (today: string, config: Parameters<typeof readDatasets>[1], timeout: number) => readDatasets(today, config, timeout);
+    const transient = () => Object.assign(new Error("canceling statement due to conflict with recovery"), { code: "40001" });
+
+    await allowNextUserRefresh();
+    let calls = 0;
+    const waits: number[] = [];
+    let claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T15:10:00Z"));
+    const recovered = await runRefresh(claim.run, {
+      fetchRates,
+      sleep: async (ms) => { waits.push(ms); },
+      readSources: (...args) => (++calls === 1 ? Promise.reject(transient()) : real(...args)),
+    });
+    expect(recovered.status).toBe("succeeded");
+    expect(calls).toBe(2);
+    expect(waits).toEqual([5_000]);
+
+    await allowNextUserRefresh();
+    calls = 0;
+    claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T15:20:00Z"));
+    const gaveUp = await runRefresh(claim.run, { fetchRates, sleep: noSleep, readSources: () => (calls++, Promise.reject(transient())) });
+    expect(gaveUp.status).toBe("failed");
+    expect(calls).toBe(3);
+
+    await allowNextUserRefresh();
+    calls = 0;
+    claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T15:30:00Z"));
+    const noTime = await runRefresh(claim.run, { fetchRates, sleep: noSleep, budgetMs: 60_000, readSources: () => (calls++, Promise.reject(transient())) });
+    expect(noTime.status).toBe("failed");
+    expect(calls).toBe(1); // another 120 s attempt would not fit in 60 s
+
+    await allowNextUserRefresh();
+    calls = 0;
+    claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T15:40:00Z"));
+    const permanent = await runRefresh(claim.run, {
+      fetchRates,
+      sleep: noSleep,
+      readSources: () => (calls++, Promise.reject(Object.assign(new Error("column does not exist"), { code: "42703" }))),
+    });
+    expect(permanent.error).toMatch(/^42703:/);
+    expect(calls).toBe(1);
+  });
+
+  it("falls back to the last stored rate, and fails without one", async () => {
+    await allowNextUserRefresh();
+    const down = async () => { throw new Error("getaddrinfo ENOTFOUND www.bankofcanada.ca"); };
+    let claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T16:00:00Z"));
+    const fallback = await runRefresh(claim.run, { fetchRates: down, sleep: noSleep });
+    expect(fallback).toMatchObject({ status: "succeeded", fxRate: "1.421900", fxSource: "stored" });
+    expect((await loadGoalsView()).fx).toMatchObject({ source: "stored", stale: true });
+
+    await mcQuery(`DELETE FROM report_fx_rate WHERE series = 'FXUSDCAD'`);
+    await allowNextUserRefresh();
+    claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T16:10:00Z"));
+    const noRate = await runRefresh(claim.run, { fetchRates: down, sleep: noSleep });
+    expect(noRate.status).toBe("failed");
+    expect(noRate.error).toMatch(/^fx_unavailable:/);
+    await mcQuery(`INSERT INTO report_fx_rate (series, rate_date, rate) VALUES ('FXUSDCAD', $1, 1.4219)`, [TODAY]);
+  });
+});
+
+describe("claims, limits and retention", () => {
+  it("allows one running refresh, limits users to one per 5 minutes, and fails abandoned runs", async () => {
+    await allowNextUserRefresh();
+    const claimed = await startRefresh("user", "vince@petrasoap.com");
+    expect(claimed.kind).toBe("claimed");
+    expect((await startRefresh("cron", "cron")).kind).toBe("running");
+    expect((await startRefresh("user", "someone@petrasoap.com")).kind).toBe("running");
+
+    // The running row is 11 minutes old: its function died; the next claim fails it.
+    await mcQuery(`UPDATE report_refresh_run SET started_at = now() - interval '11 minutes' WHERE id = $1`, [claimed.run.id]);
+    const afterStale = await startRefresh("cron", "cron");
+    expect(afterStale.kind).toBe("claimed");
+    const [abandoned] = await mcQuery<{ status: string; error: string }>(`SELECT status, error FROM report_refresh_run WHERE id = $1`, [claimed.run.id]);
+    expect(abandoned).toEqual({ status: "failed", error: "abandoned: no result within 10 minutes" });
+
+    await runRefresh(afterStale.run, { fetchRates, sleep: noSleep });
+    const limited = await startRefresh("user", "vince@petrasoap.com");
+    expect(limited.kind).toBe("rate_limited");
+    if (limited.kind === "rate_limited") {
+      expect(limited.retryAfterSeconds).toBeGreaterThan(290);
+      expect(limited.retryAfterSeconds).toBeLessThanOrEqual(300);
+    }
+    // The schedule is never rate limited.
+    const cron = await startRefresh("cron", "cron");
+    expect(cron.kind).toBe("claimed");
+    if (cron.kind === "claimed") await runRefresh(cron.run, { fetchRates, sleep: noSleep });
+  });
+
+  it("prunes runs after 90 days and keeps the large lists for the last three good runs", async () => {
+    const [{ id: oldest }] = await mcQuery<{ id: string }>(`SELECT id FROM report_refresh_run ORDER BY id LIMIT 1`);
+    await mcQuery(`UPDATE report_refresh_run SET started_at = now() - interval '91 days' WHERE id = $1`, [oldest]);
+    await allowNextUserRefresh();
+    const claim = await startRefresh("user", "vince@petrasoap.com");
+    await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+
+    expect(await mcQuery(`SELECT id FROM report_refresh_run WHERE id = $1`, [oldest])).toEqual([]);
+    expect(await mcQuery(`SELECT 1 FROM report_snap_batch WHERE run_id = $1`, [oldest])).toEqual([]);
+    const withLists = await mcQuery<{ run_id: string }>(`SELECT DISTINCT run_id FROM report_snap_reference ORDER BY run_id DESC`);
+    const lastGood = await mcQuery<{ id: string }>(`SELECT id FROM report_refresh_run WHERE status = 'succeeded' ORDER BY id DESC LIMIT 3`);
+    expect(withLists.map((r) => String(r.run_id))).toEqual(lastGood.map((r) => String(r.id)));
+    const customers = await mcQuery<{ run_id: string }>(`SELECT DISTINCT run_id FROM report_snap_customer ORDER BY run_id DESC`);
+    expect(customers.map((r) => String(r.run_id))).toEqual(lastGood.map((r) => String(r.id)));
+  });
+});

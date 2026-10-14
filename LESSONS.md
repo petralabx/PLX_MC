@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-14 (ET) — Vendor-spend writes took the author from the body and checked no capability
+
+- **What happened:** `PATCH /api/vendor-spend/budgets` and `POST /api/vendor-spend/snapshots` (TASK-290) read `updatedBy` / `enteredBy` from the request body and relied on the middleware admission gate alone. Any signed-in person could save a budget or cost entry under someone else's name, and a member under `enforce` got 200 (TASK-2928).
+- **Root cause:** The routes accepted the client's `viewerId()` as a schema field instead of using `requireSessionActor`, the session gate that task, project and bucket writes already used, and no capability covered vendor spend.
+- **Rule going forward:** A mutating route never takes an author or actor from the body. Gate it with `requireSessionActor(<capability>)` and store `authorized.auditLabel` as the author. Test it with a spoofed author in the body and with a member under `enforce`.
+
 ### 2026-10-14 (UTC) — A review fix was pushed to two PRs after both had merged (TASK-2938)
 
 - **What happened:** A fix for a Cursor Bugbot finding on #325 (a parallel-suite race in `ensurePostgresImage`) was pushed to #325 and ported to #322 at 20:23, but both PRs had merged at 20:19, so neither merge carried it. #325's description was then edited to say it did.
@@ -24,7 +30,7 @@
 
 ### 2026-10-14 (UTC) — A new Postgres suite skipped the image fallback and turned main red (TASK-2938)
 
-- **What happened:** #326 added `tests/reporting-goals-entries-postgres.test.ts` while #325 (TASK-2934) was open. It ran `docker run` on `POSTGRES_IMAGE` without `ensurePostgresImage()`, so after both merged, main's CI (run 881) failed when ECR Public answered `toomanyrequests: Rate exceeded`.
+- **What happened:** #326 added `tests/reporting-goals-entries-postgres.test.ts` while #325 (TASK-2934) was open. It ran `docker run` on `POSTGRES_IMAGE` without `ensurePostgresImage()`, so after both merged, main's CI (run 881) failed when ECR Public answered `toomanyrequests: Rate exceeded`. #327 (TASK-2935) then added the call, and a fourth entry to the guard test's list, by hand.
 - **Root cause:** `tests/harness-image-source.test.ts` checked a hand-written list of three harnesses, so a fourth, written in parallel, was never checked.
 - **Rule going forward:** A test that enforces a rule across files finds those files by scanning the tree, and asserts that the scan finds the known ones; it does not list them by hand.
 

@@ -36,6 +36,8 @@ export const CAPABILITIES = [
   "telemetry.report",
   // Read agent.report events through GET /api/cursor/agent-reports (fleet P8b).
   "agent_report.read",
+  // Save vendor budgets and manual cost snapshots (AI Spend, TASK-2928).
+  "vendor_spend.write",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];

@@ -92,6 +92,14 @@ role does. It is the only MCP principal that may set an
 server-only guard `assertAgentAssigneeAllowed` (`agent-assignee-guard.ts`)
 throws 403 in `actionCreateTask` and `PATCH /api/tasks/[id]`.
 
+**Vendor spend (TASK-2928):** `vendor_spend.write` authorizes saving a vendor
+budget (`PATCH /api/vendor-spend/budgets`) and entering a manual cost snapshot
+(`POST /api/vendor-spend/snapshots`), the AI Spend budget editor and manual
+entry form. Both routes call `requireSessionActor("vendor_spend.write")` on the
+Entra session and store the session email as the author. Admin and owner roles
+hold it; members and every service principal do not, so until mode `enforce`
+(humans synthesized as admin) no signed-in person is newly denied.
+
 **Audit data (TASK-620):** every enforcement call site records `allowed`,
 `reasonCode`, and `policyVersion` to `permissions_decision_log` (migration 022)
 via `src/lib/permissions/enforcement.ts` + `decision-log.ts`, including the
@@ -149,8 +157,9 @@ concrete rule cannot be expressed that way.
 - Depends on: none at runtime for `authorize` (pure). Identity hydration uses
   the shared `db` query seam only when enforcement is enabled.
 - Depended on by: the `repo.approve` approver gate (`mc-data` store, Repos and
-  Skills screens and routes), MCP auth (service principal actor), future
-  routing / task / sync mutation paths.
+  Skills screens and routes), MCP auth (service principal actor), the
+  vendor-spend write routes (`vendor_spend.write`), future routing / task /
+  sync mutation paths.
 
 ## Owner
 

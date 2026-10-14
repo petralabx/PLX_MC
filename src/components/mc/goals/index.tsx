@@ -5,13 +5,15 @@
 // good refresh of FileMaker and Sage plus the entries made by hand, with the
 // day-by-day charts, tables and the rules behind every number. One read of
 // GET /api/reporting/goals (one consistent snapshot); Editors can refresh,
-// which this page follows step by step until the new snapshot is in.
+// which this page follows step by step until the new snapshot is in. Viewers
+// and Editors can export it all to Excel (GET /api/reporting/goals/export).
 // Module contract: docs/modules/reporting-goals/README.md.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { api, ApiClientError } from "@/lib/api";
+import { api, apiDownload, ApiClientError } from "@/lib/api";
 import type { GoalsPage, RefreshRun } from "@/lib/reporting/goals";
+import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
 
 import { DailyBatchesChart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "./charts";
 import { GoalCards } from "./goal-cards";
@@ -69,11 +71,47 @@ function refreshLine(refresh: Refresh, page: ReadyPage | null): string {
   }
 }
 
+type Download =
+  | { kind: "idle" }
+  | { kind: "working" }
+  | { kind: "done"; fileName: string }
+  | { kind: "failed"; message: string };
+
+function downloadLine(download: Download): string {
+  switch (download.kind) {
+    case "idle":
+      return "";
+    case "working":
+      return "Preparing the Excel workbook…";
+    case "done":
+      return `Downloaded ${download.fileName}.`;
+    case "failed":
+      return `The export failed: ${download.message}`;
+  }
+}
+
+/** A refresh's progress and result take the status line back from a finished export. */
+const clearFinished = (download: Download): Download => (download.kind === "working" ? download : { kind: "idle" });
+
+/** Hands a downloaded file to the browser under its name. */
+function saveFile(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // Revoked once the browser has taken the file (as the architecture canvas does for its SVG).
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
 export function GoalsView() {
   const [page, setPage] = useState<GoalsPage | null>(null);
   const [status, setStatus] = useState<SectionState>("loading");
   const [loadError, setLoadError] = useState<{ code: string; message: string } | null>(null);
   const [refresh, setRefresh] = useState<Refresh>({ kind: "idle" });
+  const [download, setDownload] = useState<Download>({ kind: "idle" });
   // The run this page started or attached to: it counts toward the 5-minute
   // limit even before the reloaded page model carries it (or if that reload fails).
   const [followed, setFollowed] = useState<RefreshRun | null>(null);
@@ -109,10 +147,14 @@ export function GoalsView() {
         onStep: (next) => setRefresh({ kind: "running", run: next }),
         onDone: (done) => {
           setFollowed(done);
+          setDownload(clearFinished);
           setRefresh(done.status === "succeeded" ? { kind: "done", run: done } : { kind: "failed", message: done.error ?? "no reason recorded." });
           void load();
         },
-        onLost: (message) => setRefresh({ kind: "lost", message }),
+        onLost: (message) => {
+          setDownload(clearFinished);
+          setRefresh({ kind: "lost", message });
+        },
       });
     },
     [load]
@@ -131,6 +173,7 @@ export function GoalsView() {
   };
 
   async function startRefresh() {
+    setDownload(clearFinished);
     setRefresh({ kind: "starting" });
     try {
       const { run } = await api<{ run: RefreshRun }>("/reporting/goals/refresh", { method: "POST", body: "{}" });
@@ -147,12 +190,25 @@ export function GoalsView() {
     }
   }
 
+  async function exportWorkbook(today: string) {
+    setDownload({ kind: "working" });
+    try {
+      const { blob, fileName } = await apiDownload("/reporting/goals/export");
+      const name = fileName ?? workbookFileName(today);
+      saveFile(blob, name);
+      setDownload({ kind: "done", fileName: name });
+    } catch (err) {
+      setDownload({ kind: "failed", message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
   const ready = isReady(page) ? page : null;
   const busy = refresh.kind === "starting" || refresh.kind === "running";
   const newest = newestRun(page?.latestAttempt, page?.run, followed);
   const waitUntil = busy ? null : nextRefreshAt(newest, now);
   const editor = page?.viewer.editor ?? false;
-  const line = refreshLine(refresh, ready);
+  const canRefresh = editor && page?.state !== "not_configured";
+  const line = downloadLine(download) || refreshLine(refresh, ready);
   // Without a Goals role (or a session) there is nothing to retry: say what is missing.
   const noAccess = !page && loadError && (loadError.code === "forbidden" || loadError.code === "not_authenticated") ? loadError : null;
 
@@ -176,17 +232,30 @@ export function GoalsView() {
                   : " "}
           </p>
         </div>
-        {editor && page?.state !== "not_configured" ? (
+        {canRefresh || ready ? (
           <div className="r">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => void startRefresh()}
-              disabled={busy || waitUntil !== null}
-              aria-describedby="goals-refresh-status"
-            >
-              {busy ? "Refreshing…" : "Refresh"}
-            </button>
+            {canRefresh ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void startRefresh()}
+                disabled={busy || waitUntil !== null}
+                aria-describedby="goals-refresh-status"
+              >
+                {busy ? "Refreshing…" : "Refresh"}
+              </button>
+            ) : null}
+            {ready ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void exportWorkbook(ready.model.today)}
+                disabled={download.kind === "working"}
+                aria-describedby="goals-refresh-status"
+              >
+                {download.kind === "working" ? "Exporting…" : "Export to Excel"}
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>

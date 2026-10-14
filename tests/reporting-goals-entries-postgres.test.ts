@@ -429,11 +429,16 @@ describe("import: preview, then confirm", () => {
     expect((await confirm({ importId: shown.data.importId, token: shown.data.token })).status).toBe(409);
   });
 
-  it("an unchanged export previews as no change at all", async () => {
+  it("an unchanged export previews as no change at all, and confirming it changes nothing", async () => {
     await enterFixtures();
+    // Picked from Sage's list: the name (with its no-break space) is stored with the code.
+    await addEntry({ type: "Shipment", date: TODAY, customer: "Tiger Hospitality LLC\u00a0DBA of A1 American", productValue: "19000", freight: "0.5", currency: "USD" });
+    const live = (await listLive()).data.entries;
+    expect(live[7]).toMatchObject({ customerCode: "A1TEXT11", kg: null, productValue: "19000.00", freight: "0.50" });
     const shown = await preview(await entriesWorkbook(await exportedRows()));
-    expect(shown.data).toMatchObject({ rows: 7, add: [], change: [], remove: [], unchanged: 7 });
-    expect(Object.fromEntries((await listLive()).data.entries.map((e) => [e.entryId, e.source]))).toMatchObject({ M001: "ui" });
+    expect(shown.data).toMatchObject({ rows: 8, add: [], change: [], remove: [], unchanged: 8 });
+    expect((await confirm({ importId: shown.data.importId, token: shown.data.token })).data).toMatchObject({ added: 0, changed: 0, removed: 0, unchanged: 8 });
+    expect((await listLive()).data.entries).toEqual(live);
   });
 
   it("rejects a changed header row, more than 1,000 rows, a non-workbook and row errors — and keeps nothing", async () => {

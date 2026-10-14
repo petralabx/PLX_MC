@@ -57,7 +57,11 @@ Routing mutations fail closed when required registers are stale.
   sweep — and the webhook drains the queue post-ack via `after()`
   (`PLX_MC_GRAPH_NOTIFICATION_INLINE_DRAIN`, default on when the webhook is
   enabled; =0 falls back to the hourly cron drain). Edit-to-UI target <60s;
-  the 5-minute sweep remains the correctness recovery path.
+  the 5-minute sweep remains the correctness recovery path. Missing cursors,
+  unknown registers, and scoped pull errors trigger a logged full sweep. On
+  HTTP 410, the full sweep restarts the affected list delta from its initial
+  endpoint once and saves the replacement cursor only after reconciliation.
+  Logs include list key/status, never cursor URLs or Graph response bodies.
 - **Cancelled stage (TASK-2529)**: ToDos `Status` gains `Cancelled`, and two
   columns mirror `entities.cancellation`: `CancelReason` (choice: Duplicate,
   Obsolete, Superseded, Delivered without PR) and `ReplacedBy` (text, `TASK-n`).

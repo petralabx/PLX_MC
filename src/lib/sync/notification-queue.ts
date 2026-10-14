@@ -3,6 +3,7 @@
 // Cron path: authorize durable sp_sync_inbound, claim pending rows, process.
 
 import { query, withTransaction } from "@/lib/db";
+import { GraphError } from "./graph";
 import { requireSyncServiceWrite, runScopedListDelta, runSweep } from "./engine";
 import {
   buildReplayKey,
@@ -43,17 +44,23 @@ export type ScopedDeltaRunner = (listKey: string, actorId: string) => Promise<vo
 
 /**
  * Default processor (TASK-627): targeted inbound pull of the notified list.
- * Unknown list keys fall back to one full sweep — the 5-min cron remains the
+ * Unknown list keys, missing cursors, and errors fall back to a full sweep — the 5-min cron remains the
  * correctness recovery path either way.
  */
 export async function defaultScopedDeltaRunner(
   listKey: string,
   actorId: string
 ): Promise<void> {
-  const scoped = await runScopedListDelta(listKey);
-  if (scoped == null) {
-    await runSweep(actorId);
+  let reason = "unknown_list_or_missing_token";
+  try {
+    const scoped = await runScopedListDelta(listKey);
+    if (scoped != null) return;
+  } catch (err) {
+    // Avoid logging Graph URLs/bodies: they may contain delta tokens or item data.
+    reason = err instanceof GraphError ? `graph_${err.status}` : "scoped_delta_error";
   }
+  console.warn("[sync] notification delta falling back to full sweep", { listKey, reason });
+  await runSweep(actorId);
 }
 
 export async function enqueueScopedDelta(
@@ -199,7 +206,7 @@ export async function processNotificationQueue(
     return { claimed: 0, processed: 0, failed: 0 };
   }
 
-  // One sweep covers all notified lists in this batch (engine has no scoped export in P11 owns).
+  // Coalesce repeated notifications into one scoped pull per list in this batch.
   const uniqueLists = [...new Set(claimed.map((c) => c.list_key))];
   let processed = 0;
   let failed = 0;

@@ -11,23 +11,30 @@ const h = vi.hoisted(() => ({
   audits: [] as string[],
   driveId: "drive-1" as string | null,
   driveItems: [] as Record<string, unknown>[],
-  fullSweeps: 0,
+  tokens: new Map<string, string>(),
+  deltaCalls: [] as { listKey: string; token: string | null; recover: boolean }[],
+  deltaError: null as Error | null,
+  claimed: [] as { id: string; list_key: string; replay_key: string }[],
+  queueUpdates: [] as string[],
 }));
 
 vi.mock("@/lib/db", () => ({
-  query: async () => [],
-  withTransaction: async (fn: (q: unknown) => Promise<unknown>) => fn(async () => []),
+  query: async (sql: string) => { h.queueUpdates.push(sql); return []; },
+  withTransaction: async (fn: (q: unknown) => Promise<unknown>) =>
+    fn(async (sql: string) => sql.includes("FOR UPDATE SKIP LOCKED") ? h.claimed : []),
 }));
 
 vi.mock("@/lib/sync/graph", () => {
-  class GraphError extends Error {}
+  class GraphError extends Error { constructor(public status: number) { super(`graph ${status}`); } }
   return {
     GraphError,
     siteContext: async () => ({
       siteId: "s",
       listIds: { todos: "t", risks: "r", projects: "p", roadmap: "m", documents: "d" },
     }),
-    listDelta: async (_ctx: unknown, listKey: string) => {
+    listDelta: async (_ctx: unknown, listKey: string, token: string | null, recover: boolean) => {
+      h.deltaCalls.push({ listKey, token, recover });
+      if (h.deltaError) { const err = h.deltaError; h.deltaError = null; throw err; }
       h.saved.push(`delta:${listKey}`);
       return { items: [], deltaLink: `dl-${listKey}` };
     },
@@ -83,8 +90,9 @@ vi.mock("@/lib/sync/repo", () => ({
     h.audits.push(body);
   },
   getEntities: async () => [],
-  getDeltaLink: async () => null,
-  saveDeltaLink: async (listKey: string) => {
+  getDeltaLink: async (key: string) => h.tokens.get(key) ?? null,
+  saveDeltaLink: async (listKey: string, token: string) => {
+    h.tokens.set(listKey, token);
     h.saved.push(`saved:${listKey}`);
   },
   updateEntity: async (type: string, id: string, opts: { patch?: Record<string, unknown> }) => {
@@ -104,7 +112,8 @@ vi.mock("@/lib/sync/repo", () => ({
 }));
 
 import { runScopedListDelta } from "@/lib/sync/engine";
-import { defaultScopedDeltaRunner } from "@/lib/sync/notification-queue";
+import { GraphError } from "@/lib/sync/graph";
+import { defaultScopedDeltaRunner, processNotificationQueue } from "@/lib/sync/notification-queue";
 
 beforeEach(() => {
   vi.unstubAllEnvs();
@@ -114,7 +123,11 @@ beforeEach(() => {
   h.audits.length = 0;
   h.driveId = "drive-1";
   h.driveItems = [];
-  h.fullSweeps = 0;
+  h.tokens = new Map(["todos", "risks", "roadmap", "projects", "documents"].map(key => [key, `stored-${key}`]));
+  h.deltaCalls.length = 0;
+  h.deltaError = null;
+  h.claimed = [];
+  h.queueUpdates.length = 0;
 });
 
 describe("runScopedListDelta (TASK-627)", () => {
@@ -158,6 +171,43 @@ describe("defaultScopedDeltaRunner fallback", () => {
     await defaultScopedDeltaRunner("mystery", "sp_sync_inbound");
     expect(h.saved).toContain("delta:todos");
     expect(h.saved).toContain("delta:risks");
+  });
+});
+
+
+describe("notification queue with real scoped engine and mocked Graph", () => {
+  it.each(["todos", "risks", "projects", "roadmap"])("pulls only notified %s and persists its next cursor", async (listKey) => {
+    h.claimed = [
+      { id: "1", list_key: listKey, replay_key: "n1" },
+      { id: "2", list_key: listKey, replay_key: "n2" },
+    ];
+    const result = await processNotificationQueue({ authorize: async () => ({ id: "sp_sync_inbound" }) });
+    expect(result).toEqual({ claimed: 2, processed: 2, failed: 0 });
+    expect(h.deltaCalls).toEqual([{ listKey, token: `stored-${listKey}`, recover: false }]);
+    expect(h.tokens.get(listKey)).toBe(`dl-${listKey}`);
+    expect(h.registersCompleted).toEqual([listKey]);
+    expect(h.queueUpdates.some(sql => sql.includes("status = 'done'"))).toBe(true);
+  });
+
+  it("missing cursor falls back before attempting a scoped pull", async () => {
+    h.tokens.delete("todos");
+    await defaultScopedDeltaRunner("todos", "sp_sync_inbound");
+    expect(h.deltaCalls.map(call => call.listKey)).toEqual(["projects", "roadmap", "todos", "risks"]);
+    expect(h.deltaCalls.every(call => call.recover)).toBe(true);
+  });
+
+  it.each([410, 503])("Graph %s falls back to a full sweep", async (status) => {
+    h.deltaError = new GraphError(status, "test", "mock");
+    await defaultScopedDeltaRunner("todos", "sp_sync_inbound");
+    expect(h.deltaCalls.map(call => call.listKey)).toEqual(["todos", "projects", "roadmap", "todos", "risks"]);
+    expect(h.deltaCalls[0].recover).toBe(false);
+    expect(h.deltaCalls.slice(1).every(call => call.recover)).toBe(true);
+  });
+
+  it("non-Graph errors also trigger recovery", async () => {
+    h.deltaError = new Error("mock failure");
+    await defaultScopedDeltaRunner("todos", "sp_sync_inbound");
+    expect(h.deltaCalls.map(call => call.listKey)).toContain("risks");
   });
 });
 

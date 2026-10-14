@@ -59,7 +59,8 @@ vi.mock("@/lib/sync/repo", () => ({
   },
   getEntities: async () => (s.row ? [s.row] : []),
   seedRepos: async () => undefined,
-  getDeltaLink: async () => null,
+  // Scoped notifications require an established cursor; bootstrap uses the sweep.
+  getDeltaLink: async () => "stored-todos",
   saveDeltaLink: async () => undefined,
   markRegisterInboundComplete: async () => undefined,
   insertConflict: async (c: Record<string, unknown>) => { s.conflicts.push(c); },

@@ -767,9 +767,9 @@ async function adoptUnknownTask(ctx: SiteContext, item: SpListItem): Promise<"ad
   return "adopted";
 }
 
-async function pullList(ctx: SiteContext, listKey: string, type: EntityType): Promise<InboundResult> {
+async function pullList(ctx: SiteContext, listKey: string, type: EntityType, recoverExpiredToken = true): Promise<InboundResult> {
   const stored = await repo.getDeltaLink(listKey);
-  const { items, deltaLink } = await listDelta(ctx, listKey, stored);
+  const { items, deltaLink } = await listDelta(ctx, listKey, stored, recoverExpiredToken);
   const result: InboundResult = { pulled: 0, conflicts: 0, skipped: 0, adopted: 0 };
   const rows = await repo.getEntities(type);
 
@@ -1142,11 +1142,11 @@ async function pullDocuments(ctx: SiteContext): Promise<InboundResult> {
   return result;
 }
 
-async function pullRoadmap(ctx: SiteContext): Promise<InboundResult> {
+async function pullRoadmap(ctx: SiteContext, recoverExpiredToken = true): Promise<InboundResult> {
   const result: InboundResult = { pulled: 0, conflicts: 0, skipped: 0, adopted: 0 };
   if (!ctx.listIds[ROADMAP_KEY]) return result;
   const stored = await repo.getDeltaLink(ROADMAP_KEY);
-  const { items, deltaLink } = await listDelta(ctx, ROADMAP_KEY, stored);
+  const { items, deltaLink } = await listDelta(ctx, ROADMAP_KEY, stored, recoverExpiredToken);
   let rows = await repo.getBucketRows();
 
   for (const item of items) {
@@ -1288,11 +1288,11 @@ async function pullRoadmap(ctx: SiteContext): Promise<InboundResult> {
   return result;
 }
 
-async function pullProjects(ctx: SiteContext): Promise<InboundResult> {
+async function pullProjects(ctx: SiteContext, recoverExpiredToken = true): Promise<InboundResult> {
   const result: InboundResult = { pulled: 0, conflicts: 0, skipped: 0, adopted: 0 };
   if (!ctx.listIds[PROJECTS_KEY]) return result;
   const stored = await repo.getDeltaLink(PROJECTS_KEY);
-  const { items, deltaLink } = await listDelta(ctx, PROJECTS_KEY, stored);
+  const { items, deltaLink } = await listDelta(ctx, PROJECTS_KEY, stored, recoverExpiredToken);
   let rows = await repo.getProjectRows();
 
   for (const item of items) {
@@ -1422,16 +1422,21 @@ export interface SweepResult {
  * Targeted inbound pull for ONE notified register (TASK-627) — the scoped
  * delta the notification queue drains, so a SharePoint edit reaches the UI in
  * seconds instead of waiting for the 5-minute sweep. Returns null for an
- * unknown list key; the caller falls back to a full sweep (recovery path).
+ * unknown list key or missing cursor; the caller falls back to a full sweep.
+ * Expired cursors propagate to the caller, so recovery runs through the sweep.
  */
 export async function runScopedListDelta(listKey: string): Promise<InboundResult | null> {
+  const supported = [PROJECTS_KEY, ROADMAP_KEY, "todos", "risks"];
+  const documents = listKey === DOCUMENTS_DELTA_KEY && documentsSyncEnabled();
+  if (!supported.includes(listKey) && !documents) return null;
+  if (!(await repo.getDeltaLink(listKey))) return null;
   await ensureSeeded();
   await ensureReposSeeded();
   const ctx = await siteContext();
-  if (listKey === PROJECTS_KEY) return pullProjects(ctx);
-  if (listKey === ROADMAP_KEY) return pullRoadmap(ctx);
-  if (listKey === "todos") return pullList(ctx, "todos", "task");
-  if (listKey === "risks") return pullList(ctx, "risks", "risk");
+  if (listKey === PROJECTS_KEY) return pullProjects(ctx, false);
+  if (listKey === ROADMAP_KEY) return pullRoadmap(ctx, false);
+  if (listKey === "todos") return pullList(ctx, "todos", "task", false);
+  if (listKey === "risks") return pullList(ctx, "risks", "risk", false);
   if (listKey === DOCUMENTS_DELTA_KEY && documentsSyncEnabled()) return pullDocuments(ctx);
   return null;
 }

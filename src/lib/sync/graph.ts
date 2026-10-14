@@ -326,22 +326,35 @@ export function clearUilCache(): void {
 export async function listDelta(
   ctx: SiteContext,
   listKey: string,
-  storedDeltaLink: string | null
+  storedDeltaLink: string | null,
+  recoverExpiredToken = true
 ): Promise<{ items: SpListItem[]; deltaLink: string }> {
   // Request lastModifiedBy + lastModifiedDateTime so inbound can attribute
   // human vs service edits (P4). Stored delta links already carry the select
   // shape from the prior walk; first-run URLs request it explicitly.
-  let url =
-    storedDeltaLink ??
+  const initialUrl =
     `/sites/${ctx.siteId}/lists/${ctx.listIds[listKey]}/items/delta?` +
-      `$select=id,lastModifiedDateTime,lastModifiedBy&$expand=fields`;
+    `$select=id,lastModifiedDateTime,lastModifiedBy&$expand=fields`;
+  let url = storedDeltaLink ?? initialUrl;
+  let restarted = false;
   const items: SpListItem[] = [];
   for (;;) {
-    const page = await graphFetch<{
+    let page: {
       value: SpListItem[];
       "@odata.nextLink"?: string;
       "@odata.deltaLink"?: string;
-    }>(url);
+    };
+    try {
+      page = await graphFetch<typeof page>(url);
+    } catch (err) {
+      if (!recoverExpiredToken || !storedDeltaLink || restarted ||
+          !(err instanceof GraphError) || err.status !== 410) throw err;
+      console.warn("[sync] expired delta token; restarting list", { listKey });
+      restarted = true;
+      items.length = 0;
+      url = initialUrl;
+      continue;
+    }
     items.push(...page.value);
     if (page["@odata.deltaLink"]) return { items, deltaLink: page["@odata.deltaLink"] };
     if (!page["@odata.nextLink"]) throw new Error(`delta walk for ${listKey} ended without a deltaLink`);

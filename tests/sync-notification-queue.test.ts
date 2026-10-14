@@ -155,6 +155,7 @@ vi.mock("@/lib/sync/engine", () => ({
     id: SYNC_INBOUND_SERVICE_PRINCIPAL_ID,
     status: "active",
   })),
+  runScopedListDelta: vi.fn(async () => ({ pulled: 1, conflicts: 0, skipped: 0, adopted: 0 })),
   runSweep: vi.fn(async () => ({
     pushed: 0,
     pushErrors: 0,
@@ -166,7 +167,7 @@ vi.mock("@/lib/sync/engine", () => ({
   })),
 }));
 
-import { requireSyncServiceWrite, runSweep } from "@/lib/sync/engine";
+import { requireSyncServiceWrite, runScopedListDelta, runSweep } from "@/lib/sync/engine";
 import {
   enqueueScopedDelta,
   pendingQueueCount,
@@ -176,7 +177,9 @@ import {
 beforeEach(() => {
   store.reset();
   vi.mocked(requireSyncServiceWrite).mockClear();
-  vi.mocked(runSweep).mockClear();
+  vi.mocked(runSweep).mockReset();
+  vi.mocked(runScopedListDelta).mockReset();
+  vi.mocked(runScopedListDelta).mockResolvedValue({ pulled: 1, conflicts: 0, skipped: 0, adopted: 0 });
   store.subscriptions.set("sub-1", {
     id: "sub-1",
     list_key: "todos",
@@ -275,5 +278,18 @@ describe("processNotificationQueue authorization", () => {
     expect(result.processed).toBe(0);
     expect(runScopedDelta).not.toHaveBeenCalled();
     expect(store.queue[0].status).toBe("pending");
+  });
+});
+
+
+describe("default notification recovery", () => {
+  it("marks the notification failed when both scoped delta and backup sweep fail", async () => {
+    await enqueueScopedDelta({ subscriptionId: "sub-1", resource: "sites/s/lists/todos", clientState: "right" }, { expectedClientState: "right" });
+    vi.mocked(runScopedListDelta).mockRejectedValueOnce(new Error("scoped failure"));
+    vi.mocked(runSweep).mockRejectedValueOnce(new Error("backup failure"));
+    const result = await processNotificationQueue();
+    expect(result).toEqual({ claimed: 1, processed: 0, failed: 1 });
+    expect(runSweep).toHaveBeenCalledWith(SYNC_INBOUND_SERVICE_PRINCIPAL_ID);
+    expect(store.queue[0]).toMatchObject({ status: "failed", last_error: "backup failure" });
   });
 });

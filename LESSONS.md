@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-14 (ET) — Vendor-spend writes took the author from the body and checked no capability
+
+- **What happened:** `PATCH /api/vendor-spend/budgets` and `POST /api/vendor-spend/snapshots` (TASK-290) read `updatedBy` / `enteredBy` from the request body and relied on the middleware admission gate alone. Any signed-in person could save a budget or cost entry under someone else's name, and a member under `enforce` got 200 (TASK-2928).
+- **Root cause:** The routes accepted the client's `viewerId()` as a schema field instead of using `requireSessionActor`, the session gate that task, project and bucket writes already used, and no capability covered vendor spend.
+- **Rule going forward:** A mutating route never takes an author or actor from the body. Gate it with `requireSessionActor(<capability>)` and store `authorized.auditLabel` as the author. Test it with a spoofed author in the body and with a member under `enforce`.
+
 ### 2026-10-11 (ET) — Workstation loader warned and continued with a partial environment
 
 - **What happened:** The generated `~/.secrets-env.staging.ps1` wrapped the Graph fetch in try/catch that only called `Write-Warning`, then exported `AZURE_*` from the empty `MICROSOFT_GRAPH_*` values. `run-plx-mc-mcp.ps1` also silently skipped a missing loader.

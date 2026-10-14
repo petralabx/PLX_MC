@@ -36,6 +36,7 @@ const ADMIN_CAPABILITIES: readonly Capability[] = [
   "routing.policy.write",
   "sync.mutate",
   "approval.decide",
+  "vendor_spend.write",
 ];
 
 const OWNER_CAPABILITIES: readonly Capability[] = [

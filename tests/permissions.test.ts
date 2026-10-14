@@ -67,6 +67,7 @@ describe("role grant matrix", () => {
         "routing.maintain",
         "sync.mutate",
         "sync.service.write",
+        "vendor_spend.write",
       ],
     },
     {
@@ -89,6 +90,7 @@ describe("role grant matrix", () => {
         "repo.approve",
         "routing.policy.write",
         "sync.mutate",
+        "vendor_spend.write",
       ],
       denied: ["permissions.manage", "routing.propose", "routing.maintain", "sync.service.write"],
     },
@@ -113,6 +115,7 @@ describe("role grant matrix", () => {
         "routing.policy.write",
         "permissions.manage",
         "sync.mutate",
+        "vendor_spend.write",
       ],
       denied: ["routing.propose", "routing.maintain", "sync.service.write"],
     },
@@ -244,6 +247,7 @@ describe("service-principal separation", () => {
     );
     expect(mcpCaps).not.toContain("repo.approve");
     expect(mcpCaps).not.toContain("permissions.manage");
+    expect(mcpCaps).not.toContain("vendor_spend.write");
     expect(mcpCaps).toContain("project.update");
 
     const actor = service("sp_mcp_cursor");

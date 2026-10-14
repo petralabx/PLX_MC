@@ -57,6 +57,7 @@ vi.mock("@/lib/sync/repo", () => ({
   getEntity: vi.fn(async (_kind: string, id: string) => ({ data: { id, bucket: "BKT-INFRA" } })),
   getBuckets: vi.fn(async () => [{ id: "BKT-INFRA", name: "Infra" }]),
   getProjects: vi.fn(async () => []),
+  getRegisterInboundCompletions: vi.fn(async () => ({})),
 }));
 
 vi.mock("@/lib/mcp/sync-meta", () => ({
@@ -80,6 +81,15 @@ vi.mock("@/lib/compliance/repo", () => ({
     return "1";
   }),
   listAgentReports: vi.fn(async () => []),
+  eventsForTask: vi.fn(async () => []),
+  listDispatches: vi.fn(async () => []),
+}));
+
+// mc_self_check probes Microsoft Graph for real (8 s timeout) when the shell
+// holds the Graph secrets.
+vi.mock("@/lib/sync/graph", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sync/graph")>()),
+  probeGraphTokenOk: vi.fn(async () => false),
 }));
 
 vi.mock("@/lib/mcp/audit", () => ({
@@ -212,6 +222,8 @@ beforeEach(() => {
   vi.stubEnv("PLX_MC_MCP_AGENT_KEYS", JSON.stringify(KEYS));
   vi.stubEnv("PLX_MC_ALLOWED_USERS", "vince@petrasoap.com");
   vi.stubEnv("PLX_MC_ROUTING_SUGGEST_ENABLED", "1");
+  // mc_search_knowledge and mc_self_check call VMC whenever the shell has its key.
+  vi.stubEnv("VMC_API_KEY", "");
   h.tasks.length = 0;
   h.writes.length = 0;
 });

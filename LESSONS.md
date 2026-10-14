@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-14 (ET) — TASK-2946: a unit test called VMC for real because the shell held VMC_API_KEY
+
+- **What happened:** `tests/mcp-portal-tool-allowlist.test.ts` > "calls its allowlisted read tools" timed out at 5000 ms in 2 of about 5 full local runs. Two missing `vi.mock` exports printed `[mcp] unhandled tool error` and looked like the cause, but those calls failed in about 10 ms. Timing each tool call showed the time was in `mc_search_knowledge`: 0.6 s alone, 4.6 s in a loaded run.
+- **Root cause:** `searchBrainAsk` makes a live VMC request whenever `VMC_API_KEY` is set, and workstation shells set it for session capture. Adding only the missing `getRegisterInboundCompletions` export made the test slower: `mc_self_check` then reached its live VMC probe and, with the Graph secrets loaded, a live Graph probe.
+- **Rule going forward:** Time each step of a slow test before fixing it; stderr noise is not proof of the cause. A test that drives MCP tools pins every credential its path reads from the environment (`vi.stubEnv("VMC_API_KEY", "")`) or mocks the network call (`probeGraphTokenOk`), so it behaves the same in a hydrated shell as in CI.
+
 ### 2026-10-14 (ET) — Vendor-spend writes took the author from the body and checked no capability
 
 - **What happened:** `PATCH /api/vendor-spend/budgets` and `POST /api/vendor-spend/snapshots` (TASK-290) read `updatedBy` / `enteredBy` from the request body and relied on the middleware admission gate alone. Any signed-in person could save a budget or cost entry under someone else's name, and a member under `enforce` got 200 (TASK-2928).

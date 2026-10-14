@@ -1004,4 +1004,5 @@
   Public) with no second source, so a quota hit on the runner's IP failed the job.
 - **Rule going forward:** Harnesses get the image through `ensurePostgresImage()`
   (`scripts/lib/postgres-image.mjs`): ECR first, then the Docker Hub original (a cached copy before a
-  pull), tagged as `POSTGRES_IMAGE`. A new harness image gets a second source the same way.
+  pull), tagged as `POSTGRES_IMAGE`; if both pulls are refused it waits up to 60 s for a parallel
+  suite's copy. A new harness image gets a second source the same way.

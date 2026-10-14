@@ -88,6 +88,33 @@ export type {
   TruckloadCustomerRow,
 } from "./rules";
 
+export {
+  AMBER_FILL,
+  AMBER_FONT,
+  COUNT_FORMAT,
+  DOLLAR_FORMAT,
+  ENTRIES_SHEET,
+  ENTRY_COLUMNS,
+  ENTRY_CURRENCIES,
+  ENTRY_FIRST_ROW,
+  ENTRY_HEADER_ROW,
+  ENTRY_LAST_FORMATTED_ROW,
+  ENTRY_TYPES,
+  FONT_NAME,
+  FONT_SIZE,
+  HEADER_FILL,
+  IGNORED_ON_IMPORT,
+  MAX_IMPORT_ROWS,
+  TITLE_SIZE,
+  WORKBOOK_SHEETS,
+  workbookFileName,
+} from "./excel/layout";
+export type { EntryColumnKey, WorkbookSheet } from "./excel/layout";
+
+// Workbook export (TASK-2898): its exports go below this line.
+
+// Manual entries and import (TASK-2897): their exports go below this line.
+
 export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView } from "./view";
 export type { DatasetQuery, GoalsPage, GoalsView, GoalsViewInput, GoalsViewState, GoalsViewer } from "./view";
 

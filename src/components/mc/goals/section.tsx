@@ -19,6 +19,7 @@ export function Section({
   onRetry,
   size = "md",
   bare = false,
+  resetKey,
   children,
 }: {
   id: string;
@@ -32,6 +33,8 @@ export function Section({
   size?: "sm" | "md" | "lg";
   /** No card around it (the goal cards and the rules carry their own frames). */
   bare?: boolean;
+  /** Changes when a new page model arrives: a section that failed to render tries again. */
+  resetKey?: unknown;
   children?: ReactNode;
 }) {
   const headingId = `goals-${id}-h`;
@@ -47,7 +50,11 @@ export function Section({
       {note && state === "ready" ? <p className="gp-note">{note}</p> : null}
       {state === "loading" ? <Skeleton /> : null}
       {state === "failed" ? <Failed onRetry={onRetry} /> : null}
-      {state === "ready" ? <SectionBoundary onRetry={onRetry}>{children}</SectionBoundary> : null}
+      {state === "ready" ? (
+        <SectionBoundary onRetry={onRetry} resetKey={resetKey}>
+          {children}
+        </SectionBoundary>
+      ) : null}
       {source && state === "ready" ? <p className="gp-src">{source}</p> : null}
     </section>
   );
@@ -74,12 +81,20 @@ export function Failed({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-/** A section that throws while rendering shows "Failed to load" in place; the rest of the page stays. */
-class SectionBoundary extends Component<{ onRetry: () => void; children?: ReactNode }, { failed: boolean }> {
+/**
+ * A section that throws while rendering shows "Failed to load" in place; the
+ * rest of the page stays. It tries again on its own Retry, or when a new page
+ * model arrives (resetKey), whoever loaded it.
+ */
+class SectionBoundary extends Component<{ onRetry: () => void; resetKey?: unknown; children?: ReactNode }, { failed: boolean }> {
   state = { failed: false };
 
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+
+  componentDidUpdate(prev: { resetKey?: unknown }) {
+    if (this.state.failed && prev.resetKey !== this.props.resetKey) this.setState({ failed: false });
   }
 
   componentDidCatch(error: unknown) {

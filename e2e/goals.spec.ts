@@ -176,6 +176,57 @@ test.describe("goals & production", () => {
     await expect(page.getByTestId("goals-truckloads")).not.toContainText("Failed to load.");
   });
 
+  test("a section that failed to render recovers when a refresh brings good data", async ({ page }) => {
+    const broken = goalsPage();
+    (broken.model as unknown as { daily: null }).daily = null;
+    let good = false;
+    await page.route("**/api/reporting/goals", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: good ? goalsPage() : broken }) })
+    );
+    await page.route("**/api/reporting/goals/refresh", (route) =>
+      route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { run: runAt({ id: 42, trigger: "user", status: "running", step: "claimed", finishedAt: null }) } }),
+      })
+    );
+    await page.route("**/api/reporting/goals/runs/42", (route) => {
+      good = true;
+      const run = runAt({ id: 42, status: "succeeded", startedAt: "2026-10-14T13:41:50.000Z", finishedAt: "2026-10-14T13:42:20.000Z" });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: run }) });
+    });
+    await gotoGoals(page);
+    await expect(page.getByTestId("goals-daily")).toContainText("Failed to load.");
+    await page.getByRole("button", { name: "Refresh" }).click();
+    await expect(page.locator("#goals-refresh-status")).toContainText("Refreshed");
+    await expect(page.getByTestId("goals-daily").locator(".colchart")).toHaveCount(2);
+    await expect(page.getByTestId("goals-daily")).not.toContainText("Failed to load.");
+  });
+
+  test("keeps Refresh off for 5 minutes after the run it just followed", async ({ page }) => {
+    await mockGoalsApi(page);
+    const startedAt = new Date().toISOString();
+    await page.route("**/api/reporting/goals/refresh", (route) =>
+      route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { run: runAt({ id: 42, trigger: "user", status: "running", step: "claimed", startedAt, finishedAt: null }) } }),
+      })
+    );
+    await page.route("**/api/reporting/goals/runs/42", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: runAt({ id: 42, status: "succeeded", startedAt, finishedAt: new Date().toISOString() }) }),
+      })
+    );
+    await gotoGoals(page);
+    await page.getByRole("button", { name: "Refresh" }).click();
+    await expect(page.locator("#goals-refresh-status")).toContainText("Refreshed");
+    // The reloaded page model still names the 06:00 run; the run just followed keeps the limit on.
+    await expect(page.getByRole("button", { name: "Refresh" })).toBeDisabled();
+  });
+
   test("says when the data is behind, and when the last refresh failed", async ({ page }) => {
     const view = goalsPage({
       latestAttempt: runAt({ id: 43, status: "failed", startedAt: "2026-10-14T13:10:00.000Z", finishedAt: "2026-10-14T13:12:00.000Z", error: "57014: canceling statement due to statement timeout" }),

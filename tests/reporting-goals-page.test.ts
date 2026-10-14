@@ -17,6 +17,7 @@ import {
   dollars,
   filterBatches,
   isReady,
+  newestRun,
   nextRefreshAt,
   nextSort,
   rate,
@@ -61,6 +62,18 @@ describe("wording helpers", () => {
     expect(sourceText(RUN, ["daily"])).toBe("From query daily · run #41, Oct 14, 6:00 AM");
     expect(stepText("reading-sources")).toBe("Reading FileMaker and Sage");
     expect(stepText(null)).toBe("Refreshing");
+  });
+
+  it("counts the run the page just followed toward the 5-minute limit", () => {
+    // Bugbot on #321: right after a run finishes, the reloaded page model may not
+    // carry it yet (or the reload failed); the run the page followed still counts.
+    const earlier = { ...RUN, id: 40, startedAt: "2026-10-14T10:00:02.000Z" };
+    const justRan = { ...RUN, id: 42, startedAt: "2026-10-14T13:41:50.000Z" };
+    expect(newestRun(earlier, null, justRan)).toBe(justRan);
+    expect(newestRun(null, undefined, null)).toBeNull();
+    expect(nextRefreshAt(newestRun(earlier, null, justRan), Date.parse("2026-10-14T13:42:30.000Z"))).toBe(
+      Date.parse(justRan.startedAt) + 300_000
+    );
   });
 
   it("allows a user refresh 5 minutes after the newest run started", () => {
@@ -288,6 +301,17 @@ describe("charts", () => {
     expect(markup.match(/<polyline/g)).toHaveLength(4);
     // Last month's $1,007,365 tops the scale at $1.2M, with the $1M target on a tick.
     expect(text(markup.split('<div class="colchart-plot"')[0])).toBe(" $0 $200K $400K $600K $800K $1M $1.2M ");
+  });
+
+  it("draws a line that has only one point so far (the 1st of the month)", () => {
+    // Bugbot on #321: an SVG polyline with one point paints nothing.
+    const firstDay = goalsPage();
+    if (!isReady(firstDay)) throw new Error("ready");
+    firstDay.model.daily = firstDay.model.daily.map((d, i) => ({ ...d, isToday: i === 0, isFuture: i > 0 }));
+    const markup = html(DailyRevenueChart, { page: firstDay });
+    const points = [...markup.matchAll(/<polyline class="line" points="([^"]+)" stroke="var\(--p-(accent|warn)\)"/g)].map((m) => m[1].split(" ").length);
+    // Sage and Sage + by hand each draw a short flat segment on day 1.
+    expect(points).toEqual([2, 2]);
   });
 
   it("charts three months by size against this month's pace, with the numbers in a table", () => {

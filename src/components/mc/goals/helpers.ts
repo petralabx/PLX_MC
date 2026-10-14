@@ -96,6 +96,13 @@ export function sourceText(run: Pick<RefreshRun, "id" | "finishedAt" | "startedA
   return `From ${names} · run #${run.id}, ${when(run.finishedAt ?? run.startedAt)}`;
 }
 
+/** The most recently started of the runs the page knows about (any may be missing). */
+export function newestRun<R extends Pick<RefreshRun, "startedAt">>(...runs: (R | null | undefined)[]): R | null {
+  let newest: R | null = null;
+  for (const run of runs) if (run && (!newest || Date.parse(run.startedAt) > Date.parse(newest.startedAt))) newest = run;
+  return newest;
+}
+
 /** When the next user refresh is allowed (5 minutes after the newest run started), or null if now. */
 export function nextRefreshAt(newest: Pick<RefreshRun, "startedAt"> | null, nowMs: number): number | null {
   if (!newest) return null;

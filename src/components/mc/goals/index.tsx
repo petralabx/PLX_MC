@@ -20,6 +20,7 @@ import {
   day,
   dollars,
   isReady,
+  newestRun,
   nextRefreshAt,
   refreshedText,
   sourceText,
@@ -73,6 +74,9 @@ export function GoalsView() {
   const [status, setStatus] = useState<SectionState>("loading");
   const [loadError, setLoadError] = useState<{ code: string; message: string } | null>(null);
   const [refresh, setRefresh] = useState<Refresh>({ kind: "idle" });
+  // The run this page started or attached to: it counts toward the 5-minute
+  // limit even before the reloaded page model carries it (or if that reload fails).
+  const [followed, setFollowed] = useState<RefreshRun | null>(null);
   const watcher = useRef<{ stop: () => void } | null>(null);
   const now = useNow(15_000);
 
@@ -99,10 +103,12 @@ export function GoalsView() {
     (run: RefreshRun) => {
       watcher.current?.stop();
       setRefresh({ kind: "running", run });
+      setFollowed(run);
       watcher.current = watchRun(run.id, {
         load: (id) => api<RefreshRun>(`/reporting/goals/runs/${id}`),
         onStep: (next) => setRefresh({ kind: "running", run: next }),
         onDone: (done) => {
+          setFollowed(done);
           setRefresh(done.status === "succeeded" ? { kind: "done", run: done } : { kind: "failed", message: done.error ?? "no reason recorded." });
           void load();
         },
@@ -143,7 +149,7 @@ export function GoalsView() {
 
   const ready = isReady(page) ? page : null;
   const busy = refresh.kind === "starting" || refresh.kind === "running";
-  const newest = page?.latestAttempt ?? page?.run ?? null;
+  const newest = newestRun(page?.latestAttempt, page?.run, followed);
   const waitUntil = busy ? null : nextRefreshAt(newest, now);
   const editor = page?.viewer.editor ?? false;
   const line = refreshLine(refresh, ready);
@@ -274,7 +280,7 @@ function Body({ page, status, onRetry }: { page: ReadyPage | null; status: Secti
         </p>
       ) : null}
 
-      <Section id="goals" title="This month’s goals" state={state} onRetry={onRetry} size="lg" bare>
+      <Section id="goals" title="This month’s goals" state={state} onRetry={onRetry} resetKey={page} size="lg" bare>
         {ready((p) => (
           <GoalCards page={p} />
         ))}
@@ -286,7 +292,7 @@ function Body({ page, status, onRetry }: { page: ReadyPage | null; status: Secti
         note="Weekends and holidays are shaded. Point at or tap a day for its numbers, or open the table under the charts."
         source={src("daily")}
         state={state}
-        onRetry={onRetry}
+        onRetry={onRetry} resetKey={page}
         size="lg"
       >
         {ready((p) => (
@@ -306,7 +312,7 @@ function Body({ page, status, onRetry }: { page: ReadyPage | null; status: Secti
         ))}
       </Section>
 
-      <Section id="truckloads" title="Truckloads by customer" source={src("truckloads")} state={state} onRetry={onRetry}>
+      <Section id="truckloads" title="Truckloads by customer" source={src("truckloads")} state={state} onRetry={onRetry} resetKey={page}>
         {ready((p) => (
           <TruckloadTable page={p} />
         ))}
@@ -318,7 +324,7 @@ function Body({ page, status, onRetry }: { page: ReadyPage | null; status: Secti
         note="Everything your team entered by hand, with its status. Entries that no longer count are dimmed."
         source={src("entries")}
         state={state}
-        onRetry={onRetry}
+        onRetry={onRetry} resetKey={page}
       >
         {ready((p) => (
           <EntriesTable page={p} />
@@ -331,7 +337,7 @@ function Body({ page, status, onRetry }: { page: ReadyPage | null; status: Secti
         note="Completed this month (FileMaker), with the pace per 20 working days. The chart compares the last three full months with this month’s pace."
         source={src("sizes")}
         state={state}
-        onRetry={onRetry}
+        onRetry={onRetry} resetKey={page}
         size="lg"
       >
         {ready((p) => (
@@ -342,7 +348,7 @@ function Body({ page, status, onRetry }: { page: ReadyPage | null; status: Secti
         ))}
       </Section>
 
-      <Section id="scheduled" title="Scheduled from today by size" source={src("batches")} state={state} onRetry={onRetry} size="sm">
+      <Section id="scheduled" title="Scheduled from today by size" source={src("batches")} state={state} onRetry={onRetry} resetKey={page} size="sm">
         {ready((p) => (
           <ScheduledTiles tiles={p.model.sizes.scheduledFromToday} openPastDate={p.model.sizes.openPastDate} />
         ))}
@@ -354,7 +360,7 @@ function Body({ page, status, onRetry }: { page: ReadyPage | null; status: Secti
         note="Every batch this month. Select a column heading to sort."
         source={src("batches")}
         state={state}
-        onRetry={onRetry}
+        onRetry={onRetry} resetKey={page}
         size="lg"
       >
         {ready((p) => (
@@ -362,7 +368,7 @@ function Body({ page, status, onRetry }: { page: ReadyPage | null; status: Secti
         ))}
       </Section>
 
-      <Section id="rules" title="How these numbers are worked out" state={state} onRetry={onRetry} size="sm" bare>
+      <Section id="rules" title="How these numbers are worked out" state={state} onRetry={onRetry} resetKey={page} size="sm" bare>
         {ready((p) => (
           <div className="gp-rules">
             <RulesText page={p} />

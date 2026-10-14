@@ -251,17 +251,26 @@ export interface LineSeries {
 function linePoints(series: LineSeries, yMax: number): string[] {
   const runs: string[] = [];
   let current: string[] = [];
+  const close = () => {
+    // A polyline with one point paints nothing (e.g. Sage on the 1st of the
+    // month): draw it as a short flat segment across its column instead.
+    if (current.length === 1) {
+      const [x, yy] = current[0].split(",").map(Number);
+      current = [`${x - 0.3},${yy}`, `${x + 0.3},${yy}`];
+    }
+    if (current.length) runs.push(current.join(" "));
+    current = [];
+  };
   series.values.forEach((value, i) => {
     if (value === null) {
-      if (current.length) runs.push(current.join(" "));
-      current = [];
+      close();
       return;
     }
     const yy = y(value, yMax);
     if (series.step) current.push(`${i},${yy}`, `${i + 1},${yy}`);
     else current.push(`${i + 0.5},${yy}`);
   });
-  if (current.length) runs.push(current.join(" "));
+  close();
   return runs;
 }
 

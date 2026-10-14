@@ -33,6 +33,7 @@ export const SCREEN_VALUES = [
   "routing-inbox",
   "approvals",
   "activity",
+  "goals",
   "help",
 ] as const;
 

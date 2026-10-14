@@ -412,6 +412,7 @@ describe("page view", () => {
     expect(money(view.model!.revenue.inSystemCents)).toBe("367014.16");
     expect(view.fx).toEqual({ rate: "1.421900", date: "2026-10-13", source: "boc", stale: false });
     expect(view.sections.revenue).toEqual(["revenue-by-currency"]);
+    expect(view.settings).toEqual(SETTINGS);
   });
 
   it("flags a stored (fallback) rate as stale", () => {
@@ -421,7 +422,7 @@ describe("page view", () => {
   });
 
   it("says whether there is no data yet or no reporting database", () => {
-    expect(buildGoalsView({ ...base, run: null, latestRun: null, snapshot: null }).state).toBe("no_data");
+    expect(buildGoalsView({ ...base, run: null, latestRun: null, snapshot: null })).toMatchObject({ state: "no_data", settings: null });
     expect(buildGoalsView({ ...base, configured: false, run: null, latestRun: null, snapshot: null }).state).toBe("not_configured");
   });
 });

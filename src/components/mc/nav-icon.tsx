@@ -27,6 +27,7 @@ import {
   Route,
   SquareCheck,
   SquareKanban,
+  Target,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -57,6 +58,7 @@ const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   Route,
   SquareCheck,
   SquareKanban,
+  Target,
   Wrench,
 };
 

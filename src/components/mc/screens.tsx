@@ -8,6 +8,7 @@ import { BucketDetail } from "./bucket-detail";
 import { DashboardView } from "./dashboard";
 import { ProjectDetail } from "./project-detail";
 import { FilesView } from "./files-view";
+import { GoalsView } from "./goals";
 import { ArchitectureView } from "./architecture";
 import { BrainAskView } from "./brain-ask";
 import { GovernanceSopsView } from "./governance-sops";
@@ -53,5 +54,6 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   "routing-inbox": RoutingInboxView,
   approvals: ApprovalsInboxView,
   activity: ActivityView,
+  goals: GoalsView,
   help: HelpView,
 };

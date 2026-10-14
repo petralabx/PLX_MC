@@ -1,0 +1,814 @@
+/* Goals & Production screen (TASK-2896) — imported into the mc.screens layer
+   (ADR-005): phone-first, wider tiers by @container main, hover under
+   (hover: hover), --p-* tokens only. Amber is the theme's warning colour and
+   marks only what was entered by hand (fills --p-warn, text --p-warn-text).
+   The KPI/chart-card look comes from the Insights lane through the .insights
+   wrapper; this file adds the goal cards, the column charts
+   (charts/column-chart.tsx, first used here), tables, tiles, skeletons and the
+   failed state. Skeletons shimmer only under prefers-reduced-motion:
+   no-preference. */
+
+.mc .goals {
+  padding: 18px var(--p-gutter) 80px;
+  max-width: calc(var(--p-content-max) + 2 * var(--p-gutter));
+}
+
+.mc .goals h2.chartcard-title {
+  margin: 0 0 6px;
+  font-weight: 400;
+}
+
+.mc .goals :is(.gp-note, .gp-takeaway, .gp-legend, .gp-status, .gp-notice, .gp-line, .gp-count, .gp-empty) {
+  max-width: var(--p-read-max);
+  font-size: var(--p-text-small);
+  line-height: 1.5;
+}
+
+.mc .goals .gp-note {
+  margin: 0 0 12px;
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-takeaway {
+  margin: 0;
+  font-size: var(--p-text-body);
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--p-ink-2);
+}
+
+.mc .goals .gp-legend .sw {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--p-warn);
+}
+
+.mc .goals .gp-status {
+  min-height: 1.5em;
+  margin: -8px 0 0;
+  color: var(--p-ink-2);
+}
+
+.mc .goals .gp-notice {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--p-hot);
+  background: var(--p-paper-2);
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-banner {
+  padding: 10px 14px;
+  border-left: 3px solid var(--p-hot);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper-2);
+  font-size: var(--p-text-small);
+  line-height: 1.5;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-amber {
+  color: var(--p-warn-text);
+}
+
+.mc .goals .gp-empty {
+  margin: 0;
+  padding: 12px 0;
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-empty-state {
+  min-height: 16rem;
+}
+
+/* ─── Sections, skeletons and the failed state ─────────────────────────────── */
+.mc .goals .gp-sec {
+  min-width: 0;
+}
+
+.mc .goals .gp-bare {
+  padding: 0;
+}
+
+.mc .goals .gp-sec:has(> .gp-skel, > .gp-failed).gp-sm {
+  min-height: 9rem;
+}
+.mc .goals .gp-sec:has(> .gp-skel, > .gp-failed).gp-md {
+  min-height: 14rem;
+}
+.mc .goals .gp-sec:has(> .gp-skel, > .gp-failed).gp-lg {
+  min-height: 22rem;
+}
+
+.mc .goals .gp-skel {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.mc .goals .gp-skel span {
+  display: block;
+  height: 14px;
+  border-radius: var(--p-radius-sm);
+  background: var(--p-grid-2);
+}
+
+.mc .goals .gp-skel span:nth-child(3n + 1) {
+  width: 92%;
+}
+.mc .goals .gp-skel span:nth-child(3n + 2) {
+  width: 74%;
+}
+.mc .goals .gp-skel span:nth-child(3n) {
+  width: 58%;
+}
+
+.mc .goals .gp-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 4px;
+  font-size: var(--p-text-small);
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-failed p {
+  margin: 0;
+}
+
+.mc .goals .gp-src {
+  margin: 12px 0 0;
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  letter-spacing: var(--p-track-data);
+  color: var(--p-muted);
+}
+
+/* ─── Goal cards ───────────────────────────────────────────────────────────── */
+.mc .goals .gp-cards {
+  display: grid;
+  gap: 12px;
+}
+
+@container main (min-width: 52rem) {
+  .mc .goals .gp-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.mc .goals .gp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius);
+  background: var(--p-card);
+}
+
+.mc .goals .gp-card-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mc .goals .gp-card h3 {
+  margin: 0;
+  font-size: var(--p-text-body);
+  font-weight: 600;
+  color: var(--p-ink);
+}
+
+.mc .goals .pv-chip.hot {
+  color: var(--p-hot-text);
+  background: color-mix(in srgb, var(--p-hot) 12%, transparent);
+}
+
+.mc .goals .gp-def {
+  margin: 0;
+  font-size: var(--p-text-small);
+  line-height: 1.45;
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-big {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 2px 0 0;
+}
+
+.mc .goals .gp-big .v {
+  font-family: var(--mono);
+  font-size: 30px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-big .of {
+  font-size: var(--p-text-small);
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-split {
+  margin: 0;
+  font-size: var(--p-text-small);
+  color: var(--p-ink-2);
+}
+
+.mc .goals .gp-bar {
+  position: relative;
+  display: flex;
+  height: 8px;
+  margin: 6px 0 4px;
+  border-radius: 2px;
+  background: var(--p-grid-2);
+}
+
+.mc .goals .gp-bar > span:not(.tick) {
+  display: block;
+  height: 100%;
+}
+
+.mc .goals .gp-bar > span:first-child {
+  border-radius: 2px 0 0 2px;
+}
+
+.mc .goals .gp-bar .sys {
+  background: var(--p-accent);
+}
+.mc .goals .gp-bar .hand {
+  background: var(--p-warn);
+}
+.mc .goals .gp-bar .sched {
+  background: var(--p-accent-soft);
+}
+
+.mc .goals .gp-bar .tick {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 16px;
+  margin-left: -1px;
+  background: var(--p-ink);
+}
+
+.mc .goals .gp-details {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--p-text-small);
+  line-height: 1.45;
+  color: var(--p-ink-2);
+}
+
+.mc .goals .gp-details b {
+  font-weight: 600;
+  color: var(--p-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Charts ───────────────────────────────────────────────────────────────── */
+.mc .goals .gp-charts {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+@container main (min-width: 64rem) {
+  .mc .goals .gp-charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.mc .goals .gp-chart {
+  min-width: 0;
+  margin: 0;
+}
+
+.mc .goals .gp-chart figcaption {
+  margin: 0 0 10px;
+  font-size: var(--p-text-small);
+  font-weight: 600;
+  color: var(--p-ink);
+}
+
+/* Column charts (charts/column-chart.tsx). The SVG stretches to the plot box;
+   every label is HTML placed in percentages so it stays legible. */
+.mc .colchart {
+  min-width: 0;
+}
+
+.mc .colchart-body {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  grid-template-rows: 180px auto;
+  /* Room above the plot for the marker label ("Today"). */
+  padding-top: 16px;
+}
+
+.mc .colchart-y {
+  position: relative;
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.mc .colchart-y span {
+  position: absolute;
+  right: 6px;
+  transform: translateY(50%);
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+
+.mc .colchart-plot {
+  position: relative;
+  grid-row: 1;
+  grid-column: 2;
+  min-width: 0;
+  border-bottom: 1px solid var(--p-grid);
+}
+
+.mc .colchart-plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.mc .colchart-plot .shade {
+  fill: var(--p-grid-2);
+}
+
+.mc .colchart-plot .grid {
+  stroke: var(--p-grid-2);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.mc .colchart-plot .marker {
+  stroke: var(--p-ink-2);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.mc .colchart-plot .line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.mc .colchart-plot .dashed {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.mc .colchart-plot .faded {
+  opacity: 0.55;
+}
+
+.mc .colchart-plot .hit {
+  fill: transparent;
+}
+
+.mc .colchart-marker {
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, -110%);
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: var(--p-track-data);
+  color: var(--p-ink-2);
+  white-space: nowrap;
+}
+
+.mc .colchart-tip {
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-card);
+  box-shadow: var(--p-shadow-md);
+  font-size: var(--p-text-small);
+  line-height: 1.4;
+  color: var(--p-ink);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(10px);
+}
+
+.mc .colchart-tip.left {
+  transform: translateX(calc(-100% - 10px));
+}
+
+.mc .colchart-tip .gp-amber {
+  color: var(--p-warn-text);
+}
+
+.mc .colchart-x {
+  position: relative;
+  grid-row: 2;
+  grid-column: 2;
+  height: 1.4rem;
+}
+
+.mc .colchart-x span {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+
+.mc .colchart-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--p-text-small);
+  color: var(--p-ink-2);
+}
+
+.mc .colchart-keys li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mc .colchart-keys .sw {
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.mc .colchart-keys .sw.bar {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.mc .colchart-keys .sw.line,
+.mc .colchart-keys .sw.dashed {
+  width: 16px;
+  height: 0;
+  border-top: 2px solid currentColor;
+}
+
+.mc .colchart-keys .sw.dashed {
+  border-top-style: dashed;
+}
+
+/* ─── Tables ───────────────────────────────────────────────────────────────── */
+/* position: relative makes the wrapper the containing block of visually hidden
+   (absolute) text in its cells, so the wrapper clips it instead of the page. */
+.mc .goals .gp-table-wrap {
+  position: relative;
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+}
+
+.mc .goals .gp-table-wrap.tall {
+  max-height: 32rem;
+}
+
+.mc .goals .gp-table-wrap:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+
+.mc .goals .gp-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--p-text-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.mc .goals .gp-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--p-grid);
+  background: var(--p-card);
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+
+.mc .goals .gp-table thead tr + tr th {
+  top: 2.1rem;
+}
+
+.mc .goals .gp-table thead th.grp {
+  text-align: center;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-table :is(td, tbody th, tfoot th) {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--p-grid);
+  text-align: left;
+  font-weight: 400;
+  vertical-align: top;
+  white-space: nowrap;
+  color: var(--p-ink);
+}
+
+/* Only long names wrap (products, customers); everything else stays on one line. */
+.mc .goals .gp-table .wrap {
+  min-width: 11rem;
+  white-space: normal;
+}
+
+.mc .goals .gp-table tbody tr:last-child :is(td, th) {
+  border-bottom: 0;
+}
+
+.mc .goals .gp-table tfoot :is(td, th) {
+  border-top: 1px solid var(--p-grid);
+  border-bottom: 0;
+  font-weight: 600;
+}
+
+.mc .goals .gp-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mc .goals .gp-table .code {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  white-space: nowrap;
+}
+
+.mc .goals .gp-table th .code {
+  margin-left: 4px;
+  color: var(--p-muted);
+}
+
+/* Entered by hand: amber text on a light amber tint; whole rows get a left rule. */
+.mc .goals .gp-table :is(td, th).hand,
+.mc .goals .gp-table tr.hand :is(td, th) {
+  color: var(--p-warn-text);
+  background: color-mix(in srgb, var(--p-warn) 10%, var(--p-card));
+}
+
+.mc .goals .gp-table thead th.hand {
+  color: var(--p-warn-text);
+}
+
+.mc .goals .gp-table tr.hand > :first-child {
+  box-shadow: inset 3px 0 0 var(--p-warn);
+}
+
+/* Entries that no longer count: dimmed to muted text, never hidden. */
+.mc .goals .gp-table tr.hand.retired :is(td, th) {
+  color: var(--p-muted);
+  background: var(--p-card);
+}
+
+.mc .goals .gp-table tr.hand.retired > :first-child {
+  box-shadow: inset 3px 0 0 var(--p-grid);
+}
+
+.mc .goals .gp-table tr.today :is(td, th) {
+  font-weight: 600;
+}
+
+.mc .goals .gp-table.sortable thead th {
+  padding: 0;
+}
+
+.mc .goals .gp-table.sortable thead th button {
+  width: 100%;
+  min-height: var(--p-touch);
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.mc .goals .gp-table.sortable thead th[aria-sort] button {
+  color: var(--p-ink);
+}
+
+/* ─── Batch list tools ─────────────────────────────────────────────────────── */
+.mc .goals .gp-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.mc .goals .gp-search {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 26rem;
+  min-height: var(--p-touch);
+  padding: 6px 10px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper);
+  color: var(--p-ink);
+  font: inherit;
+  font-size: var(--p-text-small);
+}
+
+.mc .goals .gp-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mc .goals .gp-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--p-touch);
+  padding: 4px 10px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: transparent;
+  color: var(--p-ink);
+  font: inherit;
+  font-size: var(--p-text-small);
+  cursor: pointer;
+}
+
+.mc .goals .gp-seg button[aria-pressed="true"] {
+  border-color: var(--p-accent);
+  background: var(--p-accent);
+  color: var(--p-paper);
+}
+
+.mc .goals .gp-seg .ct {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+}
+
+.mc .goals .gp-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--p-touch);
+  font-size: var(--p-text-small);
+  color: var(--p-ink);
+  cursor: pointer;
+}
+
+.mc .goals .gp-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--p-accent);
+}
+
+.mc .goals .gp-count {
+  margin: 0 0 8px;
+  color: var(--p-muted);
+}
+
+/* ─── Tiles ───────────────────────────────────────────────────────────────── */
+.mc .goals .gp-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.mc .goals .gp-tiles li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper);
+}
+
+.mc .goals .gp-tiles li.total {
+  border-color: var(--p-ink-2);
+}
+
+.mc .goals .gp-tiles .k {
+  font-family: var(--mono);
+  font-size: var(--p-text-kicker);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-tiles .v {
+  font-family: var(--mono);
+  font-size: 22px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-tiles .s {
+  font-size: var(--p-text-small);
+  color: var(--p-ink-2);
+}
+
+.mc .goals .gp-line {
+  margin: 0;
+  color: var(--p-ink-2);
+}
+
+/* ─── Data tables under the charts (their text alternative) ───────────────── */
+.mc .goals .gp-data {
+  margin-top: 14px;
+}
+
+.mc .goals .gp-data summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--p-touch);
+  font-size: var(--p-text-small);
+  color: var(--p-accent);
+  cursor: pointer;
+}
+
+.mc .goals .gp-data[open] summary {
+  margin-bottom: 8px;
+}
+
+/* ─── The rules in plain words ─────────────────────────────────────────────── */
+.mc .goals .gp-rules {
+  max-width: var(--p-read-max);
+  font-size: var(--p-text-small);
+  line-height: 1.5;
+  color: var(--p-ink-2);
+}
+
+.mc .goals .gp-rules ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.mc .goals .gp-rules b {
+  color: var(--p-ink);
+}
+
+/* ─── Motion ──────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .mc .goals .gp-skel span {
+    animation: gp-pulse 1.4s var(--p-ease) infinite alternate;
+  }
+
+  @keyframes gp-pulse {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.45;
+    }
+  }
+}

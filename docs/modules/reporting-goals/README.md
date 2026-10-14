@@ -2,8 +2,8 @@
 
 ## What
 
-The **Goals & Production** report (sidebar: Reporting → Goals & production;
-the page arrives in a follow-up PR) and its domain module. It tracks three
+The **Goals & Production** report (sidebar: Reporting → Goals & production,
+`/?screen=goals`; on phones it is in the More sheet) and its domain module. It tracks three
 monthly goals for Petra Lab-X against the business's definitions:
 
 - large batches: 2 per working day, 7,500 kg or more
@@ -85,12 +85,31 @@ traceable to a refresh run and a named query.
 
    | Route | Who | Does |
    |---|---|---|
-   | `GET /api/reporting/goals` | Viewer | The page model |
+   | `GET /api/reporting/goals` | Viewer | The page model, plus `viewer.editor` (whether this viewer may refresh) |
    | `POST /api/reporting/goals/refresh` | Editor | Claims a run and answers 202 with it; the run finishes in `after()`. 409 while one is running, 429 within 5 minutes of the last, 503 if the reporting database is not connected. |
    | `GET /api/reporting/goals/runs/[id]` | Viewer | One run's status, for polling |
    | `GET /api/cron/reporting-goals` | Vercel Cron | Runs at 10:00 and 11:00 UTC on weekdays and acts only at 06:00 Toronto. Needs the `CRON_SECRET` bearer, compared timing-safe. |
 
-8. **Audit**
+8. **Page** — `src/components/mc/goals/` (styles `src/styles/mc-goals.css`,
+   `mc.screens` layer). One read of the page model, so every section comes
+   from the same snapshot.
+   - Header: the month's title, "Data as of" with both cutoffs, the amber
+     legend, the takeaway and, for Editors, Refresh. Refresh follows the run
+     through `GET …/runs/[id]` every 2 s and reloads when it ends; it shows
+     when the 5-minute limit lifts.
+   - Sections: the three goal cards, the day-by-day charts, truckloads by
+     customer, entries by hand, completed and scheduled batches by size, the
+     batch list (search, filters, 7,500 kg toggle, sortable columns) and the
+     rules in plain words.
+   - Charts: `StackedColumns` and `RunningLines` in
+     `src/components/mc/charts/column-chart.tsx` (native SVG; HTML labels).
+     Each has a one-sentence summary and its numbers in a table under it.
+   - Amber (`--p-warn` / `--p-warn-text`) marks only what was entered by hand.
+     The PLX palette has no red, so Behind uses the brand's alarm tone (hot).
+   - Loading shows skeletons. A failed read, or a section that can't render,
+     shows "Failed to load" + Retry in the same box. A section's figures name
+     their query and run in tooltips and in a source line under the section.
+9. **Audit**
    - `mc_events` records `reporting.goals.refresh.succeeded|failed` (run id,
      counts and error code, never values) and `reporting.goals.denied`.
    - Entry history goes to `report_manual_entry_version`, which only the
@@ -122,6 +141,9 @@ manual entries (live) ────────────────┴──�
 - Two counted entries with the same batch reference both count. Only the first
   moves the matching open batch out of the schedule. The brief defines no
   duplicate status.
+- An invoice without a shipment number counts as its own shipment
+  (`invoice:<invnumber>`), so blank numbers never merge into one load or
+  across months. The brief defines a shipment by its number only.
 
 ## Dependencies
 
@@ -147,8 +169,10 @@ Depended on by: nothing yet.
 - `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, fx, store, refresh, loader, access)
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)
 - `src/app/api/reporting/goals/` — read, refresh and run routes; `src/app/api/cron/reporting-goals/` — the daily refresh
+- `src/components/mc/goals/` — the page; `src/components/mc/charts/column-chart.tsx` — its charts; `src/styles/mc-goals.css`
 - `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants
-- `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16) and route tests against the 2026-10-14 figures
+- `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16), route and page tests against the 2026-10-14 figures
+- `e2e/goals.spec.ts`, `e2e/ui-goals-{responsive,a11y}.spec.ts` — the page in a browser (`e2e/helpers/goals.ts` serves the same fixture)
 
 ## Owner
 

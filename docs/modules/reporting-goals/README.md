@@ -88,6 +88,7 @@ traceable to a refresh run and a named query.
    | `GET /api/reporting/goals` | Viewer | The page model, plus `viewer.editor` (whether this viewer may refresh) |
    | `POST /api/reporting/goals/refresh` | Editor | Claims a run and answers 202 with it; the run finishes in `after()`. 409 while one is running, 429 within 5 minutes of the last, 503 if the reporting database is not connected. |
    | `GET /api/reporting/goals/runs/[id]` | Viewer | One run's status, for polling |
+   | `GET /api/reporting/goals/export` | Viewer | The workbook (step 10) as `PLX goals and production YYYY-MM-DD.xlsx`, dated by the run's Toronto day. 404 `no_data` before the first good refresh. |
    | `GET /api/reporting/goals/entries` | Viewer | The live manual entries, oldest first |
    | `POST /api/reporting/goals/entries` | Editor | Adds an entry: 201 with it (next `M001`-style ID; entered by the signed-in Editor). 400 `invalid_entry` with the problems. |
    | `PATCH`, `DELETE /api/reporting/goals/entries/[id]` | Editor | Changes the fields sent (nothing is written when nothing changes), or soft-deletes the entry. 404 when there is no such live entry. |
@@ -100,9 +101,12 @@ traceable to a refresh run and a named query.
    `mc.screens` layer). One read of the page model, so every section comes
    from the same snapshot.
    - Header: the month's title, "Data as of" with both cutoffs, the amber
-     legend, the takeaway and, for Editors, Refresh, Import manual entries and
-     Add entry. Refresh follows the run through `GET …/runs/[id]` every 2 s and
-     reloads when it ends; it shows when the 5-minute limit lifts.
+     legend, the takeaway, Export to Excel and, for Editors, Refresh, Import
+     manual entries and Add entry. Refresh follows the run through
+     `GET …/runs/[id]` every 2 s and reloads when it ends; it shows when the
+     5-minute limit lifts. Export downloads through `apiDownload()` (next to
+     `api()` in `src/lib/api`); its progress and errors use the same status
+     line.
    - Sections: the three goal cards, the day-by-day charts, truckloads by
      customer, entries by hand, completed and scheduled batches by size, the
      batch list (search, filters, 7,500 kg toggle, sortable columns) and the
@@ -117,13 +121,34 @@ traceable to a refresh run and a named query.
      their query and run in tooltips and in a source line under the section.
 9. **Audit**
    - `mc_events` records `reporting.goals.refresh.succeeded|failed` (run id,
-     counts and error code, never values) and `reporting.goals.denied`.
+     counts and error code, never values), `reporting.goals.export` (who and
+     the run id) and `reporting.goals.denied`.
    - It also records `reporting.goals.entry.created|updated|deleted` (the
      entry id and, for an edit, the names of the fields changed) and
      `reporting.goals.import.confirmed` (import id and counts). Never values.
    - Entry history goes to `report_manual_entry_version`, which only the
      report's Viewers can read.
-10. **Manual entries and import** — `entry-input.ts` (validation, pure),
+10. **Workbook** — `excel/export.ts` (pure, exceljs) builds the brief's seven
+    sheets from the page model plus the run's Sage invoices and truckload
+    shipments (`loadGoalsExport()`). Sheet names and order, the file name and
+    the "Manual entries" columns come from `excel/layout.ts`, the contract
+    shared with the import.
+    - House styles: Arial 10, 14-pt bold titles, header rows bold on light
+      grey and frozen, amber (fill `FFF2CC`, font `7F6000`) for whatever was
+      entered by hand, real dates, `#,##0` counts and the house dollar format.
+    - It recalculates on open (`fullCalcOnLoad`). Totals and derived values
+      are formulas: on Goals the targets, due so far, totals, statuses and
+      needed per day over the assumptions block (rows 11–21; rows 20–21 hold
+      the working days covered), with In system and By hand taken from the
+      Daily and Truckloads totals; on Daily the running revenue and target to
+      date; the truckload totals; Large on Batches. Figures from FileMaker,
+      Sage and the entries are values, to the cent, as the page computed them.
+    - In-system revenue converts USD with Excel's `ROUND` (half away from
+      zero), while the page rounds half to even, so the two differ only when a
+      conversion lands on exactly half a cent.
+    - "Manual entries" is the import template: the entries in amber, then
+      formatted blank rows with the Type and Currency lists to row 200.
+11. **Manual entries and import** — `entry-input.ts` (validation, pure),
     `entries.ts` (writes), `excel/import.ts` (reading the workbook and planning)
     and `src/components/mc/goals/entries.tsx` (the dialogs).
     - One validation serves the form (in the browser and again on the server)
@@ -199,7 +224,7 @@ Depends on:
 - `src/lib/secrets.ts`: `reportingDatabaseConfigured/Url`, `cronConfigured/Secret`
   and `basicAuthConfigured`.
 - `zod`.
-- `exceljs`: reading the import workbook (`excel/import.ts`).
+- `exceljs`: the workbook (`excel/export.ts`) and reading the import (`excel/import.ts`).
 
 External:
 - the PLX reporting replica (read-only)
@@ -211,11 +236,11 @@ Depended on by: nothing yet.
 
 - `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, fx, store, refresh, loader, access, entry-input, entries, excel/)
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)
-- `src/app/api/reporting/goals/` — read, refresh, run, entry, customer and import routes; `src/app/api/cron/reporting-goals/` — the daily refresh
+- `src/app/api/reporting/goals/` — read, refresh, run, export, entry, customer and import routes; `src/app/api/cron/reporting-goals/` — the daily refresh
 - `src/components/mc/goals/` — the page; `src/components/mc/charts/column-chart.tsx` — its charts; `src/styles/mc-goals.css`
 - `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants
-- `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16), route and page tests against the 2026-10-14 figures; `tests/reporting-goals-entries*.test.ts` — validation, the import plan, and the entry and import routes against PG16 (`tests/reporting-goals-workbook.ts` builds the workbooks)
-- `e2e/goals.spec.ts`, `e2e/ui-goals-{responsive,a11y}.spec.ts` — the page in a browser (`e2e/helpers/goals.ts` serves the same fixture); `e2e/goals-entries.spec.ts`, `e2e/ui-goals-entries-{responsive,a11y}.spec.ts` — adding, editing, deleting and importing entries (`e2e/helpers/goals-entries.ts` serves the entries API in memory)
+- `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16), route, page and workbook tests against the 2026-10-14 figures (the workbook's LibreOffice recalculation skips where `soffice` isn't installed, as in CI, and logs why); `tests/reporting-goals-entries*.test.ts` — validation, the import plan, and the entry and import routes against PG16 (`tests/reporting-goals-workbook.ts` builds the workbooks)
+- `e2e/goals.spec.ts`, `e2e/goals-export.spec.ts`, `e2e/ui-goals-{responsive,a11y}.spec.ts` — the page in a browser (`e2e/helpers/goals.ts` serves the same fixture); `e2e/goals-entries.spec.ts`, `e2e/ui-goals-entries-{responsive,a11y}.spec.ts` — adding, editing, deleting and importing entries (`e2e/helpers/goals-entries.ts` serves the entries API in memory)
 
 ## Owner
 

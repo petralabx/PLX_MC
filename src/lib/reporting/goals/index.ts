@@ -112,6 +112,10 @@ export {
 export type { EntryColumnKey, WorkbookSheet } from "./excel/layout";
 
 // Workbook export (TASK-2898): its exports go below this line.
+export { XLSX_CONTENT_TYPE, buildGoalsWorkbook } from "./excel/export";
+export type { GoalsWorkbookInput } from "./excel/export";
+export { loadGoalsExport } from "./loader";
+export type { GoalsExportData } from "./loader";
 
 // Manual entries and import (TASK-2897): their exports go below this line.
 export {

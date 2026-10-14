@@ -36,6 +36,7 @@ const EXPECTED_SCREENS = {
   "routing-inbox": true,
   approvals: true,
   activity: true,
+  goals: true,
   help: true,
 } satisfies Record<Screen, true>;
 

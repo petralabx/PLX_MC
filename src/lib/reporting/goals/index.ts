@@ -1,7 +1,8 @@
 // Goals & Production report barrel — the module boundary. Import through here,
 // not the internal files (module contract: docs/modules/reporting-goals/README.md).
 // The pure rules and the view are safe anywhere; refresh, store, loader, source-db
-// and access are server-only (client components use `import type` only).
+// and access are server-only. Client components use `import type` from here and
+// take pure runtime helpers from ./money (as screens do with mc-data/insights).
 
 export type {
   BatchHistoryRow,
@@ -88,7 +89,7 @@ export type {
 } from "./rules";
 
 export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView } from "./view";
-export type { DatasetQuery, GoalsView, GoalsViewInput, GoalsViewState } from "./view";
+export type { DatasetQuery, GoalsPage, GoalsView, GoalsViewInput, GoalsViewState, GoalsViewer } from "./view";
 
 export { FX_SERIES, fetchUsdCadRates } from "./fx";
 export type { FetchRates } from "./fx";

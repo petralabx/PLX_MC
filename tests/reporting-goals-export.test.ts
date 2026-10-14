@@ -299,6 +299,25 @@ describe("Daily, Truckloads and Batches", () => {
     expect(String(trucks.getCell(`A${total + 2}`).value)).toContain("(Goals!B15)");
   });
 
+  it("Truckloads: with no truckload customers configured, the totals are zeros, not sums that cover themselves", async () => {
+    const page = goalsPage();
+    const model = { ...page.model!, truckloads: { ...page.model!.truckloads, customers: [] } };
+    const buffer = await buildGoalsWorkbook({
+      run: RUN,
+      model,
+      settings: SETTINGS,
+      shipments: DATASETS.shipments,
+      truckloads: DATASETS.truckloads,
+      rates: [{ date: TODAY, rate: RATE }],
+      exportedAt: EXPORTED_AT,
+    });
+    const trucks = sheet(await readXlsx(buffer), "Truckloads");
+    expect(trucks.getCell("A2").value).toBe("All truckload customers");
+    for (const col of ["B", "C", "D", "E", "F", "G", "H", "I", "J", "K"]) {
+      expect([formulaOf(trucks.getCell(`${col}2`)), trucks.getCell(`${col}2`).value], col).toEqual([undefined, 0]);
+    }
+  });
+
   it("Batches: the model's batch list grouped by stage, Large as a formula, hand entries in amber", async () => {
     const { wb, model } = await build();
     const batches = sheet(wb, "Batches");

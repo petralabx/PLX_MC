@@ -470,9 +470,9 @@ export async function loadRates(from: IsoDate, to: IsoDate): Promise<FxRate[]> {
   return rows.map((r) => ({ date: r.rate_date, rate: r.rate }));
 }
 
-// ─── Manual entries (read; writes arrive with the entries API) ──────────────
+// ─── Manual entries (read; the writes are in entries.ts) ────────────────────
 
-interface EntryRow {
+export interface EntryRow {
   entry_id: string;
   type: string;
   day: string | null;
@@ -492,15 +492,13 @@ interface EntryRow {
   source: string;
 }
 
-/** Live (not deleted) manual entries, oldest first. */
-export async function listEntries(): Promise<ManualEntry[]> {
-  const rows = await query<EntryRow>(
-    `SELECT entry_id, type, day::text AS day, reference, customer, customer_code, product,
-            kg::text AS kg, product_value::text AS product_value, freight::text AS freight, currency, note,
-            entered_by, entered_at, updated_by, updated_at, source
-       FROM report_manual_entry WHERE deleted_at IS NULL ORDER BY id`
-  );
-  return rows.map((r) => ({
+/** The report_manual_entry columns an EntryRow holds (SELECT and RETURNING lists). */
+export const ENTRY_SQL_COLUMNS = `entry_id, type, day::text AS day, reference, customer, customer_code, product,
+  kg::text AS kg, product_value::text AS product_value, freight::text AS freight, currency, note,
+  entered_by, entered_at, updated_by, updated_at, source`;
+
+export function toEntry(r: EntryRow): ManualEntry {
+  return {
     entryId: r.entry_id,
     type: r.type,
     date: r.day,
@@ -518,5 +516,13 @@ export async function listEntries(): Promise<ManualEntry[]> {
     updatedBy: r.updated_by,
     updatedAt: iso(r.updated_at),
     source: r.source,
-  }));
+  };
+}
+
+/** Live (not deleted) manual entries, oldest first; pass `q` to read inside a transaction. */
+export async function listEntries(q: TxQuery = query): Promise<ManualEntry[]> {
+  const rows = await q<EntryRow>(
+    `SELECT ${ENTRY_SQL_COLUMNS} FROM report_manual_entry WHERE deleted_at IS NULL ORDER BY id`
+  );
+  return rows.map(toEntry);
 }

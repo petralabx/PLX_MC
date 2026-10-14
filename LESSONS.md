@@ -1012,3 +1012,14 @@
 - **Rule going forward:** When adding a capability, list each role/principal that holds it and
   the entry point it uses. Test the allow path through that entry point, not only through a
   principal granted in a test.
+
+## 2026-10-14 — TASK-2934: ECR Public refused the CI Postgres pull (Data limit exceeded)
+- **What went wrong:** PLX_MC #322's "Preflight + full suite" failed twice because the runner could
+  not pull `public.ecr.aws/docker/library/postgres:16-alpine` (`toomanyrequests: Data limit
+  exceeded`), so the three real-Postgres suites failed at `docker run`. main and #321 passed in the
+  same minutes.
+- **Root cause:** TASK-2577 swapped one anonymous registry quota (Docker Hub) for another (ECR
+  Public) with no second source, so a quota hit on the runner's IP failed the job.
+- **Rule going forward:** Harnesses get the image through `ensurePostgresImage()`
+  (`scripts/lib/postgres-image.mjs`): ECR first, then the Docker Hub original (a cached copy before a
+  pull), tagged as `POSTGRES_IMAGE`. A new harness image gets a second source the same way.

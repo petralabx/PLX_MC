@@ -89,17 +89,24 @@ traceable to a refresh run and a named query.
    | `POST /api/reporting/goals/refresh` | Editor | Claims a run and answers 202 with it; the run finishes in `after()`. 409 while one is running, 429 within 5 minutes of the last, 503 if the reporting database is not connected. |
    | `GET /api/reporting/goals/runs/[id]` | Viewer | One run's status, for polling |
    | `GET /api/reporting/goals/export` | Viewer | The workbook (step 10) as `PLX goals and production YYYY-MM-DD.xlsx`, dated by the run's Toronto day. 404 `no_data` before the first good refresh. |
+   | `GET /api/reporting/goals/entries` | Viewer | The live manual entries, oldest first |
+   | `POST /api/reporting/goals/entries` | Editor | Adds an entry: 201 with it (next `M001`-style ID; entered by the signed-in Editor). 400 `invalid_entry` with the problems. |
+   | `PATCH`, `DELETE /api/reporting/goals/entries/[id]` | Editor | Changes the fields sent (nothing is written when nothing changes), or soft-deletes the entry. 404 when there is no such live entry. |
+   | `GET /api/reporting/goals/customers` | Viewer | The latest good refresh's Sage customers (code, name, currency), for the form's picker |
+   | `POST /api/reporting/goals/import` | Editor | Previews an import: `{ fileName, fileBase64 }`, up to 2 MB (413). Answers the entries to add, change and remove, each with the status it would get, and a token. 422 `header_mismatch`, `too_many_rows`, `unreadable_file`, `missing_sheet`, or `invalid_rows` (one line per row problem). |
+   | `POST /api/reporting/goals/import/confirm` | Editor | Applies the uploader's preview `{ importId, token }` in one transaction. 409 `entries_changed` when entries changed since the preview, `preview_out_of_date` when a newer preview replaced it. |
    | `GET /api/cron/reporting-goals` | Vercel Cron | Runs at 10:00 and 11:00 UTC on weekdays and acts only at 06:00 Toronto. Needs the `CRON_SECRET` bearer, compared timing-safe. |
 
 8. **Page** — `src/components/mc/goals/` (styles `src/styles/mc-goals.css`,
    `mc.screens` layer). One read of the page model, so every section comes
    from the same snapshot.
    - Header: the month's title, "Data as of" with both cutoffs, the amber
-     legend, the takeaway, Export to Excel and, for Editors, Refresh. Refresh
-     follows the run through `GET …/runs/[id]` every 2 s and reloads when it
-     ends; it shows when the 5-minute limit lifts. Export downloads through
-     `apiDownload()` (next to `api()` in `src/lib/api`); its progress and
-     errors use the same status line.
+     legend, the takeaway, Export to Excel and, for Editors, Refresh, Import
+     manual entries and Add entry. Refresh follows the run through
+     `GET …/runs/[id]` every 2 s and reloads when it ends; it shows when the
+     5-minute limit lifts. Export downloads through `apiDownload()` (next to
+     `api()` in `src/lib/api`); its progress and errors use the same status
+     line.
    - Sections: the three goal cards, the day-by-day charts, truckloads by
      customer, entries by hand, completed and scheduled batches by size, the
      batch list (search, filters, 7,500 kg toggle, sortable columns) and the
@@ -116,6 +123,9 @@ traceable to a refresh run and a named query.
    - `mc_events` records `reporting.goals.refresh.succeeded|failed` (run id,
      counts and error code, never values), `reporting.goals.export` (who and
      the run id) and `reporting.goals.denied`.
+   - It also records `reporting.goals.entry.created|updated|deleted` (the
+     entry id and, for an edit, the names of the fields changed) and
+     `reporting.goals.import.confirmed` (import id and counts). Never values.
    - Entry history goes to `report_manual_entry_version`, which only the
      report's Viewers can read.
 10. **Workbook** — `excel/export.ts` (pure, exceljs) builds the brief's seven
@@ -138,6 +148,39 @@ traceable to a refresh run and a named query.
       conversion lands on exactly half a cent.
     - "Manual entries" is the import template: the entries in amber, then
       formatted blank rows with the Type and Currency lists to row 200.
+11. **Manual entries and import** — `entry-input.ts` (validation, pure),
+    `entries.ts` (writes), `excel/import.ts` (reading the workbook and planning)
+    and `src/components/mc/goals/entries.tsx` (the dialogs).
+    - One validation serves the form (in the browser and again on the server)
+      and the import. Type and date are required, kg for a batch, and product
+      value and currency for a shipment. A date in another month is allowed:
+      it gets the "Not this month" status. A field of the other type is refused,
+      not ignored. kg is kept exact to 3 places and money to 2, and nothing is
+      rounded.
+    - Every write is one transaction under one advisory lock. It writes the
+      entry, an append-only `report_manual_entry_version` row (before and
+      after) and the audit event. The Entry ID comes from
+      `report_manual_entry_seq` and skips IDs already taken. Who entered or
+      changed an entry is the signed-in Editor; the body can't set it. Deletes
+      are soft: the entry leaves the list and its history stays.
+    - A customer picked from the latest refresh's Sage list keeps its code
+      (`customer_code`), so truckload customers match by code. Free text keeps
+      none and matches by name.
+    - **Import.** Only the "Manual entries" sheet is read, and only when its
+      header row is exactly the export's (`excel/layout.ts`). Blank formatted
+      rows are skipped; more than 1,000 entry rows rejects the file. Every row
+      is checked, and any problem imports nothing.
+    - The sheet replaces the list. A row without an Entry ID is added. A row
+      whose Entry ID names a current entry changes it when a value differs
+      (compared exactly, as numbers). A current entry missing from the sheet is
+      removed. An Entry ID that isn't a current entry, or that appears twice,
+      is a row error. "Entered by" and "Dashboard status" are ignored; the
+      uploader is recorded.
+    - The preview keeps the file and the plan in `report_manual_import`, with a
+      fingerprint of the entry list it was worked out against (the token).
+      Confirm applies the uploader's newest preview in one transaction. It is
+      refused (409) if the fingerprint changed, so a stale file never
+      overwrites someone's edit.
 
 ```
 reporting replica (read-only login) ──┐ one RR read-only tx
@@ -181,7 +224,7 @@ Depends on:
 - `src/lib/secrets.ts`: `reportingDatabaseConfigured/Url`, `cronConfigured/Secret`
   and `basicAuthConfigured`.
 - `zod`.
-- `exceljs`: the workbook.
+- `exceljs`: the workbook (`excel/export.ts`) and reading the import (`excel/import.ts`).
 
 External:
 - the PLX reporting replica (read-only)
@@ -191,13 +234,13 @@ Depended on by: nothing yet.
 
 ### Key Files
 
-- `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, fx, store, refresh, loader, access, excel/)
+- `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, fx, store, refresh, loader, access, entry-input, entries, excel/)
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)
-- `src/app/api/reporting/goals/` — read, refresh, run and export routes; `src/app/api/cron/reporting-goals/` — the daily refresh
+- `src/app/api/reporting/goals/` — read, refresh, run, export, entry, customer and import routes; `src/app/api/cron/reporting-goals/` — the daily refresh
 - `src/components/mc/goals/` — the page; `src/components/mc/charts/column-chart.tsx` — its charts; `src/styles/mc-goals.css`
 - `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants
-- `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16), route, page and workbook tests against the 2026-10-14 figures (the workbook's LibreOffice recalculation skips where `soffice` isn't installed, as in CI, and logs why)
-- `e2e/goals.spec.ts`, `e2e/goals-export.spec.ts`, `e2e/ui-goals-{responsive,a11y}.spec.ts` — the page in a browser (`e2e/helpers/goals.ts` serves the same fixture)
+- `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16), route, page and workbook tests against the 2026-10-14 figures (the workbook's LibreOffice recalculation skips where `soffice` isn't installed, as in CI, and logs why); `tests/reporting-goals-entries*.test.ts` — validation, the import plan, and the entry and import routes against PG16 (`tests/reporting-goals-workbook.ts` builds the workbooks); `tests/reporting-goals-roundtrip.test.ts` — the real export read back by the import (the round-trip guarantee)
+- `e2e/goals.spec.ts`, `e2e/goals-export.spec.ts`, `e2e/ui-goals-{responsive,a11y}.spec.ts` — the page in a browser (`e2e/helpers/goals.ts` serves the same fixture); `e2e/goals-entries.spec.ts`, `e2e/ui-goals-entries-{responsive,a11y}.spec.ts` — adding, editing, deleting and importing entries (`e2e/helpers/goals-entries.ts` serves the entries API in memory)
 
 ## Owner
 

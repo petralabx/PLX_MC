@@ -8,13 +8,11 @@
 //   3. a requested repo is validated against the GitHub org at request time —
 //      an unverified request stays pending rather than fabricating membership.
 
-import { authorize, directoryRoleToAccessRole } from "@/lib/permissions";
-
 import {
   ALLOWED_REPO_ORGS,
   DEFAULT_NEW_REPO_ORG,
 } from "./data";
-import type { Actor, Repo, RepoRequest, RepoVisibility } from "./types";
+import type { Repo, RepoRequest, RepoVisibility } from "./types";
 
 export function isAllowedRepoOrg(owner: string): boolean {
   return (ALLOWED_REPO_ORGS as readonly string[]).includes(owner);
@@ -22,19 +20,6 @@ export function isAllowedRepoOrg(owner: string): boolean {
 
 export function defaultNewRepoOrg(): string {
   return DEFAULT_NEW_REPO_ORG;
-}
-
-// module-shim — remove after 2026-10-14
-// Compatibility wrapper: synchronous callers keep calling isApprover(); the
-// check now delegates to authorize({ capability: "repo.approve" }).
-export function isApprover(actor: Actor | undefined | null): boolean {
-  if (!actor || actor.kind !== "human") return false;
-  const role = directoryRoleToAccessRole(actor.role);
-  if (role !== "owner" && role !== "admin") return false;
-  return authorize({
-    actor: { kind: "human", id: actor.id, role, status: "active" },
-    capability: "repo.approve",
-  }).allowed;
 }
 
 // Allow-list membership: a repo id may be attached only when it is in the

@@ -22,7 +22,6 @@ export {
   permissionsEnforcementEnabled,
   permissionsEnforcementMode,
   permissionsIdentityHydrationEnabled,
-  permissionActorFromDirectoryRole,
   permissionActorFromMcUser,
   toSessionIdentity,
   type PermissionsEnforcementMode,

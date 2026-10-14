@@ -10,6 +10,7 @@ import {
   capabilitiesForRole,
   capabilitiesForServicePrincipal,
   isCapability,
+  permissionActorFromDirectoryRole,
   type AccessRole,
   type Capability,
   type PermissionActor,
@@ -409,5 +410,34 @@ describe("revocation", () => {
         capability: "routing.suggest",
       }).reasonCode
     ).toBe("actor_revoked");
+  });
+});
+
+describe("permissionActorFromDirectoryRole", () => {
+  it("maps a directory person onto an active human with their access role", () => {
+    expect(permissionActorFromDirectoryRole({ kind: "human", id: "vince", role: "Owner" })).toEqual({
+      kind: "human",
+      id: "vince",
+      role: "owner",
+      status: "active",
+    });
+    expect(permissionActorFromDirectoryRole({ kind: "human", id: "a", role: " ADMIN " })).toMatchObject({
+      role: "admin",
+    });
+    expect(permissionActorFromDirectoryRole({ kind: "human", id: "g", role: "Contributor" })).toMatchObject({
+      role: "member",
+    });
+    expect(permissionActorFromDirectoryRole({ kind: "human", id: "i", role: "Invited" })).toMatchObject({
+      role: "member",
+    });
+  });
+
+  it("gives no permission identity to a missing actor, an agent or a person with no role", () => {
+    expect(permissionActorFromDirectoryRole(undefined)).toBeNull();
+    expect(permissionActorFromDirectoryRole(null)).toBeNull();
+    expect(permissionActorFromDirectoryRole({ kind: "agent", id: "vibes" })).toBeNull();
+    expect(permissionActorFromDirectoryRole({ kind: "human", id: "x", role: "" })).toBeNull();
+    expect(authorize({ actor: permissionActorFromDirectoryRole(undefined), capability: "task.read" }))
+      .toMatchObject({ allowed: false, reasonCode: "unknown_actor" });
   });
 });

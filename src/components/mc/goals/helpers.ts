@@ -52,6 +52,18 @@ export const compactDollars = (c: number) => `$${COMPACT.format(c / 100)}`;
 export const oneDecimal = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 /** A stored rate without trailing zeros ("1.421900" → "1.4219"). */
 export const rate = (r: string) => r.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+/** A stored decimal at `digits` places with thousands separators ("24500.00" → "24,500.00"); text that isn't a number as it is. */
+export const decimal = (v: string | null, digits: number) =>
+  v === null || v.trim() === "" || !Number.isFinite(Number(v))
+    ? (v ?? "")
+    : Number(v).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+/** File bytes as base64, for an upload inside JSON (the shared api() helper sends JSON only). */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...Array.from(bytes.subarray(i, i + 0x8000)));
+  return btoa(binary);
+}
 
 /** "Oct 14" from an ISO date (no time zone involved). */
 export function day(iso: IsoDate | null): string {

@@ -4,12 +4,10 @@
 // never requires identity tables.
 
 import type {
-  AccessRole,
   IdentityQuery,
   McUserRecord,
   PermissionActor,
 } from "@/lib/permissions";
-import { directoryRoleToAccessRole } from "@/lib/permissions";
 import { findMcUserByEntraOid } from "@/lib/permissions/repository";
 
 export interface EntraProfileClaims {
@@ -117,24 +115,6 @@ export function permissionActorFromMcUser(user: McUserRecord): PermissionActor {
     id: user.entraOid,
     role: user.accessRole,
     status: user.status,
-  };
-}
-
-/**
- * Compatibility: map a directory Human role string into a permission actor
- * without DB lookup. Used by synchronous callers (e.g. isApprover shim).
- */
-export function permissionActorFromDirectoryRole(input: {
-  id: string;
-  role: string;
-}): PermissionActor | null {
-  const accessRole: AccessRole | null = directoryRoleToAccessRole(input.role);
-  if (!accessRole) return null;
-  return {
-    kind: "human",
-    id: input.id,
-    role: accessRole,
-    status: "active",
   };
 }
 

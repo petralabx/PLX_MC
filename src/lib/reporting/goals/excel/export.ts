@@ -14,8 +14,7 @@
 //
 // No I/O, and the export time is an input, so the workbook's contents depend
 // on the inputs alone (exceljs's zip still stamps its entries with the time).
-// exceljs loads on the first export: it takes about 0.35 s to load, which every
-// route that imports the module barrel would otherwise pay on a cold start.
+// exceljs loads on the first export (./load-exceljs.ts).
 
 import type ExcelJS from "exceljs";
 
@@ -50,6 +49,7 @@ import {
   type EntryColumnKey,
   type WorkbookSheet,
 } from "./layout";
+import { loadExcelJS } from "./load-exceljs";
 
 export const XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -434,7 +434,8 @@ function truckloadSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { tot
   for (let col = 2; col <= 11; col += 1) {
     const letter = ws.getColumn(col).letter;
     const money = col === 4 || col === 7 || col === 11;
-    put(ws, total, col, { formula: `SUM(${letter}2:${letter}${total - 1})` }, {
+    // With no customer rows the SUM would cover this row itself, a circular reference.
+    put(ws, total, col, customers.length > 0 ? { formula: `SUM(${letter}2:${letter}${total - 1})` } : 0, {
       numFmt: money ? DOLLAR_FORMAT : COUNT_FORMAT,
       bold: true,
       amber: col >= 5 && col <= 7,
@@ -628,12 +629,6 @@ function entriesSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
 }
 
 // ─── The workbook ───────────────────────────────────────────────────────────
-
-/** exceljs itself: Node hands a CommonJS package over as `default`, a bundler may hand over its exports directly. */
-async function loadExcelJS(): Promise<typeof ExcelJS> {
-  const mod = await import("exceljs");
-  return (mod as { default?: typeof ExcelJS }).default ?? mod;
-}
 
 /** The seven-sheet workbook as .xlsx bytes. */
 export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buffer> {

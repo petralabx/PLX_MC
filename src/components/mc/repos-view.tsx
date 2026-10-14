@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import { isApprover } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   actorById,
@@ -14,6 +13,7 @@ import {
   requestRepo,
   viewerId,
 } from "@/lib/mc-data/store";
+import { authorize, permissionActorFromDirectoryRole } from "@/lib/permissions";
 
 import { Avatar } from "./atoms";
 import { deriveRepoRows } from "./record-logic";
@@ -40,7 +40,10 @@ export function ReposView({ nav }: ScreenProps) {
   const registry = allRepos();
   const repoRows = deriveRepoRows(registry, allTasks());
   const requests = repoRequests();
-  const approver = isApprover(actorById(viewerId()));
+  const approver = authorize({
+    actor: permissionActorFromDirectoryRole(actorById(viewerId())),
+    capability: "repo.approve",
+  }).allowed;
 
   const submitRequest = () => {
     if (!repoName.trim()) return;

@@ -8,7 +8,7 @@
 import { z } from "zod";
 import { ApiError, parseBody, route } from "@/lib/api/route";
 import { resolveRequestActor } from "@/lib/api/session-actor";
-import { isApprover } from "@/lib/mc-data/repos";
+import { authorize, permissionActorFromDirectoryRole } from "@/lib/permissions";
 import { upsertRepo } from "@/lib/sync/repo";
 
 const upsertRepoSchema = z.object({
@@ -26,7 +26,8 @@ const upsertRepoSchema = z.object({
 
 export const POST = route(async (req) => {
   const { actor, repo } = await parseBody(req, upsertRepoSchema);
-  if (!isApprover(await resolveRequestActor(actor))) {
+  const requestActor = permissionActorFromDirectoryRole(await resolveRequestActor(actor));
+  if (!authorize({ actor: requestActor, capability: "repo.approve" }).allowed) {
     throw new ApiError("not_approver", "Only an Owner or Admin can add a repo to the registry.", 403);
   }
   await upsertRepo(repo);

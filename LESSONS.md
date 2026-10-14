@@ -26,7 +26,7 @@
 
 - **What happened:** The approver wrapper in `src/lib/mc-data/repos.ts` (a `module-shim` over `authorize({ capability: "repo.approve" })`, due for removal on 2026-10-14) still had six callers on that date, while `permissionActorFromDirectoryRole`, the helper written for those callers to migrate to, had none.
 - **Root cause:** No MC task and no PLX_MC script tracked the removal date, and the helper sat in the server-only `@/lib/auth` graph, which three of the six callers (the client store and two screens) cannot import.
-- **Rule going forward:** When adding a dated `module-shim`, put its replacement where every caller can import it, migrate at least one caller in the same PR, and open an MC task for the removal before the date.
+- **Rule going forward:** When adding a dated `module-shim`, put its replacement where every caller can import it, migrate at least one caller in the same PR, and open an MC task for the removal before the date. Enforced by `scripts/check-repo-hygiene.py` in `preflight.sh` since TASK-2947: it fails from the day after the marker's date and warns 14 days ahead.
 
 ### 2026-10-14 (UTC) — Pre-push preflight in a Claude Code cloud container
 

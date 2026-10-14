@@ -3,7 +3,7 @@
 // back to the Docker Hub original, when ECR Public refuses the pull too
 // (`toomanyrequests: Data limit exceeded`, TASK-2934).
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -15,17 +15,40 @@ import {
 } from "../scripts/lib/postgres-image.mjs";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const read = (...parts: string[]) => readFileSync(path.join(root, ...parts), "utf8");
-const shared = read("scripts", "lib", "postgres-image.mjs");
-const consumers = {
-  harness: read("scripts", "test-routing-postgres.mjs"),
-  schemaPostgres: read("tests", "schema-postgres.test.ts"),
-  reportingGoalsPostgres: read("tests", "reporting-goals-postgres.test.ts"),
-};
+const read = (file: string) => readFileSync(path.join(root, file), "utf8");
+const sharedFile = "scripts/lib/postgres-image.mjs";
+const shared = read(sharedFile);
+
+// Every test or script that names a Postgres image is a consumer. They are found by
+// scanning, not listed, so a new suite cannot skip the helper unnoticed: #326's
+// entries suite did, and failed on ECR's rate limit (TASK-2938).
+const namesAnImage = /POSTGRES_IMAGE|(^|[^/\w.-])postgres:\d|docker\.io/m;
+const consumers = Object.fromEntries(
+  ["tests", "scripts"]
+    .flatMap((dir) =>
+      readdirSync(path.join(root, dir), { recursive: true, encoding: "utf8" }).map((name) =>
+        path.join(dir, name).split(path.sep).join("/")
+      )
+    )
+    .filter((file) => /\.(ts|mts|mjs|js|cjs)$/.test(file) && file !== sharedFile && file !== "tests/harness-image-source.test.ts")
+    .map((file) => [file, read(file)] as const)
+    .filter(([, source]) => namesAnImage.test(source))
+);
 
 describe("test harness image source", () => {
   it("defines the postgres image once, on the ECR public mirror", () => {
     expect(shared).toContain('"public.ecr.aws/docker/library/postgres:16-alpine"');
+  });
+
+  it("finds every harness that starts a Postgres container", () => {
+    expect(Object.keys(consumers)).toEqual(
+      expect.arrayContaining([
+        "scripts/test-routing-postgres.mjs",
+        "tests/schema-postgres.test.ts",
+        "tests/reporting-goals-postgres.test.ts",
+        "tests/reporting-goals-entries-postgres.test.ts",
+      ])
+    );
   });
 
   it.each(Object.entries(consumers))("%s uses the shared image with no bare or Docker Hub reference", (_name, source) => {

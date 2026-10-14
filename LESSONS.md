@@ -22,6 +22,12 @@
 - **Root cause:** The PRs' state was read before the fix was written and not again before the push or the description edit; the merges landed in between.
 - **Rule going forward:** Re-read a PR's state immediately before pushing to its branch or editing its description. If it has merged, land the change as a new PR from the default branch under its own MC task, and correct any record that says it was included.
 
+### 2026-10-14 (UTC) — A new Postgres suite skipped the image fallback and turned main red (TASK-2938)
+
+- **What happened:** #326 added `tests/reporting-goals-entries-postgres.test.ts` while #325 (TASK-2934) was open. It ran `docker run` on `POSTGRES_IMAGE` without `ensurePostgresImage()`, so after both merged, main's CI (run 881) failed when ECR Public answered `toomanyrequests: Rate exceeded`.
+- **Root cause:** `tests/harness-image-source.test.ts` checked a hand-written list of three harnesses, so a fourth, written in parallel, was never checked.
+- **Rule going forward:** A test that enforces a rule across files finds those files by scanning the tree, and asserts that the scan finds the known ones; it does not list them by hand.
+
 ### 2026-10-14 (ET) — TASK-2924: the approver module-shim reached its removal date unretired
 
 - **What happened:** The approver wrapper in `src/lib/mc-data/repos.ts` (a `module-shim` over `authorize({ capability: "repo.approve" })`, due for removal on 2026-10-14) still had six callers on that date, while `permissionActorFromDirectoryRole`, the helper written for those callers to migrate to, had none.

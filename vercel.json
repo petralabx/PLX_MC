@@ -28,6 +28,10 @@
     {
       "path": "/api/cron/github-backfill",
       "schedule": "23 7 * * *"
+    },
+    {
+      "path": "/api/cron/reporting-goals",
+      "schedule": "0 10,11 * * 1-5"
     }
   ],
   "buildCommand": "npm run build"

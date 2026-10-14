@@ -35,6 +35,24 @@ export function databaseUrl(): string {
   return requireSecret("PLX_MC_DATABASE_URL");
 }
 
+// Goals & Production report (TASK-2895): a dedicated read-only login on the PLX
+// reporting replica (FileMaker silver.batches, Sage sage.oe_invoice_header and
+// sage.ar_customer — grants in docs/modules/reporting-goals/readonly-grants.sql).
+// Absent → the report shows "not connected" and refresh returns 503.
+export function reportingDatabaseConfigured(): boolean {
+  return Boolean(process.env.REPORTING_DATABASE_URL);
+}
+
+export function reportingDatabaseUrl(): string {
+  return requireSecret("REPORTING_DATABASE_URL");
+}
+
+// Presence of the Basic break-glass password (value never exposed). With Entra
+// unconfigured it decides between break-glass mode and open local dev.
+export function basicAuthConfigured(): boolean {
+  return Boolean(process.env.PLX_MC_STAGING_PASSWORD);
+}
+
 export interface GraphCredentials {
   tenantId: string;
   clientId: string;

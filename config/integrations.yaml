@@ -317,3 +317,46 @@ integrations:
       number, title, URL, author, merged time, reason; at most 50 listed per
       repo). PR bodies are parsed in memory for MC-Checkout stamps only — never
       persisted. No Task or link mutations.
+
+  - id: reporting-goals
+    name: Goals & Production report — PLX reporting replica + Bank of Canada USD/CAD
+    owner: Vince (vince@petrasoap.com)
+    criticality: Medium
+    # Read-only reporting: FileMaker and Sage data are only ever read, through a
+    # dedicated read-only login, and snapshotted into Mission Control's own
+    # Postgres. Runtime feature, dormant until its connection string exists.
+    scope: runtime (read-only pulls; key-gated)
+    autonomous: false # reads production and invoice data; never writes to FileMaker, Sage or Business Central
+    default_state: off (dormant until REPORTING_DATABASE_URL is set)
+    feature_flag: >-
+      Presence check reportingDatabaseConfigured() in src/lib/secrets.ts. Unset →
+      the report shows "not connected", POST /api/reporting/goals/refresh returns
+      503 and the scheduled refresh skips. The schedule additionally rides
+      CRON_SECRET (unset → /api/cron/reporting-goals returns 503).
+    kill_switch: >-
+      Unset REPORTING_DATABASE_URL (no further reads; the page keeps the last
+      stored snapshot), and/or remove the /api/cron/reporting-goals entry from
+      vercel.json. Revoking the mc_goals_ro login on the reporting database cuts
+      access at the source.
+    auth_source:
+      - PLX reporting replica — REPORTING_DATABASE_URL via reportingDatabaseUrl(); login mc_goals_ro with column-level SELECT on silver.batches, sage.oe_invoice_header and sage.ar_customer only, default_transaction_read_only = on (docs/modules/reporting-goals/readonly-grants.sql). TLS verified against the vendored RDS CA bundle (src/lib/db/tls.ts).
+      - Bank of Canada Valet API (FXUSDCAD) — public, no credential.
+      - Viewer / Editor — Entra app roles Goals.Viewer / Goals.Editor on the existing plx-mission-control sign-in app, carried in the session (no new Graph permission).
+    health_check: >-
+      Every refresh writes a report_refresh_run row (succeeded / failed with the
+      SQLSTATE and message, cutoffs, rate, rate source, row counts) and a
+      reporting.goals.refresh.succeeded|failed event in mc_events. The page shows
+      "data as of" the last good run, both source cutoffs, a data-is-behind
+      banner, and a flag when the rate is a stored fallback.
+    fallback_path: >-
+      A failed refresh never replaces the last good snapshot; the page keeps
+      showing it with the failure beside it. A failed Bank of Canada fetch falls
+      back to the last stored rate (flagged). Manual entries cover batches and
+      shipments the systems have not caught up with.
+    data_audit_boundary: >-
+      Reads only the granted columns, in one read-only REPEATABLE READ
+      transaction per attempt. Snapshots live in Mission Control's Postgres
+      (90 days; reference and customer lists for the last 3 good runs). Logs and
+      mc_events carry run ids, counts and error codes, never row contents.
+      Manual-entry history stays in report_manual_entry_version (readable by the
+      report's Viewers), not in mc_events.

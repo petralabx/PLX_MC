@@ -18,6 +18,8 @@ export interface EntraProfileClaims {
   email?: string;
   preferred_username?: string;
   name?: string;
+  /** App roles assigned to the user (directly or through a group) on the sign-in app. */
+  roles?: unknown;
 }
 
 export interface SessionIdentity {
@@ -36,6 +38,7 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       oid?: string | null;
+      roles?: string[];
     };
   }
 }
@@ -44,6 +47,7 @@ declare module "@auth/core/jwt" {
   interface JWT {
     oid?: string;
     email?: string;
+    roles?: string[];
   }
 }
 
@@ -83,6 +87,15 @@ export function extractEntraOid(
 ): string | null {
   const oid = profile?.oid?.trim();
   return oid ? oid : null;
+}
+
+/**
+ * App-role values from the ID token (e.g. "Goals.Viewer"). Read once at sign-in,
+ * so a role change applies at the user's next sign-in.
+ */
+export function extractEntraRoles(profile: EntraProfileClaims | null | undefined): string[] {
+  const roles = profile?.roles;
+  return Array.isArray(roles) ? roles.filter((r): r is string => typeof r === "string" && r.trim() !== "") : [];
 }
 
 export function toSessionIdentity(input: {

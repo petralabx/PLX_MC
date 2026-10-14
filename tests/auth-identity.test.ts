@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   extractEntraOid,
+  extractEntraRoles,
   hydrateMcUserByOid,
   permissionsEnforcementEnabled,
   toSessionIdentity,
@@ -27,6 +28,19 @@ describe("extractEntraOid", () => {
   it("returns null when oid is missing", () => {
     expect(extractEntraOid({ sub: "only-sub", email: "vince@petrasoap.com" })).toBeNull();
     expect(extractEntraOid(null)).toBeNull();
+  });
+});
+
+describe("extractEntraRoles", () => {
+  it("keeps the app-role strings from the ID token", () => {
+    expect(extractEntraRoles({ roles: ["Goals.Viewer", "Goals.Editor"] })).toEqual(["Goals.Viewer", "Goals.Editor"]);
+  });
+
+  it("drops anything that is not a non-empty string, and missing claims give no roles", () => {
+    expect(extractEntraRoles({ roles: ["Goals.Viewer", 7, "", null] })).toEqual(["Goals.Viewer"]);
+    expect(extractEntraRoles({ roles: "Goals.Editor" })).toEqual([]);
+    expect(extractEntraRoles({ email: "vince@petrasoap.com" })).toEqual([]);
+    expect(extractEntraRoles(null)).toEqual([]);
   });
 });
 

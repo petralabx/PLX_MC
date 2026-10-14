@@ -69,7 +69,17 @@ describe("projectProgress", () => {
   });
 
   it("handles an empty project without dividing by zero", () => {
-    expect(projectProgress([])).toEqual({ done: 0, doing: 0, total: 0, pct: 0 });
+    expect(projectProgress([])).toMatchObject({ done: 0, doing: 0, total: 0, pct: 0 });
+  });
+});
+
+describe("cancelled closure", () => {
+  it("a cancelled-only project and bucket show zero open, 100% closed, zero delivered", () => {
+    const bucket = BUCKETS[0];
+    const tasks = [task({ bucket: bucket.id, stage: "cancelled" }), task({ bucket: bucket.id, stage: "cancelled" })];
+    const expected = { done: 0, cancelled: 2, closedTasks: 2, remaining: 0, total: 2, pct: 100 };
+    expect(projectProgress(tasks)).toMatchObject(expected);
+    expect(rollupForProject([bucket], tasks)[0]).toMatchObject(expected);
   });
 });
 

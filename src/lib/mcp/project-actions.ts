@@ -6,9 +6,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { appendEvent } from "@/lib/compliance/repo";
-import { AGENTS, HUMANS } from "@/lib/mc-data/data";
-import { isArchived, isProjectClosed } from "@/lib/mc-data/helpers";
-import type { Project, StageKey } from "@/lib/mc-data/types";
+import { AGENTS, HUMANS, countTaskProgress, isArchived, isProjectClosed } from "@/lib/mc-data";
+import type { Project, Task } from "@/lib/mc-data";
 import { isKnownServicePrincipal } from "@/lib/permissions";
 import { assertProjectIdAccess } from "@/lib/permissions/project-acl-guard";
 import { filterProjectsByAcl } from "@/lib/permissions/project-acl";
@@ -18,8 +17,6 @@ import { getProjects } from "@/lib/sync/repo";
 import type { McpIdentity } from "./auth";
 import { mcpJsonResult } from "./envelope";
 import { assertMcpToolAllowed } from "./tool-allowlist";
-
-const DONE_STAGES: readonly StageKey[] = ["merged", "verified"];
 
 export const updateProjectSchema = z
   .object({
@@ -167,12 +164,11 @@ export async function actionListProjects(identity: McpIdentity, input: unknown =
     if (!bucket.project || (!includeArchived && isArchived(bucket))) continue;
     bucketsByProject.set(bucket.project, [...(bucketsByProject.get(bucket.project) ?? []), bucket.id]);
   }
-  const tasksByBucket = new Map<string, { open: number; done: number }>();
+  const tasksByBucket = new Map<string, Task[]>();
   for (const task of snap.tasks) {
-    const tally = tasksByBucket.get(task.bucket) ?? { open: 0, done: 0 };
-    if (DONE_STAGES.includes(task.stage)) tally.done += 1;
-    else tally.open += 1;
-    tasksByBucket.set(task.bucket, tally);
+    const bucketTasks = tasksByBucket.get(task.bucket) ?? [];
+    bucketTasks.push(task);
+    tasksByBucket.set(task.bucket, bucketTasks);
   }
   const projects = visible
     .filter((project) => {
@@ -185,8 +181,8 @@ export async function actionListProjects(identity: McpIdentity, input: unknown =
       const bucketIds = bucketsByProject.get(project.id) ?? [];
       const counts = bucketIds.reduce(
         (sum, id) => {
-          const tally = tasksByBucket.get(id);
-          return { open: sum.open + (tally?.open ?? 0), done: sum.done + (tally?.done ?? 0) };
+          const tally = countTaskProgress(tasksByBucket.get(id) ?? []);
+          return { open: sum.open + tally.remaining, done: sum.done + tally.done };
         },
         { open: 0, done: 0 }
       );

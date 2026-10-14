@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 
-import { ACTORS, PROJECTS, STAGES, STAGE_IDX, type Project } from "@/lib/mc-data";
+import { ACTORS, PROJECTS, type Project } from "@/lib/mc-data";
 import { projectDocLinks } from "@/lib/mc-data/doc-links";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import { allTasks, bucketsForProject, projectById, pushNotice, updateProject } from "@/lib/mc-data/store";
@@ -10,7 +10,7 @@ import { allTasks, bucketsForProject, projectById, pushNotice, updateProject } f
 import { Avatar, HealthPill, SyncTick } from "./atoms";
 import { PeoplePicker } from "./people-picker";
 import { ProjectOverview } from "./project-overview";
-import { isCountedStage, projectProgress, rollupForProject } from "./project-overview.helpers";
+import { projectProgress, rollupForProject } from "./project-overview.helpers";
 import type { ScreenProps } from "./route";
 
 const FALLBACK_PROJECT = PROJECTS[0];
@@ -220,19 +220,19 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
             <span className="v">{progress.total}</span>
           </div>
           {/* Whole-project progress — one spine segment per task (the .spine
-              skin), done = ink, in-flight = accent; counts from projectProgress
+              skin), closed = ink, in-flight = accent; counts from projectProgress
               so this cell and the section bars always agree. */}
           <div className="f">
             <span className="k">Progress</span>
             <span className="v">
-              {progress.pct}% <small className="pv-progress-ct">{progress.done} / {progress.total} done</small>
+              {progress.pct}% <small className="pv-progress-ct">{progress.closedTasks} / {progress.total} closed · {progress.done} done · {progress.cancelled} cancelled</small>
             </span>
             {progress.total > 0 && (
               <span className="spine pv-progress-spine" aria-hidden="true">
                 {Array.from({ length: progress.total }, (_, i) => (
                   <span
                     key={i}
-                    className={i < progress.done ? "done" : i < progress.done + progress.doing ? "now" : ""}
+                    className={i < progress.closedTasks ? "done" : i < progress.closedTasks + progress.doing ? "now" : ""}
                   />
                 ))}
               </span>
@@ -279,12 +279,8 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
               ) : (
                 <div className="init-grid">
                   {buckets.map((bucket) => {
-                    const bucketTasks = tasks.filter((t) => t.bucket === bucket.id && isCountedStage(t));
-                    const done = bucketTasks.filter(
-                      (t) => STAGES[STAGE_IDX[t.stage]].band === "done"
-                    ).length;
-                    const pct =
-                      bucketTasks.length > 0 ? Math.round((done / bucketTasks.length) * 100) : 0;
+                    const bucketTasks = tasks.filter((t) => t.bucket === bucket.id);
+                    const { done, cancelled, closedTasks, pct } = projectProgress(bucketTasks);
                     const barStyle = { "--pct": `${pct}%` } as CSSProperties;
                     return (
                       <button
@@ -307,7 +303,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
                           <span className="ct">
                             {bucketTasks.length === 0
                               ? "No tasks yet"
-                              : `${done}/${bucketTasks.length} tasks done`}
+                              : `${closedTasks}/${bucketTasks.length} closed · ${done} done · ${cancelled} cancelled`}
                           </span>
                         </span>
                       </button>

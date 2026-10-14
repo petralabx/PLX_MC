@@ -7,7 +7,7 @@
 //      evidence bundle (the completion contract — reuses evidenceComplete).
 
 import { AGENTS, OPERATOR_ID, HUMANS, STAGE_IDX } from "./data";
-import { evidenceComplete } from "./helpers";
+import { bandOf, evidenceComplete } from "./helpers";
 import type { ApprovalGate, StageKey, Task } from "./types";
 
 // The last stage a task may occupy without a human accountable owner.
@@ -21,6 +21,41 @@ export const TERMINAL_STAGES: readonly StageKey[] = ["merged", "verified", "canc
 // and sweeps use this one predicate so cancelled never reads as open.
 export function isClosedStage(stage: StageKey): boolean {
   return TERMINAL_STAGES.includes(stage);
+}
+
+/** Stage-derived progress: cancelled closes work without counting as delivered. */
+export interface TaskProgressCounts {
+  done: number;
+  cancelled: number;
+  closedTasks: number;
+  inProgress: number;
+  notStarted: number;
+  remaining: number;
+  total: number;
+  /** Closed / total (0–1); null for an empty task set. */
+  pctDone: number | null;
+}
+
+export function taskProgressTotals(done: number, inProgress: number, notStarted: number, cancelled: number): TaskProgressCounts {
+  const closedTasks = done + cancelled;
+  const remaining = inProgress + notStarted;
+  const total = closedTasks + remaining;
+  return { done, cancelled, closedTasks, inProgress, notStarted, remaining, total, pctDone: total > 0 ? closedTasks / total : null };
+}
+
+export function countTaskProgress(tasks: readonly Pick<Task, "stage">[]): TaskProgressCounts {
+  let done = 0;
+  let cancelled = 0;
+  let inProgress = 0;
+  let notStarted = 0;
+  for (const task of tasks) {
+    if (isClosedStage(task.stage)) {
+      if (task.stage === "cancelled") cancelled += 1;
+      else done += 1;
+    } else if (bandOf(task.stage) === "doing") inProgress += 1;
+    else notStarted += 1;
+  }
+  return taskProgressTotals(done, inProgress, notStarted, cancelled);
 }
 
 // Stages that mean "done" for the completion contract.

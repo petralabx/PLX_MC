@@ -189,7 +189,7 @@ describe("actionListProjects", () => {
         { id: "BKT-3", project: "PRJ-B" },
       ],
       tasks: [
-        { id: "T1", bucket: "BKT-1", stage: "doing" },
+        { id: "T1", bucket: "BKT-1", stage: "progress" },
         { id: "T2", bucket: "BKT-1", stage: "merged" },
         { id: "T3", bucket: "BKT-2", stage: "verified" },
         { id: "T4", bucket: "BKT-3", stage: "merged" },
@@ -224,6 +224,20 @@ describe("actionListProjects", () => {
         archivedAt: null, archivedBy: null, archiveReason: null,
       },
     ]);
+  });
+
+  it("counts cancelled as closed without adding to doneTaskCount, using stage alone", async () => {
+    const snap = await mocks.snapshot();
+    snap.tasks.push(
+      { id: "T6", bucket: "BKT-1", stage: "cancelled" },
+      { id: "T7", bucket: "BKT-2", stage: "cancelled", labels: ["closed:obsolete"] }
+    );
+    expect((await actionListProjects(steward)).projects[0]).toMatchObject({ openTaskCount: 1, doneTaskCount: 2 });
+    // Reopening in stage counts as open even with a stale closure label.
+    snap.tasks[6].stage = "planned";
+    expect((await actionListProjects(steward)).projects[0]).toMatchObject({ openTaskCount: 2, doneTaskCount: 2 });
+    snap.tasks = snap.tasks.filter((t: { stage: string }) => t.stage === "cancelled");
+    expect((await actionListProjects(steward)).projects[0]).toMatchObject({ openTaskCount: 0, doneTaskCount: 0 });
   });
 
   it("returns closed projects for status=closed, and both for all", async () => {

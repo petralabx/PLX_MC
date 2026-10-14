@@ -34,7 +34,7 @@ vi.mock("@/lib/compliance/repo", () => ({ getDispatch: vi.fn(), appendEvent: vi.
 import { actionGetContext, actionSearchTasks } from "@/lib/mcp/actions";
 import { buildInsights, isOverdue } from "@/lib/mc-data/insights";
 import { confidenceOf } from "@/lib/mc-data/helpers";
-import { isClosedStage, TERMINAL_STAGES } from "@/lib/mc-data/policy";
+import { isClosedStage, TERMINAL_STAGES, countTaskProgress } from "@/lib/mc-data/policy";
 import { BANDS, STAGES, WORKFLOW_STAGES, bandOf } from "@/lib/mc-data";
 import { projectProgress, rollupForProject, stageChipTone } from "@/components/mc/project-overview.helpers";
 import { timelineSegmentClass } from "@/components/mc/work-views.helpers";
@@ -61,6 +61,13 @@ describe("stage model", () => {
 });
 
 describe("dashboard / project / bucket counts", () => {
+  it("classifies every stage once, independent of labels and completedAt", () => {
+    const allStages = STAGES.map((s) => task(s.key, s.key, { labels: ["closed:obsolete"], completedAt: "2026-10-07T00:00:00.000Z" }));
+    const counts = countTaskProgress(allStages);
+    expect(counts).toMatchObject({ done: 2, cancelled: 1, closedTasks: 3, inProgress: 3, notStarted: 4, remaining: 7, total: 10, pctDone: 0.3 });
+    expect(counts.total).toBe(counts.done + counts.cancelled + counts.remaining);
+  });
+
   it("the dashboard donut and totals skip cancelled work", () => {
     const model = buildInsights(tasks);
     expect(model.total).toBe(2);
@@ -72,10 +79,10 @@ describe("dashboard / project / bucket counts", () => {
     expect(isOverdue(task("T", "cancelled", { due: "Jan 01" }), 400)).toBe(false);
   });
 
-  it("project progress and bucket rollups exclude cancelled from done AND from the denominator", () => {
-    expect(projectProgress(tasks)).toEqual({ done: 1, doing: 1, total: 2, pct: 50 });
+  it("project progress and bucket rollups count cancelled as closed, never delivered", () => {
+    expect(projectProgress(tasks)).toMatchObject({ done: 1, cancelled: 2, closedTasks: 3, doing: 1, remaining: 1, total: 4, pct: 75 });
     const [roll] = rollupForProject([{ id: "BKT-A" } as never], tasks);
-    expect(roll).toMatchObject({ done: 1, total: 2, pct: 50 });
+    expect(roll).toMatchObject({ done: 1, cancelled: 2, closedTasks: 3, remaining: 1, total: 4, pct: 75 });
     expect(roll.tasks).toHaveLength(4); // still listed under the Cancelled filter
   });
 });

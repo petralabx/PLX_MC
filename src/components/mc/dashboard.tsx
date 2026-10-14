@@ -111,7 +111,7 @@ function takeaway(scope: DashboardScope, s: ScopeSummary, projects: ProjectProgr
   } else {
     health = s.projects === 1 ? `The ${noun} is on track` : `All ${fmt(s.projects)} ${noun} are on track`;
   }
-  if (s.remaining === 0) return `${health}, and every task is complete.`;
+  if (s.remaining === 0) return `${health}, and every task is closed.`;
   const top = projects.reduce((a, b) => (b.remaining > a.remaining ? b : a));
   if (top.remaining === s.remaining) {
     return `${health}; all ${plural(s.remaining, "remaining task is", "remaining tasks are")} in ${top.project.name}.`;
@@ -161,9 +161,8 @@ function ProgressRow({
 function bucketMeta(row: BucketProgress, withProject: boolean) {
   const lead = withProject ? `${row.project.name} · ` : "";
   if (row.total === 0) return `${lead}No tasks yet`;
-  if (row.remaining === 0) return `${lead}All ${fmt(row.total)} done`;
   const moving = row.inProgress > 0 ? `, ${fmt(row.inProgress)} in progress` : "";
-  return `${lead}${fmt(row.done)} of ${fmt(row.total)} done · ${fmt(row.remaining)} left${moving}`;
+  return `${lead}${fmt(row.closedTasks)} of ${fmt(row.total)} closed · ${fmt(row.done)} done · ${fmt(row.cancelled)} cancelled · ${fmt(row.remaining)} left${moving}`;
 }
 
 function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
@@ -274,15 +273,15 @@ export function DashboardView({ nav }: ScreenProps) {
         {/* Each value is keyed on itself, so a change re-mounts it and replays the tick animation. */}
         <div className="kpis">
           <div className="kpi">
-            <span className="v" key={summary.done}>
-              {fmt(summary.done)}
+            <span className="v" key={summary.closedTasks}>
+              {fmt(summary.closedTasks)}
             </span>
-            <span className="k">Tasks complete</span>
+            <span className="k">Tasks closed</span>
             <span className="dash-bar" aria-hidden="true">
               <span style={{ width: widthOf(summary.pctDone) }} />
             </span>
             <span className="dash-sub">
-              {summary.total > 0 ? `${pctText(summary.pctDone, 1)} of ${plural(summary.total, "task", "tasks")}` : "No tasks yet"}
+              {summary.total > 0 ? `${pctText(summary.pctDone, 1)} of ${plural(summary.total, "task", "tasks")} · ${fmt(summary.done)} done · ${fmt(summary.cancelled)} cancelled` : "No tasks yet"}
             </span>
           </div>
           <div className="kpi">
@@ -338,7 +337,7 @@ export function DashboardView({ nav }: ScreenProps) {
                     pressed={focus?.project.id === p.project.id}
                     onSelect={() => selectProject(p.project.id)}
                   >
-                    {fmt(p.done)} of {fmt(p.total)} done · {fmt(p.remaining)} left · {plural(p.buckets, "initiative", "initiatives")}
+                    {fmt(p.closedTasks)} of {fmt(p.total)} closed · {fmt(p.done)} done · {fmt(p.cancelled)} cancelled · {fmt(p.remaining)} left · {plural(p.buckets, "initiative", "initiatives")}
                   </ProgressRow>
                 ))
               )}

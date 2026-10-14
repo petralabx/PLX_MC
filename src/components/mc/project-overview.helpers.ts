@@ -1,27 +1,24 @@
 // Pure rollup math for the Project Overview lens (no store reads — buckets and
 // tasks are INJECTED, the same contract as work-views.helpers). "Done" is the
-// explicit stage band (merged/verified), matching insights.ts and the P1 card
-// grid so every surface counts progress identically.
+// explicit stage band (merged/verified); progress counts cancelled as closed.
 
-import { STAGES, STAGE_IDX } from "@/lib/mc-data";
+import { STAGES, STAGE_IDX, countTaskProgress } from "@/lib/mc-data";
 import type { Bucket, Task } from "@/lib/mc-data";
 
 export interface InitiativeRollup {
   bucket: Bucket;
   tasks: Task[];
   done: number;
-  /** Tasks that still count toward progress: every task except cancelled (TASK-2529). */
+  cancelled: number;
+  closedTasks: number;
+  remaining: number;
+  /** All tasks, including cancelled (TASK-2815). */
   total: number;
   pct: number;
 }
 
 export function isDoneStage(task: Task): boolean {
   return STAGES[STAGE_IDX[task.stage]].band === "done";
-}
-
-// Cancelled tasks drop out of open/remaining counts and progress denominators.
-export function isCountedStage(task: Task): boolean {
-  return task.stage !== "cancelled";
 }
 
 export function isDoingStage(task: Task): boolean {
@@ -33,20 +30,15 @@ export function isDoingStage(task: Task): boolean {
 export function rollupForProject(buckets: Bucket[], tasks: Task[]): InitiativeRollup[] {
   return buckets.map((bucket) => {
     const bucketTasks = tasks.filter((t) => t.bucket === bucket.id);
-    const counted = bucketTasks.filter(isCountedStage);
-    const done = counted.filter(isDoneStage).length;
-    const pct = counted.length > 0 ? Math.round((done / counted.length) * 100) : 0;
-    return { bucket, tasks: bucketTasks, done, total: counted.length, pct };
+    const { done, cancelled, closedTasks, remaining, total, pctDone } = countTaskProgress(bucketTasks);
+    return { bucket, tasks: bucketTasks, done, cancelled, closedTasks, remaining, total, pct: Math.round((pctDone ?? 0) * 100) };
   });
 }
 
 // Whole-project counts for the facts-strip progress cell.
-export function projectProgress(tasks: Task[]): { done: number; doing: number; total: number; pct: number } {
-  const counted = tasks.filter(isCountedStage);
-  const done = counted.filter(isDoneStage).length;
-  const doing = counted.filter(isDoingStage).length;
-  const total = counted.length;
-  return { done, doing, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
+export function projectProgress(tasks: Task[]) {
+  const counts = countTaskProgress(tasks);
+  return { ...counts, doing: counts.inProgress, pct: Math.round((counts.pctDone ?? 0) * 100) };
 }
 
 // Stage → chip tone for the rollup task table. Uses the dedicated status TEXT

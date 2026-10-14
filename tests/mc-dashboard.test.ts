@@ -139,16 +139,30 @@ describe("openStageCounts", () => {
 });
 
 describe("cancelled tasks", () => {
-  it("drop out of totals, remaining and unfiled, as in the project overview", () => {
+  it("a cancelled-only project has 0 remaining and 100% progress across project, bucket and scope", () => {
+    const model = buildDashboard([task({ bucket: b1.id, stage: "cancelled" })], [b1], [open]);
+    const expected = { done: 0, cancelled: 1, closedTasks: 1, remaining: 0, total: 1, pctDone: 1 };
+    expect(model.projects[0]).toMatchObject(expected);
+    expect(model.buckets[0]).toMatchObject(expected);
+    expect(model.scopes.all).toMatchObject(expected);
+    expect(model.remaining).toEqual([]);
+    expect(openStageCounts(model.remaining).every((r) => r.tasks === 0)).toBe(true);
+  });
+
+  it("count as closed in totals without inflating delivery or remaining", () => {
     const base = buildDashboard(tasks, [b1, b2, b3, loose], [open, shut]);
     const withCancelled = buildDashboard(
       [...tasks, task({ bucket: b1.id, stage: "cancelled" }), task({ bucket: loose.id, stage: "cancelled" })],
       [b1, b2, b3, loose],
       [open, shut]
     );
-    expect(withCancelled.scopes.all).toEqual(base.scopes.all);
+    expect(withCancelled.scopes.all).toMatchObject({
+      done: base.scopes.all.done, remaining: base.scopes.all.remaining,
+      total: base.scopes.all.total + 1, cancelled: 1, closedTasks: base.scopes.all.done + 1,
+      pctDone: (base.scopes.all.done + 1) / (base.scopes.all.total + 1),
+    });
     expect(withCancelled.remaining).toHaveLength(base.remaining.length);
-    expect(withCancelled.unfiled).toEqual(base.unfiled);
+    expect(withCancelled.unfiled).toEqual({ tasks: base.unfiled.tasks + 1, open: base.unfiled.open });
     expect(openStageCounts(withCancelled.remaining).map((c) => c.stage)).not.toContain("cancelled");
   });
 });

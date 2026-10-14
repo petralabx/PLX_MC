@@ -2,8 +2,9 @@
 //
 // One read over the viewer's projects, buckets and tasks (the store's
 // ACL-scoped snapshot): delivery progress by project and by bucket, open work by
-// stage, and the tasks still to do. No React, no store reads. "Complete" is the
-// done band (merged/verified), "in progress" the doing band and "not started"
+// stage, and the tasks still to do. No React, no store reads. Closed progress
+// includes merged, verified and cancelled; delivered work
+// remains the done band, "in progress" the doing band and "not started"
 // the todo band — the same split mc_list_projects and the project overview use,
 // so every surface counts progress identically.
 //
@@ -11,24 +12,15 @@
 // Tasks whose bucket is unknown, or has no project, are reported as `unfiled`
 // so the screen can say why its totals differ from the raw task count.
 
-import { STAGES, bandOf, isProjectClosed, isArchived } from "@/lib/mc-data";
-import type { Band, Bucket, Project, StageKey, Task } from "@/lib/mc-data";
+import { STAGES, bandOf, isProjectClosed, isArchived, isClosedStage, countTaskProgress, taskProgressTotals } from "@/lib/mc-data";
+import type { Band, Bucket, Project, StageKey, Task, TaskProgressCounts } from "@/lib/mc-data";
 
 /** Which projects the figures cover: open ones, closed ones, or all of them. */
 export type DashboardScope = "active" | "closed" | "all";
 
 export const DASHBOARD_SCOPES: readonly DashboardScope[] = ["active", "closed", "all"];
 
-export interface ProgressCounts {
-  done: number;
-  inProgress: number;
-  notStarted: number;
-  /** inProgress + notStarted */
-  remaining: number;
-  total: number;
-  /** done / total (0–1); null when there are no tasks, never NaN. */
-  pctDone: number | null;
-}
+export type ProgressCounts = TaskProgressCounts;
 
 export interface ProjectProgress extends ProgressCounts {
   project: Project;
@@ -83,37 +75,13 @@ export function inScope(closed: boolean, scope: DashboardScope): boolean {
 
 const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
 
-function countTasks(tasks: readonly Task[]): ProgressCounts {
-  let done = 0;
-  let inProgress = 0;
-  let notStarted = 0;
-  for (const task of tasks) {
-    const band = bandOf(task.stage);
-    if (band === "done") done += 1;
-    else if (band === "doing") inProgress += 1;
-    else notStarted += 1;
-  }
-  return withTotals(done, inProgress, notStarted);
-}
-
 function sumCounts(rows: readonly ProgressCounts[]): ProgressCounts {
-  return withTotals(
+  return taskProgressTotals(
     rows.reduce((n, r) => n + r.done, 0),
     rows.reduce((n, r) => n + r.inProgress, 0),
-    rows.reduce((n, r) => n + r.notStarted, 0)
+    rows.reduce((n, r) => n + r.notStarted, 0),
+    rows.reduce((n, r) => n + r.cancelled, 0)
   );
-}
-
-function withTotals(done: number, inProgress: number, notStarted: number): ProgressCounts {
-  const total = done + inProgress + notStarted;
-  return {
-    done,
-    inProgress,
-    notStarted,
-    remaining: inProgress + notStarted,
-    total,
-    pctDone: total > 0 ? done / total : null,
-  };
 }
 
 export function buildDashboard(
@@ -130,8 +98,6 @@ export function buildDashboard(
   const tasksByBucket = new Map<string, Task[]>(filedBuckets.map((b) => [b.id, []]));
   const unfiled: Task[] = [];
   for (const task of tasks) {
-    // Cancelled tasks drop out of open/remaining counts and progress denominators (as in the project overview).
-    if (task.stage === "cancelled") continue;
     const list = tasksByBucket.get(task.bucket);
     if (list) list.push(task);
     else unfiled.push(task);
@@ -143,7 +109,7 @@ export function buildDashboard(
       bucket,
       project,
       closed: isProjectClosed(project),
-      ...countTasks(tasksByBucket.get(bucket.id)!),
+      ...countTaskProgress(tasksByBucket.get(bucket.id)!),
     };
   });
 
@@ -162,7 +128,7 @@ export function buildDashboard(
   const remaining: RemainingTask[] = [];
   for (const row of bucketRows) {
     for (const task of tasksByBucket.get(row.bucket.id)!) {
-      if (bandOf(task.stage) !== "done") {
+      if (!isClosedStage(task.stage)) {
         remaining.push({ task, bucket: row.bucket, project: row.project, closed: row.closed });
       }
     }
@@ -190,7 +156,7 @@ export function buildDashboard(
     buckets: bucketRows,
     remaining,
     scopes,
-    unfiled: { tasks: unfiled.length, open: unfiled.filter((t) => bandOf(t.stage) !== "done").length },
+    unfiled: { tasks: unfiled.length, open: unfiled.filter((t) => !isClosedStage(t.stage)).length },
   };
 }
 

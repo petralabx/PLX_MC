@@ -21,6 +21,7 @@ const consumers = {
   harness: read("scripts", "test-routing-postgres.mjs"),
   schemaPostgres: read("tests", "schema-postgres.test.ts"),
   reportingGoalsPostgres: read("tests", "reporting-goals-postgres.test.ts"),
+  reportingGoalsEntriesPostgres: read("tests", "reporting-goals-entries-postgres.test.ts"),
 };
 
 describe("test harness image source", () => {

@@ -14,7 +14,7 @@ import { Client, type ClientConfig, type Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { main as migrate } from "../scripts/migrate.mjs";
-import { POSTGRES_IMAGE } from "../scripts/lib/postgres-image.mjs";
+import { POSTGRES_IMAGE, ensurePostgresImage } from "../scripts/lib/postgres-image.mjs";
 
 const h = vi.hoisted(() => ({
   mcUrl: "",
@@ -75,6 +75,7 @@ beforeAll(async () => {
   const port = (server.address() as { port: number }).port;
   await new Promise<void>((resolve) => server.close(() => resolve()));
   const password = randomBytes(12).toString("hex");
+  expect(ensurePostgresImage()).toMatchObject({ ok: true });
   const run = spawnSync("docker", ["run", "-d", "--name", NAME, "-e", `POSTGRES_PASSWORD=${password}`, "-p", `127.0.0.1:${port}:5432`, POSTGRES_IMAGE], { encoding: "utf8" });
   expect(run.status, run.stderr).toBe(0);
   started = true;

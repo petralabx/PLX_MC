@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-14 (ET) — Vendor-spend writes took the author from the body and checked no capability
+
+- **What happened:** `PATCH /api/vendor-spend/budgets` and `POST /api/vendor-spend/snapshots` (TASK-290) read `updatedBy` / `enteredBy` from the request body and relied on the middleware admission gate alone. Any signed-in person could save a budget or cost entry under someone else's name, and a member under `enforce` got 200 (TASK-2928).
+- **Root cause:** The routes accepted the client's `viewerId()` as a schema field instead of using `requireSessionActor`, the session gate that task, project and bucket writes already used, and no capability covered vendor spend.
+- **Rule going forward:** A mutating route never takes an author or actor from the body. Gate it with `requireSessionActor(<capability>)` and store `authorized.auditLabel` as the author. Test it with a spoofed author in the body and with a member under `enforce`.
+
 ### 2026-10-14 (ET) — TASK-2924: the approver module-shim reached its removal date unretired
 
 - **What happened:** The approver wrapper in `src/lib/mc-data/repos.ts` (a `module-shim` over `authorize({ capability: "repo.approve" })`, due for removal on 2026-10-14) still had six callers on that date, while `permissionActorFromDirectoryRole`, the helper written for those callers to migrate to, had none.

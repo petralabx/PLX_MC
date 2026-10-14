@@ -8,7 +8,6 @@
 import { useState } from "react";
 
 import { api } from "@/lib/api";
-import { viewerId } from "@/lib/mc-data/store";
 import type {
   SpendPeriod,
   VendorSpendDetail,
@@ -409,7 +408,6 @@ function BudgetEditor({
           monthlyBudgetCents: cents,
           warnPct: warn,
           criticalPct: critical,
-          updatedBy: viewerId(),
         }),
       });
       setMsg({ tone: "ok", text: "Budget saved." });
@@ -500,7 +498,6 @@ function ManualSnapshotForm({
           periodStart: start,
           periodEnd: end,
           amountCents: cents,
-          enteredBy: viewerId(),
           note: note || undefined,
         }),
       });

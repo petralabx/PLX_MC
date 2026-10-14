@@ -1,7 +1,8 @@
 // Route tests for the vendor-spend API surface. The domain module is mocked —
 // these tests lock the envelope contract ({ data } / { error: { code,
-// message } }), Zod validation on mutations, registry gating, and the
-// CRON_SECRET gate on the scheduled refresh.
+// message } }), Zod validation on mutations, registry gating, the
+// vendor_spend.write session gate and server-side author on the writes, and
+// the CRON_SECRET gate on the scheduled refresh.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── Hoisted mocks (must precede all imports) ─────────────────────────────────
@@ -25,6 +26,33 @@ vi.mock("@/lib/vendor-spend", () => ({
   createSnapshot: m.createSnapshot,
   refreshAutomatedVendors: m.refreshAutomatedVendors,
   loadVendorRegistry: m.loadVendorRegistry,
+}));
+
+// The writes run the real requireSessionActor → authorize path; only the
+// session, the identity row and the decision log are seams (same pattern as
+// tests/sync-authorization.test.ts).
+const authState = vi.hoisted(() => ({
+  session: null as { user?: { oid?: string | null; email?: string | null } } | null,
+  role: "admin" as "owner" | "admin" | "member",
+}));
+
+vi.mock("@/lib/auth", () => ({
+  auth: async () => authState.session,
+}));
+
+vi.mock("@/lib/permissions/repository", () => ({
+  findMcUserByEntraOid: async (oid: string) => ({
+    id: "u1",
+    entraOid: oid,
+    email: "editor@petrasoap.com",
+    accessRole: authState.role,
+    status: "active",
+  }),
+  findServicePrincipalById: async () => null,
+}));
+
+vi.mock("@/lib/permissions/decision-log", () => ({
+  recordPermissionDecision: vi.fn(async () => true),
 }));
 
 import * as budgetsRoute from "@/app/api/vendor-spend/budgets/route";
@@ -75,11 +103,14 @@ beforeEach(() => {
     { vendorId: "anthropic", status: "degraded", message: "[key_missing] no admin key", snapshotCount: 0 },
   ]);
   m.loadVendorRegistry.mockReturnValue(REGISTRY);
+  authState.session = { user: { oid: "entra-editor", email: "editor@petrasoap.com" } };
+  authState.role = "admin";
   delete process.env.CRON_SECRET;
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   delete process.env.CRON_SECRET;
 });
 
@@ -151,7 +182,6 @@ describe("budgets route", () => {
       jsonReq("http://test/api/vendor-spend/budgets", "PATCH", {
         vendorId: "aws",
         monthlyBudgetCents: 250_000,
-        updatedBy: "vince",
       }),
       emptyCtx
     );
@@ -159,12 +189,28 @@ describe("budgets route", () => {
     expect(m.upsertBudget).toHaveBeenCalled();
   });
 
+  it("PATCH records the signed-in user as updatedBy, never the body's", async () => {
+    const resp = await budgetsRoute.PATCH(
+      jsonReq("http://test/api/vendor-spend/budgets", "PATCH", {
+        vendorId: "aws",
+        monthlyBudgetCents: 250_000,
+        updatedBy: "someone-else@petrasoap.com",
+      }),
+      emptyCtx
+    );
+    expect(resp.status).toBe(200);
+    expect(m.upsertBudget).toHaveBeenCalledWith(
+      expect.objectContaining({ updatedBy: "editor@petrasoap.com" })
+    );
+    const body = await resp.json();
+    expect(body.data.updatedBy).toBe("editor@petrasoap.com");
+  });
+
   it("PATCH rejects a negative budget (Zod, 400 invalid_request)", async () => {
     const resp = await budgetsRoute.PATCH(
       jsonReq("http://test/api/vendor-spend/budgets", "PATCH", {
         vendorId: "aws",
         monthlyBudgetCents: -5,
-        updatedBy: "vince",
       }),
       emptyCtx
     );
@@ -181,7 +227,6 @@ describe("budgets route", () => {
         monthlyBudgetCents: 1000,
         warnPct: 0.9,
         criticalPct: 0.5,
-        updatedBy: "vince",
       }),
       emptyCtx
     );
@@ -193,7 +238,6 @@ describe("budgets route", () => {
       jsonReq("http://test/api/vendor-spend/budgets", "PATCH", {
         vendorId: "stripe",
         monthlyBudgetCents: 1000,
-        updatedBy: "vince",
       }),
       emptyCtx
     );
@@ -213,7 +257,6 @@ describe("POST /api/vendor-spend/snapshots", () => {
     periodStart: "2026-07-01",
     periodEnd: "2026-08-01",
     amountCents: 5999,
-    enteredBy: "vince",
     note: "CC invoice",
   };
 
@@ -224,6 +267,22 @@ describe("POST /api/vendor-spend/snapshots", () => {
     );
     expect(resp.status).toBe(200);
     expect(m.createSnapshot).toHaveBeenCalledWith(expect.objectContaining({ source: "manual" }));
+  });
+
+  it("records the signed-in user as enteredBy, never the body's", async () => {
+    const resp = await snapshotsRoute.POST(
+      jsonReq("http://test/api/vendor-spend/snapshots", "POST", {
+        ...valid,
+        enteredBy: "someone-else@petrasoap.com",
+      }),
+      emptyCtx
+    );
+    expect(resp.status).toBe(200);
+    expect(m.createSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ enteredBy: "editor@petrasoap.com" })
+    );
+    const body = await resp.json();
+    expect(body.data.enteredBy).toBe("editor@petrasoap.com");
   });
 
   it("rejects periodEnd <= periodStart", async () => {
@@ -253,6 +312,77 @@ describe("POST /api/vendor-spend/snapshots", () => {
     );
     expect(resp.status).toBe(404);
   });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// vendor_spend.write — the session gate on both writes
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("vendor_spend.write gate", () => {
+  const writes = [
+    {
+      name: "PATCH /api/vendor-spend/budgets",
+      send: () =>
+        budgetsRoute.PATCH(
+          jsonReq("http://test/api/vendor-spend/budgets", "PATCH", {
+            vendorId: "aws",
+            monthlyBudgetCents: 1000,
+          }),
+          emptyCtx
+        ),
+      store: m.upsertBudget,
+      author: "updatedBy",
+    },
+    {
+      name: "POST /api/vendor-spend/snapshots",
+      send: () =>
+        snapshotsRoute.POST(
+          jsonReq("http://test/api/vendor-spend/snapshots", "POST", {
+            vendorId: "adobe",
+            periodStart: "2026-07-01",
+            periodEnd: "2026-08-01",
+            amountCents: 5999,
+          }),
+          emptyCtx
+        ),
+      store: m.createSnapshot,
+      author: "enteredBy",
+    },
+  ];
+
+  for (const write of writes) {
+    it(`${write.name} 403s a member under enforcement and writes nothing`, async () => {
+      vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
+      authState.role = "member";
+      const resp = await write.send();
+      expect(resp.status).toBe(403);
+      const body = await resp.json();
+      expect(body.error).toEqual({
+        code: "forbidden",
+        message: "vendor_spend.write denied (capability_not_granted).",
+      });
+      expect(write.store).not.toHaveBeenCalled();
+    });
+
+    it(`${write.name} admits an admin under enforcement as the signed-in author`, async () => {
+      vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
+      authState.role = "admin";
+      const resp = await write.send();
+      expect(resp.status).toBe(200);
+      expect(write.store).toHaveBeenCalledWith(
+        expect.objectContaining({ [write.author]: "editor@petrasoap.com" })
+      );
+    });
+
+    it(`${write.name} 403s without a signed-in session and writes nothing`, async () => {
+      authState.session = null;
+      const resp = await write.send();
+      expect(resp.status).toBe(403);
+      const body = await resp.json();
+      expect(body.error.code).toBe("forbidden");
+      expect(write.store).not.toHaveBeenCalled();
+    });
+  }
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

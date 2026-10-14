@@ -56,7 +56,12 @@ engineering ops and finance the true cost posture at a glance.
    standard envelope; mutations validate with Zod via `parseBody`:
    `GET /api/vendor-spend?period=`, `GET /api/vendor-spend/[vendorId]?period=`,
    `GET|PATCH /api/vendor-spend/budgets`, `POST /api/vendor-spend/snapshots`
-   (manual entry), `POST /api/vendor-spend/refresh`.
+   (manual entry), `POST /api/vendor-spend/refresh`. The budget PATCH and the
+   snapshot POST need the `vendor_spend.write` capability (admin and owner
+   roles) on the signed-in Entra session through `requireSessionActor`, and
+   record that session's email as `updated_by` / `entered_by`; the request
+   body never names the author (TASK-2928). The refresh POST is not gated by
+   the capability yet.
 7. **UI** — `AiSpendView` (`src/components/mc/ai-spend.tsx` +
    `src/components/mc/vendor-spend/`), styles in
    `src/styles/mc-vendor-spend.css` (`--p-*` tokens only). Overview table with
@@ -86,12 +91,14 @@ that prorated budget; warn ≥ `warn_pct` (default 0.80), critical ≥
   secret named — never $0, never fabricated spend.
 - AWS open days carry Cost Explorer's `Estimated` flag; Cursor cycle spend is
   labeled usage-reported, not invoice-final.
-- Manual snapshots record who entered them and when.
+- Manual snapshots record who entered them (the signed-in session, never a
+  request field) and when.
 
 ## Dependencies
 
 Depends on: **web** (MC shell, shared `api()`/`route()` wrappers, middleware
-auth), **design-system** (`--p-*` tokens behind `.brand-plx`), `src/lib/db`
+auth), **permissions** (`vendor_spend.write` via `requireSessionActor`),
+**design-system** (`--p-*` tokens behind `.brand-plx`), `src/lib/db`
 (Postgres pool), `src/lib/secrets.ts` (the one secrets accessor).
 `@aws-sdk/client-cost-explorer` is dynamically imported by the AWS adapter
 only. Depended on by: nothing yet.

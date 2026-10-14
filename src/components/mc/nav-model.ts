@@ -2,13 +2,13 @@
 // nav surface: the sidebar / rail / drawer (chrome.tsx), the phone bottom tabs,
 // group strip and More sheet (bottom-tabs.tsx, more-sheet.tsx), the ⌘K
 // palette's Navigate group (command-palette.tsx) and tests/mc-nav-model.test.ts.
-// Grouped by what a colleague is doing — My work · Plan · Knowledge · Admin &
-// health — not by system internals. Pure: no React, no store reads (badge
+// Grouped by what a colleague is doing — My work · Plan · Knowledge · Reporting
+// · Admin & health — not by system internals. Pure: no React, no store reads (badge
 // counts are resolved by the shell; icon names map to Lucide in nav-icon.tsx).
 import type { Route, Screen } from "./route";
 import { SCREEN_VALUES, routeToUrl } from "./route";
 
-export type NavGroupId = "my-work" | "plan" | "knowledge" | "admin";
+export type NavGroupId = "my-work" | "plan" | "knowledge" | "reporting" | "admin";
 /** Which live count the sidebar shows beside an item. */
 export type NavBadge = "needs" | "approvals" | "sync" | "agents" | "ai-spend";
 /** Feature flags that gate an item (off → hidden from sidebar and palette). */
@@ -24,7 +24,7 @@ export type NavIconName =
   | "House" | "LayoutDashboard" | "CircleUser" | "SquareCheck" | "SquareKanban" | "List" | "CalendarRange" | "ChartPie"
   | "BookOpen" | "ClipboardList" | "Wrench" | "Network" | "CircleHelp" | "GitBranch" | "Activity"
   | "File" | "RefreshCw" | "FileText" | "CircleDollarSign" | "Grid3x3" | "Radio" | "Inbox" | "Route"
-  | "Ellipsis";
+  | "Target" | "Ellipsis";
 
 export interface NavItem {
   screen: Screen;
@@ -86,6 +86,23 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { screen: "skills-directory", label: "Skills directory", icon: "◈", lucide: "Wrench" },
       { screen: "architecture", label: "Architecture", icon: "⬡", lucide: "Network" },
       { screen: "help", label: "Help", icon: "ⓘ", lucide: "CircleHelp", hint: "glossary" },
+    ],
+  },
+  {
+    id: "reporting",
+    label: "Reporting",
+    items: [
+      {
+        screen: "goals",
+        label: "Goals & production",
+        icon: "◎",
+        lucide: "Target",
+        hint: "batches, truckloads and revenue this month",
+        aliases: [
+          { label: "Production goals", hint: "large batches per day" },
+          { label: "Revenue goal", hint: "revenue against target" },
+        ],
+      },
     ],
   },
   {
@@ -178,7 +195,7 @@ export function navCommands(flags: NavFlags): NavCommand[] {
 }
 
 // ─── Phone tabs (<641px) — ADR-005 ──────────────────────────────────────────
-// Four bottom tabs, one per group; Admin & health lives behind "More". Detail
+// Four bottom tabs; Reporting and Admin & health live behind "More". Detail
 // screens (task / bucket / project) belong to Plan, the tab they open from.
 
 export type NavTabId = "my-work" | "plan" | "knowledge" | "more";
@@ -197,6 +214,7 @@ export const GROUP_TAB: Record<NavGroupId, NavTabId> = {
   "my-work": "my-work",
   plan: "plan",
   knowledge: "knowledge",
+  reporting: "more",
   admin: "more",
 };
 

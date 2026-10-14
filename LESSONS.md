@@ -26,13 +26,19 @@
 
 - **What happened:** `./scripts/preflight.sh --mode pre-push` exited 1 in a cloud session (TASK-2924): the three real-Postgres suites (`routing-postgres`, `schema-postgres`, `reporting-goals-postgres`) found no Docker daemon, and the later `npx playwright install chromium` step needs `cdn.playwright.dev`, which the environment's network policy denies.
 - **Root cause:** The container ships `dockerd` but does not start it; ECR Public serves image layers from a CloudFront host the proxy denies; and the lockfile's Playwright pins Chromium 1228 while the image ships 1194 in `/opt/pw-browsers`.
-- **Rule going forward:** In a cloud session, start `dockerd` with the proxy environment and tag `docker.io/library/postgres:16-alpine` as `POSTGRES_IMAGE` before reading DB-suite failures as code failures. Run E2E against `/opt/pw-browsers/chromium` through a local, uncommitted `launchOptions.executablePath` override, and report the browser-install step as not run unless `cdn.playwright.dev` is allowed.
+- **Rule going forward:** In a cloud session, start `dockerd` with the proxy environment before reading DB-suite failures as code failures; the harness falls back to Docker Hub's `postgres:16-alpine` when ECR refuses the pull (`ensurePostgresImage`, TASK-2934). Run E2E against `/opt/pw-browsers/chromium` through a local, uncommitted `launchOptions.executablePath` override, and report the browser-install step as not run unless `cdn.playwright.dev` is allowed.
 
 ### 2026-10-14 (UTC) — A shell presence check printed a secret's value into the session log
 
 - **What happened:** Checking whether `VMC_API_KEY` was set, an agent ran `echo "${VMC_API_KEY:+yes}${VMC_API_KEY:-no}"`, and the `:-` expansion printed the key's value into the session's tool output (TASK-2924).
 - **Root cause:** `${VAR:-fallback}` expands to the value whenever the variable is set; only `${VAR:+word}` hides it.
 - **Rule going forward:** Test whether a secret is set with `[ -n "${VAR:+x}" ] && echo set || echo unset`. Never `echo` a secret variable, expand it with `${VAR:-…}`, or run `env`/`printenv` unfiltered. If a value is printed, tell the operator in the same session so they can rotate it.
+
+### 2026-10-14 (ET) — A merge in the working tree broke a running pre-push gate (TASK-2896)
+
+- **What happened:** To let the PR 2 branch fast-forward over #320's pre-squash tip, a plain `git merge` of that tip ran while `./scripts/preflight.sh --mode pre-push` was building. It conflicted in five files; the merge was aborted within seconds, but the production build had already read the conflict markers and failed.
+- **Root cause:** The old tip and the follow-up both edited the same files, so a plain merge conflicts even though the tip's content was already on main (as the squash commit). And a git command that rewrites tracked files changes what a running gate checks.
+- **Rule going forward:** To make a branch whose PR was squash-merged fast-forward, record the old tip with `git merge -s ours <old tip>` (no file changes), never a plain merge. Never run git commands that touch tracked files while a preflight is running; if one did, re-run the gate.
 
 ### 2026-10-11 (ET) — Workstation loader warned and continued with a partial environment
 

@@ -45,8 +45,18 @@ export interface GoalsView {
   latestAttempt: RefreshRun | null;
   fx: { rate: string; date: IsoDate | null; source: FxSource; stale: boolean } | null;
   model: GoalsModel | null;
+  /** The goal settings the model was built with (the page's definitions and rules text quote them). */
+  settings: GoalSettings | null;
   sections: Record<string, readonly DatasetQuery[]>;
 }
+
+/** What the signed-in viewer may do on the page (from the Entra app roles). */
+export interface GoalsViewer {
+  editor: boolean;
+}
+
+/** GET /api/reporting/goals: the page model plus the viewer's permissions. */
+export type GoalsPage = GoalsView & { viewer: GoalsViewer };
 
 export interface GoalsViewInput {
   configured: boolean;
@@ -72,6 +82,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       latestAttempt,
       fx: null,
       model: null,
+      settings: null,
       sections: SECTION_QUERIES,
     };
   }
@@ -94,6 +105,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     latestAttempt,
     fx: { rate: run.fxRate, date: run.fxRateDate, source: fxSource, stale: fxSource === "stored" },
     model,
+    settings: input.settings,
     sections: SECTION_QUERIES,
   };
 }

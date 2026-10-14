@@ -1,5 +1,5 @@
 // Wave 6 — colleague UX: the sidebar is grouped by task (My work · Plan ·
-// Knowledge · Admin & health), not by system internals, and it is driven by ONE
+// Knowledge · Reporting · Admin & health), not by system internals, and it is driven by ONE
 // declarative model that the sidebar, the ⌘K palette and these tests share.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -39,8 +39,8 @@ const screensOf = (flags: NavFlags, id: string): Screen[] =>
     .items.map((i) => i.screen);
 
 describe("nav model — grouped by task", () => {
-  it("has four groups in reading order", () => {
-    expect(NAV_GROUPS.map((g) => g.label)).toEqual(["My work", "Plan", "Knowledge", "Admin & health"]);
+  it("has five groups in reading order", () => {
+    expect(NAV_GROUPS.map((g) => g.label)).toEqual(["My work", "Plan", "Knowledge", "Reporting", "Admin & health"]);
   });
 
   it("puts personal work first: Home, Dashboard, My tasks, Approvals", () => {
@@ -66,6 +66,14 @@ describe("nav model — grouped by task", () => {
       "architecture",
       "help",
     ]);
+  });
+
+  it("puts Goals & production under Reporting (TASK-2896)", () => {
+    expect(screensOf(OFF, "reporting")).toEqual(["goals"]);
+    expect(screenTitle("goals")).toBe("Goals & production");
+    expect(navCommands(OFF).map((c) => c.label)).toEqual(
+      expect.arrayContaining(["Go to Goals & production", "Go to Production goals", "Go to Revenue goal"])
+    );
   });
 
   it("keeps system internals in a collapsible Admin & health group; flagged screens only when on", () => {
@@ -107,6 +115,7 @@ describe("nav model — grouped by task", () => {
     expect(navGroupOf("repos")).toBe("admin");
     expect(navGroupOf("routing-inbox")).toBe("admin");
     expect(navGroupOf("help")).toBe("knowledge");
+    expect(navGroupOf("goals")).toBe("reporting");
     expect(navGroupOf("home")).toBe("my-work");
     expect(navGroupOf("task")).toBeNull();
   });
@@ -232,7 +241,8 @@ describe("Admin & health expanded state", () => {
 describe("phone tabs — one per group, derived from the model", () => {
   it("has My work · Plan · Knowledge · More, and each group maps to exactly one tab", () => {
     expect(NAV_TABS.map((t) => t.label)).toEqual(["My work", "Plan", "Knowledge", "More"]);
-    expect(NAV_GROUPS.map((g) => GROUP_TAB[g.id])).toEqual(["my-work", "plan", "knowledge", "more"]);
+    // Reporting has no tab of its own: it sits in the More sheet with Admin & health.
+    expect(NAV_GROUPS.map((g) => GROUP_TAB[g.id])).toEqual(["my-work", "plan", "knowledge", "more", "more"]);
     // Tab landing screens are nav items of their own group, never hand-listed elsewhere.
     for (const tab of NAV_TABS.filter((t) => t.home)) expect(tabOf(tab.home!), tab.id).toBe(tab.id);
     expect(NAV_TABS.find((t) => t.id === "more")!.home).toBeUndefined();

@@ -3,7 +3,8 @@
 
 import { ontarioStatutoryHolidays } from "@/lib/reporting/goals/calendar";
 import { normalizeRef, type GoalsInput } from "@/lib/reporting/goals/rules";
-import type { Datasets, FtlCustomer, GoalSettings, ManualEntry } from "@/lib/reporting/goals/types";
+import type { Datasets, FtlCustomer, GoalSettings, ManualEntry, RefreshRun } from "@/lib/reporting/goals/types";
+import { buildGoalsView, type GoalsPage } from "@/lib/reporting/goals/view";
 
 import datasetsJson from "./fixtures/reporting-goals/2026-10-14/datasets.json";
 import entriesJson from "./fixtures/reporting-goals/2026-10-14/entries.json";
@@ -65,6 +66,43 @@ export const ENTRIES: ManualEntry[] = (entriesJson as EntryFixture[]).map(manual
 
 export function refsOf(kind: "filemaker" | "sage"): Set<string> {
   return new Set(DATASETS.references.filter((r) => r.kind === kind).map((r) => normalizeRef(r.ref)));
+}
+
+/** The 06:00 refresh that produced the fixture (run #41, at the prototype's rate). */
+export const RUN: RefreshRun = {
+  id: 41,
+  trigger: "cron",
+  requestedBy: "cron",
+  today: TODAY,
+  status: "succeeded",
+  step: null,
+  startedAt: "2026-10-14T10:00:02.000Z",
+  finishedAt: "2026-10-14T10:00:31.000Z",
+  error: null,
+  productionCutoff: TODAY,
+  sageCutoff: TODAY,
+  fxRate: "1.421900",
+  fxRateDate: "2026-10-13",
+  fxSource: "boc",
+  rowCounts: {},
+};
+
+/** What GET /api/reporting/goals returns for the fixture with M1–M7 entered (the page tests use it). */
+export function goalsPage(overrides: Partial<GoalsPage> = {}, entries: ManualEntry[] = ENTRIES): GoalsPage {
+  const view = buildGoalsView({
+    configured: true,
+    run: RUN,
+    latestRun: RUN,
+    snapshot: DATASETS,
+    entries,
+    filemakerRefs: refsOf("filemaker"),
+    sageRefs: refsOf("sage"),
+    settings: SETTINGS,
+    ftlCustomers: FTL_CUSTOMERS,
+    holidays: HOLIDAYS,
+    rates: [{ date: TODAY, rate: RATE }],
+  });
+  return { ...view, viewer: { editor: true }, ...overrides };
 }
 
 export function goalsInput(overrides: Partial<GoalsInput> = {}): GoalsInput {

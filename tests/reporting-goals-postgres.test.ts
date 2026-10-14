@@ -200,6 +200,40 @@ describe("reporting replica access", () => {
     expect(datasets.cutoffs.productionCutoff).toBe(TODAY);
     expect(datasets.goalSummary).toEqual({ largeDone: 6, largeScheduledAhead: 11, largeOpenPastDate: 7 });
   });
+
+  it("keeps invoices without a shipment number as separate shipments, each in its own month", async () => {
+    // Three US$10,000 invoices to A1 American with no shipment number: one in
+    // September, two this month. Grouped together they would read as a
+    // US$30,000 full load in September; each is really a partial load.
+    const blank = [
+      ["IN-NOSHIP-1", "", "20260925"],
+      ["IN-NOSHIP-2", "   ", "20261013"],
+      ["IN-NOSHIP-3", "", "20261014"],
+    ];
+    for (const [invnumber, shinumber, day] of blank) {
+      await reportingAdmin.query(
+        `INSERT INTO sage.oe_invoice_header (invnumber, shinumber, ordnumber, ponumber, customer, bilname, shipdate,
+           invdate, insourcurr, invitmtot, invdiscamt, invmisc, invnetnotx, audtdate)
+         VALUES ($1, $2, '', '', 'A1TEXT11    ', 'A1 American', $3, $3, 'USD', '10000.000', '0.000', '0.000', '10000.000', $3)`,
+        [invnumber, shinumber, day]
+      );
+    }
+    try {
+      const datasets = await readDatasets(TODAY, await loadConfig());
+      const loads = datasets.truckloads.filter((t) => t.shipment.includes("IN-NOSHIP"));
+      expect(loads.map((t) => [t.shipment, t.thisMonth, toCents(t.productUsd)]).sort()).toEqual([
+        ["invoice:IN-NOSHIP-1", false, 1_000_000],
+        ["invoice:IN-NOSHIP-2", true, 1_000_000],
+        ["invoice:IN-NOSHIP-3", true, 1_000_000],
+      ]);
+      // Every other shipment is exactly as before.
+      expect(canonical({ ...datasets, truckloads: datasets.truckloads.filter((t) => !loads.includes(t)) }).truckloads).toEqual(
+        canonical(DATASETS).truckloads
+      );
+    } finally {
+      await reportingAdmin.query(`DELETE FROM sage.oe_invoice_header WHERE invnumber LIKE 'IN-NOSHIP-%'`);
+    }
+  });
 });
 
 describe("refresh and page model", () => {

@@ -48,16 +48,27 @@ describe("ensurePostgresImage", () => {
   const pullHub = `pull ${POSTGRES_IMAGE_FALLBACK}`;
   const tag = `tag ${POSTGRES_IMAGE_FALLBACK} ${POSTGRES_IMAGE}`;
   const refused = { status: 1, stderr: "toomanyrequests: Data limit exceeded" };
+  const hubRefused = { status: 1, stderr: "toomanyrequests: pull rate limit" };
+  type Result = { status: number; stderr?: string };
 
   // Records each docker invocation; anything not listed fails like a missing image.
-  function fakeDocker(results: Record<string, { status: number; stderr?: string }>) {
+  // A list answers successive calls in turn (the last answer repeats), like an
+  // image that a parallel suite finishes pulling while this one waits.
+  function fakeDocker(results: Record<string, Result | Result[]>) {
     const calls: string[] = [];
     const docker = (args: string[]) => {
       const key = args.join(" ");
       calls.push(key);
-      return results[key] ?? { status: 1, stderr: `no result for: ${key}` };
+      const answer = results[key];
+      if (!Array.isArray(answer)) return answer ?? { status: 1, stderr: `no result for: ${key}` };
+      return answer.length > 1 ? answer.shift()! : answer[0];
     };
     return { docker, calls };
+  }
+
+  function recordedSleep() {
+    const sleeps: number[] = [];
+    return { sleep: (ms: number) => void sleeps.push(ms), sleeps };
   }
 
   it("falls back to the same official image on Docker Hub", () => {
@@ -88,12 +99,40 @@ describe("ensurePostgresImage", () => {
     expect(calls).toEqual([inspect, pullEcr, inspectHub, tag]);
   });
 
-  it("reports both registries' errors when neither pull works", () => {
-    const { docker } = fakeDocker({ [pullEcr]: refused, [pullHub]: { status: 1, stderr: "toomanyrequests: pull rate limit" } });
-    expect(ensurePostgresImage(docker)).toMatchObject({
+  it("uses a parallel suite's ECR copy when its own Docker Hub pull is refused", () => {
+    const { docker, calls } = fakeDocker({
+      [inspect]: [{ status: 1 }, { status: 1 }, { status: 0 }],
+      [pullEcr]: refused,
+      [pullHub]: hubRefused,
+    });
+    const { sleep, sleeps } = recordedSleep();
+    expect(ensurePostgresImage(docker, sleep)).toEqual({ ok: true, source: "parallel-suite" });
+    expect(calls).not.toContain(tag);
+    expect(sleeps.length).toBe(2);
+  });
+
+  it("tags a parallel suite's Docker Hub copy when its own pull is refused", () => {
+    const { docker, calls } = fakeDocker({
+      [pullEcr]: refused,
+      [inspectHub]: [{ status: 1 }, { status: 1 }, { status: 0 }],
+      [pullHub]: hubRefused,
+      [tag]: { status: 0 },
+    });
+    const { sleep } = recordedSleep();
+    expect(ensurePostgresImage(docker, sleep)).toEqual({ ok: true, source: "parallel-suite" });
+    expect(calls.at(-1)).toBe(tag);
+  });
+
+  it("reports both registries' errors when neither pull works and no copy appears in time", () => {
+    const { docker } = fakeDocker({ [pullEcr]: refused, [pullHub]: hubRefused });
+    const { sleep, sleeps } = recordedSleep();
+    expect(ensurePostgresImage(docker, sleep)).toMatchObject({
       ok: false,
       error: expect.stringMatching(/Data limit exceeded[\s\S]*pull rate limit/),
     });
+    // The wait has to end well inside the suites' 90 s beforeAll budget.
+    expect(sleeps.length).toBeGreaterThan(0);
+    expect(sleeps.reduce((total, ms) => total + ms, 0)).toBeLessThanOrEqual(60_000);
   });
 
   it("fails when the Docker Hub image cannot be tagged", () => {

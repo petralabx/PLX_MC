@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-14 (UTC) — A review fix was pushed to two PRs after both had merged (TASK-2938)
+
+- **What happened:** A fix for a Cursor Bugbot finding on #325 (a parallel-suite race in `ensurePostgresImage`) was pushed to #325 and ported to #322 at 20:23, but both PRs had merged at 20:19, so neither merge carried it. #325's description was then edited to say it did.
+- **Root cause:** The PRs' state was read before the fix was written and not again before the push or the description edit; the merges landed in between.
+- **Rule going forward:** Re-read a PR's state immediately before pushing to its branch or editing its description. If it has merged, land the change as a new PR from the default branch under its own MC task, and correct any record that says it was included.
+
 ### 2026-10-14 (ET) — TASK-2924: the approver module-shim reached its removal date unretired
 
 - **What happened:** The approver wrapper in `src/lib/mc-data/repos.ts` (a `module-shim` over `authorize({ capability: "repo.approve" })`, due for removal on 2026-10-14) still had six callers on that date, while `permissionActorFromDirectoryRole`, the helper written for those callers to migrate to, had none.
@@ -1022,4 +1028,5 @@
   Public) with no second source, so a quota hit on the runner's IP failed the job.
 - **Rule going forward:** Harnesses get the image through `ensurePostgresImage()`
   (`scripts/lib/postgres-image.mjs`): ECR first, then the Docker Hub original (a cached copy before a
-  pull), tagged as `POSTGRES_IMAGE`. A new harness image gets a second source the same way.
+  pull), tagged as `POSTGRES_IMAGE`; if both pulls are refused it waits up to 60 s for a parallel
+  suite's copy. A new harness image gets a second source the same way.

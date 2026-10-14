@@ -19,13 +19,13 @@ import {
   disallowedRepos,
   isAllowedRepo,
   isAllowedRepoOrg,
-  isApprover,
   normalizeRepoInputs,
   repoFromRequest,
   repoIdFromName,
   resolveRepoInput,
 } from "@/lib/mc-data";
-import type { Repo } from "@/lib/mc-data";
+import type { Actor, Repo } from "@/lib/mc-data";
+import { authorize, permissionActorFromDirectoryRole } from "@/lib/permissions";
 import {
   __repoValidationSettled,
   __setRepoValidatorForTests,
@@ -114,20 +114,23 @@ describe("backfill", () => {
   });
 });
 
-describe("isApprover", () => {
+describe("approver check (authorize repo.approve)", () => {
+  // The check approveRepo/rejectRepo, POST /api/repos and the skills review
+  // route run: map the directory actor, then ask the permissions kernel.
+  const canApprove = (actor: Actor | undefined) =>
+    authorize({ actor: permissionActorFromDirectoryRole(actor), capability: "repo.approve" }).allowed;
+
   it("accepts Owner/Admin humans only", () => {
-    expect(isApprover(HUMANS.vince)).toBe(true); // Owner
-    expect(isApprover(HUMANS.greg)).toBe(false); // Contributor
-    expect(isApprover(AGENTS.vibes)).toBe(false); // agents never approve
-    expect(isApprover(undefined)).toBe(false);
+    expect(canApprove(HUMANS.vince)).toBe(true); // Owner
+    expect(canApprove({ ...HUMANS.vince, role: "Admin" })).toBe(true);
+    expect(canApprove(HUMANS.greg)).toBe(false); // Contributor
+    expect(canApprove({ ...HUMANS.greg, role: "Invited" })).toBe(false);
+    expect(canApprove({ ...HUMANS.greg, role: "" })).toBe(false);
   });
 
-  it("delegates to the permissions repo.approve capability (compatibility shim)", () => {
-    // Owner/Admin directory roles map to access roles that grant repo.approve;
-    // agents and contributors remain denied. Synchronous caller contract preserved.
-    expect(isApprover({ ...HUMANS.vince, role: "Admin" })).toBe(true);
-    expect(isApprover({ ...HUMANS.greg, role: "Contributor" })).toBe(false);
-    expect(isApprover({ ...AGENTS.vibes })).toBe(false);
+  it("never lets an agent or a missing actor approve", () => {
+    expect(canApprove(AGENTS.vibes)).toBe(false);
+    expect(canApprove(undefined)).toBe(false);
   });
 });
 

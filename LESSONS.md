@@ -16,6 +16,24 @@
 
 ## Lessons
 
+### 2026-10-14 (ET) — TASK-2924: the approver module-shim reached its removal date unretired
+
+- **What happened:** The approver wrapper in `src/lib/mc-data/repos.ts` (a `module-shim` over `authorize({ capability: "repo.approve" })`, due for removal on 2026-10-14) still had six callers on that date, while `permissionActorFromDirectoryRole`, the helper written for those callers to migrate to, had none.
+- **Root cause:** No MC task and no PLX_MC script tracked the removal date, and the helper sat in the server-only `@/lib/auth` graph, which three of the six callers (the client store and two screens) cannot import.
+- **Rule going forward:** When adding a dated `module-shim`, put its replacement where every caller can import it, migrate at least one caller in the same PR, and open an MC task for the removal before the date.
+
+### 2026-10-14 (UTC) — Pre-push preflight in a Claude Code cloud container
+
+- **What happened:** `./scripts/preflight.sh --mode pre-push` exited 1 in a cloud session (TASK-2924): the three real-Postgres suites (`routing-postgres`, `schema-postgres`, `reporting-goals-postgres`) found no Docker daemon, and the later `npx playwright install chromium` step needs `cdn.playwright.dev`, which the environment's network policy denies.
+- **Root cause:** The container ships `dockerd` but does not start it; ECR Public serves image layers from a CloudFront host the proxy denies; and the lockfile's Playwright pins Chromium 1228 while the image ships 1194 in `/opt/pw-browsers`.
+- **Rule going forward:** In a cloud session, start `dockerd` with the proxy environment and tag `docker.io/library/postgres:16-alpine` as `POSTGRES_IMAGE` before reading DB-suite failures as code failures. Run E2E against `/opt/pw-browsers/chromium` through a local, uncommitted `launchOptions.executablePath` override, and report the browser-install step as not run unless `cdn.playwright.dev` is allowed.
+
+### 2026-10-14 (UTC) — A shell presence check printed a secret's value into the session log
+
+- **What happened:** Checking whether `VMC_API_KEY` was set, an agent ran `echo "${VMC_API_KEY:+yes}${VMC_API_KEY:-no}"`, and the `:-` expansion printed the key's value into the session's tool output (TASK-2924).
+- **Root cause:** `${VAR:-fallback}` expands to the value whenever the variable is set; only `${VAR:+word}` hides it.
+- **Rule going forward:** Test whether a secret is set with `[ -n "${VAR:+x}" ] && echo set || echo unset`. Never `echo` a secret variable, expand it with `${VAR:-…}`, or run `env`/`printenv` unfiltered. If a value is printed, tell the operator in the same session so they can rotate it.
+
 ### 2026-10-11 (ET) — Workstation loader warned and continued with a partial environment
 
 - **What happened:** The generated `~/.secrets-env.staging.ps1` wrapped the Graph fetch in try/catch that only called `Write-Warning`, then exported `AZURE_*` from the empty `MICROSOFT_GRAPH_*` values. `run-plx-mc-mcp.ps1` also silently skipped a missing loader.

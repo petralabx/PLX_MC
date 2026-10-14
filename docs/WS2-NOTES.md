@@ -35,7 +35,6 @@ Every one of the 8 buckets and all 15 seeded tasks now attach `["portal-web"]`
 
 ### Governance helpers
 `src/lib/mc-data/repos.ts` (new, exported via the barrel):
-- `isApprover(actor)` — true only for human `Owner`/`Admin` (vince is Owner).
 - `isAllowedRepo` / `disallowedRepos` / `allowedReposOnly` — the allow-list
   predicates, used by both client and server.
 - `resolveRepoInput` / `normalizeRepoInputs` — accept registry id, unique name,
@@ -54,7 +53,8 @@ Every one of the 8 buckets and all 15 seeded tasks now attach `["portal-web"]`
 - `McState` gains `repos` (seeded from `REPOS`) + `repoRequests`.
 - Getters `allRepos()`, `repoRequests()`.
 - Actions `requestRepo` (any collaborator), `approveRepo` / `rejectRepo`
-  (gated by `isApprover`; approve adds the repo to the registry/allow-list).
+  (gated by `authorize({ capability: "repo.approve" })`: human `Owner`/`Admin`
+  only, vince is Owner; approve adds the repo to the registry/allow-list).
 - **Hardened approval gate (orchestrator decision, 2026-06-17):** `approveRepo`
   also requires `verified === true`. An unverified request (one that failed
   GitHub-org validation) can never be approved — `approveRepo` returns `false`

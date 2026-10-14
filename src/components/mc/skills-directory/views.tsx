@@ -3,8 +3,8 @@
 import { useState } from "react";
 
 import { api } from "@/lib/api";
-import { isApprover } from "@/lib/mc-data";
 import { useViewer } from "@/lib/mc-data/hooks";
+import { authorize, permissionActorFromDirectoryRole } from "@/lib/permissions";
 import type {
   CatalogListResult,
   SkillDetailResult,
@@ -94,7 +94,10 @@ export function IndexView({
   const filtered = applyFilters(skills, filter);
   const viewer = useViewer();
   const submitterEmail = viewer?.email ?? "";
-  const approver = isApprover(viewer);
+  const approver = authorize({
+    actor: permissionActorFromDirectoryRole(viewer),
+    capability: "repo.approve",
+  }).allowed;
   const canSubmit = skillId.trim() && skillMarkdown.trim() && submitterEmail;
 
   async function loadReviewQueue() {

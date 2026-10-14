@@ -125,8 +125,8 @@ integrations:
     data_audit_boundary: >-
       Mirrors only repo metadata (id, name, owner, visibility, default branch,
       language, scope) — no secrets, no PII. Approvals are gated by the
-      Owner/Admin role (lib/mc-data/repos.ts isApprover); the request queue
-      records who requested/decided each repo with timestamps.
+      repo.approve capability (Owner/Admin; authorize in lib/permissions); the
+      request queue records who requested/decided each repo with timestamps.
 
   - id: mc-routing
     name: Commit/PR → Mission Control routing (shadow → suggestion → confirmation)

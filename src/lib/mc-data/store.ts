@@ -13,6 +13,7 @@
 // screens must observe.
 
 import { api } from "@/lib/api";
+import { authorize, permissionActorFromDirectoryRole } from "@/lib/permissions";
 
 import {
   ACTORS,
@@ -38,7 +39,7 @@ import type { CancelReason } from "./cancellation";
 import { parseMentions } from "./collab";
 import { domainOf, isNavVisible, isPetraEmail, isProjectClosed } from "./helpers";
 import { assignmentViolation, isAgentId, stageAdvanceViolation } from "./policy";
-import { allowedReposOnly, disallowedRepos, isAllowedRepoOrg, isApprover, repoFromRequest } from "./repos";
+import { allowedReposOnly, disallowedRepos, isAllowedRepoOrg, repoFromRequest } from "./repos";
 import type {
   Actor,
   AuditRow,
@@ -752,7 +753,8 @@ export function requestRepo(input: NewRepoRequestInput, actorId: string = viewer
 // approved — that would put an unvalidated repo on the allow-list, exactly what
 // the validation gate prevents (error-code-style reason: repo_unverified).
 export function approveRepo(requestId: string, actorId: string = viewerId()): boolean {
-  if (!isApprover(state.actors[actorId])) {
+  const actor = permissionActorFromDirectoryRole(state.actors[actorId]);
+  if (!authorize({ actor, capability: "repo.approve" }).allowed) {
     pushNotice("Only an Owner or Admin can approve a repo request.");
     return false;
   }
@@ -780,7 +782,8 @@ export function approveRepo(requestId: string, actorId: string = viewerId()): bo
 
 // Reject a pending request — gated to an approver. Nothing joins the registry.
 export function rejectRepo(requestId: string, actorId: string = viewerId()): boolean {
-  if (!isApprover(state.actors[actorId])) {
+  const actor = permissionActorFromDirectoryRole(state.actors[actorId]);
+  if (!authorize({ actor, capability: "repo.approve" }).allowed) {
     pushNotice("Only an Owner or Admin can reject a repo request.");
     return false;
   }

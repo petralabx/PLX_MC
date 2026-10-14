@@ -434,7 +434,8 @@ function truckloadSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { tot
   for (let col = 2; col <= 11; col += 1) {
     const letter = ws.getColumn(col).letter;
     const money = col === 4 || col === 7 || col === 11;
-    put(ws, total, col, { formula: `SUM(${letter}2:${letter}${total - 1})` }, {
+    // With no customer rows the SUM would cover this row itself, a circular reference.
+    put(ws, total, col, customers.length > 0 ? { formula: `SUM(${letter}2:${letter}${total - 1})` } : 0, {
       numFmt: money ? DOLLAR_FORMAT : COUNT_FORMAT,
       bold: true,
       amber: col >= 5 && col <= 7,

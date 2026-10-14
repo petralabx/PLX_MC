@@ -78,3 +78,22 @@ export function directoryRoleToAccessRole(role: string | undefined | null): Acce
   // enforcement is on; governance capabilities remain role-gated.
   return "member";
 }
+
+/**
+ * Map a directory actor (job-title role, no DB lookup) onto a permission actor
+ * for synchronous callers. No actor, an agent, or a person with no role maps to
+ * null, which authorize() denies as unknown_actor.
+ */
+export function permissionActorFromDirectoryRole(
+  actor: { kind: string; id: string; role?: string } | null | undefined
+): PermissionActor | null {
+  if (actor?.kind !== "human") return null;
+  const accessRole = directoryRoleToAccessRole(actor.role);
+  if (!accessRole) return null;
+  return {
+    kind: "human",
+    id: actor.id,
+    role: accessRole,
+    status: "active",
+  };
+}

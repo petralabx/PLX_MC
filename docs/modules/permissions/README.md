@@ -99,8 +99,10 @@ enforcement mode and — during staged rollout — the shadow (real-identity)
 verdict. Recording is fail-open and a no-op in mode `off`. The same sink
 covers MCP auth denials (missing or revoked principal), tool-allowlist
 denials, checkout-release verdicts, agent-assignee decisions, restricted-project
-ACL decisions, and routing-session transfer verdicts. UI affordance checks
-(e.g. the `isApprover` display shim) are not enforcement and are not recorded.
+ACL decisions, and routing-session transfer verdicts. The synchronous
+`repo.approve` approver gate (`authorize` on `permissionActorFromDirectoryRole`
+in the store, the Repos and Skills screens and their routes) does not go
+through `enforcement.ts` and is not recorded.
 
 **Project ACL (TASK-1527 / TASK-1548):** restricted projects are a resource
 allowlist, not a new capability. `src/lib/permissions/project-acl.ts` is the
@@ -146,8 +148,9 @@ concrete rule cannot be expressed that way.
 
 - Depends on: none at runtime for `authorize` (pure). Identity hydration uses
   the shared `db` query seam only when enforcement is enabled.
-- Depended on by: `mc-data/repos` (`isApprover` shim), MCP auth (service
-  principal actor), future routing / task / sync mutation paths.
+- Depended on by: the `repo.approve` approver gate (`mc-data` store, Repos and
+  Skills screens and routes), MCP auth (service principal actor), future
+  routing / task / sync mutation paths.
 
 ## Owner
 

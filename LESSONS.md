@@ -16,6 +16,24 @@
 
 ## Lessons
 
+### 2026-10-14 (ET) — TASK-2924: the approver module-shim reached its removal date unretired
+
+- **What happened:** The approver wrapper in `src/lib/mc-data/repos.ts` (a `module-shim` over `authorize({ capability: "repo.approve" })`, due for removal on 2026-10-14) still had six callers on that date, while `permissionActorFromDirectoryRole`, the helper written for those callers to migrate to, had none.
+- **Root cause:** No MC task and no PLX_MC script tracked the removal date, and the helper sat in the server-only `@/lib/auth` graph, which three of the six callers (the client store and two screens) cannot import.
+- **Rule going forward:** When adding a dated `module-shim`, put its replacement where every caller can import it, migrate at least one caller in the same PR, and open an MC task for the removal before the date.
+
+### 2026-10-14 (UTC) — Pre-push preflight in a Claude Code cloud container
+
+- **What happened:** `./scripts/preflight.sh --mode pre-push` exited 1 in a cloud session (TASK-2924): the three real-Postgres suites (`routing-postgres`, `schema-postgres`, `reporting-goals-postgres`) found no Docker daemon, and the later `npx playwright install chromium` step needs `cdn.playwright.dev`, which the environment's network policy denies.
+- **Root cause:** The container ships `dockerd` but does not start it; ECR Public serves image layers from a CloudFront host the proxy denies; and the lockfile's Playwright pins Chromium 1228 while the image ships 1194 in `/opt/pw-browsers`.
+- **Rule going forward:** In a cloud session, start `dockerd` with the proxy environment before reading DB-suite failures as code failures; the harness falls back to Docker Hub's `postgres:16-alpine` when ECR refuses the pull (`ensurePostgresImage`, TASK-2934). Run E2E against `/opt/pw-browsers/chromium` through a local, uncommitted `launchOptions.executablePath` override, and report the browser-install step as not run unless `cdn.playwright.dev` is allowed.
+
+### 2026-10-14 (UTC) — A shell presence check printed a secret's value into the session log
+
+- **What happened:** Checking whether `VMC_API_KEY` was set, an agent ran `echo "${VMC_API_KEY:+yes}${VMC_API_KEY:-no}"`, and the `:-` expansion printed the key's value into the session's tool output (TASK-2924).
+- **Root cause:** `${VAR:-fallback}` expands to the value whenever the variable is set; only `${VAR:+word}` hides it.
+- **Rule going forward:** Test whether a secret is set with `[ -n "${VAR:+x}" ] && echo set || echo unset`. Never `echo` a secret variable, expand it with `${VAR:-…}`, or run `env`/`printenv` unfiltered. If a value is printed, tell the operator in the same session so they can rotate it.
+
 ### 2026-10-14 (ET) — A merge in the working tree broke a running pre-push gate (TASK-2896)
 
 - **What happened:** To let the PR 2 branch fast-forward over #320's pre-squash tip, a plain `git merge` of that tip ran while `./scripts/preflight.sh --mode pre-push` was building. It conflicted in five files; the merge was aborted within seconds, but the production build had already read the conflict markers and failed.
@@ -994,3 +1012,14 @@
 - **Rule going forward:** When adding a capability, list each role/principal that holds it and
   the entry point it uses. Test the allow path through that entry point, not only through a
   principal granted in a test.
+
+## 2026-10-14 — TASK-2934: ECR Public refused the CI Postgres pull (Data limit exceeded)
+- **What went wrong:** PLX_MC #322's "Preflight + full suite" failed twice because the runner could
+  not pull `public.ecr.aws/docker/library/postgres:16-alpine` (`toomanyrequests: Data limit
+  exceeded`), so the three real-Postgres suites failed at `docker run`. main and #321 passed in the
+  same minutes.
+- **Root cause:** TASK-2577 swapped one anonymous registry quota (Docker Hub) for another (ECR
+  Public) with no second source, so a quota hit on the runner's IP failed the job.
+- **Rule going forward:** Harnesses get the image through `ensurePostgresImage()`
+  (`scripts/lib/postgres-image.mjs`): ECR first, then the Docker Hub original (a cached copy before a
+  pull), tagged as `POSTGRES_IMAGE`. A new harness image gets a second source the same way.

@@ -23,7 +23,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { Client } from "pg";
-import { POSTGRES_IMAGE } from "./lib/postgres-image.mjs";
+import { POSTGRES_IMAGE, ensurePostgresImage } from "./lib/postgres-image.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = path.join(ROOT, "db", "migrations");
@@ -886,6 +886,12 @@ async function main() {
   let containerStarted = false;
   try {
     console.log(`starting container ${containerName} on port ${port}`);
+    const image = ensurePostgresImage();
+    if (!image.ok) {
+      console.error(image.error);
+      throw new Error("postgres image unavailable");
+    }
+    console.log(`postgres image source: ${image.source}`);
     const run = docker([
       "run",
       "-d",

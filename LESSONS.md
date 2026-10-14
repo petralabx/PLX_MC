@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-14 (ET) — A merge in the working tree broke a running pre-push gate (TASK-2896)
+
+- **What happened:** To let the PR 2 branch fast-forward over #320's pre-squash tip, a plain `git merge` of that tip ran while `./scripts/preflight.sh --mode pre-push` was building. It conflicted in five files; the merge was aborted within seconds, but the production build had already read the conflict markers and failed.
+- **Root cause:** The old tip and the follow-up both edited the same files, so a plain merge conflicts even though the tip's content was already on main (as the squash commit). And a git command that rewrites tracked files changes what a running gate checks.
+- **Rule going forward:** To make a branch whose PR was squash-merged fast-forward, record the old tip with `git merge -s ours <old tip>` (no file changes), never a plain merge. Never run git commands that touch tracked files while a preflight is running; if one did, re-run the gate.
+
 ### 2026-10-11 (ET) — Workstation loader warned and continued with a partial environment
 
 - **What happened:** The generated `~/.secrets-env.staging.ps1` wrapped the Graph fetch in try/catch that only called `Write-Warning`, then exported `AZURE_*` from the empty `MICROSOFT_GRAPH_*` values. `run-plx-mc-mcp.ps1` also silently skipped a missing loader.

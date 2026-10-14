@@ -1,11 +1,13 @@
 // Loads the page model: the latest successful snapshot, the live manual entries
-// and the references they match, then hands them to the pure view builder.
+// and the references they match, then hands them to the pure view builder. The
+// export also gets that snapshot's invoices and truckload shipments.
 
 import { databaseConfigured, reportingDatabaseConfigured } from "@/lib/secrets";
 
 import { previousMonthStart } from "./calendar";
 import { normalizeRef } from "./rules";
 import { latestRuns, listEntries, loadConfig, loadRates, loadReferenceMatches, loadSnapshot } from "./store";
+import type { FxRate, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
 import { buildGoalsView, type GoalsView } from "./view";
 
 const EMPTY_SETTINGS = {
@@ -17,6 +19,23 @@ const EMPTY_SETTINGS = {
 };
 
 export async function loadGoalsView(): Promise<GoalsView> {
+  return (await loadGoals()).view;
+}
+
+/** The page model plus what the workbook adds, from the same run: its Sage invoices, truckload shipments and the stored rates. */
+export interface GoalsExportData {
+  view: GoalsView;
+  shipments: ShipmentRow[];
+  truckloads: TruckloadRow[];
+  rates: FxRate[];
+}
+
+export async function loadGoalsExport(): Promise<GoalsExportData> {
+  const { view, snapshot, rates } = await loadGoals();
+  return { view, shipments: snapshot?.shipments ?? [], truckloads: snapshot?.truckloads ?? [], rates };
+}
+
+async function loadGoals(): Promise<{ view: GoalsView; snapshot: SnapshotData | null; rates: FxRate[] }> {
   const configured = reportingDatabaseConfigured();
   const empty = {
     configured,
@@ -28,10 +47,11 @@ export async function loadGoalsView(): Promise<GoalsView> {
     holidays: new Set<string>(),
     rates: [],
   };
+  const none = { snapshot: null, rates: [] };
   // Without Mission Control's own database there is nothing stored to show.
-  if (!databaseConfigured()) return buildGoalsView({ ...empty, run: null, latestRun: null, snapshot: null });
+  if (!databaseConfigured()) return { ...none, view: buildGoalsView({ ...empty, run: null, latestRun: null, snapshot: null }) };
   const { succeeded, latest } = await latestRuns();
-  if (!succeeded) return buildGoalsView({ ...empty, run: null, latestRun: latest, snapshot: null });
+  if (!succeeded) return { ...none, view: buildGoalsView({ ...empty, run: null, latestRun: latest, snapshot: null }) };
   // Sequential on purpose: Mission Control's pool is small (5).
   const config = await loadConfig();
   const snapshot = await loadSnapshot(succeeded);
@@ -41,7 +61,7 @@ export async function loadGoalsView(): Promise<GoalsView> {
     succeeded.id,
     entries.map((e) => normalizeRef(e.reference))
   );
-  return buildGoalsView({
+  const view = buildGoalsView({
     configured,
     run: succeeded,
     latestRun: latest,
@@ -54,4 +74,5 @@ export async function loadGoalsView(): Promise<GoalsView> {
     holidays: config.holidays,
     rates,
   });
+  return { view, snapshot, rates };
 }

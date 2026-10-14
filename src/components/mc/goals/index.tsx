@@ -5,15 +5,17 @@
 // good refresh of FileMaker and Sage plus the entries made by hand, with the
 // day-by-day charts, tables and the rules behind every number. One read of
 // GET /api/reporting/goals (one consistent snapshot); Editors can refresh,
-// which this page follows step by step until the new snapshot is in.
+// which this page follows step by step until the new snapshot is in, and add,
+// edit, delete and import the entries made by hand (./entries.tsx, TASK-2897).
 // Module contract: docs/modules/reporting-goals/README.md.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { api, ApiClientError } from "@/lib/api";
-import type { GoalsPage, RefreshRun } from "@/lib/reporting/goals";
+import type { EvaluatedEntry, GoalsPage, RefreshRun } from "@/lib/reporting/goals";
 
 import { DailyBatchesChart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "./charts";
+import { DeleteEntryDialog, EntryDialog, ImportDialog } from "./entries";
 import { GoalCards } from "./goal-cards";
 import {
   clock,
@@ -30,7 +32,15 @@ import {
 } from "./helpers";
 import { watchRun } from "./run-watch";
 import { Section, type SectionState } from "./section";
-import { BatchList, CompletedTiles, EntriesTable, RulesText, ScheduledTiles, TruckloadTable } from "./tables";
+import {
+  BatchList,
+  CompletedTiles,
+  EntriesTable,
+  RulesText,
+  ScheduledTiles,
+  TruckloadTable,
+  type EntryActions,
+} from "./tables";
 
 type Refresh =
   | { kind: "idle" }
@@ -40,6 +50,22 @@ type Refresh =
   | { kind: "failed"; message: string }
   | { kind: "refused"; message: string }
   | { kind: "lost"; message: string };
+
+/** The entries dialog an Editor has open. */
+type EntryDialogState =
+  | { kind: "add" }
+  | { kind: "edit"; entry: EvaluatedEntry }
+  | { kind: "delete"; entry: EvaluatedEntry }
+  | { kind: "import" }
+  | null;
+
+/** After a delete the row and its button are gone: keep focus in the entries section. */
+function focusEntries(): void {
+  (
+    document.querySelector<HTMLElement>("[data-testid='goals-entries'] [role='region']") ??
+    document.querySelector<HTMLElement>("[data-testid='goals-add-entry']")
+  )?.focus();
+}
 
 function useNow(stepMs: number): number {
   const [now, setNow] = useState(() => Date.now());
@@ -77,6 +103,9 @@ export function GoalsView() {
   // The run this page started or attached to: it counts toward the 5-minute
   // limit even before the reloaded page model carries it (or if that reload fails).
   const [followed, setFollowed] = useState<RefreshRun | null>(null);
+  const [entryDialog, setEntryDialog] = useState<EntryDialogState>(null);
+  // The last entry write's result ("Added M008."), announced with the refresh status.
+  const [entryNotice, setEntryNotice] = useState("");
   const watcher = useRef<{ stop: () => void } | null>(null);
   const now = useNow(15_000);
 
@@ -130,7 +159,15 @@ export function GoalsView() {
     void load();
   };
 
+  /** An entry was added, saved, deleted or imported: say so and reload the page model. */
+  const entryWritten = (message: string, then?: () => void) => {
+    setEntryDialog(null);
+    setEntryNotice(message);
+    void load().then(() => then?.());
+  };
+
   async function startRefresh() {
+    setEntryNotice("");
     setRefresh({ kind: "starting" });
     try {
       const { run } = await api<{ run: RefreshRun }>("/reporting/goals/refresh", { method: "POST", body: "{}" });
@@ -153,6 +190,9 @@ export function GoalsView() {
   const waitUntil = busy ? null : nextRefreshAt(newest, now);
   const editor = page?.viewer.editor ?? false;
   const line = refreshLine(refresh, ready);
+  const entryActions: EntryActions | undefined = editor
+    ? { onEdit: (entry) => setEntryDialog({ kind: "edit", entry }), onDelete: (entry) => setEntryDialog({ kind: "delete", entry }) }
+    : undefined;
   // Without a Goals role (or a session) there is nothing to retry: say what is missing.
   const noAccess = !page && loadError && (loadError.code === "forbidden" || loadError.code === "not_authenticated") ? loadError : null;
 
@@ -187,6 +227,16 @@ export function GoalsView() {
             >
               {busy ? "Refreshing…" : "Refresh"}
             </button>
+            {ready ? (
+              <>
+                <button type="button" className="btn ghost" data-testid="goals-import" onClick={() => setEntryDialog({ kind: "import" })}>
+                  Import manual entries
+                </button>
+                <button type="button" className="btn ghost" data-testid="goals-add-entry" onClick={() => setEntryDialog({ kind: "add" })}>
+                  Add entry
+                </button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -200,6 +250,11 @@ export function GoalsView() {
         <p id="goals-refresh-status" className="gp-status" role="status">
           {line ||
             (editor && waitUntil !== null && ready ? `Refreshed recently. Refresh is available again at ${clock(new Date(waitUntil).toISOString())}.` : "")}
+          {entryNotice ? (
+            <span className="gp-entry-notice" data-testid="goals-entries-status">
+              {entryNotice}
+            </span>
+          ) : null}
         </p>
         {loadError && page ? (
           <p className="gp-notice" data-testid="goals-load-error">
@@ -215,8 +270,27 @@ export function GoalsView() {
         ) : page && !ready ? (
           <NotReady page={page} editor={editor} />
         ) : (
-          <Body page={ready} status={status} onRetry={retry} />
+          <Body page={ready} status={status} onRetry={retry} entryActions={entryActions} />
         )}
+
+        {ready && editor && entryDialog ? (
+          entryDialog.kind === "import" ? (
+            <ImportDialog onClose={() => setEntryDialog(null)} onImported={(message) => entryWritten(message)} />
+          ) : entryDialog.kind === "delete" ? (
+            <DeleteEntryDialog
+              entry={entryDialog.entry}
+              onClose={() => setEntryDialog(null)}
+              onDeleted={(message) => entryWritten(message, focusEntries)}
+            />
+          ) : (
+            <EntryDialog
+              entry={entryDialog.kind === "edit" ? entryDialog.entry : null}
+              largeBatchMinKg={ready.settings.largeBatchMinKg}
+              onClose={() => setEntryDialog(null)}
+              onSaved={(message) => entryWritten(message)}
+            />
+          )
+        ) : null}
       </div>
     </div>
   );
@@ -252,7 +326,17 @@ function NotReady({ page, editor }: { page: GoalsPage; editor: boolean }) {
   );
 }
 
-function Body({ page, status, onRetry }: { page: ReadyPage | null; status: SectionState; onRetry: () => void }) {
+function Body({
+  page,
+  status,
+  onRetry,
+  entryActions,
+}: {
+  page: ReadyPage | null;
+  status: SectionState;
+  onRetry: () => void;
+  entryActions?: EntryActions;
+}) {
   const state: SectionState = page ? "ready" : status === "ready" ? "failed" : status;
   const src = (key: string) => (page ? sourceText(page.run, page.sections[key] ?? []) : null);
   const ready = (render: (p: ReadyPage) => ReactNode) => (page ? render(page) : null);
@@ -327,7 +411,7 @@ function Body({ page, status, onRetry }: { page: ReadyPage | null; status: Secti
         onRetry={onRetry} resetKey={page}
       >
         {ready((p) => (
-          <EntriesTable page={p} />
+          <EntriesTable page={p} actions={entryActions} />
         ))}
       </Section>
 

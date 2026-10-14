@@ -16,6 +16,7 @@ import {
   amount,
   count,
   day,
+  decimal,
   dollars,
   filterBatches,
   nextSort,
@@ -107,17 +108,18 @@ export function TruckloadTable({ page }: { page: ReadyPage }) {
 
 // ─── Entries made by hand ─────────────────────────────────────────────────
 
-const decimal = (v: string | null, digits: number) =>
-  v === null || v.trim() === "" || !Number.isFinite(Number(v))
-    ? (v ?? "")
-    : Number(v).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-
 function loadText(e: EvaluatedEntry): string {
   if (!e.truckload) return "";
   return e.truckload.kind === "full" ? "Full" : "Partial";
 }
 
-export function EntriesTable({ page }: { page: ReadyPage }) {
+/** Editors get Edit and Delete on every row (TASK-2897). */
+export interface EntryActions {
+  onEdit: (entry: EvaluatedEntry) => void;
+  onDelete: (entry: EvaluatedEntry) => void;
+}
+
+export function EntriesTable({ page, actions }: { page: ReadyPage; actions?: EntryActions }) {
   const entries = page.model.entries;
   if (entries.length === 0) {
     return <p className="gp-empty">No entries by hand. Figures come from FileMaker and Sage only.</p>;
@@ -138,6 +140,11 @@ export function EntriesTable({ page }: { page: ReadyPage }) {
             <th scope="col">Currency</th>
             <th scope="col">Truckload</th>
             <th scope="col">Status</th>
+            {actions ? (
+              <th scope="col">
+                <span className="vh">Actions</span>
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -159,6 +166,18 @@ export function EntriesTable({ page }: { page: ReadyPage }) {
                 {e.statusLabel}
                 {e.counts ? null : <span className="vh"> (no longer counts)</span>}
               </td>
+              {actions ? (
+                <td>
+                  <div className="gp-row-actions">
+                    <button type="button" className="btn ghost sm" onClick={() => actions.onEdit(e)}>
+                      Edit<span className="vh"> {e.entryId}</span>
+                    </button>
+                    <button type="button" className="btn ghost sm" onClick={() => actions.onDelete(e)}>
+                      Delete<span className="vh"> {e.entryId}</span>
+                    </button>
+                  </div>
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

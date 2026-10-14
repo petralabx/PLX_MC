@@ -797,6 +797,271 @@
   color: var(--p-ink);
 }
 
+/* ─── Entries by hand: row actions, the form, delete and import (TASK-2897) ── */
+.mc .goals .gp-entry-notice {
+  display: block;
+}
+
+.mc .goals .gp-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Native modal dialogs: the top layer keeps them over everything; they stay
+   inside .mc in the DOM, so the tokens (and dark mode) apply. Each is its own
+   container, so the form goes to two columns when the dialog is wide enough. */
+.mc .goals .gp-dialog {
+  container: gp-dialog / inline-size;
+  width: min(40rem, calc(100vw - 2 * var(--p-gutter)));
+  max-height: calc(100dvh - 2 * var(--p-gutter));
+  padding: 0;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius);
+  background: var(--p-paper);
+  box-shadow: var(--p-shadow-md);
+  color: var(--p-ink);
+  overflow: auto;
+}
+
+.mc .goals .gp-dialog.lg {
+  width: min(64rem, calc(100vw - 2 * var(--p-gutter)));
+}
+
+.mc .goals .gp-dialog::backdrop {
+  background: var(--p-scrim);
+}
+
+.mc .goals .gp-dialog-h {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 8px 8px 18px;
+  border-bottom: 1px solid var(--p-grid);
+  background: var(--p-paper);
+}
+
+.mc .goals .gp-dialog-h h2 {
+  margin: 0;
+  font-size: var(--p-text-h3);
+  font-weight: 600;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-x {
+  flex: 0 0 auto;
+  min-width: var(--p-touch);
+  min-height: var(--p-touch);
+  border: 0;
+  background: transparent;
+  color: var(--p-ink-2);
+  font-size: var(--p-text-body);
+  cursor: pointer;
+}
+
+.mc .goals .gp-dialog-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.mc .goals .gp-dialog-text {
+  max-width: var(--p-read-max);
+  margin: 0;
+  font-size: var(--p-text-small);
+  line-height: 1.5;
+  color: var(--p-ink-2);
+}
+
+.mc .goals .gp-dialog-text b {
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--p-grid);
+  background: var(--p-paper);
+}
+
+.mc .goals .gp-dialog .gp-status {
+  margin: 0;
+  color: var(--p-ink);
+}
+
+/* An empty status or alert stays in the accessibility tree (so what it says
+   later is announced) but takes no room. */
+.mc .goals .gp-dialog :is(.gp-status, .gp-alert):empty {
+  position: absolute;
+}
+
+/* Problems: the alarm tone, never amber (amber means "entered by hand"). */
+.mc .goals .gp-alert:not(:empty) {
+  padding: 10px 12px;
+  border-left: 3px solid var(--p-hot);
+  background: var(--p-paper-2);
+  font-size: var(--p-text-small);
+  line-height: 1.5;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-alert p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.mc .goals .gp-alert ul {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.mc .goals .gp-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px 18px;
+}
+
+@container gp-dialog (min-width: 34rem) {
+  .mc .goals .gp-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mc .goals .gp-field.wide {
+    grid-column: 1 / -1;
+  }
+}
+
+.mc .goals .gp-field {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mc .goals .gp-field > label,
+.mc .goals .gp-field > legend {
+  padding: 0;
+  font-size: var(--p-text-small);
+  font-weight: 600;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-field .opt {
+  font-weight: 400;
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-hint {
+  margin: 0;
+  font-size: var(--p-text-small);
+  line-height: 1.4;
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--p-touch);
+  padding: 6px 10px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper);
+  color: var(--p-ink);
+  font-size: var(--p-text-body);
+}
+
+.dark .mc .goals .gp-input,
+.mc.dark .goals .gp-input {
+  color-scheme: dark;
+}
+
+.mc .goals textarea.gp-input {
+  resize: vertical;
+}
+
+.mc .goals .gp-input[aria-invalid="true"] {
+  border-color: var(--p-hot);
+  box-shadow: inset 0 0 0 1px var(--p-hot);
+}
+
+.mc .goals .gp-field-err {
+  margin: 0;
+  font-size: var(--p-text-small);
+  line-height: 1.4;
+  color: var(--p-hot-text);
+}
+
+.mc .goals .gp-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 18px;
+}
+
+.mc .goals .gp-choices label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--p-touch);
+  font-size: var(--p-text-body);
+  color: var(--p-ink);
+  cursor: pointer;
+}
+
+.mc .goals .gp-choices input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--p-accent);
+}
+
+.mc .goals .gp-file {
+  max-width: 100%;
+  min-height: var(--p-touch);
+  font-size: var(--p-text-small);
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-preview {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.mc .goals .gp-preview-part {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mc .goals .gp-preview-part h3 {
+  margin: 0;
+  font-size: var(--p-text-body);
+  font-weight: 600;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-changes {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 /* ─── Motion ──────────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: no-preference) {
   .mc .goals .gp-skel span {

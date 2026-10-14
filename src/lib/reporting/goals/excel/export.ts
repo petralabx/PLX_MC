@@ -14,12 +14,21 @@
 //
 // No I/O, and the export time is an input, so the workbook's contents depend
 // on the inputs alone (exceljs's zip still stamps its entries with the time).
+// exceljs loads on the first export: it takes about 0.35 s to load, which every
+// route that imports the module barrel would otherwise pay on a cold start.
 
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
 
 import { REPORT_TIME_ZONE } from "../calendar";
-import { invertCents, toCents } from "../money";
-import { classifyLoad, rateOn, type BatchStage, type EvaluatedEntry, type GoalsModel, type LoadKind, type LoadTally } from "../rules";
+import {
+  classifyLoad,
+  truckloadProductUsdCents,
+  type BatchStage,
+  type EvaluatedEntry,
+  type GoalsModel,
+  type LoadKind,
+  type LoadTally,
+} from "../rules";
 import type { FxRate, GoalSettings, IsoDate, RefreshRun, ShipmentRow, TruckloadRow } from "../types";
 import {
   AMBER_FILL,
@@ -480,19 +489,12 @@ function batchSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
 
 const shipmentKey = (code: string | null, shipment: string) => `${code ?? ""}|${shipment}`;
 
-/**
- * Full or Partial for each of this month's truckload shipments, decided as
- * rules.computeGoals decides it: USD product plus any CAD product at the ship
- * date's rate, against the configured minimum.
- */
+/** Full or Partial for each of this month's truckload shipments, by the rule computeGoals counts them with. */
 function loadKinds(input: GoalsWorkbookInput): Map<string, LoadKind> {
   const kinds = new Map<string, LoadKind>();
   for (const row of input.truckloads) {
     if (!row.thisMonth) continue;
-    const cadCents = toCents(row.productCad);
-    const usdCents =
-      toCents(row.productUsd) + (cadCents === 0 ? 0 : invertCents(cadCents, rateOn(input.rates, row.shipDate, input.model.revenue.rate)));
-    const kind = classifyLoad(usdCents, input.settings);
+    const kind = classifyLoad(truckloadProductUsdCents(row, input.rates, input.model.revenue.rate), input.settings);
     if (kind) kinds.set(shipmentKey(row.code, row.shipment), kind);
   }
   return kinds;
@@ -627,9 +629,16 @@ function entriesSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
 
 // ─── The workbook ───────────────────────────────────────────────────────────
 
+/** exceljs itself: Node hands a CommonJS package over as `default`, a bundler may hand over its exports directly. */
+async function loadExcelJS(): Promise<typeof ExcelJS> {
+  const mod = await import("exceljs");
+  return (mod as { default?: typeof ExcelJS }).default ?? mod;
+}
+
 /** The seven-sheet workbook as .xlsx bytes. */
 export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buffer> {
-  const wb = new ExcelJS.Workbook();
+  const { Workbook } = await loadExcelJS();
+  const wb = new Workbook();
   wb.creator = "PLX Mission Control";
   wb.created = input.exportedAt;
   wb.modified = input.exportedAt;

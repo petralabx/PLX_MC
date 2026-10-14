@@ -8,8 +8,8 @@
 // ignored (the uploader is recorded; the status is computed). Every row is
 // checked with the form's own validation, and any problem stops the whole
 // import. Nothing is written here: entries.ts stores the plan and applies it
-// on confirm. Server-only (exceljs, loaded only when a workbook is read);
-// planImport itself is pure.
+// on confirm. Server-only (exceljs, loaded only when a workbook is read:
+// ./load-exceljs.ts); planImport itself is pure.
 
 import type ExcelJS from "exceljs";
 
@@ -34,6 +34,7 @@ import {
   MAX_IMPORT_ROWS,
   type EntryColumnKey,
 } from "./layout";
+import { loadExcelJS } from "./load-exceljs";
 
 export type ImportFileErrorCode = "unreadable_file" | "missing_sheet" | "header_mismatch" | "too_many_rows";
 
@@ -154,16 +155,6 @@ function readRow(row: ExcelJS.Row, rowNumber: number): SheetRow | null {
     else draft[key as EntryField] = read.value;
   }
   return blank ? null : { row: rowNumber, entryId, draft, unreadable };
-}
-
-/**
- * exceljs itself, loaded on first use: it takes about 0.35 s, and every goals
- * route imports this module through the barrel. Node hands a CommonJS package
- * over as `default`, a bundler may hand over its exports directly.
- */
-async function loadExcelJS(): Promise<typeof ExcelJS> {
-  const mod = await import("exceljs");
-  return (mod as { default?: typeof ExcelJS }).default ?? mod;
 }
 
 /**

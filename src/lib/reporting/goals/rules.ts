@@ -17,6 +17,7 @@ import type {
   IsoDate,
   ManualEntry,
   SnapshotData,
+  TruckloadRow,
 } from "./types";
 
 // ─── Size bands ─────────────────────────────────────────────────────────────
@@ -67,6 +68,16 @@ export function truckloadCustomerFor(
 }
 
 export type LoadKind = "full" | "partial";
+
+/** A truckload shipment's product in US cents: its USD product plus any CAD product at its ship date's rate. */
+export function truckloadProductUsdCents(
+  row: Pick<TruckloadRow, "productUsd" | "productCad" | "shipDate">,
+  rates: readonly FxRate[],
+  fallbackRate: string
+): number {
+  const cadCents = toCents(row.productCad);
+  return toCents(row.productUsd) + (cadCents === 0 ? 0 : invertCents(cadCents, rateOn(rates, row.shipDate, fallbackRate)));
+}
 
 /** A shipment's product value (US$ cents, before tax and freight): full, partial, or never a load (≤ 0). */
 export function classifyLoad(productUsdCents: number, settings: GoalSettings): LoadKind | null {
@@ -456,9 +467,7 @@ export function computeGoals(input: GoalsInput): GoalsModel {
   for (const row of data.truckloads) {
     const customer = tallies.get(row.code);
     if (!customer) continue;
-    const cadCents = toCents(row.productCad);
-    const productUsdCents =
-      toCents(row.productUsd) + (cadCents === 0 ? 0 : invertCents(cadCents, rateOn(input.rates, row.shipDate, rate)));
+    const productUsdCents = truckloadProductUsdCents(row, input.rates, rate);
     const kind = classifyLoad(productUsdCents, settings);
     if (kind) tally(row.thisMonth ? customer.thisMonth : customer.lastMonth, kind, productUsdCents);
   }

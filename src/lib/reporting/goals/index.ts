@@ -114,6 +114,53 @@ export type { EntryColumnKey, WorkbookSheet } from "./excel/layout";
 // Workbook export (TASK-2898): its exports go below this line.
 
 // Manual entries and import (TASK-2897): their exports go below this line.
+export {
+  ENTRY_DATE_MAX,
+  ENTRY_DATE_MIN,
+  ENTRY_FIELDS,
+  ENTRY_FIELD_LABELS,
+  ENTRY_TEXT_LIMITS,
+  MAX_IMPORT_BYTES,
+  changedFields,
+  entryValuesOf,
+  plainDecimal,
+  validateEntry,
+} from "./entry-input";
+export type {
+  DraftValue,
+  EntryCurrency,
+  EntryDraft,
+  EntryField,
+  EntryFields,
+  EntryValidation,
+  EntryValues,
+  FieldError,
+} from "./entry-input";
+export { ImportFileError, planImport, readEntriesSheet, rowErrorsMessage } from "./excel/import";
+export type {
+  ImportFileErrorCode,
+  ImportPlan,
+  PlanResult,
+  PlannedAdd,
+  PlannedChange,
+  PlannedRemoval,
+  RowError,
+  SheetRow,
+} from "./excel/import";
+export {
+  CONFIRM_BODY,
+  ENTRY_BODY,
+  ENTRY_PATCH,
+  IMPORT_BODY,
+  confirmImport,
+  createEntry,
+  deleteEntry,
+  latestCustomers,
+  liveEntries,
+  previewImport,
+  updateEntry,
+} from "./entries";
+export type { EntryBody, ImportPreview, ImportResult } from "./entries";
 
 export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView } from "./view";
 export type { DatasetQuery, GoalsPage, GoalsView, GoalsViewInput, GoalsViewState, GoalsViewer } from "./view";

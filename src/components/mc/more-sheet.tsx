@@ -1,5 +1,6 @@
-// The phone "More" sheet (ADR-005): Admin & health, the way into the full
-// nav drawer (Projects and Initiatives live there — spec Q2), and appearance.
+// The phone "More" sheet (ADR-005): the groups that have no tab of their own
+// (Reporting, Admin & health), the way into the full nav drawer (Projects and
+// Initiatives live there — spec Q2), and appearance.
 // A bottom sheet on phone; mc-shell.css makes it a centred dialog at ≥641 in
 // case it is still open when the window widens. Uses the shared layer
 // contract (use-layer.ts): Esc, focus in and back to More, Tab wrap, scroll lock.
@@ -8,7 +9,7 @@ import { X } from "lucide-react";
 
 import { CountBadge, type Count } from "./count-badge";
 import { NavIcon } from "./nav-icon";
-import { isPlainLeftClick, navHref, visibleNavGroups, type NavBadge, type NavFlags } from "./nav-model";
+import { GROUP_TAB, isPlainLeftClick, navHref, visibleNavGroups, type NavBadge, type NavFlags } from "./nav-model";
 import type { Nav, Route } from "./route";
 import { useLayer } from "./use-layer";
 
@@ -38,7 +39,7 @@ export function MoreSheet({
   const { onKeyDown } = useLayer(open, onClose, ref);
   const headingId = useId();
   if (!open) return null;
-  const admin = visibleNavGroups(flags).find((group) => group.id === "admin");
+  const groups = visibleNavGroups(flags).filter((group) => GROUP_TAB[group.id] === "more" && group.items.length > 0);
 
   return (
     <>
@@ -60,12 +61,12 @@ export function MoreSheet({
           </button>
         </div>
         <div className="sheet-body">
-          {admin ? (
-            <div role="group" aria-labelledby={`${headingId}-admin`}>
-              <div className="grp-h" id={`${headingId}-admin`}>
-                {admin.label}
+          {groups.map((group) => (
+            <div key={group.id} role="group" aria-labelledby={`${headingId}-${group.id}`}>
+              <div className="grp-h" id={`${headingId}-${group.id}`}>
+                {group.label}
               </div>
-              {admin.items.map((item) => (
+              {group.items.map((item) => (
                 <a
                   key={item.screen}
                   className="row"
@@ -84,7 +85,7 @@ export function MoreSheet({
                 </a>
               ))}
             </div>
-          ) : null}
+          ))}
           <div className="grp-h">Navigate</div>
           <button type="button" className="row" onClick={onAllScreens} aria-controls="mc-nav">
             <span className="nm">All screens, projects and initiatives</span>

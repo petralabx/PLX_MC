@@ -23,6 +23,7 @@
 @import "../styles/mc-routing-inbox.css" layer(mc.legacy);
 @import "../styles/mc-approvals.css" layer(mc.legacy);
 @import "../styles/mc-dashboard.css" layer(mc.screens);
+@import "../styles/mc-goals.css" layer(mc.screens);
 
 * {
   box-sizing: border-box;

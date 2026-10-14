@@ -104,11 +104,14 @@ describe("GET /api/reporting/goals", () => {
     expect(await resp.json()).toMatchObject({ error: { code: "forbidden" } });
   });
 
-  it("serves Viewers the page model", async () => {
+  it("serves the page model and says whether the viewer may refresh", async () => {
     signedIn(["Goals.Viewer"]);
     const resp = await viewGet(new Request("http://localhost/api/reporting/goals"), ctx);
     expect(resp.status).toBe(200);
-    expect(await resp.json()).toEqual({ data: { state: "ready" } });
+    expect(await resp.json()).toEqual({ data: { state: "ready", viewer: { editor: false } } });
+    signedIn(["Goals.Editor"]);
+    const editor = await viewGet(new Request("http://localhost/api/reporting/goals"), ctx);
+    expect(await editor.json()).toEqual({ data: { state: "ready", viewer: { editor: true } } });
   });
 });
 

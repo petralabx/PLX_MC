@@ -141,6 +141,9 @@ manual entries (live) ────────────────┴──�
 - Two counted entries with the same batch reference both count. Only the first
   moves the matching open batch out of the schedule. The brief defines no
   duplicate status.
+- An invoice without a shipment number counts as its own shipment
+  (`invoice:<invnumber>`), so blank numbers never merge into one load or
+  across months. The brief defines a shipment by its number only.
 
 ## Dependencies
 

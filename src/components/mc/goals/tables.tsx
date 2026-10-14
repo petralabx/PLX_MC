@@ -319,7 +319,8 @@ export function RulesText({ page }: { page: ReadyPage }) {
         days from today to month end. Open batches are Allocated or Committed with planned kg, scheduled this month.
       </li>
       <li>
-        <b>Full truckloads</b> are Sage shipments (all invoices on one shipment number) to {list} with{" "}
+        <b>Full truckloads</b> are Sage shipments (all invoices on one shipment number; an invoice without one counts
+        on its own) to {list} with{" "}
         {usd(settings.fullTruckloadMinUsdCents)} or more of product, before tax and freight. Smaller shipments to them
         are partial loads. A shipment counts in the month it ships.
       </li>

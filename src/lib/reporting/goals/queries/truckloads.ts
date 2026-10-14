@@ -1,7 +1,9 @@
 // Shipments to the truckload customers, this month and last: one row per Sage
 // shinumber, summing its invoices' product value (invitmtot − invdiscamt,
-// before tax and freight) per currency. Shipments with product value ≤ 0
-// (freight-only, $0) are never loads. Codes are space-padded in Sage, so trim.
+// before tax and freight) per currency. An invoice without a shinumber is its
+// own shipment ("invoice:<invnumber>"), so blank numbers never merge into one
+// load or across months. Shipments with product value ≤ 0 (freight-only, $0)
+// are never loads. Codes are space-padded in Sage, so trim.
 // Full/partial is decided in rules.ts against the configured minimum.
 // Params: $1 today, $2 truckload customer codes (text[]).
 
@@ -21,7 +23,7 @@ export const truckloadsQuery: DatasetQuery<Row, TruckloadRow[]> = {
   name: "truckloads",
   sql: `${MONTH_WINDOW}
 SELECT trim(i.customer) AS code,
-       trim(i.shinumber) AS shipment,
+       coalesce(nullif(trim(i.shinumber), ''), 'invoice:' || trim(i.invnumber)) AS shipment,
        to_date(min(i.shipdate), 'YYYYMMDD')::text AS ship_date,
        coalesce(sum(i.invitmtot::numeric - i.invdiscamt::numeric) FILTER (WHERE trim(i.insourcurr) = 'USD'), 0) AS product_usd,
        coalesce(sum(i.invitmtot::numeric - i.invdiscamt::numeric) FILTER (WHERE trim(i.insourcurr) = 'CAD'), 0) AS product_cad,

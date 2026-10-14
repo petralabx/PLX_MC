@@ -510,6 +510,28 @@ describe("import: preview, then confirm", () => {
     expect((await confirm({ importId: second.data.importId, token: second.data.token })).status).toBe(200);
   });
 
+  it("stores a preview under the entries lock, so two at once can't both stay open", async () => {
+    await enterFixtures();
+    const bytes = await entriesWorkbook(await exportedRows());
+    // Hold the lock every entry write takes, as a confirm or an edit would.
+    await db.query("BEGIN");
+    await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["reporting-goals-entries"]);
+    let stored = false;
+    const pending = preview(bytes).then((result) => {
+      stored = true;
+      return result;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    expect(stored, "the preview waits for the lock").toBe(false);
+    await db.query("COMMIT");
+    expect((await pending).status).toBe(200);
+    const open = await sql<{ n: string }>(
+      `SELECT count(*)::text AS n FROM report_manual_import WHERE uploaded_by = $1 AND status = 'previewed'`,
+      [EDITOR.toLowerCase()]
+    );
+    expect(open[0].n).toBe("1");
+  });
+
   it("applies in one transaction: a failure part-way leaves every entry as it was", async () => {
     await enterFixtures();
     const rows = await exportedRows();

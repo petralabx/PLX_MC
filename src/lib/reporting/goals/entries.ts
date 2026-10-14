@@ -378,6 +378,9 @@ export async function previewImport(input: { fileName: string; bytes: Buffer; ac
   const token = entriesToken(current);
   const sha256 = createHash("sha256").update(input.bytes).digest("hex");
   const importId = await withTransaction(async (q) => {
+    // The entries lock serializes this with confirm and every entry write, so two
+    // previews at once can't both stay open.
+    await lockEntries(q);
     await q(`UPDATE report_manual_import SET status = 'superseded' WHERE uploaded_by = $1 AND status = 'previewed'`, [
       input.actor.label,
     ]);

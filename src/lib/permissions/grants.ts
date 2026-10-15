@@ -58,7 +58,8 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
 // Entra-gated.
 // task.cancel / task.reopen are deliberately absent: any agent holding them could
 // cancel any task. They are granted per principal in SERVICE_GRANTS (task.cancel: only
-// sp_mcp_cos; task.reopen: none today, TASK-2529) and to the human admin/owner roles.
+// sp_mcp_cos and sp_mcp_ledger; task.reopen: none today, TASK-2529) and to the human
+// admin/owner roles.
 const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "task.read",
   "task.create",
@@ -79,9 +80,11 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
 ];
 
 // sp_mcp_ledger is the one steward principal: the agent bundle plus
-// task.link_merged_pr (mc_link_merged_pr). Only sp_mcp_cos also holds it.
+// task.link_merged_pr (mc_link_merged_pr) and task.cancel (Ledger dedup; Vince
+// 2026-10-15 16:37 ET). Only sp_mcp_cos also holds these two.
 const LEDGER_MCP_CAPABILITIES: readonly Capability[] = [
   ...MCP_AGENT_CAPABILITIES,
+  "task.cancel",
   "task.link_merged_pr",
 ];
 

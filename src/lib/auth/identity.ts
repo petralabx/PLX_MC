@@ -46,6 +46,8 @@ declare module "@auth/core/jwt" {
     oid?: string;
     email?: string;
     roles?: string[];
+    /** Epoch ms of the Entra sign-in that issued this session (gate.sessionStillValid). */
+    signedInAt?: number;
   }
 }
 

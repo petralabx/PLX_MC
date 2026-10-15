@@ -23,11 +23,23 @@
 - **Rule going forward:** MCP authorization reads only the key-authenticated principal (`identity.actor.id` / `servicePrincipalId`) and records written from it, such as a checkout event's `permissionActorId`. A caller header may be logged or used as a label, never compared to grant access. Test every MCP authz path with a spoofed header naming the owner.
 - **Rollout:** Ship such a change in shadow first (`PLX_MC_MCP_PRINCIPAL_AUTHZ`, default `shadow`): the old rule decides, the new one is logged as `authz.shadow_mismatch`, and enforce follows only once per-runtime keys are live and that log is clean, so agents on the shared key do not lock up mid-task.
 
+### 2026-10-15 (ET) — Goals users with Entra roles still got "No access"
+
+- **What happened:** Goals.Viewer / Goals.Editor were assigned in Entra on 2026-10-14 (TASK-2940), but the users kept getting the Goals "No access" panel (TASK-2977).
+- **Root cause:** MC reads app roles only at sign-in, sessions were Auth.js defaults (30 days, renewed on every use) and MC had no sign-out, so sessions issued before the assignment kept `roles: []` with no way to refresh them.
+- **Rule going forward:** Anything read only at sign-in (roles, allowlist) needs a bounded session and a visible way to sign in again. Sessions now end 12h after sign-in or when the email leaves the allowlist (`sessionStillValid`); when assigning roles, tell users to use Sign out or "Sign in again".
+
 ### 2026-10-15 (ET) — A bulk 'expired' release dropped checkouts that open PRs still held
 
 - **What happened:** On 2026-10-14 at 19:21Z a Cursor agent acting as cos@ released 30 checkouts as `expired` in about 7 seconds. Eleven open portal PRs lost their checkouts, and the compliance gate blocked the migration chain until each PR was re-stamped (TASK-2965).
 - **Root cause:** The open-PR expiry exception lived only in verification (`prDispatchResolver`). `mc_release_checkout` checked authorization but not the exception, so a manual release overrode it. The release events also recorded no session id, so the run was hard to trace.
 - **Rule going forward:** A manual write that ends a lease applies every exception the gate applies to that lease. Reuse the gate's proof (`openPrHoldingCheckout`), fail closed when GitHub cannot be read, and record the caller's `workerId` on every lease event.
+
+### 2026-10-14 (ET) — TASK-2946: a unit test called VMC for real because the shell held VMC_API_KEY
+
+- **What happened:** `tests/mcp-portal-tool-allowlist.test.ts` > "calls its allowlisted read tools" timed out at 5000 ms in 2 of about 5 full local runs. Two missing `vi.mock` exports printed `[mcp] unhandled tool error` and looked like the cause, but those calls failed in about 10 ms. Timing each tool call showed the time was in `mc_search_knowledge`: 0.6 s alone, 4.6 s in a loaded run.
+- **Root cause:** `searchBrainAsk` makes a live VMC request whenever `VMC_API_KEY` is set, and workstation shells set it for session capture. Adding only the missing `getRegisterInboundCompletions` export made the test slower: `mc_self_check` then reached its live VMC probe and, with the Graph secrets loaded, a live Graph probe.
+- **Rule going forward:** Time each step of a slow test before fixing it; stderr noise is not proof of the cause. A test that drives MCP tools pins every credential its path reads from the environment (`vi.stubEnv("VMC_API_KEY", "")`) or mocks the network call (`probeGraphTokenOk`), so it behaves the same in a hydrated shell as in CI.
 
 ### 2026-10-14 (ET) — Vendor-spend writes took the author from the body and checked no capability
 
@@ -144,6 +156,9 @@
   - **What happened:** the PR was opened about 30 s before `mc_complete_task`. The gate runs within seconds of `opened`, so it blocked on missing evidence.
   - **Order to follow:** call `mc_complete_task` first, then open the PR. Once the PR exists, `mc_verify_pr` shows the verdict.
   - **If it happens anyway:** hand in the evidence. The next push or PR edit re-runs the gate. Never push an empty commit to re-run it.
+- **Recurred 2026-10-14 (TASK-2946, PR #330):**
+  - **What happened:** a Claude Code session opened the PR 7 s before `mc_complete_task`, and the gate blocked with "missing an evidence summary". `mc_verify_pr` showed pass once the evidence landed, and one re-run of the failed `compliance` job recovered it.
+  - **Why it recurs:** the order lives in `.cursor/rules/mc-plan-hygiene-on-pr.mdc` and `docs/AGENT-PR-SOP.md`, but not in `config/governance-contract.yaml`, so the generated `CLAUDE.md` and `AGENTS.md` pipeline contracts never state it. Adding it to the contract is the promotion this lesson needs.
 
 ### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
 

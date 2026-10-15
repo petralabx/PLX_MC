@@ -23,6 +23,10 @@ const MEMBER_CAPABILITIES: readonly Capability[] = [
   "task.complete",
   "routing.suggest",
   "routing.resolve",
+  "bucket.comment",
+  "repo.request",
+  "skill.submit",
+  "skill.install",
 ];
 
 const ADMIN_CAPABILITIES: readonly Capability[] = [
@@ -38,6 +42,7 @@ const ADMIN_CAPABILITIES: readonly Capability[] = [
   "sync.mutate",
   "approval.decide",
   "vendor_spend.write",
+  "compliance.reconcile",
 ];
 
 const OWNER_CAPABILITIES: readonly Capability[] = [

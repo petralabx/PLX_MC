@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-15 (ET) — TASK-3011: gating the session still left body-owned fields and racy whole-record writes
+
+- **What happened:** The first TASK-3011 pass gated bucket comments and repo requests with `requireSessionActor` and took the author from the session, but review found that `verified` still came from the body. The comment route also still replaced the whole thread from a client copy that could be stale, outside a lock. Repo decisions were last-write-wins, so a second decision or a pending update could overwrite one already made. And the UI added the approved repo through a separate fire-and-forget call, even when the decision was refused.
+- **Root cause:** Only the author fields were treated as untrusted. Every other server-owned field, and the read-modify-write around them, was left as before.
+- **Rule going forward:** In a mutating route, list every field the server owns (author, status, verification, timestamps, ids) and set each one on the server. Write one operation per request: add, edit or delete one item, inside one transaction under a lock, never a whole-collection replace from a client copy. Make every state transition a conditional write (`WHERE status = 'pending'`) that returns 409 when it loses. Do a decision and its side effect in one server write; the client only rolls back and shows a notice.
+
 ### 2026-10-15 (ET) — TASK-3008: the MCP operator email header granted release rights and restricted-project access
 
 - **What happened:** Any MCP key holder could release another agent's checkout as "admin" or "steward" by setting `X-MC-Operator-Email` to the owner or to `cos@petrasoap.com` (the default agent operator), and could pass a restricted project's ACL by naming a member in that header.

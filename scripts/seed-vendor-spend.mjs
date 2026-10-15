@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // Vendor-spend bootstrap — trigger a YTD API backfill for the automated
-// vendors (AWS / Anthropic / Cursor) through the deployed app's refresh
-// endpoint, so all adapter logic stays in the one domain module
-// (src/lib/vendor-spend) instead of being re-implemented here.
+// vendors (AWS / Anthropic / Cursor) through the deployed app's CRON_SECRET
+// refresh endpoint (GET /api/cron/vendor-spend-refresh?period=), so all adapter
+// logic stays in the one domain module (src/lib/vendor-spend) instead of being
+// re-implemented here. The session-gated POST /api/vendor-spend/refresh needs
+// a signed-in admin, which a script does not have (TASK-3011).
 //
 // Env:  PLX_MC_BASE_URL   app origin (default http://localhost:3000)
-//       PLX_MC_SEED_AUTH  optional "user:password" for the Basic-auth staging gate
+//       CRON_SECRET       the app's cron bearer secret (required unless --dry-run)
 // Usage: node scripts/seed-vendor-spend.mjs [--dry-run] [--period mtd|weekly|quarterly|ytd]
 // Exit codes: 0 — refresh ran (degraded vendors reported, not fatal),
 //             1 — endpoint unreachable or returned an error envelope.
@@ -23,26 +25,24 @@ async function main() {
   }
 
   const base = (process.env.PLX_MC_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
-  const url = `${base}/api/vendor-spend/refresh`;
+  const url = `${base}/api/cron/vendor-spend-refresh?period=${period}`;
 
   if (dryRun) {
-    console.log(`dry-run: would POST ${url} with { period: "${period}" }`);
+    console.log(`dry-run: would GET ${url} with the CRON_SECRET bearer`);
     console.log("dry-run: automated vendors are pulled via their adapters; vendors with");
     console.log("dry-run: missing admin keys are logged as degraded (visible, never fabricated).");
     return 0;
   }
 
-  const headers = { "content-type": "application/json" };
-  if (process.env.PLX_MC_SEED_AUTH) {
-    headers.authorization = `Basic ${Buffer.from(process.env.PLX_MC_SEED_AUTH).toString("base64")}`;
+  if (!process.env.CRON_SECRET) {
+    console.error("CRON_SECRET is not set — the refresh endpoint needs the app's cron bearer secret.");
+    return 1;
   }
 
   let resp;
   try {
     resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ period }),
+      headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
     });
   } catch (err) {
     console.error(`refresh endpoint unreachable (${url}): ${err.message}`);

@@ -1,6 +1,7 @@
 // POST /api/repos approver gate: in OIDC mode the approver is the signed-in
 // Entra session, never the request body's `actor` field (review 2026-09-25),
-// and its mc_users row decides, not the HUMANS job title (TASK-3010).
+// and its mc_users row decides (TASK-3010); a session with no row falls back to
+// the HUMANS directory role while the app roles are rolled out.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +10,7 @@ const state = vi.hoisted(() => ({
   session: null as { user?: { email?: string | null; oid?: string | null } } | null,
   mcUsers: {} as Record<string, { accessRole: "owner" | "admin" | "member"; status: "active" | "revoked" }>,
   upserts: [] as unknown[],
+  requests: [] as unknown[],
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -24,6 +26,7 @@ vi.mock("@/lib/permissions/repository", () => ({
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
+  getRepoRequests: async () => state.requests,
   upsertRepo: async (repo: unknown) => {
     state.upserts.push(repo);
   },
@@ -54,6 +57,7 @@ beforeEach(() => {
   state.session = null;
   state.mcUsers = {};
   state.upserts = [];
+  state.requests = [];
 });
 
 describe("POST /api/repos approver gate", () => {
@@ -81,11 +85,23 @@ describe("POST /api/repos approver gate", () => {
     expect(state.upserts).toHaveLength(1);
   });
 
-  it("refuses an Owner in the HUMANS directory who has no mc_users row (OIDC)", async () => {
+  it("transitional: an Owner in the HUMANS directory with no mc_users row falls back to the directory role, logged (OIDC)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     state.session = { user: { email: "Vince@PetraSoap.com", oid: "oid-vince" } };
     const res = await post({ repo });
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe("not_approver");
+    expect(res.status).toBe(200);
+    expect(state.upserts).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("no mc_users row"), "vince@petrasoap.com");
+    warn.mockRestore();
+  });
+
+  it("refuses a session with no mc_users row whose directory role is not an approver (OIDC)", async () => {
+    for (const email of ["greg.m@petrasoap.com", "stranger@petrasoap.com"]) {
+      state.session = { user: { email, oid: `oid-${email}` } };
+      const res = await post({ repo });
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe("not_approver");
+    }
     expect(state.upserts).toHaveLength(0);
   });
 
@@ -105,5 +121,17 @@ describe("POST /api/repos approver gate", () => {
     expect((await post({ actor: "greg", repo })).status).toBe(403);
     expect((await post({ actor: "vince", repo })).status).toBe(200);
     expect(state.upserts).toHaveLength(1);
+  });
+
+  it("refuses to add a repo the session itself has a pending request for (TASK-3011)", async () => {
+    state.session = { user: { email: "vince@petrasoap.com", oid: "oid-vince" } };
+    state.mcUsers = { "oid-vince": { accessRole: "owner", status: "active" } };
+    state.requests = [
+      { id: "RR-1", name: "spoofed", owner: "petralabx", requestedBy: "vince", requestedTs: "t", status: "pending", verified: true },
+    ];
+    const res = await post({ repo });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("self_approval");
+    expect(state.upserts).toHaveLength(0);
   });
 });

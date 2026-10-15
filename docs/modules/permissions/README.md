@@ -100,6 +100,35 @@ entry form. Both routes call `requireSessionActor("vendor_spend.write")` on the
 Entra session and store the session email as the author. Admin and owner roles
 hold it; members and every service principal do not, so until mode `enforce`
 (humans synthesized as admin) no signed-in person is newly denied.
+`POST /api/vendor-spend/refresh` needs it too (TASK-3011); the script backfill
+uses `GET /api/cron/vendor-spend-refresh?period=` with `CRON_SECRET` instead.
+
+**Session writes behind the middleware gate only (TASK-3011):** each now calls
+`requireSessionActor(<capability>)` and takes its author from the session
+(`sessionAuthorId` in `src/lib/api/session-actor.ts`: the directory id when the
+email is listed, else the email — the id `GET /api/viewer` returns).
+`bucket.comment` (member and up): `PATCH /api/buckets/[id]/comments`, plus the
+bucket's project ACL (404 for an unknown bucket). One operation per request
+(`add` / `edit` / `delete` one comment, `BucketCommentOp`), applied in one
+transaction under a per-bucket advisory lock: an add gets a server id, stamp
+and the session author; only the author edits or deletes (403).
+`repo.request` (member and up): filing / updating one's own pending request
+(`POST /api/repos/requests`) and `POST /api/repos/validate`. The server verifies
+the request itself (allowed org + GitHub lookup) and re-verifies on a name or
+owner change; `verified` and its details never come from the body. A decision
+needs `repo.approve` and, until mode `enforce`, the directory approver role
+(the same check as `POST /api/repos`); it is recorded under the session, is
+final, refuses self-approval (`self_approval`), an unverified request and a
+disallowed org, and an approval adds the repo to the registry in the same
+transaction. Every request write is conditional on the row still being
+pending (409 otherwise). `POST /api/repos` also refuses a repo matching the
+caller's own pending request.
+`skill.submit` (member and up): `POST /api/skills-directory/submit`, submitter =
+session email. `skill.install` (member and up): `POST
+/api/skills-directory/install` and `/sync-check`. `compliance.reconcile` (admin
+and owner): `POST /api/compliance/reconcile`. No service principal holds any
+of them. Under break-glass (Basic auth, no Entra session) a manual reconcile
+is `GET /api/cron/reconcile` with the `CRON_SECRET` bearer.
 
 **Audit data (TASK-620):** every enforcement call site records `allowed`,
 `reasonCode`, and `policyVersion` to `permissions_decision_log` (migration 022)
@@ -155,13 +184,17 @@ emptying it breaks every MCP call that names an operator: reduce it to the
 MCP operator emails plus a named break-glass owner, not to empty, until the
 MCP allowlist is split from sign-in.
 
-**`repo.approve` (TASK-3010):** `POST /api/repos` and
-`PATCH /api/skills-directory/submissions/[id]` call `requireRepoApprover`
-(`src/lib/api/session-actor.ts`): in OIDC mode the session's `mc_users` row
-(role + status) decides in every enforcement mode — staged modes would
-otherwise treat every person as admin. No row → `403 not_approver`; the
-HUMANS directory job title is not read. Dormant local/test mode keeps the
-body actor's directory role.
+**`repo.approve` (TASK-3010):** `POST /api/repos`, the decision path of
+`POST /api/repos/requests` and `PATCH /api/skills-directory/submissions/[id]`
+call `requireRepoApprover` (`src/lib/api/session-actor.ts`): in OIDC mode the
+session's `mc_users` row (role + status) decides in every enforcement mode —
+staged modes would otherwise treat every person as admin. A revoked row is
+`403 not_approver`. **Transitional:** a session with no row falls back to its
+HUMANS directory role (the pre-TASK-3010 rule) and logs
+`repo.approve by directory role, no mc_users row`, so approvers are not locked
+out before the app roles exist. Remove the fallback after step 4 below shows
+every approver with a row. Dormant local/test mode keeps the body actor's
+directory role.
 
 **Operator steps (in this order):**
 
@@ -239,10 +272,12 @@ concrete rule cannot be expressed that way.
 - Depends on: none at runtime for `authorize` (pure). Identity hydration uses
   the shared `db` query seam only when enforcement is enabled.
 - Depended on by: the `repo.approve` approver gate (`requireRepoApprover` on
-  `mc_users` for the routes; directory-role UI hints in the store and the
-  Repos and Skills screens), MCP auth (service principal actor), the
-  vendor-spend write routes (`vendor_spend.write`), future routing / task /
-  sync mutation paths.
+  `mc_users` for the routes, with a logged directory-role fallback while a
+  session has no row; directory-role UI hints in the store and the Repos and
+  Skills screens), MCP auth (service principal actor), the vendor-spend write
+  routes (`vendor_spend.write`), the TASK-3011 session writes (bucket comments,
+  repo requests, skills submit/install, compliance reconcile), future routing /
+  task / sync mutation paths.
 
 ## Owner
 

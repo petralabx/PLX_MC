@@ -5,11 +5,16 @@
 // agents are bound to the same allow-list at the server boundary. In OIDC mode
 // the approver is the signed-in session's mc_users row, never the body's
 // `actor` field (requireRepoApprover, TASK-3010).
+// The UI's approve path no longer calls this — it decides through POST
+// /api/repos/requests, which adds the repo in the same write (TASK-3011). A
+// direct add is still refused when it would approve the caller's own pending
+// request.
 
 import { z } from "zod";
-import { parseBody, route } from "@/lib/api/route";
+import { ApiError, parseBody, route } from "@/lib/api/route";
 import { requireRepoApprover } from "@/lib/api/session-actor";
-import { upsertRepo } from "@/lib/sync/repo";
+import { repoFromRequest } from "@/lib/mc-data/repos";
+import { getRepoRequests, upsertRepo } from "@/lib/sync/repo";
 
 const upsertRepoSchema = z.object({
   actor: z.string().min(1).optional(),
@@ -26,10 +31,16 @@ const upsertRepoSchema = z.object({
 
 export const POST = route(async (req) => {
   const { actor, repo } = await parseBody(req, upsertRepoSchema);
-  await requireRepoApprover(actor, "Only an Owner or Admin can add a repo to the registry.", {
+  const approver = await requireRepoApprover(actor, "Only an Owner or Admin can add a repo to the registry.", {
     type: "repo",
     id: repo.id,
   });
+  const ownPending = (await getRepoRequests()).some(
+    (r) => r.status === "pending" && r.requestedBy === approver.authorId && repoFromRequest(r).id === repo.id
+  );
+  if (ownPending) {
+    throw new ApiError("self_approval", "A repo request must be approved by someone other than its requester.", 403);
+  }
   await upsertRepo(repo);
   return repo;
 });

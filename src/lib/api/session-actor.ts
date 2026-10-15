@@ -26,25 +26,41 @@ export function actorByEmail(email: string | null | undefined): Actor | undefine
   );
 }
 
+// The author id a session-gated write records for the signed-in person: the id
+// GET /api/viewer gives them (directory id when the email is listed, else the
+// email), so the client's own-comment / own-request checks keep matching.
+// `auditLabel` comes from requireSessionActor — never from the request body.
+export function sessionAuthorId(auditLabel: string): string {
+  const listed = actorByEmail(auditLabel);
+  return listed?.kind === "human" ? listed.id : auditLabel;
+}
+
 /**
- * Gate a repo.approve action (repo registry, skill submissions). OIDC: the
- * signed-in session's mc_users row decides — its access_role, kept current
- * from the MC.* Entra app role at sign-in, and its status — in every
- * enforcement mode, since staged modes would otherwise treat every person as
- * admin (TASK-3010). No row → not an approver; the HUMANS job title is not
- * read. Dormant local/test mode keeps the body actor's directory role.
+ * Gate a repo.approve action (repo registry, repo request decisions, skill
+ * submissions). OIDC: the signed-in session's mc_users row decides — its
+ * access_role, kept current from the MC.* Entra app role at sign-in, and its
+ * status — in every enforcement mode, since staged modes would otherwise treat
+ * every person as admin (TASK-3010). A revoked row is refused.
+ *
+ * Transitional: until the MC.* app roles exist and approvers have signed in
+ * again, a session with no mc_users row falls back to its directory (HUMANS)
+ * role, as before TASK-3010, and the fallback is logged. Remove the fallback
+ * once every approver has a row (permissions README, TASK-3010 steps).
+ *
+ * Returns the approver's author id (sessionAuthorId) for self-approval checks.
+ * Dormant local/test mode keeps the body actor's directory role.
  */
 export async function requireRepoApprover(
   bodyActor: string | undefined,
   deniedMessage: string,
   resource?: PermissionResource
-): Promise<void> {
+): Promise<{ authorId: string | undefined }> {
   if (!oidcEnabled()) {
     const actor = permissionActorFromDirectoryRole(bodyActor ? ACTORS[bodyActor] : undefined);
     if (!authorize({ actor, capability: "repo.approve" }).allowed) {
       throw new ApiError("not_approver", deniedMessage, 403);
     }
-    return;
+    return { authorId: bodyActor };
   }
   let session: { user?: { oid?: string | null; email?: string | null } } | null;
   try {
@@ -57,6 +73,11 @@ export async function requireRepoApprover(
   const auditLabel = session?.user?.email?.trim().toLowerCase() || oid;
   const user = await findMcUserByEntraOid(oid);
   if (!user) {
+    const directoryActor = actorByEmail(auditLabel);
+    if (authorize({ actor: permissionActorFromDirectoryRole(directoryActor), capability: "repo.approve" }).allowed) {
+      console.warn("[auth] repo.approve by directory role, no mc_users row (TASK-3010 transitional): %s", auditLabel);
+      return { authorId: sessionAuthorId(auditLabel) };
+    }
     recordUnresolvedActorDenial({
       site: "repo.approve.session",
       capability: "repo.approve",
@@ -75,6 +96,7 @@ export async function requireRepoApprover(
     appliedActor: permissionActorFromMcUser(user),
   });
   if (!decision.allowed) throw new ApiError("not_approver", deniedMessage, 403);
+  return { authorId: sessionAuthorId(auditLabel) };
 }
 
 // Dormant (no-OIDC) local/test mode has no session provider, so no viewer can

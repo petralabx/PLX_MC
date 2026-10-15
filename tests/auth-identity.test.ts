@@ -7,6 +7,7 @@ import {
   extractEntraRoles,
   hydrateMcUserByOid,
   permissionsEnforcementEnabled,
+  syncMcUserAtSignIn,
   toSessionIdentity,
 } from "@/lib/auth/identity";
 
@@ -107,5 +108,95 @@ describe("permissionsEnforcementEnabled", () => {
     expect(identityQuery).toHaveBeenCalledWith(expect.stringContaining("FROM mc_users"), [
       "oid-persisted",
     ]);
+  });
+});
+
+// TASK-3010: the sign-in writes the mc_users row from the MC.* app role.
+describe("syncMcUserAtSignIn", () => {
+  const claims = {
+    oid: "oid-new-admin",
+    email: "New.Admin@PetraSoap.com",
+    name: "New Admin",
+    roles: ["MC.Admin"],
+  };
+
+  it("creates or updates an active row with the role's access_role", async () => {
+    const identityQuery = vi.fn(async () => []);
+
+    await expect(
+      syncMcUserAtSignIn(
+        { claims, decision: { admitted: true, via: "role", accessRole: "admin" } },
+        identityQuery
+      )
+    ).resolves.toBe("upserted");
+    expect(identityQuery).toHaveBeenCalledTimes(1);
+    const [sql, params] = identityQuery.mock.calls[0] as unknown as [string, unknown[]];
+    expect(sql).toContain("INSERT INTO mc_users");
+    expect(sql).toContain("ON CONFLICT (entra_oid) DO UPDATE");
+    expect(sql).toContain("status = 'active'");
+    expect(params).toEqual([
+      "usr_oid-new-admin",
+      "oid-new-admin",
+      "new.admin@petrasoap.com",
+      "New Admin",
+      "admin",
+    ]);
+  });
+
+  it("leaves an allowlist-only sign-in's row alone (no role claim to write)", async () => {
+    const identityQuery = vi.fn(async () => []);
+
+    await expect(
+      syncMcUserAtSignIn(
+        { claims: { ...claims, roles: [] }, decision: { admitted: true, via: "allowlist", accessRole: null } },
+        identityQuery
+      )
+    ).resolves.toBe("unchanged");
+    expect(identityQuery).not.toHaveBeenCalled();
+  });
+
+  it("revokes the row of a refused sign-in (role removed, not allowlisted)", async () => {
+    const identityQuery = vi.fn(async () => []);
+
+    await expect(
+      syncMcUserAtSignIn(
+        { claims: { ...claims, roles: [] }, decision: { admitted: false, via: null, accessRole: null } },
+        identityQuery
+      )
+    ).resolves.toBe("revoked");
+    const [sql, params] = identityQuery.mock.calls[0] as unknown as [string, unknown[]];
+    expect(sql).toContain("UPDATE mc_users");
+    expect(sql).toContain("status = 'revoked'");
+    expect(params).toEqual(["oid-new-admin"]);
+  });
+
+  it("reports a failed write without throwing, so admission alone decides", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const identityQuery = vi.fn(async () => {
+      throw new Error("db down");
+    });
+
+    await expect(
+      syncMcUserAtSignIn(
+        { claims, decision: { admitted: true, via: "role", accessRole: "admin" } },
+        identityQuery
+      )
+    ).resolves.toBe("failed");
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("writes nothing without an Entra oid", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const identityQuery = vi.fn(async () => []);
+
+    await expect(
+      syncMcUserAtSignIn(
+        { claims: { ...claims, oid: undefined }, decision: { admitted: true, via: "role", accessRole: "admin" } },
+        identityQuery
+      )
+    ).resolves.toBe("failed");
+    expect(identityQuery).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 });

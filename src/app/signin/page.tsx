@@ -10,13 +10,13 @@ import { BrandBoundary, Kicker } from "@/components/brand";
 import { auth, oidcEnabled, signIn } from "@/lib/auth";
 
 // The Auth.js `?error=` codes this gate can realistically surface, in plain,
-// honest copy. The allowlist rejection (isAllowedUser → false) lands here as
-// "AccessDenied".
+// honest copy. The admission refusal (no MC.* app role and not on the
+// allowlist — admissionDecision, TASK-3010) lands here as "AccessDenied".
 function errorMessage(code: string | undefined): string | null {
   if (!code) return null;
   switch (code) {
     case "AccessDenied":
-      return "That account is not on the Mission Control allowlist. Access is limited to authorized Petra staff.";
+      return "That account has no Mission Control access. Access is limited to authorized Petra staff; ask an owner to assign you a Mission Control role.";
     case "Configuration":
       return "Sign-in is temporarily unavailable due to a server configuration issue.";
     default:

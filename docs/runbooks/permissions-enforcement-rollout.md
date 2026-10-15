@@ -82,6 +82,9 @@ Rows already written stay.
 
 1. Ensure migrations 016/022/023 are applied (`npm run migrate`).
 2. Seed `mc_users` for every allowlisted operator (entra_oid, email, role).
+   Since TASK-3010 a sign-in with an MC.* Entra app role creates or updates
+   the row itself (`docs/modules/permissions/README.md`, "Admission from Entra
+   app roles"); hand-seed only people who still sign in by allowlist alone.
 3. Set `PLX_MC_PERMISSIONS_ENFORCEMENT_MODE=log-only` on the Vercel environment
    named above. Vince's go is required before this step.
 4. Done-when: a sampled day of `permissions_decision_log` (query above) shows

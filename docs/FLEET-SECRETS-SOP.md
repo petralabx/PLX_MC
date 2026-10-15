@@ -74,7 +74,7 @@ Secrets Manager during deploy or rotation.
 | `COMPLIANCE_OIDC_ENABLED` | `1` — prefer GitHub Actions OIDC on verify |
 | `COMPLIANCE_OIDC_AUDIENCE` | Audience verified on OIDC tokens (e.g. `plx-mc-compliance-verify`) |
 | `COMPLIANCE_OIDC_REPO_ALLOWLIST` | Comma-separated `org/repo` list allowed to mint OIDC tokens |
-| `PLX_MC_ALLOWED_USERS` | Comma-separated operator emails — MC sign-in + MCP operator allowlist. CSV is the source of truth; Vince-approved non-Petra exceptions (gmail/Proton) are admitted when listed. |
+| `PLX_MC_ALLOWED_USERS` | Comma-separated operator emails — MCP operator allowlist, and the transitional / break-glass MC sign-in path beside the MC.* Entra app roles (TASK-3010, `docs/modules/permissions/README.md`). CSV is the source of truth; Vince-approved non-Petra exceptions (gmail/Proton) are admitted when listed. |
 | `PLX_MC_MCP_API_KEY` | Server-side MCP API key (clients use `MC_MCP_API_KEY`; see §5) |
 | `VMC_API_KEY` | Sensitive. Company-brain search for Ask (`/?screen=brain-ask` → `/api/brain-ask/*`). Source: `prod/ec2-secrets`. Missing → `not_configured` empty list. `mc_self_check.brainAskConfigured` is key presence; `brainAskSearchOk` / `brainAskSearchStatus` are the live probe (no snippets). |
 | `VMC_BASE_URL` | VMC origin for Ask. Default `https://missioncontrol.tayloralton.com`. Set explicitly on Production/Preview so the default cannot drift silently. |

@@ -1,8 +1,7 @@
 import { z } from "zod";
 
 import { ApiError, parseBody, route } from "@/lib/api/route";
-import { resolveRequestActor } from "@/lib/api/session-actor";
-import { authorize, permissionActorFromDirectoryRole } from "@/lib/permissions";
+import { requireRepoApprover } from "@/lib/api/session-actor";
 import {
   getSkillSubmission,
   publishApprovedSkillSubmission,
@@ -19,14 +18,7 @@ const patchSchema = z.object({
 export const PATCH = route(async (req, ctx) => {
   const { id } = await ctx.params;
   const body = await parseBody(req, patchSchema);
-  const reviewActor = permissionActorFromDirectoryRole(await resolveRequestActor(body.actor));
-  if (!authorize({ actor: reviewActor, capability: "repo.approve" }).allowed) {
-    throw new ApiError(
-      "not_approver",
-      "Only an Owner or Admin can review skill submissions.",
-      403
-    );
-  }
+  await requireRepoApprover(body.actor, "Only an Owner or Admin can review skill submissions.");
   if (body.status === "approved") {
     const current = await getSkillSubmission(id);
     if (!current) {

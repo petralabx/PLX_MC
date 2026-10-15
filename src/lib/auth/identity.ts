@@ -1,14 +1,21 @@
 // Session identity helpers — propagate Entra oid through JWT/session.
-// Email allowlist remains the outer admission gate (gate.ts). DB hydration
+// Admission (MC.* app role or allowlist) is decided in gate.ts. DB hydration
 // is gated by PLX_MC_PERMISSIONS_ENFORCEMENT_ENABLED so local dev/build
-// never requires identity tables.
+// never requires identity tables; the sign-in mc_users write (TASK-3010)
+// runs only on an Entra sign-in, which needs a deployed database anyway.
 
 import type {
   IdentityQuery,
   McUserRecord,
   PermissionActor,
 } from "@/lib/permissions";
-import { findMcUserByEntraOid } from "@/lib/permissions/repository";
+import {
+  findMcUserByEntraOid,
+  revokeMcUserByEntraOid,
+  upsertMcUserFromEntra,
+} from "@/lib/permissions/repository";
+
+import type { AdmissionDecision } from "./gate";
 
 export interface EntraProfileClaims {
   oid?: string;
@@ -133,4 +140,52 @@ export async function hydrateMcUserByOid(
     return null;
   }
   return findMcUserByEntraOid(entraOid, runQuery);
+}
+
+export type McUserSignInSync = "upserted" | "revoked" | "unchanged" | "failed";
+
+/**
+ * Write the sign-in's admission to mc_users (TASK-3010):
+ * - MC.* role → create/update the row with that access_role, status active.
+ * - allowlist only → no role claim to write; an existing row is left as is.
+ * - refused → mark an existing row revoked.
+ * Never throws: a failed write is logged and admission alone decides the
+ * sign-in, so the database can neither grant nor block it.
+ */
+export async function syncMcUserAtSignIn(
+  input: { claims: EntraProfileClaims | null | undefined; decision: AdmissionDecision },
+  runQuery?: IdentityQuery
+): Promise<McUserSignInSync> {
+  const { claims, decision } = input;
+  if (decision.admitted && !decision.accessRole) return "unchanged";
+  const oid = extractEntraOid(claims);
+  const email = (claims?.email ?? claims?.preferred_username)?.trim().toLowerCase();
+  if (!oid || (decision.accessRole && !email)) {
+    console.error(
+      "[auth] mc_users sign-in sync skipped: ID token has no %s (admitted=%s)",
+      oid ? "email" : "oid",
+      String(decision.admitted)
+    );
+    return "failed";
+  }
+  try {
+    if (decision.accessRole && email) {
+      await upsertMcUserFromEntra(
+        { entraOid: oid, email, displayName: claims?.name?.trim() || null, accessRole: decision.accessRole },
+        runQuery
+      );
+      return "upserted";
+    }
+    await revokeMcUserByEntraOid(oid, runQuery);
+    return "revoked";
+  } catch (err) {
+    console.error(
+      "[auth] mc_users sign-in sync FAILED for oid %s (admitted=%s, role=%s): %s",
+      oid,
+      String(decision.admitted),
+      decision.accessRole ?? "none",
+      err instanceof Error ? err.message : String(err)
+    );
+    return "failed";
+  }
 }

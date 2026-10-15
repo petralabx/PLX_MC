@@ -9,7 +9,8 @@ verified GitHub links, and service principals.
 
 This is **not** a generic IAM framework, database-authored policy language, or
 policy DSL. Domain lifecycle rules stay in `mc-data/policy`; authentication
-admission (email allowlist / MCP API key) stays in `auth` / `mcp`.
+admission (MC.* Entra app roles + transitional allowlist / MCP API key) stays
+in `auth` / `mcp`.
 
 ## Why
 
@@ -33,7 +34,7 @@ const decision = authorize({
 
 | Layer | Responsibility |
 |-------|----------------|
-| `auth` | Authenticate Entra sessions / credentials; admit via allowlist; propagate `oid` |
+| `auth` | Authenticate Entra sessions / credentials; admit via MC.* app role or allowlist; write `mc_users` at sign-in; propagate `oid` |
 | `permissions` | Decide whether an authenticated actor may perform a capability |
 | `mc-data/policy` | Domain invariants after authorization (accountable owner, lifecycle, evidence) |
 
@@ -107,10 +108,90 @@ enforcement mode and — during staged rollout — the shadow (real-identity)
 verdict. Recording is fail-open and a no-op in mode `off`. The same sink
 covers MCP auth denials (missing or revoked principal), tool-allowlist
 denials, checkout-release verdicts, agent-assignee decisions, restricted-project
-ACL decisions, and routing-session transfer verdicts. The synchronous
-`repo.approve` approver gate (`authorize` on `permissionActorFromDirectoryRole`
-in the store, the Repos and Skills screens and their routes) does not go
-through `enforcement.ts` and is not recorded.
+ACL decisions, routing-session transfer verdicts, and the server-side
+`repo.approve` gate (`repo.approve.session`). The client-side approver checks
+in the store and the Repos and Skills screens (`authorize` on
+`permissionActorFromDirectoryRole`) are UI hints only and are not recorded.
+
+**Admission from Entra app roles (TASK-3010):** the `plx-mission-control` app
+registration defines three app roles. At each Entra sign-in
+(`src/lib/auth/index.ts` `signIn` callback, which runs only on the
+`/api/auth` callback route, never in middleware) the ID token's `roles` claim
+(the same claim Goals.Viewer / Goals.Editor use) is mapped by
+`admissionDecision` / `accessRoleFromEntraRoles` in `src/lib/auth/gate.ts`:
+
+| Entra app role (value) | Petra level | `mc_users.access_role` |
+|------------------------|-------------|------------------------|
+| `MC.Owner` | L5 | `owner` |
+| `MC.Admin` | L4 | `admin` |
+| `MC.Member` | L2–L3 | `member` |
+| none | L1 | no admission by role |
+
+Highest role wins. Values are case-sensitive.
+
+- **Admission** = holds an MC.* role **OR** email is on `PLX_MC_ALLOWED_USERS`.
+  Neither → refused (`AccessDenied` on `/signin`).
+- **MC.* role** → `mc_users` row created or updated (`entra_oid`, email,
+  display name, `access_role`, `status='active'`). Entra is the source of
+  truth: the role re-activates a revoked row and overwrites a hand-set role.
+- **Allowlist only** (no MC.* role) → admitted; the existing row is left as is
+  (never downgraded or deleted from an absent claim); no row is created. Each
+  such sign-in logs `[auth] admitted by PLX_MC_ALLOWED_USERS without an MC.*
+  app role: <email>` — the list of people still to assign.
+- **Refused** → an existing row is set `status='revoked'`.
+- A failed `mc_users` write is logged (`[auth] mc_users sign-in sync FAILED`)
+  and never changes the admission result: the database can neither grant nor
+  block a sign-in.
+- **Removing a role** ends access within 12h: sessions end 12h after sign-in
+  (`sessionStillValid`, TASK-2977); the next sign-in without a role, off the
+  allowlist, is refused and revokes the row. To cut access at once, also remove
+  the email from the allowlist (live check on every request) or revoke the
+  user's Entra sessions.
+
+**`PLX_MC_ALLOWED_USERS` is transitional / break-glass.** It stays an
+admission path so deploying this before the roles exist locks nobody out. It
+is also the MCP `X-MC-Operator-Email` allowlist (`src/lib/mcp/auth.ts`), so
+emptying it breaks every MCP call that names an operator: reduce it to the
+MCP operator emails plus a named break-glass owner, not to empty, until the
+MCP allowlist is split from sign-in.
+
+**`repo.approve` (TASK-3010):** `POST /api/repos` and
+`PATCH /api/skills-directory/submissions/[id]` call `requireRepoApprover`
+(`src/lib/api/session-actor.ts`): in OIDC mode the session's `mc_users` row
+(role + status) decides in every enforcement mode — staged modes would
+otherwise treat every person as admin. No row → `403 not_approver`; the
+HUMANS directory job title is not read. Dormant local/test mode keeps the
+body actor's directory role.
+
+**Operator steps (in this order):**
+
+1. Deploy this change. Nothing changes for anyone on the allowlist.
+2. Entra admin center → App registrations → `plx-mission-control` → App roles →
+   create three roles, allowed member types *Users/Groups*, values exactly
+   `MC.Owner`, `MC.Admin`, `MC.Member` (display names "MC Owner", "MC Admin",
+   "MC Member").
+3. Enterprise applications → `plx-mission-control` → Users and groups → assign
+   the L5 group to MC.Owner, L4 to MC.Admin, L2 and L3 to MC.Member. Assign no
+   L1 group.
+4. Ask each person to Sign out and sign in again (or wait out the 12h session).
+   Verify: `SELECT email, access_role, status, updated_at FROM mc_users ORDER BY
+   updated_at DESC;` shows every expected person with the right role, and
+   Vercel logs show no `admitted by PLX_MC_ALLOWED_USERS` lines for people who
+   should hold a role. Check that the repo approvers (today: Vince) have an
+   `owner` or `admin` row — without one, repo and skill approval returns 403.
+5. Enterprise applications → `plx-mission-control` → Properties → set
+   **Assignment required? = Yes**, so Entra refuses anyone without a role
+   before MC sees them. Do this only after step 4, or allowlisted people with
+   no assignment are refused by Entra itself.
+6. Reduce `PLX_MC_ALLOWED_USERS` to the MCP operator emails plus a named
+   break-glass owner (see above), and redeploy.
+7. Then TASK-618 can move `PLX_MC_PERMISSIONS_ENFORCEMENT_MODE` log-only →
+   review → enforce on `permissions_decision_log`.
+
+Roll back: re-add emails to `PLX_MC_ALLOWED_USERS` (admits them with no role)
+and set **Assignment required?** back to No. Reverting the code restores
+allowlist-only admission and the HUMANS job-title `repo.approve` gate;
+`mc_users` rows already written stay.
 
 **Project ACL (TASK-1527 / TASK-1548):** restricted projects are a resource
 allowlist, not a new capability. `src/lib/permissions/project-acl.ts` is the
@@ -150,14 +231,16 @@ concrete rule cannot be expressed that way.
 - `db/migrations/025_grok_hermes_mcp_principals.sql` — Grok/Hermes MCP principals
 - `db/migrations/030_chatgpt_mcp_principal.sql` — ChatGPT MCP principal
 - `db/migrations/034_ledger_mcp_principal.sql` — Ledger steward MCP principal (`task.link_merged_pr`)
-- `src/lib/auth/identity.ts` — Entra `oid` session helpers + enforcement mode
+- `src/lib/auth/identity.ts` — Entra `oid` session helpers, enforcement mode, sign-in `mc_users` sync
+- `src/lib/auth/gate.ts` — MC.* role → access_role mapping, admission decision, session validity
 
 ## Dependencies
 
 - Depends on: none at runtime for `authorize` (pure). Identity hydration uses
   the shared `db` query seam only when enforcement is enabled.
-- Depended on by: the `repo.approve` approver gate (`mc-data` store, Repos and
-  Skills screens and routes), MCP auth (service principal actor), the
+- Depended on by: the `repo.approve` approver gate (`requireRepoApprover` on
+  `mc_users` for the routes; directory-role UI hints in the store and the
+  Repos and Skills screens), MCP auth (service principal actor), the
   vendor-spend write routes (`vendor_spend.write`), future routing / task /
   sync mutation paths.
 

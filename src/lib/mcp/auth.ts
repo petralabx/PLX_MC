@@ -61,6 +61,21 @@ export function expectedMcpApiKey(): string {
  * Retirement kill switch for the legacy shared key: set to 0 once every agent
  * runtime carries its own key and sp_mcp_cursor's shared credential is dead.
  */
+export type McpPrincipalAuthzMode = "shadow" | "enforce";
+
+/**
+ * TASK-3008 rollout switch. "shadow" (default, and any value but "enforce"):
+ * the operator-email rules still decide checkout release and restricted-project
+ * access, and the principal-only decision is logged beside them. "enforce":
+ * only the authenticated principal decides. Flip only after per-runtime keys
+ * are live and the authz.shadow_mismatch log is clean (TASK-2569).
+ */
+export function mcpPrincipalAuthzMode(): McpPrincipalAuthzMode {
+  return (process.env.PLX_MC_MCP_PRINCIPAL_AUTHZ ?? "").trim().toLowerCase() === "enforce"
+    ? "enforce"
+    : "shadow";
+}
+
 export function sharedMcpKeyEnabled(): boolean {
   return (process.env.PLX_MC_MCP_SHARED_KEY_ENABLED ?? "1").trim() === "1";
 }

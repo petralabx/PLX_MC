@@ -16,6 +16,13 @@
 
 ## Lessons
 
+### 2026-10-15 (ET) — TASK-3008: the MCP operator email header granted release rights and restricted-project access
+
+- **What happened:** Any MCP key holder could release another agent's checkout as "admin" or "steward" by setting `X-MC-Operator-Email` to the owner or to `cos@petrasoap.com` (the default agent operator), and could pass a restricted project's ACL by naming a member in that header.
+- **Root cause:** `authorizeCheckoutRelease` and `aclPrincipalFromMcp` read the operator email, which is caller-chosen and only checked against the allowlist, although `src/lib/mcp/auth.ts` documents it as audit context that never grants access.
+- **Rule going forward:** MCP authorization reads only the key-authenticated principal (`identity.actor.id` / `servicePrincipalId`) and records written from it, such as a checkout event's `permissionActorId`. A caller header may be logged or used as a label, never compared to grant access. Test every MCP authz path with a spoofed header naming the owner.
+- **Rollout:** Ship such a change in shadow first (`PLX_MC_MCP_PRINCIPAL_AUTHZ`, default `shadow`): the old rule decides, the new one is logged as `authz.shadow_mismatch`, and enforce follows only once per-runtime keys are live and that log is clean, so agents on the shared key do not lock up mid-task.
+
 ### 2026-10-15 (ET) — A bulk 'expired' release dropped checkouts that open PRs still held
 
 - **What happened:** On 2026-10-14 at 19:21Z a Cursor agent acting as cos@ released 30 checkouts as `expired` in about 7 seconds. Eleven open portal PRs lost their checkouts, and the compliance gate blocked the migration chain until each PR was re-stamped (TASK-2965).

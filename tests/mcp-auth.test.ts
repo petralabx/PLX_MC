@@ -285,3 +285,41 @@ describe("MCP service principal auth", () => {
     );
   });
 });
+
+describe("aclPrincipalFromMcp (TASK-3008)", () => {
+  it("under enforce uses only the authenticated service principal, never the operator email header", async () => {
+    vi.stubEnv("PLX_MC_MCP_PRINCIPAL_AUTHZ", "enforce");
+    const { aclPrincipalFromMcp } = await import("@/lib/routing/mutations/actors");
+    const { canAccessProject } = await import("@/lib/permissions/project-acl");
+    const identity = {
+      operatorEmail: "ross@petrasoap.com",
+      runtime: "cursor",
+      workerId: "w",
+      repo: "petralabx/PLX_MC",
+      servicePrincipalId: MCP_SERVICE_PRINCIPAL_ID,
+      actor: { kind: "service" as const, id: MCP_SERVICE_PRINCIPAL_ID, status: "active" as const },
+    };
+    expect(aclPrincipalFromMcp(identity).tokens).toEqual([MCP_SERVICE_PRINCIPAL_ID]);
+    // Naming a member (by email or directory id) in the header passes nothing.
+    const restricted = { visibility: "restricted", members: ["ross@petrasoap.com", "ross"] };
+    expect(canAccessProject(restricted, aclPrincipalFromMcp(identity))).toBe(false);
+    expect(
+      canAccessProject({ visibility: "restricted", members: [MCP_SERVICE_PRINCIPAL_ID] }, aclPrincipalFromMcp(identity))
+    ).toBe(true);
+  });
+
+  it("in shadow mode (default) keeps the operator email tokens and carries the principal-only tokens beside them", async () => {
+    vi.stubEnv("PLX_MC_MCP_PRINCIPAL_AUTHZ", "");
+    const { aclPrincipalFromMcp } = await import("@/lib/routing/mutations/actors");
+    const principal = aclPrincipalFromMcp({
+      operatorEmail: "ross@petrasoap.com",
+      runtime: "cursor",
+      workerId: "w",
+      repo: "petralabx/PLX_MC",
+      servicePrincipalId: MCP_SERVICE_PRINCIPAL_ID,
+      actor: { kind: "service" as const, id: MCP_SERVICE_PRINCIPAL_ID, status: "active" as const },
+    });
+    expect(principal.tokens).toEqual(expect.arrayContaining([MCP_SERVICE_PRINCIPAL_ID, "ross@petrasoap.com", "ross"]));
+    expect(principal.principalOnlyTokens).toEqual([MCP_SERVICE_PRINCIPAL_ID]);
+  });
+});

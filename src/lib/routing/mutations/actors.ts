@@ -14,7 +14,7 @@ import type {
   PermissionContext,
   PermissionResource,
 } from "@/lib/permissions";
-import type { McpIdentity } from "@/lib/mcp/auth";
+import { mcpPrincipalAuthzMode, type McpIdentity } from "@/lib/mcp/auth";
 import { HUMANS } from "@/lib/mc-data/data";
 import {
   principalFromTokens,
@@ -137,14 +137,26 @@ function directoryIdsForEmail(email: string | undefined): string[] {
     .map((human) => human.id);
 }
 
-/** ACL principal for an authenticated MCP agent (sp_* + operator email). */
+/**
+ * ACL principal for an authenticated MCP agent. Under enforce it is the service
+ * principal only: the operator email header is caller-chosen audit context and
+ * never a member token (TASK-3008). During the shadow rollout (default) the
+ * email and its directory ids still count, so agents on the shared key keep
+ * their restricted-project access, and `principalOnlyTokens` lets the guard log
+ * every decision the principal alone would refuse.
+ */
 export function aclPrincipalFromMcp(identity: McpIdentity): ProjectAclPrincipal {
-  return principalFromTokens(
-    identity.servicePrincipalId,
-    identity.actor.id,
-    identity.operatorEmail,
-    ...directoryIdsForEmail(identity.operatorEmail)
-  );
+  const principalOnly = principalFromTokens(identity.servicePrincipalId, identity.actor.id);
+  if (mcpPrincipalAuthzMode() === "enforce") return principalOnly;
+  return {
+    ...principalFromTokens(
+      identity.servicePrincipalId,
+      identity.actor.id,
+      identity.operatorEmail,
+      ...directoryIdsForEmail(identity.operatorEmail)
+    ),
+    principalOnlyTokens: principalOnly.tokens,
+  };
 }
 
 /** ACL principal for a session or MCP actor already authorized for a capability. */

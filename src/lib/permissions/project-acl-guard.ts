@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/api/route";
 import type { Bucket, Project, Task } from "@/lib/mc-data/types";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
 import { recordPermissionDecision } from "./decision-log";
+import { recordShadowMismatch } from "./shadow-mismatch";
 import {
   assertCanAccessProject,
   canAccessProject,
@@ -64,7 +65,21 @@ export async function assertProjectIdAccess(
     throw new ApiError("not_found", `unknown project ${projectId}`, 404);
   }
   if (isRestrictedProject(project)) {
-    recordRestrictedProjectDecision(projectId, principal, canAccessProject(project, principal));
+    const allowed = canAccessProject(project, principal);
+    recordRestrictedProjectDecision(projectId, principal, allowed);
+    if (principal.principalOnlyTokens) {
+      const principalAllowed = canAccessProject(project, { tokens: principal.principalOnlyTokens });
+      if (principalAllowed !== allowed) {
+        await recordShadowMismatch({
+          site: "permissions.project-acl",
+          mode: "shadow",
+          actor: principal.principalOnlyTokens[0] ?? "unknown",
+          projectId,
+          operatorAllowed: allowed,
+          principalAllowed,
+        });
+      }
+    }
   }
   assertCanAccessProject(project, principal);
 }

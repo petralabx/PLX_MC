@@ -32,6 +32,12 @@ export interface ProjectAclFields {
 export interface ProjectAclPrincipal {
   /** Normalized identity tokens (email, oid, directory id, sp_*). */
   tokens: string[];
+  /**
+   * TASK-3008 shadow rollout: the tokens the authenticated principal alone
+   * carries (no operator email). Set only on MCP principals in shadow mode;
+   * the guard logs where these would be refused.
+   */
+  principalOnlyTokens?: string[];
 }
 
 export function normalizeMemberToken(raw: string): string {

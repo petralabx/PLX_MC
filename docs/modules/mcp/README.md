@@ -50,7 +50,7 @@ Routing behavior is unchanged; owner: Vince. No migration is needed.
 | `mc_request_approval` | `POST /api/cursor/request-approval` | `approval.request` (write) | `gateId`, `checkoutRef` (`dsp_…last4`), `status: pending`, `inputRequired: true` |
 | `mc_get_approval_gate` | `GET /api/cursor/approval-gate` | `task.read` (read; only the authenticated service principal that raised the gate) | `gateId`, `checkoutRef`, `status`, `decidedBy`, `decidedAt`, `note`, `proposal`, `timedOut` |
 | `mc_release_checkout` | `POST /api/cursor/checkouts/release` | `task.checkout` + project ACL + accountable human / admin / Ledger-CoS steward (write) | releases one lease by `checkoutId`, or by `checkoutRef` + `taskId`; returns `checkoutRef`, `releasedAt`, `releasedReason` (`manual: …`), `authz` |
-| `mc_release_checkouts` | `POST /api/cursor/checkouts/release-batch` | same, per item | `results[]` with `ok` + `data` or `ok: false` + `error`; `released`, `failed` |
+| `mc_release_checkouts` | `POST /api/cursor/checkouts/release-batch` | same, per item | `results[]` with `ok` + `data` or `ok: false` + `error`; `released`, `failed`; `refused[]` with `checkoutRef`, `taskId`, `code`, `reason` per unreleased item |
 | `mc_report_session_telemetry` | `POST /api/cursor/session-telemetry` | `telemetry.report` (write) | appends one `agent.session_telemetry` event per `sessionId` (replays are no-ops); read back per runtime and per bucket via `GET /api/agent-metrics?rollup=cost` (`src/lib/routing/cost-rollup.ts`); the roll-up applies the caller's project ACL (restricted-project tasks and their telemetry are dropped) and resolves checkout ids missing from the newest-5000 event sample from the `mc_dispatch` ledger. Remaining limit: a task's own `task.completed`/telemetry events older than that sample are not counted |
 
 `mc_list_buckets` now needs only `task.read` (was `bucket.create`), so
@@ -78,6 +78,19 @@ MC has no separate Ledger or CoS service principal). Anyone else gets 403 and a
 return `ambiguous_checkout_ref`. A release never touches the task. A PR reopen
 undoes only a `merged`/`closed` release, never a manual one. SOP:
 `docs/AGENT-PR-SOP.md` (Ledger hygiene).
+
+**Open-PR guard (TASK-2965):** an expired lease stays valid while an open PR
+carries its stamp (the verification-time expiry exception). A release whose
+reason claims expiry (`expired`, `lease expired`, `expiry`) asks
+`openPrHoldingCheckout` in `src/lib/compliance/service.ts`. It reads the task's
+PR candidates from `mc_events` and asks GitHub for the live state, the same
+proof the gate uses. An open PR with the stamp returns
+`open_pr_expiry_exception` (409) and a `checkout.release_refused` event. A
+GitHub read failure returns `open_pr_check_unavailable` (503) and keeps the
+lease. Other reasons release as before. `checkout.released`,
+`checkout.release_denied` and `checkout.release_refused` record the caller's
+`workerId` (`X-MC-Worker-Id`, the stdio client's per-session id;
+`unknown-worker` when absent).
 
 **Cancelled end stage (TASK-2529):** `cancelled` is a task stage for work that
 will never ship. It is terminal (`TERMINAL_STAGES`) but is never "done": it is
@@ -242,6 +255,8 @@ other principal holds that capability. The portal's existing MC key does not cha
 portal key, because `mc_self_check` stays forbidden to it.
 
 **Workbench principal:** `sp_mcp_workbench` (PLX Agent Workbench, `tswaterloo/OntologyProject`; migration 038; owner Tanush) is read-only: its grant is `task.read` only, and its allowlist is `mc_self_check`, `mc_get_context`, `mc_list_buckets`, `mc_search_knowledge`, `mc_search_tasks` and `mc_get_task`; every write tool gives 403.
+
+**Infra principal:** `sp_mcp_infra` (PLX Infra; migration 040; owner Infra, approved by Vince 2026-10-15) is read-only like the Workbench: its grant is `task.read` only, its allowlist is the same six read tools, and every write tool gives 403. A later grant change can widen it.
 
 **Agent reports (agent fleet P8, D12):** `POST /api/cursor/agent-report`
 records one free-form report per agent run as an `agent.report` event in

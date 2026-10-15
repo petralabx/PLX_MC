@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-15 (ET) — A bulk 'expired' release dropped checkouts that open PRs still held
+
+- **What happened:** On 2026-10-14 at 19:21Z a Cursor agent acting as cos@ released 30 checkouts as `expired` in about 7 seconds. Eleven open portal PRs lost their checkouts, and the compliance gate blocked the migration chain until each PR was re-stamped (TASK-2965).
+- **Root cause:** The open-PR expiry exception lived only in verification (`prDispatchResolver`). `mc_release_checkout` checked authorization but not the exception, so a manual release overrode it. The release events also recorded no session id, so the run was hard to trace.
+- **Rule going forward:** A manual write that ends a lease applies every exception the gate applies to that lease. Reuse the gate's proof (`openPrHoldingCheckout`), fail closed when GitHub cannot be read, and record the caller's `workerId` on every lease event.
+
 ### 2026-10-14 (ET) — TASK-2946: a unit test called VMC for real because the shell held VMC_API_KEY
 
 - **What happened:** `tests/mcp-portal-tool-allowlist.test.ts` > "calls its allowlisted read tools" timed out at 5000 ms in 2 of about 5 full local runs. Two missing `vi.mock` exports printed `[mcp] unhandled tool error` and looked like the cause, but those calls failed in about 10 ms. Timing each tool call showed the time was in `mc_search_knowledge`: 0.6 s alone, 4.6 s in a loaded run.
@@ -28,11 +34,23 @@
 - **Root cause:** The routes accepted the client's `viewerId()` as a schema field instead of using `requireSessionActor`, the session gate that task, project and bucket writes already used, and no capability covered vendor spend.
 - **Rule going forward:** A mutating route never takes an author or actor from the body. Gate it with `requireSessionActor(<capability>)` and store `authorized.auditLabel` as the author. Test it with a spoofed author in the body and with a member under `enforce`.
 
+### 2026-10-14 (UTC) — A review fix was pushed to two PRs after both had merged (TASK-2938)
+
+- **What happened:** A fix for a Cursor Bugbot finding on #325 (a parallel-suite race in `ensurePostgresImage`) was pushed to #325 and ported to #322 at 20:23, but both PRs had merged at 20:19, so neither merge carried it. #325's description was then edited to say it did.
+- **Root cause:** The PRs' state was read before the fix was written and not again before the push or the description edit; the merges landed in between.
+- **Rule going forward:** Re-read a PR's state immediately before pushing to its branch or editing its description. If it has merged, land the change as a new PR from the default branch under its own MC task, and correct any record that says it was included.
+
+### 2026-10-14 (UTC) — A new Postgres suite skipped the image fallback and turned main red (TASK-2938)
+
+- **What happened:** #326 added `tests/reporting-goals-entries-postgres.test.ts` while #325 (TASK-2934) was open. It ran `docker run` on `POSTGRES_IMAGE` without `ensurePostgresImage()`, so after both merged, main's CI (run 881) failed when ECR Public answered `toomanyrequests: Rate exceeded`. #327 (TASK-2935) then added the call, and a fourth entry to the guard test's list, by hand.
+- **Root cause:** `tests/harness-image-source.test.ts` checked a hand-written list of three harnesses, so a fourth, written in parallel, was never checked.
+- **Rule going forward:** A test that enforces a rule across files finds those files by scanning the tree, and asserts that the scan finds the known ones; it does not list them by hand.
+
 ### 2026-10-14 (ET) — TASK-2924: the approver module-shim reached its removal date unretired
 
 - **What happened:** The approver wrapper in `src/lib/mc-data/repos.ts` (a `module-shim` over `authorize({ capability: "repo.approve" })`, due for removal on 2026-10-14) still had six callers on that date, while `permissionActorFromDirectoryRole`, the helper written for those callers to migrate to, had none.
 - **Root cause:** No MC task and no PLX_MC script tracked the removal date, and the helper sat in the server-only `@/lib/auth` graph, which three of the six callers (the client store and two screens) cannot import.
-- **Rule going forward:** When adding a dated `module-shim`, put its replacement where every caller can import it, migrate at least one caller in the same PR, and open an MC task for the removal before the date.
+- **Rule going forward:** When adding a dated `module-shim`, put its replacement where every caller can import it, migrate at least one caller in the same PR, and open an MC task for the removal before the date. Enforced by `scripts/check-repo-hygiene.py` in `preflight.sh` since TASK-2947: it fails from the day after the marker's date and warns 14 days ahead.
 
 ### 2026-10-14 (UTC) — Pre-push preflight in a Claude Code cloud container
 
@@ -1037,4 +1055,5 @@
   Public) with no second source, so a quota hit on the runner's IP failed the job.
 - **Rule going forward:** Harnesses get the image through `ensurePostgresImage()`
   (`scripts/lib/postgres-image.mjs`): ECR first, then the Docker Hub original (a cached copy before a
-  pull), tagged as `POSTGRES_IMAGE`. A new harness image gets a second source the same way.
+  pull), tagged as `POSTGRES_IMAGE`; if both pulls are refused it waits up to 60 s for a parallel
+  suite's copy. A new harness image gets a second source the same way.

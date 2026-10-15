@@ -123,11 +123,14 @@ const WORKBENCH_TOOLS = [
   "mc_search_tasks",
   "mc_get_task",
 ];
+// sp_mcp_infra (PLX Infra) has the same read-only allowlist as the Workbench.
+const INFRA = "sp_mcp_infra";
 
 const KEYS: Record<string, string> = {
   sp_mcp_claude_code: "claude-key",
   sp_mcp_portal: "portal-key",
   sp_mcp_workbench: "workbench-key",
+  sp_mcp_infra: "infra-key",
 };
 
 function headers(key: string): Record<string, string> {
@@ -252,9 +255,23 @@ describe("MCP tool allowlist", () => {
     expect(isMcpToolAllowed(WORKBENCH, "mc_tool_added_later")).toBe(false);
   });
 
+  it("lets sp_mcp_infra call only the same six read tools", () => {
+    expect([...(MCP_TOOL_ALLOWLISTS[INFRA] ?? [])].sort()).toEqual([...WORKBENCH_TOOLS].sort());
+    for (const tool of WORKBENCH_TOOLS) {
+      expect(isMcpToolAllowed(INFRA, tool)).toBe(true);
+    }
+    for (const tool of ["mc_create_task", ...Object.keys(REFUSED_TOOL_ARGS)]) {
+      if (WORKBENCH_TOOLS.includes(tool)) continue;
+      expect({ tool, allowed: isMcpToolAllowed(INFRA, tool) }).toEqual({ tool, allowed: false });
+    }
+    expect(isMcpToolAllowed(INFRA, "mc_tool_added_later")).toBe(false);
+  });
+
   it("leaves every other MCP principal without a tool allowlist", () => {
-    const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => id !== PORTAL && id !== WORKBENCH);
-    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 2);
+    const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
+      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA
+    );
+    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 3);
     for (const principalId of others) {
       expect(MCP_TOOL_ALLOWLISTS[principalId]).toBeUndefined();
       for (const tool of [...ALLOWED_TOOLS, ...Object.keys(REFUSED_TOOL_ARGS)]) {
@@ -386,6 +403,58 @@ describe("sp_mcp_workbench through HTTP MCP and the cursor REST routes", () => {
       new Request("http://localhost/api/cursor/tasks", {
         method: "POST",
         headers: headers("workbench-key"),
+        body: JSON.stringify({ title: "Should not exist", bucket: "BKT-INFRA" }),
+      }),
+      { params: Promise.resolve({}) }
+    );
+    expect(create.status).toBe(403);
+    expect(((await create.json()) as { error: { code: string } }).error.code).toBe("forbidden");
+    expect(h.writes).toEqual([]);
+  });
+});
+
+describe("sp_mcp_infra through HTTP MCP and the cursor REST routes", () => {
+  it("lists tools and searches tasks as sp_mcp_infra", async () => {
+    const list = await rpc("infra-key", "tools/list", {});
+    const names = (list.result.tools as { name: string }[]).map((t) => t.name);
+    expect(names).toEqual(expect.arrayContaining(WORKBENCH_TOOLS));
+    h.tasks.push({ id: "TASK-1", title: "Infra", stage: "backlog", bucket: "BKT-INFRA" });
+    const search = await callTool("infra-key", "mc_search_tasks", { q: "infra" });
+    expect(search.isError).toBe(false);
+    expect(search.body).toMatchObject({
+      data: { total: 1 },
+      meta: { actor: { servicePrincipalId: INFRA } },
+    });
+    expect(h.writes).toEqual([]);
+  });
+
+  it("refuses mc_create_task and every other non-read tool with forbidden", async () => {
+    const args: Record<string, Record<string, unknown>> = {
+      ...REFUSED_TOOL_ARGS,
+      mc_create_task: { title: "Should not exist", bucket: "BKT-INFRA", reporter: "cos@petrasoap.com" },
+    };
+    for (const [tool, toolArgs] of Object.entries(args)) {
+      if (WORKBENCH_TOOLS.includes(tool)) continue;
+      const result = await callTool("infra-key", tool, toolArgs);
+      expect({ tool, isError: result.isError, body: result.body }).toMatchObject({
+        tool,
+        isError: true,
+        body: { error: { code: "forbidden" } },
+      });
+    }
+    expect(h.writes).toEqual([]);
+  });
+
+  it("searches through GET /api/cursor/tasks and gets 403 on POST /api/cursor/tasks", async () => {
+    const search = await cursorTasksGet(
+      new Request("http://localhost/api/cursor/tasks?limit=1", { headers: headers("infra-key") }),
+      { params: Promise.resolve({}) }
+    );
+    expect(search.status).toBe(200);
+    const create = await cursorTasksPost(
+      new Request("http://localhost/api/cursor/tasks", {
+        method: "POST",
+        headers: headers("infra-key"),
         body: JSON.stringify({ title: "Should not exist", bucket: "BKT-INFRA" }),
       }),
       { params: Promise.resolve({}) }

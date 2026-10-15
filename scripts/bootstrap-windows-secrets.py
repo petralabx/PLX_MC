@@ -63,6 +63,7 @@ MCP_PRINCIPAL_IDS = {
     "sp_mcp_ledger",
     "sp_mcp_cos",
     "sp_mcp_workbench",
+    "sp_mcp_infra",
 }
 
 

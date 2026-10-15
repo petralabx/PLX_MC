@@ -570,6 +570,35 @@ export async function releaseDispatchManually(input: {
   return r ? { releasedAt: r.released_at.toISOString(), eventSeq: String(r.seq) } : null;
 }
 
+/**
+ * PR numbers that may still be open for a task in one repo, newest first: PRs
+ * with a pr.* or gate.* event for the task whose newest such event is not a
+ * merge or close. Events carry the bare repo name, so both forms match. Only
+ * GitHub decides whether a candidate is open (service.openPrHoldingCheckout).
+ */
+export async function openPrCandidatesForTask(taskId: string, repoFullName: string, limit = 10): Promise<number[]> {
+  const bareName = repoFullName.split("/").pop() ?? repoFullName;
+  const rows = await query<{ pr: string }>(
+    `SELECT pr FROM (
+       SELECT DISTINCT ON (pr) pr, kind, seq FROM mc_events
+        WHERE kind = ANY($1::text[]) AND pr IS NOT NULL
+          AND lower(repo) IN (lower($2), lower($3))
+          AND (task_id = $4 OR payload->'taskIds' ? $4)
+        ORDER BY pr, seq DESC
+     ) newest
+     WHERE kind NOT IN ('pr.merged', 'pr.closed')
+     ORDER BY seq DESC LIMIT $5`,
+    [
+      ["pr.opened", "pr.synchronized", "pr.merged", "pr.closed", "gate.passed", "gate.blocked"],
+      repoFullName,
+      bareName,
+      taskId,
+      limit,
+    ]
+  );
+  return rows.map((r) => Number(r.pr)).filter((n) => Number.isInteger(n) && n > 0);
+}
+
 // ─── Compliance check ledger ─────────────────────────────────────────────────
 
 export async function recordCheck(c: {

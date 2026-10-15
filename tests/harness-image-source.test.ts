@@ -3,7 +3,7 @@
 // back to the Docker Hub original, when ECR Public refuses the pull too
 // (`toomanyrequests: Data limit exceeded`, TASK-2934).
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -15,18 +15,40 @@ import {
 } from "../scripts/lib/postgres-image.mjs";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const read = (...parts: string[]) => readFileSync(path.join(root, ...parts), "utf8");
-const shared = read("scripts", "lib", "postgres-image.mjs");
-const consumers = {
-  harness: read("scripts", "test-routing-postgres.mjs"),
-  schemaPostgres: read("tests", "schema-postgres.test.ts"),
-  reportingGoalsPostgres: read("tests", "reporting-goals-postgres.test.ts"),
-  reportingGoalsEntriesPostgres: read("tests", "reporting-goals-entries-postgres.test.ts"),
-};
+const read = (file: string) => readFileSync(path.join(root, file), "utf8");
+const sharedFile = "scripts/lib/postgres-image.mjs";
+const shared = read(sharedFile);
+
+// Every test or script that names a Postgres image is a consumer. They are found by
+// scanning, not listed, so a new suite cannot skip the helper unnoticed: #326's
+// entries suite did, and failed on ECR's rate limit (TASK-2938).
+const namesAnImage = /POSTGRES_IMAGE|(^|[^/\w.-])postgres:\d|docker\.io/m;
+const consumers = Object.fromEntries(
+  ["tests", "scripts"]
+    .flatMap((dir) =>
+      readdirSync(path.join(root, dir), { recursive: true, encoding: "utf8" }).map((name) =>
+        path.join(dir, name).split(path.sep).join("/")
+      )
+    )
+    .filter((file) => /\.(ts|mts|mjs|js|cjs)$/.test(file) && file !== sharedFile && file !== "tests/harness-image-source.test.ts")
+    .map((file) => [file, read(file)] as const)
+    .filter(([, source]) => namesAnImage.test(source))
+);
 
 describe("test harness image source", () => {
   it("defines the postgres image once, on the ECR public mirror", () => {
     expect(shared).toContain('"public.ecr.aws/docker/library/postgres:16-alpine"');
+  });
+
+  it("finds every harness that starts a Postgres container", () => {
+    expect(Object.keys(consumers)).toEqual(
+      expect.arrayContaining([
+        "scripts/test-routing-postgres.mjs",
+        "tests/schema-postgres.test.ts",
+        "tests/reporting-goals-postgres.test.ts",
+        "tests/reporting-goals-entries-postgres.test.ts",
+      ])
+    );
   });
 
   it.each(Object.entries(consumers))("%s uses the shared image with no bare or Docker Hub reference", (_name, source) => {
@@ -49,16 +71,27 @@ describe("ensurePostgresImage", () => {
   const pullHub = `pull ${POSTGRES_IMAGE_FALLBACK}`;
   const tag = `tag ${POSTGRES_IMAGE_FALLBACK} ${POSTGRES_IMAGE}`;
   const refused = { status: 1, stderr: "toomanyrequests: Data limit exceeded" };
+  const hubRefused = { status: 1, stderr: "toomanyrequests: pull rate limit" };
+  type Result = { status: number; stderr?: string };
 
   // Records each docker invocation; anything not listed fails like a missing image.
-  function fakeDocker(results: Record<string, { status: number; stderr?: string }>) {
+  // A list answers successive calls in turn (the last answer repeats), like an
+  // image that a parallel suite finishes pulling while this one waits.
+  function fakeDocker(results: Record<string, Result | Result[]>) {
     const calls: string[] = [];
     const docker = (args: string[]) => {
       const key = args.join(" ");
       calls.push(key);
-      return results[key] ?? { status: 1, stderr: `no result for: ${key}` };
+      const answer = results[key];
+      if (!Array.isArray(answer)) return answer ?? { status: 1, stderr: `no result for: ${key}` };
+      return answer.length > 1 ? answer.shift()! : answer[0];
     };
     return { docker, calls };
+  }
+
+  function recordedSleep() {
+    const sleeps: number[] = [];
+    return { sleep: (ms: number) => void sleeps.push(ms), sleeps };
   }
 
   it("falls back to the same official image on Docker Hub", () => {
@@ -89,12 +122,40 @@ describe("ensurePostgresImage", () => {
     expect(calls).toEqual([inspect, pullEcr, inspectHub, tag]);
   });
 
-  it("reports both registries' errors when neither pull works", () => {
-    const { docker } = fakeDocker({ [pullEcr]: refused, [pullHub]: { status: 1, stderr: "toomanyrequests: pull rate limit" } });
-    expect(ensurePostgresImage(docker)).toMatchObject({
+  it("uses a parallel suite's ECR copy when its own Docker Hub pull is refused", () => {
+    const { docker, calls } = fakeDocker({
+      [inspect]: [{ status: 1 }, { status: 1 }, { status: 0 }],
+      [pullEcr]: refused,
+      [pullHub]: hubRefused,
+    });
+    const { sleep, sleeps } = recordedSleep();
+    expect(ensurePostgresImage(docker, sleep)).toEqual({ ok: true, source: "parallel-suite" });
+    expect(calls).not.toContain(tag);
+    expect(sleeps.length).toBe(2);
+  });
+
+  it("tags a parallel suite's Docker Hub copy when its own pull is refused", () => {
+    const { docker, calls } = fakeDocker({
+      [pullEcr]: refused,
+      [inspectHub]: [{ status: 1 }, { status: 1 }, { status: 0 }],
+      [pullHub]: hubRefused,
+      [tag]: { status: 0 },
+    });
+    const { sleep } = recordedSleep();
+    expect(ensurePostgresImage(docker, sleep)).toEqual({ ok: true, source: "parallel-suite" });
+    expect(calls.at(-1)).toBe(tag);
+  });
+
+  it("reports both registries' errors when neither pull works and no copy appears in time", () => {
+    const { docker } = fakeDocker({ [pullEcr]: refused, [pullHub]: hubRefused });
+    const { sleep, sleeps } = recordedSleep();
+    expect(ensurePostgresImage(docker, sleep)).toMatchObject({
       ok: false,
       error: expect.stringMatching(/Data limit exceeded[\s\S]*pull rate limit/),
     });
+    // The wait has to end well inside the suites' 90 s beforeAll budget.
+    expect(sleeps.length).toBeGreaterThan(0);
+    expect(sleeps.reduce((total, ms) => total + ms, 0)).toBeLessThanOrEqual(60_000);
   });
 
   it("fails when the Docker Hub image cannot be tagged", () => {

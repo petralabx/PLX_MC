@@ -29,7 +29,7 @@ definition of "passing."
   the same rules reach Cursor, Claude Code, and ChatGPT/Codex from one source.
 - `scripts/check-repo-hygiene.py` enforces `docs/REPO_HYGIENE_SPEC.md`
   (approved root files, forbidden patterns, dated artifact bundles, documented
-  archives) with exit codes.
+  archives, unexpired `module-shim` dates) with exit codes.
 - `scripts/preflight.sh --mode pre-commit|pre-push|ci` runs policy gates +
   stack checks; local hooks (`.pre-commit-config.yaml`) and CI
   (`.github/workflows/ci.yml`) both invoke it.

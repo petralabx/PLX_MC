@@ -597,7 +597,7 @@ const releaseCheckoutItem = {
 
 server.tool(
   "mc_release_checkout",
-  "Release a stray or expired checkout lease (audits checkout.released). Target the full checkoutId, or checkoutRef (dsp_…last4) plus taskId. Only the checkout's accountable human, an admin, or a Ledger/CoS steward may release. Refuses an already-released lease. Never changes the task stage or Verified.",
+  "Release a stray or expired checkout lease (audits checkout.released). Target the full checkoutId, or checkoutRef (dsp_…last4) plus taskId. Only the checkout's accountable human, an admin, or a Ledger/CoS steward may release. Refuses an already-released lease, and refuses an expired-lease reason (open_pr_expiry_exception) while an open PR carries the stamp. Never changes the task stage or Verified.",
   releaseCheckoutItem,
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_release_checkout");
@@ -607,7 +607,7 @@ server.tool(
 
 server.tool(
   "mc_release_checkouts",
-  "Batch form of mc_release_checkout (max 50 items), with a per-item outcome.",
+  "Batch form of mc_release_checkout (max 50 items), with a per-item outcome; refused[] names each unreleased item by checkoutRef, taskId, code and reason.",
   { items: z.array(z.object(releaseCheckoutItem)).min(1).max(50) },
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_release_checkouts");

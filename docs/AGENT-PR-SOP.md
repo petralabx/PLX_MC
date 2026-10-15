@@ -278,7 +278,10 @@ Rules:
 - A release changes only the lease. It never moves the task stage and never
   marks it Verified.
 - Never release a lease that an open PR still stamps. That PR's gate then
-  fails with `checkout released`, and only a new checkout fixes it.
+  fails with `checkout released`, and only a new checkout fixes it. MC
+  enforces this for an `expired` reason: it returns
+  `open_pr_expiry_exception` and keeps the lease. Bulk releases list each
+  unreleased item in `refused[]`.
 - `already_released` means there is nothing to do. MC writes no second event.
 - A PR reopen does not undo a manual release.
 

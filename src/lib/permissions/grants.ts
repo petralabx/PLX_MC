@@ -5,6 +5,7 @@ import {
   COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
   COS_MCP_SERVICE_PRINCIPAL_ID,
   GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
+  INFRA_MCP_SERVICE_PRINCIPAL_ID,
   LEDGER_MCP_SERVICE_PRINCIPAL_ID,
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
@@ -50,7 +51,7 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
   owner: OWNER_CAPABILITIES,
 };
 
-// Every per-agent MCP principal except sp_mcp_portal and sp_mcp_workbench carries the same reviewed task/planning/routing
+// Every per-agent MCP principal except sp_mcp_portal, sp_mcp_workbench and sp_mcp_infra carries the same reviewed task/planning/routing
 // + bucket.update + project.update (steward edits, mc_update_project) +
 // sync.resolve (via sync.mutate) bundle; per-agent identity isolates
 // credentials and audit, not capabilities. Console sweep/retry stay
@@ -111,6 +112,10 @@ const PORTAL_MCP_CAPABILITIES: readonly Capability[] = [
 // src/lib/mcp/tool-allowlist.ts limits it to its six read tools.
 const WORKBENCH_MCP_CAPABILITIES: readonly Capability[] = ["task.read"];
 
+// sp_mcp_infra (PLX Infra; Vince 2026-10-15 09:10 ET): read-only, the same
+// grant and tool allowlist as sp_mcp_workbench.
+const INFRA_MCP_CAPABILITIES: readonly Capability[] = ["task.read"];
+
 const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
   ...Object.fromEntries(
     MCP_AGENT_SERVICE_PRINCIPAL_IDS.map((id) => [
@@ -123,7 +128,9 @@ const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
             ? COS_MCP_CAPABILITIES
             : id === WORKBENCH_MCP_SERVICE_PRINCIPAL_ID
               ? WORKBENCH_MCP_CAPABILITIES
-              : MCP_AGENT_CAPABILITIES,
+              : id === INFRA_MCP_SERVICE_PRINCIPAL_ID
+                ? INFRA_MCP_CAPABILITIES
+                : MCP_AGENT_CAPABILITIES,
     ])
   ),
   [SYNC_INBOUND_SERVICE_PRINCIPAL_ID]: ["sync.service.write", "task.read"],

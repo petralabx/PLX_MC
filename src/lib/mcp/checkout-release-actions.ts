@@ -12,11 +12,19 @@
 // Anyone else gets 403 and a checkout.release_denied audit row with its
 // reasonCode. The operator email is the same admitted context checkout()
 // recorded as accountable_human, so this rule trusts nothing new.
+//
+// Open-PR guard (TASK-2965): an expired lease stays valid while an open PR
+// carries its stamp (the verification-time expiry exception). A release whose
+// reason says "expired" would override that exception, so the action refuses
+// it with open_pr_expiry_exception and audits checkout.release_refused. Other
+// reasons still release. Every release event records the caller's workerId
+// (X-MC-Worker-Id, the stdio client's per-session id).
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import * as complianceRepo from "@/lib/compliance/repo";
+import { openPrHoldingCheckout } from "@/lib/compliance/service";
 import { HUMANS } from "@/lib/mc-data/data";
 import { directoryRoleToAccessRole, POLICY_VERSION } from "@/lib/permissions";
 import { recordPermissionDecision } from "@/lib/permissions/decision-log";
@@ -57,6 +65,26 @@ export type ReleaseCheckoutInput = z.infer<typeof releaseCheckoutSchema>;
 export const releaseCheckoutsSchema = z.object({
   items: z.array(releaseCheckoutSchema).min(1).max(RELEASE_BATCH_MAX),
 });
+
+/** A release reason that claims the lease expired ("expired", "lease expired", "expiry"). */
+const EXPIRED_REASON_RE = /\bexpir(?:e|ed|y)\b/i;
+
+export function isExpiredReason(reason: string): boolean {
+  return EXPIRED_REASON_RE.test(reason);
+}
+
+/** A refusal on a resolved checkout; the batch form reports its ref and task. */
+export class CheckoutReleaseRefusal extends ApiError {
+  constructor(
+    code: string,
+    message: string,
+    status: number,
+    readonly checkoutRef: string,
+    readonly taskId: string
+  ) {
+    super(code, message, status);
+  }
+}
 
 export type ReleaseAuthzReasonCode = "accountable_human" | "admin" | "steward" | "not_accountable";
 
@@ -128,6 +156,9 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
   // Same restricted-project guard as every other MCP task write.
   await assertTaskProjectAccess(dispatch.taskId, aclPrincipalFromMcp(identity));
   const actor = `${identity.runtime}:${identity.operatorEmail}`;
+  const workerId = identity.workerId || "unknown-worker";
+  const refuse = (code: string, message: string, status: number) =>
+    new CheckoutReleaseRefusal(code, message, status, ref, dispatch.taskId);
 
   const authz = authorizeCheckoutRelease(identity.operatorEmail, dispatch);
   void recordPermissionDecision({
@@ -153,9 +184,10 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
         reason,
         reasonCode: authz.reasonCode,
         servicePrincipalId: identity.servicePrincipalId,
+        workerId,
       },
     });
-    throw new ApiError(
+    throw refuse(
       "forbidden",
       `mc_release_checkout denied (${authz.reasonCode}): only the checkout's accountable human, an admin, or a Ledger/CoS steward may release it.`,
       403
@@ -163,11 +195,46 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
   }
 
   if (dispatch.revoked) {
-    throw new ApiError("checkout_revoked", `${ref} is revoked; there is no lease to release.`, 409);
+    throw refuse("checkout_revoked", `${ref} is revoked; there is no lease to release.`, 409);
   }
-  const alreadyReleased = () =>
-    new ApiError("already_released", `${ref} is already released; nothing changed.`, 409);
+  const alreadyReleased = () => refuse("already_released", `${ref} is already released; nothing changed.`, 409);
   if (dispatch.releasedAt) throw alreadyReleased();
+
+  if (isExpiredReason(reason)) {
+    let prNumber: number | null;
+    try {
+      prNumber = await openPrHoldingCheckout(dispatch);
+    } catch (err) {
+      // Fail closed: without proof that no open PR holds the stamp, keep the lease.
+      console.error("[mcp] open-PR check for %s failed:", ref, err);
+      throw refuse(
+        "open_pr_check_unavailable",
+        `${ref} was not released: MC could not read its PRs on GitHub to rule out an open PR. Retry later.`,
+        503
+      );
+    }
+    if (prNumber !== null) {
+      await complianceRepo.appendEvent({
+        kind: "checkout.release_refused",
+        actor,
+        repo: dispatch.repo,
+        taskId: dispatch.taskId,
+        pr: String(prNumber),
+        payload: {
+          checkoutRef: ref,
+          reason,
+          code: "open_pr_expiry_exception",
+          servicePrincipalId: identity.servicePrincipalId,
+          workerId,
+        },
+      });
+      throw refuse(
+        "open_pr_expiry_exception",
+        `${ref} is stamped on open PR #${prNumber} in ${dispatch.repo}, so the open-PR expiry exception keeps it valid. It cannot be released as expired. Merging or closing the PR releases it.`,
+        409
+      );
+    }
+  }
 
   const releasedReason = `manual: ${reason}`;
   const released = await complianceRepo.releaseDispatchManually({
@@ -180,6 +247,7 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
       reason,
       reasonCode: authz.reasonCode,
       servicePrincipalId: identity.servicePrincipalId,
+      workerId,
       wasExpired: new Date(dispatch.expiresAt).getTime() <= Date.now(),
     },
   });
@@ -203,6 +271,15 @@ export type ReleaseItemOutcome =
   | { index: number; ok: true; data: Awaited<ReturnType<typeof actionReleaseCheckout>> }
   | { index: number; ok: false; error: { code: string; message: string } };
 
+/** One item the batch did not release, named by checkout and task where known. */
+export interface ReleaseRefusedItem {
+  index: number;
+  checkoutRef: string | null;
+  taskId: string | null;
+  code: string;
+  reason: string;
+}
+
 /** Batch form: every item runs on its own and reports its own outcome. */
 export async function actionReleaseCheckouts(
   identity: McpIdentity,
@@ -210,6 +287,7 @@ export async function actionReleaseCheckouts(
 ) {
   requireMcpActor(identity, "task.checkout");
   const results: ReleaseItemOutcome[] = [];
+  const refused: ReleaseRefusedItem[] = [];
   for (const [index, item] of input.items.entries()) {
     try {
       results.push({ index, ok: true, data: await actionReleaseCheckout(identity, item) });
@@ -222,14 +300,22 @@ export async function actionReleaseCheckouts(
           ? { code: err.code, message: err.message }
           : { code: "internal", message: "Internal error." };
       results.push({ index, ok: false, error });
+      const named = err instanceof CheckoutReleaseRefusal ? err : null;
+      refused.push({
+        index,
+        checkoutRef: named?.checkoutRef ?? item.checkoutRef ?? null,
+        taskId: named?.taskId ?? item.taskId ?? null,
+        code: error.code,
+        reason: error.message,
+      });
     }
   }
   const released = results.filter((r) => r.ok).length;
-  return { results, released, failed: results.length - released };
+  return { results, released, failed: results.length - released, refused };
 }
 
 const RELEASE_DESCRIPTION =
-  "Release a stray or expired checkout lease (sets releasedAt/releasedReason, audits checkout.released). Target the full checkoutId, or the redacted checkoutRef (dsp_…last4) plus taskId. Only the checkout's accountable human, an admin, or a Ledger/CoS steward may release. Refuses an already-released lease. Never changes the task stage or Verified.";
+  "Release a stray or expired checkout lease (sets releasedAt/releasedReason, audits checkout.released). Target the full checkoutId, or the redacted checkoutRef (dsp_…last4) plus taskId. Only the checkout's accountable human, an admin, or a Ledger/CoS steward may release. Refuses an already-released lease, and refuses an expired-lease reason (open_pr_expiry_exception) while an open PR carries the stamp. Never changes the task stage or Verified.";
 
 export function registerCheckoutReleaseTools(server: McpServer, identity: McpIdentity): void {
   server.tool("mc_release_checkout", RELEASE_DESCRIPTION, releaseCheckoutSchema.shape, async (args) =>
@@ -238,7 +324,7 @@ export function registerCheckoutReleaseTools(server: McpServer, identity: McpIde
 
   server.tool(
     "mc_release_checkouts",
-    `Batch form of mc_release_checkout (max ${RELEASE_BATCH_MAX} items). Each item is released on its own and reports ok + data or ok:false + error.`,
+    `Batch form of mc_release_checkout (max ${RELEASE_BATCH_MAX} items). Each item is released on its own and reports ok + data or ok:false + error; refused[] names each unreleased item by checkoutRef, taskId, code and reason.`,
     releaseCheckoutsSchema.shape,
     async (args) => mcpJsonResult({ data: await actionReleaseCheckouts(identity, args) })
   );

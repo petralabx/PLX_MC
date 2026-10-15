@@ -99,6 +99,40 @@ following the standard format: What, Why, How, Dependencies, Owner, Key Files.
 A module without a contract README is a violation. A module whose code changed
 significantly while its contract went untouched 60+ days is a major finding.
 
+## Compatibility Shim Expiry
+
+A compatibility shim carries a dated comment (CLAUDE.md, Module Boundaries):
+
+```
+// module-shim — remove after 2026-10-14
+```
+
+`scripts/check-repo-hygiene.py` reads every tracked file except Markdown
+(`.md`, `.mdc`) and compares each marker's date with today's date in UTC:
+
+| Marker date | Result |
+|---|---|
+| Before today | Violation: the shim has expired. Retire it, or move its date in a reviewed PR. |
+| Today | Passes. The date is the last allowed day. |
+| Within the next 14 days | Passes, with a warning. |
+| Later | Passes. |
+| Not a real date (`2026-02-30`) | Violation. |
+
+- The `isApprover` shim, dated 2026-10-14, passes on 14 October and fails
+  from 15 October (TASK-2924).
+- The date is compared in UTC, as on CI, so every machine gets the same answer
+  at the same moment. In Eastern time a shim starts failing at 20:00 EDT
+  (19:00 EST) on its last allowed day.
+- Markdown is skipped because docs quote the marker (rule surfaces, specs,
+  `LESSONS.md`); a shim is code. The rule's own `YYYY-MM-DD` template is not a
+  date, so it never matches.
+- `-`, `--` or `:` in place of the em dash, and any letter case, still match.
+- A test that needs a dated marker builds it at runtime
+  (`tests/test_check_repo_hygiene.py`). A literal one in a tracked code file
+  trips the check.
+- `python scripts/check-repo-hygiene.py --today 2026-11-01` shows what will
+  have expired by that day.
+
 ## Enforcement
 
 | Gate | Command | Blocks? |
@@ -115,3 +149,4 @@ The repo is compliant when:
 - No loose files exist under `artifacts/`
 - Archives are dated and documented
 - Every active module has a contract README in `docs/modules/`
+- No tracked file carries a `module-shim` marker past its removal date

@@ -84,6 +84,9 @@ def test_hygiene_gate_exit_codes(tmp_path):
     sandbox_scripts.mkdir()
     shutil.copy(SCRIPTS / "check-repo-hygiene.py", sandbox_scripts)
     checker = sandbox_scripts / "check-repo-hygiene.py"
+    # The gate lists tracked files with git (module-shim check), so the sandbox
+    # must be a work tree.
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
 
     (tmp_path / "README.md").write_text("clean\n", encoding="utf-8")
     assert _run(checker, tmp_path) == 0, "hygiene gate must exit 0 on a clean root"

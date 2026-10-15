@@ -21,6 +21,24 @@ export function isAllowedUser(
   return allowed.includes(addr);
 }
 
+// A signed-in session lasts 12 hours from sign-in, however often it is used.
+// Entra app roles (e.g. Goals.Viewer) are only read at sign-in, so this bounds
+// how long a role change waits, and a session with no sign-in stamp (issued
+// before TASK-2977) ends at once so it picks up roles assigned since.
+export const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+/** Whether an existing session may continue: signed in within 12h and still allowlisted. */
+export function sessionStillValid(
+  token: { email?: unknown; signedInAt?: unknown },
+  now: number = Date.now(),
+  allowlistCsv: string | undefined = process.env.PLX_MC_ALLOWED_USERS
+): boolean {
+  const signedInAt = token.signedInAt;
+  if (typeof signedInAt !== "number" || !Number.isFinite(signedInAt)) return false;
+  if (signedInAt > now || now - signedInAt >= SESSION_MAX_AGE_MS) return false;
+  return isAllowedUser(token.email, allowlistCsv);
+}
+
 // Public, non-sensitive paths that must load BEFORE authentication: the
 // branded sign-in page and the static brand assets it renders (logo,
 // favicons, webfonts). Without this bypass an unauthenticated visitor in OIDC

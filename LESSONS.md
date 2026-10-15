@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-15 (ET) — Goals users with Entra roles still got "No access"
+
+- **What happened:** Goals.Viewer / Goals.Editor were assigned in Entra on 2026-10-14 (TASK-2940), but the users kept getting the Goals "No access" panel (TASK-2977).
+- **Root cause:** MC reads app roles only at sign-in, sessions were Auth.js defaults (30 days, renewed on every use) and MC had no sign-out, so sessions issued before the assignment kept `roles: []` with no way to refresh them.
+- **Rule going forward:** Anything read only at sign-in (roles, allowlist) needs a bounded session and a visible way to sign in again. Sessions now end 12h after sign-in or when the email leaves the allowlist (`sessionStillValid`); when assigning roles, tell users to use Sign out or "Sign in again".
+
 ### 2026-10-14 (ET) — Vendor-spend writes took the author from the body and checked no capability
 
 - **What happened:** `PATCH /api/vendor-spend/budgets` and `POST /api/vendor-spend/snapshots` (TASK-290) read `updatedBy` / `enteredBy` from the request body and relied on the middleware admission gate alone. Any signed-in person could save a budget or cost entry under someone else's name, and a member under `enforce` got 200 (TASK-2928).

@@ -8,8 +8,9 @@
 //   ≥2200   + pin the live column
 import type { RefObject } from "react";
 import Image from "next/image";
-import { Moon, PanelRight, Pin, Search, Sun } from "lucide-react";
+import { LogOut, Moon, PanelRight, Pin, Search, Sun } from "lucide-react";
 
+import { signOutAction } from "@/lib/auth/actions";
 import { useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import { dataSource, storeSyncCounts } from "@/lib/mc-data/store";
 
@@ -147,6 +148,13 @@ export function Topbar({
         </button>
         {viewer ? (
           <Avatar actor={viewer} id={viewer.id} size="lg" title={`${viewer.name} · ${viewer.role}`} />
+        ) : null}
+        {viewer ? (
+          <form action={signOutAction}>
+            <button type="submit" className="iconbtn" aria-label="Sign out" title="Sign out" data-testid="sign-out">
+              <LogOut className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+            </button>
+          </form>
         ) : null}
       </div>
     </header>

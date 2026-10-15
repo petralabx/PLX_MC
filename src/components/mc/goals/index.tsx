@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { api, apiDownload, ApiClientError } from "@/lib/api";
+import { signInAgainAction } from "@/lib/auth/actions";
 import type { EvaluatedEntry, GoalsPage, RefreshRun } from "@/lib/reporting/goals";
 import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
 
@@ -337,6 +338,12 @@ export function GoalsView() {
           <div className="empty gp-empty-state" data-testid="goals-no-access">
             <h3>No access</h3>
             <p>{noAccess.message}</p>
+            <p>Roles are read when you sign in. If you were given access recently, sign in again.</p>
+            <form action={signInAgainAction.bind(null, "goals")}>
+              <button type="submit" className="btn" data-testid="goals-sign-in-again">
+                Sign in again
+              </button>
+            </form>
           </div>
         ) : page && !ready ? (
           <NotReady page={page} editor={editor} />

@@ -8,6 +8,7 @@
 // Fail-open: a degraded repo or a failed report write never fails the run.
 
 import { ApiError, route } from "@/lib/api/route";
+import { secretMatches } from "@/lib/auth/gate";
 import {
   defaultBackfillDeps,
   parseBackfillDays,
@@ -23,7 +24,7 @@ export const GET = route(async (req) => {
   if (!cronConfigured()) {
     throw new ApiError("cron_disabled", "Scheduled GitHub backfill is not configured (CRON_SECRET unset).", 503);
   }
-  if (req.headers.get("authorization") !== `Bearer ${cronSecret()}`) {
+  if (!(await secretMatches(req.headers.get("authorization"), cronSecret(), "Bearer "))) {
     throw new ApiError("unauthorized", "Invalid or missing cron authorization.", 401);
   }
   if (!githubBackfillEnabled()) {

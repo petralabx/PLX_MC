@@ -29,7 +29,7 @@ const run = async (request: Request): Promise<Response> =>
 
 describe("basic gate (fallback mode)", () => {
   it("is dormant when PLX_MC_STAGING_PASSWORD is unset (local dev)", async () => {
-    expect(basicGate(req())).toBeNull();
+    expect(await basicGate(req())).toBeNull();
     expect((await run(req())).status).toBe(200);
   });
 

@@ -4,6 +4,7 @@
 // + routing.maintain only. Final typed links and audit events are preserved.
 
 import { ApiError, route } from "@/lib/api/route";
+import { secretMatches } from "@/lib/auth/gate";
 import {
   ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
   type PermissionActor,
@@ -133,7 +134,7 @@ export const GET = route(async (req) => {
       503
     );
   }
-  if (req.headers.get("authorization") !== `Bearer ${cronSecret()}`) {
+  if (!(await secretMatches(req.headers.get("authorization"), cronSecret(), "Bearer "))) {
     throw new ApiError("unauthorized", "Invalid or missing cron authorization.", 401);
   }
 

@@ -48,6 +48,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
             clientId: creds.clientId,
             clientSecret: creds.clientSecret,
             issuer: `https://login.microsoftonline.com/${creds.tenantId}/v2.0`,
+            // Shared machines: Microsoft asks which account every time instead
+            // of silently reusing the last one (TASK-3012).
+            authorization: { params: { prompt: "select_account" } },
           }),
         ]
       : [],
@@ -92,13 +95,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
       // Drives the middleware (src/middleware.ts default-exports `auth`):
       // OIDC mode: unauthenticated → false → redirect to Microsoft sign-in.
       // Dormant/fallback mode: the Basic gate decides (Response = challenge).
-      authorized({ request, auth: session }) {
+      async authorized({ request, auth: session }) {
         // The sign-in page and the brand/font assets it renders must load
         // before auth, or OIDC mode loops /signin → /signin and the logo
         // 307s instead of returning an image. These paths expose no data.
         if (isPublicAsset(request.nextUrl.pathname)) return true;
         if (!entraAuthConfigured()) {
-          return basicGate(request) ?? true;
+          return (await basicGate(request)) ?? true;
         }
         return !!session?.user;
       },

@@ -4,9 +4,8 @@
 // Toronto (EDT or EST) refreshes. Vercel injects `Authorization: Bearer
 // $CRON_SECRET`; default-off (503) until CRON_SECRET is set.
 
-import { timingSafeEqual } from "node:crypto";
-
 import { ApiError, route } from "@/lib/api/route";
+import { secretMatches } from "@/lib/auth/gate";
 import { isoWeekday, runRefresh, startRefresh, torontoDate, torontoHour } from "@/lib/reporting/goals";
 import { cronConfigured, cronSecret, reportingDatabaseConfigured } from "@/lib/secrets";
 
@@ -16,17 +15,11 @@ export const maxDuration = 300;
 
 const REFRESH_HOUR = 6;
 
-function bearerMatches(header: string | null): boolean {
-  const expected = Buffer.from(`Bearer ${cronSecret()}`);
-  const actual = Buffer.from(header ?? "");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
 export const GET = route(async (req) => {
   if (!cronConfigured()) {
     throw new ApiError("cron_disabled", "Scheduled Goals & production refresh is not configured (CRON_SECRET unset).", 503);
   }
-  if (!bearerMatches(req.headers.get("authorization"))) {
+  if (!(await secretMatches(req.headers.get("authorization"), cronSecret(), "Bearer "))) {
     throw new ApiError("unauthorized", "Invalid or missing cron authorization.", 401);
   }
   const now = new Date();

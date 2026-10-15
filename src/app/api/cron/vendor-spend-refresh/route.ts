@@ -5,6 +5,7 @@
 // the seed script's job.
 
 import { ApiError, route } from "@/lib/api/route";
+import { secretMatches } from "@/lib/auth/gate";
 import { cronConfigured, cronSecret } from "@/lib/secrets";
 import { refreshAutomatedVendors } from "@/lib/vendor-spend";
 
@@ -19,7 +20,7 @@ export const GET = route(async (req) => {
       503
     );
   }
-  if (req.headers.get("authorization") !== `Bearer ${cronSecret()}`) {
+  if (!(await secretMatches(req.headers.get("authorization"), cronSecret(), "Bearer "))) {
     throw new ApiError("unauthorized", "Invalid or missing cron authorization.", 401);
   }
   const outcomes = await refreshAutomatedVendors("mtd");

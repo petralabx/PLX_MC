@@ -21,6 +21,7 @@ vi.mock("@/lib/db", () => ({
 import {
   findDispatchesBySuffix,
   hasActiveCheckoutForPrincipal,
+  openPrCandidatesForTask,
   releaseDispatchManually,
   unreleaseDispatches,
 } from "@/lib/compliance/repo";
@@ -98,5 +99,25 @@ describe("hasActiveCheckoutForPrincipal", () => {
   it("is false when no active lease matches", async () => {
     h.rows = [];
     expect(await hasActiveCheckoutForPrincipal("TASK-1", "sp_mcp_cursor")).toBe(false);
+  });
+});
+
+describe("openPrCandidatesForTask (TASK-2965)", () => {
+  it("lists the task's PRs in the repo whose newest PR event is not a merge or close", async () => {
+    h.rows = [{ pr: "41" }, { pr: "7" }, { pr: "not-a-number" }];
+    expect(await openPrCandidatesForTask("TASK-1", "petralabx/plx-customer-portal")).toEqual([41, 7]);
+    const sql = squash(h.calls[0].text);
+    expect(sql).toContain("SELECT DISTINCT ON (pr) pr, kind, seq FROM mc_events");
+    expect(sql).toContain("lower(repo) IN (lower($2), lower($3))");
+    expect(sql).toContain("(task_id = $4 OR payload->'taskIds' ? $4)");
+    expect(sql).toContain("WHERE kind NOT IN ('pr.merged', 'pr.closed')");
+    expect(sql).not.toMatch(/UPDATE|DELETE|INSERT/);
+    expect(h.calls[0].params).toEqual([
+      ["pr.opened", "pr.synchronized", "pr.merged", "pr.closed", "gate.passed", "gate.blocked"],
+      "petralabx/plx-customer-portal",
+      "plx-customer-portal",
+      "TASK-1",
+      10,
+    ]);
   });
 });

@@ -162,6 +162,20 @@ async function resolveDispatchForOpenPr(
   return { dispatch: d };
 }
 
+/**
+ * The open PR that keeps an expired checkout valid, or null. Same proof as
+ * resolveDispatchForOpenPr: the live PR is open and its body carries the
+ * stamp. Candidates come from the task's PR events in the checkout's repo.
+ * GitHub errors propagate, so a caller can fail closed.
+ */
+export async function openPrHoldingCheckout(d: Pick<repo.DispatchRow, "id" | "taskId" | "repo">): Promise<number | null> {
+  for (const prNumber of await repo.openPrCandidatesForTask(d.taskId, d.repo)) {
+    const state = await loadPrState(d.repo, prNumber);
+    if (state.open && state.checkoutIds.includes(d.id)) return prNumber;
+  }
+  return null;
+}
+
 // A PR that references a cancelled task is not blocked, but it must not read as
 // delivery: the projection skips promotion and the check says so (TASK-2529).
 function cancelledTaskWarning(task: Task): string {

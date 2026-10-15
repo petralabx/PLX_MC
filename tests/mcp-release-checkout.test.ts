@@ -20,13 +20,38 @@ type Dispatch = {
   releasedReason: string | null;
 };
 
-type Event = { kind: string; actor: string; repo?: string | null; taskId?: string | null; payload: Record<string, unknown> };
+type Event = {
+  kind: string;
+  actor: string;
+  repo?: string | null;
+  taskId?: string | null;
+  pr?: string | null;
+  payload: Record<string, unknown>;
+};
+
+// A PR as the task's events and GitHub see it (TASK-2965 open-PR guard).
+type Pr = { number: number; taskId: string; open: boolean; checkoutIds: string[] };
 
 const h = vi.hoisted(() => ({
   dispatches: new Map<string, Dispatch>(),
   events: [] as Event[],
+  prs: [] as Pr[],
+  githubDown: false,
   patchTask: vi.fn(),
 }));
+
+vi.mock("@/lib/compliance/github-pr", async (importOriginal) => {
+  const { ApiError } = await import("@/lib/api/route");
+  return {
+    ...(await importOriginal<typeof import("@/lib/compliance/github-pr")>()),
+    loadPrState: vi.fn(async (_repo: string, prNumber: number) => {
+      if (h.githubDown) throw new ApiError("github_unavailable", "No GitHub auth configured.", 503);
+      const pr = h.prs.find((p) => p.number === prNumber);
+      if (!pr) throw new ApiError("not_found", "PR not found.", 404);
+      return { open: pr.open, checkoutIds: pr.checkoutIds };
+    }),
+  };
+});
 
 vi.mock("@/lib/permissions/decision-log", () => ({
   recordPermissionDecision: vi.fn(async () => true),
@@ -74,6 +99,9 @@ vi.mock("@/lib/compliance/repo", async (importOriginal) => ({
       return { releasedAt: d.releasedAt, eventSeq: String(h.events.length) };
     }
   ),
+  openPrCandidatesForTask: vi.fn(async (taskId: string) =>
+    h.prs.filter((p) => p.taskId === taskId).map((p) => p.number)
+  ),
   appendEvent: vi.fn(async (e: Event) => {
     h.events.push({ ...e, payload: e.payload ?? {} });
     return String(h.events.length);
@@ -83,7 +111,7 @@ vi.mock("@/lib/compliance/repo", async (importOriginal) => ({
 import { POST as mcpPost } from "@/app/api/cursor/mcp/route";
 import { POST as releaseRoute } from "@/app/api/cursor/checkouts/release/route";
 import { POST as releaseBatchRoute } from "@/app/api/cursor/checkouts/release-batch/route";
-import { authorizeCheckoutRelease } from "@/lib/mcp/checkout-release-actions";
+import { authorizeCheckoutRelease, isExpiredReason } from "@/lib/mcp/checkout-release-actions";
 import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 
 const FUTURE = new Date(Date.now() + 3_600_000).toISOString();
@@ -105,6 +133,8 @@ function seed(id: string, taskId: string, over: Partial<Dispatch> = {}): void {
   });
 }
 
+let workerHeader: string | null = "release-test";
+
 function headers(operator: string): Record<string, string> {
   return {
     "content-type": "application/json",
@@ -113,7 +143,7 @@ function headers(operator: string): Record<string, string> {
     "x-mc-operator-email": operator,
     "x-mc-repo": "petralabx/PLX_MC",
     "x-mc-runtime": "claude-code",
-    "x-mc-worker-id": "release-test",
+    ...(workerHeader === null ? {} : { "x-mc-worker-id": workerHeader }),
   };
 }
 
@@ -162,6 +192,7 @@ const TRANSPORTS = [
 
 const releasedEvents = () => h.events.filter((e) => e.kind === "checkout.released");
 const deniedEvents = () => h.events.filter((e) => e.kind === "checkout.release_denied");
+const refusedEvents = () => h.events.filter((e) => e.kind === "checkout.release_refused");
 
 beforeEach(() => {
   vi.stubEnv("PLX_MC_MCP_ENABLED", "1");
@@ -174,6 +205,9 @@ beforeEach(() => {
   vi.stubEnv("PLX_MC_PUBLIC_URL", "https://mc.plxcustomer.io");
   h.dispatches.clear();
   h.events.length = 0;
+  h.prs.length = 0;
+  h.githubDown = false;
+  workerHeader = "release-test";
   h.patchTask.mockClear();
 });
 
@@ -204,6 +238,17 @@ describe("authorizeCheckoutRelease", () => {
       reasonCode: "not_accountable",
     });
     expect(authorizeCheckoutRelease("", { accountableHuman: "" }).allowed).toBe(false);
+  });
+});
+
+describe("isExpiredReason", () => {
+  it("matches reasons that claim the lease expired, and nothing else", () => {
+    for (const reason of ["expired", "Expired", "lease expired", "expired, never released", "TTL expiry"]) {
+      expect({ reason, hit: isExpiredReason(reason) }).toEqual({ reason, hit: true });
+    }
+    for (const reason of ["stray from a stopped run", "duplicate", "superseded by TASK-9", "expiresAt drift"]) {
+      expect({ reason, hit: isExpiredReason(reason) }).toEqual({ reason, hit: false });
+    }
   });
 });
 
@@ -402,6 +447,93 @@ for (const [transport, call] of TRANSPORTS) {
       expect(h.events).toEqual([]);
     });
 
+    it("refuses an 'expired' release while an open PR carries the stamp (TASK-2965)", async () => {
+      seed("dsp_portalxx0326", "TASK-2897", { expiresAt: PAST });
+      h.prs.push({ number: 326, taskId: "TASK-2897", open: true, checkoutIds: ["dsp_portalxx0326"] });
+      const out = await call(
+        "mc_release_checkout",
+        { checkoutId: "dsp_portalxx0326", reason: "expired" },
+        "cos@petrasoap.com"
+      );
+      expect(out.ok).toBe(false);
+      if (out.status !== null) expect(out.status).toBe(409);
+      expect(out.body.error).toMatchObject({ code: "open_pr_expiry_exception" });
+      expect(out.body.error.message).toContain("#326");
+      expect(out.text).not.toContain("dsp_portalxx0326");
+      expect(h.dispatches.get("dsp_portalxx0326")).toMatchObject({ releasedAt: null, releasedReason: null });
+      expect(releasedEvents()).toEqual([]);
+      expect(refusedEvents()).toEqual([
+        expect.objectContaining({
+          actor: "claude-code:cos@petrasoap.com",
+          taskId: "TASK-2897",
+          pr: "326",
+          payload: expect.objectContaining({
+            checkoutRef: "dsp_…0326",
+            code: "open_pr_expiry_exception",
+            servicePrincipalId: "sp_mcp_cursor",
+            workerId: "release-test",
+          }),
+        }),
+      ]);
+    });
+
+    it("still releases with an open PR when the reason is not 'expired'", async () => {
+      seed("dsp_portalxx0326", "TASK-2897", { expiresAt: PAST });
+      h.prs.push({ number: 326, taskId: "TASK-2897", open: true, checkoutIds: ["dsp_portalxx0326"] });
+      const out = await call(
+        "mc_release_checkout",
+        { checkoutId: "dsp_portalxx0326", reason: "stray from a stopped run" },
+        "cos@petrasoap.com"
+      );
+      expect(out.ok).toBe(true);
+      expect(releasedEvents()).toHaveLength(1);
+      expect(refusedEvents()).toEqual([]);
+    });
+
+    it("releases as 'expired' when no open PR carries this stamp", async () => {
+      seed("dsp_portalxx0326", "TASK-2897", { expiresAt: PAST });
+      // A closed PR with the stamp, and an open PR stamped with another checkout.
+      h.prs.push({ number: 300, taskId: "TASK-2897", open: false, checkoutIds: ["dsp_portalxx0326"] });
+      h.prs.push({ number: 326, taskId: "TASK-2897", open: true, checkoutIds: ["dsp_portalnew9999"] });
+      const out = await call(
+        "mc_release_checkout",
+        { checkoutId: "dsp_portalxx0326", reason: "expired" },
+        "cos@petrasoap.com"
+      );
+      expect(out.ok).toBe(true);
+      expect(h.dispatches.get("dsp_portalxx0326")?.releasedReason).toBe("manual: expired");
+    });
+
+    it("fails closed on an 'expired' release when GitHub cannot be read", async () => {
+      seed("dsp_portalxx0326", "TASK-2897", { expiresAt: PAST });
+      h.prs.push({ number: 326, taskId: "TASK-2897", open: true, checkoutIds: ["dsp_portalxx0326"] });
+      h.githubDown = true;
+      const out = await call(
+        "mc_release_checkout",
+        { checkoutId: "dsp_portalxx0326", reason: "expired" },
+        "cos@petrasoap.com"
+      );
+      expect(out.ok).toBe(false);
+      if (out.status !== null) expect(out.status).toBe(503);
+      expect(out.body.error).toMatchObject({ code: "open_pr_check_unavailable" });
+      expect(h.dispatches.get("dsp_portalxx0326")?.releasedAt).toBeNull();
+      expect(releasedEvents()).toEqual([]);
+    });
+
+    it("records the caller's worker id on checkout.released", async () => {
+      seed("dsp_aaaaaaaa0001", "TASK-1");
+      await call("mc_release_checkout", { checkoutId: "dsp_aaaaaaaa0001", reason: "stray" }, "ross@petrasoap.com");
+      expect(releasedEvents()[0].payload).toMatchObject({ workerId: "release-test" });
+    });
+
+    it("records unknown-worker when the worker id header is missing, and still releases", async () => {
+      workerHeader = null;
+      seed("dsp_aaaaaaaa0001", "TASK-1");
+      const out = await call("mc_release_checkout", { checkoutId: "dsp_aaaaaaaa0001", reason: "stray" }, "ross@petrasoap.com");
+      expect(out.ok).toBe(true);
+      expect(releasedEvents()[0].payload).toMatchObject({ workerId: "unknown-worker" });
+    });
+
     it("hides a lease on a restricted-project task", async () => {
       seed("dsp_secretxx0001", "TASK-SECRET");
       const out = await call("mc_release_checkout", { checkoutId: "dsp_secretxx0001", reason: "x" }, "vince@petrasoap.com");
@@ -436,9 +568,82 @@ for (const [transport, call] of TRANSPORTS) {
         { index: 2, ok: true, data: expect.objectContaining({ checkoutRef: "dsp_…7px3" }) },
         { index: 3, ok: false, error: expect.objectContaining({ code: "already_released" }) },
       ]);
+      expect(out.body.data.refused).toEqual([
+        {
+          index: 1,
+          checkoutRef: "dsp_…0001",
+          taskId: "TASK-1",
+          code: "forbidden",
+          reason: expect.stringContaining("not_accountable"),
+        },
+        {
+          index: 3,
+          checkoutRef: "dsp_…7px3",
+          taskId: "TASK-2279",
+          code: "already_released",
+          reason: expect.stringContaining("already released"),
+        },
+      ]);
       expect(releasedEvents()).toHaveLength(2);
       expect(deniedEvents()).toHaveLength(1);
       expect(h.patchTask).not.toHaveBeenCalled();
+    });
+
+    it("refuses 'expired' items held by an open PR and releases the rest (TASK-2965)", async () => {
+      // The 2026-10-14 incident shape: a steward bulk-releases leases as expired.
+      seed("dsp_portalxx0326", "TASK-2897", { expiresAt: PAST });
+      seed("dsp_portalxx0327", "TASK-2935", { expiresAt: PAST });
+      seed("dsp_staleexx0001", "TASK-2001", { expiresAt: PAST });
+      seed("dsp_strayxxx0002", "TASK-2002", { expiresAt: PAST });
+      h.prs.push({ number: 326, taskId: "TASK-2897", open: true, checkoutIds: ["dsp_portalxx0326"] });
+      h.prs.push({ number: 327, taskId: "TASK-2935", open: true, checkoutIds: ["dsp_portalxx0327"] });
+      h.prs.push({ number: 200, taskId: "TASK-2001", open: false, checkoutIds: ["dsp_staleexx0001"] });
+      h.prs.push({ number: 201, taskId: "TASK-2002", open: true, checkoutIds: ["dsp_strayxxx0002"] });
+      const out = await call(
+        "mc_release_checkouts",
+        {
+          items: [
+            { checkoutId: "dsp_portalxx0326", reason: "expired" },
+            { checkoutId: "dsp_staleexx0001", reason: "expired" },
+            { checkoutRef: "dsp_…0327", taskId: "TASK-2935", reason: "expired" },
+            { checkoutId: "dsp_strayxxx0002", reason: "stray from a stopped run" },
+            { checkoutId: "dsp_nosuchlease", reason: "expired" },
+          ],
+        },
+        "cos@petrasoap.com"
+      );
+      expect(out.ok).toBe(true);
+      expect(out.body.data).toMatchObject({ released: 2, failed: 3 });
+      expect(out.body.data.results).toEqual([
+        { index: 0, ok: false, error: expect.objectContaining({ code: "open_pr_expiry_exception" }) },
+        { index: 1, ok: true, data: expect.objectContaining({ checkoutRef: "dsp_…0001" }) },
+        { index: 2, ok: false, error: expect.objectContaining({ code: "open_pr_expiry_exception" }) },
+        { index: 3, ok: true, data: expect.objectContaining({ checkoutRef: "dsp_…0002" }) },
+        { index: 4, ok: false, error: expect.objectContaining({ code: "not_found" }) },
+      ]);
+      expect(out.body.data.refused).toEqual([
+        {
+          index: 0,
+          checkoutRef: "dsp_…0326",
+          taskId: "TASK-2897",
+          code: "open_pr_expiry_exception",
+          reason: expect.stringContaining("#326"),
+        },
+        {
+          index: 2,
+          checkoutRef: "dsp_…0327",
+          taskId: "TASK-2935",
+          code: "open_pr_expiry_exception",
+          reason: expect.stringContaining("#327"),
+        },
+        { index: 4, checkoutRef: null, taskId: null, code: "not_found", reason: "Unknown checkout." },
+      ]);
+      expect(out.text).not.toMatch(/dsp_portalxx|dsp_staleexx|dsp_strayxxx/);
+      expect(h.dispatches.get("dsp_portalxx0326")?.releasedAt).toBeNull();
+      expect(h.dispatches.get("dsp_portalxx0327")?.releasedAt).toBeNull();
+      expect(releasedEvents().map((e) => e.payload.checkoutRef)).toEqual(["dsp_…0001", "dsp_…0002"]);
+      expect(releasedEvents().every((e) => e.payload.workerId === "release-test")).toBe(true);
+      expect(refusedEvents()).toHaveLength(2);
     });
   });
 }

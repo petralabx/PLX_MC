@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-15 (ET) — A bulk 'expired' release dropped checkouts that open PRs still held
+
+- **What happened:** On 2026-10-14 at 19:21Z a Cursor agent acting as cos@ released 30 checkouts as `expired` in about 7 seconds. Eleven open portal PRs lost their checkouts, and the compliance gate blocked the migration chain until each PR was re-stamped (TASK-2965).
+- **Root cause:** The open-PR expiry exception lived only in verification (`prDispatchResolver`). `mc_release_checkout` checked authorization but not the exception, so a manual release overrode it. The release events also recorded no session id, so the run was hard to trace.
+- **Rule going forward:** A manual write that ends a lease applies every exception the gate applies to that lease. Reuse the gate's proof (`openPrHoldingCheckout`), fail closed when GitHub cannot be read, and record the caller's `workerId` on every lease event.
+
 ### 2026-10-14 (ET) — Vendor-spend writes took the author from the body and checked no capability
 
 - **What happened:** `PATCH /api/vendor-spend/budgets` and `POST /api/vendor-spend/snapshots` (TASK-290) read `updatedBy` / `enteredBy` from the request body and relied on the middleware admission gate alone. Any signed-in person could save a budget or cost entry under someone else's name, and a member under `enforce` got 200 (TASK-2928).

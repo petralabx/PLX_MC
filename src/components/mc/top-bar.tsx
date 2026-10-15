@@ -1,6 +1,6 @@
 // Mission Control top bar (ADR-005). One element for every tier; mc-shell.css
 // decides which slots show:
-//   phone   mark · screen title · search icon · avatar
+//   phone   mark · screen title · search icon · avatar (account menu)
 //   ≥641    wordmark · search field (⌘K hint, hidden on touch) · sync pill ·
 //           theme toggle · avatar; the static workspace label joins when the
 //           bar is ≥900 wide and "Mission Control" when ≥1280 (container queries)
@@ -8,15 +8,15 @@
 //   ≥2200   + pin the live column
 import type { RefObject } from "react";
 import Image from "next/image";
-import { LogOut, Moon, PanelRight, Pin, Search, Sun } from "lucide-react";
+import { Moon, PanelRight, Pin, Search, Sun } from "lucide-react";
 
-import { signOutAction } from "@/lib/auth/actions";
 import { useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import { dataSource, storeSyncCounts } from "@/lib/mc-data/store";
 
-import { Avatar, PMark } from "./atoms";
+import { PMark } from "./atoms";
 import { isPlainLeftClick, navHref, screenTitle } from "./nav-model";
 import type { Nav, Route } from "./route";
+import { UserMenu } from "./user-menu";
 
 /** The sync pill only claims "Synced" once the server has answered. */
 function syncStatus(): { cls: "ok" | "warn" | "pending"; label: string } {
@@ -146,16 +146,7 @@ export function Topbar({
             <Moon className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
           )}
         </button>
-        {viewer ? (
-          <Avatar actor={viewer} id={viewer.id} size="lg" title={`${viewer.name} · ${viewer.role}`} />
-        ) : null}
-        {viewer ? (
-          <form action={signOutAction}>
-            <button type="submit" className="iconbtn" aria-label="Sign out" title="Sign out" data-testid="sign-out">
-              <LogOut className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
-            </button>
-          </form>
-        ) : null}
+        {viewer ? <UserMenu viewer={viewer} /> : null}
       </div>
     </header>
   );

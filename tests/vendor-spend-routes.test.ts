@@ -470,4 +470,35 @@ describe("GET /api/cron/vendor-spend-refresh", () => {
     expect(body.data.outcomes).toHaveLength(2);
     expect(m.refreshAutomatedVendors).toHaveBeenCalledWith("mtd");
   });
+
+  it("runs a YTD backfill with ?period=ytd — the seed script's path (TASK-3011)", async () => {
+    process.env.CRON_SECRET = "s3cret";
+    const resp = await cronRoute.GET(
+      new Request("http://test/api/cron/vendor-spend-refresh?period=ytd", {
+        headers: { authorization: "Bearer s3cret" },
+      }),
+      emptyCtx
+    );
+    expect(resp.status).toBe(200);
+    expect(m.refreshAutomatedVendors).toHaveBeenCalledWith("ytd");
+  });
+
+  it("rejects an unknown period (400) and checks the bearer first", async () => {
+    process.env.CRON_SECRET = "s3cret";
+    const bad = await cronRoute.GET(
+      new Request("http://test/api/cron/vendor-spend-refresh?period=hourly", {
+        headers: { authorization: "Bearer s3cret" },
+      }),
+      emptyCtx
+    );
+    expect(bad.status).toBe(400);
+    const unauth = await cronRoute.GET(
+      new Request("http://test/api/cron/vendor-spend-refresh?period=ytd", {
+        headers: { authorization: "Bearer wrong" },
+      }),
+      emptyCtx
+    );
+    expect(unauth.status).toBe(401);
+    expect(m.refreshAutomatedVendors).not.toHaveBeenCalled();
+  });
 });

@@ -189,12 +189,26 @@ describe("bucket discussion thread (persisted + optimistic — Item 4)", () => {
   });
 
   it("persists through the mirror and reconciles to the server's stored thread", async () => {
-    // Echo server: returns exactly what was sent (the durable thread).
-    __setBucketCommentMirrorForTests(async (_bucketId, comments) => comments);
-    addBucketComment("BKT-WMS", "kickoff @greg", "vince");
+    // The server applies one operation and returns its stored thread (TASK-3011).
+    const ops: unknown[] = [];
+    __setBucketCommentMirrorForTests(async (_bucketId, op) => {
+      ops.push(op);
+      return [{ id: "CMT-srv", author: "vince", body: "kickoff @greg", ts: "t", mentions: ["greg"] }];
+    });
+    const c = addBucketComment("BKT-WMS", "kickoff @greg", "vince")!;
     await __bucketMirrorSettled();
-    expect(commentsForBucket("BKT-WMS")).toHaveLength(1);
+    expect(ops).toEqual([{ op: "add", body: "kickoff @greg", mentions: ["greg"] }]);
+    expect(commentsForBucket("BKT-WMS").map((x) => x.id)).toEqual(["CMT-srv"]);
     expect(activeNotices()).toHaveLength(0); // success path surfaces no notice
+
+    editBucketComment("BKT-WMS", "CMT-srv", "revised", "vince");
+    deleteBucketComment("BKT-WMS", "CMT-srv", "vince");
+    await __bucketMirrorSettled();
+    expect(ops.slice(1)).toEqual([
+      { op: "edit", id: "CMT-srv", body: "revised", mentions: [] },
+      { op: "delete", id: "CMT-srv" },
+    ]);
+    expect(c.id).not.toBe("CMT-srv");
   });
 
   it("rolls back + surfaces a non-silent notice when the mirror rejects", async () => {

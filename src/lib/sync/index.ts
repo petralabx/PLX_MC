@@ -51,6 +51,7 @@ export {
   clearSiteContextCache,
 } from "./graph";
 export { validateRepoInOrg, type RepoValidation } from "./github";
+export { applyBucketCommentOp } from "./repo";
 export { startSyncScheduler, syncEnabled } from "./scheduler";
 export {
   createBucket,
@@ -59,7 +60,6 @@ export {
   patchBucket,
   patchProject,
   patchTask,
-  setBucketComments,
   snapshot,
   type CreateBucketInput,
   type CreateProjectInput,

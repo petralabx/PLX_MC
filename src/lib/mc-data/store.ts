@@ -44,6 +44,7 @@ import type {
   Actor,
   AuditRow,
   Bucket,
+  BucketCommentOp,
   Comment,
   FileEntry,
   Human,
@@ -769,6 +770,7 @@ export function approveRepo(requestId: string, actorId: string = viewerId()): bo
     pushNotice(`${req.name} hasn't been verified against the GitHub org — it can't be approved.`);
     return false;
   }
+  const priorRepos = state.repos;
   req.status = "approved";
   req.decidedBy = actorId;
   req.decidedTs = stamp();
@@ -776,13 +778,51 @@ export function approveRepo(requestId: string, actorId: string = viewerId()): bo
   state.repos = { ...state.repos, [repo.id]: repo };
   pushAudit(actorId, `Approved repo ${req.name} — added to the registry allow-list.`, "pending");
   emit();
-  // Persist the decision + the new registry repo (the repo route re-checks the
-  // approver gate server-side) so the approval survives a reload.
-  mirrorRepoRequest(req);
-  serverCall(async () => {
-    await api("/repos", { method: "POST", body: JSON.stringify({ actor: actorId, repo }) });
+  // One server write records the decision and adds the repo (TASK-3011).
+  persistRepoDecision(req, "approve", () => {
+    state.repos = priorRepos;
   });
   return true;
+}
+
+// Send an approve/reject decision to the server (TASK-3011). If the server
+// refuses it, roll the optimistic decision back and surface a notice. No-op
+// under SSR/tests with no injected mirror (like the bucket-comment mirror).
+type RepoDecisionMirror = (req: RepoRequest) => Promise<unknown>;
+
+const defaultRepoDecisionMirror: RepoDecisionMirror = (req) =>
+  api("/repos/requests", { method: "POST", body: JSON.stringify(req) });
+
+let repoDecisionMirror = defaultRepoDecisionMirror;
+let repoDecisionMirrorInjected = false;
+let repoDecisionInFlight: Promise<void> = Promise.resolve();
+
+export function __setRepoDecisionMirrorForTests(fn: RepoDecisionMirror | null) {
+  repoDecisionMirror = fn ?? defaultRepoDecisionMirror;
+  repoDecisionMirrorInjected = fn !== null;
+}
+
+export function __repoDecisionSettled(): Promise<void> {
+  return repoDecisionInFlight;
+}
+
+function persistRepoDecision(req: RepoRequest, verb: "approve" | "reject", undo: () => void = () => {}) {
+  if (typeof window === "undefined" && !repoDecisionMirrorInjected) return;
+  repoDecisionInFlight = repoDecisionMirror({ ...req }).then(
+    () => undefined,
+    (err) => {
+      req.status = "pending";
+      req.decidedBy = undefined;
+      req.decidedTs = undefined;
+      undo();
+      pushNotice(
+        `Couldn't ${verb} ${req.name} — it was rolled back. ${
+          err instanceof Error ? err.message : "The server rejected the decision."
+        }`
+      );
+      emit();
+    }
+  );
 }
 
 // Reject a pending request — gated to an approver. Nothing joins the registry.
@@ -799,7 +839,7 @@ export function rejectRepo(requestId: string, actorId: string = viewerId()): boo
   req.decidedTs = stamp();
   pushAudit(actorId, `Rejected repo request ${req.name}.`, "pending");
   emit();
-  mirrorRepoRequest(req); // persist the decision
+  persistRepoDecision(req, "reject");
   return true;
 }
 
@@ -1263,12 +1303,12 @@ export function deleteComment(taskId: string, commentId: string, actor: string =
 // failed write is never silently dropped. Comments stay app-only (never pushed
 // to SharePoint, per the EN-001 decision).
 
-type BucketCommentMirror = (bucketId: string, comments: Comment[]) => Promise<Comment[]>;
+type BucketCommentMirror = (bucketId: string, op: BucketCommentOp) => Promise<Comment[]>;
 
-const defaultBucketCommentMirror: BucketCommentMirror = (bucketId, comments) =>
+const defaultBucketCommentMirror: BucketCommentMirror = (bucketId, op) =>
   api<Comment[]>(`/buckets/${bucketId}/comments`, {
     method: "PATCH",
-    body: JSON.stringify({ comments }),
+    body: JSON.stringify(op),
   });
 
 let bucketCommentMirror = defaultBucketCommentMirror;
@@ -1287,13 +1327,12 @@ export function __bucketMirrorSettled(): Promise<void> {
   return bucketMirrorInFlight;
 }
 
-// Mirror the bucket's CURRENT thread to the server; reconcile to the stored
-// result on success, restore `prior` + surface a notice on failure. No-op under
-// SSR/tests with no injected mirror (the optimistic state stands).
-function persistBucketThread(bucketId: string, prior: Comment[]): void {
+// Send one comment operation to the server; reconcile to the stored thread on
+// success, restore `prior` + surface a notice on failure. No-op under SSR/tests
+// with no injected mirror (the optimistic state stands).
+function persistBucketThread(bucketId: string, prior: Comment[], op: BucketCommentOp): void {
   if (typeof window === "undefined" && !bucketCommentMirrorInjected) return;
-  const next = state.bucketComments[bucketId] ?? [];
-  bucketMirrorInFlight = bucketCommentMirror(bucketId, next).then(
+  bucketMirrorInFlight = bucketCommentMirror(bucketId, op).then(
     (saved) => {
       state.bucketComments = { ...state.bucketComments, [bucketId]: saved };
       emit();
@@ -1320,7 +1359,7 @@ export function addBucketComment(bucketId: string, body: string, author: string 
   };
   emit();
   notifyMentions(comment.mentions, author, { label: bucketId });
-  persistBucketThread(bucketId, prior);
+  persistBucketThread(bucketId, prior, { op: "add", body: comment.body, mentions: comment.mentions });
   return comment;
 }
 
@@ -1341,7 +1380,7 @@ export function editBucketComment(bucketId: string, commentId: string, body: str
   };
   emit();
   if (added.length) notifyMentions(added, editor, { label: bucketId });
-  persistBucketThread(bucketId, prior);
+  persistBucketThread(bucketId, prior, { op: "edit", id: commentId, body: text, mentions });
 }
 
 export function deleteBucketComment(bucketId: string, commentId: string, actor: string = viewerId()) {
@@ -1354,7 +1393,7 @@ export function deleteBucketComment(bucketId: string, commentId: string, actor: 
     [bucketId]: list.filter((c) => c.id !== commentId),
   };
   emit();
-  persistBucketThread(bucketId, prior);
+  persistBucketThread(bucketId, prior, { op: "delete", id: commentId });
 }
 
 // ─── Projects (P2 — parent above buckets) ────────────────────────────────────
@@ -1859,6 +1898,9 @@ export function resetStore() {
   repoValidatorInjected = false;
   repoRequestSeq = 0;
   repoValidationInFlight = Promise.resolve();
+  repoDecisionMirror = defaultRepoDecisionMirror;
+  repoDecisionMirrorInjected = false;
+  repoDecisionInFlight = Promise.resolve();
   bucketCommentMirror = defaultBucketCommentMirror;
   bucketCommentMirrorInjected = false;
   bucketMirrorInFlight = Promise.resolve();

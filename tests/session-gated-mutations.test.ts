@@ -6,7 +6,7 @@
 // seams (same pattern as tests/vendor-spend-routes.test.ts).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Bucket, Comment, Project, RepoRequest } from "@/lib/mc-data/types";
+import type { Bucket, Project, RepoRequest } from "@/lib/mc-data/types";
 
 const authState = vi.hoisted(() => ({
   session: null as { user?: { oid?: string | null; email?: string | null } } | null,
@@ -16,11 +16,11 @@ const authState = vi.hoisted(() => ({
 const m = vi.hoisted(() => ({
   buckets: [] as unknown[],
   projects: [] as unknown[],
-  threads: {} as Record<string, unknown[]>,
   repoRequests: [] as unknown[],
-  replaceBucketComments: vi.fn(async (_id: string, comments: unknown[]) => comments),
-  upsertRepoRequest: vi.fn(async () => undefined),
-  validateRepoInOrg: vi.fn(async () => ({ ok: true })),
+  applyBucketCommentOp: vi.fn(async () => [] as unknown[]),
+  upsertRepoRequest: vi.fn(async () => true),
+  decideRepoRequest: vi.fn(async () => true),
+  validateRepoInOrg: vi.fn(async () => ({ ok: true, visibility: "private", def: "main", lang: "Go" }) as Record<string, unknown>),
   reconcileSweep: vi.fn(async () => ({ processed: 0, resolved: 0, failed: 0 })),
   createSkillSubmission: vi.fn(async (input: Record<string, unknown>) => ({ id: "SUB-1", ...input })),
   fetchManifest: vi.fn(async () => ({ ok: false, note: "offline" })),
@@ -54,10 +54,10 @@ vi.mock("@/lib/sync/repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sync/repo")>()),
   getBuckets: async () => m.buckets,
   getProjects: async () => m.projects,
-  bucketCommentsByBucket: async () => m.threads,
-  replaceBucketComments: m.replaceBucketComments,
-  getRepoRequests: async () => m.repoRequests,
+  applyBucketCommentOp: m.applyBucketCommentOp,
+  getRepoRequest: async (id: string) => (m.repoRequests as RepoRequest[]).find((r) => r.id === id) ?? null,
   upsertRepoRequest: m.upsertRepoRequest,
+  decideRepoRequest: m.decideRepoRequest,
 }));
 
 vi.mock("@/lib/sync", async (importOriginal) => ({
@@ -96,15 +96,6 @@ const jsonReq = (method: string, body: unknown) =>
     body: JSON.stringify(body),
   });
 
-const comment = (over: Partial<Comment>): Comment => ({
-  id: "CMT-1",
-  author: "vince",
-  body: "original",
-  ts: "2026.10.15 · 09:00",
-  mentions: [],
-  ...over,
-});
-
 const pendingRequest = (over: Partial<RepoRequest> = {}): RepoRequest => ({
   id: "RR-1",
   name: "new-repo",
@@ -125,8 +116,10 @@ beforeEach(() => {
     { id: "PRJ-OPEN" } as Project,
     { id: "PRJ-SECRET", visibility: "restricted", members: ["vince@petrasoap.com"] } as Project,
   ];
-  m.threads = {};
   m.repoRequests = [];
+  m.upsertRepoRequest.mockResolvedValue(true);
+  m.decideRepoRequest.mockResolvedValue(true);
+  m.validateRepoInOrg.mockResolvedValue({ ok: true, visibility: "private", def: "main", lang: "Go" });
 });
 
 afterEach(() => {
@@ -140,92 +133,122 @@ async function errorCode(resp: Response): Promise<string> {
 // ─── PATCH /api/buckets/{id}/comments ────────────────────────────────────────
 
 describe("PATCH /api/buckets/{id}/comments", () => {
-  it("stores a new comment under the session author, never the body's", async () => {
+  it("applies one add under the session author, never the body's (member under enforce)", async () => {
     vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
     const resp = await bucketCommentsRoute.PATCH(
-      jsonReq("PATCH", { actor: "vince", comments: [comment({ id: "CMT-2", author: "vince", body: "hi" })] }),
+      jsonReq("PATCH", { op: "add", body: "hi", mentions: [], author: "vince", actor: "vince" }),
       ctx("BKT-OPEN")
     );
     expect(resp.status).toBe(200);
-    expect(m.replaceBucketComments).toHaveBeenCalledWith("BKT-OPEN", [
-      expect.objectContaining({ id: "CMT-2", author: "greg", body: "hi" }),
-    ]);
+    expect(m.applyBucketCommentOp).toHaveBeenCalledWith("BKT-OPEN", { op: "add", body: "hi", mentions: [] }, "greg");
   });
 
-  it("keeps other people's comments unchanged when the client edits or drops them", async () => {
-    m.threads = { "BKT-OPEN": [comment({ id: "CMT-1", author: "vince", body: "original" })] };
+  it("passes edit and delete through with the session author for the ownership check", async () => {
     await bucketCommentsRoute.PATCH(
-      jsonReq("PATCH", { comments: [comment({ id: "CMT-1", author: "vince", body: "rewritten" })] }),
+      jsonReq("PATCH", { op: "edit", id: "CMT-1", body: "edited", mentions: [] }),
       ctx("BKT-OPEN")
     );
-    expect(m.replaceBucketComments).toHaveBeenLastCalledWith("BKT-OPEN", [
-      comment({ id: "CMT-1", author: "vince", body: "original" }),
-    ]);
-
-    await bucketCommentsRoute.PATCH(jsonReq("PATCH", { comments: [] }), ctx("BKT-OPEN"));
-    expect(m.replaceBucketComments).toHaveBeenLastCalledWith("BKT-OPEN", [
-      comment({ id: "CMT-1", author: "vince", body: "original" }),
-    ]);
+    await bucketCommentsRoute.PATCH(jsonReq("PATCH", { op: "delete", id: "CMT-1" }), ctx("BKT-OPEN"));
+    expect(m.applyBucketCommentOp).toHaveBeenNthCalledWith(
+      1,
+      "BKT-OPEN",
+      { op: "edit", id: "CMT-1", body: "edited", mentions: [] },
+      "greg"
+    );
+    expect(m.applyBucketCommentOp).toHaveBeenNthCalledWith(2, "BKT-OPEN", { op: "delete", id: "CMT-1" }, "greg");
   });
 
-  it("lets the author edit and delete their own comment", async () => {
-    m.threads = {
-      "BKT-OPEN": [comment({ id: "CMT-1", author: "greg" }), comment({ id: "CMT-3", author: "greg" })],
-    };
-    await bucketCommentsRoute.PATCH(
-      jsonReq("PATCH", {
-        comments: [comment({ id: "CMT-1", author: "greg", body: "edited", editedTs: "2026.10.15 · 10:00" })],
-      }),
+  it("rejects the old whole-thread body (400)", async () => {
+    const resp = await bucketCommentsRoute.PATCH(
+      jsonReq("PATCH", { comments: [{ id: "CMT-1", author: "vince", body: "x", ts: "t", mentions: [] }] }),
       ctx("BKT-OPEN")
     );
-    expect(m.replaceBucketComments).toHaveBeenCalledWith("BKT-OPEN", [
-      comment({ id: "CMT-1", author: "greg", body: "edited", editedTs: "2026.10.15 · 10:00" }),
-    ]);
+    expect(resp.status).toBe(400);
+    expect(m.applyBucketCommentOp).not.toHaveBeenCalled();
   });
 
   it("refuses a comment write on a restricted bucket without the project ACL", async () => {
     const resp = await bucketCommentsRoute.PATCH(
-      jsonReq("PATCH", { comments: [comment({ id: "CMT-9", author: "greg" })] }),
+      jsonReq("PATCH", { op: "add", body: "hi", mentions: [] }),
       ctx("BKT-SECRET")
     );
     expect(resp.status).toBe(403);
-    expect(m.replaceBucketComments).not.toHaveBeenCalled();
+    expect(m.applyBucketCommentOp).not.toHaveBeenCalled();
   });
 
   it("admits a project member on the restricted bucket", async () => {
     authState.session = VINCE;
     const resp = await bucketCommentsRoute.PATCH(
-      jsonReq("PATCH", { comments: [comment({ id: "CMT-9", author: "greg" })] }),
+      jsonReq("PATCH", { op: "add", body: "hi", mentions: [] }),
       ctx("BKT-SECRET")
     );
     expect(resp.status).toBe(200);
-    expect(m.replaceBucketComments).toHaveBeenCalledWith("BKT-SECRET", [
-      expect.objectContaining({ id: "CMT-9", author: "vince" }),
-    ]);
+    expect(m.applyBucketCommentOp).toHaveBeenCalledWith("BKT-SECRET", { op: "add", body: "hi", mentions: [] }, "vince");
+  });
+
+  it("404s an unknown bucket", async () => {
+    const resp = await bucketCommentsRoute.PATCH(
+      jsonReq("PATCH", { op: "add", body: "hi", mentions: [] }),
+      ctx("BKT-NOPE")
+    );
+    expect(resp.status).toBe(404);
+    expect(m.applyBucketCommentOp).not.toHaveBeenCalled();
   });
 
   it("403s with no session", async () => {
     authState.session = null;
-    const resp = await bucketCommentsRoute.PATCH(jsonReq("PATCH", { comments: [] }), ctx("BKT-OPEN"));
+    const resp = await bucketCommentsRoute.PATCH(
+      jsonReq("PATCH", { op: "add", body: "hi", mentions: [] }),
+      ctx("BKT-OPEN")
+    );
     expect(resp.status).toBe(403);
-    expect(m.replaceBucketComments).not.toHaveBeenCalled();
+    expect(m.applyBucketCommentOp).not.toHaveBeenCalled();
   });
 });
 
 // ─── POST /api/repos/requests ────────────────────────────────────────────────
 
-describe("POST /api/repos/requests", () => {
-  it("files a new request as the session requester and ignores a body decision", async () => {
+const stored = (mock: { mock: { calls: unknown[][] } }, call = 0) => mock.mock.calls[call][0] as RepoRequest;
+
+describe("POST /api/repos/requests — filing and updating", () => {
+  it("files as the session requester; decision and verification fields in the body are ignored", async () => {
     vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
+    m.validateRepoInOrg.mockResolvedValue({ ok: false, note: "not found in the org" });
     const resp = await repoRequestsRoute.POST(
-      jsonReq("POST", pendingRequest({ requestedBy: "vince", decidedBy: "vince", decidedTs: "x" })),
+      jsonReq(
+        "POST",
+        pendingRequest({
+          requestedBy: "vince",
+          decidedBy: "vince",
+          decidedTs: "x",
+          verified: true,
+          note: "trust me",
+          visibility: "public",
+          def: "main",
+          lang: "Rust",
+        })
+      ),
       ctx()
     );
     expect(resp.status).toBe(200);
-    const stored = (m.upsertRepoRequest.mock.calls[0] as unknown[])[0] as RepoRequest;
-    expect(stored).toMatchObject({ id: "RR-1", requestedBy: "greg", status: "pending" });
-    expect(stored.decidedBy).toBeUndefined();
-    expect(stored.decidedTs).toBeUndefined();
+    expect(m.validateRepoInOrg).toHaveBeenCalledWith("petralabx", "new-repo");
+    const row = stored(m.upsertRepoRequest);
+    expect(row).toMatchObject({ id: "RR-1", requestedBy: "greg", status: "pending", verified: false, note: "not found in the org" });
+    expect(row.decidedBy).toBeUndefined();
+    expect(row.decidedTs).toBeUndefined();
+    expect(row.visibility).toBeUndefined();
+    expect(row.lang).toBeUndefined();
+  });
+
+  it("records the server's GitHub verification on a new request", async () => {
+    await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ verified: false })), ctx());
+    expect(stored(m.upsertRepoRequest)).toMatchObject({ verified: true, visibility: "private", def: "main", lang: "Go" });
+  });
+
+  it("never verifies a request in a disallowed org", async () => {
+    await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ owner: "evil-corp", verified: true })), ctx());
+    expect(m.validateRepoInOrg).not.toHaveBeenCalled();
+    expect(stored(m.upsertRepoRequest)).toMatchObject({ verified: false });
   });
 
   it("refuses to create a request that is already approved", async () => {
@@ -237,15 +260,70 @@ describe("POST /api/repos/requests", () => {
     expect(m.upsertRepoRequest).not.toHaveBeenCalled();
   });
 
+  it("an unchanged re-send keeps the stored verification and writes nothing", async () => {
+    m.repoRequests = [pendingRequest({ verified: false, note: "not found" })];
+    const resp = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ verified: true, note: "ok" })), ctx());
+    expect(resp.status).toBe(200);
+    expect((await resp.json()).data).toMatchObject({ verified: false, note: "not found" });
+    expect(m.upsertRepoRequest).not.toHaveBeenCalled();
+    expect(m.validateRepoInOrg).not.toHaveBeenCalled();
+  });
+
+  it("re-verifies when the requester changes the name or owner", async () => {
+    m.repoRequests = [pendingRequest({ verified: true })];
+    m.validateRepoInOrg.mockResolvedValue({ ok: false, note: "not found" });
+    await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ name: "other-repo", verified: true })), ctx());
+    expect(m.validateRepoInOrg).toHaveBeenCalledWith("petralabx", "other-repo");
+    expect(stored(m.upsertRepoRequest)).toMatchObject({ name: "other-repo", verified: false });
+  });
+
+  it("409s when the request was decided before the conditional update landed", async () => {
+    m.repoRequests = [pendingRequest()];
+    m.upsertRepoRequest.mockResolvedValue(false);
+    const resp = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ name: "renamed" })), ctx());
+    expect(resp.status).toBe(409);
+  });
+
+  it("lets only the requester update their pending request", async () => {
+    m.repoRequests = [pendingRequest({ requestedBy: "greg" })];
+    authState.session = { user: { oid: "oid-ross", email: "ross@petrasoap.com" } };
+    const other = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ name: "mine-now" })), ctx());
+    expect(other.status).toBe(403);
+    expect(m.upsertRepoRequest).not.toHaveBeenCalled();
+  });
+
+  it("refuses to rewrite a decided request", async () => {
+    authState.session = VINCE;
+    m.repoRequests = [pendingRequest({ status: "rejected", decidedBy: "stephen" })];
+    const resp = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest()), ctx());
+    expect(resp.status).toBe(409);
+    expect(m.upsertRepoRequest).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/repos/requests — decisions", () => {
   it("refuses an approval from a member under enforce", async () => {
     vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
     m.repoRequests = [pendingRequest({ requestedBy: "stephen" })];
     const resp = await repoRequestsRoute.POST(
-      jsonReq("POST", pendingRequest({ requestedBy: "stephen", status: "approved", decidedBy: "vince" })),
+      jsonReq("POST", pendingRequest({ requestedBy: "stephen", status: "approved" })),
       ctx()
     );
     expect(resp.status).toBe(403);
-    expect(m.upsertRepoRequest).not.toHaveBeenCalled();
+    expect(m.decideRepoRequest).not.toHaveBeenCalled();
+  });
+
+  it("refuses approve and reject from a directory member in the default mode", async () => {
+    m.repoRequests = [pendingRequest({ requestedBy: "stephen" })];
+    for (const status of ["approved", "rejected"] as const) {
+      const resp = await repoRequestsRoute.POST(
+        jsonReq("POST", pendingRequest({ requestedBy: "stephen", status })),
+        ctx()
+      );
+      expect(resp.status).toBe(403);
+      expect(await errorCode(resp)).toBe("not_approver");
+    }
+    expect(m.decideRepoRequest).not.toHaveBeenCalled();
   });
 
   it("refuses self-approval, even by an approver", async () => {
@@ -258,22 +336,31 @@ describe("POST /api/repos/requests", () => {
     );
     expect(resp.status).toBe(403);
     expect(await errorCode(resp)).toBe("self_approval");
-    expect(m.upsertRepoRequest).not.toHaveBeenCalled();
+    expect(m.decideRepoRequest).not.toHaveBeenCalled();
   });
 
-  it("records an approver's decision under the session, keeping the stored requester", async () => {
+  it("approves under the session and adds the stored request's repo in the same write", async () => {
     vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
     authState.session = VINCE;
     authState.role = "owner";
-    m.repoRequests = [pendingRequest({ requestedBy: "greg" })];
+    m.repoRequests = [pendingRequest({ requestedBy: "greg", visibility: "private", def: "main", lang: "Go" })];
     const resp = await repoRequestsRoute.POST(
-      jsonReq("POST", pendingRequest({ requestedBy: "stephen", status: "approved", decidedBy: "greg" })),
+      jsonReq("POST", pendingRequest({ name: "swapped", requestedBy: "stephen", status: "approved", decidedBy: "greg" })),
       ctx()
     );
     expect(resp.status).toBe(200);
-    const stored = (m.upsertRepoRequest.mock.calls[0] as unknown[])[0] as RepoRequest;
-    expect(stored).toMatchObject({ status: "approved", requestedBy: "greg", decidedBy: "vince" });
-    expect(stored.decidedTs).toBeTruthy();
+    const [decided, repo] = m.decideRepoRequest.mock.calls[0] as unknown as [RepoRequest, { id: string; name: string }];
+    expect(decided).toMatchObject({ status: "approved", name: "new-repo", requestedBy: "greg", decidedBy: "vince" });
+    expect(decided.decidedTs).toBeTruthy();
+    expect(repo).toMatchObject({ id: "new-repo", name: "new-repo", owner: "petralabx" });
+  });
+
+  it("rejects without adding a repo", async () => {
+    authState.session = VINCE;
+    m.repoRequests = [pendingRequest()];
+    const resp = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ status: "rejected" })), ctx());
+    expect(resp.status).toBe(200);
+    expect(m.decideRepoRequest).toHaveBeenCalledWith(expect.objectContaining({ status: "rejected", decidedBy: "vince" }), undefined);
   });
 
   it("refuses to approve an unverified request", async () => {
@@ -284,26 +371,26 @@ describe("POST /api/repos/requests", () => {
       ctx()
     );
     expect(resp.status).toBe(409);
-    expect(m.upsertRepoRequest).not.toHaveBeenCalled();
+    expect(m.decideRepoRequest).not.toHaveBeenCalled();
   });
 
-  it("refuses to rewrite a decided request", async () => {
+  it("refuses to approve a request in a disallowed org", async () => {
     authState.session = VINCE;
-    m.repoRequests = [pendingRequest({ status: "rejected", decidedBy: "stephen" })];
-    const resp = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest()), ctx());
+    m.repoRequests = [pendingRequest({ owner: "evil-corp", verified: true })];
+    const resp = await repoRequestsRoute.POST(
+      jsonReq("POST", pendingRequest({ owner: "evil-corp", status: "approved" })),
+      ctx()
+    );
     expect(resp.status).toBe(409);
-    expect(m.upsertRepoRequest).not.toHaveBeenCalled();
+    expect(m.decideRepoRequest).not.toHaveBeenCalled();
   });
 
-  it("lets only the requester update their pending request", async () => {
-    m.repoRequests = [pendingRequest({ requestedBy: "greg", verified: false })];
-    const own = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ verified: true })), ctx());
-    expect(own.status).toBe(200);
-
-    authState.session = { user: { oid: "oid-ross", email: "ross@petrasoap.com" } };
-    const other = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ note: "mine now" })), ctx());
-    expect(other.status).toBe(403);
-    expect(m.upsertRepoRequest).toHaveBeenCalledTimes(1);
+  it("409s when another decision or update won the race", async () => {
+    authState.session = VINCE;
+    m.repoRequests = [pendingRequest()];
+    m.decideRepoRequest.mockResolvedValue(false);
+    const resp = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ status: "approved" })), ctx());
+    expect(resp.status).toBe(409);
   });
 });
 

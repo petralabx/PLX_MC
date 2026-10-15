@@ -1,42 +1,38 @@
-// PATCH /api/buckets/{id}/comments — persist a bucket's discussion thread
-// (EN-001 / Item 4). The store mirrors the whole comment array (the same shape
-// task comments round-trip through PATCH /api/tasks/{id}); the server replaces
-// the thread atomically and returns the stored comments. App-only — bucket
-// comments are never pushed to SharePoint. Needs bucket.comment on the signed-in
-// session and the bucket's project ACL; the session is the author, and other
-// people's comments are kept as stored (TASK-3011).
+// PATCH /api/buckets/{id}/comments — one write to a bucket's discussion thread
+// (EN-001 / Item 4): add, edit or delete a single comment, and get the stored
+// thread back. App-only — bucket comments are never pushed to SharePoint.
+// Needs bucket.comment on the signed-in session and the bucket's project ACL.
+// The session is the author; only the author edits or deletes (TASK-3011).
+// One operation per request (not the whole thread) so a client can never drop
+// or rewrite a comment it has not seen.
 
 import { z } from "zod";
-import { parseBody, route } from "@/lib/api/route";
+import { ApiError, parseBody, route } from "@/lib/api/route";
 import { sessionAuthorId } from "@/lib/api/session-actor";
 import { assertBucketProjectAccess } from "@/lib/permissions/project-acl-guard";
 import {
   aclPrincipalFromAuthorized,
   requireSessionActor,
 } from "@/lib/routing/mutations/actors";
-import { setBucketComments } from "@/lib/sync";
+import { applyBucketCommentOp } from "@/lib/sync";
+import { getBuckets } from "@/lib/sync/repo";
 
-// Mirrors the task discussion comment shape (api/tasks/[id]/route.ts) — a
-// free-form note with a capped body and resolved @mentions.
-const commentSchema = z.object({
-  id: z.string(),
-  author: z.string(),
-  body: z.string().min(1).max(5000),
-  ts: z.string(),
-  mentions: z.array(z.string()).max(50),
-  editedTs: z.string().optional(),
-});
+const text = z.string().trim().min(1).max(5000);
+const mentions = z.array(z.string()).max(50);
 
-const patchBucketCommentsSchema = z.object({
-  // Deprecated / ignored — the author is the session (TASK-3011).
-  actor: z.string().min(1).optional(),
-  comments: z.array(commentSchema).max(500),
-});
+const bucketCommentOpSchema = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("add"), body: text, mentions }),
+  z.object({ op: z.literal("edit"), id: z.string().min(1), body: text, mentions }),
+  z.object({ op: z.literal("delete"), id: z.string().min(1) }),
+]);
 
 export const PATCH = route(async (req, ctx) => {
   const { id } = await ctx.params;
-  const { comments } = await parseBody(req, patchBucketCommentsSchema);
+  const op = await parseBody(req, bucketCommentOpSchema);
   const authorized = await requireSessionActor("bucket.comment", { type: "bucket", id });
+  if (!(await getBuckets()).some((bucket) => bucket.id === id)) {
+    throw new ApiError("not_found", `unknown bucket ${id}`, 404);
+  }
   await assertBucketProjectAccess(id, aclPrincipalFromAuthorized(authorized));
-  return setBucketComments(id, comments, sessionAuthorId(authorized.auditLabel));
+  return applyBucketCommentOp(id, op, sessionAuthorId(authorized.auditLabel));
 });

@@ -27,8 +27,11 @@ import {
 import type { Actor, Repo } from "@/lib/mc-data";
 import { authorize, permissionActorFromDirectoryRole } from "@/lib/permissions";
 import {
+  __repoDecisionSettled,
   __repoValidationSettled,
+  __setRepoDecisionMirrorForTests,
   __setRepoValidatorForTests,
+  activeNotices,
   addTask,
   allRepos,
   approveRepo,
@@ -325,6 +328,23 @@ describe("self-service request → approve", () => {
     expect(approveRepo(req.id, "vince")).toBe(false); // vince is Owner, but filed it
     expect(repoRequests().find((r) => r.id === req.id)?.status).toBe("pending");
     expect(allRepos()["own-repo"]).toBeUndefined();
+  });
+
+  it("sends the decision once and rolls back the approval when the server refuses it (TASK-3011)", async () => {
+    __setRepoValidatorForTests(async () => ({ ok: true, visibility: "public", def: "main", lang: "TypeScript" }));
+    const req = requestRepo({ name: "refused-repo" }, "greg");
+    await __repoValidationSettled();
+    const sent: unknown[] = [];
+    __setRepoDecisionMirrorForTests(async (r) => {
+      sent.push(r);
+      throw new Error("self_approval");
+    });
+    expect(approveRepo(req.id, "vince")).toBe(true); // optimistic
+    await __repoDecisionSettled();
+    expect(sent).toEqual([expect.objectContaining({ id: req.id, status: "approved", decidedBy: "vince" })]);
+    expect(repoRequests().find((r) => r.id === req.id)?.status).toBe("pending");
+    expect(allRepos()["refused-repo"]).toBeUndefined();
+    expect(activeNotices().some((n) => n.body.includes("rolled back"))).toBe(true);
   });
 
   it("blocks approve/reject for non-approvers", () => {

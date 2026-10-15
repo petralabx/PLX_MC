@@ -129,30 +129,6 @@ export async function snapshot(): Promise<StateSnapshot> {
   };
 }
 
-// Replace a bucket's discussion thread (EN-001 / Item 4). The store mirrors the
-// whole array (the same shape task comments round-trip), so the server replaces
-// the thread atomically and returns the stored comments. App-only — bucket
-// comments are never pushed to SharePoint. `author` is the signed-in session
-// (TASK-3011): new comments are recorded under it, only its own comments can be
-// edited or dropped, and everyone else's stay exactly as stored.
-export async function setBucketComments(
-  bucketId: string,
-  comments: Comment[],
-  author: string
-): Promise<Comment[]> {
-  const stored = (await repo.bucketCommentsByBucket())[bucketId] ?? [];
-  const incoming = new Map(comments.map((c) => [c.id, c]));
-  const storedIds = new Set(stored.map((c) => c.id));
-  const kept = stored.flatMap((c) => {
-    if (c.author !== author) return [c];
-    const next = incoming.get(c.id);
-    if (!next) return [];
-    return [{ ...c, body: next.body, mentions: next.mentions, editedTs: next.editedTs }];
-  });
-  const added = comments.filter((c) => !storedIds.has(c.id)).map((c) => ({ ...c, author }));
-  return repo.replaceBucketComments(bucketId, [...kept, ...added]);
-}
-
 // ─── Buckets / initiatives (EN-005) ──────────────────────────────────────────
 
 // `BKT-<SLUG>` from the name (uppercased, hyphenated, capped), with a numeric

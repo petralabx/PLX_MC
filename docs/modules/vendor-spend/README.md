@@ -51,7 +51,10 @@ engineering ops and finance the true cost posture at a glance.
    upserts api snapshots, and logs the outcome; one vendor failing never kills
    the batch. Trigger paths: `POST /api/vendor-spend/refresh` (operator
    button), `GET /api/cron/vendor-spend-refresh` (CRON_SECRET-gated, mirrors
-   the sync cron), and `node scripts/seed-vendor-spend.mjs` (bootstrap/backfill).
+   the sync cron; MTD by default, `?period=` for any spend period), and
+   `node scripts/seed-vendor-spend.mjs` (bootstrap/backfill: calls the cron
+   route with `?period=ytd` and the `CRON_SECRET` bearer, since the session
+   POST needs a signed-in admin — TASK-3011).
 6. **API** — all routes go through the shared `route()` wrapper with the
    standard envelope; mutations validate with Zod via `parseBody`:
    `GET /api/vendor-spend?period=`, `GET /api/vendor-spend/[vendorId]?period=`,

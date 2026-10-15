@@ -11,7 +11,7 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
 import { entraAuthConfigured, entraAuthCredentials } from "@/lib/secrets";
 
-import { basicGate, isAllowedUser, isPublicAsset } from "./gate";
+import { basicGate, isAllowedUser, isPublicAsset, sessionStillValid } from "./gate";
 import { extractEntraOid, extractEntraRoles, toSessionIdentity, type EntraProfileClaims } from "./identity";
 
 export { basicGate, isAllowedUser } from "./gate";
@@ -68,8 +68,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
           // App roles (e.g. Goals.Viewer / Goals.Editor), assigned to groups on
           // the sign-in app. Refreshed at each sign-in.
           token.roles = extractEntraRoles(claims);
+          token.signedInAt = Date.now();
+          return token;
         }
-        return token;
+        // Existing session: end it after 12h, when it predates the sign-in
+        // stamp, or once the email leaves the allowlist (null signs out).
+        return sessionStillValid(token) ? token : null;
       },
       session({ session, token }) {
         const identity = toSessionIdentity({

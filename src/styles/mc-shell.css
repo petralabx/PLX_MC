@@ -160,6 +160,101 @@
     gap: var(--p-space-2);
     margin-left: auto;
   }
+  /* Account menu (user-menu.tsx, TASK-2977): the avatar is the trigger; the
+     popover reuses the filter bar's .fb-pop skin (paper, grid hairline, ink
+     shadow) and the .kk kicker voice. */
+  .mc .usermenu {
+    position: relative;
+    flex: 0 0 auto;
+  }
+  .mc .usermenu-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--p-touch);
+    height: var(--p-touch);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .mc .usermenu-trigger:focus-visible,
+  .mc .usermenu-item:focus-visible {
+    outline: 2px solid var(--p-accent);
+    outline-offset: 2px;
+  }
+  .mc .usermenu-trigger[aria-expanded="true"] .av {
+    box-shadow: 0 0 0 2px var(--p-paper), 0 0 0 3px var(--p-ink);
+  }
+  .mc .usermenu-pop {
+    position: absolute;
+    z-index: 60;
+    top: 100%;
+    right: 0;
+    margin-top: 6px;
+    min-width: 240px;
+    max-width: min(320px, calc(100vw - 2 * var(--p-gutter)));
+    background: var(--p-paper);
+    border: 1px solid var(--p-grid);
+    box-shadow: 0 8px 28px color-mix(in srgb, var(--p-ink) 12%, transparent);
+    padding: 5px;
+  }
+  .mc .usermenu-who {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px 10px;
+    border-bottom: 1px solid var(--p-grid);
+    margin-bottom: 5px;
+  }
+  .mc .usermenu-who .kk {
+    font-family: var(--mono);
+    font-size: var(--p-text-cap-2);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--p-muted);
+    margin-bottom: 4px;
+  }
+  .mc .usermenu-who .nm {
+    font-family: var(--p-font-serif);
+    font-size: var(--p-text-h3);
+    letter-spacing: -0.015em;
+    color: var(--p-ink);
+  }
+  .mc .usermenu-who .em {
+    font-family: var(--mono);
+    font-size: var(--p-text-mono);
+    color: var(--p-ink-2);
+    overflow-wrap: anywhere;
+  }
+  .mc .usermenu-who .rl {
+    font-size: var(--p-text-small);
+    color: var(--p-muted);
+  }
+  .mc .usermenu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: var(--p-touch);
+    padding: 6px 10px;
+    border: 0;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+    font-size: var(--p-text-small);
+    color: var(--p-ink-2);
+    transition: background var(--p-dur-fast) var(--p-ease);
+  }
+  .mc .usermenu-item:hover {
+    background: var(--p-paper-2);
+    color: var(--p-ink);
+  }
+  .mc .usermenu-item .ic {
+    width: 16px;
+    height: 16px;
+  }
   .mc .iconbtn {
     position: relative;
     display: inline-flex;

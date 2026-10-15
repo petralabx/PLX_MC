@@ -243,6 +243,8 @@ portal key, because `mc_self_check` stays forbidden to it.
 
 **Workbench principal:** `sp_mcp_workbench` (PLX Agent Workbench, `tswaterloo/OntologyProject`; migration 038; owner Tanush) is read-only: its grant is `task.read` only, and its allowlist is `mc_self_check`, `mc_get_context`, `mc_list_buckets`, `mc_search_knowledge`, `mc_search_tasks` and `mc_get_task`; every write tool gives 403.
 
+**Infra principal:** `sp_mcp_infra` (PLX Infra; migration 040; owner Infra, approved by Vince 2026-10-15) is read-only like the Workbench: its grant is `task.read` only, its allowlist is the same six read tools, and every write tool gives 403. A later grant change can widen it.
+
 **Agent reports (agent fleet P8, D12):** `POST /api/cursor/agent-report`
 records one free-form report per agent run as an `agent.report` event in
 `mc_events`. The body is `agentSlug`, `loopId`, `runId`, `title` and `markdown`

@@ -86,6 +86,26 @@ def test_missing_dedicated_key_fails_closed_without_shared_fallback() -> None:
         )
 
 
+def test_infra_principal_uses_only_its_dedicated_key() -> None:
+    bootstrap = load_script()
+
+    assert "sp_mcp_infra" in bootstrap.MCP_PRINCIPAL_IDS
+    assert (
+        bootstrap.select_mcp_key(
+            "sp_mcp_infra",
+            {"PLX_MC_MCP_API_KEY": "shared-key"},
+            {"sp_mcp_infra": "infra-key"},
+        )
+        == "infra-key"
+    )
+    with pytest.raises(SystemExit, match="mcp principal key unavailable"):
+        bootstrap.select_mcp_key(
+            "sp_mcp_infra",
+            {"PLX_MC_MCP_API_KEY": "shared-key"},
+            {"sp_mcp_claude_code": "claude-key"},
+        )
+
+
 def test_unreviewed_principal_is_rejected() -> None:
     bootstrap = load_script()
 

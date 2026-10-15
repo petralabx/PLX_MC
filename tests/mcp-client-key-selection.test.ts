@@ -35,6 +35,12 @@ describe("MCP client principal selection", () => {
     ).toBe("sp_mcp_claude_code");
   });
 
+  it("accepts sp_mcp_infra as an explicit dedicated principal", () => {
+    expect(resolveMcpPrincipalId({ MC_MCP_PRINCIPAL_ID: "sp_mcp_infra" })).toBe(
+      "sp_mcp_infra"
+    );
+  });
+
   it("rejects principal ids outside the reviewed registry", () => {
     expect(() =>
       resolveMcpPrincipalId({ MC_MCP_PRINCIPAL_ID: "sp_unreviewed" })
@@ -100,6 +106,24 @@ describe("MCP client key resolution", () => {
       selectMcpKeyFromSecret(
         { PLX_MC_MCP_API_KEY: "shared-key" },
         "sp_mcp_codex"
+      )
+    ).toBe("");
+  });
+
+  it("never gives sp_mcp_infra the shared Cursor key", () => {
+    expect(
+      resolveMcpClientKey({ PLX_MC_MCP_API_KEY: "shared-key" }, "sp_mcp_infra")
+    ).toBe("");
+    expect(
+      selectMcpKeyFromSecret(
+        { sp_mcp_infra: "infra-key", PLX_MC_MCP_API_KEY: "shared-key" },
+        "sp_mcp_infra"
+      )
+    ).toBe("infra-key");
+    expect(
+      selectMcpKeyFromSecret(
+        { sp_mcp_claude_code: "claude-key", PLX_MC_MCP_API_KEY: "shared-key" },
+        "sp_mcp_infra"
       )
     ).toBe("");
   });

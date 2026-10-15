@@ -99,6 +99,24 @@ entry form. Both routes call `requireSessionActor("vendor_spend.write")` on the
 Entra session and store the session email as the author. Admin and owner roles
 hold it; members and every service principal do not, so until mode `enforce`
 (humans synthesized as admin) no signed-in person is newly denied.
+`POST /api/vendor-spend/refresh` needs it too (TASK-3011).
+
+**Session writes behind the middleware gate only (TASK-3011):** each now calls
+`requireSessionActor(<capability>)` and takes its author from the session
+(`sessionAuthorId` in `src/lib/api/session-actor.ts`: the directory id when the
+email is listed, else the email — the id `GET /api/viewer` returns).
+`bucket.comment` (member and up): `PATCH /api/buckets/[id]/comments`, plus the
+bucket's project ACL; new comments get the session author, only the author's
+own comments can be edited or dropped, others are kept as stored.
+`repo.request` (member and up): filing / updating one's own pending request
+(`POST /api/repos/requests`) and `POST /api/repos/validate`; a decision on a
+request needs `repo.approve`, is recorded under the session, is final, and
+refuses self-approval (`self_approval`) and unverified approval.
+`skill.submit` (member and up): `POST /api/skills-directory/submit`, submitter =
+session email. `skill.install` (member and up): `POST
+/api/skills-directory/install` and `/sync-check`. `compliance.reconcile` (admin
+and owner): `POST /api/compliance/reconcile`. No service principal holds any
+of them.
 
 **Audit data (TASK-620):** every enforcement call site records `allowed`,
 `reasonCode`, and `policyVersion` to `permissions_decision_log` (migration 022)
@@ -158,8 +176,9 @@ concrete rule cannot be expressed that way.
   the shared `db` query seam only when enforcement is enabled.
 - Depended on by: the `repo.approve` approver gate (`mc-data` store, Repos and
   Skills screens and routes), MCP auth (service principal actor), the
-  vendor-spend write routes (`vendor_spend.write`), future routing / task /
-  sync mutation paths.
+  vendor-spend write routes (`vendor_spend.write`), the TASK-3011 session
+  writes (bucket comments, repo requests, skills submit/install, compliance
+  reconcile), future routing / task / sync mutation paths.
 
 ## Owner
 

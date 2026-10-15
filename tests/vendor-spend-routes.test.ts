@@ -414,6 +414,24 @@ describe("POST /api/vendor-spend/refresh", () => {
     );
     expect(resp.status).toBe(400);
   });
+
+  it("403s a member under enforcement and pulls nothing (TASK-3011)", async () => {
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
+    authState.role = "member";
+    const resp = await refreshRoute.POST(
+      jsonReq("http://test/api/vendor-spend/refresh", "POST", { period: "mtd" }),
+      emptyCtx
+    );
+    expect(resp.status).toBe(403);
+    expect(m.refreshAutomatedVendors).not.toHaveBeenCalled();
+  });
+
+  it("403s with no session (TASK-3011)", async () => {
+    authState.session = null;
+    const resp = await refreshRoute.POST(jsonReq("http://test/api/vendor-spend/refresh", "POST", {}), emptyCtx);
+    expect(resp.status).toBe(403);
+    expect(m.refreshAutomatedVendors).not.toHaveBeenCalled();
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

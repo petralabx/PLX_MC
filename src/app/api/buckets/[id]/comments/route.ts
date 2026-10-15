@@ -2,10 +2,18 @@
 // (EN-001 / Item 4). The store mirrors the whole comment array (the same shape
 // task comments round-trip through PATCH /api/tasks/{id}); the server replaces
 // the thread atomically and returns the stored comments. App-only — bucket
-// comments are never pushed to SharePoint.
+// comments are never pushed to SharePoint. Needs bucket.comment on the signed-in
+// session and the bucket's project ACL; the session is the author, and other
+// people's comments are kept as stored (TASK-3011).
 
 import { z } from "zod";
 import { parseBody, route } from "@/lib/api/route";
+import { sessionAuthorId } from "@/lib/api/session-actor";
+import { assertBucketProjectAccess } from "@/lib/permissions/project-acl-guard";
+import {
+  aclPrincipalFromAuthorized,
+  requireSessionActor,
+} from "@/lib/routing/mutations/actors";
 import { setBucketComments } from "@/lib/sync";
 
 // Mirrors the task discussion comment shape (api/tasks/[id]/route.ts) — a
@@ -20,12 +28,15 @@ const commentSchema = z.object({
 });
 
 const patchBucketCommentsSchema = z.object({
-  actor: z.string().min(1),
+  // Deprecated / ignored — the author is the session (TASK-3011).
+  actor: z.string().min(1).optional(),
   comments: z.array(commentSchema).max(500),
 });
 
 export const PATCH = route(async (req, ctx) => {
   const { id } = await ctx.params;
   const { comments } = await parseBody(req, patchBucketCommentsSchema);
-  return setBucketComments(id, comments);
+  const authorized = await requireSessionActor("bucket.comment", { type: "bucket", id });
+  await assertBucketProjectAccess(id, aclPrincipalFromAuthorized(authorized));
+  return setBucketComments(id, comments, sessionAuthorId(authorized.auditLabel));
 });

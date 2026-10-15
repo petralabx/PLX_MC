@@ -18,6 +18,15 @@ export function actorByEmail(email: string | null | undefined): Actor | undefine
   );
 }
 
+// The author id a session-gated write records for the signed-in person: the id
+// GET /api/viewer gives them (directory id when the email is listed, else the
+// email), so the client's own-comment / own-request checks keep matching.
+// `auditLabel` comes from requireSessionActor — never from the request body.
+export function sessionAuthorId(auditLabel: string): string {
+  const listed = actorByEmail(auditLabel);
+  return listed?.kind === "human" ? listed.id : auditLabel;
+}
+
 export async function resolveRequestActor(bodyActor: string | undefined): Promise<Actor | undefined> {
   if (oidcEnabled()) {
     let session: { user?: { email?: string | null } } | null;

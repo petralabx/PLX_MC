@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { ApiError, parseBody, route } from "@/lib/api/route";
+import { requireSessionActor } from "@/lib/routing/mutations/actors";
 import {
   buildSkillsInstallPlan,
   createSkillsSource,
@@ -27,6 +28,7 @@ function parseLocalRegistry(value: unknown): SkillsRegistry | null {
 
 export const POST = route(async (req) => {
   const body = await parseBody(req, syncCheckSchema);
+  await requireSessionActor("skill.install");
   const allowlist = readCompanySkillsAllowlist();
   const source = createSkillsSource();
   const fetched = await source.fetchManifest(pointerFromAllowlist(allowlist));

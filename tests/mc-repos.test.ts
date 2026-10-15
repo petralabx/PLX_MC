@@ -317,6 +317,16 @@ describe("self-service request → approve", () => {
     expect(allRepos()["wontfix"]).toBeUndefined();
   });
 
+  it("refuses self-approval, even for an approver (TASK-3011)", async () => {
+    __setRepoValidatorForTests(async () => ({ ok: true, visibility: "public", def: "main", lang: "TypeScript" }));
+    const req = requestRepo({ name: "own-repo" }, "vince");
+    await __repoValidationSettled();
+    expect(repoRequests().find((r) => r.id === req.id)?.verified).toBe(true);
+    expect(approveRepo(req.id, "vince")).toBe(false); // vince is Owner, but filed it
+    expect(repoRequests().find((r) => r.id === req.id)?.status).toBe("pending");
+    expect(allRepos()["own-repo"]).toBeUndefined();
+  });
+
   it("blocks approve/reject for non-approvers", () => {
     const req = requestRepo({ name: "needs-owner" });
     expect(approveRepo(req.id, "greg")).toBe(false); // Contributor

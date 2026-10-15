@@ -38,6 +38,17 @@ export const CAPABILITIES = [
   "agent_report.read",
   // Save vendor budgets and manual cost snapshots (AI Spend, TASK-2928).
   "vendor_spend.write",
+  // TASK-3011: session writes that had only the middleware gate.
+  // Post / edit / delete one's own comment in a bucket thread.
+  "bucket.comment",
+  // File a repo request and probe its GitHub-org validation (deciding is repo.approve).
+  "repo.request",
+  // Submit a skill for review (reviewing is repo.approve).
+  "skill.submit",
+  // Build a skills install / sync-check plan from the company catalog.
+  "skill.install",
+  // Replay the compliance reconciliation queue by hand (the cron run is CRON_SECRET-gated).
+  "compliance.reconcile",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];

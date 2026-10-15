@@ -760,6 +760,11 @@ export function approveRepo(requestId: string, actorId: string = viewerId()): bo
   }
   const req = state.repoRequests.find((r) => r.id === requestId);
   if (!req || req.status !== "pending") return false;
+  // The server refuses self-approval (TASK-3011); say so before anything is sent.
+  if (req.requestedBy === actorId) {
+    pushNotice("A repo request must be approved by someone other than its requester.");
+    return false;
+  }
   if (!req.verified) {
     pushNotice(`${req.name} hasn't been verified against the GitHub org — it can't be approved.`);
     return false;
@@ -1263,7 +1268,7 @@ type BucketCommentMirror = (bucketId: string, comments: Comment[]) => Promise<Co
 const defaultBucketCommentMirror: BucketCommentMirror = (bucketId, comments) =>
   api<Comment[]>(`/buckets/${bucketId}/comments`, {
     method: "PATCH",
-    body: JSON.stringify({ actor: viewerId(), comments }),
+    body: JSON.stringify({ comments }),
   });
 
 let bucketCommentMirror = defaultBucketCommentMirror;

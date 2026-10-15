@@ -285,3 +285,25 @@ describe("MCP service principal auth", () => {
     );
   });
 });
+
+describe("aclPrincipalFromMcp (TASK-3008)", () => {
+  it("uses only the authenticated service principal, never the operator email header", async () => {
+    const { aclPrincipalFromMcp } = await import("@/lib/routing/mutations/actors");
+    const { canAccessProject } = await import("@/lib/permissions/project-acl");
+    const identity = {
+      operatorEmail: "ross@petrasoap.com",
+      runtime: "cursor",
+      workerId: "w",
+      repo: "petralabx/PLX_MC",
+      servicePrincipalId: MCP_SERVICE_PRINCIPAL_ID,
+      actor: { kind: "service" as const, id: MCP_SERVICE_PRINCIPAL_ID, status: "active" as const },
+    };
+    expect(aclPrincipalFromMcp(identity).tokens).toEqual([MCP_SERVICE_PRINCIPAL_ID]);
+    // Naming a member (by email or directory id) in the header passes nothing.
+    const restricted = { visibility: "restricted", members: ["ross@petrasoap.com", "ross"] };
+    expect(canAccessProject(restricted, aclPrincipalFromMcp(identity))).toBe(false);
+    expect(
+      canAccessProject({ visibility: "restricted", members: [MCP_SERVICE_PRINCIPAL_ID] }, aclPrincipalFromMcp(identity))
+    ).toBe(true);
+  });
+});

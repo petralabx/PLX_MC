@@ -49,7 +49,7 @@ Routing behavior is unchanged; owner: Vince. No migration is needed.
 | `mc_verify_pr` | `GET /api/cursor/verify?repo=&pr=` | `task.read` | the `/api/compliance/verify` verdict from GitHub PR stamps/labels/files; `recorded: false` (no check row, no `gate.*` event) |
 | `mc_request_approval` | `POST /api/cursor/request-approval` | `approval.request` (write) | `gateId`, `checkoutRef` (`dsp_…last4`), `status: pending`, `inputRequired: true` |
 | `mc_get_approval_gate` | `GET /api/cursor/approval-gate` | `task.read` (read; only the authenticated service principal that raised the gate) | `gateId`, `checkoutRef`, `status`, `decidedBy`, `decidedAt`, `note`, `proposal`, `timedOut` |
-| `mc_release_checkout` | `POST /api/cursor/checkouts/release` | `task.checkout` + project ACL + accountable human / admin / Ledger-CoS steward (write) | releases one lease by `checkoutId`, or by `checkoutRef` + `taskId`; returns `checkoutRef`, `releasedAt`, `releasedReason` (`manual: …`), `authz` |
+| `mc_release_checkout` | `POST /api/cursor/checkouts/release` | `task.checkout` + project ACL + checkout principal / Ledger-CoS steward principal (write) | releases one lease by `checkoutId`, or by `checkoutRef` + `taskId`; returns `checkoutRef`, `releasedAt`, `releasedReason` (`manual: …`), `authz` |
 | `mc_release_checkouts` | `POST /api/cursor/checkouts/release-batch` | same, per item | `results[]` with `ok` + `data` or `ok: false` + `error`; `released`, `failed` |
 | `mc_report_session_telemetry` | `POST /api/cursor/session-telemetry` | `telemetry.report` (write) | appends one `agent.session_telemetry` event per `sessionId` (replays are no-ops); read back per runtime and per bucket via `GET /api/agent-metrics?rollup=cost` (`src/lib/routing/cost-rollup.ts`); the roll-up applies the caller's project ACL (restricted-project tasks and their telemetry are dropped) and resolves checkout ids missing from the newest-5000 event sample from the `mc_dispatch` ledger. Remaining limit: a task's own `task.completed`/telemetry events older than that sample are not counted |
 
@@ -63,15 +63,22 @@ or verify reasons. They return `checkoutRef` (`dsp_…` + last 4). An agent
 completes with the id from its own `mc_checkout_task` receipt.
 `mc_request_approval` applies the same restricted-project guard
 (`assertTaskProjectAccess`) as the other task writes.
+Every MCP restricted-project check (`aclPrincipalFromMcp`) matches only the
+authenticated service principal id, so a restricted project admits an agent
+only when its `sp_mcp_*` id is a member. The `X-MC-Operator-Email` header is
+never a member token, and a restricted project created over MCP lists its
+creating principal, not the operator (TASK-3008).
 
 **Checkout release (TASK-2326):** `mc_release_checkout` and
 `mc_release_checkouts` (`src/lib/mcp/checkout-release-actions.ts`) end a stray
 or expired lease. One SQL statement sets `released_at` and `released_reason`
 (`manual: <reason>`) and appends `checkout.released` with the actor, reason,
 `checkoutRef` and authz `reasonCode`. The principal needs `task.checkout`. The
-operator must then be the lease's accountable human, a directory owner/admin,
-or a Ledger/CoS steward (`CHECKOUT_RELEASE_STEWARDS`, today `cos@petrasoap.com`;
-MC has no separate Ledger or CoS service principal). Anyone else gets 403 and a
+authenticated principal must then be the one that checked the lease out
+(`checkout_principal`: the checkout event's `permissionActorId`) or a Ledger/CoS
+steward principal (`steward`: `CHECKOUT_RELEASE_STEWARDS`, `sp_mcp_ledger` and
+`sp_mcp_cos`). The operator email header grants nothing (TASK-3008). A lease with
+no recorded principal is steward-only. Anyone else gets 403 and a
 `checkout.release_denied` event. An already-released lease returns
 `already_released` and writes no second event. A revoked lease returns
 `checkout_revoked`. A `checkoutRef` needs `taskId`, and two matching leases

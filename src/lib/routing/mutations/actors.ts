@@ -137,14 +137,13 @@ function directoryIdsForEmail(email: string | undefined): string[] {
     .map((human) => human.id);
 }
 
-/** ACL principal for an authenticated MCP agent (sp_* + operator email). */
+/**
+ * ACL principal for an authenticated MCP agent: the service principal only.
+ * The operator email header is caller-chosen audit context and never a member
+ * token (TASK-3008).
+ */
 export function aclPrincipalFromMcp(identity: McpIdentity): ProjectAclPrincipal {
-  return principalFromTokens(
-    identity.servicePrincipalId,
-    identity.actor.id,
-    identity.operatorEmail,
-    ...directoryIdsForEmail(identity.operatorEmail)
-  );
+  return principalFromTokens(identity.servicePrincipalId, identity.actor.id);
 }
 
 /** ACL principal for a session or MCP actor already authorized for a capability. */

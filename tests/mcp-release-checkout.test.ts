@@ -18,6 +18,8 @@ type Dispatch = {
   expiresAt: string;
   releasedAt: string | null;
   releasedReason: string | null;
+  /** Service principal recorded on the checkout event (permissionActorId). */
+  checkoutPrincipal: string | null;
 };
 
 type Event = { kind: string; actor: string; repo?: string | null; taskId?: string | null; payload: Record<string, unknown> };
@@ -44,19 +46,29 @@ vi.mock("@/lib/sync", async (importOriginal) => ({
 vi.mock("@/lib/sync/repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sync/repo")>()),
   getEntity: vi.fn(async (_kind: string, id: string) => ({
-    data: { id, stage: "progress", bucket: id === "TASK-SECRET" ? "BKT-SECRET" : "BKT-OPEN" },
+    data: {
+      id,
+      stage: "progress",
+      bucket: id === "TASK-SECRET" ? "BKT-SECRET" : id === "TASK-ROSS" ? "BKT-ROSS" : id === "TASK-CLAUDE" ? "BKT-CLAUDE" : "BKT-OPEN",
+    },
   })),
   getBuckets: vi.fn(async () => [
     { id: "BKT-OPEN", name: "Open", project: null },
     { id: "BKT-SECRET", name: "Secret", project: "PRJ-SECRET" },
+    { id: "BKT-ROSS", name: "Ross", project: "PRJ-ROSS" },
+    { id: "BKT-CLAUDE", name: "Claude", project: "PRJ-CLAUDE" },
   ]),
   getProjects: vi.fn(async () => [
     { id: "PRJ-SECRET", name: "Secret", visibility: "restricted", members: ["someone-else@petrasoap.com"] },
+    // A human member, by email and directory id: an MCP header naming them must not pass.
+    { id: "PRJ-ROSS", name: "Ross", visibility: "restricted", members: ["ross@petrasoap.com", "ross"] },
+    { id: "PRJ-CLAUDE", name: "Claude", visibility: "restricted", members: ["sp_mcp_claude_code"] },
   ]),
 }));
 
 vi.mock("@/lib/compliance/repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/compliance/repo")>()),
+  getDispatchCheckoutPrincipal: vi.fn(async (id: string) => h.dispatches.get(id)?.checkoutPrincipal ?? null),
   getDispatch: vi.fn(async (id: string) => {
     const d = h.dispatches.get(id);
     return d ? { ...d } : null;
@@ -101,15 +113,22 @@ function seed(id: string, taskId: string, over: Partial<Dispatch> = {}): void {
     expiresAt: FUTURE,
     releasedAt: null,
     releasedReason: null,
+    // The shared test key authenticates sp_mcp_cursor, so by default the caller owns the lease.
+    checkoutPrincipal: "sp_mcp_cursor",
     ...over,
   });
 }
 
-function headers(operator: string): Record<string, string> {
+const SHARED_KEY = "test-mcp-key";
+const COS_KEY = "cos-key";
+const LEDGER_KEY = "ledger-key";
+const CLAUDE_KEY = "claude-key";
+
+function headers(operator: string, key: string): Record<string, string> {
   return {
     "content-type": "application/json",
     accept: "application/json, text/event-stream",
-    "x-api-key": "test-mcp-key",
+    "x-api-key": key,
     "x-mc-operator-email": operator,
     "x-mc-repo": "petralabx/PLX_MC",
     "x-mc-runtime": "claude-code",
@@ -124,12 +143,17 @@ type Outcome = { ok: boolean; status: number | null; body: Body; text: string };
 
 let rpcId = 0;
 
-async function viaMcp(tool: string, args: Record<string, unknown>, operator: string): Promise<Outcome> {
+async function viaMcp(
+  tool: string,
+  args: Record<string, unknown>,
+  operator: string,
+  key: string = SHARED_KEY
+): Promise<Outcome> {
   rpcId += 1;
   const res = await mcpPost(
     new Request("http://localhost/api/cursor/mcp", {
       method: "POST",
-      headers: headers(operator),
+      headers: headers(operator, key),
       body: JSON.stringify({ jsonrpc: "2.0", id: rpcId, method: "tools/call", params: { name: tool, arguments: args } }),
     })
   );
@@ -140,13 +164,18 @@ async function viaMcp(tool: string, args: Record<string, unknown>, operator: str
   return { ok: json.result.isError !== true, status: null, body, text };
 }
 
-async function viaRest(tool: string, args: Record<string, unknown>, operator: string): Promise<Outcome> {
+async function viaRest(
+  tool: string,
+  args: Record<string, unknown>,
+  operator: string,
+  key: string = SHARED_KEY
+): Promise<Outcome> {
   const route = tool === "mc_release_checkouts" ? releaseBatchRoute : releaseRoute;
   const path = tool === "mc_release_checkouts" ? "release-batch" : "release";
   const res = await route(
     new Request(`http://localhost/api/cursor/checkouts/${path}`, {
       method: "POST",
-      headers: headers(operator),
+      headers: headers(operator, key),
       body: JSON.stringify(args),
     }),
     { params: Promise.resolve({}) }
@@ -166,7 +195,10 @@ const deniedEvents = () => h.events.filter((e) => e.kind === "checkout.release_d
 beforeEach(() => {
   vi.stubEnv("PLX_MC_MCP_ENABLED", "1");
   vi.stubEnv("PLX_MC_MCP_API_KEY", "test-mcp-key");
-  vi.stubEnv("PLX_MC_MCP_AGENT_KEYS", "");
+  vi.stubEnv(
+    "PLX_MC_MCP_AGENT_KEYS",
+    JSON.stringify({ sp_mcp_cos: COS_KEY, sp_mcp_ledger: LEDGER_KEY, sp_mcp_claude_code: CLAUDE_KEY })
+  );
   vi.stubEnv(
     "PLX_MC_ALLOWED_USERS",
     "vince@petrasoap.com,ross@petrasoap.com,stephen@petrasoap.com,cos@petrasoap.com"
@@ -182,28 +214,26 @@ afterEach(() => {
 });
 
 describe("authorizeCheckoutRelease", () => {
-  it("allows the accountable human, an admin, and a Ledger/CoS steward", () => {
-    expect(authorizeCheckoutRelease("Ross@PetraSoap.com", { accountableHuman: "ross@petrasoap.com" })).toEqual({
+  it("allows the principal that checked the lease out and the Ledger/CoS steward principals", () => {
+    expect(authorizeCheckoutRelease("sp_mcp_claude_code", "sp_mcp_claude_code")).toEqual({
       allowed: true,
-      reasonCode: "accountable_human",
+      reasonCode: "checkout_principal",
     });
-    expect(authorizeCheckoutRelease("vince@petrasoap.com", { accountableHuman: "ross@petrasoap.com" })).toEqual({
-      allowed: true,
-      reasonCode: "admin",
-    });
-    expect(authorizeCheckoutRelease("cos@petrasoap.com", { accountableHuman: "ross@petrasoap.com" })).toEqual({
-      allowed: true,
-      reasonCode: "steward",
-    });
+    for (const steward of ["sp_mcp_cos", "sp_mcp_ledger"]) {
+      expect(authorizeCheckoutRelease(steward, "sp_mcp_claude_code")).toEqual({ allowed: true, reasonCode: "steward" });
+      expect(authorizeCheckoutRelease(steward, null)).toEqual({ allowed: true, reasonCode: "steward" });
+    }
   });
 
-  it("denies everyone else with not_accountable", () => {
-    // stephen is in the directory but holds no admin role.
-    expect(authorizeCheckoutRelease("stephen@petrasoap.com", { accountableHuman: "ross@petrasoap.com" })).toEqual({
+  it("denies every other principal, and email strings, with not_accountable", () => {
+    expect(authorizeCheckoutRelease("sp_mcp_cursor", "sp_mcp_claude_code")).toEqual({
       allowed: false,
       reasonCode: "not_accountable",
     });
-    expect(authorizeCheckoutRelease("", { accountableHuman: "" }).allowed).toBe(false);
+    // A lease with no recorded principal is steward-only.
+    expect(authorizeCheckoutRelease("sp_mcp_cursor", null).allowed).toBe(false);
+    expect(authorizeCheckoutRelease("cos@petrasoap.com", "sp_mcp_claude_code").allowed).toBe(false);
+    expect(authorizeCheckoutRelease("", null).allowed).toBe(false);
   });
 });
 
@@ -212,7 +242,7 @@ describe("tool registration", () => {
     const res = await mcpPost(
       new Request("http://localhost/api/cursor/mcp", {
         method: "POST",
-        headers: headers("vince@petrasoap.com"),
+        headers: headers("vince@petrasoap.com", SHARED_KEY),
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
       })
     );
@@ -224,7 +254,7 @@ describe("tool registration", () => {
 
 for (const [transport, call] of TRANSPORTS) {
   describe(`mc_release_checkout over ${transport}`, () => {
-    it("lets the accountable human release by full id and audits checkout.released", async () => {
+    it("lets the checkout's own principal release by full id and audits checkout.released", async () => {
       seed("dsp_abcdefgh1234", "TASK-2279");
       const out = await call(
         "mc_release_checkout",
@@ -236,7 +266,7 @@ for (const [transport, call] of TRANSPORTS) {
         taskId: "TASK-2279",
         checkoutRef: "dsp_…1234",
         releasedReason: "manual: stray from a stopped run",
-        authz: "accountable_human",
+        authz: "checkout_principal",
       });
       // The usable credential never comes back.
       expect(out.text).not.toContain("dsp_abcdefgh1234");
@@ -254,7 +284,7 @@ for (const [transport, call] of TRANSPORTS) {
           payload: expect.objectContaining({
             checkoutRef: "dsp_…1234",
             reason: "stray from a stopped run",
-            reasonCode: "accountable_human",
+            reasonCode: "checkout_principal",
             servicePrincipalId: "sp_mcp_cursor",
             wasExpired: false,
           }),
@@ -264,25 +294,15 @@ for (const [transport, call] of TRANSPORTS) {
         expect.objectContaining({
           site: "mcp.release-checkout",
           allowed: true,
-          reasonCode: "accountable_human",
+          reasonCode: "checkout_principal",
         })
       );
       // Only the lease changes: the task stage and Verified are never written.
       expect(h.patchTask).not.toHaveBeenCalled();
     });
 
-    it("lets an admin and a Ledger/CoS steward release another person's lease", async () => {
-      seed("dsp_aaaaaaaa0001", "TASK-1");
-      seed("dsp_aaaaaaaa0002", "TASK-1");
-      const admin = await call("mc_release_checkout", { checkoutId: "dsp_aaaaaaaa0001", reason: "x" }, "vince@petrasoap.com");
-      const steward = await call("mc_release_checkout", { checkoutId: "dsp_aaaaaaaa0002", reason: "x" }, "cos@petrasoap.com");
-      expect(admin.body.data.authz).toBe("admin");
-      expect(steward.body.data.authz).toBe("steward");
-      expect(releasedEvents()).toHaveLength(2);
-    });
-
-    it("forbids anyone else and audits the reasonCode", async () => {
-      seed("dsp_abcdefgh1234", "TASK-2279");
+    it("forbids another principal's lease and audits the reasonCode", async () => {
+      seed("dsp_abcdefgh1234", "TASK-2279", { checkoutPrincipal: "sp_mcp_claude_code" });
       const out = await call(
         "mc_release_checkout",
         { checkoutId: "dsp_abcdefgh1234", reason: "not mine" },
@@ -411,11 +431,66 @@ for (const [transport, call] of TRANSPORTS) {
     });
   });
 
+  describe(`operator email grants nothing over ${transport} (TASK-3008)`, () => {
+    it.each([
+      ["the owner", "vince@petrasoap.com"],
+      ["the default agent operator cos@", "cos@petrasoap.com"],
+      ["the lease's accountable human", "ross@petrasoap.com"],
+    ])("refuses the shared key with the header set to %s", async (_label, operator) => {
+      seed("dsp_otheragnt0001", "TASK-1", { checkoutPrincipal: "sp_mcp_claude_code" });
+      const out = await call("mc_release_checkout", { checkoutId: "dsp_otheragnt0001", reason: "x" }, operator);
+      expect(out.ok).toBe(false);
+      if (out.status !== null) expect(out.status).toBe(403);
+      expect(out.body.error.message).toContain("not_accountable");
+      expect(h.dispatches.get("dsp_otheragnt0001")?.releasedAt).toBeNull();
+      expect(releasedEvents()).toEqual([]);
+    });
+
+    it("lets the principal that checked the lease out release it, whatever the header", async () => {
+      seed("dsp_claudeown0001", "TASK-1", { checkoutPrincipal: "sp_mcp_claude_code" });
+      const out = await call(
+        "mc_release_checkout",
+        { checkoutId: "dsp_claudeown0001", reason: "x" },
+        "stephen@petrasoap.com",
+        CLAUDE_KEY
+      );
+      expect(out.ok).toBe(true);
+      expect(out.body.data.authz).toBe("checkout_principal");
+      expect(releasedEvents()[0]).toMatchObject({
+        actor: "claude-code:stephen@petrasoap.com",
+        payload: expect.objectContaining({ servicePrincipalId: "sp_mcp_claude_code" }),
+      });
+    });
+
+    it("lets the steward principals sp_mcp_cos and sp_mcp_ledger release any lease", async () => {
+      seed("dsp_stewardxx0001", "TASK-1");
+      seed("dsp_stewardxx0002", "TASK-1", { checkoutPrincipal: null });
+      const cos = await call("mc_release_checkout", { checkoutId: "dsp_stewardxx0001", reason: "x" }, "stephen@petrasoap.com", COS_KEY);
+      const ledger = await call("mc_release_checkout", { checkoutId: "dsp_stewardxx0002", reason: "x" }, "stephen@petrasoap.com", LEDGER_KEY);
+      expect(cos.body.data.authz).toBe("steward");
+      expect(ledger.body.data.authz).toBe("steward");
+    });
+
+    it("hides a restricted-project lease when the header names a member", async () => {
+      seed("dsp_rossprojx0001", "TASK-ROSS", { checkoutPrincipal: "sp_mcp_cursor" });
+      const out = await call("mc_release_checkout", { checkoutId: "dsp_rossprojx0001", reason: "x" }, "ross@petrasoap.com");
+      expect(out.ok).toBe(false);
+      expect(h.dispatches.get("dsp_rossprojx0001")?.releasedAt).toBeNull();
+      expect(h.events).toEqual([]);
+    });
+
+    it("admits a restricted-project lease when the service principal is a member", async () => {
+      seed("dsp_claudeprj0001", "TASK-CLAUDE", { checkoutPrincipal: "sp_mcp_claude_code" });
+      const out = await call("mc_release_checkout", { checkoutId: "dsp_claudeprj0001", reason: "x" }, "stephen@petrasoap.com", CLAUDE_KEY);
+      expect(out.ok).toBe(true);
+    });
+  });
+
   describe(`mc_release_checkouts over ${transport}`, () => {
     it("returns a per-item outcome and keeps going past a failed item", async () => {
       seed("dsp_cursorxxbn4y", "TASK-2279");
       seed("dsp_claudexx7px3", "TASK-2279");
-      seed("dsp_notminexx0001", "TASK-1", { accountableHuman: "greg.m@petrasoap.com" });
+      seed("dsp_notminexx0001", "TASK-1", { checkoutPrincipal: "sp_mcp_claude_code" });
       const out = await call(
         "mc_release_checkouts",
         {

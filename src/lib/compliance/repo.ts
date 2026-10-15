@@ -495,6 +495,22 @@ export async function listDispatches(f: ListDispatchesFilter): Promise<DispatchL
 }
 
 /**
+ * Service principal that minted a checkout: its checkout event's
+ * permissionActorId, never an operator header. Null when none was recorded.
+ */
+export async function getDispatchCheckoutPrincipal(id: string): Promise<string | null> {
+  const rows = await query<{ principal: string | null }>(
+    `SELECT payload->>'permissionActorId' AS principal
+       FROM mc_events
+      WHERE kind = 'checkout' AND payload->>'checkoutId' = $1
+      ORDER BY seq
+      LIMIT 1`,
+    [id]
+  );
+  return rows[0]?.principal ?? null;
+}
+
+/**
  * True when `principalId` holds an unrevoked, unreleased, unexpired checkout of
  * `taskId`. The principal is the checkout event's permissionActorId (the
  * authenticated service principal at checkout), never an operator header.

@@ -272,9 +272,11 @@ How:
 
 Rules:
 
-- Only the lease's accountable human, an admin, or a Ledger/CoS steward
-  (`cos@petrasoap.com`) may release. Anyone else gets `forbidden`, and MC
-  records a `checkout.release_denied` event with the reasonCode.
+- Only the service principal that checked the lease out, or a Ledger/CoS
+  steward principal (`sp_mcp_ledger`, `sp_mcp_cos`, each on its own key), may
+  release. The `X-MC-Operator-Email` header grants nothing. Anyone else gets
+  `forbidden`, and MC records a `checkout.release_denied` event with the
+  reasonCode.
 - A release changes only the lease. It never moves the task stage and never
   marks it Verified.
 - Never release a lease that an open PR still stamps. That PR's gate then

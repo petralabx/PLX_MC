@@ -534,7 +534,8 @@ describe("POST /api/cursor/tasks with an idempotency key", () => {
   it("still replays for a member of the task's new restricted project", async () => {
     await restCreate({ ...TASK, idempotencyKey: "k-member" });
     moveTaskIntoRestrictedProject("TASK-900");
-    h.projects[0].members = ["vince@petrasoap.com"];
+    // Membership is the authenticated principal; the operator email grants nothing (TASK-3008).
+    h.projects[0].members = ["sp_mcp_portal"];
     const replay = await restCreate({ ...TASK, idempotencyKey: "k-member" });
     expect(replay.status).toBe(200);
     expect(replay.json.data).toMatchObject({ taskId: "TASK-900", replayed: true });

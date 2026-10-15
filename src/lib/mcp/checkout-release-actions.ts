@@ -6,19 +6,23 @@
 // Verified, evidence) — only the lease.
 //
 // AuthZ: the principal needs task.checkout (the lease capability), then one of:
-//   accountable_human — the operator is the lease's accountable human;
-//   admin             — the operator is an owner/admin in the PLX directory;
-//   steward           — the operator is a Ledger/CoS steward identity.
+//   checkout_principal — the authenticated principal is the one that checked
+//                        the lease out (the checkout event's permissionActorId);
+//   steward            — the authenticated principal is a Ledger/CoS steward
+//                        service principal (sp_mcp_ledger, sp_mcp_cos).
 // Anyone else gets 403 and a checkout.release_denied audit row with its
-// reasonCode. The operator email is the same admitted context checkout()
-// recorded as accountable_human, so this rule trusts nothing new.
+// reasonCode. The operator email header is caller-chosen audit context only and
+// grants nothing (TASK-3008).
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import * as complianceRepo from "@/lib/compliance/repo";
-import { HUMANS } from "@/lib/mc-data/data";
-import { directoryRoleToAccessRole, POLICY_VERSION } from "@/lib/permissions";
+import {
+  COS_MCP_SERVICE_PRINCIPAL_ID,
+  LEDGER_MCP_SERVICE_PRINCIPAL_ID,
+  POLICY_VERSION,
+} from "@/lib/permissions";
 import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
@@ -29,11 +33,11 @@ import { checkoutRef } from "./read-actions";
 export const RELEASE_REASON_MAX = 500;
 export const RELEASE_BATCH_MAX = 50;
 
-/**
- * Ledger/CoS steward identities. Ledger and CoS run as fleet agents under the
- * cos@ operator identity; MC has no separate Ledger or CoS service principal.
- */
-export const CHECKOUT_RELEASE_STEWARDS: readonly string[] = ["cos@petrasoap.com"];
+/** Ledger/CoS steward service principals, authenticated by their own API keys. */
+export const CHECKOUT_RELEASE_STEWARDS: readonly string[] = [
+  LEDGER_MCP_SERVICE_PRINCIPAL_ID,
+  COS_MCP_SERVICE_PRINCIPAL_ID,
+];
 
 // Full id: dsp_ + base36 (genId). Ref: dsp_…last4, as mc_list_checkouts and
 // mc_get_task print it; three ASCII dots are accepted for plain keyboards.
@@ -58,21 +62,21 @@ export const releaseCheckoutsSchema = z.object({
   items: z.array(releaseCheckoutSchema).min(1).max(RELEASE_BATCH_MAX),
 });
 
-export type ReleaseAuthzReasonCode = "accountable_human" | "admin" | "steward" | "not_accountable";
+export type ReleaseAuthzReasonCode = "checkout_principal" | "steward" | "not_accountable";
 
-/** Who may release this lease (pure; the operator email is already allowlisted). */
+/**
+ * Who may release this lease (pure). `principalId` is the authenticated
+ * service principal; `checkoutPrincipalId` is the principal that minted the
+ * lease (null when the checkout recorded none).
+ */
 export function authorizeCheckoutRelease(
-  operatorEmail: string,
-  dispatch: Pick<complianceRepo.DispatchRow, "accountableHuman">
+  principalId: string,
+  checkoutPrincipalId: string | null
 ): { allowed: boolean; reasonCode: ReleaseAuthzReasonCode } {
-  const operator = operatorEmail.trim().toLowerCase();
-  if (operator && operator === dispatch.accountableHuman.trim().toLowerCase()) {
-    return { allowed: true, reasonCode: "accountable_human" };
+  if (CHECKOUT_RELEASE_STEWARDS.includes(principalId)) return { allowed: true, reasonCode: "steward" };
+  if (principalId && principalId === checkoutPrincipalId) {
+    return { allowed: true, reasonCode: "checkout_principal" };
   }
-  const human = Object.values(HUMANS).find((h) => (h.email ?? "").toLowerCase() === operator);
-  const role = human ? directoryRoleToAccessRole(human.role) : null;
-  if (role === "owner" || role === "admin") return { allowed: true, reasonCode: "admin" };
-  if (CHECKOUT_RELEASE_STEWARDS.includes(operator)) return { allowed: true, reasonCode: "steward" };
   return { allowed: false, reasonCode: "not_accountable" };
 }
 
@@ -129,7 +133,10 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
   await assertTaskProjectAccess(dispatch.taskId, aclPrincipalFromMcp(identity));
   const actor = `${identity.runtime}:${identity.operatorEmail}`;
 
-  const authz = authorizeCheckoutRelease(identity.operatorEmail, dispatch);
+  const authz = authorizeCheckoutRelease(
+    identity.actor.id,
+    await complianceRepo.getDispatchCheckoutPrincipal(dispatch.id)
+  );
   void recordPermissionDecision({
     site: "mcp.release-checkout",
     actorKind: identity.actor.kind,
@@ -157,7 +164,7 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
     });
     throw new ApiError(
       "forbidden",
-      `mc_release_checkout denied (${authz.reasonCode}): only the checkout's accountable human, an admin, or a Ledger/CoS steward may release it.`,
+      `mc_release_checkout denied (${authz.reasonCode}): only the principal that checked it out or a Ledger/CoS steward principal may release it.`,
       403
     );
   }
@@ -229,7 +236,7 @@ export async function actionReleaseCheckouts(
 }
 
 const RELEASE_DESCRIPTION =
-  "Release a stray or expired checkout lease (sets releasedAt/releasedReason, audits checkout.released). Target the full checkoutId, or the redacted checkoutRef (dsp_…last4) plus taskId. Only the checkout's accountable human, an admin, or a Ledger/CoS steward may release. Refuses an already-released lease. Never changes the task stage or Verified.";
+  "Release a stray or expired checkout lease (sets releasedAt/releasedReason, audits checkout.released). Target the full checkoutId, or the redacted checkoutRef (dsp_…last4) plus taskId. Only the service principal that checked it out, or a Ledger/CoS steward principal (sp_mcp_ledger, sp_mcp_cos), may release; the operator email grants nothing. Refuses an already-released lease. Never changes the task stage or Verified.";
 
 export function registerCheckoutReleaseTools(server: McpServer, identity: McpIdentity): void {
   server.tool("mc_release_checkout", RELEASE_DESCRIPTION, releaseCheckoutSchema.shape, async (args) =>

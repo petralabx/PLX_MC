@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-15 (ET) — TASK-3008: the MCP operator email header granted release rights and restricted-project access
+
+- **What happened:** Any MCP key holder could release another agent's checkout as "admin" or "steward" by setting `X-MC-Operator-Email` to the owner or to `cos@petrasoap.com` (the default agent operator), and could pass a restricted project's ACL by naming a member in that header.
+- **Root cause:** `authorizeCheckoutRelease` and `aclPrincipalFromMcp` read the operator email, which is caller-chosen and only checked against the allowlist, although `src/lib/mcp/auth.ts` documents it as audit context that never grants access.
+- **Rule going forward:** MCP authorization reads only the key-authenticated principal (`identity.actor.id` / `servicePrincipalId`) and records written from it, such as a checkout event's `permissionActorId`. A caller header may be logged or used as a label, never compared to grant access. Test every MCP authz path with a spoofed header naming the owner.
+
 ### 2026-10-14 (ET) — Vendor-spend writes took the author from the body and checked no capability
 
 - **What happened:** `PATCH /api/vendor-spend/budgets` and `POST /api/vendor-spend/snapshots` (TASK-290) read `updatedBy` / `enteredBy` from the request body and relied on the middleware admission gate alone. Any signed-in person could save a budget or cost entry under someone else's name, and a member under `enforce` got 200 (TASK-2928).

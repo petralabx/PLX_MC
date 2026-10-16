@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   oidc: true,
   session: null as { user?: { email?: string | null } } | null,
   upserts: [] as unknown[],
+  requests: [] as unknown[],
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -15,6 +16,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
+  getRepoRequests: async () => state.requests,
   upsertRepo: async (repo: unknown) => {
     state.upserts.push(repo);
   },
@@ -44,6 +46,7 @@ beforeEach(() => {
   state.oidc = true;
   state.session = null;
   state.upserts = [];
+  state.requests = [];
 });
 
 describe("POST /api/repos approver gate", () => {
@@ -74,5 +77,16 @@ describe("POST /api/repos approver gate", () => {
     expect((await post({ actor: "greg", repo })).status).toBe(403);
     expect((await post({ actor: "vince", repo })).status).toBe(200);
     expect(state.upserts).toHaveLength(1);
+  });
+
+  it("refuses to add a repo the session itself has a pending request for (TASK-3011)", async () => {
+    state.session = { user: { email: "vince@petrasoap.com" } };
+    state.requests = [
+      { id: "RR-1", name: "spoofed", owner: "petralabx", requestedBy: "vince", requestedTs: "t", status: "pending", verified: true },
+    ];
+    const res = await post({ repo });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("self_approval");
+    expect(state.upserts).toHaveLength(0);
   });
 });

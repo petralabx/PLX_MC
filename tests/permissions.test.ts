@@ -53,6 +53,10 @@ describe("role grant matrix", () => {
         "task.complete",
         "routing.suggest",
         "routing.resolve",
+        "bucket.comment",
+        "repo.request",
+        "skill.submit",
+        "skill.install",
       ],
       denied: [
         "task.reopen",
@@ -69,6 +73,7 @@ describe("role grant matrix", () => {
         "sync.mutate",
         "sync.service.write",
         "vendor_spend.write",
+        "compliance.reconcile",
       ],
     },
     {
@@ -92,6 +97,11 @@ describe("role grant matrix", () => {
         "routing.policy.write",
         "sync.mutate",
         "vendor_spend.write",
+        "bucket.comment",
+        "repo.request",
+        "skill.submit",
+        "skill.install",
+        "compliance.reconcile",
       ],
       denied: ["permissions.manage", "routing.propose", "routing.maintain", "sync.service.write"],
     },
@@ -117,6 +127,11 @@ describe("role grant matrix", () => {
         "permissions.manage",
         "sync.mutate",
         "vendor_spend.write",
+        "bucket.comment",
+        "repo.request",
+        "skill.submit",
+        "skill.install",
+        "compliance.reconcile",
       ],
       denied: ["routing.propose", "routing.maintain", "sync.service.write"],
     },
@@ -259,6 +274,7 @@ describe("service-principal separation", () => {
     expect(mcpCaps).not.toContain("repo.approve");
     expect(mcpCaps).not.toContain("permissions.manage");
     expect(mcpCaps).not.toContain("vendor_spend.write");
+    expect(mcpCaps).not.toContain("compliance.reconcile");
     expect(mcpCaps).toContain("project.update");
 
     const actor = service("sp_mcp_cursor");

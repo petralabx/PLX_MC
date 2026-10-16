@@ -4,9 +4,11 @@
 // so there is exactly one write path and no drift.
 
 import { query, withTransaction, type TxQuery } from "@/lib/db";
+import { randomUUID } from "node:crypto";
 import type {
   AuditRow,
   Bucket,
+  BucketCommentOp,
   Comment,
   Project,
   Repo,
@@ -805,22 +807,52 @@ export async function bucketCommentsByBucket(): Promise<Record<string, Comment[]
   return out;
 }
 
-// Replace a bucket's whole thread atomically (mirrors the task-comment "send the
-// whole array" round-trip). delete-by-bucket (always a WHERE) + re-insert in
-// array order, in one transaction. Returns the stored comments.
-export async function replaceBucketComments(bucketId: string, comments: Comment[]): Promise<Comment[]> {
-  await withTransaction(async (q) => {
-    await q("DELETE FROM bucket_comments WHERE bucket_id = $1", [bucketId]);
-    for (let i = 0; i < comments.length; i++) {
-      const c = comments[i];
+// Apply one comment operation to a bucket's thread (TASK-3011) and return the
+// stored thread. One transaction under a per-bucket advisory lock, so concurrent
+// writers serialize and an add's position never collides. `author` is the
+// signed-in session: an add is recorded under it with a server id and stamp, and
+// an edit or delete must target the author's own comment (403 otherwise, 404 for
+// an unknown id).
+export async function applyBucketCommentOp(
+  bucketId: string,
+  op: BucketCommentOp,
+  author: string
+): Promise<Comment[]> {
+  return withTransaction(async (q) => {
+    await q("SELECT pg_advisory_xact_lock(hashtext($1))", [`bucket_comments:${bucketId}`]);
+    if (op.op === "add") {
       await q(
-        `INSERT INTO bucket_comments (bucket_id, id, position, author, body, mentions, ts, edited_ts)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [bucketId, c.id, i, c.author, c.body, JSON.stringify(c.mentions ?? []), c.ts, c.editedTs ?? null]
+        `INSERT INTO bucket_comments (bucket_id, id, position, author, body, mentions, ts)
+         SELECT $1, $2, COALESCE(MAX(position) + 1, 0), $3, $4, $5, $6
+           FROM bucket_comments WHERE bucket_id = $1`,
+        [bucketId, `CMT-${randomUUID()}`, author, op.body, JSON.stringify(op.mentions), stamp()]
       );
+    } else {
+      const [row] = await q<{ author: string }>(
+        "SELECT author FROM bucket_comments WHERE bucket_id = $1 AND id = $2 FOR UPDATE",
+        [bucketId, op.id]
+      );
+      if (!row) throw new ApiError("not_found", `unknown comment ${op.id} on ${bucketId}`, 404);
+      if (row.author !== author) {
+        throw new ApiError("forbidden", "Only the author can edit or delete a comment.", 403);
+      }
+      if (op.op === "edit") {
+        await q(
+          `UPDATE bucket_comments SET body = $3, mentions = $4, edited_ts = $5
+            WHERE bucket_id = $1 AND id = $2`,
+          [bucketId, op.id, op.body, JSON.stringify(op.mentions), stamp()]
+        );
+      } else {
+        await q("DELETE FROM bucket_comments WHERE bucket_id = $1 AND id = $2", [bucketId, op.id]);
+      }
     }
+    const rows = await q<BucketCommentRow>(
+      `SELECT bucket_id, id, author, body, mentions, ts, edited_ts
+         FROM bucket_comments WHERE bucket_id = $1 ORDER BY position`,
+      [bucketId]
+    );
+    return rows.map(toComment);
   });
-  return comments;
 }
 
 // ─── Repo registry + request queue (EN-002 / Item 2) ─────────────────────────
@@ -878,8 +910,8 @@ export async function seedRepos(repos: Repo[]): Promise<void> {
 
 // Upsert a registry repo (an approval) — registry edits re-queue the push-only
 // SharePoint mirror (sync_state -> pending), preserving the prior sp_item_id.
-export async function upsertRepo(r: Repo): Promise<void> {
-  await query(
+export async function upsertRepo(r: Repo, q: TxQuery = query): Promise<void> {
+  await q(
     `INSERT INTO repos (id, name, lang, def_branch, owner, visibility, scope, sync_state)
      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
      ON CONFLICT (id) DO UPDATE SET
@@ -940,10 +972,22 @@ export async function getRepoRequests(): Promise<RepoRequest[]> {
   return rows.map(toRepoRequest);
 }
 
-// Upsert the full request row (create, post-validation verify, and decision all
-// mirror through here — idempotent on id).
-export async function upsertRepoRequest(req: RepoRequest): Promise<void> {
-  await query(
+export async function getRepoRequest(id: string): Promise<RepoRequest | null> {
+  const [row] = await query<RepoRequestRow>(
+    `SELECT id, name, owner, lang, visibility, scope, def_branch, requested_by,
+            requested_ts, status, verified, note, decided_by, decided_ts
+       FROM repo_requests WHERE id = $1`,
+    [id]
+  );
+  return row ? toRepoRequest(row) : null;
+}
+
+// Create a pending request, or update one that is still pending (idempotent on
+// id). Returns false when the row exists but was decided meanwhile (TASK-3011):
+// a requester's update can never revert or overwrite a decision. Decisions go
+// through decideRepoRequest.
+export async function upsertRepoRequest(req: RepoRequest): Promise<boolean> {
+  const rows = await query(
     `INSERT INTO repo_requests
        (id, name, owner, lang, visibility, scope, def_branch, requested_by,
         requested_ts, status, verified, note, decided_by, decided_ts)
@@ -951,7 +995,9 @@ export async function upsertRepoRequest(req: RepoRequest): Promise<void> {
      ON CONFLICT (id) DO UPDATE SET
        name = $2, owner = $3, lang = $4, visibility = $5, scope = $6, def_branch = $7,
        status = $10, verified = $11, note = $12, decided_by = $13, decided_ts = $14,
-       updated_at = now()`,
+       updated_at = now()
+     WHERE repo_requests.status = 'pending'
+     RETURNING id`,
     [
       req.id,
       req.name,
@@ -969,6 +1015,26 @@ export async function upsertRepoRequest(req: RepoRequest): Promise<void> {
       req.decidedTs ?? null,
     ]
   );
+  return rows.length > 0;
+}
+
+// Record a decision on a still-pending request and, for an approval, add `repo`
+// to the registry in the same transaction (TASK-3011). The update only lands if
+// the row is still pending with the name, owner and verification the decider
+// saw; returns false (nothing written) when a concurrent decision or update won.
+export async function decideRepoRequest(decided: RepoRequest, repo?: Repo): Promise<boolean> {
+  return withTransaction(async (q) => {
+    const rows = await q(
+      `UPDATE repo_requests
+          SET status = $2, decided_by = $3, decided_ts = $4, updated_at = now()
+        WHERE id = $1 AND status = 'pending' AND name = $5 AND owner = $6 AND verified = $7
+        RETURNING id`,
+      [decided.id, decided.status, decided.decidedBy ?? null, decided.decidedTs ?? null, decided.name, decided.owner, decided.verified]
+    );
+    if (rows.length === 0) return false;
+    if (repo) await upsertRepo(repo, q);
+    return true;
+  });
 }
 
 // ─── Buckets / initiatives (EN-005) ──────────────────────────────────────────

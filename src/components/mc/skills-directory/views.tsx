@@ -139,7 +139,6 @@ export function IndexView({
           skillId: id,
           title: `Skill review: ${id}`,
           description: description.trim() || undefined,
-          submitterEmail,
           skillMd: markdown,
         }),
       });

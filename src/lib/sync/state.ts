@@ -129,14 +129,6 @@ export async function snapshot(): Promise<StateSnapshot> {
   };
 }
 
-// Replace a bucket's discussion thread (EN-001 / Item 4). The store mirrors the
-// whole array (the same shape task comments round-trip), so the server replaces
-// the thread atomically and returns the stored comments. App-only — bucket
-// comments are never pushed to SharePoint.
-export async function setBucketComments(bucketId: string, comments: Comment[]): Promise<Comment[]> {
-  return repo.replaceBucketComments(bucketId, comments);
-}
-
 // ─── Buckets / initiatives (EN-005) ──────────────────────────────────────────
 
 // `BKT-<SLUG>` from the name (uppercased, hyphenated, capped), with a numeric

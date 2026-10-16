@@ -1,59 +1,98 @@
 // Bucket-comment persistence invariants (Item 4): the DB accessors' safety
-// contract — the replace-thread upsert deletes by bucket (always a WHERE) and
-// re-inserts parameterized in array order, and the grouped read maps rows back
-// to the Comment shape. The db layer is mocked so the test is hermetic.
+// contract — one locked, parameterized, author-checked operation per write, and
+// the grouped read maps rows back to the Comment shape. The db layer is mocked
+// so the test is hermetic.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Comment } from "@/lib/mc-data";
 
-const db = vi.hoisted(() => ({ calls: [] as { text: string; params: unknown[] }[], rows: [] as unknown[] }));
+const db = vi.hoisted(() => ({
+  calls: [] as { text: string; params: unknown[] }[],
+  rows: [] as unknown[],
+  respond: null as ((text: string) => unknown[]) | null,
+}));
 
 vi.mock("@/lib/db", () => ({
   async query(text: string, params: unknown[] = []) {
     db.calls.push({ text, params });
-    return db.rows;
+    return db.respond ? db.respond(text) : db.rows;
   },
   // Run the transaction body with a capturing query, like the real client.
   async withTransaction(fn: (q: (t: string, p?: unknown[]) => Promise<unknown[]>) => Promise<unknown>) {
     const q = async (text: string, params: unknown[] = []) => {
       db.calls.push({ text, params });
-      return db.rows;
+      return db.respond ? db.respond(text) : db.rows;
     };
     return fn(q);
   },
 }));
 
-import { bucketCommentsByBucket, replaceBucketComments } from "@/lib/sync/repo";
+import { applyBucketCommentOp, bucketCommentsByBucket } from "@/lib/sync/repo";
 
 beforeEach(() => {
   db.calls.length = 0;
   db.rows = [];
+  db.respond = null;
 });
 
-describe("replaceBucketComments — atomic replace-thread, parameterized", () => {
-  it("deletes by bucket (always a WHERE) then re-inserts in array order with position", async () => {
-    const comments: Comment[] = [
-      { id: "CMT-1", author: "vince", body: "first @greg", ts: "2026.06.18 · 10:00", mentions: ["greg"] },
-      { id: "CMT-2", author: "vince", body: "second", ts: "2026.06.18 · 10:01", mentions: [], editedTs: "2026.06.18 · 10:02" },
-    ];
-    const out = await replaceBucketComments("BKT-WMS", comments);
-    expect(out).toEqual(comments);
+// TASK-3011: one comment operation per request, in one transaction under a
+// per-bucket advisory lock. The author is the session (passed in by the route),
+// the id is server-generated, and only the author can edit or delete.
+describe("applyBucketCommentOp — per-operation, author-checked, locked", () => {
+  const thread = [{ bucket_id: "BKT-WMS", id: "CMT-1", author: "vince", body: "a", mentions: [], ts: "t1", edited_ts: null }];
+  const respond = (owner: string | null) => (text: string) => {
+    if (text.includes("FOR UPDATE")) return owner ? [{ author: owner }] : [];
+    if (text.startsWith("SELECT bucket_id")) return thread;
+    return [];
+  };
 
-    expect(db.calls[0].text).toBe("DELETE FROM bucket_comments WHERE bucket_id = $1");
-    expect(db.calls[0].params).toEqual(["BKT-WMS"]);
-
-    expect(db.calls[1].text).toContain("INSERT INTO bucket_comments");
-    expect(db.calls[1].text).not.toContain("first @greg"); // bound, never interpolated
-    expect(db.calls[1].params[0]).toBe("BKT-WMS");
-    expect(db.calls[1].params[2]).toBe(0); // position
-    expect(db.calls[2].params[2]).toBe(1);
-    expect(db.calls[2].params[7]).toBe("2026.06.18 · 10:02"); // edited_ts bound positionally
+  it("adds under the given author with a server id, after taking the bucket lock", async () => {
+    db.respond = respond(null);
+    const out = await applyBucketCommentOp("BKT-WMS", { op: "add", body: "hi @greg", mentions: ["greg"] }, "greg");
+    expect(db.calls[0].text).toContain("pg_advisory_xact_lock");
+    expect(db.calls[0].params).toEqual(["bucket_comments:BKT-WMS"]);
+    const insert = db.calls.find((c) => c.text.includes("INSERT INTO bucket_comments"))!;
+    expect(insert.text).not.toContain("hi @greg"); // bound, never interpolated
+    expect(insert.params[0]).toBe("BKT-WMS");
+    expect(String(insert.params[1])).toMatch(/^CMT-[0-9a-f-]{36}$/);
+    expect(insert.params[2]).toBe("greg");
+    expect(insert.params[3]).toBe("hi @greg");
+    expect(out).toEqual([{ id: "CMT-1", author: "vince", body: "a", mentions: [], ts: "t1" }]);
+    const read = db.calls[db.calls.length - 1];
+    expect(read.text).toContain("WHERE bucket_id = $1");
+    expect(read.params).toEqual(["BKT-WMS"]);
   });
 
-  it("clearing a thread issues exactly the delete (no inserts)", async () => {
-    await replaceBucketComments("BKT-WMS", []);
-    expect(db.calls).toHaveLength(1);
-    expect(db.calls[0].text).toBe("DELETE FROM bucket_comments WHERE bucket_id = $1");
+  it("edits only the author's own comment", async () => {
+    db.respond = respond("greg");
+    await applyBucketCommentOp("BKT-WMS", { op: "edit", id: "CMT-1", body: "edited", mentions: [] }, "greg");
+    const update = db.calls.find((c) => c.text.startsWith("UPDATE bucket_comments"))!;
+    expect(update.params.slice(0, 4)).toEqual(["BKT-WMS", "CMT-1", "edited", "[]"]);
+  });
+
+  it("refuses to edit or delete someone else's comment (403) and writes nothing", async () => {
+    db.respond = respond("vince");
+    for (const op of [
+      { op: "edit" as const, id: "CMT-1", body: "hijack", mentions: [] },
+      { op: "delete" as const, id: "CMT-1" },
+    ]) {
+      await expect(applyBucketCommentOp("BKT-WMS", op, "greg")).rejects.toMatchObject({ status: 403 });
+    }
+    expect(db.calls.some((c) => /^(UPDATE|DELETE)/.test(c.text))).toBe(false);
+  });
+
+  it("404s an unknown comment id", async () => {
+    db.respond = respond(null);
+    await expect(applyBucketCommentOp("BKT-WMS", { op: "delete", id: "CMT-404" }, "greg")).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it("deletes the author's own comment by bucket and id", async () => {
+    db.respond = respond("greg");
+    await applyBucketCommentOp("BKT-WMS", { op: "delete", id: "CMT-1" }, "greg");
+    const del = db.calls.find((c) => c.text.startsWith("DELETE FROM bucket_comments"))!;
+    expect(del.text).toContain("WHERE bucket_id = $1 AND id = $2");
+    expect(del.params).toEqual(["BKT-WMS", "CMT-1"]);
   });
 });
 

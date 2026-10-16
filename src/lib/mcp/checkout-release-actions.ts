@@ -201,12 +201,20 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
   const refuse = (code: string, message: string, status: number) =>
     new CheckoutReleaseRefusal(code, message, status, ref, dispatch.taskId);
 
-  const byPrincipal = authorizeCheckoutRelease(
-    identity.actor.id,
-    await complianceRepo.getDispatchCheckoutPrincipal(dispatch.id)
-  );
-  const byOperator = authorizeCheckoutReleaseByOperator(identity.operatorEmail, dispatch);
   const mode = mcpPrincipalAuthzMode();
+  // In shadow mode the principal rule only feeds the comparison, so a failed
+  // lookup must not fail the release: log it and compare as an unknown principal.
+  let checkoutPrincipal: string | null = null;
+  let principalLookupFailed = false;
+  try {
+    checkoutPrincipal = await complianceRepo.getDispatchCheckoutPrincipal(dispatch.id);
+  } catch (err) {
+    if (mode === "enforce") throw err;
+    principalLookupFailed = true;
+    console.error("[mcp] checkout principal lookup for %s failed (shadow, unknown principal):", ref, err);
+  }
+  const byPrincipal = authorizeCheckoutRelease(identity.actor.id, checkoutPrincipal);
+  const byOperator = authorizeCheckoutReleaseByOperator(identity.operatorEmail, dispatch);
   const authz = mode === "enforce" ? byPrincipal : byOperator;
   const shadow = mode === "enforce" ? byOperator : byPrincipal;
   void recordPermissionDecision({
@@ -224,7 +232,7 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
     auditLabel: identity.operatorEmail,
   });
   if (byPrincipal.allowed !== byOperator.allowed) {
-    await recordShadowMismatch({
+    void recordShadowMismatch({
       site: "mcp.release-checkout",
       mode,
       actor,
@@ -237,6 +245,7 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
       principalAllowed: byPrincipal.allowed,
       principalReasonCode: byPrincipal.reasonCode,
       checkoutRef: ref,
+      ...(principalLookupFailed ? { principalLookupFailed } : {}),
     });
   }
   if (!authz.allowed) {

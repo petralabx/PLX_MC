@@ -3,7 +3,7 @@ import { legacySearchFixture } from "./helpers/task-search-fixture";
 // strip them) and echo the applied filter. Before this, callers that passed
 // `query` or `taskIds` got the unfiltered head of the task list with a
 // normal-looking response — indistinguishable from a genuine no-match.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/route";
 import type { Task } from "@/lib/mc-data";
 
@@ -106,6 +106,7 @@ import {
   resolveSearchQueryText,
 } from "@/lib/mcp/actions";
 import type { McpIdentity } from "@/lib/mcp/auth";
+import * as complianceRepo from "@/lib/compliance/repo";
 
 const memberIdentity: McpIdentity = {
   operatorEmail: "tanush@petrasoap.com",
@@ -229,5 +230,47 @@ describe("restricted project ACL on search/context", () => {
     if (!("topTasks" in result) || !result.topTasks) throw new Error("expected topTasks");
     expect(result.topTasks.some((t) => t.id === "TASK-SECRET")).toBe(false);
     expect(result.buckets.some((b) => b.id === "BKT-TRADING")).toBe(false);
+  });
+});
+
+// TASK-3026: in shadow mode a read that shows restricted contents only because
+// of the operator email header logs one authz.shadow_mismatch per call.
+describe("read-path shadow mismatches", () => {
+  const shadowIdentity: McpIdentity = {
+    ...memberIdentity,
+    servicePrincipalId: "sp_mcp_grok",
+    actor: { kind: "service", id: "sp_mcp_grok", status: "active" },
+  };
+  const mismatches = () =>
+    vi.mocked(complianceRepo.appendEvent).mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.kind === "authz.shadow_mismatch");
+
+  beforeEach(() => {
+    vi.stubEnv("PLX_MC_MCP_PRINCIPAL_AUTHZ", "");
+    vi.mocked(complianceRepo.appendEvent).mockClear();
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("logs get_context and search_tasks reads the principal alone could not see, and still returns them", async () => {
+    const context = await actionGetContext({ depth: "compact" }, shadowIdentity);
+    if (!("topTasks" in context) || !context.topTasks) throw new Error("expected topTasks");
+    expect(context.topTasks.some((t) => t.id === "TASK-SECRET")).toBe(true);
+    const search = await actionSearchTasks({ query: "Restricted trading", limit: 10 }, shadowIdentity);
+    expect(search.tasks.map((t) => t.id)).toEqual(["TASK-SECRET"]);
+
+    expect(mismatches().map((e) => e.payload)).toEqual([
+      { site: "mcp.get-context", mode: "shadow", projectIds: ["PRJ-TRADING"], operatorAllowed: true, principalAllowed: false },
+      { site: "mcp.search-tasks", mode: "shadow", projectIds: ["PRJ-TRADING"], operatorAllowed: true, principalAllowed: false },
+    ]);
+    expect(mismatches()[0].actor).toBe("sp_mcp_grok");
+  });
+
+  it("logs nothing when the principal is itself a member, or when the email grants nothing extra", async () => {
+    await actionGetContext({ depth: "compact" }, memberIdentity);
+    await actionSearchTasks({ query: "Restricted trading", limit: 10 }, outsiderIdentity);
+    expect(mismatches()).toEqual([]);
   });
 });

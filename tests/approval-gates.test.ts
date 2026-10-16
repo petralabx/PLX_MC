@@ -88,6 +88,7 @@ vi.mock("@/lib/compliance/repo", () => ({
 }));
 vi.mock("@/lib/permissions/project-acl-guard", () => ({
   assertTaskProjectAccess: async () => undefined,
+  recordReadShadowMismatch: () => undefined,
 }));
 
 function gate(over: Partial<ApprovalGate> = {}): ApprovalGate {

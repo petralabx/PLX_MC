@@ -2,7 +2,8 @@
 // mc_search_knowledge, mc_verify_pr. Shared by the cursor REST routes and the
 // HTTP MCP transport. Every tool authorizes task.read only — read tools never
 // require a write grant — and applies the restricted-project ACL the same way
-// mc_get_context does. None of them writes: mc_verify_pr computes the gate
+// mc_get_context does. None of them writes (beyond the fire-and-forget
+// authz.shadow_mismatch audit row, TASK-3026): mc_verify_pr computes the gate
 // verdict with verifyPr({ record: false }). None of them returns a full dsp_*
 // checkout id (see redactCheckoutIds).
 
@@ -14,6 +15,7 @@ import { loadPrVerifyInput } from "@/lib/compliance/github-pr";
 import * as complianceRepo from "@/lib/compliance/repo";
 import { verifyPr } from "@/lib/compliance/service";
 import { filterTasksByAcl, indexById } from "@/lib/permissions/project-acl";
+import { recordReadShadowMismatch } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import { snapshot } from "@/lib/sync";
 import { actionGetContext } from "./actions";
@@ -149,12 +151,14 @@ export async function actionListCheckouts(identity: McpIdentity, input: ListChec
   ]);
   // Drop checkouts whose task sits in a restricted project this principal
   // cannot see (same side-channel rule as GET /api/state).
+  const principal = aclPrincipalFromMcp(identity);
+  recordReadShadowMismatch("mcp.list-checkouts", snap.projects ?? [], principal);
   const visible = new Set(
     filterTasksByAcl(
       snap.tasks,
       indexById(snap.buckets ?? []),
       indexById(snap.projects ?? []),
-      aclPrincipalFromMcp(identity)
+      principal
     ).map((t) => t.id)
   );
   const hidden = new Set(snap.tasks.filter((t) => !visible.has(t.id)).map((t) => t.id));

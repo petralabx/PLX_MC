@@ -1,7 +1,8 @@
 // Goals & Production business rules — the contract with the business (the
 // brief's "Business rules" section, plus the decisions approved in the plan:
 // half-to-even cents per converted amount, and the data-is-behind banner counted
-// in working days). Pure: no I/O and no clock — `today` is always passed in.
+// in working days; and, from 2026-10-16, Line 1 bulk kg in place of large
+// batches). Pure: no I/O and no clock — `today` is always passed in.
 // Every rule is tested against the 2026-10-14 fixtures in
 // tests/reporting-goals-rules.test.ts.
 
@@ -124,6 +125,11 @@ function kgOf(value: string | null): number {
   return Number.isFinite(kg) ? kg : 0;
 }
 
+/** kg (3 decimal places at most, as the batch list holds them) as whole grams, so sums of kg never drift. */
+function grams(kg: number): number {
+  return Math.round(kg * 1000);
+}
+
 /** Status of a manual entry; the first match wins (brief: "Status (computed, never stored)"). */
 export function entryStatus(entry: ManualEntry, ctx: EntryContext): EntryStatus {
   const ref = normalizeRef(entry.reference);
@@ -147,8 +153,8 @@ export interface EvaluatedEntry extends ManualEntry {
   status: EntryStatus;
   statusLabel: string;
   counts: boolean;
-  /** A counted batch of at least the large-batch minimum. */
-  large: boolean;
+  /** A counted batch of at least the Line 1 minimum (assumed to run on Line 1). */
+  line1: boolean;
   /** The open FileMaker batch this counted batch entry completes, if its reference matches one. */
   completesBatchId: string | null;
   /** A counted shipment's product value plus freight, in CAD cents. */
@@ -209,9 +215,10 @@ export interface DailyPoint {
   isWorkingDay: boolean;
   isToday: boolean;
   isFuture: boolean;
-  largeDone: number;
-  largeByHand: number;
-  largeScheduled: number;
+  /** Line 1 bulk kg on this day: completed in FileMaker, entered by hand, and open (planned kg). */
+  line1DoneKg: number;
+  line1ByHandKg: number;
+  line1ScheduledKg: number;
   cadCents: number;
   usdCents: number;
   byHandCadCents: number;
@@ -233,7 +240,8 @@ export interface BatchListRow {
   date: IsoDate;
   kg: number;
   band: SizeBand;
-  large: boolean;
+  /** At least the Line 1 minimum, so assumed to run on Line 1 (whatever `line` FileMaker records). */
+  line1: boolean;
   line: string | null;
   source: "FileMaker" | "By hand";
   entryId: string | null;
@@ -269,18 +277,19 @@ export interface GoalsModel {
   coveredThrough: { production: IsoDate; revenue: IsoDate };
   /** A cutoff is behind when at least one working day lies between it and today. */
   behind: { production: boolean; sage: boolean };
-  largeBatches: {
-    target: number;
-    dueSoFar: number;
+  /** Line 1 bulk, in kg: each figure is a sum over the `batches` rows flagged line1. */
+  line1: {
+    targetKg: number;
+    dueSoFarKg: number;
     dueBy: IsoDate;
-    inSystem: number;
-    byHand: number;
-    total: number;
+    inSystemKg: number;
+    byHandKg: number;
+    totalKg: number;
     status: GoalStatus;
-    neededPerDay: number;
-    openFromToday: number;
-    openPastDate: number;
-    ifAllRun: number;
+    neededPerDayKg: number;
+    scheduledFromTodayKg: number;
+    openPastDateKg: number;
+    ifAllRunKg: number;
   };
   truckloads: {
     target: number | null;
@@ -344,6 +353,11 @@ function plural(n: number, one: string, many: string): string {
   return `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 }
 
+/** Whole kg with thousands separators ("91,702"). */
+function wholeKg(kg: number): string {
+  return Math.round(kg).toLocaleString("en-US");
+}
+
 function emptyTally(): LoadTally {
   return { full: 0, partial: 0, productUsdCents: 0 };
 }
@@ -355,6 +369,10 @@ function tally(t: LoadTally, kind: LoadKind, productUsdCents: number): void {
 
 function emptyBandCounts(): Record<SizeBand, number> {
   return { "~10,000": 0, "5,000–8,999": 0, "Under 5,000": 0, "Over 11,000": 0 };
+}
+
+function emptyStageGrams(): Record<BatchStage, number> {
+  return { completed: 0, completed_by_hand: 0, scheduled: 0, open_past_date: 0 };
 }
 
 export function computeGoals(input: GoalsInput): GoalsModel {
@@ -393,14 +411,14 @@ export function computeGoals(input: GoalsInput): GoalsModel {
       status,
       statusLabel: ENTRY_STATUS_LABELS[status],
       counts,
-      large: false,
+      line1: false,
       completesBatchId: null,
       revenueCadCents: 0,
       truckload: null,
     };
     if (!counts) return evaluated;
     if (entry.type === "Batch") {
-      evaluated.large = kgOf(entry.kg) >= settings.largeBatchMinKg;
+      evaluated.line1 = kgOf(entry.kg) >= settings.line1MinKg;
       const open = openBatchesByRef.get(normalizeRef(entry.reference));
       if (open && !completedByEntry.has(open.id)) {
         evaluated.completesBatchId = open.id;
@@ -423,13 +441,13 @@ export function computeGoals(input: GoalsInput): GoalsModel {
     return evaluated;
   });
   const counted = entries.filter((e) => e.counts);
-  const countedLargeBatches = counted.filter((e) => e.type === "Batch" && e.large);
+  const countedLine1Batches = counted.filter((e) => e.type === "Batch" && e.line1);
   const countedShipments = counted.filter((e) => e.type === "Shipment");
 
   // ── Covered-through and freshness ──
   const productionThrough = coveredThrough(
     data.cutoffs.productionCutoff,
-    countedLargeBatches.map((e) => e.date as IsoDate),
+    countedLine1Batches.map((e) => e.date as IsoDate),
     start,
     today
   );
@@ -441,23 +459,6 @@ export function computeGoals(input: GoalsInput): GoalsModel {
   );
   const productionCovered = workingDaysBetween(start, productionThrough, holidays);
   const revenueCovered = workingDaysBetween(start, revenueThrough, holidays);
-
-  // ── Large batches ──
-  let openFromToday = data.goalSummary.largeScheduledAhead;
-  let openPastDate = data.goalSummary.largeOpenPastDate;
-  const scheduledAdjust = new Map<IsoDate, number>();
-  for (const [batchId] of completedByEntry) {
-    const open = data.batches.find((b) => b.id === batchId);
-    if (!open || Number(open.kg) < settings.largeBatchMinKg) continue;
-    if (open.date >= today) openFromToday -= 1;
-    else openPastDate -= 1;
-    scheduledAdjust.set(open.date, (scheduledAdjust.get(open.date) ?? 0) + 1);
-  }
-  const largeInSystem = data.goalSummary.largeDone;
-  const largeByHand = countedLargeBatches.length;
-  const largeTotal = largeInSystem + largeByHand;
-  const largeTarget = settings.largeBatchesPerWorkingDay * workingDays;
-  const largeDueSoFar = settings.largeBatchesPerWorkingDay * productionCovered;
 
   // ── Truckloads ──
   const tallies = new Map<string, TruckloadCustomerRow>();
@@ -497,48 +498,6 @@ export function computeGoals(input: GoalsInput): GoalsModel {
   const lastMonthCadCents =
     toCents(revenueRow("CAD", false)?.netBeforeTax) + convertCents(toCents(revenueRow("USD", false)?.netBeforeTax), rate);
 
-  // ── Day by day ──
-  const dailyByDay = new Map(data.daily.map((row) => [row.day, row]));
-  const byHandLarge = new Map<IsoDate, number>();
-  for (const e of countedLargeBatches) byHandLarge.set(e.date as IsoDate, (byHandLarge.get(e.date as IsoDate) ?? 0) + 1);
-  const byHandRevenue = new Map<IsoDate, number>();
-  for (const e of countedShipments) {
-    byHandRevenue.set(e.date as IsoDate, (byHandRevenue.get(e.date as IsoDate) ?? 0) + e.revenueCadCents);
-  }
-  let cumCad = 0;
-  let cumUsd = 0;
-  let cumCadLast = 0;
-  let cumUsdLast = 0;
-  let cumByHand = 0;
-  const daily: DailyPoint[] = calendarDays.map(({ day, isWorkingDay: working, workingDaysToDate: wdToDate }) => {
-    const row = dailyByDay.get(day);
-    const dayCad = toCents(row?.cadThis);
-    const dayUsd = toCents(row?.usdThis);
-    const dayByHand = byHandRevenue.get(day) ?? 0;
-    cumCad += dayCad;
-    cumUsd += dayUsd;
-    cumCadLast += toCents(row?.cadLast);
-    cumUsdLast += toCents(row?.usdLast);
-    cumByHand += dayByHand;
-    const sageToDateCents = cumCad + convertCents(cumUsd, rate);
-    return {
-      day,
-      isWorkingDay: working,
-      isToday: day === today,
-      isFuture: day > today,
-      largeDone: row?.largeDone ?? 0,
-      largeByHand: byHandLarge.get(day) ?? 0,
-      largeScheduled: (row?.largeOpen ?? 0) - (scheduledAdjust.get(day) ?? 0),
-      cadCents: dayCad,
-      usdCents: dayUsd,
-      byHandCadCents: dayByHand,
-      sageToDateCents,
-      withHandToDateCents: sageToDateCents + cumByHand,
-      targetToDateCents: prorateCents(targetCents, wdToDate, workingDays),
-      lastMonthToDateCents: cumCadLast + convertCents(cumUsdLast, rate),
-    };
-  });
-
   // ── Batch list: FileMaker rows, with hand entries merged in ──
   const batches: BatchListRow[] = data.batches.map((b) => {
     const entry = completedByEntry.get(b.id);
@@ -554,7 +513,7 @@ export function computeGoals(input: GoalsInput): GoalsModel {
         date: entry.date as IsoDate,
         kg,
         band: sizeBand(kg),
-        large: kg >= settings.largeBatchMinKg,
+        line1: kg >= settings.line1MinKg,
         line: b.line,
         source: "By hand",
         entryId: entry.entryId,
@@ -572,7 +531,7 @@ export function computeGoals(input: GoalsInput): GoalsModel {
       date: b.date,
       kg,
       band: sizeBand(kg),
-      large: kg >= settings.largeBatchMinKg,
+      line1: kg >= settings.line1MinKg,
       line: b.line,
       source: "FileMaker",
       entryId: null,
@@ -591,13 +550,71 @@ export function computeGoals(input: GoalsInput): GoalsModel {
       date: e.date as IsoDate,
       kg,
       band: sizeBand(kg),
-      large: kg >= settings.largeBatchMinKg,
+      line1: kg >= settings.line1MinKg,
       line: null,
       source: "By hand",
       entryId: e.entryId,
     });
   }
   batches.sort((a, b) => (a.date === b.date ? a.batch.localeCompare(b.batch) : a.date < b.date ? -1 : 1));
+
+  // ── Line 1 bulk: sums over the batch list in whole grams, so the card, the chart and the list agree ──
+  const line1Days = new Map<IsoDate, Record<BatchStage, number>>();
+  const line1Grams = emptyStageGrams();
+  for (const b of batches) {
+    if (!b.line1) continue;
+    const g = grams(b.kg);
+    const onDay = line1Days.get(b.date) ?? emptyStageGrams();
+    onDay[b.stage] += g;
+    line1Days.set(b.date, onDay);
+    line1Grams[b.stage] += g;
+  }
+  const line1Total = line1Grams.completed + line1Grams.completed_by_hand;
+  const line1Open = line1Grams.scheduled + line1Grams.open_past_date;
+  const line1PerDay = grams(settings.line1KgPerWorkingDay);
+  const line1Target = line1PerDay * workingDays;
+  const line1DueSoFar = line1PerDay * productionCovered;
+
+  // ── Day by day ──
+  const dailyByDay = new Map(data.daily.map((row) => [row.day, row]));
+  const byHandRevenue = new Map<IsoDate, number>();
+  for (const e of countedShipments) {
+    byHandRevenue.set(e.date as IsoDate, (byHandRevenue.get(e.date as IsoDate) ?? 0) + e.revenueCadCents);
+  }
+  let cumCad = 0;
+  let cumUsd = 0;
+  let cumCadLast = 0;
+  let cumUsdLast = 0;
+  let cumByHand = 0;
+  const daily: DailyPoint[] = calendarDays.map(({ day, isWorkingDay: working, workingDaysToDate: wdToDate }) => {
+    const row = dailyByDay.get(day);
+    const line1 = line1Days.get(day) ?? emptyStageGrams();
+    const dayCad = toCents(row?.cadThis);
+    const dayUsd = toCents(row?.usdThis);
+    const dayByHand = byHandRevenue.get(day) ?? 0;
+    cumCad += dayCad;
+    cumUsd += dayUsd;
+    cumCadLast += toCents(row?.cadLast);
+    cumUsdLast += toCents(row?.usdLast);
+    cumByHand += dayByHand;
+    const sageToDateCents = cumCad + convertCents(cumUsd, rate);
+    return {
+      day,
+      isWorkingDay: working,
+      isToday: day === today,
+      isFuture: day > today,
+      line1DoneKg: line1.completed / 1000,
+      line1ByHandKg: line1.completed_by_hand / 1000,
+      line1ScheduledKg: (line1.scheduled + line1.open_past_date) / 1000,
+      cadCents: dayCad,
+      usdCents: dayUsd,
+      byHandCadCents: dayByHand,
+      sageToDateCents,
+      withHandToDateCents: sageToDateCents + cumByHand,
+      targetToDateCents: prorateCents(targetCents, wdToDate, workingDays),
+      lastMonthToDateCents: cumCadLast + convertCents(cumUsdLast, rate),
+    };
+  });
 
   // ── Size bands ──
   const completedTiles = new Map<SizeBand | "Total", BandTile>();
@@ -651,18 +668,18 @@ export function computeGoals(input: GoalsInput): GoalsModel {
       production: isBehind(data.cutoffs.productionCutoff, today, holidays),
       sage: isBehind(data.cutoffs.sageCutoff, today, holidays),
     },
-    largeBatches: {
-      target: largeTarget,
-      dueSoFar: largeDueSoFar,
+    line1: {
+      targetKg: line1Target / 1000,
+      dueSoFarKg: line1DueSoFar / 1000,
       dueBy: productionThrough,
-      inSystem: largeInSystem,
-      byHand: largeByHand,
-      total: largeTotal,
-      status: largeTotal >= largeDueSoFar ? "on_track" : "behind",
-      neededPerDay: remaining > 0 ? Math.max(0, largeTarget - largeTotal) / remaining : 0,
-      openFromToday,
-      openPastDate,
-      ifAllRun: largeTotal + openFromToday + openPastDate,
+      inSystemKg: line1Grams.completed / 1000,
+      byHandKg: line1Grams.completed_by_hand / 1000,
+      totalKg: line1Total / 1000,
+      status: line1Total >= line1DueSoFar ? "on_track" : "behind",
+      neededPerDayKg: remaining > 0 ? Math.max(0, line1Target - line1Total) / remaining / 1000 : 0,
+      scheduledFromTodayKg: line1Grams.scheduled / 1000,
+      openPastDateKg: line1Grams.open_past_date / 1000,
+      ifAllRunKg: (line1Total + line1Open) / 1000,
     },
     truckloads: {
       target: settings.fullTruckloadsPerMonth,
@@ -710,10 +727,9 @@ export function computeGoals(input: GoalsInput): GoalsModel {
 
 /** One sentence built from the numbers (no model involved). */
 export function takeaway(model: GoalsModel): string {
-  const { largeBatches, truckloads, revenue } = model;
+  const { line1, truckloads, revenue } = model;
   return (
-    `${plural(largeBatches.total, "large batch", "large batches")} against ` +
-    `${largeBatches.dueSoFar.toLocaleString("en-US")} due so far, ` +
+    `${wholeKg(line1.totalKg)} kg of Line 1 bulk against ${wholeKg(line1.dueSoFarKg)} kg due so far, ` +
     `${plural(truckloads.full.total, "full truckload", "full truckloads")}, and ` +
     `${formatDollars(revenue.totalCents)} of the ${formatDollars(revenue.dueSoFarCents)} revenue due so far.`
   );

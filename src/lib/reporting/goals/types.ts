@@ -36,16 +36,8 @@ export interface Cutoffs {
   sageCutoff: IsoDate | null;
 }
 
-export interface GoalSummaryRow {
-  largeDone: number;
-  largeScheduledAhead: number;
-  largeOpenPastDate: number;
-}
-
 export interface DailyRow {
   day: IsoDate;
-  largeDone: number;
-  largeOpen: number;
   cadThis: string;
   usdThis: string;
   cadLast: string;
@@ -117,7 +109,6 @@ export interface CustomerRow {
 /** Everything one refresh reads from the reporting database. */
 export interface Datasets {
   cutoffs: Cutoffs;
-  goalSummary: GoalSummaryRow;
   daily: DailyRow[];
   truckloads: TruckloadRow[];
   revenue: RevenueRow[];
@@ -135,8 +126,10 @@ export type SnapshotData = Omit<Datasets, "references" | "customers" | "forecast
 // ─── Configuration ──────────────────────────────────────────────────────────
 
 export interface GoalSettings {
-  largeBatchesPerWorkingDay: number;
-  largeBatchMinKg: number;
+  /** Line 1 bulk kg per working day (the goal). */
+  line1KgPerWorkingDay: number;
+  /** A batch of this many kg or more is assumed to run on Line 1 (FileMaker's line field is not used). */
+  line1MinKg: number;
   fullTruckloadMinUsdCents: number;
   revenueTargetCadCents: number;
   /** null until the business sets a monthly full-truckload target. */

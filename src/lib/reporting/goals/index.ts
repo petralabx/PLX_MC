@@ -17,7 +17,6 @@ export type {
   FxRate,
   FxSource,
   GoalSettings,
-  GoalSummaryRow,
   IsoDate,
   ManualEntry,
   ReferenceKind,
@@ -165,6 +164,10 @@ export {
   updateEntry,
 } from "./entries";
 export type { EntryBody, ImportPreview, ImportResult } from "./entries";
+
+// Shipments list (TASK-3143): its exports go below this line.
+export { buildShipmentList, filterShipments, shipmentTotals } from "./shipment-list";
+export type { ShipmentFilter, ShipmentListInput, ShipmentListRow, ShipmentTotals } from "./shipment-list";
 
 export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView } from "./view";
 export type { DatasetQuery, GoalsPage, GoalsView, GoalsViewInput, GoalsViewState, GoalsViewer } from "./view";

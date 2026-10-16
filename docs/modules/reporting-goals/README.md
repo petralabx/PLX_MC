@@ -6,7 +6,8 @@ The **Goals & Production** report (sidebar: Reporting → Goals & production,
 `/?screen=goals`; on phones it is in the More sheet) and its domain module. It tracks three
 monthly goals for Petra Lab-X against the business's definitions:
 
-- large batches: 2 per working day, 7,500 kg or more
+- Line 1 bulk: 20,000 kg per working day, counting batches of 5,000 kg or more
+  (it replaced the large-batch goal on 2026-10-16; see "Line 1 bulk" below)
 - full truckloads: US$18,000 or more of product per shipment to five customers
 - shipped revenue: $1,000,000 CAD a month
 
@@ -43,15 +44,17 @@ traceable to a refresh run and a named query.
    Money is integer cents parsed exactly from decimal strings. Each converted
    amount is rounded to the cent, half to even: 25,750 × 1.4219 = 36,613.925
    gives 36,613.92.
-3. **Queries** — `queries/*.ts`, one per dataset: `cutoffs`, `goal-summary`,
-   `daily`, `truckloads`, `revenue-by-currency`, `shipments`, `batches`,
+3. **Queries** — `queries/*.ts`, one per dataset: `cutoffs`, `daily`,
+   `truckloads`, `revenue-by-currency`, `shipments`, `batches`,
    `batch-history`, `references` and `customers`.
    - They are adapted from the prototype's verified SQL.
-   - Today is bound as `$1`. The large-batch minimum and truckload codes are
-     bound too, because the config tables live in Mission Control's database
-     and not on the replica.
+   - Today is bound as `$1`. The truckload codes are bound too, because the
+     config tables live in Mission Control's database and not on the replica.
    - Working days are computed in `rules.ts`, so the queries need no holiday
      table.
+   - Line 1 kg are summed in `rules.ts` from `batches`, not in SQL. The
+     `goal-summary` query and `daily`'s large-batch counts were retired with
+     migration 042.
 4. **Refresh** — `refresh.ts`, `source-db.ts`, `fx.ts` and `store.ts`.
    1. The claim takes `pg_advisory_xact_lock`.
       - At most one run is `running`, enforced by a unique index.
@@ -110,8 +113,8 @@ traceable to a refresh run and a named query.
      line.
    - Sections: the three goal cards, the day-by-day charts, truckloads by
      customer, entries by hand, completed and scheduled batches by size, the
-     batch list (search, filters, 7,500 kg toggle, sortable columns) and the
-     rules in plain words.
+     batch list (search, filters, "Line 1 only" toggle, sortable columns) and
+     the rules in plain words.
    - Charts: `StackedColumns` and `RunningLines` in
      `src/components/mc/charts/column-chart.tsx` (native SVG; HTML labels).
      Each has a one-sentence summary and its numbers in a table under it.
@@ -120,6 +123,8 @@ traceable to a refresh run and a named query.
    - Loading shows skeletons. A failed read, or a section that can't render,
      shows "Failed to load" + Retry in the same box. A section's figures name
      their query and run in tooltips and in a source line under the section.
+   - After the batch list, "Shipments this month" lists the month's invoices
+     and shipments by hand (see **Shipments list** below).
 9. **Audit**
    - `mc_events` records `reporting.goals.refresh.succeeded|failed` (run id,
      counts and error code, never values), `reporting.goals.export` (who and
@@ -142,7 +147,7 @@ traceable to a refresh run and a named query.
       needed per day over the assumptions block (rows 11–21; rows 20–21 hold
       the working days covered), with In system and By hand taken from the
       Daily and Truckloads totals; on Daily the running revenue and target to
-      date; the truckload totals; Large on Batches. Figures from FileMaker,
+      date; the truckload totals; Line 1 on Batches. Figures from FileMaker,
       Sage and the entries are values, to the cent, as the page computed them.
     - In-system revenue converts USD with Excel's `ROUND` (half away from
       zero), while the page rounds half to even, so the two differ only when a
@@ -252,6 +257,36 @@ Bank of Canada Valet (FXUSDCAD) ──────┼─ refresh ─→ report_r
 manual entries (live) ────────────────┴──────── loader → rules → GET /api/reporting/goals
 ```
 
+### Shipments list
+
+"Shipments this month" (`shipment-list.ts`, `src/components/mc/goals/shipments.tsx`)
+lists one row per Sage invoice shipped this month (query `shipments`, the
+invoices the Revenue card adds up) and one per counted shipment entered by hand
+(amber, source "By hand"), by ship date, then invoice. The page model carries
+the rows (`shipments`), built from the same snapshot and entries as the cards.
+
+- **CAD.** A CAD invoice's net as it is; a USD invoice's net at the run's rate,
+  rounded to the cent half to even; other currencies are not converted. A hand
+  entry shows the CAD it adds to revenue (product value plus freight) and its
+  reference under Invoice.
+- **Truckload.** Full or Partial belongs to the invoice's whole shipment
+  (customer code plus shipment number, or `invoice:<number>` without one, as
+  the `truckloads` query groups invoices), classified with the Truckloads
+  card's helpers. Every invoice of a full load shows Full, and the list's loads
+  match the card. A hand entry shows its own load.
+- **Filters and totals.** A search (customer, invoice or reference, shipment,
+  order, PO) and one filter (All, Truckload customers, Full, Partial, CAD, USD,
+  By hand). The totals, in a small table under the list, follow them: the CAD
+  subtotal, the USD subtotal converted once at the rate, the CAD entered by
+  hand, and their sum, which is the Revenue card's formula; with no filter it
+  is the card's total to the cent.
+  Converting the USD subtotal once can differ from adding up the CAD column by
+  a few cents (on the 2026-10-14 fixture, 245,176.45 against 245,176.46).
+  Other currencies are listed but left out of the total.
+- The Excel export is unchanged. Each invoice's lines ("what shipped") are to
+  follow as an expandable row once the reporting login can read Sage's invoice
+  lines.
+
 ### Setup
 
 1. Run `readonly-grants.sql` on the reporting database. It creates the
@@ -261,8 +296,8 @@ manual entries (live) ────────────────┴──�
 3. Create the app roles `Goals.Viewer` and `Goals.Editor` on the Entra app
    registration `plx-mission-control`, and assign the Viewer and Editor groups
    to them on its enterprise application. Assigning groups needs Entra ID P1.
-4. Apply migration 039 through the approved live migration workflow before
-   the code deploys (`docs/runbooks/db-migrate.md`).
+4. Apply migrations 039 and 042 through the approved live migration workflow
+   before the code deploys (`docs/runbooks/db-migrate.md`).
 5. Revenue forecast (TASK-3151): apply migration 043 (after 042) the same way
    before its code deploys. Then a DBA runs `readonly-grants-forecast.sql` on
    the reporting database for the existing `mc_goals_ro` login (fresh installs
@@ -292,10 +327,42 @@ manual entries (live) ────────────────┴──�
    7. An order shipped but not yet invoiced: when it leaves the open orders and
       when its invoice counts.
 
+### Line 1 bulk
+
+Approved by Vince Alton on 2026-10-16 (TASK-3142), in place of the large-batch
+goal (2 batches of 7,500 kg or more per working day).
+
+- **Goal.** 20,000 kg of Line 1 bulk per working day
+  (`report_goal_setting.line1_kg_per_working_day`): 420,000 kg in October
+  2026's 21 working days. Due so far counts the working days to production's
+  covered-through date, as the large-batch goal did.
+- **Size decides.** A batch of 5,000 kg or more (`line1_min_kg`; exactly
+  5,000 counts) is assumed to run on Line 1. FileMaker's `line` field is not
+  used: in the 2026-10-14 data every batch of 5,000 kg or more is recorded on
+  line 10 (27 batches) or 5 (5), none on 1. The batch list still shows it.
+- **kg.** A batch's kg is the batch list's: actual kg once Realized (planned
+  if missing), planned while open. Done is FileMaker's Realized Line 1 kg; by
+  hand is the kg of counted entries of 5,000 kg or more, including one that
+  completes an open batch, whose planned kg then leaves the schedule.
+- **One source.** Every Line 1 figure is a sum over the batch list, in whole
+  grams, so the card, the chart, the list, the takeaway and the workbook
+  agree, and runs stored before the change show the new figures at once.
+- **Migration 042** adds the two settings and defaults
+  `report_snap_daily.large_done` / `large_open` to 0. It drops nothing: 039's
+  `large_batch*` settings rows, `report_snap_goal_summary` and those two
+  columns are retired but kept, because production applies 042 before the code
+  deploys, and the release still live until then (or restored by a code
+  rollback) reads and writes them. A later migration can drop them. Rollback:
+  revert the code; run `db/rollback/042_reporting_goals_line1_rollback.sql`
+  only if the Line 1 settings must go too.
+
 ### Interpretations to confirm
 
 - Covered-through dates never run past today. A manual entry dated later this
   month does not raise "due so far" early.
+- Production's covered-through date moves with a counted Line 1 batch entered
+  by hand (5,000 kg or more), as it did with large batches; a smaller batch
+  entered by hand does not move it.
 - Two counted entries with the same batch reference both count. Only the first
   moves the matching open batch out of the schedule. The brief defines no
   duplicate status.
@@ -368,6 +435,7 @@ Depended on by: nothing yet.
 
 - `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, fx, store, refresh, loader, access, entry-input, entries, excel/)
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)
+- `db/migrations/042_reporting_goals_line1.sql` (+ `db/rollback/042_reporting_goals_line1_rollback.sql`) — the Line 1 settings
 - `src/app/api/reporting/goals/` — read, refresh, run, export, entry, customer and import routes; `src/app/api/cron/reporting-goals/` — the daily refresh
 - `src/components/mc/goals/` — the page; `src/components/mc/charts/column-chart.tsx` — its charts; `src/styles/mc-goals.css`
 - `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants; `readonly-grants-forecast.sql` — the forecast's grants for the existing login

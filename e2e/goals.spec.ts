@@ -18,12 +18,12 @@ test.describe("goals & production", () => {
       "Data as of Oct 14, 6:00 AM · FileMaker through Oct 14 · Sage through Oct 14"
     );
     await expect(screen(page)).toContainText(
-      "8 large batches against 18 due so far, 3 full truckloads, and $408,628 of the $428,571 revenue due so far."
+      "91,702 kg of Line 1 bulk against 180,000 kg due so far, 3 full truckloads, and $408,628 of the $428,571 revenue due so far."
     );
-    const large = page.getByTestId("goals-card-large-batches");
-    await expect(large).toContainText("8 of 42");
-    await expect(large).toContainText("6 in FileMaker + 2 entered by hand");
-    await expect(large.locator(".pv-chip")).toHaveText("Behind");
+    const line1 = page.getByTestId("goals-card-line1");
+    await expect(line1).toContainText("91,702 of 420,000 kg");
+    await expect(line1).toContainText("72,652 kg in FileMaker + 19,050 kg entered by hand");
+    await expect(line1.locator(".pv-chip")).toHaveText("Behind");
     await expect(page.getByTestId("goals-card-truckloads")).toContainText("2 in Sage + 1 entered by hand");
     await expect(page.getByTestId("goals-card-revenue")).toContainText("$408,628 of $1,000,000");
     await expect(page.getByTestId("goals-card-revenue").locator(".gp-big")).toHaveAttribute(
@@ -59,7 +59,7 @@ test.describe("goals & production", () => {
     const box = (await chart.boundingBox())!;
     await page.touchscreen.tap(box.x + (box.width * 13.5) / 31, box.y + box.height / 2);
     await expect(chart.locator(".colchart-tip")).toContainText("Oct 14");
-    await expect(chart.locator(".colchart-tip")).toContainText("By hand: 1");
+    await expect(chart.locator(".colchart-tip")).toContainText("By hand: 9,000 kg");
     await context.close();
   });
 
@@ -77,14 +77,50 @@ test.describe("goals & production", () => {
     await expect(list.locator("tbody tr")).toHaveCount(1);
     await expect(list.locator("tbody tr")).toContainText("Completed (by hand)");
     await list.getByLabel("Search batches").fill("");
-    await list.getByLabel("7,500 kg and up").check();
-    const large = await list.locator("tbody tr").count();
-    expect(large).toBeLessThan(total);
+    await list.getByLabel("Line 1 only (5,000 kg or more)").check();
+    // 5,000 kg or more, whatever line FileMaker records: the rows the Line 1 card adds up.
+    await expect(list.locator("tbody tr")).toHaveCount(goalsPage().model!.batches.filter((b) => b.line1).length);
+    expect(await list.locator("tbody tr").count()).toBeLessThan(total);
     await list.getByRole("button", { name: "kg" }).click();
     await expect(list.getByRole("columnheader", { name: /kg/ })).toHaveAttribute("aria-sort", "descending");
     const kgs = await list.locator("tbody tr td.num").allTextContents();
     const values = kgs.map((v) => Number(v.replace(/,/g, "")));
     expect(values).toEqual([...values].sort((a, b) => b - a));
+  });
+
+  test("lists this month's shipments; search and a filter change the rows and the totals", async ({ page }) => {
+    await mockGoalsApi(page);
+    await gotoGoals(page);
+    const section = page.getByTestId("goals-shipments");
+    await expect(section.getByRole("heading", { name: "Shipments this month" })).toBeVisible();
+    await expect(section).toContainText("From queries shipments, truckloads · run #41");
+    const list = section.getByRole("region", { name: "Shipment list" });
+    const totals = section.getByRole("region", { name: "Shipment totals" });
+    const total = totals.locator("tfoot tr");
+    await expect(section.getByText("Showing 72 of 72 shipments")).toBeVisible();
+    await expect(list.locator("tbody tr")).toHaveCount(72);
+    await expect(list.locator("tbody tr.hand")).toHaveCount(2);
+    // With no filter the total is the Revenue card's, to the cent.
+    await expect(total).toContainText("Total: 70 invoices and 2 by hand");
+    await expect(total).toContainText("408,628.08");
+    await expect(totals.locator("tbody tr.hand")).toContainText("41,613.92");
+
+    await section.getByRole("button", { name: /^CAD/ }).click();
+    await expect(section.getByRole("button", { name: /^CAD/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(section.getByText("Showing 58 of 72 shipments")).toBeVisible();
+    await expect(total).toContainText("Total: 57 invoices and 1 by hand");
+    await expect(total).toContainText("126,837.71");
+    await expect(totals).not.toContainText("USD");
+
+    await section.getByLabel("Search shipments").fill("remco");
+    await expect(section.getByText("No shipments match these filters.")).toBeVisible();
+    await expect(totals).toHaveCount(0);
+    await section.getByRole("button", { name: /^USD/ }).click();
+    await expect(section.getByText("Showing 8 of 72 shipments")).toBeVisible();
+    await expect(list.locator("tbody tr")).toHaveCount(8);
+    await expect(list.locator("tbody tr").first()).toContainText("REMCODA LLC");
+    await expect(total).toContainText("Total: 8 invoices");
+    await expect(total).toContainText("22,522.90");
   });
 
   test("an Editor refreshes and the page follows the run to its result", async ({ page }) => {
@@ -134,7 +170,7 @@ test.describe("goals & production", () => {
   test("Viewers get no Refresh button", async ({ page }) => {
     await mockGoalsApi(page, goalsPage({ viewer: { editor: false } }));
     await gotoGoals(page);
-    await expect(page.getByTestId("goals-card-large-batches")).toBeVisible();
+    await expect(page.getByTestId("goals-card-line1")).toBeVisible();
     await expect(page.getByRole("button", { name: "Refresh" })).toHaveCount(0);
   });
 
@@ -165,7 +201,7 @@ test.describe("goals & production", () => {
     expect(failed?.y).toBe(loading?.y);
     fail = false;
     await page.getByTestId("goals-truckloads").getByRole("button", { name: "Retry" }).click();
-    await expect(page.getByTestId("goals-card-large-batches")).toContainText("8 of 42");
+    await expect(page.getByTestId("goals-card-line1")).toContainText("91,702 of 420,000 kg");
     await expect(page.getByText("Failed to load.")).toHaveCount(0);
   });
 
@@ -176,7 +212,7 @@ test.describe("goals & production", () => {
     await mockGoalsApi(page, broken);
     await gotoGoals(page);
     await expect(page.getByTestId("goals-daily")).toContainText("Failed to load.");
-    await expect(page.getByTestId("goals-card-large-batches")).toContainText("8 of 42");
+    await expect(page.getByTestId("goals-card-line1")).toContainText("91,702 of 420,000 kg");
     await expect(page.getByTestId("goals-truckloads")).not.toContainText("Failed to load.");
   });
 

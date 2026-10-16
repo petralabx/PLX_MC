@@ -241,12 +241,12 @@ const COLUMNS: { key: BatchSortKey; label: string; num?: boolean }[] = [
 
 export function BatchList({ page }: { page: ReadyPage }) {
   const [filter, setFilter] = useState<BatchFilter>("all");
-  const [largeOnly, setLargeOnly] = useState(false);
+  const [line1Only, setLine1Only] = useState(false);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<BatchSort>(DEFAULT_BATCH_SORT);
   const all = page.model.batches;
-  const rows = sortBatches(filterBatches(all, { filter, largeOnly, query }), sort);
-  const minKg = count(page.settings.largeBatchMinKg);
+  const rows = sortBatches(filterBatches(all, { filter, line1Only, query }), sort);
+  const minKg = count(page.settings.line1MinKg);
 
   return (
     <>
@@ -263,13 +263,13 @@ export function BatchList({ page }: { page: ReadyPage }) {
         <div className="gp-seg" role="group" aria-label="Show batches">
           {BATCH_FILTERS.map((f) => (
             <button key={f.key} type="button" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
-              {f.label} <span className="ct">{count(filterBatches(all, { filter: f.key, largeOnly, query: "" }).length)}</span>
+              {f.label} <span className="ct">{count(filterBatches(all, { filter: f.key, line1Only, query: "" }).length)}</span>
             </button>
           ))}
         </div>
         <label className="gp-check">
-          <input type="checkbox" checked={largeOnly} onChange={(event) => setLargeOnly(event.target.checked)} />
-          {minKg} kg and up
+          <input type="checkbox" checked={line1Only} onChange={(event) => setLine1Only(event.target.checked)} />
+          Line 1 only ({minKg} kg or more)
         </label>
       </div>
       <p className="gp-count" role="status">
@@ -331,10 +331,11 @@ export function RulesText({ page }: { page: ReadyPage }) {
         taken the next weekday. {model.month.label} has {count(model.calendar.workingDays)} working days.
       </li>
       <li>
-        <b>Large batches</b> are {count(settings.largeBatchMinKg)} kg or more. A batch is done when FileMaker marks it
-        Realized this month (sized on its actual kg, or planned kg if that is missing). The goal is{" "}
-        {count(settings.largeBatchesPerWorkingDay)} a working day; “due so far” counts the working days up to the date the
-        data covers. On track means done is at least due so far. Needed per day spreads what’s left over the working
+        <b>Line 1 bulk</b> is the kg of every batch of {count(settings.line1MinKg)} kg or more, whatever line FileMaker
+        records for it: a batch that size is assumed to run on Line 1. A batch is done when FileMaker marks it Realized
+        this month (its actual kg, or planned kg if that is missing); a batch entered by hand counts its own kg. The goal
+        is {count(settings.line1KgPerWorkingDay)} kg a working day; “due so far” counts the working days up to the date
+        the data covers. On track means done is at least due so far. Needed per day spreads what’s left over the working
         days from today to month end. Open batches are Allocated or Committed with planned kg, scheduled this month.
       </li>
       <li>
@@ -347,6 +348,12 @@ export function RulesText({ page }: { page: ReadyPage }) {
         <b>Revenue</b> is the net before tax (product, freight and other charges) of invoices shipped this month. US
         dollars are converted at the Bank of Canada rate and each amount is rounded to the cent. Credit notes are not
         deducted. The target is {dollars(settings.revenueTargetCadCents)} a month, spread evenly over its working days.
+      </li>
+      <li>
+        <b>Shipments this month</b> lists those invoices one by one, and the shipments entered by hand that count. A US
+        dollar invoice shows its CAD at the rate; the totals add up the US dollar invoices first and convert them once,
+        as the Revenue card does, so they can be a few cents off the CAD column. Full or Partial goes by the invoice’s
+        whole shipment, as for full truckloads. Other currencies are listed but not converted or counted.
       </li>
       <li>
         <b>Covered through</b> is the later of the latest FileMaker or Sage data and the latest counted entry by hand,

@@ -256,12 +256,12 @@ function Choices({
 /** Add an entry (`entry` null) or edit one. */
 export function EntryDialog({
   entry,
-  largeBatchMinKg,
+  line1MinKg,
   onClose,
   onSaved,
 }: {
   entry: ManualEntry | null;
-  largeBatchMinKg: number;
+  line1MinKg: number;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -397,7 +397,7 @@ export function EntryDialog({
               </datalist>
             ) : null}
             {text("product", { optional: true })}
-            {shipment ? null : text("kg", { decimal: true, hint: `Actual kg. ${count(largeBatchMinKg)} kg or more is a large batch.` })}
+            {shipment ? null : text("kg", { decimal: true, hint: `Actual kg. ${count(line1MinKg)} kg or more counts toward Line 1.` })}
             {shipment ? text("productValue", { decimal: true, hint: "Before tax and freight." }) : null}
             {shipment ? text("freight", { decimal: true, optional: true }) : null}
             {shipment ? (

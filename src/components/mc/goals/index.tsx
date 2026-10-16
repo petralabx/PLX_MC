@@ -1,7 +1,7 @@
 "use client";
 
 // Goals & Production (Reporting → Goals & production, TASK-2896): this month's
-// three goals — large batches, full truckloads and revenue — from the latest
+// three goals — Line 1 bulk, full truckloads and revenue — from the latest
 // good refresh of FileMaker and Sage plus the entries made by hand, with the
 // day-by-day charts, tables and the rules behind every number. One read of
 // GET /api/reporting/goals (one consistent snapshot); Editors can refresh,
@@ -17,7 +17,7 @@ import { signInAgainAction } from "@/lib/auth/actions";
 import type { EvaluatedEntry, GoalsPage, RefreshRun } from "@/lib/reporting/goals";
 import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
 
-import { DailyBatchesChart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "./charts";
+import { DailyLine1Chart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "./charts";
 import { DeleteEntryDialog, EntryDialog, ImportDialog } from "./entries";
 import { ForecastSection } from "./forecast";
 import { GoalCards } from "./goal-cards";
@@ -36,6 +36,7 @@ import {
 } from "./helpers";
 import { watchRun } from "./run-watch";
 import { Section, type SectionState } from "./section";
+import { ShipmentList } from "./shipments";
 import {
   BatchList,
   CompletedTiles,
@@ -364,7 +365,7 @@ export function GoalsView() {
           ) : (
             <EntryDialog
               entry={entryDialog.kind === "edit" ? entryDialog.entry : null}
-              largeBatchMinKg={ready.settings.largeBatchMinKg}
+              line1MinKg={ready.settings.line1MinKg}
               onClose={() => setEntryDialog(null)}
               onSaved={(message) => entryWritten(message)}
             />
@@ -462,8 +463,8 @@ function Body({
           <>
             <div className="gp-charts">
               <figure className="gp-chart">
-                <figcaption>Large batches per day</figcaption>
-                <DailyBatchesChart page={p} />
+                <figcaption>Line 1 bulk kg per day</figcaption>
+                <DailyLine1Chart page={p} />
               </figure>
               <figure className="gp-chart">
                 <figcaption>Revenue against the {dollars(p.settings.revenueTargetCadCents)} target (CAD)</figcaption>
@@ -528,6 +529,20 @@ function Body({
       >
         {ready((p) => (
           <BatchList page={p} />
+        ))}
+      </Section>
+
+      <Section
+        id="shipments"
+        title="Shipments this month"
+        note="Every Sage invoice shipped this month, and the shipments entered by hand that count. The totals follow the search and filters."
+        source={src("shipments")}
+        state={state}
+        onRetry={onRetry} resetKey={page}
+        size="lg"
+      >
+        {ready((p) => (
+          <ShipmentList page={p} />
         ))}
       </Section>
 

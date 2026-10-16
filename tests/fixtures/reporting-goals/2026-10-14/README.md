@@ -8,7 +8,7 @@ market spot the prototype used).
 |---|---|---|
 | `source.json` | Rows for synthetic `silver.batches`, `sage.oe_invoice_header` and `sage.ar_customer` tables, in their source shapes (Sage columns as space-padded text, `shipdate` as `YYYYMMDD`) | `tests/reporting-goals-postgres.test.ts` loads them into a disposable PG16 |
 | `datasets.json` | What every dataset query must return for today = 2026-10-14 | Postgres test (SQL output must equal it) and the pure rules tests |
-| `expected.json` | The brief's published numbers, plus the prototype's per-day figures | Rules and view tests |
+| `expected.json` | The brief's published numbers, the prototype's per-day revenue figures, and the Line 1 bulk figures (rule of 2026-10-16), worked out by hand from `datasets.json`'s batches | Rules and view tests |
 | `entries.json` | Manual-entry scenarios M1–M7 from the brief | Rules and view tests |
 | `forecast-source.json` | Revenue forecast (TASK-3151) source rows: Sage `oe_order_header`/`oe_order_detail` (space-padded text, `YYYYMMDD` dates, with the traps the SQL must leave out), FileMaker `assembly_order`, its order-entry links, `silver.finished_products` and the AOs' bulk batches | `tests/reporting-goals-forecast-replica.ts` loads them for the Postgres test |
 | `forecast.json` | What the two forecast queries must return for those rows, plus the hit-rate history the page fixture uses (an August run from before the forecast, and September's first run) | Postgres test (SQL output must equal it), the forecast, page, workbook and browser tests |

@@ -9,11 +9,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { niceMax, ticksFor } from "@/components/mc/charts";
-import { DailyBatchesChart, DailyRevenueChart, SizeHistoryChart } from "@/components/mc/goals/charts";
+import { DailyLine1Chart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "@/components/mc/goals/charts";
 import { GoalCards } from "@/components/mc/goals/goal-cards";
 import {
   barParts,
   cents,
+  compactKg,
   dollars,
   filterBatches,
   isReady,
@@ -26,6 +27,7 @@ import {
   sourceText,
   stepText,
   when,
+  wholeKg,
   type ReadyPage,
 } from "@/components/mc/goals/helpers";
 import { GoalsView } from "@/components/mc/goals";
@@ -55,10 +57,17 @@ describe("wording helpers", () => {
     expect(rate("2.000000")).toBe("2");
   });
 
+  it("shows kg whole, and compact on chart axes", () => {
+    expect(wholeKg(91_702)).toBe("91,702");
+    expect(wholeKg(25_253.692)).toBe("25,254");
+    expect(wholeKg(7_250.5)).toBe("7,251");
+    expect([0, 20_000, 80_000, 1_200_000].map(compactKg)).toEqual(["0", "20K", "80K", "1.2M"]);
+  });
+
   it("speaks Toronto time and names the run and queries", () => {
     expect(when(RUN.finishedAt!)).toBe("Oct 14, 6:00 AM");
     expect(refreshedText(RUN)).toBe("Refreshed 6:00 AM · FileMaker through Oct 14 · Sage through Oct 14");
-    expect(sourceText(RUN, ["goal-summary", "batches"])).toBe("From queries goal-summary, batches · run #41, Oct 14, 6:00 AM");
+    expect(sourceText(RUN, ["daily", "batches"])).toBe("From queries daily, batches · run #41, Oct 14, 6:00 AM");
     expect(sourceText(RUN, ["daily"])).toBe("From query daily · run #41, Oct 14, 6:00 AM");
     expect(stepText("reading-sources")).toBe("Reading FileMaker and Sage");
     expect(stepText(null)).toBe("Refreshing");
@@ -106,16 +115,20 @@ describe("wording helpers", () => {
 describe("batch list helpers", () => {
   const rows = READY.model.batches;
 
-  it("filters by stage, source, size and search", () => {
-    const all = filterBatches(rows, { filter: "all", largeOnly: false, query: "" });
+  it("filters by stage, source, Line 1 and search", () => {
+    const all = filterBatches(rows, { filter: "all", line1Only: false, query: "" });
     expect(all).toHaveLength(rows.length);
-    const byHand = filterBatches(rows, { filter: "by_hand", largeOnly: false, query: "" });
+    const byHand = filterBatches(rows, { filter: "by_hand", line1Only: false, query: "" });
     expect(byHand.map((r) => r.batch).sort()).toEqual(["BC-26286C", "BC-26290X"]);
-    const completed = filterBatches(rows, { filter: "completed", largeOnly: false, query: "" });
+    const completed = filterBatches(rows, { filter: "completed", line1Only: false, query: "" });
     expect(completed.length).toBe(32); // 30 in FileMaker + 2 by hand
-    expect(filterBatches(rows, { filter: "open_past_date", largeOnly: false, query: "" }).every((r) => r.stage === "open_past_date")).toBe(true);
-    expect(filterBatches(rows, { filter: "all", largeOnly: true, query: "" }).every((r) => r.kg >= 7500)).toBe(true);
-    expect(filterBatches(rows, { filter: "all", largeOnly: false, query: "  bc-26290x " }).map((r) => r.batch)).toEqual(["BC-26290X"]);
+    expect(filterBatches(rows, { filter: "open_past_date", line1Only: false, query: "" }).every((r) => r.stage === "open_past_date")).toBe(true);
+    // Line 1 only: the 8 completed in FileMaker, M1 and M2 by hand, 16 from today and 7 past their date.
+    const line1 = filterBatches(rows, { filter: "all", line1Only: true, query: "" });
+    expect(line1.length).toBe(33);
+    expect(line1.every((r) => r.line1 && r.kg >= 5000)).toBe(true);
+    expect(filterBatches(rows, { filter: "completed", line1Only: true, query: "" })).toHaveLength(10);
+    expect(filterBatches(rows, { filter: "all", line1Only: false, query: "  bc-26290x " }).map((r) => r.batch)).toEqual(["BC-26290X"]);
   });
 
   it("sorts by any column, with a stable tie-break, and flips on a second click", () => {
@@ -179,14 +192,24 @@ describe("following a refresh run", () => {
 describe("goal cards (2026-10-14 with M1–M7)", () => {
   const out = text(html(GoalCards, { page: READY }));
 
-  it("shows large batches: 8 of 42, split, due so far, needed per day and the schedule", () => {
-    expect(out).toContain("Large batches Behind");
-    expect(out).toContain("Batches of 7,500 kg or more, 2 per working day (42 this month).");
-    expect(out).toContain("8 of 42");
-    expect(out).toContain("6 in FileMaker + 2 entered by hand");
-    expect(out).toContain("Due so far: 18 by Oct 14");
-    expect(out).toContain("Needed per working day: 2.6 over 13 working days");
-    expect(out).toContain("If every scheduled batch runs: 25 (11 from today, 6 open past their date)");
+  it("shows Line 1 bulk in kg: 91,702 of 420,000, split, due so far, needed per day and the schedule", () => {
+    expect(out).toContain("Line 1 bulk Behind");
+    expect(out).toContain(
+      "Bulk kg of batches of 5,000 kg or more (assumed to run on Line 1), 20,000 kg per working day (420,000 kg this month)."
+    );
+    expect(out).toContain("91,702 of 420,000 kg");
+    expect(out).toContain("72,652 kg in FileMaker + 19,050 kg entered by hand");
+    expect(out).toContain("Due so far: 180,000 kg by Oct 14");
+    expect(out).toContain("Needed per working day: 25,254 kg over 13 working days");
+    expect(out).toContain("If every scheduled batch runs: 295,197 kg (136,555 kg from today, 66,940 kg open past their date)");
+  });
+
+  it("builds the Line 1 definition from the settings, never from fixed numbers", () => {
+    const page = goalsPage();
+    if (!isReady(page)) throw new Error("ready");
+    const custom = { ...page, settings: { ...page.settings, line1MinKg: 6_000, line1KgPerWorkingDay: 25_000 } };
+    const card = text(html(GoalCards, { page: custom }));
+    expect(card).toContain("Bulk kg of batches of 6,000 kg or more (assumed to run on Line 1), 25,000 kg per working day");
   });
 
   it("shows full truckloads without a status chip and against last month", () => {
@@ -206,8 +229,8 @@ describe("goal cards (2026-10-14 with M1–M7)", () => {
 
   it("marks the by-hand figures amber and names query and run in the tooltips", () => {
     const markup = html(GoalCards, { page: READY });
-    expect(markup).toContain('<span class="gp-amber">2 entered by hand</span>');
-    expect(markup).toContain('title="From queries goal-summary, batches · run #41, Oct 14, 6:00 AM"');
+    expect(markup).toContain('<span class="gp-amber">19,050 kg entered by hand</span>');
+    expect(markup).toContain('title="From query batches · run #41, Oct 14, 6:00 AM"');
     expect(markup).toContain('title="From query revenue-by-currency · run #41, Oct 14, 6:00 AM"');
   });
 
@@ -217,7 +240,7 @@ describe("goal cards (2026-10-14 with M1–M7)", () => {
     const stale = { ...plain, fx: { ...plain.fx, source: "stored" as const, stale: true } };
     const markup = html(GoalCards, { page: stale });
     expect(markup).not.toContain("entered by hand</span>");
-    expect(text(markup)).toContain("6 in FileMaker Due so far");
+    expect(text(markup)).toContain("72,652 kg in FileMaker Due so far");
     expect(text(markup)).toContain("stored rate from Oct 13; the Bank of Canada rate couldn't be fetched");
   });
 });
@@ -263,10 +286,21 @@ describe("tables and tiles", () => {
     expect(markup).toContain('aria-sort="ascending"');
   });
 
+  it("offers a Line 1 only filter worded from the settings, and keeps FileMaker's Line column", () => {
+    const markup = html(BatchList, { page: READY });
+    expect(text(markup)).toContain("Line 1 only (5,000 kg or more)");
+    expect(markup).not.toMatch(/7,500|[Ll]arge/);
+    expect(text(markup)).toContain(" Line ");
+  });
+
   it("states the rules with the configured numbers", () => {
     const out = text(html(RulesText, { page: READY }));
     expect(out).toContain("October 2026 has 21 working days");
-    expect(out).toContain("Large batches are 7,500 kg or more");
+    expect(out).toContain(
+      "Line 1 bulk is the kg of every batch of 5,000 kg or more, whatever line FileMaker records for it: a batch that size is assumed to run on Line 1."
+    );
+    expect(out).toContain("The goal is 20,000 kg a working day");
+    expect(out).not.toMatch(/[Ll]arge batch|7,500/);
     expect(out).toContain("A1 American, Pet Supplies Plus, Diversified Hospitality, 1-Shoppe or Soapbox with US$18,000 or more");
     expect(out).toContain("The target is $1,000,000 a month");
   });
@@ -281,16 +315,26 @@ describe("charts", () => {
     expect(ticksFor(1.2e8)).toEqual([0, 2e7, 4e7, 6e7, 8e7, 1e8, 1.2e8]);
   });
 
-  it("summarises the daily batches chart for assistive tech and marks today", () => {
-    const markup = html(DailyBatchesChart, { page: READY });
+  it("summarises the daily Line 1 chart for assistive tech and marks today", () => {
+    const markup = html(DailyLine1Chart, { page: READY });
+    // Still scheduled: 136,555 kg from today + 66,940 kg open past their date = 203,495 kg.
     expect(markup).toContain(
-      'aria-label="Large batches per day, October 2026: 8 done so far (6 in FileMaker, 2 entered by hand) and 17 still scheduled, against 2 a working day. Weekends and holidays are shaded."'
+      'aria-label="Line 1 bulk kg per day, October 2026: 91,702 kg done so far (72,652 kg in FileMaker, 19,050 kg entered by hand) and 203,495 kg still scheduled, against 20,000 kg a working day. Weekends and holidays are shaded."'
     );
     expect(markup).toContain(">Today<");
-    // Whole batches get whole-number ticks, up to the tallest day (Oct 14: 1 + 1 by hand + 4 scheduled).
-    expect(text(markup.split('<div class="colchart-plot"')[0])).toBe(" 0 1 2 3 4 5 6 ");
+    expect(text(markup)).toContain("Target: 20,000 kg a working day");
+    // Compact kg ticks up to the tallest day (Oct 14: 10,106 + 9,000 by hand + 43,000 scheduled = 62,106).
+    expect(text(markup.split('<div class="colchart-plot"')[0])).toBe(" 0 20K 40K 60K 80K ");
     // 10 weekend days and Thanksgiving are shaded.
     expect(markup.match(/class="shade"/g)).toHaveLength(10);
+  });
+
+  it("lists Line 1 kg per day in the chart table, by hand in amber", () => {
+    const markup = html(DailyTable, { page: READY });
+    expect(text(markup)).toContain("Line 1 kg done Line 1 kg by hand Line 1 kg scheduled");
+    // Oct 13: M1's 10,050 kg by hand; BC-26286G and BC-26286H (18,000 kg) still open.
+    expect(text(markup)).toContain("Oct 13 Yes 0 10,050 18,000");
+    expect(markup).toContain('<td class="num hand">9,000</td>');
   });
 
   it("summarises the revenue chart and draws Sage only up to today", () => {
@@ -325,7 +369,8 @@ describe("page shell", () => {
   it("renders skeletons, not spinners, before the page model arrives", () => {
     const markup = html(GoalsView, {});
     expect(text(markup)).toContain("Loading the latest refresh…");
-    // One skeleton per section, the revenue forecast's included.
+    // One skeleton per section, the shipments list and the revenue forecast included.
+    expect(markup).toContain('data-testid="goals-shipments"');
     expect(markup).toContain('data-testid="goals-forecast"');
     expect(markup.match(/class="gp-skel"/g)).toHaveLength(markup.match(/<section /g)?.length ?? -1);
     expect(text(markup)).toContain("Amber marks figures your team entered by hand that aren’t in FileMaker or Sage yet.");

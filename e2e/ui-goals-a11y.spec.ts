@@ -12,7 +12,7 @@ test.describe("goals a11y (G4)", () => {
   test.beforeEach(async ({ page }) => {
     await mockGoalsApi(page);
     await gotoGoals(page);
-    await expect(page.getByTestId("goals-card-large-batches")).toBeVisible();
+    await expect(page.getByTestId("goals-card-line1")).toBeVisible();
     await page.getByText("Day-by-day numbers").click();
     await page.getByText("Monthly numbers").click();
   });
@@ -26,5 +26,17 @@ test.describe("goals a11y (G4)", () => {
     await page.locator(".mc").first().evaluate((el) => el.classList.add("dark"));
     const results = await new AxeBuilder({ page }).include('[data-testid="goals-screen"]').withTags(TAGS).analyze();
     expect(results.violations).toEqual([]);
+  });
+
+  test("the shipments list has no axe violations with a filter and a search on, light and dark", async ({ page }) => {
+    const section = page.getByTestId("goals-shipments");
+    await section.getByRole("button", { name: /^Truckload customers/ }).click();
+    await section.getByLabel("Search shipments").fill("a1");
+    await expect(section.getByText("Showing 2 of 72 shipments")).toBeVisible();
+    for (const mode of ["light", "dark"]) {
+      if (mode === "dark") await page.locator(".mc").first().evaluate((el) => el.classList.add("dark"));
+      const results = await new AxeBuilder({ page }).include('[data-testid="goals-shipments"]').withTags(TAGS).analyze();
+      expect(results.violations, mode).toEqual([]);
+    }
   });
 });

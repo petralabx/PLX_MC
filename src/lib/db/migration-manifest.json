@@ -40,5 +40,6 @@
   "039_reporting_goals.sql",
   "040_infra_mcp_principal.sql",
   "041_mc_events_checkout_id_idx.sql",
+  "042_reporting_goals_line1.sql",
   "043_reporting_goals_forecast.sql"
 ]

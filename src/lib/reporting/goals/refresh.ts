@@ -11,7 +11,6 @@ import { batchesQuery } from "./queries/batches";
 import { customersQuery } from "./queries/customers";
 import { cutoffsQuery } from "./queries/cutoffs";
 import { dailyQuery } from "./queries/daily";
-import { goalSummaryQuery } from "./queries/goal-summary";
 import { referencesQuery } from "./queries/references";
 import { revenueByCurrencyQuery } from "./queries/revenue-by-currency";
 import type { DatasetQuery } from "./queries/shared";
@@ -72,15 +71,13 @@ export async function readDatasets(
   config: GoalsConfig,
   attemptTimeoutMs: number = ATTEMPT_TIMEOUT_MS
 ): Promise<Datasets> {
-  const minKg = config.settings.largeBatchMinKg;
   const codes = config.ftlCustomers.map((c) => c.code);
   return withReportingSnapshot(async (q: SourceQuery) => {
     const read = async <R extends object, O>(dataset: DatasetQuery<R, O>, params: unknown[]): Promise<O> =>
       dataset.map(await q<R>(dataset.sql, params));
     return {
       cutoffs: await read(cutoffsQuery, [today]),
-      goalSummary: await read(goalSummaryQuery, [today, minKg]),
-      daily: await read(dailyQuery, [today, minKg]),
+      daily: await read(dailyQuery, [today]),
       truckloads: await read(truckloadsQuery, [today, codes]),
       revenue: await read(revenueByCurrencyQuery, [today]),
       shipments: await read(shipmentsQuery, [today]),

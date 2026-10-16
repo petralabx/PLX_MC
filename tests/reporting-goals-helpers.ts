@@ -24,10 +24,10 @@ export const FORECAST: ForecastSnapshot = {
   history: forecastJson.history,
 };
 
-/** The goal settings migration 039 seeds. */
+/** The goal settings migrations 039 and 042 seed (042's Line 1 settings replaced the large-batch ones). */
 export const SETTINGS: GoalSettings = {
-  largeBatchesPerWorkingDay: 2,
-  largeBatchMinKg: 7500,
+  line1KgPerWorkingDay: 20_000,
+  line1MinKg: 5_000,
   fullTruckloadMinUsdCents: 1_800_000,
   revenueTargetCadCents: 100_000_000,
   fullTruckloadsPerMonth: null,

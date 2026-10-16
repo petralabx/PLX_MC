@@ -20,7 +20,7 @@ const row = (page: Page, entryId: string) => table(page).locator("tbody tr").fil
 async function open(page: Page, api = new EntriesApi()): Promise<EntriesApi> {
   await api.install(page);
   await gotoGoals(page);
-  await expect(page.getByTestId("goals-card-large-batches")).toContainText("8 of 42");
+  await expect(page.getByTestId("goals-card-line1")).toContainText("91,702 of 420,000 kg");
   return api;
 }
 
@@ -49,7 +49,8 @@ test.describe("goals & production: entries by hand", () => {
     await expect(row(page, "M008")).toHaveClass("hand");
     await expect(row(page, "M008")).toContainText("BC-26299Z");
     await expect(row(page, "M008")).toContainText("Counted");
-    await expect(page.getByTestId("goals-card-large-batches")).toContainText("9 of 42");
+    // 8,000 kg is Line 1: 91,702 + 8,000.
+    await expect(page.getByTestId("goals-card-line1")).toContainText("99,702 of 420,000 kg");
     await expect(page.getByTestId("goals-add-entry")).toBeFocused();
     expect(api.writes()).toEqual([
       {

@@ -4,12 +4,12 @@
 
 import { buildForecast, type ForecastSnapshot, type ForecastView } from "./forecast";
 import { computeGoals, type GoalsModel } from "./rules";
+import { buildShipmentList, type ShipmentListRow } from "./shipment-list";
 import type { FtlCustomer, FxRate, FxSource, GoalSettings, IsoDate, ManualEntry, RefreshRun, SnapshotData } from "./types";
 
-/** Dataset query names — the names tooltips show. One per report_snap_* table. */
+/** Dataset query names — the names tooltips show. One per report_snap_* table (report_snap_goal_summary is retired). */
 export const DATASET_QUERIES = {
   cutoffs: "cutoffs",
-  goalSummary: "goal-summary",
   daily: "daily",
   truckloads: "truckloads",
   revenue: "revenue-by-currency",
@@ -27,14 +27,14 @@ export type DatasetQuery = (typeof DATASET_QUERIES)[keyof typeof DATASET_QUERIES
 /** Which queries each page section is built from (manual entries are live, not snapshotted). */
 export const SECTION_QUERIES: Record<string, readonly DatasetQuery[]> = {
   freshness: [DATASET_QUERIES.cutoffs],
-  largeBatches: [DATASET_QUERIES.goalSummary, DATASET_QUERIES.batches],
+  line1: [DATASET_QUERIES.batches],
   truckloads: [DATASET_QUERIES.truckloads],
   revenue: [DATASET_QUERIES.revenue],
-  daily: [DATASET_QUERIES.daily],
+  daily: [DATASET_QUERIES.daily, DATASET_QUERIES.batches],
   entries: [DATASET_QUERIES.references, DATASET_QUERIES.batches],
   sizes: [DATASET_QUERIES.batches, DATASET_QUERIES.batchHistory],
   batches: [DATASET_QUERIES.batches],
-  shipments: [DATASET_QUERIES.shipments],
+  shipments: [DATASET_QUERIES.shipments, DATASET_QUERIES.truckloads],
   forecast: [DATASET_QUERIES.revenue, DATASET_QUERIES.forecastOrders, DATASET_QUERIES.forecastAos],
 };
 
@@ -49,6 +49,8 @@ export interface GoalsView {
   latestAttempt: RefreshRun | null;
   fx: { rate: string; date: IsoDate | null; source: FxSource; stale: boolean } | null;
   model: GoalsModel | null;
+  /** This month's shipments list (shipment-list.ts), from the same snapshot and entries as the model; empty without one. */
+  shipments: ShipmentListRow[];
   /** The goal settings the model was built with (the page's definitions and rules text quote them). */
   settings: GoalSettings | null;
   sections: Record<string, readonly DatasetQuery[]>;
@@ -90,6 +92,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       latestAttempt,
       fx: null,
       model: null,
+      shipments: [],
       settings: null,
       sections: SECTION_QUERIES,
       forecast: null,
@@ -114,6 +117,15 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     latestAttempt,
     fx: { rate: run.fxRate, date: run.fxRateDate, source: fxSource, stale: fxSource === "stored" },
     model,
+    shipments: buildShipmentList({
+      shipments: input.snapshot.shipments,
+      truckloads: input.snapshot.truckloads,
+      entries: model.entries,
+      rate: run.fxRate,
+      rates: input.rates,
+      settings: input.settings,
+      ftlCustomers: input.ftlCustomers,
+    }),
     settings: input.settings,
     sections: SECTION_QUERIES,
     forecast: buildForecast({ snapshot: input.forecast ?? null, model, settings: input.settings, rate: run.fxRate }),

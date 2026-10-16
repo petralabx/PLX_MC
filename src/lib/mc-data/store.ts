@@ -1283,24 +1283,61 @@ export function __taskCommentMirrorSettled(): Promise<void> {
   return taskCommentMirrorInFlight;
 }
 
+// Adds still in flight, keyed by optimistic CMT- id (TASK-3070). The server
+// 404s that id, so an edit or delete issued before the add settles waits on
+// `id` (the server id, null when the add was refused and rolled back) and
+// replays with it. Each queued op chains on the one before, so they reach the
+// server in order.
+const pendingTaskAdds = new Map<string, { id: Promise<string | null>; queued: number }>();
+
 // Apply `comments` optimistically with an activity line, then send `op`.
 // Reconcile to the stored thread on success; restore the prior thread and
 // activity + surface a notice on failure. No server call under SSR/tests with
-// no injected mirror (the optimistic state stands).
-function persistTaskThread(t: Task, comments: Comment[], op: CommentOp, activity: string): void {
-  const prior = clone(t.comments ?? []);
+// no injected mirror (the optimistic state stands). `addedId` is the
+// optimistic id when `op` is an add.
+function persistTaskThread(t: Task, comments: Comment[], op: CommentOp, activity: string, addedId?: string): void {
+  let prior = clone(t.comments ?? []);
   const priorActivity = t.activity;
   t.comments = comments;
   t.activity = [{ age: "now", who: viewerId(), kind: "move", what: activity }, ...t.activity];
   emit();
   if (typeof window === "undefined" && !taskCommentMirrorInjected) return;
-  taskCommentMirrorInFlight = taskCommentMirror(t.id, op).then(
-    (saved) => {
+  const pending = op.op === "add" ? undefined : pendingTaskAdds.get(op.id);
+  const after = pending?.id;
+  let send: Promise<Comment[] | null>;
+  if (pending && after && op.op !== "add") {
+    const queued = op;
+    pending.queued += 1;
+    send = after.then((id) => {
+      if (id === null) return null; // the add was refused; its rollback covers this op
+      prior = prior.map((c) => (c.id === queued.id ? { ...c, id } : c));
+      return taskCommentMirror(t.id, { ...queued, id });
+    });
+  } else {
+    send = taskCommentMirror(t.id, op);
+  }
+  const done = send.then(
+    (saved): string | null => {
+      if (saved === null) return null;
       const cur = taskById(t.id);
-      if (cur) cur.comments = saved;
+      // An add is appended under the task row lock, so the stored comment is
+      // the last of the returned thread (applyTaskCommentOp).
+      const savedId = addedId ? (saved[saved.length - 1]?.id ?? null) : null;
+      const queuedOps = addedId ? (pendingTaskAdds.get(addedId)?.queued ?? 0) : 0;
+      if (addedId) pendingTaskAdds.delete(addedId);
+      if (cur) {
+        // With ops queued behind this add, keep the optimistic thread under the
+        // server id; the last queued op reconciles.
+        cur.comments =
+          queuedOps && savedId
+            ? (cur.comments ?? []).map((c) => (c.id === addedId ? { ...c, id: savedId } : c))
+            : saved;
+      }
       emit();
+      return savedId;
     },
-    (err) => {
+    (err): null => {
+      if (addedId) pendingTaskAdds.delete(addedId);
       const cur = taskById(t.id);
       if (cur) {
         cur.comments = prior;
@@ -1312,8 +1349,12 @@ function persistTaskThread(t: Task, comments: Comment[], op: CommentOp, activity
         }`
       );
       emit();
+      return null;
     }
   );
+  if (addedId) pendingTaskAdds.set(addedId, { id: done, queued: 0 });
+  if (pending && after) pending.id = done.then(() => after);
+  taskCommentMirrorInFlight = done.then(() => undefined);
 }
 
 // Add a comment to a task's thread (EN-001 / WS-3). App-only (never mirrored
@@ -1323,7 +1364,7 @@ export function addComment(taskId: string, body: string, author: string = viewer
   if (!t) return null;
   const comment = buildComment(body, author);
   if (!comment) return null;
-  persistTaskThread(t, [...(t.comments ?? []), comment], { op: "add", body: comment.body, mentions: comment.mentions }, "added a comment");
+  persistTaskThread(t, [...(t.comments ?? []), comment], { op: "add", body: comment.body, mentions: comment.mentions }, "added a comment", comment.id);
   notifyMentions(comment.mentions, author, { taskId, label: taskId });
   return comment;
 }

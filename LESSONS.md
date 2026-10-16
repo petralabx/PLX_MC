@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-16 (ET) — TASK-3070: edit/delete of a just-added task comment 404'd
+
+- **What happened:** After TASK-3043 the server assigns comment ids, but the store still showed a new comment under its optimistic `CMT-<n>` id until the add returned. An edit or delete in that window sent the `CMT-<n>` id and the server 404'd it.
+- **Root cause:** The move to server-assigned ids did not cover ops that reference a record whose create is still in flight.
+- **Rule going forward:** When the server assigns an id, an op on an optimistic record waits for its create and replays with the server id (or the UI disables it until then). A refused create drops the ops queued behind it. Bucket threads (`addBucketComment`) have the same race and need the same fix.
+
 ### 2026-10-16 (ET) — TASK-3043: the bucket-comment fix left task comments and client-made ids on the old pattern
 
 - **What happened:** After PR #337 moved bucket comments to one operation per request, `PATCH /api/tasks/[id]` still replaced the whole task thread from a client array, with client-chosen authors. Repo request ids came from a per-page-load counter (`RR-1` again after a reload, which the server then read as an update to the requester's earlier request), and the server's `/repos/validate` result was never recorded on the request.

@@ -33,6 +33,7 @@ import {
   unreadCount,
   updateSubtask,
 } from "@/lib/mc-data/store";
+import type { Comment, CommentOp } from "@/lib/mc-data/types";
 
 beforeEach(() => resetStore());
 
@@ -117,6 +118,103 @@ describe("task comments — persisted one operation at a time (TASK-3043)", () =
     expect(notices).toHaveLength(1);
     expect(notices[0].body).toContain("TASK-221");
     expect(notices[0].body.toLowerCase()).toContain("rolled back");
+  });
+
+  // TASK-3070: an edit/delete issued before the add's response lands must not
+  // send the optimistic CMT- id (the server 404s it); it waits and replays with
+  // the server id, and a refused add drops it with the rollback.
+  function delayedAdd(stored: Comment[]) {
+    const ops: CommentOp[] = [];
+    let release!: (fail?: boolean) => void;
+    __setTaskCommentMirrorForTests(async (_taskId, op) => {
+      ops.push(op);
+      if (op.op === "add") {
+        const fail = await new Promise<boolean | undefined>((r) => (release = r));
+        if (fail) throw new Error("server down");
+        return [...stored];
+      }
+      if (!stored.some((c) => c.id === op.id)) throw new Error(`unknown comment ${op.id}`);
+      if (op.op === "delete") stored = stored.filter((c) => c.id !== op.id);
+      else stored = stored.map((c) => (c.id === op.id ? { ...c, body: op.body, mentions: op.mentions, editedTs: "t2" } : c));
+      return [...stored];
+    });
+    return { ops, release: (fail?: boolean) => release(fail) };
+  }
+  const SRV = { id: "CMT-srv-1", author: "vince", body: "draft", ts: "t1", mentions: [] };
+
+  it("add-then-edit before the add settles replays the edit with the server id", async () => {
+    const m = delayedAdd([SRV]);
+    const c = addComment("TASK-221", "draft", "vince")!;
+    editComment("TASK-221", c.id, "final", "vince");
+    expect(taskById("TASK-221")!.comments!.map((x) => x.body)).toEqual(["final"]);
+    m.release();
+    await __taskCommentMirrorSettled();
+    expect(m.ops).toEqual([
+      { op: "add", body: "draft", mentions: [] },
+      { op: "edit", id: "CMT-srv-1", body: "final", mentions: [] },
+    ]);
+    expect(taskById("TASK-221")!.comments!.map((x) => [x.id, x.body])).toEqual([["CMT-srv-1", "final"]]);
+    expect(activeNotices()).toHaveLength(0);
+  });
+
+  it("add-then-delete before the add settles replays the delete with the server id", async () => {
+    const m = delayedAdd([SRV]);
+    const c = addComment("TASK-221", "draft", "vince")!;
+    deleteComment("TASK-221", c.id, "vince");
+    expect(taskById("TASK-221")!.comments).toEqual([]);
+    m.release();
+    await __taskCommentMirrorSettled();
+    expect(m.ops).toEqual([
+      { op: "add", body: "draft", mentions: [] },
+      { op: "delete", id: "CMT-srv-1" },
+    ]);
+    expect(taskById("TASK-221")!.comments).toEqual([]);
+    expect(activeNotices()).toHaveLength(0);
+  });
+
+  it("add-then-edit-then-delete reaches the server in order", async () => {
+    const m = delayedAdd([SRV]);
+    const c = addComment("TASK-221", "draft", "vince")!;
+    editComment("TASK-221", c.id, "final", "vince");
+    deleteComment("TASK-221", c.id, "vince");
+    m.release();
+    await __taskCommentMirrorSettled();
+    expect(m.ops.map((o) => [o.op, "id" in o ? o.id : null])).toEqual([
+      ["add", null],
+      ["edit", "CMT-srv-1"],
+      ["delete", "CMT-srv-1"],
+    ]);
+    expect(taskById("TASK-221")!.comments).toEqual([]);
+    expect(activeNotices()).toHaveLength(0);
+  });
+
+  it("a refused add rolls back and drops the edit and delete queued behind it", async () => {
+    const m = delayedAdd([]);
+    const activityBefore = taskById("TASK-221")!.activity.length;
+    const c = addComment("TASK-221", "draft", "vince")!;
+    editComment("TASK-221", c.id, "final", "vince");
+    deleteComment("TASK-221", c.id, "vince");
+    m.release(true);
+    await __taskCommentMirrorSettled();
+    expect(m.ops).toEqual([{ op: "add", body: "draft", mentions: [] }]);
+    expect(taskById("TASK-221")!.comments ?? []).toEqual([]);
+    expect(taskById("TASK-221")!.activity).toHaveLength(activityBefore);
+    expect(activeNotices()).toHaveLength(1);
+  });
+
+  it("a queued edit the server refuses rolls back to the saved comment under its server id", async () => {
+    let release!: () => void;
+    __setTaskCommentMirrorForTests(async (_taskId, op) => {
+      if (op.op !== "add") throw new Error("Only the author can edit or delete a comment.");
+      await new Promise<void>((r) => (release = r));
+      return [SRV];
+    });
+    const c = addComment("TASK-221", "draft", "vince")!;
+    editComment("TASK-221", c.id, "final", "vince");
+    release();
+    await __taskCommentMirrorSettled();
+    expect(taskById("TASK-221")!.comments!.map((x) => [x.id, x.body])).toEqual([["CMT-srv-1", "draft"]]);
+    expect(activeNotices()).toHaveLength(1);
   });
 
   it("never sends comments through the whole-task PATCH", async () => {

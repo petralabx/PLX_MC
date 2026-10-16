@@ -350,6 +350,12 @@ export function RulesText({ page }: { page: ReadyPage }) {
         deducted. The target is {dollars(settings.revenueTargetCadCents)} a month, spread evenly over its working days.
       </li>
       <li>
+        <b>Shipments this month</b> lists those invoices one by one, and the shipments entered by hand that count. A US
+        dollar invoice shows its CAD at the rate; the totals add up the US dollar invoices first and convert them once,
+        as the Revenue card does, so they can be a few cents off the CAD column. Full or Partial goes by the invoice’s
+        whole shipment, as for full truckloads. Other currencies are listed but not converted or counted.
+      </li>
+      <li>
         <b>Covered through</b> is the later of the latest FileMaker or Sage data and the latest counted entry by hand,
         never past today. The banner at the top appears when either system is more than one working day behind.
       </li>

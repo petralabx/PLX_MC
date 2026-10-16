@@ -369,7 +369,7 @@ describe("page shell", () => {
   it("renders skeletons, not spinners, before the page model arrives", () => {
     const markup = html(GoalsView, {});
     expect(text(markup)).toContain("Loading the latest refresh…");
-    expect(markup.match(/class="gp-skel"/g)).toHaveLength(8);
+    expect(markup.match(/class="gp-skel"/g)).toHaveLength(9);
     expect(text(markup)).toContain("Amber marks figures your team entered by hand that aren’t in FileMaker or Sage yet.");
   });
 

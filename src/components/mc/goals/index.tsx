@@ -35,6 +35,7 @@ import {
 } from "./helpers";
 import { watchRun } from "./run-watch";
 import { Section, type SectionState } from "./section";
+import { ShipmentList } from "./shipments";
 import {
   BatchList,
   CompletedTiles,
@@ -527,6 +528,20 @@ function Body({
       >
         {ready((p) => (
           <BatchList page={p} />
+        ))}
+      </Section>
+
+      <Section
+        id="shipments"
+        title="Shipments this month"
+        note="Every Sage invoice shipped this month, and the shipments entered by hand that count. The totals follow the search and filters."
+        source={src("shipments")}
+        state={state}
+        onRetry={onRetry} resetKey={page}
+        size="lg"
+      >
+        {ready((p) => (
+          <ShipmentList page={p} />
         ))}
       </Section>
 

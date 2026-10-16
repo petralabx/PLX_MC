@@ -6,6 +6,7 @@
 // default-off (503) until CRON_SECRET is set. Fail-open inside checkMissedTick.
 
 import { ApiError, route } from "@/lib/api/route";
+import { secretMatches } from "@/lib/auth/gate";
 import { cronConfigured, cronSecret } from "@/lib/secrets";
 import {
   checkMissedTick,
@@ -24,7 +25,7 @@ export const GET = route(async (req) => {
       503
     );
   }
-  if (req.headers.get("authorization") !== `Bearer ${cronSecret()}`) {
+  if (!(await secretMatches(req.headers.get("authorization"), cronSecret(), "Bearer "))) {
     throw new ApiError("unauthorized", "Invalid or missing cron authorization.", 401);
   }
   // beforeSweep=1 is the redundancy workflow's pre-recovery observation.

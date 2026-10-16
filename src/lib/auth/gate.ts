@@ -105,13 +105,42 @@ export function isPublicAsset(pathname: string): boolean {
   );
 }
 
+const sha256 = async (value: string) =>
+  new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+
+/**
+ * The one shared-secret check (CRON_SECRET bearer, Basic break-glass, CI
+ * token). Fails closed when the secret is unset or blank, so `Bearer ` or
+ * `Bearer undefined` never match. Both sides are hashed first and compared
+ * without early exit, so neither content nor length leaks through timing.
+ * Web Crypto keeps it usable in the edge middleware as well as Node routes.
+ */
+export async function secretMatches(
+  provided: string | null | undefined,
+  secret: string | null | undefined,
+  prefix = ""
+): Promise<boolean> {
+  if (!secret?.trim() || provided == null) return false;
+  const [got, want] = await Promise.all([sha256(provided), sha256(`${prefix}${secret}`)]);
+  let diff = 0;
+  for (let i = 0; i < want.length; i++) diff |= got[i] ^ want[i];
+  return diff === 0;
+}
+
+/** Entra end-session URL: ends the Microsoft session, then returns to /signin. */
+export function entraLogoutUrl(tenantId: string, origin: string): string {
+  const url = new URL(`https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/logout`);
+  url.searchParams.set("post_logout_redirect_uri", new URL("/signin", origin).toString());
+  return url.toString();
+}
+
 // Basic-auth fallback gate (used only when Entra OIDC is not configured):
 // dormant without the shared secret, 401 challenge otherwise.
-export function basicGate(req: Request): Response | null {
+export async function basicGate(req: Request): Promise<Response | null> {
   const password = process.env.PLX_MC_STAGING_PASSWORD;
   if (!password) return null;
-  const header = req.headers.get("authorization") ?? "";
-  if (header === `Basic ${btoa(`plx:${password}`)}`) return null;
+  const header = req.headers.get("authorization");
+  if (await secretMatches(header, btoa(`plx:${password}`), "Basic ")) return null;
   return new Response("Authentication required.", {
     status: 401,
     headers: { "WWW-Authenticate": 'Basic realm="PLX Mission Control staging"' },

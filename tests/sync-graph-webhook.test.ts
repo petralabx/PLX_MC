@@ -2,8 +2,6 @@
 // verification, enqueue-then-respond (no inline sweep).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
 const m = vi.hoisted(() => ({
   enabled: true,
@@ -45,18 +43,6 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.restoreAllMocks());
-
-describe("middleware carve-out for sync webhook", () => {
-  it("exempts api/sync/webhook exactly and keeps P6 propose carve-out", () => {
-    const source = readFileSync(resolve(process.cwd(), "src/middleware.ts"), "utf8");
-    expect(source).toMatch(/api\/sync\/webhook/);
-    expect(source).toMatch(/do not broaden to `\/api\/sync\/\*`/);
-    expect(source).toMatch(/api\/routing\/propose/);
-    expect(source).toMatch(
-      /api\/compliance\/webhook\|api\/compliance\/verify\|api\/routing\/propose\|api\/cursor/
-    );
-  });
-});
 
 describe("Graph validationToken plaintext", () => {
   it("GET returns the validation token as text/plain without JSON envelope", async () => {

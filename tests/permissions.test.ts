@@ -214,16 +214,26 @@ describe("service-principal separation", () => {
     });
   });
 
-  it("task.cancel is held by sp_mcp_cos only; task.reopen by no service principal (TASK-2529)", () => {
+  it("task.cancel is held by sp_mcp_cos and sp_mcp_ledger only; task.reopen by no service principal (TASK-2529)", () => {
     for (const role of ["admin", "owner"] as const) {
       expect(capabilitiesForRole(role)).toEqual(expect.arrayContaining(["task.cancel", "task.reopen"]));
     }
     expect(capabilitiesForRole("member")).not.toContain("task.cancel");
     for (const id of MCP_AGENT_SERVICE_PRINCIPAL_IDS) {
       expect(capabilitiesForServicePrincipal(id)).not.toContain("task.reopen");
-      if (id === "sp_mcp_cos") continue;
+      if (id === "sp_mcp_cos" || id === "sp_mcp_ledger") continue;
       expect(capabilitiesForServicePrincipal(id)).not.toContain("task.cancel");
     }
+    expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.cancel" }))
+      .toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
+  });
+
+  it("sp_mcp_ledger holds task.cancel; sp_mcp_cursor still does not", () => {
+    expect(capabilitiesForServicePrincipal("sp_mcp_ledger")).toContain("task.cancel");
+    expect(authorize({ actor: service("sp_mcp_ledger"), capability: "task.cancel" }).allowed).toBe(true);
+    expect(authorize({ actor: service("sp_mcp_ledger"), capability: "task.reopen" }))
+      .toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
+    expect(capabilitiesForServicePrincipal("sp_mcp_cursor")).not.toContain("task.cancel");
     expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.cancel" }))
       .toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
   });

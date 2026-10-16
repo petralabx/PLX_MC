@@ -3,9 +3,9 @@
 // it returns the pass/block verdict + reasons. The soft-vs-hard (warn vs block)
 // decision belongs to the caller (the status-check workflow), not this route.
 
-import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { ApiError, parseBody, route } from "@/lib/api/route";
+import { secretMatches } from "@/lib/auth/gate";
 import {
   verifyGitHubActionsOidc,
   type GitHubActionsOidcClaims,
@@ -45,13 +45,6 @@ function extractBearerToken(authorization: string | null): string | null {
   if (!authorization) return null;
   const match = /^Bearer\s+(\S+)$/i.exec(authorization.trim());
   return match?.[1] ?? null;
-}
-
-function bearerTokenMatches(token: string, expected: string): boolean {
-  const got = Buffer.from(token);
-  const exp = Buffer.from(expected);
-  if (got.length !== exp.length) return false;
-  return timingSafeEqual(got, exp);
 }
 
 function signedComplianceWorkflowAllowed(
@@ -150,7 +143,7 @@ export const POST = route(async (req) => {
     }
   }
   if (!authorized && bearerAvailable) {
-    if (bearerTokenMatches(token, complianceCiToken())) {
+    if (await secretMatches(token, complianceCiToken())) {
       authorized = true;
       verifiedBody = body;
     }

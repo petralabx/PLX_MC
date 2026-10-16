@@ -4,6 +4,7 @@
 // sweep remains the recovery path when webhooks are disabled.
 
 import { ApiError, route } from "@/lib/api/route";
+import { secretMatches } from "@/lib/auth/gate";
 import {
   cronConfigured,
   cronSecret,
@@ -20,7 +21,7 @@ export const GET = route(async (req) => {
   if (!cronConfigured()) {
     throw new ApiError("cron_disabled", "Scheduled notification drain is not configured (CRON_SECRET unset).", 503);
   }
-  if (req.headers.get("authorization") !== `Bearer ${cronSecret()}`) {
+  if (!(await secretMatches(req.headers.get("authorization"), cronSecret(), "Bearer "))) {
     throw new ApiError("unauthorized", "Invalid or missing cron authorization.", 401);
   }
   const service = await requireSyncServiceWrite();

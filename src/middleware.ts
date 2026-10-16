@@ -5,7 +5,7 @@
 //   2. Basic-auth fallback (PLX_MC_STAGING_PASSWORD set) — break-glass.
 //   3. Neither configured (local dev, tests) — open.
 
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/auth/edge";
 
 export default auth;
 
@@ -23,7 +23,9 @@ export const config = {
   // them via isPublicAsset).
   //
   // SECURITY: each carve-out is path-EXACT and only for a route that
-  // self-authenticates. The remaining compliance routes
+  // self-authenticates. Every alternative is anchored: `$` for a single path,
+  // `(?:/|$)` for a segment and its children, so a sibling such as
+  // `/api/cursorX` or `/signin-anything` stays gated (TASK-3012). The remaining compliance routes
   // (checkout/complete/reconcile) and `/api/events` do NOT self-authenticate, so
   // they stay behind the gate — exempting `api/compliance` broadly would make the
   // control plane world-callable (EN-007 runbook, review #3).
@@ -34,6 +36,6 @@ export const config = {
   // Only the two exact OAuth discovery paths are public: resource metadata
   // and the no-issuer JSON response (header-key auth only, TASK-1958).
   matcher: [
-    "/((?!\\.well-known/oauth-protected-resource$|\\.well-known/oauth-authorization-server$|api/auth|api/cron|api/sync/webhook|api/compliance/webhook|api/compliance/verify|api/routing/propose|api/cursor|_next/static|_next/image|favicon.ico|signin|brand|fonts|presentations).*)",
+    "/((?!\\.well-known/oauth-protected-resource$|\\.well-known/oauth-authorization-server$|api/sync/webhook$|api/compliance/webhook$|api/compliance/verify$|api/routing/propose$|favicon\\.ico$|signin$|(?:api/auth|api/cron|api/cursor|_next/static|_next/image|brand|fonts|presentations)(?:/|$)).*)",
   ],
 };

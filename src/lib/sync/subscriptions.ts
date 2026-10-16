@@ -2,7 +2,8 @@
 // call Graph only through injectable seams. Phase acceptance never creates a
 // live Graph subscription — tests inject mocks.
 
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
+import { secretMatches } from "@/lib/auth/gate";
 import { query } from "@/lib/db";
 import {
   graphNotificationUrl,
@@ -343,11 +344,14 @@ export async function disableSubscription(
   return rows[0] ? rowToStored(rows[0]) : null;
 }
 
-/** Timing-safe clientState compare against the configured secret. */
-export function verifyClientState(
+/**
+ * clientState compare against the configured secret via the shared
+ * secretMatches (no length/content timing leak; unset or blank refuses).
+ */
+export async function verifyClientState(
   received: string | undefined | null,
   expected?: string
-): boolean {
+): Promise<boolean> {
   const want = expected ?? (() => {
     try {
       return graphWebhookClientState();
@@ -355,11 +359,7 @@ export function verifyClientState(
       return "";
     }
   })();
-  if (!received || !want) return false;
-  const a = Buffer.from(received);
-  const b = Buffer.from(want);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  return secretMatches(received, want);
 }
 
 /**
@@ -372,7 +372,7 @@ export async function verifyNotificationIdentity(input: {
   clientState?: string | null;
   expectedClientState?: string;
 }): Promise<{ ok: true; subscription: StoredSubscription } | { ok: false; reason: string }> {
-  if (!verifyClientState(input.clientState, input.expectedClientState)) {
+  if (!(await verifyClientState(input.clientState, input.expectedClientState))) {
     return { ok: false, reason: "invalid_client_state" };
   }
   const subscription = await getSubscriptionById(input.subscriptionId);

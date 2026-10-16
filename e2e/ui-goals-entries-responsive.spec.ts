@@ -40,7 +40,7 @@ test.describe("goals entries responsive (G3)", () => {
   test.beforeEach(async ({ page }) => {
     await new EntriesApi().install(page);
     await gotoGoals(page);
-    await expect(page.getByTestId("goals-card-large-batches")).toBeVisible();
+    await expect(page.getByTestId("goals-card-line1")).toBeVisible();
   });
 
   test("entry actions and the entry form fit", async ({ page }, testInfo) => {

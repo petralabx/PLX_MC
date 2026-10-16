@@ -14,11 +14,11 @@ import {
   count,
   day,
   dollars,
-  oneDecimal,
   pct,
   rate,
   sourceText,
   usd,
+  wholeKg,
   type BarParts,
   type ReadyPage,
 } from "./helpers";
@@ -89,48 +89,47 @@ function Card({
 
 export function GoalCards({ page }: { page: ReadyPage }) {
   const { model, settings, run, fx, sections } = page;
-  const lb = model.largeBatches;
+  const l1 = model.line1;
   const tl = model.truckloads;
   const rev = model.revenue;
-  const perDay = settings.largeBatchesPerWorkingDay;
-  const lbSource = sourceText(run, sections.largeBatches);
+  const l1Source = sourceText(run, sections.line1);
   const tlSource = sourceText(run, sections.truckloads);
   const revSource = sourceText(run, sections.revenue);
-  const scheduled = Math.max(0, lb.ifAllRun - lb.total);
+  const scheduled = Math.max(0, l1.ifAllRunKg - l1.totalKg);
   const fullScale = Math.max(tl.lastMonth.full, tl.full.total, 1);
   const rateText = `${rate(fx.rate)} (${fx.stale ? `stored rate from ${day(fx.date)}; the Bank of Canada rate couldn't be fetched` : `Bank of Canada, ${day(fx.date)}`})`;
 
   return (
     <div className="gp-cards">
       <Card
-        id="large-batches"
-        title="Large batches"
-        status={lb.status}
-        definition={`Batches of ${count(settings.largeBatchMinKg)} kg or more, ${count(perDay)} per working day (${count(lb.target)} this month).`}
-        big={count(lb.total)}
-        of={`of ${count(lb.target)}`}
-        source={lbSource}
+        id="line1"
+        title="Line 1 bulk"
+        status={l1.status}
+        definition={`Bulk kg of batches of ${count(settings.line1MinKg)} kg or more (assumed to run on Line 1), ${count(settings.line1KgPerWorkingDay)} kg per working day (${wholeKg(l1.targetKg)} kg this month).`}
+        big={wholeKg(l1.totalKg)}
+        of={`of ${wholeKg(l1.targetKg)} kg`}
+        source={l1Source}
       >
         <Split
-          system={`${count(lb.inSystem)} in FileMaker`}
-          byHand={`${count(lb.byHand)} entered by hand`}
-          hasHand={lb.byHand > 0}
-          title={lbSource}
+          system={`${wholeKg(l1.inSystemKg)} kg in FileMaker`}
+          byHand={`${wholeKg(l1.byHandKg)} kg entered by hand`}
+          hasHand={l1.byHandKg > 0}
+          title={l1Source}
         />
         <Bar
-          parts={barParts({ inSystem: lb.inSystem, byHand: lb.byHand, schedule: scheduled, scale: lb.target, tickAt: lb.dueSoFar })}
-          tickLabel={`Due so far: ${count(lb.dueSoFar)}`}
+          parts={barParts({ inSystem: l1.inSystemKg, byHand: l1.byHandKg, schedule: scheduled, scale: l1.targetKg, tickAt: l1.dueSoFarKg })}
+          tickLabel={`Due so far: ${wholeKg(l1.dueSoFarKg)} kg`}
         />
-        <ul className="gp-details" title={lbSource}>
+        <ul className="gp-details" title={l1Source}>
           <li>
-            Due so far: <b>{count(lb.dueSoFar)}</b> by {day(lb.dueBy)}
+            Due so far: <b>{wholeKg(l1.dueSoFarKg)} kg</b> by {day(l1.dueBy)}
           </li>
           <li>
-            Needed per working day: <b>{oneDecimal(lb.neededPerDay)}</b> over {count(model.calendar.remaining)} working days
+            Needed per working day: <b>{wholeKg(l1.neededPerDayKg)} kg</b> over {count(model.calendar.remaining)} working days
           </li>
           <li>
-            If every scheduled batch runs: <b>{count(lb.ifAllRun)}</b> ({count(lb.openFromToday)} from today,{" "}
-            {count(lb.openPastDate)} open past their date)
+            If every scheduled batch runs: <b>{wholeKg(l1.ifAllRunKg)} kg</b> ({wholeKg(l1.scheduledFromTodayKg)} kg from today,{" "}
+            {wholeKg(l1.openPastDateKg)} kg open past their date)
           </li>
         </ul>
       </Card>

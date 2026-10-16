@@ -25,7 +25,7 @@ test.describe("goals entries a11y (G4)", () => {
   test.beforeEach(async ({ page }) => {
     await new EntriesApi().install(page);
     await gotoGoals(page);
-    await expect(page.getByTestId("goals-card-large-batches")).toBeVisible();
+    await expect(page.getByTestId("goals-card-line1")).toBeVisible();
   });
 
   test("the entry form, with its errors showing, has no axe violations", async ({ page }) => {

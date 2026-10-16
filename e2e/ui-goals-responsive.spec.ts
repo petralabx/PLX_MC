@@ -22,7 +22,7 @@ test.describe("goals responsive (G3)", () => {
   test.beforeEach(async ({ page }) => {
     await mockGoalsApi(page);
     await gotoGoals(page);
-    await expect(page.getByTestId("goals-card-large-batches")).toBeVisible();
+    await expect(page.getByTestId("goals-card-line1")).toBeVisible();
   });
 
   test("goals: no horizontal overflow, light and dark", async ({ page }, testInfo) => {

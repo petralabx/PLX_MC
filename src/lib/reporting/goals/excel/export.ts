@@ -69,14 +69,14 @@ export interface GoalsWorkbookInput {
 
 // ─── Fixed cells (the brief's formulas name them: =B13*B11, Goals!$B$17, …) ─
 
-const GOAL_ROW = { header: 4, large: 5, full: 6, partial: 7, revenue: 8 } as const;
+const GOAL_ROW = { header: 4, line1: 5, full: 6, partial: 7, revenue: 8 } as const;
 
 /** The Goals assumptions block. Rows 11–19 are the brief's; 20–21 (working days covered) feed "Due so far". */
 const INPUT_ROW = {
   workingDays: 11,
   workingDaysLeft: 12,
   perDay: 13,
-  largeMinKg: 14,
+  line1MinKg: 14,
   fullMinUsd: 15,
   revenueTarget: 16,
   rate: 17,
@@ -90,7 +90,6 @@ const goalsInput = (row: number) => `Goals!$B$${row}`;
 
 const DATE_FORMAT = "yyyy-mm-dd";
 const RATE_FORMAT = "0.0000";
-const PER_DAY_FORMAT = "0.0";
 const NOTE_COLOR = "FF595959";
 
 /** Batch stages as the page labels them (components/mc/goals/helpers.ts), grouped in its stage order. */
@@ -216,7 +215,7 @@ function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
     `   A shipment counts toward revenue (product value plus freight), and toward truckloads when it’s to ${customers}.`,
     "3. Date: the day it finished or shipped, in this month. Reference: the batch number, or the invoice, shipment, order or PO number.",
     "   Once that reference appears in the system data, the report stops counting your entry, so nothing is counted twice.",
-    `4. Batch: fill in kg (${count(settings.largeBatchMinKg)} kg or more is a large batch). Shipment: fill in Product value (before tax and freight), Freight, and Currency (CAD or USD).`,
+    `4. Batch: fill in kg (${count(settings.line1MinKg)} kg or more counts toward Line 1). Shipment: fill in Product value (before tax and freight), Freight, and Currency (CAD or USD).`,
     "5. Save the file. On the Goals & production page, an Editor chooses Import manual entries, uploads it, checks the preview of entries to add, change and remove, and confirms.",
     "   The sheet replaces the current list, so deleting a row removes that entry. “Entered by” and “Dashboard status” aren’t imported; whoever imports is recorded.",
   ];
@@ -267,15 +266,15 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
   const status = (row: number) => ({ formula: `IF(G${row}>=C${row},"On track","Behind")` });
   const needed = (row: number) => ({ formula: `IF($B$${I.workingDaysLeft}>0,MAX(0,B${row}-G${row})/$B$${I.workingDaysLeft},0)` });
 
-  put(ws, R.large, 1, `Large batches (${count(settings.largeBatchMinKg)} kg or more)`);
-  put(ws, R.large, 2, { formula: `B${I.perDay}*B${I.workingDays}` }, { numFmt: COUNT_FORMAT });
-  put(ws, R.large, 3, { formula: `B${I.perDay}*B${I.productionCovered}` }, { numFmt: COUNT_FORMAT });
-  put(ws, R.large, 4, excelDate(model.largeBatches.dueBy), { numFmt: DATE_FORMAT });
-  put(ws, R.large, 5, { formula: `Daily!C${daily.total}` }, { numFmt: COUNT_FORMAT });
-  put(ws, R.large, 6, { formula: `Daily!D${daily.total}` }, { numFmt: COUNT_FORMAT, amber: true });
-  put(ws, R.large, 7, total(R.large), { numFmt: COUNT_FORMAT, bold: true });
-  put(ws, R.large, 8, status(R.large));
-  put(ws, R.large, 9, needed(R.large), { numFmt: PER_DAY_FORMAT });
+  put(ws, R.line1, 1, `Line 1 bulk, kg (batches of ${count(settings.line1MinKg)} kg or more)`);
+  put(ws, R.line1, 2, { formula: `B${I.perDay}*B${I.workingDays}` }, { numFmt: COUNT_FORMAT });
+  put(ws, R.line1, 3, { formula: `B${I.perDay}*B${I.productionCovered}` }, { numFmt: COUNT_FORMAT });
+  put(ws, R.line1, 4, excelDate(model.line1.dueBy), { numFmt: DATE_FORMAT });
+  put(ws, R.line1, 5, { formula: `Daily!C${daily.total}` }, { numFmt: COUNT_FORMAT });
+  put(ws, R.line1, 6, { formula: `Daily!D${daily.total}` }, { numFmt: COUNT_FORMAT, amber: true });
+  put(ws, R.line1, 7, total(R.line1), { numFmt: COUNT_FORMAT, bold: true });
+  put(ws, R.line1, 8, status(R.line1));
+  put(ws, R.line1, 9, needed(R.line1), { numFmt: COUNT_FORMAT });
 
   // No status or due-so-far for truckloads, as on the page; the target is a setting (none yet).
   const target = settings.fullTruckloadsPerMonth;
@@ -309,8 +308,8 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
   const inputs: [row: number, label: string, value: ExcelJS.CellValue, numFmt: string | undefined, note: string | null][] = [
     [I.workingDays, "Working days this month", model.calendar.workingDays, COUNT_FORMAT, "Monday to Friday, less Ontario public holidays"],
     [I.workingDaysLeft, "Working days left, from today", model.calendar.remaining, COUNT_FORMAT, `${model.today} to ${model.month.end}, today included`],
-    [I.perDay, "Large batches per working day (target)", settings.largeBatchesPerWorkingDay, COUNT_FORMAT, "Your goal"],
-    [I.largeMinKg, "Large batch minimum, kg", settings.largeBatchMinKg, COUNT_FORMAT, "Your goal"],
+    [I.perDay, "Line 1 bulk per working day, kg (target)", settings.line1KgPerWorkingDay, COUNT_FORMAT, "Your goal"],
+    [I.line1MinKg, "Line 1 minimum batch, kg", settings.line1MinKg, COUNT_FORMAT, "A batch of this many kg or more is assumed to run on Line 1"],
     [I.fullMinUsd, "Full truckload minimum, US$ before tax and freight", settings.fullTruckloadMinUsdCents / 100, DOLLAR_FORMAT, "Your goal"],
     [I.revenueTarget, "Revenue target, CAD", settings.revenueTargetCadCents / 100, DOLLAR_FORMAT, "Your goal"],
     [I.rate, "USD/CAD rate", Number(model.revenue.rate), RATE_FORMAT, rateNote],
@@ -319,9 +318,9 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
     [
       I.productionCovered,
       "Working days covered, production",
-      workingDaysTo(model, model.largeBatches.dueBy),
+      workingDaysTo(model, model.line1.dueBy),
       COUNT_FORMAT,
-      `To ${model.largeBatches.dueBy}: FileMaker’s data, or a later large batch entered by hand`,
+      `To ${model.line1.dueBy}: FileMaker’s data, or a later Line 1 batch entered by hand`,
     ],
     [
       I.revenueCovered,
@@ -348,9 +347,9 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
   headerRow(ws, 1, [
     { text: "Date" },
     { text: "Working day" },
-    { text: "Large batches done (FileMaker)" },
-    { text: "Large batches done (by hand)", amber: true },
-    { text: "Large batches still scheduled" },
+    { text: "Line 1 kg done (FileMaker)" },
+    { text: "Line 1 kg done (by hand)", amber: true },
+    { text: "Line 1 kg still scheduled" },
     { text: "CAD invoiced (Sage)" },
     { text: "USD invoiced (Sage)" },
     { text: "Revenue by hand, CAD", amber: true },
@@ -363,9 +362,9 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
     const r = 2 + i;
     put(ws, r, 1, excelDate(d.day), { numFmt: DATE_FORMAT });
     put(ws, r, 2, d.isWorkingDay ? "Yes" : "No");
-    put(ws, r, 3, d.largeDone, { numFmt: COUNT_FORMAT });
-    put(ws, r, 4, d.largeByHand, { numFmt: COUNT_FORMAT, amber: true });
-    put(ws, r, 5, d.largeScheduled, { numFmt: COUNT_FORMAT });
+    put(ws, r, 3, d.line1DoneKg, { numFmt: COUNT_FORMAT });
+    put(ws, r, 4, d.line1ByHandKg, { numFmt: COUNT_FORMAT, amber: true });
+    put(ws, r, 5, d.line1ScheduledKg, { numFmt: COUNT_FORMAT });
     put(ws, r, 6, dollars(d.cadCents), { numFmt: DOLLAR_FORMAT });
     put(ws, r, 7, dollars(d.usdCents), { numFmt: DOLLAR_FORMAT });
     put(ws, r, 8, dollars(d.byHandCadCents), { numFmt: DOLLAR_FORMAT, amber: true });
@@ -462,7 +461,7 @@ function batchSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
     { text: "Date" },
     { text: "kg" },
     { text: "Size band" },
-    { text: `Large (${count(input.settings.largeBatchMinKg)} kg+)` },
+    { text: `Line 1 (${count(input.settings.line1MinKg)} kg+)` },
     { text: "Line" },
     { text: "Status" },
     { text: "Source" },
@@ -479,7 +478,7 @@ function batchSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
     put(ws, r, 4, excelDate(b.date), { amber, numFmt: DATE_FORMAT });
     put(ws, r, 5, b.kg, { amber, numFmt: COUNT_FORMAT });
     put(ws, r, 6, b.band, { amber });
-    put(ws, r, 7, { formula: `IF(E${r}>=${goalsInput(INPUT_ROW.largeMinKg)},"Yes","")` }, { amber });
+    put(ws, r, 7, { formula: `IF(E${r}>=${goalsInput(INPUT_ROW.line1MinKg)},"Yes","")` }, { amber });
     put(ws, r, 8, b.line, { amber });
     put(ws, r, 9, b.status, { amber });
     put(ws, r, 10, b.source, { amber });

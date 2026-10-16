@@ -1,14 +1,14 @@
 "use client";
 
 // The page's charts (brief §Screens 4 and 7) over the shared column charts:
-// large batches per day, revenue against the monthly target, and completed
+// Line 1 bulk kg per day, revenue against the monthly target, and completed
 // batches by size for the last three months against this month's pace. Each
 // chart has a one-sentence summary for assistive tech and its numbers in a
 // table under it (the text alternative), so nothing depends on hovering.
 
 import { RunningLines, StackedColumns, type ChartKey, type ColumnAxis } from "../charts";
 
-import { amount, compactDollars, count, day, dollars, oneDecimal, type ReadyPage } from "./helpers";
+import { amount, compactDollars, compactKg, count, day, dollars, oneDecimal, wholeKg, type ReadyPage } from "./helpers";
 
 const C = {
   done: "var(--p-accent)",
@@ -33,27 +33,30 @@ function todayMarker(page: ReadyPage) {
   return index >= 0 ? { index, label: "Today" } : null;
 }
 
-export function DailyBatchesChart({ page }: { page: ReadyPage }) {
+export function DailyLine1Chart({ page }: { page: ReadyPage }) {
   const { model, settings } = page;
-  const lb = model.largeBatches;
+  const l1 = model.line1;
+  const perDay = count(settings.line1KgPerWorkingDay);
   const keys: ChartKey[] = [
     { label: "Completed (FileMaker)", colorVar: C.done, kind: "bar" },
     { label: "Entered by hand", colorVar: C.hand, kind: "bar" },
     { label: "Still scheduled", colorVar: C.scheduled, kind: "bar" },
-    { label: `Target: ${count(settings.largeBatchesPerWorkingDay)} a working day`, colorVar: C.target, kind: "dashed" },
+    { label: `Target: ${perDay} kg a working day`, colorVar: C.target, kind: "dashed" },
   ];
-  const stillScheduled = model.daily.reduce((n, d) => n + d.largeScheduled, 0);
+  // Every open Line 1 batch this month, from today or past its date (the batch list's own sum).
+  const stillScheduled = l1.scheduledFromTodayKg + l1.openPastDateKg;
   return (
     <StackedColumns
-      summary={`Large batches per day, ${model.month.label}: ${count(lb.total)} done so far (${count(lb.inSystem)} in FileMaker, ${count(lb.byHand)} entered by hand) and ${count(stillScheduled)} still scheduled, against ${count(settings.largeBatchesPerWorkingDay)} a working day. Weekends and holidays are shaded.`}
+      summary={`Line 1 bulk kg per day, ${model.month.label}: ${wholeKg(l1.totalKg)} kg done so far (${wholeKg(l1.inSystemKg)} kg in FileMaker, ${wholeKg(l1.byHandKg)} kg entered by hand) and ${wholeKg(stillScheduled)} kg still scheduled, against ${perDay} kg a working day. Weekends and holidays are shaded.`}
       axis={dayAxis(page)}
       stacks={model.daily.map((d) => [
-        { key: "done", value: d.largeDone, colorVar: C.done },
-        { key: "hand", value: d.largeByHand, colorVar: C.hand },
-        { key: "scheduled", value: d.largeScheduled, colorVar: C.scheduled },
+        { key: "done", value: d.line1DoneKg, colorVar: C.done },
+        { key: "hand", value: d.line1ByHandKg, colorVar: C.hand },
+        { key: "scheduled", value: d.line1ScheduledKg, colorVar: C.scheduled },
       ])}
       keys={keys}
-      target={{ value: settings.largeBatchesPerWorkingDay, colorVar: C.target }}
+      formatY={compactKg}
+      target={{ value: settings.line1KgPerWorkingDay, colorVar: C.target }}
       marker={todayMarker(page)}
       readout={(i) => {
         const d = model.daily[i];
@@ -61,9 +64,9 @@ export function DailyBatchesChart({ page }: { page: ReadyPage }) {
           <>
             <b>{day(d.day)}</b>
             {d.isWorkingDay ? null : <span> · not a working day</span>}
-            <span>Completed: {count(d.largeDone)}</span>
-            {d.largeByHand > 0 ? <span className="gp-amber">By hand: {count(d.largeByHand)}</span> : null}
-            <span>Still scheduled: {count(d.largeScheduled)}</span>
+            <span>Completed: {wholeKg(d.line1DoneKg)} kg</span>
+            {d.line1ByHandKg > 0 ? <span className="gp-amber">By hand: {wholeKg(d.line1ByHandKg)} kg</span> : null}
+            <span>Still scheduled: {wholeKg(d.line1ScheduledKg)} kg</span>
           </>
         );
       }}
@@ -122,9 +125,9 @@ export function DailyTable({ page }: { page: ReadyPage }) {
             <tr>
               <th scope="col">Day</th>
               <th scope="col">Working day</th>
-              <th scope="col" className="num">Large done</th>
-              <th scope="col" className="num hand">Large by hand</th>
-              <th scope="col" className="num">Still scheduled</th>
+              <th scope="col" className="num">Line 1 kg done</th>
+              <th scope="col" className="num hand">Line 1 kg by hand</th>
+              <th scope="col" className="num">Line 1 kg scheduled</th>
               <th scope="col" className="num">CAD invoiced</th>
               <th scope="col" className="num">USD invoiced</th>
               <th scope="col" className="num hand">By hand (CAD)</th>
@@ -139,9 +142,9 @@ export function DailyTable({ page }: { page: ReadyPage }) {
               <tr key={d.day} className={d.isToday ? "today" : undefined}>
                 <th scope="row">{day(d.day)}</th>
                 <td>{d.isWorkingDay ? "Yes" : "No"}</td>
-                <td className="num">{count(d.largeDone)}</td>
-                <td className="num hand">{count(d.largeByHand)}</td>
-                <td className="num">{count(d.largeScheduled)}</td>
+                <td className="num">{wholeKg(d.line1DoneKg)}</td>
+                <td className="num hand">{wholeKg(d.line1ByHandKg)}</td>
+                <td className="num">{wholeKg(d.line1ScheduledKg)}</td>
                 <td className="num">{amount(d.cadCents)}</td>
                 <td className="num">{amount(d.usdCents)}</td>
                 <td className="num hand">{amount(d.byHandCadCents)}</td>

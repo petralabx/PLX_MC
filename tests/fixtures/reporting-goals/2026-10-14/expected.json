@@ -6,15 +6,92 @@
   "throughToday": 9,
   "remaining": 13
  },
- "largeBatches": {
-  "done": 6,
-  "dueSoFar": 18,
-  "monthTarget": 42,
-  "openFromToday": 11,
-  "openPastDate": 7,
-  "ifAllRun": 24,
-  "neededPerDay": "2.8",
-  "status": "behind"
+ "line1": {
+  "minKg": 5000,
+  "kgPerWorkingDay": 20000,
+  "targetKg": 420000,
+  "dueSoFarKg": 180000,
+  "doneBatches": 8,
+  "doneKg": 72652,
+  "scheduledFromTodayBatches": 16,
+  "scheduledFromTodayKg": 136555,
+  "openPastDateBatches": 8,
+  "openPastDateKg": 76940,
+  "ifAllRunKg": 286147,
+  "neededPerDayKg": "26719.08",
+  "status": "behind",
+  "byDay": [
+   {
+    "day": "2026-10-01",
+    "doneKg": 7139,
+    "scheduledKg": 0
+   },
+   {
+    "day": "2026-10-05",
+    "doneKg": 18024,
+    "scheduledKg": 10200
+   },
+   {
+    "day": "2026-10-07",
+    "doneKg": 16135,
+    "scheduledKg": 11000
+   },
+   {
+    "day": "2026-10-08",
+    "doneKg": 10121,
+    "scheduledKg": 11000
+   },
+   {
+    "day": "2026-10-09",
+    "doneKg": 11127,
+    "scheduledKg": 10000
+   },
+   {
+    "day": "2026-10-12",
+    "doneKg": 0,
+    "scheduledKg": 6740
+   },
+   {
+    "day": "2026-10-13",
+    "doneKg": 0,
+    "scheduledKg": 28000
+   },
+   {
+    "day": "2026-10-14",
+    "doneKg": 10106,
+    "scheduledKg": 43000
+   },
+   {
+    "day": "2026-10-15",
+    "doneKg": 0,
+    "scheduledKg": 47000
+   },
+   {
+    "day": "2026-10-16",
+    "doneKg": 0,
+    "scheduledKg": 21000
+   },
+   {
+    "day": "2026-10-22",
+    "doneKg": 0,
+    "scheduledKg": 5000
+   },
+   {
+    "day": "2026-10-25",
+    "doneKg": 0,
+    "scheduledKg": 5500
+   },
+   {
+    "day": "2026-10-27",
+    "doneKg": 0,
+    "scheduledKg": 5055
+   },
+   {
+    "day": "2026-10-28",
+    "doneKg": 0,
+    "scheduledKg": 10000
+   }
+  ]
  },
  "completedBySize": {
   "total": 30,
@@ -53,9 +130,11 @@
   "status": "behind"
  },
  "withAllEntries": {
-  "largeDone": 8,
-  "ifAllRun": 25,
-  "neededPerDay": "2.6",
+  "line1ByHandKg": 19050,
+  "line1TotalKg": 91702,
+  "line1OpenPastDateKg": 66940,
+  "line1IfAllRunKg": 295197,
+  "line1NeededPerDayKg": "25253.69",
   "fullLoads": 3,
   "revenueCad": "408628.08",
   "neededPerDay$": "45490.15",
@@ -65,8 +144,6 @@
   {
    "day": "2026-10-01",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 47619,
@@ -75,8 +152,6 @@
   {
    "day": "2026-10-02",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "26981.20",
    "usdInvoiced": "0.00",
    "targetToDate": 95238,
@@ -85,8 +160,6 @@
   {
    "day": "2026-10-03",
    "isWorkingDay": false,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 95238,
@@ -95,8 +168,6 @@
   {
    "day": "2026-10-04",
    "isWorkingDay": false,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 95238,
@@ -105,8 +176,6 @@
   {
    "day": "2026-10-05",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 2,
-   "largeStillScheduled": 1,
    "cadInvoiced": "38627.73",
    "usdInvoiced": "10270.40",
    "targetToDate": 142857,
@@ -115,8 +184,6 @@
   {
    "day": "2026-10-06",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "2081.15",
    "usdInvoiced": "0.00",
    "targetToDate": 190476,
@@ -125,8 +192,6 @@
   {
    "day": "2026-10-07",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 1,
-   "largeStillScheduled": 1,
    "cadInvoiced": "48774.32",
    "usdInvoiced": "0.00",
    "targetToDate": 238095,
@@ -135,8 +200,6 @@
   {
    "day": "2026-10-08",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 1,
-   "largeStillScheduled": 1,
    "cadInvoiced": "1527.13",
    "usdInvoiced": "1008.04",
    "targetToDate": 285714,
@@ -145,8 +208,6 @@
   {
    "day": "2026-10-09",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 1,
-   "largeStillScheduled": 1,
    "cadInvoiced": "3846.18",
    "usdInvoiced": "73494.32",
    "targetToDate": 333333,
@@ -155,8 +216,6 @@
   {
    "day": "2026-10-10",
    "isWorkingDay": false,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 333333,
@@ -165,8 +224,6 @@
   {
    "day": "2026-10-11",
    "isWorkingDay": false,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 333333,
@@ -175,8 +232,6 @@
   {
    "day": "2026-10-12",
    "isWorkingDay": false,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 333333,
@@ -185,8 +240,6 @@
   {
    "day": "2026-10-13",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 3,
    "cadInvoiced": "0.00",
    "usdInvoiced": "87656.00",
    "targetToDate": 380952,
@@ -195,8 +248,6 @@
   {
    "day": "2026-10-14",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 1,
-   "largeStillScheduled": 4,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 428571,
@@ -205,8 +256,6 @@
   {
    "day": "2026-10-15",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 4,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 476190,
@@ -215,8 +264,6 @@
   {
    "day": "2026-10-16",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 2,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 523810,
@@ -225,8 +272,6 @@
   {
    "day": "2026-10-17",
    "isWorkingDay": false,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 523810,
@@ -235,8 +280,6 @@
   {
    "day": "2026-10-18",
    "isWorkingDay": false,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 523810,
@@ -245,8 +288,6 @@
   {
    "day": "2026-10-19",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 571429,
@@ -255,8 +296,6 @@
   {
    "day": "2026-10-20",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 619048,
@@ -265,8 +304,6 @@
   {
    "day": "2026-10-21",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 666667,
@@ -275,8 +312,6 @@
   {
    "day": "2026-10-22",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 714286,
@@ -285,8 +320,6 @@
   {
    "day": "2026-10-23",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 761905,
@@ -295,8 +328,6 @@
   {
    "day": "2026-10-24",
    "isWorkingDay": false,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 761905,
@@ -305,8 +336,6 @@
   {
    "day": "2026-10-25",
    "isWorkingDay": false,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 761905,
@@ -315,8 +344,6 @@
   {
    "day": "2026-10-26",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 809524,
@@ -325,8 +352,6 @@
   {
    "day": "2026-10-27",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 857143,
@@ -335,8 +360,6 @@
   {
    "day": "2026-10-28",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 1,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 904762,
@@ -345,8 +368,6 @@
   {
    "day": "2026-10-29",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 952381,
@@ -355,8 +376,6 @@
   {
    "day": "2026-10-30",
    "isWorkingDay": true,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 1000000,
@@ -365,8 +384,6 @@
   {
    "day": "2026-10-31",
    "isWorkingDay": false,
-   "largeDoneFileMaker": 0,
-   "largeStillScheduled": 0,
    "cadInvoiced": "0.00",
    "usdInvoiced": "0.00",
    "targetToDate": 1000000,

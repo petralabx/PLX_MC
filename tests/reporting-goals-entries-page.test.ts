@@ -49,7 +49,7 @@ describe("entries table actions", () => {
 
 describe("entry form", () => {
   it("adds a batch by default: type, date, reference, product, kg and note, each labelled", () => {
-    const markup = html(EntryDialog, { entry: null, largeBatchMinKg: 7500, onClose: noop, onSaved: noop });
+    const markup = html(EntryDialog, { entry: null, line1MinKg: 5000, onClose: noop, onSaved: noop });
     const out = text(markup);
     expect(markup).toContain('aria-labelledby');
     expect(out).toContain("Add an entry");
@@ -59,7 +59,7 @@ describe("entry form", () => {
     for (const label of ["Type", "Date", "Reference (optional)", "Product (optional)", "kg", "Note (optional)"]) {
       expect(out).toContain(label);
     }
-    expect(out).toContain("Actual kg. 7,500 kg or more is a large batch.");
+    expect(out).toContain("Actual kg. 5,000 kg or more counts toward Line 1.");
     for (const field of ["customer", "productValue", "freight", "currency"]) expect(markup).not.toContain(`name="${field}"`);
     // Every input is labelled by a <label for> with its id.
     for (const [, id] of markup.matchAll(/<input[^>]*id="([^"]+)"/g)) expect(markup).toContain(`for="${id}"`);
@@ -67,7 +67,7 @@ describe("entry form", () => {
   });
 
   it("edits a shipment with its values filled in the way a person types them", () => {
-    const markup = html(EntryDialog, { entry: { ...M3, productValue: "24500.00", freight: "1250.00" }, largeBatchMinKg: 7500, onClose: noop, onSaved: noop });
+    const markup = html(EntryDialog, { entry: { ...M3, productValue: "24500.00", freight: "1250.00" }, line1MinKg: 5000, onClose: noop, onSaved: noop });
     expect(text(markup)).toContain("Edit entry M003");
     expect(input(markup, { name: "type", value: "Shipment" })).toHaveProperty("checked");
     expect(input(markup, { name: "currency", value: "USD" })).toHaveProperty("checked");

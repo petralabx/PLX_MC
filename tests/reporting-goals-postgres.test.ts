@@ -1,8 +1,8 @@
-// Goals & Production against real Postgres: migration 039 on a disposable PG16,
-// a synthetic reporting replica (silver.batches as a view, Sage columns as
-// space-padded text) loaded from the 2026-10-14 fixtures, and the shipped
-// read-only grant script. Disposable local PG16 only: no external URLs or
-// credentials are consumed.
+// Goals & Production against real Postgres: migrations 039 and 042 on a
+// disposable PG16, a synthetic reporting replica (silver.batches as a view, Sage
+// columns as space-padded text) loaded from the 2026-10-14 fixtures, and the
+// shipped read-only grant script. Disposable local PG16 only: no external URLs
+// or credentials are consumed.
 
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -169,7 +169,6 @@ function canonical(d: Datasets) {
   const sorted = <T>(rows: T[]) => rows.map((r) => JSON.stringify(r)).sort();
   return {
     cutoffs: d.cutoffs,
-    goalSummary: d.goalSummary,
     daily: d.daily.map((r) => ({ ...r, cadThis: cents(r.cadThis), usdThis: cents(r.usdThis), cadLast: cents(r.cadLast), usdLast: cents(r.usdLast) })),
     truckloads: sorted(d.truckloads.map((r) => ({ ...r, productUsd: cents(r.productUsd), productCad: cents(r.productCad) }))),
     revenue: sorted(d.revenue.map((r) => ({ ...r, netBeforeTax: cents(r.netBeforeTax) }))),
@@ -196,10 +195,7 @@ describe("reporting replica access", () => {
   it("returns the fixture datasets for 2026-10-14 through the read-only login", async () => {
     const datasets = await readDatasets(TODAY, await loadConfig());
     expect(canonical(datasets)).toEqual(canonical(DATASETS));
-    // The today-overlap regression: with the production cutoff at today, today's
-    // batches count as scheduled ahead only (11 + 7, not 28).
     expect(datasets.cutoffs.productionCutoff).toBe(TODAY);
-    expect(datasets.goalSummary).toEqual({ largeDone: 6, largeScheduledAhead: 11, largeOpenPastDate: 7 });
   });
 
   it("keeps invoices without a shipment number as separate shipments, each in its own month", async () => {
@@ -251,14 +247,29 @@ describe("refresh and page model", () => {
     expect(view.state).toBe("ready");
     expect(view.run?.id).toBe(first.id);
     const model = view.model!;
-    expect(model.largeBatches).toMatchObject({ total: 6, dueSoFar: 18, target: 42, openFromToday: 11, openPastDate: 7, ifAllRun: 24 });
+    // Line 1 bulk from the stored batch list (tests/fixtures/reporting-goals/2026-10-14/expected.json).
+    expect(model.line1).toMatchObject({
+      totalKg: 72_652,
+      dueSoFarKg: 180_000,
+      targetKg: 420_000,
+      scheduledFromTodayKg: 136_555,
+      openPastDateKg: 76_940,
+      ifAllRunKg: 286_147,
+    });
     expect(model.truckloads.full.total).toBe(2);
     expect(model.truckloads.lastMonth).toMatchObject({ full: 7, partial: 5 });
     expect(money(model.revenue.totalCents)).toBe("367014.16");
     expect(money(model.revenue.dueSoFarCents)).toBe("428571.43");
     expect(money(model.revenue.neededPerDayCents)).toBe("48691.22");
     expect(money(model.revenue.lastMonthCadCents)).toBe("1007365.11");
-    expect(model.takeaway).toBe("6 large batches against 18 due so far, 2 full truckloads, and $367,014 of the $428,571 revenue due so far.");
+    expect(model.takeaway).toBe(
+      "72,652 kg of Line 1 bulk against 180,000 kg due so far, 2 full truckloads, and $367,014 of the $428,571 revenue due so far."
+    );
+    // The retired large-batch snapshot is no longer written; the daily rows take 042's defaults.
+    expect(await mcQuery(`SELECT 1 FROM report_snap_goal_summary WHERE run_id = $1`, [first.id])).toEqual([]);
+    expect(await mcQuery(`SELECT DISTINCT large_done, large_open FROM report_snap_daily WHERE run_id = $1`, [first.id])).toEqual([
+      { large_done: 0, large_open: 0 },
+    ]);
 
     const events = await mcQuery<{ kind: string; actor: string }>(`SELECT kind, actor FROM mc_events WHERE kind LIKE 'reporting.goals.%' ORDER BY seq`);
     expect(events).toEqual([{ kind: "reporting.goals.refresh.succeeded", actor: "cron:reporting-goals" }]);
@@ -278,8 +289,8 @@ describe("refresh and page model", () => {
     expect(Object.fromEntries(model.entries.map((e) => [e.entryId, e.status]))).toEqual({
       M001: "counted", M002: "counted", M003: "counted", M004: "in_sage", M005: "in_filemaker", M006: "not_this_month", M007: "counted",
     });
-    expect(model.largeBatches).toMatchObject({ total: 8, ifAllRun: 25 });
-    expect(model.largeBatches.neededPerDay.toFixed(1)).toBe("2.6");
+    expect(model.line1).toMatchObject({ byHandKg: 19_050, totalKg: 91_702, openPastDateKg: 66_940, ifAllRunKg: 295_197 });
+    expect(model.line1.neededPerDayKg.toFixed(2)).toBe("25253.69");
     expect(model.truckloads.full.total).toBe(3);
     expect(money(model.revenue.totalCents)).toBe("408628.08");
     expect(money(model.revenue.neededPerDayCents)).toBe("45490.15");
@@ -414,5 +425,72 @@ describe("claims, limits and retention", () => {
     expect(withLists.map((r) => String(r.run_id))).toEqual(lastGood.map((r) => String(r.id)));
     const customers = await mcQuery<{ run_id: string }>(`SELECT DISTINCT run_id FROM report_snap_customer ORDER BY run_id DESC`);
     expect(customers.map((r) => String(r.run_id))).toEqual(lastGood.map((r) => String(r.id)));
+  });
+});
+
+describe("migration 042: Line 1 bulk settings, expand only", () => {
+  const RETIRED = ["large_batches_per_working_day", "large_batch_min_kg"];
+
+  it("seeds the Line 1 settings beside 039's retired large-batch rows, and reads only the Line 1 ones", async () => {
+    const rows = await mcQuery<{ key: string; value: string; updated_by: string }>(
+      `SELECT key, value::text AS value, updated_by FROM report_goal_setting WHERE key = ANY($1::text[]) ORDER BY key COLLATE "C"`,
+      [[...RETIRED, "line1_kg_per_working_day", "line1_min_kg"]]
+    );
+    expect(rows).toEqual([
+      { key: "large_batch_min_kg", value: "7500", updated_by: "migration:039" },
+      { key: "large_batches_per_working_day", value: "2", updated_by: "migration:039" },
+      { key: "line1_kg_per_working_day", value: "20000", updated_by: "migration:042" },
+      { key: "line1_min_kg", value: "5000", updated_by: "migration:042" },
+    ]);
+    const { settings } = await loadConfig();
+    expect(settings).toEqual({
+      line1KgPerWorkingDay: 20_000,
+      line1MinKg: 5_000,
+      fullTruckloadMinUsdCents: 1_800_000,
+      revenueTargetCadCents: 100_000_000,
+      fullTruckloadsPerMonth: null,
+    });
+    const line1 = (await loadGoalsView()).model!.line1;
+    // The retired rows change nothing, even unset; an unset Line 1 row is an error, never a silent 0.
+    await mcQuery(`UPDATE report_goal_setting SET value = NULL WHERE key = ANY($1::text[])`, [RETIRED]);
+    try {
+      expect((await loadConfig()).settings).toEqual(settings);
+      expect((await loadGoalsView()).model!.line1).toEqual(line1);
+      await mcQuery(`UPDATE report_goal_setting SET value = NULL WHERE key = 'line1_min_kg'`);
+      await expect(loadConfig()).rejects.toThrow("report_goal_setting.line1_min_kg is not set");
+    } finally {
+      await mcQuery(
+        `UPDATE report_goal_setting
+            SET value = CASE key WHEN 'large_batches_per_working_day' THEN 2 WHEN 'large_batch_min_kg' THEN 7500 ELSE 5000 END
+          WHERE key = ANY($1::text[])`,
+        [[...RETIRED, "line1_min_kg"]]
+      );
+    }
+    expect((await loadConfig()).settings).toEqual(settings);
+  });
+
+  it("still takes the previous release's large-batch snapshot writes", async () => {
+    // Production applies 042 before the new code deploys: until then the live release writes these.
+    const [{ id }] = await mcQuery<{ id: string }>(
+      `INSERT INTO report_refresh_run (trigger, requested_by, today, status, finished_at, error)
+       VALUES ('cron', 'cron', $1, 'failed', now(), 'test: previous release') RETURNING id`,
+      [TODAY]
+    );
+    try {
+      await mcQuery(
+        `INSERT INTO report_snap_goal_summary (run_id, large_done, large_scheduled_ahead, large_open_past_date) VALUES ($1, 6, 11, 7)`,
+        [id]
+      );
+      await mcQuery(
+        `INSERT INTO report_snap_daily (run_id, day, large_done, large_open, cad_this, usd_this, cad_last, usd_last)
+         VALUES ($1, $2, 1, 4, 0, 0, 0, 0)`,
+        [id, TODAY]
+      );
+      expect(await mcQuery(`SELECT large_done, large_open FROM report_snap_daily WHERE run_id = $1`, [id])).toEqual([
+        { large_done: 1, large_open: 4 },
+      ]);
+    } finally {
+      await mcQuery(`DELETE FROM report_refresh_run WHERE id = $1`, [id]);
+    }
   });
 });

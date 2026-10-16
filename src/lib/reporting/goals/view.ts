@@ -5,10 +5,9 @@
 import { computeGoals, type GoalsModel } from "./rules";
 import type { FtlCustomer, FxRate, FxSource, GoalSettings, IsoDate, ManualEntry, RefreshRun, SnapshotData } from "./types";
 
-/** Dataset query names — the names tooltips show. One per report_snap_* table. */
+/** Dataset query names — the names tooltips show. One per report_snap_* table (report_snap_goal_summary is retired). */
 export const DATASET_QUERIES = {
   cutoffs: "cutoffs",
-  goalSummary: "goal-summary",
   daily: "daily",
   truckloads: "truckloads",
   revenue: "revenue-by-currency",
@@ -24,10 +23,10 @@ export type DatasetQuery = (typeof DATASET_QUERIES)[keyof typeof DATASET_QUERIES
 /** Which queries each page section is built from (manual entries are live, not snapshotted). */
 export const SECTION_QUERIES: Record<string, readonly DatasetQuery[]> = {
   freshness: [DATASET_QUERIES.cutoffs],
-  largeBatches: [DATASET_QUERIES.goalSummary, DATASET_QUERIES.batches],
+  line1: [DATASET_QUERIES.batches],
   truckloads: [DATASET_QUERIES.truckloads],
   revenue: [DATASET_QUERIES.revenue],
-  daily: [DATASET_QUERIES.daily],
+  daily: [DATASET_QUERIES.daily, DATASET_QUERIES.batches],
   entries: [DATASET_QUERIES.references, DATASET_QUERIES.batches],
   sizes: [DATASET_QUERIES.batches, DATASET_QUERIES.batchHistory],
   batches: [DATASET_QUERIES.batches],

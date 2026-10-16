@@ -4,16 +4,9 @@
   "productionCutoff": "2026-10-14",
   "sageCutoff": "2026-10-14"
  },
- "goalSummary": {
-  "largeDone": 6,
-  "largeScheduledAhead": 11,
-  "largeOpenPastDate": 7
- },
  "daily": [
   {
    "day": "2026-10-01",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "32863.12",
@@ -21,8 +14,6 @@
   },
   {
    "day": "2026-10-02",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "26981.20",
    "usdThis": "0.00",
    "cadLast": "7748.00",
@@ -30,8 +21,6 @@
   },
   {
    "day": "2026-10-03",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "35057.00",
@@ -39,8 +28,6 @@
   },
   {
    "day": "2026-10-04",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "807.09",
@@ -48,8 +35,6 @@
   },
   {
    "day": "2026-10-05",
-   "largeDone": 2,
-   "largeOpen": 1,
    "cadThis": "38627.73",
    "usdThis": "10270.40",
    "cadLast": "0.00",
@@ -57,8 +42,6 @@
   },
   {
    "day": "2026-10-06",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "2081.15",
    "usdThis": "0.00",
    "cadLast": "0.00",
@@ -66,8 +49,6 @@
   },
   {
    "day": "2026-10-07",
-   "largeDone": 1,
-   "largeOpen": 1,
    "cadThis": "48774.32",
    "usdThis": "0.00",
    "cadLast": "32.00",
@@ -75,8 +56,6 @@
   },
   {
    "day": "2026-10-08",
-   "largeDone": 1,
-   "largeOpen": 1,
    "cadThis": "1527.13",
    "usdThis": "1008.04",
    "cadLast": "21704.00",
@@ -84,8 +63,6 @@
   },
   {
    "day": "2026-10-09",
-   "largeDone": 1,
-   "largeOpen": 1,
    "cadThis": "3846.18",
    "usdThis": "73494.32",
    "cadLast": "23652.00",
@@ -93,8 +70,6 @@
   },
   {
    "day": "2026-10-10",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "9295.00",
@@ -102,8 +77,6 @@
   },
   {
    "day": "2026-10-11",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "31980.00",
@@ -111,8 +84,6 @@
   },
   {
    "day": "2026-10-12",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "0.00",
@@ -120,8 +91,6 @@
   },
   {
    "day": "2026-10-13",
-   "largeDone": 0,
-   "largeOpen": 3,
    "cadThis": "0.00",
    "usdThis": "87656.00",
    "cadLast": "0.00",
@@ -129,8 +98,6 @@
   },
   {
    "day": "2026-10-14",
-   "largeDone": 1,
-   "largeOpen": 4,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "58914.16",
@@ -138,8 +105,6 @@
   },
   {
    "day": "2026-10-15",
-   "largeDone": 0,
-   "largeOpen": 4,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "42142.00",
@@ -147,8 +112,6 @@
   },
   {
    "day": "2026-10-16",
-   "largeDone": 0,
-   "largeOpen": 2,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "8957.30",
@@ -156,8 +119,6 @@
   },
   {
    "day": "2026-10-17",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "22801.00",
@@ -165,8 +126,6 @@
   },
   {
    "day": "2026-10-18",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "11743.60",
@@ -174,8 +133,6 @@
   },
   {
    "day": "2026-10-19",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "0.00",
@@ -183,8 +140,6 @@
   },
   {
    "day": "2026-10-20",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "0.00",
@@ -192,8 +147,6 @@
   },
   {
    "day": "2026-10-21",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "17156.00",
@@ -201,8 +154,6 @@
   },
   {
    "day": "2026-10-22",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "35390.55",
@@ -210,8 +161,6 @@
   },
   {
    "day": "2026-10-23",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "17952.00",
@@ -219,8 +168,6 @@
   },
   {
    "day": "2026-10-24",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "18829.00",
@@ -228,8 +175,6 @@
   },
   {
    "day": "2026-10-25",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "29648.00",
@@ -237,8 +182,6 @@
   },
   {
    "day": "2026-10-26",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "0.00",
@@ -246,8 +189,6 @@
   },
   {
    "day": "2026-10-27",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "0.00",
@@ -255,8 +196,6 @@
   },
   {
    "day": "2026-10-28",
-   "largeDone": 0,
-   "largeOpen": 1,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "19270.00",
@@ -264,8 +203,6 @@
   },
   {
    "day": "2026-10-29",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "50463.00",
@@ -273,8 +210,6 @@
   },
   {
    "day": "2026-10-30",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "186621.12",
@@ -282,8 +217,6 @@
   },
   {
    "day": "2026-10-31",
-   "largeDone": 0,
-   "largeOpen": 0,
    "cadThis": "0.00",
    "usdThis": "0.00",
    "cadLast": "0.00",

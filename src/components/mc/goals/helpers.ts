@@ -45,9 +45,13 @@ export function amount(c: number): string {
   return cents(c).replace("$", "");
 }
 export const usd = (c: number) => `US${formatDollars(c)}`;
+/** Whole kg ("91,702"); kg sums carry up to 3 decimal places. */
+export const wholeKg = (kg: number) => count(Math.round(kg));
 const COMPACT = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 /** Chart axis dollars ("$250K", "$1M"). */
 export const compactDollars = (c: number) => `$${COMPACT.format(c / 100)}`;
+/** Chart axis kg ("20K", "1.2M"). */
+export const compactKg = (kg: number) => COMPACT.format(kg);
 /** Needed-per-day figures show one decimal ("2.6"). */
 export const oneDecimal = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 /** A stored rate without trailing zeros ("1.421900" → "1.4219"). */
@@ -212,13 +216,13 @@ function sortValue(row: BatchListRow, key: BatchSortKey): number | string {
 
 export function filterBatches(
   rows: readonly BatchListRow[],
-  opts: { filter: BatchFilter; largeOnly: boolean; query: string }
+  opts: { filter: BatchFilter; line1Only: boolean; query: string }
 ): BatchListRow[] {
   const needle = opts.query.trim().toLowerCase();
   return rows.filter(
     (row) =>
       inFilter(row, opts.filter) &&
-      (!opts.largeOnly || row.large) &&
+      (!opts.line1Only || row.line1) &&
       (!needle || `${row.batch} ${row.product ?? ""} ${row.line ?? ""} ${row.status}`.toLowerCase().includes(needle))
   );
 }

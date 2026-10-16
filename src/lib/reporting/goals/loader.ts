@@ -11,8 +11,8 @@ import type { FxRate, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
 import { buildGoalsView, type GoalsView } from "./view";
 
 const EMPTY_SETTINGS = {
-  largeBatchesPerWorkingDay: 0,
-  largeBatchMinKg: 0,
+  line1KgPerWorkingDay: 0,
+  line1MinKg: 0,
   fullTruckloadMinUsdCents: 0,
   revenueTargetCadCents: 0,
   fullTruckloadsPerMonth: null,

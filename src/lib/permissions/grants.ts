@@ -8,6 +8,7 @@ import {
   INFRA_MCP_SERVICE_PRINCIPAL_ID,
   LEDGER_MCP_SERVICE_PRINCIPAL_ID,
   MCP_AGENT_SERVICE_PRINCIPAL_IDS,
+  MCP_SERVICE_PRINCIPAL_ID,
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
   SYNC_INBOUND_SERVICE_PRINCIPAL_ID,
@@ -61,10 +62,10 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
 // sync.resolve (via sync.mutate) bundle; per-agent identity isolates
 // credentials and audit, not capabilities. Console sweep/retry stay
 // Entra-gated.
-// task.cancel / task.reopen are deliberately absent: any agent holding them could
-// cancel any task. They are granted per principal in SERVICE_GRANTS (task.cancel: only
-// sp_mcp_cos and sp_mcp_ledger; task.reopen: none today, TASK-2529) and to the human
-// admin/owner roles.
+// task.cancel / task.reopen are deliberately absent from this shared bundle: any
+// agent holding them could cancel any task. They are granted per principal in
+// SERVICE_GRANTS (task.cancel: sp_mcp_cursor, sp_mcp_cos, and sp_mcp_ledger;
+// task.reopen: none today, TASK-2529) and to the human admin/owner roles.
 const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "task.read",
   "task.create",
@@ -84,9 +85,18 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "sync.mutate",
 ];
 
-// sp_mcp_ledger is the one steward principal: the agent bundle plus
+// sp_mcp_cursor is the principal Ledger's Task calls authenticate as (no
+// sp_mcp_ledger key, and no events under that principal). Vince approved
+// task.cancel only on 2026-10-16. Not task.reopen, and not task.link_merged_pr.
+const CURSOR_MCP_CAPABILITIES: readonly Capability[] = [
+  ...MCP_AGENT_CAPABILITIES,
+  "task.cancel",
+];
+
+// sp_mcp_ledger is the steward principal: the agent bundle plus
 // task.link_merged_pr (mc_link_merged_pr) and task.cancel (Ledger dedup; Vince
-// 2026-10-15 16:37 ET). Only sp_mcp_cos also holds these two.
+// 2026-10-15 16:37 ET). sp_mcp_cos also holds these two. sp_mcp_cursor holds
+// task.cancel only.
 const LEDGER_MCP_CAPABILITIES: readonly Capability[] = [
   ...MCP_AGENT_CAPABILITIES,
   "task.cancel",
@@ -134,11 +144,13 @@ const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
           ? LEDGER_MCP_CAPABILITIES
           : id === COS_MCP_SERVICE_PRINCIPAL_ID
             ? COS_MCP_CAPABILITIES
-            : id === WORKBENCH_MCP_SERVICE_PRINCIPAL_ID
-              ? WORKBENCH_MCP_CAPABILITIES
-              : id === INFRA_MCP_SERVICE_PRINCIPAL_ID
-                ? INFRA_MCP_CAPABILITIES
-                : MCP_AGENT_CAPABILITIES,
+            : id === MCP_SERVICE_PRINCIPAL_ID
+              ? CURSOR_MCP_CAPABILITIES
+              : id === WORKBENCH_MCP_SERVICE_PRINCIPAL_ID
+                ? WORKBENCH_MCP_CAPABILITIES
+                : id === INFRA_MCP_SERVICE_PRINCIPAL_ID
+                  ? INFRA_MCP_CAPABILITIES
+                  : MCP_AGENT_CAPABILITIES,
     ])
   ),
   [SYNC_INBOUND_SERVICE_PRINCIPAL_ID]: ["sync.service.write", "task.read"],

@@ -13,7 +13,9 @@
 Three monthly goals are tracked in a prototype dashboard built in Claude, which
 read the reporting database through a local MCP server:
 
-- large batches: 2 per working day, ≥ 7,500 kg
+- large batches: 2 per working day, ≥ 7,500 kg. Replaced on 2026-10-16
+  (Vince, TASK-3142) by Line 1 bulk: 20,000 kg per working day of batches
+  ≥ 5,000 kg, which are assumed to run on Line 1
 - full truckloads: ≥ US$18,000 of product per shipment to five customers
 - shipped revenue: $1,000,000 CAD a month
 

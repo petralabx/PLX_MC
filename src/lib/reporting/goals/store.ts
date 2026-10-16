@@ -1,7 +1,9 @@
-// Goals & Production persistence in Mission Control's own Postgres (migration
-// 039): refresh runs and their snapshots, configuration, the USD/CAD history and
-// manual entries. All SQL is parameterized; table and column names are fixed
-// literals. Server-only.
+// Goals & Production persistence in Mission Control's own Postgres (migrations
+// 039 and 042): refresh runs and their snapshots, configuration, the USD/CAD
+// history and manual entries. All SQL is parameterized; table and column names
+// are fixed literals. Server-only. Retired by 042 and no longer read or written
+// here: report_snap_goal_summary, report_snap_daily.large_done / large_open and
+// the large_batch* settings (kept for the previous release and rollback).
 
 import { appendEventTx } from "@/lib/compliance/repo";
 import { query, withTransaction, type TxQuery } from "@/lib/db";
@@ -167,16 +169,10 @@ async function insertSnapshot(q: TxQuery, runId: number, d: Datasets): Promise<v
   const id = (rows: unknown[][]) => rows.map((row) => [runId, ...row]);
   await insertRows(
     q,
-    "report_snap_goal_summary",
-    [["run_id", "bigint"], ["large_done", "integer"], ["large_scheduled_ahead", "integer"], ["large_open_past_date", "integer"]],
-    id([[d.goalSummary.largeDone, d.goalSummary.largeScheduledAhead, d.goalSummary.largeOpenPastDate]])
-  );
-  await insertRows(
-    q,
     "report_snap_daily",
-    [["run_id", "bigint"], ["day", "date"], ["large_done", "integer"], ["large_open", "integer"],
+    [["run_id", "bigint"], ["day", "date"],
       ["cad_this", "numeric"], ["usd_this", "numeric"], ["cad_last", "numeric"], ["usd_last", "numeric"]],
-    id(d.daily.map((r) => [r.day, r.largeDone, r.largeOpen, r.cadThis, r.usdThis, r.cadLast, r.usdLast]))
+    id(d.daily.map((r) => [r.day, r.cadThis, r.usdThis, r.cadLast, r.usdLast]))
   );
   await insertRows(
     q,
@@ -310,12 +306,8 @@ export async function failRun(run: RefreshRun, failure: { code: string; message:
 export async function loadSnapshot(run: RefreshRun): Promise<SnapshotData> {
   // One connection, sequential reads: the snapshot is immutable once written.
   return withTransaction(async (q) => {
-    const [summary] = await q<{ large_done: number; large_scheduled_ahead: number; large_open_past_date: number }>(
-      `SELECT large_done, large_scheduled_ahead, large_open_past_date FROM report_snap_goal_summary WHERE run_id = $1`,
-      [run.id]
-    );
-    const daily = await q<{ day: string; large_done: number; large_open: number; cad_this: string; usd_this: string; cad_last: string; usd_last: string }>(
-      `SELECT day::text AS day, large_done, large_open, cad_this::text AS cad_this, usd_this::text AS usd_this,
+    const daily = await q<{ day: string; cad_this: string; usd_this: string; cad_last: string; usd_last: string }>(
+      `SELECT day::text AS day, cad_this::text AS cad_this, usd_this::text AS usd_this,
               cad_last::text AS cad_last, usd_last::text AS usd_last
          FROM report_snap_daily WHERE run_id = $1 ORDER BY day`,
       [run.id]
@@ -352,14 +344,8 @@ export async function loadSnapshot(run: RefreshRun): Promise<SnapshotData> {
     );
     return {
       cutoffs: { productionCutoff: run.productionCutoff, sageCutoff: run.sageCutoff },
-      goalSummary: {
-        largeDone: summary?.large_done ?? 0,
-        largeScheduledAhead: summary?.large_scheduled_ahead ?? 0,
-        largeOpenPastDate: summary?.large_open_past_date ?? 0,
-      },
       daily: daily.map((r) => ({
-        day: r.day, largeDone: r.large_done, largeOpen: r.large_open,
-        cadThis: r.cad_this, usdThis: r.usd_this, cadLast: r.cad_last, usdLast: r.usd_last,
+        day: r.day, cadThis: r.cad_this, usdThis: r.usd_this, cadLast: r.cad_last, usdLast: r.usd_last,
       })),
       truckloads: truckloads.map((r) => ({
         code: r.code, shipment: r.shipment, shipDate: r.ship_date,
@@ -417,9 +403,10 @@ export async function loadConfig(): Promise<GoalsConfig> {
     return value;
   };
   const truckTarget = setting.get("full_truckloads_per_month");
+  // Other keys, such as 039's retired large_batch* rows, are ignored.
   const settings: GoalSettings = {
-    largeBatchesPerWorkingDay: Number(required("large_batches_per_working_day")),
-    largeBatchMinKg: Number(required("large_batch_min_kg")),
+    line1KgPerWorkingDay: Number(required("line1_kg_per_working_day")),
+    line1MinKg: Number(required("line1_min_kg")),
     fullTruckloadMinUsdCents: toCents(required("full_truckload_min_usd")),
     revenueTargetCadCents: toCents(required("revenue_target_cad")),
     fullTruckloadsPerMonth: truckTarget === undefined || truckTarget === null ? null : Number(truckTarget),

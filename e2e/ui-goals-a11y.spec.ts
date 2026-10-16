@@ -12,7 +12,7 @@ test.describe("goals a11y (G4)", () => {
   test.beforeEach(async ({ page }) => {
     await mockGoalsApi(page);
     await gotoGoals(page);
-    await expect(page.getByTestId("goals-card-large-batches")).toBeVisible();
+    await expect(page.getByTestId("goals-card-line1")).toBeVisible();
     await page.getByText("Day-by-day numbers").click();
     await page.getByText("Monthly numbers").click();
   });

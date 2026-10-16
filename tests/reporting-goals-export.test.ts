@@ -141,7 +141,7 @@ describe("the workbook", () => {
       return out;
     };
     expect(amberHeaders("Goals", 4)).toEqual(["By hand"]);
-    expect(amberHeaders("Daily", 1)).toEqual(["Large batches done (by hand)", "Revenue by hand, CAD"]);
+    expect(amberHeaders("Daily", 1)).toEqual(["Line 1 kg done (by hand)", "Revenue by hand, CAD"]);
     expect(amberHeaders("Truckloads", 1)).toEqual(["Full loads (by hand)", "Partial loads (by hand)", "Product US$ (by hand)"]);
     // The import template: every column is entered by hand except the computed status.
     expect(amberHeaders("Manual entries", 1)).toEqual(ENTRY_COLUMNS.filter((c) => c.key !== "status").map((c) => c.header));
@@ -157,7 +157,9 @@ describe("the workbook", () => {
     expect(daily.getCell("F3")).toMatchObject({ value: 26981.2, numFmt: DOLLAR_FORMAT });
     const goals = sheet(wb, "Goals");
     expect(goals.getCell("D5").value).toEqual(utcDay("2026-10-14"));
-    expect(goals.getCell("B14")).toMatchObject({ value: 7500, numFmt: COUNT_FORMAT });
+    expect(goals.getCell("B13")).toMatchObject({ value: 20_000, numFmt: COUNT_FORMAT });
+    expect(goals.getCell("B14")).toMatchObject({ value: 5000, numFmt: COUNT_FORMAT });
+    expect(goals.getCell("I5").numFmt).toBe(COUNT_FORMAT);
     expect(goals.getCell("B16")).toMatchObject({ value: 1_000_000, numFmt: DOLLAR_FORMAT });
     expect(goals.getCell("B17")).toMatchObject({ value: 1.4219, numFmt: "0.0000" });
     expect(goals.getCell("B18").value).toEqual(utcDay("2026-10-14"));
@@ -210,7 +212,21 @@ describe("Goals", () => {
       formulas[`I${row}`] = `IF($B$12>0,MAX(0,B${row}-G${row})/$B$12,0)`;
     }
     for (const [address, formula] of Object.entries(formulas)) expect(formulaOf(goals.getCell(address)), address).toBe(formula);
+    expect(goals.getCell("A5").value).toBe("Line 1 bulk, kg (batches of 5,000 kg or more)");
     expect(goals.getCell("B6").value).toBe("No target set");
+  });
+
+  it("has no large-batch figure, column or definition left on any sheet", async () => {
+    const { wb } = await build();
+    const found: string[] = [];
+    for (const ws of wb.worksheets) {
+      ws.eachRow((row) =>
+        row.eachCell((cell) => {
+          if (/large|7,?500/i.test(String(cell.value ?? ""))) found.push(`${ws.name}!${cell.address}`);
+        })
+      );
+    }
+    expect(found).toEqual([]);
   });
 
   it("holds the inputs the formulas use: the calendar, the goals, the rate and both cutoffs", async () => {
@@ -220,8 +236,8 @@ describe("Goals", () => {
     expect(inputs).toEqual({
       "Working days this month": 21,
       "Working days left, from today": 13,
-      "Large batches per working day (target)": 2,
-      "Large batch minimum, kg": 7500,
+      "Line 1 bulk per working day, kg (target)": 20_000,
+      "Line 1 minimum batch, kg": 5000,
       "Full truckload minimum, US$ before tax and freight": 18000,
       "Revenue target, CAD": 1_000_000,
       "USD/CAD rate": 1.4219,
@@ -231,9 +247,11 @@ describe("Goals", () => {
       "Working days covered, revenue": 9,
     });
     expect(goals.getCell("C17").value).toBe("Bank of Canada daily rate (FXUSDCAD) for 2026-10-13");
+    expect(goals.getCell("C14").value).toBe("A batch of this many kg or more is assumed to run on Line 1");
+    expect(goals.getCell("C20").value).toBe("To 2026-10-14: FileMaker’s data, or a later Line 1 batch entered by hand");
     // "Due so far" (=B13*B20) recomputes from these exactly as the model did.
-    expect(Number(inputs["Large batches per working day (target)"]) * Number(inputs["Working days covered, production"])).toBe(
-      model.largeBatches.dueSoFar
+    expect(Number(inputs["Line 1 bulk per working day, kg (target)"]) * Number(inputs["Working days covered, production"])).toBe(
+      model.line1.dueSoFarKg
     );
   });
 
@@ -254,15 +272,22 @@ describe("Goals", () => {
 });
 
 describe("Daily, Truckloads and Batches", () => {
-  it("Daily: one row per day of the month with the brief's running revenue, then SUM totals", async () => {
+  it("Daily: one row per day of the month with Line 1 kg and the brief's running revenue, then SUM totals", async () => {
     const { wb, model } = await build();
     const daily = sheet(wb, "Daily");
     expect(model.daily).toHaveLength(31);
+    expect((daily.getRow(1).values as unknown[]).slice(3, 6)).toEqual([
+      "Line 1 kg done (FileMaker)",
+      "Line 1 kg done (by hand)",
+      "Line 1 kg still scheduled",
+    ]);
     model.daily.forEach((day, i) => {
       const r = 2 + i;
       expect(daily.getCell(`A${r}`).value).toEqual(utcDay(day.day));
       expect(daily.getCell(`B${r}`).value).toBe(day.isWorkingDay ? "Yes" : "No");
-      expect(daily.getCell(`D${r}`).value).toBe(day.largeByHand);
+      expect(daily.getCell(`C${r}`)).toMatchObject({ value: day.line1DoneKg, numFmt: COUNT_FORMAT });
+      expect(daily.getCell(`D${r}`).value).toBe(day.line1ByHandKg);
+      expect(daily.getCell(`E${r}`).value).toBe(day.line1ScheduledKg);
       expect(daily.getCell(`H${r}`).value).toBe(day.byHandCadCents / 100);
       expect(isAmber(daily.getCell(`D${r}`)) && isAmber(daily.getCell(`H${r}`))).toBe(true);
       expect(isAmber(daily.getCell(`C${r}`)) || isAmber(daily.getCell(`F${r}`))).toBe(false);
@@ -271,9 +296,9 @@ describe("Daily, Truckloads and Batches", () => {
     });
     expect(daily.getCell("A33").value).toBe("Total");
     for (const col of ["C", "D", "E", "F", "G", "H"]) expect(formulaOf(daily.getCell(`${col}33`)), col).toBe(`SUM(${col}2:${col}32)`);
-    // Oct 13: BC-26286C was scheduled, and M1 completed it by hand.
-    expect(daily.getCell("D14").value).toBe(1);
-    expect(daily.getCell("E14").value).toBe(2);
+    // Oct 13: BC-26286C (10,000 kg) was scheduled, and M1 completed it by hand with 10,050 kg.
+    expect(daily.getCell("D14").value).toBe(10_050);
+    expect(daily.getCell("E14").value).toBe(18_000);
     expect(daily.getCell("H15").value).toBe(41613.92);
   });
 
@@ -318,7 +343,7 @@ describe("Daily, Truckloads and Batches", () => {
     }
   });
 
-  it("Batches: the model's batch list grouped by stage, Large as a formula, hand entries in amber", async () => {
+  it("Batches: the model's batch list grouped by stage, Line 1 as a formula, hand entries in amber", async () => {
     const { wb, model } = await build();
     const batches = sheet(wb, "Batches");
     expect((batches.getRow(1).values as unknown[]).slice(1)).toEqual([
@@ -328,7 +353,7 @@ describe("Daily, Truckloads and Batches", () => {
       "Date",
       "kg",
       "Size band",
-      "Large (7,500 kg+)",
+      "Line 1 (5,000 kg+)",
       "Line",
       "Status",
       "Source",
@@ -454,6 +479,7 @@ describe("Read me", () => {
     const lines = [...Array(ws.rowCount)].map((_, i) => text(i + 1));
     expect(lines.filter((l) => /^\d\. /.test(l)).map((l) => l.slice(0, 2))).toEqual(["1.", "2.", "3.", "4.", "5."]);
     expect(lines.join("\n")).toContain("Import manual entries");
+    expect(lines.join("\n")).toContain("4. Batch: fill in kg (5,000 kg or more counts toward Line 1).");
     const examples = lines.indexOf("Example rows (format only; not imported)") + 1;
     expect(examples).toBeGreaterThan(0);
     const header = (ws.getRow(examples + 1).values as unknown[]).slice(1);
@@ -573,14 +599,14 @@ describe("recalculated by LibreOffice (soffice --headless --convert-to xlsx)", (
         expect(at("I8")).toBeCloseTo(model.revenue.neededPerDayCents / 100, 2);
         expect(at("H8")).toBe(model.revenue.status === "on_track" ? "On track" : "Behind");
         expect([at("B5"), at("C5"), at("G5"), at("G6"), at("G7")]).toEqual([
-          model.largeBatches.target,
-          model.largeBatches.dueSoFar,
-          model.largeBatches.total,
+          model.line1.targetKg,
+          model.line1.dueSoFarKg,
+          model.line1.totalKg,
           model.truckloads.full.total,
           model.truckloads.partial.total,
         ]);
-        expect(Number(at("I5")).toFixed(1)).toBe(model.largeBatches.neededPerDay.toFixed(1));
-        expect(at("H5")).toBe(model.largeBatches.status === "on_track" ? "On track" : "Behind");
+        expect(at("I5")).toBeCloseTo(model.line1.neededPerDayKg, 6);
+        expect(at("H5")).toBe(model.line1.status === "on_track" ? "On track" : "Behind");
 
         // The running revenue line ends where the page's does, to the cent.
         const daily = sheet(wb, "Daily");
@@ -588,13 +614,15 @@ describe("recalculated by LibreOffice (soffice --headless --convert-to xlsx)", (
         expect(resultOf(daily.getCell("I32"))).toBeCloseTo(last.withHandToDateCents / 100, 2);
         expect(resultOf(daily.getCell("J32"))).toBeCloseTo(last.targetToDateCents / 100, 6);
 
-        // Large = Yes on every batch that counts if every scheduled batch runs.
+        // Line 1 = Yes on every batch that counts if every scheduled batch runs: their kg add up to it.
         const batches = sheet(wb, "Batches");
-        let large = 0;
-        for (let r = 2; r <= batches.rowCount; r += 1) if (resultOf(batches.getCell(`G${r}`)) === "Yes") large += 1;
-        expect(large).toBe(model.largeBatches.ifAllRun);
+        let line1Kg = 0;
+        for (let r = 2; r <= batches.rowCount; r += 1) {
+          if (resultOf(batches.getCell(`G${r}`)) === "Yes") line1Kg += Number(batches.getCell(`E${r}`).value);
+        }
+        expect(line1Kg).toBeCloseTo(model.line1.ifAllRunKg, 6);
       }
-      expect([plain.model.largeBatches.ifAllRun, entered.model.largeBatches.ifAllRun]).toEqual([24, 25]);
+      expect([plain.model.line1.ifAllRunKg, entered.model.line1.ifAllRunKg]).toEqual([286_147, 295_197]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

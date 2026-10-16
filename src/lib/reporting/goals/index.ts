@@ -17,7 +17,6 @@ export type {
   FxRate,
   FxSource,
   GoalSettings,
-  GoalSummaryRow,
   IsoDate,
   ManualEntry,
   ReferenceKind,

@@ -6,7 +6,8 @@ The **Goals & Production** report (sidebar: Reporting → Goals & production,
 `/?screen=goals`; on phones it is in the More sheet) and its domain module. It tracks three
 monthly goals for Petra Lab-X against the business's definitions:
 
-- large batches: 2 per working day, 7,500 kg or more
+- Line 1 bulk: 20,000 kg per working day, counting batches of 5,000 kg or more
+  (it replaced the large-batch goal on 2026-10-16; see "Line 1 bulk" below)
 - full truckloads: US$18,000 or more of product per shipment to five customers
 - shipped revenue: $1,000,000 CAD a month
 
@@ -42,15 +43,17 @@ traceable to a refresh run and a named query.
    Money is integer cents parsed exactly from decimal strings. Each converted
    amount is rounded to the cent, half to even: 25,750 × 1.4219 = 36,613.925
    gives 36,613.92.
-3. **Queries** — `queries/*.ts`, one per dataset: `cutoffs`, `goal-summary`,
-   `daily`, `truckloads`, `revenue-by-currency`, `shipments`, `batches`,
+3. **Queries** — `queries/*.ts`, one per dataset: `cutoffs`, `daily`,
+   `truckloads`, `revenue-by-currency`, `shipments`, `batches`,
    `batch-history`, `references` and `customers`.
    - They are adapted from the prototype's verified SQL.
-   - Today is bound as `$1`. The large-batch minimum and truckload codes are
-     bound too, because the config tables live in Mission Control's database
-     and not on the replica.
+   - Today is bound as `$1`. The truckload codes are bound too, because the
+     config tables live in Mission Control's database and not on the replica.
    - Working days are computed in `rules.ts`, so the queries need no holiday
      table.
+   - Line 1 kg are summed in `rules.ts` from `batches`, not in SQL. The
+     `goal-summary` query and `daily`'s large-batch counts were retired with
+     migration 042.
 4. **Refresh** — `refresh.ts`, `source-db.ts`, `fx.ts` and `store.ts`.
    1. The claim takes `pg_advisory_xact_lock`.
       - At most one run is `running`, enforced by a unique index.
@@ -109,8 +112,8 @@ traceable to a refresh run and a named query.
      line.
    - Sections: the three goal cards, the day-by-day charts, truckloads by
      customer, entries by hand, completed and scheduled batches by size, the
-     batch list (search, filters, 7,500 kg toggle, sortable columns) and the
-     rules in plain words.
+     batch list (search, filters, "Line 1 only" toggle, sortable columns) and
+     the rules in plain words.
    - Charts: `StackedColumns` and `RunningLines` in
      `src/components/mc/charts/column-chart.tsx` (native SVG; HTML labels).
      Each has a one-sentence summary and its numbers in a table under it.
@@ -141,7 +144,7 @@ traceable to a refresh run and a named query.
       needed per day over the assumptions block (rows 11–21; rows 20–21 hold
       the working days covered), with In system and By hand taken from the
       Daily and Truckloads totals; on Daily the running revenue and target to
-      date; the truckload totals; Large on Batches. Figures from FileMaker,
+      date; the truckload totals; Line 1 on Batches. Figures from FileMaker,
       Sage and the entries are values, to the cent, as the page computed them.
     - In-system revenue converts USD with Excel's `ROUND` (half away from
       zero), while the page rounds half to even, so the two differ only when a
@@ -198,13 +201,45 @@ manual entries (live) ────────────────┴──�
 3. Create the app roles `Goals.Viewer` and `Goals.Editor` on the Entra app
    registration `plx-mission-control`, and assign the Viewer and Editor groups
    to them on its enterprise application. Assigning groups needs Entra ID P1.
-4. Apply migration 039 through the approved live migration workflow before
-   the code deploys (`docs/runbooks/db-migrate.md`).
+4. Apply migrations 039 and 042 through the approved live migration workflow
+   before the code deploys (`docs/runbooks/db-migrate.md`).
+
+### Line 1 bulk
+
+Approved by Vince Alton on 2026-10-16 (TASK-3142), in place of the large-batch
+goal (2 batches of 7,500 kg or more per working day).
+
+- **Goal.** 20,000 kg of Line 1 bulk per working day
+  (`report_goal_setting.line1_kg_per_working_day`): 420,000 kg in October
+  2026's 21 working days. Due so far counts the working days to production's
+  covered-through date, as the large-batch goal did.
+- **Size decides.** A batch of 5,000 kg or more (`line1_min_kg`; exactly
+  5,000 counts) is assumed to run on Line 1. FileMaker's `line` field is not
+  used: in the 2026-10-14 data every batch of 5,000 kg or more is recorded on
+  line 10 (27 batches) or 5 (5), none on 1. The batch list still shows it.
+- **kg.** A batch's kg is the batch list's: actual kg once Realized (planned
+  if missing), planned while open. Done is FileMaker's Realized Line 1 kg; by
+  hand is the kg of counted entries of 5,000 kg or more, including one that
+  completes an open batch, whose planned kg then leaves the schedule.
+- **One source.** Every Line 1 figure is a sum over the batch list, in whole
+  grams, so the card, the chart, the list, the takeaway and the workbook
+  agree, and runs stored before the change show the new figures at once.
+- **Migration 042** adds the two settings and defaults
+  `report_snap_daily.large_done` / `large_open` to 0. It drops nothing: 039's
+  `large_batch*` settings rows, `report_snap_goal_summary` and those two
+  columns are retired but kept, because production applies 042 before the code
+  deploys, and the release still live until then (or restored by a code
+  rollback) reads and writes them. A later migration can drop them. Rollback:
+  revert the code; run `db/rollback/042_reporting_goals_line1_rollback.sql`
+  only if the Line 1 settings must go too.
 
 ### Interpretations to confirm
 
 - Covered-through dates never run past today. A manual entry dated later this
   month does not raise "due so far" early.
+- Production's covered-through date moves with a counted Line 1 batch entered
+  by hand (5,000 kg or more), as it did with large batches; a smaller batch
+  entered by hand does not move it.
 - Two counted entries with the same batch reference both count. Only the first
   moves the matching open batch out of the schedule. The brief defines no
   duplicate status.
@@ -236,6 +271,7 @@ Depended on by: nothing yet.
 
 - `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, fx, store, refresh, loader, access, entry-input, entries, excel/)
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)
+- `db/migrations/042_reporting_goals_line1.sql` (+ `db/rollback/042_reporting_goals_line1_rollback.sql`) — the Line 1 settings
 - `src/app/api/reporting/goals/` — read, refresh, run, export, entry, customer and import routes; `src/app/api/cron/reporting-goals/` — the daily refresh
 - `src/components/mc/goals/` — the page; `src/components/mc/charts/column-chart.tsx` — its charts; `src/styles/mc-goals.css`
 - `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants

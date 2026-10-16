@@ -99,7 +99,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         lucide: "Target",
         hint: "batches, truckloads and revenue this month",
         aliases: [
-          { label: "Production goals", hint: "large batches per day" },
+          { label: "Production goals", hint: "Line 1 bulk kg per day" },
           { label: "Revenue goal", hint: "revenue against target" },
         ],
       },

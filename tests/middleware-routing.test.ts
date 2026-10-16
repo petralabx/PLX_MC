@@ -3,10 +3,12 @@
 // with Next's own matcher semantics) and assert real paths, not the source text.
 // Each carve-out covers only its own path segment and its children (TASK-3012):
 // a sibling such as /api/cursorX or /signin-anything stays behind the gate.
+import { readFileSync } from "node:fs";
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/auth/edge", () => ({ auth: vi.fn() }));
 
 import { config } from "@/middleware";
 
@@ -67,4 +69,16 @@ describe("middleware matcher", () => {
     "/",
     "/tasks",
   ])("keeps %s behind the session gate", (path) => expect(gated(path)).toBe(true));
+});
+
+describe("middleware edge bundle", () => {
+  it("imports the edge auth entry, which does not reference the mc_users writer", () => {
+    const middleware = readFileSync("src/middleware.ts", "utf8");
+    const edge = readFileSync("src/lib/auth/edge.ts", "utf8");
+    expect(middleware).toContain('from "@/lib/auth/edge"');
+    expect(middleware).not.toContain('from "@/lib/auth"');
+    expect(edge).not.toMatch(
+      /from ["']\.\/identity["']|from ["']@\/lib\/auth\/identity["']|permissions\/repository|@\/lib\/db|syncMcUserAtSignIn/
+    );
+  });
 });

@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-16 (ET) — Edge deploy rejected node:util/types after a green next build
+
+- **What happened:** Vercel preview `dpl_taPkMmReiNoqWxnKDRBWN6VsWZno` compiled, then failed while deploying middleware: `The Edge Function "_middleware" is referencing unsupported modules: node:util/types`. GitHub CI was green.
+- **Root cause:** Middleware imported `@/lib/auth`, and that module's sign-in callback writes `mc_users`. The Edge bundler followed that import through `permissions/repository` into `pg`, which uses `node:util/types`. A successful `next build` does not run Vercel's Edge module check.
+- **Rule going forward:** Middleware imports `@/lib/auth/edge` only. The `mc_users` write stays in `src/lib/auth/index.ts`, which the Edge entry does not import. Before calling an auth change deployed, confirm `.next/server/edge` has no `node:util` or `syncMcUserAtSignIn`. This is the same graph as the 2026-07-23 Edge lesson.
+
 ### 2026-10-15 (ET) — TASK-3011: gating the session still left body-owned fields and racy whole-record writes
 
 - **What happened:** The first TASK-3011 pass gated bucket comments and repo requests with `requireSessionActor` and took the author from the session, but review found that `verified` still came from the body. The comment route also still replaced the whole thread from a client copy that could be stale, outside a lock. Repo decisions were last-write-wins, so a second decision or a pending update could overwrite one already made. And the UI added the approved repo through a separate fire-and-forget call, even when the decision was refused.

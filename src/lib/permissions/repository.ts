@@ -1,4 +1,5 @@
-// Narrow read-only repository for migration-016 identities. The default query
+// Narrow repository for migration-016 identities: reads, plus the two
+// mc_users writes the Entra sign-in makes (TASK-3010). The default query
 // seam is loaded lazily so importing permissions/auth with enforcement off
 // never loads database configuration or opens a connection.
 
@@ -71,6 +72,47 @@ export async function findMcUserByEntraOid(
     accessRole: role,
     status,
   };
+}
+
+/**
+ * Create or update the mc_users row for an Entra sign-in that presented an
+ * MC.* app role. Entra is the source of truth: the role sets access_role and
+ * re-activates a revoked row.
+ */
+export async function upsertMcUserFromEntra(
+  input: { entraOid: string; email: string; displayName?: string | null; accessRole: AccessRole },
+  runQuery: IdentityQuery = defaultIdentityQuery
+): Promise<void> {
+  await runQuery(
+    `INSERT INTO mc_users (id, entra_oid, email, display_name, access_role, status)
+     VALUES ($1, $2, $3, $4, $5, 'active')
+     ON CONFLICT (entra_oid) DO UPDATE
+        SET email = EXCLUDED.email,
+            display_name = COALESCE(EXCLUDED.display_name, mc_users.display_name),
+            access_role = EXCLUDED.access_role,
+            status = 'active',
+            updated_at = now()`,
+    [
+      `usr_${input.entraOid}`,
+      input.entraOid,
+      input.email,
+      input.displayName ?? null,
+      input.accessRole,
+    ]
+  );
+}
+
+/** Mark an mc_users row revoked (a refused sign-in: no MC.* role, not allowlisted). */
+export async function revokeMcUserByEntraOid(
+  entraOid: string,
+  runQuery: IdentityQuery = defaultIdentityQuery
+): Promise<void> {
+  await runQuery(
+    `UPDATE mc_users
+        SET status = 'revoked', updated_at = now()
+      WHERE entra_oid = $1 AND status <> 'revoked'`,
+    [entraOid]
+  );
 }
 
 export async function findGithubIdentityByUserId(

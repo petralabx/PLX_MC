@@ -357,6 +357,7 @@ describe("POST /api/repos/requests — decisions", () => {
 
   it("rejects without adding a repo", async () => {
     authState.session = VINCE;
+    authState.role = "owner";
     m.repoRequests = [pendingRequest()];
     const resp = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ status: "rejected" })), ctx());
     expect(resp.status).toBe(200);
@@ -365,6 +366,7 @@ describe("POST /api/repos/requests — decisions", () => {
 
   it("refuses to approve an unverified request", async () => {
     authState.session = VINCE;
+    authState.role = "owner";
     m.repoRequests = [pendingRequest({ verified: false })];
     const resp = await repoRequestsRoute.POST(
       jsonReq("POST", pendingRequest({ verified: true, status: "approved" })),
@@ -376,6 +378,7 @@ describe("POST /api/repos/requests — decisions", () => {
 
   it("refuses to approve a request in a disallowed org", async () => {
     authState.session = VINCE;
+    authState.role = "owner";
     m.repoRequests = [pendingRequest({ owner: "evil-corp", verified: true })];
     const resp = await repoRequestsRoute.POST(
       jsonReq("POST", pendingRequest({ owner: "evil-corp", status: "approved" })),
@@ -387,6 +390,7 @@ describe("POST /api/repos/requests — decisions", () => {
 
   it("409s when another decision or update won the race", async () => {
     authState.session = VINCE;
+    authState.role = "owner";
     m.repoRequests = [pendingRequest()];
     m.decideRepoRequest.mockResolvedValue(false);
     const resp = await repoRequestsRoute.POST(jsonReq("POST", pendingRequest({ status: "approved" })), ctx());

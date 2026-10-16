@@ -5,8 +5,16 @@
 // stands in. Server-only (imports Auth.js); the client never calls this.
 
 import { auth, oidcEnabled } from "@/lib/auth";
+import { permissionActorFromMcUser } from "@/lib/auth/identity";
 import { ACTORS, HUMANS, OPERATOR_ID } from "@/lib/mc-data/data";
 import type { Actor, Human } from "@/lib/mc-data/types";
+import {
+  authorize,
+  permissionActorFromDirectoryRole,
+  type PermissionResource,
+} from "@/lib/permissions";
+import { authorizeStaged, recordUnresolvedActorDenial } from "@/lib/permissions/enforcement";
+import { findMcUserByEntraOid } from "@/lib/permissions/repository";
 
 import { ApiError } from "./route";
 
@@ -27,21 +35,68 @@ export function sessionAuthorId(auditLabel: string): string {
   return listed?.kind === "human" ? listed.id : auditLabel;
 }
 
-export async function resolveRequestActor(bodyActor: string | undefined): Promise<Actor | undefined> {
-  if (oidcEnabled()) {
-    let session: { user?: { email?: string | null } } | null;
-    try {
-      session = (await auth()) as { user?: { email?: string | null } } | null;
-    } catch {
-      throw new ApiError("not_authenticated", "No signed-in session found.", 401);
+/**
+ * Gate a repo.approve action (repo registry, repo request decisions, skill
+ * submissions). OIDC: the signed-in session's mc_users row decides — its
+ * access_role, kept current from the MC.* Entra app role at sign-in, and its
+ * status — in every enforcement mode, since staged modes would otherwise treat
+ * every person as admin (TASK-3010). A revoked row is refused.
+ *
+ * Transitional: until the MC.* app roles exist and approvers have signed in
+ * again, a session with no mc_users row falls back to its directory (HUMANS)
+ * role, as before TASK-3010, and the fallback is logged. Remove the fallback
+ * once every approver has a row (permissions README, TASK-3010 steps).
+ *
+ * Returns the approver's author id (sessionAuthorId) for self-approval checks.
+ * Dormant local/test mode keeps the body actor's directory role.
+ */
+export async function requireRepoApprover(
+  bodyActor: string | undefined,
+  deniedMessage: string,
+  resource?: PermissionResource
+): Promise<{ authorId: string | undefined }> {
+  if (!oidcEnabled()) {
+    const actor = permissionActorFromDirectoryRole(bodyActor ? ACTORS[bodyActor] : undefined);
+    if (!authorize({ actor, capability: "repo.approve" }).allowed) {
+      throw new ApiError("not_approver", deniedMessage, 403);
     }
-    const actor = actorByEmail(session?.user?.email);
-    if (!actor) {
-      throw new ApiError("not_authenticated", "No signed-in session found.", 401);
-    }
-    return actor;
+    return { authorId: bodyActor };
   }
-  return bodyActor ? ACTORS[bodyActor] : undefined;
+  let session: { user?: { oid?: string | null; email?: string | null } } | null;
+  try {
+    session = (await auth()) as { user?: { oid?: string | null; email?: string | null } } | null;
+  } catch {
+    throw new ApiError("not_authenticated", "No signed-in session found.", 401);
+  }
+  const oid = session?.user?.oid?.trim();
+  if (!oid) throw new ApiError("not_authenticated", "No signed-in session found.", 401);
+  const auditLabel = session?.user?.email?.trim().toLowerCase() || oid;
+  const user = await findMcUserByEntraOid(oid);
+  if (!user) {
+    const directoryActor = actorByEmail(auditLabel);
+    if (authorize({ actor: permissionActorFromDirectoryRole(directoryActor), capability: "repo.approve" }).allowed) {
+      console.warn("[auth] repo.approve by directory role, no mc_users row (TASK-3010 transitional): %s", auditLabel);
+      return { authorId: sessionAuthorId(auditLabel) };
+    }
+    recordUnresolvedActorDenial({
+      site: "repo.approve.session",
+      capability: "repo.approve",
+      actorKind: "human",
+      actorId: oid,
+      resource,
+      auditLabel,
+    });
+    throw new ApiError("not_approver", deniedMessage, 403);
+  }
+  const decision = authorizeStaged({
+    site: "repo.approve.session",
+    capability: "repo.approve",
+    resource,
+    auditLabel,
+    appliedActor: permissionActorFromMcUser(user),
+  });
+  if (!decision.allowed) throw new ApiError("not_approver", deniedMessage, 403);
+  return { authorId: sessionAuthorId(auditLabel) };
 }
 
 // Dormant (no-OIDC) local/test mode has no session provider, so no viewer can
@@ -65,7 +120,8 @@ function viewerFromSession(email: string, name: string | null | undefined): Huma
 // /api/viewer). OIDC: the signed-in Entra session — their directory record
 // when the email is listed, else a viewer built from the session; no readable
 // session → null (nobody is borrowed). Dormant mode → the operator. Never an
-// authorization input — mutating routes gate on resolveRequestActor.
+// authorization input — mutating routes gate on requireRepoApprover or
+// requireSessionActor.
 export async function resolveViewer(): Promise<Human | null> {
   if (!oidcEnabled()) return HUMANS[DORMANT_OPERATOR_ID] ?? null;
   let session: { user?: { email?: string | null; name?: string | null } } | null;

@@ -9,8 +9,8 @@
 //   verifies the repo against the GitHub org itself (allowed org + GitHub
 //   lookup) and re-verifies when the name or owner changes; `verified`, `note`,
 //   `visibility`, `def` and `lang` in the body are ignored.
-// - Deciding needs repo.approve (plus the directory approver role until mode
-//   `enforce`, matching POST /api/repos), is recorded under the session, and is
+// - Deciding needs repo.approve (plus the approver's mc_users role in every
+//   mode, matching POST /api/repos; TASK-3010), is recorded under the session, and is
 //   final. Nobody approves their own request, and only a verified request in an
 //   allowed org is approved. An approval adds the repo to the registry in the
 //   same transaction.
@@ -18,12 +18,10 @@
 
 import { z } from "zod";
 import { ApiError, parseBody, route } from "@/lib/api/route";
-import { resolveRequestActor, sessionAuthorId } from "@/lib/api/session-actor";
-import { permissionsEnforcementMode } from "@/lib/auth/identity";
+import { requireRepoApprover, sessionAuthorId } from "@/lib/api/session-actor";
 import { isAllowedRepoOrg, repoFromRequest } from "@/lib/mc-data/repos";
 import { ALLOWED_REPO_ORGS } from "@/lib/mc-data/data";
 import type { RepoRequest } from "@/lib/mc-data/types";
-import { authorize, permissionActorFromDirectoryRole } from "@/lib/permissions";
 import { requireSessionActor } from "@/lib/routing/mutations/actors";
 import { validateRepoInOrg } from "@/lib/sync";
 import { decideRepoRequest, getRepoRequest, stamp, upsertRepoRequest } from "@/lib/sync/repo";
@@ -70,14 +68,12 @@ export const POST = route(async (req) => {
       throw new ApiError("invalid_request", "A new repo request is filed as pending.", 400);
     }
     const authorized = await requireSessionActor("repo.approve", { type: "repo", id: body.id });
-    // Until enforce, every session is synthesized as admin, so the directory
-    // approver role (the POST /api/repos gate) still decides who may approve.
-    if (permissionsEnforcementMode() !== "enforce") {
-      const directoryActor = permissionActorFromDirectoryRole(await resolveRequestActor(undefined));
-      if (!authorize({ actor: directoryActor, capability: "repo.approve" }).allowed) {
-        throw new ApiError("not_approver", "Only an Owner or Admin can decide a repo request.", 403);
-      }
-    }
+    // Until enforce, every session is synthesized as admin, so the approver's
+    // mc_users role (TASK-3010) still decides who may approve, in every mode.
+    await requireRepoApprover(undefined, "Only an Owner or Admin can decide a repo request.", {
+      type: "repo",
+      id: body.id,
+    });
     const decider = sessionAuthorId(authorized.auditLabel);
     if (existing.status !== "pending") throw decided(existing);
     if (body.status === "approved") {

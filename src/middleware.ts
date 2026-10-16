@@ -5,7 +5,7 @@
 //   2. Basic-auth fallback (PLX_MC_STAGING_PASSWORD set) — break-glass.
 //   3. Neither configured (local dev, tests) — open.
 
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/auth/edge";
 
 export default auth;
 

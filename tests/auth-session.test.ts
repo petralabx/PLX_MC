@@ -27,6 +27,18 @@ describe("sessionStillValid", () => {
     expect(sessionStillValid({ email: "jesse@petrasoap.com", signedInAt: now - 60_000 }, now, allow)).toBe(false);
   });
 
+  it("keeps an MC.* role holder who is not allowlisted until the 12h limit (TASK-3010)", () => {
+    const token = { email: "new.admin@petrasoap.com", roles: ["MC.Admin"], signedInAt: now - 60_000 };
+    expect(sessionStillValid(token, now, allow)).toBe(true);
+    expect(sessionStillValid({ ...token, signedInAt: now - SESSION_MAX_AGE_MS }, now, allow)).toBe(false);
+  });
+
+  it("ends a session with neither an MC.* role nor an allowlist entry", () => {
+    expect(
+      sessionStillValid({ email: "jesse@petrasoap.com", roles: ["Goals.Viewer"], signedInAt: now - 60_000 }, now, allow)
+    ).toBe(false);
+  });
+
   it("rejects a stamp from the future or a non-number", () => {
     expect(sessionStillValid({ email: "oleg@petrasoap.com", signedInAt: now + 60_000 }, now, allow)).toBe(false);
     expect(sessionStillValid({ email: "oleg@petrasoap.com", signedInAt: "yesterday" }, now, allow)).toBe(false);

@@ -214,20 +214,23 @@ describe("service-principal separation", () => {
     });
   });
 
-  it("task.cancel is held by sp_mcp_cursor, sp_mcp_cos, and sp_mcp_ledger only; task.reopen by no service principal (TASK-2529)", () => {
+  it("task.cancel is held by sp_mcp_cursor, sp_mcp_cos, and sp_mcp_ledger only; task.reopen by sp_mcp_ledger only (TASK-2580)", () => {
     for (const role of ["admin", "owner"] as const) {
       expect(capabilitiesForRole(role)).toEqual(expect.arrayContaining(["task.cancel", "task.reopen"]));
     }
     expect(capabilitiesForRole("member")).not.toContain("task.cancel");
+    expect(capabilitiesForRole("member")).not.toContain("task.reopen");
     for (const id of MCP_AGENT_SERVICE_PRINCIPAL_IDS) {
-      expect(capabilitiesForServicePrincipal(id)).not.toContain("task.reopen");
+      if (id !== "sp_mcp_ledger") {
+        expect(capabilitiesForServicePrincipal(id)).not.toContain("task.reopen");
+      }
       if (id === "sp_mcp_cursor" || id === "sp_mcp_cos" || id === "sp_mcp_ledger") continue;
       expect(capabilitiesForServicePrincipal(id)).not.toContain("task.cancel");
     }
     expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.cancel" }).allowed).toBe(true);
   });
 
-  it("sp_mcp_cursor holds task.cancel only; sp_mcp_ledger still holds it and not task.reopen", () => {
+  it("sp_mcp_cursor holds task.cancel only; sp_mcp_ledger holds task.cancel and task.reopen", () => {
     const cursor = capabilitiesForServicePrincipal("sp_mcp_cursor");
     expect(cursor).toContain("task.cancel");
     expect(cursor).not.toContain("task.reopen");
@@ -235,10 +238,10 @@ describe("service-principal separation", () => {
     expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.cancel" }).allowed).toBe(true);
     expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.reopen" }))
       .toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
-    expect(capabilitiesForServicePrincipal("sp_mcp_ledger")).toContain("task.cancel");
+    const ledger = capabilitiesForServicePrincipal("sp_mcp_ledger");
+    expect(ledger).toEqual(expect.arrayContaining(["task.cancel", "task.reopen"]));
     expect(authorize({ actor: service("sp_mcp_ledger"), capability: "task.cancel" }).allowed).toBe(true);
-    expect(authorize({ actor: service("sp_mcp_ledger"), capability: "task.reopen" }))
-      .toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
+    expect(authorize({ actor: service("sp_mcp_ledger"), capability: "task.reopen" }).allowed).toBe(true);
   });
 
   it("sp_mcp_cos is the cursor grant plus exactly task.link_merged_pr", () => {

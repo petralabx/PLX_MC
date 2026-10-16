@@ -65,7 +65,7 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
 // task.cancel / task.reopen are deliberately absent from this shared bundle: any
 // agent holding them could cancel any task. They are granted per principal in
 // SERVICE_GRANTS (task.cancel: sp_mcp_cursor, sp_mcp_cos, and sp_mcp_ledger;
-// task.reopen: none today, TASK-2529) and to the human admin/owner roles.
+// task.reopen: sp_mcp_ledger only, TASK-2580) and to the human admin/owner roles.
 const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "task.read",
   "task.create",
@@ -94,12 +94,13 @@ const CURSOR_MCP_CAPABILITIES: readonly Capability[] = [
 ];
 
 // sp_mcp_ledger is the steward principal: the agent bundle plus
-// task.link_merged_pr (mc_link_merged_pr) and task.cancel (Ledger dedup; Vince
-// 2026-10-15 16:37 ET). sp_mcp_cos also holds these two. sp_mcp_cursor holds
-// task.cancel only.
+// task.link_merged_pr (mc_link_merged_pr), task.cancel (Ledger dedup; Vince
+// 2026-10-15 16:37 ET), and task.reopen (TASK-2580). sp_mcp_cos holds cancel
+// and link_merged_pr but not reopen. sp_mcp_cursor holds task.cancel only.
 const LEDGER_MCP_CAPABILITIES: readonly Capability[] = [
   ...MCP_AGENT_CAPABILITIES,
   "task.cancel",
+  "task.reopen",
   "task.link_merged_pr",
 ];
 

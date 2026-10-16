@@ -83,6 +83,18 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+const gate = vi.hoisted(() => ({ calls: [] as unknown[][] }));
+vi.mock("@/lib/auth/gate", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth/gate")>();
+  return {
+    ...actual,
+    secretMatches: (...args: Parameters<typeof actual.secretMatches>) => {
+      gate.calls.push(args);
+      return actual.secretMatches(...args);
+    },
+  };
+});
+
 import {
   buildListSubscriptionResource,
   defaultSubscriptionExpiry,
@@ -170,11 +182,30 @@ describe("graph subscription helpers (no live Graph)", () => {
 });
 
 describe("clientState + subscription/resource identity", () => {
-  it("verifyClientState is timing-safe and rejects mismatches", () => {
-    expect(verifyClientState("secret", "secret")).toBe(true);
-    expect(verifyClientState("secret", "other")).toBe(false);
-    expect(verifyClientState("", "secret")).toBe(false);
-    expect(verifyClientState(null, "secret")).toBe(false);
+  it("verifyClientState accepts only an exact match", async () => {
+    expect(await verifyClientState("secret", "secret")).toBe(true);
+    expect(await verifyClientState("secret", "other!")).toBe(false);
+    expect(await verifyClientState("secret", "secret-longer")).toBe(false);
+    expect(await verifyClientState("", "secret")).toBe(false);
+    expect(await verifyClientState(null, "secret")).toBe(false);
+  });
+
+  it("verifyClientState compares through secretMatches even on a length mismatch", async () => {
+    gate.calls.length = 0;
+    expect(await verifyClientState("s", "a-much-longer-client-state")).toBe(false);
+    expect(gate.calls).toEqual([["s", "a-much-longer-client-state"]]);
+  });
+
+  it("verifyClientState refuses when the clientState secret is unset or blank", async () => {
+    vi.stubEnv("PLX_MC_GRAPH_WEBHOOK_CLIENT_STATE", "");
+    try {
+      expect(await verifyClientState("anything")).toBe(false);
+      expect(await verifyClientState("")).toBe(false);
+      expect(await verifyClientState("anything", "")).toBe(false);
+      expect(await verifyClientState("   ", "   ")).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("verifyNotificationIdentity requires clientState, active sub, and resource match", async () => {

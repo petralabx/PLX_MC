@@ -360,6 +360,16 @@ export function RulesText({ page }: { page: ReadyPage }) {
         <b>Refresh</b> runs every weekday at 6:00 AM Toronto time; Editors can refresh at most every 5 minutes. A refresh
         that fails keeps the last good data on this page.
       </li>
+      <li>
+        <b>Revenue forecast</b> takes every open Sage order line expected to ship by month end, overdue ones included,
+        at the quantity still to ship × its unit price (US dollars at the Bank of Canada rate). Each line is matched to
+        its FileMaker assembly order by order number and item: Ready when the assembly order is packed or its bulk batch
+        is made (unless it’s scheduled after month end), Planned in time when it’s scheduled from today to month end,
+        Late when it’s scheduled after month end or past its date, Not planned when there is none. Theoretical is the
+        invoiced revenue plus Ready and Planned in time; At risk is Late plus Not planned. Realistic applies the share
+        of Ready and Planned in time actually invoiced in the last complete months (up to three); Pace extends the
+        invoiced revenue over the month’s working days.
+      </li>
     </ul>
   );
 }

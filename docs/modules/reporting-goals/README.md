@@ -17,7 +17,8 @@ replica, refreshed at 06:00 Toronto each weekday and on demand. Staff can add
 An entry counts until its reference appears in the system data.
 
 Not this module's job: writing to FileMaker, Sage or Business Central (never),
-forecasting beyond "if every scheduled batch runs", or months other than the
+forecasting beyond "if every scheduled batch runs" and this month's revenue
+forecast (step 12), or months other than the
 current one (the snapshot tables are month-aware so history can follow).
 
 ## Why
@@ -129,10 +130,10 @@ traceable to a refresh run and a named query.
    - Entry history goes to `report_manual_entry_version`, which only the
      report's Viewers can read.
 10. **Workbook** — `excel/export.ts` (pure, exceljs) builds the brief's seven
-    sheets from the page model plus the run's Sage invoices and truckload
-    shipments (`loadGoalsExport()`). Sheet names and order, the file name and
-    the "Manual entries" columns come from `excel/layout.ts`, the contract
-    shared with the import.
+    sheets, and the Forecast sheet (step 12), from the page model plus the
+    run's Sage invoices and truckload shipments (`loadGoalsExport()`). Sheet
+    names and order, the file name and the "Manual entries" columns come from
+    `excel/layout.ts`, the contract shared with the import.
     - House styles: Arial 10, 14-pt bold titles, header rows bold on light
       grey and frozen, amber (fill `FFF2CC`, font `7F6000`) for whatever was
       entered by hand, real dates, `#,##0` counts and the house dollar format.
@@ -181,6 +182,68 @@ traceable to a refresh run and a named query.
       Confirm applies the uploader's newest preview in one transaction. It is
       refused (409) if the fingerprint changed, so a stale file never
       overwrites someone's edit.
+12. **Revenue forecast** (TASK-3151) — `forecast.ts` (pure), `forecast-read.ts`,
+    `forecast-store.ts`, `queries/forecast-*.ts` and
+    `src/components/mc/goals/forecast.tsx`. The last section of the page, before
+    the rules: this month's revenue against the target, from the open Sage
+    orders matched to FileMaker's plan.
+    - **Datasets.** `forecast-orders`: every open item line of an Active or
+      Future Sage order expected to ship by month end, overdue lines included
+      (quantity still to ship, unit, unit price, currency). `forecast-assembly-orders`:
+      the FileMaker assembly orders (AOs) that can link to those lines, and every
+      AO scheduled this month, each with its bulk batch and that batch's status.
+      Both run last in the refresh's read-only transaction.
+    - **Read access.** Before them, the refresh checks from the catalogs that
+      `mc_goals_ro` can read exactly the columns they read
+      (`FORECAST_COLUMNS`, `queries/forecast-access.ts`). If any is missing it
+      skips both, every other dataset refreshes as before, and the run records
+      it: `report_snap_forecast_summary.access = 'missing'` with the columns, the
+      `reporting.goals.refresh.succeeded` event's `forecast: "missing"`, a log
+      line, and the section's "Waiting for read access to Sage orders and
+      FileMaker assembly orders" naming them.
+    - **The link** is the portal's Projected Revenue join: Sage `ORDNUMBER` +
+      `ITEM` = the AO's order (its order list `oelist_c`, else its orders in
+      FileMaker's order entry, through the portal's "OE Fix", first order only)
+      + its finished product's ERP code (else code). The bulk batch is the AO's
+      `idbatch`, else `idbatch_pre`.
+    - **Buckets.** Each line is split across its AOs, which keep their own date
+      and quantity (packed first, then by date; output beyond what the order's
+      open lines of that item still need, later ones included, is taken as
+      shipped already, oldest first); what no AO covers is Not planned. Each
+      portion lands in one bucket, first match wins: the AO is packed → Ready;
+      scheduled after month end → Late; its bulk batch is made → Ready;
+      scheduled from today to month end → Planned in time; before today →
+      Late; no AO (or an AO with no date) → Not planned.
+    - **Values.** Quantity still to ship × unit price in the order's currency,
+      to the cent; CAD as the Revenue card converts (USD at the run's Bank of
+      Canada rate, half to even, per row; other currencies listed, never
+      converted).
+    - **The four numbers**, against `revenue_target_cad`. Theoretical =
+      invoiced so far (the Revenue card's total, by hand included) + Ready +
+      Planned in time. At risk = Late + Not planned. Pace = invoiced ÷ revenue
+      working days covered × working days in the month. Realistic = invoiced +
+      (Ready + Planned in time) × the average hit rate of up to the three latest
+      complete months. A month's hit rate is the Sage revenue invoiced in it
+      after its first good run, at that run's rate (the month's invoices as the
+      last run of the next month sees them, less those at the first run), ÷
+      that run's Ready + Planned in time. A month counts only when that first
+      run had a forecast and an earlier month is still on record (runs are kept
+      90 days, so the oldest month on record may have lost its first runs).
+      Each run stores those (`report_snap_forecast_summary`, Sage and FileMaker
+      only, no entries by hand), so history needs no other source; until a
+      month is measured, Realistic shows "Measured from" the first month that
+      counts.
+    - Open AOs scheduled this month whose order and item match no open order
+      line (of any date) are a note: production with no order behind it, never
+      revenue.
+    - **The list**: one row per line portion (expected date, order, customer,
+      PO, item, description, still to ship, unit price, value, CAD, bucket, AO,
+      bulk batch), bucket chips with counts, a search (order, customer, PO, item,
+      description, AO) and CAD totals that follow both.
+    - **Storage**: `report_snap_forecast_line`, `report_snap_forecast_ao` and
+      `report_snap_forecast_summary` (migration 043), kept with their run (90
+      days). **Workbook**: the Forecast sheet holds the rows as values and the
+      totals, the four numbers and the hit rates as formulas.
 
 ```
 reporting replica (read-only login) ──┐ one RR read-only tx
@@ -200,6 +263,34 @@ manual entries (live) ────────────────┴──�
    to them on its enterprise application. Assigning groups needs Entra ID P1.
 4. Apply migration 039 through the approved live migration workflow before
    the code deploys (`docs/runbooks/db-migrate.md`).
+5. Revenue forecast (TASK-3151): apply migration 043 (after 042) the same way
+   before its code deploys. Then a DBA runs `readonly-grants-forecast.sql` on
+   the reporting database for the existing `mc_goals_ro` login (fresh installs
+   get the same grants from `readonly-grants.sql`). Until then the section
+   waits for read access and everything else works.
+6. Before relying on the forecast, reconcile three to five open orders against
+   Sage's O/E Order Entry screen and FileMaker, one rule at a time. Each rule is
+   one named fragment or function, so a correction is one edit:
+   1. An order with a partial shipment: Sage's Qty. Ordered, Shipped, B/O,
+      Shipped To Date and Orig. Order against "Still to ship"
+      (`QTY_TO_SHIP_SQL`, `queries/forecast-orders.ts`).
+   2. A line whose price unit differs from its order unit, and one with a
+      discount: Ext. Price against still to ship × Unit Price (`toRow` in
+      `forecast.ts`; discounts aren't deducted).
+   3. One order of each type in use (Active, Future, Standing, Quote) and one on
+      hold (`COUNTED_ORDER_TYPES_SQL`).
+   4. A line without its own Exp. Ship Date (`EXPECTED_DATE_SQL`), a
+      miscellaneous charge and a comment line (`ITEM_LINES_SQL`).
+   5. Two AOs: their order list and finished product against the order number
+      and item (`AO_ORDER_LIST_SQL`, `AO_ITEM_SQL`,
+      `queries/forecast-assembly-orders.ts`; `fixOeNumber`, `linkedOrderNumber`),
+      one AO listing several orders, and one created in the portal.
+   6. An AO's quantity against what it makes for the order, in pieces and in
+      cases (`aoQtyInLineUnit`), and its status and bulk batch's status against
+      FileMaker (`aoStage`, `isBulkMade`, `bucketFor`). One order with lines of
+      an item in two months and an AO for each (`LATER_QTY_SQL`, `forecastRows`).
+   7. An order shipped but not yet invoiced: when it leaves the open orders and
+      when its invoice counts.
 
 ### Interpretations to confirm
 
@@ -211,6 +302,47 @@ manual entries (live) ────────────────┴──�
 - An invoice without a shipment number counts as its own shipment
   (`invoice:<invnumber>`), so blank numbers never merge into one load or
   across months. The brief defines a shipment by its number only.
+- Revenue forecast (TASK-3151), each reconciled by Setup step 6:
+  - Still to ship is `QTYORDERED − QTYSHIPPED`, as the portal reads open
+    quantity: Sage lowers QTYORDERED as shipments post. Sage's COMPLETE flags
+    are never read (the header's is an enumeration, 1–5). A posted shipment not
+    yet invoiced is in neither invoiced nor open orders.
+  - Value is still to ship × UNITPRICE, which is per order unit (ORDUNIT; the
+    pricing unit, PRIUNTPRC, isn't used). Line and order discounts are not
+    deducted, so the value can be above what Sage will invoice. Quantities are
+    valued to two decimals (Sage keeps four).
+  - Active (1) and Future (2) orders count; Standing (3, a template) and Quote
+    (4) don't. Orders on hold count. As in the portal: miscellaneous charges
+    (line type 2), the C and MISC items and orders whose reference or
+    description says TEST are left out.
+  - The expected date is the line's EXPDATE, else the order's. A line with
+    neither is left out.
+  - An AO links to the first order in its list only, as the portal joins, so
+    a second order on the list shows Not planned unless it has its own AO.
+    Order numbers and item codes match exactly, trimmed. The item code comes
+    from `idfinprod`; the portal's `portal_product_id` override (TASK-2650,
+    through a gold table) isn't read.
+  - An AO's quantity is its `qtytotal`, in pieces, ÷ `unitsperbox` for a case
+    line when it is over 1. The portal values `qtymfgleftoe_c`, but FileMaker
+    calculates it: it is 0 once an AO is packed and empty on AOs created in
+    the portal, so it can't place a packed AO's goods in Ready. An AO without a
+    readable quantity covers nothing.
+  - Several AOs on one order and item form one stream: packed first, then by
+    scheduled date. Output beyond what the order's open lines of that item
+    still need (those due after month end or undated included,
+    `LATER_QTY_SQL`) is taken as shipped already, from the oldest, which is
+    conservative when AOs were made bigger than the order. The lines of one
+    order and item share the first line's unit.
+  - AO statuses Realized and Completed are packed; Cancelled AOs never link.
+    An AO with no scheduled date is Not planned unless it is packed or its
+    bulk is made. A bulk batch is made when FileMaker marks it Realized.
+  - The hit rate averages the monthly rates (each rounded to the cent of
+    Ready + Planned in time before the mean), uncapped; a month counts once a
+    run in the month after it has closed it. A month is measured from its
+    first good run only, so the month the forecast or its read access arrives
+    isn't measured. With runs kept 90 days, the third complete month's first
+    runs are almost always gone, so in practice Realistic averages at most two
+    months; three would need about 125 days of run history.
 
 ## Dependencies
 
@@ -238,7 +370,8 @@ Depended on by: nothing yet.
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)
 - `src/app/api/reporting/goals/` — read, refresh, run, export, entry, customer and import routes; `src/app/api/cron/reporting-goals/` — the daily refresh
 - `src/components/mc/goals/` — the page; `src/components/mc/charts/column-chart.tsx` — its charts; `src/styles/mc-goals.css`
-- `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants
+- `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants; `readonly-grants-forecast.sql` — the forecast's grants for the existing login
+- Revenue forecast (TASK-3151): `src/lib/reporting/goals/forecast.ts` (pure), `forecast-read.ts`, `forecast-store.ts`, `queries/forecast-{orders,assembly-orders,access}.ts`; `src/components/mc/goals/forecast.tsx`; `db/migrations/043_reporting_goals_forecast.sql` (+ rollback); `tests/reporting-goals-forecast*.test.ts` and the forecast block of `tests/reporting-goals-postgres.test.ts` (`tests/reporting-goals-forecast-replica.ts` builds the source tables from `forecast-source.json`); `e2e/goals-forecast.spec.ts`
 - `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16), route, page and workbook tests against the 2026-10-14 figures (the workbook's LibreOffice recalculation skips where `soffice` isn't installed, as in CI, and logs why); `tests/reporting-goals-entries*.test.ts` — validation, the import plan, and the entry and import routes against PG16 (`tests/reporting-goals-workbook.ts` builds the workbooks); `tests/reporting-goals-roundtrip.test.ts` — the real export read back by the import (the round-trip guarantee)
 - `e2e/goals.spec.ts`, `e2e/goals-export.spec.ts`, `e2e/ui-goals-{responsive,a11y}.spec.ts` — the page in a browser (`e2e/helpers/goals.ts` serves the same fixture); `e2e/goals-entries.spec.ts`, `e2e/ui-goals-entries-{responsive,a11y}.spec.ts` — adding, editing, deleting and importing entries (`e2e/helpers/goals-entries.ts` serves the entries API in memory)
 

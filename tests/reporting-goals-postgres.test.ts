@@ -39,7 +39,12 @@ import {
   type RefreshRun,
 } from "@/lib/reporting/goals";
 
-import { DATASETS, TODAY } from "./reporting-goals-helpers";
+import { FORECAST_COLUMNS, forecastRows, type ForecastView } from "@/lib/reporting/goals";
+import { loadForecast } from "@/lib/reporting/goals/forecast-store";
+import { forecastAosQuery } from "@/lib/reporting/goals/queries/forecast-assembly-orders";
+
+import { createForecastSourceTables, loadForecastSource } from "./reporting-goals-forecast-replica";
+import { DATASETS, FORECAST, TODAY } from "./reporting-goals-helpers";
 import source from "./fixtures/reporting-goals/2026-10-14/source.json";
 import entries from "./fixtures/reporting-goals/2026-10-14/entries.json";
 
@@ -111,6 +116,8 @@ async function loadReplica(db: Client): Promise<void> {
   for (const c of source.customers) {
     await db.query(`INSERT INTO sage.ar_customer (idcust, namecust, codecurn) VALUES ($1, $2, $3)`, [c.idcust, c.namecust, c.codecurn]);
   }
+  // Empty until the revenue forecast's tests load them (the grant script grants on them).
+  await createForecastSourceTables(db);
   // The shipped grant script, as a DBA would run it (psql variable filled in).
   const grants = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants.sql"), "utf8");
   await db.query(grants.replace(":'password'", "'disposable-test-password'"));
@@ -414,5 +421,176 @@ describe("claims, limits and retention", () => {
     expect(withLists.map((r) => String(r.run_id))).toEqual(lastGood.map((r) => String(r.id)));
     const customers = await mcQuery<{ run_id: string }>(`SELECT DISTINCT run_id FROM report_snap_customer ORDER BY run_id DESC`);
     expect(customers.map((r) => String(r.run_id))).toEqual(lastGood.map((r) => String(r.id)));
+  });
+});
+
+describe("revenue forecast (TASK-3151)", () => {
+  const sortedJson = <T>(rows: T[]) => rows.map((r) => JSON.stringify(r)).sort();
+  // Every forecast column but silver.batches' (granted with the report itself), as the refresh names them.
+  const NEW_COLUMNS = FORECAST_COLUMNS.filter(([schema, table]) => `${schema}.${table}` !== "silver.batches");
+  const missingNames = NEW_COLUMNS.flatMap(([schema, table, columns]) => columns.map((c) => `${schema}.${table}.${c}`));
+
+  function ready(view: ForecastView | null) {
+    if (view?.state !== "ready") throw new Error(`forecast is ${view?.state ?? "missing"}`);
+    return view;
+  }
+
+  beforeAll(async () => {
+    await loadForecastSource(reportingAdmin);
+  });
+
+  it("never reads Sage's COMPLETE flags or FileMaker's calculated leftovers", async () => {
+    const ro = await connect(state.reportingUrl);
+    try {
+      await expect(ro.query("SELECT complete FROM sage.oe_order_header LIMIT 1")).rejects.toMatchObject({ code: "42501" });
+      await expect(ro.query("SELECT complete FROM sage.oe_order_detail LIMIT 1")).rejects.toMatchObject({ code: "42501" });
+      await expect(ro.query("SELECT qtymfgleftoe_c FROM public.assembly_order LIMIT 1")).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await ro.end();
+    }
+  });
+
+  it("returns the fixture's open order lines and assembly orders through the read-only login", async () => {
+    // Left out by the SQL: a quote, a standing order, a TEST order (reference) and one whose description
+    // says test, a line due next month, a line with no expected date, a misc charge, a "C" line, fully
+    // shipped lines (one with Sage's COMPLETE = 1, one on an order whose COMPLETE enum says 4) and a line
+    // whose posted shipment covers it. Kept: an order whose COMPLETE enum says 3 but still has quantity
+    // to ship, a future order, and a line dated by its order (its own expdate is 0). OR1000160001's
+    // November line of the same item rides on its October line as laterQty.
+    const { forecast } = await readDatasets(TODAY, await loadConfig());
+    expect(forecast.access).toBe("read");
+    expect(forecast.missing).toEqual([]);
+    expect(forecast.lines).toEqual(FORECAST.data.lines);
+    // AOs: oelist_c, else FileMaker's order-entry link (AO-26301E); the bulk batch through idbatch, else
+    // idbatch_pre (AO-26307B); none for an old AO on a closed order or one due next month only.
+    expect(sortedJson(forecast.aos)).toEqual(sortedJson(FORECAST.data.aos));
+  });
+
+  it("links every AO to its order-entry orders in one pass, not a lookup per AO", async () => {
+    // The query reads every AO, and the login's statement timeout is 120 s: on 30,000 synthetic AOs a
+    // lookup per AO took 78 s, one grouped pass 2 s.
+    const ro = await connect(state.reportingUrl);
+    try {
+      const plan = await ro.query<{ "QUERY PLAN": string }>(`EXPLAIN ${forecastAosQuery.sql}`, [TODAY]);
+      expect(plan.rows.map((r) => r["QUERY PLAN"]).join("\n")).not.toMatch(/SubPlan/);
+    } finally {
+      await ro.end();
+    }
+  });
+
+  it("without its grants (an existing login), the forecast waits for read access and everything else refreshes", async () => {
+    for (const [schema, table, columns] of NEW_COLUMNS) {
+      await reportingAdmin.query(`REVOKE SELECT (${columns.map((c) => `"${c}"`).join(", ")}) ON ${schema}.${table} FROM mc_goals_ro`);
+    }
+    await allowNextUserRefresh();
+    const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T17:00:00Z"));
+    expect(claim.kind).toBe("claimed");
+    const run = await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+    expect(run).toMatchObject({ status: "succeeded", error: null });
+    expect(run.rowCounts).toMatchObject({ batches: 94, shipments: 70, daily: 31, forecastLines: 0, forecastAos: 0 });
+
+    const [summary] = await mcQuery<{ access: string; missing: string[]; lines: number; ready_cad: string | null }>(
+      `SELECT access, missing, lines, ready_cad::text AS ready_cad FROM report_snap_forecast_summary WHERE run_id = $1`,
+      [run.id]
+    );
+    expect(summary).toEqual({ access: "missing", missing: missingNames, lines: 0, ready_cad: null });
+    expect(await mcQuery(`SELECT 1 FROM report_snap_forecast_line WHERE run_id = $1`, [run.id])).toEqual([]);
+    const [event] = await mcQuery<{ payload: { runId: number; forecast: string } }>(
+      `SELECT payload FROM mc_events WHERE kind = 'reporting.goals.refresh.succeeded' ORDER BY seq DESC LIMIT 1`
+    );
+    expect(event.payload).toMatchObject({ runId: run.id, forecast: "missing" });
+
+    const view = await loadGoalsView();
+    expect(view.run?.id).toBe(run.id);
+    expect(view.forecast).toEqual({
+      state: "waiting_for_access",
+      missing: NEW_COLUMNS.map(([schema, table, columns]) => ({ relation: `${schema}.${table}`, columns: [...columns] })),
+    });
+    expect(money(view.model!.revenue.inSystemCents)).toBe("367014.16");
+  });
+
+  it("after readonly-grants-forecast.sql (re-runnable), the next refresh stores the datasets and the run's summary", async () => {
+    const script = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants-forecast.sql"), "utf8");
+    await reportingAdmin.query(script);
+    await reportingAdmin.query(script);
+    await allowNextUserRefresh();
+    const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T17:10:00Z"));
+    const run = await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+    expect(run).toMatchObject({ status: "succeeded", error: null });
+    expect(run.rowCounts).toMatchObject({ batches: 94, forecastLines: 15, forecastAos: 21 });
+
+    const [summary] = await mcQuery(
+      `SELECT access, missing, lines, ready_cad::text AS ready, planned_cad::text AS planned, late_cad::text AS late,
+              not_planned_cad::text AS not_planned
+         FROM report_snap_forecast_summary WHERE run_id = $1`,
+      [run.id]
+    );
+    expect(summary).toEqual({
+      access: "read", missing: [], lines: 15, ready: "53762.80", planned: "64627.53", late: "27917.55", not_planned: "12785.70",
+    });
+    // The datasets come back from storage exactly as they were read.
+    const stored = await loadForecast(run);
+    expect(stored?.data.lines).toEqual(FORECAST.data.lines);
+    expect(sortedJson(stored?.data.aos ?? [])).toEqual(sortedJson(FORECAST.data.aos));
+
+    const view = await loadGoalsView();
+    const forecast = ready(view.forecast);
+    // Stored and read back, the rows are exactly what the fixture's datasets give.
+    expect(forecast.rows).toEqual(forecastRows(FORECAST.data, TODAY, run.fxRate!));
+    expect(forecast.invoicedCents).toBe(view.model!.revenue.totalCents);
+    expect(forecast.theoreticalCents - forecast.invoicedCents).toBe(11_839_033);
+    expect(money(forecast.atRiskCents)).toBe("40703.25");
+    expect(forecast.unordered).toEqual({ count: 2, pieces: 8400 });
+    // Only October is on record, and the oldest month on record never counts (runs are kept 90 days, so its
+    // first runs may be gone): the hit rate starts with November.
+    expect([forecast.realistic, forecast.measuredFrom]).toEqual([null, "2026-11-01"]);
+  });
+
+  it("measures the hit rate once a month is complete, from the stored summaries", async () => {
+    // September's first good run: 5,000 CAD invoiced so far, 900,000 ready + planned. An August run from before
+    // the forecast is on record, so September's first runs are too. Run ids follow time (claims are serialized),
+    // so the backdated runs take ids -1 and 0. Today's run closes September.
+    await mcQuery(
+      `INSERT INTO report_refresh_run (id, trigger, requested_by, today, status, started_at, finished_at, fx_rate, fx_rate_date, fx_source)
+       VALUES (-1, 'cron', 'cron', '2026-08-31', 'succeeded', now() - interval '46 days', now() - interval '46 days', 1.38, '2026-08-28', 'boc')`
+    );
+    const [sep] = await mcQuery<{ id: string }>(
+      `INSERT INTO report_refresh_run (id, trigger, requested_by, today, status, started_at, finished_at, fx_rate, fx_rate_date, fx_source)
+       VALUES (0, 'cron', 'cron', '2026-09-01', 'succeeded', now() - interval '45 days', now() - interval '45 days', 1.37, '2026-08-31', 'boc')
+       RETURNING id`
+    );
+    await mcQuery(
+      `INSERT INTO report_snap_revenue (run_id, currency, this_month, invoices, net_before_tax) VALUES ($1, 'CAD', true, 1, 5000)`,
+      [sep.id]
+    );
+    await mcQuery(
+      `INSERT INTO report_snap_forecast_summary (run_id, access, lines, ready_cad, planned_cad, late_cad, not_planned_cad)
+       VALUES ($1, 'read', 40, 500000, 400000, 10, 20)`,
+      [sep.id]
+    );
+    const view = await loadGoalsView();
+    const forecast = ready(view.forecast);
+    // Closed by today's run: September is 683,025.94 CAD + US$228,102.66 × 1.37 (312,500.64), less the 5,000 at its first run.
+    expect(forecast.realistic!.months).toEqual([
+      expect.objectContaining({ month: "2026-09-01", firstRunId: Number(sep.id), readyPlannedCents: 90_000_000, invoicedAfterCents: 99_052_658 }),
+    ]);
+    expect(forecast.measuredFrom).toBe("2026-09-01");
+    expect(forecast.realistic!.cents).toBe(forecast.invoicedCents + Math.round((11_839_033 * 99_052_658) / 90_000_000));
+  });
+
+  it("goes with its run: pruning a run deletes its forecast rows and summary", async () => {
+    const [waiting] = await mcQuery<{ run_id: string }>(
+      `SELECT run_id FROM report_snap_forecast_summary WHERE access = 'missing' ORDER BY run_id DESC LIMIT 1`
+    );
+    const [read] = await mcQuery<{ run_id: string }>(
+      `SELECT run_id FROM report_snap_forecast_summary WHERE access = 'read' AND lines = 15 ORDER BY run_id DESC LIMIT 1`
+    );
+    await mcQuery(`UPDATE report_refresh_run SET started_at = now() - interval '91 days' WHERE id = ANY($1::bigint[])`, [[waiting.run_id, read.run_id]]);
+    await allowNextUserRefresh();
+    const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T17:20:00Z"));
+    await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+    for (const table of ["report_snap_forecast_summary", "report_snap_forecast_line", "report_snap_forecast_ao"]) {
+      expect(await mcQuery(`SELECT 1 FROM ${table} WHERE run_id = ANY($1::bigint[])`, [[waiting.run_id, read.run_id]]), table).toEqual([]);
+    }
   });
 });

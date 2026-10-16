@@ -151,10 +151,14 @@ test.describe("goals & production", () => {
     });
     await page.goto("/?screen=goals");
     await waitForHydration(page);
-    await expect(screen(page).locator(".gp-skel")).toHaveCount(8);
+    // One skeleton per section (the revenue forecast's included), then one "Failed to load." each.
+    const sections = screen(page).locator("section.gp-sec");
+    await expect(sections.last()).toBeVisible();
+    const sectionCount = await sections.count();
+    await expect(screen(page).locator(".gp-skel")).toHaveCount(sectionCount);
     const loading = await page.getByTestId("goals-batches").boundingBox();
     release();
-    await expect(page.getByText("Failed to load.")).toHaveCount(8);
+    await expect(page.getByText("Failed to load.")).toHaveCount(sectionCount);
     await expect(page.getByTestId("goals-as-of")).toHaveText("Couldn’t load the report: Internal error.");
     // The failed state takes the skeleton's place: nothing below moves.
     const failed = await page.getByTestId("goals-batches").boundingBox();

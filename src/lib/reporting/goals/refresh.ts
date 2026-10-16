@@ -4,6 +4,7 @@
 // and the page keeps showing the last good one. Server-only.
 
 import { previousMonthStart, torontoDate } from "./calendar";
+import { readForecast } from "./forecast-read";
 import { fetchUsdCadRates, type FetchRates } from "./fx";
 import { batchHistoryQuery } from "./queries/batch-history";
 import { batchesQuery } from "./queries/batches";
@@ -87,6 +88,8 @@ export async function readDatasets(
       batchHistory: await read(batchHistoryQuery, [today]),
       references: await read(referencesQuery, [today]),
       customers: await read(customersQuery, []),
+      // Last, and only when the login can read its tables (TASK-3151).
+      forecast: await readForecast(q, today),
     };
   }, attemptTimeoutMs);
 }

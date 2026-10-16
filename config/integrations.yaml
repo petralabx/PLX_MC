@@ -339,7 +339,7 @@ integrations:
       vercel.json. Revoking the mc_goals_ro login on the reporting database cuts
       access at the source.
     auth_source:
-      - PLX reporting replica — REPORTING_DATABASE_URL via reportingDatabaseUrl(); login mc_goals_ro with column-level SELECT on silver.batches, sage.oe_invoice_header and sage.ar_customer only, default_transaction_read_only = on (docs/modules/reporting-goals/readonly-grants.sql). TLS verified against the vendored RDS CA bundle (src/lib/db/tls.ts).
+      - PLX reporting replica — REPORTING_DATABASE_URL via reportingDatabaseUrl(); login mc_goals_ro with column-level SELECT on silver.batches, sage.oe_invoice_header and sage.ar_customer, plus for the revenue forecast (TASK-3151) sage.oe_order_header, sage.oe_order_detail, public.assembly_order, public.order_entry, public.order_entry_item, public.order_entry_item_assembly and silver.finished_products, and nothing else; default_transaction_read_only = on (docs/modules/reporting-goals/readonly-grants.sql; the existing login gets the forecast's columns from readonly-grants-forecast.sql). TLS verified against the vendored RDS CA bundle (src/lib/db/tls.ts).
       - Bank of Canada Valet API (FXUSDCAD) — public, no credential.
       - Viewer / Editor — Entra app roles Goals.Viewer / Goals.Editor on the existing plx-mission-control sign-in app, carried in the session (no new Graph permission).
     health_check: >-
@@ -347,7 +347,10 @@ integrations:
       SQLSTATE and message, cutoffs, rate, rate source, row counts) and a
       reporting.goals.refresh.succeeded|failed event in mc_events. The page shows
       "data as of" the last good run, both source cutoffs, a data-is-behind
-      banner, and a flag when the rate is a stored fallback.
+      banner, and a flag when the rate is a stored fallback. Each good run
+      records whether the login could read the revenue forecast's columns
+      (report_snap_forecast_summary, and forecast: read|missing on the event);
+      when it couldn't, the section names the missing columns.
     fallback_path: >-
       A failed refresh never replaces the last good snapshot; the page keeps
       showing it with the failure beside it. A failed Bank of Canada fetch falls
@@ -355,7 +358,9 @@ integrations:
       shipments the systems have not caught up with.
     data_audit_boundary: >-
       Reads only the granted columns, in one read-only REPEATABLE READ
-      transaction per attempt. Snapshots live in Mission Control's Postgres
+      transaction per attempt; the forecast's grants are checked from the
+      catalogs first, and without them its two datasets are skipped, never
+      attempted. Snapshots live in Mission Control's Postgres
       (90 days; reference and customer lists for the last 3 good runs). Logs and
       mc_events carry run ids, counts and error codes, never row contents.
       Manual-entry history stays in report_manual_entry_version (readable by the

@@ -207,3 +207,44 @@ export {
   resolveGoalsActor,
 } from "./access";
 export type { GoalsActor, GoalsRole } from "./access";
+
+// Revenue forecast (TASK-3151): its exports go below this line. forecast.ts is
+// pure; client components take its runtime helpers from ./forecast directly.
+export {
+  FORECAST_BUCKETS,
+  FORECAST_BUCKET_LABELS,
+  FORECAST_FILTERS,
+  HIT_RATE_MONTHS,
+  aoQtyInLineUnit,
+  aoStage,
+  bucketFor,
+  buildForecast,
+  filterForecastRows,
+  fixOeNumber,
+  forecastCadCents,
+  forecastRows,
+  forecastSummary,
+  hitRateMonths,
+  isBulkMade,
+  isCaseUnit,
+  linkedOrderNumber,
+  oeNumbersFromList,
+  orderItemKey,
+  otherCurrencyTotals,
+  productionWithoutOrders,
+} from "./forecast";
+export type {
+  AoStage,
+  ForecastBucket,
+  ForecastFilter,
+  ForecastInput,
+  ForecastReady,
+  ForecastRow,
+  ForecastRunPoint,
+  ForecastSnapshot,
+  ForecastSummary,
+  ForecastView,
+  HitRateMonth,
+} from "./forecast";
+export type { ForecastAccess, ForecastAoRow, ForecastDatasets, ForecastLineRow } from "./types";
+export { FORECAST_COLUMNS } from "./queries/forecast-access";

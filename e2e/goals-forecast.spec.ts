@@ -1,0 +1,112 @@
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Page } from "@playwright/test";
+
+import type { GoalsPage } from "../src/lib/reporting/goals";
+import { waitForHydration } from "./helpers";
+import { goalsPage, gotoGoals, mockGoalsApi } from "./helpers/goals";
+
+// Revenue forecast on Goals & Production (TASK-3151), against the 2026-10-14
+// fixture with M1–M7 entered: the section sits last, before the rules; its
+// chips and search change the rows and the totals; and it says when it is
+// waiting for read access. Axe-clean in light and dark, with numbers and while
+// waiting. No sideways scrolling at desktop, tablet and phone widths is checked
+// on the whole screen, this section included, by e2e/ui-goals-responsive.spec.ts.
+
+const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+const section = (page: Page) => page.getByTestId("goals-forecast");
+
+const WAITING: GoalsPage = goalsPage({}, undefined, {
+  data: {
+    access: "missing",
+    missing: ["sage.oe_order_header.type", "sage.oe_order_header.expdate", "public.assembly_order.qtytotal"],
+    lines: [],
+    aos: [],
+  },
+  history: [],
+});
+
+test.describe("goals revenue forecast", () => {
+  test("sits at the bottom, after the batch list and before the rules, with its four numbers", async ({ page }) => {
+    await mockGoalsApi(page);
+    await gotoGoals(page);
+    await expect(section(page)).toBeVisible();
+    const order = await page
+      .locator("[data-testid='goals-screen'] section.gp-sec")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+    expect(order.slice(-2)).toEqual(["goals-forecast", "goals-rules"]);
+    expect(order.indexOf("goals-forecast")).toBeGreaterThan(order.indexOf("goals-batches"));
+
+    const numbers = section(page).getByTestId("goals-forecast-numbers");
+    await expect(numbers.locator("li")).toHaveCount(4);
+    await expect(numbers.locator("li").nth(0)).toContainText("Theoretical$527,018of $1,000,000");
+    await expect(numbers.locator("li").nth(1)).toContainText("At risk$40,703");
+    await expect(numbers.locator("li").nth(2)).toContainText("Realistic$503,340");
+    await expect(numbers.locator("li").nth(2)).toContainText("80.0% hit rate, measured over September 2026");
+    await expect(numbers.locator("li").nth(3)).toContainText("Pace$953,466");
+    await expect(section(page)).toContainText("2 assembly orders scheduled this month (8,400 pieces) have no open Sage order behind them");
+    await expect(section(page)).toContainText("From queries revenue-by-currency, forecast-orders, forecast-assembly-orders · run #41");
+    await expect(page.getByTestId("goals-rules")).toContainText("Revenue forecast takes every open Sage order line");
+  });
+
+  test("bucket chips and the search change the rows and the totals", async ({ page }) => {
+    await mockGoalsApi(page);
+    await gotoGoals(page);
+    const list = section(page).getByRole("region", { name: "Open orders this month" });
+    const status = section(page).locator(".gp-count");
+    const search = section(page).getByLabel("Search open orders");
+    await expect(list.locator("tbody tr")).toHaveCount(18);
+    await expect(status).toHaveText("Showing 18 of 18 rows · 159,093.58 CAD (and EUR 2,100.00, not converted)");
+
+    await section(page).getByRole("button", { name: /^Late/ }).click();
+    await expect(section(page).getByRole("button", { name: /^Late/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(list.locator("tbody tr")).toHaveCount(3);
+    await expect(status).toHaveText("Showing 3 of 18 rows · 27,917.55 CAD");
+    await expect(list.locator("tfoot")).toContainText("27,917.55");
+
+    await section(page).getByRole("button", { name: /^All/ }).click();
+    await search.fill("a1 american");
+    await expect(list.locator("tbody tr")).toHaveCount(5);
+    await expect(status).toHaveText("Showing 5 of 18 rows · 54,743.15 CAD");
+    await section(page).getByRole("button", { name: /^Ready/ }).click();
+    await expect(list.locator("tbody tr")).toHaveCount(1);
+    await expect(list.locator("tbody tr")).toContainText("AO-26275G");
+    await expect(status).toHaveText("Showing 1 of 18 rows · 17,062.80 CAD");
+
+    await search.fill("nothing like this");
+    await expect(section(page).getByText("No open orders match these filters.")).toBeVisible();
+    await expect(status).toHaveText("Showing 0 of 18 rows · 0.00 CAD");
+  });
+
+  test("while the login can't read the orders it says so, names what's missing, and the rest of the page stays", async ({ page }) => {
+    await mockGoalsApi(page, WAITING);
+    await gotoGoals(page);
+    const waiting = section(page).getByTestId("goals-forecast-waiting");
+    await expect(waiting).toContainText("Waiting for read access to Sage orders and FileMaker assembly orders.");
+    await expect(waiting).toContainText("sage.oe_order_header: type, expdate");
+    await expect(waiting).toContainText("public.assembly_order: qtytotal");
+    await expect(section(page).getByRole("region", { name: "Open orders this month" })).toHaveCount(0);
+    await expect(page.getByTestId("goals-card-revenue")).toContainText("$408,628 of $1,000,000");
+  });
+
+  for (const mode of ["light", "dark"] as const) {
+    test(`has no axe violations in ${mode} mode, with numbers and while waiting`, async ({ page }) => {
+      const scan = async () => {
+        if (mode === "dark") await page.locator(".mc").first().evaluate((el) => el.classList.add("dark"));
+        const results = await new AxeBuilder({ page }).include('[data-testid="goals-forecast"]').withTags(TAGS).analyze();
+        expect(results.violations).toEqual([]);
+      };
+      await mockGoalsApi(page);
+      await gotoGoals(page);
+      await section(page).getByRole("button", { name: /^Not planned/ }).click();
+      await expect(section(page).locator("tbody tr")).toHaveCount(5);
+      await scan();
+
+      await page.unrouteAll({ behavior: "ignoreErrors" });
+      await mockGoalsApi(page, WAITING);
+      await page.reload();
+      await waitForHydration(page);
+      await expect(section(page).getByTestId("goals-forecast-waiting")).toBeVisible();
+      await scan();
+    });
+  }
+});

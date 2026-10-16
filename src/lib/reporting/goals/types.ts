@@ -126,10 +126,11 @@ export interface Datasets {
   batchHistory: BatchHistoryRow[];
   references: ReferenceRow[];
   customers: CustomerRow[];
+  forecast: ForecastDatasets;
 }
 
-/** The datasets the page needs (references and customers are looked up separately). */
-export type SnapshotData = Omit<Datasets, "references" | "customers">;
+/** The datasets the page needs (references, customers and the forecast are looked up separately). */
+export type SnapshotData = Omit<Datasets, "references" | "customers" | "forecast">;
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -189,3 +190,57 @@ export type EntryStatus =
   | "needs_value"
   | "bad_type"
   | "counted";
+
+// ─── Revenue forecast datasets (TASK-3151) ──────────────────────────────────
+
+/** An open Sage order line expected to ship by month end (queries/forecast-orders.ts). */
+export interface ForecastLineRow {
+  orderNo: string;
+  lineNo: number | null;
+  customerCode: string | null;
+  customer: string | null;
+  po: string | null;
+  item: string;
+  description: string | null;
+  /** The line's expected ship date, else the order's. */
+  expected: IsoDate;
+  /** Still to ship, in the line's order unit. */
+  qty: string;
+  unit: string | null;
+  /** Per order unit, in the order's currency. */
+  unitPrice: string;
+  currency: string;
+  /** Still to ship on the order's open lines of the same item due after month end or undated (the AO output they need isn't shipped yet). */
+  laterQty: string;
+}
+
+/** A FileMaker assembly order linked to a due line, or scheduled this month (queries/forecast-assembly-orders.ts). */
+export interface ForecastAoRow {
+  id: string;
+  /** The AO number (nameamo_c), e.g. AO-26279A. */
+  ao: string | null;
+  status: string | null;
+  scheduled: IsoDate | null;
+  /** The finished product's Sage item code. */
+  item: string | null;
+  /** The free-text order list (oelist_c), else the orders linked in FileMaker's order entry. */
+  oeList: string | null;
+  /** Pieces. */
+  qty: string | null;
+  unitsPerBox: string | null;
+  /** The bulk batch it packs from, and that batch's status. */
+  batch: string | null;
+  batchStatus: string | null;
+  /** Its order and item match an open Sage order line of any date. */
+  openOrder: boolean;
+}
+
+/** read: both datasets were read; missing: the login lacks SELECT on these columns (schema.table.column), so neither was. */
+export type ForecastAccess = "read" | "missing";
+
+export interface ForecastDatasets {
+  access: ForecastAccess;
+  missing: string[];
+  lines: ForecastLineRow[];
+  aos: ForecastAoRow[];
+}

@@ -6,6 +6,7 @@
 import { appendEventTx } from "@/lib/compliance/repo";
 import { query, withTransaction, type TxQuery } from "@/lib/db";
 
+import { forecastTableRows } from "./forecast-store";
 import { FX_SERIES } from "./fx";
 import { toCents } from "./money";
 import type {
@@ -237,6 +238,8 @@ export function rowCounts(d: Datasets): Record<string, number> {
     batchHistory: d.batchHistory.length,
     references: d.references.length,
     customers: d.customers.length,
+    forecastLines: d.forecast.lines.length,
+    forecastAos: d.forecast.aos.length,
   };
 }
 
@@ -254,6 +257,10 @@ export async function completeRun(run: RefreshRun, datasets: Datasets, fx: Resol
   const counts = rowCounts(datasets);
   return withTransaction(async (q) => {
     await insertSnapshot(q, run.id, datasets);
+    for (const t of forecastTableRows(run, datasets.forecast, fx.rate)) await insertRows(q, t.table, t.columns, t.rows);
+    if (datasets.forecast.access === "missing") {
+      console.warn("[reporting-goals] run=%s forecast skipped: no read access to %s", run.id, datasets.forecast.missing.join(", "));
+    }
     const [done] = await q<RunRow>(
       `UPDATE report_refresh_run
           SET status = 'succeeded', step = NULL, finished_at = now(), error = NULL,
@@ -278,7 +285,7 @@ export async function completeRun(run: RefreshRun, datasets: Datasets, fx: Resol
     await appendEventTx(q, {
       kind: "reporting.goals.refresh.succeeded",
       actor: runActor(run),
-      payload: { runId: run.id, trigger: run.trigger, today: run.today, ms, rowCounts: counts, fxSource: fx.source },
+      payload: { runId: run.id, trigger: run.trigger, today: run.today, ms, rowCounts: counts, fxSource: fx.source, forecast: datasets.forecast.access },
     });
     return toRun(done);
   });

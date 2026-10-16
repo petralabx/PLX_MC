@@ -2,19 +2,27 @@
 // Not a test file (no .test.ts): vitest only collects tests/**/*.test.ts.
 
 import { ontarioStatutoryHolidays } from "@/lib/reporting/goals/calendar";
+import type { ForecastSnapshot } from "@/lib/reporting/goals/forecast";
 import { normalizeRef, type GoalsInput } from "@/lib/reporting/goals/rules";
-import type { Datasets, FtlCustomer, GoalSettings, ManualEntry, RefreshRun } from "@/lib/reporting/goals/types";
+import type { Datasets, ForecastDatasets, FtlCustomer, GoalSettings, ManualEntry, RefreshRun } from "@/lib/reporting/goals/types";
 import { buildGoalsView, type GoalsPage } from "@/lib/reporting/goals/view";
 
 import datasetsJson from "./fixtures/reporting-goals/2026-10-14/datasets.json";
 import entriesJson from "./fixtures/reporting-goals/2026-10-14/entries.json";
 import expectedJson from "./fixtures/reporting-goals/2026-10-14/expected.json";
+import forecastJson from "./fixtures/reporting-goals/2026-10-14/forecast.json";
 
 export const TODAY = "2026-10-14";
 export const RATE = "1.4219";
 
 export const DATASETS = datasetsJson as unknown as Datasets & { today: string };
 export const EXPECTED = expectedJson;
+
+/** The revenue forecast's datasets for the fixture run, and the hit-rate history (TASK-3151). */
+export const FORECAST: ForecastSnapshot = {
+  data: forecastJson as unknown as ForecastDatasets,
+  history: forecastJson.history,
+};
 
 /** The goal settings migration 039 seeds. */
 export const SETTINGS: GoalSettings = {
@@ -88,7 +96,11 @@ export const RUN: RefreshRun = {
 };
 
 /** What GET /api/reporting/goals returns for the fixture with M1–M7 entered (the page tests use it). */
-export function goalsPage(overrides: Partial<GoalsPage> = {}, entries: ManualEntry[] = ENTRIES): GoalsPage {
+export function goalsPage(
+  overrides: Partial<GoalsPage> = {},
+  entries: ManualEntry[] = ENTRIES,
+  forecast: ForecastSnapshot | null = FORECAST
+): GoalsPage {
   const view = buildGoalsView({
     configured: true,
     run: RUN,
@@ -101,6 +113,7 @@ export function goalsPage(overrides: Partial<GoalsPage> = {}, entries: ManualEnt
     ftlCustomers: FTL_CUSTOMERS,
     holidays: HOLIDAYS,
     rates: [{ date: TODAY, rate: RATE }],
+    forecast,
   });
   return { ...view, viewer: { editor: true }, ...overrides };
 }

@@ -1,0 +1,68 @@
+{
+  "today": "2026-10-14",
+  "access": "read",
+  "missing": [],
+  "lines": [
+    { "orderNo": "OR1000160001", "lineNo": 32, "customerCode": "1SHOP11", "customer": "1-Shoppe Inc.", "po": "PO-5501", "item": "FP-1001", "description": "Hand soap 500 mL", "expected": "2026-10-09", "qty": "400.0000", "unit": "CSE", "unitPrice": "48.000000", "currency": "CAD", "laterQty": "50.0000" },
+    { "orderNo": "OR1000160006", "lineNo": 32, "customerCode": "1SHOP11", "customer": "1-Shoppe Inc.", "po": "PO-5506", "item": "FP-6006", "description": "Body lotion 250 mL", "expected": "2026-10-12", "qty": "200.0000", "unit": "CSE", "unitPrice": "36.500000", "currency": "CAD", "laterQty": "0" },
+    { "orderNo": "OR1000160012", "lineNo": 32, "customerCode": "PETSUP10", "customer": "Pet Supplies Plus", "po": "PO-5512", "item": "FP-1212", "description": "Pet wipes 80 ct", "expected": "2026-10-15", "qty": "100.0000", "unit": "CSE", "unitPrice": "25.000000", "currency": "CAD", "laterQty": "0" },
+    { "orderNo": "OR1000160004", "lineNo": 32, "customerCode": "SOAP11", "customer": "Soapbox Soaps", "po": "PO-5504", "item": "FP-4004", "description": "Body wash 355 mL", "expected": "2026-10-16", "qty": "6000.0000", "unit": "EA", "unitPrice": "2.250000", "currency": "USD", "laterQty": "0" },
+    { "orderNo": "OR1000160015", "lineNo": 32, "customerCode": "GREEN10", "customer": "Green Leaf Co.", "po": "PO-5515", "item": "FP-1515", "description": "Bath bomb 6 pk", "expected": "2026-10-19", "qty": "100.0000", "unit": "CSE", "unitPrice": "20.000000", "currency": "CAD", "laterQty": "0" },
+    { "orderNo": "OR1000160002", "lineNo": 32, "customerCode": "A1TEXT11", "customer": "Tiger Hospitality LLC DBA of A1\u00a0American", "po": "PO-5502", "item": "FP-2002", "description": "Shampoo 30 mL", "expected": "2026-10-20", "qty": "10000.0000", "unit": "EA", "unitPrice": "0.850000", "currency": "USD", "laterQty": "0" },
+    { "orderNo": "OR1000160011", "lineNo": 32, "customerCode": "EUROC1", "customer": "Euro Cosmetics GmbH", "po": "PO-5511", "item": "FP-1111", "description": "Face cream 50 mL", "expected": "2026-10-21", "qty": "500.0000", "unit": "EA", "unitPrice": "4.200000", "currency": "EUR", "laterQty": "0" },
+    { "orderNo": "OR1000160003", "lineNo": 32, "customerCode": "DIVE11", "customer": "Diversified Hospitality Solutions", "po": "PO-5503", "item": "FP-3003", "description": "Conditioner 1 L", "expected": "2026-10-22", "qty": "250.0000", "unit": "CSE", "unitPrice": "60.000000", "currency": "CAD", "laterQty": "0" },
+    { "orderNo": "OR1000160008", "lineNo": 32, "customerCode": "A1TEXT11", "customer": "Tiger Hospitality LLC DBA of A1\u00a0American", "po": "PO-5508", "item": "FP-8008", "description": "Hotel amenity kit", "expected": "2026-10-23", "qty": "1000.0000", "unit": "CSE", "unitPrice": "30.000000", "currency": "USD", "laterQty": "0" },
+    { "orderNo": "OR1000160007", "lineNo": 32, "customerCode": "GREEN10", "customer": "Green Leaf Co.", "po": "PO-5507", "item": "FP-7007", "description": "Bar soap 4 oz", "expected": "2026-10-26", "qty": "1200.0000", "unit": "EA", "unitPrice": "1.100000", "currency": "CAD", "laterQty": "0" },
+    { "orderNo": "OR1000158877", "lineNo": 64, "customerCode": "DIVE11", "customer": "Diversified Hospitality Solutions", "po": "PO-5509", "item": "FP-9009", "description": "Hand sanitizer 1 gal", "expected": "2026-10-27", "qty": "80.0000", "unit": "CSE", "unitPrice": "95.000000", "currency": "CAD", "laterQty": "0" },
+    { "orderNo": "OR1000160014", "lineNo": 32, "customerCode": "GREEN10", "customer": "Green Leaf Co.", "po": "PO-5514", "item": "FP-1414", "description": "Shower gel 1 L", "expected": "2026-10-28", "qty": "20.0000", "unit": "CSE", "unitPrice": "50.000000", "currency": "CAD", "laterQty": "0" },
+    { "orderNo": "OR1000160010", "lineNo": 32, "customerCode": "DIVE11", "customer": "Diversified Hospitality Solutions", "po": "PO-5510", "item": "FP-9009", "description": "Hand sanitizer 1 gal", "expected": "2026-10-29", "qty": "40.0000", "unit": "CSE", "unitPrice": "95.000000", "currency": "CAD", "laterQty": "0" },
+    { "orderNo": "OR1000160005", "lineNo": 32, "customerCode": "PETSUP10", "customer": "Pet Supplies Plus", "po": "PO-5505", "item": "FP-5005", "description": "Pet shampoo 16 oz", "expected": "2026-10-30", "qty": "300.0000", "unit": "CSE", "unitPrice": "54.000000", "currency": "USD", "laterQty": "0" },
+    { "orderNo": "OR1000160013", "lineNo": 32, "customerCode": "GREEN10", "customer": "Green Leaf Co.", "po": "PO-5513", "item": "FP-1313", "description": "Hand cream 75 mL", "expected": "2026-10-30", "qty": "60.0000", "unit": "CSE", "unitPrice": "40.000000", "currency": "CAD", "laterQty": "0" }
+  ],
+  "aos": [
+    { "id": "11434", "ao": "AO-26289P", "status": "Generated", "scheduled": null, "item": "FP-1414", "oeList": "OR1000160014", "qty": "120", "unitsPerBox": "6", "batch": null, "batchStatus": null, "openOrder": true },
+    { "id": "11441", "ao": "AO-26263Q", "status": "Realized", "scheduled": "2026-09-20", "item": "FP-1515", "oeList": "OR1000160015", "qty": "1000", "unitsPerBox": "10", "batch": "BC-26166Q", "batchStatus": "Realized", "openOrder": true },
+    { "id": "11411", "ao": "AO-26275G", "status": "Realized", "scheduled": "2026-10-02", "item": "FP-8008", "oeList": "OR1000160008", "qty": "9600", "unitsPerBox": "24", "batch": "BC-26164G", "batchStatus": "Realized", "openOrder": true },
+    { "id": "11454", "ao": "AO-26278V", "status": "Realized", "scheduled": "2026-10-05", "item": "FP-8080", "oeList": null, "qty": "2000", "unitsPerBox": "10", "batch": "BC-26167V", "batchStatus": "Realized", "openOrder": false },
+    { "id": "11401", "ao": "AO-26279A", "status": "Realized", "scheduled": "2026-10-06", "item": "FP-1001", "oeList": "OR1000160001", "qty": "4800", "unitsPerBox": "12", "batch": "BC-26161A", "batchStatus": "Realized", "openOrder": true },
+    { "id": "11406", "ao": "AO-26282F", "status": "Allocated", "scheduled": "2026-10-09", "item": "FP-6006", "oeList": "OR1000160006", "qty": "4800", "unitsPerBox": "24", "batch": "BC-26281F", "batchStatus": "Allocated", "openOrder": true },
+    { "id": "11432", "ao": "AO-26286M", "status": "Committed", "scheduled": "2026-10-13", "item": "FP-1212", "oeList": "OR1000160012 (rush)", "qty": "1200", "unitsPerBox": "12", "batch": "BC-26165M", "batchStatus": "Realized", "openOrder": true },
+    { "id": "11404", "ao": "AO-26287D", "status": "Allocated", "scheduled": "2026-10-14", "item": "FP-4004", "oeList": "OR1000160004", "qty": "6000", "unitsPerBox": "24", "batch": "BC-26286W", "batchStatus": "Allocated", "openOrder": true },
+    { "id": "11431", "ao": "AO-26292L", "status": "Allocated", "scheduled": "2026-10-19", "item": "FP-1111", "oeList": "OR1000160011", "qty": "500", "unitsPerBox": "12", "batch": "BC-26291L", "batchStatus": "Committed", "openOrder": true },
+    { "id": "11403", "ao": "AO-26293C", "status": "Committed", "scheduled": "2026-10-20", "item": "FP-3003", "oeList": "OR1000160003", "qty": "1500", "unitsPerBox": "6", "batch": "BC-26163C", "batchStatus": "Realized", "openOrder": true },
+    { "id": "11451", "ao": "AO-26294S", "status": "Allocated", "scheduled": "2026-10-21", "item": "FP-9999", "oeList": null, "qty": "6000", "unitsPerBox": "24", "batch": "BC-26292S", "batchStatus": "Allocated", "openOrder": false },
+    { "id": "11412", "ao": "AO-26295H", "status": "Allocated", "scheduled": "2026-10-22", "item": "FP-8008", "oeList": "OR1000160008", "qty": "7200", "unitsPerBox": "24", "batch": "BC-26294H", "batchStatus": "Allocated", "openOrder": true },
+    { "id": "11442", "ao": "AO-26295R", "status": "Allocated", "scheduled": "2026-10-22", "item": "FP-1515", "oeList": "OR1000160015", "qty": "1000", "unitsPerBox": "10", "batch": "BC-26293R", "batchStatus": "Allocated", "openOrder": true },
+    { "id": "11433", "ao": "AO-26298N", "status": "Cancelled", "scheduled": "2026-10-25", "item": "FP-1313", "oeList": "OR1000160013", "qty": "720", "unitsPerBox": "12", "batch": null, "batchStatus": null, "openOrder": true },
+    { "id": "11421", "ao": "AO-26299K", "status": "Committed", "scheduled": "2026-10-26", "item": "FP-9009", "oeList": "OR10 158877, OR1000160010", "qty": "320", "unitsPerBox": "4", "batch": "BC-26298K", "batchStatus": "Allocated", "openOrder": true },
+    { "id": "11452", "ao": "AO-26300T", "status": "Committed", "scheduled": "2026-10-27", "item": "FP-2002", "oeList": "OR1000139990", "qty": "2400", "unitsPerBox": "48", "batch": "BC-26297T", "batchStatus": "Allocated", "openOrder": false },
+    { "id": "11405", "ao": "AO-26301E", "status": "Allocated", "scheduled": "2026-10-28", "item": "FP-5005", "oeList": "OR1000160005", "qty": "3600", "unitsPerBox": "12", "batch": "BC-26283E", "batchStatus": "Committed", "openOrder": true },
+    { "id": "11453", "ao": "AO-26303U", "status": "Allocated", "scheduled": "2026-10-30", "item": "FP-7070", "oeList": "OR1000160099", "qty": "3000", "unitsPerBox": "12", "batch": null, "batchStatus": null, "openOrder": true },
+    { "id": "11402", "ao": "AO-26307B", "status": "Allocated", "scheduled": "2026-11-03", "item": "FP-2002", "oeList": "OR1000160002", "qty": "10000", "unitsPerBox": "48", "batch": "BC-26162B", "batchStatus": "Realized", "openOrder": true },
+    { "id": "11461", "ao": "AO-26309W", "status": "Allocated", "scheduled": "2026-11-05", "item": "FP-2002", "oeList": "OR2000160002", "qty": "500", "unitsPerBox": "48", "batch": null, "batchStatus": null, "openOrder": false },
+    { "id": "11413", "ao": "AO-26314J", "status": "Allocated", "scheduled": "2026-11-10", "item": "FP-8008", "oeList": "OR1000160008", "qty": "4800", "unitsPerBox": "24", "batch": null, "batchStatus": null, "openOrder": true }
+  ],
+  "history": [
+    {
+      "runId": 12,
+      "today": "2026-08-31",
+      "rate": "1.380000",
+      "readyPlannedCents": null,
+      "sage": { "cadThisMonth": 61044218, "usdThisMonth": 18230417, "cadLastMonth": 70211963, "usdLastMonth": 20118342 }
+    },
+    {
+      "runId": 20,
+      "today": "2026-09-01",
+      "rate": "1.370000",
+      "readyPlannedCents": 118750000,
+      "sage": { "cadThisMonth": 702594, "usdThisMonth": 2810266, "cadLastMonth": 81244310, "usdLastMonth": 19873420 }
+    },
+    {
+      "runId": 41,
+      "today": "2026-10-14",
+      "rate": "1.421900",
+      "readyPlannedCents": 11839033,
+      "sage": { "cadThisMonth": 12183771, "usdThisMonth": 17242876, "cadLastMonth": 68302594, "usdLastMonth": 22810266 }
+    }
+  ]
+}

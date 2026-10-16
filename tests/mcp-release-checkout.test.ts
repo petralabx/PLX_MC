@@ -129,6 +129,7 @@ import {
   isExpiredReason,
 } from "@/lib/mcp/checkout-release-actions";
 import { recordPermissionDecision } from "@/lib/permissions/decision-log";
+import * as complianceRepo from "@/lib/compliance/repo";
 
 const FUTURE = new Date(Date.now() + 3_600_000).toISOString();
 const PAST = new Date(Date.now() - 3_600_000).toISOString();
@@ -781,6 +782,37 @@ describe("shadow rollout (PLX_MC_MCP_PRINCIPAL_AUTHZ unset)", () => {
       operatorAllowed: true,
       principalAllowed: false,
     });
+  });
+
+  // TASK-3026: the principal lookup only feeds the shadow comparison here.
+  it("still releases when the checkout-principal lookup throws, comparing as an unknown principal", async () => {
+    seed("dsp_shadowerr1", "TASK-OPEN");
+    vi.mocked(complianceRepo.getDispatchCheckoutPrincipal).mockRejectedValueOnce(new Error("connection terminated"));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const out = await viaRest("mc_release_checkout", { checkoutId: "dsp_shadowerr1", reason: "stray lease" }, "ross@petrasoap.com");
+    expect(out.ok).toBe(true);
+    expect(out.body.data.authz).toBe("accountable_human");
+    expect(h.dispatches.get("dsp_shadowerr1")?.releasedAt).not.toBeNull();
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
+    expect(mismatches()).toHaveLength(1);
+    expect(mismatches()[0].payload).toMatchObject({
+      site: "mcp.release-checkout",
+      operatorAllowed: true,
+      principalAllowed: false,
+      principalLookupFailed: true,
+    });
+  });
+
+  it("under enforce a failed lookup still fails the release closed", async () => {
+    vi.stubEnv("PLX_MC_MCP_PRINCIPAL_AUTHZ", "enforce");
+    seed("dsp_enforceerr1", "TASK-OPEN");
+    vi.mocked(complianceRepo.getDispatchCheckoutPrincipal).mockRejectedValueOnce(new Error("connection terminated"));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const out = await viaRest("mc_release_checkout", { checkoutId: "dsp_enforceerr1", reason: "stray lease" }, "ross@petrasoap.com");
+    errors.mockRestore();
+    expect(out.ok).toBe(false);
+    expect(h.dispatches.get("dsp_enforceerr1")?.releasedAt).toBeNull();
   });
 
   it("authorizeCheckoutReleaseByOperator is the pre-TASK-3008 rule", () => {

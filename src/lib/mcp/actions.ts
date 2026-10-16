@@ -42,6 +42,7 @@ import {
   assertProjectIdAccess,
   assertTaskProjectAccess,
   loadProjectAclMaps,
+  recordReadShadowMismatch,
 } from "@/lib/permissions/project-acl-guard";
 import {
   canAccessBucket,
@@ -179,6 +180,7 @@ export async function actionGetContext(
   const filter = resolveContextFilter(opts);
   const snap = await snapshot();
   const principal = identity ? aclPrincipalFromMcp(identity) : undefined;
+  recordReadShadowMismatch("mcp.get-context", snap.projects ?? [], principal);
   const projectsById = indexById(snap.projects ?? []);
   const bucketsById = indexById(snap.buckets ?? []);
   let visibleBuckets = principal
@@ -238,7 +240,8 @@ export async function actionSearchTasks(input: SearchTasksInput = {}, identity?:
   const principal = identity ? aclPrincipalFromMcp(identity) : undefined;
   const hiddenBuckets: string[] = [];
   if (principal) {
-    const { buckets, projectsById } = await loadProjectAclMaps();
+    const { projects, buckets, projectsById } = await loadProjectAclMaps();
+    recordReadShadowMismatch("mcp.search-tasks", projects, principal);
     for (const bucket of buckets) {
       if (!canAccessBucket(bucket, projectsById, principal)) hiddenBuckets.push(bucket.id);
     }

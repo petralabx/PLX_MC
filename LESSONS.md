@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-16 (ET) — TASK-3026: shadow-mode audit writes could fail a release and exhaust the DB pool
+
+- **What happened:** After PR #335, `mc_release_checkout` awaited the checkout-principal lookup unguarded, so a query error failed a release even though shadow mode only compares that rule. `assertProjectIdAccess` awaited `recordShadowMismatch` inside `mc_update_task`'s transaction, and that write takes a second pooled connection. With the pool at 5, five concurrent mismatching updates each held one connection and waited for another, stalling until the 10s acquire timeout.
+- **Root cause:** Audit-only shadow work ran on the decision path with the same failure and blocking behaviour as the real decision.
+- **Rule going forward:** Shadow and audit work never decides, never throws into the caller, and is never awaited while a transaction client is held. Call it fire-and-forget (`void ...`) like `recordPermissionDecision`, and catch the inputs it alone needs. A test with a size-5 fake pool (`tests/mcp-authz-shadow-pool.test.ts`) pins this.
+
 ### 2026-10-16 (ET) — TASK-3070: edit/delete of a just-added task comment 404'd
 
 - **What happened:** After TASK-3043 the server assigns comment ids, but the store still showed a new comment under its optimistic `CMT-<n>` id until the add returned. An edit or delete in that window sent the `CMT-<n>` id and the server 404'd it.

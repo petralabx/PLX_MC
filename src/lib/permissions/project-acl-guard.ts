@@ -70,7 +70,7 @@ export async function assertProjectIdAccess(
     if (principal.principalOnlyTokens) {
       const principalAllowed = canAccessProject(project, { tokens: principal.principalOnlyTokens });
       if (principalAllowed !== allowed) {
-        await recordShadowMismatch({
+        void recordShadowMismatch({
           site: "permissions.project-acl",
           mode: "shadow",
           actor: principal.principalOnlyTokens[0] ?? "unknown",
@@ -82,6 +82,33 @@ export async function assertProjectIdAccess(
     }
   }
   assertCanAccessProject(project, principal);
+}
+
+/**
+ * TASK-3026 read-path shadow log: the restricted projects this principal can
+ * see only through the operator email (the principal-only tokens are a subset
+ * of the full tokens, so the reverse cannot happen). One fire-and-forget
+ * authz.shadow_mismatch per read call that hides something under enforce.
+ */
+export function recordReadShadowMismatch(
+  site: string,
+  projects: readonly Project[],
+  principal: ProjectAclPrincipal | undefined
+): void {
+  if (!principal?.principalOnlyTokens) return;
+  const principalOnly = { tokens: principal.principalOnlyTokens };
+  const projectIds = projects
+    .filter((project) => canAccessProject(project, principal) && !canAccessProject(project, principalOnly))
+    .map((project) => project.id);
+  if (projectIds.length === 0) return;
+  void recordShadowMismatch({
+    site,
+    mode: "shadow",
+    actor: principal.principalOnlyTokens[0] ?? "unknown",
+    projectIds,
+    operatorAllowed: true,
+    principalAllowed: false,
+  });
 }
 
 export async function assertBucketProjectAccess(

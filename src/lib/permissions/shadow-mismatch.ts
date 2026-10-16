@@ -4,6 +4,11 @@
 // Unlike the permissions decision log this is not gated on the enforcement
 // mode, so the disagreement log exists before PLX_MC_MCP_PRINCIPAL_AUTHZ is
 // flipped. Fail-open: a sink failure never changes the decision.
+//
+// Call it fire-and-forget (`void recordShadowMismatch(...)`), never awaited:
+// appendEvent takes its own pooled connection, and a caller awaiting it while
+// holding a transaction client can exhaust the pool (max 5) and stall until
+// the acquire timeout (TASK-3026).
 
 import { appendEvent } from "@/lib/compliance/repo";
 

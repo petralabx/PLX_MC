@@ -241,13 +241,16 @@ describe("sp_mcp_portal grant", () => {
     );
     expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 3);
     for (const principalId of others) {
-      // sp_mcp_ledger and sp_mcp_cos add the steward capability (TASK-2559) plus task.cancel.
+      // sp_mcp_cursor adds task.cancel only. sp_mcp_ledger and sp_mcp_cos add
+      // that plus the steward capability task.link_merged_pr (TASK-2559).
       const extra =
-        principalId === "sp_mcp_ledger"
-          ? ["task.cancel", "task.link_merged_pr"]
-          : principalId === "sp_mcp_cos"
+        principalId === "sp_mcp_cursor"
+          ? ["task.cancel"]
+          : principalId === "sp_mcp_ledger"
             ? ["task.cancel", "task.link_merged_pr"]
-            : [];
+            : principalId === "sp_mcp_cos"
+              ? ["task.cancel", "task.link_merged_pr"]
+              : [];
       expect([...capabilitiesForServicePrincipal(principalId)].sort()).toEqual(
         [...FULL_MCP_BUNDLE, ...extra].sort()
       );

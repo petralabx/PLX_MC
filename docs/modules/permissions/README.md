@@ -70,9 +70,12 @@ moving a task to and from the `cancelled` end stage (`mc_update_task`
 `patch.cancel` / `patch.reopen`, `mc_report_progress` `stage:"cancelled"`, over
 HTTP MCP, the cursor REST routes and the stdio client). They are evaluated on
 the authenticated principal; `X-MC-Operator-Email` is recorded as audit context
-only. Admin and owner roles hold both. No service principal holds either today,
-and `MCP_AGENT_CAPABILITIES` never includes them (every agent would then cancel
-any task); an operator grants one to a named principal in `SERVICE_GRANTS`.
+only. Admin and owner roles hold both. `task.cancel` is granted to
+`sp_mcp_cursor` (Ledger's live Task principal; cancel only, Vince 2026-10-16),
+`sp_mcp_cos`, and `sp_mcp_ledger`. No service principal holds `task.reopen`.
+`MCP_AGENT_CAPABILITIES` never includes either capability (every agent would
+then cancel any task); an operator grants one to a named principal in
+`SERVICE_GRANTS`.
 Humans cancel from the task detail (click **Cancelled** in the lifecycle rail,
 pick a reason): `PATCH /api/tasks/{id}` with `{cancel: {reason, replacedBy?,
 note?}}` alone, authorized as `task.cancel` on the Entra session (TASK-2598);

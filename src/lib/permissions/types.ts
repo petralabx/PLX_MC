@@ -176,9 +176,9 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
 export const LEDGER_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_ledger" as const;
 
 /**
- * Chief of Staff steward principal. The only MCP principal holding task.cancel,
- * and with sp_mcp_ledger the only one holding task.link_merged_pr. Its key goes
- * only to the Chief of Staff runtime.
+ * Chief of Staff steward principal. With sp_mcp_ledger, one of two MCP
+ * principals holding task.link_merged_pr. task.cancel is also held by
+ * sp_mcp_cursor (cancel only). Its key goes only to the Chief of Staff runtime.
  */
 export const COS_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_cos" as const;
 

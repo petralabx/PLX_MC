@@ -47,6 +47,17 @@ describe("GET /api/cron/reconcile — auth boundary", () => {
     expect(m.reconcileSweep).not.toHaveBeenCalled();
   });
 
+  it("fails closed when CRON_SECRET is blank: `Bearer ` and `Bearer undefined` are refused", async () => {
+    m.cronSecret.mockReturnValue("   ");
+    expect((await call("Bearer    ")).status).toBe(401);
+    m.cronSecret.mockReturnValue("");
+    expect((await call("Bearer ")).status).toBe(401);
+    // An accessor regression that hands back undefined must not admit `Bearer undefined`.
+    m.cronSecret.mockReturnValue(undefined as unknown as string);
+    expect((await call("Bearer undefined")).status).toBe(401);
+    expect(m.reconcileSweep).not.toHaveBeenCalled();
+  });
+
   it("reconciles on a valid bearer and returns the result envelope", async () => {
     m.reconcileSweep.mockResolvedValue({ processed: 2, resolved: 2, failed: 0 });
     const resp = await call("Bearer topsecret");

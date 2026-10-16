@@ -7,6 +7,7 @@
 // MC/DB outage) replay here and only then clear.
 
 import { ApiError, route } from "@/lib/api/route";
+import { secretMatches } from "@/lib/auth/gate";
 import { reconcileSweep } from "@/lib/compliance/service";
 import { checkMissedTick } from "@/lib/sync/health";
 import { cronConfigured, cronSecret } from "@/lib/secrets";
@@ -20,7 +21,7 @@ export const GET = route(async (req) => {
   if (!cronConfigured()) {
     throw new ApiError("cron_disabled", "Scheduled reconcile is not configured (CRON_SECRET unset).", 503);
   }
-  if (req.headers.get("authorization") !== `Bearer ${cronSecret()}`) {
+  if (!(await secretMatches(req.headers.get("authorization"), cronSecret(), "Bearer "))) {
     throw new ApiError("unauthorized", "Invalid or missing cron authorization.", 401);
   }
   const result = await reconcileSweep();

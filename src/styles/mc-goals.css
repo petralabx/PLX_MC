@@ -576,7 +576,7 @@
   white-space: nowrap;
 }
 
-.mc .goals .gp-table th .code {
+.mc .goals .gp-table :is(th, td) .code {
   margin-left: 4px;
   color: var(--p-muted);
 }
@@ -707,6 +707,16 @@
 .mc .goals .gp-count {
   margin: 0 0 8px;
   color: var(--p-muted);
+}
+
+/* ─── Shipments list ───────────────────────────────────────────────────────── */
+/* The totals table and the rounding note sit under the list, at reading width. */
+.mc .goals .gp-table-wrap + :is(.gp-table-wrap, .gp-line) {
+  margin-top: 10px;
+}
+
+.mc .goals .gp-table-wrap.narrow {
+  max-width: var(--p-read-max);
 }
 
 /* ─── Tiles ───────────────────────────────────────────────────────────────── */

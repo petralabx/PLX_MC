@@ -34,4 +34,20 @@ test.describe("goals responsive (G3)", () => {
     await page.screenshot({ path: `${SHOT_DIR}/${testInfo.project.name}-dark.png`, fullPage: true });
     await expectSurfaceNoHorizontalOverflow(page, "goals-screen", `goals/${testInfo.project.name}/dark`);
   });
+
+  test("shipments list: the table scrolls inside its region, never the page, and the totals fit, light and dark", async ({ page }, testInfo) => {
+    const section = page.getByTestId("goals-shipments");
+    await section.getByRole("button", { name: /^USD/ }).click();
+    await expect(section.getByText("Showing 14 of 72 shipments")).toBeVisible();
+    const totals = section.getByRole("region", { name: "Shipment totals" });
+    for (const mode of ["light", "dark"]) {
+      if (mode === "dark") await page.locator(".mc").first().evaluate((el) => el.classList.add("dark"));
+      const label = `goals-shipments/${testInfo.project.name}/${mode}`;
+      await expectSurfaceNoHorizontalOverflow(page, "goals-shipments", label);
+      await expectNoPageOverflow(page, label);
+      // Each total sits beside its label: the totals never need scrolling sideways.
+      const { scrollWidth, clientWidth } = await totals.evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
+      expect(scrollWidth, `${label}: totals scrollWidth ${scrollWidth} > ${clientWidth}`).toBeLessThanOrEqual(clientWidth + 2);
+    }
+  });
 });

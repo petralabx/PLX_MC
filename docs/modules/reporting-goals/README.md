@@ -119,6 +119,8 @@ traceable to a refresh run and a named query.
    - Loading shows skeletons. A failed read, or a section that can't render,
      shows "Failed to load" + Retry in the same box. A section's figures name
      their query and run in tooltips and in a source line under the section.
+   - After the batch list, "Shipments this month" lists the month's invoices
+     and shipments by hand (see **Shipments list** below).
 9. **Audit**
    - `mc_events` records `reporting.goals.refresh.succeeded|failed` (run id,
      counts and error code, never values), `reporting.goals.export` (who and
@@ -188,6 +190,36 @@ Bank of Canada Valet (FXUSDCAD) ──────┼─ refresh ─→ report_r
                                       │                     │
 manual entries (live) ────────────────┴──────── loader → rules → GET /api/reporting/goals
 ```
+
+### Shipments list
+
+"Shipments this month" (`shipment-list.ts`, `src/components/mc/goals/shipments.tsx`)
+lists one row per Sage invoice shipped this month (query `shipments`, the
+invoices the Revenue card adds up) and one per counted shipment entered by hand
+(amber, source "By hand"), by ship date, then invoice. The page model carries
+the rows (`shipments`), built from the same snapshot and entries as the cards.
+
+- **CAD.** A CAD invoice's net as it is; a USD invoice's net at the run's rate,
+  rounded to the cent half to even; other currencies are not converted. A hand
+  entry shows the CAD it adds to revenue (product value plus freight) and its
+  reference under Invoice.
+- **Truckload.** Full or Partial belongs to the invoice's whole shipment
+  (customer code plus shipment number, or `invoice:<number>` without one, as
+  the `truckloads` query groups invoices), classified with the Truckloads
+  card's helpers. Every invoice of a full load shows Full, and the list's loads
+  match the card. A hand entry shows its own load.
+- **Filters and totals.** A search (customer, invoice or reference, shipment,
+  order, PO) and one filter (All, Truckload customers, Full, Partial, CAD, USD,
+  By hand). The totals, in a small table under the list, follow them: the CAD
+  subtotal, the USD subtotal converted once at the rate, the CAD entered by
+  hand, and their sum, which is the Revenue card's formula; with no filter it
+  is the card's total to the cent.
+  Converting the USD subtotal once can differ from adding up the CAD column by
+  a few cents (on the 2026-10-14 fixture, 245,176.45 against 245,176.46).
+  Other currencies are listed but left out of the total.
+- The Excel export is unchanged. Each invoice's lines ("what shipped") are to
+  follow as an expandable row once the reporting login can read Sage's invoice
+  lines.
 
 ### Setup
 

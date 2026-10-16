@@ -87,6 +87,41 @@ test.describe("goals & production", () => {
     expect(values).toEqual([...values].sort((a, b) => b - a));
   });
 
+  test("lists this month's shipments; search and a filter change the rows and the totals", async ({ page }) => {
+    await mockGoalsApi(page);
+    await gotoGoals(page);
+    const section = page.getByTestId("goals-shipments");
+    await expect(section.getByRole("heading", { name: "Shipments this month" })).toBeVisible();
+    await expect(section).toContainText("From queries shipments, truckloads · run #41");
+    const list = section.getByRole("region", { name: "Shipment list" });
+    const totals = section.getByRole("region", { name: "Shipment totals" });
+    const total = totals.locator("tfoot tr");
+    await expect(section.getByText("Showing 72 of 72 shipments")).toBeVisible();
+    await expect(list.locator("tbody tr")).toHaveCount(72);
+    await expect(list.locator("tbody tr.hand")).toHaveCount(2);
+    // With no filter the total is the Revenue card's, to the cent.
+    await expect(total).toContainText("Total: 70 invoices and 2 by hand");
+    await expect(total).toContainText("408,628.08");
+    await expect(totals.locator("tbody tr.hand")).toContainText("41,613.92");
+
+    await section.getByRole("button", { name: /^CAD/ }).click();
+    await expect(section.getByRole("button", { name: /^CAD/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(section.getByText("Showing 58 of 72 shipments")).toBeVisible();
+    await expect(total).toContainText("Total: 57 invoices and 1 by hand");
+    await expect(total).toContainText("126,837.71");
+    await expect(totals).not.toContainText("USD");
+
+    await section.getByLabel("Search shipments").fill("remco");
+    await expect(section.getByText("No shipments match these filters.")).toBeVisible();
+    await expect(totals).toHaveCount(0);
+    await section.getByRole("button", { name: /^USD/ }).click();
+    await expect(section.getByText("Showing 8 of 72 shipments")).toBeVisible();
+    await expect(list.locator("tbody tr")).toHaveCount(8);
+    await expect(list.locator("tbody tr").first()).toContainText("REMCODA LLC");
+    await expect(total).toContainText("Total: 8 invoices");
+    await expect(total).toContainText("22,522.90");
+  });
+
   test("an Editor refreshes and the page follows the run to its result", async ({ page }) => {
     await mockGoalsApi(page);
     let polls = 0;
@@ -151,10 +186,10 @@ test.describe("goals & production", () => {
     });
     await page.goto("/?screen=goals");
     await waitForHydration(page);
-    await expect(screen(page).locator(".gp-skel")).toHaveCount(8);
+    await expect(screen(page).locator(".gp-skel")).toHaveCount(9);
     const loading = await page.getByTestId("goals-batches").boundingBox();
     release();
-    await expect(page.getByText("Failed to load.")).toHaveCount(8);
+    await expect(page.getByText("Failed to load.")).toHaveCount(9);
     await expect(page.getByTestId("goals-as-of")).toHaveText("Couldn’t load the report: Internal error.");
     // The failed state takes the skeleton's place: nothing below moves.
     const failed = await page.getByTestId("goals-batches").boundingBox();

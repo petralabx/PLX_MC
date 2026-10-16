@@ -3,6 +3,7 @@
 // query behind each section, so every figure can name its query and run. Pure.
 
 import { computeGoals, type GoalsModel } from "./rules";
+import { buildShipmentList, type ShipmentListRow } from "./shipment-list";
 import type { FtlCustomer, FxRate, FxSource, GoalSettings, IsoDate, ManualEntry, RefreshRun, SnapshotData } from "./types";
 
 /** Dataset query names — the names tooltips show. One per report_snap_* table. */
@@ -31,7 +32,7 @@ export const SECTION_QUERIES: Record<string, readonly DatasetQuery[]> = {
   entries: [DATASET_QUERIES.references, DATASET_QUERIES.batches],
   sizes: [DATASET_QUERIES.batches, DATASET_QUERIES.batchHistory],
   batches: [DATASET_QUERIES.batches],
-  shipments: [DATASET_QUERIES.shipments],
+  shipments: [DATASET_QUERIES.shipments, DATASET_QUERIES.truckloads],
 };
 
 export type GoalsViewState = "ready" | "not_configured" | "no_data";
@@ -45,6 +46,8 @@ export interface GoalsView {
   latestAttempt: RefreshRun | null;
   fx: { rate: string; date: IsoDate | null; source: FxSource; stale: boolean } | null;
   model: GoalsModel | null;
+  /** This month's shipments list (shipment-list.ts), from the same snapshot and entries as the model; empty without one. */
+  shipments: ShipmentListRow[];
   /** The goal settings the model was built with (the page's definitions and rules text quote them). */
   settings: GoalSettings | null;
   sections: Record<string, readonly DatasetQuery[]>;
@@ -82,6 +85,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       latestAttempt,
       fx: null,
       model: null,
+      shipments: [],
       settings: null,
       sections: SECTION_QUERIES,
     };
@@ -105,6 +109,15 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     latestAttempt,
     fx: { rate: run.fxRate, date: run.fxRateDate, source: fxSource, stale: fxSource === "stored" },
     model,
+    shipments: buildShipmentList({
+      shipments: input.snapshot.shipments,
+      truckloads: input.snapshot.truckloads,
+      entries: model.entries,
+      rate: run.fxRate,
+      rates: input.rates,
+      settings: input.settings,
+      ftlCustomers: input.ftlCustomers,
+    }),
     settings: input.settings,
     sections: SECTION_QUERIES,
   };

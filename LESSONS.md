@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-16 (ET) — TASK-3043: the bucket-comment fix left task comments and client-made ids on the old pattern
+
+- **What happened:** After PR #337 moved bucket comments to one operation per request, `PATCH /api/tasks/[id]` still replaced the whole task thread from a client array, with client-chosen authors. Repo request ids came from a per-page-load counter (`RR-1` again after a reload, which the server then read as an update to the requester's earlier request), and the server's `/repos/validate` result was never recorded on the request.
+- **Root cause:** The fix was applied to the route under review, not to every route with the same shape. Task comments and bucket comments share one `Comment` model but had separate write paths.
+- **Rule going forward:** When fixing a trust flaw in one route, grep for every route and store path with the same shape (the same type, `z.array(...)` of user content, `++seq` ids) and fix or ticket each one in the same PR. Ids for records that outlive the page come from `randomUUID()` (on the server where it can, otherwise `crypto.randomUUID()`), never a module counter.
+
 ### 2026-10-16 (ET) — Edge deploy rejected node:util/types after a green next build
 
 - **What happened:** Vercel preview `dpl_taPkMmReiNoqWxnKDRBWN6VsWZno` compiled, then failed while deploying middleware: `The Edge Function "_middleware" is referencing unsupported modules: node:util/types`. GitHub CI was green.

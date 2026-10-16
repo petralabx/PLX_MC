@@ -279,6 +279,26 @@ describe("self-service request → approve", () => {
     expect(allRepos()["new-tool"]?.name).toBe("new-tool");
   });
 
+  it("issues request ids that are unique across page loads (TASK-3043)", () => {
+    const first = requestRepo({ name: "repo-a" });
+    resetStore(); // a reload: the store starts over from the seed
+    const second = requestRepo({ name: "repo-b" });
+    expect(first.id).toMatch(/^RR-[0-9a-f-]{36}$/);
+    expect(second.id).toMatch(/^RR-[0-9a-f-]{36}$/);
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it("asks the server to validate the filed request by id, so the result is recorded there (TASK-3043)", async () => {
+    const calls: unknown[][] = [];
+    __setRepoValidatorForTests(async (...args) => {
+      calls.push(args);
+      return { ok: true, visibility: "private", def: "main" };
+    });
+    const req = requestRepo({ name: "new-tool" });
+    await __repoValidationSettled();
+    expect(calls).toEqual([[DEFAULT_NEW_REPO_ORG, "new-tool", req.id]]);
+  });
+
   it("marks an unvalidated repo pending/unverified rather than fabricating it", async () => {
     __setRepoValidatorForTests(async () => ({ ok: false, note: "not found in the org" }));
     const req = requestRepo({ name: "ghost-repo" });

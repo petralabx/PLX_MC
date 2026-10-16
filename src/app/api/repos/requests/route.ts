@@ -20,10 +20,9 @@ import { z } from "zod";
 import { ApiError, parseBody, route } from "@/lib/api/route";
 import { requireRepoApprover, sessionAuthorId } from "@/lib/api/session-actor";
 import { isAllowedRepoOrg, repoFromRequest } from "@/lib/mc-data/repos";
-import { ALLOWED_REPO_ORGS } from "@/lib/mc-data/data";
 import type { RepoRequest } from "@/lib/mc-data/types";
 import { requireSessionActor } from "@/lib/routing/mutations/actors";
-import { validateRepoInOrg } from "@/lib/sync";
+import { verifyRepoRequest } from "@/lib/sync";
 import { decideRepoRequest, getRepoRequest, stamp, upsertRepoRequest } from "@/lib/sync/repo";
 
 const repoRequestSchema = z.object({
@@ -38,23 +37,6 @@ const repoRequestSchema = z.object({
   // Ignored — the server verifies; kept so the client's full request still parses.
   verified: z.boolean(),
 });
-
-type Verification = Pick<RepoRequest, "verified" | "note" | "visibility" | "def" | "lang">;
-
-async function verify(owner: string, name: string): Promise<Verification> {
-  if (!isAllowedRepoOrg(owner)) {
-    return { verified: false, note: `Org ${owner} is not allowed — permitted orgs: ${ALLOWED_REPO_ORGS.join(", ")}.` };
-  }
-  const result = await validateRepoInOrg(owner, name);
-  if (!result.ok) return { verified: false, note: result.note ?? "Could not be validated against the org." };
-  return {
-    verified: true,
-    note: `Validated against ${owner} on GitHub.`,
-    visibility: result.visibility,
-    def: result.def,
-    lang: result.lang,
-  };
-}
 
 const decided = (existing: RepoRequest) =>
   new ApiError("request_decided", `Repo request ${existing.id} is already ${existing.status}.`, 409);
@@ -117,7 +99,7 @@ export const POST = route(async (req) => {
     status: "pending",
     ...(sameRepo
       ? { verified: existing.verified, note: existing.note, visibility: existing.visibility, def: existing.def, lang: existing.lang }
-      : await verify(body.owner, body.name)),
+      : await verifyRepoRequest(body.owner, body.name)),
   };
   if (!(await upsertRepoRequest(request))) {
     throw new ApiError("request_decided", `Repo request ${body.id} was decided meanwhile.`, 409);

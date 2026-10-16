@@ -6,7 +6,7 @@
 // One operation per request (not the whole thread) so a client can never drop
 // or rewrite a comment it has not seen.
 
-import { z } from "zod";
+import { commentOpSchema } from "@/lib/api/comment-op";
 import { ApiError, parseBody, route } from "@/lib/api/route";
 import { sessionAuthorId } from "@/lib/api/session-actor";
 import { assertBucketProjectAccess } from "@/lib/permissions/project-acl-guard";
@@ -17,18 +17,9 @@ import {
 import { applyBucketCommentOp } from "@/lib/sync";
 import { getBuckets } from "@/lib/sync/repo";
 
-const text = z.string().trim().min(1).max(5000);
-const mentions = z.array(z.string()).max(50);
-
-const bucketCommentOpSchema = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("add"), body: text, mentions }),
-  z.object({ op: z.literal("edit"), id: z.string().min(1), body: text, mentions }),
-  z.object({ op: z.literal("delete"), id: z.string().min(1) }),
-]);
-
 export const PATCH = route(async (req, ctx) => {
   const { id } = await ctx.params;
-  const op = await parseBody(req, bucketCommentOpSchema);
+  const op = await parseBody(req, commentOpSchema);
   const authorized = await requireSessionActor("bucket.comment", { type: "bucket", id });
   if (!(await getBuckets()).some((bucket) => bucket.id === id)) {
     throw new ApiError("not_found", `unknown bucket ${id}`, 404);

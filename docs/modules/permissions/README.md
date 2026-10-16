@@ -109,13 +109,19 @@ uses `GET /api/cron/vendor-spend-refresh?period=` with `CRON_SECRET` instead.
 email is listed, else the email — the id `GET /api/viewer` returns).
 `bucket.comment` (member and up): `PATCH /api/buckets/[id]/comments`, plus the
 bucket's project ACL (404 for an unknown bucket). One operation per request
-(`add` / `edit` / `delete` one comment, `BucketCommentOp`), applied in one
+(`add` / `edit` / `delete` one comment, `CommentOp`), applied in one
 transaction under a per-bucket advisory lock: an add gets a server id, stamp
 and the session author; only the author edits or deletes (403).
+Task comments follow the same rule (TASK-3043): `PATCH /api/tasks/[id]/comments`
+(`task.progress` plus the task's project ACL) takes one `CommentOp` under the
+task row lock, and `PATCH /api/tasks/[id]` refuses a `comments` field (400).
 `repo.request` (member and up): filing / updating one's own pending request
 (`POST /api/repos/requests`) and `POST /api/repos/validate`. The server verifies
 the request itself (allowed org + GitHub lookup) and re-verifies on a name or
-owner change; `verified` and its details never come from the body. A decision
+owner change; `verified` and its details never come from the body.
+`POST /api/repos/validate` with `requestId` re-validates the requester's own
+pending request and records the result on it (TASK-3043). Request ids are
+`RR-<uuid>`, unique across page loads. A decision
 needs `repo.approve` and, until mode `enforce`, the directory approver role
 (the same check as `POST /api/repos`); it is recorded under the session, is
 final, refuses self-approval (`self_approval`), an unverified request and a

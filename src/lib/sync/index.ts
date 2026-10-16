@@ -51,9 +51,11 @@ export {
   clearSiteContextCache,
 } from "./graph";
 export { validateRepoInOrg, type RepoValidation } from "./github";
+export { verifyRepoRequest, type RepoRequestVerification } from "./repo-requests";
 export { applyBucketCommentOp } from "./repo";
 export { startSyncScheduler, syncEnabled } from "./scheduler";
 export {
+  applyTaskCommentOp,
   createBucket,
   createProject,
   createTask,

@@ -29,15 +29,6 @@ export const subtaskSchema = z.object({
   status: z.enum(["todo", "doing", "blocked", "done"]).optional(),
 });
 
-export const commentSchema = z.object({
-  id: z.string(),
-  author: z.string(),
-  body: z.string().min(1).max(5000),
-  ts: z.string(),
-  mentions: z.array(z.string()).max(50),
-  editedTs: z.string().optional(),
-});
-
 export const patchTaskSchema = z.object({
   // Deprecated / ignored — authority is session oid only.
   actor: z.string().min(1).optional(),
@@ -51,7 +42,9 @@ export const patchTaskSchema = z.object({
   labels: z.array(z.string()).max(25).optional(),
   coassignees: z.array(z.string()).optional(),
   subtasks: z.array(subtaskSchema).optional(),
-  comments: z.array(commentSchema).max(500).optional(),
+  // Refused — comments are written one at a time through
+  // PATCH /api/tasks/{id}/comments under the session author (TASK-3043).
+  comments: z.undefined({ error: "Write task comments one at a time with PATCH /api/tasks/{id}/comments." }).optional(),
   accountableOwner: z.string().nullable().optional(),
   humanOnly: z.boolean().optional(),
   repos: z.array(z.string()).max(50).optional(),

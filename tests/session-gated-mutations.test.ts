@@ -6,7 +6,7 @@
 // seams (same pattern as tests/vendor-spend-routes.test.ts).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Bucket, Project, RepoRequest } from "@/lib/mc-data/types";
+import type { Bucket, Project, RepoRequest, Task } from "@/lib/mc-data/types";
 
 const authState = vi.hoisted(() => ({
   session: null as { user?: { oid?: string | null; email?: string | null } } | null,
@@ -17,8 +17,11 @@ const m = vi.hoisted(() => ({
   buckets: [] as unknown[],
   projects: [] as unknown[],
   repoRequests: [] as unknown[],
+  tasks: [] as unknown[],
   applyBucketCommentOp: vi.fn(async () => [] as unknown[]),
+  applyTaskCommentOp: vi.fn(async () => [] as unknown[] | null),
   upsertRepoRequest: vi.fn(async () => true),
+  recordRepoRequestVerification: vi.fn(async () => true),
   decideRepoRequest: vi.fn(async () => true),
   validateRepoInOrg: vi.fn(async () => ({ ok: true, visibility: "private", def: "main", lang: "Go" }) as Record<string, unknown>),
   reconcileSweep: vi.fn(async () => ({ processed: 0, resolved: 0, failed: 0 })),
@@ -54,15 +57,23 @@ vi.mock("@/lib/sync/repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sync/repo")>()),
   getBuckets: async () => m.buckets,
   getProjects: async () => m.projects,
+  getEntity: async (type: string, id: string) => {
+    const task = type === "task" ? (m.tasks as Task[]).find((t) => t.id === id) : undefined;
+    return task ? { data: task } : null;
+  },
   applyBucketCommentOp: m.applyBucketCommentOp,
   getRepoRequest: async (id: string) => (m.repoRequests as RepoRequest[]).find((r) => r.id === id) ?? null,
   upsertRepoRequest: m.upsertRepoRequest,
+  recordRepoRequestVerification: m.recordRepoRequestVerification,
   decideRepoRequest: m.decideRepoRequest,
 }));
 
+// The GitHub probe, where verifyRepoRequest (sync/repo-requests) calls it.
+vi.mock("@/lib/sync/github", () => ({ validateRepoInOrg: m.validateRepoInOrg }));
+
 vi.mock("@/lib/sync", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sync")>()),
-  validateRepoInOrg: m.validateRepoInOrg,
+  applyTaskCommentOp: m.applyTaskCommentOp,
 }));
 
 vi.mock("@/lib/compliance/service", () => ({ reconcileSweep: m.reconcileSweep }));
@@ -82,6 +93,7 @@ import * as repoValidateRoute from "@/app/api/repos/validate/route";
 import * as skillsInstallRoute from "@/app/api/skills-directory/install/route";
 import * as skillsSubmitRoute from "@/app/api/skills-directory/submit/route";
 import * as skillsSyncCheckRoute from "@/app/api/skills-directory/sync-check/route";
+import * as taskCommentsRoute from "@/app/api/tasks/[id]/comments/route";
 
 // greg (member) and vince (owner) are directory humans: their author id is the
 // directory id, the same id GET /api/viewer gives the client.
@@ -117,7 +129,10 @@ beforeEach(() => {
     { id: "PRJ-SECRET", visibility: "restricted", members: ["vince@petrasoap.com"] } as Project,
   ];
   m.repoRequests = [];
+  m.tasks = [{ id: "TASK-OPEN", bucket: "BKT-OPEN" } as Task, { id: "TASK-SECRET", bucket: "BKT-SECRET" } as Task];
+  m.applyTaskCommentOp.mockResolvedValue([]);
   m.upsertRepoRequest.mockResolvedValue(true);
+  m.recordRepoRequestVerification.mockResolvedValue(true);
   m.decideRepoRequest.mockResolvedValue(true);
   m.validateRepoInOrg.mockResolvedValue({ ok: true, visibility: "private", def: "main", lang: "Go" });
 });
@@ -203,6 +218,116 @@ describe("PATCH /api/buckets/{id}/comments", () => {
     );
     expect(resp.status).toBe(403);
     expect(m.applyBucketCommentOp).not.toHaveBeenCalled();
+  });
+});
+
+// ─── PATCH /api/tasks/{id}/comments (TASK-3043) ──────────────────────────────
+
+describe("PATCH /api/tasks/{id}/comments", () => {
+  it("applies one add under the session author, never the body's (member under enforce)", async () => {
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
+    const resp = await taskCommentsRoute.PATCH(
+      jsonReq("PATCH", { op: "add", body: "hi", mentions: [], author: "vince", id: "CMT-forged", ts: "x" }),
+      ctx("TASK-OPEN")
+    );
+    expect(resp.status).toBe(200);
+    expect(m.applyTaskCommentOp).toHaveBeenCalledWith("TASK-OPEN", { op: "add", body: "hi", mentions: [] }, "greg");
+  });
+
+  it("passes edit and delete through with the session as the author to check", async () => {
+    await taskCommentsRoute.PATCH(jsonReq("PATCH", { op: "delete", id: "CMT-1", author: "vince" }), ctx("TASK-OPEN"));
+    expect(m.applyTaskCommentOp).toHaveBeenCalledWith("TASK-OPEN", { op: "delete", id: "CMT-1" }, "greg");
+  });
+
+  it("refuses a whole-thread body", async () => {
+    const resp = await taskCommentsRoute.PATCH(
+      jsonReq("PATCH", { comments: [{ id: "CMT-1", author: "vince", body: "x", ts: "t", mentions: [] }] }),
+      ctx("TASK-OPEN")
+    );
+    expect(resp.status).toBe(400);
+    expect(m.applyTaskCommentOp).not.toHaveBeenCalled();
+  });
+
+  it("refuses a task in a restricted project the session is not a member of", async () => {
+    const resp = await taskCommentsRoute.PATCH(jsonReq("PATCH", { op: "add", body: "x", mentions: [] }), ctx("TASK-SECRET"));
+    expect(resp.status).toBe(403);
+    expect(m.applyTaskCommentOp).not.toHaveBeenCalled();
+  });
+
+  it("404s an unknown task", async () => {
+    const resp = await taskCommentsRoute.PATCH(jsonReq("PATCH", { op: "add", body: "x", mentions: [] }), ctx("TASK-404"));
+    expect(resp.status).toBe(404);
+    expect(m.applyTaskCommentOp).not.toHaveBeenCalled();
+  });
+
+  it("403s with no session and writes nothing", async () => {
+    authState.session = null;
+    const resp = await taskCommentsRoute.PATCH(jsonReq("PATCH", { op: "add", body: "x", mentions: [] }), ctx("TASK-OPEN"));
+    expect(resp.status).toBe(403);
+    expect(m.applyTaskCommentOp).not.toHaveBeenCalled();
+  });
+});
+
+// ─── POST /api/repos/validate (TASK-3043) ────────────────────────────────────
+
+describe("POST /api/repos/validate — records the result on the filed request", () => {
+  const validate = (body: Record<string, unknown>) => repoValidateRoute.POST(jsonReq("POST", body), ctx());
+
+  it("validates the stored request and records the server's result, ignoring any client verdict", async () => {
+    m.repoRequests = [pendingRequest({ verified: false })];
+    const resp = await validate({ requestId: "RR-1", owner: "petralabx", name: "new-repo", verified: false, ok: false });
+    expect(resp.status).toBe(200);
+    expect((await resp.json()).data).toMatchObject({ ok: true, visibility: "private" });
+    expect(m.validateRepoInOrg).toHaveBeenCalledWith("petralabx", "new-repo");
+    expect(m.recordRepoRequestVerification).toHaveBeenCalledWith({
+      id: "RR-1",
+      name: "new-repo",
+      owner: "petralabx",
+      verified: true,
+      note: "Validated against petralabx on GitHub.",
+      visibility: "private",
+      def: "main",
+      lang: "Go",
+    });
+  });
+
+  it("records a failed validation as unverified", async () => {
+    m.repoRequests = [pendingRequest({ verified: true })];
+    m.validateRepoInOrg.mockResolvedValue({ ok: false, note: "not found" });
+    await validate({ requestId: "RR-1", owner: "petralabx", name: "new-repo" });
+    const recorded = (m.recordRepoRequestVerification.mock.calls[0] as unknown[])[0] as RepoRequest;
+    expect(recorded).toMatchObject({ id: "RR-1", verified: false, note: "not found" });
+    expect(recorded.visibility).toBeUndefined(); // a stale lookup is not kept
+  });
+
+  it("lets only the requester validate their request", async () => {
+    m.repoRequests = [pendingRequest({ requestedBy: "greg" })];
+    authState.session = VINCE;
+    const resp = await validate({ requestId: "RR-1", owner: "petralabx", name: "new-repo" });
+    expect(resp.status).toBe(403);
+    expect(m.recordRepoRequestVerification).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unknown, decided or renamed request and records nothing", async () => {
+    expect((await validate({ requestId: "RR-9", name: "new-repo" })).status).toBe(404);
+    m.repoRequests = [pendingRequest({ status: "rejected", decidedBy: "vince" })];
+    expect((await validate({ requestId: "RR-1", name: "new-repo" })).status).toBe(409);
+    m.repoRequests = [pendingRequest()];
+    expect((await validate({ requestId: "RR-1", name: "other-repo" })).status).toBe(409);
+    expect(m.validateRepoInOrg).not.toHaveBeenCalled();
+    expect(m.recordRepoRequestVerification).not.toHaveBeenCalled();
+  });
+
+  it("409s when the request changed before the conditional record landed", async () => {
+    m.repoRequests = [pendingRequest()];
+    m.recordRepoRequestVerification.mockResolvedValue(false);
+    expect((await validate({ requestId: "RR-1", name: "new-repo" })).status).toBe(409);
+  });
+
+  it("without a requestId is a bare probe that records nothing", async () => {
+    const resp = await validate({ name: "new-repo" });
+    expect(resp.status).toBe(200);
+    expect(m.recordRepoRequestVerification).not.toHaveBeenCalled();
   });
 });
 

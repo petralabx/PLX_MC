@@ -11,6 +11,8 @@ import {
   __bucketMirrorSettled,
   __setBucketCommentMirrorForTests,
   __setPatchMirrorForTests,
+  __setTaskCommentMirrorForTests,
+  __taskCommentMirrorSettled,
   activeNotices,
   addBucketComment,
   addComment,
@@ -72,6 +74,61 @@ describe("task comments — add / edit / delete", () => {
     const c = addComment("TASK-221", "bye", "vince")!;
     deleteComment("TASK-221", c.id, "vince");
     expect(taskById("TASK-221")!.comments).toHaveLength(0);
+  });
+});
+
+describe("task comments — persisted one operation at a time (TASK-3043)", () => {
+  it("sends ops without an author or the thread, and reconciles to the stored thread", async () => {
+    const ops: unknown[] = [];
+    const stored = [
+      { id: "CMT-greg", author: "greg", body: "greg was here", ts: "t0", mentions: [] },
+      { id: "CMT-srv", author: "vince", body: "first @greg", ts: "t1", mentions: ["greg"] },
+    ];
+    __setTaskCommentMirrorForTests(async (taskId, op) => {
+      ops.push([taskId, op]);
+      return stored;
+    });
+    addComment("TASK-221", "first @greg", "vince");
+    await __taskCommentMirrorSettled();
+    expect(ops).toEqual([["TASK-221", { op: "add", body: "first @greg", mentions: ["greg"] }]]);
+    // Server truth wins: another user's comment the client had not seen is kept.
+    expect(taskById("TASK-221")!.comments).toEqual(stored);
+
+    editComment("TASK-221", "CMT-srv", "revised", "vince");
+    deleteComment("TASK-221", "CMT-srv", "vince");
+    await __taskCommentMirrorSettled();
+    expect(ops.slice(1)).toEqual([
+      ["TASK-221", { op: "edit", id: "CMT-srv", body: "revised", mentions: [] }],
+      ["TASK-221", { op: "delete", id: "CMT-srv" }],
+    ]);
+    expect(activeNotices()).toHaveLength(0);
+  });
+
+  it("rolls back the thread and the activity line + surfaces a notice when the server refuses", async () => {
+    __setTaskCommentMirrorForTests(async () => {
+      throw new Error("Only the author can edit or delete a comment.");
+    });
+    const activityBefore = taskById("TASK-221")!.activity.length;
+    addComment("TASK-221", "doomed", "vince");
+    await __taskCommentMirrorSettled();
+    expect(taskById("TASK-221")!.comments ?? []).toHaveLength(0);
+    expect(taskById("TASK-221")!.activity).toHaveLength(activityBefore);
+    const notices = activeNotices();
+    expect(notices).toHaveLength(1);
+    expect(notices[0].body).toContain("TASK-221");
+    expect(notices[0].body.toLowerCase()).toContain("rolled back");
+  });
+
+  it("never sends comments through the whole-task PATCH", async () => {
+    const patches: unknown[] = [];
+    __setPatchMirrorForTests(async (_id, patch) => {
+      patches.push(patch);
+      return taskById("TASK-221")!;
+    });
+    __setTaskCommentMirrorForTests(async () => []);
+    addComment("TASK-221", "hello", "vince");
+    await __taskCommentMirrorSettled();
+    expect(patches).toEqual([]);
   });
 });
 

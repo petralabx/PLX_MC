@@ -138,21 +138,20 @@ describe("patchTaskSchema (PATCH /api/tasks/{id} validation contract)", () => {
     expect(parsed.success).toBe(false);
   });
 
-  it("accepts a comments array (EN-001 / WS-3, app-only DB-only field)", () => {
+  it("refuses a client-supplied comments array — comments go through /comments one op at a time (TASK-3043)", () => {
     const parsed = patchTaskSchema.safeParse({
       actor: "vince",
       comments: [
         { id: "CMT-1", author: "vince", body: "hi @greg", ts: "2026.06.17 · 21:40", mentions: ["greg"] },
       ],
     });
-    expect(parsed.success).toBe(true);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error!.issues[0].path).toEqual(["comments"]);
+    expect(parsed.error!.issues[0].message).toContain("/comments");
   });
 
-  it("rejects a comment with an empty body", () => {
-    const parsed = patchTaskSchema.safeParse({
-      actor: "vince",
-      comments: [{ id: "CMT-1", author: "vince", body: "", ts: "t", mentions: [] }],
-    });
+  it("refuses even an empty comments array (it would wipe the thread)", () => {
+    const parsed = patchTaskSchema.safeParse({ actor: "vince", comments: [] });
     expect(parsed.success).toBe(false);
   });
 });

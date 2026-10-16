@@ -63,7 +63,7 @@ vi.mock("@/lib/sync/repo", () => ({
 
 // Imported AFTER the mocks so `state.ts`'s `import * as repo from "./repo"`
 // and `ensureSeeded` from "./engine" resolve to the mocked modules.
-import { patchTask } from "@/lib/sync/state";
+import { applyTaskCommentOp, patchTask } from "@/lib/sync/state";
 
 function seedTask(over: Partial<Task> = {}): Task {
   const base: Task = {
@@ -156,6 +156,55 @@ describe("patchTask — comments round-trip DB-only (EN-001 / WS-3)", () => {
     expect(row.data.comments).toEqual(comments);
     expect(row.sync_state).toBe("synced"); // app-only — never pushed to SharePoint
     expect(row.dirty_fields).toEqual([]);
+  });
+});
+
+// TASK-3043: a task thread takes one operation per write. The author is the
+// session (passed in by PATCH /api/tasks/{id}/comments), the id and stamp are
+// the server's, only the author edits or deletes, and nobody else's comment is
+// ever dropped or rewritten.
+describe("applyTaskCommentOp — per-operation, author-checked", () => {
+  const vinceNote = { id: "CMT-1", author: "vince", body: "vince's note", ts: "t1", mentions: [] };
+  const gregNote = { id: "CMT-2", author: "greg", body: "greg's note", ts: "t2", mentions: [] };
+
+  it("adds under the session author with a server id and stamp, keeping the thread", async () => {
+    seedTask({ comments: [vinceNote] });
+    const thread = await applyTaskCommentOp("TASK-900", { op: "add", body: "hi @greg", mentions: ["greg"] }, "greg");
+    expect(thread).toHaveLength(2);
+    expect(thread![0]).toEqual(vinceNote);
+    expect(thread![1]).toMatchObject({ author: "greg", body: "hi @greg", mentions: ["greg"], ts: "2026.06.16 · 00:00" });
+    expect(thread![1].id).toMatch(/^CMT-[0-9a-f-]{36}$/);
+    expect(store.rows.get("task:TASK-900")!.data.comments).toEqual(thread);
+    expect(store.rows.get("task:TASK-900")!.sync_state).toBe("synced"); // app-only, never pushed
+  });
+
+  it("edits and deletes the author's own comment, leaving another user's unchanged", async () => {
+    seedTask({ comments: [vinceNote, gregNote] });
+    const edited = await applyTaskCommentOp("TASK-900", { op: "edit", id: "CMT-2", body: "revised", mentions: [] }, "greg");
+    expect(edited![0]).toEqual(vinceNote);
+    expect(edited![1]).toMatchObject({ id: "CMT-2", author: "greg", body: "revised", editedTs: "2026.06.16 · 00:00" });
+    const deleted = await applyTaskCommentOp("TASK-900", { op: "delete", id: "CMT-2" }, "greg");
+    expect(deleted).toEqual([vinceNote]);
+  });
+
+  it("refuses to edit or delete another user's comment and writes nothing", async () => {
+    seedTask({ comments: [vinceNote, gregNote] });
+    await expect(
+      applyTaskCommentOp("TASK-900", { op: "edit", id: "CMT-1", body: "hijacked", mentions: [] }, "greg")
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+    await expect(applyTaskCommentOp("TASK-900", { op: "delete", id: "CMT-1" }, "greg")).rejects.toMatchObject({
+      code: "forbidden",
+      status: 403,
+    });
+    expect(store.rows.get("task:TASK-900")!.data.comments).toEqual([vinceNote, gregNote]);
+  });
+
+  it("404s an unknown comment and returns null for an unknown task", async () => {
+    seedTask({ comments: [vinceNote] });
+    await expect(applyTaskCommentOp("TASK-900", { op: "delete", id: "CMT-9" }, "vince")).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(await applyTaskCommentOp("TASK-404", { op: "add", body: "x", mentions: [] }, "vince")).toBeNull();
   });
 });
 

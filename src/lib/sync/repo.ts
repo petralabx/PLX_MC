@@ -8,8 +8,8 @@ import { randomUUID } from "node:crypto";
 import type {
   AuditRow,
   Bucket,
-  BucketCommentOp,
   Comment,
+  CommentOp,
   Project,
   Repo,
   RepoRequest,
@@ -815,7 +815,7 @@ export async function bucketCommentsByBucket(): Promise<Record<string, Comment[]
 // an unknown id).
 export async function applyBucketCommentOp(
   bucketId: string,
-  op: BucketCommentOp,
+  op: CommentOp,
   author: string
 ): Promise<Comment[]> {
   return withTransaction(async (q) => {
@@ -1014,6 +1014,23 @@ export async function upsertRepoRequest(req: RepoRequest): Promise<boolean> {
       req.decidedBy ?? null,
       req.decidedTs ?? null,
     ]
+  );
+  return rows.length > 0;
+}
+
+// Record a GitHub-org validation on a still-pending request (TASK-3043): the
+// server's /repos/validate result, never the client's. Only lands while the row
+// is pending with the name and owner that were validated; returns false
+// (nothing written) when it was decided or renamed meanwhile.
+export async function recordRepoRequestVerification(
+  req: Pick<RepoRequest, "id" | "name" | "owner" | "verified" | "note" | "visibility" | "def" | "lang">
+): Promise<boolean> {
+  const rows = await query(
+    `UPDATE repo_requests
+        SET verified = $4, note = $5, visibility = $6, def_branch = $7, lang = $8, updated_at = now()
+      WHERE id = $1 AND status = 'pending' AND name = $2 AND owner = $3
+      RETURNING id`,
+    [req.id, req.name, req.owner, req.verified, req.note ?? null, req.visibility ?? null, req.def ?? null, req.lang ?? null]
   );
   return rows.length > 0;
 }

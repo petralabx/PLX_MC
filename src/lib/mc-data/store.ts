@@ -44,8 +44,8 @@ import type {
   Actor,
   AuditRow,
   Bucket,
-  BucketCommentOp,
   Comment,
+  CommentOp,
   FileEntry,
   Human,
   InboxNotification,
@@ -390,12 +390,17 @@ function applyServerState(snapshot: ServerSnapshot) {
   emit();
 }
 
-// Mirror a repo request to the server (persist). Fire-and-forget; a no-op under
-// SSR/tests, like every other serverCall — the optimistic state stands.
-function mirrorRepoRequest(request: RepoRequest) {
-  serverCall(async () => {
-    await api("/repos/requests", { method: "POST", body: JSON.stringify(request) });
-  });
+// File a repo request on the server (persist). Resolves once the POST settles
+// (a failure is logged, like serverCall, and the local state stands), so the
+// validation can follow it; resolves at once under SSR/tests.
+function mirrorRepoRequest(request: RepoRequest): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  return api("/repos/requests", { method: "POST", body: JSON.stringify(request) }).then(
+    () => undefined,
+    (err) => {
+      console.warn("[mc-store] server mirror unavailable — staying on local state:", err);
+    }
+  );
 }
 
 // The GET /api/state seam (same pattern as the viewer seam below). A failed
@@ -645,7 +650,8 @@ export function invitePerson(email: string): string | null {
 // ─── Repo registry: self-service request → approve (EN-002 / WS-2) ───────────
 
 // GitHub-org validation seam. Production default issues the real POST to
-// /api/repos/validate (which calls the org with GITHUB_TOKEN). Overridable in
+// /api/repos/validate (which calls the org with GITHUB_TOKEN and records the
+// result on the filed request, TASK-3043). Overridable in
 // tests (__setRepoValidatorForTests) so the request→validate→reconcile path is
 // unit-testable even though `serverCall`/the default validator are no-ops under
 // SSR/test. Result shape mirrors lib/sync/github.ts RepoValidation.
@@ -656,17 +662,16 @@ interface RepoValidationResult {
   lang?: string;
   note?: string;
 }
-type RepoValidator = (owner: string, name: string) => Promise<RepoValidationResult>;
+type RepoValidator = (owner: string, name: string, requestId: string) => Promise<RepoValidationResult>;
 
-const defaultRepoValidator: RepoValidator = (owner, name) =>
+const defaultRepoValidator: RepoValidator = (owner, name, requestId) =>
   api<RepoValidationResult>("/repos/validate", {
     method: "POST",
-    body: JSON.stringify({ owner, name }),
+    body: JSON.stringify({ owner, name, requestId }),
   });
 
 let repoValidator: RepoValidator = defaultRepoValidator;
 let repoValidatorInjected = false;
-let repoRequestSeq = 0;
 // Test seam: the in-flight validation of the last requestRepo call so a test
 // can await the reconcile (mirrors the patchTaskFields return-promise pattern).
 let repoValidationInFlight: Promise<void> = Promise.resolve();
@@ -693,7 +698,9 @@ export interface NewRepoRequestInput {
 export function requestRepo(input: NewRepoRequestInput, actorId: string = viewerId()): RepoRequest {
   const name = (input.name ?? "").trim();
   const owner = (input.owner ?? "").trim() || DEFAULT_NEW_REPO_ORG;
-  const id = `RR-${++repoRequestSeq}`;
+  // Unique across page loads (TASK-3043): a per-load counter reissued RR-1 and
+  // collided with the requester's own earlier request.
+  const id = `RR-${crypto.randomUUID()}`;
   const request: RepoRequest = {
     id,
     name,
@@ -710,7 +717,7 @@ export function requestRepo(input: NewRepoRequestInput, actorId: string = viewer
   state.repoRequests = [request, ...state.repoRequests];
   pushAudit(actorId, `Requested repo ${name} — pending GitHub-org validation and approval.`, "pending");
   emit();
-  mirrorRepoRequest(request);
+  const filed = mirrorRepoRequest(request);
 
   if (!isAllowedRepoOrg(owner)) {
     return request;
@@ -729,7 +736,6 @@ export function requestRepo(input: NewRepoRequestInput, actorId: string = viewer
       r.note = result.note ?? "Could not be validated against the org.";
     }
     emit();
-    mirrorRepoRequest(r);
   };
   const onError = (err: unknown) => {
     const r = state.repoRequests.find((x) => x.id === id);
@@ -737,13 +743,14 @@ export function requestRepo(input: NewRepoRequestInput, actorId: string = viewer
     r.verified = false;
     r.note = `Validation failed: ${err instanceof Error ? err.message : "unknown error"}.`;
     emit();
-    mirrorRepoRequest(r);
   };
 
   // SSR/tests with no injected validator: leave the request unverified (no
-  // network to call) — matching the serverCall no-op contract.
+  // network to call) — matching the serverCall no-op contract. Validate once
+  // the request is filed: the server records the result on it, and approval
+  // reads only that server-recorded result.
   if (typeof window !== "undefined" || repoValidatorInjected) {
-    repoValidationInFlight = repoValidator(owner, name).then(reconcile, onError);
+    repoValidationInFlight = filed.then(() => repoValidator(owner, name, id)).then(reconcile, onError);
   }
   return request;
 }
@@ -904,7 +911,6 @@ export type TaskFieldPatch = Partial<
     | "labels"
     | "coassignees"
     | "subtasks"
-    | "comments"
     | "assignee"
     | "accountableOwner"
     | "humanOnly"
@@ -1249,15 +1255,75 @@ function buildComment(body: string, author: string): Comment | null {
   };
 }
 
-// Add a comment to a task's thread (EN-001 / WS-3). Persists through the task
-// PATCH spine (DB-only tier — comments are never mirrored to SharePoint), then
-// fires the @mention notify path for anyone tagged.
+// Task threads persist one operation at a time through
+// PATCH /api/tasks/{id}/comments (TASK-3043): the server sets the id, stamp and
+// session author and only lets the author edit or delete, so a stale or forged
+// client thread can never drop or rewrite someone else's comment. Same
+// optimistic apply → reconcile / rollback+notice spine as the bucket thread.
+type TaskCommentMirror = (taskId: string, op: CommentOp) => Promise<Comment[]>;
+
+const defaultTaskCommentMirror: TaskCommentMirror = (taskId, op) =>
+  api<Comment[]>(`/tasks/${taskId}/comments`, {
+    method: "PATCH",
+    body: JSON.stringify(op),
+  });
+
+let taskCommentMirror = defaultTaskCommentMirror;
+let taskCommentMirrorInjected = false;
+let taskCommentMirrorInFlight: Promise<void> = Promise.resolve();
+
+// Test seam (mirrors __setBucketCommentMirrorForTests). Pass null to restore.
+export function __setTaskCommentMirrorForTests(fn: TaskCommentMirror | null) {
+  taskCommentMirror = fn ?? defaultTaskCommentMirror;
+  taskCommentMirrorInjected = fn !== null;
+}
+
+// Test seam: await the in-flight task-thread mirror.
+export function __taskCommentMirrorSettled(): Promise<void> {
+  return taskCommentMirrorInFlight;
+}
+
+// Apply `comments` optimistically with an activity line, then send `op`.
+// Reconcile to the stored thread on success; restore the prior thread and
+// activity + surface a notice on failure. No server call under SSR/tests with
+// no injected mirror (the optimistic state stands).
+function persistTaskThread(t: Task, comments: Comment[], op: CommentOp, activity: string): void {
+  const prior = clone(t.comments ?? []);
+  const priorActivity = t.activity;
+  t.comments = comments;
+  t.activity = [{ age: "now", who: viewerId(), kind: "move", what: activity }, ...t.activity];
+  emit();
+  if (typeof window === "undefined" && !taskCommentMirrorInjected) return;
+  taskCommentMirrorInFlight = taskCommentMirror(t.id, op).then(
+    (saved) => {
+      const cur = taskById(t.id);
+      if (cur) cur.comments = saved;
+      emit();
+    },
+    (err) => {
+      const cur = taskById(t.id);
+      if (cur) {
+        cur.comments = prior;
+        cur.activity = priorActivity;
+      }
+      pushNotice(
+        `Couldn't save the comment on ${t.id} — it was rolled back. ${
+          err instanceof Error ? err.message : "The server rejected the update."
+        }`
+      );
+      emit();
+    }
+  );
+}
+
+// Add a comment to a task's thread (EN-001 / WS-3). App-only (never mirrored
+// to SharePoint), then fires the @mention notify path for anyone tagged.
 export function addComment(taskId: string, body: string, author: string = viewerId()): Comment | null {
   const t = taskById(taskId);
   if (!t) return null;
   const comment = buildComment(body, author);
   if (!comment) return null;
-  patchTaskFields(taskId, { comments: [...(t.comments ?? []), comment] }, { activity: "added a comment" });
+  persistTaskThread(t, [...(t.comments ?? []), comment], { op: "add", body: comment.body, mentions: comment.mentions }, "added a comment");
   notifyMentions(comment.mentions, author, { taskId, label: taskId });
   return comment;
 }
@@ -1277,7 +1343,7 @@ export function editComment(taskId: string, commentId: string, body: string, edi
   const comments = (t.comments ?? []).map((c) =>
     c.id === commentId ? { ...c, body: text, mentions, editedTs: stamp() } : c
   );
-  patchTaskFields(taskId, { comments }, { activity: "edited a comment" });
+  persistTaskThread(t, comments, { op: "edit", id: commentId, body: text, mentions }, "edited a comment");
   if (added.length) notifyMentions(added, editor, { taskId, label: taskId });
 }
 
@@ -1287,10 +1353,11 @@ export function deleteComment(taskId: string, commentId: string, actor: string =
   if (!t) return;
   const existing = (t.comments ?? []).find((c) => c.id === commentId);
   if (!existing || existing.author !== actor) return;
-  patchTaskFields(
-    taskId,
-    { comments: (t.comments ?? []).filter((c) => c.id !== commentId) },
-    { activity: "deleted a comment" }
+  persistTaskThread(
+    t,
+    (t.comments ?? []).filter((c) => c.id !== commentId),
+    { op: "delete", id: commentId },
+    "deleted a comment"
   );
 }
 
@@ -1303,7 +1370,7 @@ export function deleteComment(taskId: string, commentId: string, actor: string =
 // failed write is never silently dropped. Comments stay app-only (never pushed
 // to SharePoint, per the EN-001 decision).
 
-type BucketCommentMirror = (bucketId: string, op: BucketCommentOp) => Promise<Comment[]>;
+type BucketCommentMirror = (bucketId: string, op: CommentOp) => Promise<Comment[]>;
 
 const defaultBucketCommentMirror: BucketCommentMirror = (bucketId, op) =>
   api<Comment[]>(`/buckets/${bucketId}/comments`, {
@@ -1330,7 +1397,7 @@ export function __bucketMirrorSettled(): Promise<void> {
 // Send one comment operation to the server; reconcile to the stored thread on
 // success, restore `prior` + surface a notice on failure. No-op under SSR/tests
 // with no injected mirror (the optimistic state stands).
-function persistBucketThread(bucketId: string, prior: Comment[], op: BucketCommentOp): void {
+function persistBucketThread(bucketId: string, prior: Comment[], op: CommentOp): void {
   if (typeof window === "undefined" && !bucketCommentMirrorInjected) return;
   bucketMirrorInFlight = bucketCommentMirror(bucketId, op).then(
     (saved) => {
@@ -1896,7 +1963,6 @@ export function resetStore() {
   patchMirrorInjected = false;
   repoValidator = defaultRepoValidator;
   repoValidatorInjected = false;
-  repoRequestSeq = 0;
   repoValidationInFlight = Promise.resolve();
   repoDecisionMirror = defaultRepoDecisionMirror;
   repoDecisionMirrorInjected = false;
@@ -1904,6 +1970,9 @@ export function resetStore() {
   bucketCommentMirror = defaultBucketCommentMirror;
   bucketCommentMirrorInjected = false;
   bucketMirrorInFlight = Promise.resolve();
+  taskCommentMirror = defaultTaskCommentMirror;
+  taskCommentMirrorInjected = false;
+  taskCommentMirrorInFlight = Promise.resolve();
   bucketUpdateMirror = defaultBucketUpdateMirror;
   bucketUpdateMirrorInjected = false;
   bucketUpdateInFlight = Promise.resolve();

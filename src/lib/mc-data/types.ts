@@ -226,9 +226,10 @@ export interface Comment {
   editedTs?: string;
 }
 
-// One bucket-comment write (PATCH /api/buckets/{id}/comments, TASK-3011). The
-// server sets the id, author and timestamps; only the author edits or deletes.
-export type BucketCommentOp =
+// One comment write (PATCH /api/buckets/{id}/comments, TASK-3011;
+// PATCH /api/tasks/{id}/comments, TASK-3043). The server sets the id, author
+// and timestamps; only the author edits or deletes.
+export type CommentOp =
   | { op: "add"; body: string; mentions: string[] }
   | { op: "edit"; id: string; body: string; mentions: string[] }
   | { op: "delete"; id: string };

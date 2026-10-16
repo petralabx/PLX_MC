@@ -3,6 +3,7 @@
 // the mirror pending/dirty — the engine's sweep is the single outbound code
 // path (spec §6 "pending until the first successful write, then synced").
 
+import { randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/api/route";
 import { OPERATOR_ID, HUMANS, SP_LISTS } from "@/lib/mc-data/data";
 import type { Cancellation } from "@/lib/mc-data/cancellation";
@@ -26,6 +27,7 @@ import type {
   AuditRow,
   Bucket,
   Comment,
+  CommentOp,
   FileEntry,
   Project,
   ProjectStatus,
@@ -819,4 +821,35 @@ export async function patchTask(
   }
   const updated = await repo.getEntity("task", id, opts.query);
   return (updated?.data ?? null) as Task | null;
+}
+
+// Apply one comment operation to a task's thread (TASK-3043), the rules of
+// applyBucketCommentOp: an add is recorded under `author` (the signed-in
+// session) with a server id and stamp, and an edit or delete must target the
+// author's own comment (403, 404 for an unknown id). Under the task row lock,
+// so concurrent writers serialize and nobody's comment is lost. Returns the
+// stored thread, or null for an unknown task.
+export async function applyTaskCommentOp(id: string, op: CommentOp, author: string): Promise<Comment[] | null> {
+  await ensureSeeded();
+  return withTransaction(async (q) => {
+    const row = await repo.getEntity("task", id, q, true);
+    if (!row) return null;
+    const thread = (row.data as unknown as Task).comments ?? [];
+    let next: Comment[];
+    if (op.op === "add") {
+      next = [...thread, { id: `CMT-${randomUUID()}`, author, body: op.body, ts: repo.stamp(), mentions: op.mentions }];
+    } else {
+      const existing = thread.find((c) => c.id === op.id);
+      if (!existing) throw new ApiError("not_found", `unknown comment ${op.id} on ${id}`, 404);
+      if (existing.author !== author) {
+        throw new ApiError("forbidden", "Only the author can edit or delete a comment.", 403);
+      }
+      next =
+        op.op === "edit"
+          ? thread.map((c) => (c.id === op.id ? { ...c, body: op.body, mentions: op.mentions, editedTs: repo.stamp() } : c))
+          : thread.filter((c) => c.id !== op.id);
+    }
+    const task = await patchTask(id, { comments: next }, author, { query: q });
+    return task?.comments ?? next;
+  });
 }

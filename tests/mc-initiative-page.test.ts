@@ -1,12 +1,23 @@
 // TASK-3175 — Initiative (bucket) page redesign: the spec moves into the
 // header kicker (no standalone "/ Spec" block), and Documents & links lists
 // every bucket repo as a GitHub row after the five SharePoint registers.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { BucketDetail, docRowsForBucket, specForBucket } from "@/components/mc/bucket-detail";
 import { addBucket, resetStore, updateBucket } from "@/lib/mc-data/store";
+
+// The body of the first `@container main (max-width: 599px)` block in a stylesheet.
+function phoneTier(file: string): string {
+  const css = readFileSync(join(process.cwd(), "src/styles", file), "utf8");
+  const start = css.indexOf("@container main (max-width: 599px)");
+  expect(start).toBeGreaterThan(-1);
+  return css.slice(start, css.indexOf("\n}\n", start));
+}
 
 beforeEach(() => resetStore());
 
@@ -93,5 +104,16 @@ describe("BucketDetail strip and tasks", () => {
     expect(html).toMatch(/0 tasks · 0 done · 0 cancelled · 0 in\s+flight · <span class="">0 blocked<\/span>/);
     expect(html).toContain('aria-label="Task filter"');
     expect(html).toContain("No tasks in this initiative yet.");
+  });
+});
+
+describe("Owner picker at the phone tier", () => {
+  // .ppick is 284px wide; anchored at the owner cell (column 2 of 3) it ran
+  // past a 390px viewport. It anchors to the facts zone's left edge instead.
+  it("anchors the strip's owner picker to the facts zone and caps its width", () => {
+    const block = phoneTier("mc-overview.css");
+    expect(block).toMatch(/\.mc \.pv-facts \{\s*position: relative;/);
+    expect(block).toMatch(/\.mc \.pv-strip \.pv-owner \{\s*position: static;/);
+    expect(block).toMatch(/\.mc \.pv-strip \.ppick \{\s*min-width: min\(284px, 100%\);/);
   });
 });

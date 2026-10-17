@@ -1569,6 +1569,20 @@
     font-size: 30px;
   }
 
+  /* The owner picker anchors to the facts zone's left edge, not the owner
+     cell (column 2 or 3), so its 284px never runs past a phone viewport. */
+  .mc .pv-facts {
+    position: relative;
+  }
+
+  .mc .pv-strip .pv-owner {
+    position: static;
+  }
+
+  .mc .pv-strip .ppick {
+    min-width: min(284px, 100%);
+  }
+
   .mc .pv-dates .today {
     display: none;
   }

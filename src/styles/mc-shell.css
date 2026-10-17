@@ -368,6 +368,11 @@
     margin-inline: calc(-1 * var(--mc-bleed));
     padding-inline: calc(var(--mc-bleed) + var(--p-gutter));
   }
+  /* The overview strip's zones pad themselves, so it bleeds without a gutter. */
+  .mc .mc-stage .pv-strip {
+    margin-inline: calc(-1 * var(--mc-bleed));
+    padding-inline: var(--mc-bleed);
+  }
 
   /* Phone group strip — every screen of the current tab, one tap away. */
   .mc .mc-subnav {

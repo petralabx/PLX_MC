@@ -1132,3 +1132,13 @@
   the real status. The client turns `signin_required` on a read into a sign-in round trip back to
   the same screen; a write keeps the page so unsaved input survives. When shortening a session,
   test what an already-open tab does when it ends.
+
+## 2026-10-17 — TASK-3175: a restyled page kicker broke e2e navigation checks
+- **What went wrong:** The Initiative page redesign replaced the header's `.kk` kicker with a new
+  `.ini-kicker` row. Ten e2e tests (ui-project-responsive, ui-project-wiring) wait for
+  `.mc .ph .kk` with "Initiative ·" after navigating to a bucket, so CI failed on PR #358.
+- **Root cause:** `.ph .kk` is the shared page-kicker hook that specs and the header skin rely on.
+  I ran the unit tests and screenshots, but not the e2e specs that navigate into the page.
+- **Rule going forward:** When restyling a page header, keep the shared hook classes (`.ph`,
+  `.kk`, `.r`) and add a page class next to them. Before pushing, grep `e2e/` for the selectors
+  the touched markup used and run those specs.

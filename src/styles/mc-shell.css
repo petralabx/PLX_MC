@@ -26,9 +26,9 @@
    - Only drawers, sheets and the pane move (--p-dur, --p-ease); reduced
      motion means nothing moves. Hover styles live under (hover: hover). */
 
-/* Registered so the ultra-wide gutter below resolves 100cqi against <main>
+/* Registered so the ultra-wide bleed below resolves 100cqi against <main>
    where it is declared, then inherits as a plain length. */
-@property --mc-col-gutter {
+@property --mc-bleed {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
@@ -353,16 +353,20 @@
   .mc .mc-stage > :not(.mc-subnav) {
     flex: 1 0 auto;
   }
-  /* Ultra-wide column: screens pad with --p-gutter and draw hairlines on the
-     same full-bleed element, so growing the gutter to (main − 1560px) / 2
-     centres every page header, strip and body in a 1560px column while the
-     hairlines stay full-bleed. Below 1612px of main it is the base gutter. */
-  .mc .mc-stage {
-    --mc-gutter-base: var(--p-gutter);
+  /* Ultra-wide column: each screen root is inset by --mc-bleed, so its
+     content (gutters included) centres in a 1560px column and every layout
+     inside behaves as it does at 1560px. The page header and the views
+     strip bleed back out to <main>'s edges, so their hairlines and fills
+     stay full-bleed while their content stays in the column. 0 below
+     1560px + two gutters of main. */
+  .mc .mc-stage > :not(.mc-subnav) {
+    --mc-bleed: max(0px, calc((100cqi - 1560px) / 2 - var(--p-gutter)));
+    width: auto; /* stretch inside the inset, even where a screen sets 100% */
+    margin-inline: var(--mc-bleed);
   }
-  .mc .mc-stage > * {
-    --mc-col-gutter: max(var(--mc-gutter-base), calc((100cqi - 1560px) / 2));
-    --p-gutter: var(--mc-col-gutter);
+  .mc .mc-stage :is(.ph, .tb, .filterbar) {
+    margin-inline: calc(-1 * var(--mc-bleed));
+    padding-inline: calc(var(--mc-bleed) + var(--p-gutter));
   }
 
   /* Phone group strip — every screen of the current tab, one tap away. */

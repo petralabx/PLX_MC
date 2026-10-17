@@ -80,3 +80,18 @@ describe("BucketDetail body", () => {
     }
   });
 });
+
+describe("BucketDetail strip and tasks", () => {
+  it("uses the shared overview strip (3-up facts) and the three-way task filter", () => {
+    const bucket = addBucket({ name: "Shared parts" });
+    const html = render(bucket.id);
+    expect(html).toContain('data-testid="overview-strip"');
+    expect(html).toContain("pv-strip-in cols-3");
+    for (const label of ["Health", "Accountable owner", "Project", "Started", "Target"]) {
+      expect(html).toContain(`<span class="k">${label}</span>`);
+    }
+    expect(html).toMatch(/0 tasks · 0 done · 0 cancelled · 0 in\s+flight · <span class="">0 blocked<\/span>/);
+    expect(html).toContain('aria-label="Task filter"');
+    expect(html).toContain("No tasks in this initiative yet.");
+  });
+});

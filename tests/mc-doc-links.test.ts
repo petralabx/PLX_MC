@@ -1,8 +1,8 @@
-// Project / bucket doc links: prd URLs become safe links; built-in PRD ids and
+// Doc links: prd URLs become safe links; built-in PRD ids and
 // anything that isn't http(s) do not (src/lib/mc-data/doc-links.ts).
 import { describe, expect, it } from "vitest";
 
-import { docLinkFromPrd, normalizeBucketPrd, projectDocLinks } from "@/lib/mc-data/doc-links";
+import { SHAREPOINT_REGISTERS, docLinkFromPrd, docLinkKind, normalizeBucketPrd } from "@/lib/mc-data/doc-links";
 
 const SPEC =
   "https://github.com/petralabx/plx-customer-portal/blob/staging/docs/projects/cos-companion/DESKTOP-SPEC.md";
@@ -64,24 +64,27 @@ describe("normalizeBucketPrd", () => {
   });
 });
 
-describe("projectDocLinks", () => {
-  const project = { id: "PRJ-COS-COMPANION", name: "COS Companion", prd: null };
+describe("docLinkKind", () => {
+  const kind = (url: string) => docLinkKind(docLinkFromPrd(url)!);
 
-  it("is empty when nothing links a doc (the block stays hidden)", () => {
-    expect(projectDocLinks(project, [{ id: "BKT-A", name: "A", prd: null }])).toEqual([]);
+  it("picks the task icon for a TASK-* page, the issue icon for a GitHub issue, else doc", () => {
+    expect(kind("https://mc.plxcustomer.io/tasks/TASK-2181")).toBe("task");
+    expect(kind("https://github.com/petralabx/PLX_MC/issues/341")).toBe("issue");
+    expect(kind(SPEC)).toBe("doc");
+    expect(kind("https://docs.example.com")).toBe("doc");
   });
+});
 
-  it("lists the project link first, then buckets in the given order, skipping non-links", () => {
-    const links = projectDocLinks({ ...project, prd: "https://example.com/README.md" }, [
-      { id: "BKT-DESKTOP-SHELL", name: "Desktop shell", prd: SPEC },
-      { id: "BKT-PWA-SPIKE", name: "PWA spike", prd: null },
-      { id: "BKT-LEGACY", name: "Legacy", prd: "PRD-LEGACY" },
-      { id: "BKT-UAT", name: "UAT", prd: "https://example.com/UAT-PLAN.md" },
+describe("SHAREPOINT_REGISTERS", () => {
+  it("lists the five registers once each, documents last as the library", () => {
+    expect(SHAREPOINT_REGISTERS.map((r) => r.label)).toEqual([
+      "Project Plan",
+      "Roadmap",
+      "Milestone Register",
+      "Risk Register",
+      "Project Documents",
     ]);
-    expect(links.map((l) => [l.scope, l.scopeId, l.scopeName, l.label])).toEqual([
-      ["project", "PRJ-COS-COMPANION", "COS Companion", "README.md"],
-      ["bucket", "BKT-DESKTOP-SHELL", "Desktop shell", "DESKTOP-SPEC.md"],
-      ["bucket", "BKT-UAT", "UAT", "UAT-PLAN.md"],
-    ]);
+    expect(new Set(SHAREPOINT_REGISTERS.map((r) => r.key)).size).toBe(5);
+    expect(SHAREPOINT_REGISTERS.filter((r) => r.source === "Library").map((r) => r.key)).toEqual(["documents"]);
   });
 });

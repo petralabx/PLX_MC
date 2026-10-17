@@ -105,6 +105,32 @@ export function isPublicAsset(pathname: string): boolean {
   );
 }
 
+/** An API path (/api or /api/…): answered with JSON, never with a page. */
+export function isApiPath(pathname: string): boolean {
+  return /^\/api(\/|$)/.test(pathname);
+}
+
+/**
+ * Where sign-in returns the browser (TASK-3161): the path and query of
+ * `callbackUrl`. Its origin is dropped, so the result is always a page on this
+ * site. A `//` path (protocol-relative once redirected to), an API path (raw
+ * JSON), /signin itself or anything unparseable returns home.
+ */
+export function signInReturnPath(callbackUrl: unknown): string {
+  if (typeof callbackUrl !== "string") return "/";
+  let url: URL;
+  try {
+    url = new URL(callbackUrl, "https://mc.invalid");
+  } catch {
+    return "/";
+  }
+  const { pathname, search } = url;
+  if (!/^https?:$/.test(url.protocol) || pathname.startsWith("//") || pathname === "/signin" || isApiPath(pathname)) {
+    return "/";
+  }
+  return `${pathname}${search}`;
+}
+
 const sha256 = async (value: string) =>
   new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
 

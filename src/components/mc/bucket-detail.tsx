@@ -31,7 +31,12 @@ import {
   type Task,
   type Trace,
 } from "@/lib/mc-data";
-import { docLinkFromPrd, normalizeBucketPrd } from "@/lib/mc-data/doc-links";
+import {
+  SHAREPOINT_REGISTERS,
+  docLinkFromPrd,
+  normalizeBucketPrd,
+  type SharePointRegisterKey,
+} from "@/lib/mc-data/doc-links";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   addBucketComment,
@@ -56,6 +61,14 @@ import { Timeline } from "./timeline";
 // A static fallback (first fixture initiative) so the detail view always
 // resolves to a real bucket; live resolution goes through bucketById (EN-005).
 const FALLBACK_BUCKET = BUCKETS[0];
+
+const REGISTER_ICON: Record<SharePointRegisterKey, LucideIcon> = {
+  plan: ListChecks,
+  roadmap: MapIcon,
+  milestones: Flag,
+  risks: TriangleAlert,
+  documents: Folder,
+};
 
 interface BucketRollups {
   tasks: Task[];
@@ -124,11 +137,13 @@ export interface DocRow {
 /** The five SharePoint registers, then one GitHub row per bucket repo. */
 export function docRowsForBucket(repos: string[], repoName: (id: string) => string): DocRow[] {
   return [
-    { key: "plan", icon: ListChecks, label: "Project Plan", source: "MS List", target: null },
-    { key: "roadmap", icon: MapIcon, label: "Roadmap", source: "MS List", target: null },
-    { key: "milestones", icon: Flag, label: "Milestone Register", source: "MS List", target: null },
-    { key: "risks", icon: TriangleAlert, label: "Risk Register", source: "MS List", target: null },
-    { key: "docs", icon: Folder, label: "Project Documents", source: "Library", target: "files" },
+    ...SHAREPOINT_REGISTERS.map((register): DocRow => ({
+      key: register.key,
+      icon: REGISTER_ICON[register.key],
+      label: register.label,
+      source: register.source,
+      target: register.key === "documents" ? "files" : null,
+    })),
     ...repos.map((id): DocRow => ({
       key: `repo:${id}`,
       icon: GitBranch,
@@ -139,7 +154,7 @@ export function docRowsForBucket(repos: string[], repoName: (id: string) => stri
   ];
 }
 
-function PrdLinkField({ bucketId, prd }: { bucketId: string; prd: string | null }) {
+export function PrdLinkField({ bucketId, prd }: { bucketId: string; prd: string | null }) {
   const [draft, setDraft] = useState(prd ?? "");
   const [message, setMessage] = useState<string | null>(null);
 

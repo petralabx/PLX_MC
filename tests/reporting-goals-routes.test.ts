@@ -36,12 +36,21 @@ vi.mock("@/lib/reporting/goals/refresh", async (importOriginal) => ({
 vi.mock("@/lib/reporting/goals/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/reporting/goals/store")>()),
   getRun: vi.fn(async (id: number) => (id === 7 ? { id: 7, status: "running", step: "reading-sources" } : null)),
+  // Run 41 has its lines; run 40 couldn't read them; any other run has none (it failed, or predates them).
+  loadShipmentLines: vi.fn(async (id: number) =>
+    id === 41
+      ? { access: "read", missing: [], lines: [{ invoice: "IN1000180398", lineNo: 128, kind: "charge", code: "FRT", amount: "1250.000" }] }
+      : id === 40
+        ? { access: "missing", missing: ["sage.oe_invoice_detail.invdisc"], lines: [] }
+        : null
+  ),
 }));
 
 import { GET as cronGet } from "@/app/api/cron/reporting-goals/route";
 import { POST as refreshPost } from "@/app/api/reporting/goals/refresh/route";
 import { GET as viewGet } from "@/app/api/reporting/goals/route";
 import { GET as runGet } from "@/app/api/reporting/goals/runs/[id]/route";
+import { GET as linesGet } from "@/app/api/reporting/goals/runs/[id]/shipment-lines/route";
 import { appendEvent } from "@/lib/compliance/repo";
 import { goalsRolesFromClaims, resolveGoalsActor } from "@/lib/reporting/goals";
 import { runRefresh, startRefresh } from "@/lib/reporting/goals/refresh";
@@ -177,6 +186,32 @@ describe("GET /api/reporting/goals/runs/[id]", () => {
     expect((await get("-1")).status).toBe(400);
     signedIn([]);
     expect((await get("7")).status).toBe(403);
+  });
+});
+
+describe("GET /api/reporting/goals/runs/[id]/shipment-lines", () => {
+  const get = (id: string) =>
+    linesGet(new Request(`http://localhost/api/reporting/goals/runs/${id}/shipment-lines`), { params: Promise.resolve({ id }) });
+
+  it("returns one run's Sage invoice lines to Viewers, as stored", async () => {
+    expect((await get("41")).status).toBe(401);
+    signedIn(["Goals.Viewer"]);
+    const ok = await get("41");
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({
+      data: { access: "read", missing: [], lines: [{ invoice: "IN1000180398", lineNo: 128, kind: "charge", code: "FRT", amount: "1250.000" }] },
+    });
+    expect(await (await get("40")).json()).toEqual({ data: { access: "missing", missing: ["sage.oe_invoice_detail.invdisc"], lines: [] } });
+  });
+
+  it("is 404 for a run without lines, 400 for a bad id and 403 without a Goals role", async () => {
+    signedIn(["Goals.Editor"]);
+    const none = await get("39");
+    expect(none.status).toBe(404);
+    expect(await none.json()).toEqual({ error: { code: "not_found", message: "Refresh run 39 has no invoice lines." } });
+    for (const bad of ["0", "-1", "4.1", "abc", "9007199254740993"]) expect((await get(bad)).status, bad).toBe(400);
+    signedIn([]);
+    expect((await get("41")).status).toBe(403);
   });
 });
 

@@ -719,6 +719,151 @@
   max-width: var(--p-read-max);
 }
 
+/* What shipped (TASK-3144): each invoice's toggle in the first column, its
+   "don't add up" mark under its number, and the lines it opens to in a
+   full-width row inside the list's own scroller. That scroller is their container: what an
+   opened invoice says stays within its visible width (cqi) and to its left edge
+   while the list scrolls sideways, and a lines table wider than that scrolls on
+   its own. The list's cell rules reach into that table, so the ones it must not
+   take are reset here. */
+.mc .goals .gp-table-wrap.shipments {
+  container-type: inline-size;
+}
+
+.mc .goals .gp-table td.gp-open {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.mc .goals .gp-table tbody th .pv-chip {
+  display: block;
+  width: max-content;
+  max-width: 7rem;
+  margin-top: 4px;
+  white-space: normal;
+}
+
+.mc .goals .gp-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: transparent;
+  color: var(--p-ink-2);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+/* A chevron: right when closed, down when open. */
+.mc .goals .gp-expand::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-left: -2px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.mc .goals .gp-expand[aria-expanded="true"]::before {
+  margin-top: -3px;
+  margin-left: 0;
+  transform: rotate(45deg);
+}
+
+.mc .goals .gp-expand:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) {
+  .mc .goals .gp-expand:hover {
+    border-color: var(--p-ink);
+    color: var(--p-ink);
+  }
+}
+
+@media (pointer: coarse) {
+  .mc .goals .gp-expand {
+    width: var(--p-touch);
+    height: var(--p-touch);
+  }
+}
+
+.mc .goals .gp-table tr.gp-lines-row > td {
+  padding: 10px 12px 14px;
+  background: var(--p-paper-2);
+  white-space: normal;
+}
+
+.mc .goals .gp-lines-view {
+  position: sticky;
+  left: 12px;
+  max-width: calc(100cqi - 24px);
+}
+
+.mc .goals .gp-lines-panel {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+.mc .goals .gp-lines-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.mc .goals .gp-lines-scroll:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+
+.mc .goals .gp-lines-panel .gp-alert {
+  max-width: var(--p-read-max);
+}
+
+.mc .goals .gp-table .gp-lines {
+  border-collapse: collapse;
+  font-size: var(--p-text-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.mc .goals .gp-table .gp-lines caption {
+  margin-bottom: 6px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-table .gp-lines :is(th, td) {
+  padding: 4px 14px 4px 0;
+  border-bottom: 1px solid var(--p-grid);
+  background: transparent;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-table .gp-lines thead th {
+  position: static;
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-table .gp-lines .code {
+  margin-left: 0;
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-table .gp-lines .wrap {
+  min-width: 9rem;
+}
+
 /* ─── Tiles ───────────────────────────────────────────────────────────────── */
 .mc .goals .gp-tiles {
   display: grid;

@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-16 (ET) — TASK-3151: the compliance gate ran before the task's evidence was handed in
+
+- **What happened:** PR #348 opened at 23:20:05 UTC, and the task's evidence (`POST /api/cursor/complete`) went in right after. The `compliance` job verified at 23:20:14 and blocked: no summary, checklist, rollback or test run. The evidence landed at 23:20:16, and a re-run of the job passed. #346 and #347 had the same order and passed only because their gate happened to run later.
+- **Root cause:** The gate reads the task's evidence when the PR opens (and on synchronize/reopen), so evidence handed in after opening races it.
+- **Rule going forward:** After the last commit, hand in the task's evidence (summary, `verificationCommands`, `rollback`, `testRun`) before opening the PR with its `MC-Checkout:` line. If the gate still blocks on missing evidence, re-run the failed `compliance` job once the evidence is in. Never push an empty commit or close and reopen the PR.
+
 ### 2026-10-16 (ET) — TASK-3026: shadow-mode audit writes could fail a release and exhaust the DB pool
 
 - **What happened:** After PR #335, `mc_release_checkout` awaited the checkout-principal lookup unguarded, so a query error failed a release even though shadow mode only compares that rule. `assertProjectIdAccess` awaited `recordShadowMismatch` inside `mc_update_task`'s transaction, and that write takes a second pooled connection. With the pool at 5, five concurrent mismatching updates each held one connection and waited for another, stalling until the 10s acquire timeout.

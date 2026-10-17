@@ -1,5 +1,5 @@
 // GET /api/reporting/goals/export — the Goals & Production workbook
-// (TASK-2898): the eight-sheet .xlsx of the latest good refresh plus the live
+// (TASK-2898): the nine-sheet .xlsx of the latest good refresh plus the live
 // manual entries, exactly as the page shows them, downloaded as
 // "PLX goals and production YYYY-MM-DD.xlsx" (the run's Toronto date).
 // Viewers and Editors. Each export is recorded as reporting.goals.export (who,
@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 export const GET = route(async () => {
   const actor = await requireGoalsRole("viewer");
-  const { view, shipments, truckloads, rates } = await loadGoalsExport();
+  const { view, shipments, shipmentLines, truckloads, rates } = await loadGoalsExport();
   const { run, model, settings } = view;
   if (view.state !== "ready" || !run || !model || !settings) {
     throw new ApiError(
@@ -30,7 +30,17 @@ export const GET = route(async () => {
       404
     );
   }
-  const workbook = await buildGoalsWorkbook({ run, model, settings, shipments, truckloads, rates, exportedAt: new Date(), forecast: view.forecast });
+  const workbook = await buildGoalsWorkbook({
+    run,
+    model,
+    settings,
+    shipments,
+    shipmentLines,
+    truckloads,
+    rates,
+    exportedAt: new Date(),
+    forecast: view.forecast,
+  });
   await appendEvent({ kind: "reporting.goals.export", actor: `human:${actor.label}`, payload: { runId: run.id } });
   return new Response(new Uint8Array(workbook), {
     status: 200,

@@ -1,8 +1,8 @@
 // The Goals & Production workbook (TASK-2898): the report and the import
 // template in one .xlsx, built from the page model of one good refresh plus that
-// run's Sage invoices and truckload shipments. The eight sheets, their order and
-// the "Manual entries" layout come from ./layout.ts, shared with the import
-// (TASK-2897).
+// run's Sage invoices, their lines (TASK-3144) and truckload shipments. The nine
+// sheets, their order and the "Manual entries" layout come from ./layout.ts,
+// shared with the import (TASK-2897).
 //
 // House rules (brief, "Workbook rules"): Arial 10 throughout and 14-pt bold
 // titles; header rows bold on light grey and frozen; everything entered by hand
@@ -20,6 +20,8 @@ import type ExcelJS from "exceljs";
 
 import { REPORT_TIME_ZONE, monthLabel } from "../calendar";
 import { FORECAST_BUCKET_LABELS, type ForecastBucket, type ForecastView } from "../forecast";
+import { toCents } from "../money";
+import { missingByRelation } from "../queries/read-access";
 import {
   classifyLoad,
   truckloadProductUsdCents,
@@ -29,7 +31,8 @@ import {
   type LoadKind,
   type LoadTally,
 } from "../rules";
-import type { FxRate, GoalSettings, IsoDate, RefreshRun, ShipmentRow, TruckloadRow } from "../types";
+import { invoiceLines, linesMismatch, type InvoiceHeader } from "../shipment-lines";
+import type { FxRate, GoalSettings, IsoDate, RefreshRun, ShipmentLinesDataset, ShipmentRow, TruckloadRow } from "../types";
 import {
   AMBER_FILL,
   AMBER_FONT,
@@ -68,6 +71,8 @@ export interface GoalsWorkbookInput {
   exportedAt: Date;
   /** The page's revenue forecast (TASK-3151); absent or not ready: the Forecast sheet says why. */
   forecast?: ForecastView | null;
+  /** The run's invoice lines (TASK-3144); absent, or not read: the Shipment lines sheet says why. */
+  shipmentLines?: ShipmentLinesDataset | null;
 }
 
 // ─── Fixed cells (the brief's formulas name them: =B13*B11, Goals!$B$17, …) ─
@@ -800,9 +805,95 @@ function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   put(ws, r, 1, "CAD uses Excel’s ROUND (half away from zero) while the page rounds half to even, so the two differ only on an exact half cent.", { note: true });
 }
 
+// ─── Shipment lines (TASK-3144) ─────────────────────────────────────────────
+
+const SHIPMENT_LINE_HEADERS = [
+  "Invoice",
+  "Ship date",
+  "Customer",
+  "Line type",
+  "Item or charge",
+  "Description",
+  "Quantity",
+  "Unit",
+  "Unit price",
+  "Amount",
+  "Discount",
+  "Currency",
+] as const;
+/** Sage keeps four decimals on quantities: at least two shown, up to four. */
+const QUANTITY_FORMAT = "#,##0.00##";
+
+/**
+ * One row per line of the run's Sage invoices, in the Shipments sheet's order of
+ * invoices, each invoice's lines in Sage's order, as values in the invoice's
+ * currency (a charge has no quantity, unit or unit price). Under the rows, the
+ * invoices whose lines don't add up to them, worded as on the page; or that
+ * every one does. Without the lines, the sheet says why.
+ */
+function shipmentLinesSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
+  columns(ws, [15, 12, 36, 10, 16, 36, 12, 8, 13, 14, 12, 9]);
+  const data = input.shipmentLines ?? null;
+  if (data?.access !== "read") {
+    const why =
+      data?.access === "missing"
+        ? "Item details are waiting for read access to Sage invoice lines. The reporting login can’t read " +
+          `${missingByRelation(data.missing).map((m) => `${m.relation} (${m.columns.join(", ")})`).join("; ")}. A database administrator grants it ` +
+          "with docs/modules/reporting-goals/readonly-grants-shipment-lines.sql, and the next refresh fills this sheet in."
+        : "This refresh has no invoice lines yet. They fill in at the next refresh.";
+    put(ws, 1, 1, why, { note: true });
+    return;
+  }
+  headerRow(ws, 1, SHIPMENT_LINE_HEADERS.map((text) => ({ text })));
+  freeze(ws, 1);
+  const headers = input.shipments.map(
+    (s): InvoiceHeader => ({
+      key: `sage:${s.invoice}`,
+      invoice: s.invoice,
+      source: "Sage",
+      productCents: toCents(s.productValue),
+      otherCents: toCents(s.otherCharges),
+    })
+  );
+  const byInvoice = invoiceLines(headers, data.lines);
+  const off: string[] = [];
+  let r = 2;
+  for (const s of input.shipments) {
+    const entry = byInvoice.get(`sage:${s.invoice}`);
+    if (!entry) throw new Error(`no lines entry for invoice ${s.invoice}`);
+    for (const line of entry.lines) {
+      const item = line.kind === "item";
+      put(ws, r, 1, s.invoice);
+      put(ws, r, 2, excelDate(s.shipDate), { numFmt: DATE_FORMAT });
+      put(ws, r, 3, s.customer);
+      put(ws, r, 4, item ? "Item" : "Charge");
+      put(ws, r, 5, line.code);
+      put(ws, r, 6, line.description);
+      put(ws, r, 7, item ? decimal(line.qty) : null, { numFmt: QUANTITY_FORMAT });
+      put(ws, r, 8, item ? line.unit : null);
+      put(ws, r, 9, item ? decimal(line.unitPrice) : null, { numFmt: PRICE_FORMAT });
+      put(ws, r, 10, decimal(line.amount), { numFmt: AMOUNT_FORMAT });
+      put(ws, r, 11, decimal(line.discount), { numFmt: AMOUNT_FORMAT });
+      put(ws, r, 12, s.currency);
+      r += 1;
+    }
+    if (!entry.agrees) {
+      off.push(`${s.invoice}: ${entry.lines.length === 0 ? "Sage has no lines for this invoice. " : ""}${linesMismatch(entry, s.currency).join(" ")}`);
+    }
+  }
+  if (input.shipments.length === 0) return;
+  r += 1;
+  if (off.length === 0) {
+    put(ws, r, 1, "Every invoice’s lines add up to the invoice, to the cent.", { note: true });
+    return;
+  }
+  put(ws, r++, 1, `${count(off.length)} ${off.length === 1 ? "invoice’s" : "invoices’"} lines don’t add up to the invoice:`, { note: true });
+  for (const text of off) put(ws, r++, 1, text, { note: true });
+}
+
 // ─── The workbook ───────────────────────────────────────────────────────────
 
-/** The eight-sheet workbook as .xlsx bytes. */
+/** The nine-sheet workbook as .xlsx bytes. */
 export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buffer> {
   const { Workbook } = await loadExcelJS();
   const wb = new Workbook();
@@ -819,6 +910,7 @@ export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buf
   goalsSheet(sheets.Goals, input, daily, trucks);
   batchSheet(sheets.Batches, input);
   shipmentSheet(sheets.Shipments, input);
+  shipmentLinesSheet(sheets["Shipment lines"], input);
   forecastSheet(sheets.Forecast, input);
   entriesSheet(sheets[ENTRIES_SHEET], input);
   return Buffer.from(await wb.xlsx.writeBuffer());

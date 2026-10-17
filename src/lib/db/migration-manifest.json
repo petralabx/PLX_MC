@@ -41,5 +41,6 @@
   "040_infra_mcp_principal.sql",
   "041_mc_events_checkout_id_idx.sql",
   "042_reporting_goals_line1.sql",
-  "043_reporting_goals_forecast.sql"
+  "043_reporting_goals_forecast.sql",
+  "044_reporting_goals_shipment_lines.sql"
 ]

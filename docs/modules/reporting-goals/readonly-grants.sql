@@ -57,3 +57,12 @@ GRANT SELECT (id, idoe) ON public.order_entry_item TO mc_goals_ro;
 GRANT SELECT (id, erpcode) ON public.order_entry TO mc_goals_ro;
 
 GRANT SELECT (id, code, erp_code) ON silver.finished_products TO mc_goals_ro;
+
+-- Shipment lines (TASK-3144): Sage's invoice lines, joined to their invoices on
+-- invuniq (the header's invnumber and shipdate are granted above). Never the
+-- lines' costs (unitcost, exticost) or anything else. An existing login gets
+-- exactly these from readonly-grants-shipment-lines.sql instead.
+GRANT SELECT (invuniq) ON sage.oe_invoice_header TO mc_goals_ro;
+
+GRANT SELECT (invuniq, linenum, linetype, item, misccharge, "desc", qtyshipped, invunit, unitprice, extinvmisc, invdisc)
+    ON sage.oe_invoice_detail TO mc_goals_ro;

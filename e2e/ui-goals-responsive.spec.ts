@@ -50,4 +50,19 @@ test.describe("goals responsive (G3)", () => {
       expect(scrollWidth, `${label}: totals scrollWidth ${scrollWidth} > ${clientWidth}`).toBeLessThanOrEqual(clientWidth + 2);
     }
   });
+
+  test("shipment lines: opened invoices stay inside the list's region, never widening the page, light and dark", async ({ page }, testInfo) => {
+    const list = page.getByTestId("goals-shipments").getByRole("region", { name: "Shipment list" });
+    for (const invoice of ["IN1000180398", "IN1000180368", "IN1000180353"]) {
+      await list.getByRole("button", { name: `Lines of invoice ${invoice}` }).click();
+    }
+    await expect(list.locator("tr.gp-lines-row")).toHaveCount(3);
+    await expect(list.locator("tr.gp-lines-row table")).toHaveCount(2);
+    for (const mode of ["light", "dark"]) {
+      if (mode === "dark") await page.locator(".mc").first().evaluate((el) => el.classList.add("dark"));
+      const label = `goals-shipment-lines/${testInfo.project.name}/${mode}`;
+      await expectSurfaceNoHorizontalOverflow(page, "goals-shipments", label);
+      await expectNoPageOverflow(page, label);
+    }
+  });
 });

@@ -93,7 +93,7 @@ test.describe("goals & production", () => {
     await gotoGoals(page);
     const section = page.getByTestId("goals-shipments");
     await expect(section.getByRole("heading", { name: "Shipments this month" })).toBeVisible();
-    await expect(section).toContainText("From queries shipments, truckloads · run #41");
+    await expect(section).toContainText("From queries shipments, truckloads, shipment-lines · run #41");
     const list = section.getByRole("region", { name: "Shipment list" });
     const totals = section.getByRole("region", { name: "Shipment totals" });
     const total = totals.locator("tfoot tr");

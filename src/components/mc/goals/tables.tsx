@@ -353,7 +353,11 @@ export function RulesText({ page }: { page: ReadyPage }) {
         <b>Shipments this month</b> lists those invoices one by one, and the shipments entered by hand that count. A US
         dollar invoice shows its CAD at the rate; the totals add up the US dollar invoices first and convert them once,
         as the Revenue card does, so they can be a few cents off the CAD column. Full or Partial goes by the invoice’s
-        whole shipment, as for full truckloads. Other currencies are listed but not converted or counted.
+        whole shipment, as for full truckloads. Other currencies are listed but not converted or counted. Open an invoice
+        for what shipped: its Sage lines, items with their quantity, unit price, amount and discount, and charges such as
+        freight. Its item lines less their discounts should come to its product value and its charges to its other
+        charges, to the cent; an invoice whose lines don’t is marked, with both figures. The search finds item codes and
+        descriptions too.
       </li>
       <li>
         <b>Covered through</b> is the later of the latest FileMaker or Sage data and the latest counted entry by hand,

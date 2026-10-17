@@ -1,14 +1,23 @@
 // Loads the page model: the latest successful snapshot, the live manual entries
 // and the references they match, then hands them to the pure view builder. The
-// export also gets that snapshot's invoices and truckload shipments.
+// export also gets that snapshot's invoices, their lines and truckload shipments.
 
 import { databaseConfigured, reportingDatabaseConfigured } from "@/lib/secrets";
 
 import { previousMonthStart } from "./calendar";
 import { loadForecast } from "./forecast-store";
 import { normalizeRef } from "./rules";
-import { latestRuns, listEntries, loadConfig, loadRates, loadReferenceMatches, loadSnapshot } from "./store";
-import type { FxRate, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
+import {
+  latestRuns,
+  listEntries,
+  loadConfig,
+  loadRates,
+  loadReferenceMatches,
+  loadShipmentLineSummary,
+  loadShipmentLines,
+  loadSnapshot,
+} from "./store";
+import type { FxRate, ShipmentLinesDataset, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
 import { buildGoalsView, type GoalsView } from "./view";
 
 const EMPTY_SETTINGS = {
@@ -23,17 +32,21 @@ export async function loadGoalsView(): Promise<GoalsView> {
   return (await loadGoals()).view;
 }
 
-/** The page model plus what the workbook adds, from the same run: its Sage invoices, truckload shipments and the stored rates. */
+/** The page model plus what the workbook adds, from the same run: its Sage invoices and their lines, truckload shipments and the stored rates. */
 export interface GoalsExportData {
   view: GoalsView;
   shipments: ShipmentRow[];
+  /** The run's invoice lines (TASK-3144); null before the first good refresh, or for a run stored without them. */
+  shipmentLines: ShipmentLinesDataset | null;
   truckloads: TruckloadRow[];
   rates: FxRate[];
 }
 
 export async function loadGoalsExport(): Promise<GoalsExportData> {
   const { view, snapshot, rates } = await loadGoals();
-  return { view, shipments: snapshot?.shipments ?? [], truckloads: snapshot?.truckloads ?? [], rates };
+  // Only the workbook reads them here; the page fetches them on demand (GET …/runs/[id]/shipment-lines).
+  const shipmentLines = view.run ? await loadShipmentLines(view.run.id) : null;
+  return { view, shipments: snapshot?.shipments ?? [], shipmentLines, truckloads: snapshot?.truckloads ?? [], rates };
 }
 
 async function loadGoals(): Promise<{ view: GoalsView; snapshot: SnapshotData | null; rates: FxRate[] }> {
@@ -63,6 +76,7 @@ async function loadGoals(): Promise<{ view: GoalsView; snapshot: SnapshotData | 
     entries.map((e) => normalizeRef(e.reference))
   );
   const forecast = await loadForecast(succeeded);
+  const shipmentLines = await loadShipmentLineSummary(succeeded.id);
   const view = buildGoalsView({
     configured,
     run: succeeded,
@@ -76,6 +90,7 @@ async function loadGoals(): Promise<{ view: GoalsView; snapshot: SnapshotData | 
     holidays: config.holidays,
     rates,
     forecast,
+    shipmentLines,
   });
   return { view, snapshot, rates };
 }

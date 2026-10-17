@@ -15,7 +15,9 @@ Figures come from FileMaker (`silver.batches`) and Sage 300
 (`sage.oe_invoice_header`, `sage.ar_customer`) on the read-only PLX reporting
 replica, refreshed at 06:00 Toronto each weekday and on demand. Staff can add
 **manual entries** for batches and shipments the systems haven't caught up with.
-An entry counts until its reference appears in the system data.
+An entry counts until its reference appears in the system data. The shipments
+list opens each invoice to what shipped, its Sage lines
+(`sage.oe_invoice_detail`), checked against the invoice to the cent (TASK-3144).
 
 Not this module's job: writing to FileMaker, Sage or Business Central (never),
 forecasting beyond "if every scheduled batch runs" and this month's revenue
@@ -45,8 +47,9 @@ traceable to a refresh run and a named query.
    amount is rounded to the cent, half to even: 25,750 × 1.4219 = 36,613.925
    gives 36,613.92.
 3. **Queries** — `queries/*.ts`, one per dataset: `cutoffs`, `daily`,
-   `truckloads`, `revenue-by-currency`, `shipments`, `batches`,
-   `batch-history`, `references` and `customers`.
+   `truckloads`, `revenue-by-currency`, `shipments`, `shipment-lines`,
+   `batches`, `batch-history`, `references` and `customers` (and the
+   forecast's two, step 12).
    - They are adapted from the prototype's verified SQL.
    - Today is bound as `$1`. The truckload codes are bound too, because the
      config tables live in Mission Control's database and not on the replica.
@@ -92,6 +95,7 @@ traceable to a refresh run and a named query.
    | `GET /api/reporting/goals` | Viewer | The page model, plus `viewer.editor` (whether this viewer may refresh) |
    | `POST /api/reporting/goals/refresh` | Editor | Claims a run and answers 202 with it; the run finishes in `after()`. 409 while one is running, 429 within 5 minutes of the last, 503 if the reporting database is not connected. |
    | `GET /api/reporting/goals/runs/[id]` | Viewer | One run's status, for polling |
+   | `GET /api/reporting/goals/runs/[id]/shipment-lines` | Viewer | One good run's Sage invoice lines and whether the login could read them (`{ access, missing, lines }`), which the shipments list fetches once (TASK-3144). 404 when the run has none stored. |
    | `GET /api/reporting/goals/export` | Viewer | The workbook (step 10) as `PLX goals and production YYYY-MM-DD.xlsx`, dated by the run's Toronto day. 404 `no_data` before the first good refresh. |
    | `GET /api/reporting/goals/entries` | Viewer | The live manual entries, oldest first |
    | `POST /api/reporting/goals/entries` | Editor | Adds an entry: 201 with it (next `M001`-style ID; entered by the signed-in Editor). 400 `invalid_entry` with the problems. |
@@ -135,8 +139,9 @@ traceable to a refresh run and a named query.
    - Entry history goes to `report_manual_entry_version`, which only the
      report's Viewers can read.
 10. **Workbook** — `excel/export.ts` (pure, exceljs) builds the brief's seven
-    sheets, and the Forecast sheet (step 12), from the page model plus the
-    run's Sage invoices and truckload shipments (`loadGoalsExport()`). Sheet
+    sheets, the Shipment lines sheet (see **Shipments list**) and the Forecast
+    sheet (step 12), from the page model plus the run's Sage invoices, their
+    lines and truckload shipments (`loadGoalsExport()`). Sheet
     names and order, the file name and the "Manual entries" columns come from
     `excel/layout.ts`, the contract shared with the import.
     - House styles: Arial 10, 14-pt bold titles, header rows bold on light
@@ -283,9 +288,44 @@ the rows (`shipments`), built from the same snapshot and entries as the cards.
   Converting the USD subtotal once can differ from adding up the CAD column by
   a few cents (on the 2026-10-14 fixture, 245,176.45 against 245,176.46).
   Other currencies are listed but left out of the total.
-- The Excel export is unchanged. Each invoice's lines ("what shipped") are to
-  follow as an expandable row once the reporting login can read Sage's invoice
-  lines.
+- **What shipped** (TASK-3144; `shipment-lines.ts`, `queries/shipment-lines.ts`).
+  Each Sage row has a toggle (a button with `aria-expanded`) in its first
+  column that opens the invoice's lines under it: items (code, description,
+  quantity shipped, unit, unit price, amount, discount) and charges such as
+  freight (code, description, amount), in the invoice's currency. Rows entered
+  by hand have none. The search also matches the lines' codes and descriptions.
+- **Checked to the cent.** Item lines' amounts less their discounts must come
+  to the invoice's product value, and charges to its other charges, each side
+  added up exactly and rounded once. An invoice whose lines don't is marked
+  "Lines don't add up" on its row and, opened, shows both figures; the line
+  above the list counts them, or says every invoice adds up. An invoice with no
+  lines on the replica is marked unless both its amounts are 0.
+- **Dataset.** `shipment-lines`: the lines of exactly the invoices `shipments`
+  reads (the header's ship date in the month), joined on INVUNIQ, by invoice and
+  line number, read last but one in the refresh's read-only transaction.
+- **Read access.** First the refresh checks from the catalogs that
+  `mc_goals_ro` can read exactly the columns the query reads
+  (`SHIPMENT_LINE_COLUMNS`; the check is shared with the forecast,
+  `queries/read-access.ts`). If any is missing it skips the lines, everything
+  else refreshes as before, and the run records it:
+  `report_snap_shipment_line_summary.access = 'missing'` with the columns, the
+  `reporting.goals.refresh.succeeded` event's `shipmentLines: "missing"`, a log
+  line, and an opened invoice's "Item details are waiting for read access to
+  Sage invoice lines" naming them.
+- **Loaded on demand.** The page model carries only whether the run has its
+  lines (`shipmentLines`); the list fetches them once, from
+  `GET …/runs/[id]/shipment-lines`, when it opens. Measured on the 2026-10-14
+  fixture and a synthetic month of 700 invoices × 3 lines: the fixture's page
+  model is 78 KB (its 133 lines, 25 KB); a 700-invoice month's is 306 KB
+  without lines, and its 2,100 lines would add 338 KB uncompressed to it (the
+  route sends them as 389 KB, about 15 KB gzipped), past the ~300 KB the page
+  allows itself.
+- **Storage**: `report_snap_shipment_line` (one row per line, as read) and
+  `report_snap_shipment_line_summary` (migration 044), kept with their run
+  (90 days). **Workbook**: the "Shipment lines" sheet, after Shipments, holds
+  one row per line (invoice, ship date, customer, line type, item or charge,
+  description, quantity, unit, unit price, amount, discount, currency) as values,
+  then the invoices whose lines don't add up, worded as on the page.
 
 ### Setup
 
@@ -326,6 +366,30 @@ the rows (`shipments`), built from the same snapshot and entries as the cards.
       an item in two months and an AO for each (`LATER_QTY_SQL`, `forecastRows`).
    7. An order shipped but not yet invoiced: when it leaves the open orders and
       when its invoice counts.
+7. What shipped (TASK-3144): apply migration 044 (after 043) the same way
+   before its code deploys. Then a DBA runs `readonly-grants-shipment-lines.sql`
+   on the reporting database for the existing `mc_goals_ro` login (fresh
+   installs get the same grants from `readonly-grants.sql`). Until then an
+   opened invoice waits for read access and everything else works.
+8. Before relying on the "Lines don't add up" marks, reconcile three invoices
+   against Sage's O/E Invoice Inquiry (or the printed invoice), one rule each.
+   Each rule is one named fragment or function, so a correction is one edit:
+   1. An invoice with freight or another miscellaneous charge: each charge
+      line's code and amount (`CHARGE_LINE_SQL`, `LINE_CODE_SQL`,
+      `queries/shipment-lines.ts`), and their sum against the invoice's Misc.
+      Charges (`invoiceLines`, `shipment-lines.ts`).
+   2. An invoice with a line discount, and a line priced in a unit other than
+      its invoice unit: Qty. Shipped, Unit Price, Extended Price and Discount
+      against the opened invoice, and the item lines less their discounts
+      against the invoice's product value.
+   3. An invoice with an invoice (header) discount: if Sage keeps it on the
+      lines' discount, the lines add up; if it spreads it in HDRDISC instead,
+      the invoice shows "Lines don't add up" by exactly that discount. Then
+      deduct HDRDISC in `invoiceLines`, add it to `SHIPMENT_LINE_COLUMNS` and
+      both grant scripts, and reconcile again.
+   Then check each "Lines don't add up" mark the first refreshes show: it
+   should be a real difference (a line missing on the replica, a manual
+   adjustment), not a rule.
 
 ### Line 1 bulk
 
@@ -411,6 +475,25 @@ goal (2 batches of 7,500 kg or more per working day).
     runs are almost always gone, so in practice Realistic averages at most two
     months; three would need about 125 days of run history.
 
+- What shipped (TASK-3144), each reconciled by Setup step 8:
+  - A line belongs to its invoice by INVUNIQ (OEINVD.INVUNIQ → OEINVH.INVUNIQ,
+    as the portal's Sage sync keys them) and to the month by its invoice's ship
+    date, as in the shipments list; the line's own shipment fields aren't read.
+  - Line type 2 is a miscellaneous charge, its code MISCCHARGE (else ITEM when
+    Sage left that blank); 1 and blank are items, as the portal reads order
+    lines. Every line is listed, the forecast's left-out C and MISC items too,
+    since Sage counts them in the invoice's totals.
+  - An item shows QTYSHIPPED in INVUNIT and UNITPRICE per INVUNIT (the pricing
+    unit's price, PRIUNTPRC, isn't read), and Sage's Extended Price as stored
+    (EXTINVMISC), never quantity × price recomputed.
+  - An invoice adds up when its item lines' EXTINVMISC less INVDISC come to
+    INVITMTOT − INVDISCAMT and its charges' EXTINVMISC to INVMISC, to the cent.
+    The invoice discount is assumed to sit on the lines' INVDISC; the
+    alternative, HDRDISC, is Setup step 8.3. A charge's INVDISC is shown, never
+    deducted.
+  - Lines are kept with their run for the full 90 days, like its invoices
+    (about 2,100 rows a run in a 700-invoice month).
+
 ## Dependencies
 
 Depends on:
@@ -438,7 +521,8 @@ Depended on by: nothing yet.
 - `db/migrations/042_reporting_goals_line1.sql` (+ `db/rollback/042_reporting_goals_line1_rollback.sql`) — the Line 1 settings
 - `src/app/api/reporting/goals/` — read, refresh, run, export, entry, customer and import routes; `src/app/api/cron/reporting-goals/` — the daily refresh
 - `src/components/mc/goals/` — the page; `src/components/mc/charts/column-chart.tsx` — its charts; `src/styles/mc-goals.css`
-- `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants; `readonly-grants-forecast.sql` — the forecast's grants for the existing login
+- `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants; `readonly-grants-forecast.sql` — the forecast's grants for the existing login; `readonly-grants-shipment-lines.sql` — the invoice lines' grants for the existing login
+- What shipped (TASK-3144): `src/lib/reporting/goals/shipment-lines.ts` (pure), `queries/shipment-lines.ts`, `queries/read-access.ts` (the catalog check it shares with the forecast); `src/app/api/reporting/goals/runs/[id]/shipment-lines/route.ts`; `db/migrations/044_reporting_goals_shipment_lines.sql` (+ rollback); `tests/reporting-goals-shipment-lines{,-export}.test.ts` and the shipment lines block of `tests/reporting-goals-postgres.test.ts` (`tests/reporting-goals-shipment-lines-replica.ts` loads `shipment-lines-source.json`); `e2e/goals-shipment-lines.spec.ts`
 - Revenue forecast (TASK-3151): `src/lib/reporting/goals/forecast.ts` (pure), `forecast-read.ts`, `forecast-store.ts`, `queries/forecast-{orders,assembly-orders,access}.ts`; `src/components/mc/goals/forecast.tsx`; `db/migrations/043_reporting_goals_forecast.sql` (+ rollback); `tests/reporting-goals-forecast*.test.ts` and the forecast block of `tests/reporting-goals-postgres.test.ts` (`tests/reporting-goals-forecast-replica.ts` builds the source tables from `forecast-source.json`); `e2e/goals-forecast.spec.ts`
 - `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16), route, page and workbook tests against the 2026-10-14 figures (the workbook's LibreOffice recalculation skips where `soffice` isn't installed, as in CI, and logs why); `tests/reporting-goals-entries*.test.ts` — validation, the import plan, and the entry and import routes against PG16 (`tests/reporting-goals-workbook.ts` builds the workbooks); `tests/reporting-goals-roundtrip.test.ts` — the real export read back by the import (the round-trip guarantee)
 - `e2e/goals.spec.ts`, `e2e/goals-export.spec.ts`, `e2e/ui-goals-{responsive,a11y}.spec.ts` — the page in a browser (`e2e/helpers/goals.ts` serves the same fixture); `e2e/goals-entries.spec.ts`, `e2e/ui-goals-entries-{responsive,a11y}.spec.ts` — adding, editing, deleting and importing entries (`e2e/helpers/goals-entries.ts` serves the entries API in memory)

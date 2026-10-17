@@ -25,6 +25,11 @@ export type {
   RefreshTrigger,
   RevenueRow,
   RunStatus,
+  ShipmentLineKind,
+  ShipmentLineRow,
+  ShipmentLinesAccess,
+  ShipmentLinesDataset,
+  ShipmentLinesSummary,
   ShipmentRow,
   SnapshotData,
   TruckloadRow,
@@ -47,7 +52,7 @@ export {
 } from "./calendar";
 export type { Holiday } from "./calendar";
 
-export { centsToDecimal, convertCents, formatDollars, invertCents, prorateCents, toCents } from "./money";
+export { centsToDecimal, convertCents, formatAmount, formatDollars, invertCents, prorateCents, sumToCents, toCents } from "./money";
 
 export {
   ENTRY_STATUS_LABELS,
@@ -168,6 +173,11 @@ export type { EntryBody, ImportPreview, ImportResult } from "./entries";
 // Shipments list (TASK-3143): its exports go below this line.
 export { buildShipmentList, filterShipments, shipmentTotals } from "./shipment-list";
 export type { ShipmentFilter, ShipmentListInput, ShipmentListRow, ShipmentTotals } from "./shipment-list";
+// What shipped, the invoices' lines (TASK-3144): its exports go below this line.
+// shipment-lines.ts is pure; client components take its runtime helpers from ./shipment-lines directly.
+export { invoiceLines, linesMismatch, linesSearchText, shipmentLinesView } from "./shipment-lines";
+export type { InvoiceHeader, InvoiceLines, LinesCheck, ShipmentLinesView } from "./shipment-lines";
+export { SHIPMENT_LINE_COLUMNS } from "./queries/shipment-lines";
 
 export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView } from "./view";
 export type { DatasetQuery, GoalsPage, GoalsView, GoalsViewInput, GoalsViewState, GoalsViewer } from "./view";
@@ -197,6 +207,7 @@ export {
   latestRuns,
   listEntries,
   loadConfig,
+  loadShipmentLines,
 } from "./store";
 export type { ClaimOutcome, GoalsConfig } from "./store";
 

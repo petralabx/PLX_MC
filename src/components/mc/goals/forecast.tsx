@@ -19,13 +19,11 @@ import {
   type ForecastBucket,
 } from "@/lib/reporting/goals/forecast";
 
-import { amount, count, day, dollars, type ReadyPage } from "./helpers";
+import { amount, count, day, dollars, price, type ReadyPage } from "./helpers";
 
 const plural = (n: number, one: string, many: string) => `${count(n)} ${n === 1 ? one : many}`;
 /** Quantities to two places at most ("6,000", "12.5"). */
 const qty = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
-/** A Sage unit price as entered, at least to the cent ("48.00", "0.85"). */
-const price = (p: string) => Number(p).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 
 /** Ready reads as done, Planned in time as on the way, Late and Not planned as at risk (never amber: that means "by hand"). */
 const CHIP: Record<ForecastBucket, string> = { ready: "ok", planned: "info", late: "hot", not_planned: "hot" };

@@ -11,7 +11,7 @@ import type {
   IsoDate,
   RefreshRun,
 } from "@/lib/reporting/goals";
-import { centsToDecimal, formatDollars } from "@/lib/reporting/goals/money";
+import { formatAmount, formatDollars } from "@/lib/reporting/goals/money";
 
 /** A page model with a good run behind it (every section can render). */
 export type ReadyPage = GoalsPage & {
@@ -37,13 +37,12 @@ export const count = (n: number) => n.toLocaleString("en-US");
 export const dollars = formatDollars;
 /** Exact dollars and cents ("$1,234.56"). */
 export function cents(c: number): string {
-  const [whole, frac] = centsToDecimal(c).replace("-", "").split(".");
-  return `${c < 0 ? "-" : ""}$${Number(whole).toLocaleString("en-US")}.${frac}`;
+  return `${c < 0 ? "-" : ""}$${formatAmount(Math.abs(c))}`;
 }
 /** Exact amount without a symbol, for columns whose heading names the currency ("31,394.40"). */
-export function amount(c: number): string {
-  return cents(c).replace("$", "");
-}
+export const amount = formatAmount;
+/** A Sage unit price as entered, at least to the cent ("48.00", "0.85", "1.6638"). */
+export const price = (p: string) => Number(p).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 export const usd = (c: number) => `US${formatDollars(c)}`;
 /** Whole kg ("91,702"); kg sums carry up to 3 decimal places. */
 export const wholeKg = (kg: number) => count(Math.round(kg));

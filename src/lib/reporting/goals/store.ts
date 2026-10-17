@@ -1,6 +1,7 @@
 // Goals & Production persistence in Mission Control's own Postgres (migrations
-// 039 and 042): refresh runs and their snapshots, configuration, the USD/CAD
-// history and manual entries. All SQL is parameterized; table and column names
+// 039, 042 and 044): refresh runs and their snapshots (the invoice lines of
+// TASK-3144 among them), configuration, the USD/CAD history and manual
+// entries. All SQL is parameterized; table and column names
 // are fixed literals. Server-only. Retired by 042 and no longer read or written
 // here: report_snap_goal_summary, report_snap_daily.large_done / large_open and
 // the large_batch* settings (kept for the previous release and rollback).
@@ -22,6 +23,9 @@ import type {
   RefreshRun,
   RefreshTrigger,
   RunStatus,
+  ShipmentLinesAccess,
+  ShipmentLinesDataset,
+  ShipmentLinesSummary,
   SnapshotData,
 } from "./types";
 
@@ -197,6 +201,22 @@ async function insertSnapshot(q: TxQuery, runId: number, d: Datasets): Promise<v
     id(d.shipments.map((r, i) => [i + 1, r.invoice, r.shipment, r.orderNo, r.po, r.customerCode, r.customer,
       r.shipDate, r.currency, r.productValue, r.otherCharges, r.netBeforeTax]))
   );
+  // The invoices' lines (TASK-3144), and whether the login could read them, so
+  // the page can tell "none" from "can't read yet" (migration 044).
+  await insertRows(
+    q,
+    "report_snap_shipment_line",
+    [["run_id", "bigint"], ["row_no", "integer"], ["invoice", "text"], ["line_no", "integer"], ["kind", "text"], ["code", "text"],
+      ["description", "text"], ["qty", "numeric"], ["unit", "text"], ["unit_price", "numeric"], ["amount", "numeric"], ["discount", "numeric"]],
+    id(d.shipmentLines.lines.map((r, i) => [i + 1, r.invoice, r.lineNo, r.kind, r.code, r.description, r.qty, r.unit, r.unitPrice,
+      r.amount, r.discount]))
+  );
+  await insertRows(
+    q,
+    "report_snap_shipment_line_summary",
+    [["run_id", "bigint"], ["access", "text"], ["missing", "jsonb"], ["lines", "integer"]],
+    id([[d.shipmentLines.access, JSON.stringify(d.shipmentLines.missing), d.shipmentLines.lines.length]])
+  );
   await insertRows(
     q,
     "report_snap_batch",
@@ -234,6 +254,7 @@ export function rowCounts(d: Datasets): Record<string, number> {
     batchHistory: d.batchHistory.length,
     references: d.references.length,
     customers: d.customers.length,
+    shipmentLines: d.shipmentLines.lines.length,
     forecastLines: d.forecast.lines.length,
     forecastAos: d.forecast.aos.length,
   };
@@ -256,6 +277,9 @@ export async function completeRun(run: RefreshRun, datasets: Datasets, fx: Resol
     for (const t of forecastTableRows(run, datasets.forecast, fx.rate)) await insertRows(q, t.table, t.columns, t.rows);
     if (datasets.forecast.access === "missing") {
       console.warn("[reporting-goals] run=%s forecast skipped: no read access to %s", run.id, datasets.forecast.missing.join(", "));
+    }
+    if (datasets.shipmentLines.access === "missing") {
+      console.warn("[reporting-goals] run=%s shipment lines skipped: no read access to %s", run.id, datasets.shipmentLines.missing.join(", "));
     }
     const [done] = await q<RunRow>(
       `UPDATE report_refresh_run
@@ -281,7 +305,16 @@ export async function completeRun(run: RefreshRun, datasets: Datasets, fx: Resol
     await appendEventTx(q, {
       kind: "reporting.goals.refresh.succeeded",
       actor: runActor(run),
-      payload: { runId: run.id, trigger: run.trigger, today: run.today, ms, rowCounts: counts, fxSource: fx.source, forecast: datasets.forecast.access },
+      payload: {
+        runId: run.id,
+        trigger: run.trigger,
+        today: run.today,
+        ms,
+        rowCounts: counts,
+        fxSource: fx.source,
+        shipmentLines: datasets.shipmentLines.access,
+        forecast: datasets.forecast.access,
+      },
     });
     return toRun(done);
   });
@@ -371,6 +404,47 @@ export async function loadSnapshot(run: RefreshRun): Promise<SnapshotData> {
         line: r.line, date: r.day, kg: r.kg,
       })),
       batchHistory: history.map((r) => ({ id: r.batch_id, batch: r.batch, date: r.day, kg: r.kg, statusQc: r.status_qc })),
+    };
+  });
+}
+
+/** What a run stored about its Sage invoice lines (TASK-3144); null for a failed run, or one stored before migration 044. */
+export async function loadShipmentLineSummary(runId: number): Promise<ShipmentLinesSummary | null> {
+  const [row] = await query<{ access: ShipmentLinesAccess; missing: string[]; lines: number }>(
+    `SELECT access, missing, lines FROM report_snap_shipment_line_summary WHERE run_id = $1`,
+    [runId]
+  );
+  return row ? { access: row.access, missing: row.missing, lines: row.lines } : null;
+}
+
+/**
+ * One run's Sage invoice lines in the query's order, as read (the page fetches
+ * them on demand; the workbook lists them); null when the run has none stored.
+ */
+export async function loadShipmentLines(runId: number): Promise<ShipmentLinesDataset | null> {
+  // One connection, sequential reads: the snapshot is immutable once written.
+  return withTransaction(async (q) => {
+    const [summary] = await q<{ access: ShipmentLinesAccess; missing: string[] }>(
+      `SELECT access, missing FROM report_snap_shipment_line_summary WHERE run_id = $1`,
+      [runId]
+    );
+    if (!summary) return null;
+    const lines = await q<{
+      invoice: string; line_no: number | null; kind: "item" | "charge"; code: string | null; description: string | null; qty: string;
+      unit: string | null; unit_price: string; amount: string; discount: string;
+    }>(
+      `SELECT invoice, line_no, kind, code, description, qty::text AS qty, unit, unit_price::text AS unit_price,
+              amount::text AS amount, discount::text AS discount
+         FROM report_snap_shipment_line WHERE run_id = $1 ORDER BY row_no`,
+      [runId]
+    );
+    return {
+      access: summary.access,
+      missing: summary.missing,
+      lines: lines.map((l) => ({
+        invoice: l.invoice, lineNo: l.line_no, kind: l.kind, code: l.code, description: l.description, qty: l.qty, unit: l.unit,
+        unitPrice: l.unit_price, amount: l.amount, discount: l.discount,
+      })),
     };
   });
 }

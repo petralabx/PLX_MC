@@ -12,6 +12,7 @@
 
 import { addDays, monthEnd, monthLabel, monthStart } from "./calendar";
 import { convertCents, prorateCents, toCents } from "./money";
+import { missingByRelation } from "./queries/read-access";
 import { normalizeName, type GoalsModel } from "./rules";
 import type { ForecastAoRow, ForecastDatasets, ForecastLineRow, GoalSettings, IsoDate } from "./types";
 
@@ -429,24 +430,10 @@ export interface ForecastInput {
   rate: string;
 }
 
-/** "schema.table.column" names, grouped by relation in the order they came. */
-function groupMissing(missing: readonly string[]): { relation: string; columns: string[] }[] {
-  const out: { relation: string; columns: string[] }[] = [];
-  for (const name of missing) {
-    const cut = name.lastIndexOf(".");
-    const relation = name.slice(0, cut);
-    const column = name.slice(cut + 1);
-    const group = out.find((g) => g.relation === relation);
-    if (group) group.columns.push(column);
-    else out.push({ relation, columns: [column] });
-  }
-  return out;
-}
-
 export function buildForecast(input: ForecastInput): ForecastView {
   const { snapshot, model, settings, rate } = input;
   if (!snapshot) return { state: "not_in_run" };
-  if (snapshot.data.access === "missing") return { state: "waiting_for_access", missing: groupMissing(snapshot.data.missing) };
+  if (snapshot.data.access === "missing") return { state: "waiting_for_access", missing: missingByRelation(snapshot.data.missing) };
 
   const rows = forecastRows(snapshot.data, model.today, rate);
   const buckets = bucketTotals(rows);

@@ -40,11 +40,13 @@ import {
 } from "@/lib/reporting/goals";
 
 import { FORECAST_COLUMNS, forecastRows, type ForecastView } from "@/lib/reporting/goals";
+import { SHIPMENT_LINE_COLUMNS, invoiceLines, loadShipmentLines } from "@/lib/reporting/goals";
 import { loadForecast } from "@/lib/reporting/goals/forecast-store";
 import { forecastAosQuery } from "@/lib/reporting/goals/queries/forecast-assembly-orders";
 
 import { createForecastSourceTables, loadForecastSource } from "./reporting-goals-forecast-replica";
-import { DATASETS, FORECAST, TODAY } from "./reporting-goals-helpers";
+import { DATASETS, FORECAST, SHIPMENT_LINES, TODAY } from "./reporting-goals-helpers";
+import { createShipmentLineSourceTables, loadShipmentLineSource } from "./reporting-goals-shipment-lines-replica";
 import source from "./fixtures/reporting-goals/2026-10-14/source.json";
 import entries from "./fixtures/reporting-goals/2026-10-14/entries.json";
 
@@ -116,8 +118,9 @@ async function loadReplica(db: Client): Promise<void> {
   for (const c of source.customers) {
     await db.query(`INSERT INTO sage.ar_customer (idcust, namecust, codecurn) VALUES ($1, $2, $3)`, [c.idcust, c.namecust, c.codecurn]);
   }
-  // Empty until the revenue forecast's tests load them (the grant script grants on them).
+  // Empty until the revenue forecast's and the shipment lines' tests load them (the grant script grants on them).
   await createForecastSourceTables(db);
+  await createShipmentLineSourceTables(db);
   // The shipped grant script, as a DBA would run it (psql variable filled in).
   const grants = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants.sql"), "utf8");
   await db.query(grants.replace(":'password'", "'disposable-test-password'"));
@@ -324,8 +327,9 @@ describe("refresh and page model", () => {
       );
       expect(event).toMatchObject({ actor: "human:vince@petrasoap.com", payload: { code: "42501" } });
     } finally {
+      // The table-level REVOKE took the column grants with it: restore readonly-grants.sql's.
       await reportingAdmin.query(`GRANT SELECT (invnumber, shinumber, ordnumber, ponumber, customer, bilname, shipdate, insourcurr,
-        invitmtot, invdiscamt, invmisc, invnetnotx, audtdate) ON sage.oe_invoice_header TO mc_goals_ro`);
+        invitmtot, invdiscamt, invmisc, invnetnotx, audtdate, invuniq) ON sage.oe_invoice_header TO mc_goals_ro`);
     }
   });
 
@@ -670,5 +674,113 @@ describe("revenue forecast (TASK-3151)", () => {
     for (const table of ["report_snap_forecast_summary", "report_snap_forecast_line", "report_snap_forecast_ao"]) {
       expect(await mcQuery(`SELECT 1 FROM ${table} WHERE run_id = ANY($1::bigint[])`, [[waiting.run_id, read.run_id]]), table).toEqual([]);
     }
+  });
+});
+
+describe("shipment lines (TASK-3144)", () => {
+  // What readonly-grants-shipment-lines.sql grants an existing login: the header's join key and every detail
+  // column (the header's invnumber and shipdate came with the report), as the refresh names them.
+  const NEW_COLUMNS = SHIPMENT_LINE_COLUMNS.map(
+    ([schema, table, columns]) => [schema, table, table === "oe_invoice_header" ? columns.filter((c) => c === "invuniq") : [...columns]] as const
+  );
+  const missingNames = NEW_COLUMNS.flatMap(([schema, table, columns]) => columns.map((c) => `${schema}.${table}.${c}`));
+  const offInvoices = (lines: typeof SHIPMENT_LINES, rows: Parameters<typeof invoiceLines>[0]) =>
+    [...invoiceLines(rows, lines).entries()].filter(([, v]) => !v.agrees).map(([key]) => key);
+
+  beforeAll(async () => {
+    await loadShipmentLineSource(reportingAdmin);
+  });
+
+  it("never reads Sage's costs or how the invoice discount is spread over the lines", async () => {
+    const ro = await connect(state.reportingUrl);
+    try {
+      for (const column of ["unitcost", "exticost", "hdrdisc"]) {
+        await expect(ro.query(`SELECT ${column} FROM sage.oe_invoice_detail LIMIT 1`), column).rejects.toMatchObject({ code: "42501" });
+      }
+    } finally {
+      await ro.end();
+    }
+  });
+
+  it("returns the lines of exactly this month's invoices through the read-only login, by invoice and line number", async () => {
+    // Left out by the SQL: two September invoices' lines (one shipped Sep 30 and dated Oct 1) and a line whose
+    // invoice isn't on the replica. Kept, from rows inserted out of order: charges (the code from MISCCHARGE, or
+    // ITEM when that is blank), a line with a blank line type (an item), line numbers past 96 in number order,
+    // and quantities, prices and amounts as Sage keeps them.
+    const { shipmentLines } = await readDatasets(TODAY, await loadConfig());
+    expect(shipmentLines).toEqual({ access: "read", missing: [], lines: SHIPMENT_LINES });
+  });
+
+  it("without its grants (an existing login), the lines wait for read access and everything else refreshes", async () => {
+    for (const [schema, table, columns] of NEW_COLUMNS) {
+      await reportingAdmin.query(`REVOKE SELECT (${columns.map((c) => `"${c}"`).join(", ")}) ON ${schema}.${table} FROM mc_goals_ro`);
+    }
+    await allowNextUserRefresh();
+    const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T18:00:00Z"));
+    expect(claim.kind).toBe("claimed");
+    const run = await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+    expect(run).toMatchObject({ status: "succeeded", error: null });
+    expect(run.rowCounts).toMatchObject({ batches: 94, shipments: 70, shipmentLines: 0, forecastLines: 15 });
+
+    const [summary] = await mcQuery<{ access: string; missing: string[]; lines: number }>(
+      `SELECT access, missing, lines FROM report_snap_shipment_line_summary WHERE run_id = $1`,
+      [run.id]
+    );
+    expect(summary).toEqual({ access: "missing", missing: missingNames, lines: 0 });
+    expect(await mcQuery(`SELECT 1 FROM report_snap_shipment_line WHERE run_id = $1`, [run.id])).toEqual([]);
+    const [event] = await mcQuery<{ payload: { runId: number; shipmentLines: string; forecast: string } }>(
+      `SELECT payload FROM mc_events WHERE kind = 'reporting.goals.refresh.succeeded' ORDER BY seq DESC LIMIT 1`
+    );
+    expect(event.payload).toMatchObject({ runId: run.id, shipmentLines: "missing", forecast: "read" });
+
+    const view = await loadGoalsView();
+    expect(view.run?.id).toBe(run.id);
+    expect(view.shipmentLines).toEqual({
+      state: "waiting_for_access",
+      missing: NEW_COLUMNS.map(([schema, table, columns]) => ({ relation: `${schema}.${table}`, columns: [...columns] })),
+    });
+    expect(view.shipments.filter((r) => r.source === "Sage")).toHaveLength(70);
+    expect(money(view.model!.revenue.inSystemCents)).toBe("367014.16");
+    expect(await loadShipmentLines(run.id)).toEqual({ access: "missing", missing: missingNames, lines: [] });
+  });
+
+  it("after readonly-grants-shipment-lines.sql (re-runnable), the next refresh stores the lines, read back exactly", async () => {
+    const script = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants-shipment-lines.sql"), "utf8");
+    await reportingAdmin.query(script);
+    await reportingAdmin.query(script);
+    await allowNextUserRefresh();
+    const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T18:10:00Z"));
+    const run = await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+    expect(run).toMatchObject({ status: "succeeded", error: null });
+    expect(run.rowCounts).toMatchObject({ shipments: 70, shipmentLines: 133 });
+
+    const [summary] = await mcQuery(`SELECT access, missing, lines FROM report_snap_shipment_line_summary WHERE run_id = $1`, [run.id]);
+    expect(summary).toEqual({ access: "read", missing: [], lines: 133 });
+    // Stored and read back with Sage's own scales (4-decimal quantities, 6-decimal prices, 3-decimal amounts).
+    const stored = await loadShipmentLines(run.id);
+    expect(stored).toEqual({ access: "read", missing: [], lines: SHIPMENT_LINES });
+
+    // The page says they're there without carrying them; the list's rows and the stored lines reconcile as on the page.
+    const view = await loadGoalsView();
+    expect(view.shipmentLines).toEqual({ state: "ready", lines: 133 });
+    expect(JSON.stringify(view)).not.toContain("Fuel surcharge");
+    expect(offInvoices(stored!.lines, view.shipments)).toEqual(["sage:IN1000180353", "sage:IN1000180370", "sage:IN1000180368"]);
+  });
+
+  it("goes with its run: pruning a run deletes its lines and their summary", async () => {
+    const [read] = await mcQuery<{ run_id: string }>(
+      `SELECT run_id FROM report_snap_shipment_line_summary WHERE access = 'read' AND lines = 133 ORDER BY run_id DESC LIMIT 1`
+    );
+    const [waiting] = await mcQuery<{ run_id: string }>(
+      `SELECT run_id FROM report_snap_shipment_line_summary WHERE access = 'missing' ORDER BY run_id DESC LIMIT 1`
+    );
+    await mcQuery(`UPDATE report_refresh_run SET started_at = now() - interval '91 days' WHERE id = ANY($1::bigint[])`, [[read.run_id, waiting.run_id]]);
+    await allowNextUserRefresh();
+    const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T18:20:00Z"));
+    await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+    for (const table of ["report_snap_shipment_line_summary", "report_snap_shipment_line"]) {
+      expect(await mcQuery(`SELECT 1 FROM ${table} WHERE run_id = ANY($1::bigint[])`, [[read.run_id, waiting.run_id]]), table).toEqual([]);
+    }
+    expect(await loadShipmentLines(Number(read.run_id))).toBeNull();
   });
 });

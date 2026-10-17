@@ -4,13 +4,23 @@
 import { ontarioStatutoryHolidays } from "@/lib/reporting/goals/calendar";
 import type { ForecastSnapshot } from "@/lib/reporting/goals/forecast";
 import { normalizeRef, type GoalsInput } from "@/lib/reporting/goals/rules";
-import type { Datasets, ForecastDatasets, FtlCustomer, GoalSettings, ManualEntry, RefreshRun } from "@/lib/reporting/goals/types";
+import type {
+  Datasets,
+  ForecastDatasets,
+  FtlCustomer,
+  GoalSettings,
+  ManualEntry,
+  RefreshRun,
+  ShipmentLineRow,
+  ShipmentLinesSummary,
+} from "@/lib/reporting/goals/types";
 import { buildGoalsView, type GoalsPage } from "@/lib/reporting/goals/view";
 
 import datasetsJson from "./fixtures/reporting-goals/2026-10-14/datasets.json";
 import entriesJson from "./fixtures/reporting-goals/2026-10-14/entries.json";
 import expectedJson from "./fixtures/reporting-goals/2026-10-14/expected.json";
 import forecastJson from "./fixtures/reporting-goals/2026-10-14/forecast.json";
+import shipmentLinesJson from "./fixtures/reporting-goals/2026-10-14/shipment-lines.json";
 
 export const TODAY = "2026-10-14";
 export const RATE = "1.4219";
@@ -23,6 +33,12 @@ export const FORECAST: ForecastSnapshot = {
   data: forecastJson as unknown as ForecastDatasets,
   history: forecastJson.history,
 };
+
+/** The lines of this month's Sage invoices, as queries/shipment-lines.ts returns them (TASK-3144). */
+export const SHIPMENT_LINES = shipmentLinesJson as ShipmentLineRow[];
+
+/** The fixture run's stored summary of them: read, 133 lines. */
+export const SHIPMENT_LINES_SUMMARY: ShipmentLinesSummary = { access: "read", missing: [], lines: SHIPMENT_LINES.length };
 
 /** The goal settings migrations 039 and 042 seed (042's Line 1 settings replaced the large-batch ones). */
 export const SETTINGS: GoalSettings = {
@@ -99,7 +115,8 @@ export const RUN: RefreshRun = {
 export function goalsPage(
   overrides: Partial<GoalsPage> = {},
   entries: ManualEntry[] = ENTRIES,
-  forecast: ForecastSnapshot | null = FORECAST
+  forecast: ForecastSnapshot | null = FORECAST,
+  shipmentLines: ShipmentLinesSummary | null = SHIPMENT_LINES_SUMMARY
 ): GoalsPage {
   const view = buildGoalsView({
     configured: true,
@@ -114,6 +131,7 @@ export function goalsPage(
     holidays: HOLIDAYS,
     rates: [{ date: TODAY, rate: RATE }],
     forecast,
+    shipmentLines,
   });
   return { ...view, viewer: { editor: true }, ...overrides };
 }

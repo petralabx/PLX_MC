@@ -11,9 +11,11 @@ import { batchesQuery } from "./queries/batches";
 import { customersQuery } from "./queries/customers";
 import { cutoffsQuery } from "./queries/cutoffs";
 import { dailyQuery } from "./queries/daily";
+import { missingColumns } from "./queries/read-access";
 import { referencesQuery } from "./queries/references";
 import { revenueByCurrencyQuery } from "./queries/revenue-by-currency";
 import type { DatasetQuery } from "./queries/shared";
+import { SHIPMENT_LINE_COLUMNS, shipmentLinesQuery } from "./queries/shipment-lines";
 import { shipmentsQuery } from "./queries/shipments";
 import { truckloadsQuery } from "./queries/truckloads";
 import { latestRateOnOrBefore } from "./rules";
@@ -30,7 +32,7 @@ import {
   type GoalsConfig,
   type ResolvedRate,
 } from "./store";
-import type { Datasets, IsoDate, RefreshRun, RefreshTrigger } from "./types";
+import type { Datasets, IsoDate, RefreshRun, RefreshTrigger, ShipmentLinesDataset } from "./types";
 
 /** Time a refresh may take in total: the routes' maxDuration (300 s) less a margin. */
 export const REFRESH_BUDGET_MS = 280_000;
@@ -65,6 +67,17 @@ export function startRefresh(trigger: RefreshTrigger, requestedBy: string, now: 
   return claimRun({ trigger, requestedBy, today: torontoDate(now) });
 }
 
+/**
+ * The lines of this month's Sage invoices (TASK-3144), in the refresh's own
+ * transaction: the catalog check first, then the query, or neither. Missing
+ * grants never fail the refresh.
+ */
+async function readShipmentLines(q: SourceQuery, today: IsoDate): Promise<ShipmentLinesDataset> {
+  const missing = await missingColumns(q, SHIPMENT_LINE_COLUMNS);
+  if (missing.length > 0) return { access: "missing", missing, lines: [] };
+  return { access: "read", missing: [], lines: shipmentLinesQuery.map(await q(shipmentLinesQuery.sql, [today])) };
+}
+
 /** Read every dataset for `today` from the replica in one consistent transaction. */
 export async function readDatasets(
   today: IsoDate,
@@ -85,6 +98,8 @@ export async function readDatasets(
       batchHistory: await read(batchHistoryQuery, [today]),
       references: await read(referencesQuery, [today]),
       customers: await read(customersQuery, []),
+      // Only when the login can read Sage's invoice lines (TASK-3144).
+      shipmentLines: await readShipmentLines(q, today),
       // Last, and only when the login can read its tables (TASK-3151).
       forecast: await readForecast(q, today),
     };

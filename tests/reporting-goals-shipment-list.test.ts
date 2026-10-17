@@ -366,8 +366,8 @@ describe("the page model and the section", () => {
   it("carries the list built from the same snapshot and entries as the model", () => {
     expect(page.shipments).toEqual(listFor().rows);
     expect(shipmentTotals(page.shipments, page.model.revenue.rate).totalCadCents).toBe(page.model.revenue.totalCents);
-    // Its source line names both datasets it is built from (the truckload kinds come from truckloads).
-    expect(page.sections.shipments).toEqual(["shipments", "truckloads"]);
+    // Its source line names the datasets it is built from (the truckload kinds come from truckloads, what shipped from shipment-lines).
+    expect(page.sections.shipments).toEqual(["shipments", "truckloads", "shipment-lines"]);
     const empty = buildGoalsView({
       configured: true,
       run: null,

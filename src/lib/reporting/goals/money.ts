@@ -57,6 +57,18 @@ export function toCents(value: string | number | null | undefined): number {
   return toSafeNumber(divideHalfEven(units, pow10(scale - 2)));
 }
 
+/**
+ * The exact sum of decimal amounts less the exact sum of `minus`, rounded to the
+ * cent once, half to even. Sage keeps three decimals on invoice lines, so they
+ * are added up before rounding, never rounded one by one (TASK-3144).
+ */
+export function sumToCents(plus: readonly string[], minus: readonly string[] = []): number {
+  const terms = [...plus.map((v) => ({ ...parseDecimal(v), sign: ONE })), ...minus.map((v) => ({ ...parseDecimal(v), sign: -ONE }))];
+  const scale = Math.max(2, ...terms.map((t) => t.scale));
+  const total = terms.reduce((sum, t) => sum + t.sign * t.units * pow10(scale - t.scale), ZERO);
+  return toSafeNumber(divideHalfEven(total, pow10(scale - 2)));
+}
+
 /** cents × rate, rounded to the cent half to even (USD → CAD at USD/CAD). */
 export function convertCents(cents: number, rate: string): number {
   const { units, scale } = parseDecimal(rate);
@@ -81,6 +93,12 @@ export function centsToDecimal(cents: number): string {
   const sign = cents < 0 ? "-" : "";
   const magnitude = Math.abs(cents);
   return `${sign}${Math.trunc(magnitude / 100)}.${String(magnitude % 100).padStart(2, "0")}`;
+}
+
+/** Exact amount with thousands separators and no symbol, e.g. 444240 → "4,442.40" (display only). */
+export function formatAmount(cents: number): string {
+  const [whole, frac] = centsToDecimal(Math.abs(cents)).split(".");
+  return `${cents < 0 ? "-" : ""}${Number(whole).toLocaleString("en-US")}.${frac}`;
 }
 
 /** Whole-dollar display, e.g. 36701416 → "$367,014" (display only). */

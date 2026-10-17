@@ -117,11 +117,13 @@ export interface Datasets {
   batchHistory: BatchHistoryRow[];
   references: ReferenceRow[];
   customers: CustomerRow[];
+  /** The lines of this month's Sage invoices (TASK-3144), when the login can read them. */
+  shipmentLines: ShipmentLinesDataset;
   forecast: ForecastDatasets;
 }
 
-/** The datasets the page needs (references, customers and the forecast are looked up separately). */
-export type SnapshotData = Omit<Datasets, "references" | "customers" | "forecast">;
+/** The datasets the page needs (references, customers, the invoice lines and the forecast are looked up separately). */
+export type SnapshotData = Omit<Datasets, "references" | "customers" | "shipmentLines" | "forecast">;
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -236,4 +238,46 @@ export interface ForecastDatasets {
   missing: string[];
   lines: ForecastLineRow[];
   aos: ForecastAoRow[];
+}
+
+// ─── Shipment lines: what shipped (TASK-3144) ───────────────────────────────
+
+/** item: Sage line type 1 (or blank); charge: line type 2, a miscellaneous charge such as freight. */
+export type ShipmentLineKind = "item" | "charge";
+
+/** One line of a Sage invoice shipped this month (queries/shipment-lines.ts), as Sage keeps it. */
+export interface ShipmentLineRow {
+  /** Its invoice's number: the shipments list keys that invoice's row by it ("sage:<invoice>"). */
+  invoice: string;
+  /** Sage's line number (32, 64, …): the lines' order. */
+  lineNo: number | null;
+  kind: ShipmentLineKind;
+  /** The item's code, or the charge's. */
+  code: string | null;
+  description: string | null;
+  /** Quantity shipped, in `unit`. */
+  qty: string;
+  unit: string | null;
+  /** Per `unit`, in the invoice's currency. */
+  unitPrice: string;
+  /** Sage's extended amount, in the invoice's currency: the item's quantity × price as invoiced, or the charge. */
+  amount: string;
+  /** The line's discount, in the invoice's currency. */
+  discount: string;
+}
+
+/** read: the lines were read; missing: the login lacks SELECT on these columns (schema.table.column), so they weren't. */
+export type ShipmentLinesAccess = "read" | "missing";
+
+export interface ShipmentLinesDataset {
+  access: ShipmentLinesAccess;
+  missing: string[];
+  lines: ShipmentLineRow[];
+}
+
+/** What a run stored about its invoice lines (report_snap_shipment_line_summary): the page model reads only this. */
+export interface ShipmentLinesSummary {
+  access: ShipmentLinesAccess;
+  missing: string[];
+  lines: number;
 }

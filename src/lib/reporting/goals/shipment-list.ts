@@ -6,7 +6,8 @@
 // list adds up to revenue.totalCents to the cent, and the kinds come from the
 // Truckloads card's helpers, so the list agrees with that card. Pure: the page
 // model carries the rows (view.ts) and the browser filters and totals them.
-// Each row is keyed by its invoice, so an invoice's lines can hang under it.
+// Each row is keyed by its invoice, so an invoice's lines hang under it
+// (shipment-lines.ts, TASK-3144), and the search finds what they hold.
 
 import { convertCents, toCents } from "./money";
 import {
@@ -17,6 +18,7 @@ import {
   type EvaluatedEntry,
   type LoadKind,
 } from "./rules";
+import { linesSearchText, type InvoiceLines } from "./shipment-lines";
 import type { FtlCustomer, FxRate, GoalSettings, IsoDate, ShipmentRow, TruckloadRow } from "./types";
 
 interface RowFields {
@@ -166,17 +168,23 @@ function inFilter(row: ShipmentListRow, filter: ShipmentFilter): boolean {
   }
 }
 
-/** The rows in the filter whose customer (name or code), invoice or reference, shipment, order or PO holds the search, ignoring case and spacing. */
+/**
+ * The rows in the filter whose customer (name or code), invoice or reference,
+ * shipment, order or PO holds the search, ignoring case and spacing; with the
+ * run's invoice lines (by row key), an item or charge code or description too.
+ */
 export function filterShipments(
   rows: readonly ShipmentListRow[],
-  opts: { filter: ShipmentFilter; query: string }
+  opts: { filter: ShipmentFilter; query: string; lines?: ReadonlyMap<string, InvoiceLines> }
 ): ShipmentListRow[] {
   const needle = normalizeName(opts.query);
   return rows.filter(
     (row) =>
       inFilter(row, opts.filter) &&
       (!needle ||
-        normalizeName([row.customer, row.customerCode, row.invoice, row.shipment, row.orderNo, row.po].join(" ")).includes(needle))
+        normalizeName(
+          [row.customer, row.customerCode, row.invoice, row.shipment, row.orderNo, row.po, linesSearchText(opts.lines?.get(row.key))].join(" ")
+        ).includes(needle))
   );
 }
 

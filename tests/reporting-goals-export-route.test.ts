@@ -34,13 +34,19 @@ import { ApiClientError, apiDownload, dispositionFileName } from "@/lib/api";
 import { appendEvent } from "@/lib/compliance/repo";
 import { WORKBOOK_SHEETS, XLSX_CONTENT_TYPE, type GoalsExportData } from "@/lib/reporting/goals";
 
-import { DATASETS, RATE, TODAY, goalsPage } from "./reporting-goals-helpers";
+import { DATASETS, RATE, SHIPMENT_LINES, TODAY, goalsPage } from "./reporting-goals-helpers";
 
 const ctx = { params: Promise.resolve({}) };
 const FILE = "PLX goals and production 2026-10-14.xlsx";
 
 function exportData(view = goalsPage()): GoalsExportData {
-  return { view, shipments: DATASETS.shipments, truckloads: DATASETS.truckloads, rates: [{ date: TODAY, rate: RATE }] };
+  return {
+    view,
+    shipments: DATASETS.shipments,
+    shipmentLines: { access: "read", missing: [], lines: SHIPMENT_LINES },
+    truckloads: DATASETS.truckloads,
+    rates: [{ date: TODAY, rate: RATE }],
+  };
 }
 
 function signedIn(roles: string[] | undefined) {
@@ -80,8 +86,9 @@ describe("GET /api/reporting/goals/export", () => {
     await wb.xlsx.load(await resp.arrayBuffer());
     expect(wb.worksheets.map((ws) => ws.name)).toEqual([...WORKBOOK_SHEETS]);
     expect(wb.getWorksheet("Manual entries")!.getCell("A2").value).toBe("M001");
-    // The page's revenue forecast rides along (its first open order row).
+    // The page's revenue forecast rides along (its first open order row), and the run's invoice lines (the first one's invoice).
     expect(wb.getWorksheet("Forecast")!.getCell("B7").value).toBe("OR1000160001");
+    expect(wb.getWorksheet("Shipment lines")!.getCell("A2").value).toBe("IN1000180352");
     expect(appendEvent).toHaveBeenCalledTimes(1);
     expect(appendEvent).toHaveBeenCalledWith({
       kind: "reporting.goals.export",

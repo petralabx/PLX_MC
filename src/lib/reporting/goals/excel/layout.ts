@@ -6,7 +6,7 @@
 import type { IsoDate } from "../types";
 
 /** Sheets, in order. */
-export const WORKBOOK_SHEETS = ["Read me", "Goals", "Daily", "Truckloads", "Batches", "Shipments", "Forecast", "Manual entries"] as const;
+export const WORKBOOK_SHEETS = ["Read me", "Goals", "Daily", "Truckloads", "Batches", "Shipments", "Shipment lines", "Forecast", "Manual entries"] as const;
 export type WorkbookSheet = (typeof WORKBOOK_SHEETS)[number];
 
 /** "PLX goals and production 2026-10-14.xlsx". */

@@ -1,5 +1,5 @@
 // Goals & Production workbook (TASK-2898), built from the 2026-10-14 fixture
-// with and without M1–M7 and read back with exceljs: the eight sheets in the
+// with and without M1–M7 and read back with exceljs: the nine sheets in the
 // shared order, the house styles, real dates and number formats, formulas
 // wherever the brief derives a value, amber for everything entered by hand,
 // and the "Manual entries" import template. LibreOffice then recalculates it:
@@ -35,6 +35,8 @@ vi.mock("@/lib/reporting/goals/store", async () => {
       filemaker: new Set(refs.filter((r) => h.refsOf("filemaker").has(r))),
       sage: new Set(refs.filter((r) => h.refsOf("sage").has(r))),
     })),
+    loadShipmentLineSummary: vi.fn(async () => h.SHIPMENT_LINES_SUMMARY),
+    loadShipmentLines: vi.fn(async () => ({ access: "read", missing: [], lines: h.SHIPMENT_LINES })),
   };
 });
 vi.mock("@/lib/reporting/goals/forecast-store", async () => {
@@ -58,9 +60,9 @@ import {
   type GoalsModel,
   type ManualEntry,
 } from "@/lib/reporting/goals";
-import { loadSnapshot } from "@/lib/reporting/goals/store";
+import { loadShipmentLines, loadSnapshot } from "@/lib/reporting/goals/store";
 
-import { DATASETS, ENTRIES, RATE, RUN, SETTINGS, TODAY, goalsPage } from "./reporting-goals-helpers";
+import { DATASETS, ENTRIES, RATE, RUN, SETTINGS, SHIPMENT_LINES, TODAY, goalsPage } from "./reporting-goals-helpers";
 
 const EXPORTED_AT = new Date("2026-10-14T14:42:00Z");
 const DATE_FORMAT = "yyyy-mm-dd";
@@ -100,7 +102,7 @@ const formulaOf = (cell: ExcelJS.Cell) =>
 const utcDay = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
 describe("the workbook", () => {
-  it("has the eight sheets in the shared order, set to recalculate on open", async () => {
+  it("has the nine sheets in the shared order, set to recalculate on open", async () => {
     const { wb, buffer } = await build();
     expect(wb.worksheets.map((ws) => ws.name)).toEqual([...WORKBOOK_SHEETS]);
     // exceljs reads calcPr back without its attributes, so look at the file itself
@@ -495,13 +497,15 @@ describe("Read me", () => {
 });
 
 describe("loadGoalsExport", () => {
-  it("returns the page model with the same run's invoices, truckload shipments and rates", async () => {
+  it("returns the page model with the same run's invoices, their lines, truckload shipments and rates", async () => {
     store.succeeded = RUN;
     const data = await loadGoalsExport();
     expect(data.view).toEqual(await loadGoalsView());
     expect(data.view.state).toBe("ready");
     expect(vi.mocked(loadSnapshot)).toHaveBeenCalledWith(RUN);
+    expect(vi.mocked(loadShipmentLines)).toHaveBeenCalledWith(RUN.id);
     expect(data.shipments).toBe(DATASETS.shipments);
+    expect(data.shipmentLines).toEqual({ access: "read", missing: [], lines: SHIPMENT_LINES });
     expect(data.truckloads).toBe(DATASETS.truckloads);
     expect(data.rates).toEqual([{ date: TODAY, rate: RATE }]);
   });
@@ -509,7 +513,7 @@ describe("loadGoalsExport", () => {
   it("has no rows before the first good refresh", async () => {
     store.succeeded = null;
     const data = await loadGoalsExport();
-    expect(data).toMatchObject({ shipments: [], truckloads: [], rates: [] });
+    expect(data).toMatchObject({ shipments: [], shipmentLines: null, truckloads: [], rates: [] });
     expect(data.view.state).toBe("no_data");
   });
 });

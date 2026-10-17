@@ -12,6 +12,8 @@ market spot the prototype used).
 | `entries.json` | Manual-entry scenarios M1–M7 from the brief | Rules and view tests |
 | `forecast-source.json` | Revenue forecast (TASK-3151) source rows: Sage `oe_order_header`/`oe_order_detail` (space-padded text, `YYYYMMDD` dates, with the traps the SQL must leave out), FileMaker `assembly_order`, its order-entry links, `silver.finished_products` and the AOs' bulk batches | `tests/reporting-goals-forecast-replica.ts` loads them for the Postgres test |
 | `forecast.json` | What the two forecast queries must return for those rows, plus the hit-rate history the page fixture uses (an August run from before the forecast, and September's first run) | Postgres test (SQL output must equal it), the forecast, page, workbook and browser tests |
+| `shipment-lines-source.json` | What shipped (TASK-3144): every invoice's `invuniq`, and rows for a synthetic `sage.oe_invoice_detail` (space-padded text, `linenum` spaced by 32, 4-decimal quantities, 6-decimal prices, 3-decimal amounts, plus cost columns the report must never read), inserted out of order | `tests/reporting-goals-shipment-lines-replica.ts` loads them for the Postgres test |
+| `shipment-lines.json` | What the `shipment-lines` query must return for those rows: the 133 lines of this month's invoices, by invoice and line number | Postgres test (SQL output must equal it), the shipment lines, workbook and browser tests |
 
 ## Provenance
 
@@ -58,3 +60,18 @@ independently (Python `Decimal`, half to even) at USD/CAD 1.4219 with M1–M7:
 Ready 53,762.80 · Planned in time 64,627.53 · Late 27,917.55 · Not planned
 12,785.70; Theoretical 527,018.41 · At risk 40,703.25 · Pace 953,465.52 ·
 Realistic 503,340.34 (September's 80% hit rate).
+
+The invoice lines are **synthetic** too, derived from `source.json` with Python
+`Decimal` (codes `FP-20xx`, `TP-DBS-1L` and `BLK-SHB-KG`; freight `FRT` and a
+fuel surcharge `FUEL`). On every October invoice but three, the item lines'
+amounts less their discounts make the product value (`invitmtot −
+invdiscamt`) and the charges make `invmisc`, to the cent: the three invoice
+discounts sit on a line's `invdisc`, one invoice has a line discount of its own
+(329.55), there is a fractional kg quantity, a no-charge line on a $0 invoice,
+a $0 invoice with no lines, a line with a blank line type, a charge whose code
+is in `item`, and invoices with four and five lines (line numbers 128 and 160
+must sort after 96). The three that don't add up: IN1000180353 has no lines
+(0.00 against 16,588.00), IN1000180368 lost a line (4,442.40 against
+7,164.80), and IN1000180370's freight is a dollar short (18.35 against 19.35).
+The query must leave out two September invoices' lines (one shipped Sep 30 and
+dated Oct 1) and a line whose invoice isn't on the replica.

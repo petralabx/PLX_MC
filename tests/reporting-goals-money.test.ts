@@ -8,6 +8,7 @@ import {
   formatDollars,
   invertCents,
   prorateCents,
+  sumToCents,
   toCents,
 } from "@/lib/reporting/goals/money";
 
@@ -63,5 +64,19 @@ describe("conversion", () => {
     expect(centsToDecimal(-5)).toBe("-0.05");
     expect(formatDollars(36_701_416)).toBe("$367,014");
     expect(formatDollars(42_857_143)).toBe("$428,571");
+  });
+});
+
+describe("sumToCents", () => {
+  it("adds Sage's decimal amounts exactly and rounds the sum to the cent once, half to even", () => {
+    // Each 10.005 alone rounds to 10.00; together they are 20.01.
+    expect(sumToCents(["10.005", "10.005"])).toBe(2001);
+    expect(sumToCents(["10.000", "10.000"], ["0.005", "0.005"])).toBe(1999);
+    expect(sumToCents(["0.005"])).toBe(0);
+    expect(sumToCents(["0.015"])).toBe(2);
+    expect(sumToCents(["15704.000", "9400.000", "6302.900"], ["12.500"])).toBe(3_139_440);
+    expect(sumToCents([], [])).toBe(0);
+    expect(sumToCents(["-12.5", " 1 "])).toBe(-1150);
+    expect(() => sumToCents(["12,50"])).toThrow(RangeError);
   });
 });

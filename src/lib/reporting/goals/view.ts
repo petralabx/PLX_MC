@@ -5,7 +5,18 @@
 import { buildForecast, type ForecastSnapshot, type ForecastView } from "./forecast";
 import { computeGoals, type GoalsModel } from "./rules";
 import { buildShipmentList, type ShipmentListRow } from "./shipment-list";
-import type { FtlCustomer, FxRate, FxSource, GoalSettings, IsoDate, ManualEntry, RefreshRun, SnapshotData } from "./types";
+import { shipmentLinesView, type ShipmentLinesView } from "./shipment-lines";
+import type {
+  FtlCustomer,
+  FxRate,
+  FxSource,
+  GoalSettings,
+  IsoDate,
+  ManualEntry,
+  RefreshRun,
+  ShipmentLinesSummary,
+  SnapshotData,
+} from "./types";
 
 /** Dataset query names — the names tooltips show. One per report_snap_* table (report_snap_goal_summary is retired). */
 export const DATASET_QUERIES = {
@@ -14,6 +25,7 @@ export const DATASET_QUERIES = {
   truckloads: "truckloads",
   revenue: "revenue-by-currency",
   shipments: "shipments",
+  shipmentLines: "shipment-lines",
   batches: "batches",
   batchHistory: "batch-history",
   references: "references",
@@ -34,7 +46,7 @@ export const SECTION_QUERIES: Record<string, readonly DatasetQuery[]> = {
   entries: [DATASET_QUERIES.references, DATASET_QUERIES.batches],
   sizes: [DATASET_QUERIES.batches, DATASET_QUERIES.batchHistory],
   batches: [DATASET_QUERIES.batches],
-  shipments: [DATASET_QUERIES.shipments, DATASET_QUERIES.truckloads],
+  shipments: [DATASET_QUERIES.shipments, DATASET_QUERIES.truckloads, DATASET_QUERIES.shipmentLines],
   forecast: [DATASET_QUERIES.revenue, DATASET_QUERIES.forecastOrders, DATASET_QUERIES.forecastAos],
 };
 
@@ -51,6 +63,8 @@ export interface GoalsView {
   model: GoalsModel | null;
   /** This month's shipments list (shipment-list.ts), from the same snapshot and entries as the model; empty without one. */
   shipments: ShipmentListRow[];
+  /** Whether the run has its invoices' lines (TASK-3144); the page fetches them on demand. null without a model. */
+  shipmentLines: ShipmentLinesView | null;
   /** The goal settings the model was built with (the page's definitions and rules text quote them). */
   settings: GoalSettings | null;
   sections: Record<string, readonly DatasetQuery[]>;
@@ -80,6 +94,8 @@ export interface GoalsViewInput {
   rates: readonly FxRate[];
   /** The run's forecast and hit-rate history; null or absent when the run predates the forecast. */
   forecast?: ForecastSnapshot | null;
+  /** The run's stored summary of its invoice lines; null or absent when the run predates them. */
+  shipmentLines?: ShipmentLinesSummary | null;
 }
 
 export function buildGoalsView(input: GoalsViewInput): GoalsView {
@@ -93,6 +109,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       fx: null,
       model: null,
       shipments: [],
+      shipmentLines: null,
       settings: null,
       sections: SECTION_QUERIES,
       forecast: null,
@@ -126,6 +143,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       settings: input.settings,
       ftlCustomers: input.ftlCustomers,
     }),
+    shipmentLines: shipmentLinesView(input.shipmentLines ?? null),
     settings: input.settings,
     sections: SECTION_QUERIES,
     forecast: buildForecast({ snapshot: input.forecast ?? null, model, settings: input.settings, rate: run.fxRate }),

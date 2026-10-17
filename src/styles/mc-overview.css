@@ -1515,6 +1515,20 @@
   .mc .pv-sec-r .track .bar {
     flex-basis: 96px;
   }
+
+  /* Phones: the title shares the chevron's row at any width, and the count
+     wraps under the bar instead of clipping. */
+  .mc .pv-sec-title {
+    flex-basis: 0;
+  }
+
+  .mc .pv-sec-r .track {
+    flex-wrap: wrap;
+  }
+
+  .mc .pv-sec-r .track .ct {
+    white-space: normal;
+  }
 }
 
 /* Resource tiles: 5 → 3 → 2 columns. */

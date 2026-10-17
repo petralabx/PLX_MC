@@ -77,7 +77,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
   };
 
   return (
-    <div className="mc-main pv-page" data-testid="project-screen">
+    <div className="mc-main" data-testid="project-screen">
       <div className="ph">
         <div>
           <button type="button" className="back" onClick={() => nav("home")}>

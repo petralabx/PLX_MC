@@ -1588,20 +1588,6 @@
   }
 }
 
-/* Ultra-wide: header, strip and body centre in a 1560px column; the hairlines
-   stay full-bleed because only the padding grows. */
-@container main (min-width: 1800px) {
-  .mc .pv-page > .ph,
-  .mc .pv-page .bkbody .c {
-    padding-left: calc((100% - 1560px) / 2);
-    padding-right: calc((100% - 1560px) / 2);
-  }
-
-  .mc .pv-page .pv-strip {
-    padding: 0 calc((100% - 1560px) / 2);
-  }
-}
-
 /* Header description edit: constrain the textarea to the .sub column width. */
 .mc .ph .ph-desc-edit {
   margin-top: 9px;

@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { withTransaction } from "@/lib/db";
+import { evidenceStandardReport, requiresHumanVerification, type EvidenceStandardReport } from "@/lib/compliance";
 import { appendEventTx } from "@/lib/compliance/repo";
 import type { Task } from "@/lib/mc-data/types";
 import { assertProjectIdAccess, assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
@@ -16,6 +17,7 @@ import { BUCKET_ID_RE } from "@/lib/sync/mapping";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
 import type { McpIdentity } from "./auth";
 import { mcpJsonResult, taskLink } from "./envelope";
+import { assertEvidenceStandard } from "./evidence-standard-guard";
 import { assertMayCloseOrReopen, cancelContextFor, cancelPatchSchema, reopenPatchSchema } from "./task-cancel-actions";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 
@@ -172,6 +174,12 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
       requested.description = parseInput(z.string().max(TASK_DESCRIPTION_MAX),
         [before.description ?? "", patch.appendDescription].filter(Boolean).join("\n\n"));
     }
+    // Evidence standard (TASK-3165): only the text this call writes is checked,
+    // against the labels the task will have. A throw rolls the transaction back.
+    const written = patch.description ?? patch.appendDescription;
+    const evidenceStandard = written !== undefined && requiresHumanVerification(labels)
+      ? evidenceStandardReport(written, true) : undefined;
+    if (evidenceStandard) assertEvidenceStandard("The task description", evidenceStandard);
     const changed: Partial<EditableFields> = {};
     const diff: TaskDiff = {};
     for (const field of Object.keys(requested) as (keyof EditableFields)[]) {
@@ -216,6 +224,7 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
       diff,
       eventSeq,
       link: taskLink(taskId),
+      ...(evidenceStandard ? { evidenceStandard } : {}),
     };
   });
 }
@@ -224,7 +233,11 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
 // 32 KB descriptions plus before/after would pass Vercel's 4.5 MB response cap
 // after the writes have committed. The full diff stays in the task.updated event.
 export type UpdateTaskItemOutcome =
-  | { index: number; ok: true; taskId: string; changed: string[]; eventSeq: string | undefined }
+  | {
+      index: number; ok: true; taskId: string; changed: string[]; eventSeq: string | undefined;
+      /** Present when the item wrote description text on work a person must verify (TASK-3165). */
+      evidenceStandard?: EvidenceStandardReport;
+    }
   | { index: number; ok: false; error: { code: string; message: string } };
 
 const BATCH_ERROR_MESSAGE_MAX = 500;
@@ -237,7 +250,10 @@ export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
   for (const [index, item] of items.entries()) {
     try {
       const data = await actionUpdateTask(identity, item);
-      results.push({ index, ok: true, taskId: data.taskId, changed: Object.keys(data.diff), eventSeq: data.eventSeq });
+      results.push({
+        index, ok: true, taskId: data.taskId, changed: Object.keys(data.diff), eventSeq: data.eventSeq,
+        ...("evidenceStandard" in data && data.evidenceStandard ? { evidenceStandard: data.evidenceStandard } : {}),
+      });
     } catch (err) {
       if (!(err instanceof ApiError)) console.error("[mcp] mc_update_tasks item %d failed:", index, err);
       results.push({
@@ -256,7 +272,7 @@ export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
 export function registerTaskUpdateTools(server: McpServer, identity: McpIdentity): void {
   // Full strict schemas preserve unknown-field rejection at the MCP boundary.
   server.registerTool("mc_update_task", {
-    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority, bucket (move to a BKT-* id; optional note; audits task.moved). Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, and removing the only kind leaves kind:needs-review; swap with removeLabels:[old], addLabels:[new] in one call. Exactly one lane:* must remain, except lane-less tasks may gain/lose kind:* labels, closed:duplicate|obsolete|superseded|delivered|wontfix or not-needed, be moved by bucket alone, or be in a terminal stage; labels cannot mix with incremental fields, nor description with appendDescription. Moves reject unknown, archived or closed-project targets and restricted projects without access; stage, labels, PRs and checkouts are untouched and the ToDos bucket syncs outbound. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy?: TASK-n (required for duplicate/superseded), note?} and reopen {stage?, note?} (default: the stage before the cancel; clears cancellation, keeps completedAt): stage changes that cannot be combined with other fields; cancel needs the task.cancel capability and reopen task.reopen, granted to the authenticated principal (the operator email grants nothing); audits task.cancelled / task.reopened. Rejects all other fields, including evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. Hub only.",
+    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority, bucket (move to a BKT-* id; optional note; audits task.moved). Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, and removing the only kind leaves kind:needs-review; swap with removeLabels:[old], addLabels:[new] in one call. Exactly one lane:* must remain, except lane-less tasks may gain/lose kind:* labels, closed:duplicate|obsolete|superseded|delivered|wontfix or not-needed, be moved by bucket alone, or be in a terminal stage; labels cannot mix with incremental fields, nor description with appendDescription. Moves reject unknown, archived or closed-project targets and restricted projects without access; stage, labels, PRs and checkouts are untouched and the ToDos bucket syncs outbound. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy?: TASK-n (required for duplicate/superseded), note?} and reopen {stage?, note?} (default: the stage before the cancel; clears cancellation, keeps completedAt): stage changes that cannot be combined with other fields; cancel needs the task.cancel capability and reopen task.reopen, granted to the authenticated principal (the operator email grants nothing); audits task.cancelled / task.reopened. Rejects all other fields, including evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. On a task a person must verify (verify:human or kind:human-test), new description text must be STE-lite: warns until 2026-10-24 (result.evidenceStandard), then refused with evidence_standard. Hub only.",
     inputSchema: updateTaskSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateTask(identity, args) }));
   server.registerTool("mc_update_tasks", {

@@ -6,6 +6,7 @@
 
 import type { Evidence } from "@/lib/mc-data";
 import { hasHumanAccountableOwner } from "@/lib/mc-data";
+import { blockingFindings, describeFindings, evidenceStandardReport, requiresHumanVerification } from "./evidence-standard";
 import { bundleRequirementsFor } from "./risk";
 import type { RiskTier, VerifyInput, VerifyResult } from "./types";
 
@@ -83,6 +84,16 @@ export function verifyCompliance(input: VerifyInput): VerifyResult {
       // block (review S1). A missing initiative is no_bucket and does block.
       notes.push("bucket-PRD requirement not enforced yet (bucket store unavailable) — advisory");
     }
+  }
+  // Human-verification evidence standard (TASK-3165): the summary a person reads
+  // is held to STE-lite. A note during the warn-only week, a reason after it.
+  if (requiresHumanVerification(task.labels, tier) && task.evidence?.summary?.trim()) {
+    const report = evidenceStandardReport(task.evidence.summary, true, input.now);
+    const blocking = blockingFindings(report);
+    const errors = report.findings.filter((finding) => finding.severity === "error");
+    const line = (found: typeof errors) => `evidence summary breaks STE-lite (${found.length}): ${describeFindings(found)}`;
+    if (blocking.length > 0) reasons.push(line(blocking));
+    else if (errors.length > 0) notes.push(`${line(errors)} Warning only until ${report.enforceFrom.slice(0, 10)}.`);
   }
 
   return reasons.length === 0

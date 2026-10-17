@@ -5,12 +5,14 @@
 // All seams are mocked in-memory (same technique as compliance-server.test.ts).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { complete } from "@/lib/compliance/service";
 import type { Task } from "@/lib/mc-data";
 
 const db = vi.hoisted(() => ({
   dispatches: new Map<string, { taskId: string; accountableHuman: string; repo: string }>(),
   patched: [] as { taskId: string; patch: Record<string, unknown> }[],
+  taskLabels: [] as string[],
 }));
 
 vi.mock("@/lib/compliance/service", () => ({
@@ -33,7 +35,7 @@ vi.mock("@/lib/sync", () => ({
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
-  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: "BKT-OPEN" } })),
+  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: "BKT-OPEN", labels: db.taskLabels } })),
   getBuckets: vi.fn(async () => [{ id: "BKT-OPEN", project: null }]),
   getProjects: vi.fn(async () => []),
 }));
@@ -67,6 +69,8 @@ const identity: McpIdentity = {
 beforeEach(() => {
   db.dispatches.clear();
   db.patched.length = 0;
+  db.taskLabels = [];
+  vi.mocked(complete).mockClear();
   db.dispatches.set("dsp_test", { taskId: "TASK-900", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 });
 
@@ -112,6 +116,57 @@ describe("actionComplete evidence (P0d)", () => {
     });
     const ev = db.patched.at(-1)?.patch.evidence as { shots?: { label: string }[] };
     expect(ev.shots).toHaveLength(2);
+  });
+});
+
+// TASK-3165: on work a person must verify, the summary is held to STE-lite. It
+// is checked before complete() releases the checkout, so a refused hand-in can
+// be fixed and sent again on the same checkout.
+describe("actionComplete evidence standard (TASK-3165)", () => {
+  const longSummary = `${Array.from({ length: 30 }, (_, i) => `word${i}`).join(" ")}.`;
+  const handIn = (over: Partial<Parameters<typeof actionComplete>[1]> = {}) =>
+    actionComplete(identity, {
+      checkoutId: "dsp_test",
+      summary: longSummary,
+      verificationCommands: ["npm test"],
+      rollback: "revert the PR",
+      ...over,
+    });
+
+  afterEach(() => vi.useRealTimers());
+  const at = (iso: string) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(iso));
+  };
+
+  it("hands in during the warn-only week and returns the findings", async () => {
+    at("2026-10-20T12:00:00Z");
+    db.taskLabels = ["verify:human"];
+    const res = await handIn();
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(res.evidenceStandard).toMatchObject({ applies: true, mode: "warn", enforceFrom: "2026-10-24T04:00:00.000Z" });
+    expect(res.evidenceStandard.findings).toMatchObject([{ rule: "sentence-length", severity: "error" }]);
+  });
+
+  it("refuses the hand-in after the week, before the checkout is released", async () => {
+    at("2026-10-25T12:00:00Z");
+    db.taskLabels = ["kind:human-test"];
+    await expect(handIn()).rejects.toMatchObject({ code: "evidence_standard", status: 400 });
+    expect(complete).not.toHaveBeenCalled();
+    expect(db.patched).toHaveLength(0);
+  });
+
+  it("holds an unlabelled high-risk change (from filesChanged) to the standard", async () => {
+    at("2026-10-25T12:00:00Z");
+    await expect(handIn({ filesChanged: ["src/lib/auth/edge.ts"] })).rejects.toMatchObject({ code: "evidence_standard" });
+    await expect(handIn({ filesChanged: ["src/components/mc/help.tsx"] })).resolves.toMatchObject({ ok: true });
+  });
+
+  it("accepts a clean summary after the week", async () => {
+    at("2026-10-25T12:00:00Z");
+    db.taskLabels = ["verify:human"];
+    const res = await handIn({ summary: "API calls now get a 401. The browser goes to sign-in." });
+    expect(res.evidenceStandard.findings).toEqual([]);
   });
 });
 

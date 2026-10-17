@@ -35,6 +35,18 @@ truth table is proven before any plumbing exists.
   PRs pass (recorded, ungated); an agent PR with no checked-out task is blocked;
   agent PRs must carry a human accountable owner (EN-003) + the tier bundle. The
   soft-vs-hard (warn vs block) decision belongs to the caller.
+- Human-verification evidence standard (TASK-3165, `evidence-standard.ts`,
+  `ste-lite.ts`). It applies when a person must verify the work: label
+  `verify:human`, a `kind:human-test` task, or a high-risk change. The agent's
+  text must pass STE-lite, the measurable part of ASD-STE100. A numbered step
+  has 20 words or fewer. Any other sentence has 25 or fewer. A prose paragraph
+  has 6 sentences or fewer. Code, links, paths and IDs count as one word.
+  Passive voice is advice only. The verifier checks the evidence summary. The
+  MCP layer checks the task description at create and update, and the summary
+  at `mc_complete_task` (before anything is recorded; `filesChanged` gives the
+  likely tier, and the PR gate stays the authority). Until `EVIDENCE_STANDARD_ENFORCE_FROM` (2026-10-24, Toronto
+  midnight) a finding is a note; after it, a blocking reason and a 400
+  `evidence_standard`. Operators are never gated.
 - Repository binding requires matching full `owner/name` identities, compared
   case-insensitively. Bare dispatch identities and callers supplying only a bare
   name fail closed. Generated workflows retain the bare `repo` display/event key
@@ -153,6 +165,8 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 
 - `src/lib/compliance/risk.ts` — risk-tier classifier + per-tier bundle floor
 - `src/lib/compliance/verify.ts` — `evidenceCompleteForTier` + `verifyCompliance`
+- `src/lib/compliance/ste-lite.ts` — deterministic STE-lite writing check (`steLiteFindings`)
+- `src/lib/compliance/evidence-standard.ts` — human-verification scope, warn-only week, blocking findings (TASK-3165); the MCP 400 lives in `src/lib/mcp/evidence-standard-guard.ts`
 - `src/lib/compliance/types.ts` — `RiskTier`, `ActorKind`, `VerifyInput/Result`
 - `src/lib/compliance/index.ts` — pure-core barrel (import through here)
 - `src/lib/compliance/tracked-repos.ts` — fleet registry accessor (`TRACKED_REPO_SLUGS`, build-time JSON import of `config/tracked-repos-registry.json`) + pure `registryDrift()`; the Hub MCP checkout allowlist is derived from its `status: active` entries (`ACTIVE_TRACKED_REPO_SLUGS`, so pending/sandbox entries stay fail-closed) and `tests/tracked-repos-drift.test.ts` pins every subset list (pilots, go-live, loop ledgers, REPOS seed) to it

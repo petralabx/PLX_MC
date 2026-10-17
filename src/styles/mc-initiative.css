@@ -1,0 +1,189 @@
+/* Initiative (bucket) page redesign (TASK-3175) — imported into the mc.screens
+   layer (ADR-005): phone-first, wider tiers by @container main (main-content
+   width, so the page re-tiers when the nav opens or closes), hover under
+   (hover: hover), --p-* tokens only. Handoff "Screen 2 — Initiative page".
+   The page keeps the legacy .ph / .bk / .blk / .doclinks / .risk skins and
+   only adds the kicker line, the spec link and the two-column body here. */
+
+/* Ultra-wide: header and body content centre in a 1560px column while the
+   hairlines stay full-bleed (the padding grows, the border does not move). */
+.mc .ini-page > .ph {
+  padding-inline: max(var(--p-gutter), calc((100% - 1560px) / 2));
+}
+
+.mc .ini-page .ini-ph-main {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+/* Kicker line: INITIATIVE · id · ↰ PROJECT · name · 📄 spec ↗ */
+.mc .ini-kicker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 12px 0 8px;
+  font-family: var(--mono);
+  font-size: var(--p-text-kicker);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .ini-klink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--p-accent);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The spec reads as a file name, not a label: no uppercase, tight tracking.
+   A long name wraps instead of pushing the page sideways on a phone. */
+.mc .ini-klink.ini-spec {
+  min-width: 0;
+  text-transform: none;
+  letter-spacing: 0.04em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.mc .ini-klink.ini-spec-edit {
+  color: var(--p-muted);
+}
+
+@media (hover: hover) {
+  .mc .ini-klink:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .mc .ini-klink.ini-spec-edit:hover {
+    color: var(--p-accent);
+  }
+}
+
+/* PrdLinkField opened from the kicker: label over an underline input. */
+.mc .ini-spec-field {
+  margin-top: 12px;
+  max-width: 420px;
+}
+
+.mc .ini-spec-field .f {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mc .ini-spec-field .k {
+  font-family: var(--mono);
+  font-size: var(--p-text-cap-2);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .ini-spec-field .v {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mc .ini-spec-field .le-input {
+  width: 100%;
+}
+
+/* Views switcher: 44px touch targets unless the pointer is fine. */
+.mc .ini-page .ph .vsw button {
+  min-height: 44px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mc .ini-page .ph .vsw button {
+    min-height: 0;
+  }
+}
+
+/* Body: one column (aside under a top hairline, no fill) until the main
+   content is 1100px wide, then tasks + discussion | a 320–420px paper aside. */
+.mc .ini-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding-inline: max(0px, calc((100% - 1560px) / 2));
+}
+
+.mc .ini-body .ini-main,
+.mc .ini-body .ini-aside {
+  min-width: 0;
+  padding: 22px var(--p-gutter) 0;
+}
+
+.mc .ini-body .ini-aside {
+  margin-top: 26px;
+  border-top: 1px solid var(--p-grid);
+}
+
+.mc .ini-body .blk {
+  margin-bottom: 26px;
+}
+
+.mc .ini-body .blk:last-child {
+  margin-bottom: 0;
+}
+
+@container main (min-width: 1100px) {
+  .mc .ini-body {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  }
+
+  .mc .ini-body .ini-aside {
+    margin-top: 0;
+    padding-bottom: 22px;
+    border-top: 0;
+    border-left: 1px solid var(--p-grid);
+    background: var(--p-paper);
+  }
+}
+
+/* Documents & links: bordered 38px rows on paper (also when stacked). */
+.mc .ini-aside .doclinks {
+  background: var(--p-paper);
+}
+
+.mc .ini-aside .doclinks .dl {
+  min-height: 38px;
+  padding: 6px 12px;
+}
+
+.mc .ini-aside .doclinks .dl .ic,
+.mc .ini-aside .doclinks .dl .ext {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mc .ini-aside .trace-summary {
+  align-items: center;
+  gap: 8px;
+}
+
+.mc .ini-aside .overview-trace-block > .kk {
+  display: block;
+  margin-top: 10px;
+}
+
+/* The discussion thread's root (.tl, timeline.tsx) shares its class with the
+   Gantt view's root in mc-views.css, which adds 80px of bottom padding and
+   scrolls on x. Undo both here so the stacked aside sits 26px under it. */
+.mc .ini-main .tl {
+  padding: 0;
+  overflow-x: visible;
+}

@@ -1,6 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  ArrowUpRight,
+  CornerLeftUp,
+  FileText,
+  Flag,
+  Folder,
+  GitBranch,
+  ListChecks,
+  Map as MapIcon,
+  Pencil,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
 
 import { api } from "@/lib/api";
 // Type-only import — keeps node-only loader/source code out of the client bundle.
@@ -85,6 +98,47 @@ export function mergeMilestones(fixture: Milestone[], ledger: Milestone[]): Mile
   return [...fixture, ...ledger];
 }
 
+/**
+ * The spec the header kicker links to: a URL spec (docLinkFromPrd), a built-in
+ * PRD id (rendered in the body's PRD block), or nothing yet.
+ */
+export type BucketSpec =
+  | { kind: "url"; href: string; label: string }
+  | { kind: "prd"; id: string }
+  | { kind: "none" };
+
+export function specForBucket(prd: string | null): BucketSpec {
+  if (prd && PRDS[prd]) return { kind: "prd", id: prd };
+  const link = docLinkFromPrd(prd);
+  return link ? { kind: "url", ...link } : { kind: "none" };
+}
+
+export interface DocRow {
+  key: string;
+  icon: LucideIcon;
+  label: string;
+  source: "MS List" | "Library" | "GitHub";
+  target: "files" | "repos" | null; // null = SharePoint list not wired yet
+}
+
+/** The five SharePoint registers, then one GitHub row per bucket repo. */
+export function docRowsForBucket(repos: string[], repoName: (id: string) => string): DocRow[] {
+  return [
+    { key: "plan", icon: ListChecks, label: "Project Plan", source: "MS List", target: null },
+    { key: "roadmap", icon: MapIcon, label: "Roadmap", source: "MS List", target: null },
+    { key: "milestones", icon: Flag, label: "Milestone Register", source: "MS List", target: null },
+    { key: "risks", icon: TriangleAlert, label: "Risk Register", source: "MS List", target: null },
+    { key: "docs", icon: Folder, label: "Project Documents", source: "Library", target: "files" },
+    ...repos.map((id): DocRow => ({
+      key: `repo:${id}`,
+      icon: GitBranch,
+      label: repoName(id),
+      source: "GitHub",
+      target: "repos",
+    })),
+  ];
+}
+
 function PrdLinkField({ bucketId, prd }: { bucketId: string; prd: string | null }) {
   const [draft, setDraft] = useState(prd ?? "");
   const [message, setMessage] = useState<string | null>(null);
@@ -159,12 +213,19 @@ export function BucketDetail({ route, nav }: ScreenProps) {
   }, [bucket.id]);
   const projection = projectionState?.bucketId === bucket.id ? projectionState.data : null;
 
+  // The PrdLinkField editor stays open only for the prd value it was opened
+  // on — a save changes bucket.prd, so the editor closes by itself.
+  const specKey = `${bucket.id}:${bucket.prd ?? ""}`;
+  const [specEditFor, setSpecEditFor] = useState<string | null>(null);
+  const editingSpec = specEditFor === specKey;
+
   const parentProject = bucket.project ? projectById(bucket.project) : undefined;
   const rollups = rollupsForBucket(bucket.id, allTasks(), MILESTONES, allRisks());
   const prd = bucket.prd ? PRDS[bucket.prd] : null;
   // A prd that isn't a built-in PRD id may be a URL to a spec elsewhere
-  // (e.g. a tracked repo's docs); show it instead of dropping it.
-  const specLink = prd ? null : docLinkFromPrd(bucket.prd);
+  // (e.g. a tracked repo's docs); the header kicker links it.
+  const spec = specForBucket(bucket.prd);
+  const docRows = docRowsForBucket(bucket.repos, (id) => allRepos()[id]?.name ?? id);
 
   const ledgerMilestones = projection?.bound ? projection.milestones : [];
   const ledgerTrace = projection?.bound ? projection.trace : null;
@@ -214,39 +275,77 @@ export function BucketDetail({ route, nav }: ScreenProps) {
   }
 
   return (
-    <div className="mc-main">
+    <div className="mc-main ini-page">
       <div className="ph">
-        <div>
+        <div className="ini-ph-main">
           <button type="button" className="back" onClick={() => nav("home")}>
             ← Back
           </button>
-          <span className="kk bucket-kicker">Initiative · {bucket.id}</span>
-          {parentProject ? (
+          {/* Kicker line: id · parent project · the initiative's spec. The spec
+              lives here now — the standalone "/ Spec" block is gone. */}
+          <div className="ini-kicker" data-testid="bucket-kicker">
+            <span>Initiative · {bucket.id}</span>
+            {parentProject ? (
+              <button
+                type="button"
+                className="ini-klink"
+                onClick={() => nav("project", { projectId: parentProject.id, bucketId: bucket.id })}
+              >
+                <CornerLeftUp size={11} aria-hidden="true" />
+                Project · {parentProject.name}
+              </button>
+            ) : null}
+            {spec.kind === "url" ? (
+              <a
+                className="ini-klink ini-spec"
+                href={spec.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Spec · ${spec.label}`}
+                data-testid="bucket-spec-link"
+              >
+                <FileText size={11} aria-hidden="true" />
+                {spec.label}
+                <ArrowUpRight size={10} aria-hidden="true" />
+              </a>
+            ) : spec.kind === "prd" ? (
+              <a className="ini-klink ini-spec" href="#bucket-prd" data-testid="bucket-spec-link">
+                <FileText size={11} aria-hidden="true" />
+                {spec.id}
+              </a>
+            ) : null}
             <button
               type="button"
-              className="kk bucket-kicker"
-              style={{ marginLeft: 8 }}
-              onClick={() => nav("project", { projectId: parentProject.id, bucketId: bucket.id })}
+              className="ini-klink ini-spec-edit"
+              aria-expanded={editingSpec}
+              aria-label={spec.kind === "none" ? "Add spec link" : "Edit spec link"}
+              onClick={() => setSpecEditFor(editingSpec ? null : specKey)}
             >
-              Project · {parentProject.name}
+              {spec.kind === "none" ? "+ Add spec" : <Pencil size={10} aria-hidden="true" />}
             </button>
-          ) : null}
+          </div>
           <h1>{bucket.name}</h1>
           <p className="sub">{bucket.desc}</p>
+          {editingSpec && (
+            <div className="ini-spec-field">
+              <PrdLinkField key={specKey} bucketId={bucket.id} prd={bucket.prd} />
+            </div>
+          )}
         </div>
         <div className="r">
           <HealthPill h={bucket.health} />
-          <div className="vsw">
+          <SyncTick sync={bucket.sync} />
+          <nav className="vsw" aria-label="Views">
             <button type="button" onClick={() => nav("board", { bucketId: bucket.id })}>
-              board
+              Board
             </button>
             <button type="button" onClick={() => nav("list", { bucketId: bucket.id })}>
-              list
+              List
             </button>
             <button type="button" onClick={() => nav("timeline", { bucketId: bucket.id })}>
-              timeline
+              Timeline
             </button>
-          </div>
+          </nav>
         </div>
       </div>
 
@@ -289,31 +388,18 @@ export function BucketDetail({ route, nav }: ScreenProps) {
               </select>
             </span>
           </div>
-          <PrdLinkField key={`${bucket.id}:${bucket.prd ?? ""}`} bucketId={bucket.id} prd={bucket.prd} />
           <div className="f">
             <span className="k">Tasks</span>
             <span className="v">{rollups.tasks.length}</span>
           </div>
         </div>
 
-        <div className="bkbody">
-          <div className="c">
-            {specLink && (
-              <div className="blk" data-testid="bucket-spec-link">
-                <div className="bh">
-                  <span className="kk">/ Spec</span>
-                </div>
-                <ul className="doc-links">
-                  <li>
-                    <a href={specLink.href} target="_blank" rel="noopener noreferrer">
-                      {specLink.label}
-                    </a>
-                  </li>
-                </ul>
-              </div>
-            )}
+        {/* Two columns at ≥1100px of main-content width (@container main in
+            mc-initiative.css), stacked below. */}
+        <div className="ini-body">
+          <div className="ini-main">
             {prd && (
-              <div className="blk">
+              <div className="blk" id="bucket-prd">
                 <div className="bh">
                   <span className="kk">
                     / PRD · <b>{prd.id}</b>
@@ -367,7 +453,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             <div className="blk">
               <div className="bh">
                 <span className="kk">
-                  / ToDos · SharePoint mirror · <b>{rollups.tasks.length}</b>
+                  / Tasks · <b>{rollups.tasks.length}</b> · SharePoint mirror
                 </span>
                 <button
                   type="button"
@@ -444,7 +530,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             </div>
           </div>
 
-          <div className="c">
+          <aside className="ini-aside">
             <div className="blk">
               <div className="bh">
                 <span className="kk">/ Documents &amp; Links</span>
@@ -456,50 +542,36 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                 </span>
               </div>
               <div className="doclinks">
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">▦</span>
-                  <span className="t">Project Plan</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">▷</span>
-                  <span className="t">Roadmap</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">◆</span>
-                  <span className="t">Milestone Register</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">△</span>
-                  <span className="t">Risk Register</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" onClick={() => nav("files")}>
-                  <span className="ic">❒</span>
-                  <span className="t">Project Documents</span>
-                  <span className="ms">Library</span>
-                  <span className="ext">↗</span>
-                </button>
-                {bucket.repos.map((repoId) => (
-                  <button type="button" className="dl" key={repoId} onClick={() => nav("repos")}>
-                    <span className="ic">{"</>"}</span>
-                    <span className="t">{allRepos()[repoId]?.name ?? repoId}</span>
-                    <span className="ms">GitHub</span>
-                    <span className="ext">↗</span>
-                  </button>
-                ))}
+                {docRows.map((row) => {
+                  const Icon = row.icon;
+                  const target = row.target;
+                  return (
+                    <button
+                      type="button"
+                      className="dl"
+                      key={row.key}
+                      title={target ? row.label : "coming soon"}
+                      onClick={target ? () => nav(target) : undefined}
+                    >
+                      <span className="ic">
+                        <Icon size={14} aria-hidden="true" />
+                      </span>
+                      <span className="t">{row.label}</span>
+                      <span className="ms">{row.source}</span>
+                      <span className="ext">
+                        <ArrowUpRight size={12} aria-hidden="true" />
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             <div className="blk">
               <div className="bh">
-                <span className="kk">/ Milestones</span>
+                <span className="kk">
+                  / Milestones · <b>{milestones.length}</b>
+                </span>
               </div>
               <div className="mlist">
                 {milestones.length > 0 ? (
@@ -580,12 +652,18 @@ export function BucketDetail({ route, nav }: ScreenProps) {
               {trace ? (
                 <>
                   <div className="trace-summary">
-                    <span className="okflag">{traceSummary.satisfied} satisfied</span>
+                    <span className="pill ok">
+                      <span className="dot" />
+                      {traceSummary.satisfied} satisfied
+                    </span>
                     <span className="pill info">
                       <span className="dot" />
                       {traceSummary.inFlight} in flight
                     </span>
-                    {traceSummary.gaps > 0 && <span className="gapflag">{traceSummary.gaps} gap</span>}
+                    <span className={`pill ${traceSummary.gaps > 0 ? "warn" : "muted"}`}>
+                      <span className="dot" />
+                      {traceSummary.gaps} gap
+                    </span>
                   </div>
                   {traceFromLedger && <span className="kk">Quality Ledger · read-only</span>}
                 </>
@@ -593,7 +671,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                 <p className="trace-empty">No traceability rows are mapped for this initiative yet.</p>
               )}
             </div>
-          </div>
+          </aside>
         </div>
       </div>
     </div>

@@ -26,6 +26,14 @@
    - Only drawers, sheets and the pane move (--p-dur, --p-ease); reduced
      motion means nothing moves. Hover styles live under (hover: hover). */
 
+/* Registered so the ultra-wide gutter below resolves 100cqi against <main>
+   where it is declared, then inherits as a plain length. */
+@property --mc-col-gutter {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 @layer mc.shell {
   /* ─── Frame ──────────────────────────────────────────────────────────── */
   .mc.mc-app {
@@ -344,6 +352,17 @@
   /* The screen root fills the stage (screens centre their empty states). */
   .mc .mc-stage > :not(.mc-subnav) {
     flex: 1 0 auto;
+  }
+  /* Ultra-wide column: screens pad with --p-gutter and draw hairlines on the
+     same full-bleed element, so growing the gutter to (main − 1560px) / 2
+     centres every page header, strip and body in a 1560px column while the
+     hairlines stay full-bleed. Below 1612px of main it is the base gutter. */
+  .mc .mc-stage {
+    --mc-gutter-base: var(--p-gutter);
+  }
+  .mc .mc-stage > * {
+    --mc-col-gutter: max(var(--mc-gutter-base), calc((100cqi - 1560px) / 2));
+    --p-gutter: var(--mc-col-gutter);
   }
 
   /* Phone group strip — every screen of the current tab, one tap away. */

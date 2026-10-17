@@ -11,6 +11,8 @@
 //   ≥1025    top bar · 240px sidebar · main
 //   ≥1600    + persistent context pane on collection screens
 //   ≥2200    + optional pinned live column (Agent activity or Approvals)
+// Inside <main>, pages tier by main's own width (data-tier, useContentTier),
+// and at ultra-wide the page content centres in a 1560px column.
 // JS reads the tier only for behaviour: at ≥1600 opening a task from a
 // collection screen fills the pane instead of leaving the collection.
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
@@ -40,6 +42,7 @@ import {
   minWidthNow,
   paneHiddenPref,
   paneWidthPref,
+  useContentTier,
   useMinWidth,
   usePref,
 } from "./shell-prefs";
@@ -65,6 +68,10 @@ export function MissionControlShell() {
   const moreRef = useRef<HTMLButtonElement | null>(null);
   const paneToggleRef = useRef<HTMLButtonElement | null>(null);
   const liveToggleRef = useRef<HTMLButtonElement | null>(null);
+  // Page tier from <main>'s own width (data-tier), so a screen re-tiers when
+  // the nav, pane or live column changes the room it has.
+  const mainRef = useRef<HTMLElement | null>(null);
+  const tier = useContentTier(mainRef);
   const counts = useNavCounts();
   const flags = navFlags();
 
@@ -387,7 +394,14 @@ export function MissionControlShell() {
           onDrawerKeyDown={drawer.onKeyDown}
         />
         <NavScrim open={drawer.open} onDrawer={drawer.send} />
-        <main className="mc-stage" id="mc-main" tabIndex={-1} inert={phonePaneOpen || undefined}>
+        <main
+          ref={mainRef}
+          className="mc-stage"
+          id="mc-main"
+          tabIndex={-1}
+          data-tier={tier ?? undefined}
+          inert={phonePaneOpen || undefined}
+        >
           <GroupStrip route={route} nav={nav} flags={flags} />
           {route.screen === "home" ? (
             <InboxView route={route} nav={nav} openNewTask={() => openNewTask()} />

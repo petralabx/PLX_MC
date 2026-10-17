@@ -1,0 +1,45 @@
+/* PLX Design System — canonical entry stylesheet.
+   The compiler reads this file (and everything it @imports) for tokens + fonts.
+   Mazius Display is self-hosted (free, by Alberto Casagrande / Collletttivo — see fonts/LICENSE.txt).
+   Inter + JetBrains Mono load from Google Fonts CDN. */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+
+/* Token layer — MUST stay above the @font-face rules: an @import that follows
+   any other rule is ignored per the CSS spec. */
+@import "./colors_and_type.css";
+
+/* ─── Mazius Display (serif) — self-hosted ──────────────────────────────── */
+@font-face {
+  font-family: "Mazius Display";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/MaziusDisplay-Regular.woff2") format("woff2"),
+       url("fonts/MaziusDisplay-Regular.woff") format("woff");
+}
+@font-face {
+  font-family: "Mazius Display";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/MaziusDisplay-Extraitalic.woff2") format("woff2"),
+       url("fonts/MaziusDisplay-Extraitalic.woff") format("woff");
+}
+@font-face {
+  font-family: "Mazius Display";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/MaziusDisplay-Bold.woff2") format("woff2"),
+       url("fonts/MaziusDisplay-Bold.woff") format("woff");
+}
+@font-face {
+  font-family: "Mazius Display";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/MaziusDisplay-ExtraItalicBold.woff2") format("woff2"),
+       url("fonts/MaziusDisplay-ExtraItalicBold.woff") format("woff");
+}
+

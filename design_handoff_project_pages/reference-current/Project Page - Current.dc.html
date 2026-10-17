@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="mc-globals.css">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="lx-icon.js"></script>
+  <script src="mc-sample-data.js"></script>
+</helmet>
+<div class="brand-plx mc mc-app" data-screen-label="Project · Current">
+  <div class="mc-chrome">
+    <header class="mc-top">
+      <a href="#" class="brand"><img src="public/brand/logo-horizontal-ink.png" alt="Petra Lab-X" class="brand-logo"><span class="sub">Mission Control</span></a>
+      <span class="ws" title="Workspace"><span class="pm acc" aria-label="PLX"><span class="num">14</span><span class="sym">Px</span></span><span>PLX Engineering</span></span>
+      <span class="title">Project</span>
+      <div class="r">
+        <button type="button" class="search"><lx-icon class="ic" name="search"></lx-icon><span class="search-hint">Search · jump · create…</span><span class="key kbd-hint">⌘K</span></button>
+        <button type="button" class="iconbtn search-icon" aria-label="Search"><lx-icon class="ic" name="search"></lx-icon></button>
+        <a href="#" class="topsync warn" title="SharePoint sync issues · review queue"><span class="d"></span><span class="lb">7 to resolve</span></a>
+        <button type="button" class="iconbtn theme" aria-label="Dark mode"><lx-icon class="ic" name="moon"></lx-icon></button>
+        <div class="usermenu"><button type="button" class="usermenu-trigger" aria-label="Account: Vince Alton"><span class="av human lg" title="Vince Alton">VA</span></button></div>
+      </div>
+    </header>
+  </div>
+  <div class="mc-body" data-pane="closed" data-live="off">
+    <nav class="mc-side" id="mc-nav" aria-label="Main">
+      <div class="side-head">
+        <button type="button" class="iconbtn rail-toggle" aria-label="Open navigation"><lx-icon class="ic" name="panel-left"></lx-icon></button>
+        <button type="button" class="iconbtn side-close" aria-label="Close navigation"><lx-icon class="ic" name="x"></lx-icon></button>
+      </div>
+      <div class="grp" role="group">
+        <div class="h">My work</div>
+        <div class="grp-body">
+          <a href="#" class="item"><lx-icon class="ic" name="house"></lx-icon><span class="nm">Home</span><span class="badge unk"><span aria-hidden="true">32+</span></span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="layout-dashboard"></lx-icon><span class="nm">Dashboard</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="circle-user"></lx-icon><span class="nm">My tasks</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="square-check"></lx-icon><span class="nm">Approvals</span><span class="badge unk"><span aria-hidden="true">—</span></span></a>
+        </div>
+      </div>
+      <div class="grp" role="group">
+        <div class="h">Plan</div>
+        <div class="grp-body">
+          <a href="#" class="item"><lx-icon class="ic" name="square-kanban"></lx-icon><span class="nm">Board</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="list"></lx-icon><span class="nm">List</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="calendar-range"></lx-icon><span class="nm">Timeline</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="chart-pie"></lx-icon><span class="nm">Insights</span></a>
+          <div class="sub" role="group">
+            <div class="h">Projects</div>
+            <sc-for list="{{ sideProjects }}" as="p" hint-placeholder-count="8">
+              <a href="#" class="item" aria-current="{{ p.current }}" title="{{ p.name }}"><span class="hl {{ p.health }}" aria-hidden="true"></span><span class="nm">{{ p.name }}</span></a>
+            </sc-for>
+            <button type="button" class="item side-new-initiative"><lx-icon class="ic" name="plus"></lx-icon><span class="nm">New project</span></button>
+          </div>
+          <div class="sub" role="group">
+            <div class="h">Initiatives</div>
+            <sc-for list="{{ sideInitiatives }}" as="b" hint-placeholder-count="18">
+              <a href="#" class="item" title="{{ b.name }}"><span class="hl {{ b.health }}" aria-hidden="true"></span><span class="nm">{{ b.name }}</span></a>
+            </sc-for>
+            <button type="button" class="item side-new-initiative"><lx-icon class="ic" name="plus"></lx-icon><span class="nm">New initiative</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="grp" role="group">
+        <div class="h">Knowledge</div>
+        <div class="grp-body">
+          <a href="#" class="item"><lx-icon class="ic" name="book-open"></lx-icon><span class="nm">Ask the Brain</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="clipboard-list"></lx-icon><span class="nm">SOP guide</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="wrench"></lx-icon><span class="nm">Skills directory</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="network"></lx-icon><span class="nm">Architecture</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="circle-help"></lx-icon><span class="nm">Help</span></a>
+        </div>
+      </div>
+      <div class="grp" role="group">
+        <div class="h">Reporting</div>
+        <div class="grp-body">
+          <a href="#" class="item"><lx-icon class="ic" name="target"></lx-icon><span class="nm">Goals &amp; production</span></a>
+        </div>
+      </div>
+      <div class="grp" role="group">
+        <button type="button" class="h h-toggle" aria-expanded="false">Admin &amp; health<span class="chev" aria-hidden="true">▸</span></button>
+      </div>
+    </nav>
+    <main class="mc-stage" id="mc-main">
+      <div class="mc-main" data-testid="project-screen">
+        <div class="ph">
+          <div>
+            <button type="button" class="back">← Back</button>
+            <span class="kk bucket-kicker">Project · {{ project.id }}</span>
+            <h1>{{ project.name }}</h1>
+            <p class="sub">{{ project.desc }} <button type="button" class="tl-link">Edit</button></p>
+          </div>
+          <div class="r">
+            <span class="{{ project.pillClass }}" style="white-space:nowrap"><span class="dot"></span>{{ project.pillLabel }}</span>
+            <span class="sync synced" title="SharePoint · Today · 19:11"><span class="d"></span><span>Synced</span><span class="ts">· 19:11</span></span>
+            <nav class="pv-seg" aria-label="Project lens">
+              <button type="button" class="{{ overviewOn }}" onClick="{{ setOverview }}">Overview</button>
+              <button type="button" class="{{ initiativesOn }}" onClick="{{ setInitiatives }}">Initiatives</button>
+            </nav>
+          </div>
+        </div>
+        <div class="bk">
+          <div class="bkfacts">
+            <div class="f">
+              <span class="k">Health</span>
+              <span class="v sm"><label class="rfact-select"><select aria-label="Set project health" defaultValue="track"><option value="track">On track</option><option value="risk">At risk</option><option value="off">Off track</option></select><span class="caret" aria-hidden="true">▾</span></label></span>
+            </div>
+            <div class="f">
+              <span class="k">Accountable owner</span>
+              <span class="v sm" style="position:relative"><button type="button" class="ntm-field-btn"><span class="who fact-owner"><span class="av human sm">{{ owner.init }}</span><span class="nm">{{ owner.name }}</span></span><span class="caret" aria-hidden="true">▾</span></button></span>
+            </div>
+            <div class="f">
+              <span class="k">Target</span>
+              <span class="v sm"><input class="le-input" defaultValue="{{ project.target }}" placeholder="e.g. Aug 01" aria-label="Set target"></span>
+            </div>
+            <div class="f">
+              <span class="k">Started</span>
+              <span class="v sm">{{ project.started }}</span>
+            </div>
+            <div class="f">
+              <span class="k">Initiatives</span>
+              <span class="v">{{ project.initiatives }}</span>
+            </div>
+            <div class="f">
+              <span class="k">Tasks</span>
+              <span class="v">{{ project.total }}</span>
+            </div>
+            <div class="f">
+              <span class="k">Progress</span>
+              <span class="v">{{ project.pct }}% <small class="pv-progress-ct">{{ project.progressCt }}</small></span>
+              <span class="spine pv-progress-spine" aria-hidden="true"><sc-for list="{{ spine }}" as="s" hint-placeholder-count="0"><span class="{{ s.cls }}"></span></sc-for></span>
+            </div>
+          </div>
+          <div class="bkbody pv-wide">
+            <div class="c">
+              <div class="blk" data-testid="project-doc-links">
+                <div class="bh"><span class="kk">/ Documents &amp; links · <b>{{ docCount }}</b></span></div>
+                <ul class="doc-links">
+                  <sc-for list="{{ docLinks }}" as="d" hint-placeholder-count="10">
+                    <li><span class="doc-scope">{{ d.scope }}</span><a href="{{ d.href }}" target="_blank" rel="noopener noreferrer">{{ d.label }}</a></li>
+                  </sc-for>
+                </ul>
+              </div>
+              <div class="blk">
+                <div class="bh"><span class="kk">{{ lensKicker }}<b>{{ bucketCount }}</b></span></div>
+                <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+                  <div class="pv-roll">
+                    <sc-for list="{{ rollups }}" as="r" hint-placeholder-count="3">
+                      <section class="{{ r.secClass }}" data-screen-label="{{ r.name }}">
+                        <div class="pv-sec-h">
+                          <button type="button" class="pv-sec-toggle" aria-expanded="{{ r.open }}" onClick="{{ r.toggle }}">
+                            <span class="chev" aria-hidden="true">▾</span>
+                            <span class="nm">{{ r.name }}</span>
+                            <span class="id">{{ r.id }}</span>
+                            <span class="track"><span class="bar"><span class="fill" style="width: {{ r.pctStr }}"></span></span><span class="ct">{{ r.ct }}</span></span>
+                            <span class="{{ r.pillClass }}" style="white-space:nowrap"><span class="dot"></span>{{ r.pillLabel }}</span>
+                          </button>
+                          <button type="button" class="pv-open tl-link">Open →</button>
+                        </div>
+                        <sc-if value="{{ r.open }}" hint-placeholder-val="{{ true }}">
+                          <div class="pv-tt">
+                            <div class="pv-thead" aria-hidden="true"><span class="h-id">ID</span><span>Task</span><span>Stage</span><span class="h-pri">Pri</span><span class="h-who">Executor</span><span class="h-due">Due</span></div>
+                            <sc-for list="{{ r.tasks }}" as="t" hint-placeholder-count="6">
+                              <button type="button" class="pv-trow">
+                                <span class="tid">{{ t.id }}</span>
+                                <span class="ttl">{{ t.title }}</span>
+                                <span class="{{ t.chipClass }}">{{ t.stage }}</span>
+                                <span class="pv-pri"><span class="{{ t.prioClass }}" title="{{ t.prioTitle }}"><span class="bars">{{ t.tick }}</span></span></span>
+                                <span class="pv-who">
+                                  <sc-if value="{{ t.unassigned }}" hint-placeholder-val="{{ true }}"><span class="unassigned">+ Assign</span></sc-if>
+                                  <sc-if value="{{ t.assigned }}" hint-placeholder-val="{{ false }}"><span class="who"><span class="{{ t.avClass }}">{{ t.init }}</span><span class="nm">{{ t.who }}</span><sc-if value="{{ t.isAgent }}" hint-placeholder-val="{{ false }}"><span class="tag model">{{ t.model }}</span></sc-if></span></sc-if>
+                                </span>
+                                <span class="{{ t.dueClass }}">{{ t.due }}</span>
+                              </button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </section>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ isInitiatives }}" hint-placeholder-val="{{ false }}">
+                  <div class="init-grid">
+                    <sc-for list="{{ rollups }}" as="r" hint-placeholder-count="6">
+                      <button type="button" class="init-card {{ r.health }}">
+                        <span class="ih"><span class="id">{{ r.id }}</span><span class="{{ r.pillClass }}" style="white-space:nowrap"><span class="dot"></span>{{ r.pillLabel }}</span></span>
+                        <span class="nm">{{ r.name }}</span>
+                        <span class="prog"><span class="bar"><span class="fill" style="width: {{ r.pctStr }}"></span></span><span class="ct">{{ r.cardCt }}</span></span>
+                      </button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { collapsed: {}, lens: "overview", ready: !!window.MC_DATA };
+  componentDidMount() {
+    if (!window.MC_DATA) {
+      this._t = setInterval(() => { if (window.MC_DATA) { clearInterval(this._t); this.setState({ ready: true }); } }, 40);
+    }
+  }
+  componentWillUnmount() { if (this._t) clearInterval(this._t); }
+  renderVals() {
+    const D = window.MC_DATA;
+    if (!D) return { isOverview: true, isInitiatives: false, overviewOn: "on", initiativesOn: "" };
+    const PILL = { track: ["pill ok", "On track"], risk: ["pill warn", "At risk"], off: ["pill hot", "Off track"] };
+    const P = D.project, A = D.actors;
+    const owner = A[P.owner];
+    const col = this.state.collapsed;
+    const rollups = D.buckets.map((b) => {
+      const closed = !!col[b.id];
+      const pct = Math.round((b.closed / b.total) * 100);
+      return {
+        id: b.id, name: b.name, health: b.health, open: !closed,
+        secClass: `pv-sec ${b.health}${closed ? " closed" : ""}`,
+        pctStr: pct + "%",
+        ct: `${b.closed} / ${b.total} closed · ${b.done} done · ${b.cancelled} cancelled`,
+        cardCt: `${b.closed}/${b.total} closed · ${b.done} done · ${b.cancelled} cancelled`,
+        pillClass: PILL[b.health][0], pillLabel: PILL[b.health][1],
+        toggle: () => this.setState((s) => ({ collapsed: { ...s.collapsed, [b.id]: !s.collapsed[b.id] } })),
+        tasks: b.tasks.map((t) => {
+          const st = D.STAGES[t.stage], pr = D.PRIORITY[t.pri], a = t.assignee ? A[t.assignee] : null;
+          return {
+            id: t.id, title: t.title, stage: st.name, chipClass: `pv-chip ${st.tone}`,
+            prioClass: `prio ${pr.cls}`, prioTitle: `Priority · ${pr.label}`, tick: pr.tick,
+            unassigned: !a, assigned: !!a, who: a ? a.name : "", init: a ? a.init : "",
+            avClass: a ? `av ${a.kind} sm` : "", isAgent: !!(a && a.kind === "agent"), model: a && a.model ? a.model : "",
+            due: t.due, dueClass: `pv-due${t.blocked ? " hot" : ""}`,
+          };
+        }),
+      };
+    });
+    const spine = Array.from({ length: P.total }, (_, i) => ({ cls: i < P.closed ? "done" : i < P.closed + P.doing ? "now" : "" }));
+    const isOverview = this.state.lens === "overview";
+    return {
+      project: { ...P, pillClass: PILL[P.health][0], pillLabel: PILL[P.health][1], progressCt: `${P.closed} / ${P.total} closed · ${P.done} done · ${P.cancelled} cancelled` },
+      owner, spine, rollups,
+      docLinks: D.docLinks, docCount: D.docLinks.length, bucketCount: D.buckets.length,
+      sideProjects: D.sidebar.projects.map((p) => ({ ...p, current: p.active ? "page" : undefined })),
+      sideInitiatives: D.sidebar.initiatives,
+      isOverview, isInitiatives: !isOverview,
+      lensKicker: isOverview ? "/ Overview · " : "/ Initiatives · ",
+      overviewOn: isOverview ? "on" : "", initiativesOn: isOverview ? "" : "on",
+      setOverview: () => this.setState({ lens: "overview" }),
+      setInitiatives: () => this.setState({ lens: "initiatives" }),
+    };
+  }
+}
+</script>
+</body>
+</html>

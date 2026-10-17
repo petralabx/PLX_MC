@@ -1,0 +1,261 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   PETRA LAB-X — COLORS & TYPE
+   Single stylesheet you can drop into any PLX artifact (slide, mock, prototype,
+   production page). Defines the brand token layer (--p-*), font stacks, the
+   editorial type scale, and a small set of semantic element + utility styles.
+
+   CANONICAL AUTHORITY (ADR-005): petralabx/plx-customer-portal →
+   design-system/tokens.css. This file is ALIGNED TO v1.3.0 @ staging
+   (sourceCommit 00fe1abc6). Provenance of the reconciled values:
+     · v1.2.0 (2026-08-06) — paper-hierarchy promotion (ADR-007)
+     · v1.3.0 (2026-08-12) — dark-scheme WCAG AA remediation
+     · --p-muted AA-darkened 2026-07-02 · status *-text shades
+       per CONTRAST-FINDINGS-2026-06-19
+   On any future diff, the portal bundle wins. Re-sync from the repo.
+
+   Load the webfonts first (all free / open — hosted via CDN, links below):
+     <link href="https://api.fontshare.com/v2/css?f[]=mazius-display@400,401&display=swap" rel="stylesheet">
+     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+   Three type stacks, three jobs:
+     · Mazius Display (serif) — page heroes, deed titles, the pause-here moments.
+     · Inter (sans)           — body, labels, tables, navigation.
+     · JetBrains Mono (mono)  — kickers, IDs, timestamps, data, chassis ticks.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── SURFACES — document model · paper is first-class ─────────────────── */
+  /* Light values adopted from the MRP surface sheet per ADR-007 (v1.2.0):
+     paper-2 is the COOL SAGE recess, no longer the warm cream #F2EDE2.      */
+  --p-paper:        #FBFAF6;   /* 1° — page + cards (primary surface)        */
+  --p-paper-2:      #ECEFE9;   /* 2° — recess: rails, footers, hovers, bands */
+  --p-card:         #FBFAF6;   /* deprecated alias (ADR-002) — do not use    */
+  --p-rail:         #EEEBE3;   /* 0° — global rail / inner sidebar / labels  */
+  --p-canvas:       #F5F3EC;   /* page bg beneath cards on dense surfaces     */
+
+  /* ─── TEXT — three steps of warm near-black ───────────────────────────── */
+  --p-ink:          #1B1A17;   /* primary text + dark CTAs                   */
+  --p-ink-2:        #3A3833;   /* secondary text, body                       */
+  --p-muted:        #6B665B;   /* tertiary, mono labels (AA-darkened 2026-07-02) */
+
+  /* ─── HAIRLINES — translucent ink, never solid grey ───────────────────── */
+  --p-grid:         rgba(27, 26, 23, 0.16);   /* cards, dividers             */
+  --p-grid-2:       rgba(27, 26, 23, 0.08);   /* row separators, inner KPIs  */
+
+  /* ─── ACCENT — forest · the one chromatic moment ──────────────────────── */
+  --p-accent:       #244A39;   /* primary action, active state, italic word */
+  --p-accent-soft:  #BCCFBF;   /* tints, accent backgrounds, hover wash      */
+
+  /* ─── STATUS — earth-toned, NOT saturated alarm colors ────────────────── */
+  --p-ok:           #5C7A55;   /* sage   — approved / live / signed / sealed */
+  --p-warn:         #C99340;   /* amber  — pending / in review / open flag   */
+  --p-info:         #5B7B91;   /* steel  — informational / new               */
+  --p-hot:          #52606E;   /* mineral— destructive ONLY                  */
+
+  /* status FOREGROUND shades — base status tokens double as pill/chip FILLS,
+     so label text uses darker shades holding WCAG AA 4.5:1 on every surface
+     and on 12% chip fill (CONTRAST-FINDINGS-2026-06-19 remediation)         */
+  --p-ok-text:      #48603F;   /* sage text on ok-tinted chips               */
+  --p-warn-text:    #7E5C0F;   /* amber text on warn-tinted chips            */
+  --p-info-text:    #476378;   /* steel text on info-tinted chips            */
+  --p-hot-text:     #46535F;   /* mineral text on hot-tinted chips           */
+
+  /* ─── TYPE STACKS ─────────────────────────────────────────────────────── */
+  --p-font-serif:   "Mazius Display", "Times New Roman", Georgia, serif;
+  --p-font-sans:    "Inter", -apple-system, system-ui, sans-serif;
+  --p-font-mono:    "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+  /* short aliases — both work */
+  --mazius:         var(--p-font-serif);
+  --sans:           var(--p-font-sans);
+  --mono:           var(--p-font-mono);
+
+  /* ─── TYPE SCALE — editorial, generous ────────────────────────────────── */
+  --p-text-display: 56px;      /* page heroes, login moments (scales up to 152 on marketing) */
+  --p-text-h1:      32px;      /* section titles in folio                    */
+  --p-text-h2:      24px;      /* subsection                                 */
+  --p-text-h3:      18px;      /* card titles                                */
+  --p-text-body:    14px;      /* body                                       */
+  --p-text-body-compact: 13px; /* dense body: key/value grids, data panes    */
+  --p-text-small:   12px;      /* captions                                   */
+  --p-text-mono:    11px;      /* default mono                               */
+  --p-text-meta:    10px;      /* compact metadata                           */
+  --p-text-kicker:  9.5px;     /* high-tracking kicker labels                */
+  --p-text-tick:    9px;       /* chassis ticks, smallest kicker labels      */
+
+  /* ─── LETTER-SPACING — mono labels need air ───────────────────────────── */
+  --p-track-tick:   0.22em;    /* smallest mono labels / chassis ticks       */
+  --p-track-meta:   0.16em;    /* standard mono captions / pill text (was 0.18) */
+  --p-track-data:   0.04em;    /* numeric data with tabular-nums             */
+
+  /* ─── RADIUS — nearly sharp; we are not a squishy SaaS app ────────────── */
+  --p-radius:       4px;       /* default — cards                            */
+  --p-radius-sm:    3px;       /* pills, tints                               */
+  --p-radius-lg:    6px;       /* quote tiles, banded dossier wraps          */
+  /* Buttons and status pills have NO radius — sharp rectangles.             */
+
+  /* ─── SPACING — multiples of 4 with a 14 break for editorial rhythm ───── */
+  --p-space-1:      4px;
+  --p-space-2:      8px;
+  --p-space-3:      14px;      /* the intentional "14 break"                 */
+  --p-space-4:      22px;
+  --p-space-5:      32px;
+  --p-space-6:      48px;
+  --p-space-7:      72px;
+
+  /* ─── MOTION — short, decisive · no springs, no bounces ───────────────── */
+  --p-ease:         cubic-bezier(0.2, 0.8, 0.2, 1); /* @kind other */
+  --p-dur-fast:     120ms; /* @kind other */
+  --p-dur:          180ms; /* @kind other */
+  --p-dur-slow:     320ms; /* @kind other */
+
+  /* ─── ICONOGRAPHY — the two icon sizes brand surfaces use ─────────────── */
+  --p-icon:         16px;      /* inline/detail icons (lucide h-4 w-4)       */
+  --p-icon-lg:      32px;      /* header/hero icons                          */
+
+  /* ─── LAYOUT — key/value field grids ──────────────────────────────────── */
+  --p-field-label-w: 160px;    /* label column in two-column field grids     */
+
+  /* ─── LAYERING — chrome contract (drawer above backdrop) ──────────────── */
+  --p-z-drawer:     60; /* @kind other */
+  --p-z-scrim:      59; /* @kind other */
+
+  /* ─── SCRIM — drawer/sheet backdrop wash ──────────────────────────────── */
+  --p-scrim:        rgba(27, 26, 23, 0.5);
+
+  /* ─── DATA-VIZ — categorical series ramp · PROPOSED, not yet portal canon
+     (see ds-updates/ADR-PROPOSAL-chart-palette.md). Fixed order; single-series
+     charts use chart-1 only; gridlines --p-grid-2; axis labels mono. ─────── */
+  --p-chart-1:      var(--p-accent);   /* forest  */
+  --p-chart-2:      var(--p-warn);     /* amber   */
+  --p-chart-3:      var(--p-info);     /* steel   */
+  --p-chart-4:      var(--p-ok);       /* sage    */
+  --p-chart-5:      var(--p-hot);      /* mineral */
+  --p-chart-6:      #8E7B4F;           /* ochre — the one net-new hue        */
+}
+
+/* ─── DARK SCHEME ───────────────────────────────────────────────────────── */
+/* v1.3.0 (2026-08-12): dark scheme swept exhaustively and now WCAG AA-clean —
+   muted lightened, accent-soft darkened (menu hovers were forest-on-forest
+   at 3.80:1), ok lightened. */
+.dark, [data-scheme="dark"] {
+  --p-paper:        #1A1816;
+  --p-paper-2:      #22201D;
+  --p-card:         #1A1816;   /* deprecated alias — do not use              */
+  --p-rail:         #16140F;
+  --p-canvas:       #1A1816;
+  --p-ink:          #F1ECE0;
+  --p-ink-2:        #C9C2B5;
+  --p-muted:        #A09789;   /* AA on every dark surface (was #827B6F)     */
+  --p-grid:         rgba(241, 236, 224, 0.12);
+  --p-grid-2:       rgba(241, 236, 224, 0.06);
+  --p-accent:       #7AB18C;
+  --p-accent-soft:  #264132;   /* darkened so --p-accent reads AA on it      */
+  --p-ok:           #7EA372;   /* lightened for AA on lightest dark surface  */
+  --p-warn:         #D9A85C;
+  --p-info:         #7A9DB3;
+  --p-hot:          #8FA0B0;
+  --p-ok-text:      var(--p-ok);
+  --p-warn-text:    var(--p-warn);
+  --p-info-text:    var(--p-info);
+  --p-hot-text:     var(--p-hot);
+  --p-scrim:        rgba(0, 0, 0, 0.6);
+  --p-chart-6:      #B3A16F;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SEMANTIC ELEMENTS — sensible defaults so raw HTML lands on-brand.
+   Scope under .plx so the stylesheet never hijacks unrelated markup.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.plx {
+  background: var(--p-paper);
+  color: var(--p-ink);
+  font-family: var(--sans);
+  font-size: var(--p-text-body);
+  line-height: 1.55;
+  font-feature-settings: "ss01", "ss02";
+  -webkit-font-smoothing: antialiased;
+}
+
+.plx h1, .plx h2, .plx h3 {
+  font-family: var(--mazius);
+  font-weight: 400;
+  color: var(--p-ink);
+  margin: 0 0 var(--p-space-3);
+  text-wrap: balance;
+}
+.plx h1 { font-size: var(--p-text-h1); line-height: 1.04; letter-spacing: -0.02em; }
+.plx h2 { font-size: var(--p-text-h2); line-height: 1.08; letter-spacing: -0.015em; }
+.plx h3 { font-size: var(--p-text-h3); line-height: 1.15; letter-spacing: -0.012em; }
+/* the signature move: a single italic forest accent word inside a serif headline */
+.plx h1 em, .plx h2 em, .plx h3 em, .plx .serif em, .plx .p-serif em { font-style: italic; color: var(--p-accent); font-family: inherit; }
+
+.plx p { margin: 0 0 var(--p-space-3); color: var(--p-ink-2); max-width: 68ch; text-wrap: pretty; }
+.plx a { color: var(--p-accent); text-decoration: none; }
+.plx a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.plx strong { font-weight: 600; color: var(--p-ink); }
+.plx hr { border: 0; border-top: 1px solid var(--p-grid); margin: var(--p-space-5) 0; }
+.plx code, .plx pre {
+  font-family: var(--mono);
+  font-size: var(--p-text-mono);
+  background: var(--p-paper-2);
+  border: 1px solid var(--p-grid-2);
+}
+.plx code { padding: 1px 5px; border-radius: var(--p-radius-sm); }
+.plx pre { padding: var(--p-space-3) var(--p-space-4); border-radius: var(--p-radius); overflow: auto; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILITY CLASSES — the editorial moments shadcn / plain HTML don't cover.
+   Keep this list short. Each utility also answers to the portal's `.p-*`
+   class name so canonical-vocabulary markup ports over unchanged.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.plx .serif,    .plx .p-serif    { font-family: var(--mazius); font-weight: 400; }
+.plx .mono,     .plx .p-mono     { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* kicker — THE brand signature: tiny uppercase mono with generous tracking.
+   Reads as instrumentation (a label on a panel), not a UI string. */
+.plx .kicker,   .plx .p-kicker   { font-family: var(--mono); font-size: var(--p-text-kicker); letter-spacing: var(--p-track-tick); text-transform: uppercase; color: var(--p-muted); }
+.plx .meta,     .plx .p-meta     { font-family: var(--mono); font-size: var(--p-text-meta); letter-spacing: var(--p-track-meta); text-transform: uppercase; color: var(--p-muted); }
+.plx .data,     .plx .p-data     { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: var(--p-track-data); }
+.plx .hairline, .plx .p-hairline { border: 0; border-top: 1px solid var(--p-grid); margin: 0; }
+
+/* status pill — two canonical renderings (PATTERN-REGISTRY §1).
+   Default = outline: sharp rectangle, border + 5px dot in the TONE hue,
+   NO fill; the label always uses the AA --p-*-text shade.
+   .chip = chassis chip: 3px corners, 12% tone fill — for dense contexts.
+   .ink  = solid — reserved for the TOP of the severity ramp only (ADR-003).
+   .acc  = one meaning only: retest queue (ADR-004). */
+.plx .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid currentColor; font-family: var(--mono); font-size: 9px; letter-spacing: var(--p-track-meta); text-transform: uppercase; }
+.plx .pill .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+/* tone hue expanded per rule (the portal's `--pill-hue` parameter) so the token
+   registry stays free of component-scoped custom properties — same rendering */
+.plx .pill.ok   { color: var(--p-ok-text);   border-color: var(--p-ok); }
+.plx .pill.ok .dot   { background: var(--p-ok); }
+.plx .pill.warn { color: var(--p-warn-text); border-color: var(--p-warn); }
+.plx .pill.warn .dot { background: var(--p-warn); }
+.plx .pill.info { color: var(--p-info-text); border-color: var(--p-info); }
+.plx .pill.info .dot { background: var(--p-info); }
+.plx .pill.hot  { color: var(--p-hot-text);  border-color: var(--p-hot); }
+.plx .pill.hot .dot  { background: var(--p-hot); }
+.plx .pill.acc  { color: var(--p-accent);    border-color: var(--p-accent); }
+.plx .pill.acc .dot  { background: var(--p-accent); }
+.plx .pill.chip { border-color: transparent; border-radius: var(--p-radius-sm); }
+.plx .pill.chip.ok   { background: color-mix(in srgb, var(--p-ok) 12%, transparent); }
+.plx .pill.chip.warn { background: color-mix(in srgb, var(--p-warn) 12%, transparent); }
+.plx .pill.chip.info { background: color-mix(in srgb, var(--p-info) 12%, transparent); }
+.plx .pill.chip.hot  { background: color-mix(in srgb, var(--p-hot) 12%, transparent); }
+.plx .pill.chip.acc  { background: color-mix(in srgb, var(--p-accent) 12%, transparent); }
+.plx .pill.ink  { color: var(--p-paper); border-color: var(--p-ink); background: var(--p-ink); }
+.plx .pill.ink .dot  { background: var(--p-ink); }
+
+/* button — ink-on-paper filled; ghost = hairline outline. Mono uppercase. */
+.plx .btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--p-ink); background: var(--p-ink); color: var(--p-paper); font-family: var(--mono); font-size: 10px; letter-spacing: var(--p-track-meta); text-transform: uppercase; cursor: pointer; transition: all var(--p-dur-fast) var(--p-ease); }
+.plx .btn:hover { background: var(--p-accent); border-color: var(--p-accent); }
+.plx .btn.ghost { background: transparent; color: var(--p-ink); border-color: var(--p-grid); }
+.plx .btn.ghost:hover { background: transparent; border-color: var(--p-ink); }
+.plx .btn.acc { background: var(--p-accent); border-color: var(--p-accent); color: #fff; }
+
+/* card — paper + hairline. No shadow. Wakes on hover by darkening the border. */
+.plx .card { background: var(--p-paper); border: 1px solid var(--p-grid); border-radius: var(--p-radius); padding: var(--p-space-4); transition: border-color var(--p-dur) var(--p-ease); }
+.plx .card:hover { border-color: var(--p-ink-2); }

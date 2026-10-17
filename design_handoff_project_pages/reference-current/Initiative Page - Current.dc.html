@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="mc-globals.css">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="lx-icon.js"></script>
+  <script src="mc-sample-data.js"></script>
+</helmet>
+<div class="brand-plx mc mc-app" data-screen-label="Initiative · Current">
+  <div class="mc-chrome">
+    <header class="mc-top">
+      <a href="#" class="brand"><img src="public/brand/logo-horizontal-ink.png" alt="Petra Lab-X" class="brand-logo"><span class="sub">Mission Control</span></a>
+      <span class="ws" title="Workspace"><span class="pm acc" aria-label="PLX"><span class="num">14</span><span class="sym">Px</span></span><span>PLX Engineering</span></span>
+      <span class="title">Initiative</span>
+      <div class="r">
+        <button type="button" class="search"><lx-icon class="ic" name="search"></lx-icon><span class="search-hint">Search · jump · create…</span><span class="key kbd-hint">⌘K</span></button>
+        <button type="button" class="iconbtn search-icon" aria-label="Search"><lx-icon class="ic" name="search"></lx-icon></button>
+        <a href="#" class="topsync warn" title="SharePoint sync issues · review queue"><span class="d"></span><span class="lb">7 to resolve</span></a>
+        <button type="button" class="iconbtn theme" aria-label="Dark mode"><lx-icon class="ic" name="moon"></lx-icon></button>
+        <div class="usermenu"><button type="button" class="usermenu-trigger" aria-label="Account: Vince Alton"><span class="av human lg" title="Vince Alton">VA</span></button></div>
+      </div>
+    </header>
+  </div>
+  <div class="mc-body" data-pane="closed" data-live="off">
+    <nav class="mc-side" id="mc-nav" aria-label="Main">
+      <div class="side-head">
+        <button type="button" class="iconbtn rail-toggle" aria-label="Open navigation"><lx-icon class="ic" name="panel-left"></lx-icon></button>
+        <button type="button" class="iconbtn side-close" aria-label="Close navigation"><lx-icon class="ic" name="x"></lx-icon></button>
+      </div>
+      <div class="grp" role="group">
+        <div class="h">My work</div>
+        <div class="grp-body">
+          <a href="#" class="item"><lx-icon class="ic" name="house"></lx-icon><span class="nm">Home</span><span class="badge unk"><span aria-hidden="true">32+</span></span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="layout-dashboard"></lx-icon><span class="nm">Dashboard</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="circle-user"></lx-icon><span class="nm">My tasks</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="square-check"></lx-icon><span class="nm">Approvals</span><span class="badge unk"><span aria-hidden="true">—</span></span></a>
+        </div>
+      </div>
+      <div class="grp" role="group">
+        <div class="h">Plan</div>
+        <div class="grp-body">
+          <a href="#" class="item"><lx-icon class="ic" name="square-kanban"></lx-icon><span class="nm">Board</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="list"></lx-icon><span class="nm">List</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="calendar-range"></lx-icon><span class="nm">Timeline</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="chart-pie"></lx-icon><span class="nm">Insights</span></a>
+          <div class="sub" role="group">
+            <div class="h">Projects</div>
+            <sc-for list="{{ sideProjects }}" as="p" hint-placeholder-count="8">
+              <a href="#" class="item" title="{{ p.name }}"><span class="hl {{ p.health }}" aria-hidden="true"></span><span class="nm">{{ p.name }}</span></a>
+            </sc-for>
+            <button type="button" class="item side-new-initiative"><lx-icon class="ic" name="plus"></lx-icon><span class="nm">New project</span></button>
+          </div>
+          <div class="sub" role="group">
+            <div class="h">Initiatives</div>
+            <sc-for list="{{ sideInitiatives }}" as="b" hint-placeholder-count="18">
+              <a href="#" class="item" aria-current="{{ b.current }}" title="{{ b.name }}"><span class="hl {{ b.health }}" aria-hidden="true"></span><span class="nm">{{ b.name }}</span></a>
+            </sc-for>
+            <button type="button" class="item side-new-initiative"><lx-icon class="ic" name="plus"></lx-icon><span class="nm">New initiative</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="grp" role="group">
+        <div class="h">Knowledge</div>
+        <div class="grp-body">
+          <a href="#" class="item"><lx-icon class="ic" name="book-open"></lx-icon><span class="nm">Ask the Brain</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="clipboard-list"></lx-icon><span class="nm">SOP guide</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="wrench"></lx-icon><span class="nm">Skills directory</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="network"></lx-icon><span class="nm">Architecture</span></a>
+          <a href="#" class="item"><lx-icon class="ic" name="circle-help"></lx-icon><span class="nm">Help</span></a>
+        </div>
+      </div>
+      <div class="grp" role="group">
+        <div class="h">Reporting</div>
+        <div class="grp-body">
+          <a href="#" class="item"><lx-icon class="ic" name="target"></lx-icon><span class="nm">Goals &amp; production</span></a>
+        </div>
+      </div>
+      <div class="grp" role="group">
+        <button type="button" class="h h-toggle" aria-expanded="false">Admin &amp; health<span class="chev" aria-hidden="true">▸</span></button>
+      </div>
+    </nav>
+    <main class="mc-stage" id="mc-main">
+      <div class="mc-main">
+        <div class="ph">
+          <div>
+            <button type="button" class="back">← Back</button>
+            <span class="kk bucket-kicker">Initiative · {{ bucket.id }}</span>
+            <button type="button" class="kk bucket-kicker" style="margin-left:8px">Project · {{ project.name }}</button>
+            <h1>{{ bucket.name }}</h1>
+            <p class="sub">{{ bucket.desc }}</p>
+          </div>
+          <div class="r">
+            <span class="{{ bucket.pillClass }}" style="white-space:nowrap"><span class="dot"></span>{{ bucket.pillLabel }}</span>
+            <div class="vsw"><button type="button">board</button><button type="button">list</button><button type="button">timeline</button></div>
+          </div>
+        </div>
+        <div class="bk">
+          <div class="bkfacts">
+            <div class="f"><span class="k">Health</span><span class="v sm"><span class="{{ bucket.pillClass }}" style="white-space:nowrap"><span class="dot"></span>{{ bucket.pillLabel }}</span></span></div>
+            <div class="f"><span class="k">Accountable owner</span><span class="v sm fact-owner"><span class="av human sm">{{ owner.init }}</span>{{ owner.name }}</span></div>
+            <div class="f"><span class="k">Target</span><span class="v sm">{{ bucket.target }}</span></div>
+            <div class="f"><span class="k">Started</span><span class="v sm">{{ bucket.started }}</span></div>
+            <div class="f"><span class="k">Project</span><span class="v sm"><select defaultValue="p"><option value="">No project</option><option value="p">{{ project.name }}</option></select></span></div>
+            <div class="f"><span class="k">PRD link</span><span class="v sm"><input class="le-input" type="url" defaultValue="{{ bucket.prdHref }}" placeholder="https://" aria-label="PRD link"></span></div>
+            <div class="f"><span class="k">Tasks</span><span class="v">{{ bucket.total }}</span></div>
+          </div>
+          <div class="bkbody">
+            <div class="c">
+              <div class="blk" data-testid="bucket-spec-link">
+                <div class="bh"><span class="kk">/ Spec</span></div>
+                <ul class="doc-links"><li><a href="#" target="_blank" rel="noopener noreferrer">{{ bucket.prdLabel }}</a></li></ul>
+              </div>
+              <div class="blk">
+                <div class="bh"><span class="kk">/ ToDos · SharePoint mirror · <b>{{ bucket.total }}</b></span><button type="button" class="splink">Open board →</button></div>
+                <div class="splist">
+                  <div class="splist-head"><span class="src"><span class="ic">▦</span>ToDos (MS List) · {{ bucket.name }}</span><span class="ms-source">MS List</span></div>
+                  <div class="splist-table">
+                    <div class="sprow head"><span>Task ID</span><span>Title</span><span>Status</span><span>Assigned To</span><span>Sync</span></div>
+                    <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="8">
+                      <button type="button" class="sprow">
+                        <span class="id">{{ t.id }}</span>
+                        <span class="ti">{{ t.title }}</span>
+                        <span class="st">{{ t.stage }}</span>
+                        <span class="asg">
+                          <sc-if value="{{ t.assigned }}" hint-placeholder-val="{{ false }}"><span class="avstack"><span class="{{ t.avClass }}">{{ t.init }}</span></span></sc-if>
+                          <sc-if value="{{ t.unassigned }}" hint-placeholder-val="{{ true }}"><span class="none">—</span></sc-if>
+                        </span>
+                        <span class="sycell"><span class="sync synced"><span class="d"></span><span>Synced</span></span></span>
+                      </button>
+                    </sc-for>
+                  </div>
+                  <div class="splist-foot"><span>Mirrors two-way to ToDos columns</span><span>Last sync Today · 19:11</span></div>
+                </div>
+              </div>
+              <div class="blk">
+                <div class="bh"><span class="kk">/ Discussion</span><span class="kk">app-only thread</span></div>
+                <div class="tl">
+                  <div class="tl-composer">
+                    <div class="tl-input-wrap"><textarea class="tl-input" rows="3" placeholder="Write a comment… @mention a colleague or agent" aria-label="Write a comment"></textarea></div>
+                    <div class="tl-composer-foot"><span class="tl-hint">@ to mention · ⌘↵ to post</span><span class="tl-composer-acts"><button type="button" class="btn sm" disabled="{{ true }}">Comment</button></span></div>
+                  </div>
+                  <div class="tl-stream">
+                    <sc-for list="{{ timeline }}" as="i" hint-placeholder-count="4">
+                      <sc-if value="{{ i.isEvent }}" hint-placeholder-val="{{ false }}">
+                        <div class="tl-row event"><span class="tl-gut"><span class="{{ i.avClass }}">{{ i.init }}</span></span><span class="tl-body"><b>{{ i.name }}</b> {{ i.what }}</span><span class="tl-age">{{ i.age }}</span></div>
+                      </sc-if>
+                      <sc-if value="{{ i.isComment }}" hint-placeholder-val="{{ true }}">
+                        <div class="tl-row comment"><span class="tl-gut"><span class="{{ i.avClass }}">{{ i.init }}</span></span><div class="tl-card"><div class="tl-meta"><b>{{ i.name }}</b><span class="tl-age">{{ i.ts }}</span><sc-if value="{{ i.mine }}" hint-placeholder-val="{{ false }}"><span class="tl-acts"><button type="button" class="tl-link">Edit</button><button type="button" class="tl-link danger">Delete</button></span></sc-if></div><div class="tl-text">{{ i.body }}</div></div></div>
+                      </sc-if>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="c">
+              <div class="blk">
+                <div class="bh"><span class="kk">/ Documents &amp; Links</span><span class="kk"><span class="sync"><span class="d"></span>SharePoint</span></span></div>
+                <div class="doclinks">
+                  <button type="button" class="dl" title="coming soon"><span class="ic">▦</span><span class="t">Project Plan</span><span class="ms">MS List</span><span class="ext">↗</span></button>
+                  <button type="button" class="dl" title="coming soon"><span class="ic">▷</span><span class="t">Roadmap</span><span class="ms">MS List</span><span class="ext">↗</span></button>
+                  <button type="button" class="dl" title="coming soon"><span class="ic">◆</span><span class="t">Milestone Register</span><span class="ms">MS List</span><span class="ext">↗</span></button>
+                  <button type="button" class="dl" title="coming soon"><span class="ic">△</span><span class="t">Risk Register</span><span class="ms">MS List</span><span class="ext">↗</span></button>
+                  <button type="button" class="dl"><span class="ic">❒</span><span class="t">Project Documents</span><span class="ms">Library</span><span class="ext">↗</span></button>
+                  <sc-for list="{{ repos }}" as="r" hint-placeholder-count="2">
+                    <button type="button" class="dl"><span class="ic">&lt;/&gt;</span><span class="t">{{ r.name }}</span><span class="ms">GitHub</span><span class="ext">↗</span></button>
+                  </sc-for>
+                </div>
+              </div>
+              <div class="blk">
+                <div class="bh"><span class="kk">/ Milestones</span></div>
+                <div class="mlist">
+                  <sc-for list="{{ milestones }}" as="m" hint-placeholder-count="4">
+                    <div class="risk milestone"><div><div class="t">{{ m.name }}</div><div class="mit">{{ m.sp }}</div></div><span class="{{ m.pillClass }}" style="white-space:nowrap"><span class="dot"></span>{{ m.pillLabel }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+              <div class="blk">
+                <div class="bh"><span class="kk">/ Risks · <b>{{ riskCount }}</b></span><span class="kk">→ Risk Register</span></div>
+                <div class="risks">
+                  <sc-for list="{{ risks }}" as="r" hint-placeholder-count="2">
+                    <div class="risk"><div><div class="t">{{ r.title }}</div><div class="mit">{{ r.mit }}</div><div class="li"><span class="x">Likelihood {{ r.like }}</span><span class="x">Impact {{ r.impact }}</span><span class="x owner-pill"><span class="av human sm">{{ r.ownerInit }}</span>{{ r.ownerFirst }}</span></div></div><span class="sync synced"><span class="d"></span><span>Synced</span></span></div>
+                  </sc-for>
+                </div>
+              </div>
+              <div class="blk overview-trace-block">
+                <div class="bh"><span class="kk">/ Traceability</span><button type="button" class="splink">Full matrix →</button></div>
+                <div class="trace-summary"><span class="okflag">{{ trace.satisfied }} satisfied</span><span class="pill info"><span class="dot"></span>{{ trace.inFlight }} in flight</span><span class="gapflag">{{ trace.gaps }} gap</span></div>
+                <span class="kk">Quality Ledger · read-only</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { ready: !!window.MC_DATA };
+  componentDidMount() {
+    if (!window.MC_DATA) {
+      this._t = setInterval(() => { if (window.MC_DATA) { clearInterval(this._t); this.setState({ ready: true }); } }, 40);
+    }
+  }
+  componentWillUnmount() { if (this._t) clearInterval(this._t); }
+  renderVals() {
+    const D = window.MC_DATA;
+    if (!D) return {};
+    const PILL = { track: ["pill ok", "On track"], risk: ["pill warn", "At risk"], off: ["pill hot", "Off track"] };
+    const MS = { now: ["pill acc", "Active"], risk: ["pill warn", "At risk"], done: ["pill muted", "Upcoming"], upcoming: ["pill muted", "Upcoming"] };
+    const A = D.actors, B = D.buckets[0], X = D.bucketExtras;
+    const av = (id) => { const a = A[id]; return { init: a.init, name: a.name, avClass: `av ${a.kind} sm` }; };
+    const timeline = [
+      ...X.comments.map((c) => ({ ...av(c.author), isComment: true, isEvent: false, ts: c.ts, body: c.body, mine: c.author === "va" })),
+      ...X.events.map((e) => ({ ...av(e.who), isEvent: true, isComment: false, what: e.what, age: e.age })),
+    ];
+    return {
+      project: D.project,
+      bucket: { ...B, pillClass: PILL[B.health][0], pillLabel: PILL[B.health][1], prdLabel: B.prd.label, prdHref: "https://github.com/petralabx/plx-customer-portal/blob/main/docs/" + B.prd.label },
+      owner: A[B.owner],
+      tasks: B.tasks.map((t) => {
+        const a = t.assignee ? A[t.assignee] : null;
+        return { id: t.id, title: t.title, stage: D.STAGES[t.stage].name, assigned: !!a, unassigned: !a, init: a ? a.init : "", avClass: a ? `av ${a.kind} sm` : "" };
+      }),
+      timeline,
+      repos: B.repos.map((r) => ({ name: r })),
+      milestones: X.milestones.map((m) => ({ ...m, pillClass: MS[m.state][0], pillLabel: MS[m.state][1] })),
+      risks: X.risks.map((r) => ({ ...r, ownerInit: A[r.owner].init, ownerFirst: A[r.owner].name.split(" ")[0] })),
+      riskCount: X.risks.length,
+      trace: X.trace,
+      sideProjects: D.sidebar.projects,
+      sideInitiatives: D.sidebar.initiatives.map((b, i) => ({ ...b, current: i === 0 ? "page" : undefined })),
+    };
+  }
+}
+</script>
+</body>
+</html>

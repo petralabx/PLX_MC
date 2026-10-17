@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/plx-design-system-1bf47fe1-5630-4129-9785-73c202815eec/colors_and_type.css">
+  <link rel="stylesheet" href="_ds/plx-design-system-1bf47fe1-5630-4129-9785-73c202815eec/styles.css">
+  <script src="_ds/plx-design-system-1bf47fe1-5630-4129-9785-73c202815eec/_ds_bundle.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="lx-icon.js"></script>
+  <script src="mc-sample-data.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; background: var(--p-canvas); }
+    * { box-sizing: border-box; }
+    a { color: var(--p-accent); text-decoration: none; }
+    a:hover { text-decoration: underline; text-underline-offset: 2px; }
+    button, input, select, textarea { font-family: inherit; }
+    button { cursor: pointer; }
+    select { appearance: none; -webkit-appearance: none; }
+    input::placeholder, textarea::placeholder { color: var(--p-muted); }
+    :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--p-accent); outline-offset: 1px; }
+  </style>
+</helmet>
+<div data-screen-label="Initiative · Redesign" style="min-height:100vh;display:flex;flex-direction:column;background:var(--p-canvas);color:var(--p-ink);font-family:var(--sans);font-size:13px;line-height:1.5;font-feature-settings:'ss01','ss02';-webkit-font-smoothing:antialiased;margin:0 auto;width:100%;max-width:{{ rootMax }};border-left:{{ rootEdge }};border-right:{{ rootEdge }}">
+
+  <header style="position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px;height:56px;padding:0 {{ gutter }};border-bottom:1px solid var(--p-grid);background:var(--p-paper)">
+    <sc-if value="{{ isPhone }}" hint-placeholder-val="{{ false }}">
+      <span aria-label="PLX" style="width:24px;height:24px;border:1px solid var(--p-accent);color:var(--p-accent);position:relative;display:inline-block;flex:0 0 auto"><span style="position:absolute;top:1.5px;left:2.5px;font:6px/1 var(--mono)">14</span><span style="position:absolute;bottom:1px;right:2.5px;font:11px/1 var(--mazius)">Px</span></span>
+      <span style="flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font:18px/1 var(--mazius);letter-spacing:-0.015em">Initiative</span>
+      <button type="button" aria-label="Search" style="display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:1px solid transparent;background:transparent;color:var(--p-ink-2)"><lx-icon name="search" size="18"></lx-icon></button>
+    </sc-if>
+    <sc-if value="{{ notPhone }}" hint-placeholder-val="{{ true }}">
+      <a href="#" style="display:flex;align-items:center;gap:9px;flex:0 0 auto;min-height:44px;color:var(--p-ink)"><img src="public/brand/logo-horizontal-ink.png" alt="Petra Lab-X" style="display:block;height:18px;width:auto"><sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}"><span style="padding-left:9px;border-left:1px solid var(--p-grid);font:8.5px var(--mono);letter-spacing:0.24em;text-transform:uppercase;white-space:nowrap;color:var(--p-muted)">Mission Control</span></sc-if></a>
+      <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+        <span title="Workspace" style="display:inline-flex;align-items:center;gap:8px;padding:0 10px;border-left:1px solid var(--p-grid);font-size:11px;white-space:nowrap;color:var(--p-ink-2)"><span aria-label="PLX" style="width:24px;height:24px;border:1px solid var(--p-accent);color:var(--p-accent);position:relative;display:inline-block;flex:0 0 auto"><span style="position:absolute;top:1.5px;left:2.5px;font:6px/1 var(--mono)">14</span><span style="position:absolute;bottom:1px;right:2.5px;font:11px/1 var(--mazius)">Px</span></span><span>PLX Engineering</span></span>
+      </sc-if>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:auto;min-width:0">
+        <button type="button" style="display:flex;align-items:center;gap:10px;flex:0 1 320px;min-width:0;min-height:40px;padding:0 12px;border:1px solid var(--p-grid);background:var(--p-canvas);font-size:12px;color:var(--p-muted);cursor:text;text-align:left" style-hover="border-color:var(--p-ink-2)"><lx-icon name="search" size="16"></lx-icon><span style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font:10px var(--mono);letter-spacing:0.04em">Search · jump · create…</span><span style="margin-left:auto;padding:1px 6px;border:1px solid var(--p-grid);font:9px var(--mono);letter-spacing:0.06em;color:var(--p-ink-2)">⌘K</span></button>
+        <a href="#" title="SharePoint sync issues · review queue" style="display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;min-height:40px;padding:0 11px;border:1px solid var(--p-grid);font:9px var(--mono);letter-spacing:0.12em;text-transform:uppercase;white-space:nowrap;color:var(--p-warn-text);text-decoration:none" style-hover="border-color:var(--p-ink-2)"><span style="width:6px;height:6px;border-radius:1px;background:var(--p-warn)"></span><span>7 to resolve</span></a>
+        <button type="button" aria-label="Dark mode" style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid transparent;background:transparent;color:var(--p-ink-2)" style-hover="border-color:var(--p-grid)"><lx-icon name="moon" size="18"></lx-icon></button>
+      </div>
+    </sc-if>
+    <button type="button" aria-label="Account: Vince Alton" style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border:0;background:transparent;border-radius:50%;flex:0 0 auto"><span title="Vince Alton" style="width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--p-ink);color:var(--p-paper);font:11px var(--mono)">VA</span></button>
+  </header>
+
+  <div style="display:grid;flex:1 0 auto;grid-template-columns:{{ bodyCols }};min-height:0">
+    <sc-if value="{{ notPhone }}" hint-placeholder-val="{{ true }}">
+      <nav aria-label="Main" style="position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;overflow-x:hidden;border-right:1px solid var(--p-grid);background:var(--p-rail);padding:{{ sidePad }};scrollbar-width:thin">
+        <sc-for list="{{ navGroups }}" as="g" hint-placeholder-count="4">
+          <div role="group" style="margin-bottom:{{ grpGap }};padding:{{ grpPad }};border-top:{{ grpRule }}">
+            <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;padding:0 8px;font:8.5px var(--mono);letter-spacing:0.22em;text-transform:uppercase;color:var(--p-muted)">{{ g.label }}</div></sc-if>
+            <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="4">
+              <a href="#" title="{{ it.label }}" style="display:flex;align-items:center;gap:9px;width:{{ itemW }};min-height:32px;margin:{{ itemMargin }};padding:{{ itemPad }};border-left:2px solid transparent;justify-content:{{ itemJustify }};font-size:12.5px;color:var(--p-ink-2);text-decoration:none;position:relative" style-hover="background:var(--p-paper-2);color:var(--p-ink)">
+                <lx-icon name="{{ it.icon }}" size="16" style="color:var(--p-muted)"></lx-icon>
+                <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}"><span style="flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ it.label }}</span></sc-if>
+                <sc-if value="{{ it.badgeStatic }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;padding:0 5px;border:1px dashed var(--p-grid);background:var(--p-paper);font:9px/15px var(--mono);font-variant-numeric:tabular-nums;color:var(--p-muted);margin-left:auto">{{ it.badge }}</span></sc-if>
+                <sc-if value="{{ it.badgeFloat }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:2px;right:-4px;display:inline-flex;align-items:center;justify-content:center;min-width:18px;padding:0 5px;border:1px dashed var(--p-grid);background:var(--p-paper);font:9px/15px var(--mono);font-variant-numeric:tabular-nums;color:var(--p-muted)">{{ it.badge }}</span></sc-if>
+              </a>
+            </sc-for>
+            <sc-if value="{{ g.hasLists }}" hint-placeholder-val="{{ false }}">
+              <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+                <div role="group" style="margin-top:12px">
+                  <div style="margin:0 0 6px;padding:0 8px;font:8.5px var(--mono);letter-spacing:0.22em;text-transform:uppercase;color:var(--p-muted)">Projects</div>
+                  <sc-for list="{{ sideProjects }}" as="p" hint-placeholder-count="8">
+                    <a href="#" title="{{ p.name }}" style="display:flex;align-items:center;gap:9px;width:100%;min-height:32px;padding:0 8px;border-left:2px solid transparent;font-size:12.5px;color:var(--p-ink-2);text-decoration:none" style-hover="background:var(--p-paper-2);color:var(--p-ink)"><span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:16px;height:16px"><span style="width:2px;height:11px;border-radius:1px;background:{{ p.tick }}"></span></span><span style="flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ p.name }}</span></a>
+                  </sc-for>
+                  <button type="button" style="display:flex;align-items:center;gap:9px;width:100%;min-height:32px;padding:0 8px;border:0;border-left:2px solid transparent;background:none;font-size:12.5px;color:var(--p-ink-2);text-align:left" style-hover="background:var(--p-paper-2);color:var(--p-ink)"><lx-icon name="plus" size="16" style="color:var(--p-muted)"></lx-icon><span>New project</span></button>
+                  <div style="margin:12px 0 6px;padding:0 8px;font:8.5px var(--mono);letter-spacing:0.22em;text-transform:uppercase;color:var(--p-muted)">Initiatives</div>
+                  <sc-for list="{{ sideInitiatives }}" as="b" hint-placeholder-count="18">
+                    <a href="#" title="{{ b.name }}" aria-current="{{ b.current }}" style="display:flex;align-items:center;gap:9px;width:100%;min-height:32px;padding:0 8px;border-left:2px solid {{ b.rule }};background:{{ b.bg }};font-size:12.5px;font-weight:{{ b.weight }};color:{{ b.color }};text-decoration:none" style-hover="background:var(--p-paper-2);color:var(--p-ink)"><span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:16px;height:16px"><span style="width:2px;height:11px;border-radius:1px;background:{{ b.tick }}"></span></span><span style="flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ b.name }}</span></a>
+                  </sc-for>
+                  <button type="button" style="display:flex;align-items:center;gap:9px;width:100%;min-height:32px;padding:0 8px;border:0;border-left:2px solid transparent;background:none;font-size:12.5px;color:var(--p-ink-2);text-align:left" style-hover="background:var(--p-paper-2);color:var(--p-ink)"><lx-icon name="plus" size="16" style="color:var(--p-muted)"></lx-icon><span>New initiative</span></button>
+                </div>
+              </sc-if>
+            </sc-if>
+          </div>
+        </sc-for>
+      </nav>
+    </sc-if>
+
+    <main id="mc-main" style="display:flex;flex-direction:column;min-width:0;padding-bottom:{{ stagePadB }}">
+
+      <div style="border-bottom:1px solid var(--p-grid)"><div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:14px 24px;padding:{{ phPad }};max-width:{{ pageMax }};margin:0 auto;width:100%">
+        <div style="flex:1 1 360px;min-width:0">
+          <button type="button" style="display:inline-flex;align-items:center;gap:8px;padding:0;border:0;background:none;font:9.5px var(--mono);letter-spacing:0.16em;text-transform:uppercase;color:var(--p-muted)" style-hover="color:var(--p-ink)">← Back</button>
+          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px 14px;margin:12px 0 8px;font:9.5px var(--mono);letter-spacing:0.22em;text-transform:uppercase;color:var(--p-muted)"><span style="white-space:nowrap">Initiative · {{ bucket.id }}</span><a href="#" style="color:var(--p-accent);text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap" style-hover="text-decoration:underline"><lx-icon name="corner-left-up" size="11"></lx-icon>Project · {{ project.name }}</a><a href="{{ bucket.prdHref }}" target="_blank" rel="noopener noreferrer" title="Spec · {{ bucket.prdLabel }}" style="color:var(--p-accent);text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-transform:none;letter-spacing:0.04em" style-hover="text-decoration:underline"><lx-icon name="file-text" size="11"></lx-icon>{{ bucket.prdLabel }}<lx-icon name="arrow-up-right" size="10"></lx-icon></a></div>
+          <h1 style="margin:0;font:400 {{ h1Size }}/0.98 var(--mazius);letter-spacing:-0.022em;color:var(--p-ink);text-wrap:balance">{{ bucket.name }}</h1>
+          <p style="margin:9px 0 0;max-width:66ch;font-size:13px;line-height:1.5;color:var(--p-muted);text-wrap:pretty">{{ bucket.desc }}</p>
+        </div>
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex:0 0 auto;max-width:100%">
+          <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid {{ bucket.tone }};color:{{ bucket.toneText }};font:500 9px/1.3 var(--mono);letter-spacing:0.16em;text-transform:uppercase;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:{{ bucket.tone }}"></span>{{ bucket.pillLabel }}</span>
+          <span title="SharePoint · Today · 19:11" style="display:inline-flex;align-items:center;gap:6px;font:8.5px var(--mono);letter-spacing:0.12em;text-transform:uppercase;color:var(--p-muted);white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:var(--p-ok)"></span>Synced · 19:11</span>
+          <nav aria-label="Views" style="display:inline-flex;align-items:center;border:1px solid var(--p-grid)">
+            <a href="#" style="display:inline-flex;align-items:center;padding:7px 13px;min-height:{{ segH }};font:9.5px var(--mono);letter-spacing:0.18em;text-transform:uppercase;color:var(--p-muted);text-decoration:none" style-hover="color:var(--p-ink)">Board</a>
+            <a href="#" style="display:inline-flex;align-items:center;padding:7px 13px;min-height:{{ segH }};border-left:1px solid var(--p-grid);font:9.5px var(--mono);letter-spacing:0.18em;text-transform:uppercase;color:var(--p-muted);text-decoration:none" style-hover="color:var(--p-ink)">List</a>
+            <a href="#" style="display:inline-flex;align-items:center;padding:7px 13px;min-height:{{ segH }};border-left:1px solid var(--p-grid);font:9.5px var(--mono);letter-spacing:0.18em;text-transform:uppercase;color:var(--p-muted);text-decoration:none" style-hover="color:var(--p-ink)">Timeline</a>
+          </nav>
+        </div>
+      </div></div>
+
+      <div data-screen-label="Overview strip" style="border-bottom:1px solid var(--p-grid);background:var(--p-paper)"><div style="display:grid;grid-template-columns:{{ stripCols }};max-width:{{ pageMax }};margin:0 auto;width:100%">
+        <div style="display:grid;grid-template-columns:repeat({{ factCols }}, minmax(0,1fr));gap:14px 22px;padding:16px {{ gutter }};border-right:{{ stripRuleR }};border-bottom:{{ stripRuleB }};align-content:center">
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+            <span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Health</span>
+            <label style="position:relative;display:inline-flex;align-items:center;align-self:flex-start"><span aria-hidden="true" style="position:absolute;left:8px;width:5px;height:5px;border-radius:50%;background:{{ bucket.tone }};pointer-events:none"></span><select aria-label="Set initiative health" defaultValue="{{ bucket.health }}" style="border:1px solid {{ bucket.tone }};background:transparent;color:{{ bucket.toneText }};font:500 9px/1.3 var(--mono);letter-spacing:0.16em;text-transform:uppercase;padding:4px 22px 4px 19px;cursor:pointer" style-hover="background:var(--p-paper-2)"><option value="track">On track</option><option value="risk">At risk</option><option value="off">Off track</option></select><lx-icon name="chevron-down" size="10" style="position:absolute;right:7px;pointer-events:none;color:{{ bucket.toneText }}"></lx-icon></label>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+            <span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Accountable owner</span>
+            <button type="button" style="display:inline-flex;align-items:center;justify-content:space-between;gap:8px;max-width:100%;align-self:flex-start;border:1px solid transparent;background:transparent;padding:2px 6px 2px 2px;margin-left:-2px;color:var(--p-ink);min-width:0" style-hover="border-color:var(--p-grid)"><span style="display:inline-flex;align-items:center;gap:7px;min-width:0"><span style="width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--p-ink);color:var(--p-paper);font:8px var(--mono);flex:0 0 auto">{{ owner.init }}</span><span style="font:500 12px var(--mono);letter-spacing:0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ owner.name }}</span></span><lx-icon name="chevron-down" size="11" style="color:var(--p-muted)"></lx-icon></button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+            <span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Project</span>
+            <button type="button" aria-label="Change project" style="display:inline-flex;align-items:center;gap:6px;align-self:flex-start;max-width:100%;min-width:0;padding:3px 2px;border:0;border-bottom:1px dashed var(--p-grid);background:transparent;color:var(--p-ink);font:500 12px var(--mono);letter-spacing:0.02em;text-align:left" style-hover="border-bottom-color:var(--p-ink-2)"><span style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ project.name }}</span><lx-icon name="chevron-down" size="11" style="color:var(--p-muted)"></lx-icon></button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+            <span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Started</span>
+            <span style="font:500 12px var(--mono);letter-spacing:0.02em;color:var(--p-ink);padding-top:3px">{{ bucket.started }}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+            <span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Target</span>
+            <label style="display:inline-flex;align-items:center;gap:6px;min-width:0"><input aria-label="Set target" defaultValue="{{ bucket.target }}" placeholder="e.g. Aug 01" style="border:0;border-bottom:1px dashed var(--p-grid);background:transparent;padding:3px 2px;font:500 12px var(--mono);letter-spacing:0.02em;color:var(--p-ink);width:100%;max-width:96px;outline:none" style-focus="border-bottom-color:var(--p-ink-2)"><lx-icon name="pencil" size="11" style="color:var(--p-muted)"></lx-icon></label>
+          </div>
+        </div>
+        <div style="padding:14px {{ gutter }} 15px;display:flex;flex-direction:column;gap:10px;min-width:0">
+          <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+            <span style="font:{{ bigNum }}/1 var(--mazius);letter-spacing:-0.02em;color:var(--p-ink)">{{ bucket.pct }}%</span><span style="font-size:12.5px;color:var(--p-ink-2)">of work closed</span>
+            <span style="font:9px var(--mono);letter-spacing:0.16em;text-transform:uppercase;color:var(--p-muted);padding:0 4px">vs</span>
+            <span style="font:{{ bigNum }}/1 var(--mazius);letter-spacing:-0.02em;color:var(--p-muted)">{{ sched.elapsedPct }}%</span><span style="font-size:12.5px;color:var(--p-ink-2)">of schedule elapsed</span>
+            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid {{ sched.tone }};color:{{ sched.toneText }};font:500 9px/1.3 var(--mono);letter-spacing:0.16em;text-transform:uppercase;white-space:nowrap"><lx-icon name="{{ sched.icon }}" size="11"></lx-icon>{{ sched.label }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:40px minmax(0,1fr);gap:8px 12px;align-items:center">
+            <span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Work</span>
+            <div aria-hidden="true" style="display:flex;gap:2px;height:6px"><span style="flex:0 0 {{ bucket.donePct }};background:var(--p-ink);border-radius:1px"></span><span style="flex:0 0 {{ bucket.cancelledPct }};background:var(--p-grid);border-radius:1px"></span><span style="flex:0 0 {{ bucket.doingPct }};background:var(--p-accent);border-radius:1px"></span><span style="flex:1 1 auto;background:var(--p-grid-2);border-radius:1px"></span></div>
+            <span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Time</span>
+            <div aria-hidden="true" style="position:relative;height:6px;background:var(--p-grid-2);border-radius:1px"><span style="position:absolute;left:0;top:0;bottom:0;width:{{ sched.elapsedPct }}%;background:var(--p-muted);border-radius:1px"></span><span style="position:absolute;left:{{ sched.elapsedPct }}%;top:-5px;width:1px;height:16px;background:var(--p-ink)"></span></div>
+          </div>
+          <div style="position:relative;display:flex;justify-content:space-between;padding-left:52px;font:8.5px var(--mono);letter-spacing:0.1em;text-transform:uppercase;color:var(--p-muted)"><span>{{ bucket.started }} · started</span><span style="position:absolute;left:calc(52px + (100% - 52px) * {{ sched.frac }});transform:translateX(-50%);color:var(--p-ink);display:{{ sched.todayDisplay }};white-space:nowrap">Today · {{ sched.today }}</span><span>{{ bucket.target }} · target</span></div>
+          <div style="font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--p-muted)">{{ bucket.total }} tasks · {{ bucket.done }} done · {{ bucket.cancelled }} cancelled · {{ bucket.doing }} in flight · <span style="color:var(--p-warn-text)">{{ bucket.blocked }} blocked</span></div>
+        </div>
+      </div></div>
+
+      <div style="display:grid;grid-template-columns:{{ bodyGrid }};flex:1 0 auto;max-width:{{ pageMax }};margin:0 auto;width:100%">
+        <div style="padding:22px {{ gutter }} 0;min-width:0;display:flex;flex-direction:column;gap:26px">
+
+          <section data-screen-label="Tasks">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px"><span style="font:9px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">/ Tasks · <b style="color:var(--p-ink);font-weight:500">{{ bucket.total }}</b> · SharePoint mirror</span>
+              <nav aria-label="Task filter" style="display:inline-flex;align-items:center;border:1px solid var(--p-grid)">
+                <button type="button" onClick="{{ setOpen }}" style="padding:{{ segPad }};border:0;background:{{ fOpenBg }};color:{{ fOpenFg }};font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap">{{ fOpenLabel }}</button>
+                <button type="button" onClick="{{ setHuman }}" style="display:inline-flex;align-items:center;gap:6px;padding:{{ segPad }};border:0;border-left:1px solid var(--p-grid);background:{{ fHumanBg }};color:{{ fHumanFg }};font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap"><lx-icon name="hand" size="11"></lx-icon>{{ fHumanLabel }}</button>
+                <button type="button" onClick="{{ setAll }}" style="padding:{{ segPad }};border:0;border-left:1px solid var(--p-grid);background:{{ fAllBg }};color:{{ fAllFg }};font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap">All · {{ bucket.total }}</button>
+              </nav>
+              <a href="#" style="margin-left:auto;font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--p-accent);text-decoration:none;white-space:nowrap" style-hover="text-decoration:underline">Open board →</a></div>
+            <div style="border:1px solid var(--p-grid);border-radius:4px;background:var(--p-paper);overflow:hidden">
+              <sc-if value="{{ notCompact }}" hint-placeholder-val="{{ true }}">
+                <div aria-hidden="true" style="display:grid;grid-template-columns:{{ cols.grid }};gap:12px;align-items:center;padding:7px 14px">
+                  <sc-if value="{{ cols.id }}" hint-placeholder-val="{{ true }}"><span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">ID</span></sc-if>
+                  <span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Task</span>
+                  <span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Stage</span>
+                  <sc-if value="{{ cols.pri }}" hint-placeholder-val="{{ true }}"><span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Pri</span></sc-if>
+                  <sc-if value="{{ cols.who }}" hint-placeholder-val="{{ true }}"><span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">Executor</span></sc-if>
+                  <sc-if value="{{ cols.due }}" hint-placeholder-val="{{ true }}"><span style="font:8px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted);text-align:right">Due</span></sc-if>
+                </div>
+              </sc-if>
+              <sc-for list="{{ rows }}" as="t" hint-placeholder-count="8">
+                <sc-if value="{{ notCompact }}" hint-placeholder-val="{{ true }}">
+                  <button type="button" style="display:grid;grid-template-columns:{{ cols.grid }};gap:12px;align-items:center;width:100%;min-height:34px;padding:6px 14px;border:0;border-top:1px solid var(--p-grid-2);background:transparent;text-align:left;font-size:12.5px;color:var(--p-ink)" style-hover="background:var(--p-paper-2)">
+                    <sc-if value="{{ cols.id }}" hint-placeholder-val="{{ true }}"><span style="font:10px var(--mono);letter-spacing:0.04em;color:var(--p-muted);white-space:nowrap">{{ t.id }}</span></sc-if>
+                    <span style="display:flex;align-items:center;gap:8px;min-width:0"><span style="min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ t.title }}</span><sc-if value="{{ t.blocked }}" hint-placeholder-val="{{ false }}"><span style="flex:0 0 auto;padding:1px 5px;border:1px solid var(--p-warn);font:8px var(--mono);letter-spacing:0.12em;text-transform:uppercase;color:var(--p-warn-text)">Blocked</span></sc-if><sc-if value="{{ t.needsVerify }}" hint-placeholder-val="{{ false }}"><span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;padding:1px 5px;border:1px solid var(--p-info);font:8px var(--mono);letter-spacing:0.12em;text-transform:uppercase;color:var(--p-info-text)"><lx-icon name="hand" size="9"></lx-icon>Verify</span></sc-if></span>
+                    <span style="justify-self:start;padding:2px 7px;border-radius:3px;background:{{ t.chipBg }};color:{{ t.chipFg }};font:9px var(--mono);letter-spacing:0.16em;text-transform:uppercase;white-space:nowrap">{{ t.stage }}</span>
+                    <sc-if value="{{ cols.pri }}" hint-placeholder-val="{{ true }}"><span title="{{ t.prioTitle }}" style="display:inline-flex;gap:2px;align-items:flex-end;height:10px"><sc-for list="{{ t.bars }}" as="b" hint-placeholder-count="4"><span style="width:4px;height:{{ b.h }};background:{{ b.bg }};border-radius:1px"></span></sc-for></span></sc-if>
+                    <sc-if value="{{ cols.who }}" hint-placeholder-val="{{ true }}">
+                      <span style="min-width:0;display:flex;align-items:center">
+                        <sc-if value="{{ t.unassigned }}" hint-placeholder-val="{{ true }}"><span style="font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--p-muted);border:1px dashed var(--p-grid);padding:3px 8px;white-space:nowrap">+ Assign</span></sc-if>
+                        <sc-if value="{{ t.assigned }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:7px;min-width:0"><span style="width:18px;height:18px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;background:{{ t.avBg }};color:var(--p-paper);font:8px var(--mono);border-radius:{{ t.avRadius }}">{{ t.init }}</span><span style="font-size:12px;color:var(--p-ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.who }}</span><sc-if value="{{ t.isAgent }}" hint-placeholder-val="{{ false }}"><span style="font:7.5px var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--p-accent);border:1px solid var(--p-accent-soft);padding:1px 4px;line-height:1.3;white-space:nowrap">{{ t.model }}</span></sc-if></span></sc-if>
+                      </span>
+                    </sc-if>
+                    <sc-if value="{{ cols.due }}" hint-placeholder-val="{{ true }}"><span style="font:10px var(--mono);color:{{ t.dueColor }};text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums">{{ t.due }}</span></sc-if>
+                  </button>
+                </sc-if>
+                <sc-if value="{{ compact }}" hint-placeholder-val="{{ false }}">
+                  <button type="button" style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;width:100%;padding:9px 14px;border:0;border-top:1px solid var(--p-grid-2);background:transparent;text-align:left;color:var(--p-ink)" style-hover="background:var(--p-paper-2)">
+                    <span style="display:flex;flex-direction:column;gap:4px;min-width:0">
+                      <span style="font-size:13px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ t.title }}</span>
+                      <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:9.5px var(--mono);letter-spacing:0.04em;color:var(--p-muted);white-space:nowrap"><span>{{ t.id }}</span><span>·</span><span>{{ t.whoShort }}</span><span>·</span><span style="color:{{ t.dueColor }}">{{ t.due }}</span><sc-if value="{{ t.blocked }}" hint-placeholder-val="{{ false }}"><span style="padding:0 5px;border:1px solid var(--p-warn);font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:var(--p-warn-text)">Blocked</span></sc-if><sc-if value="{{ t.needsVerify }}" hint-placeholder-val="{{ false }}"><span style="padding:0 5px;border:1px solid var(--p-info);font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:var(--p-info-text)">Verify</span></sc-if></span>
+                    </span>
+                    <span style="padding:2px 7px;border-radius:3px;background:{{ t.chipBg }};color:{{ t.chipFg }};font:9px var(--mono);letter-spacing:0.16em;text-transform:uppercase;white-space:nowrap;margin-top:2px">{{ t.stage }}</span>
+                  </button>
+                </sc-if>
+              </sc-for>
+              <sc-if value="{{ hasMore }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ toggleMore }}" style="display:flex;align-items:center;gap:8px;width:100%;min-height:{{ tapH }};padding:9px 14px 10px;border:0;border-top:1px solid var(--p-grid-2);background:var(--p-paper-2);text-align:left;font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--p-accent)" style-hover="color:var(--p-ink)">{{ moreLabel }}</button>
+              </sc-if>
+              <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+                <p style="margin:0;padding:12px 14px 14px;border-top:1px solid var(--p-grid-2);font-size:12.5px;color:var(--p-muted)">{{ emptyLabel }}</p>
+              </sc-if>
+              <sc-if value="{{ hasClosedToggle }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ toggleClosed }}" style="display:flex;align-items:center;gap:8px;width:100%;min-height:{{ tapH }};padding:8px 14px 9px;border:0;border-top:1px solid var(--p-grid-2);background:transparent;text-align:left;font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--p-muted)" style-hover="color:var(--p-accent)"><lx-icon name="{{ closedIcon }}" size="11"></lx-icon>{{ closedLabel }}</button>
+              </sc-if>
+              <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid var(--p-grid-2);background:var(--p-paper-2);font:8.5px var(--mono);letter-spacing:0.04em;color:var(--p-muted)"><span style="white-space:nowrap">Mirrors two-way to the ToDos list columns</span><span style="white-space:nowrap">Last sync Today · 19:11</span></div>
+            </div>
+          </section>
+
+          <section data-screen-label="Discussion">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px"><span style="font:9px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">/ Discussion</span><span style="font:9px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">App-only thread</span></div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="border:1px solid var(--p-grid);border-radius:6px;background:var(--p-paper)">
+                <textarea rows="3" placeholder="Write a comment… @mention a colleague or agent" aria-label="Write a comment" style="display:block;width:100%;border:0;background:transparent;color:var(--p-ink);font-size:13px;line-height:1.55;padding:11px 12px;resize:vertical;outline:none"></textarea>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-top:1px solid var(--p-grid-2);background:var(--p-paper-2)"><span style="font:8px var(--mono);letter-spacing:0.08em;color:var(--p-muted)">@ to mention · ⌘↵ to post</span><button type="button" disabled="{{ true }}" style="display:inline-flex;align-items:center;padding:5px 9px;border:1px solid var(--p-ink);background:var(--p-ink);color:var(--p-paper);font:8.5px var(--mono);letter-spacing:0.16em;text-transform:uppercase;opacity:0.45;cursor:not-allowed">Comment</button></div>
+              </div>
+              <div style="display:flex;flex-direction:column">
+                <sc-for list="{{ timeline }}" as="i" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:11px;padding:11px 0;border-bottom:1px dotted var(--p-grid-2);align-items:{{ i.align }}">
+                    <span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;background:{{ i.avBg }};color:var(--p-paper);font:8px var(--mono);border-radius:{{ i.avRadius }};margin-top:1px">{{ i.init }}</span>
+                    <sc-if value="{{ i.isEvent }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;font-size:12px;color:var(--p-ink-2);line-height:1.5"><span><b style="font-weight:500;color:var(--p-ink)">{{ i.name }}</b> {{ i.what }}</span><span style="font:8.5px var(--mono);letter-spacing:0.06em;color:var(--p-muted)">{{ i.age }}</span></span></sc-if>
+                    <sc-if value="{{ i.isComment }}" hint-placeholder-val="{{ true }}">
+                      <div style="border:1px solid var(--p-grid-2);border-radius:6px;background:var(--p-paper);padding:9px 11px;min-width:0">
+                        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:5px"><b style="font-size:12.5px;font-weight:600;color:var(--p-ink);white-space:nowrap">{{ i.name }}</b><span style="font:8.5px var(--mono);letter-spacing:0.06em;color:var(--p-muted);white-space:nowrap">{{ i.ts }}</span><sc-if value="{{ i.mine }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;display:flex;gap:10px"><button type="button" style="padding:0;border:0;background:none;font:9px var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--p-muted)" style-hover="color:var(--p-accent)">Edit</button><button type="button" style="padding:0;border:0;background:none;font:9px var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--p-muted)" style-hover="color:var(--p-hot)">Delete</button></span></sc-if></div>
+                        <div style="font-size:13px;line-height:1.55;color:var(--p-ink-2);overflow-wrap:anywhere">{{ i.body }}</div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside style="padding:22px {{ gutter }} 0;min-width:0;display:flex;flex-direction:column;gap:26px;border-left:{{ asideRule }};border-top:{{ asideTop }};background:{{ asideBg }}">
+          <section data-screen-label="Documents &amp; links">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px"><span style="font:9px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">/ Documents &amp; links</span><span style="display:inline-flex;align-items:center;gap:6px;font:8.5px var(--mono);letter-spacing:0.12em;text-transform:uppercase;color:var(--p-muted);white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:var(--p-ok)"></span>SharePoint</span></div>
+            <div style="border:1px solid var(--p-grid);border-radius:4px;background:var(--p-paper);overflow:hidden">
+              <sc-for list="{{ docs }}" as="d" hint-placeholder-count="7">
+                <a href="#" title="{{ d.title }}" style="display:flex;align-items:center;gap:10px;min-height:38px;padding:6px 12px;border-top:1px solid {{ d.rule }};color:var(--p-ink-2);font-size:12px;text-decoration:none;min-width:0" style-hover="background:var(--p-paper-2);color:var(--p-ink)">
+                  <lx-icon name="{{ d.icon }}" size="14" style="color:var(--p-accent)"></lx-icon>
+                  <span style="flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">{{ d.label }}</span>
+                  <span style="flex:0 0 auto;padding:1px 5px;border:1px solid var(--p-grid);font:7.5px var(--mono);letter-spacing:0.12em;text-transform:uppercase;color:var(--p-muted);white-space:nowrap">{{ d.source }}</span>
+                  <lx-icon name="arrow-up-right" size="12" style="color:var(--p-muted)"></lx-icon>
+                </a>
+              </sc-for>
+            </div>
+          </section>
+
+          <section data-screen-label="Milestones">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:4px"><span style="font:9px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">/ Milestones · <b style="color:var(--p-ink);font-weight:500">{{ milestoneCount }}</b></span><a href="#" style="font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--p-accent);text-decoration:none;white-space:nowrap" style-hover="text-decoration:underline">Register →</a></div>
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ milestones }}" as="m" hint-placeholder-count="4">
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:11px 0;border-bottom:1px dotted var(--p-grid-2);align-items:start">
+                  <div style="min-width:0"><div style="font-size:12.5px;color:var(--p-ink);line-height:1.4;text-wrap:pretty">{{ m.name }}</div><div style="font:10px var(--mono);letter-spacing:0.04em;color:var(--p-muted);margin-top:3px">{{ m.sp }}</div></div>
+                  <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid {{ m.tone }};color:{{ m.toneText }};font:500 9px/1.3 var(--mono);letter-spacing:0.16em;text-transform:uppercase;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:{{ m.tone }}"></span>{{ m.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section data-screen-label="Risks">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:4px"><span style="font:9px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">/ Risks · <b style="color:var(--p-ink);font-weight:500">{{ riskCount }}</b></span><a href="#" style="font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--p-accent);text-decoration:none;white-space:nowrap" style-hover="text-decoration:underline">Risk register →</a></div>
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ risks }}" as="r" hint-placeholder-count="2">
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:11px 0;border-bottom:1px dotted var(--p-grid-2);align-items:start">
+                  <div style="min-width:0">
+                    <div style="font-size:12.5px;color:var(--p-ink);line-height:1.4;text-wrap:pretty">{{ r.title }}</div>
+                    <div style="font-size:11px;color:var(--p-muted);margin-top:3px;line-height:1.45;text-wrap:pretty">{{ r.mit }}</div>
+                    <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
+                      <span style="font:8px var(--mono);letter-spacing:0.12em;text-transform:uppercase;color:var(--p-muted);border:1px solid var(--p-grid);padding:1px 5px;white-space:nowrap">Likelihood {{ r.like }}</span>
+                      <span style="font:8px var(--mono);letter-spacing:0.12em;text-transform:uppercase;color:var(--p-muted);border:1px solid var(--p-grid);padding:1px 5px;white-space:nowrap">Impact {{ r.impact }}</span>
+                      <span style="display:inline-flex;align-items:center;gap:5px;font:8px var(--mono);letter-spacing:0.12em;text-transform:uppercase;color:var(--p-muted);border:1px solid var(--p-grid);padding:1px 5px 1px 2px;white-space:nowrap"><span style="width:14px;height:14px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--p-ink);color:var(--p-paper);font:6.5px var(--mono)">{{ r.ownerInit }}</span>{{ r.ownerFirst }}</span>
+                    </div>
+                  </div>
+                  <span style="display:inline-flex;align-items:center;gap:6px;font:8.5px var(--mono);letter-spacing:0.12em;text-transform:uppercase;color:var(--p-muted);white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:var(--p-ok)"></span>Synced</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section data-screen-label="Traceability">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px"><span style="font:9px var(--mono);letter-spacing:0.2em;text-transform:uppercase;color:var(--p-muted)">/ Traceability</span><a href="#" style="font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--p-accent);text-decoration:none;white-space:nowrap" style-hover="text-decoration:underline">Full matrix →</a></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--p-ok);color:var(--p-ok-text);font:500 9px/1.3 var(--mono);letter-spacing:0.16em;text-transform:uppercase;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:var(--p-ok)"></span>{{ trace.satisfied }} satisfied</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--p-info);color:var(--p-info-text);font:500 9px/1.3 var(--mono);letter-spacing:0.16em;text-transform:uppercase;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:var(--p-info)"></span>{{ trace.inFlight }} in flight</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--p-warn);color:var(--p-warn-text);font:500 9px/1.3 var(--mono);letter-spacing:0.16em;text-transform:uppercase;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:var(--p-warn)"></span>{{ trace.gaps }} gap</span>
+            </div>
+            <div style="margin-top:10px;font:9px var(--mono);letter-spacing:0.14em;text-transform:uppercase;color:var(--p-muted)">Quality Ledger · read-only</div>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <sc-if value="{{ isPhone }}" hint-placeholder-val="{{ false }}">
+    <nav aria-label="Tabs" style="position:fixed;left:0;right:0;bottom:0;z-index:40;display:grid;grid-template-columns:repeat(4, minmax(0,1fr));height:56px;border-top:1px solid var(--p-grid);background:var(--p-paper);max-width:{{ rootMax }};margin:0 auto">
+      <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
+        <a href="#" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:44px;margin-top:-1px;border-top:2px solid {{ tb.rule }};font:9px var(--mono);letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;color:{{ tb.color }}"><lx-icon name="{{ tb.icon }}" size="20" style="color:{{ tb.iconColor }}"></lx-icon><span>{{ tb.label }}</span></a>
+      </sc-for>
+    </nav>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;forceTier&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;auto&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;desktop&quot;,&quot;tablet&quot;,&quot;phone&quot;],&quot;tsType&quot;:&quot;\&quot;auto\&quot; | \&quot;desktop\&quot; | \&quot;tablet\&quot; | \&quot;phone\&quot;&quot;,&quot;section&quot;:&quot;Preview&quot;},&quot;rowCap&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:8,&quot;min&quot;:3,&quot;max&quot;:40,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Task table&quot;},&quot;showClosed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Task table&quot;}}">
+class Component extends DCLogic {
+  state = { more: false, filter: null, closedOpen: false, ww: typeof window !== "undefined" ? window.innerWidth : 1440, mw: 1200, ready: !!window.MC_DATA };
+  componentDidMount() {
+    this._onResize = () => { this.setState({ ww: window.innerWidth }); setTimeout(() => this.measure(), 0); };
+    window.addEventListener("resize", this._onResize);
+    this._ro = new ResizeObserver((entries) => {
+      const w = entries[0].contentRect.width;
+      if (Math.abs(w - this.state.mw) > 1) this.setState({ mw: w });
+    });
+    this.observeMain();
+    if (!window.MC_DATA) this._t = setInterval(() => { if (window.MC_DATA) { clearInterval(this._t); this.setState({ ready: true }); } }, 40);
+  }
+  observeMain() {
+    const el = document.getElementById("mc-main");
+    if (!el) { this._timer = setTimeout(() => this.observeMain(), 60); return; }
+    if (this._observed !== el) {
+      if (this._observed) this._ro.unobserve(this._observed);
+      this._observed = el; this._ro.observe(el);
+      [0, 120, 600].forEach((ms) => setTimeout(() => this.measure(), ms));
+    }
+  }
+  measure() {
+    const el = this._observed;
+    if (!el) return;
+    const w = el.getBoundingClientRect().width;
+    if (w > 0 && Math.abs(w - this.state.mw) > 1) this.setState({ mw: w });
+  }
+  componentDidUpdate() { this.observeMain(); }
+  componentWillUnmount() {
+    window.removeEventListener("resize", this._onResize);
+    if (this._ro) this._ro.disconnect();
+    if (this._timer) clearTimeout(this._timer);
+    if (this._t) clearInterval(this._t);
+  }
+  renderVals() {
+    const D = window.MC_DATA;
+    const forced = this.props.forceTier ?? "auto";
+    const ww = forced === "phone" ? 390 : forced === "tablet" ? 820 : forced === "desktop" ? 1440 : this.state.ww;
+    const tier = ww < 641 ? "phone" : ww < 1025 ? "tablet" : "desktop";
+    const isPhone = tier === "phone", isDesktop = tier === "desktop";
+    const mw = this.state.mw;
+    const two = mw >= 1100;
+    const lw = two ? Math.min(mw, 1560) - 420 : mw; // left column width drives the table columns
+    const compact = lw < 600;
+    const cols = lw >= 900 ? { grid: "76px minmax(0,1fr) 96px 56px 170px 64px", id: true, pri: true, who: true, due: true }
+      : lw >= 680 ? { grid: "76px minmax(0,1fr) 96px 150px 64px", id: true, pri: false, who: true, due: true }
+      : { grid: "minmax(0,1fr) 96px 130px", id: false, pri: false, who: true, due: false };
+    const rowCap = Math.max(1, this.props.rowCap ?? 8);
+    const TONE = { track: ["var(--p-ok)", "var(--p-ok-text)", "On track"], risk: ["var(--p-warn)", "var(--p-warn-text)", "At risk"], off: ["var(--p-hot)", "var(--p-hot-text)", "Off track"] };
+    const CHIP = { muted: ["var(--p-grid-2)", "var(--p-muted)"], info: ["color-mix(in srgb, var(--p-info) 12%, transparent)", "var(--p-info-text)"], acc: ["color-mix(in srgb, var(--p-accent) 12%, transparent)", "var(--p-accent)"], warn: ["color-mix(in srgb, var(--p-warn) 12%, transparent)", "var(--p-warn-text)"], ok: ["color-mix(in srgb, var(--p-ok) 12%, transparent)", "var(--p-ok-text)"] };
+    const PRI = { hot: "var(--p-hot)", warn: "var(--p-warn)", info: "var(--p-info)", muted: "var(--p-muted)" };
+    const MS = { now: ["var(--p-accent)", "var(--p-accent)", "Active"], risk: ["var(--p-warn)", "var(--p-warn-text)", "At risk"], done: ["var(--p-ok)", "var(--p-ok-text)", "Done"], upcoming: ["var(--p-grid)", "var(--p-muted)", "Upcoming"] };
+    const base = {
+      isPhone, notPhone: !isPhone, isDesktop, compact, notCompact: !compact, cols,
+      rootMax: forced === "phone" ? "390px" : forced === "tablet" ? "820px" : "none",
+      rootEdge: forced === "auto" ? "0" : "1px solid var(--p-grid)",
+      gutter: isPhone ? "14px" : "clamp(14px, 2.4vw + 4px, 26px)",
+      bodyCols: isPhone ? "minmax(0,1fr)" : isDesktop ? "240px minmax(0,1fr)" : "64px minmax(0,1fr)",
+      sidePad: isDesktop ? "14px 0 24px" : "8px 0 16px",
+      grpGap: isDesktop ? "16px" : "8px", grpPad: isDesktop ? "0 12px" : "8px 0 0", grpRule: isDesktop ? "0" : "1px solid var(--p-grid-2)",
+      itemW: isDesktop ? "100%" : "44px", itemMargin: isDesktop ? "0" : "0 auto", itemPad: isDesktop ? "0 8px" : "0", itemJustify: isDesktop ? "flex-start" : "center",
+      stagePadB: isPhone ? "128px" : "80px",
+      phPad: isPhone ? "18px 14px 14px" : "22px clamp(14px, 2.4vw + 4px, 26px) 16px",
+      h1Size: isDesktop ? "38px" : "28px", segH: isDesktop ? "0" : "44px",
+      stripCols: mw >= 900 ? "440px minmax(0,1fr)" : "minmax(0,1fr)", stripRuleR: mw >= 900 ? "1px solid var(--p-grid-2)" : "0", stripRuleB: mw >= 900 ? "0" : "1px solid var(--p-grid-2)",
+      factCols: mw >= 900 || mw >= 560 ? 3 : 2, bigNum: compact ? "30px" : "34px",
+      bodyGrid: two ? "minmax(0, 1fr) minmax(320px, 420px)" : "minmax(0, 1fr)",
+      pageMax: "1560px", segPad: isDesktop ? "5px 9px" : "12px 10px", tapH: isDesktop ? "0" : "44px",
+      asideRule: two ? "1px solid var(--p-grid)" : "0", asideTop: two ? "0" : "1px solid var(--p-grid)", asideBg: two ? "var(--p-paper)" : "transparent",
+      toggleMore: () => this.setState((s) => ({ more: !s.more })),
+    };
+    if (!D) return base;
+    const P = D.project, A = D.actors, B = D.buckets[0], X = D.bucketExtras;
+    const doing = B.tasks.filter((t) => D.STAGES[t.stage].band === "doing").length;
+    const bpct = Math.round((B.closed / B.total) * 100);
+    const sched = (() => {
+      const yr = new Date().getFullYear();
+      const s = new Date(`${B.started}, ${yr}`), t = new Date(`${B.target}, ${yr}`), now = new Date();
+      const span = Math.max(1, (t - s) / 864e5), frac = Math.min(1, Math.max(0, (now - s) / 864e5 / span));
+      const elapsedPct = Math.round(frac * 100), overdue = now > t, delta = bpct - elapsedPct;
+      const st = overdue ? ["var(--p-warn)", "var(--p-warn-text)", "calendar-x", `Target passed · ${Math.round((now - t) / 864e5)}d`]
+        : delta >= 3 ? ["var(--p-ok)", "var(--p-ok-text)", "trending-up", `Ahead · +${delta} pts`]
+        : delta <= -3 ? ["var(--p-warn)", "var(--p-warn-text)", "trending-down", `Behind · ${delta} pts`]
+        : ["var(--p-grid)", "var(--p-muted)", "minus", "On pace"];
+      return { elapsedPct, frac: frac.toFixed(3), tone: st[0], toneText: st[1], icon: st[2], label: st[3],
+        today: now.toLocaleDateString("en-US", { month: "short", day: "2-digit" }), todayDisplay: overdue || compact || frac > 0.84 || frac < 0.12 ? "none" : "inline" };
+    })();
+    const pct = (n) => Math.round((n / B.total) * 1000) / 10 + "%";
+    const filter = this.state.filter ?? (this.props.showClosed ? "all" : "open");
+    const isOpenTask = (t) => { const band = D.STAGES[t.stage].band; return band !== "done" && band !== "cancelled"; };
+    const needsHuman = (t) => t.blocked || !!t.human;
+    const showClosed = filter === "all" || (filter === "open" && this.state.closedOpen);
+    const humanCount = B.tasks.filter(needsHuman).length, openCount = B.total - B.closed;
+    const pool = filter === "human" ? B.tasks.filter(needsHuman) : showClosed ? B.tasks : B.tasks.filter(isOpenTask);
+    const poolTotal = filter === "human" ? humanCount : showClosed ? B.total : openCount;
+    const seg = (on) => on ? ["var(--p-ink)", "var(--p-paper)"] : ["transparent", "var(--p-muted)"];
+    const rows = (this.state.more ? pool : pool.slice(0, rowCap)).map((t) => {
+      const st = D.STAGES[t.stage], pr = D.PRIORITY[t.pri], a = t.assignee ? A[t.assignee] : null;
+      return {
+        id: t.id, title: t.title, blocked: t.blocked, needsVerify: !!t.human, stage: st.name, chipBg: CHIP[st.tone][0], chipFg: CHIP[st.tone][1],
+        prioTitle: `Priority · ${pr.label}`, bars: [1, 2, 3, 4].map((i) => ({ h: 4 + i * 1.5 + "px", bg: i <= pr.n ? PRI[pr.cls] : "var(--p-grid)" })),
+        unassigned: !a, assigned: !!a, who: a ? a.name : "", whoShort: a ? a.name : "Unassigned", init: a ? a.init : "",
+        avBg: a && a.kind === "agent" ? "var(--p-accent)" : "var(--p-ink)", avRadius: a && a.kind === "agent" ? "1px" : "50%",
+        isAgent: !!(a && a.kind === "agent"), model: a && a.model ? a.model : "",
+        due: t.due, dueColor: t.blocked ? "var(--p-warn-text)" : "var(--p-muted)",
+      };
+    });
+    const av = (id) => { const a = A[id]; return { init: a.init, name: a.name, avBg: a.kind === "agent" ? "var(--p-accent)" : "var(--p-ink)", avRadius: a.kind === "agent" ? "1px" : "50%" }; };
+    const timeline = [
+      ...X.comments.map((c) => ({ ...av(c.author), isComment: true, isEvent: false, ts: c.ts, body: c.body, mine: c.author === "va", align: "start" })),
+      ...X.events.map((e) => ({ ...av(e.who), isEvent: true, isComment: false, what: e.what, age: e.age, align: "center" })),
+    ];
+    const DOCS = [["list-checks", "Project Plan", "MS List"], ["map", "Roadmap", "MS List"], ["flag", "Milestone Register", "MS List"], ["triangle-alert", "Risk Register", "MS List"], ["folder", "Project Documents", "Library"], ...B.repos.map((r) => ["git-branch", r, "GitHub"])];
+    const NAV = [
+      { label: "My work", items: [["house", "Home", "32+"], ["layout-dashboard", "Dashboard"], ["circle-user", "My tasks"], ["square-check", "Approvals", "—"]] },
+      { label: "Plan", hasLists: true, items: [["square-kanban", "Board"], ["list", "List"], ["calendar-range", "Timeline"], ["chart-pie", "Insights"]] },
+      { label: "Knowledge", items: [["book-open", "Ask the Brain"], ["clipboard-list", "SOP guide"], ["wrench", "Skills directory"], ["network", "Architecture"], ["circle-help", "Help"]] },
+      { label: "Reporting", items: [["target", "Goals & production"]] },
+    ];
+    const tick = (h) => h === "risk" ? "var(--p-warn)" : h === "off" ? "var(--p-hot)" : "var(--p-ok)";
+    return {
+      ...base,
+      project: P, owner: A[B.owner],
+      bucket: { ...B, tone: TONE[B.health][0], toneText: TONE[B.health][1], pillLabel: TONE[B.health][2],
+        prdLabel: B.prd ? B.prd.label : "Add spec", prdHref: B.prd ? B.prd.href : "#", pct: bpct, doing, blocked: B.tasks.filter((t) => t.blocked).length,
+        progressCt: `${B.closed} / ${B.total} closed · ${B.done} done · ${B.cancelled} cancelled · ${doing} in flight`,
+        donePct: pct(B.done), cancelledPct: pct(B.cancelled), doingPct: pct(doing) },
+      sched, rows, hasMore: pool.length > rowCap, empty: pool.length === 0,
+      moreLabel: this.state.more ? "Show fewer ↑" : `Show all ${poolTotal} · ${poolTotal - rows.length} more ↓`,
+      emptyLabel: filter === "human" ? "Nothing waiting on a human." : showClosed ? "No tasks yet." : `Nothing outstanding · all ${B.closed} tasks closed.`,
+      humanCount, openCount,
+      fOpenLabel: compact ? `Open · ${openCount}` : `Outstanding · ${openCount}`,
+      fHumanLabel: compact ? `Human · ${humanCount}` : `Needs a human · ${humanCount}`,
+      hasClosedToggle: filter === "open" && B.closed > 0, closedIcon: showClosed ? "eye-off" : "eye",
+      closedLabel: showClosed ? `Hide ${B.closed} closed` : `Show ${B.closed} closed · ${B.done} merged · ${B.cancelled} cancelled`,
+      toggleClosed: () => this.setState((s) => ({ closedOpen: !s.closedOpen })),
+      fOpenBg: seg(filter === "open")[0], fOpenFg: seg(filter === "open")[1],
+      fHumanBg: seg(filter === "human")[0], fHumanFg: seg(filter === "human")[1],
+      fAllBg: seg(filter === "all")[0], fAllFg: seg(filter === "all")[1],
+      setOpen: () => this.setState({ filter: "open", closedOpen: false }),
+      setHuman: () => this.setState({ filter: "human", closedOpen: false }),
+      setAll: () => this.setState({ filter: "all" }),
+      timeline,
+      docs: DOCS.map(([icon, label, source], i) => ({ icon, label, source, title: label, rule: i === 0 ? "transparent" : "var(--p-grid-2)" })),
+      milestones: X.milestones.map((m) => ({ ...m, tone: MS[m.state][0], toneText: MS[m.state][1], label: MS[m.state][2] })),
+      milestoneCount: X.milestones.length,
+      risks: X.risks.map((r) => ({ ...r, ownerInit: A[r.owner].init, ownerFirst: A[r.owner].name.split(" ")[0] })),
+      riskCount: X.risks.length, trace: X.trace,
+      navGroups: NAV.map((g) => ({ label: g.label, hasLists: !!g.hasLists, items: g.items.map(([icon, label, badge]) => ({ icon, label, badge: badge || "", badgeStatic: !!badge && isDesktop, badgeFloat: !!badge && !isDesktop })) })),
+      sideProjects: D.sidebar.projects.map((p) => ({ name: p.name, tick: tick(p.health) })),
+      sideInitiatives: D.sidebar.initiatives.map((b, i) => ({ name: b.name, tick: tick(b.health), current: i === 0 ? "page" : undefined, rule: i === 0 ? "var(--p-accent)" : "transparent", bg: i === 0 ? "var(--p-paper-2)" : "none", weight: i === 0 ? 500 : 400, color: i === 0 ? "var(--p-ink)" : "var(--p-ink-2)" })),
+      tabs: [["house", "My work"], ["square-kanban", "Plan", true], ["book-open", "Knowledge"], ["ellipsis", "More"]].map(([icon, label, on]) => ({ icon, label, rule: on ? "var(--p-accent)" : "transparent", color: on ? "var(--p-ink)" : "var(--p-muted)", iconColor: on ? "var(--p-accent)" : "var(--p-muted)" })),
+    };
+  }
+}
+</script>
+</body>
+</html>

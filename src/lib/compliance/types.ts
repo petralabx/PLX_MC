@@ -38,6 +38,8 @@ export interface VerifyInput {
   bucketPrd: "present" | "absent" | "no_bucket" | "store_unavailable" | "unknown";
   // Clock for the evidence standard's warn-only week (TASK-3165); defaults to now.
   now?: number;
+  // Whether evidence uploads are on (TASK-3166). Off: a missing visual artifact only warns.
+  evidenceStoreEnabled?: boolean;
 }
 
 export interface VerifyResult {

@@ -252,12 +252,30 @@ export interface QaTest {
   status: "pass" | "fail";
 }
 
+/**
+ * A file a person opens to verify the work (TASK-3166): stored on SharePoint by
+ * mc_upload_evidence; MC keeps only this record.
+ */
+export interface EvidenceArtifact {
+  kind: "diagram" | "screenshot" | "web-page";
+  name: string;
+  caption: string;
+  /** SharePoint web URL. */
+  url: string;
+  driveItemId: string;
+  contentType: string;
+  size: number;
+  sha256: string;
+  uploadedAt: string;
+}
+
 export interface Evidence {
   summary: string;
   items: EvidenceItem[];
   shots?: { label: string; cap: string }[];
   qa?: { pass: number; fail: number; total: number; suite: string; ran: string; tests: QaTest[] };
   rollback?: string | null;
+  artifacts?: EvidenceArtifact[];
 }
 
 /** Inbox pointer at a task's existing evidence bundle (TASK-631). Derived at read time — not a stored column. */

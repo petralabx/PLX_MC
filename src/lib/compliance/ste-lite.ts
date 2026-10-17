@@ -2,7 +2,9 @@
 // language written for aircraft maintenance manuals. A deterministic check, not
 // a model's opinion, so the gate is predictable. Sentence and paragraph length
 // can block; passive voice is advice only, because a word-pattern check for it
-// has false positives. Code, links, file paths and IDs count as one word each.
+// has false positives. Code, URLs, file paths and IDs count as one word each;
+// a markdown link's visible text counts normally, because a person reads it.
+// Each sentence in a numbered step has its own 20-word limit, as in ASD-STE100.
 // Headings and table rows are skipped: they hold labels and data, not sentences.
 
 export const STE_LITE_LIMITS = {

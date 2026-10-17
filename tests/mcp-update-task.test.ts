@@ -458,4 +458,16 @@ describe("batch description evidence standard (TASK-3165)", () => {
     expect(result.ok).toBe(true);
     expect(result.body.data.results[0]).toMatchObject({ ok: true, evidenceStandard: { applies: true, mode: "warn" } });
   });
+
+  it("caps the findings in each receipt and counts the rest", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-20T12:00:00Z"));
+    seed("TASK-1", { labels: ["lane:codex", "verify:human"] });
+    const sentence = `${Array.from({ length: 30 }, (_, i) => `word${i}`).join(" ")}.`;
+    const description = Array.from({ length: 8 }, () => sentence).join("\n\n");
+    const result = await call("REST", "mc_update_tasks", { items: [{ taskId: "TASK-1", patch: { description } }] });
+    const report = result.body.data.results[0].evidenceStandard;
+    expect(report.findings).toHaveLength(5);
+    expect(report.findingsTotal).toBe(8);
+  });
 });

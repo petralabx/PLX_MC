@@ -36,10 +36,12 @@ import {
   upsertRoutingSession,
 } from "@/lib/routing/repo";
 import type { RoutingProposalState } from "@/lib/routing/types";
+import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask, snapshot } from "@/lib/sync";
 import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import { bucketPrdForTask } from "./bucket-prd";
+import { ownEvidenceSite } from "./evidence-artifacts";
 import type { EventsQuery } from "./events";
 import { loadPrState, type PrState } from "./github-pr";
 import { projectPullRequest, projectionEnabled } from "./projection";
@@ -550,7 +552,14 @@ export async function verifyPr(
           ? { verdict: "block", reasons: [checkoutBlockReason("task_closed")] }
           : task.stage === "cancelled"
             ? { verdict: "pass", reasons: [cancelledTaskWarning(task)] }
-            : verifyCompliance({ task, actor: "agent", tier, bucketPrd });
+            : verifyCompliance({
+                task,
+                actor: "agent",
+                tier,
+                bucketPrd,
+                // A repo with its own evidence site (Trading Lab) cannot upload yet: never block it.
+                evidenceStoreEnabled: evidenceStoreEnabled() && !ownEvidenceSite(d?.repo ?? ""),
+              });
     if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, result, taskId ?? cid);
     tasks.push({ checkoutId: cid, taskId, verdict: result.verdict, reasons: result.reasons });
   }

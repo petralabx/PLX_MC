@@ -10,7 +10,7 @@ export function assertEvidenceStandard(what: string, report: EvidenceStandardRep
   throw new ApiError(
     "evidence_standard",
     `${what} breaks STE-lite, which applies to work a person must verify: ${describeFindings(blocking)} ` +
-      "Fix: one instruction per sentence, 20 words or fewer per step, 25 per other sentence, 6 sentences per paragraph.",
+      "Fix: one instruction per sentence, 20 words or fewer per sentence in a step, 25 per other sentence, 6 sentences per paragraph.",
     400
   );
 }

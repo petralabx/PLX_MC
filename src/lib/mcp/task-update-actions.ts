@@ -235,12 +235,16 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
 export type UpdateTaskItemOutcome =
   | {
       index: number; ok: true; taskId: string; changed: string[]; eventSeq: string | undefined;
-      /** Present when the item wrote description text on work a person must verify (TASK-3165). */
-      evidenceStandard?: EvidenceStandardReport;
+      /**
+       * Present when the item wrote description text on work a person must verify
+       * (TASK-3165). At most RECEIPT_FINDINGS_MAX findings; findingsTotal counts all.
+       */
+      evidenceStandard?: EvidenceStandardReport & { findingsTotal: number };
     }
   | { index: number; ok: false; error: { code: string; message: string } };
 
 const BATCH_ERROR_MESSAGE_MAX = 500;
+const RECEIPT_FINDINGS_MAX = 5;
 
 export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
   assertMcpToolAllowed(identity, "mc_update_tasks");
@@ -250,9 +254,17 @@ export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
   for (const [index, item] of items.entries()) {
     try {
       const data = await actionUpdateTask(identity, item);
+      const report = "evidenceStandard" in data ? data.evidenceStandard : undefined;
       results.push({
         index, ok: true, taskId: data.taskId, changed: Object.keys(data.diff), eventSeq: data.eventSeq,
-        ...("evidenceStandard" in data && data.evidenceStandard ? { evidenceStandard: data.evidenceStandard } : {}),
+        // A 100-item batch of long descriptions must not grow the response without limit.
+        ...(report ? {
+          evidenceStandard: {
+            ...report,
+            findings: report.findings.slice(0, RECEIPT_FINDINGS_MAX),
+            findingsTotal: report.findings.length,
+          },
+        } : {}),
       });
     } catch (err) {
       if (!(err instanceof ApiError)) console.error("[mcp] mc_update_tasks item %d failed:", index, err);

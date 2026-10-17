@@ -3,7 +3,7 @@
 // EVERY checked-out task and passes only if ALL pass; each task's verdict is its
 // own recorded check + gate event. Same in-memory repo/sync mocks as
 // tests/compliance-server.test.ts (no live DB).
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 
 vi.mock("@/lib/compliance/github-pr", () => ({
@@ -248,5 +248,33 @@ describe("cancelled tasks (TASK-2529)", () => {
 
     expect(r.verdict).toBe("pass");
     expect(r.reasons).toEqual([expect.stringMatching(/^TASK-6: warning: TASK-6 is cancelled \(obsolete\) — this PR will not promote it/)]);
+  });
+});
+
+// TASK-3166: with uploads on and after the warn-only week, a human-verification
+// task without visual evidence blocks. Trading Lab (agentic-swarm) cannot upload
+// to its own site yet, so the gate only warns for it.
+describe("verifyPr — visual evidence (TASK-3166)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("blocks a PLX task without visual evidence, and only warns for Trading Lab", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-26T12:00:00Z"));
+    vi.stubEnv("PLX_MC_EVIDENCE_STORE_ENABLED", "1");
+    db.tasks.set("TASK-1", taskish({ id: "TASK-1", labels: ["verify:human"], evidence: complete }));
+    db.tasks.set("TASK-2", taskish({ id: "TASK-2", labels: ["verify:human"], evidence: complete }));
+    const plx = await checkout({ taskId: "TASK-1", runtime: "claude", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    const lab = await checkout({ taskId: "TASK-2", runtime: "claude", accountableHuman: "vince", repo: "petralabx/agentic-swarm" });
+
+    const blocked = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 40, headSha: "sha40", changedPaths: ["src/lib/x.ts"], checkoutIds: [plx.checkoutId] });
+    expect(blocked.verdict).toBe("block");
+    expect(blocked.reasons.join(" ")).toMatch(/no visual evidence/);
+
+    const warned = await verifyPr({ repo: "petralabx/agentic-swarm", prNumber: 41, headSha: "sha41", changedPaths: ["src/lib/x.ts"], checkoutIds: [lab.checkoutId] });
+    expect(warned.verdict).toBe("pass");
+    expect(warned.reasons.join(" ")).toMatch(/no visual evidence: .*Warning only: evidence uploads are off\./);
   });
 });

@@ -6,7 +6,15 @@
 
 import type { Evidence } from "@/lib/mc-data";
 import { hasHumanAccountableOwner } from "@/lib/mc-data";
-import { blockingFindings, describeFindings, evidenceStandardReport, requiresHumanVerification } from "./evidence-standard";
+import { hasVisualArtifact } from "./evidence-artifacts";
+import {
+  VISUAL_EVIDENCE_ENFORCE_FROM,
+  blockingFindings,
+  describeFindings,
+  evidenceStandardReport,
+  requiresHumanVerification,
+  visualEvidenceMode,
+} from "./evidence-standard";
 import { bundleRequirementsFor } from "./risk";
 import type { RiskTier, VerifyInput, VerifyResult } from "./types";
 
@@ -94,6 +102,14 @@ export function verifyCompliance(input: VerifyInput): VerifyResult {
     const line = (found: typeof errors) => `evidence summary breaks STE-lite (${found.length}): ${describeFindings(found)}`;
     if (blocking.length > 0) reasons.push(line(blocking));
     else if (errors.length > 0) notes.push(`${line(errors)} Warning only until ${report.enforceFrom.slice(0, 10)}.`);
+  }
+  // Visual evidence (TASK-3166): a diagram, annotated screenshot or web page that
+  // a person can open. It blocks only after its week and while uploads are on.
+  if (requiresHumanVerification(task.labels, tier) && !hasVisualArtifact(task.evidence)) {
+    const line = "no visual evidence: upload a diagram, annotated screenshot or web page with mc_upload_evidence.";
+    if (visualEvidenceMode(input.now, input.evidenceStoreEnabled) === "block") reasons.push(line);
+    else if (!input.evidenceStoreEnabled) notes.push(`${line} Warning only: evidence uploads are off.`);
+    else notes.push(`${line} Warning only until ${VISUAL_EVIDENCE_ENFORCE_FROM.slice(0, 10)}.`);
   }
 
   return reasons.length === 0

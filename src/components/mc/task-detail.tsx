@@ -10,6 +10,7 @@ import {
   STAGE_IDX,
   TARGET_ENV,
   confidenceOf,
+  type EvidenceArtifact,
   type PriorityKey,
   type SpColumn,
   type SyncDirection,
@@ -72,6 +73,13 @@ export const SOR_FIELD_NAMES = ["Status", "Assigned To", "Due Date", "Priority"]
 type SorFieldName = (typeof SOR_FIELD_NAMES)[number];
 
 const SUBMITTED_STAGES = new Set(["review", "merged", "verified"]);
+
+// Visual evidence from mc_upload_evidence (TASK-3166).
+const ARTIFACT_KIND_LABELS: Record<EvidenceArtifact["kind"], string> = {
+  diagram: "Diagram",
+  screenshot: "Screenshot",
+  "web-page": "Web page",
+};
 
 export interface EvidenceProgress {
   done: number;
@@ -530,6 +538,33 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                       </div>
                     ) : (
                       <div className="txt muted">No screenshots captured yet.</div>
+                    )}
+                  </div>
+                </div>
+                <div className="evp" data-testid="task-visual-evidence">
+                  <div className="eph">
+                    <span className="k">Visual evidence</span>
+                    <span className="k">{task.evidence.artifacts?.length ?? 0} total</span>
+                  </div>
+                  <div className="epb">
+                    {task.evidence.artifacts?.length ? (
+                      <div className="prs">
+                        {task.evidence.artifacts.map((artifact) => (
+                          <div className="pr" key={artifact.driveItemId}>
+                            <span className="pid">{ARTIFACT_KIND_LABELS[artifact.kind]}</span>
+                            <div>
+                              <a className="t" href={artifact.url} target="_blank" rel="noopener noreferrer">
+                                {artifact.caption}
+                              </a>
+                              <div className="sub">
+                                {artifact.name} · {artifact.uploadedAt.slice(0, 10)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="txt muted">No diagram, screenshot or web page uploaded yet.</div>
                     )}
                   </div>
                 </div>

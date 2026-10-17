@@ -429,8 +429,8 @@ This applies when a person must verify the work: label `verify:human`, a `kind:h
 
 1. Write the task description and the `summary` in STE-lite.
 2. Use one instruction per sentence and the active voice.
-3. Keep each sentence in a numbered step to 20 words. Keep any other sentence to 25 words.
-4. Keep a paragraph to 6 sentences. Code, paths, URLs and IDs count as one word. Link text counts normally.
+3. Keep a numbered step to 20 words. Keep any other sentence to 25 words.
+4. Keep a paragraph to 6 sentences. Code, paths, links and IDs count as one word.
 5. Read `evidenceStandard.findings` in the result, and fix each one.
 
 Until 2026-10-24 the check only warns. After that date, `mc_create_task`, `mc_update_task` and `mc_complete_task` refuse the text with `evidence_standard`, and the `compliance` check blocks the PR. A refused hand-in records nothing. The checkout stays open until the PR merges or closes, so fix the text and send it again on the same checkout. The `compliance` check reads the PR's real paths and labels, so it can find a change high-risk when `filesChanged` did not. If it blocks on the summary, send the hand-in again with a fixed summary, then re-run the `compliance` job.

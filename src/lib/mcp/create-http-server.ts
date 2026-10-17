@@ -275,7 +275,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_create_task",
-    "Create a new MC task (SharePoint ToDos mirror). repos[] = MC registry ids (portal-web, plx-mc, agentic-swarm), not GitHub slugs. MC_REPO / X-MC-Repo remains the full GitHub slug for checkout/compliance — a different namespace from repos[]. Pass kind; omitted kind defaults to kind:needs-review. When a person must verify the task (label verify:human or kind human-test), write the description in STE-lite: one instruction per sentence, 20 words per sentence in a numbered step, 25 per other sentence. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard.",
+    "Create a new MC task (SharePoint ToDos mirror). repos[] = MC registry ids (portal-web, plx-mc, agentic-swarm), not GitHub slugs. MC_REPO / X-MC-Repo remains the full GitHub slug for checkout/compliance — a different namespace from repos[]. Pass kind; omitted kind defaults to kind:needs-review. When a person must verify the task (label verify:human or kind human-test), write the description in STE-lite: one instruction per sentence, 20 words per numbered step, 25 per other sentence. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard.",
     {
       title: z.string().min(1),
       bucket: z.string().min(1),

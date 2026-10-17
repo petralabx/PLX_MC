@@ -38,10 +38,9 @@ truth table is proven before any plumbing exists.
 - Human-verification evidence standard (TASK-3165, `evidence-standard.ts`,
   `ste-lite.ts`). It applies when a person must verify the work: label
   `verify:human`, a `kind:human-test` task, or a high-risk change. The agent's
-  text must pass STE-lite, the measurable part of ASD-STE100. Each sentence in
-  a numbered step has 20 words or fewer. Any other sentence has 25 or fewer. A
-  prose paragraph has 6 sentences or fewer. Code, URLs, paths and IDs count as
-  one word; link text counts normally.
+  text must pass STE-lite, the measurable part of ASD-STE100. A numbered step
+  has 20 words or fewer. Any other sentence has 25 or fewer. A prose paragraph
+  has 6 sentences or fewer. Code, links, paths and IDs count as one word.
   Passive voice is advice only. The verifier checks the evidence summary. The
   MCP layer checks the task description at create and update, and the summary
   at `mc_complete_task` (before anything is recorded; `filesChanged` gives the

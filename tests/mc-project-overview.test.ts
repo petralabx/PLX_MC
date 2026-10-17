@@ -6,6 +6,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { BUCKETS, TASKS } from "@/lib/mc-data";
@@ -24,6 +26,7 @@ import {
   shortDate,
   stageChipTone,
 } from "@/components/mc/project-overview.helpers";
+import { TaskTable } from "@/components/mc/task-table";
 
 const task = (over: Partial<Task>): Task =>
   ({ ...TASKS[0], id: `T-${Math.random().toString(36).slice(2, 8)}`, ...over }) as Task;
@@ -266,6 +269,20 @@ describe("cappedRows (TaskTable row cap)", () => {
   it("caps each group separately", () => {
     const many = Array.from({ length: 12 }, (_, i) => `closed-${i}`);
     expect(cappedRows(open, many, 8)).toEqual([...open.slice(0, 8), ...many.slice(0, 8)]);
+  });
+
+  it("TaskTable with closed rows hidden still caps the outstanding rows", () => {
+    const outstanding = Array.from({ length: 10 }, (_, i) => task({ id: `T-OPEN-${i}`, stage: "backlog" }));
+    const done = [task({ id: "T-DONE-0", stage: "merged" }), task({ id: "T-DONE-1", stage: "merged" })];
+    const html = renderToStaticMarkup(
+      createElement(TaskTable, { tasks: outstanding, closed: done, nav: () => {}, emptyText: "None" })
+    );
+    expect(html.match(/class="pv-trow"/g)).toHaveLength(8);
+    expect(html).toContain("T-OPEN-7");
+    expect(html).not.toContain("T-OPEN-8");
+    expect(html).not.toContain("T-DONE-0");
+    expect(html).toContain("Show all 10 · 2 more");
+    expect(html).toContain("Show 2 closed");
   });
 });
 

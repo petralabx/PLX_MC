@@ -19,6 +19,7 @@ const WAITING: GoalsPage = goalsPage({}, undefined, {
   data: {
     access: "missing",
     missing: ["sage.oe_order_header.type", "sage.oe_order_header.expdate", "public.assembly_order.qtytotal"],
+    categoryMissing: [],
     lines: [],
     aos: [],
   },
@@ -75,6 +76,28 @@ test.describe("goals revenue forecast", () => {
     await search.fill("nothing like this");
     await expect(section(page).getByText("No open orders match these filters.")).toBeVisible();
     await expect(status).toHaveText("Showing 0 of 18 rows · 0.00 CAD");
+  });
+
+  test("the customer class and item category filters change the rows, the chips and the totals (TASK-3177)", async ({ page }) => {
+    await mockGoalsApi(page);
+    await gotoGoals(page);
+    const list = section(page).getByRole("region", { name: "Open orders this month" });
+    const status = section(page).locator(".gp-count");
+    await section(page).getByLabel("Customer class").selectOption("Exclusive Manufacturing");
+    await expect(list.locator("tbody tr")).toHaveCount(12);
+    await expect(status).toHaveText("Showing 12 of 18 rows · 133,177.93 CAD");
+    await section(page).getByLabel("Item category").selectOption("channel:Distribution");
+    await expect(list.locator("tbody tr")).toHaveCount(7);
+    await expect(section(page).getByRole("button", { name: /^Planned in time/ })).toContainText("2");
+    await section(page).getByRole("button", { name: /^Planned in time/ }).click();
+    await expect(status).toHaveText("Showing 2 of 18 rows · 35,831.88 CAD");
+    await section(page).getByLabel("Customer class").selectOption("all");
+    await section(page).getByRole("button", { name: /^All/ }).click();
+    await section(page).getByLabel("Item category").selectOption("none");
+    await expect(list.locator("tbody tr")).toHaveCount(1);
+    await expect(list.locator("tbody tr")).toContainText("FP-1414");
+    // The four numbers never follow the filters.
+    await expect(section(page).getByTestId("goals-forecast-numbers").locator("li").nth(1)).toContainText("At risk$40,703");
   });
 
   test("while the login can't read the orders it says so, names what's missing, and the rest of the page stays", async ({ page }) => {

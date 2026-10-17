@@ -327,7 +327,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
           </button>
           {/* Kicker line: id · parent project · the initiative's spec. The spec
               lives here now — the standalone "/ Spec" block is gone. */}
-          <div className="ini-kicker" data-testid="bucket-kicker">
+          <div className="kk ini-kicker" data-testid="bucket-kicker">
             <span>Initiative · {bucket.id}</span>
             {parentProject ? (
               <button

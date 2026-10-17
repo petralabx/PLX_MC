@@ -9,7 +9,7 @@ test.describe("project wiring (G2)", () => {
     await page.getByLabel("Set project health").selectOption("risk");
     await expect(page.locator(".mc .ph .r .pill", { hasText: "At risk" })).toBeVisible();
 
-    const ownerButton = page.locator(".mc .bkfacts .ntm-field-btn");
+    const ownerButton = page.locator(".mc .pv-strip .ntm-field-btn");
     await ownerButton.click();
     await page.locator(".ppick .pi", { hasText: "Stephen Alton" }).click();
     await expect(ownerButton).toContainText("Stephen Alton");
@@ -52,7 +52,7 @@ test.describe("project wiring (G2)", () => {
 
     // Overview lens (default): section collapse toggles, "Open →" reaches
     // bucket detail, and the lens switcher swaps to the card grid.
-    const firstToggle = page.locator(".mc .pv-sec-toggle").first();
+    const firstToggle = page.locator(".mc .pv-sec-chev").first();
     await expect(firstToggle).toHaveAttribute("aria-expanded", "true");
     await firstToggle.click();
     await expect(firstToggle).toHaveAttribute("aria-expanded", "false");

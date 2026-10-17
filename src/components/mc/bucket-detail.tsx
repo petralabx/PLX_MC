@@ -18,7 +18,12 @@ import {
   type Task,
   type Trace,
 } from "@/lib/mc-data";
-import { docLinkFromPrd, normalizeBucketPrd } from "@/lib/mc-data/doc-links";
+import {
+  SHAREPOINT_REGISTERS,
+  docLinkFromPrd,
+  normalizeBucketPrd,
+  type SharePointRegisterKey,
+} from "@/lib/mc-data/doc-links";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   addBucketComment,
@@ -43,6 +48,14 @@ import { Timeline } from "./timeline";
 // A static fallback (first fixture initiative) so the detail view always
 // resolves to a real bucket; live resolution goes through bucketById (EN-005).
 const FALLBACK_BUCKET = BUCKETS[0];
+
+const REGISTER_GLYPH: Record<SharePointRegisterKey, string> = {
+  plan: "▦",
+  roadmap: "▷",
+  milestones: "◆",
+  risks: "△",
+  documents: "❒",
+};
 
 interface BucketRollups {
   tasks: Task[];
@@ -85,7 +98,7 @@ export function mergeMilestones(fixture: Milestone[], ledger: Milestone[]): Mile
   return [...fixture, ...ledger];
 }
 
-function PrdLinkField({ bucketId, prd }: { bucketId: string; prd: string | null }) {
+export function PrdLinkField({ bucketId, prd }: { bucketId: string; prd: string | null }) {
   const [draft, setDraft] = useState(prd ?? "");
   const [message, setMessage] = useState<string | null>(null);
 
@@ -456,36 +469,23 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                 </span>
               </div>
               <div className="doclinks">
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">▦</span>
-                  <span className="t">Project Plan</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">▷</span>
-                  <span className="t">Roadmap</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">◆</span>
-                  <span className="t">Milestone Register</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">△</span>
-                  <span className="t">Risk Register</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" onClick={() => nav("files")}>
-                  <span className="ic">❒</span>
-                  <span className="t">Project Documents</span>
-                  <span className="ms">Library</span>
-                  <span className="ext">↗</span>
-                </button>
+                {SHAREPOINT_REGISTERS.map((register) =>
+                  register.key === "documents" ? (
+                    <button type="button" className="dl" key={register.key} onClick={() => nav("files")}>
+                      <span className="ic">{REGISTER_GLYPH[register.key]}</span>
+                      <span className="t">{register.label}</span>
+                      <span className="ms">{register.source}</span>
+                      <span className="ext">↗</span>
+                    </button>
+                  ) : (
+                    <button type="button" className="dl" key={register.key} title="coming soon">
+                      <span className="ic">{REGISTER_GLYPH[register.key]}</span>
+                      <span className="t">{register.label}</span>
+                      <span className="ms">{register.source}</span>
+                      <span className="ext">↗</span>
+                    </button>
+                  )
+                )}
                 {bucket.repos.map((repoId) => (
                   <button type="button" className="dl" key={repoId} onClick={() => nav("repos")}>
                     <span className="ic">{"</>"}</span>

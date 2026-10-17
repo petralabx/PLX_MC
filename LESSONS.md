@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-17 (ET) — TASK-3165: the STE-lite check measured the wrong unit, and batch receipts had no size cap
+
+- **What happened:** Sol's review of PR #352 found three P2s. A Markdown link counted every word of its label. The 20-word step budget reset at each sentence, so a 30-word step passed. `mc_update_tasks` returned every advice finding, about 19 MB for a valid 100-item batch, above Vercel's 4.5 MB response cap after the writes had committed.
+- **Root cause:** The tests checked each rule on one sentence only, and the batch test used one small item, not the largest valid input.
+- **Rule going forward:** Test a text rule on the unit the rule names (a whole step, a whole link). Test every batch response at its largest valid input, and cap the returned lists with a total and a `truncated` flag.
+
 ### 2026-10-16 (ET) — TASK-3151: the compliance gate ran before the task's evidence was handed in
 
 - **What happened:** PR #348 opened at 23:20:05 UTC, and the task's evidence (`POST /api/cursor/complete`) went in right after. The `compliance` job verified at 23:20:14 and blocked: no summary, checklist, rollback or test run. The evidence landed at 23:20:16, and a re-run of the job passed. #346 and #347 had the same order and passed only because their gate happened to run later.

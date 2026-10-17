@@ -57,6 +57,19 @@ describe("steLiteFindings", () => {
     expect(errors(text)).toEqual([]);
   });
 
+  it("counts a whole Markdown link as one word, whatever the length of its label", () => {
+    const label = n(26);
+    expect(steLiteFindings(`Open [${label}](https://example.test/a) now. ${n(22)}.`)).toEqual([]);
+    expect(errors(`${n(24)} [${label}](https://example.test/a) now.`)).toMatchObject([
+      { rule: "sentence-length", message: expect.stringMatching(/^Sentence has 26 words/) },
+    ]);
+    expect(errors(`${n(24)} ![${label}](img.png "A title") and [${label}][ref] and [a [nested] label](https://w.test/F_(x)).`)).toMatchObject([
+      { rule: "sentence-length", message: expect.stringMatching(/^Sentence has 29 words/) },
+    ]);
+    // A label that holds a full stop no longer splits the sentence.
+    expect(errors(`1. Open [Step one. ${n(25)}](u) now.`)).toEqual([]);
+  });
+
   it("does not end a sentence at e.g. or i.e.", () => {
     expect(errors("Use a short form, e.g. a list. It reads well, i.e. fast.")).toEqual([]);
   });
@@ -91,6 +104,23 @@ describe("steLiteFindings", () => {
       "   in the list, then click Ship and confirm the dialog closes and the status changes.";
     expect(errors(wrapped)).toMatchObject([{ rule: "step-length", message: expect.stringMatching(/^Step has 29 words/) }]);
     expect(errors(`> ${n(26)}.`)).toMatchObject([{ rule: "sentence-length" }]);
+  });
+
+  it("holds the whole numbered step to 20 words, not each sentence in it", () => {
+    expect(errors(`1. ${n(15)}. ${n(15)}.`)).toMatchObject([{ rule: "step-length", message: expect.stringMatching(/^Step has 30 words/) }]);
+    expect(errors(`1. ${n(10)}. ${n(10)}.`)).toEqual([]);
+    expect(errors(`1. ${n(20)}.`)).toEqual([]);
+    expect(errors(`1. ${n(11)}. ${n(10)}.`)).toMatchObject([{ rule: "step-length", message: expect.stringMatching(/^Step has 21 words/) }]);
+    // A wrapped step is one step; a nested numbered step is a step of its own.
+    expect(errors(`1. ${n(12)}.\n   ${n(9)}.`)).toMatchObject([{ rule: "step-length", message: expect.stringMatching(/^Step has 21 words/) }]);
+    expect(errors(`1. ${n(12)}.\n   1. ${n(12)}.\n   2. ${n(12)}.`)).toEqual([]);
+    // A bullet keeps the per-sentence limit of 25.
+    expect(errors(`- ${n(15)}. ${n(15)}.`)).toEqual([]);
+    // Passive voice stays advice, once per sentence in the step.
+    expect(steLiteFindings("1. The fix was released. The row was updated.")).toMatchObject([
+      { rule: "passive-voice", severity: "advice" },
+      { rule: "passive-voice", severity: "advice" },
+    ]);
   });
 });
 

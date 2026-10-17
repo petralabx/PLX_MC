@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-17 (ET) — TASK-3174: a commit went in after its pre-commit gate failed
+
+- **What happened:** A screenshot bundle under `artifacts/ui/` failed repo hygiene (no `REPORT.md` or `index.md`). The command ran `preflight.sh --mode pre-commit; git commit … && git push`, so the commit and push went through anyway. The next commit added the missing files.
+- **Root cause:** `;` ignores the exit code, so the gate was advisory in that command line.
+- **Rule going forward:** Chain a gate to the step it guards with `&&`, never `;`. Give every new `artifacts/` bundle a `REPORT.md` and an `index.md` before its first commit.
+
 ### 2026-10-17 (ET) — TASK-3165: the STE-lite check measured the wrong unit, and batch receipts had no size cap
 
 - **What happened:** Sol's review of PR #352 found three P2s. A Markdown link counted every word of its label. The 20-word step budget reset at each sentence, so a 30-word step passed. `mc_update_tasks` returned every advice finding, about 19 MB for a valid 100-item batch, above Vercel's 4.5 MB response cap after the writes had committed.

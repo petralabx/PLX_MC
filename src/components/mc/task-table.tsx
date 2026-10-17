@@ -8,7 +8,7 @@ import { ACTORS, PRIORITY, STAGES, STAGE_IDX, hasHumanAccountableOwner, inputReq
 import type { PriorityKey, Task } from "@/lib/mc-data";
 
 import { Assignee } from "./atoms";
-import { isDoneStage, isOutstanding, stageChipTone } from "./project-overview.helpers";
+import { isDoneStage, isOutstanding, stageChipTone, tableRows } from "./project-overview.helpers";
 import type { Nav } from "./route";
 
 const PRIORITY_KEYS = Object.keys(PRIORITY) as PriorityKey[];
@@ -30,15 +30,13 @@ export function TaskTable({
   const [showAll, setShowAll] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
 
-  const rows = showClosed && closed ? [...tasks, ...closed] : tasks;
-  const visible = showAll ? rows : rows.slice(0, cap);
-  const hidden = rows.length - visible.length;
+  const { rows: visible, hidden } = tableRows(tasks, closed, { showAll, showClosed, cap });
   const closedDone = closed?.filter(isDoneStage).length ?? 0;
   const closedCancelled = (closed?.length ?? 0) - closedDone;
 
   return (
     <div className="pv-tt">
-      {rows.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="pv-empty">{emptyText}</p>
       ) : (
         <>
@@ -57,7 +55,7 @@ export function TaskTable({
       )}
       {hidden > 0 && (
         <button type="button" className="pv-tfoot more" onClick={() => setShowAll(true)}>
-          Show all {rows.length} · {hidden} more ↓
+          Show all {tasks.length} · {hidden} more ↓
         </button>
       )}
       {closed && closed.length > 0 && (

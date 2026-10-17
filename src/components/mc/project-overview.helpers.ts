@@ -89,6 +89,17 @@ export function filterCounts(tasks: readonly Task[]): Record<TaskFilterKey, numb
   return { open: tasks.filter(isOutstanding).length, human: tasks.filter(needsHuman).length, all: tasks.length };
 }
 
+// Rows a TaskTable renders: the pool (capped unless showAll) plus the
+// revealed closed rows, and how many pool rows the cap hides.
+export function tableRows<T>(
+  pool: readonly T[],
+  closed: readonly T[] | undefined,
+  { showAll, showClosed, cap }: { showAll: boolean; showClosed: boolean; cap: number }
+): { rows: T[]; hidden: number } {
+  const shown = showAll ? [...pool] : pool.slice(0, cap);
+  return { rows: showClosed && closed ? [...shown, ...closed] : shown, hidden: pool.length - shown.length };
+}
+
 // ─── Schedule vs work ────────────────────────────────────────────────────────
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -155,8 +166,10 @@ export function schedulePace(
   const frac = Math.min(1, Math.max(0, (today.getTime() - started.getTime()) / span));
   const elapsedPct = Math.round(frac * 100);
   const delta = closedPct - elapsedPct;
-  // Overdue counts from the end of the target day.
-  const overdueDays = Math.max(0, Math.floor((today.getTime() - target.getTime()) / DAY_MS));
+  // Overdue counts calendar days after the target day; rounding absorbs the
+  // 23h / 25h days around a DST change.
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const overdueDays = Math.max(0, Math.round((todayStart.getTime() - target.getTime()) / DAY_MS));
   const pace: PaceKey = overdueDays > 0 ? "overdue" : delta >= 3 ? "ahead" : delta <= -3 ? "behind" : "on";
   return { started, target, frac, elapsedPct, delta, pace, overdueDays };
 }

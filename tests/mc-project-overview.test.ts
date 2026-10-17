@@ -19,6 +19,7 @@ import {
   schedulePace,
   shortDate,
   stageChipTone,
+  tableRows,
 } from "@/components/mc/project-overview.helpers";
 
 const task = (over: Partial<Task>): Task =>
@@ -196,6 +197,13 @@ describe("schedulePace", () => {
     expect(schedulePace(100, "2026.06.11", "Oct 01", new Date(2026, 9, 1, 18))!.pace).toBe("on");
   });
 
+  it("counts overdue in calendar days, across a DST change", () => {
+    // US DST starts 2026-03-08: Mar 01 → Mar 20 00:30 is 19 calendar days but
+    // under 19 × 24h in America/New_York (run with TZ=America/New_York).
+    const s = schedulePace(10, "2026.01.01", "2026.03.01", new Date(2026, 2, 20, 0, 30))!;
+    expect(s.overdueDays).toBe(19);
+  });
+
   it("clamps elapsed to 0 before the start", () => {
     expect(schedulePace(0, "2026.06.01", "2026.09.09", at(4, 1))!.elapsedPct).toBe(0);
   });
@@ -210,5 +218,28 @@ describe("schedulePace", () => {
     expect(schedulePace(50, "soon", "2026.09.09", at(6, 1))).toBeNull();
     expect(schedulePace(50, "2026.09.09", "2026.06.01", at(6, 1))).toBeNull();
     expect(schedulePace(50, "2026.06.01", "2026.06.01", at(6, 1))).toBeNull();
+  });
+});
+
+describe("tableRows", () => {
+  const pool = Array.from({ length: 10 }, (_, i) => `open-${i}`);
+  const closed = ["closed-a", "closed-b"];
+
+  it("caps the pool and counts what the cap hides", () => {
+    const { rows, hidden } = tableRows(pool, closed, { showAll: false, showClosed: false, cap: 8 });
+    expect(rows).toEqual(pool.slice(0, 8));
+    expect(hidden).toBe(2);
+  });
+
+  it("revealed closed rows always show, even when the pool fills the cap", () => {
+    const { rows, hidden } = tableRows(pool, closed, { showAll: false, showClosed: true, cap: 8 });
+    expect(rows).toEqual([...pool.slice(0, 8), ...closed]);
+    expect(hidden).toBe(2);
+  });
+
+  it("show all lists the whole pool, then the closed rows", () => {
+    const { rows, hidden } = tableRows(pool, closed, { showAll: true, showClosed: true, cap: 8 });
+    expect(rows).toEqual([...pool, ...closed]);
+    expect(hidden).toBe(0);
   });
 });

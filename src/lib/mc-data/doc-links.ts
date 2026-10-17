@@ -5,18 +5,10 @@
 // GitHub blob in a tracked repo. Only http(s) URLs become links; anything else
 // (bare ids, javascript:, data:, junk) is not a link.
 
-import type { Bucket, Project } from "./types";
-
 export interface DocLink {
   href: string;
   /** File name from the URL path, or the host when the path is empty. */
   label: string;
-}
-
-export interface ScopedDocLink extends DocLink {
-  scope: "project" | "bucket";
-  scopeId: string;
-  scopeName: string;
 }
 
 function lastPathSegment(url: URL): string | null {
@@ -56,21 +48,27 @@ export function docLinkFromPrd(prd: string | null | undefined): DocLink | null {
   return { href: url.toString(), label: lastPathSegment(url) ?? url.host };
 }
 
-/** Project link first, then each bucket's, in the order the buckets are given. */
-export function projectDocLinks(
-  project: Pick<Project, "id" | "name" | "prd">,
-  buckets: ReadonlyArray<Pick<Bucket, "id" | "name" | "prd">>
-): ScopedDocLink[] {
-  const links: ScopedDocLink[] = [];
-  const projectLink = docLinkFromPrd(project.prd);
-  if (projectLink) {
-    links.push({ ...projectLink, scope: "project", scopeId: project.id, scopeName: project.name });
-  }
-  for (const bucket of buckets) {
-    const link = docLinkFromPrd(bucket.prd);
-    if (link) {
-      links.push({ ...link, scope: "bucket", scopeId: bucket.id, scopeName: bucket.name });
-    }
-  }
-  return links;
+/** Which icon a spec link earns: a TASK-* page, a GitHub issue, or a document. */
+export function docLinkKind(link: DocLink): "task" | "issue" | "doc" {
+  if (/^TASK-\d+/i.test(link.label)) return "task";
+  if (/\/issues\/\d+/.test(new URL(link.href).pathname)) return "issue";
+  return "doc";
 }
+
+// The five SharePoint registers every project and initiative links to — one
+// list so the bucket aside and the project resource tiles never drift.
+export type SharePointRegisterKey = "plan" | "roadmap" | "milestones" | "risks" | "documents";
+
+export interface SharePointRegister {
+  key: SharePointRegisterKey;
+  label: string;
+  source: "MS List" | "Library";
+}
+
+export const SHAREPOINT_REGISTERS: readonly SharePointRegister[] = [
+  { key: "plan", label: "Project Plan", source: "MS List" },
+  { key: "roadmap", label: "Roadmap", source: "MS List" },
+  { key: "milestones", label: "Milestone Register", source: "MS List" },
+  { key: "risks", label: "Risk Register", source: "MS List" },
+  { key: "documents", label: "Project Documents", source: "Library" },
+];

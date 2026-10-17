@@ -1512,8 +1512,16 @@
     flex: 1 1 100%;
   }
 
+  /* 320–360px phones: the bar may shrink and the count may wrap, so the
+     section's overflow: hidden never clips the count. */
   .mc .pv-sec-r .track .bar {
-    flex-basis: 96px;
+    flex: 0 1 96px;
+    min-width: 48px;
+  }
+
+  .mc .pv-sec-r .track .ct {
+    min-width: 0;
+    white-space: normal;
   }
 }
 

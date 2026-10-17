@@ -21,7 +21,7 @@ export async function createForecastSourceTables(db: Client): Promise<void> {
     );
     CREATE TABLE sage.oe_order_detail (
       orduniq text, linenum text, linetype text, item text, "desc" text, expdate text, qtyordered text, qtyshipped text,
-      qtybackord text, qtyshptodt text, origqty text, ordunit text, unitprice text, complete text, misccharge text DEFAULT ''
+      qtybackord text, qtyshptodt text, origqty text, ordunit text, unitprice text, category text, complete text, misccharge text DEFAULT ''
     );
     CREATE TABLE public.assembly_order (
       id bigint PRIMARY KEY, nameamo_c text, status text, datescheduled date, idfinprod bigint, idbatch bigint,
@@ -46,10 +46,10 @@ export async function loadForecastSource(db: Client): Promise<void> {
   for (const d of source.orderDetails) {
     await db.query(
       `INSERT INTO sage.oe_order_detail (orduniq, linenum, linetype, item, "desc", expdate, qtyordered, qtyshipped, qtybackord,
-         qtyshptodt, origqty, ordunit, unitprice, complete)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+         qtyshptodt, origqty, ordunit, unitprice, category, complete)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
       [d.orduniq, d.linenum, d.linetype, d.item, d.desc, d.expdate, d.qtyordered, d.qtyshipped, d.qtybackord, d.qtyshptodt,
-        d.origqty, d.ordunit, d.unitprice, d.complete]
+        d.origqty, d.ordunit, d.unitprice, d.category, d.complete]
     );
   }
   for (const f of source.finishedProducts) {

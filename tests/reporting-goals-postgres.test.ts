@@ -675,6 +675,37 @@ describe("revenue forecast (TASK-3151)", () => {
       expect(await mcQuery(`SELECT 1 FROM ${table} WHERE run_id = ANY($1::bigint[])`, [[waiting.run_id, read.run_id]]), table).toEqual([]);
     }
   });
+
+  it("without Sage's item category (a login granted before TASK-3177), the forecast fills in and only the category filter waits", async () => {
+    const grantScript = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants-forecast.sql"), "utf8");
+    await reportingAdmin.query(`REVOKE SELECT ("category") ON sage.oe_order_detail FROM mc_goals_ro`);
+    try {
+      await allowNextUserRefresh();
+      const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T17:30:00Z"));
+      const run = await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+      expect(run).toMatchObject({ status: "succeeded", error: null });
+      expect(run.rowCounts).toMatchObject({ forecastLines: 15, forecastAos: 21 });
+      const [summary] = await mcQuery(
+        `SELECT access, missing, category_missing FROM report_snap_forecast_summary WHERE run_id = $1`,
+        [run.id]
+      );
+      expect(summary).toEqual({ access: "read", missing: [], category_missing: ["sage.oe_order_detail.category"] });
+      const forecast = ready((await loadGoalsView()).forecast);
+      expect(forecast.categoryMissing).toEqual(["sage.oe_order_detail.category"]);
+      expect(forecast.rows).toHaveLength(18);
+      expect(forecast.rows.every((r) => r.category === null && r.channel === null)).toBe(true);
+      expect(money(forecast.atRiskCents)).toBe("40703.25");
+    } finally {
+      await reportingAdmin.query(grantScript);
+    }
+    // Re-running the forecast's grant script grants the category: the next refresh stores it, upper case and trimmed.
+    await allowNextUserRefresh();
+    const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T17:40:00Z"));
+    const run = await runRefresh(claim.run, { fetchRates, sleep: noSleep });
+    const [summary] = await mcQuery(`SELECT category_missing FROM report_snap_forecast_summary WHERE run_id = $1`, [run.id]);
+    expect(summary).toEqual({ category_missing: [] });
+    expect((await loadForecast(run))?.data.lines).toEqual(FORECAST.data.lines);
+  });
 });
 
 describe("shipment lines (TASK-3144)", () => {

@@ -11,6 +11,7 @@
 // against Sage's own screens (README, "Interpretations to confirm").
 
 import { addDays, monthEnd, monthLabel, monthStart } from "./calendar";
+import customerClassesJson from "./customer-classes.json";
 import { convertCents, prorateCents, toCents } from "./money";
 import { missingByRelation } from "./queries/read-access";
 import { normalizeName, type GoalsModel } from "./rules";
@@ -27,6 +28,40 @@ export const FORECAST_BUCKET_LABELS: Record<ForecastBucket, string> = {
   late: "Late",
   not_planned: "Not planned",
 };
+
+// ─── Customer class and item category (TASK-3177) ───────────────────────────
+
+export const CUSTOMER_CLASSES = ["Exclusive Manufacturing", "Exclusive Distribution", "Mixed", "Unclassified"] as const;
+export type CustomerClass = (typeof CUSTOMER_CLASSES)[number];
+
+const CLASS_BY_CODE = new Map<string, CustomerClass>(
+  Object.entries(customerClassesJson.classes as Record<string, string[]>).flatMap(([cls, codes]) =>
+    codes.map((code) => [code, cls as CustomerClass] as const)
+  )
+);
+
+/**
+ * The customer's class from the sales workbook's "Customer categories" sheet
+ * (customer-classes.json, written by scripts/goals-customer-classes.mjs); a
+ * customer not on it is Unclassified.
+ */
+export function customerClassOf(code: string | null | undefined): CustomerClass {
+  return CLASS_BY_CODE.get((code ?? "").trim().toUpperCase()) ?? "Unclassified";
+}
+
+export const CHANNELS = ["Manufacturing", "Distribution"] as const;
+export type Channel = (typeof CHANNELS)[number];
+
+/** The workbook's manufacturing categories; every other category is Distribution. */
+export const MANUFACTURING_CATEGORIES: readonly string[] = [
+  "BIOPH", "BRANDS", "CROWN", "LIQUID", "LSRVCA", "PHAD", "PLABEL", "MFGLBR", "MFGOHE", "MFGPKG", "MFGRM",
+];
+
+/** A Sage item category's channel; null when the line has no category. */
+export function channelOf(category: string | null): Channel | null {
+  if (!category) return null;
+  return MANUFACTURING_CATEGORIES.includes(category) ? "Manufacturing" : "Distribution";
+}
 
 // ─── The link: Sage ORDNUMBER + ITEM ↔ the AO's order list + item code ──────
 
@@ -125,9 +160,13 @@ export interface ForecastRow {
   lineNo: number | null;
   customerCode: string | null;
   customer: string | null;
+  customerClass: CustomerClass;
   po: string | null;
   item: string;
   description: string | null;
+  /** Sage's item category on the line, and its channel; null when it has none (or the login can't read it yet). */
+  category: string | null;
+  channel: Channel | null;
   expected: IsoDate;
   /** Expected before today (still due this month). */
   overdue: boolean;
@@ -164,9 +203,12 @@ function toRow(line: ForecastLineRow, key: string, qtyHundredths: number, ao: Fo
     lineNo: line.lineNo,
     customerCode: line.customerCode,
     customer: line.customer,
+    customerClass: customerClassOf(line.customerCode),
     po: line.po,
     item: line.item,
     description: line.description,
+    category: line.category,
+    channel: channelOf(line.category),
     expected: line.expected,
     overdue: line.expected < today,
     qty: qtyHundredths / 100,
@@ -414,6 +456,8 @@ export interface ForecastReady {
   otherCurrencies: { currency: string; cents: number; rows: number }[];
   /** Open AOs scheduled this month with no open order behind them: a note, never revenue. */
   unordered: { count: number; pieces: number };
+  /** The item category columns the login lacked (none: rows carry their category); null for a run stored before categories. */
+  categoryMissing: string[] | null;
 }
 
 export type ForecastView =
@@ -469,6 +513,7 @@ export function buildForecast(input: ForecastInput): ForecastView {
     pace: coveredDays > 0 ? { cents: prorateCents(invoicedCents, workingDays, coveredDays), coveredDays, workingDays } : null,
     otherCurrencies: otherCurrencyTotals(rows),
     unordered: productionWithoutOrders(snapshot.data.aos, model.today),
+    categoryMissing: snapshot.data.categoryMissing ?? null,
   };
 }
 
@@ -481,15 +526,56 @@ export const FORECAST_FILTERS: { key: ForecastFilter; label: string }[] = [
   ...FORECAST_BUCKETS.map((bucket) => ({ key: bucket, label: FORECAST_BUCKET_LABELS[bucket] })),
 ];
 
-/** Rows in the chosen bucket whose order, customer (name or code), PO, item, description or AO contain the search, ignoring case and spacing. */
-export function filterForecastRows(rows: readonly ForecastRow[], opts: { filter: ForecastFilter; query: string }): ForecastRow[] {
+/** The class filter: every class, or one. */
+export type ForecastClassFilter = "all" | CustomerClass;
+
+/** The category filter: every row, a channel, one Sage category, or the rows with none. */
+export type ForecastCategoryFilter = "all" | `channel:${Channel}` | `category:${string}` | "none";
+
+export interface ForecastListFilters {
+  filter: ForecastFilter;
+  query: string;
+  customerClass?: ForecastClassFilter;
+  category?: ForecastCategoryFilter;
+}
+
+function matchesCategory(row: ForecastRow, category: ForecastCategoryFilter): boolean {
+  if (category === "all") return true;
+  if (category === "none") return row.category === null;
+  if (category.startsWith("channel:")) return row.channel === category.slice("channel:".length);
+  return row.category === category.slice("category:".length);
+}
+
+/** The category filter's choices for these rows: both channels, then each category present (A to Z), then None when a row has none. */
+export function forecastCategoryOptions(rows: readonly ForecastRow[]): { key: ForecastCategoryFilter; label: string }[] {
+  const categories = [...new Set(rows.flatMap((row) => (row.category ? [row.category] : [])))].sort();
+  return [
+    { key: "all", label: "All categories" },
+    ...CHANNELS.map((channel) => ({ key: `channel:${channel}` as const, label: channel })),
+    ...categories.map((category) => ({ key: `category:${category}` as const, label: `${category} (${channelOf(category)})` })),
+    ...(rows.some((row) => row.category === null) ? [{ key: "none" as const, label: "No category" }] : []),
+  ];
+}
+
+/**
+ * Rows in the chosen bucket, customer class and category whose order, customer
+ * (name or code), PO, item, description, category or AO contain the search,
+ * ignoring case and spacing.
+ */
+export function filterForecastRows(rows: readonly ForecastRow[], opts: ForecastListFilters): ForecastRow[] {
   const needle = normalizeName(opts.query);
+  const customerClass = opts.customerClass ?? "all";
+  const category = opts.category ?? "all";
   return rows.filter(
     (row) =>
       (opts.filter === "all" || row.bucket === opts.filter) &&
+      (customerClass === "all" || row.customerClass === customerClass) &&
+      matchesCategory(row, category) &&
       (!needle ||
         normalizeName(
-          [row.orderNo, row.customer, row.customerCode, row.po, row.item, row.description, row.ao?.number].filter(Boolean).join(" ")
+          [row.orderNo, row.customer, row.customerCode, row.po, row.item, row.description, row.category, row.ao?.number]
+            .filter(Boolean)
+            .join(" ")
         ).includes(needle))
   );
 }

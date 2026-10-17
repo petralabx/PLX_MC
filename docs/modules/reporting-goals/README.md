@@ -250,8 +250,27 @@ traceable to a refresh run and a named query.
       PO, item, description, still to ship, unit price, value, CAD, bucket, AO,
       bulk batch), bucket chips with counts, a search (order, customer, PO, item,
       description, AO) and CAD totals that follow both.
+    - **Filters** (TASK-3177): customer class and item category, beside the
+      search. They change the list, the chip counts and the CAD total, never
+      the four numbers. **Customer class** comes from the sales workbook's
+      "Customer categories" sheet (Vince's 5 Oct list, plus customers derived
+      from the item categories they bought): Exclusive Manufacturing, Exclusive
+      Distribution or Mixed; a customer not on it is Unclassified. It is
+      committed as `customer-classes.json`; when a new workbook arrives, run
+      `node scripts/goals-customer-classes.mjs <workbook.xlsx> "<source note>"`
+      and commit the JSON. **Item category** is Sage's `CATEGORY` on the order
+      line (`queries/forecast-orders.ts`, `CATEGORY_SQL`). Its channel is
+      Manufacturing for BIOPH, BRANDS, CROWN, LIQUID, LSRVCA, PHAD, PLABEL,
+      MFGLBR, MFGOHE, MFGPKG and MFGRM (`MANUFACTURING_CATEGORIES`), else
+      Distribution. The filter offers both channels, each category on the
+      list, and No category. Its column is checked on its own
+      (`FORECAST_CATEGORY_COLUMNS`): without it the forecast still fills in,
+      lines carry no category, and the filter says it waits for read access
+      (`report_snap_forecast_summary.category_missing`; NULL on runs stored
+      before migration 045).
     - **Storage**: `report_snap_forecast_line`, `report_snap_forecast_ao` and
-      `report_snap_forecast_summary` (migration 043), kept with their run (90
+      `report_snap_forecast_summary` (migration 043; the line's category and
+      the summary's `category_missing`, migration 045), kept with their run (90
       days). **Workbook**: the Forecast sheet holds the rows as values and the
       totals, the four numbers and the hit rates as formulas.
 
@@ -343,6 +362,9 @@ the rows (`shipments`), built from the same snapshot and entries as the cards.
    the reporting database for the existing `mc_goals_ro` login (fresh installs
    get the same grants from `readonly-grants.sql`). Until then the section
    waits for read access and everything else works.
+   Forecast filters (TASK-3177): apply migration 045 the same way before its
+   code deploys, then re-run `readonly-grants-forecast.sql` so the login can
+   read Sage's item category. Until then only the item category filter waits.
 6. Before relying on the forecast, reconcile three to five open orders against
    Sage's O/E Order Entry screen and FileMaker, one rule at a time. Each rule is
    one named fragment or function, so a correction is one edit:
@@ -523,7 +545,7 @@ Depended on by: nothing yet.
 - `src/components/mc/goals/` — the page; `src/components/mc/charts/column-chart.tsx` — its charts; `src/styles/mc-goals.css`
 - `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants; `readonly-grants-forecast.sql` — the forecast's grants for the existing login; `readonly-grants-shipment-lines.sql` — the invoice lines' grants for the existing login
 - What shipped (TASK-3144): `src/lib/reporting/goals/shipment-lines.ts` (pure), `queries/shipment-lines.ts`, `queries/read-access.ts` (the catalog check it shares with the forecast); `src/app/api/reporting/goals/runs/[id]/shipment-lines/route.ts`; `db/migrations/044_reporting_goals_shipment_lines.sql` (+ rollback); `tests/reporting-goals-shipment-lines{,-export}.test.ts` and the shipment lines block of `tests/reporting-goals-postgres.test.ts` (`tests/reporting-goals-shipment-lines-replica.ts` loads `shipment-lines-source.json`); `e2e/goals-shipment-lines.spec.ts`
-- Revenue forecast (TASK-3151): `src/lib/reporting/goals/forecast.ts` (pure), `forecast-read.ts`, `forecast-store.ts`, `queries/forecast-{orders,assembly-orders,access}.ts`; `src/components/mc/goals/forecast.tsx`; `db/migrations/043_reporting_goals_forecast.sql` (+ rollback); `tests/reporting-goals-forecast*.test.ts` and the forecast block of `tests/reporting-goals-postgres.test.ts` (`tests/reporting-goals-forecast-replica.ts` builds the source tables from `forecast-source.json`); `e2e/goals-forecast.spec.ts`
+- Revenue forecast (TASK-3151): `src/lib/reporting/goals/forecast.ts` (pure), `forecast-read.ts`, `forecast-store.ts`, `queries/forecast-{orders,assembly-orders,access}.ts`, `customer-classes.json` (written by `scripts/goals-customer-classes.mjs`, TASK-3177); `src/components/mc/goals/forecast.tsx`; `db/migrations/043_reporting_goals_forecast.sql` and `045_reporting_goals_forecast_category.sql` (+ rollbacks); `tests/reporting-goals-forecast*.test.ts` and the forecast block of `tests/reporting-goals-postgres.test.ts` (`tests/reporting-goals-forecast-replica.ts` builds the source tables from `forecast-source.json`); `e2e/goals-forecast.spec.ts`
 - `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16), route, page and workbook tests against the 2026-10-14 figures (the workbook's LibreOffice recalculation skips where `soffice` isn't installed, as in CI, and logs why); `tests/reporting-goals-entries*.test.ts` — validation, the import plan, and the entry and import routes against PG16 (`tests/reporting-goals-workbook.ts` builds the workbooks); `tests/reporting-goals-roundtrip.test.ts` — the real export read back by the import (the round-trip guarantee)
 - `e2e/goals.spec.ts`, `e2e/goals-export.spec.ts`, `e2e/ui-goals-{responsive,a11y}.spec.ts` — the page in a browser (`e2e/helpers/goals.ts` serves the same fixture); `e2e/goals-entries.spec.ts`, `e2e/ui-goals-entries-{responsive,a11y}.spec.ts` — adding, editing, deleting and importing entries (`e2e/helpers/goals-entries.ts` serves the entries API in memory)
 

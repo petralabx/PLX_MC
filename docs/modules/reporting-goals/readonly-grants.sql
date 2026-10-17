@@ -49,6 +49,11 @@ GRANT SELECT (orduniq, ordnumber, customer, bilname, ponumber, type, expdate, or
 GRANT SELECT (orduniq, linenum, linetype, item, "desc", expdate, qtyordered, qtyshipped, ordunit, unitprice)
     ON sage.oe_order_detail TO mc_goals_ro;
 
+-- The line's item category, for the forecast's category filter (TASK-3177;
+-- FORECAST_CATEGORY_COLUMNS). Without it the forecast still fills in, and only
+-- that filter waits.
+GRANT SELECT (category) ON sage.oe_order_detail TO mc_goals_ro;
+
 GRANT SELECT (id, nameamo_c, status, datescheduled, idfinprod, idbatch, idbatch_pre, oelist_c, qtytotal, unitsperbox)
     ON public.assembly_order TO mc_goals_ro;
 

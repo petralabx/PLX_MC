@@ -69,6 +69,14 @@ describe("BucketDetail header", () => {
     expect(html).not.toContain("/ Spec");
   });
 
+  it("lets a long parent-project link wrap like the spec link", () => {
+    const bucket = addBucket({ name: "Long parent" });
+    updateBucket(bucket.id, { project: "PRJ-PORTAL-GOLIVE" });
+    expect(render(bucket.id)).toMatch(/<button type="button" class="ini-klink ini-project">/);
+    const css = readFileSync(join(process.cwd(), "src/styles/mc-initiative.css"), "utf8");
+    expect(css).toMatch(/\.mc \.ini-klink\.ini-project \{[^}]*min-width: 0;[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;/);
+  });
+
   it("offers + Add spec when the initiative has none", () => {
     const bucket = addBucket({ name: "No spec yet" });
     const html = render(bucket.id);

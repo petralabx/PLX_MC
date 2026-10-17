@@ -34,9 +34,9 @@ const h = vi.hoisted(() => ({
 const rows = () => h.rows as Map<string, Row>;
 const events = () => h.events as Ev[];
 
-// sp_mcp_codex stands in for the principal an operator grants task.cancel /
-// task.reopen (none holds them in the reviewed registry today); every other
-// principal keeps its real grants.
+// sp_mcp_codex stands in for a non-steward principal granted task.cancel /
+// task.reopen on top of its real grant (sp_mcp_ledger already holds both);
+// every other principal keeps its real grants.
 vi.mock("@/lib/permissions/grants", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/permissions/grants")>();
   return {

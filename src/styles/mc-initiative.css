@@ -3,12 +3,18 @@
    width, so the page re-tiers when the nav opens or closes), hover under
    (hover: hover), --p-* tokens only. Handoff "Screen 2 — Initiative page".
    The page keeps the legacy .ph / .bk / .blk / .doclinks / .risk skins and
-   only adds the kicker line, the spec link and the two-column body here. */
+   only adds the kicker line, the spec link and the two-column body here.
+   Ultra-wide centring comes from the shell (mc-shell.css grows --p-gutter
+   to (main − 1560px) / 2). The header uses it as is; see the strip/body rule
+   below for the fixed-width zones. */
 
-/* Ultra-wide: header and body content centre in a 1560px column while the
-   hairlines stay full-bleed (the padding grows, the border does not move). */
-.mc .ini-page > .ph {
-  padding-inline: max(var(--p-gutter), calc((100% - 1560px) / 2));
+/* The strip's 440px facts zone and the ≤420px aside pad with --p-gutter, so
+   the grown ultra-wide gutter would eat them. The strip and body take the
+   extra as outer padding instead, and their insides keep the base gutter. */
+.mc .ini-page .pv-strip,
+.mc .ini-page .ini-body {
+  padding-inline: calc(var(--mc-col-gutter) - var(--mc-gutter-base));
+  --p-gutter: var(--mc-gutter-base);
 }
 
 .mc .ini-page .ini-ph-main {
@@ -117,7 +123,6 @@
 .mc .ini-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  padding-inline: max(0px, calc((100% - 1560px) / 2));
 }
 
 .mc .ini-body .ini-main,
@@ -186,12 +191,6 @@
 .mc .ini-main .tl {
   padding: 0;
   overflow-x: visible;
-}
-
-/* Overview strip (shared with the Project page, overview-strip.tsx): centre
-   its content with the header on ultra-wide screens. */
-.mc .ini-page .pv-strip {
-  padding-inline: max(0px, calc((100% - 1560px) / 2));
 }
 
 /* Project picker: a native select in the dashed-underline field skin. */

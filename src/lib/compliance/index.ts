@@ -6,6 +6,8 @@
 export * from "./types";
 export * from "./risk";
 export * from "./verify";
+export * from "./ste-lite";
+export * from "./evidence-standard";
 export * from "./tracked-repos";
 // Type-only (erased at build) so client screens can type the Activity payload
 // without pulling the server loaders into the bundle.

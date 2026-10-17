@@ -5,7 +5,7 @@
 // Before this, MCP-created tasks landed ownerless and the EN-003 gate stranded
 // them in Planned until a human edited them in the UI.
 // Seams are mocked in-memory (same technique as mcp-complete-evidence.test.ts).
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 import type { CreateTaskInput } from "@/lib/sync";
 
@@ -98,5 +98,38 @@ describe("actionCreateTask accountable-owner defaulting", () => {
       accountableOwner: "stephen",
     });
     expect(db.created.at(-1)?.accountableOwner).toBe("stephen");
+  });
+});
+
+// TASK-3165: a task a person must verify gets an STE-lite description from an
+// agent. Warn-only until 2026-10-24, then the create is refused.
+describe("actionCreateTask evidence standard (TASK-3165)", () => {
+  const long = `${Array.from({ length: 30 }, (_, i) => `word${i}`).join(" ")}.`;
+  const create = (over: Record<string, unknown>) =>
+    actionCreateTask(identityFor("cos@petrasoap.com"), { title: "human test", bucket: "BKT-OPS", reporter: "x", description: long, ...over });
+  const at = (iso: string) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(iso));
+  };
+  afterEach(() => vi.useRealTimers());
+
+  it("creates the task during the week and returns the warning", async () => {
+    at("2026-10-20T12:00:00Z");
+    const res = await create({ kind: "human-test" });
+    expect(db.created).toHaveLength(1);
+    expect(res).toMatchObject({ evidenceStandard: { applies: true, mode: "warn" } });
+  });
+
+  it("refuses the create after the week, before any task exists", async () => {
+    at("2026-10-25T12:00:00Z");
+    await expect(create({ labels: ["verify:human"] })).rejects.toMatchObject({ code: "evidence_standard", status: 400 });
+    expect(db.created).toHaveLength(0);
+  });
+
+  it("leaves a task that needs no human verification alone", async () => {
+    at("2026-10-25T12:00:00Z");
+    const res = await create({ kind: "code" });
+    expect(db.created).toHaveLength(1);
+    expect(res).not.toHaveProperty("evidenceStandard");
   });
 });

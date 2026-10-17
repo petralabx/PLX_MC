@@ -229,7 +229,7 @@ server.tool(
 
 server.tool(
   "mc_create_task",
-  "Create a new MC task. repos[] items are MC registry ids (portal-web, plx-mc, agentic-swarm) — not GitHub slugs. MC_REPO / X-MC-Repo stays the full GitHub slug for checkout/compliance and is a different namespace from repos[]. Pass kind; omitted kind defaults to kind:needs-review.",
+  "Create a new MC task. repos[] items are MC registry ids (portal-web, plx-mc, agentic-swarm) — not GitHub slugs. MC_REPO / X-MC-Repo stays the full GitHub slug for checkout/compliance and is a different namespace from repos[]. Pass kind; omitted kind defaults to kind:needs-review. When a person must verify the task (label verify:human or kind human-test), write the description in STE-lite: one instruction per sentence, 20 words per numbered step, 25 per other sentence. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard.",
   {
     title: z.string().min(1),
     bucket: z.string().min(1),
@@ -386,7 +386,7 @@ server.tool(
 
 server.tool(
   "mc_complete_task",
-  "Complete agent work for a checkout credential. verificationCommands and rollback are required.",
+  "Complete agent work for a checkout credential. verificationCommands and rollback are required. When a person must verify the work (verify:human, kind:human-test, or a high-risk filesChanged), the summary must be STE-lite; pass filesChanged. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard; fix the summary and call again on the same checkout.",
   {
     checkoutId: z.string().min(1),
     summary: z.string().min(1),

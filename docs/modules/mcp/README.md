@@ -36,6 +36,7 @@ Routing behavior is unchanged; owner: Vince. No migration is needed.
 | Audit | `mcp.tool.invoked` events in `mc_events` via `src/lib/mcp/audit.ts` |
 | Capture hook | `scripts/compliance-checkout.mjs` prefers `/api/cursor/checkout` when `MC_MCP_API_KEY` set; missing `MC_TASK_ID` calls `/api/cursor/routing/suggest` and stops for explicit selection/`MC_CREATE_TASK=1` |
 | Agent read tools | `src/lib/mcp/read-actions.ts` — `task.read` only, never a write grant (table below) |
+| Evidence standard | `src/lib/mcp/evidence-standard-guard.ts` — STE-lite on agent text for work a person must verify (TASK-3165): `mc_create_task` and `mc_update_task` descriptions, the `mc_complete_task` summary. Results carry `evidenceStandard`; after 2026-10-24 a finding refuses with 400 `evidence_standard` |
 | Tool errors | `installMcpToolErrorEnvelope` (`src/lib/mcp/envelope.ts`) — a thrown `ApiError` returns `isError` + `{ "error": { "code", "message", "hint"? } }`; stdio mirrors it in `tools/plx-mc-mcp/lib/tool-errors.mjs` |
 | REST fallback CLI | `node scripts/mc.mjs checkout --task TASK-n --repo owner/name` · `complete --checkout dsp_x --summary … --verify "cmd" --rollback "…"` (refused without ≥1 `--verify` and a `--rollback`) · `status --task TASK-n` — env `MC_BASE_URL`, `MC_MCP_API_KEY`, `MC_OPERATOR_EMAIL`, `MC_REPO`; JSON out, exit 1 with the error code |
 

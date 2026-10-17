@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { resolveCompletionAutonomy } from "@/lib/routing";
+import { classifyRiskTier, evidenceStandardReport, requiresHumanVerification } from "@/lib/compliance";
 import { checkout, complete } from "@/lib/compliance/service";
 import * as complianceRepo from "@/lib/compliance/repo";
 import {
@@ -37,6 +38,7 @@ import {
   requireMcpActor,
 } from "@/lib/routing/mutations/actors";
 import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
+import { createLabelsWithKind } from "@/lib/tasks/kind";
 import {
   assertBucketProjectAccess,
   assertProjectIdAccess,
@@ -57,6 +59,7 @@ export type { SearchTasksInput } from "./task-search-schema";
 import { TERMINAL_TASK_STAGES } from "./task-update-actions";
 import { resolveCheckoutRepo } from "./checkout-repo";
 import { taskLink } from "./envelope";
+import { assertEvidenceStandard } from "./evidence-standard-guard";
 import { assertMayCloseOrReopen, cancelContextFor } from "./task-cancel-actions";
 import { buildHonestyFields } from "./honesty";
 import { syncMetaForTask } from "./sync-meta";
@@ -267,6 +270,15 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
   assertAgentAssigneeAllowed(identity.actor, input.assignee, { capability: "task.create" });
   const principal = aclPrincipalFromMcp(identity);
   await assertBucketProjectAccess(input.bucket, principal);
+  // Evidence standard (TASK-3165): a task a person must verify gets an STE-lite
+  // description. Checked before the idempotency claim, like the checks above,
+  // against the labels createTask will store.
+  const evidenceStandard = evidenceStandardReport(
+    input.description ?? "",
+    requiresHumanVerification(createLabelsWithKind(input.labels, input.kind))
+  );
+  assertEvidenceStandard("The task description", evidenceStandard);
+  const standardMeta = evidenceStandard.applies ? { evidenceStandard } : {};
   const create = (options?: Parameters<typeof createTask>[2]) =>
     createTask(
       {
@@ -284,7 +296,7 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
     );
   if (idempotencyKey === undefined) {
     const task = await create();
-    return { task, taskId: task.id, link: taskLink(task.id), sync: await syncMetaForTask(task.id) };
+    return { task, taskId: task.id, link: taskLink(task.id), sync: await syncMetaForTask(task.id), ...standardMeta };
   }
 
   // The checks above run before the claim, so a refused call does not use up
@@ -310,6 +322,7 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
       taskId: created.id,
       link: taskLink(created.id),
       sync: await syncMetaForTask(created.id),
+      ...standardMeta,
     };
   }
   const row = await getEntity("task", outcome.taskId);
@@ -330,6 +343,7 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
     link: taskLink(outcome.taskId),
     sync: await syncMetaForTask(outcome.taskId),
     replayed: true,
+    ...standardMeta,
   };
 }
 
@@ -675,9 +689,10 @@ export async function actionComplete(
     await assertTaskProjectAccess(existingDispatch.taskId, aclPrincipalFromMcp(identity));
   }
   let autonomy: ReturnType<typeof resolveCompletionAutonomy> | undefined;
+  let task: Task | undefined;
   if (existingDispatch?.taskId) {
     const row = await getEntity("task", existingDispatch.taskId);
-    const task = row?.data as unknown as Task | undefined;
+    task = row?.data as unknown as Task | undefined;
     if (!task || typeof task.bucket !== "string" || typeof existingDispatch.repo !== "string") {
       throw new ApiError("autonomy_approval_required", "Checkout autonomy scope cannot be read; completion is refused.", 403);
     }
@@ -691,6 +706,17 @@ export async function actionComplete(
       );
     }
   }
+  // Evidence standard (TASK-3165), before complete() records anything, so a
+  // refused hand-in leaves no task.completed event or evidence behind. The
+  // checkout stays open until the PR merges or closes: fix the text and send it
+  // again. filesChanged gives the tier the PR gate will likely see; the gate,
+  // which reads the PR's real paths and labels, stays the authority. The report
+  // is always returned, because the gate may still find the change high-risk.
+  const evidenceStandard = evidenceStandardReport(
+    input.summary,
+    requiresHumanVerification(task?.labels, classifyRiskTier(input.filesChanged ?? []))
+  );
+  assertEvidenceStandard("The evidence summary", evidenceStandard);
   await complete({
     checkoutId: input.checkoutId,
     summary: input.summary,
@@ -763,6 +789,7 @@ export async function actionComplete(
       qa: qa ?? null,
       shots: input.shots ?? [],
     },
+    evidenceStandard,
     sync: taskId ? await syncMetaForTask(taskId) : undefined,
   };
 }

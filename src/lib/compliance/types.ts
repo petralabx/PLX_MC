@@ -36,6 +36,8 @@ export interface VerifyInput {
   // "store_unavailable" and "unknown" stay advisory: never hard-block when the
   // bucket store cannot be read (review S1). "no_bucket" blocks.
   bucketPrd: "present" | "absent" | "no_bucket" | "store_unavailable" | "unknown";
+  // Clock for the evidence standard's warn-only week (TASK-3165); defaults to now.
+  now?: number;
 }
 
 export interface VerifyResult {

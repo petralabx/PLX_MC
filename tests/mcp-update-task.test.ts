@@ -401,3 +401,61 @@ describe("update authorization and locked incremental edits", () => {
     expect(h.queries.filter((q) => q.sql.endsWith("FOR UPDATE"))).toHaveLength(4);
   });
 });
+
+// TASK-3165: on a task a person must verify, the description text that an
+// agent writes is held to STE-lite. Warn-only until 2026-10-24, then refused.
+describe("task description evidence standard (TASK-3165)", () => {
+  const long = `${Array.from({ length: 30 }, (_, i) => `word${i}`).join(" ")}.`;
+  const update = (patch: unknown) => call("REST", "mc_update_task", { taskId: "TASK-1", patch });
+  const at = (iso: string) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(iso));
+  };
+  afterEach(() => vi.useRealTimers());
+
+  it("warns during the week and still writes the description", async () => {
+    at("2026-10-20T12:00:00Z");
+    seed("TASK-1", { labels: ["lane:codex", "verify:human"] });
+    const result = await update({ description: long });
+    expect(result.ok).toBe(true);
+    expect(result.body.data.evidenceStandard).toMatchObject({ applies: true, mode: "warn" });
+    expect(h.rows.get("TASK-1")!.data.description).toBe(long);
+  });
+
+  it("refuses the edit after the week and leaves the task as it was", async () => {
+    at("2026-10-25T12:00:00Z");
+    seed("TASK-1", { labels: ["lane:codex", "verify:human"] });
+    const result = await update({ description: long });
+    expect(result).toMatchObject({ ok: false, status: 400, body: { error: { code: "evidence_standard" } } });
+    expect(h.rows.get("TASK-1")!.data.description).toBe("Original description");
+    expect(h.events.filter((e) => e.kind === "task.updated")).toEqual([]);
+  });
+
+  it("checks a task that gains verify:human in the same edit, and skips one that needs no verification", async () => {
+    at("2026-10-25T12:00:00Z");
+    expect((await update({ description: long, addLabels: ["verify:human"] })).ok).toBe(false);
+    const plain = await update({ description: long });
+    expect(plain.ok).toBe(true);
+    expect(plain.body.data.evidenceStandard).toBeUndefined();
+  });
+
+  it("checks only the appended text, not the description already there", async () => {
+    at("2026-10-25T12:00:00Z");
+    seed("TASK-1", { labels: ["lane:codex", "kind:human-test"], description: long });
+    expect((await update({ appendDescription: "Open the Goals screen. Check the totals." })).ok).toBe(true);
+    expect((await update({ appendDescription: long })).ok).toBe(false);
+  });
+});
+
+describe("batch description evidence standard (TASK-3165)", () => {
+  afterEach(() => vi.useRealTimers());
+  it("returns the warn-week report in each mc_update_tasks receipt", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-20T12:00:00Z"));
+    seed("TASK-1", { labels: ["lane:codex", "verify:human"] });
+    const long = `${Array.from({ length: 30 }, (_, i) => `word${i}`).join(" ")}.`;
+    const result = await call("REST", "mc_update_tasks", { items: [{ taskId: "TASK-1", patch: { description: long } }] });
+    expect(result.ok).toBe(true);
+    expect(result.body.data.results[0]).toMatchObject({ ok: true, evidenceStandard: { applies: true, mode: "warn" } });
+  });
+});

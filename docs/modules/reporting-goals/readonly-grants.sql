@@ -36,3 +36,24 @@ GRANT SELECT (invnumber, shinumber, ordnumber, ponumber, customer, bilname, ship
 
 GRANT SELECT (idcust, namecust, codecurn)
     ON sage.ar_customer TO mc_goals_ro;
+
+-- Revenue forecast (TASK-3151): Sage order entry, FileMaker assembly orders,
+-- their order links and finished products (silver.batches' id,
+-- display_batch_number and status are granted above). An existing login gets
+-- exactly these from readonly-grants-forecast.sql instead.
+GRANT USAGE ON SCHEMA public TO mc_goals_ro;
+
+GRANT SELECT (orduniq, ordnumber, customer, bilname, ponumber, type, expdate, orsourcurr, reference, "desc")
+    ON sage.oe_order_header TO mc_goals_ro;
+
+GRANT SELECT (orduniq, linenum, linetype, item, "desc", expdate, qtyordered, qtyshipped, ordunit, unitprice)
+    ON sage.oe_order_detail TO mc_goals_ro;
+
+GRANT SELECT (id, nameamo_c, status, datescheduled, idfinprod, idbatch, idbatch_pre, oelist_c, qtytotal, unitsperbox)
+    ON public.assembly_order TO mc_goals_ro;
+
+GRANT SELECT (idoeitem, idassembly) ON public.order_entry_item_assembly TO mc_goals_ro;
+GRANT SELECT (id, idoe) ON public.order_entry_item TO mc_goals_ro;
+GRANT SELECT (id, erpcode) ON public.order_entry TO mc_goals_ro;
+
+GRANT SELECT (id, code, erp_code) ON silver.finished_products TO mc_goals_ro;

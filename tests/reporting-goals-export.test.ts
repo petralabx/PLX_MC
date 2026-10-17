@@ -1,5 +1,5 @@
 // Goals & Production workbook (TASK-2898), built from the 2026-10-14 fixture
-// with and without M1–M7 and read back with exceljs: the seven sheets in the
+// with and without M1–M7 and read back with exceljs: the eight sheets in the
 // shared order, the house styles, real dates and number formats, formulas
 // wherever the brief derives a value, amber for everything entered by hand,
 // and the "Manual entries" import template. LibreOffice then recalculates it:
@@ -36,6 +36,10 @@ vi.mock("@/lib/reporting/goals/store", async () => {
       sage: new Set(refs.filter((r) => h.refsOf("sage").has(r))),
     })),
   };
+});
+vi.mock("@/lib/reporting/goals/forecast-store", async () => {
+  const h = await import("./reporting-goals-helpers");
+  return { loadForecast: vi.fn(async () => h.FORECAST) };
 });
 
 import {
@@ -96,7 +100,7 @@ const formulaOf = (cell: ExcelJS.Cell) =>
 const utcDay = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
 describe("the workbook", () => {
-  it("has the seven sheets in the shared order, set to recalculate on open", async () => {
+  it("has the eight sheets in the shared order, set to recalculate on open", async () => {
     const { wb, buffer } = await build();
     expect(wb.worksheets.map((ws) => ws.name)).toEqual([...WORKBOOK_SHEETS]);
     // exceljs reads calcPr back without its attributes, so look at the file itself
@@ -107,7 +111,7 @@ describe("the workbook", () => {
 
   it("is Arial 10 throughout, with 14-point bold titles", async () => {
     const { wb } = await build();
-    const titles = new Set(["Read me!A1", "Goals!A1"]);
+    const titles = new Set(["Read me!A1", "Goals!A1", "Forecast!A1"]);
     for (const ws of wb.worksheets) {
       ws.eachRow((row) =>
         row.eachCell((cell) => {

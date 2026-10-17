@@ -1,6 +1,6 @@
 // The Goals & Production workbook (TASK-2898): the report and the import
 // template in one .xlsx, built from the page model of one good refresh plus that
-// run's Sage invoices and truckload shipments. The seven sheets, their order and
+// run's Sage invoices and truckload shipments. The eight sheets, their order and
 // the "Manual entries" layout come from ./layout.ts, shared with the import
 // (TASK-2897).
 //
@@ -18,7 +18,8 @@
 
 import type ExcelJS from "exceljs";
 
-import { REPORT_TIME_ZONE } from "../calendar";
+import { REPORT_TIME_ZONE, monthLabel } from "../calendar";
+import { FORECAST_BUCKET_LABELS, type ForecastBucket, type ForecastView } from "../forecast";
 import {
   classifyLoad,
   truckloadProductUsdCents,
@@ -65,6 +66,8 @@ export interface GoalsWorkbookInput {
   /** Stored USD/CAD rates: a CAD truckload invoice converts at its ship date's rate, as in the model. */
   rates: readonly FxRate[];
   exportedAt: Date;
+  /** The page's revenue forecast (TASK-3151); absent or not ready: the Forecast sheet says why. */
+  forecast?: ForecastView | null;
 }
 
 // ─── Fixed cells (the brief's formulas name them: =B13*B11, Goals!$B$17, …) ─
@@ -627,9 +630,179 @@ function entriesSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   listValidation(ws, "currency", "Currency", ENTRY_CURRENCIES, last);
 }
 
+// ─── Forecast (TASK-3151) ───────────────────────────────────────────────────
+
+/** Row 3 heads the four numbers and their parts in row 4; the order rows sit under the header in row 6 (frozen). */
+const FORECAST_NUMBER_ROW = 4;
+const FORECAST_HEADER_ROW = 6;
+const AMOUNT_FORMAT = "#,##0.00";
+const PRICE_FORMAT = "#,##0.00####";
+const PERCENT_FORMAT = "0.0%";
+
+const FORECAST_NUMBERS = [
+  "Invoiced so far",
+  "Ready",
+  "Planned in time",
+  "Late",
+  "Not planned",
+  "Theoretical",
+  "At risk",
+  "Hit rate (average)",
+  "Realistic",
+  "Working days covered",
+  "Working days in the month",
+  "Pace",
+  "Target",
+] as const;
+
+const FORECAST_SHEET_COLUMNS = [
+  "Expected",
+  "Order",
+  "Line",
+  "Customer code",
+  "Customer",
+  "PO",
+  "Item",
+  "Description",
+  "Still to ship",
+  "Unit",
+  "Unit price",
+  "Currency",
+  "Value",
+  "CAD",
+  "Bucket",
+  "Assembly order",
+  "AO scheduled",
+  "AO status",
+  "Bulk batch",
+  "Batch status",
+] as const;
+
+/**
+ * The four numbers over the open order rows, as the page shows them. Order
+ * figures are values (the page's, to the cent); CAD, the bucket totals and the
+ * numbers are formulas over them, the Goals sheet's revenue total, rate,
+ * working days and target, and the hit rates by month listed under the rows.
+ */
+function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
+  const { model } = input;
+  const forecast = input.forecast ?? null;
+  columns(ws, [12, 15, 7, 11, 30, 14, 12, 28, 12, 7, 12, 9, 14, 14, 16, 12, 12, 11, 12, 11]);
+  put(ws, 1, 1, `Revenue forecast — ${model.month.label}`, { title: true });
+  if (forecast?.state !== "ready") {
+    const why =
+      forecast?.state === "waiting_for_access"
+        ? "Waiting for read access to Sage orders and FileMaker assembly orders. The reporting login can’t read " +
+          `${forecast.missing.map((m) => `${m.relation} (${m.columns.join(", ")})`).join("; ")}. A database administrator grants it ` +
+          "with docs/modules/reporting-goals/readonly-grants-forecast.sql, and the next refresh fills this sheet in."
+        : "This refresh has no forecast yet. It fills in at the next refresh.";
+    put(ws, 2, 1, why, { note: true });
+    return;
+  }
+  put(
+    ws,
+    2,
+    1,
+    `Open Sage order lines expected to ship by ${model.month.end} (overdue ones included), at the quantity still to ship × the ` +
+      `unit price, matched to FileMaker’s plan through their assembly orders. CAD at the run’s rate (Goals!B${INPUT_ROW.rate}). ` +
+      "Theoretical = invoiced + Ready + Planned in time; At risk = Late + Not planned.",
+    { note: true }
+  );
+
+  const NR = FORECAST_NUMBER_ROW;
+  const first = FORECAST_HEADER_ROW + 1;
+  const last = first + forecast.rows.length - 1;
+  headerRow(ws, NR - 1, FORECAST_NUMBERS.map((text) => ({ text })));
+  headerRow(ws, FORECAST_HEADER_ROW, FORECAST_SHEET_COLUMNS.map((text) => ({ text })));
+  freeze(ws, FORECAST_HEADER_ROW);
+
+  forecast.rows.forEach((r, i) => {
+    const row = first + i;
+    put(ws, row, 1, excelDate(r.expected), { numFmt: DATE_FORMAT });
+    put(ws, row, 2, r.orderNo);
+    put(ws, row, 3, r.lineNo);
+    put(ws, row, 4, r.customerCode);
+    put(ws, row, 5, r.customer);
+    put(ws, row, 6, r.po);
+    put(ws, row, 7, r.item);
+    put(ws, row, 8, r.description);
+    put(ws, row, 9, r.qty, { numFmt: COUNT_FORMAT });
+    put(ws, row, 10, r.unit);
+    put(ws, row, 11, Number(r.unitPrice), { numFmt: PRICE_FORMAT });
+    put(ws, row, 12, r.currency);
+    put(ws, row, 13, dollars(r.valueCents), { numFmt: AMOUNT_FORMAT });
+    // As the Revenue card converts: USD at the run's rate; other currencies never.
+    put(ws, row, 14, { formula: `IF(L${row}="CAD",M${row},IF(L${row}="USD",ROUND(M${row}*${goalsInput(INPUT_ROW.rate)},2),""))` }, { numFmt: AMOUNT_FORMAT });
+    put(ws, row, 15, FORECAST_BUCKET_LABELS[r.bucket]);
+    put(ws, row, 16, r.ao?.number ?? null);
+    put(ws, row, 17, excelDate(r.ao?.scheduled ?? null), { numFmt: DATE_FORMAT });
+    put(ws, row, 18, r.ao?.status ?? null);
+    put(ws, row, 19, r.bulk?.batch ?? null);
+    put(ws, row, 20, r.bulk?.status ?? null);
+  });
+
+  // With no rows a SUMIFS range would run into the header, so the totals are zeros.
+  const bucketTotal = (bucket: ForecastBucket): ExcelJS.CellValue =>
+    forecast.rows.length > 0
+      ? { formula: `SUMIFS($N$${first}:$N$${last},$O$${first}:$O$${last},"${FORECAST_BUCKET_LABELS[bucket]}")` }
+      : 0;
+  put(ws, NR, 1, { formula: `Goals!$G$${GOAL_ROW.revenue}` }, { numFmt: DOLLAR_FORMAT });
+  (["ready", "planned", "late", "not_planned"] as const).forEach((bucket, i) => put(ws, NR, 2 + i, bucketTotal(bucket), { numFmt: DOLLAR_FORMAT }));
+  put(ws, NR, 6, { formula: `A${NR}+B${NR}+C${NR}` }, { numFmt: DOLLAR_FORMAT, bold: true });
+  put(ws, NR, 7, { formula: `D${NR}+E${NR}` }, { numFmt: DOLLAR_FORMAT, bold: true });
+  put(ws, NR, 9, { formula: `IF(ISNUMBER(H${NR}),ROUND(A${NR}+(B${NR}+C${NR})*H${NR},2),"")` }, { numFmt: DOLLAR_FORMAT, bold: true });
+  put(ws, NR, 10, { formula: goalsInput(INPUT_ROW.revenueCovered) }, { numFmt: COUNT_FORMAT });
+  put(ws, NR, 11, { formula: goalsInput(INPUT_ROW.workingDays) }, { numFmt: COUNT_FORMAT });
+  put(ws, NR, 12, { formula: `IF(J${NR}>0,ROUND(A${NR}/J${NR}*K${NR},2),"")` }, { numFmt: DOLLAR_FORMAT, bold: true });
+  put(ws, NR, 13, { formula: goalsInput(INPUT_ROW.revenueTarget) }, { numFmt: DOLLAR_FORMAT });
+
+  // The hit rate by complete month, under the rows; H4 averages it.
+  let r = (forecast.rows.length > 0 ? last : FORECAST_HEADER_ROW) + 2;
+  put(ws, r, 1, "Hit rate by month", { bold: true });
+  const months = forecast.realistic?.months ?? [];
+  if (months.length === 0) {
+    put(ws, NR, 8, "Not measured yet", { note: true });
+    put(ws, r + 1, 1, `Not measured yet: measured from ${monthLabel(forecast.measuredFrom)}, once a full month of forecasts has ended.`, { note: true });
+    r += 3;
+  } else {
+    headerRow(ws, r + 1, [
+      { text: "Month" },
+      { text: "First run of the month" },
+      { text: "Ready + planned in time then" },
+      { text: "Sage invoiced in the month after it" },
+      { text: "Hit rate" },
+    ]);
+    months.forEach((m, i) => {
+      const row = r + 2 + i;
+      put(ws, row, 1, m.label);
+      put(ws, row, 2, `Run #${m.firstRunId}, ${m.firstRunDay}`);
+      put(ws, row, 3, dollars(m.readyPlannedCents), { numFmt: DOLLAR_FORMAT });
+      put(ws, row, 4, dollars(m.invoicedAfterCents), { numFmt: DOLLAR_FORMAT });
+      put(ws, row, 5, { formula: `D${row}/C${row}` }, { numFmt: PERCENT_FORMAT });
+    });
+    put(ws, NR, 8, { formula: `AVERAGE(E${r + 2}:E${r + 1 + months.length})` }, { numFmt: PERCENT_FORMAT });
+    r += 3 + months.length;
+  }
+  const { unordered } = forecast;
+  if (unordered.count > 0) {
+    put(
+      ws,
+      r++,
+      1,
+      `Production with no order behind it: ${count(unordered.count)} assembly orders scheduled this month (${count(unordered.pieces)} pieces) ` +
+        "match no open Sage order line. They aren’t counted as revenue.",
+      { note: true }
+    );
+  }
+  for (const c of forecast.otherCurrencies) {
+    put(ws, r++, 1, `Not converted: ${c.currency} ${dollars(c.cents).toLocaleString("en-US", { minimumFractionDigits: 2 })} in ${count(c.rows)} ${c.rows === 1 ? "row" : "rows"}. Only CAD and USD count, as on the Revenue card.`, { note: true });
+  }
+  put(ws, r, 1, "CAD uses Excel’s ROUND (half away from zero) while the page rounds half to even, so the two differ only on an exact half cent.", { note: true });
+}
+
 // ─── The workbook ───────────────────────────────────────────────────────────
 
-/** The seven-sheet workbook as .xlsx bytes. */
+/** The eight-sheet workbook as .xlsx bytes. */
 export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buffer> {
   const { Workbook } = await loadExcelJS();
   const wb = new Workbook();
@@ -646,6 +819,7 @@ export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buf
   goalsSheet(sheets.Goals, input, daily, trucks);
   batchSheet(sheets.Batches, input);
   shipmentSheet(sheets.Shipments, input);
+  forecastSheet(sheets.Forecast, input);
   entriesSheet(sheets[ENTRIES_SHEET], input);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

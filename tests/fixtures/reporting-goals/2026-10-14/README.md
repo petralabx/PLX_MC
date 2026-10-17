@@ -10,6 +10,8 @@ market spot the prototype used).
 | `datasets.json` | What every dataset query must return for today = 2026-10-14 | Postgres test (SQL output must equal it) and the pure rules tests |
 | `expected.json` | The brief's published numbers, the prototype's per-day revenue figures, and the Line 1 bulk figures (rule of 2026-10-16), worked out by hand from `datasets.json`'s batches | Rules and view tests |
 | `entries.json` | Manual-entry scenarios M1–M7 from the brief | Rules and view tests |
+| `forecast-source.json` | Revenue forecast (TASK-3151) source rows: Sage `oe_order_header`/`oe_order_detail` (space-padded text, `YYYYMMDD` dates, with the traps the SQL must leave out), FileMaker `assembly_order`, its order-entry links, `silver.finished_products` and the AOs' bulk batches | `tests/reporting-goals-forecast-replica.ts` loads them for the Postgres test |
+| `forecast.json` | What the two forecast queries must return for those rows, plus the hit-rate history the page fixture uses (an August run from before the forecast, and September's first run) | Postgres test (SQL output must equal it), the forecast, page, workbook and browser tests |
 
 ## Provenance
 
@@ -44,3 +46,15 @@ market spot the prototype used).
 Replace these with the prototype's saved query results when they are
 available; the tests compare against `expected.json`, not against the files'
 provenance.
+
+The forecast fixture is **synthetic** (order numbers `OR1000158877` and
+`OR10001600xx`, AOs `114xx`, bulk batches `9900xx`, none of which the other
+files use). It covers every bucket rule, an order line split across three AOs
+and one left partly unplanned, AO output beyond the order taken as shipped,
+a November line riding on its order's October line of the same item
+(`laterQty`), an AO listing two orders, a cancelled and an undated AO, a EUR
+line, overdue lines and production with no order behind it. Derived
+independently (Python `Decimal`, half to even) at USD/CAD 1.4219 with M1–M7:
+Ready 53,762.80 · Planned in time 64,627.53 · Late 27,917.55 · Not planned
+12,785.70; Theoretical 527,018.41 · At risk 40,703.25 · Pace 953,465.52 ·
+Realistic 503,340.34 (September's 80% hit rate).

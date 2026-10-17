@@ -80,6 +80,8 @@ describe("GET /api/reporting/goals/export", () => {
     await wb.xlsx.load(await resp.arrayBuffer());
     expect(wb.worksheets.map((ws) => ws.name)).toEqual([...WORKBOOK_SHEETS]);
     expect(wb.getWorksheet("Manual entries")!.getCell("A2").value).toBe("M001");
+    // The page's revenue forecast rides along (its first open order row).
+    expect(wb.getWorksheet("Forecast")!.getCell("B7").value).toBe("OR1000160001");
     expect(appendEvent).toHaveBeenCalledTimes(1);
     expect(appendEvent).toHaveBeenCalledWith({
       kind: "reporting.goals.export",

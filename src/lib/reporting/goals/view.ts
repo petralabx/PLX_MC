@@ -2,6 +2,7 @@
 // live manual entries (rules.computeGoals), plus the run it came from and the
 // query behind each section, so every figure can name its query and run. Pure.
 
+import { buildForecast, type ForecastSnapshot, type ForecastView } from "./forecast";
 import { computeGoals, type GoalsModel } from "./rules";
 import { buildShipmentList, type ShipmentListRow } from "./shipment-list";
 import type { FtlCustomer, FxRate, FxSource, GoalSettings, IsoDate, ManualEntry, RefreshRun, SnapshotData } from "./types";
@@ -17,6 +18,8 @@ export const DATASET_QUERIES = {
   batchHistory: "batch-history",
   references: "references",
   customers: "customers",
+  forecastOrders: "forecast-orders",
+  forecastAos: "forecast-assembly-orders",
 } as const;
 
 export type DatasetQuery = (typeof DATASET_QUERIES)[keyof typeof DATASET_QUERIES];
@@ -32,6 +35,7 @@ export const SECTION_QUERIES: Record<string, readonly DatasetQuery[]> = {
   sizes: [DATASET_QUERIES.batches, DATASET_QUERIES.batchHistory],
   batches: [DATASET_QUERIES.batches],
   shipments: [DATASET_QUERIES.shipments, DATASET_QUERIES.truckloads],
+  forecast: [DATASET_QUERIES.revenue, DATASET_QUERIES.forecastOrders, DATASET_QUERIES.forecastAos],
 };
 
 export type GoalsViewState = "ready" | "not_configured" | "no_data";
@@ -50,6 +54,8 @@ export interface GoalsView {
   /** The goal settings the model was built with (the page's definitions and rules text quote them). */
   settings: GoalSettings | null;
   sections: Record<string, readonly DatasetQuery[]>;
+  /** The revenue forecast (TASK-3151); null when the page has no model. */
+  forecast: ForecastView | null;
 }
 
 /** What the signed-in viewer may do on the page (from the Entra app roles). */
@@ -72,6 +78,8 @@ export interface GoalsViewInput {
   ftlCustomers: readonly FtlCustomer[];
   holidays: ReadonlySet<IsoDate>;
   rates: readonly FxRate[];
+  /** The run's forecast and hit-rate history; null or absent when the run predates the forecast. */
+  forecast?: ForecastSnapshot | null;
 }
 
 export function buildGoalsView(input: GoalsViewInput): GoalsView {
@@ -87,6 +95,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       shipments: [],
       settings: null,
       sections: SECTION_QUERIES,
+      forecast: null,
     };
   }
   const model = computeGoals({
@@ -119,5 +128,6 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     }),
     settings: input.settings,
     sections: SECTION_QUERIES,
+    forecast: buildForecast({ snapshot: input.forecast ?? null, model, settings: input.settings, rate: run.fxRate }),
   };
 }

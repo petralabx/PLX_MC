@@ -5,6 +5,7 @@
 import { databaseConfigured, reportingDatabaseConfigured } from "@/lib/secrets";
 
 import { previousMonthStart } from "./calendar";
+import { loadForecast } from "./forecast-store";
 import { normalizeRef } from "./rules";
 import { latestRuns, listEntries, loadConfig, loadRates, loadReferenceMatches, loadSnapshot } from "./store";
 import type { FxRate, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
@@ -61,6 +62,7 @@ async function loadGoals(): Promise<{ view: GoalsView; snapshot: SnapshotData | 
     succeeded.id,
     entries.map((e) => normalizeRef(e.reference))
   );
+  const forecast = await loadForecast(succeeded);
   const view = buildGoalsView({
     configured,
     run: succeeded,
@@ -73,6 +75,7 @@ async function loadGoals(): Promise<{ view: GoalsView; snapshot: SnapshotData | 
     ftlCustomers: config.ftlCustomers,
     holidays: config.holidays,
     rates,
+    forecast,
   });
   return { view, snapshot, rates };
 }

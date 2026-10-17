@@ -369,7 +369,10 @@ describe("page shell", () => {
   it("renders skeletons, not spinners, before the page model arrives", () => {
     const markup = html(GoalsView, {});
     expect(text(markup)).toContain("Loading the latest refresh…");
-    expect(markup.match(/class="gp-skel"/g)).toHaveLength(9);
+    // One skeleton per section, the shipments list and the revenue forecast included.
+    expect(markup).toContain('data-testid="goals-shipments"');
+    expect(markup).toContain('data-testid="goals-forecast"');
+    expect(markup.match(/class="gp-skel"/g)).toHaveLength(markup.match(/<section /g)?.length ?? -1);
     expect(text(markup)).toContain("Amber marks figures your team entered by hand that aren’t in FileMaker or Sage yet.");
   });
 

@@ -19,6 +19,7 @@ import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
 
 import { DailyLine1Chart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "./charts";
 import { DeleteEntryDialog, EntryDialog, ImportDialog } from "./entries";
+import { ForecastSection } from "./forecast";
 import { GoalCards } from "./goal-cards";
 import {
   clock,
@@ -542,6 +543,20 @@ function Body({
       >
         {ready((p) => (
           <ShipmentList page={p} />
+        ))}
+      </Section>
+
+      <Section
+        id="forecast"
+        title="Revenue forecast"
+        note="This month’s open Sage orders, matched to FileMaker’s plan through their assembly orders. Amounts in CAD at the run’s Bank of Canada rate."
+        source={src("forecast")}
+        state={state}
+        onRetry={onRetry} resetKey={page}
+        size="lg"
+      >
+        {ready((p) => (
+          <ForecastSection page={p} />
         ))}
       </Section>
 

@@ -236,23 +236,58 @@ export type UpdateTaskItemOutcome =
   | {
       index: number; ok: true; taskId: string; changed: string[]; eventSeq: string | undefined;
       /** Present when the item wrote description text on work a person must verify (TASK-3165). */
-      evidenceStandard?: EvidenceStandardReport;
+      evidenceStandard?: BatchEvidenceStandard;
     }
   | { index: number; ok: false; error: { code: string; message: string } };
 
 const BATCH_ERROR_MESSAGE_MAX = 500;
+
+// Evidence findings are capped the same way (TASK-3165). One 32 KB description
+// of short passive bullets gives about 2,000 findings, so a full 100-item batch
+// returned about 19 MB after every write had committed. The caps bound the
+// findings to about 100 KB per batch, whatever the text. All findings for one
+// item: send its text again with mc_update_task, which returns the full report.
+/** Findings returned per item: enough to show what to fix first. */
+export const BATCH_FINDINGS_PER_ITEM_MAX = 10;
+/** Findings returned in the whole batch (25 items at the per-item cap). */
+export const BATCH_FINDINGS_TOTAL_MAX = 250;
+/** Characters per returned finding message; an excerpt can hold one very long word. */
+export const BATCH_FINDING_MESSAGE_MAX = 300;
+
+export type BatchEvidenceStandard = EvidenceStandardReport & {
+  /** Findings the check produced; `findings` holds the first ones only. */
+  findingsTotal: number;
+  /** True when `findings` leaves some out. */
+  findingsTruncated: boolean;
+};
+
+function batchEvidenceStandard(report: EvidenceStandardReport, budget: number): BatchEvidenceStandard {
+  const findings = report.findings.slice(0, Math.min(BATCH_FINDINGS_PER_ITEM_MAX, budget)).map((finding) =>
+    finding.message.length > BATCH_FINDING_MESSAGE_MAX
+      ? { ...finding, message: `${finding.message.slice(0, BATCH_FINDING_MESSAGE_MAX - 1)}…` } : finding);
+  return { ...report, findings, findingsTotal: report.findings.length, findingsTruncated: findings.length < report.findings.length };
+}
 
 export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
   assertMcpToolAllowed(identity, "mc_update_tasks");
   requireMcpActor(identity, "task.progress");
   const { items } = parseInput(updateTasksSchema, input);
   const results: UpdateTaskItemOutcome[] = [];
+  const findings = { total: 0, returned: 0 };
+  let checked = false;
   for (const [index, item] of items.entries()) {
     try {
       const data = await actionUpdateTask(identity, item);
+      const report = "evidenceStandard" in data && data.evidenceStandard
+        ? batchEvidenceStandard(data.evidenceStandard, BATCH_FINDINGS_TOTAL_MAX - findings.returned) : undefined;
+      if (report) {
+        checked = true;
+        findings.total += report.findingsTotal;
+        findings.returned += report.findings.length;
+      }
       results.push({
         index, ok: true, taskId: data.taskId, changed: Object.keys(data.diff), eventSeq: data.eventSeq,
-        ...("evidenceStandard" in data && data.evidenceStandard ? { evidenceStandard: data.evidenceStandard } : {}),
+        ...(report ? { evidenceStandard: report } : {}),
       });
     } catch (err) {
       if (!(err instanceof ApiError)) console.error("[mcp] mc_update_tasks item %d failed:", index, err);
@@ -266,7 +301,10 @@ export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
     }
   }
   const updated = results.filter((result) => result.ok).length;
-  return { results, updated, failed: results.length - updated };
+  return {
+    results, updated, failed: results.length - updated,
+    ...(checked ? { evidenceFindings: { ...findings, truncated: findings.returned < findings.total } } : {}),
+  };
 }
 
 export function registerTaskUpdateTools(server: McpServer, identity: McpIdentity): void {

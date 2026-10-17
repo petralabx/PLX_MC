@@ -40,7 +40,9 @@ const isPassive = (sentence: string): boolean =>
 function plainText(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    // A whole link is one word, whatever its label: inline or reference style, an
+    // image too, with one level of nested brackets or parentheses.
+    .replace(/!?\[(?:[^[\]\n]|\[[^[\]\n]*\])*\](?:\((?:[^()\n]|\([^()\n]*\))*\)|\[[^[\]\n]*\])/g, "X")
     .replace(/`[^`\n]*`/g, "X")
     // A URL keeps the punctuation after it, so a full stop still ends the sentence.
     .replace(/\bhttps?:\/\/\S*[^\s.,;:!?)\]'"]/g, "X")
@@ -69,19 +71,25 @@ interface ListUnit {
 /** Each STE-lite finding in `text`, paragraph by paragraph. */
 export function steLiteFindings(text: string): WritingFinding[] {
   const findings: WritingFinding[] = [];
-  const check = (sentence: string, step: boolean) => {
+  const checkLength = (span: string, step: boolean) => {
     const limit = step ? STE_LITE_LIMITS.stepWords : STE_LITE_LIMITS.sentenceWords;
-    const count = words(sentence).length;
+    const count = words(span).length;
     if (count > limit) {
       findings.push({
         rule: step ? "step-length" : "sentence-length",
         severity: "error",
-        message: `${step ? "Step" : "Sentence"} has ${count} words. Limit: ${limit}. ${excerpt(sentence)}`,
+        message: `${step ? "Step" : "Sentence"} has ${count} words. Limit: ${limit}. ${excerpt(span)}`,
       });
     }
+  };
+  const checkVoice = (sentence: string) => {
     if (isPassive(sentence)) {
       findings.push({ rule: "passive-voice", severity: "advice", message: `Use the active voice. ${excerpt(sentence)}` });
     }
+  };
+  const check = (sentence: string) => {
+    checkLength(sentence, false);
+    checkVoice(sentence);
   };
 
   for (const paragraph of plainText(text).split(/\n\s*\n/)) {
@@ -103,9 +111,16 @@ export function steLiteFindings(text: string): WritingFinding[] {
         listFollows = /:\s*$/.test(line);
       }
     }
-    for (const unit of units) for (const sentence of sentences(unit.text)) check(sentence, unit.step);
+    for (const unit of units) {
+      // A numbered step is one instruction: its 20-word budget covers the whole
+      // step, however many sentences it has. Other text is judged per sentence.
+      if (unit.step) {
+        checkLength(unit.text, true);
+        for (const sentence of sentences(unit.text)) checkVoice(sentence);
+      } else for (const sentence of sentences(unit.text)) check(sentence);
+    }
     const proseSentences = sentences(prose.join(" "));
-    for (const sentence of proseSentences) check(sentence, false);
+    for (const sentence of proseSentences) check(sentence);
     if (proseSentences.length > STE_LITE_LIMITS.paragraphSentences) {
       findings.push({
         rule: "paragraph-length",

@@ -92,7 +92,9 @@ vi.mock("@/lib/db", () => {
 import { POST as mcpPost } from "@/app/api/cursor/mcp/route";
 import { POST as updateRoute } from "@/app/api/cursor/tasks/update/route";
 import { POST as batchRoute } from "@/app/api/cursor/tasks/update-batch/route";
-import { actionUpdateTask } from "@/lib/mcp/task-update-actions";
+import {
+  BATCH_FINDINGS_PER_ITEM_MAX, BATCH_FINDINGS_TOTAL_MAX, BATCH_FINDING_MESSAGE_MAX, actionUpdateTask,
+} from "@/lib/mcp/task-update-actions";
 import { outboundFields } from "@/lib/sync/mapping";
 
 const identity: McpIdentity = {
@@ -457,5 +459,54 @@ describe("batch description evidence standard (TASK-3165)", () => {
     const result = await call("REST", "mc_update_tasks", { items: [{ taskId: "TASK-1", patch: { description: long } }] });
     expect(result.ok).toBe(true);
     expect(result.body.data.results[0]).toMatchObject({ ok: true, evidenceStandard: { applies: true, mode: "warn" } });
+  });
+});
+
+// Sol review of PR #352: the findings are advice during the warn week and some
+// stay advice after it, so the writes commit. The receipts must stay far below
+// Vercel's 4.5 MB response cap, or the client sees a failure after the writes.
+describe("batch evidence findings stay small (TASK-3165)", () => {
+  const n = (count: number) => Array.from({ length: count }, (_, i) => `word${i + 1}`).join(" ");
+  afterEach(() => vi.useRealTimers());
+  const batch = async (description: string) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-20T12:00:00Z"));
+    const ids = Array.from({ length: 100 }, (_, i) => `TASK-${i + 1}`);
+    for (const id of ids) seed(id, { labels: ["lane:codex", "verify:human"] });
+    const result = await call("REST", "mc_update_tasks", { items: ids.map((taskId) => ({ taskId, patch: { description } })) });
+    expect(result.ok).toBe(true);
+    expect(result.body.data.updated).toBe(100);
+    for (const id of ids) expect(h.rows.get(id)!.data.description).toBe(description);
+    return result;
+  };
+
+  it("caps the findings of a full batch of 30,800-character descriptions, and says how many there were", async () => {
+    const description = "- It was fixed.\n".repeat(1925);
+    expect(description).toHaveLength(30_800);
+    const result = await batch(description);
+    expect(JSON.stringify(result.body).length).toBeLessThan(1_000_000);
+    const [first, last] = [result.body.data.results[0], result.body.data.results[99]];
+    expect(first.evidenceStandard).toMatchObject({ applies: true, mode: "warn", findingsTotal: 1925, findingsTruncated: true });
+    expect(first.evidenceStandard.findings).toHaveLength(BATCH_FINDINGS_PER_ITEM_MAX);
+    expect(last.evidenceStandard).toMatchObject({ findings: [], findingsTotal: 1925, findingsTruncated: true });
+    expect(result.body.data.evidenceFindings).toEqual({ total: 192_500, returned: BATCH_FINDINGS_TOTAL_MAX, truncated: true });
+  });
+
+  it("shortens a long finding message, so one very long word cannot grow the receipt", async () => {
+    const description = `It was ${"x".repeat(15_000)}ed ${n(30)}.\n\n`.repeat(2);
+    const result = await batch(description);
+    expect(JSON.stringify(result.body).length).toBeLessThan(1_000_000);
+    const { findings } = result.body.data.results[0].evidenceStandard;
+    expect(findings.length).toBeGreaterThan(0);
+    for (const finding of findings) expect(finding.message.length).toBeLessThanOrEqual(BATCH_FINDING_MESSAGE_MAX);
+  });
+
+  it("returns every finding, untruncated, when they fit", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-20T12:00:00Z"));
+    seed("TASK-1", { labels: ["lane:codex", "verify:human"] });
+    const result = await call("REST", "mc_update_tasks", { items: [{ taskId: "TASK-1", patch: { description: `${n(30)}. It was fixed.` } }] });
+    expect(result.body.data.results[0].evidenceStandard).toMatchObject({ findingsTotal: 2, findingsTruncated: false, findings: [{ rule: "sentence-length" }, { rule: "passive-voice" }] });
+    expect(result.body.data.evidenceFindings).toEqual({ total: 2, returned: 2, truncated: false });
   });
 });

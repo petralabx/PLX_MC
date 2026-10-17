@@ -8,8 +8,8 @@
    prefers-reduced-motion: no-preference. */
 
 .mc .dash {
-  padding: 18px var(--p-gutter) 80px;
-  max-width: calc(var(--p-content-max) + 2 * var(--p-gutter));
+  padding: 18px var(--mc-page-edge, var(--p-gutter)) 80px;
+  max-width: calc(var(--p-content-max) + 2 * var(--mc-page-edge, var(--p-gutter)));
 }
 
 /* Card headings are real headings here; keep the Insights title look. */

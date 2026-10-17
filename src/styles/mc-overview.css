@@ -14,6 +14,7 @@
   padding: 0 0 80px;
   flex: 1;
   max-width: 920px;
+  margin-inline-start: calc(var(--mc-page-edge, var(--p-gutter)) - var(--p-gutter));
 }
 
 .mc .feed-head-agents {
@@ -241,6 +242,15 @@
 .mc .bk .bkbody .c {
   padding: 22px var(--p-gutter);
   min-width: 0;
+}
+
+/* Only the outer columns take the ultra-wide page edge. */
+.mc .bk .bkbody .c:first-child {
+  padding-left: var(--mc-page-edge, var(--p-gutter));
+}
+
+.mc .bk .bkbody .c:last-child {
+  padding-right: var(--mc-page-edge, var(--p-gutter));
 }
 
 .mc .bk .bkbody .c + .c {
@@ -2001,7 +2011,7 @@
   display: grid;
   grid-template-columns: 90px minmax(220px, 1.6fr) 150px 150px 110px 96px 96px;
   gap: 14px;
-  padding: 14px var(--p-gutter);
+  padding: 14px var(--mc-page-edge, var(--p-gutter));
   border-bottom: 1px solid var(--p-grid-2);
   align-items: center;
 }

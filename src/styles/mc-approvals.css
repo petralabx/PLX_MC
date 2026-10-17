@@ -1,7 +1,7 @@
 /* Approvals inbox (TASK-631) — scoped under .mc; --p-* tokens only (no raw hex). */
 
 .ap-page {
-  padding: 0 var(--p-gutter) 80px;
+  padding: 0 var(--mc-page-edge, var(--p-gutter)) 80px;
   max-width: 900px;
 }
 

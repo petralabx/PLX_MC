@@ -353,16 +353,15 @@
   .mc .mc-stage > :not(.mc-subnav) {
     flex: 1 0 auto;
   }
-  /* Ultra-wide column: screens pad with --p-gutter and draw hairlines on the
-     same full-bleed element, so growing the gutter to (main − 1560px) / 2
-     centres every page header, strip and body in a 1560px column while the
-     hairlines stay full-bleed. Below 1612px of main it is the base gutter. */
-  .mc .mc-stage {
-    --mc-gutter-base: var(--p-gutter);
-  }
+  /* Ultra-wide column: page headers, strips and bodies pad their page edge
+     with --mc-page-edge and draw hairlines on the same full-bleed element, so
+     growing the edge to (main − 1560px) / 2 centres them in a 1560px column
+     while the hairlines stay full-bleed. Below 1612px of main it is the base
+     gutter. --p-gutter itself is never redefined here: dialogs, popovers and
+     component-local spacing keep the small gutter at every width. */
   .mc .mc-stage > * {
-    --mc-col-gutter: max(var(--mc-gutter-base), calc((100cqi - 1560px) / 2));
-    --p-gutter: var(--mc-col-gutter);
+    --mc-col-gutter: max(var(--p-gutter), calc((100cqi - 1560px) / 2));
+    --mc-page-edge: var(--mc-col-gutter);
   }
 
   /* Phone group strip — every screen of the current tab, one tap away. */
@@ -370,7 +369,7 @@
     display: flex;
     overflow-x: auto;
     scrollbar-width: none;
-    padding: 0 var(--p-gutter);
+    padding: 0 var(--mc-page-edge, var(--p-gutter));
     border-bottom: 1px solid var(--p-grid);
     background: var(--p-paper);
   }

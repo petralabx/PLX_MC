@@ -186,6 +186,14 @@ Highest role wins. Values are case-sensitive.
   allowlist, is refused and revokes the row. To cut access at once, also remove
   the email from the allowlist (live check on every request) or revoke the
   user's Entra sessions.
+- **When a session ends** (TASK-3161) the middleware redirects a page to
+  `/signin` but answers `/api/*` with 401 `signin_required` JSON. On a read,
+  `api()` / `apiDownload()` (`src/lib/api`) send the browser to
+  `/signin?callbackUrl=<screen>`, and sign-in returns it to that screen
+  (`signInReturnPath`: a path on this site, never `/api` or `/signin`). A write
+  fails with the sign-in message and stays on the page, so unsaved input is
+  kept. A route's own 401 `not_authenticated` does not redirect: a live session
+  can hit it, and `/signin` would bounce straight back.
 
 **`PLX_MC_ALLOWED_USERS` is transitional / break-glass.** It stays an
 admission path so deploying this before the roles exist locks nobody out. It

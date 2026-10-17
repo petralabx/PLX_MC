@@ -1106,3 +1106,17 @@
   (`scripts/lib/postgres-image.mjs`): ECR first, then the Docker Hub original (a cached copy before a
   pull), tagged as `POSTGRES_IMAGE`; if both pulls are refused it waits up to 60 s for a parallel
   suite's copy. A new harness image gets a second source the same way.
+
+## 2026-10-17 — TASK-3161: an ended session looked like broken Knowledge, Reporting and Admin screens
+- **What went wrong:** After TASK-2977 capped sessions at 12h (and TASK-3010 re-checks admission on
+  every request), a tab open past its session showed "non-JSON response (200)" on the SOP guide,
+  Skills directory, Architecture, Goals and Admin & health screens, plus a broken diagram image.
+  My work and Plan kept showing the store loaded at page open, so it read as a module outage.
+- **Root cause:** The middleware answered every gated request without a session with a 307 to
+  `/signin`. `fetch` followed it and got the sign-in page's HTML with 200; `api()` had no way to
+  tell an ended session from a broken route. Screens switch with `pushState`, so no page request
+  ever reached the middleware to send the browser to sign in.
+- **Rule going forward:** An API path never redirects to an HTML page: it gets a JSON error with
+  the real status. The client turns `signin_required` on a read into a sign-in round trip back to
+  the same screen; a write keeps the page so unsaved input survives. When shortening a session,
+  test what an already-open tab does when it ends.

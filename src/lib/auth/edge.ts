@@ -13,7 +13,7 @@ import {
   toSessionIdentity,
   type EntraProfileClaims,
 } from "./claims";
-import { basicGate, isPublicAsset, sessionStillValid } from "./gate";
+import { basicGate, isApiPath, isPublicAsset, sessionStillValid } from "./gate";
 
 // Lazy config: secrets are read per request, never at module load.
 export function edgeAuthConfig(): NextAuthConfig {
@@ -76,7 +76,8 @@ export function edgeAuthConfig(): NextAuthConfig {
         return session;
       },
       // Drives the middleware (src/middleware.ts default-exports `auth`):
-      // OIDC mode: unauthenticated → false → redirect to Microsoft sign-in.
+      // OIDC mode: an unauthenticated page → false → redirect to /signin; an
+      // unauthenticated /api/* call → 401 signin_required JSON (TASK-3161).
       // Dormant/fallback mode: the Basic gate decides (Response = challenge).
       async authorized({ request, auth: session }) {
         // The sign-in page and the brand/font assets it renders must load
@@ -86,7 +87,25 @@ export function edgeAuthConfig(): NextAuthConfig {
         if (!entraAuthConfigured()) {
           return (await basicGate(request)) ?? true;
         }
-        return !!session?.user;
+        if (session?.user) return true;
+        // An API call would follow the redirect and get the sign-in page's
+        // HTML with 200 ("non-JSON response"). Say 401 so the client sends the
+        // browser to sign in (src/lib/api, TASK-3161). signin_required, not a
+        // route's not_authenticated: only this one means there is no session.
+        // No WWW-Authenticate: Basic would open the browser's password dialog
+        // on fetch, and Bearer would point OAuth clients at discovery.
+        if (isApiPath(request.nextUrl.pathname)) {
+          return Response.json(
+            {
+              error: {
+                code: "signin_required",
+                message: "Sign in to Mission Control: there is no session, or it has ended.",
+              },
+            },
+            { status: 401 }
+          );
+        }
+        return false;
       },
     },
   };

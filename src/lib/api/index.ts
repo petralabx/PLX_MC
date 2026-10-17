@@ -13,6 +13,17 @@ export class ApiClientError extends Error {
   }
 }
 
+// The middleware answers an API call without a session with 401
+// signin_required (src/lib/auth/edge.ts, TASK-3161). A read sends the browser
+// to sign in, then back to this screen. A write does not: leaving the page
+// would drop what the person was saving, so it fails with the message instead.
+function signInIfRequired(status: number, code: string | undefined, method: string | undefined): void {
+  if (status !== 401 || code !== "signin_required" || typeof window === "undefined") return;
+  if ((method ?? "GET").toUpperCase() !== "GET") return;
+  const here = `${window.location.pathname}${window.location.search}`;
+  window.location.assign(`/signin?callbackUrl=${encodeURIComponent(here)}`);
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(`/api${path}`, {
     ...init,
@@ -24,6 +35,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new ApiClientError("bad_response", `non-JSON response (${resp.status}) from /api${path}`);
   }
+  signInIfRequired(resp.status, body.error?.code, init?.method);
   if (!resp.ok || body.error) {
     throw new ApiClientError(body.error?.code ?? "http_error", body.error?.message ?? `HTTP ${resp.status}`);
   }
@@ -50,6 +62,7 @@ export async function apiDownload(path: string, init?: RequestInit): Promise<Api
     } catch {
       throw new ApiClientError("bad_response", `non-JSON response (${resp.status}) from /api${path}`);
     }
+    signInIfRequired(resp.status, body.error?.code, init?.method);
     throw new ApiClientError(body.error?.code ?? "http_error", body.error?.message ?? `HTTP ${resp.status}`);
   }
   return { blob: await resp.blob(), fileName: dispositionFileName(resp.headers.get("content-disposition")) };

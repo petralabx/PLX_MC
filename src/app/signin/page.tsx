@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 
 import { BrandBoundary, Kicker } from "@/components/brand";
 import { auth, oidcEnabled, signIn } from "@/lib/auth";
+import { signInReturnPath } from "@/lib/auth/gate";
 
 // The Auth.js `?error=` codes this gate can realistically surface, in plain,
 // honest copy. The admission refusal (no MC.* app role and not on the
@@ -24,26 +25,29 @@ function errorMessage(code: string | undefined): string | null {
   }
 }
 
-async function startEntraSignIn() {
+// Back to the screen the visitor was on (TASK-3161). The bound path comes back
+// from the browser, so it is checked again here.
+async function startEntraSignIn(returnTo: string) {
   "use server";
-  await signIn("microsoft-entra-id", { redirectTo: "/" });
+  await signIn("microsoft-entra-id", { redirectTo: signInReturnPath(returnTo) });
 }
 
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
   // OIDC is only configured on the deployed environment; locally the gate is
   // dormant and the provider does not exist, so disable the hand-off there.
   const enabled = oidcEnabled();
+  const { error, callbackUrl } = await searchParams;
+  const returnTo = signInReturnPath(callbackUrl);
 
   if (enabled) {
     const session = await auth();
-    if (session?.user) redirect("/");
+    if (session?.user) redirect(returnTo);
   }
 
-  const { error } = await searchParams;
   const message = errorMessage(error);
 
   return (
@@ -73,7 +77,7 @@ export default async function SignInPage({
             {message}
           </div>
         ) : null}
-        <form action={startEntraSignIn} className="form">
+        <form action={startEntraSignIn.bind(null, returnTo)} className="form">
           <button type="submit" className="mc-auth-msbtn" disabled={!enabled}>
             <svg
               width="16"

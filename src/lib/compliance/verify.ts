@@ -6,14 +6,23 @@
 
 import type { Evidence } from "@/lib/mc-data";
 import { hasHumanAccountableOwner } from "@/lib/mc-data";
-import { blockingFindings, describeFindings, evidenceStandardReport, requiresHumanVerification } from "./evidence-standard";
+import { hasVisualArtifact } from "./evidence-artifacts";
+import {
+  VISUAL_EVIDENCE_ENFORCE_FROM,
+  blockingFindings,
+  describeFindings,
+  evidenceStandardReport,
+  requiresHumanVerification,
+  visualEvidenceMode,
+} from "./evidence-standard";
 import { bundleRequirementsFor } from "./risk";
 import type { RiskTier, VerifyInput, VerifyResult } from "./types";
 
 // Is the evidence object complete enough for this tier?
 //   minimal → a non-empty summary
 //   note    → a non-empty summary + a non-empty, fully-done checklist + rollback
-//   full    → note + change-appropriate proof (screenshots or a test run)
+//   full    → note + change-appropriate proof (screenshots or a test run; an
+//             uploaded screenshot artifact counts, TASK-3166)
 // A non-empty summary is required at EVERY tier, and an EMPTY checklist is never
 // "complete" (review S2 — the prior code let note/full pass with no summary and
 // treated `items: []` as vacuously done, which was weaker than the low tier).
@@ -38,8 +47,9 @@ export function evidenceCompleteForTier(
     );
   }
   if (req.rollback && !ev?.rollback?.trim()) missing.push("a rollback plan (send `rollback`)");
-  if (req.evidence === "full" && !(ev?.shots?.length || ev?.qa)) {
-    missing.push("change-appropriate proof (send `testRun` or `shots`)");
+  const screenshot = ev?.artifacts?.some((artifact) => artifact.kind === "screenshot");
+  if (req.evidence === "full" && !(ev?.shots?.length || ev?.qa || screenshot)) {
+    missing.push("change-appropriate proof (send `testRun` or `shots`, or upload a screenshot with mc_upload_evidence)");
   }
   return { ok: missing.length === 0, missing };
 }
@@ -94,6 +104,14 @@ export function verifyCompliance(input: VerifyInput): VerifyResult {
     const line = (found: typeof errors) => `evidence summary breaks STE-lite (${found.length}): ${describeFindings(found)}`;
     if (blocking.length > 0) reasons.push(line(blocking));
     else if (errors.length > 0) notes.push(`${line(errors)} Warning only until ${report.enforceFrom.slice(0, 10)}.`);
+  }
+  // Visual evidence (TASK-3166): a diagram, annotated screenshot or web page that
+  // a person can open. It blocks only after its week and while uploads are on.
+  if (requiresHumanVerification(task.labels, tier) && !hasVisualArtifact(task.evidence)) {
+    const line = "no visual evidence: upload a diagram, annotated screenshot or web page with mc_upload_evidence.";
+    if (visualEvidenceMode(input.now, input.evidenceStoreEnabled) === "block") reasons.push(line);
+    else if (!input.evidenceStoreEnabled) notes.push(`${line} Warning only: evidence uploads are off for this task.`);
+    else notes.push(`${line} Warning only until ${VISUAL_EVIDENCE_ENFORCE_FROM.slice(0, 10)}.`);
   }
 
   return reasons.length === 0

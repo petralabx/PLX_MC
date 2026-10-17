@@ -258,6 +258,12 @@ export function graphInlineDrainEnabled(): boolean {
   return (process.env.PLX_MC_GRAPH_NOTIFICATION_INLINE_DRAIN ?? "1").trim() === "1";
 }
 
+// Evidence uploads to SharePoint (TASK-3166). Default OFF: a person first creates
+// the Mission Control library on the PLX site and allows this app to use it.
+export function evidenceStoreEnabled(): boolean {
+  return (process.env.PLX_MC_EVIDENCE_STORE_ENABLED ?? "0").trim() === "1";
+}
+
 // Project Documents library sync increment (TASK-628). Default OFF.
 export function documentsSyncEnabled(): boolean {
   return (process.env.PLX_MC_DOCUMENTS_SYNC_ENABLED ?? "0").trim() === "1";

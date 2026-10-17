@@ -13,12 +13,15 @@ const db = vi.hoisted(() => ({
   dispatches: new Map<string, { taskId: string; accountableHuman: string; repo: string }>(),
   patched: [] as { taskId: string; patch: Record<string, unknown> }[],
   taskLabels: [] as string[],
+  taskEvidence: undefined as unknown,
 }));
 
 vi.mock("@/lib/compliance/service", () => ({
   complete: vi.fn(async () => ({ ok: true })),
   checkout: vi.fn(async () => ({ checkoutId: "dsp_test" })),
 }));
+
+vi.mock("@/lib/db", () => ({ withTransaction: vi.fn(async (fn: (q: unknown) => unknown) => fn({})) }));
 
 vi.mock("@/lib/compliance/repo", () => ({
   getDispatch: vi.fn(async (id: string) => db.dispatches.get(id) ?? null),
@@ -35,7 +38,7 @@ vi.mock("@/lib/sync", () => ({
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
-  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: "BKT-OPEN", labels: db.taskLabels } })),
+  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: "BKT-OPEN", labels: db.taskLabels, evidence: db.taskEvidence } })),
   getBuckets: vi.fn(async () => [{ id: "BKT-OPEN", project: null }]),
   getProjects: vi.fn(async () => []),
 }));
@@ -70,6 +73,7 @@ beforeEach(() => {
   db.dispatches.clear();
   db.patched.length = 0;
   db.taskLabels = [];
+  db.taskEvidence = undefined;
   vi.mocked(complete).mockClear();
   db.dispatches.set("dsp_test", { taskId: "TASK-900", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 });
@@ -116,6 +120,16 @@ describe("actionComplete evidence (P0d)", () => {
     });
     const ev = db.patched.at(-1)?.patch.evidence as { shots?: { label: string }[] };
     expect(ev.shots).toHaveLength(2);
+  });
+
+  // TASK-3166: files from mc_upload_evidence are not lost when the hand-in rebuilds the evidence.
+  it("keeps the artifacts uploaded before the hand-in", async () => {
+    const artifacts = [{ kind: "diagram", driveItemId: "item-1", url: "https://sp/item-1" }];
+    db.taskEvidence = { summary: "old", items: [], artifacts };
+    await actionComplete(identity, { checkoutId: "dsp_test", summary: "new summary", verificationCommands: ["npm test"], rollback: "revert" });
+    const ev = db.patched.at(-1)?.patch.evidence as { summary: string; artifacts?: unknown[] };
+    expect(ev.summary).toBe("new summary");
+    expect(ev.artifacts).toEqual(artifacts);
   });
 });
 

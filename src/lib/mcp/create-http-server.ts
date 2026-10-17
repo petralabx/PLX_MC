@@ -24,6 +24,7 @@ import {
   actionSelfCheck,
 } from "./actions";
 import { recordMcpToolCall } from "./audit";
+import { actionUploadEvidence, uploadEvidenceInputShape } from "./evidence-actions";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 import { installMcpToolErrorEnvelope, taskLink } from "./envelope";
 import { idempotencyKeySchema } from "./task-create-idempotency";
@@ -333,6 +334,13 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     "Mark agent work complete for a checkout credential. verificationCommands and rollback are required. When a person must verify the work (verify:human, kind:human-test, or a high-risk filesChanged), the summary must be STE-lite; pass filesChanged. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard; fix the summary and call again on the same checkout.",
     completeTaskInputShape,
     async (body) => jsonResult(await actionComplete(identity, body))
+  );
+
+  server.tool(
+    "mc_upload_evidence",
+    "Upload visual evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html). Send the file as contentBase64, 3 MiB or less, with a caption. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). evidence_store_unavailable says what a person must set up.",
+    uploadEvidenceInputShape,
+    async (body) => jsonResult(await actionUploadEvidence(identity, body))
   );
 
   server.tool(

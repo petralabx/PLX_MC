@@ -19,7 +19,9 @@ const db = vi.hoisted(() => ({
   buckets: [
     { id: "BKT-WMS", name: "WMS", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: null as string | null, project: null },
     { id: "BKT-PRD", name: "With PRD", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: "https://example.com/prd.md", project: null },
+    { id: "BKT-SECRET", name: "Restricted", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: null as string | null, project: "PRJ-SECRET" as string | null },
   ],
+  projects: [{ id: "PRJ-SECRET", visibility: "restricted", members: ["vince@petrasoap.com"] }],
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
@@ -53,6 +55,9 @@ vi.mock("@/lib/sync/repo", () => ({
   },
   async getBuckets() {
     return db.buckets;
+  },
+  async getProjects() {
+    return db.projects;
   },
 }));
 
@@ -252,8 +257,9 @@ describe("cancelled tasks (TASK-2529)", () => {
 });
 
 // TASK-3166: with uploads on and after the warn-only week, a human-verification
-// task without visual evidence blocks. Trading Lab (agentic-swarm) cannot upload
-// to its own site yet, so the gate only warns for it.
+// task without visual evidence blocks. A task that cannot upload only warns:
+// Trading Lab (agentic-swarm) has no site yet, and a restricted project's
+// evidence must not go to the shared library.
 describe("verifyPr — visual evidence (TASK-3166)", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -275,6 +281,17 @@ describe("verifyPr — visual evidence (TASK-3166)", () => {
 
     const warned = await verifyPr({ repo: "petralabx/agentic-swarm", prNumber: 41, headSha: "sha41", changedPaths: ["src/lib/x.ts"], checkoutIds: [lab.checkoutId] });
     expect(warned.verdict).toBe("pass");
-    expect(warned.reasons.join(" ")).toMatch(/no visual evidence: .*Warning only: evidence uploads are off\./);
+    expect(warned.reasons.join(" ")).toMatch(/no visual evidence: .*Warning only: evidence uploads are off for this task\./);
+  });
+
+  it("only warns for a task in a restricted project", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-26T12:00:00Z"));
+    vi.stubEnv("PLX_MC_EVIDENCE_STORE_ENABLED", "1");
+    db.tasks.set("TASK-3", taskish({ id: "TASK-3", bucket: "BKT-SECRET", labels: ["verify:human"], evidence: complete }));
+    const secret = await checkout({ taskId: "TASK-3", runtime: "claude", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    const r = await verifyPr({ repo: "petralabx/PLX_MC", prNumber: 42, headSha: "sha42", changedPaths: ["src/lib/x.ts"], checkoutIds: [secret.checkoutId] });
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).toMatch(/no visual evidence: .*Warning only: evidence uploads are off for this task\./);
   });
 });

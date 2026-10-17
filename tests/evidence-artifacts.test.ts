@@ -11,6 +11,7 @@ import {
   VISUAL_EVIDENCE_ENFORCE_FROM,
   artifactFolder,
   artifactProblem,
+  evidenceCompleteForTier,
   hasVisualArtifact,
   ownEvidenceSite,
   sharePointSafeName,
@@ -128,7 +129,7 @@ describe("visual evidence at the gate", () => {
   it("warns while uploads are off, even after the week", () => {
     const r = verify(task({ evidence: evidence() }), AFTER, false);
     expect(r.verdict).toBe("pass");
-    expect(r.reasons.join(" ")).toMatch(/no visual evidence: .* Warning only: evidence uploads are off\./);
+    expect(r.reasons.join(" ")).toMatch(/no visual evidence: .* Warning only: evidence uploads are off for this task\./);
   });
 
   it("warns during the week when uploads are on, then blocks", () => {
@@ -136,6 +137,13 @@ describe("visual evidence at the gate", () => {
     const blocked = verify(task({ evidence: evidence() }), AFTER, true);
     expect(blocked.verdict).toBe("block");
     expect(blocked.reasons[0]).toMatch(/^no visual evidence: upload a diagram, annotated screenshot or web page/);
+  });
+
+  it("counts an uploaded screenshot as full-tier proof, and a diagram alone not", () => {
+    const noProof = { ...evidence(), qa: undefined };
+    expect(evidenceCompleteForTier(noProof, "high").missing.join(" ")).toMatch(/upload a screenshot with mc_upload_evidence/);
+    expect(evidenceCompleteForTier({ ...noProof, artifacts: [artifact("diagram")] }, "high").ok).toBe(false);
+    expect(evidenceCompleteForTier({ ...noProof, artifacts: [artifact("screenshot")] }, "high").ok).toBe(true);
   });
 
   it("passes with any visual artifact, and leaves work without human verification alone", () => {

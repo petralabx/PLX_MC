@@ -133,6 +133,17 @@ export async function assertTaskProjectAccess(
   await assertBucketProjectAccess(task.bucket, principal, q);
 }
 
+/**
+ * TASK-3166: whether a bucket sits in a restricted project. Evidence from such a
+ * project must not go to a shared library, where everyone with library access
+ * could read it.
+ */
+export async function isBucketInRestrictedProject(bucketId: string, q?: TxQuery): Promise<boolean> {
+  const bucket = (await getBuckets(q)).find((row) => row.id === bucketId);
+  if (!bucket?.project) return false;
+  return isRestrictedProject((await getProjects(q)).find((row) => row.id === bucket.project));
+}
+
 export function scopeHierarchy<TTask extends { bucket: string }, TBucket extends Bucket, TProject extends Project>(
   input: {
     tasks?: readonly TTask[];

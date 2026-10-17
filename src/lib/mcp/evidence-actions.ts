@@ -23,7 +23,7 @@ import {
 } from "@/lib/compliance";
 import * as complianceRepo from "@/lib/compliance/repo";
 import type { EvidenceArtifact, Task } from "@/lib/mc-data";
-import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
+import { assertTaskProjectAccess, isBucketInRestrictedProject } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask } from "@/lib/sync";
@@ -91,6 +91,14 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
   if (!task) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
   if (task.stage === "cancelled" || task.stage === "verified") {
     throw new ApiError("task_closed", `${taskId} is ${task.stage}; it takes no new evidence.`, 409);
+  }
+  // Everyone with access to the shared library could read a restricted project's
+  // evidence. MC never grants or narrows access itself, so it refuses instead.
+  if (await isBucketInRestrictedProject(task.bucket)) {
+    throw unavailable(
+      `${taskId} is in a restricted project. Its evidence cannot go to the shared "${PLX_EVIDENCE_STORE.library}" library. ` +
+        "A person must set up a destination that keeps the project's access rules."
+    );
   }
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   // The same file again (a retry) returns the record it already has.

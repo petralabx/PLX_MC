@@ -441,10 +441,11 @@ This also applies when a person must verify the work. The person needs something
 
 1. Make a diagram (svg or png), an annotated screenshot (png, jpeg or webp) or a web page (html).
 2. Keep the file to 3 MiB or less.
-3. Call `mc_upload_evidence` with the checkout id, the kind, the content type and a caption. Over stdio, send an absolute `filePath`. Otherwise send `contentBase64` and `fileName`.
-4. Upload before `mc_complete_task`. The hand-in keeps every uploaded file.
+3. Call `mc_upload_evidence` with the checkout id, the kind, the content type and a caption.
+4. Over stdio, send an absolute `filePath`. Otherwise send `contentBase64` and `fileName`.
+5. Upload before `mc_complete_task`. The hand-in keeps every uploaded file.
 
-MC stores the file on the PLX SharePoint site, in the `Mission Control` library, under `<system>/<project>/<bucket>/<task id>`. The task records the link and a SHA-256. Trading Lab work (`petralabx/agentic-swarm`) goes on its own site, never the PLX site.
+MC stores the file on the PLX SharePoint site, in the `Mission Control` library, under `<system>/<project>/<bucket>/<task id>`. The task records the link and a SHA-256. Trading Lab work (`petralabx/agentic-swarm`) goes on its own site, never the PLX site. MC refuses a task in a restricted project, because everyone with access to the library could read its evidence.
 
 A person must create the library and allow the Mission Control app to use the site. Then the operator sets `PLX_MC_EVIDENCE_STORE_ENABLED=1`. Until then, the call returns `evidence_store_unavailable` and says what is missing. Report that message. Never create a library or grant access yourself.
 

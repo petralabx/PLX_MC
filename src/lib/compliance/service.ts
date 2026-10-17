@@ -36,6 +36,7 @@ import {
   upsertRoutingSession,
 } from "@/lib/routing/repo";
 import type { RoutingProposalState } from "@/lib/routing/types";
+import { isBucketInRestrictedProject } from "@/lib/permissions/project-acl-guard";
 import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask, snapshot } from "@/lib/sync";
 import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
@@ -544,6 +545,13 @@ export async function verifyPr(
     const actorIdentity = d?.runtime ?? "agent";
     const task = await loadTask(taskId);
     const bucketPrd = await bucketPrdForTask(task);
+    // A task that cannot upload evidence never blocks on it: Trading Lab has its
+    // own site, and a restricted project's evidence must not go to the shared library.
+    const canUploadEvidence =
+      !!task &&
+      evidenceStoreEnabled() &&
+      !ownEvidenceSite(d?.repo ?? "") &&
+      !(await isBucketInRestrictedProject(task.bucket));
     const result: VerifyResult = resolution.reason
       ? { verdict: "block", reasons: [checkoutBlockReason(resolution.reason)] }
       : !task
@@ -557,8 +565,7 @@ export async function verifyPr(
                 actor: "agent",
                 tier,
                 bucketPrd,
-                // A repo with its own evidence site (Trading Lab) cannot upload yet: never block it.
-                evidenceStoreEnabled: evidenceStoreEnabled() && !ownEvidenceSite(d?.repo ?? ""),
+                evidenceStoreEnabled: canUploadEvidence,
               });
     if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, result, taskId ?? cid);
     tasks.push({ checkoutId: cid, taskId, verdict: result.verdict, reasons: result.reasons });

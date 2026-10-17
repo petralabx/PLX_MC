@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   dispatch: null as null | Record<string, unknown>,
   task: null as null | Record<string, unknown>,
   storeEnabled: true,
+  restricted: false,
   driveId: "drive-mc" as string | null,
   siteError: null as null | Error,
   uploads: [] as { driveId: string; path: string; size: number; contentType: string }[],
@@ -36,7 +37,10 @@ vi.mock("@/lib/sync", () => ({
 }));
 vi.mock("@/lib/db", () => ({ withTransaction: vi.fn(async (fn: (q: unknown) => unknown) => fn({})) }));
 vi.mock("@/lib/secrets", () => ({ evidenceStoreEnabled: () => h.storeEnabled }));
-vi.mock("@/lib/permissions/project-acl-guard", () => ({ assertTaskProjectAccess: vi.fn(async () => undefined) }));
+vi.mock("@/lib/permissions/project-acl-guard", () => ({
+  assertTaskProjectAccess: vi.fn(async () => undefined),
+  isBucketInRestrictedProject: vi.fn(async () => h.restricted),
+}));
 vi.mock("@/lib/routing/mutations/actors", () => ({
   requireMcpActor: vi.fn(() => ({ actorId: "sp_mcp_claude_code" })),
   aclPrincipalFromMcp: () => ({ tokens: ["sp_mcp_claude_code"] }),
@@ -93,6 +97,7 @@ beforeEach(() => {
     evidence: { summary: "s", items: [], artifacts: [{ kind: "screenshot", driveItemId: "old" }] },
   };
   h.storeEnabled = true;
+  h.restricted = false;
   h.driveId = "drive-mc";
   h.siteError = null;
   h.uploads.length = 0;
@@ -174,6 +179,17 @@ describe("mc_upload_evidence", () => {
       message: expect.stringMatching(/^Trading Lab evidence goes on its own SharePoint site, never the PLX site/),
     });
     expect(h.uploads).toHaveLength(0);
+  });
+
+  it("keeps a restricted project's evidence out of the shared library", async () => {
+    h.restricted = true;
+    await expect(upload()).rejects.toMatchObject({
+      code: "evidence_store_unavailable",
+      status: 503,
+      message: expect.stringMatching(/^TASK-3166 is in a restricted project\. .*keeps the project's access rules\.$/),
+    });
+    expect(h.uploads).toHaveLength(0);
+    expect(h.patched).toHaveLength(0);
   });
 
   it("never creates a missing library", async () => {

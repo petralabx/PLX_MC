@@ -272,7 +272,10 @@ traceable to a refresh run and a named query.
       `report_snap_forecast_summary` (migration 043; the line's category and
       the summary's `category_missing`, migration 045), kept with their run (90
       days). **Workbook**: the Forecast sheet holds the rows as values and the
-      totals, the four numbers and the hit rates as formulas.
+      totals, the four numbers and the hit rates as formulas. Each row ends
+      with its customer class and item category (columns U and V, after the
+      columns the formulas read), and a note under the rows says when
+      categories wait for read access or for the next refresh.
 
 ```
 reporting replica (read-only login) ──┐ one RR read-only tx

@@ -1,6 +1,6 @@
 "use client";
 
-// TaskTable — task rows whose columns tier by the table's own width (container queries; card rows below 600px), capped at `cap` rows with a show-all footer and an optional closed-rows reveal; props: tasks, nav, closed?, emptyText, cap?.
+// TaskTable — task rows whose columns tier by the table's own width (container queries; card rows below 600px), capped at `cap` rows (outstanding and revealed closed rows each) with a show-all footer and an optional closed-rows reveal; props: tasks, nav, closed?, emptyText, cap?.
 import { useState } from "react";
 import { Eye, EyeOff, Hand } from "lucide-react";
 
@@ -8,7 +8,7 @@ import { ACTORS, PRIORITY, STAGES, STAGE_IDX, hasHumanAccountableOwner, inputReq
 import type { PriorityKey, Task } from "@/lib/mc-data";
 
 import { Assignee } from "./atoms";
-import { isDoneStage, isOutstanding, stageChipTone } from "./project-overview.helpers";
+import { cappedRows, isDoneStage, isOutstanding, stageChipTone } from "./project-overview.helpers";
 import type { Nav } from "./route";
 
 const PRIORITY_KEYS = Object.keys(PRIORITY) as PriorityKey[];
@@ -30,8 +30,9 @@ export function TaskTable({
   const [showAll, setShowAll] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
 
-  const rows = showClosed && closed ? [...tasks, ...closed] : tasks;
-  const visible = showAll ? rows : rows.slice(0, cap);
+  const shownClosed = showClosed && closed ? closed : [];
+  const rows = [...tasks, ...shownClosed];
+  const visible = showAll ? rows : cappedRows(tasks, shownClosed, cap);
   const hidden = rows.length - visible.length;
   const closedDone = closed?.filter(isDoneStage).length ?? 0;
   const closedCancelled = (closed?.length ?? 0) - closedDone;

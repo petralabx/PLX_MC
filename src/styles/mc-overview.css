@@ -1512,8 +1512,16 @@
     flex: 1 1 100%;
   }
 
+  /* 320–360px phones: the bar may shrink and the count may wrap, so the
+     section's overflow: hidden never clips the count. */
   .mc .pv-sec-r .track .bar {
-    flex-basis: 96px;
+    flex: 0 1 96px;
+    min-width: 48px;
+  }
+
+  .mc .pv-sec-r .track .ct {
+    min-width: 0;
+    white-space: normal;
   }
 }
 
@@ -1559,6 +1567,20 @@
 @container main (max-width: 599px) {
   .mc .pv-sched-head .num {
     font-size: 30px;
+  }
+
+  /* The owner picker anchors to the facts zone's left edge, not the owner
+     cell (column 2 or 3), so its 284px never runs past a phone viewport. */
+  .mc .pv-facts {
+    position: relative;
+  }
+
+  .mc .pv-strip .pv-owner {
+    position: static;
+  }
+
+  .mc .pv-strip .ppick {
+    min-width: min(284px, 100%);
   }
 
   .mc .pv-dates .today {

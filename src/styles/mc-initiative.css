@@ -62,6 +62,14 @@
   overflow-wrap: anywhere;
 }
 
+/* A long parent-project name wraps the same way. */
+.mc .ini-klink.ini-project {
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .mc .ini-klink.ini-spec-edit {
   color: var(--p-muted);
 }

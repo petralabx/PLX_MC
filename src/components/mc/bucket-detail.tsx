@@ -332,7 +332,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             {parentProject ? (
               <button
                 type="button"
-                className="ini-klink"
+                className="ini-klink ini-project"
                 onClick={() => nav("project", { projectId: parentProject.id, bucketId: bucket.id })}
               >
                 <CornerLeftUp size={11} aria-hidden="true" />

@@ -89,6 +89,12 @@ export function filterCounts(tasks: readonly Task[]): Record<TaskFilterKey, numb
   return { open: tasks.filter(isOutstanding).length, human: tasks.filter(needsHuman).length, all: tasks.length };
 }
 
+// The rows a capped TaskTable shows: the cap applies to the outstanding rows
+// and the revealed closed rows separately, so "Show closed" always shows some.
+export function cappedRows<T>(tasks: readonly T[], closed: readonly T[], cap: number): T[] {
+  return [...tasks.slice(0, cap), ...closed.slice(0, cap)];
+}
+
 // ─── Schedule vs work ────────────────────────────────────────────────────────
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -97,6 +103,11 @@ const DAY_MS = 86_400_000;
 function validDate(year: number, month: number, day: number): Date | null {
   const date = new Date(year, month, day);
   return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day ? date : null;
+}
+
+// Local calendar date as a whole-day ordinal, independent of DST.
+function dayNumber(date: Date): number {
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS;
 }
 
 // Project/bucket dates are free text: "2026.06.11" (seed), ISO "2026-06-11",
@@ -155,8 +166,9 @@ export function schedulePace(
   const frac = Math.min(1, Math.max(0, (today.getTime() - started.getTime()) / span));
   const elapsedPct = Math.round(frac * 100);
   const delta = closedPct - elapsedPct;
-  // Overdue counts from the end of the target day.
-  const overdueDays = Math.max(0, Math.floor((today.getTime() - target.getTime()) / DAY_MS));
+  // Overdue counts from the end of the target day, in local calendar days (a
+  // DST day is not DAY_MS long).
+  const overdueDays = Math.max(0, dayNumber(today) - dayNumber(target));
   const pace: PaceKey = overdueDays > 0 ? "overdue" : delta >= 3 ? "ahead" : delta <= -3 ? "behind" : "on";
   return { started, target, frac, elapsedPct, delta, pace, overdueDays };
 }

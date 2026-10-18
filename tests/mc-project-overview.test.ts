@@ -3,11 +3,17 @@
 // counts "done" strictly by the done stage band; projectProgress and the
 // per-bucket rollups agree with each other on the same task set.
 
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { BUCKETS, TASKS } from "@/lib/mc-data";
 import type { Task } from "@/lib/mc-data";
 import {
+  cappedRows,
   filterCounts,
   filterTasks,
   isDoneStage,
@@ -20,6 +26,7 @@ import {
   shortDate,
   stageChipTone,
 } from "@/components/mc/project-overview.helpers";
+import { TaskTable } from "@/components/mc/task-table";
 
 const task = (over: Partial<Task>): Task =>
   ({ ...TASKS[0], id: `T-${Math.random().toString(36).slice(2, 8)}`, ...over }) as Task;
@@ -210,5 +217,82 @@ describe("schedulePace", () => {
     expect(schedulePace(50, "soon", "2026.09.09", at(6, 1))).toBeNull();
     expect(schedulePace(50, "2026.09.09", "2026.06.01", at(6, 1))).toBeNull();
     expect(schedulePace(50, "2026.06.01", "2026.06.01", at(6, 1))).toBeNull();
+  });
+});
+
+describe("schedulePace across DST (America/New_York)", () => {
+  // Overdue counts local calendar days, not 24-hour periods: a DST day is 23
+  // or 25 hours long.
+  const tz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = "America/New_York";
+  });
+  afterAll(() => {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  });
+
+  it("a spring-forward target is 1 day overdue just after midnight", () => {
+    const s = schedulePace(50, "2026.01.01", "2026.03.08", new Date(2026, 2, 9, 0, 30))!;
+    expect(s.overdueDays).toBe(1);
+    expect(s.pace).toBe("overdue");
+  });
+
+  it("a fall-back target is 1 day overdue the next day, not 2", () => {
+    expect(schedulePace(50, "2026.01.01", "2026.11.01", new Date(2026, 10, 2, 0, 30))!.overdueDays).toBe(1);
+    expect(schedulePace(50, "2026.01.01", "2026.11.01", new Date(2026, 10, 2, 23, 30))!.overdueDays).toBe(1);
+  });
+
+  it("is 0 on the target day and for a future target", () => {
+    expect(schedulePace(50, "2026.01.01", "2026.03.08", new Date(2026, 2, 8, 23, 59))!.overdueDays).toBe(0);
+    expect(schedulePace(50, "2026.01.01", "2026.11.01", new Date(2026, 10, 1, 23, 59))!.overdueDays).toBe(0);
+    const future = schedulePace(50, "2026.01.01", "2026.12.31", new Date(2026, 2, 9, 0, 30))!;
+    expect(future.overdueDays).toBe(0);
+    expect(future.pace).not.toBe("overdue");
+  });
+});
+
+describe("cappedRows (TaskTable row cap)", () => {
+  const open = Array.from({ length: 10 }, (_, i) => `open-${i}`);
+  const closed = ["closed-0", "closed-1", "closed-2"];
+
+  it("closed rows hidden: the first `cap` outstanding rows, as before", () => {
+    expect(cappedRows(open, [], 8)).toEqual(open.slice(0, 8));
+    expect(cappedRows(open.slice(0, 3), [], 8)).toEqual(open.slice(0, 3));
+  });
+
+  it("closed rows shown with 8+ outstanding: the closed rows are still visible", () => {
+    const rows = cappedRows(open, closed, 8);
+    expect(rows).toEqual([...open.slice(0, 8), ...closed]);
+  });
+
+  it("caps each group separately", () => {
+    const many = Array.from({ length: 12 }, (_, i) => `closed-${i}`);
+    expect(cappedRows(open, many, 8)).toEqual([...open.slice(0, 8), ...many.slice(0, 8)]);
+  });
+
+  it("TaskTable with closed rows hidden still caps the outstanding rows", () => {
+    const outstanding = Array.from({ length: 10 }, (_, i) => task({ id: `T-OPEN-${i}`, stage: "backlog" }));
+    const done = [task({ id: "T-DONE-0", stage: "merged" }), task({ id: "T-DONE-1", stage: "merged" })];
+    const html = renderToStaticMarkup(
+      createElement(TaskTable, { tasks: outstanding, closed: done, nav: () => {}, emptyText: "None" })
+    );
+    expect(html.match(/class="pv-trow"/g)).toHaveLength(8);
+    expect(html).toContain("T-OPEN-7");
+    expect(html).not.toContain("T-OPEN-8");
+    expect(html).not.toContain("T-DONE-0");
+    expect(html).toContain("Show all 10 · 2 more");
+    expect(html).toContain("Show 2 closed");
+  });
+});
+
+describe("section header CSS at the phone tier", () => {
+  it("lets the progress bar shrink and the count wrap below 600px", () => {
+    const css = readFileSync(join(process.cwd(), "src/styles/mc-overview.css"), "utf8");
+    const start = css.indexOf("@container pv-sec (max-width: 599px)");
+    expect(start).toBeGreaterThan(-1);
+    const block = css.slice(start, css.indexOf("\n}\n", start));
+    expect(block).toMatch(/\.pv-sec-r \.track \.bar \{[^}]*flex: 0 1 96px;[^}]*min-width: 48px;/);
+    expect(block).toMatch(/\.pv-sec-r \.track \.ct \{[^}]*min-width: 0;[^}]*white-space: normal;/);
   });
 });

@@ -33,6 +33,7 @@ import {
   filterForecastRows,
   fixOeNumber,
   forecastCadCents,
+  activeCategoryFilter,
   forecastCategoryOptions,
   forecastRows,
   forecastSummary,
@@ -614,6 +615,24 @@ describe("the list: customer class and item category (TASK-3177)", () => {
       "WIPES (Distribution)",
       "No category",
     ]);
+  });
+
+  it("falls back to All when the chosen category is no longer a choice or categories can't be read, so rows never go empty behind 'All categories'", () => {
+    const gone = rows.filter((r) => r.category !== "WIPES");
+    expect(forecastCategoryOptions(rows).some((o) => o.key === "category:WIPES")).toBe(true);
+    expect(forecastCategoryOptions(gone).some((o) => o.key === "category:WIPES")).toBe(false);
+    // Still a choice: kept. Gone after a refresh: All, and every row shows again.
+    expect(activeCategoryFilter("category:WIPES", rows, true)).toBe("category:WIPES");
+    const after = activeCategoryFilter("category:WIPES", gone, true);
+    expect(after).toBe("all");
+    expect(filterForecastRows(gone, { filter: "all", query: "", category: "category:WIPES" })).toHaveLength(0);
+    expect(filterForecastRows(gone, { filter: "all", query: "", category: after })).toHaveLength(gone.length);
+    // Channels and No category stay valid while categories are readable; nothing is chosen while they are not.
+    expect(activeCategoryFilter("channel:Manufacturing", gone, true)).toBe("channel:Manufacturing");
+    expect(activeCategoryFilter("none", rows, true)).toBe("none");
+    expect(activeCategoryFilter("none", gone.filter((r) => r.category !== null), true)).toBe("all");
+    expect(activeCategoryFilter("channel:Distribution", rows, false)).toBe("all");
+    expect(activeCategoryFilter("all", rows, false)).toBe("all");
   });
 
   it("reads Sage's category only when the login may: otherwise the query never names the column", () => {

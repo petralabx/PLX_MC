@@ -241,6 +241,7 @@ export {
   filterForecastRows,
   fixOeNumber,
   forecastCadCents,
+  activeCategoryFilter,
   forecastCategoryOptions,
   forecastRows,
   forecastSummary,

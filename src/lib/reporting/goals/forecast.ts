@@ -558,6 +558,22 @@ export function forecastCategoryOptions(rows: readonly ForecastRow[]): { key: Fo
 }
 
 /**
+ * The category filter to apply: the one the person chose while it is still one of
+ * the choices and the login can read categories, otherwise All. A refresh can drop
+ * the chosen category (or the access can lapse); without this the dropdown would
+ * fall back to "All categories" while the rows and totals stayed filtered to
+ * nothing.
+ */
+export function activeCategoryFilter(
+  chosen: ForecastCategoryFilter,
+  rows: readonly ForecastRow[],
+  categoriesRead: boolean
+): ForecastCategoryFilter {
+  if (chosen === "all" || !categoriesRead) return "all";
+  return forecastCategoryOptions(rows).some((option) => option.key === chosen) ? chosen : "all";
+}
+
+/**
  * Rows in the chosen bucket, customer class and category whose order, customer
  * (name or code), PO, item, description, category or AO contain the search,
  * ignoring case and spacing.

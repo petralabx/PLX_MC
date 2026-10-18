@@ -16,6 +16,7 @@ import {
   CUSTOMER_CLASSES,
   FORECAST_BUCKET_LABELS,
   FORECAST_FILTERS,
+  activeCategoryFilter,
   filterForecastRows,
   forecastCadCents,
   forecastCategoryOptions,
@@ -152,13 +153,16 @@ function aoText(row: ForecastRow): string {
 function ForecastList({ rows: all, categoryMissing }: { rows: readonly ForecastRow[]; categoryMissing: string[] | null }) {
   const [filter, setFilter] = useState<ForecastFilter>("all");
   const [customerClass, setCustomerClass] = useState<ForecastClassFilter>("all");
-  const [category, setCategory] = useState<ForecastCategoryFilter>("all");
+  const [chosenCategory, setCategory] = useState<ForecastCategoryFilter>("all");
   const [query, setQuery] = useState("");
+  const categoriesRead = categoryMissing !== null && categoryMissing.length === 0;
+  // A refresh can drop the chosen category (or the login can lose access): fall back to All, the way the dropdown shows it.
+  const category = activeCategoryFilter(chosenCategory, all, categoriesRead);
+  if (category !== chosenCategory) setCategory(category);
   const rows = filterForecastRows(all, { filter, query, customerClass, category });
   const cad = forecastCadCents(rows);
   const others = otherCurrencyTotals(rows);
   const othersText = others.length > 0 ? ` (and ${others.map((c) => `${c.currency} ${amount(c.cents)}`).join(", ")}, not converted)` : "";
-  const categoriesRead = categoryMissing !== null && categoryMissing.length === 0;
   // The chips count the rows the class and category filters keep, before the search.
   const chipCount = (key: ForecastFilter) => filterForecastRows(all, { filter: key, query: "", customerClass, category }).length;
 

@@ -64,6 +64,7 @@ MCP_PRINCIPAL_IDS = {
     "sp_mcp_cos",
     "sp_mcp_workbench",
     "sp_mcp_infra",
+    "sp_mcp_cip_auto_undraft",
 }
 
 

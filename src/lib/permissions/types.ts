@@ -167,6 +167,7 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
   "sp_mcp_cos",
   "sp_mcp_workbench",
   "sp_mcp_infra",
+  "sp_mcp_cip_auto_undraft",
 ] as const;
 
 /**
@@ -194,6 +195,12 @@ export const WORKBENCH_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_workbench" as const;
  * the MCP tool allowlist limits it to the same read tools.
  */
 export const INFRA_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_infra" as const;
+
+/**
+ * PLX CIP Auto-Undraft principal (agentic-swarm cip-auto-undraft workflow).
+ * Read-only: task.read only, and the MCP tool allowlist limits it to four read tools.
+ */
+export const CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_cip_auto_undraft" as const;
 
 export type McpAgentServicePrincipalId =
   (typeof MCP_AGENT_SERVICE_PRINCIPAL_IDS)[number];

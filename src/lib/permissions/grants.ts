@@ -2,6 +2,7 @@
 
 import type { AccessRole, Capability } from "./types";
 import {
+  CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID,
   COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
   COS_MCP_SERVICE_PRINCIPAL_ID,
   GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
@@ -57,7 +58,7 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
   owner: OWNER_CAPABILITIES,
 };
 
-// Every per-agent MCP principal except sp_mcp_portal, sp_mcp_workbench and sp_mcp_infra carries the same reviewed task/planning/routing
+// Every per-agent MCP principal except sp_mcp_portal, sp_mcp_workbench, sp_mcp_infra and sp_mcp_cip_auto_undraft carries the same reviewed task/planning/routing
 // + bucket.update + project.update (steward edits, mc_update_project) +
 // sync.resolve (via sync.mutate) bundle; per-agent identity isolates
 // credentials and audit, not capabilities. Console sweep/retry stay
@@ -135,6 +136,11 @@ const WORKBENCH_MCP_CAPABILITIES: readonly Capability[] = ["task.read"];
 // grant and tool allowlist as sp_mcp_workbench.
 const INFRA_MCP_CAPABILITIES: readonly Capability[] = ["task.read"];
 
+// sp_mcp_cip_auto_undraft (PLX CIP Auto-Undraft, agentic-swarm cip-auto-undraft;
+// Vince 2026-10-18): read-only. task.read only, and src/lib/mcp/tool-allowlist.ts
+// limits it to its four read tools.
+const CIP_AUTO_UNDRAFT_MCP_CAPABILITIES: readonly Capability[] = ["task.read"];
+
 const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
   ...Object.fromEntries(
     MCP_AGENT_SERVICE_PRINCIPAL_IDS.map((id) => [
@@ -151,7 +157,9 @@ const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
                 ? WORKBENCH_MCP_CAPABILITIES
                 : id === INFRA_MCP_SERVICE_PRINCIPAL_ID
                   ? INFRA_MCP_CAPABILITIES
-                  : MCP_AGENT_CAPABILITIES,
+                  : id === CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID
+                    ? CIP_AUTO_UNDRAFT_MCP_CAPABILITIES
+                    : MCP_AGENT_CAPABILITIES,
     ])
   ),
   [SYNC_INBOUND_SERVICE_PRINCIPAL_ID]: ["sync.service.write", "task.read"],

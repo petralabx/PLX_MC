@@ -9,6 +9,7 @@
 
 import { ApiError } from "@/lib/api/route";
 import {
+  CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID,
   INFRA_MCP_SERVICE_PRINCIPAL_ID,
   POLICY_VERSION,
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
@@ -27,6 +28,14 @@ const READ_ONLY_MCP_TOOLS = [
   "mc_get_task",
 ] as const;
 
+// The CIP auto-undraft workflow reads tasks only: no buckets, no knowledge search.
+const CIP_AUTO_UNDRAFT_MCP_TOOLS = [
+  "mc_self_check",
+  "mc_get_context",
+  "mc_search_tasks",
+  "mc_get_task",
+] as const;
+
 export const MCP_TOOL_ALLOWLISTS: Readonly<
   Partial<Record<McpAgentServicePrincipalId, readonly string[]>>
 > = {
@@ -39,6 +48,8 @@ export const MCP_TOOL_ALLOWLISTS: Readonly<
   [WORKBENCH_MCP_SERVICE_PRINCIPAL_ID]: READ_ONLY_MCP_TOOLS,
   // PLX Infra only reads, like the Workbench.
   [INFRA_MCP_SERVICE_PRINCIPAL_ID]: READ_ONLY_MCP_TOOLS,
+  // PLX CIP Auto-Undraft (agentic-swarm cip-auto-undraft) only reads tasks.
+  [CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID]: CIP_AUTO_UNDRAFT_MCP_TOOLS,
 };
 
 export function isMcpToolAllowed(principalId: string, tool: string): boolean {

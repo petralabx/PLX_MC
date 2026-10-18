@@ -24,7 +24,7 @@ import {
   type ForecastBucket,
   type ForecastCategoryFilter,
   type ForecastClassFilter,
-} from "@/lib/reporting/goals/forecast";
+} from "@/lib/reporting/goals/forecast-list";
 
 import { amount, count, day, dollars, price, type ReadyPage } from "./helpers";
 

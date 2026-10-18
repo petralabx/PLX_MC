@@ -635,6 +635,22 @@ describe("the list: customer class and item category (TASK-3177)", () => {
     expect(activeCategoryFilter("all", rows, false)).toBe("all");
   });
 
+  it("keeps the customer roster out of the browser bundle: the page's client code never imports forecast.ts or customer-classes.json", () => {
+    // Anything the client component imports ships in /_next/static, which is served without sign-in.
+    const runtimeImports = (file: string) => {
+      const source = readFileSync(path.join(process.cwd(), file), "utf8");
+      return [...source.matchAll(/^import\s+(type\s+)?[\s\S]*?\sfrom\s+"([^"]+)";/gm)].filter((m) => !m[1]).map((m) => m[2]);
+    };
+    const forbidden = /customer-classes|\/forecast$|\.\/forecast$|\/reporting\/goals$|\/reporting\/goals\/index$/;
+    for (const file of ["src/components/mc/goals/forecast.tsx", "src/lib/reporting/goals/forecast-list.ts"]) {
+      const imports = runtimeImports(file);
+      expect(imports.length).toBeGreaterThan(0);
+      expect(imports.filter((specifier) => forbidden.test(specifier))).toEqual([]);
+    }
+    expect(runtimeImports("src/components/mc/goals/forecast.tsx")).toContain("@/lib/reporting/goals/forecast-list");
+    expect(customerClassOf("NIUB01")).toBe("Exclusive Manufacturing");
+  });
+
   it("reads Sage's category only when the login may: otherwise the query never names the column", () => {
     expect(forecastOrdersQuery(true).sql).toContain("d.category");
     expect(forecastOrdersQuery(false).sql).not.toContain("d.category");

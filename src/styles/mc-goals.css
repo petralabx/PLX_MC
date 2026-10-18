@@ -655,6 +655,25 @@
   font-size: var(--p-text-small);
 }
 
+.mc .goals .gp-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--p-text-small);
+  color: var(--p-ink);
+}
+
+.mc .goals .gp-select select {
+  min-height: var(--p-touch);
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper);
+  color: var(--p-ink);
+  font: inherit;
+}
+
 .mc .goals .gp-seg {
   display: flex;
   flex-wrap: wrap;

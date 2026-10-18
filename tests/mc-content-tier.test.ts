@@ -102,6 +102,39 @@ describe("ultra-wide page edge (CSS)", () => {
     for (const width of [1200, 1612]) expect(stageVars(width)["--mc-page-edge"]).toBe(GUTTER);
   });
 
+  it("keeps the 1560px column in the shell only", () => {
+    // One centring mechanism: no screen sheet carries its own ultra-wide rule.
+    for (const file of readdirSync(styles).filter((f) => f.endsWith(".css") && f !== "mc-shell.css")) {
+      expect(css(file), file).not.toMatch(/1560px/);
+    }
+  });
+
+  // The strip's 440px facts zone and the ≤420px aside pad with --p-gutter, so
+  // the strip and the initiative body take (page edge − gutter) outside it.
+  it("lines the initiative strip and body up with the page header at every width", () => {
+    const strip = decl(rule(css("mc-overview.css"), ".mc .pv-strip"), "padding-inline")!;
+    const body = decl(rule(css("mc-initiative.css"), ".mc .ini-page .ini-body"), "padding-inline")!;
+    const facts = decl(rule(css("mc-overview.css"), ".mc .pv-facts"), "padding")!;
+    const column = decl(rule(css("mc-initiative.css"), ".mc .ini-body .ini-aside"), "padding")!;
+    const header = decl(rule(css("mc-app.css"), ".mc .ph"), "padding")!;
+    for (const width of [320, 390, 768, 1024, 1280, 1440, 1611, 1612, 1613, 1920, 2560, 3440]) {
+      const vars = stageVars(width);
+      const edge = vars["--mc-page-edge"];
+      expect(inlinePadding(header, vars, width), `header @${width}`).toBe(edge);
+      for (const [outer, inner, name] of [
+        [strip, facts, "strip"],
+        [body, column, "body"],
+      ]) {
+        const out = px(outer, vars, width);
+        // The inside always keeps the normal gutter; the outside only grows.
+        expect(inlinePadding(inner, vars, width), `${name} @${width}`).toBe(GUTTER);
+        expect(out + GUTTER, `${name} @${width}`).toBe(edge);
+        if (width <= 1612) expect(out, `${name} @${width}`).toBe(0);
+      }
+    }
+    expect(px(strip, stageVars(3440), 3440)).toBe((3440 - 1560) / 2 - GUTTER);
+  });
+
   it("keeps the Goals dialog height at the normal gutter at 3440 × 1440", () => {
     const body = rule(css("mc-goals.css"), ".mc .goals .gp-dialog");
     const maxHeight = px(decl(body, "max-height")!, stageVars(3440), 3440);

@@ -468,8 +468,12 @@
   grid-template-columns: 1fr;
 }
 
-/* Overview strip: facts zone beside the schedule-vs-work zone. */
+/* Overview strip: facts zone beside the schedule-vs-work zone. The fixed
+   340/440px facts zone pads with --p-gutter, so the strip takes the ultra-wide
+   page edge as outer padding (page edge − gutter) and lines up with the page
+   header. Below the column tier the outer padding is 0. */
 .mc .pv-strip {
+  padding-inline: calc(var(--mc-page-edge, var(--p-gutter)) - var(--p-gutter));
   background: var(--p-paper);
   border-bottom: 1px solid var(--p-grid);
 }
@@ -1603,20 +1607,6 @@
 
   .mc .pv-filter .short {
     display: inline;
-  }
-}
-
-/* Ultra-wide: header, strip and body centre in a 1560px column; the hairlines
-   stay full-bleed because only the padding grows. */
-@container main (min-width: 1800px) {
-  .mc .pv-page > .ph,
-  .mc .pv-page .bkbody .c {
-    padding-left: calc((100% - 1560px) / 2);
-    padding-right: calc((100% - 1560px) / 2);
-  }
-
-  .mc .pv-page .pv-strip {
-    padding: 0 calc((100% - 1560px) / 2);
   }
 }
 

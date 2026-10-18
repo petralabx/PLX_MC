@@ -201,6 +201,28 @@ code does not undo schema or SharePoint changes; use each applied migration's
 rollback header and inspect provisioning results before an operator rollback.
 Never mark unapplied migrations applied to bypass a failure.
 
+## Environment-scoped migration secrets and agent policy
+
+Policy: **Agents may run staging and UAT migrations freely (plan, status-only
+and deploy after reviewing the plan). MC live apply stays Vince-approved via
+`mc-live-release`.**
+
+Migration credentials are GitHub environment secrets, each environment limited
+to `main` by a deployment branch policy, so a workflow edited on another branch
+cannot read them:
+
+| Environment | Reviewers | Secrets | Used by |
+|---|---|---|---|
+| `uat-migrate` | none | `MC_UAT_DATABASE_URL` (+ `MC_STAGING_DATABASE_URL` when set) | `DB Migrate (UAT, staging when configured)` |
+| `mc-live-plan` | none | `MC_LIVE_PLAN_DATABASE_URL` (read-only `plx_mc_schema_check` URL), `MICROSOFT_GRAPH_*` | live `plan` job |
+| `mc-live-release` | Vince only, self-review prevented | `MC_LIVE_DATABASE_URL`, `MICROSOFT_GRAPH_*` | live `apply` job |
+
+The live `plan` job now runs only on `main` (the environment branch policy
+refuses other refs). Plan on `main` after the migration PR merges, then apply with
+that plan's SHA and hash. `MC_LIVE_APPROVED_DB` is not referenced by any
+workflow; delete the stale repository variable. `.github/CODEOWNERS` assigns the
+migration files, migration workflows and their scripts to Vince.
+
 ## Read-only application deployment gate
 
 Owner: Vince. Live migrations must land **before** the code that needs them.

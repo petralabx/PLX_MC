@@ -205,6 +205,8 @@ export interface ForecastLineRow {
   /** Per order unit, in the order's currency. */
   unitPrice: string;
   currency: string;
+  /** Sage's item category on the line (PLABEL, AMEN…); null when blank or not readable (TASK-3177). */
+  category: string | null;
   /** Still to ship on the order's open lines of the same item due after month end or undated (the AO output they need isn't shipped yet). */
   laterQty: string;
 }
@@ -236,6 +238,8 @@ export type ForecastAccess = "read" | "missing";
 export interface ForecastDatasets {
   access: ForecastAccess;
   missing: string[];
+  /** The item category columns the login lacked (none: lines carry their category); null for a run stored before categories (TASK-3177). */
+  categoryMissing: string[] | null;
   lines: ForecastLineRow[];
   aos: ForecastAoRow[];
 }

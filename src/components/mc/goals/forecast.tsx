@@ -2,8 +2,10 @@
 
 // Revenue forecast (TASK-3151), the last section of Goals & Production: the
 // four numbers against the revenue target, the notes behind them, and this
-// month's open Sage order lines with bucket chips, a search and CAD totals that
-// follow them (the batch list's tools, tables.tsx). Every figure comes from the
+// month's open Sage order lines with bucket chips, customer class and item
+// category filters (TASK-3177), a search and CAD totals that follow them (the
+// batch list's tools, tables.tsx). The filters change the list, never the four
+// numbers. Every figure comes from the
 // page model (lib/reporting/goals/forecast.ts); this file only shows it.
 
 import { useState } from "react";
@@ -11,13 +13,18 @@ import { useState } from "react";
 import type { ForecastFilter, ForecastReady, ForecastRow, ForecastView } from "@/lib/reporting/goals";
 import { monthLabel } from "@/lib/reporting/goals/calendar";
 import {
+  CUSTOMER_CLASSES,
   FORECAST_BUCKET_LABELS,
   FORECAST_FILTERS,
+  activeCategoryFilter,
   filterForecastRows,
   forecastCadCents,
+  forecastCategoryOptions,
   otherCurrencyTotals,
   type ForecastBucket,
-} from "@/lib/reporting/goals/forecast";
+  type ForecastCategoryFilter,
+  type ForecastClassFilter,
+} from "@/lib/reporting/goals/forecast-list";
 
 import { amount, count, day, dollars, price, type ReadyPage } from "./helpers";
 
@@ -57,7 +64,7 @@ export function ForecastSection({ page }: { page: ReadyPage }) {
     <>
       <ForecastNumbers f={forecast} />
       <ForecastNotes f={forecast} />
-      <ForecastList rows={forecast.rows} />
+      <ForecastList rows={forecast.rows} categoryMissing={forecast.categoryMissing} />
     </>
   );
 }
@@ -143,13 +150,21 @@ function aoText(row: ForecastRow): string {
   return [row.ao.number, row.ao.scheduled ? day(row.ao.scheduled) : "no date", row.ao.status].filter(Boolean).join(" · ");
 }
 
-function ForecastList({ rows: all }: { rows: readonly ForecastRow[] }) {
+function ForecastList({ rows: all, categoryMissing }: { rows: readonly ForecastRow[]; categoryMissing: string[] | null }) {
   const [filter, setFilter] = useState<ForecastFilter>("all");
+  const [customerClass, setCustomerClass] = useState<ForecastClassFilter>("all");
+  const [chosenCategory, setCategory] = useState<ForecastCategoryFilter>("all");
   const [query, setQuery] = useState("");
-  const rows = filterForecastRows(all, { filter, query });
+  const categoriesRead = categoryMissing !== null && categoryMissing.length === 0;
+  // A refresh can drop the chosen category (or the login can lose access): fall back to All, the way the dropdown shows it.
+  const category = activeCategoryFilter(chosenCategory, all, categoriesRead);
+  if (category !== chosenCategory) setCategory(category);
+  const rows = filterForecastRows(all, { filter, query, customerClass, category });
   const cad = forecastCadCents(rows);
   const others = otherCurrencyTotals(rows);
   const othersText = others.length > 0 ? ` (and ${others.map((c) => `${c.currency} ${amount(c.cents)}`).join(", ")}, not converted)` : "";
+  // The chips count the rows the class and category filters keep, before the search.
+  const chipCount = (key: ForecastFilter) => filterForecastRows(all, { filter: key, query: "", customerClass, category }).length;
 
   return (
     <>
@@ -163,14 +178,50 @@ function ForecastList({ rows: all }: { rows: readonly ForecastRow[] }) {
           autoComplete="off"
           onChange={(event) => setQuery(event.target.value)}
         />
+        <label className="gp-select">
+          Customer class
+          <select value={customerClass} onChange={(event) => setCustomerClass(event.target.value as ForecastClassFilter)}>
+            <option value="all">All classes</option>
+            {CUSTOMER_CLASSES.map((c) => (
+              <option key={c} value={c}>
+                {c} ({count(filterForecastRows(all, { filter: "all", query: "", customerClass: c, category }).length)})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="gp-select">
+          Item category
+          <select
+            value={category}
+            disabled={!categoriesRead}
+            onChange={(event) => setCategory(event.target.value as ForecastCategoryFilter)}
+          >
+            {forecastCategoryOptions(all).map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+                {o.key === "all" ? "" : ` (${count(filterForecastRows(all, { filter: "all", query: "", customerClass, category: o.key }).length)})`}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="gp-seg" role="group" aria-label="Show open orders">
           {FORECAST_FILTERS.map((f) => (
             <button key={f.key} type="button" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
-              {f.label} <span className="ct">{count(filterForecastRows(all, { filter: f.key, query: "" }).length)}</span>
+              {f.label} <span className="ct">{count(chipCount(f.key))}</span>
             </button>
           ))}
         </div>
       </div>
+      {categoryMissing === null ? (
+        <p className="gp-line" data-testid="goals-forecast-category-waiting">
+          Item categories fill in at the next refresh.
+        </p>
+      ) : categoryMissing.length > 0 ? (
+        <p className="gp-line" data-testid="goals-forecast-category-waiting">
+          The item category filter waits for read access to {categoryMissing.join(", ")}. A database administrator grants it by
+          re-running docs/modules/reporting-goals/readonly-grants-forecast.sql.
+        </p>
+      ) : null}
       <p className="gp-count" role="status">
         Showing {count(rows.length)} of {count(all.length)} rows · {amount(cad)} CAD{othersText}
       </p>
@@ -181,8 +232,10 @@ function ForecastList({ rows: all }: { rows: readonly ForecastRow[] }) {
               <th scope="col">Expected</th>
               <th scope="col">Order</th>
               <th scope="col">Customer</th>
+              <th scope="col">Class</th>
               <th scope="col">PO</th>
               <th scope="col">Item</th>
+              <th scope="col">Category</th>
               <th scope="col">Description</th>
               <th scope="col" className="num">Still to ship</th>
               <th scope="col" className="num">Unit price</th>
@@ -206,8 +259,10 @@ function ForecastList({ rows: all }: { rows: readonly ForecastRow[] }) {
                 <td className="wrap">
                   {r.customer ?? ""} <span className="code">{r.customerCode ?? ""}</span>
                 </td>
+                <td>{r.customerClass}</td>
                 <td>{r.po ?? ""}</td>
                 <td className="code">{r.item}</td>
+                <td className="code">{r.category ?? "—"}</td>
                 <td className="wrap">{r.description ?? ""}</td>
                 <td className="num">
                   {qty(r.qty)} {r.unit ?? ""}
@@ -229,7 +284,7 @@ function ForecastList({ rows: all }: { rows: readonly ForecastRow[] }) {
           </tbody>
           <tfoot>
             <tr>
-              <th scope="row" colSpan={9}>
+              <th scope="row" colSpan={11}>
                 Total shown, CAD
               </th>
               <td className="num">{amount(cad)}</td>

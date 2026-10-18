@@ -11,22 +11,40 @@
 // against Sage's own screens (README, "Interpretations to confirm").
 
 import { addDays, monthEnd, monthLabel, monthStart } from "./calendar";
+import customerClassesJson from "./customer-classes.json";
 import { convertCents, prorateCents, toCents } from "./money";
 import { missingByRelation } from "./queries/read-access";
-import { normalizeName, type GoalsModel } from "./rules";
+import type { GoalsModel } from "./rules";
 import type { ForecastAoRow, ForecastDatasets, ForecastLineRow, GoalSettings, IsoDate } from "./types";
+import {
+  FORECAST_BUCKETS,
+  channelOf,
+  otherCurrencyTotals,
+  type Channel,
+  type CustomerClass,
+  type ForecastBucket,
+} from "./forecast-list";
 
-// ─── Buckets ────────────────────────────────────────────────────────────────
+// The browser's share lives in forecast-list.ts (no customer roster); re-exported so every caller keeps one import.
+export * from "./forecast-list";
 
-export const FORECAST_BUCKETS = ["ready", "planned", "late", "not_planned"] as const;
-export type ForecastBucket = (typeof FORECAST_BUCKETS)[number];
+// ─── Customer class and item category (TASK-3177) ───────────────────────────
 
-export const FORECAST_BUCKET_LABELS: Record<ForecastBucket, string> = {
-  ready: "Ready",
-  planned: "Planned in time",
-  late: "Late",
-  not_planned: "Not planned",
-};
+
+const CLASS_BY_CODE = new Map<string, CustomerClass>(
+  Object.entries(customerClassesJson.classes as Record<string, string[]>).flatMap(([cls, codes]) =>
+    codes.map((code) => [code, cls as CustomerClass] as const)
+  )
+);
+
+/**
+ * The customer's class from the sales workbook's "Customer categories" sheet
+ * (customer-classes.json, written by scripts/goals-customer-classes.mjs); a
+ * customer not on it is Unclassified.
+ */
+export function customerClassOf(code: string | null | undefined): CustomerClass {
+  return CLASS_BY_CODE.get((code ?? "").trim().toUpperCase()) ?? "Unclassified";
+}
 
 // ─── The link: Sage ORDNUMBER + ITEM ↔ the AO's order list + item code ──────
 
@@ -125,9 +143,13 @@ export interface ForecastRow {
   lineNo: number | null;
   customerCode: string | null;
   customer: string | null;
+  customerClass: CustomerClass;
   po: string | null;
   item: string;
   description: string | null;
+  /** Sage's item category on the line, and its channel; null when it has none (or the login can't read it yet). */
+  category: string | null;
+  channel: Channel | null;
   expected: IsoDate;
   /** Expected before today (still due this month). */
   overdue: boolean;
@@ -164,9 +186,12 @@ function toRow(line: ForecastLineRow, key: string, qtyHundredths: number, ao: Fo
     lineNo: line.lineNo,
     customerCode: line.customerCode,
     customer: line.customer,
+    customerClass: customerClassOf(line.customerCode),
     po: line.po,
     item: line.item,
     description: line.description,
+    category: line.category,
+    channel: channelOf(line.category),
     expected: line.expected,
     overdue: line.expected < today,
     qty: qtyHundredths / 100,
@@ -241,24 +266,6 @@ export function forecastRows(data: Pick<ForecastDatasets, "lines" | "aos">, toda
     }
   }
   return rowsByLine.flat();
-}
-
-/** CAD of the rows that convert (CAD and USD). */
-export function forecastCadCents(rows: readonly ForecastRow[]): number {
-  return rows.reduce((n, row) => n + (row.cadCents ?? 0), 0);
-}
-
-/** Rows in other currencies, totalled per currency and never converted (as the Revenue card lists them). */
-export function otherCurrencyTotals(rows: readonly ForecastRow[]): { currency: string; cents: number; rows: number }[] {
-  const out: { currency: string; cents: number; rows: number }[] = [];
-  for (const row of rows) {
-    if (row.cadCents !== null) continue;
-    let total = out.find((t) => t.currency === row.currency);
-    if (!total) out.push((total = { currency: row.currency, cents: 0, rows: 0 }));
-    total.cents += row.valueCents;
-    total.rows += 1;
-  }
-  return out;
 }
 
 function bucketTotals(rows: readonly ForecastRow[]): Record<ForecastBucket, { cents: number; rows: number }> {
@@ -414,6 +421,8 @@ export interface ForecastReady {
   otherCurrencies: { currency: string; cents: number; rows: number }[];
   /** Open AOs scheduled this month with no open order behind them: a note, never revenue. */
   unordered: { count: number; pieces: number };
+  /** The item category columns the login lacked (none: rows carry their category); null for a run stored before categories. */
+  categoryMissing: string[] | null;
 }
 
 export type ForecastView =
@@ -469,27 +478,7 @@ export function buildForecast(input: ForecastInput): ForecastView {
     pace: coveredDays > 0 ? { cents: prorateCents(invoicedCents, workingDays, coveredDays), coveredDays, workingDays } : null,
     otherCurrencies: otherCurrencyTotals(rows),
     unordered: productionWithoutOrders(snapshot.data.aos, model.today),
+    categoryMissing: snapshot.data.categoryMissing ?? null,
   };
 }
 
-// ─── The list's chips and search ────────────────────────────────────────────
-
-export type ForecastFilter = "all" | ForecastBucket;
-
-export const FORECAST_FILTERS: { key: ForecastFilter; label: string }[] = [
-  { key: "all", label: "All" },
-  ...FORECAST_BUCKETS.map((bucket) => ({ key: bucket, label: FORECAST_BUCKET_LABELS[bucket] })),
-];
-
-/** Rows in the chosen bucket whose order, customer (name or code), PO, item, description or AO contain the search, ignoring case and spacing. */
-export function filterForecastRows(rows: readonly ForecastRow[], opts: { filter: ForecastFilter; query: string }): ForecastRow[] {
-  const needle = normalizeName(opts.query);
-  return rows.filter(
-    (row) =>
-      (opts.filter === "all" || row.bucket === opts.filter) &&
-      (!needle ||
-        normalizeName(
-          [row.orderNo, row.customer, row.customerCode, row.po, row.item, row.description, row.ao?.number].filter(Boolean).join(" ")
-        ).includes(needle))
-  );
-}

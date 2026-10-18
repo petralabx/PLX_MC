@@ -8,3 +8,11 @@
 /.github/workflows/db-migrate*.yml       @taylorvalton
 /scripts/db-migrate-live.mjs             @taylorvalton
 /scripts/dual-db-migrate.sh              @taylorvalton
+# Execution entrypoints and inputs of the migration / SharePoint provisioning steps.
+/scripts/migrate.mjs                     @taylorvalton
+/scripts/provision-sharepoint.py         @taylorvalton
+/scripts/lib/db-identity.mjs             @taylorvalton
+/scripts/lib/db-ssl.mjs                  @taylorvalton
+/config/certs/aws-rds-global-bundle.json @taylorvalton
+/config/sharepoint-schema.json           @taylorvalton
+/package.json                            @taylorvalton

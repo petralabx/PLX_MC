@@ -127,8 +127,10 @@ ledgered migration with a local SQL file by filename sort. Mention newer ledger
 entries without local files. Strip SQL comments and extract up to 50 key tables,
 ADD COLUMN clauses (including multiple clauses), indexes, views and functions,
 including schema-qualified and quoted names. Parameterized existence queries
-check relations and columns; functions are skipped with a note because overloads
-need manual inspection. Example:
+check relations (`to_regclass`) and columns (`pg_catalog.pg_attribute`, not
+`information_schema.columns`, which hides columns the ledger-only
+`plx_mc_schema_check` role cannot read); functions are skipped with a note
+because overloads need manual inspection. Example:
 
 ```text
 ### Schema sanity (newest ledgered: 0xx_name.sql)

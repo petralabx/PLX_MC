@@ -251,8 +251,11 @@ describe("live release workflow default safety", () => {
     for (const key of ["confirm", "plan_sha", "pending_hash"]) expect(wf.on.workflow_dispatch.inputs[key]).toMatchObject({ type: "string", default: "" });
     expect(wf.permissions).toEqual({ contents: "read" }); expect(wf.concurrency.group).toBe("db-migrate-plx-mc");
   });
-  it("plan has no environment or writes and reads both sources on any ref", () => {
-    expect(wf.jobs.plan).not.toHaveProperty("environment"); expect(wf.jobs.plan.if).not.toContain("refs/heads/main");
+  it("plan uses the read-only mc-live-plan environment, has no writes and reads both sources", () => {
+    expect(wf.jobs.plan.environment).toEqual({ name: "mc-live-plan", deployment: false }); expect(wf.jobs.plan.if).not.toContain("refs/heads/main");
+    const planEnv = wf.jobs.plan.steps.find((s: { env?: Record<string, string> }) => s.env?.MC_LIVE_DATABASE_URL)?.env;
+    expect(planEnv.MC_LIVE_DATABASE_URL).toBe("${{ secrets.MC_LIVE_PLAN_DATABASE_URL }}");
+    expect(JSON.stringify(wf.jobs.plan)).not.toContain("secrets.MC_LIVE_DATABASE_URL");
     expect(wf.jobs.plan.if).toContain("!(inputs.mode == 'apply' && inputs.confirm == 'MIGRATE_LIVE')");
     const runs = wf.jobs.plan.steps.map((s: { run?: string }) => s.run ?? "").join("\n");
     expect(runs).toContain("npm ci"); expect(runs).toContain("db-migrate-live.mjs plan"); expect(runs).not.toMatch(/npm run migrate|--apply|preflight-apply/);
@@ -275,6 +278,7 @@ describe("live release workflow default safety", () => {
     for (const step of liveSteps) expect(step.env.MC_LIVE_EXPECTED_IDENTITY).toBe("${{ vars.MC_LIVE_EXPECTED_IDENTITY }}");
     expect(JSON.stringify(wf)).not.toContain("MC_LIVE_APPROVED_DB");
     expect(runs.join("\n")).not.toContain("${{ inputs.");
+    expect(JSON.stringify(job)).toContain("secrets.MC_LIVE_DATABASE_URL");
     expect(readFileSync(".github/workflows/db-migrate.yml", "utf8")).not.toContain("MC_LIVE_");
   });
 });

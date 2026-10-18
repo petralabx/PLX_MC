@@ -14,6 +14,7 @@
   padding: 0 0 80px;
   flex: 1;
   max-width: 920px;
+  margin-inline-start: calc(var(--mc-page-edge, var(--p-gutter)) - var(--p-gutter));
 }
 
 .mc .feed-head-agents {
@@ -243,6 +244,15 @@
   min-width: 0;
 }
 
+/* Only the outer columns take the ultra-wide page edge. */
+.mc .bk .bkbody .c:first-child {
+  padding-left: var(--mc-page-edge, var(--p-gutter));
+}
+
+.mc .bk .bkbody .c:last-child {
+  padding-right: var(--mc-page-edge, var(--p-gutter));
+}
+
 .mc .bk .bkbody .c + .c {
   border-left: 1px solid var(--p-grid);
   background: var(--p-paper);
@@ -458,8 +468,12 @@
   grid-template-columns: 1fr;
 }
 
-/* Overview strip: facts zone beside the schedule-vs-work zone. */
+/* Overview strip: facts zone beside the schedule-vs-work zone. The fixed
+   340/440px facts zone pads with --p-gutter, so the strip takes the ultra-wide
+   page edge as outer padding (page edge − gutter) and lines up with the page
+   header. Below the column tier the outer padding is 0. */
 .mc .pv-strip {
+  padding-inline: calc(var(--mc-page-edge, var(--p-gutter)) - var(--p-gutter));
   background: var(--p-paper);
   border-bottom: 1px solid var(--p-grid);
 }
@@ -1596,20 +1610,6 @@
   }
 }
 
-/* Ultra-wide: header, strip and body centre in a 1560px column; the hairlines
-   stay full-bleed because only the padding grows. */
-@container main (min-width: 1800px) {
-  .mc .pv-page > .ph,
-  .mc .pv-page .bkbody .c {
-    padding-left: calc((100% - 1560px) / 2);
-    padding-right: calc((100% - 1560px) / 2);
-  }
-
-  .mc .pv-page .pv-strip {
-    padding: 0 calc((100% - 1560px) / 2);
-  }
-}
-
 /* Header description edit: constrain the textarea to the .sub column width. */
 .mc .ph .ph-desc-edit {
   margin-top: 9px;
@@ -2001,7 +2001,7 @@
   display: grid;
   grid-template-columns: 90px minmax(220px, 1.6fr) 150px 150px 110px 96px 96px;
   gap: 14px;
-  padding: 14px var(--p-gutter);
+  padding: 14px var(--mc-page-edge, var(--p-gutter));
   border-bottom: 1px solid var(--p-grid-2);
   align-items: center;
 }

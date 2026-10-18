@@ -15,7 +15,7 @@
 
 /* ─── Page header (each screen) ───────────────────────────────────────────── */
 .mc .ph { display:flex; align-items:flex-end; justify-content:space-between; gap:20px;
-  padding:22px var(--p-gutter) 16px; border-bottom:1px solid var(--p-grid); flex-wrap:wrap; }
+  padding:22px var(--mc-page-edge, var(--p-gutter)) 16px; border-bottom:1px solid var(--p-grid); flex-wrap:wrap; }
 .mc .ph .kk { font-family:var(--mono); font-size:var(--p-text-kicker); letter-spacing:var(--p-track-tick); text-transform:uppercase; color:var(--p-muted); display:block; margin-bottom:8px; }
 .mc .ph h1 { font-family:var(--mazius); font-size:var(--p-text-page); line-height:0.95; letter-spacing:-0.022em; margin:0; font-weight:400; color:var(--p-ink); }
 .mc .ph h1 em { font-style:italic; color:var(--p-accent); }
@@ -123,7 +123,7 @@
 
 /* ─── Empty / first-run states ────────────────────────────────────────────── */
 .mc .empty { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
-  padding:70px var(--p-gutter); gap:14px; flex:1; }
+  padding:70px var(--mc-page-edge, var(--p-gutter)); gap:14px; flex:1; }
 .mc .empty .glyph { width:54px; height:54px; border:1px solid var(--p-grid); display:flex; align-items:center; justify-content:center;
   font-family:var(--mazius); font-size:var(--p-text-stat); color:var(--p-muted); position:relative; }
 .mc .empty .glyph::before, .mc .empty .glyph::after { content:""; position:absolute; background:var(--p-grid); }
@@ -145,7 +145,7 @@
 
 /* ─── Toolbar (view switch · filters) ─────────────────────────────────────── */
 .mc .tb { display:flex; align-items:center; justify-content:space-between; gap:16px;
-  padding:10px var(--p-gutter); border-bottom:1px solid var(--p-grid); background:var(--p-paper); flex-wrap:wrap; }
+  padding:10px var(--mc-page-edge, var(--p-gutter)); border-bottom:1px solid var(--p-grid); background:var(--p-paper); flex-wrap:wrap; }
 .mc .tb .l, .mc .tb .r { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .mc .vsw { display:inline-flex; border:1px solid var(--p-grid); }
 .mc .vsw button { font-family:var(--mono); font-size:var(--p-text-kicker); letter-spacing:0.18em; text-transform:uppercase; color:var(--p-muted);
@@ -182,7 +182,7 @@
 .mc .pm.lg .num { font-size:var(--p-text-tick); top:3px; left:4px; } .mc .pm.lg .sym { font-size:var(--p-text-h3); bottom:2px; right:4px; }
 
 /* ════════ INBOX / HOME ════════ */
-.mc .inbox { padding:0 0 80px; flex:1; max-width:880px; }
+.mc .inbox { padding:0 0 80px; flex:1; max-width:880px; margin-inline-start:calc(var(--mc-page-edge, var(--p-gutter)) - var(--p-gutter)); }
 .mc .inbox .grouphd { display:flex; align-items:baseline; gap:10px; padding:11px var(--p-gutter) 9px; margin:0;
   border-bottom:1px solid var(--p-grid); }
 .mc .inbox .grouphd:not(:first-child) { margin-top:26px; border-top:1px solid var(--p-grid); }
@@ -217,7 +217,9 @@
 .mc .needs-more { background:none; border:0; padding:10px var(--p-gutter); }
 
 /* ════════ HELP (Wave 6 — colleague UX) ════════ */
-.mc .help { padding:18px var(--p-gutter) 80px; max-width:880px; display:flex; flex-direction:column; gap:26px; }
+/* Capped bodies (.help, .inbox) keep the small gutter inside their cap and
+   shift by the ultra-wide page edge, so they line up with the page header. */
+.mc .help { padding:18px var(--p-gutter) 80px; max-width:880px; display:flex; flex-direction:column; gap:26px; margin-inline-start:calc(var(--mc-page-edge, var(--p-gutter)) - var(--p-gutter)); }
 .mc .help h2 { font-family:var(--mono); font-size:var(--p-text-kicker); font-weight:400; letter-spacing:0.18em; text-transform:uppercase;
   color:var(--p-ink); margin:0 0 12px; }
 .mc .help-steps { margin:0; padding-left:1.3em; display:flex; flex-direction:column; gap:8px; max-width:66ch;

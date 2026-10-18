@@ -4,17 +4,16 @@
    (hover: hover), --p-* tokens only. Handoff "Screen 2 — Initiative page".
    The page keeps the legacy .ph / .bk / .blk / .doclinks / .risk skins and
    only adds the kicker line, the spec link and the two-column body here.
-   Ultra-wide centring comes from the shell (mc-shell.css grows --p-gutter
-   to (main − 1560px) / 2). The header uses it as is; see the strip/body rule
-   below for the fixed-width zones. */
+   Ultra-wide centring comes from the shell (mc-shell.css grows --mc-page-edge
+   to (main − 1560px) / 2; --p-gutter keeps its small value). The header pads
+   with the page edge as is; see the body rule below. */
 
-/* The strip's 440px facts zone and the ≤420px aside pad with --p-gutter, so
-   the grown ultra-wide gutter would eat them. The strip and body take the
-   extra as outer padding instead, and their insides keep the base gutter. */
-.mc .ini-page .pv-strip,
+/* The ≤420px aside pads with --p-gutter, so the body takes the ultra-wide
+   page edge as outer padding (page edge − gutter) and its columns keep the
+   small gutter. Below the column tier the outer padding is 0. The shared
+   strip does the same in mc-overview.css. */
 .mc .ini-page .ini-body {
-  padding-inline: calc(var(--mc-col-gutter) - var(--mc-gutter-base));
-  --p-gutter: var(--mc-gutter-base);
+  padding-inline: calc(var(--mc-page-edge, var(--p-gutter)) - var(--p-gutter));
 }
 
 .mc .ini-page .ini-ph-main {

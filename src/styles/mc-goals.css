@@ -9,8 +9,8 @@
    no-preference. */
 
 .mc .goals {
-  padding: 18px var(--p-gutter) 80px;
-  max-width: calc(var(--p-content-max) + 2 * var(--p-gutter));
+  padding: 18px var(--mc-page-edge, var(--p-gutter)) 80px;
+  max-width: calc(var(--p-content-max) + 2 * var(--mc-page-edge, var(--p-gutter)));
 }
 
 .mc .goals h2.chartcard-title {

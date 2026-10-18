@@ -1,0 +1,10 @@
+# Migration and deploy-path ownership (gate hardening, 2026-10-17).
+# Owner: Vince (GitHub login taylorvalton). Keep this file, the DB migrations,
+# the migration workflows and the scripts they execute under the same owner.
+# Note: this only auto-requests review. It blocks a merge only if the branch
+# protection / ruleset also enables "Require review from Code Owners".
+/.github/CODEOWNERS                      @taylorvalton
+/db/migrations/                          @taylorvalton
+/.github/workflows/db-migrate*.yml       @taylorvalton
+/scripts/db-migrate-live.mjs             @taylorvalton
+/scripts/dual-db-migrate.sh              @taylorvalton

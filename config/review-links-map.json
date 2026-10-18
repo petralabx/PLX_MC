@@ -1,0 +1,141 @@
+{
+  "schema_version": "plx-review-links/v1",
+  "description": "File paths to modules, and modules to their review links (TASK-3168). A PR that touches a module needs a link to its screen or its doc in the PR body's '## Review links' section. A path ending in '/' matches everything under it; any other path matches one file. A screen is relative to the repo's liveUrl and matches on any host, so a per-PR preview counts. A doc is a repo path and matches a GitHub blob link on any branch. Unmapped paths need no link. Keys are owner/name slugs from tracked-repos-registry.json.",
+  "repos": {
+    "petralabx/PLX_MC": {
+      "liveUrl": "https://mc.plxcustomer.io",
+      "modules": [
+        {
+          "id": "compliance",
+          "paths": ["src/lib/compliance/", "src/app/api/compliance/"],
+          "screen": "/?screen=activity",
+          "doc": "docs/modules/compliance/README.md"
+        },
+        {
+          "id": "mcp",
+          "paths": ["src/lib/mcp/", "tools/plx-mc-mcp/"],
+          "doc": "docs/modules/mcp/README.md"
+        },
+        {
+          "id": "routing",
+          "paths": ["src/lib/routing/", "src/components/mc/routing-inbox/"],
+          "screen": "/?screen=routing-inbox",
+          "doc": "docs/modules/routing/README.md"
+        },
+        {
+          "id": "sync",
+          "paths": ["src/lib/sync/"],
+          "screen": "/?screen=sync",
+          "doc": "docs/modules/sync/README.md"
+        },
+        {
+          "id": "permissions",
+          "paths": ["src/lib/permissions/"],
+          "doc": "docs/modules/permissions/README.md"
+        },
+        {
+          "id": "skills-directory",
+          "paths": ["src/lib/skills-directory/", "src/components/mc/skills-directory/"],
+          "screen": "/?screen=skills-directory",
+          "doc": "docs/modules/skills-directory/README.md"
+        },
+        {
+          "id": "loop-ledgers",
+          "paths": ["src/lib/loop-ledgers/", "src/components/mc/loop-ledgers/"],
+          "screen": "/?screen=loop-ledgers",
+          "doc": "docs/modules/loop-ledgers/README.md"
+        },
+        {
+          "id": "governance-sops",
+          "paths": ["src/lib/governance-sops/", "src/components/mc/governance-sops/"],
+          "screen": "/?screen=governance-sops",
+          "doc": "docs/modules/governance-sops/README.md"
+        }
+      ]
+    },
+    "petralabx/plx-customer-portal": {
+      "liveUrl": "https://staging.plxcustomer.io",
+      "modules": [
+        {
+          "id": "customer-portal",
+          "paths": ["portal/src/app/(portal)/"],
+          "screen": "/dashboard"
+        },
+        {
+          "id": "mrp",
+          "paths": ["portal/src/app/mrp/"],
+          "screen": "/mrp"
+        },
+        {
+          "id": "admin",
+          "paths": ["portal/src/app/admin/"],
+          "screen": "/admin"
+        },
+        {
+          "id": "mission-control",
+          "paths": ["portal/src/app/mission-control/"],
+          "screen": "/mission-control"
+        },
+        {
+          "id": "operations",
+          "paths": ["portal/src/app/operations/"],
+          "screen": "/operations"
+        },
+        {
+          "id": "design-system",
+          "paths": ["design-system/"],
+          "doc": "docs/modules/design-system/README.md"
+        },
+        {
+          "id": "business-central-integration",
+          "paths": ["bc-extensions/"],
+          "doc": "docs/modules/business-central-integration/README.md"
+        }
+      ]
+    },
+    "petralabx/agentic-swarm": {
+      "liveUrl": "https://missioncontrol.tayloralton.com",
+      "modules": [
+        {
+          "id": "trading-lab",
+          "paths": [
+            "src/trading_v2/",
+            "scripts/trading-research/",
+            "apps/vmc-web/src/app/vmc/trading-lab/",
+            "apps/vmc-web/src/lib/vmc/trading-v2/",
+            "apps/vmc-web/src/components/vmc/trading-lab/"
+          ],
+          "screen": "/vmc/trading-lab",
+          "doc": "docs/modules/trading-v2/README.md"
+        },
+        {
+          "id": "workflows",
+          "paths": [
+            "apps/vmc-web/src/app/vmc/workflows/",
+            "apps/vmc-web/src/lib/vmc/workflows/",
+            "apps/vmc-web/src/components/vmc/workflows/"
+          ],
+          "screen": "/vmc/workflows",
+          "doc": "docs/modules/workflows/README.md"
+        },
+        {
+          "id": "pipelines",
+          "paths": ["src/pipelines/", "apps/vmc-web/src/app/vmc/pipelines/", "apps/vmc-web/src/lib/vmc/pipelines/"],
+          "screen": "/vmc/pipelines",
+          "doc": "docs/modules/pipelines/README.md"
+        },
+        {
+          "id": "memory",
+          "paths": ["src/memory/", "apps/vmc-web/src/app/vmc/memory/", "apps/vmc-web/src/lib/vmc/memory/"],
+          "screen": "/vmc/memory",
+          "doc": "docs/modules/memory/README.md"
+        },
+        {
+          "id": "router",
+          "paths": ["src/router/"],
+          "doc": "docs/modules/router/README.md"
+        }
+      ]
+    }
+  }
+}

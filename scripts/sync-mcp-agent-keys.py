@@ -35,6 +35,7 @@ DEDICATED_PRINCIPAL_IDS = (
     "sp_mcp_cos",
     "sp_mcp_workbench",
     "sp_mcp_infra",
+    "sp_mcp_cip_auto_undraft",
 )
 IDENTITY_LABELS = {
     CLAUDE_PRINCIPAL_ID: "claude",
@@ -49,6 +50,7 @@ IDENTITY_LABELS = {
     "sp_mcp_cos": "cos",
     "sp_mcp_workbench": "workbench",
     "sp_mcp_infra": "infra",
+    "sp_mcp_cip_auto_undraft": "cip-auto-undraft",
 }
 # The MCP tool allowlist denies mc_self_check to these principals (decision
 # CG-07b). The sync verifies them through the task search they may call:

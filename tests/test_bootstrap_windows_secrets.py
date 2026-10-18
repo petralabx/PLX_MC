@@ -106,6 +106,26 @@ def test_infra_principal_uses_only_its_dedicated_key() -> None:
         )
 
 
+def test_cip_auto_undraft_principal_uses_only_its_dedicated_key() -> None:
+    bootstrap = load_script()
+
+    assert "sp_mcp_cip_auto_undraft" in bootstrap.MCP_PRINCIPAL_IDS
+    assert (
+        bootstrap.select_mcp_key(
+            "sp_mcp_cip_auto_undraft",
+            {"PLX_MC_MCP_API_KEY": "shared-key"},
+            {"sp_mcp_cip_auto_undraft": "cip-key"},
+        )
+        == "cip-key"
+    )
+    with pytest.raises(SystemExit, match="mcp principal key unavailable"):
+        bootstrap.select_mcp_key(
+            "sp_mcp_cip_auto_undraft",
+            {"PLX_MC_MCP_API_KEY": "shared-key"},
+            {"sp_mcp_claude_code": "claude-key"},
+        )
+
+
 def test_unreviewed_principal_is_rejected() -> None:
     bootstrap = load_script()
 

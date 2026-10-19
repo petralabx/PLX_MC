@@ -8,6 +8,7 @@ import type { Task } from "@/lib/mc-data";
 
 vi.mock("@/lib/compliance/github-pr", () => ({
   loadPrState: vi.fn(async () => ({ open: false, checkoutIds: [] })),
+  loadPrCommits: vi.fn(async () => []),
 }));
 
 const db = vi.hoisted(() => ({

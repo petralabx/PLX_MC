@@ -44,7 +44,8 @@ import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import { bucketPrdForTask } from "./bucket-prd";
 import { ownEvidenceSite } from "./evidence-artifacts";
 import type { EventsQuery } from "./events";
-import { loadPrReviewLinks, loadPrState, type PrState } from "./github-pr";
+import { agentSignals, commitTrailers, shortSha } from "./commit-signals";
+import { loadPrCommits, loadPrReviewLinks, loadPrState, type PrCommit, type PrState } from "./github-pr";
 import { projectPullRequest, projectionEnabled } from "./projection";
 import * as repo from "./repo";
 import { applyReviewLinks, reviewLinksReport, touchedModules, type ReviewLinksReport } from "./review-links";
@@ -107,7 +108,8 @@ type CheckoutBlockReason =
   | "pr_not_open"
   | "stamp_not_in_pr"
   | "task_closed"
-  | "task_deleted";
+  | "task_deleted"
+  | "unstamped_agent_commits";
 
 // The gate log is what a blocked author reads. Name the cause and the next step.
 const CHECKOUT_BLOCK_TEXT: Record<CheckoutBlockReason, string> = {
@@ -120,6 +122,8 @@ const CHECKOUT_BLOCK_TEXT: Record<CheckoutBlockReason, string> = {
   stamp_not_in_pr: "checkout stamp is not in the pull request body",
   task_closed: "task is already verified",
   task_deleted: "task deleted — re-register",
+  unstamped_agent_commits:
+    "agent commits but no MC-Checkout stamp in the pull request body — check out the task and add its MC-Checkout line to the PR body",
 };
 
 function checkoutBlockReason(reason: CheckoutBlockReason): string {
@@ -257,6 +261,11 @@ export interface CheckoutInput {
   actor?: PermissionActor;
   /** Door that called this core — recorded on the checkout audit event. */
   door?: CheckoutDoor;
+  /**
+   * The caller's `<runtime>/<lane>` (TASK-3336), recorded on the checkout event.
+   * The gate holds each commit's Agent trailer to it. Omitted = not recorded.
+   */
+  agent?: string;
 }
 
 export async function checkout(input: CheckoutInput): Promise<{ checkoutId: string }> {
@@ -338,6 +347,7 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
       actorKind: "agent",
       permissionActorId: input.actor?.id ?? null,
       door: input.door ?? null,
+      agent: input.agent ?? null,
     },
   });
   return { checkoutId };
@@ -526,6 +536,74 @@ async function reviewLinksForPr(input: VerifyPrInput): Promise<ReviewLinksReport
   }
 }
 
+// The runtime a Hub MCP checkout records when the caller sends no X-MC-Runtime
+// header (src/lib/mcp/auth.ts). It does not say which agent took the checkout.
+const DEFAULT_CHECKOUT_RUNTIME = "cursor";
+const LISTED_COMMITS = 5;
+
+interface AgentCommit {
+  commit: PrCommit;
+  signals: string[];
+}
+
+type CommitTrailerRow = ReturnType<typeof commitTrailers> & { sha: string };
+
+// TASK-3336: the commits, not the PR author, say whether agent work is in a PR.
+// The merge queue never reads GitHub (P16); the pull_request run checked this
+// head. A GitHub error propagates, so the gate holds instead of passing.
+async function agentCommitsForPr(input: VerifyPrInput): Promise<AgentCommit[]> {
+  if (input.event === "merge_group") return [];
+  const commits = await loadPrCommits(input.repoFullName ?? input.repo, input.prNumber);
+  return commits.flatMap((commit) => {
+    const signals = agentSignals(commit);
+    return signals.length > 0 ? [{ commit, signals }] : [];
+  });
+}
+
+function unstampedAgentCommitsReason(agentCommits: AgentCommit[]): string {
+  const listed = agentCommits
+    .slice(0, LISTED_COMMITS)
+    .map(({ commit, signals }) => `${shortSha(commit.sha)} (${signals.join(", ")})`);
+  const more = agentCommits.length > LISTED_COMMITS ? ` and ${agentCommits.length - LISTED_COMMITS} more` : "";
+  return `${checkoutBlockReason("unstamped_agent_commits")}: ${listed.join("; ")}${more}`;
+}
+
+// Agent and On-Behalf-Of on the commits stamped with this checkout must match
+// its record. The Agent check is strict when the checkout recorded its agent or
+// a non-default runtime; a legacy default-runtime checkout only warns.
+async function checkoutTrailerCheck(
+  d: repo.DispatchRow,
+  rows: CommitTrailerRow[]
+): Promise<{ reasons: string[]; notes: string[] }> {
+  const reasons: string[] = [];
+  const notes: string[] = [];
+  if (rows.length === 0) return { reasons, notes };
+  const recorded = await repo.getDispatchCheckoutAgent(d.id);
+  const runtime = d.runtime.trim().toLowerCase();
+  for (const t of rows) {
+    if (t.onBehalfOf && t.onBehalfOf.trim().toLowerCase() !== d.accountableHuman.trim().toLowerCase()) {
+      reasons.push(`commit ${t.sha}: On-Behalf-Of ${t.onBehalfOf} does not match the checkout's accountable person`);
+    }
+    if (!t.agent) continue;
+    const agent = t.agent.trim().toLowerCase();
+    const agentRuntime = agent.split("/")[0];
+    if (recorded) {
+      if (agent !== recorded.trim().toLowerCase()) {
+        reasons.push(`commit ${t.sha}: Agent ${t.agent} does not match the checkout's agent ${recorded}`);
+      }
+    } else if (runtime !== DEFAULT_CHECKOUT_RUNTIME) {
+      if (agentRuntime !== runtime) {
+        reasons.push(`commit ${t.sha}: Agent ${t.agent} does not match the checkout's runtime ${d.runtime}`);
+      }
+    } else if (agentRuntime !== DEFAULT_CHECKOUT_RUNTIME) {
+      notes.push(
+        `warning: commit ${t.sha}: Agent ${t.agent} not checked — the checkout records only the default runtime "${DEFAULT_CHECKOUT_RUNTIME}"; pass agent to mc_checkout_task`
+      );
+    }
+  }
+  return { reasons, notes };
+}
+
 export async function verifyPr(
   input: VerifyPrInput,
   options: VerifyPrOptions = {}
@@ -542,9 +620,14 @@ export async function verifyPr(
     )
   ) as string[];
 
-  // Operator PR: one verdict, recorded ungated (decision 5).
+  const agentCommits = await agentCommitsForPr(input);
+
+  // Operator PR: one verdict, recorded ungated (decision 5) — unless its commits
+  // carry agent signals, whoever opened it (TASK-3336).
   if (ids.length === 0) {
-    const result = verifyCompliance({ task: null, actor: "operator", tier, bucketPrd: "unknown" });
+    const result: VerifyResult = agentCommits.length
+      ? { verdict: "block", reasons: [unstampedAgentCommitsReason(agentCommits)] }
+      : verifyCompliance({ task: null, actor: "operator", tier, bucketPrd: "unknown" });
     if (record) await recordVerdict(input, tier, "operator", null, "operator", result, null);
     return { ...result, tier, actorKind: "operator", taskId: null, tasks: [] };
   }
@@ -555,6 +638,18 @@ export async function verifyPr(
   const tasks: VerifyPrTaskResult[] = [];
   const resolveForPr = input.event === "merge_group" ? queueDispatchResolver(input) : prDispatchResolver(input);
   const reviewLinks = await reviewLinksForPr(input);
+  // Every agent commit carries the trailer block and names a stamp in the body.
+  // Shape problems and unknown stamps hold every task on the PR.
+  const trailerRows: CommitTrailerRow[] = agentCommits.map(({ commit }) => ({
+    sha: shortSha(commit.sha),
+    ...commitTrailers(commit.message),
+  }));
+  const prCommitReasons = trailerRows.flatMap((t) => [
+    ...t.problems.map((p) => `commit ${t.sha}: ${p}`),
+    ...(t.checkoutId && !ids.includes(t.checkoutId)
+      ? [`commit ${t.sha}: MC-Checkout trailer ${t.checkoutId} does not match a stamp in the PR body`]
+      : []),
+  ]);
   for (const cid of ids) {
     const resolution = await resolveForPr(cid);
     const d = resolution.dispatch;
@@ -584,7 +679,14 @@ export async function verifyPr(
                 bucketPrd,
                 evidenceStoreEnabled: canUploadEvidence,
               });
-    const checked = applyReviewLinks(result, reviewLinks);
+    const trailerCheck = d
+      ? await checkoutTrailerCheck(d, trailerRows.filter((t) => t.checkoutId === cid))
+      : { reasons: [], notes: [] };
+    const commitReasons = [...prCommitReasons, ...trailerCheck.reasons];
+    const withCommits: VerifyResult = commitReasons.length
+      ? { verdict: "block", reasons: [...commitReasons, ...result.reasons, ...trailerCheck.notes] }
+      : { ...result, reasons: [...result.reasons, ...trailerCheck.notes] };
+    const checked = applyReviewLinks(withCommits, reviewLinks);
     if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, checked, taskId ?? cid);
     tasks.push({ checkoutId: cid, taskId, verdict: checked.verdict, reasons: checked.reasons });
   }

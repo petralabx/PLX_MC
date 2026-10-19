@@ -8,7 +8,7 @@ const m = vi.hoisted(() => ({ resolveGithubToken: vi.fn() }));
 
 vi.mock("@/lib/github-app", () => ({ resolveGithubToken: m.resolveGithubToken }));
 
-import { loadPrState, loadPrVerifyInput } from "@/lib/compliance/github-pr";
+import { loadPrCommits, loadPrState, loadPrVerifyInput } from "@/lib/compliance/github-pr";
 
 const PR = {
   number: 7,
@@ -126,5 +126,42 @@ describe("loadPrState", () => {
   it.each([{}, { ...PR, state: "unknown" }, { ...PR, state: "open", number: 8 }])("rejects malformed state", async (pr) => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json(pr)));
     await expect(loadPrState("petralabx/PLX_MC", 7)).rejects.toMatchObject({ code: "github_error" });
+  });
+});
+
+describe("loadPrCommits (TASK-3336)", () => {
+  const ghCommit = (i: number) => ({
+    sha: `sha${i}`,
+    commit: { message: `m${i}`, author: { name: "PLX Agent", email: "uat@petrasoap.com" }, committer: { name: "GitHub", email: "noreply@github.com" } },
+    author: i === 0 ? null : { login: "taylorvalton" },
+    committer: { login: "web-flow" },
+  });
+
+  it("pages through the PR commits and maps identities and messages", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/pulls/7/commits?per_page=100&page=1")) return Response.json(Array.from({ length: 100 }, (_, i) => ghCommit(i)));
+      if (url.endsWith("/pulls/7/commits?per_page=100&page=2")) return Response.json([ghCommit(100)]);
+      return new Response("unexpected", { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const commits = await loadPrCommits("petralabx/PLX_MC", 7);
+
+    expect(commits).toHaveLength(101);
+    expect(commits[0]).toEqual({
+      sha: "sha0", message: "m0", authorName: "PLX Agent", authorEmail: "uat@petrasoap.com", authorLogin: "",
+      committerName: "GitHub", committerEmail: "noreply@github.com", committerLogin: "web-flow",
+    });
+    expect(commits[1].authorLogin).toBe("taylorvalton");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed without a full slug, a credential, or a readable listing", async () => {
+    await expect(loadPrCommits("PLX_MC", 7)).rejects.toMatchObject({ code: "github_unavailable" });
+    m.resolveGithubToken.mockResolvedValueOnce(null);
+    await expect(loadPrCommits("petralabx/PLX_MC", 7)).rejects.toMatchObject({ code: "github_unavailable" });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ message: "odd" })));
+    await expect(loadPrCommits("petralabx/PLX_MC", 7)).rejects.toMatchObject({ code: "github_error" });
   });
 });

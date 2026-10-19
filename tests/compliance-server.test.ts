@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 import type { PrEvent } from "@/lib/compliance/webhook";
 
-const github = vi.hoisted(() => ({ loadPrState: vi.fn() }));
+const github = vi.hoisted(() => ({ loadPrState: vi.fn(), loadPrCommits: vi.fn() }));
 vi.mock("@/lib/compliance/github-pr", () => github);
 
 const db = vi.hoisted(() => ({
@@ -62,6 +62,10 @@ vi.mock("@/lib/compliance/repo", () => ({
   },
   async eventsAfter() {
     return db.events.map((e, i) => ({ seq: String(i + 1), ts: "t", pr: null, repo: null, taskId: null, payload: {}, ...e }));
+  },
+  async getDispatchCheckoutAgent(id: string) {
+    const agent = db.events.find((e) => e.kind === "checkout" && e.payload?.checkoutId === id)?.payload?.agent;
+    return typeof agent === "string" ? agent : null;
   },
   async latestCheckoutDoor() {
     const last = [...db.events].reverse().find((e) => e.kind === "checkout");
@@ -130,6 +134,7 @@ const taskish = (over: Partial<Task>): Task => ({
 beforeEach(() => {
   projection.projectPullRequest.mockReset();
   github.loadPrState.mockReset().mockResolvedValue({ open: true, checkoutIds: ["dsp_old"] });
+  github.loadPrCommits.mockReset().mockResolvedValue([]);
   db.dispatches.clear();
   db.events.length = 0;
   db.checks.length = 0;
@@ -571,5 +576,133 @@ describe("strict dispatch repository identity", () => {
     expect(dispatchRepoMatches("a/x", "b/x", "b/x")).toBe(false);
     expect(dispatchRepoMatches("b/x", "a/x", "a/x")).toBe(false);
     expect(dispatchRepoMatches("a/x", "x", "a/x")).toBe(flag !== "0");
+  });
+});
+
+// TASK-3336: the PR's head commits, not the PR author, decide whether agent work
+// is in it. Today's human-opened PRs carried agent commits and passed unstamped.
+describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
+  const human = { authorName: "Taylor Alton", authorEmail: "taylor@petralabx.com", authorLogin: "taylorvalton", committerName: "GitHub", committerEmail: "noreply@github.com", committerLogin: "web-flow" };
+  const agentIdentity = { authorName: "PLX Agent", authorEmail: "uat@petrasoap.com", authorLogin: "", committerName: "PLX Agent", committerEmail: "uat@petrasoap.com", committerLogin: "" };
+  const commit = (sha: string, message: string, who: typeof human = agentIdentity) => ({ sha, message, ...who });
+  const trailers = (checkoutId: string, agent = "claude/claude-uat", onBehalfOf = "cos@petrasoap.com") =>
+    `TASK-900: change\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nAgent: ${agent}\nOn-Behalf-Of: ${onBehalfOf}\nMC-Checkout: ${checkoutId}`;
+  const pr = { repo: "PLX_MC", repoFullName: "petralabx/PLX_MC", prNumber: 2621, headSha: "h1", changedPaths: ["src/lib/x.ts"] };
+  const stamped = async (agent?: string, runtime = "cursor") => {
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime, accountableHuman: "cos@petrasoap.com", repo: "petralabx/PLX_MC", agent });
+    return checkoutId;
+  };
+
+  it("blocks a human-opened PR with no stamp whose commits carry agent signals", async () => {
+    github.loadPrCommits.mockResolvedValue([
+      commit("aaaaaaa1", "human fix", human),
+      commit("bbbbbbb2", "agent fix\n\nCo-Authored-By: Claude <noreply@anthropic.com>", human),
+      commit("ccccccc3", "agent fix", agentIdentity),
+    ]);
+    const r = await verifyPr(pr);
+    expect(github.loadPrCommits).toHaveBeenCalledExactlyOnceWith("petralabx/PLX_MC", 2621);
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toHaveLength(1);
+    expect(r.reasons[0]).toContain("no MC-Checkout stamp in the pull request body");
+    expect(r.reasons[0]).toContain("bbbbbbb (agent Co-Authored-By trailer)");
+    expect(r.reasons[0]).toContain("ccccccc (PLX Agent identity, lane email uat@petrasoap.com)");
+    expect(r.reasons[0]).not.toContain("aaaaaaa");
+    expect(db.checks.at(-1)).toMatchObject({ verdict: "block", actorKind: "operator", taskId: null });
+    expect(db.events.some((e) => e.kind === "gate.blocked")).toBe(true);
+  });
+
+  it("keeps the operator pass for a PR with no stamp and no agent signal", async () => {
+    github.loadPrCommits.mockResolvedValue([commit("aaaaaaa1", "human fix", human)]);
+    const r = await verifyPr(pr);
+    expect(r).toMatchObject({ verdict: "pass", actorKind: "operator" });
+  });
+
+  it("holds (throws) when the commits cannot be read, never passing unread", async () => {
+    github.loadPrCommits.mockRejectedValue(new Error("GitHub down"));
+    await expect(verifyPr(pr)).rejects.toThrow("GitHub down");
+  });
+
+  it("passes a stamped PR whose agent commits carry matching trailers", async () => {
+    const cid = await stamped("claude/claude-uat");
+    github.loadPrCommits.mockResolvedValue([commit("ddddddd4", trailers(cid)), commit("aaaaaaa1", "human fix", human)]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).not.toContain("warning: commit");
+  });
+
+  it("blocks a commit whose MC-Checkout trailer does not match the body stamp", async () => {
+    const cid = await stamped("claude/claude-uat");
+    github.loadPrCommits.mockResolvedValue([commit("eeeeeee5", trailers("dsp_other"))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toContain("TASK-900: commit eeeeeee: MC-Checkout trailer dsp_other does not match a stamp in the PR body");
+  });
+
+  it("blocks a commit whose MC-Checkout trailer is not the last line", async () => {
+    const cid = await stamped("claude/claude-uat");
+    github.loadPrCommits.mockResolvedValue([commit("fffffff6", `${trailers(cid)}\nCo-Authored-By: Codex <codex@openai.com>`)]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toContain("TASK-900: commit fffffff: MC-Checkout trailer is not the last line");
+  });
+
+  it("blocks an agent commit with no trailers on a stamped PR", async () => {
+    const cid = await stamped("claude/claude-uat");
+    github.loadPrCommits.mockResolvedValue([commit("1111111a", "agent fix")]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toEqual(expect.arrayContaining([
+      "TASK-900: commit 1111111: missing Agent trailer",
+      "TASK-900: commit 1111111: missing On-Behalf-Of trailer",
+      "TASK-900: commit 1111111: missing MC-Checkout trailer",
+    ]));
+  });
+
+  it("blocks Agent and On-Behalf-Of that do not match the checkout record", async () => {
+    const cid = await stamped("claude/claude-uat");
+    github.loadPrCommits.mockResolvedValue([commit("2222222b", trailers(cid, "claude/claude-cos", "vince@petrasoap.com"))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toEqual(expect.arrayContaining([
+      "TASK-900: commit 2222222: Agent claude/claude-cos does not match the checkout's agent claude/claude-uat",
+      "TASK-900: commit 2222222: On-Behalf-Of vince@petrasoap.com does not match the checkout's accountable person",
+    ]));
+  });
+
+  it("compares On-Behalf-Of case-insensitively", async () => {
+    const cid = await stamped("claude/claude-uat");
+    github.loadPrCommits.mockResolvedValue([commit("3333333c", trailers(cid, "Claude/Claude-UAT", "COS@PetraSoap.com"))]);
+    expect((await verifyPr({ ...pr, checkoutIds: [cid] })).verdict).toBe("pass");
+  });
+
+  it("checks the Agent runtime strictly against a non-default checkout runtime", async () => {
+    const cid = await stamped(undefined, "codex");
+    github.loadPrCommits.mockResolvedValue([commit("4444444d", trailers(cid, "claude/claude-uat"))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toContain("TASK-900: commit 4444444: Agent claude/claude-uat does not match the checkout's runtime codex");
+  });
+
+  it("only warns on the Agent trailer for a legacy default-runtime checkout", async () => {
+    const cid = await stamped(undefined, "cursor");
+    github.loadPrCommits.mockResolvedValue([commit("5555555e", trailers(cid, "claude/claude-uat"))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).toContain('warning: commit 5555555: Agent claude/claude-uat not checked — the checkout records only the default runtime "cursor"');
+  });
+
+  it("never reads commits in the merge queue", async () => {
+    const cid = await stamped("claude/claude-uat");
+    const r = await verifyPr({ ...pr, checkoutIds: [cid], event: "merge_group" });
+    expect(r.verdict).toBe("pass");
+    expect(github.loadPrCommits).not.toHaveBeenCalled();
+  });
+
+  it("records the caller's agent on the checkout event", async () => {
+    const cid = await stamped("claude/claude-uat");
+    expect(db.events.find((e) => e.kind === "checkout" && e.payload?.checkoutId === cid)?.payload).toMatchObject({ agent: "claude/claude-uat" });
+    const legacy = await stamped();
+    expect(db.events.find((e) => e.kind === "checkout" && e.payload?.checkoutId === legacy)?.payload).toMatchObject({ agent: null });
   });
 });

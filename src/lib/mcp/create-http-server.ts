@@ -318,8 +318,15 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         .describe(
           "Optional GitHub slug (e.g. petralabx/local-inference) to bind checkout actor.repo. Allowlisted consumers only. Omitted = connector X-MC-Repo. Unknown slugs fail closed."
         ),
+      agent: z
+        .string()
+        .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/)
+        .optional()
+        .describe(
+          "Optional <runtime>/<lane> of the calling agent (e.g. claude/claude-cos), recorded on the checkout. The compliance gate then holds each commit's Agent trailer to it. Omitted = not recorded; the Agent trailer only warns."
+        ),
     },
-    async ({ taskId, repo }) => jsonResult(await actionCheckout(identity, taskId, { repo }))
+    async ({ taskId, repo, agent }) => jsonResult(await actionCheckout(identity, taskId, { repo, agent }))
   );
 
   server.tool(

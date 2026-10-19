@@ -169,6 +169,54 @@ export async function loadPrVerifyInput(
   };
 }
 
+// GitHub's PR commits listing stops at 250 entries (3 pages of 100).
+const MAX_COMMIT_PAGES = 3;
+
+export interface PrCommit {
+  sha: string;
+  message: string;
+  authorName: string;
+  authorEmail: string;
+  authorLogin: string;
+  committerName: string;
+  committerEmail: string;
+  committerLogin: string;
+}
+
+/** The PR's head commits (TASK-3336 agent signals). Messages are used in memory only. */
+export async function loadPrCommits(repoFullName: string, prNumber: number): Promise<PrCommit[]> {
+  const [owner, name] = repoFullName.split("/");
+  if (!owner || !name) throw new ApiError("github_unavailable", "A full repository slug is required to read PR commits.", 503);
+  const token = await resolveGithubToken({ repoOwner: owner });
+  if (!token) throw new ApiError("github_unavailable", "No GitHub auth configured - the PR commits cannot be read.", 503);
+  const url = `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${prNumber}/commits`;
+  type GhCommit = {
+    sha?: string;
+    commit?: { message?: string; author?: { name?: string; email?: string }; committer?: { name?: string; email?: string } };
+    author?: { login?: string } | null;
+    committer?: { login?: string } | null;
+  };
+  const commits: PrCommit[] = [];
+  for (let page = 1; page <= MAX_COMMIT_PAGES; page++) {
+    const list = (await githubGet(`${url}?per_page=${FILES_PER_PAGE}&page=${page}`, token)) as GhCommit[];
+    if (!Array.isArray(list)) throw new ApiError("github_error", "GitHub returned an unrecognized commits payload.", 502);
+    for (const c of list) {
+      commits.push({
+        sha: c.sha ?? "",
+        message: c.commit?.message ?? "",
+        authorName: c.commit?.author?.name ?? "",
+        authorEmail: c.commit?.author?.email ?? "",
+        authorLogin: c.author?.login ?? "",
+        committerName: c.commit?.committer?.name ?? "",
+        committerEmail: c.commit?.committer?.email ?? "",
+        committerLogin: c.committer?.login ?? "",
+      });
+    }
+    if (list.length < FILES_PER_PAGE) break;
+  }
+  return commits;
+}
+
 export interface MergedPrFacts {
   merged: boolean;
   state: "open" | "closed";

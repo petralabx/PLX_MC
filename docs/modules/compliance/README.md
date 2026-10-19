@@ -47,6 +47,16 @@ truth table is proven before any plumbing exists.
   likely tier, and the PR gate stays the authority). Until `EVIDENCE_STANDARD_ENFORCE_FROM` (2026-10-24, Toronto
   midnight) a finding is a note; after it, a blocking reason and a 400
   `evidence_standard`. Operators are never gated.
+- Review links (TASK-3168, `review-links.ts`). `config/review-links-map.json`
+  maps file paths to modules, and modules to a live screen and a doc, for the
+  portal, PLX_MC and Trading Lab. An agent PR that touches a mapped module needs
+  a link to it in the body's `## Review links` section. A screen link on any
+  host counts, so a per-PR preview works. A doc link is a GitHub blob link on any
+  branch. Unmapped paths need no link. `verifyPr` reads the PR body from GitHub
+  only when a mapped module is touched, and never in the merge queue. Until
+  `REVIEW_LINKS_ENFORCE_FROM` (2026-11-01, Toronto midnight) a missing link is a
+  note; after it, a blocking reason. Both start with `review_links_missing`. An
+  unreadable body is the note `review_links_unchecked` and never blocks.
 - Repository binding requires matching full `owner/name` identities, compared
   case-insensitively. Bare dispatch identities and callers supplying only a bare
   name fail closed. Generated workflows retain the bare `repo` display/event key
@@ -177,7 +187,8 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 - `src/lib/compliance/projection.ts` — PR lifecycle → sync task projection (authorize-gated)
 - `src/lib/compliance/bucket-prd.ts` — bucket PRD resolution for verifyPr
 - `src/lib/compliance/webhook.ts` — HMAC verify + PR-event parse (in-memory body)
-- `src/lib/compliance/github-pr.ts` — GitHub PR → `VerifyPrInput` (stamps, labels, changed files) for `mc_verify_pr`
+- `src/lib/compliance/github-pr.ts` — GitHub PR → `VerifyPrInput` (stamps, labels, changed files) for `mc_verify_pr`; `loadPrReviewLinks` for the gate
+- `src/lib/compliance/review-links.ts` — path → module → link map lookup, `## Review links` parser, warn-then-block rule (TASK-3168; data in `config/review-links-map.json`)
 - `src/lib/compliance/go-live-announcer.ts` — one-line Teams Workflow posts on `checkout` / `pr.opened` / `task.completed` (TASK-1454/1699/1701; chat-primary, hard dedupe per task+event, coalesce only on sibling `sent`, kill switches default off; `ANNOUNCE_CHECKOUT` stays off unless operators re-enable)
 - `src/lib/compliance/backfill.ts` — nightly GitHub backfill: merged PRs (last N days) per registry repo with no resolvable `MC-Checkout` stamp and no task `prs[]` link; injected GitHub client (stubbed in tests), fail-open per repo, one `github.backfill.report` row in `mc_events`; cron `src/app/api/cron/github-backfill/route.ts`, kill switch `PLX_MC_GITHUB_BACKFILL_ENABLED` (default off)
 - `src/lib/compliance/activity.ts` — per-registry-repo activity summary (last activity, open/unstamped PRs, unattributed merges from the newest backfill report, 30-day gate block rate, freshness), a pure fold over `mc_events` served by session-gated `GET /api/activity` to the Activity screen (`/?screen=activity`, `src/components/mc/activity-view.tsx`); unknown is `null`, never 0

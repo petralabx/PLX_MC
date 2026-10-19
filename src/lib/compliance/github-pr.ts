@@ -3,15 +3,18 @@
 // head SHA, labels, every MC-Checkout stamp in the body (parsed by the webhook
 // parser, so stamp rules stay in one place), and the changed paths. Auth goes
 // through resolveGithubToken (src/lib/github-app); the PR body is used in
-// memory for stamps only and never returned.
+// memory for stamps and the Review links section only, and never returned.
 
 import { ApiError } from "@/lib/api/route";
 import { resolveGithubToken } from "@/lib/github-app";
+import { parseReviewLinks, type ReviewLinksSection } from "./review-links";
 import type { VerifyPrInput } from "./service";
 import { parsePullRequestEvent } from "./webhook";
 
 const GH_API = "https://api.github.com";
 const GH_TIMEOUT_MS = 15_000;
+// The gate's verify call has a 20 s budget; an unread body only adds a note.
+const REVIEW_LINKS_TIMEOUT_MS = 5_000;
 const FILES_PER_PAGE = 100;
 // GitHub's PR files listing stops at 3000 entries (30 pages of 100).
 const MAX_FILE_PAGES = 30;
@@ -38,13 +41,30 @@ export async function loadPrState(repoFullName: string, prNumber: number): Promi
   return { open: pr.state === "open", checkoutIds: evt.checkoutIds };
 }
 
+/** The PR body's Review links section (TASK-3168), parsed in memory. Never returns the body. */
+export async function loadPrReviewLinks(repoFullName: string, prNumber: number): Promise<ReviewLinksSection> {
+  const [owner, name] = repoFullName.split("/");
+  if (!owner || !name) throw new ApiError("github_unavailable", "A full repository slug is required to read the PR body.", 503);
+  const token = await resolveGithubToken({ repoOwner: owner });
+  if (!token) throw new ApiError("github_unavailable", "No GitHub auth configured - the PR cannot be read.", 503);
+  const pr = (await githubGet(
+    `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${prNumber}`,
+    token,
+    REVIEW_LINKS_TIMEOUT_MS
+  )) as { number?: number; body?: unknown };
+  if (pr?.number !== prNumber) {
+    throw new ApiError("github_error", "GitHub returned an unrecognized pull request payload.", 502);
+  }
+  return parseReviewLinks(typeof pr.body === "string" ? pr.body : "");
+}
+
 export interface LoadedPrVerifyInput {
   input: VerifyPrInput;
   /** True when GitHub's 3000-file listing cap was hit — the tier may be understated. */
   truncated: boolean;
 }
 
-async function githubGet(url: string, token: string): Promise<unknown> {
+async function githubGet(url: string, token: string, timeoutMs = GH_TIMEOUT_MS): Promise<unknown> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -54,7 +74,7 @@ async function githubGet(url: string, token: string): Promise<unknown> {
         "x-github-api-version": "2022-11-28",
       },
       cache: "no-store",
-      signal: AbortSignal.timeout(GH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
     throw new ApiError(

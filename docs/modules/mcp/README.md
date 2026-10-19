@@ -134,8 +134,8 @@ stored in the jsonb payload.
   authenticated principal (`requireMcpActor`; capabilities from
   `src/lib/permissions/grants.ts`). `X-MC-Operator-Email` is audit context only
   and never authorizes. Human admin/owner roles hold both. `task.cancel` is
-  granted to `sp_mcp_cursor` (cancel only), `sp_mcp_cos`, and `sp_mcp_ledger`.
-  `task.reopen` is granted to `sp_mcp_ledger` only (TASK-2580). The shared
+  granted to `sp_mcp_cursor`, `sp_mcp_cos`, and `sp_mcp_ledger`. `task.reopen`
+  is granted to `sp_mcp_ledger` (TASK-2580) and `sp_mcp_cursor` (TASK-3374). The shared
   agent bundle never carries either capability. No checkout is needed. Anyone
   else gets 403 and a `task.cancel_denied` / `task.reopen_denied` event.
 - `mc_report_progress` on a cancelled task (other than notes/subtasks) returns

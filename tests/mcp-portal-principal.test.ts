@@ -243,11 +243,11 @@ describe("sp_mcp_portal grant", () => {
     );
     expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 4);
     for (const principalId of others) {
-      // sp_mcp_cursor adds task.cancel only. sp_mcp_cos adds that plus
-      // task.link_merged_pr. sp_mcp_ledger adds those plus task.reopen (TASK-2580).
+      // sp_mcp_cursor adds task.cancel and task.reopen (TASK-3374). sp_mcp_cos
+      // adds task.cancel plus task.link_merged_pr. sp_mcp_ledger adds all three (TASK-2580).
       const extra =
         principalId === "sp_mcp_cursor"
-          ? ["task.cancel"]
+          ? ["task.cancel", "task.reopen"]
           : principalId === "sp_mcp_ledger"
             ? ["task.cancel", "task.reopen", "task.link_merged_pr"]
             : principalId === "sp_mcp_cos"

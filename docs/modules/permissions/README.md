@@ -71,9 +71,10 @@ moving a task to and from the `cancelled` end stage (`mc_update_task`
 HTTP MCP, the cursor REST routes and the stdio client). They are evaluated on
 the authenticated principal; `X-MC-Operator-Email` is recorded as audit context
 only. Admin and owner roles hold both. `task.cancel` is granted to
-`sp_mcp_cursor` (Ledger's live Task principal; cancel only, Vince 2026-10-16),
+`sp_mcp_cursor` (Ledger's live Task principal; Vince 2026-10-16),
 `sp_mcp_cos`, and `sp_mcp_ledger`. `task.reopen` is granted to `sp_mcp_ledger`
-only (TASK-2580). No other service principal holds `task.reopen`.
+(TASK-2580) and `sp_mcp_cursor` (Vince 2026-10-19, TASK-3374). No other service
+principal holds `task.reopen`.
 `MCP_AGENT_CAPABILITIES` never includes either capability (every agent would
 then cancel any task); an operator grants one to a named principal in
 `SERVICE_GRANTS`.

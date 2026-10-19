@@ -635,6 +635,33 @@ describe("the list: customer class and item category (TASK-3177)", () => {
     expect(activeCategoryFilter("all", rows, false)).toBe("all");
   });
 
+  it("trims Sage's space-padded category, and a blank or whitespace-only one is no category (TASK-3189)", () => {
+    const padded = forecastRows(
+      data(
+        [
+          line({ orderNo: "OR1000000001", category: "AMEN  " }),
+          line({ orderNo: "OR1000000002", category: "PLABEL" }),
+          line({ orderNo: "OR1000000003", category: "      " }),
+          line({ orderNo: "OR1000000004", category: "" }),
+        ],
+        []
+      ),
+      TODAY,
+      RATE
+    );
+    expect(padded.map((r) => [r.category, r.channel])).toEqual([
+      ["AMEN", "Distribution"],
+      ["PLABEL", "Manufacturing"],
+      [null, null],
+      [null, null],
+    ]);
+    expect(forecastCategoryOptions(padded).map((o) => o.key)).toEqual([
+      "all", "channel:Manufacturing", "channel:Distribution", "category:AMEN", "category:PLABEL", "none",
+    ]);
+    expect(filterForecastRows(padded, { filter: "all", query: "", category: "category:AMEN" }).map((r) => r.orderNo)).toEqual(["OR1000000001"]);
+    expect(filterForecastRows(padded, { filter: "all", query: "", category: "none" }).map((r) => r.orderNo)).toEqual(["OR1000000003", "OR1000000004"]);
+  });
+
   it("keeps the customer roster out of the browser bundle: the page's client code never imports forecast.ts or customer-classes.json", () => {
     // Anything the client component imports ships in /_next/static, which is served without sign-in.
     const runtimeImports = (file: string) => {

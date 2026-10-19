@@ -153,6 +153,15 @@ describe("the Forecast sheet", () => {
     expect(String(ws.getCell("A32").value)).toContain("CAD uses Excel’s ROUND");
   });
 
+  it("writes Sage's space-padded category trimmed in column V, and a blank one as empty (TASK-3189)", async () => {
+    const lines = FORECAST.data.lines.map((l, i) => (i === 0 ? { ...l, category: "AMEN  " } : i === 1 ? { ...l, category: "      " } : l));
+    const view = goalsPage({}, undefined, { ...FORECAST, data: { ...FORECAST.data, lines } }).forecast as ForecastReady;
+    const { ws } = await build(view);
+    const vOf = (orderNo: string, item: string) => ws.getCell(`V${7 + view.rows.findIndex((r) => r.orderNo === orderNo && r.item === item)}`).value;
+    expect(vOf(lines[0].orderNo, lines[0].item)).toBe("AMEN");
+    expect(vOf(lines[1].orderNo, lines[1].item)).toBeNull();
+  });
+
   it("says under the rows when item categories wait for read access, or for the next refresh", async () => {
     const view = (categoryMissing: string[] | null) =>
       goalsPage({}, undefined, { ...FORECAST, data: { ...FORECAST.data, categoryMissing } }).forecast;

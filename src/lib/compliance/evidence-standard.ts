@@ -16,6 +16,17 @@ export function evidenceStandardMode(now: number = Date.now()): EvidenceStandard
   return now >= Date.parse(EVIDENCE_STANDARD_ENFORCE_FROM) ? "block" : "warn";
 }
 
+/** Midnight 2026-10-25 America/Toronto: visual evidence (TASK-3166) gets its own warn-only week. */
+export const VISUAL_EVIDENCE_ENFORCE_FROM = "2026-10-25T04:00:00.000Z";
+
+/**
+ * Whether a missing visual artifact blocks: only after the warn-only week and
+ * only while uploads are on. Agents cannot meet a rule whose store is off.
+ */
+export function visualEvidenceMode(now: number = Date.now(), storeEnabled = false): EvidenceStandardMode {
+  return storeEnabled && now >= Date.parse(VISUAL_EVIDENCE_ENFORCE_FROM) ? "block" : "warn";
+}
+
 /** A person must verify the work: labelled verify:human, a kind:human-test task, or a high-risk change. */
 export function requiresHumanVerification(labels: readonly string[] | undefined, tier?: RiskTier): boolean {
   const set = new Set((labels ?? []).map((label) => label.trim().toLowerCase()));

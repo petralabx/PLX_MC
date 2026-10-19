@@ -36,10 +36,13 @@ import {
   upsertRoutingSession,
 } from "@/lib/routing/repo";
 import type { RoutingProposalState } from "@/lib/routing/types";
+import { isBucketInRestrictedProject } from "@/lib/permissions/project-acl-guard";
+import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask, snapshot } from "@/lib/sync";
 import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import { bucketPrdForTask } from "./bucket-prd";
+import { ownEvidenceSite } from "./evidence-artifacts";
 import type { EventsQuery } from "./events";
 import { loadPrReviewLinks, loadPrState, type PrState } from "./github-pr";
 import { projectPullRequest, projectionEnabled } from "./projection";
@@ -559,6 +562,13 @@ export async function verifyPr(
     const actorIdentity = d?.runtime ?? "agent";
     const task = await loadTask(taskId);
     const bucketPrd = await bucketPrdForTask(task);
+    // A task that cannot upload evidence never blocks on it: Trading Lab has its
+    // own site, and a restricted project's evidence must not go to the shared library.
+    const canUploadEvidence =
+      !!task &&
+      evidenceStoreEnabled() &&
+      !ownEvidenceSite(d?.repo ?? "") &&
+      !(await isBucketInRestrictedProject(task.bucket));
     const result: VerifyResult = resolution.reason
       ? { verdict: "block", reasons: [checkoutBlockReason(resolution.reason)] }
       : !task
@@ -567,7 +577,13 @@ export async function verifyPr(
           ? { verdict: "block", reasons: [checkoutBlockReason("task_closed")] }
           : task.stage === "cancelled"
             ? { verdict: "pass", reasons: [cancelledTaskWarning(task)] }
-            : verifyCompliance({ task, actor: "agent", tier, bucketPrd });
+            : verifyCompliance({
+                task,
+                actor: "agent",
+                tier,
+                bucketPrd,
+                evidenceStoreEnabled: canUploadEvidence,
+              });
     const checked = applyReviewLinks(result, reviewLinks);
     if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, checked, taskId ?? cid);
     tasks.push({ checkoutId: cid, taskId, verdict: checked.verdict, reasons: checked.reasons });

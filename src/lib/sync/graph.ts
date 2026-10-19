@@ -467,3 +467,34 @@ export function defaultSubscriptionExpiry(now = new Date()): string {
   const ms = Math.min(GRAPH_SUBSCRIPTION_MAX_MINUTES, 3600) * 60_000;
   return new Date(now.getTime() + ms).toISOString();
 }
+
+// ─── Evidence store (TASK-3166) ──────────────────────────────────────────────
+
+/** A site's id by its server-relative path ("/sites/PLXSite") on the tenant host. */
+export async function siteIdByPath(path: string): Promise<string> {
+  const site = await graphFetch<{ id: string }>(`/sites/${SITE_HOSTNAME}:${path}?$select=id`);
+  return site.id;
+}
+
+/** A document library's drive, by library name. Null when there is none: this never creates one. */
+export async function driveIdByName(siteId: string, name: string): Promise<string | null> {
+  const drives = await graphFetch<{ value: { id: string; name: string }[] }>(
+    `/sites/${siteId}/drives?$select=id,name`
+  );
+  return drives.value.find((drive) => drive.name === name)?.id ?? null;
+}
+
+/** Graph's simple upload (up to 4 MB) to a path in a drive. Graph makes the missing folders. */
+export async function uploadSmallDriveFile(
+  driveId: string,
+  path: string,
+  bytes: Uint8Array,
+  contentType: string
+): Promise<{ id: string; webUrl: string; size: number }> {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return graphFetch(`/drives/${driveId}/root:/${encoded}:/content`, {
+    method: "PUT",
+    headers: { "content-type": contentType },
+    body: bytes as BodyInit,
+  });
+}

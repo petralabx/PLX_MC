@@ -12,6 +12,8 @@ import { taskSearchShape } from "./task-search-schema";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { basename, isAbsolute } from "node:path";
 import os from "node:os";
 import { z } from "zod";
 import { TASK_KINDS } from "./task-kind-schema";
@@ -229,7 +231,7 @@ server.tool(
 
 server.tool(
   "mc_create_task",
-  "Create a new MC task. repos[] items are MC registry ids (portal-web, plx-mc, agentic-swarm) — not GitHub slugs. MC_REPO / X-MC-Repo stays the full GitHub slug for checkout/compliance and is a different namespace from repos[]. Pass kind; omitted kind defaults to kind:needs-review. When a person must verify the task (label verify:human or kind human-test), write the description in STE-lite: one instruction per sentence, 20 words per numbered step, 25 per other sentence. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard.",
+  "Create a new MC task. repos[] items are MC registry ids (portal-web, plx-mc, agentic-swarm) — not GitHub slugs. MC_REPO / X-MC-Repo stays the full GitHub slug for checkout/compliance and is a different namespace from repos[]. Pass kind; omitted kind defaults to kind:needs-review. When a person must verify the task (label verify:human or kind human-test), write the description in STE-lite: one instruction per sentence, 20 words per sentence in a numbered step, 25 per other sentence. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard.",
   {
     title: z.string().min(1),
     bucket: z.string().min(1),
@@ -410,6 +412,31 @@ server.tool(
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_complete_task");
     return printResult(await mcFetch("/complete", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_upload_evidence",
+  "Upload visual evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html), 3 MiB or less, with a caption. Send filePath (an absolute path to a local file) or contentBase64 with fileName. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). evidence_store_unavailable says what a person must set up.",
+  {
+    checkoutId: z.string().min(1),
+    kind: z.enum(["diagram", "screenshot", "web-page"]),
+    contentType: z.string().trim().min(1),
+    caption: z.string().trim().min(1).max(500),
+    // Absolute: a relative path would resolve against this server's working directory, not the agent's.
+    filePath: z.string().min(1).refine(isAbsolute, "filePath must be an absolute path.").optional(),
+    contentBase64: z.string().min(1).optional(),
+    fileName: z.string().trim().min(1).max(120).optional(),
+  },
+  async ({ filePath, contentBase64, fileName, ...rest }) => {
+    if (!MCP_ENABLED) return disabledTool("mc_upload_evidence");
+    if (!filePath === !contentBase64) throw new Error("Send exactly one of filePath or contentBase64.");
+    const name = fileName ?? (filePath ? basename(filePath) : undefined);
+    if (!name) throw new Error("fileName is required with contentBase64.");
+    const content = contentBase64 ?? (await readFile(filePath!)).toString("base64");
+    return printResult(
+      await mcFetch("/evidence", { method: "POST", body: { ...rest, fileName: name, contentBase64: content } })
+    );
   }
 );
 

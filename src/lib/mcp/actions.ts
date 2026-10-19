@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
+import { withTransaction } from "@/lib/db";
 import { resolveCompletionAutonomy } from "@/lib/routing";
 import { classifyRiskTier, evidenceStandardReport, requiresHumanVerification } from "@/lib/compliance";
 import { checkout, complete } from "@/lib/compliance/service";
@@ -766,12 +767,17 @@ export async function actionComplete(
       ...(qa ? { qa } : {}),
       ...(input.shots?.length ? { shots: input.shots } : {}),
     };
-    await patchTask(
-      taskId,
-      { evidence } as Parameters<typeof patchTask>[1],
-      dispatch?.accountableHuman ?? identity.operatorEmail,
-      { attribution: { source: "service", actorId: identity.actor.id } }
-    );
+    // Files from mc_upload_evidence (TASK-3166) outlive a new hand-in. They are
+    // read under the task row lock, so an upload that lands meanwhile is kept.
+    await withTransaction(async (q) => {
+      const artifacts = ((await getEntity("task", taskId, q, true))?.data as unknown as Task | undefined)?.evidence?.artifacts;
+      await patchTask(
+        taskId,
+        { evidence: { ...evidence, ...(artifacts?.length ? { artifacts } : {}) } } as Parameters<typeof patchTask>[1],
+        dispatch?.accountableHuman ?? identity.operatorEmail,
+        { query: q, attribution: { source: "service", actorId: identity.actor.id } }
+      );
+    });
   }
 
   return {

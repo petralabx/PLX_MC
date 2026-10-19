@@ -176,7 +176,8 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 - `src/lib/compliance/risk.ts` — risk-tier classifier + per-tier bundle floor
 - `src/lib/compliance/verify.ts` — `evidenceCompleteForTier` + `verifyCompliance`
 - `src/lib/compliance/ste-lite.ts` — deterministic STE-lite writing check (`steLiteFindings`)
-- `src/lib/compliance/evidence-standard.ts` — human-verification scope, warn-only week, blocking findings (TASK-3165); the MCP 400 lives in `src/lib/mcp/evidence-standard-guard.ts`
+- `src/lib/compliance/evidence-standard.ts` — human-verification scope, warn-only week, blocking findings (TASK-3165); the MCP 400 lives in `src/lib/mcp/evidence-standard-guard.ts`. Also the visual-evidence week (`VISUAL_EVIDENCE_ENFORCE_FROM`, 2026-10-25) and `visualEvidenceMode`: a missing artifact blocks only after that date and only while the task can upload: uploads on, not Trading Lab and not a restricted project. An uploaded screenshot also counts as full-tier proof (TASK-3166)
+- `src/lib/compliance/evidence-artifacts.ts` — visual evidence rules (TASK-3166): kinds and content types, a content sniff that must match the declared type, the 3 MiB limit, SharePoint-safe names, the `<system>/<project>/<bucket>/<task id>` folder and `hasVisualArtifact`; the upload is `src/lib/mcp/evidence-actions.ts`
 - `src/lib/compliance/types.ts` — `RiskTier`, `ActorKind`, `VerifyInput/Result`
 - `src/lib/compliance/index.ts` — pure-core barrel (import through here)
 - `src/lib/compliance/tracked-repos.ts` — fleet registry accessor (`TRACKED_REPO_SLUGS`, build-time JSON import of `config/tracked-repos-registry.json`) + pure `registryDrift()`; the Hub MCP checkout allowlist is derived from its `status: active` entries (`ACTIVE_TRACKED_REPO_SLUGS`, so pending/sandbox entries stay fail-closed) and `tests/tracked-repos-drift.test.ts` pins every subset list (pilots, go-live, loop ledgers, REPOS seed) to it

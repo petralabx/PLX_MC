@@ -38,6 +38,9 @@ export interface VerifyInput {
   bucketPrd: "present" | "absent" | "no_bucket" | "store_unavailable" | "unknown";
   // Clock for the evidence standard's warn-only week (TASK-3165); defaults to now.
   now?: number;
+  // Whether this task can upload evidence (TASK-3166): uploads on, not Trading Lab and
+  // not a restricted project. Off: a missing visual artifact only warns.
+  evidenceStoreEnabled?: boolean;
 }
 
 export interface VerifyResult {

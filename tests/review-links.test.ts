@@ -156,6 +156,17 @@ describe("reviewLinksReport", () => {
     expect(report.missing.map((mod) => mod.id)).toEqual(["compliance", "mcp"]);
   });
 
+  it("counts a link with a malformed escape as no link, without throwing", () => {
+    const malformed = ["https://github.com/%", "https://github.com/petralabx/PLX_MC/blob/main/docs/modules/mcp/%E0%A4"];
+    const section = parseReviewLinks(body(...malformed));
+    expect(section.urls).toEqual(malformed);
+    expect(reviewLinksReport(MC, ["src/lib/mcp/actions.ts"], section, AFTER).missing.map((mod) => mod.id)).toEqual(["mcp"]);
+    const withValid = parseReviewLinks(
+      body(...malformed, "https://github.com/petralabx/PLX_MC/blob/main/docs/modules/mcp/README.md")
+    );
+    expect(reviewLinksReport(MC, ["src/lib/mcp/actions.ts"], withValid, AFTER).missing).toEqual([]);
+  });
+
   it("matches a portal screen and the routes below it", () => {
     const section = parseReviewLinks(body("https://plx-customer-portal-abc.vercel.app/mrp/orders"));
     expect(reviewLinksReport(PORTAL, ["portal/src/app/mrp/orders/page.tsx"], section, BEFORE).missing).toEqual([]);
@@ -207,6 +218,16 @@ describe("applyReviewLinks", () => {
     expect(applyReviewLinks(PASS, reviewLinksReport(MC, paths, section, AFTER))).toEqual(PASS);
     expect(applyReviewLinks(PASS, reviewLinksReport(MC, ["src/lib/x.ts"], noSection, AFTER))).toEqual(PASS);
     expect(applyReviewLinks(PASS, null)).toEqual(PASS);
+  });
+
+  it("warns, then blocks, when the only link for a module is malformed", () => {
+    const section = parseReviewLinks(body("https://github.com/%"));
+    const before = applyReviewLinks(PASS, reviewLinksReport(MC, ["src/lib/mcp/actions.ts"], section, BEFORE));
+    expect(before.verdict).toBe("pass");
+    expect(before.reasons[1]).toMatch(new RegExp(`^${REVIEW_LINKS_MISSING}: the "## Review links" section has no link for mcp`));
+    const after = applyReviewLinks(PASS, reviewLinksReport(MC, ["src/lib/mcp/actions.ts"], section, AFTER));
+    expect(after.verdict).toBe("block");
+    expect(after.reasons[0]).toMatch(new RegExp(`^${REVIEW_LINKS_MISSING}:`));
   });
 
   it("only notes an unread body, even after the block date", () => {

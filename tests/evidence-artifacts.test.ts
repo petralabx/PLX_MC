@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import type { Evidence, EvidenceArtifact, Task } from "@/lib/mc-data";
 import {
   MAX_ARTIFACT_BYTES,
+  MCP_ENVELOPE_RESERVE_BYTES,
+  MCP_TRANSPORT_LIMIT_BYTES,
   PLX_EVIDENCE_STORE,
   VISUAL_EVIDENCE_ENFORCE_FROM,
   artifactFolder,
@@ -64,11 +66,24 @@ describe("artifactProblem", () => {
     expect(artifactProblem("screenshot", "image/png", text("hello"))).toBe("The file content is not an accepted type, not image/png.");
   });
 
-  it("refuses an empty file and one over 3 MiB", () => {
+  it("refuses an empty file and one over the cap", () => {
     expect(artifactProblem("screenshot", "image/png", new Uint8Array())).toBe("The file is empty.");
     const big = new Uint8Array(MAX_ARTIFACT_BYTES + 1);
     big.set(PNG);
-    expect(artifactProblem("screenshot", "image/png", big)).toMatch(/Limit: 3145728\.$/);
+    expect(artifactProblem("screenshot", "image/png", big)).toBe(
+      `The file has ${MAX_ARTIFACT_BYTES + 1} bytes. Limit: 3096576, so the base64 upload fits the 4 MiB MCP limit.`
+    );
+  });
+
+  it("caps the raw size so the base64 body plus the envelope stays under 4 MiB", () => {
+    expect(MAX_ARTIFACT_BYTES).toBe(3096576);
+    const encoded = Math.ceil(MAX_ARTIFACT_BYTES / 3) * 4;
+    expect(encoded + MCP_ENVELOPE_RESERVE_BYTES).toBeLessThanOrEqual(MCP_TRANSPORT_LIMIT_BYTES);
+    // The old 3 MiB cap encoded to exactly 4 MiB, leaving no room for the envelope.
+    expect(Math.ceil((3 * 1024 * 1024) / 3) * 4 + MCP_ENVELOPE_RESERVE_BYTES).toBeGreaterThan(MCP_TRANSPORT_LIMIT_BYTES);
+    const atCap = new Uint8Array(MAX_ARTIFACT_BYTES);
+    atCap.set(PNG);
+    expect(artifactProblem("screenshot", "image/png", atCap)).toBeNull();
   });
 });
 

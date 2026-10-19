@@ -13,8 +13,15 @@ export const ARTIFACT_CONTENT_TYPES: Readonly<Record<EvidenceArtifactKind, reado
   "web-page": ["text/html"],
 };
 
-/** 3 MiB: the base64 body of an inline upload stays under Vercel's 4.5 MB request limit. */
-export const MAX_ARTIFACT_BYTES = 3 * 1024 * 1024;
+/** The MCP transport refuses a request body over 4 MiB. */
+export const MCP_TRANSPORT_LIMIT_BYTES = 4 * 1024 * 1024;
+/** Room kept for the JSON-RPC envelope and the other arguments (64 KiB). */
+export const MCP_ENVELOPE_RESERVE_BYTES = 64 * 1024;
+/**
+ * The largest raw file whose base64 body plus the envelope fits the 4 MiB MCP limit.
+ * base64 turns every 3 bytes into 4 characters: 3,096,576 bytes (about 2.95 MiB).
+ */
+export const MAX_ARTIFACT_BYTES = Math.floor((MCP_TRANSPORT_LIMIT_BYTES - MCP_ENVELOPE_RESERVE_BYTES) / 4) * 3;
 
 /** Where PLX evidence lives (decision, Vince, 2026-10-17). A person creates the library, never MC. */
 export const PLX_EVIDENCE_STORE = { site: "/sites/PLXSite", library: "Mission Control" } as const;
@@ -48,7 +55,7 @@ export function artifactProblem(kind: EvidenceArtifactKind, contentType: string,
   const allowed = ARTIFACT_CONTENT_TYPES[kind];
   if (!allowed.includes(contentType)) return `A ${kind} must be ${allowed.join(" or ")}, not ${contentType}.`;
   if (bytes.length === 0) return "The file is empty.";
-  if (bytes.length > MAX_ARTIFACT_BYTES) return `The file has ${bytes.length} bytes. Limit: ${MAX_ARTIFACT_BYTES}.`;
+  if (bytes.length > MAX_ARTIFACT_BYTES) return `The file has ${bytes.length} bytes. Limit: ${MAX_ARTIFACT_BYTES}, so the base64 upload fits the 4 MiB MCP limit.`;
   const actual = sniffContentType(bytes);
   if (actual !== contentType) return `The file content is ${actual ?? "not an accepted type"}, not ${contentType}.`;
   return null;

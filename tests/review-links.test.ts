@@ -2,7 +2,7 @@
 // the warn-then-block rule and the PR-body loader. Pure; GitHub is stubbed.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import reviewLinksMap from "../config/review-links-map.json";
 
 const m = vi.hoisted(() => ({ resolveGithubToken: vi.fn(async () => "tok") }));
@@ -250,6 +250,65 @@ describe("loadPrReviewLinks", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(loadPrReviewLinks(MC, 5)).resolves.toEqual({ found: true, urls: ["https://mc.plxcustomer.io/?screen=activity"] });
     expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toBe("https://api.github.com/repos/petralabx/PLX_MC/pulls/5");
+  });
+
+  describe("with one 5 s deadline for the token exchange and the PR read", () => {
+    const settled = (p: Promise<unknown>) => {
+      const state = { done: false, error: undefined as unknown };
+      p.then(
+        () => (state.done = true),
+        (err) => Object.assign(state, { done: true, error: err })
+      );
+      return state;
+    };
+    const hungFetch = () =>
+      vi.fn(
+        (_url: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_, reject) =>
+            init?.signal?.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")))
+          )
+      );
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("gives up on a hung token exchange at the deadline, never reading the PR", async () => {
+      m.resolveGithubToken.mockImplementationOnce(() => new Promise<string>(() => {}));
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      const state = settled(loadPrReviewLinks(MC, 5));
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(state.done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(state.error).toMatchObject({ code: "github_unreachable" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("reads the PR after a fast token exchange", async () => {
+      m.resolveGithubToken.mockImplementationOnce(() => new Promise<string>((resolve) => setTimeout(() => resolve("tok"), 100)));
+      vi.stubGlobal("fetch", vi.fn(async () => Response.json({ number: 5, body: body("https://mc.plxcustomer.io/?screen=activity") })));
+      const result = loadPrReviewLinks(MC, 5);
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(result).resolves.toEqual({ found: true, urls: ["https://mc.plxcustomer.io/?screen=activity"] });
+    });
+
+    it("gives the PR read only what the token exchange left of the budget", async () => {
+      m.resolveGithubToken.mockImplementationOnce(() => new Promise<string>((resolve) => setTimeout(() => resolve("tok"), 3_000)));
+      const fetchMock = hungFetch();
+      vi.stubGlobal("fetch", fetchMock);
+      const state = settled(loadPrReviewLinks(MC, 5));
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(fetchMock).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(state.done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(state.error).toMatchObject({ code: "github_unreachable" });
+    });
   });
 
   it("throws on a wrong PR payload or a missing token", async () => {

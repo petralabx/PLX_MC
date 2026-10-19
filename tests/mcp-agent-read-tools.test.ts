@@ -617,6 +617,22 @@ describe("mc_verify_pr", () => {
       expect(res.status).toBe(200);
       expect((await res.json()).data).toMatchObject({ verdict: "pass", recorded: false });
     });
+
+    it("notes review_links_unchecked when the Review links token exchange hangs past its 5 s budget", async () => {
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      vi.setSystemTime(new Date("2026-11-02T12:00:00Z"));
+      stubGithub();
+      // The first token reads the PR's stamps and files; the second, for the body, never resolves.
+      m.resolveGithubToken.mockResolvedValueOnce("gh-test-token").mockImplementationOnce(() => new Promise(() => {}));
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const call = callTool("mc_verify_pr", { repo: "petralabx/PLX_MC", pr: 42 });
+      await vi.advanceTimersByTimeAsync(5_000);
+      const { isError, body } = await call;
+      expect(isError).toBe(false);
+      expect(body.data.verdict).toBe("pass");
+      expect(body.data.reasons.join(" ")).toContain("review_links_unchecked:");
+      warn.mockRestore();
+    });
   });
 
   it("surfaces a missing GitHub credential as github_unavailable", async () => {

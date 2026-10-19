@@ -41,21 +41,40 @@ export async function loadPrState(repoFullName: string, prNumber: number): Promi
   return { open: pr.state === "open", checkoutIds: evt.checkoutIds };
 }
 
-/** The PR body's Review links section (TASK-3168), parsed in memory. Never returns the body. */
+/**
+ * The PR body's Review links section (TASK-3168), parsed in memory. Never returns the body.
+ * One deadline covers the whole lookup: the App token exchange, then the PR read.
+ */
 export async function loadPrReviewLinks(repoFullName: string, prNumber: number): Promise<ReviewLinksSection> {
   const [owner, name] = repoFullName.split("/");
   if (!owner || !name) throw new ApiError("github_unavailable", "A full repository slug is required to read the PR body.", 503);
-  const token = await resolveGithubToken({ repoOwner: owner });
-  if (!token) throw new ApiError("github_unavailable", "No GitHub auth configured - the PR cannot be read.", 503);
-  const pr = (await githubGet(
-    `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${prNumber}`,
-    token,
-    REVIEW_LINKS_TIMEOUT_MS
-  )) as { number?: number; body?: unknown };
-  if (pr?.number !== prNumber) {
-    throw new ApiError("github_error", "GitHub returned an unrecognized pull request payload.", 502);
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), REVIEW_LINKS_TIMEOUT_MS);
+  try {
+    const token = await beforeDeadline(resolveGithubToken({ repoOwner: owner }), deadline.signal);
+    if (!token) throw new ApiError("github_unavailable", "No GitHub auth configured - the PR cannot be read.", 503);
+    const pr = (await githubGet(
+      `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${prNumber}`,
+      token,
+      deadline.signal
+    )) as { number?: number; body?: unknown };
+    if (pr?.number !== prNumber) {
+      throw new ApiError("github_error", "GitHub returned an unrecognized pull request payload.", 502);
+    }
+    return parseReviewLinks(typeof pr.body === "string" ? pr.body : "");
+  } finally {
+    clearTimeout(timer);
   }
-  return parseReviewLinks(typeof pr.body === "string" ? pr.body : "");
+}
+
+/** Settle with `work`, or reject once `signal` aborts (resolveGithubToken takes no signal). */
+function beforeDeadline<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new ApiError("github_unreachable", "GitHub auth did not resolve in time.", 502));
+    if (signal.aborted) return onAbort();
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
 }
 
 export interface LoadedPrVerifyInput {
@@ -64,7 +83,7 @@ export interface LoadedPrVerifyInput {
   truncated: boolean;
 }
 
-async function githubGet(url: string, token: string, timeoutMs = GH_TIMEOUT_MS): Promise<unknown> {
+async function githubGet(url: string, token: string, signal?: AbortSignal): Promise<unknown> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -74,7 +93,7 @@ async function githubGet(url: string, token: string, timeoutMs = GH_TIMEOUT_MS):
         "x-github-api-version": "2022-11-28",
       },
       cache: "no-store",
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: signal ?? AbortSignal.timeout(GH_TIMEOUT_MS),
     });
   } catch (err) {
     throw new ApiError(

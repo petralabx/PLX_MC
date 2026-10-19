@@ -326,7 +326,7 @@ describe("loadPrReviewLinks", () => {
         process.env.GITHUB_APP_INSTALLATION_ID_PLX = "42";
         const real = await vi.importActual<typeof import("@/lib/github-app")>("@/lib/github-app");
         real.__resetInstallationTokenCache();
-        m.resolveGithubToken.mockImplementationOnce(real.resolveGithubToken);
+        m.resolveGithubToken.mockImplementationOnce(real.resolveGithubToken as unknown as () => Promise<string>);
       });
 
       afterEach(() => {

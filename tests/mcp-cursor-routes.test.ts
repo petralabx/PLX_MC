@@ -207,6 +207,7 @@ describe("routing suggest cursor route", () => {
 describe("mcp envelope", () => {
   it("uses configured public base URL", () => {
     expect(publicMcBaseUrl()).toBe("https://mc.plxcustomer.io");
+    // Stable on purpose: src/app/tasks/[id] redirects it to /?screen=task (tests/task-deep-link.test.ts).
     expect(taskLink("TASK-1")).toBe("https://mc.plxcustomer.io/tasks/TASK-1");
   });
 

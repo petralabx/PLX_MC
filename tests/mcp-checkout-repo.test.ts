@@ -167,6 +167,15 @@ describe("actionCheckout actor.repo receipt", () => {
     );
   });
 
+  it("passes the caller's runtime/lane to the checkout when given, and nothing when omitted (TASK-3336)", async () => {
+    await actionCheckout(hubIdentity, "TASK-1206", { agent: "claude/claude-uat" });
+    expect(mocks.checkout).toHaveBeenLastCalledWith(
+      expect.objectContaining({ taskId: "TASK-1206", runtime: "cursor-cloud", agent: "claude/claude-uat" })
+    );
+    await actionCheckout(hubIdentity, "TASK-1206");
+    expect(mocks.checkout).toHaveBeenLastCalledWith(expect.objectContaining({ agent: undefined }));
+  });
+
   it("allowlisted local-inference binds actor.repo on the minted checkout", async () => {
     const receipt = await actionCheckout(hubIdentity, "TASK-1206", {
       repo: "petralabx/local-inference",

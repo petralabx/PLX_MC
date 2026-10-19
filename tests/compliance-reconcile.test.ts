@@ -10,6 +10,10 @@ const db = vi.hoisted(() => ({
   events: [] as { kind: string }[],
 }));
 
+vi.mock("@/lib/compliance/github-pr", () => ({
+  loadPrCommits: vi.fn(async () => []),
+}));
+
 vi.mock("@/lib/compliance/projection", () => ({
   projectionEnabled: () => false,
   projectPullRequest: vi.fn(async () => {}),

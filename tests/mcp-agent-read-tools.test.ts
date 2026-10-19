@@ -526,6 +526,9 @@ describe("mc_verify_pr", () => {
       if (url.includes("/repos/petralabx/PLX_MC/pulls/42/files")) {
         return Response.json([{ filename: "src/lib/mcp/read-actions.ts" }]);
       }
+      if (url.includes("/repos/petralabx/PLX_MC/pulls/42/commits")) {
+        return Response.json([]);
+      }
       return new Response("not found", { status: 404 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -623,8 +626,11 @@ describe("mc_verify_pr", () => {
       vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
       vi.setSystemTime(new Date("2026-11-02T12:00:00Z"));
       stubGithub();
-      // The first token reads the PR's stamps and files; the second, for the body, never resolves.
-      m.resolveGithubToken.mockResolvedValueOnce("gh-test-token").mockImplementationOnce(() => new Promise(() => {}));
+      // The first token reads the PR's stamps and files, the second its commits; the third, for the body, never resolves.
+      m.resolveGithubToken
+        .mockResolvedValueOnce("gh-test-token")
+        .mockResolvedValueOnce("gh-test-token")
+        .mockImplementationOnce(() => new Promise(() => {}));
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const call = callTool("mc_verify_pr", { repo: "petralabx/PLX_MC", pr: 42 });
       await vi.advanceTimersByTimeAsync(5_000);
@@ -633,7 +639,7 @@ describe("mc_verify_pr", () => {
       expect(body.data.verdict).toBe("pass");
       expect(body.data.reasons.join(" ")).toContain("review_links_unchecked:");
       // The hung token exchange is cancelled at the deadline, not merely abandoned.
-      expect((m.resolveGithubToken.mock.calls[1] as unknown as [{ signal: AbortSignal }])[0].signal.aborted).toBe(true);
+      expect((m.resolveGithubToken.mock.calls[2] as unknown as [{ signal: AbortSignal }])[0].signal.aborted).toBe(true);
       warn.mockRestore();
     });
   });

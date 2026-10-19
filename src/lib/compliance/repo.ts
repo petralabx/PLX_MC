@@ -511,6 +511,22 @@ export async function getDispatchCheckoutPrincipal(id: string): Promise<string |
 }
 
 /**
+ * The `<runtime>/<lane>` a checkout recorded (TASK-3336), from its checkout
+ * event's payload. Null for a checkout taken without one.
+ */
+export async function getDispatchCheckoutAgent(id: string): Promise<string | null> {
+  const rows = await query<{ agent: string | null }>(
+    `SELECT payload->>'agent' AS agent
+       FROM mc_events
+      WHERE kind = 'checkout' AND payload->>'checkoutId' = $1
+      ORDER BY seq
+      LIMIT 1`,
+    [id]
+  );
+  return rows[0]?.agent ?? null;
+}
+
+/**
  * True when `principalId` holds an unrevoked, unreleased, unexpired checkout of
  * `taskId`. The principal is the checkout event's permissionActorId (the
  * authenticated service principal at checkout), never an operator header.

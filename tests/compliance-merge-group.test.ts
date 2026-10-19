@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 
-const github = vi.hoisted(() => ({ loadPrState: vi.fn() }));
+const github = vi.hoisted(() => ({ loadPrState: vi.fn(), loadPrCommits: vi.fn(async () => []) }));
 vi.mock("@/lib/compliance/github-pr", () => github);
 
 const db = vi.hoisted(() => ({

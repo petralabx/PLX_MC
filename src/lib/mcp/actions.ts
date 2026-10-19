@@ -488,7 +488,7 @@ export async function actionUpdateBucket(
 export async function actionCheckout(
   identity: McpIdentity,
   taskId: string,
-  options: { repo?: string } = {}
+  options: { repo?: string; agent?: string } = {}
 ) {
   const repo = resolveCheckoutRepo(identity.repo, options.repo);
   requireMcpActor(identity, "task.checkout", { type: "task", id: taskId }, {
@@ -502,6 +502,7 @@ export async function actionCheckout(
     repo,
     actor: identity.actor,
     door: "mcp",
+    agent: options.agent,
   });
   const stamp = `MC-Checkout: ${checkoutId}`;
   return {

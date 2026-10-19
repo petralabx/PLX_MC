@@ -35,6 +35,17 @@ truth table is proven before any plumbing exists.
   PRs pass (recorded, ungated); an agent PR with no checked-out task is blocked;
   agent PRs must carry a human accountable owner (EN-003) + the tier bundle. The
   soft-vs-hard (warn vs block) decision belongs to the caller.
+- Agent commits (TASK-3336, `commit-signals.ts`). `verifyPr` reads the PR's head
+  commits, whoever opened the PR. A commit is agent work when it has a `[bot]`
+  or `plx-agents` identity, the name `PLX Agent`, a lane email
+  (`cos@`/`uat@petrasoap.com`), a Claude, Codex or Cursor `Co-Authored-By`, or an
+  `Agent:`/`On-Behalf-Of:`/`MC-Checkout:` trailer. Agent commits with no body
+  stamp block. On a stamped PR, each agent commit must end with `Agent:`,
+  `On-Behalf-Of:`, then `MC-Checkout:` as the last line, naming a body stamp.
+  On-Behalf-Of must equal the checkout's accountable person. Agent must equal
+  the `<runtime>/<lane>` passed as `agent` to `mc_checkout_task`, or the
+  checkout's runtime when it is not the default `cursor`; otherwise it only
+  warns. The merge queue skips the read; a GitHub error holds the gate.
 - Human-verification evidence standard (TASK-3165, `evidence-standard.ts`,
   `ste-lite.ts`). It applies when a person must verify the work: label
   `verify:human`, a `kind:human-test` task, or a high-risk change. The agent's
@@ -175,6 +186,7 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 
 - `src/lib/compliance/risk.ts` — risk-tier classifier + per-tier bundle floor
 - `src/lib/compliance/verify.ts` — `evidenceCompleteForTier` + `verifyCompliance`
+- `src/lib/compliance/commit-signals.ts` — agent signals and the trailer block on a PR's head commits (`agentSignals`, `commitTrailers`)
 - `src/lib/compliance/ste-lite.ts` — deterministic STE-lite writing check (`steLiteFindings`)
 - `src/lib/compliance/evidence-standard.ts` — human-verification scope, warn-only week, blocking findings (TASK-3165); the MCP 400 lives in `src/lib/mcp/evidence-standard-guard.ts`. Also the visual-evidence week (`VISUAL_EVIDENCE_ENFORCE_FROM`, 2026-10-25) and `visualEvidenceMode`: a missing artifact blocks only after that date and only while the task can upload: uploads on, not Trading Lab and not a restricted project. An uploaded screenshot also counts as full-tier proof (TASK-3166). The explainer video (TASK-3167): `complexityReasons` (high-risk, more than 5 numbered steps in the description or evidence summary, 2 or more task repos) and `videoEvidenceMode` (`VIDEO_EVIDENCE_ENFORCE_FROM`, 2026-11-01, same upload rule). The gate reason starts `no explainer video:` and lands in the `gate.*` event `reasons`
 - `src/lib/compliance/evidence-artifacts.ts` — visual evidence rules (TASK-3166): kinds and content types, a content sniff that must match the declared type, the 3 MiB limit, SharePoint-safe names, the `<system>/<project>/<bucket>/<task id>` folder and `hasVisualArtifact`; the upload is `src/lib/mcp/evidence-actions.ts`. Also the `video` kind (TASK-3167): mp4 or webm, sniffed from its bytes, 100 MiB or less (`MAX_VIDEO_BYTES`), named with its extension; a video is not visual evidence (`VISUAL_ARTIFACT_KINDS`), `hasVideoArtifact` checks it on its own
@@ -188,7 +200,7 @@ Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 - `src/lib/compliance/projection.ts` — PR lifecycle → sync task projection (authorize-gated)
 - `src/lib/compliance/bucket-prd.ts` — bucket PRD resolution for verifyPr
 - `src/lib/compliance/webhook.ts` — HMAC verify + PR-event parse (in-memory body)
-- `src/lib/compliance/github-pr.ts` — GitHub PR → `VerifyPrInput` (stamps, labels, changed files) for `mc_verify_pr`; `loadPrReviewLinks` for the gate
+- `src/lib/compliance/github-pr.ts` — GitHub PR → `VerifyPrInput` (stamps, labels, changed files) for `mc_verify_pr`; `loadPrReviewLinks` for the gate; `loadPrCommits` for the agent-commit check
 - `src/lib/compliance/review-links.ts` — path → module → link map lookup, `## Review links` parser, warn-then-block rule (TASK-3168; data in `config/review-links-map.json`)
 - `src/lib/compliance/go-live-announcer.ts` — one-line Teams Workflow posts on `checkout` / `pr.opened` / `task.completed` (TASK-1454/1699/1701; chat-primary, hard dedupe per task+event, coalesce only on sibling `sent`, kill switches default off; `ANNOUNCE_CHECKOUT` stays off unless operators re-enable)
 - `src/lib/compliance/backfill.ts` — nightly GitHub backfill: merged PRs (last N days) per registry repo with no resolvable `MC-Checkout` stamp and no task `prs[]` link; injected GitHub client (stubbed in tests), fail-open per repo, one `github.backfill.report` row in `mc_events`; cron `src/app/api/cron/github-backfill/route.ts`, kill switch `PLX_MC_GITHUB_BACKFILL_ENABLED` (default off)

@@ -186,6 +186,9 @@ import { ApiError } from "@/lib/api/route";
 import { GET } from "@/app/api/activity/route";
 
 const ctx = { params: Promise.resolve({}) };
+// The route folds with the real clock (loadRepoActivity defaults now to new
+// Date()), so its gate-window fixture must be relative to Date.now(), not NOW.
+const realHoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 
 describe("GET /api/activity", () => {
   beforeEach(() => {
@@ -193,7 +196,7 @@ describe("GET /api/activity", () => {
     m.eventsByKinds.mockReset().mockImplementation(async (kinds: string[]) =>
       kinds.includes("github.backfill.report")
         ? [ev("github.backfill.report", null, hoursAgo(3), { payload: backfill() as never })]
-        : [ev("gate.blocked", "PLX_MC", hoursAgo(1), { pr: "3" })]
+        : [ev("gate.blocked", "PLX_MC", realHoursAgo(1), { pr: "3" })]
     );
   });
 

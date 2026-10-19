@@ -1,5 +1,6 @@
 // Review links (TASK-3168): the path → module → link map, the PR-body parser,
 // the warn-then-block rule and the PR-body loader. Pure; GitHub is stubbed.
+import { generateKeyPairSync } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -295,6 +296,73 @@ describe("loadPrReviewLinks", () => {
       const result = loadPrReviewLinks(MC, 5);
       await vi.advanceTimersByTimeAsync(100);
       await expect(result).resolves.toEqual({ found: true, urls: ["https://mc.plxcustomer.io/?screen=activity"] });
+    });
+
+    it("aborts the token lookup's signal at the deadline", async () => {
+      m.resolveGithubToken.mockImplementationOnce(() => new Promise<string>(() => {}));
+      vi.stubGlobal("fetch", vi.fn());
+      const state = settled(loadPrReviewLinks(MC, 5));
+      const [opts] = m.resolveGithubToken.mock.calls.at(-1) as unknown as [{ repoOwner: string; signal: AbortSignal }];
+      expect(opts).toMatchObject({ repoOwner: "petralabx" });
+      expect(opts.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(opts.signal.aborted).toBe(true);
+      expect(state.error).toMatchObject({ code: "github_unreachable" });
+    });
+
+    describe("through the real GitHub App token exchange", () => {
+      const ENV = ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_APP_INSTALLATION_ID", "GITHUB_APP_INSTALLATION_ID_PLX"] as const;
+      const saved: Record<string, string | undefined> = {};
+      const isTokenExchange = (url: RequestInfo | URL) => String(url).endsWith("/app/installations/42/access_tokens");
+
+      beforeEach(async () => {
+        for (const k of ENV) saved[k] = process.env[k];
+        process.env.GITHUB_APP_ID = "1";
+        process.env.GITHUB_APP_PRIVATE_KEY = generateKeyPairSync("rsa", {
+          modulusLength: 2048,
+          privateKeyEncoding: { type: "pkcs8", format: "pem" },
+          publicKeyEncoding: { type: "spki", format: "pem" },
+        }).privateKey;
+        process.env.GITHUB_APP_INSTALLATION_ID_PLX = "42";
+        const real = await vi.importActual<typeof import("@/lib/github-app")>("@/lib/github-app");
+        real.__resetInstallationTokenCache();
+        m.resolveGithubToken.mockImplementationOnce(real.resolveGithubToken as unknown as () => Promise<string>);
+      });
+
+      afterEach(() => {
+        for (const k of ENV) {
+          if (saved[k] === undefined) delete process.env[k];
+          else process.env[k] = saved[k];
+        }
+      });
+
+      it("cancels a hung exchange at 5 s, never reading the PR", async () => {
+        const fetchMock = hungFetch();
+        vi.stubGlobal("fetch", fetchMock);
+        const state = settled(loadPrReviewLinks(MC, 5));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetchMock).toHaveBeenCalledOnce();
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(isTokenExchange(url)).toBe(true);
+        expect(init?.signal?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(init?.signal?.aborted).toBe(true);
+        expect(state.error).toMatchObject({ code: "github_unreachable" });
+        expect(fetchMock).toHaveBeenCalledOnce();
+      });
+
+      it("reads the PR with the minted token after a fast exchange", async () => {
+        const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) =>
+          isTokenExchange(url)
+            ? Response.json({ token: "ghs_fast", expires_at: new Date(Date.now() + 3_600_000).toISOString() }, { status: 201 })
+            : (init?.headers as Record<string, string>).authorization === "Bearer ghs_fast"
+              ? Response.json({ number: 5, body: body("https://mc.plxcustomer.io/?screen=activity") })
+              : new Response("wrong token", { status: 401 })
+        );
+        vi.stubGlobal("fetch", fetchMock);
+        await expect(loadPrReviewLinks(MC, 5)).resolves.toEqual({ found: true, urls: ["https://mc.plxcustomer.io/?screen=activity"] });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      });
     });
 
     it("gives the PR read only what the token exchange left of the budget", async () => {

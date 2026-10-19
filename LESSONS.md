@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-19 (ET) — TASK-3333: a bare `.risk` row rule blanked every At risk initiative
+
+- **What happened:** Vince saw an empty card on the project page. The initiative was At risk, so its section had the class `risk`. The Risk Register row rule `.mc .risk` (a two-column grid) matched it too, and the task table landed in a 0px column. The E2E fixtures have no At risk initiative, so no test saw it.
+- **Root cause:** A generic word served as a component class (the Risk Register row) and as a state modifier (health `track`/`risk`/`off`) in the same stylesheet, and the component rule was unscoped.
+- **Rule going forward:** Scope a component rule to its container, or give the component a prefixed class. Never style a bare state word. `tests/mc-risk-row-scope.test.ts` now guards the `.risk` row.
+
 ### 2026-10-19 (ET) — TASK-3166 r3: the evidence guard sat above the write path, so the SharePoint pull skipped it
 
 - **What happened:** Sol's r3 review of PR #354 found that a normal SharePoint Roadmap pull could re-parent a bucket with evidence into a restricted project: the guard lived in `patchBucket` and the conflict path, and the pull calls `repo.updateBucket` directly. The upload's record step rechecked only a changed bucket, without a lock shared with the guards, and did not recheck a closed stage.

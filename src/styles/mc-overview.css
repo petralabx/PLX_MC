@@ -1917,7 +1917,7 @@
   flex-direction: column;
 }
 
-.mc .risk {
+.mc :is(.mlist, .risks) > .risk {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
@@ -1926,31 +1926,31 @@
   align-items: start;
 }
 
-.mc .risk:last-child {
+.mc :is(.mlist, .risks) > .risk:last-child {
   border-bottom: 0;
 }
 
-.mc .risk .t {
+.mc :is(.mlist, .risks) > .risk .t {
   font-size: var(--p-text-ui);
   color: var(--p-ink);
   line-height: 1.4;
 }
 
-.mc .risk .mit {
+.mc :is(.mlist, .risks) > .risk .mit {
   font-size: var(--p-text-mono);
   color: var(--p-muted);
   margin-top: 3px;
   line-height: 1.4;
 }
 
-.mc .risk .li {
+.mc :is(.mlist, .risks) > .risk .li {
   display: flex;
   gap: 6px;
   margin-top: 6px;
   flex-wrap: wrap;
 }
 
-.mc .risk .li .x {
+.mc :is(.mlist, .risks) > .risk .li .x {
   font-family: var(--mono);
   font-size: var(--p-text-cap-2);
   letter-spacing: 0.12em;
@@ -1960,13 +1960,13 @@
   padding: 1px 5px;
 }
 
-.mc .risk .li .owner-pill {
+.mc :is(.mlist, .risks) > .risk .li .owner-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.mc .risk.milestone {
+.mc :is(.mlist, .risks) > .risk.milestone {
   grid-template-columns: 1fr auto;
 }
 

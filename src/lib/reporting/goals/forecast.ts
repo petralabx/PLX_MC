@@ -178,6 +178,8 @@ function streamOrder(a: ForecastAoRow, b: ForecastAoRow): number {
 }
 
 function toRow(line: ForecastLineRow, key: string, qtyHundredths: number, ao: ForecastAoRow | null, today: IsoDate, rate: string): ForecastRow {
+  // Sage pads the category to six characters ('AMEN  '); blank is no category. The filter, its matching and column V read this.
+  const category = line.category?.trim() || null;
   const valueCents = convertCents(qtyHundredths, line.unitPrice);
   const cadCents = line.currency === "CAD" ? valueCents : line.currency === "USD" ? convertCents(valueCents, rate) : null;
   return {
@@ -190,8 +192,8 @@ function toRow(line: ForecastLineRow, key: string, qtyHundredths: number, ao: Fo
     po: line.po,
     item: line.item,
     description: line.description,
-    category: line.category,
-    channel: channelOf(line.category),
+    category,
+    channel: channelOf(category),
     expected: line.expected,
     overdue: line.expected < today,
     qty: qtyHundredths / 100,

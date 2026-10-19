@@ -57,9 +57,13 @@ export function sniffContentType(bytes: Uint8Array): string | null {
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
   if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50])) return "image/webp";
-  // ISO base media "ftyp" box. QuickTime ("qt  ") shares it but is not accepted.
+  // ISO base media "ftyp" box. Images (AVIF/HEIC) and QuickTime share
+  // this box, so only recognized MP4 major brands count as video.
   if (startsWith(bytes.subarray(4), [0x66, 0x74, 0x79, 0x70])) {
-    return startsWith(bytes.subarray(8), [0x71, 0x74, 0x20, 0x20]) ? null : "video/mp4";
+    const brand = new TextDecoder().decode(bytes.subarray(8, 12));
+    return ["isom", "iso2", "iso3", "iso4", "iso5", "iso6", "iso7", "iso8", "iso9", "mp41", "mp42", "avc1", "dash", "M4V "].includes(brand)
+      ? "video/mp4"
+      : null;
   }
   // EBML header with DocType "webm" (Matroska .mkv shares the header but is not accepted).
   if (startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3])) return /webm/.test(head(bytes.subarray(0, 64))) ? "video/webm" : null;

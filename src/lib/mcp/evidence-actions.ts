@@ -28,7 +28,7 @@ import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/ac
 import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask } from "@/lib/sync";
 import { GraphError, driveIdByName, siteIdByPath, uploadSmallDriveFile } from "@/lib/sync/graph";
-import { getBuckets, getEntity } from "@/lib/sync/repo";
+import { getBuckets, getEntity, lockSharedEvidence } from "@/lib/sync/repo";
 import type { McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
 
@@ -64,6 +64,13 @@ export function __clearEvidenceDriveCacheForTests(): void {
   cachedDriveId = null;
 }
 
+// A verified or cancelled task takes no new evidence; `after` names a file already uploaded.
+function assertTaskOpen(taskId: string, task: Task, after = ""): void {
+  if (task.stage === "cancelled" || task.stage === "verified") {
+    throw new ApiError("task_closed", `${taskId} is ${task.stage}; it takes no new evidence.${after}`, 409);
+  }
+}
+
 export async function actionUploadEvidence(identity: McpIdentity, input: UploadEvidenceInput) {
   const dispatch = await complianceRepo.getDispatch(input.checkoutId);
   if (!dispatch?.taskId || dispatch.revoked || dispatch.releasedAt || new Date(dispatch.expiresAt).getTime() <= Date.now()) {
@@ -89,9 +96,7 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
 
   const task = (await getEntity("task", taskId))?.data as unknown as Task | undefined;
   if (!task) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
-  if (task.stage === "cancelled" || task.stage === "verified") {
-    throw new ApiError("task_closed", `${taskId} is ${task.stage}; it takes no new evidence.`, 409);
-  }
+  assertTaskOpen(taskId, task);
   // Everyone with access to the shared library could read a restricted project's
   // evidence. MC never grants or narrows access itself, so it refuses instead.
   if (await isBucketInRestrictedProject(task.bucket)) {
@@ -144,11 +149,19 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
   return withTransaction(async (q) => {
     const current = (await getEntity("task", taskId, q, true))?.data as unknown as Task | undefined;
     if (!current) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
-    // A move into a restricted project may have committed since the first check.
-    if (current.bucket !== task.bucket && (await isBucketInRestrictedProject(current.bucket, q))) {
+    // The task may have closed during the upload. MC never deletes the file.
+    assertTaskOpen(taskId, current, uploaded ? ` The file ${uploaded.name} was uploaded to ${uploaded.url} but is not recorded.` : "");
+    // A task move, bucket re-parent or project restrict may have committed since
+    // the first check. Those take the shared-evidence lock exclusive, so under the
+    // shared lock the task -> bucket -> project chain cannot change until commit.
+    await lockSharedEvidence(q, "share");
+    if (await isBucketInRestrictedProject(current.bucket, q)) {
       throw unavailable(
-        `${taskId} moved into a restricted project during the upload. Nothing was recorded.` +
-          (uploaded ? ` A person must remove ${uploaded.url} from the shared "${PLX_EVIDENCE_STORE.library}" library.` : "")
+        `${taskId} came under a restricted project during the upload. Nothing was recorded.` +
+          (uploaded
+            ? ` The file ${uploaded.name} was uploaded to ${uploaded.url}. ` +
+              `A person must relocate it out of the shared "${PLX_EVIDENCE_STORE.library}" library.`
+            : "")
       );
     }
     const evidence = current.evidence ?? { summary: "", items: [] };

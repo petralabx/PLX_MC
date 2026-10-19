@@ -12,6 +12,10 @@ const h = vi.hoisted(() => ({
   storeEnabled: true,
   restricted: false,
   moveDuringUpload: false,
+  duringUpload: null as null | (() => void),
+  beforeRecord: null as null | (() => void),
+  locks: [] as string[],
+  heldLock: null as null | Promise<void>,
   driveId: "drive-mc" as string | null,
   siteError: null as null | Error,
   uploads: [] as { driveId: string; path: string; size: number; contentType: string }[],
@@ -29,6 +33,11 @@ vi.mock("@/lib/compliance/repo", () => ({
 vi.mock("@/lib/sync/repo", () => ({
   getEntity: vi.fn(async () => (h.task ? { data: structuredClone(h.task) } : null)),
   getBuckets: vi.fn(async () => [{ id: "BKT-HUMAN", project: "PRJ-PLX-MC-FRONTIER" }]),
+  // The shared-evidence lock: a guard holding it (h.heldLock) delays the record step.
+  lockSharedEvidence: vi.fn(async (_q: unknown, mode: string) => {
+    h.locks.push(mode);
+    await h.heldLock;
+  }),
 }));
 vi.mock("@/lib/sync", () => ({
   patchTask: vi.fn(async (_id: string, patch: Record<string, unknown>) => {
@@ -41,7 +50,10 @@ vi.mock("@/lib/sync", () => ({
 let txChain: Promise<unknown> = Promise.resolve();
 vi.mock("@/lib/db", () => ({
   withTransaction: vi.fn((fn: (q: unknown) => unknown) => {
-    const run = txChain.then(() => fn({}));
+    const run = txChain.then(() => {
+      h.beforeRecord?.();
+      return fn({});
+    });
     txChain = run.catch(() => undefined);
     return run;
   }),
@@ -67,6 +79,7 @@ vi.mock("@/lib/sync/graph", async () => {
     uploadSmallDriveFile: vi.fn(async (driveId: string, path: string, bytes: Uint8Array, contentType: string) => {
       h.uploads.push({ driveId, path, size: bytes.length, contentType });
       if (h.moveDuringUpload) h.task = { ...h.task, bucket: "BKT-PRIVATE" };
+      h.duringUpload?.();
       await new Promise((resolve) => setTimeout(resolve, 5));
       return { id: `item-${h.uploads.length}`, webUrl: `https://petrasoap.sharepoint.com/sites/PLXSite/${path}`, size: bytes.length };
     }),
@@ -111,6 +124,10 @@ beforeEach(() => {
   h.storeEnabled = true;
   h.restricted = false;
   h.moveDuringUpload = false;
+  h.duringUpload = null;
+  h.beforeRecord = null;
+  h.locks.length = 0;
+  h.heldLock = null;
   h.driveId = "drive-mc";
   h.siteError = null;
   h.uploads.length = 0;
@@ -230,14 +247,53 @@ describe("mc_upload_evidence", () => {
     expect(h.patched).toHaveLength(0);
   });
 
+  const RELOCATE =
+    /^TASK-3166 came under a restricted project during the upload\. Nothing was recorded\. The file \d{8}T\d{6}Z-[0-9a-f]{8}-flow\.svg was uploaded to https:\/\/.+\. A person must relocate it out of the shared "Mission Control" library\.$/;
+
   it("records nothing when the task moved into a restricted project during the upload", async () => {
     h.moveDuringUpload = true;
+    await expect(upload()).rejects.toMatchObject({ code: "evidence_store_unavailable", message: expect.stringMatching(RELOCATE) });
+    expect(h.patched).toHaveLength(0);
+    expect(h.events).toHaveLength(0);
+  });
+
+  it("records nothing when the task's project was restricted during the upload (same bucket)", async () => {
+    h.duringUpload = () => void (h.restricted = true);
+    await expect(upload()).rejects.toMatchObject({ code: "evidence_store_unavailable", message: expect.stringMatching(RELOCATE) });
+    expect(h.uploads).toHaveLength(1);
+    expect(h.patched).toHaveLength(0);
+    expect(h.events).toHaveLength(0);
+  });
+
+  it("waits on the shared-evidence lock, so a restrict that holds it commits first and nothing is recorded", async () => {
+    // A concurrent restrict holds the exclusive lock when the record step starts,
+    // and commits (project now restricted) only after the record step asks for it.
+    let commit!: () => void;
+    h.heldLock = new Promise<void>((resolve) => (commit = resolve));
+    h.beforeRecord = () => void setTimeout(() => ((h.restricted = true), commit()), 5);
+    await expect(upload()).rejects.toMatchObject({ code: "evidence_store_unavailable", message: expect.stringMatching(RELOCATE) });
+    expect(h.locks).toEqual(["share"]);
+    expect(h.patched).toHaveLength(0);
+  });
+
+  it("refuses to record on a task closed during the upload, and names the uploaded file", async () => {
+    h.duringUpload = () => void (h.task = { ...h.task, stage: "verified" });
     await expect(upload()).rejects.toMatchObject({
-      code: "evidence_store_unavailable",
-      message: expect.stringMatching(/moved into a restricted project during the upload\. .*A person must remove https:\/\/.+ from the shared "Mission Control" library\.$/),
+      code: "task_closed",
+      status: 409,
+      message: expect.stringMatching(/^TASK-3166 is verified; it takes no new evidence\. The file \d{8}T\d{6}Z-[0-9a-f]{8}-flow\.svg was uploaded to https:\/\/.+ but is not recorded\.$/),
     });
     expect(h.patched).toHaveLength(0);
     expect(h.events).toHaveLength(0);
+  });
+
+  it("refuses to relabel on a task cancelled before the record step", async () => {
+    const sha256 = createHash("sha256").update(svg).digest("hex");
+    h.task = { ...h.task, evidence: { summary: "s", items: [], artifacts: [{ kind: "screenshot", driveItemId: "first", sha256 }] } };
+    h.beforeRecord = () => void (h.task = { ...h.task, stage: "cancelled" });
+    await expect(upload()).rejects.toMatchObject({ code: "task_closed", message: "TASK-3166 is cancelled; it takes no new evidence." });
+    expect(h.uploads).toHaveLength(0);
+    expect(h.patched).toHaveLength(0);
   });
 
   it("never creates a missing library", async () => {

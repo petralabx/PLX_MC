@@ -31,6 +31,8 @@ import type {
   SyncConflictSubject,
 } from "./mapping";
 import { CONFLICT_LIST_KEY_FOR, LIST_KEY_FOR, numericTaskId } from "./mapping";
+import { assertNoSharedEvidenceInRestricted } from "./bucket-move";
+import { isRestrictedProject } from "@/lib/permissions/project-acl";
 
 export interface EntityRow {
   entity_type: EntityType;
@@ -230,6 +232,11 @@ export async function updateEntity(
   }
   const row = await getEntity(type, id, q, locks);
   if (!row) return;
+  const movesTo = opts.patch?.bucket;
+  if (type === "task" && typeof movesTo === "string" && movesTo !== row.data.bucket && hasSharedEvidence(row.data)) {
+    await lockSharedEvidence(q, "exclusive");
+    assertNoSharedEvidenceInRestricted(await bucketProject(q, movesTo), [row.data as unknown as Task], `move ${id} to ${movesTo}`);
+  }
   const data = { ...row.data, ...(opts.patch ?? {}) };
   delete data.completedAt; // column is the source of truth; never persist into jsonb
   delete data.cancellation;
@@ -1090,16 +1097,18 @@ export async function seedBuckets(buckets: Bucket[]): Promise<void> {
 // cannot undo a concurrent retirement. Only archiveContainer changes them.
 // `dirtyFields` (when provided) replaces the dirty set used for inbound conflict
 // detection on Gantt fields.
-export async function upsertBucket(b: Bucket, dirtyFields?: string[]): Promise<void> {
+export async function upsertBucket(b: Bucket, dirtyFields?: string[], q: TxQuery = query): Promise<void> {
+  if (b.project && q === query) return withTransaction((tx) => upsertBucket(b, dirtyFields, tx));
+  if (b.project) await guardBucketReparent(q, b.id, b.project);
   if (dirtyFields) {
-    await query(
+    await q(
       `INSERT INTO buckets (id, data, sync_state, project_id, dirty_fields) VALUES ($1, $2, 'pending', $3, $4::jsonb)
        ON CONFLICT (id) DO UPDATE SET data = $2 || jsonb_build_object('archivedAt', buckets.data->'archivedAt', 'archivedBy', buckets.data->'archivedBy', 'archiveReason', buckets.data->'archiveReason'), sync_state = 'pending', project_id = $3, dirty_fields = $4::jsonb, updated_at = now()`,
       [b.id, JSON.stringify(b), b.project ?? null, JSON.stringify(dirtyFields)]
     );
     return;
   }
-  await query(
+  await q(
     `INSERT INTO buckets (id, data, sync_state, project_id) VALUES ($1, $2, 'pending', $3)
      ON CONFLICT (id) DO UPDATE SET data = $2 || jsonb_build_object('archivedAt', buckets.data->'archivedAt', 'archivedBy', buckets.data->'archivedBy', 'archiveReason', buckets.data->'archiveReason'), sync_state = 'pending', project_id = $3, updated_at = now()`,
     [b.id, JSON.stringify(b), b.project ?? null]
@@ -1172,8 +1181,12 @@ export async function updateBucket(
     dirtyFields?: string[];
     fieldAttribution?: Record<string, FieldAttribution>;
     spItemId?: string | null; // null clears the SharePoint link (TASK-1534)
-  }
+  },
+  q: TxQuery = query
 ): Promise<void> {
+  const reparent = opts.patch?.project;
+  if (reparent && q === query) return withTransaction((tx) => updateBucket(id, opts, tx));
+  if (reparent) await guardBucketReparent(q, id, reparent);
   const sets: string[] = ["updated_at = now()"];
   const params: unknown[] = [id];
   let n = 2;
@@ -1202,7 +1215,7 @@ export async function updateBucket(
     params.push(opts.spItemId);
     n += 1;
   }
-  await query(`UPDATE buckets SET ${sets.join(", ")} WHERE id = $1`, params);
+  await q(`UPDATE buckets SET ${sets.join(", ")} WHERE id = $1`, params);
 }
 
 export async function setBucketSync(
@@ -1287,8 +1300,10 @@ export async function seedProjects(projects: Project[]): Promise<void> {
 // Upsert a project (create or edit). An edit re-queues the push-only Projects
 // mirror (sync_state -> pending), preserving the prior sp_item_id and the
 // current archive stamps (metadata edits cannot undo concurrent retirement).
-export async function upsertProject(p: Project): Promise<void> {
-  await query(
+export async function upsertProject(p: Project, q: TxQuery = query): Promise<void> {
+  if (isRestrictedProject(p) && q === query) return withTransaction((tx) => upsertProject(p, tx));
+  if (isRestrictedProject(p)) await guardProjectRestrict(q, p.id, p);
+  await q(
     `INSERT INTO projects (id, data, sync_state) VALUES ($1, $2, 'pending')
      ON CONFLICT (id) DO UPDATE SET data = $2 || jsonb_build_object('archivedAt', projects.data->'archivedAt', 'archivedBy', projects.data->'archivedBy', 'archiveReason', projects.data->'archiveReason'), sync_state = 'pending', updated_at = now()`,
     [p.id, JSON.stringify(p)]
@@ -1327,8 +1342,12 @@ export async function updateProject(
     dirtyFields?: string[];
     fieldAttribution?: Record<string, FieldAttribution>;
     spItemId?: string | null; // null clears the SharePoint link (TASK-1534)
-  }
+  },
+  q: TxQuery = query
 ): Promise<void> {
+  const restricts = opts.patch?.visibility !== undefined;
+  if (restricts && q === query) return withTransaction((tx) => updateProject(id, opts, tx));
+  if (restricts) await guardProjectRestrict(q, id, opts.patch!);
   const sets: string[] = ["updated_at = now()"];
   const params: unknown[] = [id];
   let n = 2;
@@ -1357,7 +1376,80 @@ export async function updateProject(
     params.push(opts.spItemId);
     n += 1;
   }
-  await query(`UPDATE projects SET ${sets.join(", ")} WHERE id = $1`, params);
+  await q(`UPDATE projects SET ${sets.join(", ")} WHERE id = $1`, params);
+}
+
+// ─── Shared-library evidence (TASK-3166) ─────────────────────────────────────
+// Uploaded evidence sits in the shared SharePoint library, which a restricted
+// project's access rules do not cover. The writes that can put a task with
+// evidence under a restricted project (task move, bucket re-parent, project
+// restrict) check here, in their own transaction, under this lock taken
+// exclusive. Recording an artifact takes it shared (mc_upload_evidence), so a
+// record and a guard never interleave. No caller can skip it.
+const SHARED_EVIDENCE_LOCK_KEY = "mc:shared-evidence";
+
+export async function lockSharedEvidence(q: TxQuery, mode: "share" | "exclusive"): Promise<void> {
+  const fn = mode === "share" ? "pg_advisory_xact_lock_shared" : "pg_advisory_xact_lock";
+  await q(`SELECT ${fn}(hashtextextended($1, 0))`, [SHARED_EVIDENCE_LOCK_KEY]);
+}
+
+function hasSharedEvidence(data: EntityData): boolean {
+  return ((data as unknown as Task).evidence?.artifacts?.length ?? 0) > 0;
+}
+
+// The relational FK is authoritative when data.project is unset (as in getBuckets).
+const BUCKET_PROJECT_SQL = "CASE WHEN b.data ? 'project' THEN b.data->>'project' ELSE b.project_id END";
+
+async function bucketProject(q: TxQuery, bucketId: string): Promise<Project | undefined> {
+  const rows = await q<{ data: Project }>(
+    `SELECT p.data FROM buckets b
+       JOIN projects p ON p.id = ${BUCKET_PROJECT_SQL}
+      WHERE b.id = $1`,
+    [bucketId]
+  );
+  return rows[0]?.data;
+}
+
+async function projectById(q: TxQuery, id: string): Promise<Project | undefined> {
+  return (await q<{ data: Project }>("SELECT data FROM projects WHERE id = $1", [id]))[0]?.data;
+}
+
+async function assertBucketsFreeOfSharedEvidence(
+  q: TxQuery,
+  project: Project | undefined,
+  bucketIds: string[],
+  what: string
+): Promise<void> {
+  if (!isRestrictedProject(project) || bucketIds.length === 0) return;
+  const tasks = await q<Pick<Task, "id" | "evidence">>(
+    `SELECT id, data->'evidence' AS evidence
+       FROM entities
+      WHERE entity_type = 'task' AND data->>'bucket' = ANY($1::text[])
+        AND jsonb_array_length(COALESCE(data->'evidence'->'artifacts', '[]'::jsonb)) > 0
+      ORDER BY id`,
+    [bucketIds]
+  );
+  assertNoSharedEvidenceInRestricted(project, tasks, what);
+}
+
+async function guardBucketReparent(q: TxQuery, bucketId: string, projectId: string): Promise<void> {
+  await lockSharedEvidence(q, "exclusive");
+  const current = (
+    await q<{ project: string | null }>(`SELECT ${BUCKET_PROJECT_SQL} AS project FROM buckets b WHERE id = $1`, [bucketId])
+  )[0];
+  if (!current || current.project === projectId) return;
+  await assertBucketsFreeOfSharedEvidence(q, await projectById(q, projectId), [bucketId], `move bucket ${bucketId} to ${projectId}`);
+}
+
+async function guardProjectRestrict(q: TxQuery, projectId: string, patch: Partial<Project>): Promise<void> {
+  await lockSharedEvidence(q, "exclusive");
+  const current = await projectById(q, projectId);
+  const next = { ...current, ...patch } as Project;
+  if (!isRestrictedProject(next) || isRestrictedProject(current)) return;
+  const bucketIds = (
+    await q<{ id: string }>(`SELECT id FROM buckets b WHERE ${BUCKET_PROJECT_SQL} = $1`, [projectId])
+  ).map((row) => row.id);
+  await assertBucketsFreeOfSharedEvidence(q, next, bucketIds, `restrict project ${projectId}`);
 }
 
 /** Insert a newly adopted inbound Project (never overwrites an existing id). */

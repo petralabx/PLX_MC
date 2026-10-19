@@ -1,6 +1,7 @@
 // Revenue forecast persistence (migration 043, TASK-3151): each good run's open
-// order lines and assembly orders, and its summary (whether the login could read
-// the forecast's tables, and the four bucket totals from Sage and FileMaker
+// order lines (with Sage's item category, migration 045, TASK-3177) and assembly
+// orders, and its summary (whether the login could read the forecast's tables
+// and the category column, and the four bucket totals from Sage and FileMaker
 // only). completeRun (store.ts) writes the rows below in the run's own
 // transaction; the loader reads them back with every retained run's point for
 // the hit rate. Runs are kept 90 days, and these rows go with them. Server-only.
@@ -30,9 +31,9 @@ export function forecastTableRows(run: Pick<RefreshRun, "id" | "today">, forecas
       table: "report_snap_forecast_line",
       columns: [["run_id", "bigint"], ["row_no", "integer"], ["order_no", "text"], ["line_no", "integer"], ["customer_code", "text"],
         ["customer", "text"], ["po", "text"], ["item", "text"], ["description", "text"], ["expected", "date"], ["qty", "numeric"],
-        ["unit", "text"], ["unit_price", "numeric"], ["currency", "text"], ["later_qty", "numeric"]],
+        ["unit", "text"], ["unit_price", "numeric"], ["currency", "text"], ["later_qty", "numeric"], ["category", "text"]],
       rows: id(forecast.lines.map((l, i) => [i + 1, l.orderNo, l.lineNo, l.customerCode, l.customer, l.po, l.item, l.description,
-        l.expected, l.qty, l.unit, l.unitPrice, l.currency, l.laterQty])),
+        l.expected, l.qty, l.unit, l.unitPrice, l.currency, l.laterQty, l.category])),
     },
     {
       table: "report_snap_forecast_ao",
@@ -45,9 +46,10 @@ export function forecastTableRows(run: Pick<RefreshRun, "id" | "today">, forecas
     {
       table: "report_snap_forecast_summary",
       columns: [["run_id", "bigint"], ["access", "text"], ["missing", "jsonb"], ["lines", "integer"], ["ready_cad", "numeric"],
-        ["planned_cad", "numeric"], ["late_cad", "numeric"], ["not_planned_cad", "numeric"]],
+        ["planned_cad", "numeric"], ["late_cad", "numeric"], ["not_planned_cad", "numeric"], ["category_missing", "jsonb"]],
       rows: id([[forecast.access, JSON.stringify(forecast.missing), forecast.lines.length, dollars(summary?.readyCents),
-        dollars(summary?.plannedCents), dollars(summary?.lateCents), dollars(summary?.notPlannedCents)]]),
+        dollars(summary?.plannedCents), dollars(summary?.lateCents), dollars(summary?.notPlannedCents),
+        forecast.categoryMissing === null ? null : JSON.stringify(forecast.categoryMissing)]]),
     },
   ];
 }
@@ -56,18 +58,18 @@ export function forecastTableRows(run: Pick<RefreshRun, "id" | "today">, forecas
 export async function loadForecast(run: RefreshRun): Promise<ForecastSnapshot | null> {
   // One connection, sequential reads: the snapshot is immutable once written.
   return withTransaction(async (q) => {
-    const [summary] = await q<{ access: ForecastAccess; missing: string[] }>(
-      `SELECT access, missing FROM report_snap_forecast_summary WHERE run_id = $1`,
+    const [summary] = await q<{ access: ForecastAccess; missing: string[]; category_missing: string[] | null }>(
+      `SELECT access, missing, category_missing FROM report_snap_forecast_summary WHERE run_id = $1`,
       [run.id]
     );
     if (!summary) return null;
     const lines = await q<{
       order_no: string; line_no: number | null; customer_code: string | null; customer: string | null; po: string | null;
       item: string; description: string | null; expected: string; qty: string; unit: string | null; unit_price: string; currency: string;
-      later_qty: string;
+      later_qty: string; category: string | null;
     }>(
       `SELECT order_no, line_no, customer_code, customer, po, item, description, expected::text AS expected,
-              qty::text AS qty, unit, unit_price::text AS unit_price, currency, later_qty::text AS later_qty
+              qty::text AS qty, unit, unit_price::text AS unit_price, currency, later_qty::text AS later_qty, category
          FROM report_snap_forecast_line WHERE run_id = $1 ORDER BY row_no`,
       [run.id]
     );
@@ -115,10 +117,11 @@ export async function loadForecast(run: RefreshRun): Promise<ForecastSnapshot | 
       data: {
         access: summary.access,
         missing: summary.missing,
+        categoryMissing: summary.category_missing,
         lines: lines.map((l) => ({
           orderNo: l.order_no, lineNo: l.line_no, customerCode: l.customer_code, customer: l.customer, po: l.po, item: l.item,
           description: l.description, expected: l.expected, qty: l.qty, unit: l.unit, unitPrice: l.unit_price, currency: l.currency,
-          laterQty: l.later_qty,
+          category: l.category, laterQty: l.later_qty,
         })),
         aos: aos.map((a) => ({
           id: a.ao_id, ao: a.ao, status: a.status, scheduled: a.scheduled, item: a.item, oeList: a.oe_list, qty: a.qty,

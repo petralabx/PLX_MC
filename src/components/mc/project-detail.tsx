@@ -1,16 +1,28 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  FileText,
+  Flag,
+  Folder,
+  ListChecks,
+  MapIcon,
+  Pencil,
+  TriangleAlert,
+} from "lucide-react";
 
-import { ACTORS, PROJECTS, type Project } from "@/lib/mc-data";
-import { projectDocLinks } from "@/lib/mc-data/doc-links";
+import { ACTORS, MILESTONES, PROJECTS } from "@/lib/mc-data";
+import { SHAREPOINT_REGISTERS, docLinkFromPrd, docLinkKind, type SharePointRegisterKey } from "@/lib/mc-data/doc-links";
 import { useMcVersion } from "@/lib/mc-data/hooks";
-import { allTasks, bucketsForProject, projectById, pushNotice, updateProject } from "@/lib/mc-data/store";
+import { allRisks, allTasks, bucketsForProject, projectById, pushNotice, updateProject } from "@/lib/mc-data/store";
 
 import { Avatar, HealthPill, SyncTick } from "./atoms";
+import { OverviewStrip, StripFact, StripHealthSelect } from "./overview-strip";
 import { PeoplePicker } from "./people-picker";
-import { ProjectOverview } from "./project-overview";
-import { projectProgress, rollupForProject } from "./project-overview.helpers";
+import { ProjectOverview, SPEC_ICON } from "./project-overview";
+import { needsHuman, parseMcDate, projectProgress, rollupForProject, shortDate } from "./project-overview.helpers";
 import type { ScreenProps } from "./route";
 
 const FALLBACK_PROJECT = PROJECTS[0];
@@ -19,12 +31,13 @@ const FALLBACK_PROJECT = PROJECTS[0];
 // default whole-project read) and Initiatives (the P1 card grid).
 type ProjectLens = "overview" | "initiatives";
 
-// Same labels the New Initiative / New Project modals use for the health seg.
-const HEALTH_OPTIONS: Array<{ value: Project["health"]; label: string }> = [
-  { value: "track", label: "On track" },
-  { value: "risk", label: "At risk" },
-  { value: "off", label: "Off track" },
-];
+const REGISTER_ICON: Record<SharePointRegisterKey, typeof Folder> = {
+  plan: ListChecks,
+  roadmap: MapIcon,
+  milestones: Flag,
+  risks: TriangleAlert,
+  documents: Folder,
+};
 
 export function ProjectDetail({ route, nav }: ScreenProps) {
   useMcVersion();
@@ -40,7 +53,20 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
 
   const rollups = rollupForProject(buckets, tasks);
   const progress = projectProgress(tasks);
-  const docLinks = projectDocLinks(project, buckets);
+  const projectSpec = docLinkFromPrd(project.prd);
+  const bucketIds = new Set(buckets.map((b) => b.id));
+  const milestoneCount = MILESTONES.filter((m) => bucketIds.has(m.bucket)).length;
+  const openRisks = allRisks().filter((r) => bucketIds.has(r.bucket) && r.status !== "closed").length;
+  const atRisk = buckets.filter((b) => b.health === "risk").length;
+  const offTrack = buckets.filter((b) => b.health === "off").length;
+  const started = parseMcDate(project.started, new Date().getFullYear());
+  const registerMeta: Record<SharePointRegisterKey, string> = {
+    plan: "MS List",
+    roadmap: "MS List",
+    milestones: `MS List · ${milestoneCount} milestones`,
+    risks: `MS List · ${openRisks} open`,
+    documents: "Library",
+  };
 
   // All edits route through updateProject (store) → PATCH /api/projects/{id}:
   // optimistic local apply, reconcile to server truth on success, rollback +
@@ -51,7 +77,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
   };
 
   return (
-    <div className="mc-main" data-testid="project-screen">
+    <div className="mc-main pv-page" data-testid="project-screen">
       <div className="ph">
         <div>
           <button type="button" className="back" onClick={() => nav("home")}>
@@ -125,36 +151,35 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
       </div>
 
       <div className="bk">
-        <div className="bkfacts">
-          {/* Health — editable via the facts-rail select pattern (.rfact-select,
-              the Initiative/Environment rows in task detail); the health pill
-              stays in the page header. */}
-          <div className="f">
-            <span className="k">Health</span>
-            <span className="v sm">
-              <label className="rfact-select">
-                <select
-                  value={project.health}
-                  onChange={(event) =>
-                    updateProject(project.id, { health: event.target.value as Project["health"] })
-                  }
-                  aria-label="Set project health"
-                >
-                  {HEALTH_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <span className="caret" aria-hidden="true">▾</span>
-              </label>
-            </span>
-          </div>
+        <OverviewStrip
+          progress={progress}
+          started={project.started}
+          target={project.target}
+          subline={
+            <>
+              {buckets.length} initiatives · {progress.total} tasks · {progress.doing} in flight ·{" "}
+              <span className={atRisk > 0 ? "warn" : ""}>{atRisk} at risk</span>
+              {offTrack > 0 && (
+                <>
+                  {" "}
+                  · <span className="hot">{offTrack} off track</span>
+                </>
+              )}
+            </>
+          }
+        >
+          {/* All edits route through updateProject (see commitTarget above). */}
+          <StripFact label="Health">
+            <StripHealthSelect
+              value={project.health}
+              label="Set project health"
+              onChange={(health) => updateProject(project.id, { health })}
+            />
+          </StripFact>
           {/* Accountable owner — always human; same field-button + PeoplePicker
               pattern as the task facts rail / New Initiative modal. */}
-          <div className="f">
-            <span className="k">Accountable owner</span>
-            <span className="v sm" style={{ position: "relative" }}>
+          <StripFact label="Accountable owner">
+            <span className="pv-owner">
               <button
                 type="button"
                 className="ntm-field-btn"
@@ -164,7 +189,7 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
                   <Avatar id={project.owner} size="sm" />
                   <span className="nm">{ACTORS[project.owner]?.name ?? project.owner}</span>
                 </span>
-                <span className="caret" aria-hidden="true">▾</span>
+                <ChevronDown size={11} className="caret" aria-hidden="true" />
               </button>
               {ownerPickerOpen && (
                 <PeoplePicker
@@ -184,13 +209,13 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
                 />
               )}
             </span>
-          </div>
+          </StripFact>
+          <StripFact label="Started">{started ? shortDate(started) : project.started}</StripFact>
           {/* Target — inline text edit, commit on blur/Enter (the sub-task due
               pattern) in the underline input skin (.le-input). Keyed on the
               store value so a rollback re-renders the restored target. */}
-          <div className="f">
-            <span className="k">Target</span>
-            <span className="v sm">
+          <StripFact label="Target">
+            <span className="pv-target">
               <input
                 key={`${project.id}:${project.target}`}
                 className="le-input"
@@ -205,111 +230,127 @@ export function ProjectDetail({ route, nav }: ScreenProps) {
                 placeholder="e.g. Aug 01"
                 aria-label="Set target"
               />
+              <Pencil size={11} aria-hidden="true" />
             </span>
-          </div>
-          <div className="f">
-            <span className="k">Started</span>
-            <span className="v sm">{project.started}</span>
-          </div>
-          <div className="f">
-            <span className="k">Initiatives</span>
-            <span className="v">{buckets.length}</span>
-          </div>
-          <div className="f">
-            <span className="k">Tasks</span>
-            <span className="v">{progress.total}</span>
-          </div>
-          {/* Whole-project progress — one spine segment per task (the .spine
-              skin), closed = ink, in-flight = accent; counts from projectProgress
-              so this cell and the section bars always agree. */}
-          <div className="f">
-            <span className="k">Progress</span>
-            <span className="v">
-              {progress.pct}% <small className="pv-progress-ct">{progress.closedTasks} / {progress.total} closed · {progress.done} done · {progress.cancelled} cancelled</small>
-            </span>
-            {progress.total > 0 && (
-              <span className="spine pv-progress-spine" aria-hidden="true">
-                {Array.from({ length: progress.total }, (_, i) => (
-                  <span
-                    key={i}
-                    className={i < progress.closedTasks ? "done" : i < progress.closedTasks + progress.doing ? "now" : ""}
-                  />
-                ))}
-              </span>
-            )}
-          </div>
-        </div>
+          </StripFact>
+        </OverviewStrip>
 
         {/* pv-wide: both lenses are single-column. .bkbody's default 1.6fr/1fr
-            split is for bucket detail's two-column body — without pv-wide the
-            Initiatives card grid collapses into the left track and looks like
-            the pre-P1 unstyled pile (name/ID/status colliding). */}
+            split is for bucket detail's two-column body. */}
         <div className="bkbody pv-wide">
           <div className="c">
-            {docLinks.length > 0 && (
-              <div className="blk" data-testid="project-doc-links">
-                <div className="bh">
-                  <span className="kk">
-                    / Documents &amp; links · <b>{docLinks.length}</b>
-                  </span>
-                </div>
-                <ul className="doc-links">
-                  {docLinks.map((doc) => (
-                    <li key={`${doc.scope}:${doc.scopeId}`}>
-                      <span className="doc-scope">{doc.scopeName}</span>
-                      <a href={doc.href} target="_blank" rel="noopener noreferrer">
-                        {doc.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="blk">
+            <div className="blk pv-res" data-testid="project-resources">
               <div className="bh">
+                <span className="kk">/ Project resources</span>
                 <span className="kk">
-                  {lens === "overview" ? "/ Overview · " : "/ Initiatives · "}
-                  <b>{buckets.length}</b>
+                  SharePoint · <SyncTick sync={project.sync} />
                 </span>
               </div>
+              <div className="pv-tiles">
+                {SHAREPOINT_REGISTERS.map((register) => {
+                  const Icon = REGISTER_ICON[register.key];
+                  const inner = (
+                    <>
+                      <Icon size={15} className="ic" aria-hidden="true" />
+                      <span className="tx">
+                        <span className="t">{register.label}</span>
+                        <span className="m">{registerMeta[register.key]}</span>
+                      </span>
+                      <ArrowUpRight size={12} className="ext" aria-hidden="true" />
+                    </>
+                  );
+                  // Same behaviour as the initiative page's register links:
+                  // documents opens Files; the MS List links are not provisioned yet.
+                  return register.key === "documents" ? (
+                    <button type="button" className="pv-tile" key={register.key} onClick={() => nav("files")}>
+                      {inner}
+                    </button>
+                  ) : (
+                    <button type="button" className="pv-tile" key={register.key} title="coming soon">
+                      {inner}
+                    </button>
+                  );
+                })}
+                {projectSpec && (
+                  <a
+                    className="pv-tile"
+                    href={projectSpec.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Project spec · ${projectSpec.label}`}
+                  >
+                    <FileText size={15} className="ic" aria-hidden="true" />
+                    <span className="tx">
+                      <span className="t">{projectSpec.label}</span>
+                      <span className="m">Project spec</span>
+                    </span>
+                    <ArrowUpRight size={12} className="ext" aria-hidden="true" />
+                  </a>
+                )}
+              </div>
+            </div>
+            <div className="blk">
               {lens === "overview" ? (
                 <ProjectOverview projectId={project.id} rollups={rollups} nav={nav} />
-              ) : buckets.length === 0 ? (
-                <p className="sub">No initiatives under this project yet.</p>
               ) : (
-                <div className="init-grid">
-                  {buckets.map((bucket) => {
-                    const bucketTasks = tasks.filter((t) => t.bucket === bucket.id);
-                    const { done, cancelled, closedTasks, pct } = projectProgress(bucketTasks);
-                    const barStyle = { "--pct": `${pct}%` } as CSSProperties;
-                    return (
-                      <button
-                        type="button"
-                        key={bucket.id}
-                        className={`init-card ${bucket.health}`}
-                        onClick={() =>
-                          nav("bucket", { bucketId: bucket.id, projectId: project.id })
-                        }
-                      >
-                        <span className="ih">
-                          <span className="id">{bucket.id}</span>
-                          <HealthPill h={bucket.health} />
-                        </span>
-                        <span className="nm">{bucket.name}</span>
-                        <span className="prog">
-                          <span className="bar" style={barStyle}>
-                            <span className="fill" />
-                          </span>
-                          <span className="ct">
-                            {bucketTasks.length === 0
-                              ? "No tasks yet"
-                              : `${closedTasks}/${bucketTasks.length} closed · ${done} done · ${cancelled} cancelled`}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <>
+                  <div className="bh">
+                    <span className="kk">
+                      / Initiatives · <b>{buckets.length}</b>
+                    </span>
+                  </div>
+                  {buckets.length === 0 ? (
+                    <p className="sub">No initiatives under this project yet.</p>
+                  ) : (
+                    <div className="init-grid">
+                      {rollups.map(({ bucket, tasks: bucketTasks, closedTasks, remaining, pct }) => {
+                        const barStyle = { "--pct": `${pct}%` } as CSSProperties;
+                        const spec = docLinkFromPrd(bucket.prd);
+                        const SpecIcon = spec ? SPEC_ICON[docLinkKind(spec)] : FileText;
+                        return (
+                          <button
+                            type="button"
+                            key={bucket.id}
+                            className={`init-card ${bucket.health}`}
+                            onClick={() => nav("bucket", { bucketId: bucket.id, projectId: project.id })}
+                          >
+                            <span className="ih">
+                              <span className="id">{bucket.id}</span>
+                              <HealthPill h={bucket.health} />
+                            </span>
+                            <span className="nm">{bucket.name}</span>
+                            <span className="meta">
+                              <span>
+                                {remaining} open · {bucketTasks.filter(needsHuman).length} need a human
+                              </span>
+                              {spec && (
+                                <>
+                                  <span className="sep" aria-hidden="true">
+                                    |
+                                  </span>
+                                  <span className="spec">
+                                    <SpecIcon size={11} aria-hidden="true" />
+                                    <span className="lb">{spec.label}</span>
+                                  </span>
+                                </>
+                              )}
+                            </span>
+                            <span className="prog">
+                              <span className="bar" style={barStyle}>
+                                <span className="fill" />
+                              </span>
+                              <span className="ct">
+                                {bucketTasks.length === 0
+                                  ? "No tasks yet"
+                                  : `${closedTasks} / ${bucketTasks.length} closed`}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

@@ -50,6 +50,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const k of APP_ENV) {
     if (saved[k] === undefined) delete process.env[k];
     else process.env[k] = saved[k];
@@ -138,6 +139,82 @@ describe("getInstallationToken caching", () => {
     const c = await getInstallationToken({ fetchImpl: fetchB as unknown as typeof fetch, nowMs: exp - 30_000 });
     expect(c).toBe("t2");
     expect(fetchB).toHaveBeenCalledTimes(1);
+  });
+});
+
+// A token exchange that never answers, but rejects once its init.signal aborts.
+function hungFetch() {
+  return vi.fn(
+    (_url: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_, reject) =>
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")))
+      )
+  );
+}
+
+describe("token exchange with an AbortSignal", () => {
+  it("cancels a hung exchange when the caller's signal fires, caches nothing, and the next call mints", async () => {
+    configureApp();
+    process.env.GITHUB_TOKEN = "ghp_fallback";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchImpl = hungFetch();
+    const controller = new AbortController();
+    const pending = resolveGithubToken({ fetchImpl: fetchImpl as unknown as typeof fetch, signal: controller.signal });
+    const outcome = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const init = fetchImpl.mock.calls[0][1];
+    expect(init?.signal).toBe(controller.signal);
+    controller.abort();
+    await outcome;
+    expect(init?.signal?.aborted).toBe(true);
+    // No "mint failed" warning and no PAT fallback after the caller's deadline.
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+
+    const next = vi.fn(async () => tokenResponse("ghs_next", Date.now() + 3_600_000));
+    expect(await resolveGithubToken({ fetchImpl: next as unknown as typeof fetch })).toBe("ghs_next");
+    expect(next).toHaveBeenCalledOnce(); // nothing was cached by the aborted call
+  });
+
+  it("rejects with the signal's reason when the caller aborts with one", async () => {
+    configureApp();
+    process.env.GITHUB_TOKEN = "ghp_fallback";
+    const controller = new AbortController();
+    const pending = resolveGithubToken({ fetchImpl: hungFetch() as unknown as typeof fetch, signal: controller.signal });
+    const reason = new Error("deadline");
+    controller.abort(reason);
+    await expect(pending).rejects.toBe(reason);
+  });
+
+  it("never starts a fetch for an already-aborted signal", async () => {
+    configureApp();
+    process.env.GITHUB_TOKEN = "ghp_fallback";
+    const fetchImpl = vi.fn(async () => tokenResponse("ghs_app", Date.now() + 3_600_000));
+    await expect(
+      resolveGithubToken({ fetchImpl: fetchImpl as unknown as typeof fetch, signal: AbortSignal.abort() })
+    ).rejects.toMatchObject({ name: "AbortError" });
+    await expect(
+      requestInstallationToken(
+        { appId: "1", privateKey, installationId: "789" },
+        { fetchImpl: fetchImpl as unknown as typeof fetch, signal: AbortSignal.abort() }
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("without a signal sends the same request as before and still falls back to the PAT on a mint error", async () => {
+    configureApp();
+    process.env.GITHUB_TOKEN = "ghp_fallback";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchImpl = vi.fn<(url: string | URL | Request, init?: RequestInit) => Promise<Response>>(
+      async () => new Response("nope", { status: 500 })
+    );
+    expect(await resolveGithubToken({ fetchImpl: fetchImpl as unknown as typeof fetch })).toBe("ghp_fallback");
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+    const init = fetchImpl.mock.calls[0][1];
+    expect(init?.signal).toBeUndefined();
+    expect(Object.keys(init ?? {}).filter((k) => k !== "signal")).toEqual(["method", "headers", "body"]);
   });
 });
 

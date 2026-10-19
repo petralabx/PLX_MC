@@ -3,6 +3,9 @@ name: DB Migrate (live release)
 # Manual live plx_mc release. Plan is the default and changes nothing. Apply needs
 # mode=apply, confirm=MIGRATE_LIVE and the mc-live-release environment approval.
 # Uses its own MC_LIVE_* pair, separate from the automatic path; see docs/runbooks/db-migrate.md.
+# Secrets are environment-scoped (main-only): plan reads the read-only plx_mc_schema_check URL
+# (MC_LIVE_PLAN_DATABASE_URL + Graph secrets in mc-live-plan, no reviewers); apply reads
+# MC_LIVE_DATABASE_URL + Graph secrets from mc-live-release (Vince-approved).
 on:
   workflow_dispatch:
     inputs:
@@ -39,6 +42,9 @@ concurrency:
 jobs:
   plan:
     if: ${{ !(inputs.mode == 'apply' && inputs.confirm == 'MIGRATE_LIVE') }}
+    environment:
+      name: mc-live-plan
+      deployment: false  # secrets/branch policy only; no Deployment object for a read-only plan
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -51,7 +57,7 @@ jobs:
       - run: npm ci
       - name: Plan (read-only, pending items only)
         env:
-          MC_LIVE_DATABASE_URL: ${{ secrets.MC_LIVE_DATABASE_URL }}
+          MC_LIVE_DATABASE_URL: ${{ secrets.MC_LIVE_PLAN_DATABASE_URL }}
           MC_LIVE_EXPECTED_IDENTITY: ${{ vars.MC_LIVE_EXPECTED_IDENTITY }}
           MICROSOFT_GRAPH_TENANT_ID: ${{ secrets.MICROSOFT_GRAPH_TENANT_ID }}
           MICROSOFT_GRAPH_CLIENT_ID: ${{ secrets.MICROSOFT_GRAPH_CLIENT_ID }}

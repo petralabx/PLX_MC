@@ -44,9 +44,10 @@ import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import { bucketPrdForTask } from "./bucket-prd";
 import { ownEvidenceSite } from "./evidence-artifacts";
 import type { EventsQuery } from "./events";
-import { loadPrState, type PrState } from "./github-pr";
+import { loadPrReviewLinks, loadPrState, type PrState } from "./github-pr";
 import { projectPullRequest, projectionEnabled } from "./projection";
 import * as repo from "./repo";
+import { applyReviewLinks, reviewLinksReport, touchedModules, type ReviewLinksReport } from "./review-links";
 import { classifyRiskTier } from "./risk";
 import {
   routingProposalsEnabled,
@@ -510,6 +511,21 @@ export interface VerifyPrOptions {
   record?: boolean;
 }
 
+// Review links (TASK-3168): read the PR body only when the PR touches a mapped
+// module. The merge queue never reads GitHub (P16); the pull_request run checked
+// this head. An unreadable body is advisory, so it never holds the gate.
+async function reviewLinksForPr(input: VerifyPrInput): Promise<ReviewLinksReport | null> {
+  if (input.event === "merge_group") return null;
+  const repoFullName = input.repoFullName ?? input.repo;
+  if (touchedModules(repoFullName, input.changedPaths).length === 0) return null;
+  try {
+    return reviewLinksReport(repoFullName, input.changedPaths, await loadPrReviewLinks(repoFullName, input.prNumber));
+  } catch (err) {
+    console.warn("[compliance] review links: PR body unreadable: %s", err instanceof Error ? err.message : "unknown error");
+    return reviewLinksReport(repoFullName, input.changedPaths, null);
+  }
+}
+
 export async function verifyPr(
   input: VerifyPrInput,
   options: VerifyPrOptions = {}
@@ -538,6 +554,7 @@ export async function verifyPr(
   // task's verdict is its own recorded check + event.
   const tasks: VerifyPrTaskResult[] = [];
   const resolveForPr = input.event === "merge_group" ? queueDispatchResolver(input) : prDispatchResolver(input);
+  const reviewLinks = await reviewLinksForPr(input);
   for (const cid of ids) {
     const resolution = await resolveForPr(cid);
     const d = resolution.dispatch;
@@ -567,8 +584,9 @@ export async function verifyPr(
                 bucketPrd,
                 evidenceStoreEnabled: canUploadEvidence,
               });
-    if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, result, taskId ?? cid);
-    tasks.push({ checkoutId: cid, taskId, verdict: result.verdict, reasons: result.reasons });
+    const checked = applyReviewLinks(result, reviewLinks);
+    if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, checked, taskId ?? cid);
+    tasks.push({ checkoutId: cid, taskId, verdict: checked.verdict, reasons: checked.reasons });
   }
 
   // Pass only if EVERY task passes. When blocked, surface only the blocking

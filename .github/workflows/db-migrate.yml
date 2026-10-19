@@ -25,6 +25,11 @@ jobs:
   migrate:
     # Dispatch on arbitrary branches must not gain access to migration credentials.
     if: github.ref == 'refs/heads/main'
+    # Env-level MC_UAT_DATABASE_URL / MC_STAGING_DATABASE_URL live here, with a main-only
+    # deployment branch policy, so other branches cannot read them. No reviewers.
+    environment:
+      name: uat-migrate
+      deployment: false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

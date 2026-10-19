@@ -151,6 +151,29 @@ def test_registry_tolerates_infra_principal_before_its_key_is_minted() -> None:
     assert "sp_mcp_infra" not in registry
 
 
+def test_registry_accepts_cip_auto_undraft_principal() -> None:
+    sync = load_script()
+    assert "sp_mcp_cip_auto_undraft" in sync.DEDICATED_PRINCIPAL_IDS
+    registry = sync.validate_registry(
+        json.dumps(
+            {
+                "sp_mcp_claude_code": "claude-secret",
+                "sp_mcp_cip_auto_undraft": "cip-secret",
+            }
+        )
+    )
+    assert registry["sp_mcp_cip_auto_undraft"] == "cip-secret"
+    assert sync.IDENTITY_LABELS["sp_mcp_cip_auto_undraft"] == "cip-auto-undraft"
+
+
+def test_registry_tolerates_cip_auto_undraft_before_its_key_is_minted() -> None:
+    sync = load_script()
+    registry = sync.validate_registry(
+        json.dumps({"sp_mcp_claude_code": "claude-secret"})
+    )
+    assert "sp_mcp_cip_auto_undraft" not in registry
+
+
 def search_response(principal_id: str) -> FakeResponse:
     return FakeResponse(
         200,
@@ -259,6 +282,31 @@ def test_other_identities_keep_the_self_check() -> None:
         session,
         api_key="grok-secret",
         expected_principal_id="sp_mcp_grok",
+        **IDENTITY_ARGS,
+    )
+    assert [call["url"] for call in session.calls] == [
+        "https://mc.example.test/api/cursor/self-check"
+    ]
+
+
+def test_cip_auto_undraft_identity_uses_the_self_check() -> None:
+    # Its tool allowlist admits mc_self_check, so it is not search-verified.
+    sync = load_script()
+    assert "sp_mcp_cip_auto_undraft" not in sync.SEARCH_VERIFIED_PRINCIPAL_IDS
+    session = FakeSession(
+        FakeResponse(
+            200,
+            {
+                "data": {"ok": True, "mcpEnabled": True},
+                "meta": {"actor": {"servicePrincipalId": "sp_mcp_cip_auto_undraft"}},
+            },
+        )
+    )
+
+    assert sync.verify_identity(
+        session,
+        api_key="cip-secret",
+        expected_principal_id="sp_mcp_cip_auto_undraft",
         **IDENTITY_ARGS,
     )
     assert [call["url"] for call in session.calls] == [

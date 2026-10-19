@@ -273,6 +273,8 @@ portal key, because `mc_self_check` stays forbidden to it.
 
 **Infra principal:** `sp_mcp_infra` (PLX Infra; migration 040; owner Infra, approved by Vince 2026-10-15) is read-only like the Workbench: its grant is `task.read` only, its allowlist is the same six read tools, and every write tool gives 403. A later grant change can widen it.
 
+**CIP auto-undraft principal:** `sp_mcp_cip_auto_undraft` (PLX CIP Auto-Undraft; the agentic-swarm `cip-auto-undraft` workflow, agentic-swarm #1689; migration 046; approved by Vince 2026-10-18) is read-only: its grant is `task.read` only, and its allowlist is four read tools: `mc_self_check`, `mc_get_context`, `mc_search_tasks` and `mc_get_task`. It cannot call `mc_list_buckets` or `mc_search_knowledge`, and every write tool gives 403. Key sync verifies it through `mc_self_check`.
+
 **Agent reports (agent fleet P8, D12):** `POST /api/cursor/agent-report`
 records one free-form report per agent run as an `agent.report` event in
 `mc_events`. The body is `agentSlug`, `loopId`, `runId`, `title` and `markdown`

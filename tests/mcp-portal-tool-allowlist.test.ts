@@ -107,6 +107,7 @@ import {
   isMcpToolAllowed,
 } from "@/lib/mcp/tool-allowlist";
 import { MCP_AGENT_SERVICE_PRINCIPAL_IDS } from "@/lib/permissions";
+import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 
 const PORTAL = "sp_mcp_portal";
 const ALLOWED_TOOLS = ["mc_create_task", "mc_search_tasks"];
@@ -125,12 +126,17 @@ const WORKBENCH_TOOLS = [
 ];
 // sp_mcp_infra (PLX Infra) has the same read-only allowlist as the Workbench.
 const INFRA = "sp_mcp_infra";
+// sp_mcp_cip_auto_undraft (PLX CIP Auto-Undraft) reads tasks only: four tools,
+// without mc_list_buckets and mc_search_knowledge.
+const CIP = "sp_mcp_cip_auto_undraft";
+const CIP_TOOLS = ["mc_self_check", "mc_get_context", "mc_search_tasks", "mc_get_task"];
 
 const KEYS: Record<string, string> = {
   sp_mcp_claude_code: "claude-key",
   sp_mcp_portal: "portal-key",
   sp_mcp_workbench: "workbench-key",
   sp_mcp_infra: "infra-key",
+  sp_mcp_cip_auto_undraft: "cip-key",
 };
 
 function headers(key: string): Record<string, string> {
@@ -275,11 +281,25 @@ describe("MCP tool allowlist", () => {
     expect(isMcpToolAllowed(INFRA, "mc_tool_added_later")).toBe(false);
   });
 
+  it("lets sp_mcp_cip_auto_undraft call only its four read tools", () => {
+    expect([...(MCP_TOOL_ALLOWLISTS[CIP] ?? [])].sort()).toEqual([...CIP_TOOLS].sort());
+    for (const tool of CIP_TOOLS) {
+      expect(isMcpToolAllowed(CIP, tool)).toBe(true);
+    }
+    for (const tool of ["mc_create_task", ...Object.keys(REFUSED_TOOL_ARGS)]) {
+      if (CIP_TOOLS.includes(tool)) continue;
+      expect({ tool, allowed: isMcpToolAllowed(CIP, tool) }).toEqual({ tool, allowed: false });
+    }
+    expect(isMcpToolAllowed(CIP, "mc_list_buckets")).toBe(false);
+    expect(isMcpToolAllowed(CIP, "mc_search_knowledge")).toBe(false);
+    expect(isMcpToolAllowed(CIP, "mc_tool_added_later")).toBe(false);
+  });
+
   it("leaves every other MCP principal without a tool allowlist", () => {
     const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
-      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA
+      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA && id !== CIP
     );
-    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 3);
+    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 4);
     for (const principalId of others) {
       expect(MCP_TOOL_ALLOWLISTS[principalId]).toBeUndefined();
       for (const tool of [...ALLOWED_TOOLS, ...Object.keys(REFUSED_TOOL_ARGS)]) {
@@ -469,6 +489,80 @@ describe("sp_mcp_infra through HTTP MCP and the cursor REST routes", () => {
     );
     expect(create.status).toBe(403);
     expect(((await create.json()) as { error: { code: string } }).error.code).toBe("forbidden");
+    expect(h.writes).toEqual([]);
+  });
+});
+
+describe("sp_mcp_cip_auto_undraft through HTTP MCP and the cursor REST routes", () => {
+  it("lists every registered tool and calls its four read tools", async () => {
+    const list = await rpc("cip-key", "tools/list", {});
+    const names = (list.result.tools as { name: string }[]).map((t) => t.name).sort();
+    expect(names).toEqual([...ALLOWED_TOOLS, ...Object.keys(REFUSED_TOOL_ARGS)].sort());
+    h.tasks.push({ id: "TASK-1", title: "Undraft", stage: "backlog", bucket: "BKT-INFRA" });
+    const search = await callTool("cip-key", "mc_search_tasks", { q: "undraft" });
+    expect(search.isError).toBe(false);
+    expect(search.body).toMatchObject({
+      data: { total: 1 },
+      meta: { actor: { servicePrincipalId: CIP } },
+    });
+    const context = await callTool("cip-key", "mc_get_context", REFUSED_TOOL_ARGS.mc_get_context);
+    expect(context.isError).toBe(false);
+    // The allowlist never refuses the other read tools; their own result may vary here.
+    for (const tool of ["mc_self_check", "mc_get_task"]) {
+      const result = await callTool("cip-key", tool, REFUSED_TOOL_ARGS[tool]);
+      expect({ tool, body: result.body }).not.toMatchObject({ tool, body: { error: { code: "forbidden" } } });
+    }
+    expect(h.writes).toEqual([]);
+  });
+
+  it("refuses every other registered tool with forbidden and logs a deny", async () => {
+    const args: Record<string, Record<string, unknown>> = {
+      ...REFUSED_TOOL_ARGS,
+      mc_create_task: { title: "Should not exist", bucket: "BKT-INFRA", reporter: "cos@petrasoap.com" },
+    };
+    const refused = Object.keys(args).filter((tool) => !CIP_TOOLS.includes(tool));
+    expect(refused).toEqual(expect.arrayContaining(["mc_list_buckets", "mc_search_knowledge", "mc_create_task"]));
+    for (const tool of refused) {
+      vi.mocked(recordPermissionDecision).mockClear();
+      const result = await callTool("cip-key", tool, args[tool]);
+      expect({ tool, isError: result.isError, body: result.body }).toMatchObject({
+        tool,
+        isError: true,
+        body: { error: { code: "forbidden" } },
+      });
+      expect(recordPermissionDecision).toHaveBeenCalledWith(
+        expect.objectContaining({
+          site: "mcp.tool-allowlist",
+          actorId: CIP,
+          capability: tool,
+          allowed: false,
+          reasonCode: "tool_not_allowlisted",
+        })
+      );
+    }
+    expect(h.writes).toEqual([]);
+  });
+
+  it("searches through GET /api/cursor/tasks and gets 403 on POST /api/cursor/tasks", async () => {
+    const search = await cursorTasksGet(
+      new Request("http://localhost/api/cursor/tasks?limit=1", { headers: headers("cip-key") }),
+      { params: Promise.resolve({}) }
+    );
+    expect(search.status).toBe(200);
+    vi.mocked(recordPermissionDecision).mockClear();
+    const create = await cursorTasksPost(
+      new Request("http://localhost/api/cursor/tasks", {
+        method: "POST",
+        headers: headers("cip-key"),
+        body: JSON.stringify({ title: "Should not exist", bucket: "BKT-INFRA" }),
+      }),
+      { params: Promise.resolve({}) }
+    );
+    expect(create.status).toBe(403);
+    expect(((await create.json()) as { error: { code: string } }).error.code).toBe("forbidden");
+    expect(recordPermissionDecision).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: CIP, capability: "mc_create_task", allowed: false })
+    );
     expect(h.writes).toEqual([]);
   });
 });

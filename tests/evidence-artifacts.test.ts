@@ -38,6 +38,25 @@ describe("sniffContentType", () => {
     expect(sniffContentType(HTML)).toBe("text/html");
   });
 
+  it.each(["avif", "avis", "heic", "heix", "hevc", "hevx", "mif1", "msf1", "qt  ", "xxxx"])(
+    "refuses the non-video ISO-BMFF major brand %s, even with MP4 compatibility",
+    (brand) => {
+      const bytes = new Uint8Array([0, 0, 0, 24, ...text(`ftyp${brand}`), 0, 0, 0, 0, ...text("isommp42")]);
+      expect(sniffContentType(bytes)).toBeNull();
+      expect(artifactProblem("video", "video/mp4", bytes)).not.toBeNull();
+    }
+  );
+
+  it.each(["isom", "iso2", "mp41", "mp42", "avc1", "dash", "M4V "])("accepts MP4 major brand %s", (brand) => {
+    const bytes = new Uint8Array([0, 0, 0, 16, ...text(`ftyp${brand}`), 0, 0, 0, 0]);
+    expect(sniffContentType(bytes)).toBe("video/mp4");
+    expect(artifactProblem("video", "video/mp4", bytes)).toBeNull();
+  });
+
+  it("refuses an ftyp box without a complete major brand", () => {
+    expect(sniffContentType(new Uint8Array([0, 0, 0, 16, ...text("ftypiso")]))).toBeNull();
+  });
+
   it("reads a web page with an inline SVG diagram as HTML", () => {
     expect(sniffContentType(text('<!DOCTYPE html><html><body><svg width="10"><rect/></svg></body></html>'))).toBe("text/html");
   });

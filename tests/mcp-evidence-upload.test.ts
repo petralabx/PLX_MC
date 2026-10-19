@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
   uploads: [] as { driveId: string; path: string; size: number; contentType: string }[],
   sessions: [] as { driveId: string; path: string }[],
   stored: null as null | Uint8Array,
+  storedPath: null as null | string,
   lookedUp: [] as string[],
   patched: [] as Record<string, unknown>[],
   events: [] as Record<string, unknown>[],
@@ -92,7 +93,7 @@ vi.mock("@/lib/sync/graph", async () => {
     }),
     driveItemByPath: vi.fn(async (_driveId: string, path: string) => {
       h.lookedUp.push(path);
-      if (!h.stored) return null;
+      if (!h.stored || (h.storedPath && path !== h.storedPath)) return null;
       return {
         id: "item-video", webUrl: `https://petrasoap.sharepoint.com/sites/PLXSite/${path}`, size: h.stored.length,
         "@microsoft.graph.downloadUrl": "https://download/1",
@@ -160,6 +161,7 @@ beforeEach(() => {
   h.sessions.length = 0;
   h.lookedUp.length = 0;
   h.stored = null;
+  h.storedPath = null;
   h.patched.length = 0;
   h.events.length = 0;
   __clearEvidenceDriveCacheForTests();
@@ -200,7 +202,7 @@ describe("mc_upload_evidence", () => {
   it("corrects the kind and caption of the same PNG sent again, reusing the stored file", async () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
     const sha256 = createHash("sha256").update(png).digest("hex");
-    const stored = { kind: "diagram", name: "n.png", caption: "old", url: "https://sp/n.png", driveItemId: "first", sha256 };
+    const stored = { kind: "diagram", name: "n.png", caption: "old", url: "https://sp/n.png", driveItemId: "first", sha256, contentType: "image/png", size: png.length };
     h.task = { ...h.task, evidence: { summary: "s", items: [], artifacts: [stored] } };
     const res = await upload({
       kind: "screenshot", caption: "The annotated screen", fileName: "n.png", contentType: "image/png", contentBase64: png.toString("base64"),
@@ -394,7 +396,52 @@ describe("mc_upload_evidence video upload session", () => {
 
   it("says the upload is not finished when SharePoint has no file yet", async () => {
     const { upload: session } = await start();
-    await expect(upload({ ...video, sha256, uploadedName: session!.uploadedName })).rejects.toMatchObject({ code: "upload_incomplete", status: 409 });
+    await expect(upload({ ...video, sha256, uploadedName: session!.uploadedName })).rejects.toMatchObject({ code: "upload_not_found", status: 409 });
+  });
+
+  it("refuses to relabel a diagram as a video using only its hash", async () => {
+    const { artifact } = await upload();
+    const patches = h.patched.length;
+    const events = h.events.length;
+    await expect(start({ sha256: artifact!.sha256, size: artifact!.size })).rejects.toMatchObject({
+      code: "invalid_artifact", status: 400, message: /A video must be .*not image\/svg\+xml/,
+    });
+    expect(h.patched).toHaveLength(patches);
+    expect(h.events).toHaveLength(events);
+    expect(h.sessions).toHaveLength(0);
+    expect((h.task!.evidence as { artifacts: { kind: string }[] }).artifacts.at(-1)!.kind).toBe("diagram");
+  });
+
+  it("checks a relabel that appears only under the task row lock", async () => {
+    h.beforeRecord = () => {
+      h.task = { ...h.task, evidence: { summary: "s", items: [], artifacts: [
+        { kind: "diagram", sha256, contentType: "image/png", size: mp4.length },
+      ] } };
+    };
+    await expect(upload({ ...video, contentBase64: Buffer.from(mp4).toString("base64") })).rejects.toMatchObject({
+      code: "invalid_artifact", status: 400,
+    });
+    expect(h.patched).toHaveLength(0);
+    expect(h.events).toHaveLength(0);
+  });
+
+  it("gives recovery instructions after a task move and accepts a new session", async () => {
+    const { upload: session } = await start();
+    h.stored = mp4;
+    h.storedPath = h.sessions[0].path;
+    h.task = { ...h.task, bucket: "BKT-OTHER" };
+    await expect(upload({ ...video, sha256, uploadedName: session!.uploadedName })).rejects.toMatchObject({
+      code: "upload_not_found", status: 409,
+      message: expect.stringMatching(/task.*moved.*Start a new upload session/),
+    });
+    expect(h.patched).toHaveLength(0);
+    expect(h.events).toHaveLength(0);
+    const restarted = await start();
+    h.storedPath = h.sessions[1].path;
+    expect(h.storedPath).toContain("/BKT-OTHER/");
+    const result = await upload({ ...video, sha256, uploadedName: restarted.upload!.uploadedName });
+    expect(result.artifact).toMatchObject({ kind: "video", sha256 });
+    expect(h.events).toHaveLength(1);
   });
 
   it("only finishes a name the session issued for this file", async () => {

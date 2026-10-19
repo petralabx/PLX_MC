@@ -228,7 +228,14 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
       }
       const stored = await onSharePoint(async () => driveItemByPath(await evidenceDriveId(), `${folder}/${name}`));
       if (!stored) {
-        throw new ApiError("upload_incomplete", `No file named ${name} yet. Finish the PUTs to the upload session first.`, 409);
+        throw new ApiError(
+          "upload_not_found",
+          `No file named ${name} in this task's current evidence folder. ` +
+            "If the task or its bucket moved since the session started, the file may be in the original folder. " +
+            "Start a new upload session for the current folder and upload the file again. " +
+            "Otherwise, finish the PUTs to the existing session and retry.",
+          409
+        );
       }
       const digest = await onSharePoint(async () => digestStream(await driveItemContent(stored["@microsoft.graph.downloadUrl"])));
       const storedProblem = artifactProblem(input.kind, input.contentType, digest.head, digest.size);
@@ -281,6 +288,13 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
     const stored = artifacts.find((artifact) => artifact.sha256 === sha256);
     if (stored?.kind === input.kind) return { ok: true, taskId, link: taskLink(taskId), artifact: stored, duplicate: true };
     const base = stored ?? existing;
+    if (base) {
+      // The original upload sniffed the bytes before recording this type.
+      // A session start supplies only a hash; its claimed type cannot relabel
+      // a stored image as video. Check again here for concurrent relabels.
+      const relabelProblem = artifactProblem(input.kind, base.contentType, null, base.size);
+      if (relabelProblem) throw new ApiError("invalid_artifact", relabelProblem, 400);
+    }
     const artifact: EvidenceArtifact = base ? { ...base, kind: input.kind, caption: input.caption } : uploaded!;
     await patchTask(
       taskId,

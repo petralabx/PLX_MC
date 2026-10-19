@@ -179,7 +179,7 @@ export const LEDGER_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_ledger" as const;
 /**
  * Chief of Staff steward principal. With sp_mcp_ledger, one of two MCP
  * principals holding task.link_merged_pr. task.cancel is also held by
- * sp_mcp_cursor (cancel only). Its key goes only to the Chief of Staff runtime.
+ * sp_mcp_cursor (with task.reopen). Its key goes only to the Chief of Staff runtime.
  */
 export const COS_MCP_SERVICE_PRINCIPAL_ID = "sp_mcp_cos" as const;
 

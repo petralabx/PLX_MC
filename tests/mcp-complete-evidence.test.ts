@@ -13,6 +13,7 @@ const db = vi.hoisted(() => ({
   dispatches: new Map<string, { taskId: string; accountableHuman: string; repo: string }>(),
   patched: [] as { taskId: string; patch: Record<string, unknown> }[],
   taskLabels: [] as string[],
+  taskBucket: "BKT-OPEN",
   taskEvidence: undefined as unknown,
 }));
 
@@ -38,7 +39,7 @@ vi.mock("@/lib/sync", () => ({
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
-  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: "BKT-OPEN", labels: db.taskLabels, evidence: db.taskEvidence } })),
+  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: db.taskBucket, labels: db.taskLabels, evidence: db.taskEvidence } })),
   getBuckets: vi.fn(async () => [{ id: "BKT-OPEN", project: null }]),
   getProjects: vi.fn(async () => []),
 }));
@@ -73,6 +74,7 @@ beforeEach(() => {
   db.dispatches.clear();
   db.patched.length = 0;
   db.taskLabels = [];
+  db.taskBucket = "BKT-OPEN";
   db.taskEvidence = undefined;
   vi.mocked(complete).mockClear();
   db.dispatches.set("dsp_test", { taskId: "TASK-900", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
@@ -130,6 +132,58 @@ describe("actionComplete evidence (P0d)", () => {
     const ev = db.patched.at(-1)?.patch.evidence as { summary: string; artifacts?: unknown[] };
     expect(ev.summary).toBe("new summary");
     expect(ev.artifacts).toEqual(artifacts);
+  });
+});
+
+describe("UAT code completion requires a PR", () => {
+  const handIn = (over: Partial<Parameters<typeof actionComplete>[1]> = {}) =>
+    actionComplete(identity, {
+      checkoutId: "dsp_test", summary: "Fix ready for review.",
+      verificationCommands: ["npm test"], rollback: "revert", ...over,
+    });
+
+  beforeEach(() => {
+    db.taskBucket = "BKT-UAT";
+    db.taskLabels = ["kind:code", "uat:feedback-123"];
+  });
+
+  it.each([undefined, "", "   "])("refuses missing/blank prUrl %j before writing", async (prUrl) => {
+    await expect(handIn({ prUrl })).rejects.toMatchObject({ code: "uat_code_pr_required", status: 400 });
+    expect(complete).not.toHaveBeenCalled();
+    expect(db.patched).toHaveLength(0);
+  });
+
+  it("does not treat a branch push or summary claiming failure as an explicit outcome", async () => {
+    await expect(handIn({ summary: "branch push only; blocked", outcome: "completed" }))
+      .rejects.toMatchObject({ code: "uat_code_pr_required" });
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it("accepts a PR link", async () => {
+    const prUrl = "https://github.com/petralabx/PLX_MC/pull/999";
+    await expect(handIn({ prUrl })).resolves.toMatchObject({ ok: true });
+    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ prUrl }));
+    expect(db.patched).toHaveLength(1);
+  });
+
+  it.each(["blocked", "failed"] as const)("accepts and forwards explicit %s without a PR", async (outcome) => {
+    await expect(handIn({ outcome })).resolves.toMatchObject({ ok: true, evidence: { outcome } });
+    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ outcome }));
+    expect(db.patched).toHaveLength(1);
+  });
+
+  it.each([
+    { bucket: "BKT-OPEN", labels: ["kind:code", "uat:feedback-123"] },
+    { bucket: "BKT-UAT", labels: ["kind:docs", "uat:feedback-123"] },
+    { bucket: "BKT-UAT", labels: ["kind:code"] },
+    { bucket: "BKT-UAT", labels: ["kind:code", "uat:"] },
+    { bucket: "BKT-UAT", labels: ["kind:code", "uat: "] },
+    { bucket: "BKT-UAT", labels: ["kind:code", "other:uat:feedback-123"] },
+  ])("leaves non-matching tasks unaffected: %j", async ({ bucket, labels }) => {
+    db.taskBucket = bucket;
+    db.taskLabels = labels;
+    await expect(handIn()).resolves.toMatchObject({ ok: true });
+    expect(complete).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -196,6 +250,7 @@ describe("mc_complete_task transport contracts", () => {
 
     expect(block).toContain("verificationCommands: z.array(z.string().trim().min(1)).min(1)");
     expect(block).toContain("rollback: z.string().trim().min(1)");
+    expect(block).toContain('outcome: z.enum(["completed", "blocked", "failed"]).optional()');
     expect(block).toContain("testRun: z");
     expect(block).toContain("shots: z.array");
     expect(block).toContain('mcFetch("/complete", { method: "POST", body })');

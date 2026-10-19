@@ -277,6 +277,27 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
   const alreadyReleased = () => refuse("already_released", `${ref} is already released; nothing changed.`, 409);
   if (dispatch.releasedAt) throw alreadyReleased();
 
+  if (/\bbranch[\s-]+push[\s-]+only\b/i.test(reason)) {
+    await complianceRepo.appendEvent({
+      kind: "checkout.release_refused",
+      actor,
+      repo: dispatch.repo,
+      taskId: dispatch.taskId,
+      payload: {
+        checkoutRef: ref,
+        reason,
+        code: "branch_push_only",
+        servicePrincipalId: identity.servicePrincipalId,
+        workerId,
+      },
+    });
+    throw refuse(
+      "branch_push_only",
+      `${ref} was not released: branch push only leaves work without a reviewable PR. Open a PR or report a blocked or failed outcome.`,
+      409
+    );
+  }
+
   if (isExpiredReason(reason)) {
     let prNumber: number | null;
     try {

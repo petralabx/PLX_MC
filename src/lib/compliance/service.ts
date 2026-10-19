@@ -360,6 +360,7 @@ export interface CompleteInput {
   summary: string;
   commitSha?: string;
   prUrl?: string;
+  outcome?: "completed" | "blocked" | "failed";
   actor?: PermissionActor;
 }
 
@@ -432,6 +433,7 @@ export async function complete(input: CompleteInput): Promise<{ ok: true }> {
       summary: input.summary,
       commitSha: input.commitSha ?? null,
       prUrl: input.prUrl ?? null,
+      ...(input.outcome ? { outcome: input.outcome } : {}),
       permissionActorId: input.actor?.id ?? null,
     },
   });

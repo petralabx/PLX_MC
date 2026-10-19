@@ -306,6 +306,22 @@ describe("tool registration", () => {
 
 for (const [transport, call] of TRANSPORTS) {
   describe(`mc_release_checkout over ${transport}`, () => {
+    it.each(["branch push only", "Completed: BRANCH PUSH ONLY; no PR", "branch-push-only"])(
+      "flags %s and keeps the lease active", async (reason) => {
+        seed("dsp_abcdefgh1234", "TASK-2279");
+        const out = await call("mc_release_checkout", { checkoutId: "dsp_abcdefgh1234", reason }, "ross@petrasoap.com");
+        expect(out.ok).toBe(false);
+        expect(out.body.error).toMatchObject({ code: "branch_push_only" });
+        expect(h.dispatches.get("dsp_abcdefgh1234")).toMatchObject({ releasedAt: null, releasedReason: null });
+        expect(h.events).toContainEqual(expect.objectContaining({
+          kind: "checkout.release_refused", taskId: "TASK-2279",
+          payload: expect.objectContaining({ code: "branch_push_only", checkoutRef: "dsp_…1234", reason }),
+        }));
+        expect(releasedEvents()).toHaveLength(0);
+        expect(h.patchTask).not.toHaveBeenCalled();
+      }
+    );
+
     it("lets the checkout's own principal release by full id and audits checkout.released", async () => {
       seed("dsp_abcdefgh1234", "TASK-2279");
       const out = await call(
@@ -626,6 +642,20 @@ for (const [transport, call] of TRANSPORTS) {
   });
 
   describe(`mc_release_checkouts over ${transport}`, () => {
+    it("reports branch push only in refused[] while releasing unrelated items", async () => {
+      seed("dsp_abcdefgh1234", "TASK-2279");
+      seed("dsp_abcdefgh5678", "TASK-2280");
+      const out = await call("mc_release_checkouts", { items: [
+        { checkoutId: "dsp_abcdefgh1234", reason: "branch push only" },
+        { checkoutId: "dsp_abcdefgh5678", reason: "stray from a stopped run" },
+      ] }, "ross@petrasoap.com");
+      expect(out.body.data).toMatchObject({ released: 1, failed: 1, refused: [
+        { index: 0, checkoutRef: "dsp_…1234", taskId: "TASK-2279", code: "branch_push_only" },
+      ] });
+      expect(h.dispatches.get("dsp_abcdefgh1234")?.releasedAt).toBeNull();
+      expect(releasedEvents()).toHaveLength(1);
+    });
+
     it("returns a per-item outcome and keeps going past a failed item", async () => {
       seed("dsp_cursorxxbn4y", "TASK-2279");
       seed("dsp_claudexx7px3", "TASK-2279");

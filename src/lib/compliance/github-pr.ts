@@ -51,7 +51,7 @@ export async function loadPrReviewLinks(repoFullName: string, prNumber: number):
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), REVIEW_LINKS_TIMEOUT_MS);
   try {
-    const token = await beforeDeadline(resolveGithubToken({ repoOwner: owner }), deadline.signal);
+    const token = await beforeDeadline(resolveGithubToken({ repoOwner: owner, signal: deadline.signal }), deadline.signal);
     if (!token) throw new ApiError("github_unavailable", "No GitHub auth configured - the PR cannot be read.", 503);
     const pr = (await githubGet(
       `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${prNumber}`,
@@ -67,7 +67,11 @@ export async function loadPrReviewLinks(repoFullName: string, prNumber: number):
   }
 }
 
-/** Settle with `work`, or reject once `signal` aborts (resolveGithubToken takes no signal). */
+/**
+ * Settle with `work`, or reject with github_unreachable once `signal` aborts. The
+ * token exchange is cancelled by the same signal; this is the backstop for a token
+ * lookup that ignores it, and gives the abort the same error code as the PR read.
+ */
 function beforeDeadline<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => reject(new ApiError("github_unreachable", "GitHub auth did not resolve in time.", 502));

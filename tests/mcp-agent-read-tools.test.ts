@@ -631,6 +631,8 @@ describe("mc_verify_pr", () => {
       expect(isError).toBe(false);
       expect(body.data.verdict).toBe("pass");
       expect(body.data.reasons.join(" ")).toContain("review_links_unchecked:");
+      // The hung token exchange is cancelled at the deadline, not merely abandoned.
+      expect((m.resolveGithubToken.mock.calls[1] as unknown as [{ signal: AbortSignal }])[0].signal.aborted).toBe(true);
       warn.mockRestore();
     });
   });

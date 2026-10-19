@@ -2,8 +2,9 @@
 // BKT-HUMAN-VERIFICATION-EVIDE). Agent text that a person must verify is held to
 // STE-lite (./ste-lite.ts). Pure: the MCP layer turns blocking findings into a
 // 400; the PR verifier turns them into a reason or an advisory note.
+import type { Task } from "@/lib/mc-data";
 import type { RiskTier } from "./types";
-import { steLiteFindings, type WritingFinding } from "./ste-lite";
+import { NUMBERED_STEP, steLiteFindings, type WritingFinding } from "./ste-lite";
 
 export const HUMAN_VERIFICATION_LABEL = "verify:human";
 
@@ -25,6 +26,39 @@ export const VISUAL_EVIDENCE_ENFORCE_FROM = "2026-10-25T04:00:00.000Z";
  */
 export function visualEvidenceMode(now: number = Date.now(), storeEnabled = false): EvidenceStandardMode {
   return storeEnabled && now >= Date.parse(VISUAL_EVIDENCE_ENFORCE_FROM) ? "block" : "warn";
+}
+
+/** Midnight 2026-11-01 America/Toronto: the explainer video (TASK-3167) gets its own warn-only week. */
+export const VIDEO_EVIDENCE_ENFORCE_FROM = "2026-11-01T04:00:00.000Z";
+
+/** Like visualEvidenceMode: a missing video blocks only after its week and while uploads are on. */
+export function videoEvidenceMode(now: number = Date.now(), storeEnabled = false): EvidenceStandardMode {
+  return storeEnabled && now >= Date.parse(VIDEO_EVIDENCE_ENFORCE_FROM) ? "block" : "warn";
+}
+
+/** More steps than this in a person's procedure make the work complex. */
+export const COMPLEX_PROCEDURE_STEPS = 5;
+/** This many systems (task repos) or more make the work complex. */
+export const COMPLEX_SYSTEM_COUNT = 2;
+
+/** The numbered steps in a text: a person's procedure. */
+export function procedureSteps(text: string | null | undefined): number {
+  return (text ?? "").split("\n").filter((line) => NUMBERED_STEP.test(line)).length;
+}
+
+/**
+ * Why the work is complex enough to need an explainer video (TASK-3167): a
+ * high-risk change, a procedure of more than 5 steps in the description or
+ * evidence summary, or 2 or more systems. Empty when it is not complex.
+ */
+export function complexityReasons(task: Pick<Task, "description" | "repos" | "evidence">, tier?: RiskTier): string[] {
+  const reasons: string[] = [];
+  if (tier === "high") reasons.push("high-risk change");
+  const steps = Math.max(procedureSteps(task.description), procedureSteps(task.evidence?.summary));
+  if (steps > COMPLEX_PROCEDURE_STEPS) reasons.push(`${steps}-step procedure`);
+  const systems = new Set((task.repos ?? []).map((repo) => repo.trim().toLowerCase()).filter(Boolean)).size;
+  if (systems >= COMPLEX_SYSTEM_COUNT) reasons.push(`${systems} systems`);
+  return reasons;
 }
 
 /** A person must verify the work: labelled verify:human, a kind:human-test task, or a high-risk change. */

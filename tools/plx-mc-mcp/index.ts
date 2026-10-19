@@ -11,7 +11,7 @@ import { taskSearchShape } from "./task-search-schema";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import os from "node:os";
@@ -51,10 +51,10 @@ function requireConfig() {
   if (!MC_REPO) throw new Error("MC_REPO is not set (e.g. petralabx/PLX_MC)");
 }
 
-async function mcFetch(path: string, init?: { method?: string; body?: unknown }): Promise<unknown> {
+async function mcFetch(path: string, init?: { method?: string; body?: unknown; timeoutMs?: number }): Promise<unknown> {
   requireConfig();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), init?.timeoutMs ?? REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(`${MC_BASE_URL}/api/cursor${path}`, {
       method: init?.method ?? "GET",
@@ -415,12 +415,44 @@ server.tool(
   }
 );
 
+/**
+ * A video file is too big to send inline (TASK-3167): MC opens a SharePoint
+ * upload session, this process PUTs the file there, and MC checks what landed.
+ */
+async function uploadVideoFile(filePath: string, fileName: string, fields: Record<string, unknown>): Promise<unknown> {
+  const bytes = await readFile(filePath);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const started = (await mcFetch("/evidence", {
+    method: "POST",
+    body: { ...fields, fileName, size: bytes.length, sha256 },
+  })) as { data?: { upload?: { url: string; uploadedName: string; chunkBytes: number } } };
+  const upload = started.data?.upload;
+  if (!upload) return started; // The task already has this file.
+  for (let start = 0; start < bytes.length; start += upload.chunkBytes) {
+    const chunk = bytes.subarray(start, start + upload.chunkBytes);
+    // The session URL carries its own auth: never send the MC key or a token to it.
+    const res = await fetch(upload.url, {
+      method: "PUT",
+      headers: { "Content-Range": `bytes ${start}-${start + chunk.length - 1}/${bytes.length}` },
+      body: chunk,
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!res.ok) throw new Error(`The SharePoint upload session returned ${res.status} at byte ${start}. Run the tool again.`);
+  }
+  // MC reads the whole file back to check its type and SHA-256.
+  return mcFetch("/evidence", {
+    method: "POST",
+    body: { ...fields, fileName, sha256, uploadedName: upload.uploadedName },
+    timeoutMs: Math.max(REQUEST_TIMEOUT_MS, 240_000),
+  });
+}
+
 server.tool(
   "mc_upload_evidence",
-  "Upload visual evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html), 3 MiB or less, with a caption. Send filePath (an absolute path to a local file) or contentBase64 with fileName. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). evidence_store_unavailable says what a person must set up.",
+  "Upload evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html), 3 MiB or less, or video (mp4, webm; 100 MiB or less, send filePath) with a caption. Send filePath (an absolute path to a local file) or contentBase64 with fileName. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). evidence_store_unavailable says what a person must set up. Complex work a person must verify also needs a video from the plx-knowledge-video skill (warning only until 2026-11-01).",
   {
     checkoutId: z.string().min(1),
-    kind: z.enum(["diagram", "screenshot", "web-page"]),
+    kind: z.enum(["diagram", "screenshot", "web-page", "video"]),
     contentType: z.string().trim().min(1),
     caption: z.string().trim().min(1).max(500),
     // Absolute: a relative path would resolve against this server's working directory, not the agent's.
@@ -433,6 +465,7 @@ server.tool(
     if (!filePath === !contentBase64) throw new Error("Send exactly one of filePath or contentBase64.");
     const name = fileName ?? (filePath ? basename(filePath) : undefined);
     if (!name) throw new Error("fileName is required with contentBase64.");
+    if (filePath && rest.kind === "video") return printResult(await uploadVideoFile(filePath, name, rest));
     const content = contentBase64 ?? (await readFile(filePath!)).toString("base64");
     return printResult(
       await mcFetch("/evidence", { method: "POST", body: { ...rest, fileName: name, contentBase64: content } })

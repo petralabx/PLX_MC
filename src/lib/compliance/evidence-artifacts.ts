@@ -3,18 +3,33 @@
 // src/lib/mcp/evidence-actions.ts; the store is decided there too.
 import type { Evidence, EvidenceArtifact } from "@/lib/mc-data";
 
-export const EVIDENCE_ARTIFACT_KINDS = ["diagram", "screenshot", "web-page"] as const;
+export const EVIDENCE_ARTIFACT_KINDS = ["diagram", "screenshot", "web-page", "video"] as const;
 export type EvidenceArtifactKind = EvidenceArtifact["kind"];
+
+/** The kinds that count as visual evidence (TASK-3166). A video is checked on its own (TASK-3167). */
+export const VISUAL_ARTIFACT_KINDS: readonly EvidenceArtifactKind[] = ["diagram", "screenshot", "web-page"];
 
 /** The content types each kind accepts. */
 export const ARTIFACT_CONTENT_TYPES: Readonly<Record<EvidenceArtifactKind, readonly string[]>> = {
   diagram: ["image/svg+xml", "image/png"],
   screenshot: ["image/png", "image/jpeg", "image/webp"],
   "web-page": ["text/html"],
+  video: ["video/mp4", "video/webm"],
 };
+
+/** A video's file name must end in the extension of its type, so SharePoint plays it. */
+export const VIDEO_EXTENSIONS: Readonly<Record<string, string>> = { "video/mp4": ".mp4", "video/webm": ".webm" };
 
 /** 3 MiB: the base64 body of an inline upload stays under Vercel's 4.5 MB request limit. */
 export const MAX_ARTIFACT_BYTES = 3 * 1024 * 1024;
+
+/**
+ * 100 MiB: a 3–5 minute plx-knowledge-video MP4 (1600 px, CRF 20) fits. A larger
+ * file than MAX_ARTIFACT_BYTES goes straight to SharePoint in an upload session.
+ */
+export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+
+export const maxArtifactBytes = (kind: EvidenceArtifactKind) => (kind === "video" ? MAX_VIDEO_BYTES : MAX_ARTIFACT_BYTES);
 
 /** Where PLX evidence lives (decision, Vince, 2026-10-17). A person creates the library, never MC. */
 export const PLX_EVIDENCE_STORE = { site: "/sites/PLXSite", library: "Mission Control" } as const;
@@ -35,6 +50,12 @@ export function sniffContentType(bytes: Uint8Array): string | null {
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
   if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50])) return "image/webp";
+  // ISO base media "ftyp" box. QuickTime ("qt  ") shares it but is not accepted.
+  if (startsWith(bytes.subarray(4), [0x66, 0x74, 0x79, 0x70])) {
+    return startsWith(bytes.subarray(8), [0x71, 0x74, 0x20, 0x20]) ? null : "video/mp4";
+  }
+  // EBML header with DocType "webm" (Matroska .mkv shares the header but is not accepted).
+  if (startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3])) return /webm/.test(head(bytes.subarray(0, 64))) ? "video/webm" : null;
   if (bytes.subarray(0, 2048).includes(0)) return null;
   const text = head(bytes);
   // HTML first: a web page often holds an inline <svg> diagram.
@@ -43,12 +64,22 @@ export function sniffContentType(bytes: Uint8Array): string | null {
   return null;
 }
 
-/** Why the file cannot be stored as this kind of evidence, or null when it can. */
-export function artifactProblem(kind: EvidenceArtifactKind, contentType: string, bytes: Uint8Array): string | null {
+/**
+ * Why the file cannot be stored as this kind of evidence, or null when it can.
+ * `bytes` may be only the start of the file when `size` gives the full length
+ * (a video in an upload session). Without `bytes`, only the type and size are checked.
+ */
+export function artifactProblem(
+  kind: EvidenceArtifactKind,
+  contentType: string,
+  bytes: Uint8Array | null,
+  size = bytes?.length ?? 0
+): string | null {
   const allowed = ARTIFACT_CONTENT_TYPES[kind];
   if (!allowed.includes(contentType)) return `A ${kind} must be ${allowed.join(" or ")}, not ${contentType}.`;
-  if (bytes.length === 0) return "The file is empty.";
-  if (bytes.length > MAX_ARTIFACT_BYTES) return `The file has ${bytes.length} bytes. Limit: ${MAX_ARTIFACT_BYTES}.`;
+  if (size === 0) return "The file is empty.";
+  if (size > maxArtifactBytes(kind)) return `The file has ${size} bytes. Limit: ${maxArtifactBytes(kind)}.`;
+  if (!bytes) return null;
   const actual = sniffContentType(bytes);
   if (actual !== contentType) return `The file content is ${actual ?? "not an accepted type"}, not ${contentType}.`;
   return null;
@@ -65,7 +96,18 @@ export function artifactFolder(parts: { system: string; project: string | null; 
   return [parts.system, parts.project ?? "No project", parts.bucket, parts.taskId].map(sharePointSafeName).join("/");
 }
 
+/** Why a video's file name will not play on SharePoint, or null when it will. */
+export function videoNameProblem(contentType: string, fileName: string): string | null {
+  const extension = VIDEO_EXTENSIONS[contentType];
+  return extension && !fileName.toLowerCase().endsWith(extension) ? `A ${contentType} video must be named *${extension}.` : null;
+}
+
 /** A person can open visual evidence for this work: a diagram, annotated screenshot or web page. */
 export function hasVisualArtifact(evidence: Pick<Evidence, "artifacts"> | undefined): boolean {
-  return (evidence?.artifacts ?? []).some((artifact) => EVIDENCE_ARTIFACT_KINDS.includes(artifact.kind));
+  return (evidence?.artifacts ?? []).some((artifact) => VISUAL_ARTIFACT_KINDS.includes(artifact.kind));
+}
+
+/** A person can watch an explainer video for this work (TASK-3167). */
+export function hasVideoArtifact(evidence: Pick<Evidence, "artifacts"> | undefined): boolean {
+  return (evidence?.artifacts ?? []).some((artifact) => artifact.kind === "video");
 }

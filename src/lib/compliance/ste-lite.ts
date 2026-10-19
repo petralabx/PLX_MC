@@ -21,7 +21,8 @@ export interface WritingFinding {
   message: string;
 }
 
-const STEP = /^\s*\d+[.)]\s+/;
+/** A numbered step line ("1. ", "2) "). */
+export const NUMBERED_STEP = /^\s*\d+[.)]\s+/;
 const BULLET = /^\s*[-*+]\s+/;
 const QUOTE = /^\s*>\s?/;
 const SKIPPED_LINE = /^\s*(#|\||---)/;
@@ -101,7 +102,7 @@ export function steLiteFindings(text: string): WritingFinding[] {
       const line = raw.replace(QUOTE, "");
       if (!line.trim() || SKIPPED_LINE.test(line)) continue;
       const last = units.at(-1);
-      if (STEP.test(line)) units.push({ text: line.replace(STEP, ""), step: true });
+      if (NUMBERED_STEP.test(line)) units.push({ text: line.replace(NUMBERED_STEP, ""), step: true });
       else if (BULLET.test(line)) units.push({ text: line.replace(BULLET, ""), step: false });
       // An indented line continues the step or bullet above it.
       else if (last && /^\s/.test(line)) last.text += ` ${line.trim()}`;

@@ -2,6 +2,11 @@
 // screenshot or web page that a person opens to verify the work. MC stores the
 // file on SharePoint and records a link and a SHA-256 on the task.
 //
+// A video (TASK-3167) larger than an inline upload goes in two calls: the first
+// sends size and sha256 and gets a SharePoint upload session; the agent PUTs
+// the file there; the second sends uploadedName, and MC reads the file back,
+// checks its type, size and SHA-256, and records it.
+//
 // Storage (decision, Vince, 2026-10-17): PLX work goes to the "Mission Control"
 // library on the PLX site, under <system>/<project>/<bucket>/<task id>.
 // Trading Lab (petralabx/agentic-swarm) evidence goes on its own site, never the
@@ -14,12 +19,14 @@ import { withTransaction } from "@/lib/db";
 import {
   EVIDENCE_ARTIFACT_KINDS,
   MAX_ARTIFACT_BYTES,
+  MAX_VIDEO_BYTES,
   PLX_EVIDENCE_STORE,
   TRACKED_REPOS,
   artifactFolder,
   artifactProblem,
   ownEvidenceSite,
   sharePointSafeName,
+  videoNameProblem,
 } from "@/lib/compliance";
 import * as complianceRepo from "@/lib/compliance/repo";
 import type { EvidenceArtifact, Task } from "@/lib/mc-data";
@@ -27,7 +34,15 @@ import { assertTaskProjectAccess, isBucketInRestrictedProject } from "@/lib/perm
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask } from "@/lib/sync";
-import { GraphError, driveIdByName, siteIdByPath, uploadSmallDriveFile } from "@/lib/sync/graph";
+import {
+  GraphError,
+  createDriveUploadSession,
+  driveIdByName,
+  driveItemByPath,
+  driveItemContent,
+  siteIdByPath,
+  uploadSmallDriveFile,
+} from "@/lib/sync/graph";
 import { getBuckets, getEntity } from "@/lib/sync/repo";
 import type { McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
@@ -42,7 +57,11 @@ export const uploadEvidenceInputShape = {
   fileName: z.string().trim().min(1).max(120),
   contentType: z.string().trim().min(1),
   caption: z.string().trim().min(1).max(500),
-  contentBase64: z.string().min(1).max(Math.ceil(MAX_ARTIFACT_BYTES / 3) * 4),
+  contentBase64: z.string().min(1).max(Math.ceil(MAX_ARTIFACT_BYTES / 3) * 4).optional(),
+  // A video over an upload session (TASK-3167): size and sha256 start it, uploadedName and sha256 finish it.
+  size: z.number().int().positive().max(MAX_VIDEO_BYTES).optional(),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  uploadedName: z.string().trim().min(1).max(200).optional(),
 };
 type UploadEvidenceInput = z.infer<z.ZodObject<typeof uploadEvidenceInputShape>>;
 
@@ -64,6 +83,57 @@ export function __clearEvidenceDriveCacheForTests(): void {
   cachedDriveId = null;
 }
 
+/** Upload-session chunks: a multiple of 320 KiB, as Graph requires. */
+export const UPLOAD_CHUNK_BYTES = 32 * 320 * 1024;
+
+type UploadStep = "inline" | "start" | "finish";
+
+function uploadStep(input: UploadEvidenceInput): UploadStep {
+  if (input.contentBase64 && input.size === undefined && input.sha256 === undefined && input.uploadedName === undefined) {
+    return "inline";
+  }
+  if (input.contentBase64 === undefined && input.kind === "video" && input.sha256) {
+    if (input.size !== undefined && input.uploadedName === undefined) return "start";
+    if (input.uploadedName !== undefined && input.size === undefined) return "finish";
+  }
+  throw new ApiError(
+    "invalid_request",
+    "Send contentBase64 alone, or for a video: size and sha256 to start an upload session, then uploadedName and sha256.",
+    400
+  );
+}
+
+// The second and the content hash make the name unique: no upload replaces another.
+const storedName = (uploadedAt: string, sha256: string, fileName: string) =>
+  `${uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha256.slice(0, 8)}-${sharePointSafeName(fileName)}`;
+
+/** Every SharePoint failure becomes a 503 that says what to do; other errors stay errors. */
+async function onSharePoint<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (err) {
+    if (!(err instanceof GraphError)) throw err;
+    if (err.status === 403 || err.status === 404) {
+      throw unavailable(`SharePoint refused the upload (${err.status}). ${PERSON_ACTION}`);
+    }
+    throw unavailable(`SharePoint returned ${err.status}. Try again later. If it repeats, tell a person.`);
+  }
+}
+
+/** Reads a stored file back: its size, SHA-256 and first bytes (for the type sniff). */
+async function digestStream(stream: ReadableStream<Uint8Array>): Promise<{ size: number; sha256: string; head: Uint8Array }> {
+  const hash = createHash("sha256");
+  const head = new Uint8Array(2048);
+  let size = 0;
+  for await (const chunk of stream as unknown as AsyncIterable<Uint8Array>) {
+    if (size < head.length) head.set(chunk.subarray(0, head.length - size), size);
+    size += chunk.length;
+    if (size > MAX_VIDEO_BYTES) break;
+    hash.update(chunk);
+  }
+  return { size, sha256: hash.digest("hex"), head: head.subarray(0, Math.min(size, head.length)) };
+}
+
 export async function actionUploadEvidence(identity: McpIdentity, input: UploadEvidenceInput) {
   const dispatch = await complianceRepo.getDispatch(input.checkoutId);
   if (!dispatch?.taskId || dispatch.revoked || dispatch.releasedAt || new Date(dispatch.expiresAt).getTime() <= Date.now()) {
@@ -75,8 +145,12 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
   requireMcpActor(identity, "task.complete", { type: "task", id: taskId }, { repositoryId: dispatch.repo });
   await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
 
-  const bytes = new Uint8Array(Buffer.from(input.contentBase64, "base64"));
-  const problem = artifactProblem(input.kind, input.contentType, bytes);
+  const step = uploadStep(input);
+  const bytes = input.contentBase64 ? new Uint8Array(Buffer.from(input.contentBase64, "base64")) : null;
+  // A finished session is checked once MC has read the file back.
+  const problem =
+    (step === "finish" ? null : artifactProblem(input.kind, input.contentType, bytes, bytes?.length ?? input.size)) ??
+    (input.kind === "video" ? videoNameProblem(input.contentType, input.fileName) : null);
   if (problem) throw new ApiError("invalid_artifact", problem, 400);
 
   const ownSite = ownEvidenceSite(dispatch.repo);
@@ -100,7 +174,8 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
         "A person must set up a destination that keeps the project's access rules."
     );
   }
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  // A session's sha256 is checked against the stored file when it finishes.
+  const sha256 = bytes ? createHash("sha256").update(bytes).digest("hex") : input.sha256!;
   // The same file again (a retry) returns the record it already has.
   const existing = task.evidence?.artifacts?.find((artifact) => artifact.sha256 === sha256);
   if (existing) return { ok: true, taskId, link: taskLink(taskId), artifact: existing, duplicate: true };
@@ -109,19 +184,45 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
   const system =
     TRACKED_REPOS.find((tracked) => tracked.repo.toLowerCase() === dispatch.repo.toLowerCase())?.displayName ?? dispatch.repo;
   const uploadedAt = new Date().toISOString();
-  // The second and the content hash make the name unique: no upload replaces another.
-  const name = `${uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha256.slice(0, 8)}-${sharePointSafeName(input.fileName)}`;
   const folder = artifactFolder({ system, project: bucket?.project ?? null, bucket: task.bucket, taskId });
 
+  if (step === "start") {
+    const name = storedName(uploadedAt, sha256, input.fileName);
+    const session = await onSharePoint(async () => createDriveUploadSession(await evidenceDriveId(), `${folder}/${name}`));
+    return {
+      ok: true,
+      taskId,
+      link: taskLink(taskId),
+      upload: { url: session.uploadUrl, expiresAt: session.expirationDateTime, uploadedName: name, chunkBytes: UPLOAD_CHUNK_BYTES },
+      next: "PUT the file to upload.url in chunks of chunkBytes with Content-Range and no Authorization header. Then call again with uploadedName and sha256.",
+    };
+  }
+
+  let name: string;
   let item: { id: string; webUrl: string };
-  try {
-    item = await uploadSmallDriveFile(await evidenceDriveId(), `${folder}/${name}`, bytes, input.contentType);
-  } catch (err) {
-    if (!(err instanceof GraphError)) throw err;
-    if (err.status === 403 || err.status === 404) {
-      throw unavailable(`SharePoint refused the upload (${err.status}). ${PERSON_ACTION}`);
+  let size: number;
+  if (step === "finish") {
+    // Only a name MC issued for this file: its hash prefix and file name must match.
+    name = input.uploadedName!;
+    if (!/^\d{8}T\d{6}Z$/.test(name.slice(0, 16)) || name.slice(16) !== `-${sha256.slice(0, 8)}-${sharePointSafeName(input.fileName)}`) {
+      throw new ApiError("invalid_artifact", "uploadedName is not the name the upload session returned for this file.", 400);
     }
-    throw unavailable(`SharePoint returned ${err.status}. Try again later. If it repeats, tell a person.`);
+    const stored = await onSharePoint(async () => driveItemByPath(await evidenceDriveId(), `${folder}/${name}`));
+    if (!stored) {
+      throw new ApiError("upload_incomplete", `No file named ${name} yet. Finish the PUTs to the upload session first.`, 409);
+    }
+    const digest = await onSharePoint(async () => digestStream(await driveItemContent(stored["@microsoft.graph.downloadUrl"])));
+    const storedProblem = artifactProblem(input.kind, input.contentType, digest.head, digest.size);
+    if (storedProblem) throw new ApiError("invalid_artifact", storedProblem, 400);
+    if (digest.sha256 !== sha256) {
+      throw new ApiError("invalid_artifact", "The stored file's SHA-256 does not match sha256. Start a new upload session.", 400);
+    }
+    item = stored;
+    size = digest.size;
+  } else {
+    name = storedName(uploadedAt, sha256, input.fileName);
+    item = await onSharePoint(async () => uploadSmallDriveFile(await evidenceDriveId(), `${folder}/${name}`, bytes!, input.contentType));
+    size = bytes!.length;
   }
 
   const artifact: EvidenceArtifact = {
@@ -131,7 +232,7 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
     url: item.webUrl,
     driveItemId: item.id,
     contentType: input.contentType,
-    size: bytes.length,
+    size,
     sha256,
     uploadedAt,
   };

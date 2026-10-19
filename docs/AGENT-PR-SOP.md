@@ -451,6 +451,19 @@ A person must create the library and allow the Mission Control app to use the si
 
 The `compliance` check warns while uploads are off. When uploads are on, it warns until 2026-10-25 and then blocks a task without visual evidence.
 
+### Explainer video (TASK-3167)
+
+This applies when a person must verify complex work. Complex work is a high-risk change, a procedure of more than 5 steps, or work on 2 or more systems. The gate counts numbered steps in the task description and the evidence summary. It counts systems from the task `repos`.
+
+1. Make a short video with the `plx-knowledge-video` skill. Do not build another pipeline.
+2. Export it as mp4 or webm, 100 MiB or less. Name it `*.mp4` or `*.webm`.
+3. Over stdio, call `mc_upload_evidence` with kind `video` and an absolute `filePath`.
+4. Upload before `mc_complete_task`.
+
+Over stdio, the tool sends the file straight to SharePoint in an upload session. Without stdio, send `size` and `sha256` first. Then PUT the file to `upload.url` in chunks of `chunkBytes`, with no `Authorization` header. Then send `uploadedName` and `sha256`. MC reads the file back and checks its type, size and SHA-256 before it records the video.
+
+The `compliance` check warns while uploads are off. When uploads are on, it warns until 2026-11-01 and then blocks complex work without a video.
+
 ---
 
 ## 8. Risk-tier bundle

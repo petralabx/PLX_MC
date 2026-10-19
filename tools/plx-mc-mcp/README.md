@@ -22,7 +22,7 @@ composed swarm delegation.
 | `mc_update_task` | Audited `{taskId, patch}` metadata edit; labels stay DB-only; `patch.cancel` / `patch.reopen` end or restore a task (audited `task.cancelled` / `task.reopened`) |
 | `mc_update_tasks` | Batch metadata edits, 1–100 `{taskId, patch}` items with independent outcomes |
 | `mc_complete_task` | Complete with evidence |
-| `mc_upload_evidence` | Upload a diagram, annotated screenshot or web page (absolute `filePath` or `contentBase64`, 3 MiB or less) to SharePoint for a person to open; needs a live checkout (TASK-3166) |
+| `mc_upload_evidence` | Upload a diagram, annotated screenshot or web page (absolute `filePath` or `contentBase64`, 3 MiB or less) to SharePoint for a person to open; needs a live checkout (TASK-3166). A `video` `filePath` (mp4 or webm, 100 MiB or less, TASK-3167) goes through a SharePoint upload session |
 | `mc_get_task` | One task + accountable owner, evidence, checkouts, recent events; checkout ids redacted to `checkoutRef` (read-only) |
 | `mc_list_checkouts` | Checkouts as `checkoutRef` (`dsp_…` + last 4, never the usable id) filtered by `repo` (owner/name), `taskId`, `active` (read-only) |
 | `mc_search_knowledge` | Ask the Brain search; hits carry provenance (read-only) |

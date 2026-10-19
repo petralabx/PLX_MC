@@ -65,6 +65,12 @@ interface TokenOpts {
   nowMs?: number;
   /** GitHub repo owner slug — selects the org App installation when configured. */
   repoOwner?: string | null;
+  /**
+   * Cancels the token exchange. Once it fires, the call rejects with
+   * `signal.reason` (an AbortError by default): nothing is cached and
+   * `resolveGithubToken` does not fall back to the static PAT.
+   */
+  signal?: AbortSignal;
 }
 
 /** Until `GITHUB_APP_INSTALLATION_ID_PLX` exists, petralabx reads use `GITHUB_TOKEN`. */
@@ -88,11 +94,13 @@ export function __resetInstallationTokenCache(): void {
  * read-only Contents + Metadata + Pull requests (defence in depth even if the
  * App's granted permissions are broader). Pull requests enables PR listing for
  * github-backfill / mc_verify_pr on private repos. Never logs the token.
+ * An already-aborted `opts.signal` rejects before any request is made.
  */
 export async function requestInstallationToken(
   creds: GithubAppCredentials,
   opts: TokenOpts = {}
 ): Promise<InstallationToken> {
+  opts.signal?.throwIfAborted();
   const fetchImpl = opts.fetchImpl ?? fetch;
   const jwt = mintAppJwt(creds, opts.nowMs ?? Date.now());
   const res = await fetchImpl(
@@ -106,6 +114,7 @@ export async function requestInstallationToken(
         "content-type": "application/json",
       },
       body: JSON.stringify({ permissions: { contents: "read", metadata: "read", pull_requests: "read" } }),
+      signal: opts.signal,
     }
   );
   if (!res.ok) {
@@ -166,13 +175,16 @@ function resolveStaticPat(repoOwner?: string | null): string | null {
  * PETRALABX_GITHUB_TOKEN (petralabx) / GITHUB_TOKEN (legacy) so the surface
  * keeps working before the App is provisioned or if a token mint transiently
  * fails; returns null when neither is configured, so callers emit an honest
- * degraded result instead of throwing.
+ * degraded result instead of throwing. The one exception: once `opts.signal`
+ * aborts, the call rejects with `signal.reason` (no warning, no PAT fallback),
+ * because the caller's deadline has already passed.
  */
 export async function resolveGithubToken(opts: TokenOpts = {}): Promise<string | null> {
   if (githubAppConfigured() && !plxOrgNeedsPatFallback(opts.repoOwner)) {
     try {
       return await getInstallationToken(opts);
     } catch (err) {
+      opts.signal?.throwIfAborted();
       // Never mask the failure silently, but stay up: fall back to the PAT/null.
       console.warn(
         "[github-app] installation token mint failed; falling back to static PAT: %s",

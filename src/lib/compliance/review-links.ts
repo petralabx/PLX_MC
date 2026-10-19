@@ -90,7 +90,12 @@ function linksModule(link: string, repoFullName: string, liveUrl: string, m: Rev
     }
   }
   if (m.doc && url.hostname === "github.com") {
-    const path = decodeURIComponent(url.pathname);
+    let path: string;
+    try {
+      path = decodeURIComponent(url.pathname);
+    } catch {
+      return false; // a malformed escape links to nothing; the other links still count
+    }
     return path.toLowerCase().startsWith(`/${repoFullName.toLowerCase()}/blob/`) && path.endsWith(`/${m.doc}`);
   }
   return false;

@@ -512,7 +512,10 @@ describe("mc_verify_pr", () => {
       if (url.endsWith("/repos/petralabx/PLX_MC/pulls/42")) {
         return Response.json({
           number: 42,
-          body: "Adds tools.\n\nMC-Checkout: dsp_abc123\n",
+          body:
+            "Adds tools.\n\n## Review links\n\n" +
+            "- [MCP module](https://github.com/petralabx/PLX_MC/blob/main/docs/modules/mcp/README.md)\n\n" +
+            "MC-Checkout: dsp_abc123\n",
           labels: [{ name: "agent" }],
           head: { sha: "headsha42", ref: "claude/wave4" },
           base: { ref: "main", repo: { id: 7, name: "PLX_MC", full_name: "petralabx/PLX_MC" } },
@@ -589,6 +592,47 @@ describe("mc_verify_pr", () => {
     expect(text).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
     expect(JSON.parse(text).data).toMatchObject({ verdict: "pass", recorded: false });
     expect(m.recordCheck).not.toHaveBeenCalled();
+  });
+
+  // Review links block from 2026-11-01 (TASK-3168): the fixture's mcp doc link
+  // keeps both success cases passing after enforcement starts.
+  describe("after review links enforcement starts", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-11-02T12:00:00Z"));
+      m.getDispatch.mockResolvedValue(dispatch("dsp_abc123", "TASK-100", { expiresAt: "2026-11-02T13:00:00.000Z" }));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("still passes mc_verify_pr and GET /api/cursor/verify", async () => {
+      stubGithub();
+      const { isError, body } = await callTool("mc_verify_pr", { repo: "petralabx/PLX_MC", pr: 42 });
+      expect(isError).toBe(false);
+      expect(body.data).toMatchObject({ verdict: "pass", taskId: "TASK-100", recorded: false });
+      expect(body.data.reasons.join(" ")).not.toContain("review_links");
+      const res = await verifyRoute(rest("/api/cursor/verify?repo=petralabx/PLX_MC&pr=42"), noParams);
+      expect(res.status).toBe(200);
+      expect((await res.json()).data).toMatchObject({ verdict: "pass", recorded: false });
+    });
+
+    it("notes review_links_unchecked when the Review links token exchange hangs past its 5 s budget", async () => {
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      vi.setSystemTime(new Date("2026-11-02T12:00:00Z"));
+      stubGithub();
+      // The first token reads the PR's stamps and files; the second, for the body, never resolves.
+      m.resolveGithubToken.mockResolvedValueOnce("gh-test-token").mockImplementationOnce(() => new Promise(() => {}));
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const call = callTool("mc_verify_pr", { repo: "petralabx/PLX_MC", pr: 42 });
+      await vi.advanceTimersByTimeAsync(5_000);
+      const { isError, body } = await call;
+      expect(isError).toBe(false);
+      expect(body.data.verdict).toBe("pass");
+      expect(body.data.reasons.join(" ")).toContain("review_links_unchecked:");
+      warn.mockRestore();
+    });
   });
 
   it("surfaces a missing GitHub credential as github_unavailable", async () => {

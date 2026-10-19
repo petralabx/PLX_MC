@@ -125,6 +125,26 @@ describe("verifyPr — review links", () => {
     expect(r.reasons.join(" ")).not.toContain("review_links");
   });
 
+  it("blocks, not skips, a section whose only link is malformed", async () => {
+    vi.setSystemTime(new Date("2026-11-02T00:00:00.000Z"));
+    gh.loadPrReviewLinks.mockResolvedValue({ found: true, urls: ["https://github.com/%"] });
+    const r = await gate(8, MAPPED);
+    expect(r.verdict).toBe("block");
+    expect(r.reasons[0]).toMatch(new RegExp(`^TASK-1: ${REVIEW_LINKS_MISSING}: the "## Review links" section has no link for sync`));
+    expect(r.reasons.join(" ")).not.toContain(REVIEW_LINKS_UNCHECKED);
+  });
+
+  it("passes a malformed link next to a valid one", async () => {
+    vi.setSystemTime(new Date("2026-11-02T00:00:00.000Z"));
+    gh.loadPrReviewLinks.mockResolvedValue({
+      found: true,
+      urls: ["https://github.com/%E0%A4", "https://github.com/petralabx/PLX_MC/blob/main/docs/modules/sync/README.md"],
+    });
+    const r = await gate(9, MAPPED);
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).not.toContain("review_links");
+  });
+
   it("never reads the body for unmapped paths", async () => {
     vi.setSystemTime(new Date("2026-11-02T00:00:00.000Z"));
     const r = await gate(4, ["src/lib/x.ts", "README.md"]);

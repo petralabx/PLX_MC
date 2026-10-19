@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-19 (ET) — TASK-3166: the restricted-project evidence guard only covered new uploads
+
+- **What happened:** Sol's r2 review of PR #354 found that a task or project could become restricted after its evidence went to the shared library, so the files stayed readable. A resubmitted file kept its old kind. Two identical concurrent uploads both appended an artifact.
+- **Root cause:** The guard checked the upload, not the later moves and visibility changes. The duplicate check ran once, before the row lock, and matched the hash only.
+- **Rule going forward:** Guard an access invariant at every write that can break it, in the shared state function, not just at the write that creates the data. Re-run a dedupe check under the lock that serializes the writes.
+
 ### 2026-10-17 (ET) — TASK-3174: a commit went in after its pre-commit gate failed
 
 - **What happened:** A screenshot bundle under `artifacts/ui/` failed repo hygiene (no `REPORT.md` or `index.md`). The command ran `preflight.sh --mode pre-commit; git commit … && git push`, so the commit and push went through anyway. The next commit added the missing files.

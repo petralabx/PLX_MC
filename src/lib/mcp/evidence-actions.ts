@@ -101,58 +101,79 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
     );
   }
   const sha256 = createHash("sha256").update(bytes).digest("hex");
-  // The same file again (a retry) returns the record it already has.
+  // The same file again (a retry) returns the record it already has. Sent with
+  // another kind, it reuses the stored file and corrects the kind and caption.
   const existing = task.evidence?.artifacts?.find((artifact) => artifact.sha256 === sha256);
-  if (existing) return { ok: true, taskId, link: taskLink(taskId), artifact: existing, duplicate: true };
+  if (existing?.kind === input.kind) return { ok: true, taskId, link: taskLink(taskId), artifact: existing, duplicate: true };
 
-  const bucket = (await getBuckets()).find((candidate) => candidate.id === task.bucket);
-  const system =
-    TRACKED_REPOS.find((tracked) => tracked.repo.toLowerCase() === dispatch.repo.toLowerCase())?.displayName ?? dispatch.repo;
-  const uploadedAt = new Date().toISOString();
-  // The second and the content hash make the name unique: no upload replaces another.
-  const name = `${uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha256.slice(0, 8)}-${sharePointSafeName(input.fileName)}`;
-  const folder = artifactFolder({ system, project: bucket?.project ?? null, bucket: task.bucket, taskId });
+  let uploaded: EvidenceArtifact | null = null;
+  if (!existing) {
+    const bucket = (await getBuckets()).find((candidate) => candidate.id === task.bucket);
+    const system =
+      TRACKED_REPOS.find((tracked) => tracked.repo.toLowerCase() === dispatch.repo.toLowerCase())?.displayName ?? dispatch.repo;
+    const uploadedAt = new Date().toISOString();
+    // The second and the content hash make the name unique: no upload replaces another.
+    const name = `${uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha256.slice(0, 8)}-${sharePointSafeName(input.fileName)}`;
+    const folder = artifactFolder({ system, project: bucket?.project ?? null, bucket: task.bucket, taskId });
 
-  let item: { id: string; webUrl: string };
-  try {
-    item = await uploadSmallDriveFile(await evidenceDriveId(), `${folder}/${name}`, bytes, input.contentType);
-  } catch (err) {
-    if (!(err instanceof GraphError)) throw err;
-    if (err.status === 403 || err.status === 404) {
-      throw unavailable(`SharePoint refused the upload (${err.status}). ${PERSON_ACTION}`);
+    let item: { id: string; webUrl: string };
+    try {
+      item = await uploadSmallDriveFile(await evidenceDriveId(), `${folder}/${name}`, bytes, input.contentType);
+    } catch (err) {
+      if (!(err instanceof GraphError)) throw err;
+      if (err.status === 403 || err.status === 404) {
+        throw unavailable(`SharePoint refused the upload (${err.status}). ${PERSON_ACTION}`);
+      }
+      throw unavailable(`SharePoint returned ${err.status}. Try again later. If it repeats, tell a person.`);
     }
-    throw unavailable(`SharePoint returned ${err.status}. Try again later. If it repeats, tell a person.`);
+    uploaded = {
+      kind: input.kind,
+      name,
+      caption: input.caption,
+      url: item.webUrl,
+      driveItemId: item.id,
+      contentType: input.contentType,
+      size: bytes.length,
+      sha256,
+      uploadedAt,
+    };
   }
 
-  const artifact: EvidenceArtifact = {
-    kind: input.kind,
-    name,
-    caption: input.caption,
-    url: item.webUrl,
-    driveItemId: item.id,
-    contentType: input.contentType,
-    size: bytes.length,
-    sha256,
-    uploadedAt,
-  };
-  // Append under the task row lock, so two uploads at the same time both stay.
-  await withTransaction(async (q) => {
+  // Recheck by hash under the task row lock: of two identical calls at the same
+  // time, the second finds the first's record and appends nothing.
+  return withTransaction(async (q) => {
     const current = (await getEntity("task", taskId, q, true))?.data as unknown as Task | undefined;
     if (!current) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
+    // A move into a restricted project may have committed since the first check.
+    if (current.bucket !== task.bucket && (await isBucketInRestrictedProject(current.bucket, q))) {
+      throw unavailable(
+        `${taskId} moved into a restricted project during the upload. Nothing was recorded.` +
+          (uploaded ? ` A person must remove ${uploaded.url} from the shared "${PLX_EVIDENCE_STORE.library}" library.` : "")
+      );
+    }
     const evidence = current.evidence ?? { summary: "", items: [] };
+    const artifacts = evidence.artifacts ?? [];
+    const stored = artifacts.find((artifact) => artifact.sha256 === sha256);
+    if (stored?.kind === input.kind) return { ok: true, taskId, link: taskLink(taskId), artifact: stored, duplicate: true };
+    const base = stored ?? existing;
+    const artifact: EvidenceArtifact = base ? { ...base, kind: input.kind, caption: input.caption } : uploaded!;
     await patchTask(
       taskId,
-      { evidence: { ...evidence, artifacts: [...(evidence.artifacts ?? []), artifact] } } as Parameters<typeof patchTask>[1],
+      {
+        evidence: { ...evidence, artifacts: stored ? artifacts.map((a) => (a === stored ? artifact : a)) : [...artifacts, artifact] },
+      } as Parameters<typeof patchTask>[1],
       dispatch.accountableHuman ?? identity.operatorEmail,
       { query: q, attribution: { source: "service", actorId: identity.actor.id } }
     );
     await complianceRepo.appendEventTx(q, {
-      kind: "task.evidence.uploaded",
+      kind: base ? "task.evidence.relabeled" : "task.evidence.uploaded",
       actor: `${identity.runtime}:${identity.operatorEmail}`,
       repo: dispatch.repo,
       taskId,
-      payload: { kind: artifact.kind, name, url: artifact.url, size: artifact.size, sha256 },
+      payload: { kind: artifact.kind, name: artifact.name, url: artifact.url, size: artifact.size, sha256 },
     });
+    return base
+      ? { ok: true, taskId, link: taskLink(taskId), artifact, duplicate: true }
+      : { ok: true, taskId, link: taskLink(taskId), artifact };
   });
-  return { ok: true, taskId, link: taskLink(taskId), artifact };
 }

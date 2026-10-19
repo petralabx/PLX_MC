@@ -40,7 +40,7 @@ import type {
   Task,
 } from "@/lib/mc-data/types";
 import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
-import { assertMoveTargetProjectOpen } from "./bucket-move";
+import { assertMoveTargetProjectOpen, assertNoSharedEvidenceInRestricted } from "./bucket-move";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import { withTransaction, type TxQuery } from "@/lib/db";
 import type { EntityData, FieldAttribution } from "./mapping";
@@ -287,10 +287,11 @@ export async function patchBucket(id: string, patch: PatchBucketInput, actor: st
   if (patch.project) {
     await assertProjectExists(patch.project);
     if (patch.project !== existing.project) {
-      assertMoveTargetProjectOpen(
-        (await repo.getProjects()).find((p) => p.id === patch.project),
-        `bucket ${id}`
-      );
+      const target = (await repo.getProjects()).find((p) => p.id === patch.project);
+      assertMoveTargetProjectOpen(target, `bucket ${id}`);
+      if (isRestrictedProject(target)) {
+        assertNoSharedEvidenceInRestricted(target, await tasksInBuckets([id]), `move bucket ${id} to ${patch.project}`);
+      }
     }
   }
   const defined = definedEntries(patch);
@@ -433,6 +434,14 @@ export interface PatchProjectInput {
   status?: ProjectStatus;
 }
 
+/** The tasks filed under these buckets (TASK-3166 shared-evidence guard). */
+async function tasksInBuckets(bucketIds: readonly string[]): Promise<Task[]> {
+  if (bucketIds.length === 0) return [];
+  return (await repo.getEntities("task"))
+    .map((row) => row.data as unknown as Task)
+    .filter((task) => bucketIds.includes(task.bucket));
+}
+
 export async function patchProject(id: string, patch: PatchProjectInput, actor: string): Promise<Project | null> {
   await ensureProjectsSeeded();
   const existing = (await repo.getProjects()).find((p) => p.id === id);
@@ -458,6 +467,10 @@ export async function patchProject(id: string, patch: PatchProjectInput, actor: 
   });
   next.visibility = acl.visibility;
   next.members = acl.members;
+  if (isRestrictedProject(next) && !isRestrictedProject(existing)) {
+    const bucketIds = (await repo.getBuckets()).filter((b) => b.project === id).map((b) => b.id);
+    assertNoSharedEvidenceInRestricted(next, await tasksInBuckets(bucketIds), `restrict project ${id}`);
+  }
   if (isRestrictedProject(next)) {
     // Stops later outbound pushes. Does not delete already-mirrored SharePoint
     // Projects / Roadmap / ToDos items (restrict-after-push residual).
@@ -731,6 +744,15 @@ export async function patchTask(
     assertMoveTargetProjectOpen(
       (await repo.getProjects(opts.query)).find((p) => p.id === target?.project),
       `${id} to ${taskPatch.bucket}`
+    );
+  }
+  // Shared-library evidence never moves under a restricted project (TASK-3166), on every path.
+  if (taskPatch.bucket && taskPatch.bucket !== current.bucket && current.evidence?.artifacts?.length) {
+    const target = (await repo.getBuckets(opts.query)).find((b) => b.id === taskPatch.bucket);
+    assertNoSharedEvidenceInRestricted(
+      (await repo.getProjects(opts.query)).find((p) => p.id === target?.project),
+      [current],
+      `move ${id} to ${taskPatch.bucket}`
     );
   }
   // Leaving cancelled is a capability-gated, audited reopen (TASK-2529): a generic

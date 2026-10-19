@@ -70,7 +70,7 @@ import {
   type TaskPersonMc,
 } from "./mapping";
 import { isArchived } from "@/lib/mc-data/helpers";
-import { assertMoveTargetProjectOpen, bucketMoveTargetViolation } from "./bucket-move";
+import { assertMoveTargetProjectOpen, assertNoSharedEvidenceInRestricted, bucketMoveTargetViolation } from "./bucket-move";
 import { documentsSyncEnabled } from "@/lib/secrets";
 import { fileEntryFromDriveItem, fileEntryIdForDriveItem, parentSegments, type DriveItem, type FolderRef } from "./documents";
 import { evaluateSyncFreshness, type SyncFreshnessResult } from "./freshness";
@@ -1839,10 +1839,15 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
           : null;
     if (targetProjectId) {
       try {
-        assertMoveTargetProjectOpen(
-          (await repo.getProjects()).find((p) => p.id === targetProjectId),
-          `${conflict.entityId} (${conflict.field})`
-        );
+        const target = (await repo.getProjects()).find((p) => p.id === targetProjectId);
+        assertMoveTargetProjectOpen(target, `${conflict.entityId} (${conflict.field})`);
+        // Nor under a restricted project while shared-library evidence is in scope (TASK-3166).
+        if (isRestrictedProject(target)) {
+          const moved = entityRow
+            ? [entityRow.data as unknown as Task]
+            : (await repo.getEntities("task")).map((row) => row.data as unknown as Task).filter((t) => t.bucket === conflict.entityId);
+          assertNoSharedEvidenceInRestricted(target, moved, `move ${conflict.entityId} (${conflict.field})`);
+        }
       } catch (err) {
         await repo.appendAudit(
           actor,

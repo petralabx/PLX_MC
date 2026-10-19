@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   task: null as null | Record<string, unknown>,
   storeEnabled: true,
   restricted: false,
+  moveDuringUpload: false,
   driveId: "drive-mc" as string | null,
   siteError: null as null | Error,
   uploads: [] as { driveId: string; path: string; size: number; contentType: string }[],
@@ -32,14 +33,23 @@ vi.mock("@/lib/sync/repo", () => ({
 vi.mock("@/lib/sync", () => ({
   patchTask: vi.fn(async (_id: string, patch: Record<string, unknown>) => {
     h.patched.push(patch);
+    h.task = { ...h.task, ...structuredClone(patch) };
     return {};
   }),
 }));
-vi.mock("@/lib/db", () => ({ withTransaction: vi.fn(async (fn: (q: unknown) => unknown) => fn({})) }));
+// One transaction at a time, like the task row lock.
+let txChain: Promise<unknown> = Promise.resolve();
+vi.mock("@/lib/db", () => ({
+  withTransaction: vi.fn((fn: (q: unknown) => unknown) => {
+    const run = txChain.then(() => fn({}));
+    txChain = run.catch(() => undefined);
+    return run;
+  }),
+}));
 vi.mock("@/lib/secrets", () => ({ evidenceStoreEnabled: () => h.storeEnabled }));
 vi.mock("@/lib/permissions/project-acl-guard", () => ({
   assertTaskProjectAccess: vi.fn(async () => undefined),
-  isBucketInRestrictedProject: vi.fn(async () => h.restricted),
+  isBucketInRestrictedProject: vi.fn(async (bucket: string) => h.restricted || bucket === "BKT-PRIVATE"),
 }));
 vi.mock("@/lib/routing/mutations/actors", () => ({
   requireMcpActor: vi.fn(() => ({ actorId: "sp_mcp_claude_code" })),
@@ -56,7 +66,9 @@ vi.mock("@/lib/sync/graph", async () => {
     driveIdByName: vi.fn(async () => h.driveId),
     uploadSmallDriveFile: vi.fn(async (driveId: string, path: string, bytes: Uint8Array, contentType: string) => {
       h.uploads.push({ driveId, path, size: bytes.length, contentType });
-      return { id: "item-1", webUrl: `https://petrasoap.sharepoint.com/sites/PLXSite/${path}`, size: bytes.length };
+      if (h.moveDuringUpload) h.task = { ...h.task, bucket: "BKT-PRIVATE" };
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return { id: `item-${h.uploads.length}`, webUrl: `https://petrasoap.sharepoint.com/sites/PLXSite/${path}`, size: bytes.length };
     }),
   };
 });
@@ -98,6 +110,7 @@ beforeEach(() => {
   };
   h.storeEnabled = true;
   h.restricted = false;
+  h.moveDuringUpload = false;
   h.driveId = "drive-mc";
   h.siteError = null;
   h.uploads.length = 0;
@@ -136,6 +149,31 @@ describe("mc_upload_evidence", () => {
     expect(res).toMatchObject({ duplicate: true, artifact: { driveItemId: "first" } });
     expect(h.uploads).toHaveLength(0);
     expect(h.patched).toHaveLength(0);
+  });
+
+  it("corrects the kind and caption of the same PNG sent again, reusing the stored file", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const sha256 = createHash("sha256").update(png).digest("hex");
+    const stored = { kind: "diagram", name: "n.png", caption: "old", url: "https://sp/n.png", driveItemId: "first", sha256 };
+    h.task = { ...h.task, evidence: { summary: "s", items: [], artifacts: [stored] } };
+    const res = await upload({
+      kind: "screenshot", caption: "The annotated screen", fileName: "n.png", contentType: "image/png", contentBase64: png.toString("base64"),
+    });
+    expect(h.uploads).toHaveLength(0);
+    expect(res).toMatchObject({ duplicate: true, artifact: { ...stored, kind: "screenshot", caption: "The annotated screen" } });
+    const evidence = h.patched[0].evidence as { artifacts: Record<string, unknown>[] };
+    expect(evidence.artifacts).toEqual([{ ...stored, kind: "screenshot", caption: "The annotated screen" }]);
+    expect(h.events).toMatchObject([{ kind: "task.evidence.relabeled", payload: { kind: "screenshot", sha256 } }]);
+  });
+
+  it("records one artifact for two identical uploads at the same time", async () => {
+    const [first, second] = await Promise.all([upload(), upload()]);
+    expect(h.uploads).toHaveLength(2);
+    const artifacts = (h.task?.evidence as { artifacts: { driveItemId: string }[] }).artifacts;
+    expect(artifacts.map((a) => a.driveItemId)).toEqual(["old", "item-2"]);
+    expect([first.artifact.driveItemId, second.artifact.driveItemId]).toEqual(["item-2", "item-2"]);
+    expect(second).toMatchObject({ duplicate: true });
+    expect(h.events.filter((e) => e.kind === "task.evidence.uploaded")).toHaveLength(1);
   });
 
   it("looks the library up once per process", async () => {
@@ -190,6 +228,16 @@ describe("mc_upload_evidence", () => {
     });
     expect(h.uploads).toHaveLength(0);
     expect(h.patched).toHaveLength(0);
+  });
+
+  it("records nothing when the task moved into a restricted project during the upload", async () => {
+    h.moveDuringUpload = true;
+    await expect(upload()).rejects.toMatchObject({
+      code: "evidence_store_unavailable",
+      message: expect.stringMatching(/moved into a restricted project during the upload\. .*A person must remove https:\/\/.+ from the shared "Mission Control" library\.$/),
+    });
+    expect(h.patched).toHaveLength(0);
+    expect(h.events).toHaveLength(0);
   });
 
   it("never creates a missing library", async () => {

@@ -10,6 +10,7 @@ export * from "./ste-lite";
 export * from "./evidence-standard";
 export * from "./evidence-artifacts";
 export * from "./tracked-repos";
+export * from "./review-links";
 // Type-only (erased at build) so client screens can type the Activity payload
 // without pulling the server loaders into the bundle.
 export type {

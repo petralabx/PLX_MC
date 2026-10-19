@@ -3,7 +3,7 @@
 
 .mc .sync-page {
   flex: 1;
-  padding: 22px var(--p-gutter) 80px;
+  padding: 22px var(--mc-page-edge, var(--p-gutter)) 80px;
 }
 
 .mc .regs {
@@ -479,7 +479,7 @@
 
 .mc .files {
   flex: 1;
-  padding: 18px var(--p-gutter) 80px;
+  padding: 18px var(--mc-page-edge, var(--p-gutter)) 80px;
 }
 
 .mc .fcrumbs {
@@ -663,7 +663,7 @@
   display: grid;
   gap: 16px;
   grid-template-columns: auto 1fr auto auto;
-  padding: 15px var(--p-gutter);
+  padding: 15px var(--mc-page-edge, var(--p-gutter));
   text-align: left;
   width: 100%;
 }
@@ -721,7 +721,7 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
-  padding: 0 var(--p-gutter) 16px 72px;
+  padding: 0 var(--mc-page-edge, var(--p-gutter)) 16px 72px;
 }
 
 .mc .repo-row .ritem {
@@ -761,7 +761,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 14px var(--p-gutter);
+  padding: 14px var(--mc-page-edge, var(--p-gutter));
 }
 
 .mc .repo-req-input {
@@ -785,7 +785,7 @@
 
 .mc .repo-reqs {
   border-bottom: 1px solid var(--p-grid-2);
-  padding: 0 var(--p-gutter) 16px;
+  padding: 0 var(--mc-page-edge, var(--p-gutter)) 16px;
 }
 
 .mc .repo-req-row {
@@ -831,7 +831,7 @@
 .mc .intake-queue {
   display: flex;
   flex-direction: column;
-  padding: 8px var(--p-gutter) 80px;
+  padding: 8px var(--mc-page-edge, var(--p-gutter)) 80px;
 }
 
 .mc .intake-row {

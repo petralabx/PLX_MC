@@ -217,7 +217,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px var(--p-gutter) 8px;
+  padding: 11px var(--mc-page-edge, var(--p-gutter)) 8px;
   background: var(--p-rail);
   border-bottom: 1px solid var(--p-grid);
   border-top: 1px solid var(--p-grid);
@@ -245,7 +245,7 @@
   align-items: center;
   grid-template-columns: 84px minmax(220px, 2.2fr) 130px 132px 150px 90px 120px;
   gap: 16px;
-  padding: 11px var(--p-gutter);
+  padding: 11px var(--mc-page-edge, var(--p-gutter));
   /* Rows are <button>s (keyboard-accessible) — neutralize UA button styling. */
   width: 100%;
   background: none;
@@ -532,7 +532,7 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  padding: 8px var(--p-gutter);
+  padding: 8px var(--mc-page-edge, var(--p-gutter));
   border-bottom: 1px solid var(--p-grid);
   background: var(--p-paper);
 }

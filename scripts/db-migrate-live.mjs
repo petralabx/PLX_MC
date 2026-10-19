@@ -190,7 +190,9 @@ export async function schemaSanity({ client, localFiles, ledgerFiles, readMigrat
     let present;
     if (obj.kind === "column") {
       const qualified = obj.names.length === 2;
-      const result = await client.query(`SELECT 1 FROM information_schema.columns WHERE ${qualified ? "table_schema = $3" : "table_schema = ANY (current_schemas(false))"} AND table_name = $1 AND column_name = $2`, [obj.names.at(-1), obj.column, ...(qualified ? [obj.names[0]] : [])]);
+      // pg_catalog, not information_schema.columns: the latter hides columns the caller cannot
+      // read, so the ledger-only plx_mc_schema_check plan role would see false MISSING columns.
+      const result = await client.query(`SELECT 1 FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid = a.attrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE ${qualified ? "n.nspname = $3" : "n.nspname = ANY (current_schemas(false))"} AND c.relname = $1 AND a.attname = $2 AND a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'v', 'f', 'p')`, [obj.names.at(-1), obj.column, ...(qualified ? [obj.names[0]] : [])]);
       present = result.rows.length > 0;
     } else present = Boolean((await client.query("SELECT to_regclass($1) AS object", [obj.regname])).rows?.[0]?.object);
     out.push(`- ${present ? "OK" : "MISSING"} ${obj.kind} ${obj.label}`);

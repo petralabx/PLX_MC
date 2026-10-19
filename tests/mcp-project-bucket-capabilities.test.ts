@@ -8,6 +8,7 @@ import {
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   WORKBENCH_MCP_SERVICE_PRINCIPAL_ID,
   INFRA_MCP_SERVICE_PRINCIPAL_ID,
+  CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID,
   authorize,
   capabilitiesForServicePrincipal,
 } from "@/lib/permissions";
@@ -50,12 +51,13 @@ describe("MCP project and bucket creation capability", () => {
   });
 
   it("grants project and bucket creation to every full-bundle MCP agent principal", () => {
-    // sp_mcp_portal, sp_mcp_workbench and sp_mcp_infra hold least-privilege grants (decision CG-07b).
+    // sp_mcp_portal, sp_mcp_workbench, sp_mcp_infra and sp_mcp_cip_auto_undraft hold least-privilege grants (decision CG-07b).
     for (const principalId of MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
       (id) =>
         id !== PORTAL_MCP_SERVICE_PRINCIPAL_ID &&
         id !== WORKBENCH_MCP_SERVICE_PRINCIPAL_ID &&
-        id !== INFRA_MCP_SERVICE_PRINCIPAL_ID
+        id !== INFRA_MCP_SERVICE_PRINCIPAL_ID &&
+        id !== CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID
     )) {
       const capabilities = capabilitiesForServicePrincipal(principalId);
       expect(capabilities).toEqual(

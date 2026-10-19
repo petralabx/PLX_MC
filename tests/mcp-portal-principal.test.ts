@@ -113,6 +113,7 @@ import {
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   WORKBENCH_MCP_SERVICE_PRINCIPAL_ID,
   INFRA_MCP_SERVICE_PRINCIPAL_ID,
+  CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID,
   authorize,
   capabilitiesForRole,
   capabilitiesForServicePrincipal,
@@ -121,6 +122,7 @@ import {
 const PORTAL = "sp_mcp_portal";
 const WORKBENCH = "sp_mcp_workbench";
 const INFRA = "sp_mcp_infra";
+const CIP = "sp_mcp_cip_auto_undraft";
 
 // The MCP agent bundle at PLX_MC main 20fc262 (grants.ts). P8 must not change it.
 const FULL_MCP_BUNDLE = [
@@ -235,11 +237,11 @@ describe("sp_mcp_portal grant", () => {
   });
 
   it("leaves every other MCP principal on the full MCP bundle", () => {
-    // sp_mcp_workbench and sp_mcp_infra are read-only; their grants are checked below.
+    // sp_mcp_workbench, sp_mcp_infra and sp_mcp_cip_auto_undraft are read-only; their grants are checked below.
     const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
-      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA
+      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA && id !== CIP
     );
-    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 3);
+    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 4);
     for (const principalId of others) {
       // sp_mcp_cursor adds task.cancel only. sp_mcp_cos adds that plus
       // task.link_merged_pr. sp_mcp_ledger adds those plus task.reopen (TASK-2580).
@@ -297,6 +299,26 @@ describe("sp_mcp_infra grant", () => {
     for (const capability of CAPABILITIES) {
       const allowed = authorize({
         actor: { kind: "service", id: INFRA, status: "active" },
+        capability,
+      }).allowed;
+      expect({ capability, allowed }).toEqual({ capability, allowed: capability === "task.read" });
+    }
+  });
+});
+
+// sp_mcp_cip_auto_undraft (PLX CIP Auto-Undraft, agentic-swarm cip-auto-undraft) is read-only:
+// task.read and nothing else. A capability added later is denied unless it is task.read.
+describe("sp_mcp_cip_auto_undraft grant", () => {
+  it("is a reviewed MCP principal", () => {
+    expect(CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID).toBe(CIP);
+    expect(MCP_AGENT_SERVICE_PRINCIPAL_IDS).toContain(CIP);
+  });
+
+  it("holds exactly task.read and is denied every write capability", () => {
+    expect([...capabilitiesForServicePrincipal(CIP)]).toEqual(["task.read"]);
+    for (const capability of CAPABILITIES) {
+      const allowed = authorize({
+        actor: { kind: "service", id: CIP, status: "active" },
         capability,
       }).allowed;
       expect({ capability, allowed }).toEqual({ capability, allowed: capability === "task.read" });

@@ -14,6 +14,7 @@
   padding: 0 0 80px;
   flex: 1;
   max-width: 920px;
+  margin-inline-start: calc(var(--mc-page-edge, var(--p-gutter)) - var(--p-gutter));
 }
 
 .mc .feed-head-agents {
@@ -243,6 +244,15 @@
   min-width: 0;
 }
 
+/* Only the outer columns take the ultra-wide page edge. */
+.mc .bk .bkbody .c:first-child {
+  padding-left: var(--mc-page-edge, var(--p-gutter));
+}
+
+.mc .bk .bkbody .c:last-child {
+  padding-right: var(--mc-page-edge, var(--p-gutter));
+}
+
 .mc .bk .bkbody .c + .c {
   border-left: 1px solid var(--p-grid);
   background: var(--p-paper);
@@ -283,7 +293,7 @@
    the pill. */
 .mc .init-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 14px;
 }
 
@@ -384,28 +394,46 @@
   white-space: nowrap;
 }
 
-/* Initiative card grid rides the same tiers as the facts strip: 3-up → 2-up →
-   1-up. Must sit AFTER the base .init-grid rule — equal specificity, so source
-   order is what lets the media override win. */
-@media (max-width: 1024px) {
-  .mc .init-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.mc .init-card .meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: var(--p-text-kicker);
+  letter-spacing: var(--p-track-data);
+  color: var(--p-muted);
 }
 
-@media (max-width: 640px) {
-  .mc .init-grid {
-    grid-template-columns: 1fr;
-  }
+.mc .init-card .meta > span:first-child {
+  white-space: nowrap;
 }
 
-/* ─── Project Overview lens ──────────────────────────────────────────────────
-   The whole project tree on one page: collapsible initiative sections (health
-   left-rule, progress bar + count in the header) over dense bordered task
-   tables. Mock: .orchestrator/design-projects/rollup-mock/index.html. */
+.mc .init-card .meta .sep {
+  color: var(--p-grid);
+}
+
+.mc .init-card .meta .spec {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--p-accent);
+}
+
+.mc .init-card .meta .spec .lb {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ─── Project page (TASK-3174) ───────────────────────────────────────────────
+   Header, overview strip, resource tiles and the Overview lens. Tiers follow
+   width through @container (main for page-level pivots; pv-res, pv-sec and
+   pv-tt for blocks that tier by their own width) — no new media queries. */
 
 /* Lens switcher in the page header — restates the .tb .seg recipe (scoped to
-   the toolbar) for the .ph right rail, same move as .bkfacts .ntm-field-btn. */
+   the toolbar) for the .ph right rail. */
 .mc .ph .pv-seg {
   display: inline-flex;
   align-items: center;
@@ -440,20 +468,503 @@
   grid-template-columns: 1fr;
 }
 
-/* Facts-strip progress cell */
-.mc .bkfacts .pv-progress-ct {
+/* Overview strip: facts zone beside the schedule-vs-work zone. The fixed
+   340/440px facts zone pads with --p-gutter, so the strip takes the ultra-wide
+   page edge as outer padding (page edge − gutter) and lines up with the page
+   header. Below the column tier the outer padding is 0. */
+.mc .pv-strip {
+  padding-inline: calc(var(--mc-page-edge, var(--p-gutter)) - var(--p-gutter));
+  background: var(--p-paper);
+  border-bottom: 1px solid var(--p-grid);
+}
+
+.mc .pv-strip-in {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+}
+
+.mc .pv-strip-in.cols-3 {
+  grid-template-columns: 440px minmax(0, 1fr);
+}
+
+.mc .pv-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 22px;
+  align-content: center;
+  padding: 16px var(--p-gutter);
+  border-right: 1px solid var(--p-grid-2);
+}
+
+.mc .cols-3 .pv-facts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mc .pv-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mc .pv-fact .k {
   font-family: var(--mono);
-  font-size: var(--p-text-mono);
-  letter-spacing: var(--p-track-data);
+  font-size: var(--p-text-cap-2);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   color: var(--p-muted);
 }
 
-.mc .bkfacts .pv-progress-spine {
-  margin-top: 6px;
+.mc .pv-fact .v {
+  display: flex;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: var(--p-text-small);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--p-ink);
+}
+
+/* Health select dressed as the outline pill: tone border, dot, chevron. */
+.mc .pv-health-select {
+  --tone: var(--p-ok);
+  --tone-text: var(--p-ok-text);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.mc .pv-health-select.warn {
+  --tone: var(--p-warn);
+  --tone-text: var(--p-warn-text);
+}
+
+.mc .pv-health-select.hot {
+  --tone: var(--p-hot);
+  --tone-text: var(--p-hot-text);
+}
+
+.mc .pv-health-select::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tone);
+  pointer-events: none;
+}
+
+.mc .pv-health-select select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--tone);
+  border-radius: 0;
+  background: transparent;
+  color: var(--tone-text);
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: var(--p-track-meta);
+  text-transform: uppercase;
+  padding: 3px 22px 3px 19px;
+  cursor: pointer;
+}
+
+.mc .pv-health-select .caret {
+  position: absolute;
+  right: 7px;
+  color: var(--tone-text);
+  pointer-events: none;
+}
+
+/* Owner: avatar + name + chevron; the border shows on hover only. */
+.mc .pv-owner {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mc .pv-strip .ntm-field-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: -2px;
+  padding: 2px 6px 2px 2px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--p-ink);
+  cursor: pointer;
+  transition: border-color var(--p-dur-fast) var(--p-ease);
+}
+
+.mc .pv-strip .ntm-field-btn:hover {
+  border-color: var(--p-grid);
+}
+
+.mc .pv-strip .ntm-field-btn .who {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.mc .pv-strip .ntm-field-btn .nm {
+  font-family: var(--mono);
+  font-size: var(--p-text-small);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mc .pv-strip .ntm-field-btn .caret {
+  flex: 0 0 auto;
+  color: var(--p-muted);
+}
+
+.mc .pv-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--p-muted);
+}
+
+.mc .pv-target .le-input {
+  width: 12ch;
+  min-width: 0;
+  font-size: var(--p-text-small);
+  font-weight: 500;
+}
+
+/* Schedule vs work */
+.mc .pv-sched {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px var(--p-gutter) 15px;
+}
+
+.mc .pv-sched-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+
+.mc .pv-sched-head .num {
+  font-family: var(--mazius);
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--p-ink);
+}
+
+.mc .pv-sched-head .num.muted {
+  color: var(--p-muted);
+}
+
+.mc .pv-sched-head .lb {
+  font-size: var(--p-text-ui);
+  color: var(--p-ink-2);
+}
+
+.mc .pv-sched-head .vs {
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: var(--p-track-meta);
+  text-transform: uppercase;
+  color: var(--p-muted);
+  padding: 0 6px;
+}
+
+.mc .pv-pace {
+  --tone: var(--p-grid);
+  --tone-text: var(--p-muted);
+  margin-left: auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--tone);
+  color: var(--tone-text);
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: var(--p-track-meta);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.mc .pv-pace.ahead {
+  --tone: var(--p-ok);
+  --tone-text: var(--p-ok-text);
+}
+
+.mc .pv-pace.behind,
+.mc .pv-pace.overdue {
+  --tone: var(--p-warn);
+  --tone-text: var(--p-warn-text);
+}
+
+.mc .pv-bars {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.mc .pv-bars .k {
+  font-family: var(--mono);
+  font-size: var(--p-text-cap-2);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+/* Work: one flex segment per state, grown by its task count. */
+.mc .pv-workbar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+}
+
+.mc .pv-workbar:empty {
+  background: var(--p-grid-2);
+  border-radius: 1px;
+}
+
+.mc .pv-workbar .seg {
+  flex-basis: 0;
+  border-radius: 1px;
+  background: var(--p-grid-2);
+}
+
+.mc .pv-workbar .seg.done {
+  background: var(--p-ink);
+}
+
+.mc .pv-workbar .seg.cancelled {
+  background: var(--p-grid);
+}
+
+.mc .pv-workbar .seg.doing {
+  background: var(--p-accent);
+}
+
+.mc .pv-timebar {
+  position: relative;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--p-grid-2);
+}
+
+.mc .pv-timebar .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--pct, 0%);
+  border-radius: 1px;
+  background: var(--p-muted);
+}
+
+.mc .pv-timebar .tick {
+  position: absolute;
+  left: var(--pct, 0%);
+  top: -5px;
+  width: 1px;
+  height: 16px;
+  background: var(--p-ink);
+}
+
+.mc .pv-dates {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-left: 52px;
+  font-family: var(--mono);
+  font-size: var(--p-text-cap);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .pv-dates .today {
+  position: absolute;
+  left: calc(52px + (100% - 52px) * var(--frac, 0));
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: var(--p-ink);
+}
+
+.mc .pv-subline {
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+
+.mc .pv-subline .warn {
+  color: var(--p-warn-text);
+}
+
+.mc .pv-subline .hot {
+  color: var(--p-hot-text);
+}
+
+/* Project resources: register tiles on a 1px hairline grid. */
+.mc .pv-res {
+  container: pv-res / inline-size;
+}
+
+.mc .pv-tiles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--p-grid-2);
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius);
+  overflow: hidden;
+}
+
+.mc .pv-tile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 9px 12px;
+  border: 0;
+  background: var(--p-paper);
+  color: var(--p-ink);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--p-dur-fast) var(--p-ease);
+}
+
+.mc .pv-tile:hover {
+  background: var(--p-paper-2);
+}
+
+.mc .pv-tile .ic {
+  flex: 0 0 auto;
+  color: var(--p-accent);
+}
+
+.mc .pv-tile .tx {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mc .pv-tile .t {
+  font-size: var(--p-text-ui);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mc .pv-tile .m {
+  font-family: var(--mono);
+  font-size: var(--p-text-cap-2);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mc .pv-tile .ext {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--p-muted);
+}
+
+/* Overview lens header (a .blk .bh row): kicker · task filter · expand/collapse. */
+.mc .blk .pv-ovh {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+}
+
+.mc .pv-ovh-acts {
+  display: inline-flex;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.mc .pv-textbtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--p-dur-fast) var(--p-ease);
+}
+
+.mc .pv-textbtn:hover {
+  color: var(--p-accent);
+}
+
+.mc .pv-filter {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--p-grid);
+}
+
+.mc .pv-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 0;
+  border-left: 1px solid var(--p-grid);
+  background: transparent;
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mc .pv-filter button:first-child {
+  border-left: 0;
+}
+
+.mc .pv-filter button.on {
+  background: var(--p-ink);
+  color: var(--p-paper);
+}
+
+.mc .pv-filter .short {
+  display: none;
 }
 
 /* Initiative sections */
 .mc .pv-sec {
+  container: pv-sec / inline-size;
   border: 1px solid var(--p-grid);
   border-left: 3px solid var(--p-grid);
   border-radius: var(--p-radius);
@@ -480,88 +991,171 @@
 
 .mc .pv-sec-h {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  padding-right: 16px;
+  gap: 6px 12px;
+  min-height: 48px;
+  padding: 8px 14px 8px 8px;
 }
 
-.mc .pv-sec-toggle {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 16px minmax(160px, 1.2fr) auto 1fr auto;
-  gap: 12px;
+.mc .pv-sec-chev {
+  flex: 0 0 28px;
+  height: 28px;
+  display: inline-flex;
   align-items: center;
-  padding: 11px 12px 11px 16px;
+  justify-content: center;
+  padding: 0;
   border: 0;
   background: transparent;
-  text-align: left;
-  cursor: pointer;
-  min-width: 0;
-  transition: background var(--p-dur-fast) var(--p-ease);
-}
-
-.mc .pv-sec-toggle:hover {
-  background: var(--p-paper-2);
-}
-
-.mc .pv-sec-toggle .chev {
-  font-family: var(--mono);
-  font-size: var(--p-text-meta);
   color: var(--p-muted);
-  transition: transform var(--p-dur) var(--p-ease);
+  cursor: pointer;
 }
 
-.mc .pv-sec.closed .pv-sec-toggle .chev {
-  transform: rotate(-90deg);
+.mc .pv-sec-chev:hover {
+  color: var(--p-ink);
 }
 
-.mc .pv-sec-toggle .nm {
+/* Title block takes the slack; the name clamps to two lines so it never
+   collides with the right cluster. */
+.mc .pv-sec-title {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mc .pv-sec-title .nm {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
   font-size: var(--p-text-lede);
   font-weight: 600;
   letter-spacing: -0.01em;
+  line-height: 1.3;
   color: var(--p-ink);
-  white-space: nowrap;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-wrap: pretty;
 }
 
-.mc .pv-sec-toggle .id {
+.mc .pv-sec-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
   font-family: var(--mono);
   font-size: var(--p-text-kicker);
   letter-spacing: var(--p-track-data);
   color: var(--p-muted);
 }
 
-.mc .pv-sec-toggle .track {
+.mc .pv-sec-meta .id {
+  white-space: nowrap;
+}
+
+.mc .pv-sec-meta .sep {
+  color: var(--p-grid);
+}
+
+.mc .pv-spec {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--p-accent);
+  text-decoration: none;
+}
+
+.mc .pv-spec:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mc .pv-spec .lb {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mc .pv-spec-add {
+  display: contents;
+}
+
+/* "+ Add spec" opens the PrdLinkField in flow, on its own line. */
+.mc .pv-spec-pop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  flex: 1 1 100%;
+  padding: 6px 0 2px;
+}
+
+.mc .pv-spec-pop .f {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mc .pv-spec-pop .f .k {
+  font-size: var(--p-text-cap-2);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.mc .pv-spec-pop .le-input {
+  width: min(360px, 70vw);
+}
+
+.mc .pv-sec-r {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mc .pv-sec-r .track {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
 }
 
-.mc .pv-sec-toggle .track .bar {
-  flex: 1;
-  max-width: 220px;
+.mc .pv-sec-r .track .bar {
+  flex: 0 0 140px;
   height: 3px;
   border-radius: 2px;
   background: var(--p-grid-2);
   overflow: hidden;
 }
 
-.mc .pv-sec-toggle .track .bar .fill {
+.mc .pv-sec-r .track .bar .fill {
   display: block;
   width: var(--pct, 0%);
   height: 100%;
   background: var(--p-accent);
 }
 
-.mc .pv-sec-toggle .track .ct {
+.mc .pv-sec-r .track .ct {
   font-family: var(--mono);
   font-size: var(--p-text-cap);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--p-muted);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.mc .pv-sec-r .ct .short {
+  display: none;
 }
 
 .mc .pv-open {
@@ -569,18 +1163,20 @@
   white-space: nowrap;
 }
 
-/* Task table — list-row language (borders, not cards) */
+/* Task table — list-row language (borders, not cards). Columns tier by the
+   table's own width: ID · Task · Stage · Pri · Executor · Due. */
 .mc .pv-tt {
+  container: pv-tt / inline-size;
   border-top: 1px solid var(--p-grid-2);
 }
 
 .mc .pv-thead,
 .mc .pv-trow {
   display: grid;
-  grid-template-columns: 74px 1fr 96px 56px 170px 64px;
+  grid-template-columns: 76px minmax(0, 1fr) 96px 56px 170px 64px;
   gap: 12px;
   align-items: center;
-  padding: 8px 16px 8px 44px;
+  padding: 8px 14px 8px 44px;
 }
 
 .mc .pv-thead {
@@ -602,11 +1198,13 @@
 
 .mc .pv-trow {
   width: 100%;
+  min-height: 34px;
   border: 0;
   border-top: 1px solid var(--p-grid-2);
   background: transparent;
   text-align: left;
   font-size: var(--p-text-ui);
+  color: var(--p-ink);
   cursor: pointer;
   transition: background var(--p-dur-fast) var(--p-ease);
 }
@@ -617,12 +1215,25 @@
 
 .mc .pv-trow .tid {
   font-family: var(--mono);
-  font-size: var(--p-text-mono);
+  font-size: var(--p-text-meta);
   letter-spacing: var(--p-track-data);
   color: var(--p-muted);
+  white-space: nowrap;
+}
+
+.mc .pv-trow .tmain {
+  min-width: 0;
+}
+
+.mc .pv-trow .tline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .mc .pv-trow .ttl {
+  min-width: 0;
   color: var(--p-ink);
   white-space: nowrap;
   overflow: hidden;
@@ -633,15 +1244,56 @@
   color: var(--p-accent);
 }
 
+.mc .pv-trow .tmeta {
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: var(--p-text-kicker);
+  letter-spacing: var(--p-track-data);
+  color: var(--p-muted);
+}
+
+.mc .pv-trow .tmeta .hot {
+  color: var(--p-warn-text);
+}
+
+.mc .pv-tag {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 5px;
+  border: 1px solid var(--p-grid);
+  font-family: var(--mono);
+  font-size: var(--p-text-cap-2);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+
+.mc .pv-tag.warn {
+  border-color: var(--p-warn);
+  color: var(--p-warn-text);
+}
+
+.mc .pv-tag.info {
+  border-color: var(--p-info);
+  color: var(--p-info-text);
+}
+
 /* Stage chip — 12% color-mix fill + the dedicated status TEXT tokens (the
    contrast-remediation pairing brand-tokens.css documents for chip fills). */
 .mc .pv-chip {
   font-family: var(--mono);
-  font-size: var(--p-text-cap);
+  font-size: var(--p-text-tick);
   letter-spacing: var(--p-track-meta);
   text-transform: uppercase;
   padding: 2px 7px;
-  border-radius: 2px;
+  border-radius: var(--p-radius-sm);
   justify-self: start;
   white-space: nowrap;
 }
@@ -671,7 +1323,56 @@
   background: color-mix(in srgb, var(--p-ok) 12%, transparent);
 }
 
+/* Priority: four bars rising 5.5 → 10px; the filled count is the level. */
+.mc .pv-pribars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 10px;
+}
+
+.mc .pv-pribars span {
+  width: 4px;
+  background: var(--p-grid);
+}
+
+.mc .pv-pribars span:nth-child(1) {
+  height: 5.5px;
+}
+
+.mc .pv-pribars span:nth-child(2) {
+  height: 7px;
+}
+
+.mc .pv-pribars span:nth-child(3) {
+  height: 8.5px;
+}
+
+.mc .pv-pribars span:nth-child(4) {
+  height: 10px;
+}
+
+.mc .pv-pribars.hot span.on {
+  background: var(--p-hot);
+}
+
+.mc .pv-pribars.warn span.on {
+  background: var(--p-warn);
+}
+
+.mc .pv-pribars.info span.on {
+  background: var(--p-info);
+}
+
+.mc .pv-pribars.muted span.on {
+  background: var(--p-muted);
+}
+
 .mc .pv-trow .pv-who {
+  min-width: 0;
+}
+
+.mc .pv-trow .pv-who .who {
   min-width: 0;
 }
 
@@ -685,10 +1386,11 @@
 
 .mc .pv-due {
   font-family: var(--mono);
-  font-size: var(--p-text-mono);
+  font-size: var(--p-text-meta);
   color: var(--p-muted);
   text-align: right;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .mc .pv-due.hot {
@@ -696,86 +1398,216 @@
 }
 
 .mc .pv-empty {
-  padding: 12px 16px 14px 44px;
-  border-top: 1px solid var(--p-grid-2);
+  padding: 12px 14px 14px 44px;
   font-size: var(--p-text-ui);
   color: var(--p-muted);
   margin: 0;
 }
 
-/* Responsive: shed columns down the tiers (pri/due at ≤1024, id/executor at
-   ≤640), same pivots as the rest of MC. Media blocks sit AFTER the base rules
-   they override (equal specificity — source order decides). */
-@media (max-width: 1024px) {
+/* Footer rows: show all (row cap) and the closed reveal. */
+.mc .pv-tfoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 14px 9px 44px;
+  border: 0;
+  border-top: 1px solid var(--p-grid-2);
+  background: transparent;
+  font-family: var(--mono);
+  font-size: var(--p-text-tick);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--p-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--p-dur-fast) var(--p-ease);
+}
+
+.mc .pv-tfoot.more {
+  background: var(--p-paper-2);
+}
+
+.mc .pv-tfoot:hover {
+  color: var(--p-accent);
+}
+
+/* ─── Width tiers (container queries; equal specificity, so these blocks
+   must stay AFTER the base rules above) ──────────────────────────────────── */
+
+/* Table: drop Pri below 1000px, ID and Due below 720px, card rows below 600px. */
+@container pv-tt (max-width: 999px) {
   .mc .pv-thead,
   .mc .pv-trow {
-    grid-template-columns: 74px 1fr 96px 170px;
+    grid-template-columns: 76px minmax(0, 1fr) 96px 150px 64px;
   }
 
   .mc .pv-thead .h-pri,
+  .mc .pv-trow .pv-pri {
+    display: none;
+  }
+}
+
+@container pv-tt (max-width: 719px) {
+  .mc .pv-thead,
+  .mc .pv-trow {
+    grid-template-columns: minmax(0, 1fr) 96px 130px;
+  }
+
+  .mc .pv-thead .h-id,
   .mc .pv-thead .h-due,
-  .mc .pv-trow .pv-pri,
+  .mc .pv-trow .tid,
   .mc .pv-trow .pv-due {
     display: none;
   }
 }
 
-@media (max-width: 640px) {
-  .mc .pv-sec-toggle {
-    grid-template-columns: 16px 1fr auto;
-    grid-template-rows: auto auto;
-    row-gap: 6px;
-  }
-
-  .mc .pv-sec-toggle .id {
-    display: none;
-  }
-
-  .mc .pv-sec-toggle .track {
-    grid-column: 2 / -1;
-    grid-row: 2;
-  }
-
+@container pv-tt (max-width: 599px) {
   .mc .pv-thead,
-  .mc .pv-trow {
-    grid-template-columns: 1fr 96px;
-    padding-left: 30px;
-  }
-
-  .mc .pv-thead .h-id,
-  .mc .pv-thead .h-who,
-  .mc .pv-trow .tid,
-  .mc .pv-trow .pv-who {
+  .mc .pv-trow .pv-who,
+  .mc .pv-trow .tline .pv-tag {
     display: none;
   }
+
+  .mc .pv-trow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
+    padding: 9px 14px;
+  }
+
+  .mc .pv-trow .ttl {
+    white-space: normal;
+    font-size: var(--p-text-lede);
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .mc .pv-trow .tmeta {
+    display: flex;
+  }
+
+  .mc .pv-trow .pv-chip {
+    margin-top: 2px;
+  }
+
+  .mc .pv-empty,
+  .mc .pv-tfoot {
+    padding-left: 14px;
+  }
 }
 
-/* Project detail — inline edit parity (P2). The owner cell reuses the New-Task
-   modal's field-button recipe (ntm-field-btn), which is scoped under .ntm —
-   restate it for the facts strip. The health select and target input reuse the
-   global .rfact-select / .le-input skins as-is. */
-.mc .bkfacts .ntm-field-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  max-width: 100%;
-  border: 1px dashed var(--p-grid);
-  background: transparent;
-  padding: 4px 8px;
-  color: var(--p-ink);
-  cursor: pointer;
+/* Section header: the right cluster wraps to its own indented row below
+   1000px and the count shortens; below 600px the bar takes the row. */
+@container pv-sec (max-width: 999px) {
+  .mc .pv-sec-r {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    padding-left: 36px;
+  }
+
+  .mc .pv-sec-r .track .bar {
+    flex-basis: 120px;
+  }
+
+  .mc .pv-sec-r .ct .long {
+    display: none;
+  }
+
+  .mc .pv-sec-r .ct .short {
+    display: inline;
+  }
 }
 
-.mc .bkfacts .ntm-field-btn:hover {
-  border-color: var(--p-ink-2);
+@container pv-sec (max-width: 599px) {
+  .mc .pv-sec-r .track {
+    flex: 1 1 100%;
+  }
+
+  /* 320–360px phones: the bar may shrink and the count may wrap, so the
+     section's overflow: hidden never clips the count. */
+  .mc .pv-sec-r .track .bar {
+    flex: 0 1 96px;
+    min-width: 48px;
+  }
+
+  .mc .pv-sec-r .track .ct {
+    min-width: 0;
+    white-space: normal;
+  }
 }
 
-.mc .bkfacts .ntm-field-btn .caret {
-  font-family: var(--mono);
-  font-size: var(--p-text-tick);
-  color: var(--p-muted);
-  flex: 0 0 auto;
+/* Resource tiles: 5 → 3 → 2 columns. */
+@container pv-res (max-width: 999px) {
+  .mc .pv-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container pv-res (max-width: 599px) {
+  .mc .pv-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Page-level pivots follow the main content width. */
+@container main (max-width: 1024px) {
+  .mc .ph .pv-seg button,
+  .mc .pv-filter button,
+  .mc .pv-tfoot {
+    min-height: 44px;
+  }
+
+  .mc .pv-sec-chev {
+    flex-basis: 40px;
+    height: 40px;
+  }
+}
+
+@container main (max-width: 899px) {
+  .mc .pv-strip-in,
+  .mc .pv-strip-in.cols-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mc .pv-facts {
+    border-right: 0;
+    border-bottom: 1px solid var(--p-grid-2);
+  }
+}
+
+@container main (max-width: 599px) {
+  .mc .pv-sched-head .num {
+    font-size: 30px;
+  }
+
+  /* The owner picker anchors to the facts zone's left edge, not the owner
+     cell (column 2 or 3), so its 284px never runs past a phone viewport. */
+  .mc .pv-facts {
+    position: relative;
+  }
+
+  .mc .pv-strip .pv-owner {
+    position: static;
+  }
+
+  .mc .pv-strip .ppick {
+    min-width: min(284px, 100%);
+  }
+
+  .mc .pv-dates .today {
+    display: none;
+  }
+
+  .mc .pv-filter .long {
+    display: none;
+  }
+
+  .mc .pv-filter .short {
+    display: inline;
+  }
 }
 
 /* Header description edit: constrain the textarea to the .sub column width. */
@@ -1169,7 +2001,7 @@
   display: grid;
   grid-template-columns: 90px minmax(220px, 1.6fr) 150px 150px 110px 96px 96px;
   gap: 14px;
-  padding: 14px var(--p-gutter);
+  padding: 14px var(--mc-page-edge, var(--p-gutter));
   border-bottom: 1px solid var(--p-grid-2);
   align-items: center;
 }

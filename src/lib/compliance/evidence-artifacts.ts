@@ -20,8 +20,15 @@ export const ARTIFACT_CONTENT_TYPES: Readonly<Record<EvidenceArtifactKind, reado
 /** A video's file name must end in the extension of its type, so SharePoint plays it. */
 export const VIDEO_EXTENSIONS: Readonly<Record<string, string>> = { "video/mp4": ".mp4", "video/webm": ".webm" };
 
-/** 3 MiB: the base64 body of an inline upload stays under Vercel's 4.5 MB request limit. */
-export const MAX_ARTIFACT_BYTES = 3 * 1024 * 1024;
+/** The MCP transport refuses a request body over 4 MiB. */
+export const MCP_TRANSPORT_LIMIT_BYTES = 4 * 1024 * 1024;
+/** Room kept for the JSON-RPC envelope and the other arguments (64 KiB). */
+export const MCP_ENVELOPE_RESERVE_BYTES = 64 * 1024;
+/**
+ * The largest raw file whose base64 body plus the envelope fits the 4 MiB MCP limit.
+ * base64 turns every 3 bytes into 4 characters: 3,096,576 bytes (about 2.95 MiB).
+ */
+export const MAX_ARTIFACT_BYTES = Math.floor((MCP_TRANSPORT_LIMIT_BYTES - MCP_ENVELOPE_RESERVE_BYTES) / 4) * 3;
 
 /**
  * 100 MiB: a 3–5 minute plx-knowledge-video MP4 (1600 px, CRF 20) fits. A larger
@@ -78,7 +85,11 @@ export function artifactProblem(
   const allowed = ARTIFACT_CONTENT_TYPES[kind];
   if (!allowed.includes(contentType)) return `A ${kind} must be ${allowed.join(" or ")}, not ${contentType}.`;
   if (size === 0) return "The file is empty.";
-  if (size > maxArtifactBytes(kind)) return `The file has ${size} bytes. Limit: ${maxArtifactBytes(kind)}.`;
+  if (size > maxArtifactBytes(kind)) {
+    return kind === "video"
+      ? `The file has ${size} bytes. Limit: ${MAX_VIDEO_BYTES}.`
+      : `The file has ${size} bytes. Limit: ${MAX_ARTIFACT_BYTES}, so the base64 upload fits the 4 MiB MCP limit.`;
+  }
   if (!bytes) return null;
   const actual = sniffContentType(bytes);
   if (actual !== contentType) return `The file content is ${actual ?? "not an accepted type"}, not ${contentType}.`;

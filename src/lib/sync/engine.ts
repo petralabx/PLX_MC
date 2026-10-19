@@ -70,7 +70,7 @@ import {
   type TaskPersonMc,
 } from "./mapping";
 import { isArchived } from "@/lib/mc-data/helpers";
-import { assertMoveTargetProjectOpen, bucketMoveTargetViolation } from "./bucket-move";
+import { assertMoveTargetProjectOpen, assertNoSharedEvidenceInRestricted, bucketMoveTargetViolation } from "./bucket-move";
 import { documentsSyncEnabled } from "@/lib/secrets";
 import { fileEntryFromDriveItem, fileEntryIdForDriveItem, parentSegments, type DriveItem, type FolderRef } from "./documents";
 import { evaluateSyncFreshness, type SyncFreshnessResult } from "./freshness";
@@ -1268,11 +1268,42 @@ async function pullRoadmap(ctx: SiteContext, recoverExpiredToken = true): Promis
       const nextAttr = { ...(row.fieldAttribution ?? {}) };
       for (const f of clearedDirty) delete nextAttr[f];
       for (const f of Object.keys(apply)) delete nextAttr[f];
-      await repo.updateBucket(row.bucket.id, {
-        patch: apply as Partial<Bucket>,
-        dirtyFields: nextDirty,
-        fieldAttribution: nextAttr,
-      });
+      try {
+        await repo.updateBucket(row.bucket.id, {
+          patch: apply as Partial<Bucket>,
+          dirtyFields: nextDirty,
+          fieldAttribution: nextAttr,
+        });
+      } catch (err) {
+        // The repo refuses to put shared-library evidence under a restricted
+        // project (TASK-3166). Keep MC's parent, apply the rest, and leave the
+        // move to a person as a Sync conflict.
+        if (!(err instanceof ApiError && err.code === "shared_evidence" && "project" in apply)) throw err;
+        const spProject = apply.project;
+        delete apply.project;
+        await repo.insertConflict({
+          id: `cf-${row.bucket.id.toLowerCase()}-project-${Date.now()}`,
+          entityType: "bucket",
+          entityId: row.bucket.id,
+          field: displayFieldFor("bucket", "project") ?? "project",
+          mcVal: displayValue(row.bucket.project),
+          spVal: displayValue(spProject),
+          by: SYNC_ACTOR,
+          note: err.message,
+        });
+        await repo.updateBucket(row.bucket.id, {
+          patch: apply as Partial<Bucket>,
+          syncState: "conflict",
+          dirtyFields: nextDirty,
+          fieldAttribution: nextAttr,
+        });
+        await repo.appendAudit(
+          SYNC_ACTOR,
+          `Conflict detected on ${row.bucket.id} · project (SharePoint move refused: ${err.message}).`,
+          "conflict"
+        );
+        result.conflicts += 1;
+      }
       if (Object.keys(apply).length > 0) {
         await repo.appendAudit(
           SYNC_ACTOR,
@@ -1839,10 +1870,15 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
           : null;
     if (targetProjectId) {
       try {
-        assertMoveTargetProjectOpen(
-          (await repo.getProjects()).find((p) => p.id === targetProjectId),
-          `${conflict.entityId} (${conflict.field})`
-        );
+        const target = (await repo.getProjects()).find((p) => p.id === targetProjectId);
+        assertMoveTargetProjectOpen(target, `${conflict.entityId} (${conflict.field})`);
+        // Nor under a restricted project while shared-library evidence is in scope (TASK-3166).
+        if (isRestrictedProject(target)) {
+          const moved = entityRow
+            ? [entityRow.data as unknown as Task]
+            : (await repo.getEntities("task")).map((row) => row.data as unknown as Task).filter((t) => t.bucket === conflict.entityId);
+          assertNoSharedEvidenceInRestricted(target, moved, `move ${conflict.entityId} (${conflict.field})`);
+        }
       } catch (err) {
         await repo.appendAudit(
           actor,

@@ -1,7 +1,7 @@
 /* Routing Inbox — scoped under .mc; --p-* tokens only (no raw hex). */
 
 .ri-page {
-  padding: 0 var(--p-gutter) 80px;
+  padding: 0 var(--mc-page-edge, var(--p-gutter)) 80px;
   max-width: 1100px;
 }
 

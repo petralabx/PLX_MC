@@ -1,7 +1,8 @@
 // Revenue forecast (TASK-3151), pure: the AO ↔ order-line link (the portal's
 // OE Fix), the bucket precedence, several AOs on one line, the four numbers to
 // the cent, the hit rate from the stored per-run summaries, production with no
-// order behind it, and the list's chips, search and totals. The fixture is a
+// order behind it, and the list's chips, customer class and item category
+// filters (TASK-3177), search and totals. The fixture is a
 // synthetic October 2026 (tests/fixtures/reporting-goals/2026-10-14/forecast.json,
 // what the two forecast queries return for the source rows in
 // forecast-source.json), at the run's USD/CAD 1.4219. The SQL-level choices
@@ -19,15 +20,21 @@ import { ForecastSection } from "@/components/mc/goals/forecast";
 import { isReady } from "@/components/mc/goals/helpers";
 
 import {
+  FORECAST_CATEGORY_COLUMNS,
   FORECAST_COLUMNS,
+  MANUFACTURING_CATEGORIES,
   aoStage,
   buildForecast,
   bucketFor,
   centsToDecimal,
+  channelOf,
   computeGoals,
+  customerClassOf,
   filterForecastRows,
   fixOeNumber,
   forecastCadCents,
+  activeCategoryFilter,
+  forecastCategoryOptions,
   forecastRows,
   forecastSummary,
   hitRateMonths,
@@ -38,6 +45,8 @@ import {
   productionWithoutOrders,
   type ForecastAoRow,
   type ForecastBucket,
+  type ForecastCategoryFilter,
+  type ForecastClassFilter,
   type ForecastDatasets,
   type ForecastLineRow,
   type ForecastReady,
@@ -45,6 +54,7 @@ import {
   type ForecastView,
 } from "@/lib/reporting/goals";
 import { forecastAosQuery } from "@/lib/reporting/goals/queries/forecast-assembly-orders";
+import { forecastOrdersQuery } from "@/lib/reporting/goals/queries/forecast-orders";
 
 import { FORECAST, RATE, RUN, SETTINGS, TODAY, goalsInput, goalsPage } from "./reporting-goals-helpers";
 
@@ -91,12 +101,13 @@ function line(fields: Partial<ForecastLineRow> & { orderNo: string }): ForecastL
     unit: "CSE",
     unitPrice: "10.000000",
     currency: "CAD",
+    category: "PLABEL",
     laterQty: "0",
     ...fields,
   };
 }
 
-const data = (lines: ForecastLineRow[], aos: ForecastAoRow[]): ForecastDatasets => ({ access: "read", missing: [], lines, aos });
+const data = (lines: ForecastLineRow[], aos: ForecastAoRow[]): ForecastDatasets => ({ access: "read", missing: [], categoryMissing: [], lines, aos });
 
 describe("the link: Sage order number + item ↔ the AO's order list + item code (the portal's OE Fix)", () => {
   it("normalizes an order number as the portal's OE Fix does", () => {
@@ -482,6 +493,7 @@ describe("states", () => {
         data: {
           access: "missing",
           missing: ["sage.oe_order_header.type", "sage.oe_order_header.expdate", "public.assembly_order.qtytotal"],
+          categoryMissing: [],
           lines: [],
           aos: [],
         },
@@ -541,6 +553,138 @@ describe("the list: bucket chips, search and totals that follow them", () => {
   });
 });
 
+describe("the list: customer class and item category (TASK-3177)", () => {
+  const rows = pageForecast().rows;
+  const view = (customerClass: ForecastClassFilter, category: ForecastCategoryFilter, filter: "all" | ForecastBucket = "all") => {
+    const shown = filterForecastRows(rows, { filter, query: "", customerClass, category });
+    return { rows: shown.length, cad: money(forecastCadCents(shown)) };
+  };
+
+  it("classes customers from the workbook's Customer categories sheet; one not on it is Unclassified", () => {
+    expect(customerClassOf("NIUB01")).toBe("Exclusive Manufacturing");
+    expect(customerClassOf(" queE02 ")).toBe("Exclusive Distribution");
+    // Derived from the item categories bought (not on Vince's list), still classed.
+    expect(customerClassOf("SWEAT11")).toBe("Exclusive Manufacturing");
+    expect(customerClassOf("FLAGCAR07")).toBe("Exclusive Distribution");
+    expect(customerClassOf("NOT-A-CUSTOMER")).toBe("Unclassified");
+    expect(customerClassOf(null)).toBe("Unclassified");
+  });
+
+  it("puts the workbook's eleven manufacturing categories in Manufacturing and every other in Distribution", () => {
+    expect(MANUFACTURING_CATEGORIES).toHaveLength(11);
+    for (const c of ["PLABEL", "LIQUID", "PHAD", "BRANDS", "BIOPH", "CROWN", "LSRVCA", "MFGRM", "MFGPKG"]) expect(channelOf(c)).toBe("Manufacturing");
+    for (const c of ["AMEN", "TOWELS", "WIPES", "BOTTLE", "DISP", "MISC", "VCARE", "LABELS"]) expect(channelOf(c)).toBe("Distribution");
+    expect(channelOf(null)).toBeNull();
+  });
+
+  it("carries each row's class, category and channel; a line split across AOs keeps them on every portion", () => {
+    const amenity = rows.filter((r) => r.orderNo === "OR1000160008");
+    expect(amenity).toHaveLength(4);
+    for (const r of amenity) expect(r).toMatchObject({ customerClass: "Exclusive Manufacturing", category: "AMEN", channel: "Distribution" });
+    expect(rows.find((r) => r.item === "FP-1414")).toMatchObject({ customerClass: "Unclassified", category: null, channel: null });
+  });
+
+  it("filters by class, channel, one category or no category, together with the bucket, and totals what is shown", () => {
+    expect(view("all", "all")).toEqual({ rows: 18, cad: "159093.58" });
+    expect(view("Exclusive Manufacturing", "all")).toEqual({ rows: 12, cad: "133177.93" });
+    expect(view("Unclassified", "all")).toEqual({ rows: 6, cad: "25915.65" });
+    expect(view("Mixed", "all")).toEqual({ rows: 0, cad: "0.00" });
+    expect(view("all", "channel:Manufacturing")).toEqual({ rows: 8, cad: "75815.65" });
+    expect(view("all", "channel:Distribution")).toEqual({ rows: 9, cad: "82277.93" });
+    expect(view("all", "category:AMEN")).toEqual({ rows: 5, cad: "54743.15" });
+    expect(view("all", "none")).toEqual({ rows: 1, cad: "1000.00" });
+    expect(view("Exclusive Manufacturing", "channel:Distribution", "planned")).toEqual({ rows: 2, cad: "35831.88" });
+    // The channels and "no category" split every row once.
+    const parts = (["channel:Manufacturing", "channel:Distribution", "none"] as const).map((c) => view("all", c).rows);
+    expect(parts.reduce((n, p) => n + p, 0)).toBe(18);
+  });
+
+  it("offers both channels, then each category on the list A to Z with its channel, then No category", () => {
+    expect(forecastCategoryOptions(rows).map((o) => o.label)).toEqual([
+      "All categories",
+      "Manufacturing",
+      "Distribution",
+      "AMEN (Distribution)",
+      "BOTTLE (Distribution)",
+      "BRANDS (Manufacturing)",
+      "DISP (Distribution)",
+      "LIQUID (Manufacturing)",
+      "PHAD (Manufacturing)",
+      "PLABEL (Manufacturing)",
+      "TOWELS (Distribution)",
+      "WIPES (Distribution)",
+      "No category",
+    ]);
+  });
+
+  it("falls back to All when the chosen category is no longer a choice or categories can't be read, so rows never go empty behind 'All categories'", () => {
+    const gone = rows.filter((r) => r.category !== "WIPES");
+    expect(forecastCategoryOptions(rows).some((o) => o.key === "category:WIPES")).toBe(true);
+    expect(forecastCategoryOptions(gone).some((o) => o.key === "category:WIPES")).toBe(false);
+    // Still a choice: kept. Gone after a refresh: All, and every row shows again.
+    expect(activeCategoryFilter("category:WIPES", rows, true)).toBe("category:WIPES");
+    const after = activeCategoryFilter("category:WIPES", gone, true);
+    expect(after).toBe("all");
+    expect(filterForecastRows(gone, { filter: "all", query: "", category: "category:WIPES" })).toHaveLength(0);
+    expect(filterForecastRows(gone, { filter: "all", query: "", category: after })).toHaveLength(gone.length);
+    // Channels and No category stay valid while categories are readable; nothing is chosen while they are not.
+    expect(activeCategoryFilter("channel:Manufacturing", gone, true)).toBe("channel:Manufacturing");
+    expect(activeCategoryFilter("none", rows, true)).toBe("none");
+    expect(activeCategoryFilter("none", gone.filter((r) => r.category !== null), true)).toBe("all");
+    expect(activeCategoryFilter("channel:Distribution", rows, false)).toBe("all");
+    expect(activeCategoryFilter("all", rows, false)).toBe("all");
+  });
+
+  it("trims Sage's space-padded category, and a blank or whitespace-only one is no category (TASK-3189)", () => {
+    const padded = forecastRows(
+      data(
+        [
+          line({ orderNo: "OR1000000001", category: "AMEN  " }),
+          line({ orderNo: "OR1000000002", category: "PLABEL" }),
+          line({ orderNo: "OR1000000003", category: "      " }),
+          line({ orderNo: "OR1000000004", category: "" }),
+        ],
+        []
+      ),
+      TODAY,
+      RATE
+    );
+    expect(padded.map((r) => [r.category, r.channel])).toEqual([
+      ["AMEN", "Distribution"],
+      ["PLABEL", "Manufacturing"],
+      [null, null],
+      [null, null],
+    ]);
+    expect(forecastCategoryOptions(padded).map((o) => o.key)).toEqual([
+      "all", "channel:Manufacturing", "channel:Distribution", "category:AMEN", "category:PLABEL", "none",
+    ]);
+    expect(filterForecastRows(padded, { filter: "all", query: "", category: "category:AMEN" }).map((r) => r.orderNo)).toEqual(["OR1000000001"]);
+    expect(filterForecastRows(padded, { filter: "all", query: "", category: "none" }).map((r) => r.orderNo)).toEqual(["OR1000000003", "OR1000000004"]);
+  });
+
+  it("keeps the customer roster out of the browser bundle: the page's client code never imports forecast.ts or customer-classes.json", () => {
+    // Anything the client component imports ships in /_next/static, which is served without sign-in.
+    const runtimeImports = (file: string) => {
+      const source = readFileSync(path.join(process.cwd(), file), "utf8");
+      return [...source.matchAll(/^import\s+(type\s+)?[\s\S]*?\sfrom\s+"([^"]+)";/gm)].filter((m) => !m[1]).map((m) => m[2]);
+    };
+    const forbidden = /customer-classes|\/forecast$|\.\/forecast$|\/reporting\/goals$|\/reporting\/goals\/index$/;
+    for (const file of ["src/components/mc/goals/forecast.tsx", "src/lib/reporting/goals/forecast-list.ts"]) {
+      const imports = runtimeImports(file);
+      expect(imports.length).toBeGreaterThan(0);
+      expect(imports.filter((specifier) => forbidden.test(specifier))).toEqual([]);
+    }
+    expect(runtimeImports("src/components/mc/goals/forecast.tsx")).toContain("@/lib/reporting/goals/forecast-list");
+    expect(customerClassOf("NIUB01")).toBe("Exclusive Manufacturing");
+  });
+
+  it("reads Sage's category only when the login may: otherwise the query never names the column", () => {
+    expect(forecastOrdersQuery(true).sql).toContain("d.category");
+    expect(forecastOrdersQuery(false).sql).not.toContain("d.category");
+    expect(forecastAosQuery.sql).not.toContain("d.category");
+  });
+});
+
 describe("read access", () => {
   /** "GRANT SELECT (a, b) ON schema.table TO mc_goals_ro" → { "schema.table": [a, b] } (quotes dropped). */
   function grantsIn(file: string): Record<string, string[]> {
@@ -551,9 +695,12 @@ describe("read access", () => {
     }
     return out;
   }
-  const wanted = Object.fromEntries(FORECAST_COLUMNS.map(([schema, table, columns]) => [`${schema}.${table}`, [...columns].sort()]));
+  const wanted: Record<string, string[]> = {};
+  for (const [schema, table, columns] of [...FORECAST_COLUMNS, ...FORECAST_CATEGORY_COLUMNS]) {
+    wanted[`${schema}.${table}`] = [...(wanted[`${schema}.${table}`] ?? []), ...columns].sort();
+  }
 
-  it("the one-off script for the existing login grants exactly the columns the forecast reads", () => {
+  it("the one-off script for the existing login grants exactly the columns the forecast reads, its item category included", () => {
     const grants = grantsIn("readonly-grants-forecast.sql");
     expect(Object.fromEntries(Object.entries(grants).map(([k, v]) => [k, [...v].sort()]))).toEqual(
       Object.fromEntries(Object.entries(wanted).filter(([k]) => k !== "silver.batches"))
@@ -590,12 +737,26 @@ describe("the section", () => {
     expect(out).toContain("Showing 18 of 18 rows · 159,093.58 CAD (and EUR 2,100.00, not converted)");
     for (const chip of ["All 18", "Ready 4", "Planned in time 6", "Late 3", "Not planned 5"]) expect(out).toContain(chip);
     expect(out).toContain(
-      "Oct 9 (overdue) OR1000160001 1-Shoppe Inc. 1SHOP11 PO-5501 FP-1001 Hand soap 500 mL 400 CSE 48.00 CAD 19,200.00 CAD 19,200.00 Ready AO-26279A · Oct 6 · Realized BC-26161A · Realized"
+      "Oct 9 (overdue) OR1000160001 1-Shoppe Inc. 1SHOP11 Exclusive Manufacturing PO-5501 FP-1001 PLABEL Hand soap 500 mL 400 CSE 48.00 CAD 19,200.00 CAD 19,200.00 Ready AO-26279A · Oct 6 · Realized BC-26161A · Realized"
     );
     expect(out).toContain("10,000 EA 0.85 USD 8,500.00 USD 12,086.15 Late AO-26307B · Nov 3 · Allocated BC-26162B · Realized");
     expect(out).toContain("500 EA 4.20 EUR 2,100.00 EUR not converted Planned in time");
     expect(out).toContain("20 CSE 50.00 CAD 1,000.00 CAD 1,000.00 Not planned AO-26289P · no date · Generated —");
     expect(out).toContain("Total shown, CAD 159,093.58");
+  });
+
+  it("offers the class and category filters with their counts, and says while categories wait", () => {
+    const out = render(goalsPage());
+    expect(out).toContain("Customer class All classes Exclusive Manufacturing (12) Exclusive Distribution (0) Mixed (0) Unclassified (6)");
+    expect(out).toContain("Item category All categories Manufacturing (8) Distribution (9) AMEN (Distribution) (5)");
+    expect(out).not.toContain("Item categories fill in");
+    const waiting = render(
+      goalsPage({}, undefined, { ...FORECAST, data: { ...FORECAST.data, categoryMissing: ["sage.oe_order_detail.category"] } })
+    );
+    expect(waiting).toContain("The item category filter waits for read access to sage.oe_order_detail.category.");
+    expect(waiting).toContain("readonly-grants-forecast.sql");
+    const older = render(goalsPage({}, undefined, { ...FORECAST, data: { ...FORECAST.data, categoryMissing: null } }));
+    expect(older).toContain("Item categories fill in at the next refresh.");
   });
 
   it("says when Realistic will be measured, before a month is complete", () => {
@@ -609,6 +770,7 @@ describe("the section", () => {
         data: {
           access: "missing",
           missing: ["sage.oe_order_header.type", "sage.oe_order_header.expdate", "public.assembly_order.qtytotal"],
+          categoryMissing: [],
           lines: [],
           aos: [],
         },

@@ -9,7 +9,7 @@
 // Layout never depends on these: CSS owns every width decision. JS only needs
 // the tier for behaviour — whether opening a task fills the pane or leaves the
 // collection, and whether the pane is an overlay layer or a grid column.
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, type RefObject } from "react";
 
 type Storage = Pick<globalThis.Storage, "getItem" | "setItem">;
 
@@ -127,4 +127,31 @@ export function useMinWidth(px: 641 | 1025 | 1600 | 2200): boolean {
 
 export function minWidthNow(px: 641 | 1025 | 1600 | 2200): boolean {
   return typeof window !== "undefined" && window.matchMedia(`(min-width: ${px}px)`).matches;
+}
+
+/** Page tiers by the width of <main>, not the viewport: phone ≤640 · tablet ≤1024 · desktop <1800 · ultra. */
+export type ContentTier = "phone" | "tablet" | "desktop" | "ultra";
+
+export function contentTier(width: number): ContentTier {
+  if (width <= 640) return "phone";
+  if (width <= 1024) return "tablet";
+  if (width < 1800) return "desktop";
+  return "ultra";
+}
+
+/**
+ * The content tier of an element, kept current by a ResizeObserver so a page
+ * re-tiers when the nav, pane or live column changes its width. Null until
+ * mounted (SSR and the hydrating render agree).
+ */
+export function useContentTier(ref: RefObject<HTMLElement | null>): ContentTier | null {
+  const [tier, setTier] = useState<ContentTier | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setTier(contentTier(entry.contentRect.width)));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return tier;
 }

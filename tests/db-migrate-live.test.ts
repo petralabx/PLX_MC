@@ -21,7 +21,9 @@ const env = {
 function pending(ledgerFiles: string[] | null = localFiles, liveColumnsBySite: Record<string, Record<string, string[]>> = full) {
   return computePending({ localFiles, ledgerFiles, schema, liveColumnsBySite });
 }
-function db({ ledger = true, applied = localFiles, live = "plx_mc", fail = "", sysid = "12345", present = true } = {}) {
+// restricted models plx_mc_schema_check (SELECT on schema_migrations only): information_schema.columns
+// hides columns of tables the caller cannot read, pg_catalog.pg_attribute does not.
+function db({ ledger = true, applied = localFiles, live = "plx_mc", fail = "", sysid = "12345", present = true, restricted = false } = {}) {
   const queries: string[] = [];
   let connects = 0;
   let ends = 0;
@@ -35,7 +37,8 @@ function db({ ledger = true, applied = localFiles, live = "plx_mc", fail = "", s
       if (fail === sql) throw new Error("secret SQL details");
       if (sql.startsWith("SELECT current_database")) return { rows: [{ db: live }] };
       if (sql.includes("pg_control_system")) return { rows: [{ sysid }] };
-      if (sql.startsWith("SELECT 1 FROM information_schema.columns")) return { rows: present ? [{}] : [] };
+      if (sql.startsWith("SELECT 1 FROM information_schema.columns")) return { rows: present && !restricted ? [{}] : [] };
+      if (sql.startsWith("SELECT 1 FROM pg_catalog.pg_attribute")) return { rows: present ? [{}] : [] };
       if (params && sql.startsWith("SELECT to_regclass")) return { rows: [{ object: present ? "object" : null }] };
       if (sql.startsWith("SELECT to_regclass")) return { rows: [{ ledger: ledger ? "schema_migrations" : null }] };
       if (sql === "SELECT filename FROM schema_migrations") return { rows: applied.map(filename => ({ filename })) };
@@ -251,8 +254,11 @@ describe("live release workflow default safety", () => {
     for (const key of ["confirm", "plan_sha", "pending_hash"]) expect(wf.on.workflow_dispatch.inputs[key]).toMatchObject({ type: "string", default: "" });
     expect(wf.permissions).toEqual({ contents: "read" }); expect(wf.concurrency.group).toBe("db-migrate-plx-mc");
   });
-  it("plan has no environment or writes and reads both sources on any ref", () => {
-    expect(wf.jobs.plan).not.toHaveProperty("environment"); expect(wf.jobs.plan.if).not.toContain("refs/heads/main");
+  it("plan uses the read-only mc-live-plan environment, has no writes and reads both sources", () => {
+    expect(wf.jobs.plan.environment).toEqual({ name: "mc-live-plan", deployment: false }); expect(wf.jobs.plan.if).not.toContain("refs/heads/main");
+    const planEnv = wf.jobs.plan.steps.find((s: { env?: Record<string, string> }) => s.env?.MC_LIVE_DATABASE_URL)?.env;
+    expect(planEnv.MC_LIVE_DATABASE_URL).toBe("${{ secrets.MC_LIVE_PLAN_DATABASE_URL }}");
+    expect(JSON.stringify(wf.jobs.plan)).not.toContain("secrets.MC_LIVE_DATABASE_URL");
     expect(wf.jobs.plan.if).toContain("!(inputs.mode == 'apply' && inputs.confirm == 'MIGRATE_LIVE')");
     const runs = wf.jobs.plan.steps.map((s: { run?: string }) => s.run ?? "").join("\n");
     expect(runs).toContain("npm ci"); expect(runs).toContain("db-migrate-live.mjs plan"); expect(runs).not.toMatch(/npm run migrate|--apply|preflight-apply/);
@@ -275,6 +281,7 @@ describe("live release workflow default safety", () => {
     for (const step of liveSteps) expect(step.env.MC_LIVE_EXPECTED_IDENTITY).toBe("${{ vars.MC_LIVE_EXPECTED_IDENTITY }}");
     expect(JSON.stringify(wf)).not.toContain("MC_LIVE_APPROVED_DB");
     expect(runs.join("\n")).not.toContain("${{ inputs.");
+    expect(JSON.stringify(job)).toContain("secrets.MC_LIVE_DATABASE_URL");
     expect(readFileSync(".github/workflows/db-migrate.yml", "utf8")).not.toContain("MC_LIVE_");
   });
 });
@@ -390,7 +397,16 @@ describe("read-only schema sanity", () => {
     const h = db();
     const p = await buildPlan(options({ ClientClass: h.ClientClass, readMigration: () => "ALTER TABLE foo ADD COLUMN bar int;" }));
     expect(p.output).toContain("- OK column foo.bar");
-    expect(h.queries).toContain("SELECT 1 FROM information_schema.columns WHERE table_schema = ANY (current_schemas(false)) AND table_name = $1 AND column_name = $2");
+    expect(h.queries).toContain("SELECT 1 FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid = a.attrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = ANY (current_schemas(false)) AND c.relname = $1 AND a.attname = $2 AND a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'v', 'f', 'p')");
+  });
+  it("restricted plx_mc_schema_check role still sees existing columns (privilege-independent catalog probe)", async () => {
+    const h = db({ restricted: true });
+    const p = await buildPlan(options({ ClientClass: h.ClientClass, readMigration: () => "ALTER TABLE tasks ADD COLUMN archived_at timestamptz; ALTER TABLE public.tasks ADD COLUMN archived_by text;" }));
+    expect(p.output).toContain("- OK column tasks.archived_at");
+    expect(p.output).toContain("- OK column public.tasks.archived_by");
+    expect(p.output).not.toContain("MISSING");
+    expect(p.output).not.toContain("WARNING:");
+    expect(h.queries.some(q => q.includes("information_schema"))).toBe(false);
   });
   it("reports no checkable objects for a data-only migration", async () => {
     const p = await buildPlan(options());

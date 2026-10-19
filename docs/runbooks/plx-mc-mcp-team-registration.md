@@ -51,7 +51,7 @@ Cloud user broader write access.
 | Command | `npx` |
 | Args | `tsx tools/plx-mc-mcp/index.ts` |
 | `MC_BASE_URL` | `https://mc.plxcustomer.io` |
-| `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_chatgpt`, `sp_mcp_grok`, `sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`, `sp_mcp_portal` (create and search tasks only), `sp_mcp_workbench` (read-only: six read tools), or `sp_mcp_infra` (read-only: the same six read tools) |
+| `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_chatgpt`, `sp_mcp_grok`, `sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`, `sp_mcp_portal` (create and search tasks only), `sp_mcp_workbench` (read-only: six read tools), `sp_mcp_infra` (read-only: the same six read tools), or `sp_mcp_cip_auto_undraft` (read-only: four task read tools) |
 | `MC_MCP_API_KEY` | key for that exact principal: shared compatibility key only for `sp_mcp_cursor`; otherwise the matching entry in the dedicated registry |
 | `MC_OPERATOR_EMAIL` | allowlisted operator on `PLX_MC_ALLOWED_USERS` — **agents:** `cos@petrasoap.com`; **human:** `vince@petrasoap.com`. Vince-approved gmail/Proton exceptions must also appear on that CSV. |
 | `MC_REPO` | target repo slug (e.g. `petralabx/plx-customer-portal`) |
@@ -153,6 +153,48 @@ On the Cloud environment for this repo:
 This repo's committed `.mcp.json` is Hub-only (`PLX-MC-Hub`,
 `x-mc-repo: petralabx/PLX_MC`). Never put Hub in the portal repo's
 `.mcp.json`.
+
+**Key delivery (2026-10-19, default pending Vince):** pick ONE style for
+Claude cloud.
+
+- **(a) Recommended:** set env var `MC_MCP_API_KEY` in the Claude cloud
+  environment. Claude expands it into the committed Bearer header at connect
+  time. The committed `.mcp.json` is Bearer-only: `Authorization: Bearer
+  ${MC_MCP_API_KEY}`, `x-mc-operator-email`, `x-mc-repo`,
+  `x-mc-runtime: claude-code`.
+- **(b)** A network secret on the environment (header `X-Api-Key`, host
+  `mc.plxcustomer.io`) attached by Anthropic's proxy.
+
+Why (a): `scripts/compliance-checkout.mjs` and the HTTP fallback in the
+runbooks also read `MC_MCP_API_KEY` from the environment, so the variable is
+needed anyway. Cost of (a): anyone who can open the environment dialog can
+read the value, so keep the environment personal. Never run both styles with
+an `x-api-key` in `.mcp.json`. Do **not** add `x-api-key` to `.mcp.json`
+(removed 2026-09-02, bb67b7f: a cloud-attached `x-api-key` plus the repo copy
+is sent twice, joins as `key, key`, and MC answers 401). Network secrets exist
+on Anthropic-hosted environments (Bearer or custom header), but a header-only
+secret cannot carry an OAuth client secret or an env var.
+
+**Single repo:** a Claude Code cloud session must have exactly ONE repository
+attached. The repo's `.mcp.json` loads only in a session with one repository
+(Claude Code docs, cloud environments). In a multi-repo session no
+`.mcp.json` loads and the native `mcp__PLX-MC-*__mc_*` tools are missing. Use
+`PLX_MC` (`main`) for `PLX-MC-Hub` and `plx-customer-portal` (`staging`) for
+`PLX-MC-Portal`. Do not name an environment so it implies two repos.
+
+**401 is not OAuth:** an unexpanded or empty Bearer returns 401 invalid_api_key JSON; it is not an OAuth problem
+
+An unexpanded `Bearer ${MC_MCP_API_KEY}` literal or an empty `Bearer ` gets
+`401` `invalid_api_key` JSON with header `www-authenticate: Bearer`. Claude
+Code reports "Failed to connect", not "needs authentication": a server with a
+configured `Authorization` header never falls back to OAuth. Running sessions
+keep old env values until the VM restores or a new session starts. For
+reference, `/.well-known/oauth-protected-resource` returns `200` JSON with
+`authorization_servers: []` and `/.well-known/oauth-authorization-server`
+returns `404` `oauth_not_supported` (#282, 2026-10-06). A 307 redirect to
+sign-in on discovery is a regression, not expected behavior. Full diagnostic
+ladder: portal runbook
+[`CLAUDE-CODE-WEB-MC-SETUP.md`](https://github.com/petralabx/plx-customer-portal/blob/staging/docs/runbooks/CLAUDE-CODE-WEB-MC-SETUP.md).
 
 **Cloud attach caveat (2026-07):** a saved Team MCP can appear in Integrations
 but attach with an empty catalog in a Cloud Agent. For API-launched agents, use

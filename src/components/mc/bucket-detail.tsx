@@ -1,6 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  CornerLeftUp,
+  FileText,
+  Flag,
+  Folder,
+  GitBranch,
+  ListChecks,
+  Map as MapIcon,
+  Pencil,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
 
 import { api } from "@/lib/api";
 // Type-only import — keeps node-only loader/source code out of the client bundle.
@@ -10,15 +24,18 @@ import {
   BUCKETS,
   MILESTONES,
   PRDS,
-  STAGES,
-  STAGE_IDX,
   TRACE,
   type Milestone,
   type Risk,
   type Task,
   type Trace,
 } from "@/lib/mc-data";
-import { docLinkFromPrd, normalizeBucketPrd } from "@/lib/mc-data/doc-links";
+import {
+  SHAREPOINT_REGISTERS,
+  docLinkFromPrd,
+  normalizeBucketPrd,
+  type SharePointRegisterKey,
+} from "@/lib/mc-data/doc-links";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
   addBucketComment,
@@ -32,17 +49,39 @@ import {
   mentionables,
   pickerProjects,
   projectById,
+  pushNotice,
   updateBucket,
   viewerId,
 } from "@/lib/mc-data/store";
 
-import { Avatar, AvatarStack, HealthPill, PMark, ReqChip, SyncTick } from "./atoms";
+import { Avatar, HealthPill, PMark, ReqChip, SyncTick } from "./atoms";
+import { OverviewStrip, StripFact, StripHealthSelect } from "./overview-strip";
+import { PeoplePicker } from "./people-picker";
+import {
+  filterCounts,
+  filterTasks,
+  isOutstanding,
+  parseMcDate,
+  projectProgress,
+  shortDate,
+  type TaskFilterKey,
+} from "./project-overview.helpers";
 import type { ScreenProps } from "./route";
+import { TaskFilter } from "./task-filter";
+import { TaskTable } from "./task-table";
 import { Timeline } from "./timeline";
 
 // A static fallback (first fixture initiative) so the detail view always
 // resolves to a real bucket; live resolution goes through bucketById (EN-005).
 const FALLBACK_BUCKET = BUCKETS[0];
+
+const REGISTER_ICON: Record<SharePointRegisterKey, LucideIcon> = {
+  plan: ListChecks,
+  roadmap: MapIcon,
+  milestones: Flag,
+  risks: TriangleAlert,
+  documents: Folder,
+};
 
 interface BucketRollups {
   tasks: Task[];
@@ -85,7 +124,57 @@ export function mergeMilestones(fixture: Milestone[], ledger: Milestone[]): Mile
   return [...fixture, ...ledger];
 }
 
-function PrdLinkField({ bucketId, prd }: { bucketId: string; prd: string | null }) {
+/**
+ * The spec the header kicker links to: a URL spec (docLinkFromPrd), a built-in
+ * PRD id (rendered in the body's PRD block), or nothing yet.
+ */
+export type BucketSpec =
+  | { kind: "url"; href: string; label: string }
+  | { kind: "prd"; id: string }
+  | { kind: "none" };
+
+export function specForBucket(prd: string | null): BucketSpec {
+  if (prd && PRDS[prd]) return { kind: "prd", id: prd };
+  const link = docLinkFromPrd(prd);
+  return link ? { kind: "url", ...link } : { kind: "none" };
+}
+
+export interface DocRow {
+  key: string;
+  icon: LucideIcon;
+  label: string;
+  source: "MS List" | "Library" | "GitHub";
+  target: "files" | "repos" | null; // null = SharePoint list not wired yet
+}
+
+/** The five SharePoint registers, then one GitHub row per bucket repo. */
+export function docRowsForBucket(repos: string[], repoName: (id: string) => string): DocRow[] {
+  return [
+    ...SHAREPOINT_REGISTERS.map((register): DocRow => ({
+      key: register.key,
+      icon: REGISTER_ICON[register.key],
+      label: register.label,
+      source: register.source,
+      target: register.key === "documents" ? "files" : null,
+    })),
+    ...repos.map((id): DocRow => ({
+      key: `repo:${id}`,
+      icon: GitBranch,
+      label: repoName(id),
+      source: "GitHub",
+      target: "repos",
+    })),
+  ];
+}
+
+// Same wording as the project page's initiative sections.
+function taskEmptyText(filter: TaskFilterKey, total: number): string {
+  if (total === 0) return "No tasks in this initiative yet.";
+  if (filter === "human") return "Nothing waiting on a human.";
+  return `Nothing outstanding · all ${total} tasks closed.`;
+}
+
+export function PrdLinkField({ bucketId, prd }: { bucketId: string; prd: string | null }) {
   const [draft, setDraft] = useState(prd ?? "");
   const [message, setMessage] = useState<string | null>(null);
 
@@ -159,12 +248,28 @@ export function BucketDetail({ route, nav }: ScreenProps) {
   }, [bucket.id]);
   const projection = projectionState?.bucketId === bucket.id ? projectionState.data : null;
 
+  // The PrdLinkField editor stays open only for the prd value it was opened
+  // on — a save changes bucket.prd, so the editor closes by itself.
+  const specKey = `${bucket.id}:${bucket.prd ?? ""}`;
+  const [specEditFor, setSpecEditFor] = useState<string | null>(null);
+  const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
+  const [filter, setFilter] = useState<TaskFilterKey>("open");
+  const editingSpec = specEditFor === specKey;
+
   const parentProject = bucket.project ? projectById(bucket.project) : undefined;
   const rollups = rollupsForBucket(bucket.id, allTasks(), MILESTONES, allRisks());
   const prd = bucket.prd ? PRDS[bucket.prd] : null;
   // A prd that isn't a built-in PRD id may be a URL to a spec elsewhere
-  // (e.g. a tracked repo's docs); show it instead of dropping it.
-  const specLink = prd ? null : docLinkFromPrd(bucket.prd);
+  // (e.g. a tracked repo's docs); the header kicker links it.
+  const spec = specForBucket(bucket.prd);
+  const progress = projectProgress(rollups.tasks);
+  const blocked = rollups.tasks.filter((t) => t.blocked && isOutstanding(t)).length;
+  const started = parseMcDate(bucket.started, new Date().getFullYear());
+  const commitTarget = (raw: string) => {
+    const target = raw.trim() || "—";
+    if (target !== bucket.target) updateBucket(bucket.id, { target });
+  };
+  const docRows = docRowsForBucket(bucket.repos, (id) => allRepos()[id]?.name ?? id);
 
   const ledgerMilestones = projection?.bound ? projection.milestones : [];
   const ledgerTrace = projection?.bound ? projection.trace : null;
@@ -214,70 +319,135 @@ export function BucketDetail({ route, nav }: ScreenProps) {
   }
 
   return (
-    <div className="mc-main">
+    <div className="mc-main ini-page">
       <div className="ph">
-        <div>
+        <div className="ini-ph-main">
           <button type="button" className="back" onClick={() => nav("home")}>
             ← Back
           </button>
-          <span className="kk bucket-kicker">Initiative · {bucket.id}</span>
-          {parentProject ? (
+          {/* Kicker line: id · parent project · the initiative's spec. The spec
+              lives here now — the standalone "/ Spec" block is gone. */}
+          <div className="kk ini-kicker" data-testid="bucket-kicker">
+            <span>Initiative · {bucket.id}</span>
+            {parentProject ? (
+              <button
+                type="button"
+                className="ini-klink ini-project"
+                onClick={() => nav("project", { projectId: parentProject.id, bucketId: bucket.id })}
+              >
+                <CornerLeftUp size={11} aria-hidden="true" />
+                Project · {parentProject.name}
+              </button>
+            ) : null}
+            {spec.kind === "url" ? (
+              <a
+                className="ini-klink ini-spec"
+                href={spec.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Spec · ${spec.label}`}
+                data-testid="bucket-spec-link"
+              >
+                <FileText size={11} aria-hidden="true" />
+                {spec.label}
+                <ArrowUpRight size={10} aria-hidden="true" />
+              </a>
+            ) : spec.kind === "prd" ? (
+              <a className="ini-klink ini-spec" href="#bucket-prd" data-testid="bucket-spec-link">
+                <FileText size={11} aria-hidden="true" />
+                {spec.id}
+              </a>
+            ) : null}
             <button
               type="button"
-              className="kk bucket-kicker"
-              style={{ marginLeft: 8 }}
-              onClick={() => nav("project", { projectId: parentProject.id, bucketId: bucket.id })}
+              className="ini-klink ini-spec-edit"
+              aria-expanded={editingSpec}
+              aria-label={spec.kind === "none" ? "Add spec link" : "Edit spec link"}
+              onClick={() => setSpecEditFor(editingSpec ? null : specKey)}
             >
-              Project · {parentProject.name}
+              {spec.kind === "none" ? "+ Add spec" : <Pencil size={10} aria-hidden="true" />}
             </button>
-          ) : null}
+          </div>
           <h1>{bucket.name}</h1>
           <p className="sub">{bucket.desc}</p>
+          {editingSpec && (
+            <div className="ini-spec-field">
+              <PrdLinkField key={specKey} bucketId={bucket.id} prd={bucket.prd} />
+            </div>
+          )}
         </div>
         <div className="r">
           <HealthPill h={bucket.health} />
-          <div className="vsw">
+          <SyncTick sync={bucket.sync} />
+          <nav className="vsw" aria-label="Views">
             <button type="button" onClick={() => nav("board", { bucketId: bucket.id })}>
-              board
+              Board
             </button>
             <button type="button" onClick={() => nav("list", { bucketId: bucket.id })}>
-              list
+              List
             </button>
             <button type="button" onClick={() => nav("timeline", { bucketId: bucket.id })}>
-              timeline
+              Timeline
             </button>
-          </div>
+          </nav>
         </div>
       </div>
 
       <div className="bk">
-        <div className="bkfacts">
-          <div className="f">
-            <span className="k">Health</span>
-            <span className="v sm">
-              <HealthPill h={bucket.health} />
+        <OverviewStrip
+          factColumns={3}
+          progress={progress}
+          started={bucket.started}
+          target={bucket.target}
+          subline={
+            <>
+              {progress.total} tasks · {progress.done} done · {progress.cancelled} cancelled · {progress.doing} in
+              flight · <span className={blocked > 0 ? "warn" : ""}>{blocked} blocked</span>
+            </>
+          }
+        >
+          {/* All edits route through updateBucket (store) → PATCH: optimistic
+              apply, reconcile on success, rollback + notice on failure. */}
+          <StripFact label="Health">
+            <StripHealthSelect
+              value={bucket.health}
+              label="Set initiative health"
+              onChange={(health) => updateBucket(bucket.id, { health })}
+            />
+          </StripFact>
+          {/* Accountable owner — always human; the project page's field-button
+              + PeoplePicker pattern. */}
+          <StripFact label="Accountable owner">
+            <span className="pv-owner">
+              <button type="button" className="ntm-field-btn" onClick={() => setOwnerPickerOpen((open) => !open)}>
+                <span className="who fact-owner">
+                  <Avatar id={bucket.owner} size="sm" />
+                  <span className="nm">{ACTORS[bucket.owner]?.name ?? bucket.owner}</span>
+                </span>
+                <ChevronDown size={11} className="caret" aria-hidden="true" />
+              </button>
+              {ownerPickerOpen && (
+                <PeoplePicker
+                  allowAgents={false}
+                  current={bucket.owner}
+                  onPick={(actorId) => {
+                    if (actorId) {
+                      updateBucket(bucket.id, { owner: actorId });
+                      return;
+                    }
+                    pushNotice("Initiatives require a human accountable owner.");
+                  }}
+                  onClose={() => setOwnerPickerOpen(false)}
+                  style={{ top: "calc(100% + 6px)", left: 0 }}
+                />
+              )}
             </span>
-          </div>
-          <div className="f">
-            <span className="k">Accountable owner</span>
-            <span className="v sm fact-owner">
-              <Avatar id={bucket.owner} size="sm" />
-              {ACTORS[bucket.owner]?.name ?? bucket.owner}
-            </span>
-          </div>
-          <div className="f">
-            <span className="k">Target</span>
-            <span className="v sm">{bucket.target}</span>
-          </div>
-          <div className="f">
-            <span className="k">Started</span>
-            <span className="v sm">{bucket.started}</span>
-          </div>
-          <div className="f">
-            <span className="k">Project</span>
-            <span className="v sm">
+          </StripFact>
+          <StripFact label="Project">
+            <label className="ini-project-select">
               <select
                 value={bucket.project ?? ""}
+                aria-label="Change project"
                 onChange={(event) => updateBucket(bucket.id, { project: event.target.value || null })}
               >
                 <option value="">No project</option>
@@ -287,33 +457,39 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                   </option>
                 ))}
               </select>
+              <ChevronDown size={11} className="caret" aria-hidden="true" />
+            </label>
+          </StripFact>
+          <StripFact label="Started">{started ? shortDate(started) : bucket.started}</StripFact>
+          {/* Target — commit on blur/Enter; keyed on the store value so a
+              rollback re-renders the restored target. */}
+          <StripFact label="Target">
+            <span className="pv-target">
+              <input
+                key={`${bucket.id}:${bucket.target}`}
+                className="le-input"
+                defaultValue={bucket.target}
+                onBlur={(event) => commitTarget(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                  }
+                }}
+                placeholder="e.g. Aug 01"
+                aria-label="Set target"
+              />
+              <Pencil size={11} aria-hidden="true" />
             </span>
-          </div>
-          <PrdLinkField key={`${bucket.id}:${bucket.prd ?? ""}`} bucketId={bucket.id} prd={bucket.prd} />
-          <div className="f">
-            <span className="k">Tasks</span>
-            <span className="v">{rollups.tasks.length}</span>
-          </div>
-        </div>
+          </StripFact>
+        </OverviewStrip>
 
-        <div className="bkbody">
-          <div className="c">
-            {specLink && (
-              <div className="blk" data-testid="bucket-spec-link">
-                <div className="bh">
-                  <span className="kk">/ Spec</span>
-                </div>
-                <ul className="doc-links">
-                  <li>
-                    <a href={specLink.href} target="_blank" rel="noopener noreferrer">
-                      {specLink.label}
-                    </a>
-                  </li>
-                </ul>
-              </div>
-            )}
+        {/* Two columns at ≥1100px of main-content width (@container main in
+            mc-initiative.css), stacked below. */}
+        <div className="ini-body">
+          <div className="ini-main">
             {prd && (
-              <div className="blk">
+              <div className="blk" id="bucket-prd">
                 <div className="bh">
                   <span className="kk">
                     / PRD · <b>{prd.id}</b>
@@ -365,64 +541,29 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             )}
 
             <div className="blk">
-              <div className="bh">
+              <div className="bh pv-ovh">
                 <span className="kk">
-                  / ToDos · SharePoint mirror · <b>{rollups.tasks.length}</b>
+                  / Tasks · <b>{rollups.tasks.length}</b> · SharePoint mirror
                 </span>
+                <TaskFilter value={filter} counts={filterCounts(rollups.tasks)} onChange={setFilter} />
                 <button
                   type="button"
-                  className="splink"
+                  className="splink ini-open-board"
                   onClick={() => nav("board", { bucketId: bucket.id })}
                 >
                   Open board →
                 </button>
               </div>
-              <div className="splist">
-                <div className="splist-head">
-                  <span className="src">
-                    <span className="ic">▦</span>
-                    ToDos (MS List) · {bucket.name}
-                  </span>
-                  <span className="ms-source">MS List</span>
-                </div>
-                <div className="splist-table">
-                  <div className="sprow head">
-                    <span>Task ID</span>
-                    <span>Title</span>
-                    <span>Status</span>
-                    <span>Assigned To</span>
-                    <span>Sync</span>
-                  </div>
-                  {rollups.tasks.map((task) => {
-                    const assignees = [task.assignee, ...task.coassignees].filter(
-                      (id): id is string => !!id
-                    );
-                    return (
-                      <button
-                        type="button"
-                        className="sprow"
-                        key={task.id}
-                        onClick={() => nav("task", { taskId: task.id })}
-                      >
-                        <span className="id">{task.id}</span>
-                        <span className="ti">{task.title}</span>
-                        <span className="st">{STAGES[STAGE_IDX[task.stage]].name}</span>
-                        <span className="asg">
-                          {assignees.length > 0 ? (
-                            <AvatarStack ids={assignees} lead={task.assignee ?? undefined} />
-                          ) : (
-                            <span className="none">—</span>
-                          )}
-                        </span>
-                        <span className="sycell">
-                          <SyncTick sync={task.sync} showTs={false} />
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="splist-foot">
-                  <span>Mirrors two-way to ToDos columns</span>
+              <div className="ini-tasks">
+                <TaskTable
+                  key={filter}
+                  tasks={filterTasks(rollups.tasks, filter)}
+                  closed={filter === "open" ? rollups.tasks.filter((t) => !isOutstanding(t)) : undefined}
+                  emptyText={taskEmptyText(filter, rollups.tasks.length)}
+                  nav={nav}
+                />
+                <div className="ini-mirror">
+                  <span>Mirrors two-way to the ToDos list columns</span>
                   <span>Last sync {bucket.sync.ts}</span>
                 </div>
               </div>
@@ -444,7 +585,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
             </div>
           </div>
 
-          <div className="c">
+          <aside className="ini-aside">
             <div className="blk">
               <div className="bh">
                 <span className="kk">/ Documents &amp; Links</span>
@@ -456,50 +597,36 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                 </span>
               </div>
               <div className="doclinks">
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">▦</span>
-                  <span className="t">Project Plan</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">▷</span>
-                  <span className="t">Roadmap</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">◆</span>
-                  <span className="t">Milestone Register</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" title="coming soon">
-                  <span className="ic">△</span>
-                  <span className="t">Risk Register</span>
-                  <span className="ms">MS List</span>
-                  <span className="ext">↗</span>
-                </button>
-                <button type="button" className="dl" onClick={() => nav("files")}>
-                  <span className="ic">❒</span>
-                  <span className="t">Project Documents</span>
-                  <span className="ms">Library</span>
-                  <span className="ext">↗</span>
-                </button>
-                {bucket.repos.map((repoId) => (
-                  <button type="button" className="dl" key={repoId} onClick={() => nav("repos")}>
-                    <span className="ic">{"</>"}</span>
-                    <span className="t">{allRepos()[repoId]?.name ?? repoId}</span>
-                    <span className="ms">GitHub</span>
-                    <span className="ext">↗</span>
-                  </button>
-                ))}
+                {docRows.map((row) => {
+                  const Icon = row.icon;
+                  const target = row.target;
+                  return (
+                    <button
+                      type="button"
+                      className="dl"
+                      key={row.key}
+                      title={target ? row.label : "coming soon"}
+                      onClick={target ? () => nav(target) : undefined}
+                    >
+                      <span className="ic">
+                        <Icon size={14} aria-hidden="true" />
+                      </span>
+                      <span className="t">{row.label}</span>
+                      <span className="ms">{row.source}</span>
+                      <span className="ext">
+                        <ArrowUpRight size={12} aria-hidden="true" />
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             <div className="blk">
               <div className="bh">
-                <span className="kk">/ Milestones</span>
+                <span className="kk">
+                  / Milestones · <b>{milestones.length}</b>
+                </span>
               </div>
               <div className="mlist">
                 {milestones.length > 0 ? (
@@ -580,12 +707,18 @@ export function BucketDetail({ route, nav }: ScreenProps) {
               {trace ? (
                 <>
                   <div className="trace-summary">
-                    <span className="okflag">{traceSummary.satisfied} satisfied</span>
+                    <span className="pill ok">
+                      <span className="dot" />
+                      {traceSummary.satisfied} satisfied
+                    </span>
                     <span className="pill info">
                       <span className="dot" />
                       {traceSummary.inFlight} in flight
                     </span>
-                    {traceSummary.gaps > 0 && <span className="gapflag">{traceSummary.gaps} gap</span>}
+                    <span className={`pill ${traceSummary.gaps > 0 ? "warn" : "muted"}`}>
+                      <span className="dot" />
+                      {traceSummary.gaps} gap
+                    </span>
                   </div>
                   {traceFromLedger && <span className="kk">Quality Ledger · read-only</span>}
                 </>
@@ -593,7 +726,7 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                 <p className="trace-empty">No traceability rows are mapped for this initiative yet.</p>
               )}
             </div>
-          </div>
+          </aside>
         </div>
       </div>
     </div>

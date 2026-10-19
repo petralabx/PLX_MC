@@ -681,6 +681,9 @@ const FORECAST_SHEET_COLUMNS = [
   "AO status",
   "Bulk batch",
   "Batch status",
+  // Last, so the columns the formulas read keep their letters (TASK-3177).
+  "Customer class",
+  "Item category",
 ] as const;
 
 /**
@@ -692,7 +695,7 @@ const FORECAST_SHEET_COLUMNS = [
 function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   const { model } = input;
   const forecast = input.forecast ?? null;
-  columns(ws, [12, 15, 7, 11, 30, 14, 12, 28, 12, 7, 12, 9, 14, 14, 16, 12, 12, 11, 12, 11]);
+  columns(ws, [12, 15, 7, 11, 30, 14, 12, 28, 12, 7, 12, 9, 14, 14, 16, 12, 12, 11, 12, 11, 22, 12]);
   put(ws, 1, 1, `Revenue forecast — ${model.month.label}`, { title: true });
   if (forecast?.state !== "ready") {
     const why =
@@ -744,6 +747,8 @@ function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
     put(ws, row, 18, r.ao?.status ?? null);
     put(ws, row, 19, r.bulk?.batch ?? null);
     put(ws, row, 20, r.bulk?.status ?? null);
+    put(ws, row, 21, r.customerClass);
+    put(ws, row, 22, r.category);
   });
 
   // With no rows a SUMIFS range would run into the header, so the totals are zeros.
@@ -801,6 +806,18 @@ function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   }
   for (const c of forecast.otherCurrencies) {
     put(ws, r++, 1, `Not converted: ${c.currency} ${dollars(c.cents).toLocaleString("en-US", { minimumFractionDigits: 2 })} in ${count(c.rows)} ${c.rows === 1 ? "row" : "rows"}. Only CAD and USD count, as on the Revenue card.`, { note: true });
+  }
+  if (forecast.categoryMissing === null) {
+    put(ws, r++, 1, "Item categories fill in at the next refresh.", { note: true });
+  } else if (forecast.categoryMissing.length > 0) {
+    put(
+      ws,
+      r++,
+      1,
+      `Item category is blank: the reporting login can’t read ${forecast.categoryMissing.join(", ")} yet. A database administrator ` +
+        "grants it by re-running docs/modules/reporting-goals/readonly-grants-forecast.sql.",
+      { note: true }
+    );
   }
   put(ws, r, 1, "CAD uses Excel’s ROUND (half away from zero) while the page rounds half to even, so the two differ only on an exact half cent.", { note: true });
 }

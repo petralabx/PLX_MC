@@ -34,7 +34,9 @@ retiring the broad PAT entirely.
   secrets present), else a static PAT, else `null` (callers then emit an honest
   degraded result — never a throw at the call site). If the App is configured but
   a mint transiently fails, it warns and falls back to the PAT so the surface
-  stays up.
+  stays up. An optional `opts.signal` (AbortSignal) cancels the token exchange;
+  once it fires the call rejects with `signal.reason` instead (no warning, no PAT
+  fallback, nothing cached). Without a signal there is no timeout, as before.
   - **petralabx** owners: prefer `PETRALABX_GITHUB_TOKEN` (alias
     `PETRALABX_GITHUB`) over legacy `GITHUB_TOKEN` — the org fine-grained PAT
     must cover **all** `petralabx/*` repos (portal, PLX_MC, skills, …).

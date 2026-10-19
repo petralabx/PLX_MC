@@ -5,7 +5,9 @@
 // edit after the operator reconciles a few orders against Sage's own screens
 // (README, "Interpretations to confirm"). Sage text is space-padded and dates are
 // YYYYMMDD (0 = none). The COMPLETE flags are never read: completion is decided
-// from the quantity still to ship. Params: $1 today.
+// from the quantity still to ship. Params: $1 today. Sage's item category on the
+// line (CATEGORY, TASK-3177) is read only once the login may read it
+// (forecast-access.ts); until then the query reads NULL in its place.
 
 import type { ForecastLineRow } from "../types";
 import { MONTH_WINDOW, type DatasetQuery } from "./shared";
@@ -40,8 +42,12 @@ export const ITEM_LINES_SQL = `trim(coalesce(h.ordnumber::text, '')) <> ''
     AND coalesce(h.reference::text, '') NOT ILIKE '%TEST%'
     AND coalesce(h."desc"::text, '') NOT ILIKE '%TEST%'`;
 
-/** Every open item line of a sales order, of any expected date (this query and the AO query's link). */
-export const OPEN_LINES_CTE = `open_lines AS (
+/** The line's item category as Sage keeps it (PLABEL, AMEN…), upper case; blank is NULL. */
+export const CATEGORY_SQL = `nullif(upper(trim(d.category::text)), '')`;
+
+/** Every open item line of a sales order, of any expected date (this query and the AO query's link); category is its SQL. */
+function openLinesCte(category: string): string {
+  return `open_lines AS (
   SELECT trim(h.ordnumber) AS order_no,
          CASE WHEN trim(d.linenum::text) ~ '^[0-9]+$' THEN trim(d.linenum::text)::int END AS line_no,
          nullif(trim(h.customer), '') AS customer_code,
@@ -53,13 +59,18 @@ export const OPEN_LINES_CTE = `open_lines AS (
          ${QTY_TO_SHIP_SQL} AS qty,
          nullif(trim(d.ordunit), '') AS unit,
          d.unitprice::numeric AS unit_price,
-         trim(h.orsourcurr) AS currency
+         trim(h.orsourcurr) AS currency,
+         ${category} AS category
   FROM sage.oe_order_header h
   JOIN sage.oe_order_detail d ON d.orduniq = h.orduniq
   WHERE ${COUNTED_ORDER_TYPES_SQL}
     AND ${ITEM_LINES_SQL}
     AND ${QTY_TO_SHIP_SQL} > 0
 )`;
+}
+
+/** The open lines without their category: the AO query's link never needs it. */
+export const OPEN_LINES_CTE = openLinesCte("NULL::text");
 
 /**
  * Still to ship on the order's open lines of the same item due after month end
@@ -81,36 +92,41 @@ interface Row {
   unit: string | null;
   unit_price: string;
   currency: string;
+  category: string | null;
   later_qty: string;
 }
 
-export const forecastOrdersQuery: DatasetQuery<Row, ForecastLineRow[]> = {
-  name: "forecast-orders",
-  sql: `${MONTH_WINDOW},
-${OPEN_LINES_CTE},
+/** The query, with each line's category when the login may read it, else NULL in its place. */
+export function forecastOrdersQuery(withCategory: boolean): DatasetQuery<Row, ForecastLineRow[]> {
+  return {
+    name: "forecast-orders",
+    sql: `${MONTH_WINDOW},
+${openLinesCte(withCategory ? CATEGORY_SQL : "NULL::text")},
 lines AS (
   SELECT o.*, ${LATER_QTY_SQL} AS later_qty
   FROM open_lines o, cut
 )
 SELECT l.order_no, l.line_no, l.customer_code, l.customer, l.po, l.item, l.description,
-       l.expected::text AS expected, l.qty, l.unit, l.unit_price, l.currency, l.later_qty
+       l.expected::text AS expected, l.qty, l.unit, l.unit_price, l.currency, l.category, l.later_qty
 FROM lines l, cut
 WHERE l.expected <= cut.m1
 ORDER BY l.expected, l.order_no, l.line_no`,
-  map: (rows) =>
-    rows.map((r) => ({
-      orderNo: r.order_no,
-      lineNo: r.line_no,
-      customerCode: r.customer_code,
-      customer: r.customer,
-      po: r.po,
-      item: r.item,
-      description: r.description,
-      expected: r.expected,
-      qty: r.qty,
-      unit: r.unit,
-      unitPrice: r.unit_price,
-      currency: r.currency,
-      laterQty: r.later_qty,
-    })),
-};
+    map: (rows) =>
+      rows.map((r) => ({
+        orderNo: r.order_no,
+        lineNo: r.line_no,
+        customerCode: r.customer_code,
+        customer: r.customer,
+        po: r.po,
+        item: r.item,
+        description: r.description,
+        expected: r.expected,
+        qty: r.qty,
+        unit: r.unit,
+        unitPrice: r.unit_price,
+        currency: r.currency,
+        category: r.category,
+        laterQty: r.later_qty,
+      })),
+  };
+}

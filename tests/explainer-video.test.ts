@@ -83,7 +83,7 @@ describe("video artifacts", () => {
     expect(artifactProblem("screenshot", "video/mp4", MP4)).toMatch(/^A screenshot must be image\/png/);
   });
 
-  it("allows a video up to 100 MiB, and keeps the 3 MiB limit for other kinds", () => {
+  it("allows a video up to 100 MiB, and keeps the inline limit for other kinds", () => {
     // Session start: only the declared size. Session finish: the first bytes and the real size.
     expect(artifactProblem("video", "video/mp4", null, MAX_VIDEO_BYTES)).toBeNull();
     expect(artifactProblem("video", "video/mp4", MP4, MAX_VIDEO_BYTES)).toBeNull();
@@ -91,7 +91,7 @@ describe("video artifacts", () => {
       `The file has ${MAX_VIDEO_BYTES + 1} bytes. Limit: ${MAX_VIDEO_BYTES}.`
     );
     expect(artifactProblem("video", "video/mp4", null, 0)).toBe("The file is empty.");
-    expect(artifactProblem("screenshot", "image/png", null, MAX_ARTIFACT_BYTES + 1)).toMatch(/Limit: 3145728\.$/);
+    expect(artifactProblem("screenshot", "image/png", null, MAX_ARTIFACT_BYTES + 1)).toMatch(/Limit: 3096576, so the base64 upload fits the 4 MiB MCP limit\.$/);
   });
 
   it("needs the extension of its type, so SharePoint plays it", () => {

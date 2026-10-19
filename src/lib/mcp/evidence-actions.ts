@@ -43,7 +43,7 @@ import {
   siteIdByPath,
   uploadSmallDriveFile,
 } from "@/lib/sync/graph";
-import { getBuckets, getEntity } from "@/lib/sync/repo";
+import { getBuckets, getEntity, lockSharedEvidence } from "@/lib/sync/repo";
 import type { McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
 
@@ -134,7 +134,25 @@ async function digestStream(stream: ReadableStream<Uint8Array>): Promise<{ size:
   return { size, sha256: hash.digest("hex"), head: head.subarray(0, Math.min(size, head.length)) };
 }
 
-export async function actionUploadEvidence(identity: McpIdentity, input: UploadEvidenceInput) {
+// A verified or cancelled task takes no new evidence; `after` names a file already uploaded.
+function assertTaskOpen(taskId: string, task: Task, after = ""): void {
+  if (task.stage === "cancelled" || task.stage === "verified") {
+    throw new ApiError("task_closed", `${taskId} is ${task.stage}; it takes no new evidence.${after}`, 409);
+  }
+}
+
+/** A recorded (or already stored) artifact, or for a video's first call the upload session to PUT to. */
+export type UploadEvidenceResult = {
+  ok: boolean;
+  taskId: string;
+  link: string;
+  artifact?: EvidenceArtifact;
+  duplicate?: boolean;
+  upload?: { url: string; expiresAt: string; uploadedName: string; chunkBytes: number };
+  next?: string;
+};
+
+export async function actionUploadEvidence(identity: McpIdentity, input: UploadEvidenceInput): Promise<UploadEvidenceResult> {
   const dispatch = await complianceRepo.getDispatch(input.checkoutId);
   if (!dispatch?.taskId || dispatch.revoked || dispatch.releasedAt || new Date(dispatch.expiresAt).getTime() <= Date.now()) {
     throw new ApiError("invalid_checkout", "Unknown, revoked, released, or expired checkout.", 409);
@@ -163,9 +181,7 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
 
   const task = (await getEntity("task", taskId))?.data as unknown as Task | undefined;
   if (!task) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
-  if (task.stage === "cancelled" || task.stage === "verified") {
-    throw new ApiError("task_closed", `${taskId} is ${task.stage}; it takes no new evidence.`, 409);
-  }
+  assertTaskOpen(taskId, task);
   // Everyone with access to the shared library could read a restricted project's
   // evidence. MC never grants or narrows access itself, so it refuses instead.
   if (await isBucketInRestrictedProject(task.bucket)) {
@@ -176,84 +192,113 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
   }
   // A session's sha256 is checked against the stored file when it finishes.
   const sha256 = bytes ? createHash("sha256").update(bytes).digest("hex") : input.sha256!;
-  // The same file again (a retry) returns the record it already has.
+  // The same file again (a retry) returns the record it already has. Sent with
+  // another kind, it reuses the stored file and corrects the kind and caption.
   const existing = task.evidence?.artifacts?.find((artifact) => artifact.sha256 === sha256);
-  if (existing) return { ok: true, taskId, link: taskLink(taskId), artifact: existing, duplicate: true };
+  if (existing?.kind === input.kind) return { ok: true, taskId, link: taskLink(taskId), artifact: existing, duplicate: true };
 
-  const bucket = (await getBuckets()).find((candidate) => candidate.id === task.bucket);
-  const system =
-    TRACKED_REPOS.find((tracked) => tracked.repo.toLowerCase() === dispatch.repo.toLowerCase())?.displayName ?? dispatch.repo;
-  const uploadedAt = new Date().toISOString();
-  const folder = artifactFolder({ system, project: bucket?.project ?? null, bucket: task.bucket, taskId });
+  let uploaded: EvidenceArtifact | null = null;
+  if (!existing) {
+    const bucket = (await getBuckets()).find((candidate) => candidate.id === task.bucket);
+    const system =
+      TRACKED_REPOS.find((tracked) => tracked.repo.toLowerCase() === dispatch.repo.toLowerCase())?.displayName ?? dispatch.repo;
+    const uploadedAt = new Date().toISOString();
+    const folder = artifactFolder({ system, project: bucket?.project ?? null, bucket: task.bucket, taskId });
 
-  if (step === "start") {
-    const name = storedName(uploadedAt, sha256, input.fileName);
-    const session = await onSharePoint(async () => createDriveUploadSession(await evidenceDriveId(), `${folder}/${name}`));
-    return {
-      ok: true,
-      taskId,
-      link: taskLink(taskId),
-      upload: { url: session.uploadUrl, expiresAt: session.expirationDateTime, uploadedName: name, chunkBytes: UPLOAD_CHUNK_BYTES },
-      next: "PUT the file to upload.url in chunks of chunkBytes with Content-Range and no Authorization header. Then call again with uploadedName and sha256.",
+    if (step === "start") {
+      const name = storedName(uploadedAt, sha256, input.fileName);
+      const session = await onSharePoint(async () => createDriveUploadSession(await evidenceDriveId(), `${folder}/${name}`));
+      return {
+        ok: true,
+        taskId,
+        link: taskLink(taskId),
+        upload: { url: session.uploadUrl, expiresAt: session.expirationDateTime, uploadedName: name, chunkBytes: UPLOAD_CHUNK_BYTES },
+        next: "PUT the file to upload.url in chunks of chunkBytes with Content-Range and no Authorization header. Then call again with uploadedName and sha256.",
+      };
+    }
+
+    let name: string;
+    let item: { id: string; webUrl: string };
+    let size: number;
+    if (step === "finish") {
+      // Only a name MC issued for this file: its hash prefix and file name must match.
+      name = input.uploadedName!;
+      if (!/^\d{8}T\d{6}Z$/.test(name.slice(0, 16)) || name.slice(16) !== `-${sha256.slice(0, 8)}-${sharePointSafeName(input.fileName)}`) {
+        throw new ApiError("invalid_artifact", "uploadedName is not the name the upload session returned for this file.", 400);
+      }
+      const stored = await onSharePoint(async () => driveItemByPath(await evidenceDriveId(), `${folder}/${name}`));
+      if (!stored) {
+        throw new ApiError("upload_incomplete", `No file named ${name} yet. Finish the PUTs to the upload session first.`, 409);
+      }
+      const digest = await onSharePoint(async () => digestStream(await driveItemContent(stored["@microsoft.graph.downloadUrl"])));
+      const storedProblem = artifactProblem(input.kind, input.contentType, digest.head, digest.size);
+      if (storedProblem) throw new ApiError("invalid_artifact", storedProblem, 400);
+      if (digest.sha256 !== sha256) {
+        throw new ApiError("invalid_artifact", "The stored file's SHA-256 does not match sha256. Start a new upload session.", 400);
+      }
+      item = stored;
+      size = digest.size;
+    } else {
+      name = storedName(uploadedAt, sha256, input.fileName);
+      item = await onSharePoint(async () => uploadSmallDriveFile(await evidenceDriveId(), `${folder}/${name}`, bytes!, input.contentType));
+      size = bytes!.length;
+    }
+    uploaded = {
+      kind: input.kind,
+      name,
+      caption: input.caption,
+      url: item.webUrl,
+      driveItemId: item.id,
+      contentType: input.contentType,
+      size,
+      sha256,
+      uploadedAt,
     };
   }
 
-  let name: string;
-  let item: { id: string; webUrl: string };
-  let size: number;
-  if (step === "finish") {
-    // Only a name MC issued for this file: its hash prefix and file name must match.
-    name = input.uploadedName!;
-    if (!/^\d{8}T\d{6}Z$/.test(name.slice(0, 16)) || name.slice(16) !== `-${sha256.slice(0, 8)}-${sharePointSafeName(input.fileName)}`) {
-      throw new ApiError("invalid_artifact", "uploadedName is not the name the upload session returned for this file.", 400);
-    }
-    const stored = await onSharePoint(async () => driveItemByPath(await evidenceDriveId(), `${folder}/${name}`));
-    if (!stored) {
-      throw new ApiError("upload_incomplete", `No file named ${name} yet. Finish the PUTs to the upload session first.`, 409);
-    }
-    const digest = await onSharePoint(async () => digestStream(await driveItemContent(stored["@microsoft.graph.downloadUrl"])));
-    const storedProblem = artifactProblem(input.kind, input.contentType, digest.head, digest.size);
-    if (storedProblem) throw new ApiError("invalid_artifact", storedProblem, 400);
-    if (digest.sha256 !== sha256) {
-      throw new ApiError("invalid_artifact", "The stored file's SHA-256 does not match sha256. Start a new upload session.", 400);
-    }
-    item = stored;
-    size = digest.size;
-  } else {
-    name = storedName(uploadedAt, sha256, input.fileName);
-    item = await onSharePoint(async () => uploadSmallDriveFile(await evidenceDriveId(), `${folder}/${name}`, bytes!, input.contentType));
-    size = bytes!.length;
-  }
-
-  const artifact: EvidenceArtifact = {
-    kind: input.kind,
-    name,
-    caption: input.caption,
-    url: item.webUrl,
-    driveItemId: item.id,
-    contentType: input.contentType,
-    size,
-    sha256,
-    uploadedAt,
-  };
-  // Append under the task row lock, so two uploads at the same time both stay.
-  await withTransaction(async (q) => {
+  // Recheck by hash under the task row lock: of two identical calls at the same
+  // time, the second finds the first's record and appends nothing.
+  return withTransaction(async (q) => {
     const current = (await getEntity("task", taskId, q, true))?.data as unknown as Task | undefined;
     if (!current) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
+    // The task may have closed during the upload. MC never deletes the file.
+    assertTaskOpen(taskId, current, uploaded ? ` The file ${uploaded.name} was uploaded to ${uploaded.url} but is not recorded.` : "");
+    // A task move, bucket re-parent or project restrict may have committed since
+    // the first check. Those take the shared-evidence lock exclusive, so under the
+    // shared lock the task -> bucket -> project chain cannot change until commit.
+    await lockSharedEvidence(q, "share");
+    if (await isBucketInRestrictedProject(current.bucket, q)) {
+      throw unavailable(
+        `${taskId} came under a restricted project during the upload. Nothing was recorded.` +
+          (uploaded
+            ? ` The file ${uploaded.name} was uploaded to ${uploaded.url}. ` +
+              `A person must relocate it out of the shared "${PLX_EVIDENCE_STORE.library}" library.`
+            : "")
+      );
+    }
     const evidence = current.evidence ?? { summary: "", items: [] };
+    const artifacts = evidence.artifacts ?? [];
+    const stored = artifacts.find((artifact) => artifact.sha256 === sha256);
+    if (stored?.kind === input.kind) return { ok: true, taskId, link: taskLink(taskId), artifact: stored, duplicate: true };
+    const base = stored ?? existing;
+    const artifact: EvidenceArtifact = base ? { ...base, kind: input.kind, caption: input.caption } : uploaded!;
     await patchTask(
       taskId,
-      { evidence: { ...evidence, artifacts: [...(evidence.artifacts ?? []), artifact] } } as Parameters<typeof patchTask>[1],
+      {
+        evidence: { ...evidence, artifacts: stored ? artifacts.map((a) => (a === stored ? artifact : a)) : [...artifacts, artifact] },
+      } as Parameters<typeof patchTask>[1],
       dispatch.accountableHuman ?? identity.operatorEmail,
       { query: q, attribution: { source: "service", actorId: identity.actor.id } }
     );
     await complianceRepo.appendEventTx(q, {
-      kind: "task.evidence.uploaded",
+      kind: base ? "task.evidence.relabeled" : "task.evidence.uploaded",
       actor: `${identity.runtime}:${identity.operatorEmail}`,
       repo: dispatch.repo,
       taskId,
-      payload: { kind: artifact.kind, name, url: artifact.url, size: artifact.size, sha256 },
+      payload: { kind: artifact.kind, name: artifact.name, url: artifact.url, size: artifact.size, sha256 },
     });
+    return base
+      ? { ok: true, taskId, link: taskLink(taskId), artifact, duplicate: true }
+      : { ok: true, taskId, link: taskLink(taskId), artifact };
   });
-  return { ok: true, taskId, link: taskLink(taskId), artifact };
 }

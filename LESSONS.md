@@ -16,6 +16,24 @@
 
 ## Lessons
 
+### 2026-10-19 (ET) — TASK-3166 r3: the evidence guard sat above the write path, so the SharePoint pull skipped it
+
+- **What happened:** Sol's r3 review of PR #354 found that a normal SharePoint Roadmap pull could re-parent a bucket with evidence into a restricted project: the guard lived in `patchBucket` and the conflict path, and the pull calls `repo.updateBucket` directly. The upload's record step rechecked only a changed bucket, without a lock shared with the guards, and did not recheck a closed stage.
+- **Root cause:** The r2 guard went into the state functions callers use today, not into the repo write that every path must use. A recheck without a lock the other side also takes does not serialize anything.
+- **Rule going forward:** Put an invariant guard in the lowest write function every caller shares, in the write's own transaction. Make the check and the conflicting write take the same lock, and recheck every precondition (stage, chain) after taking it.
+
+### 2026-10-19 (ET) — TASK-3166: the restricted-project evidence guard only covered new uploads
+
+- **What happened:** Sol's r2 review of PR #354 found that a task or project could become restricted after its evidence went to the shared library, so the files stayed readable. A resubmitted file kept its old kind. Two identical concurrent uploads both appended an artifact.
+- **Root cause:** The guard checked the upload, not the later moves and visibility changes. The duplicate check ran once, before the row lock, and matched the hash only.
+- **Rule going forward:** Guard an access invariant at every write that can break it, in the shared state function, not just at the write that creates the data. Re-run a dedupe check under the lock that serializes the writes.
+
+### 2026-10-17 (ET) — TASK-3174: a commit went in after its pre-commit gate failed
+
+- **What happened:** A screenshot bundle under `artifacts/ui/` failed repo hygiene (no `REPORT.md` or `index.md`). The command ran `preflight.sh --mode pre-commit; git commit … && git push`, so the commit and push went through anyway. The next commit added the missing files.
+- **Root cause:** `;` ignores the exit code, so the gate was advisory in that command line.
+- **Rule going forward:** Chain a gate to the step it guards with `&&`, never `;`. Give every new `artifacts/` bundle a `REPORT.md` and an `index.md` before its first commit.
+
 ### 2026-10-17 (ET) — TASK-3165: the STE-lite check measured the wrong unit, and batch receipts had no size cap
 
 - **What happened:** Sol's review of PR #352 found three P2s. A Markdown link counted every word of its label. The 20-word step budget reset at each sentence, so a 30-word step passed. `mc_update_tasks` returned every advice finding, about 19 MB for a valid 100-item batch, above Vercel's 4.5 MB response cap after the writes had committed.
@@ -1126,3 +1144,13 @@
   the real status. The client turns `signin_required` on a read into a sign-in round trip back to
   the same screen; a write keeps the page so unsaved input survives. When shortening a session,
   test what an already-open tab does when it ends.
+
+## 2026-10-17 — TASK-3175: a restyled page kicker broke e2e navigation checks
+- **What went wrong:** The Initiative page redesign replaced the header's `.kk` kicker with a new
+  `.ini-kicker` row. Ten e2e tests (ui-project-responsive, ui-project-wiring) wait for
+  `.mc .ph .kk` with "Initiative ·" after navigating to a bucket, so CI failed on PR #358.
+- **Root cause:** `.ph .kk` is the shared page-kicker hook that specs and the header skin rely on.
+  I ran the unit tests and screenshots, but not the e2e specs that navigate into the page.
+- **Rule going forward:** When restyling a page header, keep the shared hook classes (`.ph`,
+  `.kk`, `.r`) and add a page class next to them. Before pushing, grep `e2e/` for the selectors
+  the touched markup used and run those specs.

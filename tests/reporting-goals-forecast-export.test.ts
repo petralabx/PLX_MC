@@ -1,4 +1,5 @@
-// The workbook's Forecast sheet (TASK-3151), built from the 2026-10-14 fixture's
+// The workbook's Forecast sheet (TASK-3151; customer class and item category
+// columns, TASK-3177), built from the 2026-10-14 fixture's
 // page model (M1–M7 entered) and read back with exceljs: its place before the
 // import template, the house styles, the order rows as values and every total
 // and number as a formula; then recalculated by LibreOffice — no formula errors
@@ -77,6 +78,7 @@ describe("the Forecast sheet", () => {
     expect((ws.getRow(6).values as unknown[]).slice(1)).toEqual([
       "Expected", "Order", "Line", "Customer code", "Customer", "PO", "Item", "Description", "Still to ship", "Unit", "Unit price",
       "Currency", "Value", "CAD", "Bucket", "Assembly order", "AO scheduled", "AO status", "Bulk batch", "Batch status",
+      "Customer class", "Item category",
     ]);
     for (const row of [3, 6]) {
       ws.getRow(row).eachCell((cell) => {
@@ -124,6 +126,7 @@ describe("the Forecast sheet", () => {
       ]);
       expect(formulaOf(ws.getCell(`N${n}`))).toBe(`IF(L${n}="CAD",M${n},IF(L${n}="USD",ROUND(M${n}*Goals!$B$17,2),""))`);
       expect(ws.getCell(`P${n}`).value).toBe(r.ao?.number ?? null);
+      expect([ws.getCell(`U${n}`).value, ws.getCell(`V${n}`).value]).toEqual([r.customerClass, r.category]);
     });
     expect(ws.getCell("K10").value).toBe(2.25);
     expect(ws.getCell("O10").value).toBe("Planned in time");
@@ -137,6 +140,39 @@ describe("the Forecast sheet", () => {
     expect(formulaOf(ws.getCell("E28"))).toBe("D28/C28");
     expect(String(ws.getCell("A30").value)).toContain("2 assembly orders scheduled this month (8,400 pieces) match no open Sage order line");
     expect(String(ws.getCell("A31").value)).toContain("Not converted: EUR 2,100.00 in 1 row.");
+  });
+
+  it("ends each row with its customer class and item category, after the columns the formulas read (TASK-3177)", async () => {
+    const { ws } = await build(FORECAST_VIEW);
+    expect([ws.getCell("U7").value, ws.getCell("V7").value]).toEqual(["Exclusive Manufacturing", "PLABEL"]);
+    // Soapbox (SOAP11) isn't on the workbook's class list; FP-1414 has no category in Sage.
+    expect(ws.getCell("U10").value).toBe("Unclassified");
+    const noCategory = 7 + FORECAST_VIEW.rows.findIndex((r) => r.item === "FP-1414");
+    expect([ws.getCell(`G${noCategory}`).value, ws.getCell(`V${noCategory}`).value]).toEqual(["FP-1414", null]);
+    // Read: no note about categories, so the rounding note stays the last line.
+    expect(String(ws.getCell("A32").value)).toContain("CAD uses Excel’s ROUND");
+  });
+
+  it("writes Sage's space-padded category trimmed in column V, and a blank one as empty (TASK-3189)", async () => {
+    const lines = FORECAST.data.lines.map((l, i) => (i === 0 ? { ...l, category: "AMEN  " } : i === 1 ? { ...l, category: "      " } : l));
+    const view = goalsPage({}, undefined, { ...FORECAST, data: { ...FORECAST.data, lines } }).forecast as ForecastReady;
+    const { ws } = await build(view);
+    const vOf = (orderNo: string, item: string) => ws.getCell(`V${7 + view.rows.findIndex((r) => r.orderNo === orderNo && r.item === item)}`).value;
+    expect(vOf(lines[0].orderNo, lines[0].item)).toBe("AMEN");
+    expect(vOf(lines[1].orderNo, lines[1].item)).toBeNull();
+  });
+
+  it("says under the rows when item categories wait for read access, or for the next refresh", async () => {
+    const view = (categoryMissing: string[] | null) =>
+      goalsPage({}, undefined, { ...FORECAST, data: { ...FORECAST.data, categoryMissing } }).forecast;
+    const waiting = await build(view(["sage.oe_order_detail.category"]));
+    expect(String(waiting.ws.getCell("A32").value)).toBe(
+      "Item category is blank: the reporting login can’t read sage.oe_order_detail.category yet. A database administrator " +
+        "grants it by re-running docs/modules/reporting-goals/readonly-grants-forecast.sql."
+    );
+    expect(String(waiting.ws.getCell("A33").value)).toContain("CAD uses Excel’s ROUND");
+    const older = await build(view(null));
+    expect(older.ws.getCell("A32").value).toBe("Item categories fill in at the next refresh.");
   });
 
   it("says when Realistic will be measured, and leaves it blank", async () => {

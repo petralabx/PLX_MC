@@ -260,6 +260,8 @@ describe("UAT-only when staging is unset", () => {
   it("automatic workflow is renamed, never uses the live environment or live secrets", () => {
     const text = readFileSync(".github/workflows/db-migrate.yml", "utf8");
     expect(text).toContain("name: DB Migrate (UAT, staging when configured)");
-    expect(text).not.toMatch(/mc-live-release|MC_LIVE_|environment:/);
+    expect(text).not.toMatch(/mc-live-release|mc-live-plan|MC_LIVE_/);
+    expect(text.match(/^\s*environment:/gm)).toHaveLength(1);
+    expect(text).toMatch(/environment:\n\s+name: uat-migrate\n\s+deployment: false/);
   });
 });

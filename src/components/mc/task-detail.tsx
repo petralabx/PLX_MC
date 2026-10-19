@@ -79,6 +79,7 @@ const ARTIFACT_KIND_LABELS: Record<EvidenceArtifact["kind"], string> = {
   diagram: "Diagram",
   screenshot: "Screenshot",
   "web-page": "Web page",
+  video: "Video",
 };
 
 export interface EvidenceProgress {

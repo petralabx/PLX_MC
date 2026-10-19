@@ -338,7 +338,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_upload_evidence",
-    "Upload visual evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html). Send the file as contentBase64, 3 MiB or less, with a caption. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). evidence_store_unavailable says what a person must set up.",
+    "Upload evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it), web-page (html) or video (mp4, webm). Send the file as contentBase64, 3 MiB or less, with a caption. A larger video (100 MiB or less): send size and sha256 for an upload session, PUT the file to upload.url, then send uploadedName and sha256. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). Complex work a person must verify also needs a video from the plx-knowledge-video skill (warning only until 2026-11-01). evidence_store_unavailable says what a person must set up.",
     uploadEvidenceInputShape,
     async (body) => jsonResult(await actionUploadEvidence(identity, body))
   );

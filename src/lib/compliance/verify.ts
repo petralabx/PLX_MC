@@ -6,13 +6,16 @@
 
 import type { Evidence } from "@/lib/mc-data";
 import { hasHumanAccountableOwner } from "@/lib/mc-data";
-import { hasVisualArtifact } from "./evidence-artifacts";
+import { hasVideoArtifact, hasVisualArtifact } from "./evidence-artifacts";
 import {
+  VIDEO_EVIDENCE_ENFORCE_FROM,
   VISUAL_EVIDENCE_ENFORCE_FROM,
   blockingFindings,
+  complexityReasons,
   describeFindings,
   evidenceStandardReport,
   requiresHumanVerification,
+  videoEvidenceMode,
   visualEvidenceMode,
 } from "./evidence-standard";
 import { bundleRequirementsFor } from "./risk";
@@ -112,6 +115,17 @@ export function verifyCompliance(input: VerifyInput): VerifyResult {
     if (visualEvidenceMode(input.now, input.evidenceStoreEnabled) === "block") reasons.push(line);
     else if (!input.evidenceStoreEnabled) notes.push(`${line} Warning only: evidence uploads are off for this task.`);
     else notes.push(`${line} Warning only until ${VISUAL_EVIDENCE_ENFORCE_FROM.slice(0, 10)}.`);
+  }
+  // Explainer video (TASK-3167): complex work a person must verify needs a short
+  // video. Same rules as visual evidence, with its own week.
+  const complex = requiresHumanVerification(task.labels, tier) ? complexityReasons(task, tier) : [];
+  if (complex.length > 0 && !hasVideoArtifact(task.evidence)) {
+    const line =
+      `no explainer video: complex change (${complex.join(", ")}); ` +
+      "make one with the plx-knowledge-video skill and upload it with mc_upload_evidence (kind video).";
+    if (videoEvidenceMode(input.now, input.evidenceStoreEnabled) === "block") reasons.push(line);
+    else if (!input.evidenceStoreEnabled) notes.push(`${line} Warning only: evidence uploads are off for this task.`);
+    else notes.push(`${line} Warning only until ${VIDEO_EVIDENCE_ENFORCE_FROM.slice(0, 10)}.`);
   }
 
   return reasons.length === 0

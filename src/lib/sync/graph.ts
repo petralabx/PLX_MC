@@ -498,3 +498,40 @@ export async function uploadSmallDriveFile(
     body: bytes as BodyInit,
   });
 }
+
+/**
+ * A resumable upload session for a large file (TASK-3167). The caller PUTs the
+ * bytes straight to `uploadUrl`, which needs no token and expires. An existing
+ * file at the path makes it fail: no upload replaces another.
+ */
+export async function createDriveUploadSession(
+  driveId: string,
+  path: string
+): Promise<{ uploadUrl: string; expirationDateTime: string }> {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return graphFetch(`/drives/${driveId}/root:/${encoded}:/createUploadSession`, {
+    method: "POST",
+    body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "fail" } }),
+  });
+}
+
+/** The file at a path in a drive, with a short-lived download URL. Null when there is none. */
+export async function driveItemByPath(
+  driveId: string,
+  path: string
+): Promise<{ id: string; webUrl: string; size: number; "@microsoft.graph.downloadUrl": string } | null> {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  try {
+    return await graphFetch(`/drives/${driveId}/root:/${encoded}`);
+  } catch (err) {
+    if (err instanceof GraphError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+/** The bytes behind a download URL from driveItemByPath. The URL carries its own auth. */
+export async function driveItemContent(downloadUrl: string): Promise<ReadableStream<Uint8Array>> {
+  const resp = await fetch(downloadUrl, { signal: AbortSignal.timeout(240_000) });
+  if (!resp.ok || !resp.body) throw new GraphError(resp.status, await resp.text(), "drive item download");
+  return resp.body;
+}

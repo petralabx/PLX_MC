@@ -19,6 +19,9 @@ const h = vi.hoisted(() => ({
   driveId: "drive-mc" as string | null,
   siteError: null as null | Error,
   uploads: [] as { driveId: string; path: string; size: number; contentType: string }[],
+  sessions: [] as { driveId: string; path: string }[],
+  stored: null as null | Uint8Array,
+  lookedUp: [] as string[],
   patched: [] as Record<string, unknown>[],
   events: [] as Record<string, unknown>[],
 }));
@@ -83,6 +86,29 @@ vi.mock("@/lib/sync/graph", async () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
       return { id: `item-${h.uploads.length}`, webUrl: `https://petrasoap.sharepoint.com/sites/PLXSite/${path}`, size: bytes.length };
     }),
+    createDriveUploadSession: vi.fn(async (driveId: string, path: string) => {
+      h.sessions.push({ driveId, path });
+      return { uploadUrl: "https://petrasoap.sharepoint.com/upload/session-1", expirationDateTime: "2026-10-19T00:00:00Z" };
+    }),
+    driveItemByPath: vi.fn(async (_driveId: string, path: string) => {
+      h.lookedUp.push(path);
+      if (!h.stored) return null;
+      return {
+        id: "item-video", webUrl: `https://petrasoap.sharepoint.com/sites/PLXSite/${path}`, size: h.stored.length,
+        "@microsoft.graph.downloadUrl": "https://download/1",
+      };
+    }),
+    // Two chunks, so the read-back joins them.
+    driveItemContent: vi.fn(
+      async () =>
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(h.stored!.subarray(0, 5));
+            controller.enqueue(h.stored!.subarray(5));
+            controller.close();
+          },
+        })
+    ),
   };
 });
 
@@ -131,6 +157,9 @@ beforeEach(() => {
   h.driveId = "drive-mc";
   h.siteError = null;
   h.uploads.length = 0;
+  h.sessions.length = 0;
+  h.lookedUp.length = 0;
+  h.stored = null;
   h.patched.length = 0;
   h.events.length = 0;
   __clearEvidenceDriveCacheForTests();
@@ -145,9 +174,9 @@ describe("mc_upload_evidence", () => {
     expect(h.uploads[0]).toMatchObject({ driveId: "drive-mc", contentType: "image/svg+xml", size: svg.length });
     const sha = createHash("sha256").update(svg).digest("hex");
     expect(h.uploads[0].path).toBe(
-      `PLX Mission Control/PRJ-PLX-MC-FRONTIER/BKT-HUMAN/TASK-3166/${res.artifact.uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha.slice(0, 8)}-flow.svg`
+      `PLX Mission Control/PRJ-PLX-MC-FRONTIER/BKT-HUMAN/TASK-3166/${res.artifact!.uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha.slice(0, 8)}-flow.svg`
     );
-    expect(res.artifact.name).toMatch(/^\d{8}T\d{6}Z-[0-9a-f]{8}-flow\.svg$/);
+    expect(res.artifact!.name).toMatch(/^\d{8}T\d{6}Z-[0-9a-f]{8}-flow\.svg$/);
     expect(requireMcpActor).toHaveBeenCalledWith(identity, "task.complete", { type: "task", id: "TASK-3166" }, { repositoryId: "petralabx/PLX_MC" });
     expect(res.artifact).toMatchObject({
       kind: "diagram", caption: "The upload flow", driveItemId: "item-1", contentType: "image/svg+xml",
@@ -188,7 +217,7 @@ describe("mc_upload_evidence", () => {
     expect(h.uploads).toHaveLength(2);
     const artifacts = (h.task?.evidence as { artifacts: { driveItemId: string }[] }).artifacts;
     expect(artifacts.map((a) => a.driveItemId)).toEqual(["old", "item-2"]);
-    expect([first.artifact.driveItemId, second.artifact.driveItemId]).toEqual(["item-2", "item-2"]);
+    expect([first.artifact!.driveItemId, second.artifact!.driveItemId]).toEqual(["item-2", "item-2"]);
     expect(second).toMatchObject({ duplicate: true });
     expect(h.events.filter((e) => e.kind === "task.evidence.uploaded")).toHaveLength(1);
   });
@@ -317,5 +346,82 @@ describe("mc_upload_evidence", () => {
     h.siteError = new TypeError("bug");
     await expect(upload()).rejects.toBeInstanceOf(TypeError);
     expect(h.patched).toHaveLength(0);
+  });
+});
+
+// TASK-3167: a video too big to send inline goes in an upload session. MC opens
+// the session, the agent PUTs the bytes to SharePoint, and MC reads the file
+// back to check its type, size and SHA-256 before it records it.
+describe("mc_upload_evidence video upload session", () => {
+  const mp4 = new Uint8Array([0, 0, 0, 0x20, ...[..."ftypisom"].map((c) => c.charCodeAt(0)), 1, 2, 3, 4, 5, 6]);
+  const sha256 = createHash("sha256").update(mp4).digest("hex");
+  const video = { kind: "video", fileName: "explainer.mp4", contentType: "video/mp4", caption: "How the gate works", contentBase64: undefined };
+  const start = (over: Record<string, unknown> = {}) => upload({ ...video, size: mp4.length, sha256, ...over });
+
+  it("opens a session at the task folder and records nothing yet", async () => {
+    const res = await start();
+    expect(res.upload).toMatchObject({ url: "https://petrasoap.sharepoint.com/upload/session-1", chunkBytes: 10 * 1024 * 1024 });
+    expect(res.upload!.uploadedName).toMatch(new RegExp(`^\\d{8}T\\d{6}Z-${sha256.slice(0, 8)}-explainer\\.mp4$`));
+    expect(h.sessions).toEqual([
+      { driveId: "drive-mc", path: `PLX Mission Control/PRJ-PLX-MC-FRONTIER/BKT-HUMAN/TASK-3166/${res.upload!.uploadedName}` },
+    ]);
+    expect(h.patched).toHaveLength(0);
+    expect(h.events).toHaveLength(0);
+  });
+
+  it("records the stored video once its bytes, size and SHA-256 check out", async () => {
+    const { upload: session } = await start();
+    h.stored = mp4;
+    const res = await upload({ ...video, sha256, uploadedName: session!.uploadedName });
+    expect(res.artifact).toMatchObject({ kind: "video", driveItemId: "item-video", size: mp4.length, sha256, contentType: "video/mp4" });
+    const evidence = h.patched[0].evidence as { artifacts: { driveItemId: string }[] };
+    expect(evidence.artifacts.map((a) => a.driveItemId)).toEqual(["old", "item-video"]);
+    expect(h.events).toMatchObject([{ kind: "task.evidence.uploaded", payload: { kind: "video", sha256 } }]);
+  });
+
+  it("refuses a stored file whose SHA-256 or type does not match", async () => {
+    const { upload: session } = await start();
+    h.stored = new Uint8Array([...mp4.subarray(0, 12), 9, 9, 9, 9, 9, 9]);
+    await expect(upload({ ...video, sha256, uploadedName: session!.uploadedName })).rejects.toMatchObject({
+      code: "invalid_artifact", status: 400, message: expect.stringMatching(/SHA-256 does not match/),
+    });
+    h.stored = new TextEncoder().encode("<!DOCTYPE html><html></html>");
+    await expect(upload({ ...video, sha256, uploadedName: session!.uploadedName })).rejects.toMatchObject({
+      code: "invalid_artifact", message: "The file content is text/html, not video/mp4.",
+    });
+    expect(h.patched).toHaveLength(0);
+  });
+
+  it("says the upload is not finished when SharePoint has no file yet", async () => {
+    const { upload: session } = await start();
+    await expect(upload({ ...video, sha256, uploadedName: session!.uploadedName })).rejects.toMatchObject({ code: "upload_incomplete", status: 409 });
+  });
+
+  it("only finishes a name the session issued for this file", async () => {
+    h.stored = mp4;
+    for (const uploadedName of ["../TASK-1/x.mp4", `20261018T120000Z-${"f".repeat(8)}-explainer.mp4`, `20261018T120000Z-${sha256.slice(0, 8)}-other.mp4`]) {
+      await expect(upload({ ...video, sha256, uploadedName })).rejects.toMatchObject({ code: "invalid_artifact", status: 400 });
+    }
+    expect(h.lookedUp).toHaveLength(0);
+  });
+
+  it("refuses a video over 100 MiB, the wrong extension, or a session for another kind", async () => {
+    await expect(start({ size: 100 * 1024 * 1024 + 1 })).rejects.toMatchObject({ code: "invalid_artifact", message: /Limit: 104857600\.$/ });
+    await expect(start({ fileName: "explainer.mov" })).rejects.toMatchObject({ code: "invalid_artifact", message: "A video/mp4 video must be named *.mp4." });
+    await expect(start({ kind: "screenshot", contentType: "image/png", fileName: "x.png" })).rejects.toMatchObject({ code: "invalid_request", status: 400 });
+    expect(h.sessions).toHaveLength(0);
+  });
+
+  it("returns the existing record for a video the task already has, without a session", async () => {
+    h.task = { ...h.task, evidence: { summary: "s", items: [], artifacts: [{ kind: "video", driveItemId: "first", sha256 }] } };
+    const res = await start();
+    expect(res).toMatchObject({ duplicate: true, artifact: { driveItemId: "first" } });
+    expect(h.sessions).toHaveLength(0);
+  });
+
+  it("keeps the store rules: uploads off never open a session", async () => {
+    h.storeEnabled = false;
+    await expect(start()).rejects.toMatchObject({ code: "evidence_store_unavailable", status: 503 });
+    expect(h.sessions).toHaveLength(0);
   });
 });

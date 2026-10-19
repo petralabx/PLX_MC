@@ -257,7 +257,8 @@ export interface QaTest {
  * mc_upload_evidence; MC keeps only this record.
  */
 export interface EvidenceArtifact {
-  kind: "diagram" | "screenshot" | "web-page";
+  /** "video": an explainer from the plx-knowledge-video skill (TASK-3167). */
+  kind: "diagram" | "screenshot" | "web-page" | "video";
   name: string;
   caption: string;
   /** SharePoint web URL. */

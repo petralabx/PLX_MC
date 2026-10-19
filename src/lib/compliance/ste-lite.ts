@@ -50,6 +50,17 @@ function plainText(text: string): string {
     .replace(/\b(?:e\.g|i\.e|vs|approx)\./gi, (abbr) => abbr.replace(/\./g, ""));
 }
 
+/**
+ * The longest numbered procedure in the text: its highest step number, outside
+ * code blocks (TASK-3167: more than 5 is complex). Two 3-step lists are 3, not 6.
+ */
+export function numberedStepCount(text: string): number {
+  const numbers = plainText(text)
+    .split("\n")
+    .map((line) => (STEP.test(line) ? Number.parseInt(line.trim(), 10) : 0));
+  return Math.max(0, ...numbers);
+}
+
 const words = (sentence: string): string[] => sentence.split(/\s+/).filter((token) => /[\p{L}\p{N}]/u.test(token));
 
 const sentences = (text: string): string[] =>

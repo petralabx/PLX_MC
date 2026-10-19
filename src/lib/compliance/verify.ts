@@ -6,12 +6,13 @@
 
 import type { Evidence } from "@/lib/mc-data";
 import { hasHumanAccountableOwner } from "@/lib/mc-data";
-import { hasVisualArtifact } from "./evidence-artifacts";
+import { hasArtifactKind, hasVisualArtifact } from "./evidence-artifacts";
 import {
   VISUAL_EVIDENCE_ENFORCE_FROM,
   blockingFindings,
   describeFindings,
   evidenceStandardReport,
+  isComplexWork,
   requiresHumanVerification,
   visualEvidenceMode,
 } from "./evidence-standard";
@@ -112,6 +113,16 @@ export function verifyCompliance(input: VerifyInput): VerifyResult {
     if (visualEvidenceMode(input.now, input.evidenceStoreEnabled) === "block") reasons.push(line);
     else if (!input.evidenceStoreEnabled) notes.push(`${line} Warning only: evidence uploads are off for this task.`);
     else notes.push(`${line} Warning only until ${VISUAL_EVIDENCE_ENFORCE_FROM.slice(0, 10)}.`);
+  }
+  // Explainer video (TASK-3167): complex work a person must verify also needs a
+  // video. An operator machine records it from the agent's script, so this only
+  // warns until a cloud recorder exists (decision, Vince, 2026-10-17).
+  if (requiresHumanVerification(task.labels, tier) && isComplexWork(task, tier) && !hasArtifactKind(task.evidence, "video")) {
+    notes.push(
+      hasArtifactKind(task.evidence, "video-script")
+        ? "explainer video pending: the video script is uploaded. An operator records it with plx-knowledge-video and uploads the MP4. Warning only."
+        : "no explainer video: complex work needs one. Upload a plx-knowledge-video script as kind video-script, and an operator records it. Warning only."
+    );
   }
 
   return reasons.length === 0

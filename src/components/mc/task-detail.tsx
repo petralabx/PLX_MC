@@ -74,11 +74,13 @@ type SorFieldName = (typeof SOR_FIELD_NAMES)[number];
 
 const SUBMITTED_STAGES = new Set(["review", "merged", "verified"]);
 
-// Visual evidence from mc_upload_evidence (TASK-3166).
+// Visual evidence from mc_upload_evidence (TASK-3166), and explainer videos (TASK-3167).
 const ARTIFACT_KIND_LABELS: Record<EvidenceArtifact["kind"], string> = {
   diagram: "Diagram",
   screenshot: "Screenshot",
   "web-page": "Web page",
+  video: "Video",
+  "video-script": "Video script",
 };
 
 export interface EvidenceProgress {
@@ -558,13 +560,14 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                               </a>
                               <div className="sub">
                                 {artifact.name} · {artifact.uploadedAt.slice(0, 10)}
+                                {artifact.narrationVoice ? ` · voice ${artifact.narrationVoice}` : ""}
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="txt muted">No diagram, screenshot or web page uploaded yet.</div>
+                      <div className="txt muted">No diagram, screenshot, web page or video uploaded yet.</div>
                     )}
                   </div>
                 </div>

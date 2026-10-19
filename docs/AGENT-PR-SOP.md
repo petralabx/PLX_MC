@@ -451,6 +451,25 @@ A person must create the library and allow the Mission Control app to use the si
 
 The `compliance` check warns while uploads are off. When uploads are on, it warns until 2026-10-25 and then blocks a task without visual evidence.
 
+### Explainer video (TASK-3167)
+
+Complex work that a person must verify also needs a short explainer video. Work is complex when one of these is true:
+
+- The change is high risk.
+- The task description has more than 5 numbered steps.
+- The task touches 2 or more systems (its `repos`).
+
+The `plx-knowledge-video` skill makes the video. It runs on an operator machine, so the agent writes the script and an operator records it.
+
+1. Write the skill's `beats.json`. Give each beat a slug, narration, and an app path `url` or an `image` inside `demos/`.
+2. Use image beats for work with no screen, such as a migration. Use real diagrams and screenshots only.
+3. Upload `beats.json` with `mc_upload_evidence`, kind `video-script`.
+4. The operator records the script and uploads `demo.mp4` with kind `video` and `narrationVoice`.
+
+Over stdio, `mc_upload_evidence` with an absolute `filePath` uploads the video in chunks. Over HTTP, call `mc_start_evidence_upload` with the size and SHA-256. Then PUT the chunks to `uploadUrl` without an Authorization header, and call `mc_finish_evidence_upload`. MC re-reads the stored file and deletes it when its SHA-256 or type is wrong.
+
+The `compliance` check only warns about a missing video. A later change sets a block date when a cloud recorder exists.
+
 ---
 
 ## 8. Risk-tier bundle

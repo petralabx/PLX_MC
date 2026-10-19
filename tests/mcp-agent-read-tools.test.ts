@@ -288,7 +288,9 @@ describe("tool registry", () => {
     expect(names).toContain("mc_link_merged_pr");
     expect(names).toContain("mc_list_projects");
     expect(names).toContain("mc_upload_evidence");
-    expect(names).toHaveLength(39);
+    expect(names).toContain("mc_start_evidence_upload");
+    expect(names).toContain("mc_finish_evidence_upload");
+    expect(names).toHaveLength(41);
   });
 });
 

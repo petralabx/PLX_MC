@@ -40,9 +40,9 @@ Work is complex when one of these is true:
 | Step | Task | What ships | State |
 |------|------|------------|-------|
 | 1 | TASK-3165 | STE-lite check on agent text; warns until 2026-10-24 | Shipped (#352, #353) |
-| 2 | TASK-3166 | `mc_upload_evidence` and the visual-evidence gate; warns until 2026-10-25 | #354 |
-| 3 | TASK-3167 | Explainer video for complex work | Not started |
-| 4 | TASK-3168 | PR deep-link check | Not started |
+| 2 | TASK-3166 | `mc_upload_evidence` and the visual-evidence gate; warns until 2026-10-25 | Shipped (#354) |
+| 3 | TASK-3167 | Video kinds and chunked upload; still-image beats, Piper and a full `assemble.sh` in the skill; a warn-only video check | In review |
+| 4 | TASK-3168 | Review links check for the modules a PR touches; warns until 2026-11-01 | Shipped (#366, #368, #369, #370) |
 
 ## Restricted projects
 

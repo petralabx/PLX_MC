@@ -257,7 +257,8 @@ export interface QaTest {
  * mc_upload_evidence; MC keeps only this record.
  */
 export interface EvidenceArtifact {
-  kind: "diagram" | "screenshot" | "web-page";
+  /** TASK-3166 visual kinds, plus TASK-3167 "video" and its recorder input "video-script". */
+  kind: "diagram" | "screenshot" | "web-page" | "video" | "video-script";
   name: string;
   caption: string;
   /** SharePoint web URL. */
@@ -267,6 +268,8 @@ export interface EvidenceArtifact {
   size: number;
   sha256: string;
   uploadedAt: string;
+  /** A video's narration voice, such as "elevenlabs:<voice id>" or "piper:<model>" (TASK-3167). */
+  narrationVoice?: string;
 }
 
 export interface Evidence {

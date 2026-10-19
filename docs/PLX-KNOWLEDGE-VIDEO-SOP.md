@@ -170,10 +170,14 @@ npx playwright install chromium
 pip install faster-whisper
 ```
 
-For narration, provision `ELEVENLABS_API_KEY`. If it is unavailable, stop and
-obtain explicit approval before using local Piper (`pip install piper-tts`).
-Record any approved fallback in `metadata.yml` and `how-to.md`; never silently
-substitute a voice or ship a silent video when narration was requested.
+For narration, provision `ELEVENLABS_API_KEY`. Piper is the approved fallback
+for now (Vince, 2026-10-17, TASK-3167): `pip install piper-tts`, download a
+voice (`.onnx` plus its `.onnx.json`), and set `PIPER_MODEL` to the `.onnx` path
+(`PIPER_BIN` if `piper` is not on `PATH`). `narrate-beats.mjs` uses ElevenLabs
+when its key is set, else Piper, else it stops. It writes the voice to
+`demos/clips/audio/narration.json`. Copy that voice into `metadata.yml` and
+`how-to.md`; never silently substitute a voice or ship a silent video when
+narration was requested.
 
 Required environment variable names:
 
@@ -304,16 +308,24 @@ node demos/capture-beat.mjs --slug <slug> --url <path> \
 node demos/_engine/compose.mjs demos/clips/<slug> \
   --preset studio-dark --no-speedup
 
+node demos/still-beat.mjs        # every beat with "image" instead of "url"
+
 bash demos/assemble.sh
 ```
 
-Repeat capture and compose for every beat. Narration must come first because
-`demos/clips/audio/durations.json` sizes each on-screen hold. `--no-speedup` is
-required; the default idle speed-up collapses narration holds. The pipeline
-preloads pages off-camera, uses `activeHold` to keep static captures above the
-FPS gate, freezes each final beat frame to narration length, concatenates the
-beats, aligns captions with faster-whisper, burns captions, and normalizes
-audio. Do not globally time-stretch the finished recording.
+Repeat capture and compose for every page beat. A beat with `image` (a path
+under `demos/`) instead of `url` is a still: `still-beat.mjs` holds that diagram
+or screenshot for its narration, with no browser or login (TASK-3167). Use stills
+for work with no screen to film, such as a migration or a flow across systems.
+Narration must come first because `demos/clips/audio/narration.json` sizes each
+on-screen hold. `--no-speedup` is required; the default idle speed-up collapses
+narration holds. The pipeline preloads pages off-camera, uses `activeHold` to
+keep static captures above the FPS gate, freezes each final beat frame to
+narration length, and concatenates the beats. `assemble.sh` then writes
+`demos/out/demo.mp4` (captions burned in, audio at -16 LUFS), `demo.srt` and
+`narration.json`. Captions are one cue per sentence, timed inside each beat by
+word count, so the burned captions and the SRT always match. Do not globally
+time-stretch the finished recording.
 
 ---
 
@@ -345,6 +357,12 @@ emphasis only on controls that actually appear.
 PLX_MC currently has **no canonical Knowledge Hub upload API**. Do not invent
 one. Final package handoff and publish remain operator-reviewed until a
 canonical ingestion path exists; keep status `draft` until that review occurs.
+
+**Task evidence is different (TASK-3167).** When the video is the explainer for
+a Mission Control task, upload `demo.mp4` to that task with `mc_upload_evidence`
+(stdio, `kind: "video"`, an absolute `filePath`, and `narrationVoice` from
+`narration.json`). Over HTTP, use `mc_start_evidence_upload`, PUT the chunks,
+then `mc_finish_evidence_upload`. See `docs/AGENT-PR-SOP.md`.
 
 ---
 

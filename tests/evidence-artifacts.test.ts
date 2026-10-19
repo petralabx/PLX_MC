@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { Evidence, EvidenceArtifact, Task } from "@/lib/mc-data";
 import {
   MAX_ARTIFACT_BYTES,
+  MAX_VIDEO_BYTES,
   MCP_ENVELOPE_RESERVE_BYTES,
   MCP_TRANSPORT_LIMIT_BYTES,
   PLX_EVIDENCE_STORE,
@@ -14,11 +15,15 @@ import {
   artifactFolder,
   artifactProblem,
   evidenceCompleteForTier,
+  hasArtifactKind,
   hasVisualArtifact,
+  isComplexWork,
   ownEvidenceSite,
   sharePointSafeName,
   sniffContentType,
   verifyCompliance,
+  videoScriptProblem,
+  videoUploadProblem,
   visualEvidenceMode,
 } from "@/lib/compliance";
 
@@ -168,5 +173,117 @@ describe("visual evidence at the gate", () => {
     const plain = verify(task({ labels: ["kind:code"], evidence: evidence() }), AFTER, true);
     expect(plain.verdict).toBe("pass");
     expect(plain.reasons.join(" ")).not.toMatch(/visual evidence/);
+  });
+});
+
+// TASK-3167: complex work a person must verify also needs an explainer video. The
+// agent uploads a plx-knowledge-video script; an operator records and uploads the
+// MP4 in chunks. The gate only warns about a missing video for now.
+const MP4 = new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 2, 0]);
+const script = (beats: unknown) => text(JSON.stringify({ voice: "v", beats }));
+const BEATS = [
+  { slug: "01-map", image: "slides/map.png", narration: "The upload flow has three parts." },
+  { slug: "02-ui", url: "/tasks/TASK-1", narration: "The task page shows the files." },
+];
+
+describe("explainer video rules (TASK-3167)", () => {
+  it("finds an MP4 and a JSON script from the bytes", () => {
+    expect(sniffContentType(MP4)).toBe("video/mp4");
+    // HEIC images and QuickTime movies also start with an ftyp box.
+    const brand = (b: string) => new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, ...[...b].map((c) => c.charCodeAt(0)), 0, 0, 0, 0]);
+    expect(sniffContentType(brand("heic"))).toBeNull();
+    expect(sniffContentType(brand("qt  "))).toBeNull();
+    expect(sniffContentType(brand("mp42"))).toBe("video/mp4");
+    expect(sniffContentType(script(BEATS))).toBe("application/json");
+    expect(sniffContentType(script([{ slug: "a", image: "x.png", narration: "An <svg> diagram." }]))).toBe("application/json");
+  });
+
+  it("accepts a script whose beats each have a slug, narration, and a url or an image", () => {
+    expect(videoScriptProblem(script(BEATS))).toBeNull();
+    expect(artifactProblem("video-script", "application/json", script(BEATS))).toBeNull();
+  });
+
+  it("refuses a script a recorder cannot use", () => {
+    expect(videoScriptProblem(text("{ nope"))).toBe("The video script is not valid JSON.");
+    expect(videoScriptProblem(script([]))).toBe("The video script needs a non-empty beats list.");
+    expect(videoScriptProblem(script([{ slug: "Bad Slug", image: "a.png", narration: "x" }]))).toMatch(/^Beat 1 needs a lowercase slug/);
+    expect(videoScriptProblem(script([BEATS[0], BEATS[0]]))).toBe("Beat 2 repeats the slug 01-map.");
+    expect(videoScriptProblem(script([{ slug: "a", image: "a.png", narration: " " }]))).toBe("Beat 1 needs narration text.");
+    expect(videoScriptProblem(script([{ slug: "a", url: "/x", image: "a.png", narration: "x" }]))).toBe("Beat 1 needs a page url or an image, not both.");
+    expect(videoScriptProblem(script([{ slug: "a", narration: "x" }]))).toBe("Beat 1 needs a page url or an image, not both.");
+  });
+
+  it("keeps a script's pages inside the app and its images inside the demos folder", () => {
+    const beat = (over: Record<string, string>) => script([{ slug: "a", narration: "x", ...over }]);
+    expect(videoScriptProblem(beat({ url: "/tasks/TASK-1?tab=evidence" }))).toBeNull();
+    expect(videoScriptProblem(beat({ image: "slides/sub dir/flow.JPG" }))).toBeNull();
+    for (const url of ["//evil.example/x", "@evil.example/", "https://evil.example/", "/a b", "/a\\b"]) {
+      expect(videoScriptProblem(beat({ url }))).toMatch(/^Beat 1 url must be a path in the app/);
+    }
+    for (const image of ["../secret.png", "slides/../../x.png", "/etc/x.png", "C:/x.png", "C:\\x.png", "slides\\x.png", "x.gif", ".."]) {
+      expect(videoScriptProblem(beat({ image }))).toMatch(/^Beat 1 image must be a PNG, JPEG or WebP path inside the demos folder/);
+    }
+  });
+
+  it("sends a video through an upload session, never the inline upload", () => {
+    expect(artifactProblem("video", "video/mp4", MP4)).toMatch(/^A video goes up in chunks: call mc_start_evidence_upload/);
+    expect(videoUploadProblem("video/mp4", 5_000_000)).toBeNull();
+    expect(videoUploadProblem("video/webm", 10)).toBe("A video must be video/mp4, not video/webm.");
+    expect(videoUploadProblem("video/mp4", 0)).toBe("The video is empty.");
+    expect(videoUploadProblem("video/mp4", MAX_VIDEO_BYTES + 1)).toMatch(/Limit: 209715200\.$/);
+  });
+
+  it("counts a video as visual evidence, and a script not", () => {
+    expect(hasVisualArtifact({ artifacts: [artifact("video")] })).toBe(true);
+    expect(hasVisualArtifact({ artifacts: [artifact("video-script")] })).toBe(false);
+    expect(hasArtifactKind({ artifacts: [artifact("video-script")] }, "video-script")).toBe(true);
+  });
+
+  it("calls work complex when it is high risk, has more than 5 steps, or touches 2 systems", () => {
+    const steps = (n: number) => Array.from({ length: n }, (_, i) => `${i + 1}. Do step ${i + 1}.`).join("\n");
+    expect(isComplexWork({ description: "One step." }, "high")).toBe(true);
+    expect(isComplexWork({ description: steps(6) }, "standard")).toBe(true);
+    expect(isComplexWork({ description: steps(5) }, "standard")).toBe(false);
+    expect(isComplexWork({ description: "```\n" + steps(9) + "\n```" }, "standard")).toBe(false);
+    expect(isComplexWork({ repos: ["portal-web", "plx-mc"] }, "standard")).toBe(true);
+    expect(isComplexWork({ repos: ["plx-mc", "plx-mc"] }, "standard")).toBe(false);
+    expect(isComplexWork({ repos: ["PLX-MC", "plx-mc "] }, "standard")).toBe(false);
+    expect(isComplexWork({ description: `${steps(3)}\n\nThen:\n\n${steps(3)}` }, "standard")).toBe(false);
+  });
+});
+
+describe("explainer video at the gate (TASK-3167)", () => {
+  const AFTER = Date.parse("2026-10-26T12:00:00Z");
+  const evidence = (artifacts: EvidenceArtifact[]): Evidence => ({
+    summary: "The flow is in the video.",
+    items: [{ key: "a", label: "a", done: true }],
+    rollback: "Revert the PR.",
+    qa: { pass: 1, fail: 0, total: 1, suite: "vitest", ran: "now", tests: [] },
+    artifacts,
+  });
+  const task = (over: Partial<Task>): Task => ({
+    id: "TASK-X", title: "t", bucket: "BKT-WMS", stage: "progress", priority: "medium", assignee: "vibes",
+    coassignees: [], reporter: "vince", accountableOwner: "greg", reqs: [], repos: ["portal-web", "plx-mc"], estimate: "M",
+    labels: ["verify:human"], prs: [], due: "—", sync: { state: "pending", ts: "—", sp: "—" }, subtasks: [], activity: [],
+    ...over,
+  });
+  const verify = (t: Task) => verifyCompliance({ task: t, actor: "agent", tier: "standard", bucketPrd: "present", now: AFTER, evidenceStoreEnabled: true });
+  const reasons = (t: Task) => verify(t).reasons.join(" ");
+
+  it("warns, never blocks, when complex work has no video", () => {
+    const r = verify(task({ evidence: evidence([artifact("diagram")]) }));
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).toMatch(/no explainer video: complex work needs one\. Upload a plx-knowledge-video script .* Warning only\./);
+  });
+
+  it("says the video is pending once the script is uploaded", () => {
+    expect(reasons(task({ evidence: evidence([artifact("diagram"), artifact("video-script")]) }))).toMatch(
+      /explainer video pending: the video script is uploaded\. An operator records it/
+    );
+  });
+
+  it("is quiet with a video, and for work that is not complex", () => {
+    expect(reasons(task({ evidence: evidence([artifact("video")]) }))).not.toMatch(/explainer video/);
+    expect(reasons(task({ repos: ["plx-mc"], evidence: evidence([artifact("diagram")]) }))).not.toMatch(/explainer video/);
   });
 });

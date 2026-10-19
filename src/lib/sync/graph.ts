@@ -484,6 +484,8 @@ export async function driveIdByName(siteId: string, name: string): Promise<strin
   return drives.value.find((drive) => drive.name === name)?.id ?? null;
 }
 
+const encodeDrivePath = (path: string) => path.split("/").map(encodeURIComponent).join("/");
+
 /** Graph's simple upload (up to 4 MB) to a path in a drive. Graph makes the missing folders. */
 export async function uploadSmallDriveFile(
   driveId: string,
@@ -491,10 +493,54 @@ export async function uploadSmallDriveFile(
   bytes: Uint8Array,
   contentType: string
 ): Promise<{ id: string; webUrl: string; size: number }> {
-  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  const encoded = encodeDrivePath(path);
   return graphFetch(`/drives/${driveId}/root:/${encoded}:/content`, {
     method: "PUT",
     headers: { "content-type": contentType },
     body: bytes as BodyInit,
   });
+}
+
+/**
+ * A resumable upload for a large file (TASK-3167). The caller PUTs the bytes to
+ * `uploadUrl` in chunks, with no token: the URL carries its own authorization.
+ * "fail" refuses to replace a file that is already there.
+ */
+export async function createDriveUploadSession(
+  driveId: string,
+  path: string
+): Promise<{ uploadUrl: string; expirationDateTime: string }> {
+  return graphFetch(`/drives/${driveId}/root:/${encodeDrivePath(path)}:/createUploadSession`, {
+    method: "POST",
+    body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "fail" } }),
+  });
+}
+
+/** A drive item by path, or null when nothing is there. */
+export async function driveItemByPath(
+  driveId: string,
+  path: string
+): Promise<{ id: string; webUrl: string; size: number } | null> {
+  try {
+    return await graphFetch(`/drives/${driveId}/root:/${encodeDrivePath(path)}?$select=id,webUrl,size`);
+  } catch (err) {
+    if (err instanceof GraphError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+/** A drive item's bytes as a stream. Graph redirects to a pre-authorized download URL. */
+export async function driveItemContent(driveId: string, itemId: string): Promise<ReadableStream<Uint8Array>> {
+  const url = `${GRAPH}/drives/${driveId}/items/${itemId}/content`;
+  const resp = await fetch(url, {
+    // The route has 60 s; the checks before this read take some of it.
+    signal: AbortSignal.timeout(45_000),
+    headers: { Authorization: `Bearer ${await getToken()}` },
+  });
+  if (!resp.ok || !resp.body) throw new GraphError(resp.status, await resp.text(), url, retryAfterMsFrom(resp));
+  return resp.body;
+}
+
+export async function deleteDriveItem(driveId: string, itemId: string): Promise<void> {
+  await graphFetch(`/drives/${driveId}/items/${itemId}`, { method: "DELETE" });
 }

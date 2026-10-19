@@ -14,6 +14,8 @@ import { createPlxMcMcpServer } from "@/lib/mcp/create-http-server";
 import { publicMcBaseUrl } from "@/lib/mcp/envelope";
 
 export const runtime = "nodejs";
+// mc_finish_evidence_upload re-reads a stored video (up to 200 MiB) to check it (TASK-3167).
+export const maxDuration = 60;
 
 async function handleMcpRequest(req: Request): Promise<Response> {
   try {

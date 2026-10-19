@@ -61,9 +61,9 @@ assets:
   page: how-to.md
   outline: process-outline.md
 duration_seconds: <int>          # from ffprobe on demo.mp4
-narration:
-  provider: elevenlabs           # or the local fallback actually used
-  voice: <voice name/id>
+narration:                       # copy from demos/out/narration.json
+  provider: elevenlabs           # or piper, the approved fallback
+  voice: <voice>                 # e.g. elevenlabs:<voice id> or piper:en_US-lessac-medium
   fallback_note: <present only if a non-ElevenLabs voice was used>
 source:
   app: <plx-customer-portal | PLX_MC>

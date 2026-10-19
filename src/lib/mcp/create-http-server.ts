@@ -24,7 +24,14 @@ import {
   actionSelfCheck,
 } from "./actions";
 import { recordMcpToolCall } from "./audit";
-import { actionUploadEvidence, uploadEvidenceInputShape } from "./evidence-actions";
+import {
+  actionFinishEvidenceUpload,
+  actionStartEvidenceUpload,
+  actionUploadEvidence,
+  finishEvidenceUploadInputShape,
+  startEvidenceUploadInputShape,
+  uploadEvidenceInputShape,
+} from "./evidence-actions";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 import { installMcpToolErrorEnvelope, taskLink } from "./envelope";
 import { idempotencyKeySchema } from "./task-create-idempotency";
@@ -338,9 +345,23 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_upload_evidence",
-    "Upload visual evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html). Send the file as contentBase64, 3 MiB or less, with a caption. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). evidence_store_unavailable says what a person must set up.",
+    "Upload visual evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html), or a video-script (plx-knowledge-video beats JSON) for an operator to record. Send the file as contentBase64, 3 MiB or less, with a caption. A video uses mc_start_evidence_upload. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). evidence_store_unavailable says what a person must set up.",
     uploadEvidenceInputShape,
     async (body) => jsonResult(await actionUploadEvidence(identity, body))
+  );
+
+  server.tool(
+    "mc_start_evidence_upload",
+    "Start uploading an explainer video (TASK-3167): an MP4 up to 200 MiB, made with the plx-knowledge-video skill. Send the size and SHA-256. Needs a live checkout. Returns uploadUrl, name and chunkBytes: PUT the bytes to uploadUrl in chunks with Content-Range and no Authorization header, then call mc_finish_evidence_upload. A same-SHA-256 file already on the task returns duplicate: true. Complex work a person must verify needs a video (warning only for now).",
+    startEvidenceUploadInputShape,
+    async (body) => jsonResult(await actionStartEvidenceUpload(identity, body))
+  );
+
+  server.tool(
+    "mc_finish_evidence_upload",
+    "Finish an explainer video upload (TASK-3167) after every chunk is PUT. Send the name from mc_start_evidence_upload, a caption, the SHA-256 and narrationVoice (for example elevenlabs:<voice id> or piper:<model>). MC re-reads the stored file and keeps it only when the SHA-256 matches and it is an MP4; otherwise it deletes it and you start again.",
+    finishEvidenceUploadInputShape,
+    async (body) => jsonResult(await actionFinishEvidenceUpload(identity, body))
   );
 
   server.tool(

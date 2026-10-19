@@ -28,11 +28,11 @@ If demo-studio is not installed:
 - Node 18+, `ffmpeg`/`ffprobe` on PATH, Playwright Chromium
   (`cd <film-demo>/scripts && npm install && npx playwright install chromium`).
 - `faster-whisper` (for caption alignment): `pip install faster-whisper`.
-- Narration voice: `ELEVENLABS_API_KEY` for the intended executive voice. **If the key
-  is absent, stop and tell the user** — either supply the key or explicitly approve the
-  best available local TTS fallback (e.g. Piper), and **note the fallback in
-  `metadata.yml` and the how-to**. Never silently ship a different voice or a silent video
-  when narration was requested.
+- Narration voice: `ELEVENLABS_API_KEY` for the intended executive voice. Piper is the
+  approved fallback for now (Vince, 2026-10-17): set `PIPER_MODEL` to a Piper voice
+  (`.onnx`). With neither, `narrate-beats.mjs` stops. **Note the voice from
+  `narration.json` in `metadata.yml` and the how-to.** Never silently ship a different
+  voice or a silent video when narration was requested.
 - The target app must be **running and reachable** at the base URL in `demo.config.json`,
   and the exact flow must be **clickable end-to-end** in that build. If a step does not
   exist in the running app, do not stage or fake it (see Constraints).
@@ -91,6 +91,20 @@ narration length and stitched with no global time-stretch. Full instructions,
 one-time setup, and the working P2P example config are in
 [`pipeline/README.md`](pipeline/README.md) (`capture-beat.mjs`, `narrate-beats.mjs`,
 `assemble.sh`, `beats.example.json`, `demo.config.example.json`).
+
+## Explainer video for a Mission Control task (TASK-3167)
+
+Mission Control asks for an explainer video when complex work needs a person to
+verify it. Complex means a high-risk change, a procedure of more than 5 steps, or
+work across 2 or more systems.
+
+1. The agent writes `beats.json`. Use still beats (`image`) for anything with no screen.
+2. Stills must be real diagrams or real screenshots; never mock a UI.
+3. The agent uploads `beats.json` with `mc_upload_evidence`, `kind: "video-script"`.
+4. An operator machine records it with this pipeline and checks the result.
+5. The operator uploads `demos/out/demo.mp4` with `kind: "video"` and `narrationVoice`.
+
+Until the operator uploads the video, the compliance gate only warns.
 
 ## Quality gate (self-review before delivering)
 

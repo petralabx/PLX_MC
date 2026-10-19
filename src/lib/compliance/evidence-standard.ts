@@ -3,7 +3,7 @@
 // STE-lite (./ste-lite.ts). Pure: the MCP layer turns blocking findings into a
 // 400; the PR verifier turns them into a reason or an advisory note.
 import type { RiskTier } from "./types";
-import { steLiteFindings, type WritingFinding } from "./ste-lite";
+import { numberedStepCount, steLiteFindings, type WritingFinding } from "./ste-lite";
 
 export const HUMAN_VERIFICATION_LABEL = "verify:human";
 
@@ -31,6 +31,22 @@ export function visualEvidenceMode(now: number = Date.now(), storeEnabled = fals
 export function requiresHumanVerification(labels: readonly string[] | undefined, tier?: RiskTier): boolean {
   const set = new Set((labels ?? []).map((label) => label.trim().toLowerCase()));
   return set.has(HUMAN_VERIFICATION_LABEL) || set.has("kind:human-test") || tier === "high";
+}
+
+/** A procedure with more numbered steps than this is complex (decision, Vince, 2026-10-17). */
+export const COMPLEX_PROCEDURE_STEPS = 5;
+
+/**
+ * Complex work (TASK-3167) needs an explainer video: a high-risk change, a
+ * procedure of more than 5 numbered steps in the task description, or work
+ * that touches 2 or more systems (the task's repos).
+ */
+export function isComplexWork(task: { description?: string; repos?: readonly string[] }, tier?: RiskTier): boolean {
+  return (
+    tier === "high" ||
+    numberedStepCount(task.description ?? "") > COMPLEX_PROCEDURE_STEPS ||
+    new Set((task.repos ?? []).map((repo) => repo.trim().toLowerCase())).size >= 2
+  );
 }
 
 export interface EvidenceStandardReport {

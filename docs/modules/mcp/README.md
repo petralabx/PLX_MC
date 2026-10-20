@@ -275,6 +275,8 @@ portal key, because `mc_self_check` stays forbidden to it.
 
 **CIP auto-undraft principal:** `sp_mcp_cip_auto_undraft` (PLX CIP Auto-Undraft; the agentic-swarm `cip-auto-undraft` workflow, agentic-swarm #1689; migration 046; approved by Vince 2026-10-18) is read-only: its grant is `task.read` only, and its allowlist is four read tools: `mc_self_check`, `mc_get_context`, `mc_search_tasks` and `mc_get_task`. It cannot call `mc_list_buckets` or `mc_search_knowledge`, and every write tool gives 403. Key sync verifies it through `mc_self_check`.
 
+**Workbench intake principal:** `sp_mcp_workbench_intake` (PLX Workbench intake; TASK-3523; migration 048; approved by Vince 2026-10-20 at 4:28 PM and 5:00 PM ET) is least privilege like the portal: its grant is `task.read` and `task.create` in any bucket, and its allowlist is `mc_create_task` and `mc_search_tasks`. It cannot read agent reports, set an `agent:` assignee, or check out, progress or complete a task. Key sync verifies it through the task search, like the portal. **Pending follow-up:** tasks it creates must need vince@ or cos@ approval before checkout or launch. No creator-principal approval gate exists yet. Vince decided at 5:09 PM ET to ship the principal first and add the gate in a separate task.
+
 **Agent reports (agent fleet P8, D12):** `POST /api/cursor/agent-report`
 records one free-form report per agent run as an `agent.report` event in
 `mc_events`. The body is `agentSlug`, `loopId`, `runId`, `title` and `markdown`

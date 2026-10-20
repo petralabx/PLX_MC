@@ -13,6 +13,7 @@ import {
   INFRA_MCP_SERVICE_PRINCIPAL_ID,
   POLICY_VERSION,
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
+  WORKBENCH_INTAKE_MCP_SERVICE_PRINCIPAL_ID,
   WORKBENCH_MCP_SERVICE_PRINCIPAL_ID,
   type McpAgentServicePrincipalId,
 } from "@/lib/permissions";
@@ -50,6 +51,10 @@ export const MCP_TOOL_ALLOWLISTS: Readonly<
   [INFRA_MCP_SERVICE_PRINCIPAL_ID]: READ_ONLY_MCP_TOOLS,
   // PLX CIP Auto-Undraft (agentic-swarm cip-auto-undraft) only reads tasks.
   [CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID]: CIP_AUTO_UNDRAFT_MCP_TOOLS,
+  // PLX Workbench intake creates and searches tasks, like the portal, without
+  // agent reports (it holds no agent_report.read). The creator-principal
+  // approval gate is a pending follow-up (see grants.ts).
+  [WORKBENCH_INTAKE_MCP_SERVICE_PRINCIPAL_ID]: ["mc_create_task", "mc_search_tasks"],
 };
 
 export function isMcpToolAllowed(principalId: string, tool: string): boolean {

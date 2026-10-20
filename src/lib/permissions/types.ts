@@ -18,6 +18,8 @@ export const CAPABILITIES = [
   "task.checkout",
   "task.progress",
   "task.complete",
+  // TASK-3407: set a task's assignee or accountable owner through mc_update_task, with a reason.
+  "task.assign",
   "routing.suggest",
   "routing.resolve",
   "routing.propose",

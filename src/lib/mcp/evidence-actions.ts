@@ -44,7 +44,7 @@ import {
   uploadSmallDriveFile,
 } from "@/lib/sync/graph";
 import { getBuckets, getEntity, lockSharedEvidence } from "@/lib/sync/repo";
-import type { McpIdentity } from "./auth";
+import { mcpAuditActor, type McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
 
 const PERSON_ACTION =
@@ -306,7 +306,7 @@ export async function actionUploadEvidence(identity: McpIdentity, input: UploadE
     );
     await complianceRepo.appendEventTx(q, {
       kind: base ? "task.evidence.relabeled" : "task.evidence.uploaded",
-      actor: `${identity.runtime}:${identity.operatorEmail}`,
+      actor: mcpAuditActor(identity),
       repo: dispatch.repo,
       taskId,
       payload: { kind: artifact.kind, name: artifact.name, url: artifact.url, size: artifact.size, sha256 },

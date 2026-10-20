@@ -716,6 +716,10 @@ const taskUpdatePatch = z.object({
   }).strict().optional(),
   bucket: z.string().trim().regex(/^BKT-[A-Z0-9-]+$/).optional(),
   note: z.string().trim().min(1).max(500).optional(),
+  // TASK-3407: need task.assign and reason (10+ characters).
+  assignee: z.string().trim().min(1).max(128).nullable().optional(),
+  accountableOwner: z.string().trim().min(1).max(128).optional(),
+  reason: z.string().trim().min(10).max(2000).optional(),
 }).strict();
 
 server.registerTool("mc_update_project", {
@@ -754,7 +758,7 @@ server.registerTool("mc_list_projects", {
 });
 
 server.registerTool("mc_update_task", {
-  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, removing the only kind leaves kind:needs-review, swap with removeLabels:[old], addLabels:[new]. Exactly one lane:* must remain, unless a lane-less task only gains/loses kind:* or closed:* closure labels (or not-needed) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
+  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, removing the only kind leaves kind:needs-review, swap with removeLabels:[old], addLabels:[new]. Exactly one lane:* must remain, unless a lane-less task only gains/loses kind:* or closed:* closure labels (or not-needed) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. assignee (person id or agent:<slug>; null clears) and accountableOwner (a person) need task.assign plus reason (10+ characters); audits task.assignment.changed. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
   inputSchema: z.object({
     taskId: z.string().trim().min(1).max(128),
     patch: taskUpdatePatch,

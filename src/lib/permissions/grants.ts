@@ -35,6 +35,7 @@ const ADMIN_CAPABILITIES: readonly Capability[] = [
   ...MEMBER_CAPABILITIES,
   "task.reopen",
   "task.cancel",
+  "task.assign",
   "bucket.create",
   "bucket.update",
   "project.create",
@@ -107,6 +108,9 @@ const LEDGER_MCP_CAPABILITIES: readonly Capability[] = [
   "task.cancel",
   "task.reopen",
   "task.link_merged_pr",
+  // TASK-3407 (Vince, approval gate 2026-10-20): stewards re-assign tasks and
+  // their accountable owner with an audited reason; other agents cannot.
+  "task.assign",
 ];
 
 // sp_mcp_cos (Vince 2026-10-11 13:56 ET): Chief of Staff steward lane.
@@ -115,6 +119,7 @@ const COS_MCP_CAPABILITIES: readonly Capability[] = [
   ...MCP_AGENT_CAPABILITIES,
   "task.cancel",
   "task.link_merged_pr",
+  "task.assign",
 ];
 
 // sp_mcp_portal (agent fleet P8) is least privilege (decision CG-07b): it

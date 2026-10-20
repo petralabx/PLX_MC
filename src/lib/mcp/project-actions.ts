@@ -14,7 +14,7 @@ import { filterProjectsByAcl } from "@/lib/permissions/project-acl";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import { archiveContainer, patchProject, snapshot } from "@/lib/sync";
 import { getProjects } from "@/lib/sync/repo";
-import type { McpIdentity } from "./auth";
+import { mcpAuditActor, type McpIdentity } from "./auth";
 import { mcpJsonResult } from "./envelope";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 
@@ -130,7 +130,7 @@ export async function actionUpdateProject(identity: McpIdentity, input: unknown)
   if (!project) throw new ApiError("not_found", `unknown project ${body.projectId}`, 404);
   const eventSeq = await appendEvent({
     kind: "project.updated",
-    actor: `${identity.runtime}:${identity.operatorEmail}`,
+    actor: mcpAuditActor(identity),
     repo: identity.repo,
     payload: {
       projectId: existing.id,

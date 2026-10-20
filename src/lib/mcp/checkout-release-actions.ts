@@ -43,7 +43,7 @@ import { recordPermissionDecision } from "@/lib/permissions/decision-log";
 import { recordShadowMismatch } from "@/lib/permissions/shadow-mismatch";
 import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
-import { mcpPrincipalAuthzMode, type McpIdentity } from "./auth";
+import { mcpAuditActor, mcpPrincipalAuthzMode, type McpIdentity } from "./auth";
 import { mcpJsonResult, taskLink } from "./envelope";
 import { checkoutRef } from "./read-actions";
 
@@ -196,7 +196,7 @@ export async function actionReleaseCheckout(identity: McpIdentity, input: Releas
   const ref = checkoutRef(dispatch.id);
   // Same restricted-project guard as every other MCP task write.
   await assertTaskProjectAccess(dispatch.taskId, aclPrincipalFromMcp(identity));
-  const actor = `${identity.runtime}:${identity.operatorEmail}`;
+  const actor = mcpAuditActor(identity);
   const workerId = identity.workerId || "unknown-worker";
   const refuse = (code: string, message: string, status: number) =>
     new CheckoutReleaseRefusal(code, message, status, ref, dispatch.taskId);

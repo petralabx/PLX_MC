@@ -106,6 +106,14 @@ lease. Other reasons release as before. `checkout.released`,
 `workerId` (`X-MC-Worker-Id`, the stdio client's per-session id;
 `unknown-worker` when absent).
 
+**Actor per lane (TASK-3407):** an optional `X-MC-Agent: <runtime>/<lane>`
+header (it must start with the `X-MC-Runtime` value) names one stable actor per
+runtime and lane. Every MCP audit event then records
+`<runtime>/<lane>:<operator>` instead of `<runtime>:<operator>`
+(`mcpAuditActor`), and `mc_checkout_task` uses it as `agent` when the call
+passes none. A checkout with no agent returns an `agent_missing` warning;
+`PLX_MC_CHECKOUT_AGENT_REQUIRED=1` turns that into a 400 `agent_required`.
+
 **Cancelled end stage (TASK-2529):** `cancelled` is a task stage for work that
 will never ship. It is terminal (`TERMINAL_STAGES`) but is never "done": it is
 excluded from open/remaining counts (dashboard, project and bucket progress,
@@ -155,6 +163,13 @@ stored in the jsonb payload.
 `src/lib/mcp/task-update-actions.ts`. Both HTTP MCP and stdio support them;
 stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
 
+- `assignee` (a person id or `agent:<slug>`; `null` clears it) and
+  `accountableOwner` (a person, by directory id or email) need the
+  `task.assign` capability, held by human admins and owners and the steward
+  principals `sp_mcp_ledger` and `sp_mcp_cos`, plus a `reason` of 10 or more
+  characters. Each change writes a `task.assignment.changed` event with the
+  reason; `agent:` assignees still need a signed-in person or `sp_mcp_portal`
+  (TASK-3407). An assignment-only patch needs no lane.
 - Patch fields: `labels` replaces the entire set; `addLabels` / `removeLabels`
   are incremental and cannot accompany `labels`. Removals happen before adds.
   Labels are trimmed, non-empty and deduplicated; max 128 characters per label,
@@ -369,7 +384,7 @@ The checkout receipt also includes `taskId` and `actor.repo` (the slug bound on
 the credential), and `accountablePerson`, the person commits name in
 `On-Behalf-Of` (TASK-3483). `reuse: true` returns your own live checkout of the
 task instead of a second one (`reused: true`); when another holder has a live
-checkout, the receipt lists it under `concurrent` with a `warning`, and
+checkout, the receipt lists it under `concurrent` with a `concurrent_holder` entry in `warnings`, and
 `forceReason` records why you take over (TASK-3409). One Hub connector stamps every petralabx repo: optional `repo`
 on checkout is a GitHub slug that may override the connector `X-MC-Repo` for
 allowlisted consumers (`petralabx/local-inference`, `petralabx/skills`,

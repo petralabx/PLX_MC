@@ -114,6 +114,7 @@ import {
   WORKBENCH_MCP_SERVICE_PRINCIPAL_ID,
   INFRA_MCP_SERVICE_PRINCIPAL_ID,
   CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID,
+  WORKBENCH_INTAKE_MCP_SERVICE_PRINCIPAL_ID,
   authorize,
   capabilitiesForRole,
   capabilitiesForServicePrincipal,
@@ -123,6 +124,7 @@ const PORTAL = "sp_mcp_portal";
 const WORKBENCH = "sp_mcp_workbench";
 const INFRA = "sp_mcp_infra";
 const CIP = "sp_mcp_cip_auto_undraft";
+const INTAKE = "sp_mcp_workbench_intake";
 
 // The MCP agent bundle at PLX_MC main 20fc262 (grants.ts). P8 must not change it.
 const FULL_MCP_BUNDLE = [
@@ -147,6 +149,7 @@ const FULL_MCP_BUNDLE = [
 const KEYS: Record<string, string> = {
   sp_mcp_claude_code: "claude-key",
   sp_mcp_portal: "portal-key",
+  sp_mcp_workbench_intake: "intake-key",
 };
 
 function headers(key: string): Record<string, string> {
@@ -237,11 +240,12 @@ describe("sp_mcp_portal grant", () => {
   });
 
   it("leaves every other MCP principal on the full MCP bundle", () => {
-    // sp_mcp_workbench, sp_mcp_infra and sp_mcp_cip_auto_undraft are read-only; their grants are checked below.
+    // sp_mcp_workbench, sp_mcp_infra and sp_mcp_cip_auto_undraft are read-only, and
+    // sp_mcp_workbench_intake creates and reads; their grants are checked below.
     const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
-      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA && id !== CIP
+      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA && id !== CIP && id !== INTAKE
     );
-    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 4);
+    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 5);
     for (const principalId of others) {
       // sp_mcp_cursor adds task.cancel and task.reopen (TASK-3374). sp_mcp_cos
       // adds task.cancel plus task.link_merged_pr. sp_mcp_ledger adds all three (TASK-2580).
@@ -326,6 +330,71 @@ describe("sp_mcp_cip_auto_undraft grant", () => {
   });
 });
 
+// sp_mcp_workbench_intake (PLX Workbench intake, TASK-3523) is least privilege like the
+// portal: task.read and task.create, without agent_report.read. A capability added
+// later is denied unless it is one of those two.
+describe("sp_mcp_workbench_intake grant", () => {
+  it("is a reviewed MCP principal", () => {
+    expect(WORKBENCH_INTAKE_MCP_SERVICE_PRINCIPAL_ID).toBe(INTAKE);
+    expect(MCP_AGENT_SERVICE_PRINCIPAL_IDS).toContain(INTAKE);
+  });
+
+  it("holds exactly task.read and task.create and is denied every other capability", () => {
+    const granted = ["task.create", "task.read"];
+    expect([...capabilitiesForServicePrincipal(INTAKE)].sort()).toEqual(granted);
+    for (const capability of CAPABILITIES) {
+      const allowed = authorize({
+        actor: { kind: "service", id: INTAKE, status: "active" },
+        capability,
+      }).allowed;
+      expect({ capability, allowed }).toEqual({ capability, allowed: granted.includes(capability) });
+    }
+  });
+
+  it("authenticates the intake key as sp_mcp_workbench_intake", async () => {
+    const identity = await verifyMcpRequest(
+      new Request("http://localhost/api/cursor/self-check", { headers: headers("intake-key") })
+    );
+    expect(identity.servicePrincipalId).toBe(INTAKE);
+    expect(identity.actor).toEqual({ kind: "service", id: INTAKE, status: "active" });
+  });
+});
+
+// Write and planning tools that neither the portal nor the Workbench intake may call.
+const forbidden: [string, Record<string, unknown>][] = [
+  ["mc_checkout_task", { taskId: "TASK-1", repo: "petralabx/PLX_MC" }],
+  ["mc_report_progress", { taskId: "TASK-1", stage: "progress", notes: "x" }],
+  [
+    "mc_complete_task",
+    {
+      checkoutId: "dsp_x",
+      summary: "done",
+      verificationCommands: ["npm test"],
+      rollback: "revert",
+    },
+  ],
+  ["mc_create_bucket", { name: "New bucket" }],
+  ["mc_update_bucket", { id: "BKT-INFRA", name: "Renamed" }],
+  ["mc_create_project", { name: "New project" }],
+  ["mc_update_project", { projectId: "PRJ-PORTAL-GOLIVE", status: "closed" }],
+  ["mc_list_projects", {}],
+  ["mc_request_approval", { taskId: "TASK-1", reason: "please" }],
+  ["mc_suggest_work", { title: "x" }],
+  [
+    "mc_create_routed_task",
+    { proposalId: "rp_1", bucketId: "BKT-INFRA", title: "x", accountableOwnerId: "vince" },
+  ],
+  ["mc_confirm_existing", { proposalId: "rp_1", taskId: "TASK-1" }],
+  ["mc_attach_checkout", { proposalId: "rp_1", taskId: "TASK-1", checkoutId: "dsp_x" }],
+  ["mc_dismiss_conflict", { conflictId: "cf-1" }],
+  ["mc_dismiss_conflicts", { conflictIds: ["cf-1"] }],
+  ["mc_resolve_conflict", { conflictId: "cf-1", resolution: "keep_mc" }],
+  [
+    "mc_submit_skill",
+    { id: "portal-skill", name: "x", description: "x", skillMd: "# x" },
+  ],
+];
+
 describe("sp_mcp_portal through the MCP tools", () => {
   it("creates a task", async () => {
     const result = await callTool("portal-key", "mc_create_task", {
@@ -350,40 +419,6 @@ describe("sp_mcp_portal through the MCP tools", () => {
     expect((result.body.data as { total: number }).total).toBe(1);
   });
 
-  const forbidden: [string, Record<string, unknown>][] = [
-    ["mc_checkout_task", { taskId: "TASK-1", repo: "petralabx/PLX_MC" }],
-    ["mc_report_progress", { taskId: "TASK-1", stage: "progress", notes: "x" }],
-    [
-      "mc_complete_task",
-      {
-        checkoutId: "dsp_x",
-        summary: "done",
-        verificationCommands: ["npm test"],
-        rollback: "revert",
-      },
-    ],
-    ["mc_create_bucket", { name: "New bucket" }],
-    ["mc_update_bucket", { id: "BKT-INFRA", name: "Renamed" }],
-    ["mc_create_project", { name: "New project" }],
-    ["mc_update_project", { projectId: "PRJ-PORTAL-GOLIVE", status: "closed" }],
-    ["mc_list_projects", {}],
-    ["mc_request_approval", { taskId: "TASK-1", reason: "please" }],
-    ["mc_suggest_work", { title: "x" }],
-    [
-      "mc_create_routed_task",
-      { proposalId: "rp_1", bucketId: "BKT-INFRA", title: "x", accountableOwnerId: "vince" },
-    ],
-    ["mc_confirm_existing", { proposalId: "rp_1", taskId: "TASK-1" }],
-    ["mc_attach_checkout", { proposalId: "rp_1", taskId: "TASK-1", checkoutId: "dsp_x" }],
-    ["mc_dismiss_conflict", { conflictId: "cf-1" }],
-    ["mc_dismiss_conflicts", { conflictIds: ["cf-1"] }],
-    ["mc_resolve_conflict", { conflictId: "cf-1", resolution: "keep_mc" }],
-    [
-      "mc_submit_skill",
-      { id: "portal-skill", name: "x", description: "x", skillMd: "# x" },
-    ],
-  ];
-
   for (const [tool, args] of forbidden) {
     it(`refuses ${tool}`, async () => {
       const result = await callTool("portal-key", tool, args);
@@ -401,6 +436,51 @@ describe("sp_mcp_portal through the MCP tools", () => {
     expect(result.isError).toBe(false);
     expect(h.writes).toEqual(["checkout"]);
   });
+});
+
+describe("sp_mcp_workbench_intake through the MCP tools", () => {
+  it("creates a task", async () => {
+    const result = await callTool("intake-key", "mc_create_task", {
+      title: "Workbench intake",
+      bucket: "BKT-INFRA",
+      reporter: "cos@petrasoap.com",
+    });
+    expect(result.isError).toBe(false);
+    expect(result.body).toMatchObject({ taskId: "TASK-900" });
+    expect(h.writes).toEqual(["createTask"]);
+  });
+
+  it("searches tasks", async () => {
+    await callTool("intake-key", "mc_create_task", {
+      title: "Workbench intake",
+      bucket: "BKT-INFRA",
+      reporter: "cos@petrasoap.com",
+    });
+    const result = await callTool("intake-key", "mc_search_tasks", { q: "intake" });
+    expect(result.isError).toBe(false);
+    expect((result.body.data as { total: number }).total).toBe(1);
+  });
+
+  it("refuses an agent: assignee, which only the portal may set", async () => {
+    const result = await callTool("intake-key", "mc_create_task", {
+      title: "Workbench intake",
+      bucket: "BKT-INFRA",
+      reporter: "cos@petrasoap.com",
+      assignee: "agent:hasitha-fernando",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.body).toMatchObject({ error: { code: "forbidden" } });
+    expect(h.writes).toEqual([]);
+  });
+
+  for (const [tool, args] of forbidden) {
+    it(`refuses ${tool}`, async () => {
+      const result = await callTool("intake-key", tool, args);
+      expect(result.isError).toBe(true);
+      expect(result.body).toMatchObject({ error: { code: "forbidden" } });
+      expect(h.writes).toEqual([]);
+    });
+  }
 });
 
 describe("sp_mcp_portal through POST /api/cursor/skills/submit", () => {

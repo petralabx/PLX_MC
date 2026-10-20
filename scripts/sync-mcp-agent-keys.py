@@ -36,6 +36,7 @@ DEDICATED_PRINCIPAL_IDS = (
     "sp_mcp_workbench",
     "sp_mcp_infra",
     "sp_mcp_cip_auto_undraft",
+    "sp_mcp_workbench_intake",
 )
 IDENTITY_LABELS = {
     CLAUDE_PRINCIPAL_ID: "claude",
@@ -51,11 +52,12 @@ IDENTITY_LABELS = {
     "sp_mcp_workbench": "workbench",
     "sp_mcp_infra": "infra",
     "sp_mcp_cip_auto_undraft": "cip-auto-undraft",
+    "sp_mcp_workbench_intake": "workbench-intake",
 }
 # The MCP tool allowlist denies mc_self_check to these principals (decision
 # CG-07b). The sync verifies them through the task search they may call:
 # GET /api/cursor/tasks echoes the resolved principal in meta.actor.
-SEARCH_VERIFIED_PRINCIPAL_IDS = frozenset({"sp_mcp_portal"})
+SEARCH_VERIFIED_PRINCIPAL_IDS = frozenset({"sp_mcp_portal", "sp_mcp_workbench_intake"})
 VERCEL_API = "https://api.vercel.com"
 TERMINAL_DEPLOYMENT_STATES = {"BLOCKED", "CANCELED", "ERROR", "READY"}
 

@@ -47,6 +47,12 @@ describe("MCP client principal selection", () => {
     ).toBe("sp_mcp_cip_auto_undraft");
   });
 
+  it("accepts sp_mcp_workbench_intake as an explicit dedicated principal", () => {
+    expect(
+      resolveMcpPrincipalId({ MC_MCP_PRINCIPAL_ID: "sp_mcp_workbench_intake" })
+    ).toBe("sp_mcp_workbench_intake");
+  });
+
   it("rejects principal ids outside the reviewed registry", () => {
     expect(() =>
       resolveMcpPrincipalId({ MC_MCP_PRINCIPAL_ID: "sp_unreviewed" })
@@ -150,5 +156,17 @@ describe("MCP client key resolution", () => {
         "sp_mcp_cip_auto_undraft"
       )
     ).toBe("");
+  });
+
+  it("never gives sp_mcp_workbench_intake the shared Cursor key", () => {
+    expect(
+      resolveMcpClientKey({ PLX_MC_MCP_API_KEY: "shared-key" }, "sp_mcp_workbench_intake")
+    ).toBe("");
+    expect(
+      selectMcpKeyFromSecret(
+        { sp_mcp_workbench_intake: "intake-key", PLX_MC_MCP_API_KEY: "shared-key" },
+        "sp_mcp_workbench_intake"
+      )
+    ).toBe("intake-key");
   });
 });

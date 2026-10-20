@@ -13,6 +13,7 @@ import {
   PORTAL_MCP_SERVICE_PRINCIPAL_ID,
   ROUTING_MAINTENANCE_SERVICE_PRINCIPAL_ID,
   SYNC_INBOUND_SERVICE_PRINCIPAL_ID,
+  WORKBENCH_INTAKE_MCP_SERVICE_PRINCIPAL_ID,
   WORKBENCH_MCP_SERVICE_PRINCIPAL_ID,
 } from "./types";
 
@@ -58,7 +59,7 @@ const ROLE_GRANTS: Record<AccessRole, readonly Capability[]> = {
   owner: OWNER_CAPABILITIES,
 };
 
-// Every per-agent MCP principal except sp_mcp_portal, sp_mcp_workbench, sp_mcp_infra and sp_mcp_cip_auto_undraft carries the same reviewed task/planning/routing
+// Every per-agent MCP principal except sp_mcp_portal, sp_mcp_workbench, sp_mcp_infra, sp_mcp_cip_auto_undraft and sp_mcp_workbench_intake carries the same reviewed task/planning/routing
 // + bucket.update + project.update (steward edits, mc_update_project) +
 // sync.resolve (via sync.mutate) bundle; per-agent identity isolates
 // credentials and audit, not capabilities. Console sweep/retry stay
@@ -145,6 +146,16 @@ const INFRA_MCP_CAPABILITIES: readonly Capability[] = ["task.read"];
 // limits it to its four read tools.
 const CIP_AUTO_UNDRAFT_MCP_CAPABILITIES: readonly Capability[] = ["task.read"];
 
+// sp_mcp_workbench_intake (PLX Workbench intake; TASK-3523; Vince approved
+// 2026-10-20 at 4:28 PM and 5:00 PM ET): least privilege like sp_mcp_portal.
+// task.read and task.create in any bucket, and src/lib/mcp/tool-allowlist.ts
+// limits it to mc_create_task and mc_search_tasks. No checkout, progress or
+// complete. Pending follow-up: tasks it creates must need vince@ or cos@
+// approval before checkout or launch. No such gate exists yet; Vince decided
+// at 5:09 PM ET 2026-10-20 to ship the principal first and add the gate in a
+// separate task.
+const WORKBENCH_INTAKE_MCP_CAPABILITIES: readonly Capability[] = ["task.read", "task.create"];
+
 const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
   ...Object.fromEntries(
     MCP_AGENT_SERVICE_PRINCIPAL_IDS.map((id) => [
@@ -163,7 +174,9 @@ const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
                   ? INFRA_MCP_CAPABILITIES
                   : id === CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID
                     ? CIP_AUTO_UNDRAFT_MCP_CAPABILITIES
-                    : MCP_AGENT_CAPABILITIES,
+                    : id === WORKBENCH_INTAKE_MCP_SERVICE_PRINCIPAL_ID
+                      ? WORKBENCH_INTAKE_MCP_CAPABILITIES
+                      : MCP_AGENT_CAPABILITIES,
     ])
   ),
   [SYNC_INBOUND_SERVICE_PRINCIPAL_ID]: ["sync.service.write", "task.read"],

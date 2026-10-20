@@ -126,6 +126,26 @@ def test_cip_auto_undraft_principal_uses_only_its_dedicated_key() -> None:
         )
 
 
+def test_workbench_intake_principal_uses_only_its_dedicated_key() -> None:
+    bootstrap = load_script()
+
+    assert "sp_mcp_workbench_intake" in bootstrap.MCP_PRINCIPAL_IDS
+    assert (
+        bootstrap.select_mcp_key(
+            "sp_mcp_workbench_intake",
+            {"PLX_MC_MCP_API_KEY": "shared-key"},
+            {"sp_mcp_workbench_intake": "intake-key"},
+        )
+        == "intake-key"
+    )
+    with pytest.raises(SystemExit, match="mcp principal key unavailable"):
+        bootstrap.select_mcp_key(
+            "sp_mcp_workbench_intake",
+            {"PLX_MC_MCP_API_KEY": "shared-key"},
+            {"sp_mcp_claude_code": "claude-key"},
+        )
+
+
 def test_unreviewed_principal_is_rejected() -> None:
     bootstrap = load_script()
 

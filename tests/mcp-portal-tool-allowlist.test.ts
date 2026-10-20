@@ -130,6 +130,9 @@ const INFRA = "sp_mcp_infra";
 // without mc_list_buckets and mc_search_knowledge.
 const CIP = "sp_mcp_cip_auto_undraft";
 const CIP_TOOLS = ["mc_self_check", "mc_get_context", "mc_search_tasks", "mc_get_task"];
+// sp_mcp_workbench_intake (PLX Workbench intake) creates and searches tasks, like the
+// portal, without the agent-reports route.
+const INTAKE = "sp_mcp_workbench_intake";
 
 const KEYS: Record<string, string> = {
   sp_mcp_claude_code: "claude-key",
@@ -137,6 +140,7 @@ const KEYS: Record<string, string> = {
   sp_mcp_workbench: "workbench-key",
   sp_mcp_infra: "infra-key",
   sp_mcp_cip_auto_undraft: "cip-key",
+  sp_mcp_workbench_intake: "intake-key",
 };
 
 function headers(key: string): Record<string, string> {
@@ -295,11 +299,22 @@ describe("MCP tool allowlist", () => {
     expect(isMcpToolAllowed(CIP, "mc_tool_added_later")).toBe(false);
   });
 
+  it("lets sp_mcp_workbench_intake call only mc_create_task and mc_search_tasks", () => {
+    expect([...(MCP_TOOL_ALLOWLISTS[INTAKE] ?? [])].sort()).toEqual([...ALLOWED_TOOLS].sort());
+    for (const tool of ALLOWED_TOOLS) {
+      expect(isMcpToolAllowed(INTAKE, tool)).toBe(true);
+    }
+    for (const tool of [...ALLOWED_ROUTE_NAMES, ...Object.keys(REFUSED_TOOL_ARGS)]) {
+      expect({ tool, allowed: isMcpToolAllowed(INTAKE, tool) }).toEqual({ tool, allowed: false });
+    }
+    expect(isMcpToolAllowed(INTAKE, "mc_tool_added_later")).toBe(false);
+  });
+
   it("leaves every other MCP principal without a tool allowlist", () => {
     const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
-      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA && id !== CIP
+      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA && id !== CIP && id !== INTAKE
     );
-    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 4);
+    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 5);
     for (const principalId of others) {
       expect(MCP_TOOL_ALLOWLISTS[principalId]).toBeUndefined();
       for (const tool of [...ALLOWED_TOOLS, ...Object.keys(REFUSED_TOOL_ARGS)]) {
@@ -562,6 +577,108 @@ describe("sp_mcp_cip_auto_undraft through HTTP MCP and the cursor REST routes", 
     expect(((await create.json()) as { error: { code: string } }).error.code).toBe("forbidden");
     expect(recordPermissionDecision).toHaveBeenCalledWith(
       expect.objectContaining({ actorId: CIP, capability: "mc_create_task", allowed: false })
+    );
+    expect(h.writes).toEqual([]);
+  });
+});
+
+describe("sp_mcp_workbench_intake through HTTP MCP and the cursor REST routes", () => {
+  it("lists every registered tool, creates a task and searches as sp_mcp_workbench_intake", async () => {
+    const list = await rpc("intake-key", "tools/list", {});
+    const names = (list.result.tools as { name: string }[]).map((t) => t.name).sort();
+    expect(names).toEqual([...ALLOWED_TOOLS, ...Object.keys(REFUSED_TOOL_ARGS)].sort());
+    const create = await callTool("intake-key", "mc_create_task", {
+      title: "Workbench intake",
+      bucket: "BKT-INFRA",
+      reporter: "cos@petrasoap.com",
+    });
+    expect(create.isError).toBe(false);
+    expect(create.body).toMatchObject({ taskId: "TASK-900" });
+    expect(h.writes).toEqual(["createTask"]);
+    const search = await callTool("intake-key", "mc_search_tasks", { limit: 1 });
+    expect(search.isError).toBe(false);
+    expect(search.body.meta).toMatchObject({ actor: { servicePrincipalId: INTAKE } });
+  });
+
+  it("refuses every other registered tool with forbidden and logs a deny", async () => {
+    for (const [tool, args] of Object.entries(REFUSED_TOOL_ARGS)) {
+      vi.mocked(recordPermissionDecision).mockClear();
+      const result = await callTool("intake-key", tool, args);
+      expect({ tool, isError: result.isError, body: result.body }).toMatchObject({
+        tool,
+        isError: true,
+        body: { error: { code: "forbidden" } },
+      });
+      expect(recordPermissionDecision).toHaveBeenCalledWith(
+        expect.objectContaining({
+          site: "mcp.tool-allowlist",
+          actorId: INTAKE,
+          capability: tool,
+          allowed: false,
+          reasonCode: "tool_not_allowlisted",
+        })
+      );
+    }
+    expect(h.writes).toEqual([]);
+  });
+
+  it("creates through POST /api/cursor/tasks and searches through GET /api/cursor/tasks", async () => {
+    const create = await cursorTasksPost(
+      new Request("http://localhost/api/cursor/tasks", {
+        method: "POST",
+        headers: headers("intake-key"),
+        body: JSON.stringify({ title: "Workbench intake", bucket: "BKT-INFRA" }),
+      }),
+      { params: Promise.resolve({}) }
+    );
+    expect(create.status).toBe(200);
+    expect(h.writes).toEqual(["createTask"]);
+    const search = await cursorTasksGet(
+      new Request("http://localhost/api/cursor/tasks?limit=1", { headers: headers("intake-key") }),
+      { params: Promise.resolve({}) }
+    );
+    expect(search.status).toBe(200);
+    const json = (await search.json()) as { meta: { actor: { servicePrincipalId: string } } };
+    expect(json.meta.actor.servicePrincipalId).toBe(INTAKE);
+  });
+
+  it("refuses every other cursor route with 403 forbidden, agent reports included", async () => {
+    const refused: string[] = [];
+    const wrong: string[] = [];
+    for (const file of cursorRouteFiles()) {
+      if (file === "mcp/route.ts") continue;
+      const dir = file.replace(/\/?route\.ts$/, "");
+      const mod = (await import(join(CURSOR_API_DIR, file))) as Record<string, unknown>;
+      for (const method of HTTP_METHODS) {
+        const handler = mod[method] as RouteHandler | undefined;
+        if (typeof handler !== "function") continue;
+        const label = `${method} /api/cursor/${dir}`;
+        if (dir === "tasks" && (method === "GET" || method === "POST")) continue;
+        const path = dir.replace("[id]", "TASK-1");
+        const resp = await handler(
+          new Request(`http://localhost/api/cursor/${path}`, {
+            method,
+            headers: headers("intake-key"),
+            ...(method === "GET" ? {} : { body: "{}" }),
+          }),
+          { params: Promise.resolve({ id: "TASK-1" }) }
+        );
+        const json = (await resp.json().catch(() => ({}))) as { error?: { code?: string } };
+        if (resp.status === 403 && json.error?.code === "forbidden") refused.push(label);
+        else wrong.push(`${label} -> ${resp.status} ${json.error?.code ?? ""}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+    expect(refused).toEqual(
+      expect.arrayContaining([
+        "GET /api/cursor/agent-reports",
+        "POST /api/cursor/checkout",
+        "POST /api/cursor/progress",
+        "POST /api/cursor/complete",
+        "POST /api/cursor/tasks/update",
+        "POST /api/cursor/buckets",
+        "POST /api/cursor/projects",
+      ])
     );
     expect(h.writes).toEqual([]);
   });

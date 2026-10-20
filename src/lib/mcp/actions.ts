@@ -501,7 +501,14 @@ function checkoutWarnings(agent: string | undefined, concurrent: number): { warn
 export async function actionCheckout(
   identity: McpIdentity,
   taskId: string,
-  options: { repo?: string; agent?: string; reuse?: boolean; forceReason?: string } = {}
+  options: {
+    repo?: string;
+    agent?: string;
+    reuse?: boolean;
+    forceReason?: string;
+    baseSha?: string;
+    launchId?: string;
+  } = {}
 ) {
   const repo = resolveCheckoutRepo(identity.repo, options.repo);
   requireMcpActor(identity, "task.checkout", { type: "task", id: taskId }, {
@@ -529,6 +536,8 @@ export async function actionCheckout(
     agent,
     reuse: options.reuse,
     forceReason: options.forceReason,
+    baseSha: options.baseSha,
+    launchId: options.launchId,
   });
   const stamp = `MC-Checkout: ${checkoutId}`;
   return {

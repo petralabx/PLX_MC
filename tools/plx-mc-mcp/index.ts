@@ -293,8 +293,10 @@ server.tool(
       .describe("Optional <runtime>/<lane> of the calling agent, recorded on the checkout; the gate holds each commit's Agent trailer to it."),
     reuse: z.boolean().optional().describe("Return your own live checkout of this task instead of minting a second one."),
     forceReason: z.string().min(1).max(2000).optional().describe("Why you take over a task another holder has a live checkout of."),
+    baseSha: z.string().regex(/^[0-9a-fA-F]{40}$/).optional().describe("Full commit SHA your work starts from; the root of the checkout's SHA chain."),
+    launchId: z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/).optional().describe("Launch record id; launcher principals only."),
   },
-  async ({ taskId, repo, agent, reuse, forceReason }) => {
+  async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId }) => {
     if (!MCP_ENABLED) return disabledTool("mc_checkout_task");
     return printResult(
       await mcFetch("/checkout", {
@@ -305,9 +307,26 @@ server.tool(
           ...(agent ? { agent } : {}),
           ...(reuse !== undefined ? { reuse } : {}),
           ...(forceReason ? { forceReason } : {}),
+          ...(baseSha ? { baseSha } : {}),
+          ...(launchId ? { launchId } : {}),
         },
       })
     );
+  }
+);
+
+server.tool(
+  "mc_record_checkout_head",
+  "Record a head you pushed on your own checkout's SHA chain (TASK-3410). Only the principal that took the checkout may record; a rebase or force-push needs this call. Idempotent per head.",
+  {
+    checkoutId: z.string().regex(/^dsp_[A-Za-z0-9]+$/),
+    headSha: z.string().regex(/^[0-9a-fA-F]{40}$/),
+    beforeSha: z.string().regex(/^[0-9a-fA-F]{40}$/).optional(),
+    pr: z.number().int().positive().optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_record_checkout_head");
+    return printResult(await mcFetch("/checkout/head", { method: "POST", body }));
   }
 );
 

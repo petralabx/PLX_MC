@@ -218,6 +218,7 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   mc_update_tasks: { items: [{ taskId: "TASK-1", patch: { addLabels: ["lane:codex"] } }] },
   mc_release_checkout: { checkoutId: "dsp_x", reason: "stray" },
   mc_release_checkouts: { items: [{ checkoutId: "dsp_x", reason: "stray" }] },
+  mc_record_checkout_head: { checkoutId: "dsp_x", headSha: "a".repeat(40) },
   mc_report_session_telemetry: { sessionId: "s1", tokensIn: 1, tokensOut: 1 },
   mc_suggest_work: { title: "x" },
   mc_create_routed_task: {

@@ -16,6 +16,7 @@ const db = vi.hoisted(() => ({
   checks: [] as { id: string; verdict: string; reasons: string[]; actorKind: string; taskId: string | null }[],
   tasks: new Map<string, Task>(),
   dedupKeys: new Set<string>(),
+  heads: new Map<string, { headSha: string; beforeSha: string | null; pr: number | null; source: "launcher" | "webhook" | "gate"; recordedBy: string; recordedAt: string }[]>(),
   bucketsThrow: false,
   buckets: [
     { id: "BKT-WMS", name: "WMS", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: null as string | null, project: null },
@@ -58,6 +59,17 @@ vi.mock("@/lib/compliance/repo", () => ({
   },
   async getDispatch(id: string) {
     return db.dispatches.get(id) ?? null;
+  },
+  async dispatchHeads(id: string) {
+    return [...(db.heads.get(id) ?? [])];
+  },
+  async recordDispatchHead(h: { dispatchId: string; headSha: string; beforeSha: string | null; pr: number | null; source: "launcher" | "webhook" | "gate"; recordedBy: string }) {
+    const chain = db.heads.get(h.dispatchId) ?? [];
+    if (!db.dispatches.has(h.dispatchId) || chain.some((x) => x.headSha === h.headSha)) return false;
+    chain.push({ headSha: h.headSha, beforeSha: h.beforeSha, pr: h.pr, source: h.source, recordedBy: h.recordedBy, recordedAt: new Date().toISOString() });
+    db.heads.set(h.dispatchId, chain);
+    db.events.push({ kind: "checkout.head", actor: h.recordedBy, payload: { checkoutId: h.dispatchId, headSha: h.headSha, source: h.source } });
+    return true;
   },
   async appendEvent(e: { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown>; dedupKey?: string | null }) {
     if (e.dedupKey) {
@@ -112,7 +124,7 @@ vi.mock("@/lib/sync", () => ({
 
 // Imported AFTER the mocks so the service's `import * as repo` + sync getEntity
 // resolve to the mocked modules.
-import { checkout, complete, dispatchRepoMatches, ingestPullRequest, verifyPr } from "@/lib/compliance/service";
+import { checkout, complete, dispatchRepoMatches, ingestPullRequest, recordCheckoutHead, verifyPr } from "@/lib/compliance/service";
 
 const projection = vi.hoisted(() => ({ projectPullRequest: vi.fn() }));
 vi.mock("@/lib/compliance/projection", () => ({
@@ -151,6 +163,7 @@ beforeEach(() => {
   db.checks.length = 0;
   db.tasks.clear();
   db.dedupKeys.clear();
+  db.heads.clear();
   db.bucketsThrow = false;
   const withPrd = db.buckets.find((bucket) => bucket.id === "BKT-PRD");
   if (withPrd) withPrd.prd = "https://example.com/prd.md";
@@ -879,4 +892,149 @@ describe("merge approval policy (TASK-3408)", () => {
     const cid = await seedWith([await signed(head)]);
     expect((await verifyPr({ ...pr, checkoutIds: [cid] })).verdict).toBe("pass");
   });
+});
+
+// TASK-3410: the checkout lease chain. Launcher checkouts (a launch record) hold
+// the PR head to their recorded SHA chain; a commit naming a launcher lane needs a
+// launch record. Both warn until PLX_MC_LEASE_CHAIN_ENFORCE=1. Other checkouts
+// (Claude web, Cursor cloud, Codex, people) are unaffected.
+describe("checkout lease chain (TASK-3410)", () => {
+  const slug = "petralabx/PLX_MC";
+  const launcher = { kind: "service" as const, id: "sp_mcp_ledger", status: "active" as const };
+  const other = { kind: "service" as const, id: "sp_mcp_claude_code", status: "active" as const };
+  const sha = (c: string) => c.repeat(40);
+  const base = sha("0");
+  const agentIdentity = { authorName: "PLX Agent", authorEmail: "uat@petrasoap.com", authorLogin: "", committerName: "PLX Agent", committerEmail: "uat@petrasoap.com", committerLogin: "" };
+  const lane = "claude-code/coding-1-l1";
+  const commit = (s: string, message: string) => ({ sha: s, message, ...agentIdentity });
+  const trailers = (cid: string, agent: string) =>
+    `TASK-900: change\n\nAgent: ${agent}\nOn-Behalf-Of: cos@petrasoap.com\nMC-Checkout: ${cid}`;
+  const pr = (headSha: string, prNumber = 3410) => ({ repo: "PLX_MC", repoFullName: slug, prNumber, headSha, changedPaths: ["src/x.ts"] });
+  const seed = () =>
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+  const launch = async () => {
+    seed();
+    return (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: launcher, agent: "claude-code/coding-1-l1", baseSha: base, launchId: "launch-1" })).checkoutId;
+  };
+  const heads = (cid: string) => (db.heads.get(cid) ?? []).map((h) => `${h.headSha[0]}:${h.source}:${h.pr ?? "-"}`);
+
+  beforeEach(() => {
+    process.env.PLX_MC_LAUNCHER_PRINCIPALS = "sp_mcp_ledger";
+    github.loadPrCommits.mockResolvedValue([]);
+  });
+  afterEach(() => {
+    delete process.env.PLX_MC_LAUNCHER_PRINCIPALS;
+    delete process.env.PLX_MC_LEASE_CHAIN_ENFORCE;
+    delete process.env.PLX_MC_LAUNCH_LANES;
+  });
+
+  it("records launcherId, baseSha and launchId on the checkout", async () => {
+    const cid = await launch();
+    expect(db.dispatches.get(cid)).toMatchObject({ launcherId: "sp_mcp_ledger", baseSha: base, launchId: "launch-1" });
+    expect(db.events.find((e) => e.kind === "checkout")?.payload).toMatchObject({ baseSha: base, launchId: "launch-1", permissionActorId: "sp_mcp_ledger" });
+  });
+
+  it("mints a fresh lease for a launch even when reuse is asked", async () => {
+    seed();
+    const plain = (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: launcher })).checkoutId;
+    const launched = await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: launcher, reuse: true, launchId: "launch-3" });
+    expect(launched.checkoutId).not.toBe(plain);
+    expect(launched.reused).toBeUndefined();
+    expect(db.dispatches.get(launched.checkoutId)).toMatchObject({ launchId: "launch-3" });
+  });
+
+  it("refuses a launch record from a principal not on the launcher list, and a short base SHA", async () => {
+    seed();
+    await expect(checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, launchId: "launch-2" }))
+      .rejects.toMatchObject({ code: "not_a_launcher", status: 403 });
+    await expect(checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, baseSha: "abc1234" }))
+      .rejects.toMatchObject({ code: "invalid_request", status: 400 });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, baseSha: base });
+    expect(db.dispatches.get(checkoutId)).toMatchObject({ launcherId: "sp_mcp_claude_code", baseSha: base, launchId: null });
+  });
+
+  it("attaches the first head, then extends the chain on a fast-forward or a staging merge, not a force-push", async () => {
+    const cid = await launch();
+    const evt = (headSha: string, beforeSha: string | null, prNumber = 3410): PrEvent => ({
+      ...pr(headSha, prNumber), action: beforeSha ? "synchronize" : "opened", beforeSha, merged: false, branch: "x", title: "x", author: "agent", labels: [], checkoutId: cid, checkoutIds: [cid],
+    });
+    await ingestPullRequest(evt(sha("a"), null));
+    await ingestPullRequest(evt(sha("b"), sha("a")));
+    await ingestPullRequest(evt(sha("c"), sha("b"))); // first-parent merge of staging: before is the old head
+    await ingestPullRequest(evt(sha("f"), sha("9"))); // force-push: before is not on the chain
+    await ingestPullRequest(evt(sha("e"), sha("c"), 9999)); // another PR stamping the same checkout
+    expect(heads(cid)).toEqual(["a:webhook:3410", "b:webhook:3410", "c:webhook:3410"]);
+  });
+
+  it("passes a head that descends from a recorded head and records it", async () => {
+    const cid = await launch();
+    await recordHead(cid, sha("a"));
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane)), commit(sha("b"), trailers(cid, lane))]);
+    const r = await verifyPr({ ...pr(sha("b")), checkoutIds: [cid] });
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).not.toContain("SHA chain");
+    expect(heads(cid)).toEqual(["a:launcher:-", "b:gate:3410"]);
+  });
+
+  it("warns, then blocks once enforced, on a head outside the chain or a chain bound to another PR", async () => {
+    const cid = await launch();
+    await recordHead(cid, sha("a"), 3410);
+    github.loadPrCommits.mockResolvedValue([commit(sha("7"), trailers(cid, lane)), commit(sha("8"), trailers(cid, lane))]); // rewritten history
+    const warned = await verifyPr({ ...pr(sha("8")), checkoutIds: [cid] });
+    expect(warned.verdict).toBe("pass");
+    expect(warned.reasons.join(" ")).toContain("warning: head 8888888 is outside checkout");
+    expect(heads(cid)).toEqual(["a:launcher:3410"]);
+
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    const blocked = await verifyPr({ ...pr(sha("8")), checkoutIds: [cid] });
+    expect(blocked.verdict).toBe("block");
+    expect(blocked.reasons.join(" ")).toContain("recorded SHA chain (last recorded aaaaaaa)");
+    const otherPr = await verifyPr({ ...pr(sha("a"), 9999), checkoutIds: [cid] });
+    expect(otherPr.verdict).toBe("block");
+    expect(otherPr.reasons.join(" ")).toContain("SHA chain is bound to PR #3410, not #9999");
+  });
+
+  it("blocks a commit stamped by a different actor than the checkout's", async () => {
+    const cid = await launch();
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, "codex/cloud"))]);
+    const r = await verifyPr({ ...pr(sha("a")), checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.join(" ")).toContain("Agent codex/cloud does not match the checkout's agent claude-code/coding-1-l1");
+  });
+
+  it("holds launcher-lane Agent trailers to a launch record, and only those", async () => {
+    process.env.PLX_MC_LAUNCH_LANES = "claude-code/coding-1-*";
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    seed();
+    const web = (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, agent: "claude-code/coding-1-l2" })).checkoutId;
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(web, "claude-code/coding-1-l2"))]);
+    const lane = await verifyPr({ ...pr(sha("a")), checkoutIds: [web] });
+    expect(lane.verdict).toBe("block");
+    expect(lane.reasons.join(" ")).toContain("names a launcher lane, but its checkout has no launch record");
+
+    const claudeWeb = (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, agent: "claude-code/claude" })).checkoutId;
+    github.loadPrCommits.mockResolvedValue([commit(sha("b"), trailers(claudeWeb, "claude-code/claude"))]);
+    expect((await verifyPr({ ...pr(sha("b"), 3411), checkoutIds: [claudeWeb] })).verdict).toBe("pass");
+
+    const launched = await launch();
+    github.loadPrCommits.mockResolvedValue([commit(sha("c"), trailers(launched, "claude-code/coding-1-l1"))]);
+    expect((await verifyPr({ ...pr(sha("c"), 3412), checkoutIds: [launched] })).verdict).toBe("pass");
+  });
+
+  it("lets only the principal that took the checkout record its heads, while it is unreleased", async () => {
+    const cid = await launch();
+    await expect(recordCheckoutHead({ checkoutId: cid, headSha: sha("a"), principalId: "sp_mcp_claude_code" }))
+      .rejects.toMatchObject({ code: "not_checkout_launcher", status: 403 });
+    const first = await recordCheckoutHead({ checkoutId: cid, headSha: sha("a"), prNumber: 3410, principalId: "sp_mcp_ledger" });
+    expect(first.recorded).toBe(true);
+    expect((await recordCheckoutHead({ checkoutId: cid, headSha: sha("a"), principalId: "sp_mcp_ledger" })).recorded).toBe(false);
+    await expect(recordCheckoutHead({ checkoutId: cid, headSha: sha("b"), prNumber: 9999, principalId: "sp_mcp_ledger" }))
+      .rejects.toMatchObject({ code: "chain_bound", status: 409 });
+    db.dispatches.get(cid)!.releasedAt = new Date().toISOString();
+    await expect(recordCheckoutHead({ checkoutId: cid, headSha: sha("b"), principalId: "sp_mcp_ledger" }))
+      .rejects.toMatchObject({ code: "checkout_inactive", status: 409 });
+  });
+
+  const recordHead = (cid: string, headSha: string, prNumber?: number) =>
+    recordCheckoutHead({ checkoutId: cid, headSha, prNumber, principalId: "sp_mcp_ledger" });
 });

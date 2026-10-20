@@ -325,8 +325,20 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         .describe(
           "Optional <runtime>/<lane> of the calling agent (e.g. claude/claude-cos), recorded on the checkout. The compliance gate then holds each commit's Agent trailer to it. Omitted = not recorded; the Agent trailer only warns."
         ),
+      reuse: z
+        .boolean()
+        .optional()
+        .describe("Return your own live checkout of this task and repo (same runtime and operator) instead of minting a second one."),
+      forceReason: z
+        .string()
+        .trim()
+        .min(1)
+        .max(2000)
+        .optional()
+        .describe("Why you take over a task another holder has a live checkout of. Logged; required when takeover enforcement is on."),
     },
-    async ({ taskId, repo, agent }) => jsonResult(await actionCheckout(identity, taskId, { repo, agent }))
+    async ({ taskId, repo, agent, reuse, forceReason }) =>
+      jsonResult(await actionCheckout(identity, taskId, { repo, agent, reuse, forceReason }))
   );
 
   server.tool(

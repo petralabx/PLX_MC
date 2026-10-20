@@ -16,8 +16,11 @@ vi.mock("@/lib/compliance/projection", () => ({
   projectPullRequest: vi.fn(async () => {}),
 }));
 
+const renewDispatches = vi.hoisted(() => vi.fn(async () => {}));
+
 vi.mock("@/lib/compliance/repo", () => ({
   releaseDispatches: vi.fn(async () => {}),
+  renewDispatches,
   async getDispatch(id: string) {
     return db.dispatches.get(id) ?? null;
   },
@@ -34,6 +37,7 @@ import { ingestPullRequest } from "@/lib/compliance/service";
 beforeEach(() => {
   db.dispatches.clear();
   db.events.length = 0;
+  renewDispatches.mockClear();
 });
 
 function prPayload(over: Record<string, unknown> = {}, prOver: Record<string, unknown> = {}) {
@@ -110,6 +114,8 @@ describe("ingestPullRequest", () => {
     const e = db.events.find((x) => x.kind === "pr.opened")!;
     expect(e.taskId).toBe("TASK-900");
     expect(e.payload).toMatchObject({ sparse: false, actorKind: "agent" });
+    // TASK-3409: activity on the stamped PR keeps its checkout alive.
+    expect(renewDispatches).toHaveBeenCalledWith(["dsp_x"], { repo: "petralabx/PLX_MC", pr: evt.prNumber, ttlMinutes: 480 });
   });
 
   it("records an operator PR (no checkout) as unrouted/action_required — not a sparse Task", async () => {

@@ -366,7 +366,11 @@ tasks are not stranded at the EN-003 Planned gate. An explicit
 
 **PR stamp:** `mc_checkout_task` → `meta.links.checkoutStamp` = `MC-Checkout: dsp_*`.
 The checkout receipt also includes `taskId` and `actor.repo` (the slug bound on
-the credential). One Hub connector stamps every petralabx repo: optional `repo`
+the credential), and `accountablePerson`, the person commits name in
+`On-Behalf-Of` (TASK-3483). `reuse: true` returns your own live checkout of the
+task instead of a second one (`reused: true`); when another holder has a live
+checkout, the receipt lists it under `concurrent` with a `warning`, and
+`forceReason` records why you take over (TASK-3409). One Hub connector stamps every petralabx repo: optional `repo`
 on checkout is a GitHub slug that may override the connector `X-MC-Repo` for
 allowlisted consumers (`petralabx/local-inference`, `petralabx/skills`,
 `petralabx/1hr-after`, `petralabx/furgenics`, `petralabx/for-and-against`,

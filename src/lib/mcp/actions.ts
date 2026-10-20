@@ -488,14 +488,14 @@ export async function actionUpdateBucket(
 export async function actionCheckout(
   identity: McpIdentity,
   taskId: string,
-  options: { repo?: string; agent?: string } = {}
+  options: { repo?: string; agent?: string; reuse?: boolean; forceReason?: string } = {}
 ) {
   const repo = resolveCheckoutRepo(identity.repo, options.repo);
   requireMcpActor(identity, "task.checkout", { type: "task", id: taskId }, {
     repositoryId: repo,
   });
   await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
-  const { checkoutId, accountablePerson } = await checkout({
+  const { checkoutId, accountablePerson, reused, concurrent } = await checkout({
     taskId,
     runtime: identity.runtime,
     accountableHuman: identity.operatorEmail,
@@ -503,6 +503,8 @@ export async function actionCheckout(
     actor: identity.actor,
     door: "mcp",
     agent: options.agent,
+    reuse: options.reuse,
+    forceReason: options.forceReason,
   });
   const stamp = `MC-Checkout: ${checkoutId}`;
   return {
@@ -511,6 +513,9 @@ export async function actionCheckout(
     prBodyLine: stamp,
     // The person commits name in On-Behalf-Of (TASK-3483).
     accountablePerson,
+    // TASK-3409: an existing live checkout handed back, and other holders' leases.
+    ...(reused ? { reused: true } : {}),
+    ...(concurrent?.length ? { concurrent, warning: "Another holder has a live checkout of this task; coordinate before pushing." } : {}),
     link: taskLink(taskId),
     sync: await syncMetaForTask(taskId),
     actor: { repo },

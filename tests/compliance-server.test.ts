@@ -24,6 +24,17 @@ const db = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
+  async liveDispatchesForTask(taskId: string, repoSlug: string) {
+    return [...db.dispatches.values()].filter((d) => d.taskId === taskId && d.repo.toLowerCase() === repoSlug.toLowerCase() && !d.revoked && !(d as { releasedAt?: string | null }).releasedAt && new Date(d.expiresAt).getTime() > Date.now());
+  },
+  async renewDispatches(ids: string[], input: { repo: string; ttlMinutes: number }) {
+    for (const id of ids) {
+      const d = db.dispatches.get(id);
+      if (!d || d.revoked || (d as { releasedAt?: string | null }).releasedAt || d.repo.toLowerCase() !== input.repo.toLowerCase()) continue;
+      d.expiresAt = new Date(Math.max(new Date(d.expiresAt).getTime(), Date.now() + input.ttlMinutes * 60_000)).toISOString();
+      db.events.push({ kind: "checkout.renewed", actor: d.runtime, taskId: d.taskId, payload: { checkoutId: id } });
+    }
+  },
   async releaseDispatches(ids: string[], input: { repo: string; pr: number; reason: string }) {
     for (const id of ids) {
       const d = db.dispatches.get(id)!;
@@ -748,5 +759,80 @@ describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
     expect(db.events.find((e) => e.kind === "checkout" && e.payload?.checkoutId === cid)?.payload).toMatchObject({ agent: "claude/claude-uat" });
     const legacy = await stamped();
     expect(db.events.find((e) => e.kind === "checkout" && e.payload?.checkoutId === legacy)?.payload).toMatchObject({ agent: null });
+  });
+});
+
+// TASK-3409: checkout lifecycle — reuse, a second holder, renewal while the PR
+// is active, and the checkout's state on every verify result.
+describe("checkout lifecycle (TASK-3409)", () => {
+  const slug = "petralabx/PLX_MC";
+  const mint = (over: Partial<Parameters<typeof checkout>[0]> = {}) =>
+    checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude", ...over });
+  beforeEach(() => {
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "vince", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    delete process.env.PLX_MC_CHECKOUT_TAKEOVER_ENFORCE;
+  });
+
+  it("reuse returns the caller's own live checkout instead of minting a second", async () => {
+    const first = await mint();
+    const again = await mint({ reuse: true });
+    expect(again).toMatchObject({ checkoutId: first.checkoutId, reused: true });
+    expect(db.events.some((e) => e.kind === "checkout.reused" && e.payload?.checkoutId === first.checkoutId)).toBe(true);
+    expect((await mint()).checkoutId).not.toBe(first.checkoutId);
+  });
+
+  it("logs a second holder and reports it, without refusing while enforcement is off", async () => {
+    const held = await mint({ runtime: "cursor", agent: undefined });
+    const second = await mint();
+    expect(second.concurrent).toEqual([
+      { checkoutRef: `dsp_…${held.checkoutId.slice(-4)}`, runtime: "cursor", accountableHuman: "cos@petrasoap.com" },
+    ]);
+    const ev = db.events.find((e) => e.kind === "checkout.concurrent");
+    expect(ev?.payload).toMatchObject({ checkoutId: second.checkoutId, forceReason: null, enforced: false });
+  });
+
+  it("refuses a second holder without forceReason once enforcement is on, and logs the reason when given", async () => {
+    await mint({ runtime: "cursor", agent: undefined });
+    process.env.PLX_MC_CHECKOUT_TAKEOVER_ENFORCE = "1";
+    await expect(mint()).rejects.toMatchObject({ code: "checkout_held", status: 409 });
+    const taken = await mint({ forceReason: "cursor lane stalled for 3 h; CoS asked Claude to finish" });
+    expect(taken.concurrent).toHaveLength(1);
+    expect(db.events.findLast((e) => e.kind === "checkout.concurrent")?.payload).toMatchObject({
+      forceReason: "cursor lane stalled for 3 h; CoS asked Claude to finish",
+      enforced: true,
+    });
+  });
+
+  it("renews a stamped checkout on a push to its open PR, never a released one", async () => {
+    const live = await mint();
+    const d = db.dispatches.get(live.checkoutId)!;
+    d.expiresAt = new Date(Date.now() - 60_000).toISOString();
+    const gone = await mint({ runtime: "codex", agent: undefined });
+    db.dispatches.get(gone.checkoutId)!.releasedAt = new Date().toISOString();
+    const before = db.dispatches.get(gone.checkoutId)!.expiresAt;
+    await ingestPullRequest({
+      repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h2", changedPaths: ["src/x.ts"],
+      action: "synchronize", merged: false, branch: "b", title: "t", author: "agent", labels: [],
+      checkoutId: null, checkoutIds: [live.checkoutId, gone.checkoutId],
+    });
+    expect(new Date(db.dispatches.get(live.checkoutId)!.expiresAt).getTime()).toBeGreaterThan(Date.now() + 7 * 3_600_000);
+    expect(db.dispatches.get(gone.checkoutId)!.expiresAt).toBe(before);
+    expect(db.events.filter((e) => e.kind === "checkout.renewed").map((e) => e.payload?.checkoutId)).toEqual([live.checkoutId]);
+  });
+
+  it("reports the checkout's state and the task's approval gates on each verify result", async () => {
+    github.loadPrCommits.mockResolvedValue([]);
+    const { checkoutId } = await mint();
+    db.tasks.get("TASK-900")!.approvalGates = [
+      { id: "apg_1", reason: "yes?", requestedBy: "cos@petrasoap.com", requestedAt: "2026-10-20T16:38:03Z", status: "approved", decidedBy: "vince@petrasoap.com", decidedAt: "2026-10-20T16:50:22Z" },
+    ];
+    const r = await verifyPr({ repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
+    expect(r.tasks[0].checkout).toMatchObject({ live: true, releasedReason: null, blockReason: null });
+    expect(r.tasks[0].approvals).toEqual([
+      { gateId: "apg_1", status: "approved", decidedBy: "vince@petrasoap.com", decidedAt: "2026-10-20T16:50:22Z" },
+    ]);
+    db.dispatches.get(checkoutId)!.revoked = true;
+    const revoked = await verifyPr({ repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
+    expect(revoked.tasks[0].checkout).toMatchObject({ live: false, blockReason: "revoked" });
   });
 });

@@ -266,9 +266,39 @@ export interface CheckoutInput {
    * The gate holds each commit's Agent trailer to it. Omitted = not recorded.
    */
   agent?: string;
+  /**
+   * TASK-3409: hand back the caller's own live checkout of this task and repo
+   * (same runtime and operator) instead of minting a second one.
+   */
+  reuse?: boolean;
+  /**
+   * TASK-3409: why the caller takes over a task another holder has a live
+   * checkout of. Logged on the checkout.concurrent event; required only while
+   * PLX_MC_CHECKOUT_TAKEOVER_ENFORCE=1.
+   */
+  forceReason?: string;
 }
 
-export async function checkout(input: CheckoutInput): Promise<{ checkoutId: string; accountablePerson: string }> {
+export interface CheckoutResult {
+  checkoutId: string;
+  /** The person commits name in On-Behalf-Of (TASK-3483). */
+  accountablePerson: string;
+  /** True when `reuse` returned an existing live checkout (TASK-3409). */
+  reused?: boolean;
+  /** Other holders' live checkouts of the same task (TASK-3409), redacted. */
+  concurrent?: { checkoutRef: string; runtime: string; accountableHuman: string }[];
+}
+
+/** Refuse a second holder without forceReason (TASK-3409). Off by default: warn first. */
+function checkoutTakeoverEnforced(): boolean {
+  return (process.env.PLX_MC_CHECKOUT_TAKEOVER_ENFORCE ?? "").trim() === "1";
+}
+
+const redactCheckout = (id: string): string => `dsp_…${id.slice(-4)}`;
+const holderKey = (d: { runtime: string; accountableHuman: string }): string =>
+  `${d.runtime.trim().toLowerCase()}|${d.accountableHuman.trim().toLowerCase()}`;
+
+export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   if (input.actor) {
     const decision = authorizeStaged({
       site: "compliance.checkout",
@@ -324,6 +354,40 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
     );
   }
 
+  const owner = backfilledOwner ?? task?.accountableOwner ?? null;
+  const accountablePerson = checkoutAccountablePeople(input.accountableHuman, owner)[0];
+  const live = await repo.liveDispatchesForTask(input.taskId, input.repo);
+  const mine = holderKey(input);
+  if (input.reuse) {
+    const own = live.find((d) => holderKey(d) === mine && !d.approvalGateId);
+    if (own) {
+      await repo.appendEvent({
+        kind: "checkout.reused",
+        actor: input.runtime,
+        repo: input.repo,
+        taskId: input.taskId,
+        payload: { checkoutId: own.id, permissionActorId: input.actor?.id ?? null, door: input.door ?? null },
+      });
+      return { checkoutId: own.id, accountablePerson, reused: true };
+    }
+  }
+  const others = live.filter((d) => holderKey(d) !== mine);
+  const forceReason = input.forceReason?.trim() || null;
+  if (others.length > 0 && checkoutTakeoverEnforced() && !forceReason) {
+    throw new ApiError(
+      "checkout_held",
+      `Task ${input.taskId} already has a live checkout in ${input.repo} held by ${others
+        .map((d) => d.runtime)
+        .join(", ")}. Pass forceReason to take it over, or reuse your own.`,
+      409
+    );
+  }
+  const concurrent = others.map((d) => ({
+    checkoutRef: redactCheckout(d.id),
+    runtime: d.runtime,
+    accountableHuman: d.accountableHuman,
+  }));
+
   const checkoutId = genId("dsp");
   // A checkout ALWAYS mints an agent credential — it is the agent handshake.
   // Operators do not check out (their PRs are recorded ungated). The actor kind
@@ -352,8 +416,22 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
       agent: input.agent ?? null,
     },
   });
-  const owner = backfilledOwner ?? task?.accountableOwner ?? null;
-  return { checkoutId, accountablePerson: checkoutAccountablePeople(input.accountableHuman, owner)[0] };
+  if (concurrent.length > 0) {
+    await repo.appendEvent({
+      kind: "checkout.concurrent",
+      actor: input.runtime,
+      repo: input.repo,
+      taskId: input.taskId,
+      payload: {
+        checkoutId,
+        heldBy: concurrent,
+        forceReason,
+        enforced: checkoutTakeoverEnforced(),
+      },
+    });
+    return { checkoutId, accountablePerson, concurrent };
+  }
+  return { checkoutId, accountablePerson };
 }
 
 /**
@@ -484,6 +562,16 @@ export interface VerifyPrTaskResult {
   taskId: string | null;
   verdict: "pass" | "block";
   reasons: string[];
+  /** TASK-3409: the checkout's state at this head. */
+  checkout?: {
+    live: boolean;
+    expiresAt: string | null;
+    releasedReason: string | null;
+    /** Why the checkout does not resolve for this PR; null when it does. */
+    blockReason: string | null;
+  };
+  /** TASK-3409: the task's approval gates, newest last (signed records arrive with TASK-3408). */
+  approvals?: { gateId: string; status: string; decidedBy: string | null; decidedAt: string | null }[];
 }
 
 export interface VerifyPrResult extends VerifyResult {
@@ -716,7 +804,24 @@ export async function verifyPr(
       : { ...result, reasons: [...result.reasons, ...trailerCheck.notes] };
     const checked = applyReviewLinks(withCommits, reviewLinks);
     if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, checked, taskId ?? cid);
-    tasks.push({ checkoutId: cid, taskId, verdict: checked.verdict, reasons: checked.reasons });
+    tasks.push({
+      checkoutId: cid,
+      taskId,
+      verdict: checked.verdict,
+      reasons: checked.reasons,
+      checkout: {
+        live: !!d && !resolution.reason,
+        expiresAt: d?.expiresAt ?? null,
+        releasedReason: d?.releasedReason ?? null,
+        blockReason: resolution.reason ?? null,
+      },
+      approvals: (task?.approvalGates ?? []).map((g) => ({
+        gateId: g.id,
+        status: g.status,
+        decidedBy: g.decidedBy ?? null,
+        decidedAt: g.decidedAt ?? null,
+      })),
+    });
   }
 
   // Pass only if EVERY task passes. When blocked, surface only the blocking
@@ -1195,6 +1300,20 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
       await repo.releaseDispatches([cid], { repo: d.repo, pr: evt.prNumber, reason: evt.merged ? "merged" : "closed" });
     }
     return { action: evt.action, actorKind, taskId, recorded: true, proposalId, deepLink };
+  }
+
+  // TASK-3409: a push to (or reopen of) an open PR that carries a stamp keeps
+  // that checkout alive, so in-flight work never lapses mid-review.
+  const renewable: string[] = [];
+  let renewRepo: string | null = null;
+  for (const cid of new Set(ids)) {
+    const d = await repo.getDispatch(cid);
+    if (!d || d.revoked || d.releasedAt || !dispatchRepoMatches(d.repo, evt.repo, evt.repoFullName)) continue;
+    renewable.push(cid);
+    renewRepo = d.repo;
+  }
+  if (renewRepo) {
+    await repo.renewDispatches(renewable, { repo: renewRepo, pr: evt.prNumber, ttlMinutes: CHECKOUT_TTL_MIN });
   }
 
   const kind = evt.action === "synchronize" ? "pr.synchronized" : "pr.opened";

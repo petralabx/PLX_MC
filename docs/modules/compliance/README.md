@@ -91,6 +91,17 @@ truth table is proven before any plumbing exists.
   the task's bucket has no PRD link. `verifyPr(input, { record: false })`
   computes the same verdict without the check row or gate event — used only by
   the read-only MCP `mc_verify_pr`, whose inputs come from `github-pr.ts`.
+- TASK-3409: a push to, or reopen of, an open PR whose body carries a stamp
+  extends that checkout to at least now + 8 h (`renewDispatches`, audited as
+  `checkout.renewed`); revoked or released leases are never extended.
+  `checkout({ reuse: true })` hands back the caller's own live lease (same
+  runtime and operator, event `checkout.reused`). A checkout of a task that
+  another holder has a live lease on is logged as `checkout.concurrent` with
+  the holders and any `forceReason`; with `PLX_MC_CHECKOUT_TAKEOVER_ENFORCE=1`
+  it is refused (`checkout_held`, 409) unless `forceReason` is given. Each
+  `verifyPr` task result carries `checkout` (live, expiresAt, releasedReason,
+  blockReason) and the task's approval gates as `approvals`. The merge SHA was
+  already stamped on the task by the PR projection.
 - TASK-2011: expired checkouts fall back to live GitHub open-PR/stamp proof,
   once per PR verification/ingestion, failing closed when GitHub is unavailable.
   Revoked/released credentials, repo mismatches, and deleted/verified tasks

@@ -286,10 +286,28 @@ server.tool(
       .describe(
         "Optional GitHub slug (e.g. petralabx/local-inference) to bind checkout actor.repo. Allowlisted consumers only. Omitted = MC_REPO / X-MC-Repo."
       ),
+    agent: z
+      .string()
+      .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/)
+      .optional()
+      .describe("Optional <runtime>/<lane> of the calling agent, recorded on the checkout; the gate holds each commit's Agent trailer to it."),
+    reuse: z.boolean().optional().describe("Return your own live checkout of this task instead of minting a second one."),
+    forceReason: z.string().min(1).max(2000).optional().describe("Why you take over a task another holder has a live checkout of."),
   },
-  async ({ taskId, repo }) => {
+  async ({ taskId, repo, agent, reuse, forceReason }) => {
     if (!MCP_ENABLED) return disabledTool("mc_checkout_task");
-    return printResult(await mcFetch("/checkout", { method: "POST", body: { taskId, ...(repo ? { repo } : {}) } }));
+    return printResult(
+      await mcFetch("/checkout", {
+        method: "POST",
+        body: {
+          taskId,
+          ...(repo ? { repo } : {}),
+          ...(agent ? { agent } : {}),
+          ...(reuse !== undefined ? { reuse } : {}),
+          ...(forceReason ? { forceReason } : {}),
+        },
+      })
+    );
   }
 );
 

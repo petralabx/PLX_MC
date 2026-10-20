@@ -38,6 +38,16 @@ export function taskLink(taskId: string): string {
   return `${publicMcBaseUrl()}/tasks/${encodeURIComponent(taskId)}`;
 }
 
+/** Project deep link (TASK-3442): /projects/PRJ-n, an alias onto the shell's project screen. */
+export function projectLink(projectId: string): string {
+  return `${publicMcBaseUrl()}/projects/${encodeURIComponent(projectId)}`;
+}
+
+/** Bucket deep link (TASK-3442): /buckets/BKT-n, an alias onto the shell's bucket screen. */
+export function bucketLink(bucketId: string): string {
+  return `${publicMcBaseUrl()}/buckets/${encodeURIComponent(bucketId)}`;
+}
+
 export function buildMeta(
   identity: McpIdentity,
   partial: Partial<Omit<McpResponseMeta, "requestId" | "ts" | "actor">> = {}

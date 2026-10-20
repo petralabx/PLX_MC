@@ -59,7 +59,7 @@ import { taskSearchSchema, type SearchTasksInput } from "./task-search-schema";
 export type { SearchTasksInput } from "./task-search-schema";
 import { TERMINAL_TASK_STAGES } from "./task-update-actions";
 import { resolveCheckoutRepo } from "./checkout-repo";
-import { taskLink } from "./envelope";
+import { bucketLink, projectLink, taskLink } from "./envelope";
 import { assertEvidenceStandard } from "./evidence-standard-guard";
 import { assertMayCloseOrReopen, cancelContextFor } from "./task-cancel-actions";
 import { buildHonestyFields } from "./honesty";
@@ -367,7 +367,7 @@ export async function actionCreateProject(
       ? { members: [...creator.tokens, ...(projectInput.members ?? [])] }
       : {}),
   });
-  return { project, projectId: project.id, sync: project.sync };
+  return { project, projectId: project.id, link: projectLink(project.id), sync: project.sync };
 }
 
 export type CreateBucketActionInput = Omit<CreateBucketInput, "desc"> & {
@@ -390,7 +390,7 @@ export async function actionCreateBucket(
     desc: description,
     owner: input.owner ?? resolveHumanAccountableOwner(identity.operatorEmail),
   });
-  return { bucket, bucketId: bucket.id, sync: bucket.sync };
+  return { bucket, bucketId: bucket.id, link: bucketLink(bucket.id), sync: bucket.sync };
 }
 
 export async function actionListBuckets(
@@ -482,7 +482,7 @@ export async function actionUpdateBucket(
   }
   const bucket = await patchBucket(id, patch, authorized.auditLabel);
   if (!bucket) throw new ApiError("not_found", `unknown bucket ${id}`, 404);
-  return { bucket, bucketId: bucket.id, sync: bucket.sync };
+  return { bucket, bucketId: bucket.id, link: bucketLink(bucket.id), sync: bucket.sync };
 }
 
 export async function actionCheckout(

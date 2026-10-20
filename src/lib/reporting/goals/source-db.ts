@@ -59,7 +59,8 @@ export async function withReportingSnapshot<T>(
   let failure: Error | undefined;
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-    // Timestamp → date casts (the production cutoff) use the Toronto calendar.
+    // The Toronto calendar for any timestamp → date cast. The queries no longer
+    // depend on it (the MCP path can't set it, TASK-3489); kept as the default.
     await client.query(`SET LOCAL TIME ZONE '${REPORT_TIME_ZONE}'`);
     const deadline = Date.now() + timeoutMs;
     const q: SourceQuery = async (text, params = []) => {

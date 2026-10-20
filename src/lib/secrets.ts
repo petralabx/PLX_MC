@@ -38,13 +38,28 @@ export function databaseUrl(): string {
 // Goals & Production report (TASK-2895): a dedicated read-only login on the PLX
 // reporting replica (FileMaker silver.batches, Sage sage.oe_invoice_header and
 // sage.ar_customer — grants in docs/modules/reporting-goals/readonly-grants.sql).
-// Absent → the report shows "not connected" and refresh returns 503.
+// TASK-3489: or the same replica through plx-reporting-mcp (bearer token),
+// for hosts that can't reach its port 5432; used when both REPORTING_MCP_URL
+// and REPORTING_MCP_TOKEN are set. Neither path → the report shows "not
+// connected" and refresh returns 503.
 export function reportingDatabaseConfigured(): boolean {
-  return Boolean(process.env.REPORTING_DATABASE_URL);
+  return reportingMcpConfigured() || Boolean(process.env.REPORTING_DATABASE_URL);
 }
 
 export function reportingDatabaseUrl(): string {
   return requireSecret("REPORTING_DATABASE_URL");
+}
+
+export function reportingMcpConfigured(): boolean {
+  return Boolean(process.env.REPORTING_MCP_URL && process.env.REPORTING_MCP_TOKEN);
+}
+
+export function reportingMcpUrl(): string {
+  return requireSecret("REPORTING_MCP_URL");
+}
+
+export function reportingMcpToken(): string {
+  return requireSecret("REPORTING_MCP_TOKEN");
 }
 
 // Presence of the Basic break-glass password (value never exposed). With Entra

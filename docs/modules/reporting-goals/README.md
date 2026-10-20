@@ -67,7 +67,8 @@ traceable to a refresh run and a named query.
       fetched rate is stored. If the fetch fails, the run uses the last stored
       rate and flags it.
    3. Every query runs in one `REPEATABLE READ READ ONLY` transaction on the
-      replica, with a 120-second budget per attempt. A transient error is
+      replica (or through plx-reporting-mcp, see **Reporting MCP path**), with
+      a 120-second budget per attempt. A transient error is
       retried twice at most (backoff 5 s, then 15 s), and only while another
       full attempt fits in the 280-second budget.
    4. All snapshots and the run's success are written in one Mission Control
@@ -349,6 +350,64 @@ the rows (`shipments`), built from the same snapshot and entries as the cards.
   description, quantity, unit, unit price, amount, discount, currency) as values,
   then the invoices whose lines don't add up, worded as on the page.
 
+### Reporting MCP path
+
+Since TASK-2719 the replica's port 5432 is open only to scoped sources, and
+Vercel is not one of them. When `REPORTING_MCP_URL` and `REPORTING_MCP_TOKEN`
+are both set, the refresh reads through **plx-reporting-mcp** instead
+(`source-mcp.ts`, TASK-3489). That is the bearer-authenticated MCP server in
+front of postgres-mcp (restricted mode) on App Runner; see agentic-swarm
+`apps/plx-reporting-mcp/README.md`. With only one of the two set, or neither,
+the refresh uses `REPORTING_DATABASE_URL` exactly as before. With no path at all
+the report is not connected.
+
+- **Same queries.** The refresh sends the same fixed dataset queries to the
+  `execute_sql` tool, one at a time, in one MCP session per attempt. Nothing
+  else is called.
+- **Literals, not parameters.** `execute_sql` takes SQL text only.
+  `sql-literal.ts` is the one place a parameter becomes SQL. It accepts only
+  strings, finite numbers, booleans, null, valid dates, and arrays of strings
+  or of numbers, and it refuses anything else.
+- **No shared snapshot.** Restricted mode runs each statement in its own
+  read-only transaction, and it refuses `BEGIN` and `SET`. So the datasets of
+  one run are not read at one single moment, as `REPEATABLE READ` gives the pg
+  path. A batch or invoice that changes during the few seconds of a refresh can
+  show in one dataset and not yet in another. The next refresh corrects it.
+- **No session time zone.** Restricted mode also refuses `AT TIME ZONE`. The
+  one timestamp the queries read (the latest `silver.batches.updated_at`)
+  comes back as epoch seconds. `cutoffs.ts` turns it into a Toronto date.
+- **Limits.** The server caps a result at 5,000 rows and 2 MB, and a statement
+  at 15 s. References (about 12,800) and customers (about 7,400) therefore come
+  back as one row of arrays (about 0.2 and 0.4 MB on 2026-10-20). A truncated
+  result fails the attempt; no partial snapshot is stored.
+- **Failures.** These fail the attempt: a truncated result, a tool error, an
+  `Error:` text, an unreadable result, HTTP 401/429/5xx, and the 120-second
+  attempt budget running out. Retries follow the existing transient rules:
+  429, 5xx, an unreachable server, a statement timeout and a reset server pool
+  are retried, and 401, a refused query and a permission error are not.
+- **Grants.** The catalog checks for the forecast and the invoice lines run
+  through the same path, so they check the MCP server's role. Without those
+  grants the forecast waits and everything else refreshes, as before. On
+  2026-10-20 that role could read the invoice lines, but not 6 of the
+  forecast's columns.
+- **Logs.** Neither the adapter nor the refresh logs the token, SQL text or row
+  values. Errors carry a stable code and a fixed message.
+
+Setup (the operator does this; agents never set these):
+
+1. Issue a token for client `mc-goals-report` as the plx-reporting-mcp README
+   says. Add only its SHA-256 to `plx/ro/reporting-mcp/tokens`. The gateway
+   picks it up within about 60 s.
+2. Set `REPORTING_MCP_URL` (the App Runner service URL plus `/mcp`) and
+   `REPORTING_MCP_TOKEN` on the Vercel project `plx-mission-control`.
+3. Confirm that the server's role reads the same replica and the goals columns.
+   A refresh shows this: the cutoffs, the row counts, and any section that
+   waits for read access.
+
+Rollback: unset `REPORTING_MCP_URL` or `REPORTING_MCP_TOKEN`. The refresh falls
+back to `REPORTING_DATABASE_URL` when it is set. To cut the path at the source,
+disable `mc-goals-report` in the token map.
+
 ### Setup
 
 1. Run `readonly-grants.sql` on the reporting database. It creates the
@@ -528,20 +587,23 @@ Depends on:
 - **compliance**: `appendEvent` / `appendEventTx` into `mc_events`.
 - `src/lib/db`: Mission Control's pool and `withTransaction`.
 - `src/lib/db/tls`: the RDS CA bundle, reused for the replica.
-- `src/lib/secrets.ts`: `reportingDatabaseConfigured/Url`, `cronConfigured/Secret`
-  and `basicAuthConfigured`.
+- `src/lib/secrets.ts`: `reportingDatabaseConfigured/Url`,
+  `reportingMcpConfigured/Url/Token`, `cronConfigured/Secret` and
+  `basicAuthConfigured`.
+- `@modelcontextprotocol/sdk`: the MCP client for the reporting MCP path.
 - `zod`.
 - `exceljs`: the workbook (`excel/export.ts`) and reading the import (`excel/import.ts`).
 
 External:
-- the PLX reporting replica (read-only)
+- the PLX reporting replica (read-only), directly or through plx-reporting-mcp
 - the Bank of Canada Valet API (no key)
 
 Depended on by: nothing yet.
 
 ### Key Files
 
-- `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, fx, store, refresh, loader, access, entry-input, entries, excel/)
+- `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, source-mcp, sql-literal, fx, store, refresh, loader, access, entry-input, entries, excel/)
+- Reporting MCP path (TASK-3489): `source-mcp.ts`, `sql-literal.ts`; `tests/reporting-goals-source-mcp.test.ts` (a fake plx-reporting-mcp), `tests/reporting-goals-sql-literal.test.ts`, `tests/reporting-goals-source-select.test.ts`
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)
 - `db/migrations/042_reporting_goals_line1.sql` (+ `db/rollback/042_reporting_goals_line1_rollback.sql`) — the Line 1 settings
 - `src/app/api/reporting/goals/` — read, refresh, run, export, entry, customer and import routes; `src/app/api/cron/reporting-goals/` — the daily refresh

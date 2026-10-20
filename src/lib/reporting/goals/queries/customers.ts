@@ -1,28 +1,27 @@
 // Sage customers for the manual-entry customer picker (codes are space-padded
-// in Sage, so trim). No params.
+// in Sage, so trim). They come back as one row holding a [code, name, currency]
+// array per customer, in code order: over 7,000 rows would pass the reporting
+// MCP's 5,000-row cap (TASK-3489). No params.
 
 import type { CustomerRow } from "../types";
 import type { DatasetQuery } from "./shared";
 
 interface Row {
-  code: string;
-  name: string | null;
-  currency: string | null;
+  customers: [code: string, name: string | null, currency: string | null][];
 }
 
 export const customersQuery: DatasetQuery<Row, CustomerRow[]> = {
   name: "customers",
   sql: `
-SELECT trim(c.idcust) AS code,
-       trim(c.namecust) AS name,
-       nullif(trim(c.codecurn), '') AS currency
+SELECT coalesce(array_agg(ARRAY[trim(c.idcust), trim(c.namecust), nullif(trim(c.codecurn), '')] ORDER BY trim(c.idcust)),
+                ARRAY[]::text[]) AS customers
 FROM sage.ar_customer c
-WHERE trim(coalesce(c.idcust, '')) <> ''
-ORDER BY 1`,
+WHERE trim(coalesce(c.idcust, '')) <> ''`,
   map: (rows) => {
     const seen = new Set<string>();
     return rows
-      .filter((r) => !seen.has(r.code) && seen.add(r.code))
-      .map((r) => ({ code: r.code, name: r.name ?? r.code, currency: r.currency }));
+      .flatMap((r) => r.customers)
+      .filter(([code]) => !seen.has(code) && seen.add(code))
+      .map(([code, name, currency]) => ({ code, name: name ?? code, currency }));
   },
 };

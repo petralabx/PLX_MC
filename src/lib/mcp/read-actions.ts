@@ -13,7 +13,7 @@ import { ApiError } from "@/lib/api/route";
 import { searchBrainAsk, searchStatusMessage } from "@/lib/brain-ask";
 import { loadPrVerifyInput } from "@/lib/compliance/github-pr";
 import * as complianceRepo from "@/lib/compliance/repo";
-import { verifyPr } from "@/lib/compliance/service";
+import { checkoutAccountablePeople, verifyPr } from "@/lib/compliance/service";
 import { filterTasksByAcl, indexById } from "@/lib/permissions/project-acl";
 import { recordReadShadowMismatch } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
@@ -71,13 +71,19 @@ export function redactCheckoutIds<T>(value: T): T {
   return value;
 }
 
-function toCheckoutView(row: complianceRepo.DispatchListRow, now = Date.now()) {
+function toCheckoutView(
+  row: complianceRepo.DispatchListRow,
+  taskOwner: string | null | undefined,
+  now = Date.now()
+) {
   return {
     checkoutRef: checkoutRef(row.id),
     taskId: row.taskId,
     repo: row.repo,
     runtime: row.runtime,
     accountableHuman: row.accountableHuman,
+    // Who commits name in On-Behalf-Of; the gate accepts any entry (TASK-3483).
+    accountablePeople: checkoutAccountablePeople(row.accountableHuman, taskOwner),
     actorKind: row.actorKind,
     issuedAt: row.issuedAt,
     expiresAt: row.expiresAt,
@@ -110,7 +116,7 @@ export async function actionGetTask(identity: McpIdentity, id: string) {
     task,
     accountableOwner: task.accountableOwner,
     evidence: task.evidence ?? null,
-    checkouts: checkouts.map((row) => toCheckoutView(row)),
+    checkouts: checkouts.map((row) => toCheckoutView(row, task.accountableOwner)),
     events: events.map(compactTaskUpdatedEvent),
     link: taskLink(taskId),
   });
@@ -162,7 +168,10 @@ export async function actionListCheckouts(identity: McpIdentity, input: ListChec
     ).map((t) => t.id)
   );
   const hidden = new Set(snap.tasks.filter((t) => !visible.has(t.id)).map((t) => t.id));
-  const checkouts = rows.filter((row) => !hidden.has(row.taskId)).map((row) => toCheckoutView(row));
+  const owners = new Map(snap.tasks.map((t) => [t.id, t.accountableOwner]));
+  const checkouts = rows
+    .filter((row) => !hidden.has(row.taskId))
+    .map((row) => toCheckoutView(row, owners.get(row.taskId)));
   return { checkouts, count: checkouts.length, filter };
 }
 

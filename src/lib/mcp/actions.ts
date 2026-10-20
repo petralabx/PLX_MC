@@ -495,7 +495,7 @@ export async function actionCheckout(
     repositoryId: repo,
   });
   await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
-  const { checkoutId } = await checkout({
+  const { checkoutId, accountablePerson } = await checkout({
     taskId,
     runtime: identity.runtime,
     accountableHuman: identity.operatorEmail,
@@ -509,6 +509,8 @@ export async function actionCheckout(
     checkoutId,
     taskId,
     prBodyLine: stamp,
+    // The person commits name in On-Behalf-Of (TASK-3483).
+    accountablePerson,
     link: taskLink(taskId),
     sync: await syncMetaForTask(taskId),
     actor: { repo },

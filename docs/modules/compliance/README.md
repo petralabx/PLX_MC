@@ -42,7 +42,11 @@ truth table is proven before any plumbing exists.
   `Agent:`/`On-Behalf-Of:`/`MC-Checkout:` trailer. Agent commits with no body
   stamp block. On a stamped PR, each agent commit must end with `Agent:`,
   `On-Behalf-Of:`, then `MC-Checkout:` as the last line, naming a body stamp.
-  On-Behalf-Of must equal the checkout's accountable person. Agent must equal
+  On-Behalf-Of must equal the checkout's accountable person. When the checkout
+  was minted through a shared service alias (`cos@…`, not a person), the task's
+  human accountable owner is accepted too (TASK-3483); `mc_checkout_task`
+  returns that person as `accountablePerson`, and `mc_get_task` and
+  `mc_list_checkouts` list every accepted value as `accountablePeople`. Agent must equal
   the `<runtime>/<lane>` passed as `agent` to `mc_checkout_task`, or the
   checkout's runtime when it is not the default `cursor`; otherwise it only
   warns. The merge queue skips the read; a GitHub error holds the gate.

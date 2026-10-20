@@ -104,6 +104,7 @@ describe("mc_complete_task contract", () => {
     ["missing verificationCommands", { ...validComplete, verificationCommands: undefined }],
     ["empty verificationCommands", { ...validComplete, verificationCommands: [] }],
     ["blank verification command", { ...validComplete, verificationCommands: ["  "] }],
+    ["unknown outcome", { ...validComplete, outcome: "done-ish" }],
     ["missing rollback", { ...validComplete, rollback: undefined }],
     ["blank rollback", { ...validComplete, rollback: "   " }],
   ];

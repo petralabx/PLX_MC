@@ -394,6 +394,8 @@ server.tool(
     summary: z.string().min(1),
     commitSha: z.string().optional(),
     prUrl: z.string().optional(),
+    outcome: z.enum(["completed", "blocked", "failed"]).optional()
+      .describe("UAT code work requires prUrl unless outcome is blocked or failed."),
     // Pipeline contract: non-empty verificationCommands AND rollback (matches
     // completeTaskInputShape in src/lib/mcp/actions.ts).
     verificationCommands: z.array(z.string().trim().min(1)).min(1),

@@ -655,6 +655,8 @@ export const completeTaskInputShape = {
   summary: z.string().min(1),
   commitSha: z.string().optional(),
   prUrl: z.string().optional(),
+  outcome: z.enum(["completed", "blocked", "failed"]).optional()
+    .describe("UAT code work requires prUrl unless outcome is blocked or failed."),
   verificationCommands: z.array(nonBlank).min(1),
   filesChanged: z.array(z.string()).optional(),
   rollback: nonBlank,
@@ -678,6 +680,7 @@ export async function actionComplete(
     summary: string;
     commitSha?: string;
     prUrl?: string;
+    outcome?: "completed" | "blocked" | "failed";
     verificationCommands?: string[];
     filesChanged?: string[];
     rollback?: string;
@@ -708,6 +711,21 @@ export async function actionComplete(
       );
     }
   }
+  // A pushed branch is not a reviewable UAT fix. Check before any evidence or
+  // completion event is written; blocked/failed hand-ins remain auditable.
+  if (
+    task?.bucket === "BKT-UAT" &&
+    task.labels?.includes("kind:code") &&
+    task.labels.some((label) => /^uat:\S+$/.test(label)) &&
+    !input.prUrl?.trim() &&
+    input.outcome !== "blocked" && input.outcome !== "failed"
+  ) {
+    throw new ApiError(
+      "uat_code_pr_required",
+      "UAT code completion requires prUrl or an explicit blocked or failed outcome. A branch push alone is incomplete.",
+      400
+    );
+  }
   // Evidence standard (TASK-3165), before complete() records anything, so a
   // refused hand-in leaves no task.completed event or evidence behind. The
   // checkout stays open until the PR merges or closes: fix the text and send it
@@ -724,6 +742,7 @@ export async function actionComplete(
     summary: input.summary,
     commitSha: input.commitSha,
     prUrl: input.prUrl,
+    outcome: input.outcome,
     actor: identity.actor,
   });
   if (autonomy && existingDispatch) {
@@ -790,6 +809,7 @@ export async function actionComplete(
       summary: input.summary,
       commitSha: input.commitSha ?? null,
       prUrl: input.prUrl ?? null,
+      outcome: input.outcome ?? "completed",
       verificationCommands: input.verificationCommands ?? [],
       filesChanged: input.filesChanged ?? [],
       rollback: input.rollback ?? null,

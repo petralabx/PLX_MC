@@ -551,6 +551,12 @@ describe("complete", () => {
     expect(ev!.payload).toMatchObject({ summary: "shipped", commitSha: "deadbeef" });
   });
 
+  it.each(["blocked", "failed"] as const)("records the explicit %s outcome in the completion audit", async (outcome) => {
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    await complete({ checkoutId, summary: "Work could not finish.", outcome });
+    expect(db.events.find((e) => e.kind === "task.completed")?.payload).toMatchObject({ outcome, prUrl: null });
+  });
+
   it("rejects completion for an unknown or expired checkout (S4)", async () => {
     await expect(complete({ checkoutId: "dsp_bogus", summary: "x" })).rejects.toMatchObject({ code: "invalid_checkout" });
     db.dispatches.set("dsp_exp", {

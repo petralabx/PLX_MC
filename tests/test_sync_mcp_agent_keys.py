@@ -174,6 +174,29 @@ def test_registry_tolerates_cip_auto_undraft_before_its_key_is_minted() -> None:
     assert "sp_mcp_cip_auto_undraft" not in registry
 
 
+def test_registry_accepts_workbench_intake_principal() -> None:
+    sync = load_script()
+    assert "sp_mcp_workbench_intake" in sync.DEDICATED_PRINCIPAL_IDS
+    registry = sync.validate_registry(
+        json.dumps(
+            {
+                "sp_mcp_claude_code": "claude-secret",
+                "sp_mcp_workbench_intake": "intake-secret",
+            }
+        )
+    )
+    assert registry["sp_mcp_workbench_intake"] == "intake-secret"
+    assert sync.IDENTITY_LABELS["sp_mcp_workbench_intake"] == "workbench-intake"
+
+
+def test_registry_tolerates_workbench_intake_before_its_key_is_minted() -> None:
+    sync = load_script()
+    registry = sync.validate_registry(
+        json.dumps({"sp_mcp_claude_code": "claude-secret"})
+    )
+    assert "sp_mcp_workbench_intake" not in registry
+
+
 def search_response(principal_id: str) -> FakeResponse:
     return FakeResponse(
         200,
@@ -192,9 +215,11 @@ IDENTITY_ARGS = {
 }
 
 
-def test_portal_is_the_only_search_verified_principal() -> None:
+def test_only_portal_and_workbench_intake_are_search_verified() -> None:
     sync = load_script()
-    assert sync.SEARCH_VERIFIED_PRINCIPAL_IDS == frozenset({"sp_mcp_portal"})
+    assert sync.SEARCH_VERIFIED_PRINCIPAL_IDS == frozenset(
+        {"sp_mcp_portal", "sp_mcp_workbench_intake"}
+    )
 
 
 def test_task_search_identity_accepts_the_portal_actor() -> None:
@@ -259,6 +284,22 @@ def test_portal_identity_never_calls_self_check() -> None:
         session,
         api_key="portal-secret",
         expected_principal_id="sp_mcp_portal",
+        **IDENTITY_ARGS,
+    )
+    assert [call["url"] for call in session.calls] == [
+        "https://mc.example.test/api/cursor/tasks"
+    ]
+
+
+def test_workbench_intake_identity_never_calls_self_check() -> None:
+    # Its tool allowlist denies mc_self_check, like the portal's.
+    sync = load_script()
+    session = FakeSession(search_response("sp_mcp_workbench_intake"))
+
+    assert sync.verify_identity(
+        session,
+        api_key="intake-secret",
+        expected_principal_id="sp_mcp_workbench_intake",
         **IDENTITY_ARGS,
     )
     assert [call["url"] for call in session.calls] == [

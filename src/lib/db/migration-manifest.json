@@ -45,5 +45,6 @@
   "044_reporting_goals_shipment_lines.sql",
   "045_reporting_goals_forecast_category.sql",
   "046_cip_auto_undraft_mcp_principal.sql",
-  "047_checkout_lease_chain.sql"
+  "047_checkout_lease_chain.sql",
+  "048_workbench_intake_mcp_principal.sql"
 ]

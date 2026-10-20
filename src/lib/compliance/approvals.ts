@@ -12,8 +12,10 @@ import {
   type ApprovalEvidenceRef,
   type ApprovalGate,
   type ApprovalProposal,
+  type ApprovalScope,
   type Task,
 } from "@/lib/mc-data";
+import { approvalExpiry, deciderViolation, signApproval } from "./approval-signature";
 import { APPROVAL_WAIT_MAX_MS, pendingApprovalGates } from "@/lib/mc-data/policy";
 import { patchTask } from "@/lib/sync";
 import { getEntities, getEntity } from "@/lib/sync/repo";
@@ -37,6 +39,10 @@ export interface RequestApprovalInput {
   checkoutRef?: string;
   /** Structured proposal, already validated (approvalProposalSchema). */
   proposal?: ApprovalProposal;
+  /** TASK-3408: what the approval will cover (launch, merge or flags). */
+  scope?: ApprovalScope;
+  /** TASK-3408: where the request came from (a message link, a ticket). */
+  sourceRef?: string;
 }
 
 export async function requestApprovalGate(
@@ -51,6 +57,8 @@ export async function requestApprovalGate(
     reason: input.reason,
     ...(input.checkoutRef ? { checkoutRef: input.checkoutRef } : {}),
     ...(input.proposal ? { proposal: input.proposal } : {}),
+    ...(input.scope ? { scope: input.scope } : {}),
+    ...(input.sourceRef ? { sourceRef: input.sourceRef } : {}),
     requestedBy: input.requestedBy,
     requestedByPrincipal: input.requestedByPrincipal,
     requestedRuntime: input.runtime,
@@ -115,6 +123,8 @@ export async function requestApprovalGate(
       hasProposal: !!input.proposal,
       reason: gate.reason,
       runtime: input.runtime ?? null,
+      scope: input.scope ?? null,
+      sourceRef: input.sourceRef ?? null,
     },
   });
   return { gate, task: updated };
@@ -172,14 +182,31 @@ export async function decideApprovalGate(
     });
     throw new ApiError("separation_of_duties", violation, 403);
   }
+  // TASK-3408: only people on the server-side allowlist (when one is set) decide.
+  const notAllowed = input.decision === "approved" ? deciderViolation(input.decidedBy) : null;
+  if (notAllowed) {
+    await appendEvent({
+      kind: "approval.denied",
+      actor: input.decidedBy,
+      taskId: input.taskId,
+      payload: { gateId: gate.id, reasonCode: "decider_not_allowed", attemptedDecision: input.decision, requestedBy: gate.requestedBy },
+    });
+    throw new ApiError("decider_not_allowed", notAllowed, 403);
+  }
 
-  const decided: ApprovalGate = {
+  const decidedAt = new Date().toISOString();
+  const base: ApprovalGate = {
     ...gate,
     status: input.decision,
     decidedBy: input.decidedBy,
-    decidedAt: new Date().toISOString(),
+    decidedAt,
     note: input.note,
   };
+  // An approval is stamped with its expiry, then signed over the whole record.
+  const stamped: ApprovalGate =
+    input.decision === "approved" ? { ...base, expiresAt: approvalExpiry(gate.scope, decidedAt) } : base;
+  const decided: ApprovalGate =
+    input.decision === "approved" ? { ...stamped, signature: signApproval(input.taskId, stamped) } : stamped;
   const updated = await patchTask(
     input.taskId,
     {
@@ -205,6 +232,8 @@ export async function decideApprovalGate(
       reason: gate.reason,
       requestedBy: gate.requestedBy,
       note: input.note ?? null,
+      expiresAt: decided.expiresAt ?? null,
+      signed: !!decided.signature,
     },
   });
   return { gate: decided, task: updated };
@@ -225,6 +254,10 @@ export interface ApprovalGateState {
   decidedBy: string | null;
   decidedAt: string | null;
   note: string | null;
+  /** TASK-3408: the approval's scope, expiry and whether it is signed. */
+  scope: ApprovalScope | null;
+  expiresAt: string | null;
+  signed: boolean;
   /** True when this call returned on the wait cap with the gate still pending. */
   timedOut: boolean;
 }
@@ -242,6 +275,9 @@ function gateState(taskId: string, gate: ApprovalGate, timedOut: boolean): Appro
     decidedBy: gate.decidedBy ?? null,
     decidedAt: gate.decidedAt ?? null,
     note: gate.note ?? null,
+    scope: gate.scope ?? null,
+    expiresAt: gate.expiresAt ?? null,
+    signed: !!gate.signature,
     timedOut,
   };
 }

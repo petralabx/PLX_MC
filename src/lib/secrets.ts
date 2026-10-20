@@ -27,6 +27,14 @@ function firstSecret(...names: string[]): string | undefined {
   return undefined;
 }
 
+/**
+ * TASK-3408: HMAC key that signs approval decisions. Unset = approvals are
+ * stored unsigned and every signed-approval check fails closed.
+ */
+export function approvalSigningKey(): string | null {
+  return firstSecret("PLX_MC_APPROVAL_SIGNING_KEY")?.trim() || null;
+}
+
 export function databaseConfigured(): boolean {
   return Boolean(process.env.PLX_MC_DATABASE_URL);
 }

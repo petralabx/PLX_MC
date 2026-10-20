@@ -41,6 +41,7 @@ import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask, snapshot } from "@/lib/sync";
 import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
+import { checkApproval } from "./approval-signature";
 import { bucketPrdForTask } from "./bucket-prd";
 import { ownEvidenceSite } from "./evidence-artifacts";
 import type { EventsQuery } from "./events";
@@ -720,6 +721,22 @@ async function checkoutTrailerCheck(
   return { reasons, notes };
 }
 
+/** Opt-in policy label (TASK-3408): this task merges only under a signed merge approval of the exact head. */
+export const MERGE_APPROVAL_LABEL = "approval:merge-required";
+
+function mergeApprovalReasons(task: Task | null, input: VerifyPrInput): string[] {
+  if (!task || !(task.labels ?? []).includes(MERGE_APPROVAL_LABEL)) return [];
+  const repoSlug = input.repoFullName ?? input.repo;
+  const want = { kind: "merge" as const, repo: repoSlug, pr: input.prNumber, headSha: input.headSha };
+  const gates = task.approvalGates ?? [];
+  if (gates.some((g) => checkApproval(task.id, g, want).ok)) return [];
+  const last = gates.findLast((g) => g.scope?.kind === "merge");
+  const why = last ? (checkApproval(task.id, last, want) as { reason: string }).reason : "no_merge_approval";
+  return [
+    `${MERGE_APPROVAL_LABEL}: no signed merge approval covers ${repoSlug}#${input.prNumber} at ${input.headSha.slice(0, 7)} (${why})`,
+  ];
+}
+
 export async function verifyPr(
   input: VerifyPrInput,
   options: VerifyPrOptions = {}
@@ -798,7 +815,7 @@ export async function verifyPr(
     const trailerCheck = d
       ? await checkoutTrailerCheck(d, trailerRows.filter((t) => t.checkoutId === cid), task)
       : { reasons: [], notes: [] };
-    const commitReasons = [...prCommitReasons, ...trailerCheck.reasons];
+    const commitReasons = [...prCommitReasons, ...trailerCheck.reasons, ...mergeApprovalReasons(task, input)];
     const withCommits: VerifyResult = commitReasons.length
       ? { verdict: "block", reasons: [...commitReasons, ...result.reasons, ...trailerCheck.notes] }
       : { ...result, reasons: [...result.reasons, ...trailerCheck.notes] };

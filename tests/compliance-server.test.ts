@@ -3,7 +3,7 @@
 // technique as tests/mc-patch.test.ts), so this exercises the real orchestration:
 // tier classification, actor/task resolution from the dispatch ledger, the
 // verdict, and the recorded check + emitted events.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 import type { PrEvent } from "@/lib/compliance/webhook";
 
@@ -834,5 +834,49 @@ describe("checkout lifecycle (TASK-3409)", () => {
     db.dispatches.get(checkoutId)!.revoked = true;
     const revoked = await verifyPr({ repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
     expect(revoked.tasks[0].checkout).toMatchObject({ live: false, blockReason: "revoked" });
+  });
+});
+
+// TASK-3408: a task labelled approval:merge-required merges only under a
+// person's signed merge approval of the exact PR head.
+describe("merge approval policy (TASK-3408)", () => {
+  const slug = "petralabx/PLX_MC";
+  const head = "d".repeat(40);
+  const pr = { repo: "PLX_MC", repoFullName: slug, prNumber: 3408, headSha: head, changedPaths: ["src/x.ts"] };
+  beforeEach(() => {
+    process.env.PLX_MC_APPROVAL_SIGNING_KEY = "policy-key";
+    github.loadPrCommits.mockResolvedValue([]);
+  });
+  afterEach(() => { delete process.env.PLX_MC_APPROVAL_SIGNING_KEY; });
+
+  const seedWith = async (gates: Task["approvalGates"]) => {
+    db.tasks.set("TASK-900", taskish({ labels: ["lane:claude-cli", "approval:merge-required"], approvalGates: gates, evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    return (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude" })).checkoutId;
+  };
+  const signed = async (scopeHead: string) => {
+    const { signApproval, approvalExpiry } = await import("@/lib/compliance/approval-signature");
+    const decidedAt = new Date().toISOString();
+    const g = { id: "apg_m", reason: "merge?", requestedBy: "cos@petrasoap.com", requestedAt: decidedAt, status: "approved" as const, decidedBy: "vince@petrasoap.com", decidedAt, scope: { kind: "merge" as const, repo: slug, pr: 3408, headSha: scopeHead } };
+    const stamped = { ...g, expiresAt: approvalExpiry(g.scope, decidedAt) };
+    return { ...stamped, signature: signApproval("TASK-900", stamped) };
+  };
+
+  it("blocks without a covering approval and names why", async () => {
+    const cid = await seedWith([]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.join(" ")).toContain(`approval:merge-required: no signed merge approval covers ${slug}#3408 at ddddddd (no_merge_approval)`);
+  });
+
+  it("blocks when the approval covers another head", async () => {
+    const cid = await seedWith([await signed("e".repeat(40))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.join(" ")).toContain("(head_sha_mismatch)");
+  });
+
+  it("passes with a signed approval of this exact head", async () => {
+    const cid = await seedWith([await signed(head)]);
+    expect((await verifyPr({ ...pr, checkoutIds: [cid] })).verdict).toBe("pass");
   });
 });

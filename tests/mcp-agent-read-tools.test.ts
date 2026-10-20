@@ -275,6 +275,7 @@ describe("tool registry", () => {
       "mc_verify_pr",
       "mc_request_approval",
       "mc_get_approval_gate",
+      "mc_verify_approval",
       "mc_list_buckets",
     ]) {
       expect(names).toContain(tool);
@@ -288,7 +289,7 @@ describe("tool registry", () => {
     expect(names).toContain("mc_link_merged_pr");
     expect(names).toContain("mc_list_projects");
     expect(names).toContain("mc_upload_evidence");
-    expect(names).toHaveLength(39);
+    expect(names).toHaveLength(40);
   });
 });
 

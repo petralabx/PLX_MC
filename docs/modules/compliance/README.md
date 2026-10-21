@@ -115,12 +115,16 @@ truth table is proven before any plumbing exists.
   (`mc_record_checkout_head`), when the `pull_request` webhook sees the first
   head with verified base ancestry or a push that GitHub compare proves
   descends from a recorded head (a staging merge included); forced pushes
-  never extend the chain, or when the gate finds a chain head
-  among the PR's commits. The gate seeds an empty chain that has a `baseSha`
-  only when GitHub compare proves the head descends from it; an unproven or
-  failed compare leaves the head untrusted. Only launcher checkouts let a
-  failed webhook compare queue the event. The first head with a PR number binds the chain to
-  that PR. For a checkout with a launch record, `verifyPr` reports a PR head
+  never extend the chain, or when GitHub compare proves the gate's requested
+  head itself descends from a chain head (never the PR's current commits, which
+  a delayed run or replay of an old head would borrow). The gate seeds an empty
+  chain that has a `baseSha` only when GitHub compare proves the head descends
+  from it; an unproven or failed compare leaves the head untrusted. Only
+  launcher checkouts let a failed webhook compare queue the event. The first
+  head with a PR number binds the chain to that PR; a head recorded before its
+  PR existed binds (guarded `pr IS NULL` update, audited as
+  `checkout.head_bound`) to the first PR the webhook, gate or launcher sees it
+  on, and a head bound to another PR fails verification. For a checkout with a launch record, `verifyPr` reports a PR head
   outside the chain (rewritten history) or a chain bound to another PR. A
   commit whose `Agent:` trailer names a lane in `PLX_MC_LAUNCH_LANES` (exact
   values, or prefixes ending in `*`; empty = none) needs a checkout with a

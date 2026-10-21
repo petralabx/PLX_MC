@@ -677,6 +677,41 @@ export async function recordDispatchHead(input: {
   return rows.length > 0;
 }
 
+/**
+ * Bind a recorded head to its PR while it has none (a launcher can record a head
+ * before the PR exists), and audit the bind. The `pr IS NULL` guard lets only one
+ * PR win a race. Returns the PR the head is bound to afterwards; null = not recorded.
+ */
+export async function bindDispatchHeadPr(input: {
+  dispatchId: string;
+  headSha: string;
+  pr: number;
+  recordedBy: string;
+}): Promise<number | null> {
+  const bound = await query<{ pr: number }>(
+    `WITH bound AS (
+       UPDATE mc_dispatch_heads SET pr = $3
+        WHERE dispatch_id = $1 AND head_sha = $2 AND pr IS NULL
+        RETURNING dispatch_id, pr
+     ), audited AS (
+       INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload)
+       SELECT 'checkout.head_bound', $4::text, d.repo, d.task_id, ($3::integer)::text,
+              jsonb_build_object('checkoutId', d.id, 'headSha', $2::text)
+         FROM bound b JOIN mc_dispatch d ON d.id = b.dispatch_id
+       RETURNING seq
+     )
+     SELECT pr FROM bound`,
+    [input.dispatchId, input.headSha, input.pr, input.recordedBy]
+  );
+  if (bound.length > 0) return bound[0].pr;
+  // Lost the race or already bound: a new statement reads the committed binding.
+  const rows = await query<{ pr: number | null }>(
+    `SELECT pr FROM mc_dispatch_heads WHERE dispatch_id = $1 AND head_sha = $2`,
+    [input.dispatchId, input.headSha]
+  );
+  return rows[0]?.pr ?? null;
+}
+
 /** Release and audit atomically; a repeated close is a no-op. */
 export async function releaseDispatches(
   ids: string[],

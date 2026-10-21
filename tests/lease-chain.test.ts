@@ -54,21 +54,30 @@ describe("webhookExtendsChain", () => {
 describe("chainVerdict", () => {
   const d = { id: "dsp_abcd1234", baseSha: null };
   const input = { prNumber: 7, headSha: sha("c") };
-  it("accepts a recorded head, attaches to an empty chain, and records a descendant", () => {
-    expect(chainVerdict(d, [head("c")], input, [])).toEqual({ ok: true, record: false });
-    expect(chainVerdict(d, [], input, [])).toEqual({ ok: true, record: true });
-    expect(chainVerdict(d, [head("a", null)], input, [sha("a"), sha("c")])).toEqual({ ok: true, record: true });
+  it("accepts a recorded head, attaches to an empty chain, and records a verified descendant", () => {
+    expect(chainVerdict(d, [head("c")], input)).toEqual({ ok: true, record: false, bind: false });
+    expect(chainVerdict(d, [], input)).toEqual({ ok: true, record: true, bind: false });
+    expect(chainVerdict(d, [head("a", null)], input, sha("a"))).toEqual({ ok: true, record: true, bind: false });
   });
 
   it("seeds an empty chain from a base SHA only with verified base ancestry", () => {
     const based = { id: "dsp_abcd1234", baseSha: sha("0") };
-    expect(chainVerdict(based, [], input, [sha("c")])).toMatchObject({ ok: false, reason: expect.stringContaining("no verified ancestry from checkout dsp_…1234's base 0000000") });
-    expect(chainVerdict(based, [], input, [sha("c")], true)).toEqual({ ok: true, record: true });
-    expect(chainVerdict(based, [head("c")], input, [])).toEqual({ ok: true, record: false });
+    expect(chainVerdict(based, [], input)).toMatchObject({ ok: false, reason: expect.stringContaining("no verified ancestry from checkout dsp_…1234's base 0000000") });
+    expect(chainVerdict(based, [], input, sha("9"))).toMatchObject({ ok: false });
+    expect(chainVerdict(based, [], input, sha("0"))).toEqual({ ok: true, record: true, bind: false });
+    expect(chainVerdict(based, [head("c")], input)).toEqual({ ok: true, record: false, bind: false });
   });
 
   it("names a rewritten history and a chain bound to another PR", () => {
-    expect(chainVerdict(d, [head("a")], input, [sha("b"), sha("c")])).toMatchObject({ ok: false, reason: expect.stringContaining("outside checkout dsp_…1234") });
-    expect(chainVerdict(d, [head("a", 9)], input, [sha("a")])).toMatchObject({ ok: false, reason: expect.stringContaining("bound to PR #9, not #7") });
+    expect(chainVerdict(d, [head("a")], input)).toMatchObject({ ok: false, reason: expect.stringContaining("outside checkout dsp_…1234") });
+    // Only a proven ancestor that is a recorded head counts; the base or any other SHA does not.
+    expect(chainVerdict(d, [head("a")], input, sha("b"))).toMatchObject({ ok: false });
+    expect(chainVerdict({ ...d, baseSha: sha("0") }, [head("a")], input, sha("0"))).toMatchObject({ ok: false });
+    expect(chainVerdict(d, [head("a", 9)], input, sha("a"))).toMatchObject({ ok: false, reason: expect.stringContaining("bound to PR #9, not #7") });
+  });
+
+  it("binds a recorded head that has no PR, and refuses one bound to another PR", () => {
+    expect(chainVerdict(d, [head("c", null)], input)).toEqual({ ok: true, record: false, bind: true });
+    expect(chainVerdict(d, [head("a", null), head("c", 9)], input)).toMatchObject({ ok: false, reason: expect.stringContaining("bound to PR #9, not #7") });
   });
 });

@@ -83,7 +83,7 @@ import { POST as requestApprovalRoute } from "@/app/api/cursor/request-approval/
 import { actionListBuckets } from "@/lib/mcp/actions";
 import { actionRequestApproval } from "@/lib/mcp/approval-actions";
 import type { McpIdentity } from "@/lib/mcp/auth";
-import { actionGetTask } from "@/lib/mcp/read-actions";
+import { actionGetTask, actionListCheckouts } from "@/lib/mcp/read-actions";
 
 const HEADERS: Record<string, string> = {
   "content-type": "application/json",
@@ -289,7 +289,8 @@ describe("tool registry", () => {
     expect(names).toContain("mc_link_merged_pr");
     expect(names).toContain("mc_list_projects");
     expect(names).toContain("mc_upload_evidence");
-    expect(names).toHaveLength(40);
+    expect(names).toContain("mc_record_checkout_head");
+    expect(names).toHaveLength(41);
   });
 });
 
@@ -454,6 +455,42 @@ describe("mc_list_checkouts", () => {
       ["vince@petrasoap.com"],
       ["greg.m@petrasoap.com", "cos@petrasoap.com"],
     ]);
+  });
+
+  // TASK-3410: the owning launcher reads the full id of the checkouts it took;
+  // every other principal, and a minting principal not on the launcher list, does not.
+  it("shows checkoutId only to the launcher principal that took the checkout", async () => {
+    process.env.PLX_MC_LAUNCHER_PRINCIPALS = "sp_mcp_ledger";
+    const as = (id: McpIdentity["servicePrincipalId"]): McpIdentity => ({
+      operatorEmail: "cos@petrasoap.com",
+      runtime: "claude-code",
+      workerId: "w",
+      repo: "petralabx/PLX_MC",
+      servicePrincipalId: id,
+      actor: { kind: "service", id, status: "active" },
+    });
+    m.listDispatches.mockImplementation(async () => [
+      dispatch("dsp_launch01", "TASK-100", { launcherId: "sp_mcp_ledger" }),
+      dispatch("dsp_claude02", "TASK-100", { launcherId: "sp_mcp_claude_code" }),
+      dispatch("dsp_legacy03", "TASK-100"),
+    ]);
+    try {
+      const own = await actionListCheckouts(as("sp_mcp_ledger"));
+      expect(own.checkouts.map((c) => ("checkoutId" in c ? c.checkoutId : c.checkoutRef))).toEqual([
+        "dsp_launch01",
+        "dsp_…de02",
+        "dsp_…cy03",
+      ]);
+      const task = await actionGetTask(as("sp_mcp_ledger"), "TASK-100");
+      expect(task.checkouts[0]).toMatchObject({ checkoutId: "dsp_launch01", checkoutRef: "dsp_…ch01" });
+      expect(JSON.stringify(task.events)).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
+      for (const id of ["sp_mcp_claude_code", "sp_mcp_cursor"] as const) {
+        expect(JSON.stringify(await actionListCheckouts(as(id)))).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
+        expect(JSON.stringify(await actionGetTask(as(id), "TASK-100"))).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
+      }
+    } finally {
+      delete process.env.PLX_MC_LAUNCHER_PRINCIPALS;
+    }
   });
 
   it("rejects a bare repo name with a structured invalid_repo error", async () => {

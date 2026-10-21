@@ -45,6 +45,16 @@ import { checkApproval } from "./approval-signature";
 import { bucketPrdForTask } from "./bucket-prd";
 import { ownEvidenceSite } from "./evidence-artifacts";
 import type { EventsQuery } from "./events";
+import {
+  boundPr,
+  chainVerdict,
+  FULL_SHA_RE,
+  isLauncherPrincipal,
+  LAUNCH_ID_RE,
+  leaseChainEnforced,
+  namesLaunchLane,
+  webhookExtendsChain,
+} from "./lease-chain";
 import { agentSignals, commitTrailers, shortSha } from "./commit-signals";
 import { loadPrCommits, loadPrReviewLinks, loadPrState, type PrCommit, type PrState } from "./github-pr";
 import { projectPullRequest, projectionEnabled } from "./projection";
@@ -278,6 +288,14 @@ export interface CheckoutInput {
    * PLX_MC_CHECKOUT_TAKEOVER_ENFORCE=1.
    */
   forceReason?: string;
+  /** TASK-3410: the full commit SHA the work starts from; the root of the checkout's SHA chain. */
+  baseSha?: string;
+  /**
+   * TASK-3410: the launcher's launch record id. Only a principal listed in
+   * PLX_MC_LAUNCHER_PRINCIPALS may attach one; it puts the checkout under the
+   * lease-chain rules.
+   */
+  launchId?: string;
 }
 
 export interface CheckoutResult {
@@ -330,6 +348,20 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
     );
   }
 
+  const baseSha = input.baseSha?.trim().toLowerCase() || null;
+  if (baseSha && !FULL_SHA_RE.test(baseSha)) {
+    throw new ApiError("invalid_request", "baseSha must be a full 40-character commit SHA.", 400);
+  }
+  const launchId = input.launchId?.trim() || null;
+  if (launchId) {
+    if (!LAUNCH_ID_RE.test(launchId)) {
+      throw new ApiError("invalid_request", "launchId must be 1-128 characters of A-Z, a-z, 0-9, '.', '_', ':' or '-'.", 400);
+    }
+    if (!isLauncherPrincipal(input.actor?.id)) {
+      throw new ApiError("not_a_launcher", "Only a launcher principal (PLX_MC_LAUNCHER_PRINCIPALS) may attach a launch record.", 403);
+    }
+  }
+
   const taskRow = await getEntity("task", input.taskId);
   const task = taskRow?.data as Task | undefined;
   if (task?.stage === "cancelled") {
@@ -359,7 +391,8 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   const accountablePerson = checkoutAccountablePeople(input.accountableHuman, owner)[0];
   const live = await repo.liveDispatchesForTask(input.taskId, input.repo);
   const mine = holderKey(input);
-  if (input.reuse) {
+  // A launch always mints its own lease (TASK-3410): reuse could hand back one without the launch record.
+  if (input.reuse && !launchId) {
     const own = live.find((d) => holderKey(d) === mine && !d.approvalGateId);
     if (own) {
       await repo.appendEvent({
@@ -402,6 +435,9 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
     accountableHuman: input.accountableHuman,
     repo: input.repo,
     ttlMinutes: CHECKOUT_TTL_MIN,
+    launcherId: input.actor?.id ?? null,
+    baseSha,
+    launchId,
   });
   await repo.appendEvent({
     kind: "checkout",
@@ -415,6 +451,8 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
       permissionActorId: input.actor?.id ?? null,
       door: input.door ?? null,
       agent: input.agent ?? null,
+      baseSha,
+      launchId,
     },
   });
   if (concurrent.length > 0) {
@@ -452,6 +490,52 @@ export function checkoutAccountablePeople(
   if (person) return [person];
   const owner = humanEmailFor(taskOwner);
   return owner && owner !== operator ? [owner, operator] : [operator];
+}
+
+// ─── Lease chain heads (TASK-3410) ───────────────────────────────────────────
+
+export interface RecordCheckoutHeadInput {
+  checkoutId: string;
+  headSha: string;
+  beforeSha?: string | null;
+  prNumber?: number | null;
+  /** The authenticated principal; must be the one that took the checkout. */
+  principalId: string;
+}
+
+/**
+ * The owning launcher records a head it pushed, so a history it rewrote on
+ * purpose (rebase, force-push) stays on the checkout's chain. Only the principal
+ * that took the checkout may record, and only while the checkout is unreleased.
+ */
+export async function recordCheckoutHead(input: RecordCheckoutHeadInput) {
+  const d = await repo.getDispatch(input.checkoutId);
+  if (!d) throw new ApiError("not_found", "unknown checkout.", 404);
+  if (!d.launcherId || d.launcherId !== input.principalId) {
+    throw new ApiError("not_checkout_launcher", "Only the principal that took this checkout may record its heads.", 403);
+  }
+  if (d.revoked || d.releasedAt) {
+    throw new ApiError("checkout_inactive", "The checkout is revoked or released; re-checkout the task.", 409);
+  }
+  const headSha = input.headSha.trim().toLowerCase();
+  const beforeSha = input.beforeSha?.trim().toLowerCase() || null;
+  if (!FULL_SHA_RE.test(headSha) || (beforeSha && !FULL_SHA_RE.test(beforeSha))) {
+    throw new ApiError("invalid_request", "headSha and beforeSha must be full 40-character commit SHAs.", 400);
+  }
+  const heads = await repo.dispatchHeads(d.id);
+  const bound = boundPr(heads);
+  if (input.prNumber && bound !== null && bound !== input.prNumber) {
+    throw new ApiError("chain_bound", `This checkout's SHA chain is bound to PR #${bound}.`, 409);
+  }
+  const recorded = await repo.recordDispatchHead({
+    dispatchId: d.id,
+    headSha,
+    beforeSha,
+    pr: input.prNumber ?? null,
+    source: "launcher",
+    recordedBy: input.principalId,
+  });
+  return { dispatch: d, recorded, chain: recorded ? await repo.dispatchHeads(d.id) : heads };
 }
 
 // ─── Complete (the done marker, mirrors VMC complete_task) ───────────────────
@@ -664,9 +748,12 @@ type CommitTrailerRow = ReturnType<typeof commitTrailers> & { sha: string };
 // TASK-3336: the commits, not the PR author, say whether agent work is in a PR.
 // The merge queue never reads GitHub (P16); the pull_request run checked this
 // head. A GitHub error propagates, so the gate holds instead of passing.
-async function agentCommitsForPr(input: VerifyPrInput): Promise<AgentCommit[]> {
+async function prCommitsForVerify(input: VerifyPrInput): Promise<PrCommit[]> {
   if (input.event === "merge_group") return [];
-  const commits = await loadPrCommits(input.repoFullName ?? input.repo, input.prNumber);
+  return loadPrCommits(input.repoFullName ?? input.repo, input.prNumber);
+}
+
+function agentCommitsOf(commits: PrCommit[]): AgentCommit[] {
   return commits.flatMap((commit) => {
     const signals = agentSignals(commit);
     return signals.length > 0 ? [{ commit, signals }] : [];
@@ -721,6 +808,43 @@ async function checkoutTrailerCheck(
   return { reasons, notes };
 }
 
+// TASK-3410: the lease chain. A commit whose Agent trailer names a launcher lane
+// needs a checkout with a launch record, and a launcher checkout's PR head must
+// be on its recorded SHA chain. Both warn until PLX_MC_LEASE_CHAIN_ENFORCE=1. The
+// merge queue re-runs the head the pull_request run checked, so it skips this.
+async function leaseChainCheck(
+  d: repo.DispatchRow,
+  rows: CommitTrailerRow[],
+  input: VerifyPrInput,
+  prCommitShas: string[],
+  record: boolean
+): Promise<{ reasons: string[]; notes: string[] }> {
+  const found: string[] = [];
+  if (!d.launchId) {
+    for (const t of rows) {
+      if (namesLaunchLane(t.agent)) {
+        found.push(`commit ${t.sha}: Agent ${t.agent} names a launcher lane, but its checkout has no launch record`);
+      }
+    }
+  } else if (input.event !== "merge_group") {
+    const verdict = chainVerdict(d, await repo.dispatchHeads(d.id), input, prCommitShas);
+    if (!verdict.ok) found.push(verdict.reason);
+    else if (verdict.record && record && FULL_SHA_RE.test(input.headSha)) {
+      await repo.recordDispatchHead({
+        dispatchId: d.id,
+        headSha: input.headSha,
+        beforeSha: null,
+        pr: input.prNumber,
+        source: "gate",
+        recordedBy: "compliance-gate",
+      });
+    }
+  }
+  return leaseChainEnforced()
+    ? { reasons: found, notes: [] }
+    : { reasons: [], notes: found.map((r) => `warning: ${r} (PLX_MC_LEASE_CHAIN_ENFORCE is off)`) };
+}
+
 /** Opt-in policy label (TASK-3408): this task merges only under a signed merge approval of the exact head. */
 export const MERGE_APPROVAL_LABEL = "approval:merge-required";
 
@@ -753,7 +877,8 @@ export async function verifyPr(
     )
   ) as string[];
 
-  const agentCommits = await agentCommitsForPr(input);
+  const prCommits = await prCommitsForVerify(input);
+  const agentCommits = agentCommitsOf(prCommits);
 
   // Operator PR: one verdict, recorded ungated (decision 5) — unless its commits
   // carry agent signals, whoever opened it (TASK-3336).
@@ -812,13 +937,21 @@ export async function verifyPr(
                 bucketPrd,
                 evidenceStoreEnabled: canUploadEvidence,
               });
-    const trailerCheck = d
-      ? await checkoutTrailerCheck(d, trailerRows.filter((t) => t.checkoutId === cid), task)
+    const stamped = trailerRows.filter((t) => t.checkoutId === cid);
+    const trailerCheck = d ? await checkoutTrailerCheck(d, stamped, task) : { reasons: [], notes: [] };
+    const chainCheck = d
+      ? await leaseChainCheck(d, stamped, input, prCommits.map((c) => c.sha), record)
       : { reasons: [], notes: [] };
-    const commitReasons = [...prCommitReasons, ...trailerCheck.reasons, ...mergeApprovalReasons(task, input)];
+    const commitReasons = [
+      ...prCommitReasons,
+      ...trailerCheck.reasons,
+      ...chainCheck.reasons,
+      ...mergeApprovalReasons(task, input),
+    ];
+    const notes = [...trailerCheck.notes, ...chainCheck.notes];
     const withCommits: VerifyResult = commitReasons.length
-      ? { verdict: "block", reasons: [...commitReasons, ...result.reasons, ...trailerCheck.notes] }
-      : { ...result, reasons: [...result.reasons, ...trailerCheck.notes] };
+      ? { verdict: "block", reasons: [...commitReasons, ...result.reasons, ...notes] }
+      : { ...result, reasons: [...result.reasons, ...notes] };
     const checked = applyReviewLinks(withCommits, reviewLinks);
     if (record) await recordVerdict(input, tier, "agent", taskId, actorIdentity, checked, taskId ?? cid);
     tasks.push({
@@ -1321,16 +1454,30 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
 
   // TASK-3409: a push to (or reopen of) an open PR that carries a stamp keeps
   // that checkout alive, so in-flight work never lapses mid-review.
-  const renewable: string[] = [];
+  const renewable: repo.DispatchRow[] = [];
   let renewRepo: string | null = null;
   for (const cid of new Set(ids)) {
     const d = await repo.getDispatch(cid);
     if (!d || d.revoked || d.releasedAt || !dispatchRepoMatches(d.repo, evt.repo, evt.repoFullName)) continue;
-    renewable.push(cid);
+    renewable.push(d);
     renewRepo = d.repo;
   }
   if (renewRepo) {
-    await repo.renewDispatches(renewable, { repo: renewRepo, pr: evt.prNumber, ttlMinutes: CHECKOUT_TTL_MIN });
+    await repo.renewDispatches(renewable.map((d) => d.id), { repo: renewRepo, pr: evt.prNumber, ttlMinutes: CHECKOUT_TTL_MIN });
+  }
+  // TASK-3410: the push extends each stamped checkout's SHA chain when it is a
+  // fast-forward from a chain head (or attaches the first head to an empty chain).
+  for (const d of renewable) {
+    if (webhookExtendsChain(d, await repo.dispatchHeads(d.id), evt)) {
+      await repo.recordDispatchHead({
+        dispatchId: d.id,
+        headSha: evt.headSha,
+        beforeSha: evt.beforeSha ?? null,
+        pr: evt.prNumber,
+        source: "webhook",
+        recordedBy: "github-webhook",
+      });
+    }
   }
 
   const kind = evt.action === "synchronize" ? "pr.synchronized" : "pr.opened";

@@ -39,6 +39,7 @@ import { registerRoutingMutationTools } from "./routing-mutation-actions";
 import { registerSyncConflictTools } from "./sync-actions";
 import { registerAgentReadTools } from "./read-actions";
 import { registerApprovalTools } from "./approval-actions";
+import { registerCheckoutHeadTools } from "./checkout-head-actions";
 import { registerCheckoutReleaseTools } from "./checkout-release-actions";
 import { registerTaskUpdateTools } from "./task-update-actions";
 import { registerProjectTools } from "./project-actions";
@@ -336,9 +337,21 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         .max(2000)
         .optional()
         .describe("Why you take over a task another holder has a live checkout of. Logged; required when takeover enforcement is on."),
+      baseSha: z
+        .string()
+        .trim()
+        .regex(/^[0-9a-fA-F]{40}$/)
+        .optional()
+        .describe("Full commit SHA your work starts from; the root of the checkout's SHA chain (TASK-3410)."),
+      launchId: z
+        .string()
+        .trim()
+        .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+        .optional()
+        .describe("Launch record id. Launcher principals only (PLX_MC_LAUNCHER_PRINCIPALS); puts the checkout under the lease-chain rules."),
     },
-    async ({ taskId, repo, agent, reuse, forceReason }) =>
-      jsonResult(await actionCheckout(identity, taskId, { repo, agent, reuse, forceReason }))
+    async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId }) =>
+      jsonResult(await actionCheckout(identity, taskId, { repo, agent, reuse, forceReason, baseSha, launchId }))
   );
 
   server.tool(
@@ -418,6 +431,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   registerAgentReadTools(server, identity);
   registerApprovalTools(server, identity);
   registerCheckoutReleaseTools(server, identity);
+  registerCheckoutHeadTools(server, identity);
   registerTaskUpdateTools(server, identity);
   registerProjectTools(server, identity);
   registerLinkMergedPrTools(server, identity);

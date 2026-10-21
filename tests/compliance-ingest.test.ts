@@ -21,6 +21,8 @@ const renewDispatches = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("@/lib/compliance/repo", () => ({
   releaseDispatches: vi.fn(async () => {}),
   renewDispatches,
+  dispatchHeads: async () => [],
+  recordDispatchHead: async () => true,
   async getDispatch(id: string) {
     return db.dispatches.get(id) ?? null;
   },
@@ -84,6 +86,11 @@ describe("parsePullRequestEvent", () => {
     )!;
     expect(merged.mergedAt).toBe("2026-07-23T15:04:05Z");
     expect(parsePullRequestEvent(prPayload({ action: "closed" }, { merged_at: "2026-07-23T15:04:05Z" }))!.mergedAt).toBeNull();
+  });
+
+  it("carries a synchronize push's before SHA as beforeSha (TASK-3410)", () => {
+    expect(parsePullRequestEvent(prPayload({ action: "synchronize", before: "b".repeat(40) }))?.beforeSha).toBe("b".repeat(40));
+    expect(parsePullRequestEvent(prPayload())?.beforeSha).toBeNull();
   });
 
   it("returns null for a non-pull_request payload", () => {

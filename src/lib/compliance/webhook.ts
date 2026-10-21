@@ -18,6 +18,8 @@ export interface PrEvent {
   repositoryId?: string | null;
   prNumber: number;
   headSha: string;
+  /** The head before a synchronize push (GitHub `before`); null for other actions (TASK-3410). */
+  beforeSha?: string | null;
   /** Merge commit SHA when closed+merged; otherwise null. */
   mergeSha?: string | null;
   /** GitHub pr.merged_at (ISO-8601) when closed+merged — the task completion time. */
@@ -102,6 +104,7 @@ export function parsePullRequestEvent(payload: unknown): PrEvent | null {
     repositoryId,
     prNumber: num,
     headSha: asStr(head.sha),
+    beforeSha: asStr(p.before) || null,
     mergeSha: merged && mergeCommitSha ? mergeCommitSha : null,
     mergedAt: merged && asStr(pr.merged_at) ? asStr(pr.merged_at) : null,
     branch: asStr(head.ref),

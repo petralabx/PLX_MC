@@ -45,8 +45,9 @@ Routing behavior is unchanged; owner: Vince. No migration is needed.
 
 | Tool | REST (stdio proxy) | Auth | Returns |
 |------|--------------------|------|---------|
-| `mc_get_task` | `GET /api/cursor/tasks/{id}` | `task.read` + project ACL | task (as `mc_get_context` full), `accountableOwner`, `evidence`, `checkouts`, recent `events` (excludes `mcp.tool.invoked`); every `dsp_*` id redacted |
-| `mc_list_checkouts` | `GET /api/cursor/checkouts?repo=&taskId=&active=&limit=` | `task.read` + project ACL | dispatches newest first as `checkoutRef` + `taskId`, `repo`, `runtime`, `issuedAt`, `expiresAt`, `active`; `repo` is an exact owner/name slug |
+| `mc_get_task` | `GET /api/cursor/tasks/{id}` | `task.read` + project ACL | task (as `mc_get_context` full), `accountableOwner`, `evidence`, `checkouts`, recent `events` (excludes `mcp.tool.invoked`); every `dsp_*` id redacted, except `checkoutId` on a checkout a launcher principal took, shown to that launcher only (TASK-3410) |
+| `mc_list_checkouts` | `GET /api/cursor/checkouts?repo=&taskId=&active=&limit=` | `task.read` + project ACL | dispatches newest first as `checkoutRef` + `taskId`, `repo`, `runtime`, `issuedAt`, `expiresAt`, `active`; `repo` is an exact owner/name slug; `checkoutId` only for the launcher principal that took it (TASK-3410) |
+| `mc_record_checkout_head` | `POST /api/cursor/checkout/head` | `task.checkout` + project ACL + the principal that took the checkout (write) | records `headSha` (optional `beforeSha`, `pr`) on the checkout's SHA chain; returns `checkoutRef`, `recorded`, `baseSha`, `launchRecorded`, `boundPr`, `chain`. Refuses another principal (403 `not_checkout_launcher`), a released or revoked checkout (409 `checkout_inactive`) and a PR other than the bound one (409 `chain_bound`) (TASK-3410) |
 | `mc_search_knowledge` | `GET /api/cursor/knowledge/search?q=&limit=` | `task.read` | Ask the Brain hits with provenance (`id`, `source`, `namespace`, `score`) + honest `status` |
 | `mc_verify_pr` | `GET /api/cursor/verify?repo=&pr=` | `task.read` | the `/api/compliance/verify` verdict from GitHub PR stamps/labels/files; `recorded: false` (no check row, no `gate.*` event) |
 | `mc_request_approval` | `POST /api/cursor/request-approval` | `approval.request` (write) | `gateId`, `checkoutRef` (`dsp_…last4`), `status: pending`, `inputRequired: true` |
@@ -388,7 +389,10 @@ the credential), and `accountablePerson`, the person commits name in
 `On-Behalf-Of` (TASK-3483). `reuse: true` returns your own live checkout of the
 task instead of a second one (`reused: true`); when another holder has a live
 checkout, the receipt lists it under `concurrent` with a `concurrent_holder` entry in `warnings`, and
-`forceReason` records why you take over (TASK-3409). One Hub connector stamps every petralabx repo: optional `repo`
+`forceReason` records why you take over (TASK-3409). Optional `baseSha` (full
+SHA) roots the checkout's SHA chain, and `launchId` (launcher principals in
+`PLX_MC_LAUNCHER_PRINCIPALS` only) records the launch and puts the checkout
+under the lease-chain rules (TASK-3410). One Hub connector stamps every petralabx repo: optional `repo`
 on checkout is a GitHub slug that may override the connector `X-MC-Repo` for
 allowlisted consumers (`petralabx/local-inference`, `petralabx/skills`,
 `petralabx/1hr-after`, `petralabx/furgenics`, `petralabx/for-and-against`,

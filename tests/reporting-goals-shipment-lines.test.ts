@@ -235,7 +235,7 @@ describe("read access", () => {
   function grantsIn(file: string): Record<string, string[]> {
     const sql = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", file), "utf8").replace(/--.*$/gm, "");
     const out: Record<string, string[]> = {};
-    for (const m of sql.matchAll(/GRANT\s+SELECT\s*\(([^)]*)\)\s*ON\s+([\w.]+)\s+TO\s+mc_goals_ro/gi)) {
+    for (const m of sql.matchAll(/GRANT\s+SELECT\s*\(([^)]*)\)\s*ON\s+([\w.]+)\s+TO\s+(?:mc_goals_ro|:"role")/gi)) {
       out[m[2]] = [...(out[m[2]] ?? []), ...m[1].split(",").map((c) => c.trim().replace(/"/g, ""))];
     }
     return out;

@@ -39,10 +39,12 @@ import {
   type RefreshRun,
 } from "@/lib/reporting/goals";
 
-import { FORECAST_COLUMNS, forecastRows, type ForecastView } from "@/lib/reporting/goals";
+import { FORECAST_CATEGORY_COLUMNS, FORECAST_COLUMNS, forecastRows, type ForecastView } from "@/lib/reporting/goals";
 import { SHIPMENT_LINE_COLUMNS, invoiceLines, loadShipmentLines } from "@/lib/reporting/goals";
 import { loadForecast } from "@/lib/reporting/goals/forecast-store";
 import { forecastAosQuery } from "@/lib/reporting/goals/queries/forecast-assembly-orders";
+import { missingColumns, type ColumnList } from "@/lib/reporting/goals/queries/read-access";
+import type { SourceQuery } from "@/lib/reporting/goals/source-db";
 
 import { createForecastSourceTables, loadForecastSource } from "./reporting-goals-forecast-replica";
 import { DATASETS, FORECAST, SHIPMENT_LINES, TODAY } from "./reporting-goals-helpers";
@@ -132,6 +134,18 @@ async function mcQuery<R>(text: string, params: unknown[] = []): Promise<R[]> {
 
 async function allowNextUserRefresh(): Promise<void> {
   await mcQuery(`UPDATE report_refresh_run SET started_at = started_at - interval '10 minutes'`);
+}
+
+/** Run a shipped grant script on the replica with psql, as a DBA would (each variable as -v name=value). */
+function psqlScript(file: string, vars: Record<string, string> = {}): void {
+  const script = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", file), "utf8");
+  const run = spawnSync(
+    "docker",
+    ["exec", "-i", NAME, "psql", "-U", "postgres", "-d", "reporting_goals", "-v", "ON_ERROR_STOP=1",
+      ...Object.entries(vars).flatMap(([name, value]) => ["-v", `${name}=${value}`]), "-f", "-"],
+    { input: script, encoding: "utf8" }
+  );
+  expect(run.status, run.stderr).toBe(0);
 }
 
 beforeAll(async () => {
@@ -592,9 +606,8 @@ describe("revenue forecast (TASK-3151)", () => {
   });
 
   it("after readonly-grants-forecast.sql (re-runnable), the next refresh stores the datasets and the run's summary", async () => {
-    const script = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants-forecast.sql"), "utf8");
-    await reportingAdmin.query(script);
-    await reportingAdmin.query(script);
+    psqlScript("readonly-grants-forecast.sql");
+    psqlScript("readonly-grants-forecast.sql");
     await allowNextUserRefresh();
     const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T17:10:00Z"));
     const run = await runRefresh(claim.run, { fetchRates, sleep: noSleep });
@@ -677,7 +690,6 @@ describe("revenue forecast (TASK-3151)", () => {
   });
 
   it("without Sage's item category (a login granted before TASK-3177), the forecast fills in and only the category filter waits", async () => {
-    const grantScript = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants-forecast.sql"), "utf8");
     await reportingAdmin.query(`REVOKE SELECT ("category") ON sage.oe_order_detail FROM mc_goals_ro`);
     try {
       await allowNextUserRefresh();
@@ -696,7 +708,7 @@ describe("revenue forecast (TASK-3151)", () => {
       expect(forecast.rows.every((r) => r.category === null && r.channel === null)).toBe(true);
       expect(money(forecast.atRiskCents)).toBe("40703.25");
     } finally {
-      await reportingAdmin.query(grantScript);
+      psqlScript("readonly-grants-forecast.sql");
     }
     // Re-running the forecast's grant script grants the category: the next refresh stores it, upper case and trimmed.
     await allowNextUserRefresh();
@@ -776,9 +788,8 @@ describe("shipment lines (TASK-3144)", () => {
   });
 
   it("after readonly-grants-shipment-lines.sql (re-runnable), the next refresh stores the lines, read back exactly", async () => {
-    const script = readFileSync(path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants-shipment-lines.sql"), "utf8");
-    await reportingAdmin.query(script);
-    await reportingAdmin.query(script);
+    psqlScript("readonly-grants-shipment-lines.sql");
+    psqlScript("readonly-grants-shipment-lines.sql");
     await allowNextUserRefresh();
     const claim = await startRefresh("user", "vince@petrasoap.com", new Date("2026-10-14T18:10:00Z"));
     const run = await runRefresh(claim.run, { fetchRates, sleep: noSleep });
@@ -813,5 +824,52 @@ describe("shipment lines (TASK-3144)", () => {
       expect(await mcQuery(`SELECT 1 FROM ${table} WHERE run_id = ANY($1::bigint[])`, [[read.run_id, waiting.run_id]]), table).toEqual([]);
     }
     expect(await loadShipmentLines(Number(read.run_id))).toBeNull();
+  });
+});
+
+describe("grant scripts for another role (TASK-3558)", () => {
+  // Through plx-reporting-mcp the refresh's read-access checks run as the MCP server's own role, not mc_goals_ro.
+  // The forecast's and the invoice lines' scripts grant the role psql's -v role names (here one that needs quoting).
+  const ROLE = "reporting-mcp-ro";
+  // What each script grants: every column its dataset reads but those readonly-grants.sql grants with the report.
+  const FORECAST_GRANTED: ColumnList = [...FORECAST_COLUMNS, ...FORECAST_CATEGORY_COLUMNS].filter(
+    ([schema, table]) => `${schema}.${table}` !== "silver.batches"
+  );
+  const LINES_GRANTED: ColumnList = SHIPMENT_LINE_COLUMNS.map(
+    ([schema, table, columns]) => [schema, table, table === "oe_invoice_header" ? columns.filter((c) => c === "invuniq") : [...columns]] as const
+  );
+  const names = (list: ColumnList) => list.flatMap(([schema, table, columns]) => columns.map((c) => `${schema}.${table}.${c}`));
+  let asRole: Client;
+  const q: SourceQuery = async (text, params) => (await asRole.query(text, params)).rows;
+
+  beforeAll(async () => {
+    await reportingAdmin.query(`CREATE ROLE "${ROLE}" LOGIN PASSWORD 'disposable-mcp-password'`);
+    asRole = await connect(state.reportingUrl.replace("mc_goals_ro:disposable-test-password", `${ROLE}:disposable-mcp-password`));
+  });
+
+  afterAll(async () => {
+    await asRole?.end();
+  });
+
+  it("with -v role, both scripts grant that role exactly the columns their datasets read (re-runnable)", async () => {
+    // Before the scripts run for it, the role reads none of these columns.
+    expect(await missingColumns(q, FORECAST_GRANTED)).toEqual(names(FORECAST_GRANTED));
+    expect(await missingColumns(q, LINES_GRANTED)).toEqual(names(LINES_GRANTED));
+    for (const file of ["readonly-grants-forecast.sql", "readonly-grants-shipment-lines.sql"]) {
+      psqlScript(file, { role: ROLE });
+      psqlScript(file, { role: ROLE });
+    }
+    // The refresh's own check, through the role's own login, finds nothing missing.
+    expect(await missingColumns(q, FORECAST_GRANTED)).toEqual([]);
+    expect(await missingColumns(q, LINES_GRANTED)).toEqual([]);
+    // Column-level SELECT on exactly those columns: nothing at table level, nothing else.
+    const columns = await reportingAdmin.query<{ name: string; privilege: string }>(
+      `SELECT table_schema || '.' || table_name || '.' || column_name AS name, privilege_type AS privilege
+         FROM information_schema.column_privileges WHERE grantee = $1`,
+      [ROLE]
+    );
+    expect(columns.rows.every((r) => r.privilege === "SELECT")).toBe(true);
+    expect(columns.rows.map((r) => r.name).sort()).toEqual([...names(FORECAST_GRANTED), ...names(LINES_GRANTED)].sort());
+    expect((await reportingAdmin.query(`SELECT 1 FROM information_schema.table_privileges WHERE grantee = $1`, [ROLE])).rows).toEqual([]);
   });
 });

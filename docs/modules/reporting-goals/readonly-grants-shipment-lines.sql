@@ -1,4 +1,5 @@
--- Shipment lines read access for the existing mc_goals_ro login (TASK-3144).
+-- Shipment lines read access for an existing role (TASK-3144): the
+-- mc_goals_ro login, or the reporting MCP server's own role (TASK-3558).
 --
 -- Run once by a DBA on the PLX reporting database — on the primary when the
 -- reporting database is a streaming replica, since grants replicate. It adds
@@ -12,15 +13,26 @@
 --
 --   psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f readonly-grants-shipment-lines.sql
 --
+-- That grants mc_goals_ro. Through plx-reporting-mcp the refresh checks the
+-- MCP server's own role instead, so name that role with -v role (psql 10+):
+--
+--   psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -v role=<role> -f readonly-grants-shipment-lines.sql
+--
 -- Until it runs, every refresh records that the invoice lines are waiting for
 -- read access (naming the columns it lacks), an opened invoice on the page says
 -- so, and everything else refreshes as before. The next refresh after it runs
 -- brings the lines in. tests/reporting-goals-postgres.test.ts runs it (twice)
 -- against a disposable replica.
 
-GRANT USAGE ON SCHEMA sage TO mc_goals_ro;
+-- The grantee: -v role, else mc_goals_ro.
+\if :{?role}
+\else
+  \set role mc_goals_ro
+\endif
 
-GRANT SELECT (invuniq) ON sage.oe_invoice_header TO mc_goals_ro;
+GRANT USAGE ON SCHEMA sage TO :"role";
+
+GRANT SELECT (invuniq) ON sage.oe_invoice_header TO :"role";
 
 GRANT SELECT (invuniq, linenum, linetype, item, misccharge, "desc", qtyshipped, invunit, unitprice, extinvmisc, invdisc)
-    ON sage.oe_invoice_detail TO mc_goals_ro;
+    ON sage.oe_invoice_detail TO :"role";

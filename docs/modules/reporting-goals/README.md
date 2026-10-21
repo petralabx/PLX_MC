@@ -402,7 +402,9 @@ Setup (the operator does this; agents never set these):
    `REPORTING_MCP_TOKEN` on the Vercel project `plx-mission-control`.
 3. Confirm that the server's role reads the same replica and the goals columns.
    A refresh shows this: the cutoffs, the row counts, and any section that
-   waits for read access.
+   waits for read access. For a section that waits, a DBA runs its grant script
+   for the server's role: `psql ... -v role=<role> -f readonly-grants-forecast.sql`
+   or `readonly-grants-shipment-lines.sql` (TASK-3558).
 
 Rollback: unset `REPORTING_MCP_URL` or `REPORTING_MCP_TOKEN`. The refresh falls
 back to `REPORTING_DATABASE_URL` when it is set. To cut the path at the source,
@@ -422,8 +424,9 @@ disable `mc-goals-report` in the token map.
 5. Revenue forecast (TASK-3151): apply migration 043 (after 042) the same way
    before its code deploys. Then a DBA runs `readonly-grants-forecast.sql` on
    the reporting database for the existing `mc_goals_ro` login (fresh installs
-   get the same grants from `readonly-grants.sql`). Until then the section
-   waits for read access and everything else works.
+   get the same grants from `readonly-grants.sql`). Through plx-reporting-mcp,
+   run it for the server's role with `-v role=<role>` instead. Until then the
+   section waits for read access and everything else works.
    Forecast filters (TASK-3177): apply migration 045 the same way before its
    code deploys, then re-run `readonly-grants-forecast.sql` so the login can
    read Sage's item category. Until then only the item category filter waits.
@@ -453,8 +456,10 @@ disable `mc-goals-report` in the token map.
 7. What shipped (TASK-3144): apply migration 044 (after 043) the same way
    before its code deploys. Then a DBA runs `readonly-grants-shipment-lines.sql`
    on the reporting database for the existing `mc_goals_ro` login (fresh
-   installs get the same grants from `readonly-grants.sql`). Until then an
-   opened invoice waits for read access and everything else works.
+   installs get the same grants from `readonly-grants.sql`). Through
+   plx-reporting-mcp, run it for the server's role with `-v role=<role>`
+   instead. Until then an opened invoice waits for read access and everything
+   else works.
 8. Before relying on the "Lines don't add up" marks, reconcile three invoices
    against Sage's O/E Invoice Inquiry (or the printed invoice), one rule each.
    Each rule is one named fragment or function, so a correction is one edit:

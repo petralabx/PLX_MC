@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "bootstrap-windows-secrets.py"
 SERVER_PRINCIPALS = REPO_ROOT / "src" / "lib" / "permissions" / "types.ts"
 CLIENT_SELECTOR = REPO_ROOT / "tools" / "plx-mc-mcp" / "lib" / "key-resolution.mjs"
+
+
+def _posix_mode(path: Path) -> int:
+    if os.name == "nt":
+        pytest.skip("Unix file mode is not meaningful on Windows")
+    return stat.S_IMODE(path.stat().st_mode)
 
 
 def load_script() -> ModuleType:
@@ -938,6 +945,21 @@ class _RecordingSecrets:
                     }
                 )
             }
+        if SecretId == "plx/coding/legacy-compat":
+            return {
+                "SecretString": json.dumps(
+                    {
+                        "PETRALABX_GITHUB_TOKEN": SENTINEL_PAT,
+                        "PLX_MC_MCP_API_KEY": "legacy-compat-mcp",
+                        "SWARM_API_KEY": "legacy-swarm",
+                    }
+                )
+            }
+        if SecretId == "plx/coding/lane-override":
+            return {"SecretString": "raw-override-mcp-key"}
+        if SecretId.startswith("plx/prod/mc/lane-") and SecretId.endswith("-key/v1"):
+            lane = SecretId[len("plx/prod/mc/lane-") : -len("-key/v1")]
+            return {"SecretString": json.dumps({"api_key": f"lane-{lane}-mcp-key"})}
         raise AssertionError(SecretId)
 
 
@@ -964,6 +986,11 @@ def _run_bootstrap_main(
         "staging_output_path",
         lambda principal_id, home_path=None: home / f"staging-{principal_id}.ps1",
     )
+    monkeypatch.setattr(
+        bootstrap,
+        "staging_shell_output_path",
+        lambda principal_id, home_path=None: home / f"staging-{principal_id}.sh",
+    )
     client = _RecordingSecrets()
     monkeypatch.setattr(bootstrap.boto3, "client", lambda *_a, **_k: client)
     monkeypatch.setattr(sys, "argv", ["bootstrap-windows-secrets.py", *argv])
@@ -982,12 +1009,21 @@ def test_app_mode_non_default_principal_never_reads_ec2_secrets(
         ["--mcp-principal-id", "sp_mcp_codex"],
     )
     assert bootstrap.EC2_SECRETS_ID not in client.calls
-    assert "plx/prod/mc/mcp-agent-keys/v1" in client.calls
+    assert bootstrap.MCP_AGENT_KEYS_SECRET_ID not in client.calls
+    assert "plx/prod/mc/lane-codex-key/v1" in client.calls
     staging = (tmp_path / "home" / "staging-sp_mcp_codex.ps1").read_text(
         encoding="utf-8"
     )
-    assert "codex-mcp-key" in staging
+    shell = (tmp_path / "home" / "staging-sp_mcp_codex.sh").read_text(encoding="utf-8")
+    assert "lane-codex-mcp-key" not in staging
+    assert "lane-codex-mcp-key" not in shell
+    assert "codex-mcp-key" not in staging
+    assert "get-secret-value" in staging
+    assert "plx/prod/mc/lane-codex-key/v1" in staging
+    assert "plx/prod/mc/lane-codex-key/v1" in shell
     assert SENTINEL_PAT not in staging
+    assert _posix_mode(tmp_path / "home" / "staging-sp_mcp_codex.ps1") == 0o600
+    assert _posix_mode(tmp_path / "home" / "staging-sp_mcp_codex.sh") == 0o600
 
 
 def test_app_mode_non_default_principal_ignores_compat_secret(
@@ -1029,6 +1065,7 @@ def test_app_mode_default_principal_reads_ec2_secrets_unless_compat_id_is_set(
     )
     assert "small-mcp-key" in staging
     assert "small-swarm" in staging
+    assert _posix_mode(tmp_path / "flag" / "staging-sp_mcp_cursor.ps1") == 0o600
 
     client = _run_bootstrap_main(
         bootstrap,
@@ -1049,16 +1086,38 @@ def test_legacy_mode_still_reads_ec2_secrets(
         bootstrap,
         monkeypatch,
         tmp_path / "home",
+        ["--legacy-personal-pat", "--mcp-principal-id", "sp_mcp_codex"],
+    )
+    assert bootstrap.EC2_SECRETS_ID in client.calls
+    assert bootstrap.MCP_AGENT_KEYS_SECRET_ID in client.calls
+    assert "plx/prod/mc/lane-codex-key/v1" not in client.calls
+    staging = (tmp_path / "home" / "staging-sp_mcp_codex.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert SENTINEL_PAT in staging
+    assert "codex-mcp-key" in staging
+    assert _posix_mode(tmp_path / "home" / "staging-sp_mcp_codex.ps1") == 0o600
+
+
+def test_legacy_mode_accepts_compat_secret_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bootstrap = load_script()
+    client = _run_bootstrap_main(
+        bootstrap,
+        monkeypatch,
+        tmp_path / "home",
         [
             "--legacy-personal-pat",
             "--mcp-principal-id",
             "sp_mcp_codex",
             "--compat-secret-id",
-            "plx/coding/compat-small",
+            "plx/coding/legacy-compat",
         ],
     )
-    assert bootstrap.EC2_SECRETS_ID in client.calls
-    assert "plx/coding/compat-small" not in client.calls
+    assert bootstrap.EC2_SECRETS_ID not in client.calls
+    assert "plx/coding/legacy-compat" in client.calls
+    assert bootstrap.MCP_AGENT_KEYS_SECRET_ID in client.calls
     staging = (tmp_path / "home" / "staging-sp_mcp_codex.ps1").read_text(
         encoding="utf-8"
     )
@@ -1090,3 +1149,450 @@ def test_shell_launchers_have_lf_endings_when_writes_translate_newlines(
     for name in ("plx-github-app-auth", "gh"):
         blob = (tmp_path / ".local" / "bin" / name).read_bytes()
         assert b"\r" not in blob, name
+
+
+# --- TASK-3581: per-principal lane secrets ---------------------------------
+
+
+LANE_SECRET_CASES = (
+    ("sp_mcp_claude_code", "plx/prod/mc/lane-claude-code-key/v1"),
+    ("sp_mcp_codex", "plx/prod/mc/lane-codex-key/v1"),
+    ("sp_mcp_chatgpt", "plx/prod/mc/lane-chatgpt-key/v1"),
+    ("sp_mcp_grok", "plx/prod/mc/lane-grok-key/v1"),
+    ("sp_mcp_hermes", "plx/prod/mc/lane-hermes-key/v1"),
+    ("sp_mcp_swarm", "plx/prod/mc/lane-swarm-key/v1"),
+    ("sp_mcp_agent_runner", "plx/prod/mc/lane-agent-runner-key/v1"),
+    ("sp_mcp_portal", "plx/prod/mc/lane-portal-key/v1"),
+    ("sp_mcp_ledger", "plx/prod/mc/lane-ledger-key/v1"),
+    ("sp_mcp_cos", "plx/prod/mc/lane-cos-key/v1"),
+    ("sp_mcp_workbench", "plx/prod/mc/lane-workbench-key/v1"),
+    ("sp_mcp_infra", "plx/prod/mc/lane-infra-key/v1"),
+    ("sp_mcp_cip_auto_undraft", "plx/prod/mc/lane-cip-auto-undraft-key/v1"),
+    ("sp_mcp_workbench_intake", "plx/prod/mc/lane-workbench-intake-key/v1"),
+)
+
+
+@pytest.mark.parametrize(("principal_id", "secret_id"), LANE_SECRET_CASES)
+def test_lane_secret_id_replaces_underscores(principal_id: str, secret_id: str) -> None:
+    bootstrap = load_script()
+    assert bootstrap.lane_key_secret_id(principal_id) == secret_id
+
+
+def test_docs_list_every_lane_secret_and_forbid_the_bundle() -> None:
+    bootstrap = load_script()
+    readme = (REPO_ROOT / "docs/modules/mcp/README.md").read_text(encoding="utf-8")
+    registration = (
+        REPO_ROOT / "docs/runbooks/plx-mc-mcp-team-registration.md"
+    ).read_text(encoding="utf-8")
+    for _principal, secret_id in LANE_SECRET_CASES:
+        assert secret_id in readme
+        assert secret_id in registration
+    for text in (readme, registration):
+        assert bootstrap.MCP_AGENT_KEYS_SECRET_ID in text
+        assert "must not" in text and "bundle" in text
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("raw-mcp-key", "raw-mcp-key"),
+        ('  {"MC_MCP_API_KEY":"named-key","api_key":"alias-key"}  ', "named-key"),
+        ('{"api_key":"alias-only"}', "alias-only"),
+        ('"quoted-key"', "quoted-key"),
+    ],
+)
+def test_parse_mcp_key_material_accepts_raw_or_json(raw: str, expected: str) -> None:
+    bootstrap = load_script()
+    assert (
+        bootstrap.parse_mcp_key_material(raw, "plx/prod/mc/lane-codex-key/v1")
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "",
+        "   ",
+        "{not-json secret-echo-sentinel}",
+        '{"other":"secret-echo-sentinel"}',
+        '["secret-echo-sentinel"]',
+        '{"MC_MCP_API_KEY":""}',
+        '{"api_key":42}',
+    ],
+)
+def test_parse_mcp_key_material_fails_closed_without_echoing(raw: str) -> None:
+    bootstrap = load_script()
+    with pytest.raises(SystemExit, match="invalid MCP key material") as exc:
+        bootstrap.parse_mcp_key_material(raw, "plx/prod/mc/lane-codex-key/v1")
+    assert "secret-echo-sentinel" not in str(exc.value)
+
+
+def test_app_mode_refuses_the_bundle_as_an_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bootstrap = load_script()
+    with pytest.raises(SystemExit, match="agent-key bundle") as exc:
+        _run_bootstrap_main(
+            bootstrap,
+            monkeypatch,
+            tmp_path / "home",
+            [
+                "--mcp-principal-id",
+                "sp_mcp_claude_code",
+                "--mcp-key-secret-id",
+                bootstrap.MCP_AGENT_KEYS_SECRET_ID,
+            ],
+        )
+    assert "secret-echo-sentinel" not in str(exc.value)
+
+
+def test_app_mode_override_reads_only_that_secret(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bootstrap = load_script()
+    client = _run_bootstrap_main(
+        bootstrap,
+        monkeypatch,
+        tmp_path / "home",
+        [
+            "--mcp-principal-id",
+            "sp_mcp_claude_code",
+            "--mcp-key-secret-id",
+            "plx/coding/lane-override",
+        ],
+    )
+    assert bootstrap.MCP_AGENT_KEYS_SECRET_ID not in client.calls
+    assert "plx/prod/mc/lane-claude-code-key/v1" not in client.calls
+    assert "plx/coding/lane-override" in client.calls
+    staging = (tmp_path / "home" / "staging-sp_mcp_claude_code.ps1").read_text(
+        encoding="utf-8"
+    )
+    shell = (tmp_path / "home" / "staging-sp_mcp_claude_code.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "raw-override-mcp-key" not in staging
+    assert "raw-override-mcp-key" not in shell
+    assert "plx/coding/lane-override" in staging
+    assert "plx/coding/lane-override" in shell
+
+
+def test_app_mode_missing_lane_secret_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from botocore.exceptions import ClientError
+
+    bootstrap = load_script()
+
+    class Denied(_RecordingSecrets):
+        def get_secret_value(self, SecretId: str) -> dict:
+            self.calls.append(SecretId)
+            if SecretId.startswith("plx/prod/mc/lane-"):
+                raise ClientError(
+                    {
+                        "Error": {
+                            "Code": "AccessDeniedException",
+                            "Message": "denied secret-echo-sentinel",
+                        }
+                    },
+                    "GetSecretValue",
+                )
+            return super().get_secret_value(SecretId)
+
+    client = Denied()
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(bootstrap.boto3, "client", lambda *_a, **_k: client)
+    monkeypatch.setattr(bootstrap, "HOME", home)
+    monkeypatch.setattr(
+        bootstrap, "OUTPUT_GITHUB_PS1", home / ".secrets-env.github.ps1"
+    )
+    monkeypatch.setattr(bootstrap, "OUTPUT_GITHUB_SH", home / ".secrets-env.github")
+    monkeypatch.setattr(
+        bootstrap,
+        "staging_output_path",
+        lambda principal_id, home_path=None: home / f"staging-{principal_id}.ps1",
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "staging_shell_output_path",
+        lambda principal_id, home_path=None: home / f"staging-{principal_id}.sh",
+    )
+    monkeypatch.setattr(sys, "argv", ["bootstrap", "--mcp-principal-id", "sp_mcp_grok"])
+    with pytest.raises(SystemExit, match="AccessDeniedException") as exc:
+        bootstrap.main()
+    message = str(exc.value)
+    assert "secret-echo-sentinel" not in message
+    assert bootstrap.MCP_AGENT_KEYS_SECRET_ID not in client.calls
+    assert "Refusing to fall back" in message
+    assert not (tmp_path / "home" / "staging-sp_mcp_grok.ps1").exists()
+
+
+def test_app_mode_invalid_lane_payload_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bootstrap = load_script()
+
+    class Bad(_RecordingSecrets):
+        def get_secret_value(self, SecretId: str) -> dict:
+            self.calls.append(SecretId)
+            if SecretId.startswith("plx/prod/mc/lane-"):
+                return {"SecretString": '{"note":"secret-echo-sentinel"}'}
+            return super().get_secret_value(SecretId)
+
+    client = Bad()
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(bootstrap.boto3, "client", lambda *_a, **_k: client)
+    monkeypatch.setattr(bootstrap, "HOME", home)
+    monkeypatch.setattr(
+        bootstrap, "OUTPUT_GITHUB_PS1", home / ".secrets-env.github.ps1"
+    )
+    monkeypatch.setattr(bootstrap, "OUTPUT_GITHUB_SH", home / ".secrets-env.github")
+    monkeypatch.setattr(
+        bootstrap,
+        "staging_output_path",
+        lambda principal_id, home_path=None: home / f"staging-{principal_id}.ps1",
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "staging_shell_output_path",
+        lambda principal_id, home_path=None: home / f"staging-{principal_id}.sh",
+    )
+    monkeypatch.setattr(sys, "argv", ["bootstrap", "--mcp-principal-id", "sp_mcp_grok"])
+    with pytest.raises(SystemExit, match="invalid MCP key material") as exc:
+        bootstrap.main()
+    assert "secret-echo-sentinel" not in str(exc.value)
+    assert bootstrap.MCP_AGENT_KEYS_SECRET_ID not in client.calls
+
+
+def test_legacy_denied_ec2_secret_names_compat_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from botocore.exceptions import ClientError
+
+    bootstrap = load_script()
+
+    class Denied(_RecordingSecrets):
+        def get_secret_value(self, SecretId: str) -> dict:
+            self.calls.append(SecretId)
+            if SecretId == bootstrap.EC2_SECRETS_ID:
+                raise ClientError(
+                    {
+                        "Error": {
+                            "Code": "AccessDeniedException",
+                            "Message": "secret-echo-sentinel",
+                        }
+                    },
+                    "GetSecretValue",
+                )
+            return super().get_secret_value(SecretId)
+
+    client = Denied()
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(bootstrap.boto3, "client", lambda *_a, **_k: client)
+    monkeypatch.setattr(bootstrap, "HOME", home)
+    monkeypatch.setattr(
+        bootstrap, "OUTPUT_GITHUB_PS1", home / ".secrets-env.github.ps1"
+    )
+    monkeypatch.setattr(bootstrap, "OUTPUT_GITHUB_SH", home / ".secrets-env.github")
+    monkeypatch.setattr(
+        bootstrap,
+        "staging_output_path",
+        lambda principal_id, home_path=None: home / f"staging-{principal_id}.ps1",
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "staging_shell_output_path",
+        lambda principal_id, home_path=None: home / f"staging-{principal_id}.sh",
+    )
+    monkeypatch.setattr(sys, "argv", ["bootstrap", "--legacy-personal-pat"])
+    with pytest.raises(SystemExit, match="AccessDeniedException") as exc:
+        bootstrap.main()
+    message = str(exc.value)
+    assert "secret-echo-sentinel" not in message
+    assert "--compat-secret-id" in message
+    assert "prod/ec2-secrets" in message
+
+
+def test_write_private_text_is_mode_0600_under_a_loose_umask(tmp_path: Path) -> None:
+    bootstrap = load_script()
+    target = tmp_path / "nested" / "loader.ps1"
+    target.parent.mkdir()
+    target.write_text("old\n", encoding="utf-8")
+    target.chmod(0o644)
+    previous = os.umask(0)
+    try:
+        bootstrap.write_private_text(target, "MC_MCP_API_KEY='kept-private'\n")
+    finally:
+        os.umask(previous)
+    assert _posix_mode(target) == 0o600
+    assert target.read_text(encoding="utf-8") == "MC_MCP_API_KEY='kept-private'\n"
+    assert list(tmp_path.glob("nested/.loader.ps1.*.tmp")) == []
+
+
+def test_unix_fragment_fetches_the_lane_key_in_memory(tmp_path: Path) -> None:
+    bootstrap = load_script()
+    secret_id = bootstrap.lane_key_secret_id("sp_mcp_claude_code")
+    sentinel = "lane-claude-runtime-key"
+    text = "\n".join(
+        bootstrap.staging_shell_loader_lines(
+            {
+                "MC_MCP_PRINCIPAL_ID": "sp_mcp_claude_code",
+                "MC_OPERATOR_EMAIL": "cos@example.test",
+                "PLX_MC_MCP_ENABLED": "1",
+                "PLX_GITHUB_APP_SLUG": "plx-agents-writer",
+                "PLX_GITHUB_APP_ID": "42",
+                "PLX_GITHUB_APP_INSTALLATION_ID": "7",
+                "PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID": (
+                    "plx/github/apps/plx-agents-writer/private-key"
+                ),
+            },
+            "sp_mcp_claude_code",
+            "app",
+            mcp_key_secret_id=secret_id,
+            python_exe=sys.executable,
+        )
+    )
+    assert sentinel not in text
+    assert bootstrap.MCP_AGENT_KEYS_SECRET_ID in text
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    aws = bin_dir / "aws"
+    aws.write_text(
+        f"#!/bin/sh\nprintf '%s\\n' '{json.dumps({'MC_MCP_API_KEY': sentinel})}'\n",
+        encoding="utf-8",
+    )
+    aws.chmod(0o755)
+    script = tmp_path / "loader.sh"
+    script.write_text(text, encoding="utf-8")
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    proc = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1" && printf %s "$MC_MCP_API_KEY"',
+            "bash",
+            str(script),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == sentinel
+    assert sentinel not in proc.stderr
+
+    aws.write_text(
+        "#!/bin/sh\necho secret-echo-sentinel >&2\nexit 1\n", encoding="utf-8"
+    )
+    aws.chmod(0o755)
+    failed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; status=$?; printf %s "$MC_MCP_API_KEY"; exit $status',
+            "bash",
+            str(script),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert failed.returncode != 0
+    assert failed.stdout == ""
+    assert "missing MC_MCP_API_KEY" in failed.stderr
+    assert "secret-echo-sentinel" not in failed.stderr
+
+
+def test_shell_parser_matches_parse_mcp_key_material() -> None:
+    bootstrap = load_script()
+    samples = [
+        "raw-mcp-key",
+        '{"MC_MCP_API_KEY":"named-key","api_key":"alias-key"}',
+        '{"api_key":"alias-only"}',
+        '"quoted-key"',
+        "",
+        "{not-json",
+        '{"other":"nope"}',
+    ]
+    for raw in samples:
+        try:
+            expected = bootstrap.parse_mcp_key_material(raw, "secret/id")
+            expect_code = 0
+        except SystemExit:
+            expected = ""
+            expect_code = 1
+        proc = subprocess.run(
+            [sys.executable, "-c", bootstrap.MCP_KEY_PARSE_PROGRAM],
+            input=raw,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == expect_code
+        assert proc.stdout == expected
+        assert "nope" not in proc.stderr
+
+
+@needs_pwsh
+def test_pwsh_loader_fetches_lane_key_without_writing_it(tmp_path: Path) -> None:
+    bootstrap = load_script()
+    secret_id = bootstrap.lane_key_secret_id("sp_mcp_claude_code")
+    sentinel = "lane-claude-pwsh-key"
+    values = dict(FAKE_VALUES)
+    values["MC_MCP_API_KEY"] = "embedded-key-must-not-appear"
+    values["MC_MCP_PRINCIPAL_ID"] = "sp_mcp_claude_code"
+    text = "\n".join(
+        bootstrap.staging_loader_lines(
+            values,
+            "sp_mcp_claude_code",
+            "app",
+            mcp_key_secret_id=secret_id,
+        )
+    )
+    assert sentinel not in text
+    assert "embedded-key-must-not-appear" not in text
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    aws = bin_dir / "aws"
+    aws.write_text(
+        "#!/bin/sh\n"
+        'case "$*" in\n'
+        "  *cursor-graph*)\n"
+        f"    printf '%s\\n' '{FAKE_GRAPH}'\n"
+        "    ;;\n"
+        f"  *{secret_id}*)\n"
+        f"    printf '%s\\n' '{json.dumps({'MC_MCP_API_KEY': sentinel})}'\n"
+        "    ;;\n"
+        "  *)\n"
+        "    echo unexpected >&2\n"
+        "    exit 1\n"
+        "    ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    aws.chmod(0o755)
+    loader = tmp_path / "loader.ps1"
+    loader.write_text(text, encoding="utf-8")
+    env = {
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "HOME": str(tmp_path),
+        "TEST_LOADER": str(loader),
+    }
+    proc = subprocess.run(
+        [PWSH, "-NoProfile", "-NonInteractive", "-Command", PROBE],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+        cwd=tmp_path,
+    )
+    out = dict(line.split("=", 1) for line in proc.stdout.splitlines() if "=" in line)
+    assert out["threw"] == "no", proc.stdout + proc.stderr
+    assert out["env:MC_MCP_API_KEY"] == sentinel
+    assert "embedded-key-must-not-appear" not in proc.stdout

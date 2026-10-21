@@ -55,7 +55,11 @@ Do not continue governed task operations with an uncertain identity.
 - [ ] Export `AWS_PROFILE` before bootstrap when the box uses a named profile.
       The fragment and `~/.local/bin/plx-github-app-auth` keep that profile.
 - [ ] Use `--legacy-personal-pat` only during rollout, when the App secret
-      is not on the box yet.
+      is not on the box yet. A host denied `prod/ec2-secrets` passes
+      `--compat-secret-id` instead of receiving that secret.
+- [ ] App mode reads one lane secret per dedicated principal
+      (`plx/prod/mc/lane-<suffix>-key/v1`). Do not grant the box
+      `plx/prod/mc/mcp-agent-keys/v1`.
 
 Stop on authentication, organization-access, or repository-scope failure. Do
 not copy `PETRALABX_GITHUB_TOKEN`, `PETRALABX_GITHUB`, `PLX_GITHUB_PAT`, or

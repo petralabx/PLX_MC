@@ -157,7 +157,8 @@ Never treat selected membership alone as consumption evidence.
 | Store | Name | Consumer env name |
 |-------|------|-------------------|
 | AWS `prod/ec2-secrets` | `PLX_MC_MCP_API_KEY` | `MC_MCP_API_KEY` for compatibility principal `sp_mcp_cursor` |
-| AWS `plx/prod/mc/mcp-agent-keys/v1` | principal-id → key registry | `MC_MCP_API_KEY` for dedicated agent principals |
+| AWS `plx/prod/mc/mcp-agent-keys/v1` | principal-id → key registry | Server registry only. Must not be granted to coding boxes |
+| AWS `plx/prod/mc/lane-<suffix>-key/v1` | one principal's key (`MC_MCP_API_KEY` or `api_key`, or a raw string) | `MC_MCP_API_KEY` for `sp_mcp_<suffix>` on a coding box. Example: `sp_mcp_claude_code` → `plx/prod/mc/lane-claude-code-key/v1`. Full list: `docs/modules/mcp/README.md` |
 | Vercel Production | `PLX_MC_MCP_API_KEY`, `PLX_MC_MCP_AGENT_KEYS` | Validated server-side on `/api/cursor/mcp` |
 | Vercel Production | `PLX_MC_APPROVAL_SIGNING_KEY` (TASK-3408) | HMAC key that signs approval decisions; unset = approvals are stored unsigned and every signed-approval check fails closed. Rotating it invalidates existing signatures, so rotate between decisions and re-approve live gates |
 

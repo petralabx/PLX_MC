@@ -12,13 +12,20 @@ Precedence (authoritative — do not reverse):
   4. The shared Cursor MCP key (sp_mcp_cursor) comes from prod/ec2-secrets,
      or from --compat-secret-id / PLX_BOOTSTRAP_COMPAT_SECRET_ID. In GitHub
      App mode any other principal does not read that secret. Dedicated agent
-     keys come from plx/prod/mc/mcp-agent-keys/v1 and never fall back to the
-     shared key.
+     keys come from one secret per principal:
+     plx/prod/mc/lane-<suffix>-key/v1 (sp_mcp_<suffix>, underscores become
+     hyphens). Override with --mcp-key-secret-id. App mode never reads
+     plx/prod/mc/mcp-agent-keys/v1 and never falls back to the shared key.
+     The loader fetches that lane secret when the file is sourced. A value
+     that must be written is stored in a mode 0600 file.
 
-Outputs (never commit):
+Outputs (never commit; secret-bearing files are mode 0600):
   ~/.secrets-env.staging.ps1   — full PLX agent workstation hydrate (Windows)
   ~/.secrets-env.staging.<principal>.ps1
                                 — isolated non-Cursor MCP principal hydrate
+  ~/.secrets-env.staging       — Unix hydrate (Cursor)
+  ~/.secrets-env.staging.<principal>
+                                — Unix hydrate for a dedicated principal
   ~/.secrets-env.github.ps1    — GitHub App fragment (Windows; safe to profile-source)
   ~/.secrets-env.github        — same for bash/zsh (Linux/macOS/DGX)
   ~/.local/bin/plx-github-app-auth
@@ -38,13 +45,17 @@ GitHub auth (default):
 Rollout compatibility:
   --legacy-personal-pat or PLX_BOOTSTRAP_LEGACY_GITHUB_PAT=1 restores the
   personal PAT export. Use it only until every box shows the app in
-  `gh auth status`.
+  `gh auth status`. A host denied prod/ec2-secrets (coding-1) must pass
+  --compat-secret-id. The command exits with the AWS error code and does
+  not print secret text.
 
 Usage:
   python scripts/bootstrap-windows-secrets.py
   python scripts/bootstrap-windows-secrets.py --legacy-personal-pat
   python scripts/bootstrap-windows-secrets.py --compat-secret-id <smaller-secret>
-  . ~/.secrets-env.staging.ps1          # full session
+  python scripts/bootstrap-windows-secrets.py --mcp-principal-id sp_mcp_claude_code
+  . ~/.secrets-env.staging.ps1          # full session (Windows)
+  source ~/.secrets-env.staging         # full session (Unix)
   . ~/.secrets-env.github.ps1           # GitHub App fragment (Windows)
   source ~/.secrets-env.github          # GitHub App fragment (Unix)
 
@@ -60,6 +71,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 import boto3
@@ -75,6 +87,11 @@ OUTPUT_GITHUB_SH = HOME / ".secrets-env.github"
 CURSOR_GRAPH_SECRET_ID = "plx/prod/m365/cursor-graph/v1"
 EC2_SECRETS_ID = "prod/ec2-secrets"
 MCP_AGENT_KEYS_SECRET_ID = "plx/prod/mc/mcp-agent-keys/v1"
+# sp_mcp_<suffix> -> plx/prod/mc/lane-<suffix-with-hyphens>-key/v1
+LANE_KEY_SECRET_PREFIX = "plx/prod/mc/lane-"
+LANE_KEY_SECRET_SUFFIX = "-key/v1"
+PRIVATE_FILE_MODE = 0o600
+SECRET_ID_RE = re.compile(r"[A-Za-z0-9/_.+=,@-]+")
 DEFAULT_GITHUB_APP_SLUG = "plx-agents-writer"
 GITHUB_APP_SLUG_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 # Personal PATs that coding boxes must not receive from prod/ec2-secrets.
@@ -111,6 +128,39 @@ MCP_PRINCIPAL_IDS = {
 
 def sh_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+def write_private_text(path: Path, text: str) -> None:
+    """Write text to path as mode 0600.
+
+    os.open applies 0o600 under umask 0o077, so a loose process umask cannot
+    widen the new inode. os.replace publishes that inode under the final name.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = text if text.endswith("\n") else text + "\n"
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.monotonic_ns()}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    previous_umask = os.umask(0o077)
+    try:
+        descriptor = os.open(temporary, flags, PRIVATE_FILE_MODE)
+    finally:
+        os.umask(previous_umask)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.chmod(temporary, PRIVATE_FILE_MODE)
+        except OSError:
+            pass
+        os.replace(temporary, path)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
 
 
 def github_powershell_reset_lines() -> list[str]:
@@ -537,11 +587,43 @@ def github_app_powershell_loader_lines(
 
 
 def get_secret_dict(client, secret_id: str) -> dict:
-    raw = client.get_secret_value(SecretId=secret_id)["SecretString"]
-    data = json.loads(raw)
+    try:
+        raw = client.get_secret_value(SecretId=secret_id)["SecretString"]
+    except ClientError:
+        raise
+    except (KeyError, TypeError):
+        raise SystemExit(f"{secret_id}: unreadable secret") from None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        raise SystemExit(f"{secret_id}: expected JSON object") from None
     if not isinstance(data, dict):
         raise SystemExit(f"{secret_id}: expected JSON object")
     return data
+
+
+def read_secret_dict_fail_closed(client, secret_id: str) -> dict:
+    """Read a JSON secret. On denial, exit with the error code and no payload."""
+    try:
+        return get_secret_dict(client, secret_id)
+    except ClientError as err:
+        code = err.response.get("Error", {}).get("Code", "ClientError")
+        if secret_id == EC2_SECRETS_ID:
+            hint = (
+                " This host cannot read prod/ec2-secrets. "
+                "Pass --compat-secret-id with a secret that holds the personal PAT "
+                "(and PLX_MC_MCP_API_KEY for sp_mcp_cursor), or re-run without "
+                "--legacy-personal-pat."
+            )
+        else:
+            hint = " Check the secret id and this host's GetSecretValue grant."
+        raise SystemExit(f"{secret_id}: {code}.{hint}") from None
+
+
+def compat_secret_id_from_args(compat_secret_id: str | None) -> str:
+    return (
+        compat_secret_id or os.environ.get("PLX_BOOTSTRAP_COMPAT_SECRET_ID") or ""
+    ).strip() or EC2_SECRETS_ID
 
 
 def load_compat_secret(
@@ -553,23 +635,24 @@ def load_compat_secret(
 ) -> dict:
     """Bundle that holds PLX_MC_MCP_API_KEY and optional SWARM_API_KEY.
 
-    Legacy mode always reads prod/ec2-secrets. App mode reads it only for
-    sp_mcp_cursor, unless --compat-secret-id or PLX_BOOTSTRAP_COMPAT_SECRET_ID
-    names a smaller secret. Any other principal in app mode reads nothing
-    from that bundle.
+    Legacy mode reads prod/ec2-secrets, or --compat-secret-id /
+    PLX_BOOTSTRAP_COMPAT_SECRET_ID when a host is denied that secret.
+    App mode reads it only for sp_mcp_cursor. Any other principal in app
+    mode reads nothing from that bundle.
     """
     if principal_id not in MCP_PRINCIPAL_IDS:
         raise SystemExit(f"unsupported mcp principal id: {principal_id}")
     if mode == GITHUB_AUTH_MODE_LEGACY:
-        return get_secret_dict(client, EC2_SECRETS_ID)
+        return read_secret_dict_fail_closed(
+            client, compat_secret_id_from_args(compat_secret_id)
+        )
     if mode != GITHUB_AUTH_MODE_APP:
         raise SystemExit(f"unknown github auth mode: {mode}")
     if principal_id != MCP_CURSOR_PRINCIPAL_ID:
         return {}
-    secret_id = (
-        compat_secret_id or os.environ.get("PLX_BOOTSTRAP_COMPAT_SECRET_ID") or ""
-    ).strip() or EC2_SECRETS_ID
-    return get_secret_dict(client, secret_id)
+    return read_secret_dict_fail_closed(
+        client, compat_secret_id_from_args(compat_secret_id)
+    )
 
 
 def select_mcp_key(
@@ -588,10 +671,128 @@ def select_mcp_key(
     return key
 
 
+def lane_key_secret_id(principal_id: str) -> str:
+    """Map sp_mcp_<suffix> to plx/prod/mc/lane-<suffix>-key/v1.
+
+    Underscores in the suffix become hyphens. sp_mcp_claude_code becomes
+    plx/prod/mc/lane-claude-code-key/v1.
+    """
+    prefix = "sp_mcp_"
+    if principal_id not in MCP_PRINCIPAL_IDS or not principal_id.startswith(prefix):
+        raise SystemExit(f"unsupported mcp principal id: {principal_id}")
+    lane = principal_id[len(prefix) :].replace("_", "-")
+    if not lane or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", lane):
+        raise SystemExit(f"unsupported mcp principal id: {principal_id}")
+    return f"{LANE_KEY_SECRET_PREFIX}{lane}{LANE_KEY_SECRET_SUFFIX}"
+
+
+def check_mcp_key_secret_id(secret_id: str) -> str:
+    if not secret_id or SECRET_ID_RE.fullmatch(secret_id) is None:
+        raise SystemExit("invalid MCP key secret id")
+    if secret_id == MCP_AGENT_KEYS_SECRET_ID:
+        raise SystemExit(
+            f"refusing {MCP_AGENT_KEYS_SECRET_ID}: "
+            "app mode does not read the agent-key bundle"
+        )
+    return secret_id
+
+
+def resolve_mcp_key_secret_id(principal_id: str, override: str | None) -> str:
+    """Per-principal secret for app mode. Cursor does not use this path."""
+    if principal_id not in MCP_PRINCIPAL_IDS:
+        raise SystemExit(f"unsupported mcp principal id: {principal_id}")
+    if principal_id == MCP_CURSOR_PRINCIPAL_ID:
+        raise SystemExit(
+            "sp_mcp_cursor keeps the compatibility secret; it does not use a lane key"
+        )
+    raw = (override or "").strip()
+    if raw:
+        return check_mcp_key_secret_id(raw)
+    return lane_key_secret_id(principal_id)
+
+
+def parse_mcp_key_material(raw: str, secret_id: str) -> str:
+    """Accept a raw string or JSON with MC_MCP_API_KEY / api_key.
+
+    Failures name the secret id only. The payload is never included.
+    """
+    text = raw.strip()
+    if not text:
+        raise SystemExit(f"{secret_id}: invalid MCP key material")
+    key = ""
+    if text[:1] in '{["':
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            raise SystemExit(f"{secret_id}: invalid MCP key material") from None
+        if isinstance(data, str):
+            key = data.strip()
+        elif isinstance(data, dict):
+            candidate = data.get("MC_MCP_API_KEY")
+            if not isinstance(candidate, str) or not candidate.strip():
+                candidate = data.get("api_key")
+            if isinstance(candidate, str):
+                key = candidate.strip()
+    else:
+        key = text
+    if not key:
+        raise SystemExit(f"{secret_id}: invalid MCP key material")
+    return key
+
+
+def read_mcp_key_secret(client, secret_id: str) -> str:
+    """Validate one principal's key. Never reads the agent-key bundle."""
+    secret_id = check_mcp_key_secret_id(secret_id)
+    try:
+        response = client.get_secret_value(SecretId=secret_id)
+    except ClientError as err:
+        code = err.response.get("Error", {}).get("Code", "ClientError")
+        raise SystemExit(
+            f"{secret_id}: {code}. Refusing to fall back to {MCP_AGENT_KEYS_SECRET_ID}."
+        ) from None
+    raw = response.get("SecretString") if isinstance(response, dict) else None
+    if not isinstance(raw, str):
+        raise SystemExit(f"{secret_id}: invalid MCP key material")
+    return parse_mcp_key_material(raw, secret_id)
+
+
+# In-memory parser embedded in the Unix fragment. Same rules as
+# parse_mcp_key_material. It writes the key on stdout or exits 1 with no text.
+MCP_KEY_PARSE_PROGRAM = """
+import json, sys
+raw = sys.stdin.read().strip()
+key = ""
+try:
+    if raw[:1] in '{["':
+        data = json.loads(raw)
+        if isinstance(data, str):
+            key = data.strip()
+        elif isinstance(data, dict):
+            candidate = data.get("MC_MCP_API_KEY")
+            if not isinstance(candidate, str) or not candidate.strip():
+                candidate = data.get("api_key")
+            if isinstance(candidate, str):
+                key = candidate.strip()
+    elif raw:
+        key = raw
+except (ValueError, TypeError, AttributeError):
+    key = ""
+if not key:
+    raise SystemExit(1)
+sys.stdout.write(key)
+""".strip()
+
+
 def staging_output_path(principal_id: str, home: Path = HOME) -> Path:
     if principal_id == MCP_CURSOR_PRINCIPAL_ID:
         return home / ".secrets-env.staging.ps1"
     return home / f".secrets-env.staging.{principal_id}.ps1"
+
+
+def staging_shell_output_path(principal_id: str, home: Path = HOME) -> Path:
+    if principal_id == MCP_CURSOR_PRINCIPAL_ID:
+        return home / ".secrets-env.staging"
+    return home / f".secrets-env.staging.{principal_id}"
 
 
 # Env names the generated loader must hydrate. A missing or empty value aborts
@@ -633,7 +834,11 @@ def ps_quote(value: str) -> str:
 
 
 def staging_loader_lines(
-    values: dict[str, str], principal_id: str, mode: str = GITHUB_AUTH_MODE_APP
+    values: dict[str, str],
+    principal_id: str,
+    mode: str = GITHUB_AUTH_MODE_APP,
+    *,
+    mcp_key_secret_id: str | None = None,
 ) -> list[str]:
     """PowerShell loader that hydrates atomically and fails closed.
 
@@ -641,8 +846,14 @@ def staging_loader_lines(
     validated, and only then is $env:* assigned in one block. On any failure
     nothing is assigned, $global:PlxSecretsLoaderStatus stays 'failed', and the
     loader throws naming the missing variables (never values).
+
+    When mcp_key_secret_id is set, MC_MCP_API_KEY is fetched at source time
+    and is not written into this file.
     """
-    del principal_id  # retained so callers keep the existing signature
+    if mcp_key_secret_id:
+        mcp_key_secret_id = check_mcp_key_secret_id(mcp_key_secret_id)
+        values = dict(values)
+        values["MC_MCP_API_KEY"] = ""
     required_names, optional_names = loader_contract(mode)
     allowed = required_names + optional_names
     for name in values:
@@ -669,6 +880,7 @@ def staging_loader_lines(
         "# reference. Personal PATs are not loaded. CIP owns merges.",
         "# GitHub (legacy mode): PETRALABX_GITHUB_TOKEN only, behind",
         "# --legacy-personal-pat.",
+        f"# Principal: {principal_id}",
         "",
         "$global:PlxSecretsLoaderStatus = 'failed'",
         "$global:PlxSecretsLoaderMissing = ''",
@@ -705,12 +917,63 @@ def staging_loader_lines(
             "$__plxStage['AZURE_CLIENT_ID']     = $__plxStage['MICROSOFT_GRAPH_CLIENT_ID']",
             "$__plxStage['AZURE_CLIENT_SECRET'] = $__plxStage['MICROSOFT_GRAPH_CLIENT_SECRET']",
             "",
+        ]
+    )
+    if mcp_key_secret_id:
+        quoted_id = ps_quote(mcp_key_secret_id)
+        lines.extend(
+            [
+                "# Per-principal MCP key. Fetched into memory at source time.",
+                f"# Source: {mcp_key_secret_id}",
+                f"# Not a source: {MCP_AGENT_KEYS_SECRET_ID}",
+                "$__mcpKey = ''",
+                "try {",
+                "  $__mcpRaw = & $__awsCli secretsmanager get-secret-value --region us-east-1 "
+                + f"--secret-id {quoted_id} --query SecretString --output text 2>$null",
+                "  if ($LASTEXITCODE -ne 0) { throw 'aws cli exited non-zero' }",
+                "  $__mcpTrim = ([string]$__mcpRaw).Trim()",
+                "  if ($__mcpTrim.StartsWith('{') -or $__mcpTrim.StartsWith('[') -or $__mcpTrim.StartsWith([char]34)) {",
+                "    $__mcpJson = $__mcpTrim | ConvertFrom-Json",
+                "    if ($__mcpJson -is [string]) {",
+                "      $__mcpKey = $__mcpJson.Trim()",
+                "    } else {",
+                "      $__fromName = $__mcpJson.MC_MCP_API_KEY",
+                "      $__fromAlias = $__mcpJson.api_key",
+                "      if ($__fromName -is [string] -and -not [string]::IsNullOrWhiteSpace($__fromName)) {",
+                "        $__mcpKey = $__fromName.Trim()",
+                "      } elseif ($__fromAlias -is [string] -and -not [string]::IsNullOrWhiteSpace($__fromAlias)) {",
+                "        $__mcpKey = $__fromAlias.Trim()",
+                "      }",
+                "    }",
+                "  } elseif (-not [string]::IsNullOrWhiteSpace($__mcpTrim)) {",
+                "    $__mcpKey = $__mcpTrim",
+                "  }",
+                "  if (-not [string]::IsNullOrWhiteSpace($__mcpKey)) {",
+                "    $__plxStage['MC_MCP_API_KEY'] = $__mcpKey",
+                "  }",
+                "} catch {",
+                "  # Do not echo the exception message: it can quote payload text.",
+                "  $__plxStage.Remove('MC_MCP_API_KEY')",
+                "}",
+                "Remove-Variable __mcpRaw, __mcpTrim, __mcpJson, __fromName, __fromAlias, __mcpKey "
+                "-ErrorAction SilentlyContinue",
+                "",
+            ]
+        )
+    fetch_source = CURSOR_GRAPH_SECRET_ID
+    if mcp_key_secret_id:
+        fetch_source = f"{CURSOR_GRAPH_SECRET_ID} and {mcp_key_secret_id}"
+    lines.extend(
+        [
             "$__plxMissing = @($__plxRequired | Where-Object { [string]::IsNullOrWhiteSpace([string]$__plxStage[$_]) })",
             "if ($__plxMissing.Count -gt 0) {",
             "  $global:PlxSecretsLoaderMissing = $__plxMissing -join ','",
             "  $__plxNames = $global:PlxSecretsLoaderMissing",
-            "  Remove-Variable __plxRequired, __plxOptional, __plxStage, __plxMissing, __graph, __awsCli -ErrorAction SilentlyContinue",
-            f'  throw "PLX secrets loader failed: missing $__plxNames (check AWS credentials: aws sts get-caller-identity; fetch source {CURSOR_GRAPH_SECRET_ID}). No environment variables were set."',
+            "  Remove-Variable __plxRequired, __plxOptional, __plxStage, __plxMissing, __graph, __awsCli, __mcpRaw, __mcpTrim, __mcpJson, __fromName, __fromAlias, __mcpKey -ErrorAction SilentlyContinue",
+            '  throw "PLX secrets loader failed: missing $__plxNames '
+            "(check AWS credentials: aws sts get-caller-identity; fetch source "
+            + fetch_source
+            + '). No environment variables were set."',
             "}",
             "",
             "# Single assignment block — reached only when every required name is present.",
@@ -739,6 +1002,73 @@ def staging_loader_lines(
     return lines
 
 
+def _static_loader_items(values: dict[str, str], mode: str) -> list[tuple[str, str]]:
+    required_names, optional_names = loader_contract(mode)
+    allowed = required_names + optional_names
+    for name in values:
+        if name not in allowed:
+            raise SystemExit(f"loader value {name} is not declared required/optional")
+    return [(name, value) for name, value in values.items() if value]
+
+
+def staging_shell_loader_lines(
+    values: dict[str, str],
+    principal_id: str,
+    mode: str = GITHUB_AUTH_MODE_APP,
+    *,
+    mcp_key_secret_id: str | None = None,
+    python_exe: str | None = None,
+) -> list[str]:
+    """Unix hydrate. Dedicated principals fetch MC_MCP_API_KEY into memory."""
+    if mcp_key_secret_id:
+        mcp_key_secret_id = check_mcp_key_secret_id(mcp_key_secret_id)
+        values = dict(values)
+        values["MC_MCP_API_KEY"] = ""
+    interpreter = python_exe or sys.executable
+    lines = [
+        "# Machine-local secrets loader for PLX agent workstations — do not commit",
+        f"# {GENERATED_MARKER}",
+        "# Source this file. A failed MCP key fetch exports nothing.",
+        f"# Principal: {principal_id}",
+        "# AWS Secrets Manager only. No ~/.aws credential text files.",
+        "",
+    ]
+    if mcp_key_secret_id:
+        lines.extend(
+            [
+                f"# MCP key source: {mcp_key_secret_id}",
+                f"# Not a source: {MCP_AGENT_KEYS_SECRET_ID}",
+                "__plx_raw=$(aws secretsmanager get-secret-value --region us-east-1 "
+                + f"--secret-id {sh_quote(mcp_key_secret_id)} "
+                + "--query SecretString --output text 2>/dev/null) || __plx_raw=''",
+                "__plx_key=$(printf '%s' \"$__plx_raw\" | "
+                + f"{sh_quote(interpreter)} -c {sh_quote(MCP_KEY_PARSE_PROGRAM)}"
+                + ") || __plx_key=''",
+                "unset __plx_raw",
+                'if [ -z "$__plx_key" ]; then',
+                "  unset __plx_key MC_MCP_API_KEY",
+                "  echo 'PLX secrets loader failed: missing MC_MCP_API_KEY' >&2",
+                "  return 1 2>/dev/null || exit 1",
+                "fi",
+                'export MC_MCP_API_KEY="$__plx_key"',
+                "unset __plx_key",
+                "",
+            ]
+        )
+    for name, value in _static_loader_items(values, mode):
+        lines.append(f"export {name}={sh_quote(value)}")
+    if mode == GITHUB_AUTH_MODE_APP:
+        lines.extend(
+            [
+                "",
+                "unset PETRALABX_GITHUB_TOKEN PETRALABX_GITHUB PLX_GITHUB_PAT "
+                "GITHUB_TOKEN GH_TOKEN GH_ENTERPRISE_TOKEN",
+            ]
+        )
+    lines.append("")
+    return lines
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -749,7 +1079,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--legacy-personal-pat",
         action="store_true",
-        help="Export PETRALABX_GITHUB_TOKEN from prod/ec2-secrets. Rollout only.",
+        help=(
+            "Export PETRALABX_GITHUB_TOKEN. Rollout only. "
+            "Reads prod/ec2-secrets unless --compat-secret-id is set. "
+            "A denied read exits with the AWS error code and does not print secret text."
+        ),
     )
     parser.add_argument(
         "--github-app-slug",
@@ -760,10 +1094,22 @@ def parse_args() -> argparse.Namespace:
         "--compat-secret-id",
         default=None,
         help=(
-            "App mode, sp_mcp_cursor only. Smaller secret with "
-            "PLX_MC_MCP_API_KEY and optional SWARM_API_KEY. "
-            "Defaults to PLX_BOOTSTRAP_COMPAT_SECRET_ID or prod/ec2-secrets. "
-            "Ignored for any other principal, and ignored in legacy mode."
+            "Secret with PLX_MC_MCP_API_KEY and optional SWARM_API_KEY for "
+            "sp_mcp_cursor. In --legacy-personal-pat mode it also holds the "
+            "personal PAT and replaces prod/ec2-secrets. "
+            "Ignored for any other principal in app mode. "
+            "Defaults to PLX_BOOTSTRAP_COMPAT_SECRET_ID or prod/ec2-secrets."
+        ),
+    )
+    parser.add_argument(
+        "--mcp-key-secret-id",
+        default=None,
+        help=(
+            "App mode, dedicated principals only. Secret id for this "
+            "principal's MC_MCP_API_KEY. Default is "
+            "plx/prod/mc/lane-<suffix>-key/v1. "
+            "Accepts a raw string or JSON with MC_MCP_API_KEY or api_key. "
+            "The agent-key bundle is refused."
         ),
     )
     return parser.parse_args()
@@ -785,12 +1131,27 @@ def main() -> None:
         principal_id=args.mcp_principal_id,
         compat_secret_id=args.compat_secret_id,
     )
-    registry = (
-        {}
-        if args.mcp_principal_id == MCP_CURSOR_PRINCIPAL_ID
-        else get_secret_dict(client, MCP_AGENT_KEYS_SECRET_ID)
+    use_lane_secret = (
+        mode == GITHUB_AUTH_MODE_APP
+        and args.mcp_principal_id != MCP_CURSOR_PRINCIPAL_ID
     )
-    mcp_key = select_mcp_key(args.mcp_principal_id, sec, registry)
+    mcp_key_secret_id = None
+    mcp_key = ""
+    if use_lane_secret:
+        mcp_key_secret_id = resolve_mcp_key_secret_id(
+            args.mcp_principal_id, args.mcp_key_secret_id
+        )
+        # Confirm the secret is readable and well formed. The loader fetches
+        # it again so the value is not written to disk.
+        confirmed = read_mcp_key_secret(client, mcp_key_secret_id)
+        del confirmed
+    else:
+        registry = (
+            {}
+            if args.mcp_principal_id == MCP_CURSOR_PRINCIPAL_ID
+            else read_secret_dict_fail_closed(client, MCP_AGENT_KEYS_SECRET_ID)
+        )
+        mcp_key = select_mcp_key(args.mcp_principal_id, sec, registry)
     # Validate cursor-graph exists and has the three keys as a set (fail closed
     # at bootstrap time rather than writing a half-wired loader).
     graph = get_secret_dict(client, CURSOR_GRAPH_SECRET_ID)
@@ -822,56 +1183,66 @@ def main() -> None:
     }
     values.update(github_auth_values(sec, mode=mode, binding=binding))
 
-    lines = staging_loader_lines(values, args.mcp_principal_id, mode)
-
-    output_staging.write_text("\n".join(lines), encoding="utf-8")
+    lines = staging_loader_lines(
+        values,
+        args.mcp_principal_id,
+        mode,
+        mcp_key_secret_id=mcp_key_secret_id,
+    )
+    output_shell = staging_shell_output_path(args.mcp_principal_id)
+    shell_lines = staging_shell_loader_lines(
+        values,
+        args.mcp_principal_id,
+        mode,
+        mcp_key_secret_id=mcp_key_secret_id,
+        python_exe=sys.executable,
+    )
+    write_private_text(output_staging, "\n".join(lines))
+    write_private_text(output_shell, "\n".join(shell_lines))
 
     wrote_github = False
     if mode == GITHUB_AUTH_MODE_LEGACY:
         remove_generated_gh_wrapper(HOME)
         gh_token = values.get("PETRALABX_GITHUB_TOKEN") or ""
         if gh_token:
-            OUTPUT_GITHUB_PS1.write_text(
+            write_private_text(
+                OUTPUT_GITHUB_PS1,
                 "\n".join(github_powershell_loader_lines(gh_token)),
-                encoding="utf-8",
             )
-            OUTPUT_GITHUB_SH.write_text(
+            write_private_text(
+                OUTPUT_GITHUB_SH,
                 "\n".join(github_shell_loader_lines(gh_token)),
-                encoding="utf-8",
             )
-            try:
-                OUTPUT_GITHUB_SH.chmod(0o600)
-            except OSError:
-                pass
             wrote_github = True
     else:
         if binding is None:
             raise SystemExit("github app binding required")
         write_github_app_commands(HOME, sys.executable, str(AUTH_SCRIPT))
-        OUTPUT_GITHUB_PS1.write_text(
+        write_private_text(
+            OUTPUT_GITHUB_PS1,
             "\n".join(
                 github_app_powershell_loader_lines(
                     binding, sys.executable, str(AUTH_SCRIPT)
                 )
             ),
-            encoding="utf-8",
         )
-        OUTPUT_GITHUB_SH.write_text(
+        write_private_text(
+            OUTPUT_GITHUB_SH,
             "\n".join(github_app_shell_loader_lines(binding)),
-            encoding="utf-8",
         )
-        try:
-            OUTPUT_GITHUB_SH.chmod(0o600)
-            OUTPUT_GITHUB_PS1.chmod(0o600)
-        except OSError:
-            pass
         wrote_github = True
 
+    loaded = [name for name, value in values.items() if value]
+    if mcp_key_secret_id:
+        loaded.insert(0, "MC_MCP_API_KEY")
     print(f"wrote {output_staging}")
+    print(f"wrote {output_shell}")
     if wrote_github:
         print(f"wrote {OUTPUT_GITHUB_PS1}")
         print(f"wrote {OUTPUT_GITHUB_SH}")
-    print("keys loaded:", ", ".join(k for k, v in values.items() if v))
+    print("keys loaded:", ", ".join(loaded))
+    if mcp_key_secret_id:
+        print(f"mcp key source: {mcp_key_secret_id} (runtime fetch)")
     print(f"graph source: {CURSOR_GRAPH_SECRET_ID} (runtime matched set)")
     print(f"mcp principal: {args.mcp_principal_id}")
     print(f"github auth mode: {mode}")

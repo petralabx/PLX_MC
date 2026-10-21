@@ -74,7 +74,19 @@ App mode reads `PLX_MC_MCP_API_KEY` and optional `SWARM_API_KEY` only for the
 default principal `sp_mcp_cursor`. That read is `prod/ec2-secrets`, or the
 secret named by `--compat-secret-id` / `PLX_BOOTSTRAP_COMPAT_SECRET_ID`.
 Any other `--mcp-principal-id` in app mode does not call GetSecretValue on
-`prod/ec2-secrets`. Legacy mode still reads `prod/ec2-secrets`.
+`prod/ec2-secrets` and does not read the agent-key bundle
+`plx/prod/mc/mcp-agent-keys/v1`. That bundle must not be granted to boxes.
+A dedicated principal reads `plx/prod/mc/lane-<suffix>-key/v1`
+(`sp_mcp_claude_code` → `plx/prod/mc/lane-claude-code-key/v1`; underscores in
+the suffix become hyphens). `--mcp-key-secret-id` overrides that id. The
+PowerShell and Unix loaders fetch the secret when sourced, so
+`MC_MCP_API_KEY` is not stored in the file. The full list is in
+`docs/modules/mcp/README.md`.
+
+Legacy mode still reads `prod/ec2-secrets`, unless `--compat-secret-id` names
+a smaller secret. A host denied `prod/ec2-secrets` (coding-1) exits with the
+AWS error code. The message names `--compat-secret-id` and does not print
+secret text.
 
 **Precedence (TASK-756):** AWS Secrets Manager only. Do not restore
 `~/.aws/Secret_Github.txt`. Graph credentials stay a matched set from
@@ -126,6 +138,29 @@ wrapper when that file carries the bootstrap marker, and leaves an unrelated
 `gh` binary alone.
 
 Turn the flag off once `gh auth status` shows the app.
+
+On a host that cannot read `prod/ec2-secrets` (coding-1), pass
+`--compat-secret-id` with a secret that contains the personal PAT. Do not
+grant that host `prod/ec2-secrets` or `plx/prod/mc/mcp-agent-keys/v1`.
+
+```bash
+python scripts/bootstrap-windows-secrets.py --legacy-personal-pat \
+  --compat-secret-id <smaller-secret>
+```
+
+## Rollback
+
+Revert the bootstrap change and re-run it from commit `07016274` on each
+box so the loader matches that tree. Secret values do not change.
+
+```bash
+git checkout 07016274 -- scripts/bootstrap-windows-secrets.py
+python scripts/bootstrap-windows-secrets.py
+```
+
+A host denied `prod/ec2-secrets` still cannot use `--legacy-personal-pat`
+against that secret. Use `--compat-secret-id`, or re-run without the legacy
+flag after the GitHub App secret is present.
 
 ## Rollout
 

@@ -52,7 +52,7 @@ Cloud user broader write access.
 | Args | `tsx tools/plx-mc-mcp/index.ts` |
 | `MC_BASE_URL` | `https://mc.plxcustomer.io` |
 | `MC_MCP_PRINCIPAL_ID` | `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_chatgpt`, `sp_mcp_grok`, `sp_mcp_hermes`, `sp_mcp_swarm`, `sp_mcp_agent_runner`, `sp_mcp_portal` (create and search tasks only), `sp_mcp_workbench` (read-only: six read tools), `sp_mcp_infra` (read-only: the same six read tools), `sp_mcp_cip_auto_undraft` (read-only: four task read tools), or `sp_mcp_workbench_intake` (create and search tasks only) |
-| `MC_MCP_API_KEY` | key for that exact principal: shared compatibility key only for `sp_mcp_cursor`; otherwise the matching entry in the dedicated registry |
+| `MC_MCP_API_KEY` | key for that exact principal: shared compatibility key only for `sp_mcp_cursor`; otherwise that principal's lane secret (below), never the bundle |
 | `MC_OPERATOR_EMAIL` | allowlisted operator on `PLX_MC_ALLOWED_USERS` — **agents:** `cos@petrasoap.com`; **human:** `vince@petrasoap.com`. Vince-approved gmail/Proton exceptions must also appear on that CSV. |
 | `MC_REPO` | target repo slug (e.g. `petralabx/plx-customer-portal`) |
 | `PLX_MC_MCP_ENABLED` | `1` |
@@ -84,10 +84,36 @@ Cursor MCP child processes do not inherit PowerShell env vars. Use the repo laun
    . $HOME\.secrets-env.staging.sp_mcp_claude_code.ps1
    ```
 
-   Secrets Manager is authoritative (`prod/ec2-secrets` for Cursor/GitHub/Swarm;
-   `plx/prod/mc/mcp-agent-keys/v1` for dedicated MCP identities;
-   `plx/prod/m365/cursor-graph/v1` for the matched `MICROSOFT_GRAPH_*` set).
-   The script does **not** read credential text files under `~/.aws`.
+   Secrets Manager is authoritative. `prod/ec2-secrets` (or
+   `--compat-secret-id`) supplies Cursor's `PLX_MC_MCP_API_KEY`. Dedicated
+   principals read one lane secret, not the bundle
+   `plx/prod/mc/mcp-agent-keys/v1`. That bundle must not be granted to boxes;
+   it remains the server registry only. `plx/prod/m365/cursor-graph/v1` is the
+   matched `MICROSOFT_GRAPH_*` set. The script does **not** read credential
+   text files under `~/.aws`.
+
+   App mode maps `sp_mcp_<suffix>` to `plx/prod/mc/lane-<suffix>-key/v1`
+   (underscores become hyphens). Override with `--mcp-key-secret-id`. The
+   loader fetches the secret when sourced. The key is not written into the
+   file. A missing or invalid secret fails closed and the message does not
+   include the payload.
+
+   | Principal | Secret id |
+   |-----------|-----------|
+   | `sp_mcp_agent_runner` | `plx/prod/mc/lane-agent-runner-key/v1` |
+   | `sp_mcp_chatgpt` | `plx/prod/mc/lane-chatgpt-key/v1` |
+   | `sp_mcp_cip_auto_undraft` | `plx/prod/mc/lane-cip-auto-undraft-key/v1` |
+   | `sp_mcp_claude_code` | `plx/prod/mc/lane-claude-code-key/v1` |
+   | `sp_mcp_codex` | `plx/prod/mc/lane-codex-key/v1` |
+   | `sp_mcp_cos` | `plx/prod/mc/lane-cos-key/v1` |
+   | `sp_mcp_grok` | `plx/prod/mc/lane-grok-key/v1` |
+   | `sp_mcp_hermes` | `plx/prod/mc/lane-hermes-key/v1` |
+   | `sp_mcp_infra` | `plx/prod/mc/lane-infra-key/v1` |
+   | `sp_mcp_ledger` | `plx/prod/mc/lane-ledger-key/v1` |
+   | `sp_mcp_portal` | `plx/prod/mc/lane-portal-key/v1` |
+   | `sp_mcp_swarm` | `plx/prod/mc/lane-swarm-key/v1` |
+   | `sp_mcp_workbench` | `plx/prod/mc/lane-workbench-key/v1` |
+   | `sp_mcp_workbench_intake` | `plx/prod/mc/lane-workbench-intake-key/v1` |
 
 2. Override the local `PLX-MC` block in `.cursor/mcp.json` to run the Windows launcher
    (do **not** commit this override — Linux/macOS keep `node tools/plx-mc-mcp/launch.mjs`):

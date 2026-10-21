@@ -587,6 +587,38 @@ that column via the existing operator runbook before deploy; no Graph operation
 is part of this implementation. Production retirement is a separate steward action.
 
 
+### Workstation per-principal secrets
+
+Coding boxes do not read the agent-key bundle
+`plx/prod/mc/mcp-agent-keys/v1`. That bundle stays the server registry
+(`scripts/sync-mcp-agent-keys.py` → Vercel). It must not be granted to boxes.
+
+App mode maps `sp_mcp_<suffix>` to `plx/prod/mc/lane-<suffix>-key/v1`
+(underscores in the suffix become hyphens). `sp_mcp_claude_code` reads
+`plx/prod/mc/lane-claude-code-key/v1`. `--mcp-key-secret-id` overrides the
+id. The secret is a raw string or JSON with `MC_MCP_API_KEY` or `api_key`.
+A missing or invalid secret fails closed and the error does not include the
+payload. The generated PowerShell and Unix loaders fetch that secret when
+sourced, so the key is not written into the file. `sp_mcp_cursor` stays on
+`PLX_MC_MCP_API_KEY` from `prod/ec2-secrets` or `--compat-secret-id`.
+
+| Principal | Secret id |
+|-----------|-----------|
+| `sp_mcp_agent_runner` | `plx/prod/mc/lane-agent-runner-key/v1` |
+| `sp_mcp_chatgpt` | `plx/prod/mc/lane-chatgpt-key/v1` |
+| `sp_mcp_cip_auto_undraft` | `plx/prod/mc/lane-cip-auto-undraft-key/v1` |
+| `sp_mcp_claude_code` | `plx/prod/mc/lane-claude-code-key/v1` |
+| `sp_mcp_codex` | `plx/prod/mc/lane-codex-key/v1` |
+| `sp_mcp_cos` | `plx/prod/mc/lane-cos-key/v1` |
+| `sp_mcp_grok` | `plx/prod/mc/lane-grok-key/v1` |
+| `sp_mcp_hermes` | `plx/prod/mc/lane-hermes-key/v1` |
+| `sp_mcp_infra` | `plx/prod/mc/lane-infra-key/v1` |
+| `sp_mcp_ledger` | `plx/prod/mc/lane-ledger-key/v1` |
+| `sp_mcp_portal` | `plx/prod/mc/lane-portal-key/v1` |
+| `sp_mcp_swarm` | `plx/prod/mc/lane-swarm-key/v1` |
+| `sp_mcp_workbench` | `plx/prod/mc/lane-workbench-key/v1` |
+| `sp_mcp_workbench_intake` | `plx/prod/mc/lane-workbench-intake-key/v1` |
+
 ### MCP credential rotation and audit attribution
 
 Owner: Vince / CoS. `PLX_MC_MCP_AGENT_KEYS` remains the reviewed principal-to-key

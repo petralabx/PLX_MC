@@ -29,7 +29,7 @@ export const GET = route(async (req) => {
     return { ran: false, reason: "outside_window", today, torontoHour: hour };
   }
   if (!reportingDatabaseConfigured()) {
-    console.warn("[reporting-goals] scheduled refresh skipped: REPORTING_DATABASE_URL is not set");
+    console.warn("[reporting-goals] scheduled refresh skipped: neither REPORTING_MCP_URL/REPORTING_MCP_TOKEN nor REPORTING_DATABASE_URL is set");
     return { ran: false, reason: "not_configured", today };
   }
   const claim = await startRefresh("cron", "cron", now);

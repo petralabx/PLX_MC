@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-20 (ET) — TASK-3489: closing port 5432 stopped the Goals refresh, and the MCP way round had its own limits
+
+- **What happened:** TASK-2719 removed the open-5432 security group on Oct 18. Vercel was not among the scoped sources, so every Goals refresh timed out on connect. The fix reads through plx-reporting-mcp, and live probes showed three limits before any code shipped. Restricted mode refuses `AT TIME ZONE` and `timezone()`. References (12,810 rows) and customers (7,407) pass its 5,000-row cap. A failed statement resets the server's pool, so concurrent calls fail with "pool is closed".
+- **Root cause:** The SG change had no list of the consumers that reach the replica from outside the scoped sources. The restricted-mode limits are not written down; only probes find them.
+- **Rule going forward:** Before closing a network path, list every consumer that uses it and how each one will reach it afterwards. Before moving queries onto plx-reporting-mcp, run each one through it wrapped in `count(*)`. Check its row count against the 5,000-row cap, and check that restricted mode accepts every function it calls.
+
 ### 2026-10-19 (ET) — TASK-3333: a bare `.risk` row rule blanked every At risk initiative
 
 - **What happened:** Vince saw an empty card on the project page. The initiative was At risk, so its section had the class `risk`. The Risk Register row rule `.mc .risk` (a two-column grid) matched it too, and the task table landed in a 0px column. The E2E fixtures have no At risk initiative, so no test saw it.

@@ -1,7 +1,10 @@
 // Refresh orchestration: claim → USD/CAD rate → every dataset query in one
-// read-only REPEATABLE READ transaction on the reporting replica → all snapshots
-// stored in one Mission Control transaction. A failure is recorded on the run
-// and the page keeps showing the last good one. Server-only.
+// read-only REPEATABLE READ transaction on the reporting replica (or, when
+// configured, through plx-reporting-mcp, one statement at a time: TASK-3489) →
+// all snapshots stored in one Mission Control transaction. A failure is
+// recorded on the run and the page keeps showing the last good one. Server-only.
+
+import { reportingMcpConfigured } from "@/lib/secrets";
 
 import { previousMonthStart, torontoDate } from "./calendar";
 import { readForecast } from "./forecast-read";
@@ -20,6 +23,7 @@ import { shipmentsQuery } from "./queries/shipments";
 import { truckloadsQuery } from "./queries/truckloads";
 import { latestRateOnOrBefore } from "./rules";
 import { ATTEMPT_TIMEOUT_MS, withReportingSnapshot, type SourceQuery } from "./source-db";
+import { withReportingMcp } from "./source-mcp";
 import {
   claimRun,
   completeRun,
@@ -78,14 +82,19 @@ async function readShipmentLines(q: SourceQuery, today: IsoDate): Promise<Shipme
   return { access: "read", missing: [], lines: shipmentLinesQuery.map(await q(shipmentLinesQuery.sql, [today])) };
 }
 
-/** Read every dataset for `today` from the replica in one consistent transaction. */
+/**
+ * Read every dataset for `today` from the replica: through plx-reporting-mcp
+ * when REPORTING_MCP_URL and REPORTING_MCP_TOKEN are set, else in one
+ * consistent transaction on REPORTING_DATABASE_URL.
+ */
 export async function readDatasets(
   today: IsoDate,
   config: GoalsConfig,
   attemptTimeoutMs: number = ATTEMPT_TIMEOUT_MS
 ): Promise<Datasets> {
   const codes = config.ftlCustomers.map((c) => c.code);
-  return withReportingSnapshot(async (q: SourceQuery) => {
+  const withSource = reportingMcpConfigured() ? withReportingMcp : withReportingSnapshot;
+  return withSource(async (q: SourceQuery) => {
     const read = async <R extends object, O>(dataset: DatasetQuery<R, O>, params: unknown[]): Promise<O> =>
       dataset.map(await q<R>(dataset.sql, params));
     return {
@@ -111,10 +120,12 @@ export async function readDatasets(
 // connections, and dropped sockets. Permission, syntax and data errors are not.
 const TRANSIENT_SQLSTATES = new Set(["40001", "40P01", "57014", "57P01", "57P02", "57P03", "53300", "08000", "08001", "08003", "08004", "08006"]);
 const TRANSIENT_NODE_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "EAI_AGAIN"]);
+// The reporting MCP (source-mcp.ts): rate limited, the gateway or service down, or unreachable.
+const TRANSIENT_MCP_CODE = /^mcp_(http_(429|5\d\d)|network)$/;
 
 export function isTransient(err: unknown): boolean {
   const code = (err as { code?: unknown })?.code;
-  if (typeof code === "string" && (TRANSIENT_SQLSTATES.has(code) || TRANSIENT_NODE_CODES.has(code))) return true;
+  if (typeof code === "string" && (TRANSIENT_SQLSTATES.has(code) || TRANSIENT_NODE_CODES.has(code) || TRANSIENT_MCP_CODE.test(code))) return true;
   const message = err instanceof Error ? err.message : "";
   return /Connection terminated|timeout exceeded when trying to connect/i.test(message);
 }

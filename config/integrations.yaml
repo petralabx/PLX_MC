@@ -327,18 +327,24 @@ integrations:
     # Postgres. Runtime feature, dormant until its connection string exists.
     scope: runtime (read-only pulls; key-gated)
     autonomous: false # reads production and invoice data; never writes to FileMaker, Sage or Business Central
-    default_state: off (dormant until REPORTING_DATABASE_URL is set)
+    default_state: off (dormant until REPORTING_MCP_URL + REPORTING_MCP_TOKEN, or REPORTING_DATABASE_URL, is set)
     feature_flag: >-
-      Presence check reportingDatabaseConfigured() in src/lib/secrets.ts. Unset →
+      Presence check reportingDatabaseConfigured() in src/lib/secrets.ts: true
+      when reportingMcpConfigured() (both REPORTING_MCP_URL and
+      REPORTING_MCP_TOKEN set; the refresh then reads through
+      plx-reporting-mcp, TASK-3489) or REPORTING_DATABASE_URL is set. Unset →
       the report shows "not connected", POST /api/reporting/goals/refresh returns
       503 and the scheduled refresh skips. The schedule additionally rides
       CRON_SECRET (unset → /api/cron/reporting-goals returns 503).
     kill_switch: >-
-      Unset REPORTING_DATABASE_URL (no further reads; the page keeps the last
-      stored snapshot), and/or remove the /api/cron/reporting-goals entry from
+      Unset REPORTING_MCP_URL / REPORTING_MCP_TOKEN (falls back to
+      REPORTING_DATABASE_URL when set) and REPORTING_DATABASE_URL (no further
+      reads; the page keeps the last stored snapshot), and/or remove the /api/cron/reporting-goals entry from
       vercel.json. Revoking the mc_goals_ro login on the reporting database cuts
-      access at the source.
+      access at the source; disabling the mc-goals-report entry in
+      plx/ro/reporting-mcp/tokens cuts the MCP path within about 60 s.
     auth_source:
+      - plx-reporting-mcp (agentic-swarm apps/plx-reporting-mcp, App Runner) — REPORTING_MCP_URL and REPORTING_MCP_TOKEN via reportingMcpUrl() / reportingMcpToken(); a per-client bearer token (client mc-goals-report) whose SHA-256 is in Secrets Manager plx/ro/reporting-mcp/tokens. The server's own read-only role reads the replica (postgres-mcp restricted mode); the same catalog checks gate the forecast and the invoice lines on that role's grants. Only its execute_sql tool is called, with the fixed goals queries.
       - PLX reporting replica — REPORTING_DATABASE_URL via reportingDatabaseUrl(); login mc_goals_ro with column-level SELECT on silver.batches, sage.oe_invoice_header and sage.ar_customer, plus for the revenue forecast (TASK-3151) sage.oe_order_header, sage.oe_order_detail, public.assembly_order, public.order_entry, public.order_entry_item, public.order_entry_item_assembly and silver.finished_products, plus for the shipments list's invoice lines (TASK-3144) sage.oe_invoice_detail (never its costs) and sage.oe_invoice_header.invuniq, and nothing else; default_transaction_read_only = on (docs/modules/reporting-goals/readonly-grants.sql; the existing login gets the forecast's columns from readonly-grants-forecast.sql and the invoice lines' from readonly-grants-shipment-lines.sql). TLS verified against the vendored RDS CA bundle (src/lib/db/tls.ts).
       - Bank of Canada Valet API (FXUSDCAD) — public, no credential.
       - Viewer / Editor — Entra app roles Goals.Viewer / Goals.Editor on the existing plx-mission-control sign-in app, carried in the session (no new Graph permission).
@@ -361,11 +367,14 @@ integrations:
       shipments the systems have not caught up with.
     data_audit_boundary: >-
       Reads only the granted columns, in one read-only REPEATABLE READ
-      transaction per attempt; the forecast's and the invoice lines' grants are
+      transaction per attempt (through plx-reporting-mcp: one read-only
+      statement per dataset, no shared snapshot; a truncated result fails the
+      attempt); the forecast's and the invoice lines' grants are
       checked from the catalogs first, and without them those datasets are
       skipped, never attempted. Snapshots live in Mission Control's Postgres
       (90 days, invoice lines included; reference and customer lists for the
       last 3 good runs). Logs and
-      mc_events carry run ids, counts and error codes, never row contents.
+      mc_events carry run ids, counts and error codes, never row contents,
+      SQL text or the MCP token.
       Manual-entry history stays in report_manual_entry_version (readable by the
       report's Viewers), not in mc_events.

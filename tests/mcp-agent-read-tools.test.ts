@@ -290,7 +290,8 @@ describe("tool registry", () => {
     expect(names).toContain("mc_list_projects");
     expect(names).toContain("mc_upload_evidence");
     expect(names).toContain("mc_record_checkout_head");
-    expect(names).toHaveLength(41);
+    expect(names).toContain("mc_ask_question");
+    expect(names).toHaveLength(42);
   });
 });
 

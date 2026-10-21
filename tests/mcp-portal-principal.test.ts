@@ -142,6 +142,7 @@ const FULL_MCP_BUNDLE = [
   "routing.propose",
   "routing.resolve",
   "approval.request",
+  "question.ask",
   "telemetry.report",
   "sync.mutate",
 ];

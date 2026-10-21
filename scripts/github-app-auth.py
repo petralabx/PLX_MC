@@ -364,6 +364,16 @@ def refuse_ambient_credentials(detail: str = "") -> int:
     return MINT_FAILED_EXIT
 
 
+def git_credential_quit(detail: str = "") -> int:
+    """Stop git helper iteration. Exit status alone does not.
+
+    Git ignores a helper's non-zero status and continues to the next helper
+    and to GIT_ASKPASS. ``quit=true`` on stdout is the protocol stop.
+    """
+    sys.stdout.write("quit=true\n")
+    return refuse_ambient_credentials(detail)
+
+
 def wrapper_skip_dirs(env: dict[str, str]) -> set[str]:
     home = env.get("HOME") or str(Path.home())
     return {os.path.normcase(os.path.abspath(os.path.join(home, ".local", "bin")))}
@@ -406,9 +416,11 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 token = get_installation_token()
             except SystemExit as err:
-                return refuse_ambient_credentials(str(err))
+                return git_credential_quit(str(err))
+            except Exception as err:
+                return git_credential_quit(err.__class__.__name__)
             if not str(token or "").strip():
-                return refuse_ambient_credentials()
+                return git_credential_quit()
         sys.stdout.write(
             render_git_credential(action, stdin_text, token, on_erase=erase)
         )

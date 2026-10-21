@@ -331,6 +331,79 @@ def test_token_command_prints_only_the_token(
     assert captured.err == ""
 
 
+def test_git_fill_mint_failure_does_not_use_another_helper(
+    tmp_path: Path,
+) -> None:
+    """A failed mint must stop git. A later helper or stored password must not win."""
+    other = tmp_path / "other-helper"
+    other.write_text(
+        "#!/bin/sh\nprintf 'username=personal\\npassword=stored-personal-pat\\n'\n",
+        encoding="utf-8",
+    )
+    other.chmod(0o755)
+    askpass = tmp_path / "askpass"
+    askpass.write_text(
+        "#!/bin/sh\nprintf '%s\\n' 'askpass-personal-pat'\n", encoding="utf-8"
+    )
+    askpass.chmod(0o755)
+    store = tmp_path / "credstore"
+    store.write_text(
+        "https://personal:stored-personal-pat@github.com\n",
+        encoding="utf-8",
+    )
+    cfg = tmp_path / "gitconfig"
+    env = os.environ.copy()
+    for name in (
+        "PLX_GITHUB_APP_ID",
+        "PLX_GITHUB_APP_INSTALLATION_ID",
+        "PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID",
+        "PLX_GITHUB_APP_SLUG",
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GH_ENTERPRISE_TOKEN",
+    ):
+        env.pop(name, None)
+    env["HOME"] = str(tmp_path)
+    env["GIT_CONFIG_GLOBAL"] = str(cfg)
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_ASKPASS"] = str(askpass)
+    helper = f"{sys.executable} {SCRIPT} git-credential"
+
+    def add(value: str) -> None:
+        subprocess.run(
+            [
+                "git",
+                "config",
+                "--file",
+                str(cfg),
+                "--add",
+                "credential.https://github.com.helper",
+                value,
+            ],
+            check=True,
+            env=env,
+        )
+
+    add("")
+    add(f"!{helper}")
+    add(f"!{other}")
+    add(f"store --file {store}")
+    proc = subprocess.run(
+        ["git", "credential", "fill"],
+        input="protocol=https\nhost=github.com\n\n",
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+    blob = proc.stdout + proc.stderr
+    assert proc.returncode != 0
+    assert "stored-personal-pat" not in blob
+    assert "askpass-personal-pat" not in blob
+    assert "password=" not in proc.stdout
+
+
 def test_git_credential_mint_failure_prints_no_password(
     auth, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -342,9 +415,25 @@ def test_git_credential_mint_failure_prints_no_password(
     code = auth.main(["git-credential", "get"])
     assert code == 126
     captured = capsys.readouterr()
-    assert captured.out == ""
+    assert captured.out == "quit=true\n"
     assert "password=" not in captured.out
     assert "ambient" in captured.err.lower()
+
+
+def test_git_credential_quit_on_unexpected_mint_error(
+    auth, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def boom(**_kwargs: object) -> str:
+        raise OSError("network down")
+
+    monkeypatch.setattr(auth, "get_installation_token", boom)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("protocol=https\nhost=github.com\n"))
+    code = auth.main(["git-credential", "get"])
+    assert code == 126
+    captured = capsys.readouterr()
+    assert captured.out == "quit=true\n"
+    assert "password=" not in captured.out
+    assert "OSError" in captured.err
 
 
 def test_git_credential_command_skips_non_github_hosts(

@@ -765,6 +765,67 @@ def test_powershell_sets_isolated_gh_env_for_the_child(tmp_path: Path) -> None:
     assert f"GH_CONFIG_DIR={home / '.config' / 'plx-github-app' / 'gh'}" in text
 
 
+def test_powershell_empty_helper_reset_survives_legacy_quoting(tmp_path: Path) -> None:
+    """PowerShell 5.1 drops a native '' argument. The empty helper reset must remain."""
+    pwsh = _pwsh()
+    if pwsh is None:
+        pytest.skip("pwsh is not installed")
+    bootstrap = load_script()
+    home = tmp_path / "home"
+    home.mkdir()
+    cfg = tmp_path / "gitconfig"
+    fragment = home / "fragment.ps1"
+    fragment.write_text(
+        "\n".join(
+            bootstrap.github_app_powershell_loader_lines(
+                _binding(bootstrap),
+                "/usr/bin/python3",
+                "/repo/scripts/github-app-auth.py",
+            )
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["GIT_CONFIG_GLOBAL"] = str(cfg)
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    proc = subprocess.run(
+        [
+            pwsh,
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$PSNativeCommandArgumentPassing = 'Legacy'; "
+            f". '{fragment}'; exit $LASTEXITCODE",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+    listed = subprocess.run(
+        [
+            "git",
+            "config",
+            "--file",
+            str(cfg),
+            "--get-all",
+            "credential.https://github.com.helper",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert listed.returncode == 0, listed.stderr
+    values = listed.stdout.splitlines()
+    assert values[0] == ""
+    assert "git-credential" in values[1]
+    assert len(values) == 2
+
+
 def test_shell_launchers_have_lf_endings_when_writes_translate_newlines(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

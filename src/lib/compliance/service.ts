@@ -56,7 +56,7 @@ import {
   webhookExtendsChain,
 } from "./lease-chain";
 import { agentSignals, commitTrailers, shortSha } from "./commit-signals";
-import { loadPrCommits, loadPrReviewLinks, loadPrState, type PrCommit, type PrState } from "./github-pr";
+import { githubHeadDescendsFrom, loadPrCommits, loadPrReviewLinks, loadPrState, type PrCommit, type PrState } from "./github-pr";
 import { projectPullRequest, projectionEnabled } from "./projection";
 import * as repo from "./repo";
 import { applyReviewLinks, reviewLinksReport, touchedModules, type ReviewLinksReport } from "./review-links";
@@ -1468,7 +1468,17 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
   // TASK-3410: the push extends each stamped checkout's SHA chain when it is a
   // fast-forward from a chain head (or attaches the first head to an empty chain).
   for (const d of renewable) {
-    if (webhookExtendsChain(d, await repo.dispatchHeads(d.id), evt)) {
+    const heads = await repo.dispatchHeads(d.id);
+    if (evt.forced || heads.some((h) => h.headSha === evt.headSha) || (boundPr(heads) !== null && boundPr(heads) !== evt.prNumber)) continue;
+    const candidates = heads.length ? heads.map((h) => h.headSha).reverse() : d.baseSha ? [d.baseSha] : [];
+    let ancestor: string | null = null;
+    for (const sha of candidates) {
+      if (await githubHeadDescendsFrom(d.repo, sha, evt.headSha)) {
+        ancestor = sha;
+        break;
+      }
+    }
+    if (webhookExtendsChain(d, heads, evt, ancestor)) {
       await repo.recordDispatchHead({
         dispatchId: d.id,
         headSha: evt.headSha,

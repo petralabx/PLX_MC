@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 import type { PrEvent } from "@/lib/compliance/webhook";
 
-const github = vi.hoisted(() => ({ loadPrState: vi.fn(), loadPrCommits: vi.fn() }));
+const github = vi.hoisted(() => ({ loadPrState: vi.fn(), loadPrCommits: vi.fn(), githubHeadDescendsFrom: vi.fn() }));
 vi.mock("@/lib/compliance/github-pr", () => github);
 
 const db = vi.hoisted(() => ({
@@ -158,6 +158,7 @@ beforeEach(() => {
   projection.projectPullRequest.mockReset();
   github.loadPrState.mockReset().mockResolvedValue({ open: true, checkoutIds: ["dsp_old"] });
   github.loadPrCommits.mockReset().mockResolvedValue([]);
+  github.githubHeadDescendsFrom.mockReset().mockResolvedValue(false);
   db.dispatches.clear();
   db.events.length = 0;
   db.checks.length = 0;
@@ -958,12 +959,21 @@ describe("checkout lease chain (TASK-3410)", () => {
     const evt = (headSha: string, beforeSha: string | null, prNumber = 3410): PrEvent => ({
       ...pr(headSha, prNumber), action: beforeSha ? "synchronize" : "opened", beforeSha, merged: false, branch: "x", title: "x", author: "agent", labels: [], checkoutId: cid, checkoutIds: [cid],
     });
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
     await ingestPullRequest(evt(sha("a"), null));
     await ingestPullRequest(evt(sha("b"), sha("a")));
     await ingestPullRequest(evt(sha("c"), sha("b"))); // first-parent merge of staging: before is the old head
-    await ingestPullRequest(evt(sha("f"), sha("9"))); // force-push: before is not on the chain
+    github.githubHeadDescendsFrom.mockResolvedValue(false);
+    await ingestPullRequest(evt(sha("f"), sha("c"))); // rebase: before is still the old head
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
+    await ingestPullRequest({ ...evt(sha("d"), sha("c")), forced: true });
     await ingestPullRequest(evt(sha("e"), sha("c"), 9999)); // another PR stamping the same checkout
     expect(heads(cid)).toEqual(["a:webhook:3410", "b:webhook:3410", "c:webhook:3410"]);
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    github.loadPrCommits.mockResolvedValue([commit(sha("f"), trailers(cid, lane))]);
+    const blocked = await verifyPr({ ...pr(sha("f")), checkoutIds: [cid] });
+    expect(blocked.verdict).toBe("block");
+    expect(blocked.reasons.join(" ")).toContain("outside checkout");
   });
 
   it("passes a head that descends from a recorded head and records it", async () => {

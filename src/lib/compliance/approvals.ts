@@ -148,6 +148,9 @@ export interface DecideApprovalInput {
   /** Deciding human's audit label (session email/oid) — never caller-supplied. */
   decidedBy: string;
   note?: string;
+  /** Exact scope text and source shown by the human decision surface. */
+  renderedScope?: string;
+  renderedSourceRef?: string;
 }
 
 export async function decideApprovalGate(
@@ -192,6 +195,13 @@ export async function decideApprovalGate(
       payload: { gateId: gate.id, reasonCode: "decider_not_allowed", attemptedDecision: input.decision, requestedBy: gate.requestedBy },
     });
     throw new ApiError("decider_not_allowed", notAllowed, 403);
+  }
+
+  if (input.decision === "approved" && gate.scope && (
+    input.renderedScope !== JSON.stringify(gate.scope, null, 2) ||
+    (input.renderedSourceRef ?? null) !== (gate.sourceRef ?? null)
+  )) {
+    throw new ApiError("approval_scope_not_reviewed", "Review the current approval scope and source before approving.", 409);
   }
 
   const decidedAt = new Date().toISOString();

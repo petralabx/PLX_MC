@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-21 (ET) — TASK-3410 r3: the gate seeded a lease chain that the webhook had refused
+
+- **What happened:** Astra's review of PR #387 found that `chainVerdict` accepted any first head for a launcher checkout with a `baseSha`. A head the webhook rejected (no proven base ancestry) could pass the gate and join the chain.
+- **Root cause:** The webhook and the gate are two doors to the same chain, and only the webhook carried the ancestry proof.
+- **Rule going forward:** Every path that adds to a trusted record proves the same thing. Give each door the same proof, and test that a failed proof leaves the record untouched.
+
 ### 2026-10-19 (ET) — TASK-3333: a bare `.risk` row rule blanked every At risk initiative
 
 - **What happened:** Vince saw an empty card on the project page. The initiative was At risk, so its section had the class `risk`. The Risk Register row rule `.mc .risk` (a two-column grid) matched it too, and the task table landed in a 0px column. The E2E fixtures have no At risk initiative, so no test saw it.

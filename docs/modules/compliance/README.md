@@ -100,7 +100,7 @@ truth table is proven before any plumbing exists.
   `checkout.renewed`); revoked or released leases are never extended.
   `checkout({ reuse: true })` hands back the caller's own live lease (same
   authenticated principal, recorded agent, runtime and operator, event `checkout.reused`). A checkout of a task that
-  another holder has a live lease on is logged as `checkout.concurrent` with
+  another holder (any of those four differs) has a live lease on is logged as `checkout.concurrent` with
   the holders and any `forceReason`; with `PLX_MC_CHECKOUT_TAKEOVER_ENFORCE=1`
   it is refused (`checkout_held`, 409) unless `forceReason` is given. Each
   `verifyPr` task result carries `checkout` (live, expiresAt, releasedReason,
@@ -116,7 +116,10 @@ truth table is proven before any plumbing exists.
   head with verified base ancestry or a push that GitHub compare proves
   descends from a recorded head (a staging merge included); forced pushes
   never extend the chain, or when the gate finds a chain head
-  among the PR's commits. The first head with a PR number binds the chain to
+  among the PR's commits. The gate seeds an empty chain that has a `baseSha`
+  only when GitHub compare proves the head descends from it; an unproven or
+  failed compare leaves the head untrusted. Only launcher checkouts let a
+  failed webhook compare queue the event. The first head with a PR number binds the chain to
   that PR. For a checkout with a launch record, `verifyPr` reports a PR head
   outside the chain (rewritten history) or a chain bound to another PR. A
   commit whose `Agent:` trailer names a lane in `PLX_MC_LAUNCH_LANES` (exact

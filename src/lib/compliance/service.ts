@@ -392,8 +392,15 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   const live = await repo.liveDispatchesForTask(input.taskId, input.repo);
   const mine = holderKey(input);
   // A launch always mints its own lease (TASK-3410): reuse could hand back one without the launch record.
-  if (input.reuse && !launchId) {
-    const own = live.find((d) => holderKey(d) === mine && !d.approvalGateId);
+  if (input.reuse && !launchId && input.actor?.id) {
+    let own: repo.DispatchRow | undefined;
+    for (const d of live) {
+      if (holderKey(d) !== mine || d.approvalGateId || d.launcherId !== input.actor.id) continue;
+      const recordedAgent = await repo.getDispatchCheckoutAgent(d.id);
+      if ((recordedAgent ?? null) !== (input.agent ?? null)) continue;
+      own = d;
+      break;
+    }
     if (own) {
       await repo.appendEvent({
         kind: "checkout.reused",

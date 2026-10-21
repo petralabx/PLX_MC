@@ -11,7 +11,7 @@ const github = vi.hoisted(() => ({ loadPrState: vi.fn(), loadPrCommits: vi.fn(),
 vi.mock("@/lib/compliance/github-pr", () => github);
 
 const db = vi.hoisted(() => ({
-  dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string; revoked: boolean; expiresAt: string; releasedAt?: string | null; releasedReason?: string | null }>(),
+  dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string; revoked: boolean; expiresAt: string; launcherId?: string | null; releasedAt?: string | null; releasedReason?: string | null }>(),
   events: [] as { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown> }[],
   checks: [] as { id: string; verdict: string; reasons: string[]; actorKind: string; taskId: string | null }[],
   tasks: new Map<string, Task>(),
@@ -781,7 +781,7 @@ describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
 describe("checkout lifecycle (TASK-3409)", () => {
   const slug = "petralabx/PLX_MC";
   const mint = (over: Partial<Parameters<typeof checkout>[0]> = {}) =>
-    checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude", ...over });
+    checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude", actor: { kind: "service", id: "sp_mcp_claude_code", status: "active" }, ...over });
   beforeEach(() => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "vince", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
     delete process.env.PLX_MC_CHECKOUT_TAKEOVER_ENFORCE;
@@ -793,6 +793,35 @@ describe("checkout lifecycle (TASK-3409)", () => {
     expect(again).toMatchObject({ checkoutId: first.checkoutId, reused: true });
     expect(db.events.some((e) => e.kind === "checkout.reused" && e.payload?.checkoutId === first.checkoutId)).toBe(true);
     expect((await mint()).checkoutId).not.toBe(first.checkoutId);
+  });
+
+  it("never reuses a different principal's lease despite identical runtime and operator headers", async () => {
+    const held = await mint();
+    const second = await mint({ reuse: true, actor: { kind: "service", id: "sp_mcp_codex", status: "active" } });
+    expect(second.checkoutId).not.toBe(held.checkoutId);
+    expect(second.reused).toBeUndefined();
+  });
+
+  it("does not leak a launcher-owned credential through reuse", async () => {
+    process.env.PLX_MC_LAUNCHER_PRINCIPALS = "sp_mcp_ledger";
+    try {
+      const held = await mint({ actor: { kind: "service", id: "sp_mcp_ledger", status: "active" }, launchId: "launch-1" });
+      expect((await mint({ reuse: true })).checkoutId).not.toBe(held.checkoutId);
+    } finally {
+      delete process.env.PLX_MC_LAUNCHER_PRINCIPALS;
+    }
+  });
+
+  it.each([undefined, "claude-code/other"])("does not reuse an incompatible agent %s", async (agent) => {
+    const held = await mint();
+    expect((await mint({ reuse: true, agent })).checkoutId).not.toBe(held.checkoutId);
+  });
+
+  it("does not reuse legacy ownerless leases or unauthenticated requests", async () => {
+    const held = await mint({ actor: undefined });
+    expect((await mint({ reuse: true })).checkoutId).not.toBe(held.checkoutId);
+    const plain = await mint({ actor: undefined });
+    expect((await mint({ reuse: true, actor: undefined })).checkoutId).not.toBe(plain.checkoutId);
   });
 
   it("logs a second holder and reports it, without refusing while enforcement is off", async () => {

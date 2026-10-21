@@ -99,7 +99,7 @@ truth table is proven before any plumbing exists.
   extends that checkout to at least now + 8 h (`renewDispatches`, audited as
   `checkout.renewed`); revoked or released leases are never extended.
   `checkout({ reuse: true })` hands back the caller's own live lease (same
-  runtime and operator, event `checkout.reused`). A checkout of a task that
+  authenticated principal, recorded agent, runtime and operator, event `checkout.reused`). A checkout of a task that
   another holder has a live lease on is logged as `checkout.concurrent` with
   the holders and any `forceReason`; with `PLX_MC_CHECKOUT_TAKEOVER_ENFORCE=1`
   it is refused (`checkout_held`, 409) unless `forceReason` is given. Each

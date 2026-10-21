@@ -5,10 +5,12 @@ Precedence (authoritative — do not reverse):
   1. AWS Secrets Manager is the only credential source this script reads.
   2. Never read credential values from files under ~/.aws (that preference
      caused the 2026-07-26 Graph 401 outage / TASK-742 / TASK-756).
-  3. MICROSOFT_GRAPH_TENANT_ID / _CLIENT_ID / _CLIENT_SECRET are always a
+  3. MICROSOFT_GRAPH_TENANT_ID / _CLIENT_ID / _CLIENT_SECRET and the matching
+     AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET are always a
      matched set from one secret: plx/prod/m365/cursor-graph/v1
-     (PLX_Cursor_Graph). The generated loader fetches that secret at
-     source-time so the three values cannot be paired across apps.
+     (PLX_Cursor_Graph). PowerShell and Unix loaders fetch that secret at
+     source-time so the three values cannot be paired across apps. A missing
+     or partial secret exits non-zero and names the missing variables.
   4. The shared Cursor MCP key (sp_mcp_cursor) comes from prod/ec2-secrets,
      or from --compat-secret-id / PLX_BOOTSTRAP_COMPAT_SECRET_ID. In GitHub
      App mode any other principal does not read that secret. Dedicated agent
@@ -782,6 +784,57 @@ if not key:
 sys.stdout.write(key)
 """.strip()
 
+# camelCase fields in CURSOR_GRAPH_SECRET_ID, in PowerShell required-name order.
+# AZURE_* is a copy of the MICROSOFT_GRAPH_* trio (same matched set).
+GRAPH_FIELD_MAP = (
+    ("tenantId", "MICROSOFT_GRAPH_TENANT_ID", "AZURE_TENANT_ID"),
+    ("clientId", "MICROSOFT_GRAPH_CLIENT_ID", "AZURE_CLIENT_ID"),
+    ("clientSecret", "MICROSOFT_GRAPH_CLIENT_SECRET", "AZURE_CLIENT_SECRET"),
+)
+GRAPH_ENV_NAMES = tuple(
+    graph_name for _field, graph_name, _azure_name in GRAPH_FIELD_MAP
+) + tuple(azure_name for _field, _graph_name, azure_name in GRAPH_FIELD_MAP)
+
+
+def graph_export_program() -> str:
+    """Embedded parser for the Unix Graph fetch.
+
+    Success writes quoted ``export`` lines for the six Graph names and nothing
+    else. Failure writes ``MISSING:<names>`` to stdout (names only, no values)
+    and exits 1. JSON errors are swallowed so a payload cannot land in a
+    traceback.
+    """
+    return f"""
+import json, sys
+PAIRS = {GRAPH_FIELD_MAP!r}
+NAMES = {GRAPH_ENV_NAMES!r}
+raw = sys.stdin.read().strip()
+present = {{}}
+try:
+    data = json.loads(raw) if raw else None
+    if isinstance(data, dict):
+        for field, graph_name, azure_name in PAIRS:
+            candidate = data.get(field)
+            if isinstance(candidate, str) and candidate.strip():
+                text = candidate.strip()
+                present[graph_name] = text
+                present[azure_name] = text
+except (ValueError, TypeError, AttributeError):
+    present = {{}}
+missing = [name for name in NAMES if name not in present]
+if missing:
+    sys.stdout.write("MISSING:" + ",".join(missing))
+    raise SystemExit(1)
+
+def sh_quote(value):
+    quote = "'"
+    return quote + value.replace(quote, quote + '"' + quote + '"' + quote) + quote
+
+sys.stdout.write("\\n".join(
+    "export " + name + "=" + sh_quote(present[name]) for name in NAMES
+))
+""".strip()
+
 
 def staging_output_path(principal_id: str, home: Path = HOME) -> Path:
     if principal_id == MCP_CURSOR_PRINCIPAL_ID:
@@ -1011,6 +1064,47 @@ def _static_loader_items(values: dict[str, str], mode: str) -> list[tuple[str, s
     return [(name, value) for name, value in values.items() if value]
 
 
+def _graph_shell_fetch_lines(interpreter: str) -> list[str]:
+    """Fetch CURSOR_GRAPH_SECRET_ID and export the six names, or stop."""
+    fallback = ",".join(GRAPH_ENV_NAMES)
+    fetch_note = (
+        f"(fetch source {CURSOR_GRAPH_SECRET_ID}). No environment variables were set."
+    )
+    return [
+        "# Microsoft Graph app-only — PLX_Cursor_Graph (matched set)",
+        f"# Source: {CURSOR_GRAPH_SECRET_ID}",
+        f"# Not a source: {MCP_AGENT_KEYS_SECRET_ID}",
+        "__plx_graph_raw=$(aws secretsmanager get-secret-value --region us-east-1 "
+        + f"--secret-id {sh_quote(CURSOR_GRAPH_SECRET_ID)} "
+        + "--query SecretString --output text 2>/dev/null) || __plx_graph_raw=''",
+        "__plx_graph_exports=$(printf '%s' \"$__plx_graph_raw\" | "
+        + f"{sh_quote(interpreter)} -c {sh_quote(graph_export_program())}"
+        + ") || true",
+        "unset __plx_graph_raw",
+        'case "$__plx_graph_exports" in',
+        "  export\\ *) ;;",
+        "  MISSING:*)",
+        "    printf '%s\\n' "
+        + '"PLX secrets loader failed: missing ${__plx_graph_exports#MISSING:} '
+        + fetch_note
+        + '" >&2',
+        "    unset __plx_graph_exports __plx_key",
+        "    return 1 2>/dev/null || exit 1",
+        "    ;;",
+        "  *)",
+        "    printf '%s\\n' "
+        + sh_quote(f"PLX secrets loader failed: missing {fallback} {fetch_note}")
+        + " >&2",
+        "    unset __plx_graph_exports __plx_key",
+        "    return 1 2>/dev/null || exit 1",
+        "    ;;",
+        "esac",
+        'eval "$__plx_graph_exports"',
+        "unset __plx_graph_exports",
+        "",
+    ]
+
+
 def staging_shell_loader_lines(
     values: dict[str, str],
     principal_id: str,
@@ -1019,7 +1113,11 @@ def staging_shell_loader_lines(
     mcp_key_secret_id: str | None = None,
     python_exe: str | None = None,
 ) -> list[str]:
-    """Unix hydrate. Dedicated principals fetch MC_MCP_API_KEY into memory."""
+    """Unix hydrate. Graph and dedicated MCP keys are fetched into memory.
+
+    Nothing is exported until the Graph matched set is present. A missing or
+    partial Graph secret exits non-zero and names the missing variables.
+    """
     if mcp_key_secret_id:
         mcp_key_secret_id = check_mcp_key_secret_id(mcp_key_secret_id)
         values = dict(values)
@@ -1028,7 +1126,7 @@ def staging_shell_loader_lines(
     lines = [
         "# Machine-local secrets loader for PLX agent workstations — do not commit",
         f"# {GENERATED_MARKER}",
-        "# Source this file. A failed MCP key fetch exports nothing.",
+        "# Source this file. A failed Graph or MCP key fetch exports nothing.",
         f"# Principal: {principal_id}",
         "# AWS Secrets Manager only. No ~/.aws credential text files.",
         "",
@@ -1050,13 +1148,19 @@ def staging_shell_loader_lines(
                 "  echo 'PLX secrets loader failed: missing MC_MCP_API_KEY' >&2",
                 "  return 1 2>/dev/null || exit 1",
                 "fi",
-                'export MC_MCP_API_KEY="$__plx_key"',
-                "unset __plx_key",
                 "",
             ]
         )
+    lines.extend(_graph_shell_fetch_lines(interpreter))
     for name, value in _static_loader_items(values, mode):
         lines.append(f"export {name}={sh_quote(value)}")
+    if mcp_key_secret_id:
+        lines.extend(
+            [
+                'export MC_MCP_API_KEY="$__plx_key"',
+                "unset __plx_key",
+            ]
+        )
     if mode == GITHUB_AUTH_MODE_APP:
         lines.extend(
             [

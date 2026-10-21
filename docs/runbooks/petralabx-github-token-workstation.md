@@ -18,12 +18,14 @@ Fleet policy:
 | What | Secret id | What lands on the box |
 |------|-----------|------------------------|
 | App id + installation id | `plx/github/apps/<slug>/config` | JSON `{"appId","installationId"}` copied into env as ids |
-| Private key | `plx/github/apps/<slug>/private-key` | **Reference only.** The PEM stays in Secrets Manager |
+| Private key | `plx/github/apps/<slug>/private-key` | **Reference only.** The secret is a PEM, or JSON with a `private_key` field. The helper reads that field. The PEM stays in Secrets Manager |
 
 Default `<slug>` is `plx-agents-writer`.
 
 The helper `scripts/github-app-auth.py` reads that private-key secret when it
-needs to mint. It caches the installation token under
+needs to mint. If the SecretString starts with `{`, it parses JSON and uses
+`private_key`. Invalid JSON, or a JSON object with no PEM `private_key`,
+stops the mint. It caches the installation token under
 `~/.cache/plx-github-app/` (mode `0600`) and refreshes it 60 seconds before
 expiry. It refuses any secret id that is not
 `plx/github/apps/<slug>/private-key`, so a poisoned env file cannot point it
@@ -63,8 +65,16 @@ That writes (local only, never commit):
   `PLX_GITHUB_APP_SLUG`, and `PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID`.
   Unsets the four personal PAT names and `GH_TOKEN`.
   Points `git` at `~/.local/bin/plx-github-app-auth` and puts a `gh` wrapper
-  on `PATH`.
+  on `PATH`. When `AWS_PROFILE` is set in the bootstrap process, the fragment
+  and the launcher export that same profile. `git` runs the launcher directly,
+  so the profile has to be in the launcher, not only in a sourced file.
 - `~/.local/bin/plx-github-app-auth`, `~/.local/bin/gh`, `~/.local/bin/gh.cmd`
+
+App mode reads `PLX_MC_MCP_API_KEY` and optional `SWARM_API_KEY` only for the
+default principal `sp_mcp_cursor`. That read is `prod/ec2-secrets`, or the
+secret named by `--compat-secret-id` / `PLX_BOOTSTRAP_COMPAT_SECRET_ID`.
+Any other `--mcp-principal-id` in app mode does not call GetSecretValue on
+`prod/ec2-secrets`. Legacy mode still reads `prod/ec2-secrets`.
 
 **Precedence (TASK-756):** AWS Secrets Manager only. Do not restore
 `~/.aws/Secret_Github.txt`. Graph credentials stay a matched set from
@@ -139,7 +149,7 @@ Do not remove the PAT keys before every box shows the app.
 |-----|--------------|-------|
 | Vince Windows | `~/.secrets-env.github.ps1` | Also `load-secrets.ps1` for non-GitHub secrets |
 | Dell VTA (`agentic-winrm`) | same under that profile | Cannot write `C:\Users\vince` via WinRM |
-| DGX Spark | `~/.secrets-env.github` | Use `AWS_PROFILE=plx-prod` for bootstrap |
+| DGX Spark | `~/.secrets-env.github` | Export `AWS_PROFILE=plx-prod` before bootstrap. The launcher keeps it |
 | Vercel / EC2 app hosts | server App install + injected env | Not this workstation helper |
 
 ## Related

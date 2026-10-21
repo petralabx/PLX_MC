@@ -52,6 +52,8 @@ Do not continue governed task operations with an uncertain identity.
 - [ ] Bot apps are PR-write-only. CIP owns merges.
 - [ ] Follow PLX_MC `docs/runbooks/petralabx-github-token-workstation.md`.
 - [ ] Run `gh auth status` and confirm the account is the app bot.
+- [ ] Export `AWS_PROFILE` before bootstrap when the box uses a named profile.
+      The fragment and `~/.local/bin/plx-github-app-auth` keep that profile.
 - [ ] Use `--legacy-personal-pat` only during rollout, when the App secret
       is not on the box yet.
 

@@ -9,7 +9,9 @@ Precedence (authoritative — do not reverse):
      matched set from one secret: plx/prod/m365/cursor-graph/v1
      (PLX_Cursor_Graph). The generated loader fetches that secret at
      source-time so the three values cannot be paired across apps.
-  4. The shared Cursor MCP key comes from prod/ec2-secrets. Dedicated agent
+  4. The shared Cursor MCP key (sp_mcp_cursor) comes from prod/ec2-secrets,
+     or from --compat-secret-id / PLX_BOOTSTRAP_COMPAT_SECRET_ID. In GitHub
+     App mode any other principal does not read that secret. Dedicated agent
      keys come from plx/prod/mc/mcp-agent-keys/v1 and never fall back to the
      shared key.
 
@@ -41,6 +43,7 @@ Rollout compatibility:
 Usage:
   python scripts/bootstrap-windows-secrets.py
   python scripts/bootstrap-windows-secrets.py --legacy-personal-pat
+  python scripts/bootstrap-windows-secrets.py --compat-secret-id <smaller-secret>
   . ~/.secrets-env.staging.ps1          # full session
   . ~/.secrets-env.github.ps1           # GitHub App fragment (Windows)
   source ~/.secrets-env.github          # GitHub App fragment (Unix)
@@ -52,6 +55,7 @@ docs/FLEET-SECRETS-SOP.md § workstation Graph precedence.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -171,6 +175,26 @@ def personal_pat_from_secret(sec: dict) -> str:
     return ""
 
 
+_github_app_auth_mod = None
+
+
+def github_app_auth():
+    """Sibling helper. Same PEM unwrap the token minter uses."""
+    global _github_app_auth_mod
+    if _github_app_auth_mod is None:
+        path = Path(__file__).resolve().with_name("github-app-auth.py")
+        spec = importlib.util.spec_from_file_location(
+            "plx_github_app_auth_runtime", path
+        )
+        if spec is None or spec.loader is None:
+            raise SystemExit("github-app-auth.py is missing")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        _github_app_auth_mod = module
+    return _github_app_auth_mod
+
+
 def parse_github_app_config(
     slug: str, config: dict, private_key_pem: str
 ) -> dict[str, str]:
@@ -181,9 +205,8 @@ def parse_github_app_config(
     ).strip()
     if not app_id.isdigit() or not installation_id.isdigit():
         raise SystemExit(f"{config_id}: appId and installationId must be numeric")
-    pem = private_key_pem.replace("\\n", "\n")
-    if "BEGIN" not in pem or "PRIVATE KEY" not in pem:
-        raise SystemExit(f"{key_id}: expected a PEM private key")
+    # Validate and unwrap. The PEM is not returned; only the secret id is.
+    github_app_auth().unwrap_private_key_pem(private_key_pem, key_id)
     return {
         "PLX_GITHUB_APP_SLUG": slug,
         "PLX_GITHUB_APP_ID": app_id,
@@ -248,15 +271,29 @@ def git_credential_helper_value() -> str:
     return '!"$HOME/.local/bin/plx-github-app-auth" git-credential'
 
 
+def aws_profile_for_helper() -> str:
+    """Named profile the bootstrap process itself used. Empty when unset.
+
+    Git invokes the launcher directly, so the profile has to be in that
+    script. A sourced fragment alone is not enough.
+    """
+    value = os.environ.get("AWS_PROFILE", "").strip()
+    if any(ch in value for ch in ("\n", "\r", "\0")):
+        raise SystemExit("AWS_PROFILE must be a single line")
+    return value
+
+
 def app_auth_launcher_sh(python_exe: str, auth_script: str) -> str:
-    return "\n".join(
-        [
-            "#!/bin/sh",
-            f"# {GENERATED_MARKER} — do not commit",
-            f'exec {sh_quote(python_exe)} {sh_quote(auth_script)} "$@"',
-            "",
-        ]
-    )
+    lines = [
+        "#!/bin/sh",
+        f"# {GENERATED_MARKER} — do not commit",
+    ]
+    profile = aws_profile_for_helper()
+    if profile:
+        lines.append(f"export AWS_PROFILE={sh_quote(profile)}")
+    lines.append(f'exec {sh_quote(python_exe)} {sh_quote(auth_script)} "$@"')
+    lines.append("")
+    return "\n".join(lines)
 
 
 def gh_wrapper_sh() -> str:
@@ -396,7 +433,7 @@ def github_app_gh_function_lines() -> list[str]:
 
 def github_app_shell_loader_lines(binding: dict[str, str]) -> list[str]:
     helper = git_credential_helper_value()
-    return [
+    lines = [
         "# GitHub App auth for coding boxes — do not commit",
         f"# {GENERATED_MARKER}",
         f"# Private key reference: {binding['PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID']}",
@@ -407,8 +444,17 @@ def github_app_shell_loader_lines(binding: dict[str, str]) -> list[str]:
         + sh_quote(binding["PLX_GITHUB_APP_INSTALLATION_ID"]),
         "export PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID="
         + sh_quote(binding["PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID"]),
-        "unset PETRALABX_GITHUB_TOKEN PETRALABX_GITHUB PLX_GITHUB_PAT "
-        "GITHUB_TOKEN GH_TOKEN GH_ENTERPRISE_TOKEN",
+    ]
+    profile = aws_profile_for_helper()
+    if profile:
+        lines.append(f"export AWS_PROFILE={sh_quote(profile)}")
+    lines.extend(
+        [
+            "unset PETRALABX_GITHUB_TOKEN PETRALABX_GITHUB PLX_GITHUB_PAT "
+            "GITHUB_TOKEN GH_TOKEN GH_ENTERPRISE_TOKEN",
+        ]
+    )
+    return lines + [
         'case ":$PATH:" in',
         '  *":$HOME/.local/bin:"*) ;;',
         '  *) PATH="$HOME/.local/bin:$PATH"; export PATH ;;',
@@ -427,7 +473,7 @@ def github_app_powershell_loader_lines(
     binding: dict[str, str], python_exe: str, auth_script: str
 ) -> list[str]:
     helper = git_credential_helper_value()
-    return [
+    lines = [
         "# GitHub App auth for coding boxes — do not commit",
         f"# {GENERATED_MARKER}",
         f"# Private key reference: {binding['PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID']}",
@@ -438,7 +484,12 @@ def github_app_powershell_loader_lines(
         + ps_quote(binding["PLX_GITHUB_APP_INSTALLATION_ID"]),
         "$env:PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID = "
         + ps_quote(binding["PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID"]),
-        *personal_pat_powershell_clear_lines(),
+    ]
+    profile = aws_profile_for_helper()
+    if profile:
+        lines.append(f"$env:AWS_PROFILE = {ps_quote(profile)}")
+    lines.extend(personal_pat_powershell_clear_lines())
+    return lines + [
         'if ($env:PATH -notlike "*$HOME\\.local\\bin*") {',
         '  $env:PATH = "$HOME\\.local\\bin;" + $env:PATH',
         "}",
@@ -491,6 +542,34 @@ def get_secret_dict(client, secret_id: str) -> dict:
     if not isinstance(data, dict):
         raise SystemExit(f"{secret_id}: expected JSON object")
     return data
+
+
+def load_compat_secret(
+    client,
+    *,
+    mode: str,
+    principal_id: str,
+    compat_secret_id: str | None = None,
+) -> dict:
+    """Bundle that holds PLX_MC_MCP_API_KEY and optional SWARM_API_KEY.
+
+    Legacy mode always reads prod/ec2-secrets. App mode reads it only for
+    sp_mcp_cursor, unless --compat-secret-id or PLX_BOOTSTRAP_COMPAT_SECRET_ID
+    names a smaller secret. Any other principal in app mode reads nothing
+    from that bundle.
+    """
+    if principal_id not in MCP_PRINCIPAL_IDS:
+        raise SystemExit(f"unsupported mcp principal id: {principal_id}")
+    if mode == GITHUB_AUTH_MODE_LEGACY:
+        return get_secret_dict(client, EC2_SECRETS_ID)
+    if mode != GITHUB_AUTH_MODE_APP:
+        raise SystemExit(f"unknown github auth mode: {mode}")
+    if principal_id != MCP_CURSOR_PRINCIPAL_ID:
+        return {}
+    secret_id = (
+        compat_secret_id or os.environ.get("PLX_BOOTSTRAP_COMPAT_SECRET_ID") or ""
+    ).strip() or EC2_SECRETS_ID
+    return get_secret_dict(client, secret_id)
 
 
 def select_mcp_key(
@@ -677,6 +756,16 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="App under plx/github/apps/<slug> (default plx-agents-writer or PLX_GITHUB_APP_SLUG).",
     )
+    parser.add_argument(
+        "--compat-secret-id",
+        default=None,
+        help=(
+            "App mode, sp_mcp_cursor only. Smaller secret with "
+            "PLX_MC_MCP_API_KEY and optional SWARM_API_KEY. "
+            "Defaults to PLX_BOOTSTRAP_COMPAT_SECRET_ID or prod/ec2-secrets. "
+            "Ignored for any other principal, and ignored in legacy mode."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -684,7 +773,18 @@ def main() -> None:
     args = parse_args()
     output_staging = staging_output_path(args.mcp_principal_id)
     client = boto3.client("secretsmanager", region_name="us-east-1")
-    sec = get_secret_dict(client, EC2_SECRETS_ID)
+    # Secrets Manager only — no ~/.aws text-file fallbacks.
+    mode = (
+        GITHUB_AUTH_MODE_LEGACY
+        if args.legacy_personal_pat or legacy_personal_pat_from_env()
+        else GITHUB_AUTH_MODE_APP
+    )
+    sec = load_compat_secret(
+        client,
+        mode=mode,
+        principal_id=args.mcp_principal_id,
+        compat_secret_id=args.compat_secret_id,
+    )
     registry = (
         {}
         if args.mcp_principal_id == MCP_CURSOR_PRINCIPAL_ID
@@ -700,13 +800,6 @@ def main() -> None:
                 f"{CURSOR_GRAPH_SECRET_ID}: missing {key} — refusing to write "
                 "MICROSOFT_GRAPH_* from any other source"
             )
-
-    # Secrets Manager only — no ~/.aws text-file fallbacks.
-    mode = (
-        GITHUB_AUTH_MODE_LEGACY
-        if args.legacy_personal_pat or legacy_personal_pat_from_env()
-        else GITHUB_AUTH_MODE_APP
-    )
     binding = None
     if mode == GITHUB_AUTH_MODE_APP:
         slug = resolve_github_app_slug(args.github_app_slug)

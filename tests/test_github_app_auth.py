@@ -436,6 +436,92 @@ def test_git_credential_quit_on_unexpected_mint_error(
     assert "OSError" in captured.err
 
 
+def _assert_jwt_verifies(token: str, rsa_pem: str, tmp_path: Path) -> None:
+    header_b, payload_b, sig_b = token.split(".")
+    key = tmp_path / "key.pem"
+    pub = tmp_path / "pub.pem"
+    key.parent.mkdir(parents=True, exist_ok=True)
+    key.write_text(rsa_pem, encoding="utf-8")
+    subprocess.run(
+        ["openssl", "pkey", "-in", str(key), "-pubout", "-out", str(pub)],
+        check=True,
+        capture_output=True,
+    )
+    sig = base64.urlsafe_b64decode(sig_b + "=" * (-len(sig_b) % 4))
+    sig_path = tmp_path / "sig"
+    data = tmp_path / "data"
+    sig_path.write_bytes(sig)
+    data.write_bytes(f"{header_b}.{payload_b}".encode())
+    proc = subprocess.run(
+        [
+            "openssl",
+            "dgst",
+            "-sha256",
+            "-verify",
+            str(pub),
+            "-signature",
+            str(sig_path),
+            str(data),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_json_wrapped_and_raw_pem_both_sign_the_jwt(
+    auth, rsa_pem: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """plx/github/apps/<slug>/private-key is sometimes a JSON object."""
+    secret_id = "plx/github/apps/plx-agents-writer/private-key"
+    holder = {"raw": rsa_pem}
+
+    class Client:
+        def get_secret_value(self, SecretId: str) -> dict:
+            assert SecretId == secret_id
+            return {"SecretString": holder["raw"]}
+
+    monkeypatch.setattr(auth.boto3, "client", lambda *_a, **_k: Client())
+
+    raw = auth.secrets_manager_private_key(secret_id)
+    assert raw.strip() == rsa_pem.strip()
+    _assert_jwt_verifies(
+        auth.mint_app_jwt("42", raw, 1_700_000_000), rsa_pem, tmp_path / "raw"
+    )
+
+    holder["raw"] = "\n" + json.dumps(
+        {
+            "app_id": "99",
+            "client_id": "Iv1.example",
+            "private_key": rsa_pem,
+            "slug": "plx-agents-writer",
+            "webhook_secret": "webhook-sentinel",
+        }
+    )
+    unwrapped = auth.secrets_manager_private_key(secret_id)
+    assert "webhook-sentinel" not in unwrapped
+    assert unwrapped.strip() == rsa_pem.strip()
+    _assert_jwt_verifies(
+        auth.mint_app_jwt("42", unwrapped, 1_700_000_000), rsa_pem, tmp_path / "json"
+    )
+
+    holder["raw"] = "{not-json PRIVATE KEY"
+    with pytest.raises(SystemExit, match="not valid JSON") as exc:
+        auth.secrets_manager_private_key(secret_id)
+    assert "not-json" not in str(exc.value)
+
+    holder["raw"] = json.dumps({"slug": "plx-agents-writer", "note": "PRIVATE KEY"})
+    with pytest.raises(SystemExit, match="PEM") as exc:
+        auth.secrets_manager_private_key(secret_id)
+    assert "PRIVATE KEY" not in str(exc.value)
+
+    holder["raw"] = json.dumps({"private_key": "not-a-pem-sentinel"})
+    with pytest.raises(SystemExit, match="PEM") as exc:
+        auth.secrets_manager_private_key(secret_id)
+    assert "not-a-pem-sentinel" not in str(exc.value)
+
+
 def test_git_credential_command_skips_non_github_hosts(
     auth, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

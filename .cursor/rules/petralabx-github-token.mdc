@@ -14,7 +14,9 @@ push, opening a PR, Loop Ledgers fallback debugging, skills publish):
 2. Load the generated fragment (never commit these files). It exports the
    app id, installation id, and private-key **reference**. It does not copy
    `PETRALABX_GITHUB_TOKEN`, `PETRALABX_GITHUB`, `PLX_GITHUB_PAT`, or
-   `GITHUB_TOKEN` out of `prod/ec2-secrets`.
+   `GITHUB_TOKEN` out of `prod/ec2-secrets`. If the box uses a named AWS
+   profile, export `AWS_PROFILE` before bootstrap. The fragment and the git
+   helper keep that profile.
 
 ```powershell
 python scripts/bootstrap-windows-secrets.py

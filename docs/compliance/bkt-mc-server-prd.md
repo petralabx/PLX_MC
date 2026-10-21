@@ -2,7 +2,7 @@
 
 BKT-MC-SERVER covers the server changes in PR #385, from `601640a4c5db33733d9e6ecd78aff5387a561c7a` to `0e23bb30d0a5fcbe11727b2b8f8cd1ece333a583`.
 Vince owns the outcome.
-This document describes that diff only.
+This document describes that diff. Later changes in the bucket get their own section (TASK-3567).
 
 - TASK-3483 accepts a task's human accountable owner for service-alias checkouts and returns accountable people in checkout receipts and reads. See `src/lib/compliance/service.ts`, `src/lib/mc-data/policy.ts`, and `src/lib/mcp/read-actions.ts`.
 - TASK-3409 renews stamped open-PR leases on push or reopen, supports explicit reuse, reports concurrent holders, and exposes checkout liveness. See `src/lib/compliance/repo.ts`, `src/lib/compliance/service.ts`, `src/lib/compliance/webhook.ts`, and `src/lib/mcp/actions.ts`.
@@ -48,6 +48,29 @@ Leave migration 047's additive columns and table in place; this scope contains n
 Keep enforcement flags disabled while operators review activation.
 Removing the signing key makes signed checks fail closed; rotating it invalidates existing signatures and requires live gates to be approved again.
 See `db/migrations/047_checkout_lease_chain.sql`, `src/lib/compliance/lease-chain.ts`, and `docs/FLEET-SECRETS-SOP.md`.
+
+## TASK-3567: questions for a named person
+
+Scope: a bot asks one person a question on a task, and only that person answers it.
+Vince asked for it on 21 Oct, after 47 gates addressed to Ricardo or Vince were all approved under one login.
+Vince owns the outcome.
+
+- `mc_ask_question` stores a question with options, a recommended option and the reason on the task (`Task.questions`, DB-only).
+  It refuses an agent, an unknown id, or a person outside the task's restricted project as the addressee.
+  See `src/lib/compliance/questions.ts` and `src/lib/mcp/question-actions.ts`.
+- `GET /api/questions` lists only the signed-in person's open questions, filtered on the server by addressee and project access.
+- `POST /api/questions/answer` accepts an answer only when the session person is the addressee, whatever their role.
+  It stores the answer on the question and posts it to the task as that person's comment, under the task row lock.
+- The Approvals screen shows the questions above the gates. `/?screen=approvals&question=<id>` opens one question.
+- An open question never freezes the task's stage. No migration.
+
+Principals and capabilities: `question.ask` is added to the shared MCP agent bundle; no human role holds it.
+`question.answer` is added to the member role, so admins and owners hold it too.
+The predicate context-denies `question.answer` to every service actor, as it does `approval.decide`.
+The addressee check runs in every enforcement mode, because outside `enforce` every signed-in person is an admin.
+See `src/lib/permissions/types.ts`, `src/lib/permissions/grants.ts` and `src/lib/permissions/predicates.ts`.
+
+Rollback: revert the PR. Stored questions stay in the task jsonb and are ignored; no other data changes.
 
 ## How migration 047 is applied
 

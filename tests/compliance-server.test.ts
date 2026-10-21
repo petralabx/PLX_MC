@@ -834,6 +834,19 @@ describe("checkout lifecycle (TASK-3409)", () => {
     expect(ev?.payload).toMatchObject({ checkoutId: second.checkoutId, forceReason: null, enforced: false });
   });
 
+  it.each([
+    ["another principal", { actor: { kind: "service" as const, id: "sp_mcp_codex", status: "active" as const } }],
+    ["another agent lane", { agent: "claude-code/other" }],
+  ])("counts %s with the same runtime and operator as another holder", async (_label, over) => {
+    const held = await mint();
+    const second = await mint(over);
+    expect(second.concurrent).toEqual([
+      { checkoutRef: `dsp_…${held.checkoutId.slice(-4)}`, runtime: "claude-code", accountableHuman: "cos@petrasoap.com" },
+    ]);
+    process.env.PLX_MC_CHECKOUT_TAKEOVER_ENFORCE = "1";
+    await expect(mint(over)).rejects.toMatchObject({ code: "checkout_held", status: 409 });
+  });
+
   it("refuses a second holder without forceReason once enforcement is on, and logs the reason when given", async () => {
     await mint({ runtime: "cursor", agent: undefined });
     process.env.PLX_MC_CHECKOUT_TAKEOVER_ENFORCE = "1";
@@ -1033,6 +1046,41 @@ describe("checkout lease chain (TASK-3410)", () => {
     expect(otherPr.reasons.join(" ")).toContain("SHA chain is bound to PR #3410, not #9999");
   });
 
+  it("seeds an empty chain only with verified base ancestry, never on a failed compare", async () => {
+    const cid = await launch();
+    github.loadPrCommits.mockResolvedValue([commit(sha("c"), trailers(cid, lane))]);
+    const warned = await verifyPr({ ...pr(sha("c")), checkoutIds: [cid] });
+    expect(warned.verdict).toBe("pass");
+    expect(warned.reasons.join(" ")).toContain("warning: head ccccccc has no verified ancestry from checkout");
+    expect(github.githubHeadDescendsFrom).toHaveBeenCalledWith(slug, base, sha("c"));
+    expect(heads(cid)).toEqual([]);
+
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    expect((await verifyPr({ ...pr(sha("c")), checkoutIds: [cid] })).verdict).toBe("block");
+    github.githubHeadDescendsFrom.mockRejectedValue(new Error("github_unavailable"));
+    const failed = await verifyPr({ ...pr(sha("c")), checkoutIds: [cid] });
+    expect(failed.verdict).toBe("block");
+    expect(failed.reasons.join(" ")).toContain("no verified ancestry from checkout");
+    expect(heads(cid)).toEqual([]);
+
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
+    expect((await verifyPr({ ...pr(sha("c")), checkoutIds: [cid] })).verdict).toBe("pass");
+    expect(heads(cid)).toEqual(["c:gate:3410"]);
+  });
+
+  it("does not queue the event when an ordinary checkout's ancestry compare fails, but does for a launcher checkout", async () => {
+    seed();
+    const plain = (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, baseSha: base })).checkoutId;
+    const evt = (cid: string): PrEvent => ({
+      ...pr(sha("a")), action: "opened", beforeSha: null, merged: false, branch: "x", title: "x", author: "agent", labels: [], checkoutId: cid, checkoutIds: [cid],
+    });
+    github.githubHeadDescendsFrom.mockRejectedValue(new Error("github_unavailable"));
+    await expect(ingestPullRequest(evt(plain))).resolves.toMatchObject({ recorded: true });
+    expect(heads(plain)).toEqual([]);
+    const launched = await launch();
+    await expect(ingestPullRequest(evt(launched))).rejects.toThrow("github_unavailable");
+  });
+
   it("blocks a commit stamped by a different actor than the checkout's", async () => {
     const cid = await launch();
     github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, "codex/cloud"))]);
@@ -1057,6 +1105,7 @@ describe("checkout lease chain (TASK-3410)", () => {
 
     const launched = await launch();
     github.loadPrCommits.mockResolvedValue([commit(sha("c"), trailers(launched, "claude-code/coding-1-l1"))]);
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
     expect((await verifyPr({ ...pr(sha("c"), 3412), checkoutIds: [launched] })).verdict).toBe("pass");
   });
 

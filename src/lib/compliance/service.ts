@@ -412,7 +412,17 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
       return { checkoutId: own.id, accountablePerson, reused: true };
     }
   }
-  const others = live.filter((d) => holderKey(d) !== mine);
+  // Another holder differs in runtime, operator, principal or recorded agent (the reuse check's identity).
+  const others: repo.DispatchRow[] = [];
+  for (const d of live) {
+    if (
+      holderKey(d) !== mine ||
+      (d.launcherId ?? null) !== (input.actor?.id ?? null) ||
+      ((await repo.getDispatchCheckoutAgent(d.id)) ?? null) !== (input.agent ?? null)
+    ) {
+      others.push(d);
+    }
+  }
   const forceReason = input.forceReason?.trim() || null;
   if (others.length > 0 && checkoutTakeoverEnforced() && !forceReason) {
     throw new ApiError(
@@ -834,7 +844,14 @@ async function leaseChainCheck(
       }
     }
   } else if (input.event !== "merge_group") {
-    const verdict = chainVerdict(d, await repo.dispatchHeads(d.id), input, prCommitShas);
+    const heads = await repo.dispatchHeads(d.id);
+    // The first head needs the same base-ancestry proof the webhook uses; a failed compare proves nothing.
+    const baseVerified =
+      heads.length === 0 &&
+      !!d.baseSha &&
+      FULL_SHA_RE.test(input.headSha) &&
+      (await githubHeadDescendsFrom(d.repo, d.baseSha, input.headSha).catch(() => false));
+    const verdict = chainVerdict(d, heads, input, prCommitShas, baseVerified);
     if (!verdict.ok) found.push(verdict.reason);
     else if (verdict.record && record && FULL_SHA_RE.test(input.headSha)) {
       await repo.recordDispatchHead({
@@ -1480,7 +1497,9 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
     const candidates = heads.length ? heads.map((h) => h.headSha).reverse() : d.baseSha ? [d.baseSha] : [];
     let ancestor: string | null = null;
     for (const sha of candidates) {
-      if (await githubHeadDescendsFrom(d.repo, sha, evt.headSha)) {
+      const descends = githubHeadDescendsFrom(d.repo, sha, evt.headSha);
+      // Only launcher checkouts are held to the chain; an ordinary checkout's failed compare must not queue the event.
+      if (await (d.launchId ? descends : descends.catch(() => false))) {
         ancestor = sha;
         break;
       }

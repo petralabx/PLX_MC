@@ -60,6 +60,13 @@ describe("chainVerdict", () => {
     expect(chainVerdict(d, [head("a", null)], input, [sha("a"), sha("c")])).toEqual({ ok: true, record: true });
   });
 
+  it("seeds an empty chain from a base SHA only with verified base ancestry", () => {
+    const based = { id: "dsp_abcd1234", baseSha: sha("0") };
+    expect(chainVerdict(based, [], input, [sha("c")])).toMatchObject({ ok: false, reason: expect.stringContaining("no verified ancestry from checkout dsp_…1234's base 0000000") });
+    expect(chainVerdict(based, [], input, [sha("c")], true)).toEqual({ ok: true, record: true });
+    expect(chainVerdict(based, [head("c")], input, [])).toEqual({ ok: true, record: false });
+  });
+
   it("names a rewritten history and a chain bound to another PR", () => {
     expect(chainVerdict(d, [head("a")], input, [sha("b"), sha("c")])).toMatchObject({ ok: false, reason: expect.stringContaining("outside checkout dsp_…1234") });
     expect(chainVerdict(d, [head("a", 9)], input, [sha("a")])).toMatchObject({ ok: false, reason: expect.stringContaining("bound to PR #9, not #7") });

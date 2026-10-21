@@ -52,8 +52,8 @@ export const MCP_TOOL_ALLOWLISTS: Readonly<
   // PLX CIP Auto-Undraft (agentic-swarm cip-auto-undraft) only reads tasks.
   [CIP_AUTO_UNDRAFT_MCP_SERVICE_PRINCIPAL_ID]: CIP_AUTO_UNDRAFT_MCP_TOOLS,
   // PLX Workbench intake creates and searches tasks, like the portal, without
-  // agent reports (it holds no agent_report.read). The creator-principal
-  // approval gate is a pending follow-up (see grants.ts).
+  // agent reports (it holds no agent_report.read). Its tasks wait for creator
+  // approval (TASK-3530, see grants.ts).
   [WORKBENCH_INTAKE_MCP_SERVICE_PRINCIPAL_ID]: ["mc_create_task", "mc_search_tasks"],
 };
 

@@ -25,6 +25,7 @@ import {
 import { cancelTask } from "@/lib/sync/cancel";
 import { getEntity } from "@/lib/sync/repo";
 import {
+  creatorApprovalViolation,
   isArchived,
   resolveHumanAccountableOwner,
   STAGE_IDX,
@@ -39,6 +40,7 @@ import {
   requireMcpActor,
 } from "@/lib/routing/mutations/actors";
 import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
+import { isCreatorApprovalGated } from "@/lib/permissions";
 import { createLabelsWithKind } from "@/lib/tasks/kind";
 import {
   assertBucketProjectAccess,
@@ -280,6 +282,14 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
   );
   assertEvidenceStandard("The task description", evidenceStandard);
   const standardMeta = evidenceStandard.applies ? { evidenceStandard } : {};
+  // TASK-3530: a gated creator's task starts with a pending creator approval,
+  // so it may not be created straight into progress or later either.
+  const creatorApproval = isCreatorApprovalGated(identity.servicePrincipalId)
+    ? { principal: identity.servicePrincipalId, status: "pending" as const, requestedAt: new Date().toISOString() }
+    : undefined;
+  const createViolation =
+    creatorApproval && input.stage ? creatorApprovalViolation({ id: "The new task", creatorApproval }, input.stage) : null;
+  if (createViolation) throw new ApiError("creator_approval_pending", createViolation, 409);
   const create = (options?: Parameters<typeof createTask>[2]) =>
     createTask(
       {
@@ -291,6 +301,8 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
         // backfill. An explicit accountableOwner from the caller still wins.
         accountableOwner:
           input.accountableOwner ?? resolveHumanAccountableOwner(identity.operatorEmail),
+        // Server-set only: a caller value never reaches the task.
+        creatorApproval,
       },
       { source: "service", actorId: authorized.actorId },
       options

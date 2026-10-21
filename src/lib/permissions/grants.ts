@@ -155,10 +155,8 @@ const CIP_AUTO_UNDRAFT_MCP_CAPABILITIES: readonly Capability[] = ["task.read"];
 // 2026-10-20 at 4:28 PM and 5:00 PM ET): least privilege like sp_mcp_portal.
 // task.read and task.create in any bucket, and src/lib/mcp/tool-allowlist.ts
 // limits it to mc_create_task and mc_search_tasks. No checkout, progress or
-// complete. Pending follow-up: tasks it creates must need vince@ or cos@
-// approval before checkout or launch. No such gate exists yet; Vince decided
-// at 5:09 PM ET 2026-10-20 to ship the principal first and add the gate in a
-// separate task.
+// complete. Tasks it creates wait for vince@ or cos@ approval before checkout
+// or launch (CREATOR_APPROVAL_GATED_PRINCIPALS below, TASK-3530).
 const WORKBENCH_INTAKE_MCP_CAPABILITIES: readonly Capability[] = ["task.read", "task.create"];
 
 const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
@@ -193,6 +191,30 @@ const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
     "task.read",
   ],
 };
+
+// Creator-principal approval gate (TASK-3530; Vince approved 2026-10-20 5:09 PM
+// ET). A task one of these principals creates starts with a pending creator
+// approval: no checkout, launch or move into progress until a creator approver
+// clears it through the creator-approval action. Reviewed code, like
+// SERVICE_GRANTS: add a principal only with an approval on record.
+const CREATOR_APPROVAL_GATED_PRINCIPALS: readonly string[] = [
+  WORKBENCH_INTAKE_MCP_SERVICE_PRINCIPAL_ID,
+];
+
+// The only people who may clear a creator approval, by Entra object id (the
+// session oid, never an email a caller can supply), with their audit label.
+const CREATOR_APPROVERS: Readonly<Record<string, string>> = {
+  "29e05178-0bd1-49b9-be6e-b01be1975f70": "vince@petrasoap.com",
+  "a3d74eb5-f230-4335-a852-15fa2d7021b6": "cos@petrasoap.com",
+};
+
+export function isCreatorApprovalGated(servicePrincipalId: string | null | undefined): boolean {
+  return !!servicePrincipalId && CREATOR_APPROVAL_GATED_PRINCIPALS.includes(servicePrincipalId);
+}
+
+export function isCreatorApprover(oid: string | null | undefined): boolean {
+  return !!oid && Object.prototype.hasOwnProperty.call(CREATOR_APPROVERS, oid);
+}
 
 export function capabilitiesForRole(role: AccessRole): readonly Capability[] {
   return ROLE_GRANTS[role] ?? [];

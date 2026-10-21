@@ -1,36 +1,36 @@
 ---
-description: Load petralabx GitHub org PAT before GitHub org automation
+description: Coding boxes use a GitHub App installation token, not a personal PAT
 alwaysApply: true
 ---
 
-# Petralabx GitHub org PAT (workstation)
+# Petralabx GitHub auth (workstation)
 
-Before any agent action that talks to **`petralabx/*` GitHub** outside the
-already-configured GitHub App path (opening PRs, `gh`/`git` push as a PAT,
-Loop Ledgers PAT fallback debugging, skills publish, etc.):
+Before any agent action that talks to **`petralabx/*` GitHub** (`gh`, `git`
+push, opening a PR, Loop Ledgers fallback debugging, skills publish):
 
-1. Ensure `PETRALABX_GITHUB_TOKEN` (and usually `GITHUB_TOKEN`) is in the
-   process env.
-2. Prefer loading the generated fragment (never commit these files):
+1. Use the GitHub App path. Default slug is `plx-agents-writer`. A per-bot
+   app is `plx/github/apps/<slug>/private-key` when that box sets
+   `PLX_GITHUB_APP_SLUG`. Bot apps are PR-write-only. **CIP owns merges.**
+2. Load the generated fragment (never commit these files). It exports the
+   app id, installation id, and private-key **reference**. It does not copy
+   `PETRALABX_GITHUB_TOKEN`, `PETRALABX_GITHUB`, `PLX_GITHUB_PAT`, or
+   `GITHUB_TOKEN` out of `prod/ec2-secrets`.
 
 ```powershell
+python scripts/bootstrap-windows-secrets.py
 . $HOME\.secrets-env.github.ps1
-# or full hydrate:
-. $HOME\load-secrets.ps1
-# or:
-python scripts/bootstrap-windows-secrets.py; . $HOME\.secrets-env.staging.ps1
 ```
 
 ```bash
+python scripts/bootstrap-windows-secrets.py
 source ~/.secrets-env.github
-# or:
-python scripts/bootstrap-windows-secrets.py && source ~/.secrets-env.github
 ```
 
-3. Do **not** leave a weak/limited PAT in `~/.aws/Secret_Github.txt` — it must
-   be the org fine-grained PAT (or absent so bootstrap uses
-   `PETRALABX_GITHUB_TOKEN` from `prod/ec2-secrets`).
+3. `gh auth status` must show the GitHub App bot. Do not print the token or
+   the private key.
+4. `--legacy-personal-pat` (or `PLX_BOOTSTRAP_LEGACY_GITHUB_PAT=1`) is rollout
+   compatibility only. Do not leave a PAT in `~/.aws/Secret_Github.txt`.
 
 Canonical runbook: `docs/runbooks/petralabx-github-token-workstation.md`.
-Resolver contract: `resolveGithubToken({ repoOwner: "petralabx" })` prefers
-`PETRALABX_GITHUB_TOKEN` over legacy `GITHUB_TOKEN`.
+`resolveGithubToken()` logs a loud `LOUD FALLBACK` error when it uses
+`PETRALABX_GITHUB_TOKEN` or `PETRALABX_GITHUB`.

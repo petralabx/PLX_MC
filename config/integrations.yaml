@@ -300,7 +300,9 @@ integrations:
     auth_source:
       - GitHub token via resolveGithubToken() (src/lib/github-app) — App
         installation token (requested scope contents:read + metadata:read) or
-        the PETRALABX_GITHUB_TOKEN / GITHUB_TOKEN PAT fallback. Listing PRs on a
+        the PETRALABX_GITHUB_TOKEN / GITHUB_TOKEN PAT fallback. A fallback to
+        PETRALABX_GITHUB_TOKEN or PETRALABX_GITHUB logs a loud console.error
+        (LOUD FALLBACK) and does not log the token. Listing PRs on a
         private repo needs Pull requests:read on whichever credential resolves;
         without it that repo reports degraded (permission_denied / not_found).
     health_check: >-

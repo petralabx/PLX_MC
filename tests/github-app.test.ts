@@ -229,15 +229,60 @@ describe("resolveGithubToken fallback contract", () => {
 
   it("falls back to the static GITHUB_TOKEN when the App is not configured", async () => {
     process.env.GITHUB_TOKEN = "ghp_static";
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const token = await resolveGithubToken();
     expect(token).toBe("ghp_static");
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 
   it("prefers PETRALABX_GITHUB_TOKEN over legacy GITHUB_TOKEN for petralabx PAT fallback", async () => {
     process.env.GITHUB_TOKEN = "ghp_legacy";
     process.env.PETRALABX_GITHUB_TOKEN = "github_pat_petra";
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const token = await resolveGithubToken({ repoOwner: "petralabx" });
     expect(token).toBe("github_pat_petra");
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("LOUD FALLBACK"), "PETRALABX_GITHUB_TOKEN");
+    expect(JSON.stringify(error.mock.calls)).not.toContain("github_pat_petra");
+    error.mockRestore();
+  });
+
+  it("logs loudly when the PETRALABX_GITHUB alias is the fallback", async () => {
+    process.env.PETRALABX_GITHUB = "github_pat_alias";
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const token = await resolveGithubToken({ repoOwner: "petralabx" });
+    expect(token).toBe("github_pat_alias");
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("LOUD FALLBACK"), "PETRALABX_GITHUB");
+    expect(JSON.stringify(error.mock.calls)).not.toContain("github_pat_alias");
+    error.mockRestore();
+  });
+
+  it("does not loud-log a legacy GITHUB_TOKEN fallback", async () => {
+    process.env.GITHUB_TOKEN = "ghp_legacy_only";
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const token = await resolveGithubToken({ repoOwner: "petralabx" });
+    expect(token).toBe("ghp_legacy_only");
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("logs loudly when a failed App mint falls back to PETRALABX_GITHUB_TOKEN", async () => {
+    configureApp();
+    process.env.GITHUB_APP_INSTALLATION_ID_PLX = "143714328";
+    process.env.PETRALABX_GITHUB_TOKEN = "github_pat_petra";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchImpl = vi.fn(async () => new Response("nope", { status: 500 }));
+    const token = await resolveGithubToken({
+      repoOwner: "petralabx",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(token).toBe("github_pat_petra");
+    expect(warn).toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("LOUD FALLBACK"), "PETRALABX_GITHUB_TOKEN");
+    expect(JSON.stringify(error.mock.calls)).not.toContain("github_pat_petra");
+    warn.mockRestore();
+    error.mockRestore();
   });
 
   it("keeps legacy GITHUB_TOKEN for non-petralabx owners when both PATs are set", async () => {

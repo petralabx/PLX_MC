@@ -44,14 +44,21 @@ Do not duplicate or improvise MCP setup details from the canonical documents.
 Stop if self-check fails, the identity is wrong, or the MCP remains disabled.
 Do not continue governed task operations with an uncertain identity.
 
-## 3. Validate the organization PAT
+## 3. Validate GitHub App auth
 
-- [ ] Prefer `PETRALABX_GITHUB_TOKEN` over legacy `GITHUB_TOKEN`.
+- [ ] Coding boxes use a GitHub App installation token, not a personal PAT.
+- [ ] Default app is `plx-agents-writer`. A per-bot app uses
+      `plx/github/apps/<slug>/private-key`.
+- [ ] Bot apps are PR-write-only. CIP owns merges.
 - [ ] Follow PLX_MC `docs/runbooks/petralabx-github-token-workstation.md`.
-- [ ] Validate access without displaying token values.
+- [ ] Run `gh auth status` and confirm the account is the app bot.
+- [ ] Use `--legacy-personal-pat` only during rollout, when the App secret
+      is not on the box yet.
 
 Stop on authentication, organization-access, or repository-scope failure. Do
-not replace the organization PAT with an unapproved weaker token.
+not copy `PETRALABX_GITHUB_TOKEN`, `PETRALABX_GITHUB`, `PLX_GITHUB_PAT`, or
+`GITHUB_TOKEN` out of `prod/ec2-secrets` unless the legacy flag is set. Do
+not print token values.
 
 ## 4. Bootstrap the repository
 
@@ -102,10 +109,10 @@ compliance errors. Never bypass hooks, checks, or governance workflows.
 - [ ] Include required task, PRD, or artifact links.
 - [ ] Watch checks and reviews until resolved.
 - [ ] Address review findings and rerun affected local gates.
-- [ ] Merge only when required checks and approvals are green.
+- [ ] Leave the PR open. CIP owns merges. Do not merge.
 
-Do not push or merge to a production branch or `main` without explicit operator
-approval, even when `main` is the repository's normal integration branch.
+Do not push or merge to `main`. CIP owns merges, even when `main` is the
+repository's integration branch.
 
 ## 8. Close out safely
 
@@ -135,7 +142,7 @@ Never reuse a checkout ID across repositories.
 
 - Never hardcode or expose secrets.
 - Never bypass compliance, hooks, checks, or approvals.
-- Never push or merge to production or `main` without operator approval.
+- Never push or merge to `main`. CIP owns merges.
 - Do not install routing activation workflows in this skill.
 - Do not change `PLX_MC_ROUTING_METADATA_ENABLED`.
 - Do not use confirmation probes or fuzzy matching to activate routing.

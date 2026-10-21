@@ -34,12 +34,19 @@ retiring the broad PAT entirely.
   secrets present), else a static PAT, else `null` (callers then emit an honest
   degraded result — never a throw at the call site). If the App is configured but
   a mint transiently fails, it warns and falls back to the PAT so the surface
-  stays up. An optional `opts.signal` (AbortSignal) cancels the token exchange;
-  once it fires the call rejects with `signal.reason` instead (no warning, no PAT
-  fallback, nothing cached). Without a signal there is no timeout, as before.
+  stays up. When that fallback is `PETRALABX_GITHUB_TOKEN` or the
+  `PETRALABX_GITHUB` alias, it also logs a loud `console.error` (`LOUD FALLBACK`)
+  naming the variable and never the token. Coding boxes should be on a GitHub
+  App installation token; the PAT is rollout compatibility only. An optional
+  `opts.signal` (AbortSignal) cancels the token exchange; once it fires the call
+  rejects with `signal.reason` instead (no warning, no PAT fallback, nothing
+  cached). Without a signal there is no timeout, as before.
   - **petralabx** owners: prefer `PETRALABX_GITHUB_TOKEN` (alias
     `PETRALABX_GITHUB`) over legacy `GITHUB_TOKEN` — the org fine-grained PAT
     must cover **all** `petralabx/*` repos (portal, PLX_MC, skills, …).
+    Using it is loud. Workstation `git` / `gh` do not use this resolver; they
+    use `scripts/github-app-auth.py` (PR-write-only, CIP owns merges). See
+    `docs/runbooks/petralabx-github-token-workstation.md`.
   - **other owners** (e.g. `taylorvalton`): legacy `GITHUB_TOKEN` only, so an
     org-scoped PAT cannot mask personal-account access.
 - Default-off: with no App secrets, behavior is the PAT path above, so this ships

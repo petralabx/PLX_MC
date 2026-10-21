@@ -38,6 +38,7 @@ M365 identities (SSO vs daemon Graph vs Office NAA):
 | **Workstation Graph (Cursor)** | AWS Secrets Manager — `plx/prod/m365/cursor-graph/v1` | Matched `MICROSOFT_GRAPH_TENANT_ID` / `_CLIENT_ID` / `_CLIENT_SECRET` set (PLX_Cursor_Graph). Never pair with `prod/ec2-secrets` Graph keys. Never use this client for Office Nested App Auth. |
 | **Office add-ins (public)** | `PLX_OFFICE_ADDIN_CLIENT_ID` / `PLX_OFFICE_ADDIN_TENANT_ID` | Public SPA for Outlook/Excel/Word NAA. **No client secret.** Catalog: [M365-IDENTITY-CATALOG.md](runbooks/M365-IDENTITY-CATALOG.md). |
 | **Operator local load** | `~/load-secrets.ps1` / `~/.secrets-env.staging.ps1` via `scripts/bootstrap-windows-secrets.py` | Hydrates env for local ops; SM only — no `~/.aws/*.txt` credential fallbacks (TASK-756) |
+| **Coding-box GitHub** | `plx/github/apps/<slug>/config` and `plx/github/apps/<slug>/private-key` | Default slug `plx-agents-writer`. Bootstrap stores the app id and the private-key secret id, not the PEM and not personal PATs. Legacy flag `--legacy-personal-pat`. Bot apps are PR-write-only. CIP owns merges. Runbook: [petralabx-github-token-workstation.md](runbooks/petralabx-github-token-workstation.md) |
 | **Per-repo gate config** | GitHub repo **Secrets** + **Variables** | Set by org admin during onboarding |
 | **MC runtime** | Vercel **Production** env on `mc.plxcustomer.io` | Redeploy after any change |
 

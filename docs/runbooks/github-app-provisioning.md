@@ -33,15 +33,21 @@ private key lives only in the secret stores — never here):
   Legacy `plx-cursor-skills` on installation `142149327` remains relevant only for
   the optional write/publish path (Step 2a historical + Step 4), not the primary catalog read.
 - **PAT note:** Vercel never had a `GITHUB_TOKEN` (the deployed app is App-only).
-  The AWS `GITHUB_TOKEN` is a **shared** dev-box credential used by other tooling
-  and was intentionally left in place — do not remove it as part of this module.
+  The AWS `GITHUB_TOKEN` stayed in place for the 2026-06 read-only App rollout.
+  Coding-box retirement of `GITHUB_TOKEN`, `PETRALABX_GITHUB_TOKEN`,
+  `PETRALABX_GITHUB`, and `PLX_GITHUB_PAT` happens only after every box shows
+  the App in `gh auth status` (see the workstation runbook rollout).
 - **Org-wide PAT (2026-07-13):** `PETRALABX_GITHUB` / `PETRALABX_GITHUB_TOKEN` in
   `staging/ec2-secrets` + `prod/ec2-secrets` is a fine-grained PAT with access to
   **all** `petralabx` repositories (verified: 9/9 org repos, `push`+`pull`).
   `resolveGithubToken({ repoOwner: "petralabx" })` prefers this over legacy
-  `GITHUB_TOKEN` when the App mint is skipped or fails. Workstation bootstrap
-  (`scripts/bootstrap-windows-secrets.py`) exports `PETRALABX_GITHUB_TOKEN` and
-  uses it for `GITHUB_TOKEN` when `~/.aws/Secret_Github.txt` is absent.
+  `GITHUB_TOKEN` when the App mint is skipped or fails, and logs a loud
+  `LOUD FALLBACK` error when it does. Workstation bootstrap
+  (`scripts/bootstrap-windows-secrets.py`) does **not** export that PAT by
+  default. It provisions `plx-agents-writer` (or `--github-app-slug`) as an
+  app id plus `plx/github/apps/<slug>/private-key`. `--legacy-personal-pat`
+  restores the old export during rollout. See
+  `docs/runbooks/petralabx-github-token-workstation.md`.
   **GitHub App** installation on `petralabx` is also **All repositories** (9/9
   match) — keep both App install and PAT in sync whenever a new org repo is
   created (App “all repos” auto-includes; if the App is ever switched to selected

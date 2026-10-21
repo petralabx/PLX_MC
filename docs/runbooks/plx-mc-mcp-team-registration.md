@@ -114,8 +114,10 @@ Cursor MCP child processes do not inherit PowerShell env vars. Use the repo laun
 
    The generated loader stages every value, validates all required names, then sets
    `$env:*` in one block. On any failure it sets nothing and throws
-   `PLX secrets loader failed: missing <NAMES>`. Optional names
-   (`PETRALABX_GITHUB_TOKEN`, `SWARM_API_KEY`) are exported only when non-empty.
+   `PLX secrets loader failed: missing <NAMES>`. Optional name `SWARM_API_KEY`
+   is exported only when non-empty. App mode also requires the `PLX_GITHUB_APP_*`
+   reference variables and clears personal PAT variables. `PETRALABX_GITHUB_TOKEN`
+   is optional only with `--legacy-personal-pat`.
 
 3. Reload Cursor MCP servers after bootstrap or key rotation.
 

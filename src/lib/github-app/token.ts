@@ -155,18 +155,50 @@ export async function getInstallationToken(opts: TokenOpts = {}): Promise<string
  * including plx-customer-portal). Other owners keep legacy GITHUB_TOKEN so a
  * petralabx-only token cannot mask taylorvalton access.
  */
-function resolveStaticPat(repoOwner?: string | null): string | null {
+type PetraPatSource = "PETRALABX_GITHUB_TOKEN" | "PETRALABX_GITHUB";
+
+interface StaticPat {
+  token: string | null;
+  source: PetraPatSource | "GITHUB_TOKEN" | null;
+}
+
+/**
+ * Loud on purpose. Coding boxes must mint a GitHub App installation token.
+ * A hit on the personal/org PAT means rollout compatibility is still in use.
+ * The message names the variable only — never the token value.
+ */
+function logPetraPatFallback(source: PetraPatSource): void {
+  console.error(
+    [
+      "[github-app] LOUD FALLBACK: resolved GitHub auth from %s.",
+      "Coding boxes must use a GitHub App installation token",
+      "(prefer plx-agents-writer, or plx/github/apps/<app>/private-key for a per-bot app).",
+      "This personal PAT is rollout compatibility only.",
+      "Remove it from prod/ec2-secrets after gh auth status shows the app.",
+      "CIP owns merges.",
+    ].join(" "),
+    source
+  );
+}
+
+function resolveStaticPat(repoOwner?: string | null): StaticPat {
   const owner = (repoOwner ?? "").trim().toLowerCase();
   const plxOrg = (process.env.REPO_ORG_PLX ?? "petralabx").toLowerCase();
-  const petra =
-    process.env.PETRALABX_GITHUB_TOKEN?.trim() ||
-    process.env.PETRALABX_GITHUB?.trim() ||
-    "";
+  const petraToken = process.env.PETRALABX_GITHUB_TOKEN?.trim() || "";
+  const petraAlias = process.env.PETRALABX_GITHUB?.trim() || "";
   const legacy = process.env.GITHUB_TOKEN?.trim() || "";
-  if (owner === plxOrg) return petra || legacy || null;
-  if (owner) return legacy || null;
+  const none: StaticPat = { token: null, source: null };
+  const fromPetra = (): StaticPat | null => {
+    if (petraToken) return { token: petraToken, source: "PETRALABX_GITHUB_TOKEN" };
+    if (petraAlias) return { token: petraAlias, source: "PETRALABX_GITHUB" };
+    return null;
+  };
+  const fromLegacy = (): StaticPat | null =>
+    legacy ? { token: legacy, source: "GITHUB_TOKEN" } : null;
+  if (owner === plxOrg) return fromPetra() ?? fromLegacy() ?? none;
+  if (owner) return fromLegacy() ?? none;
   // No owner hint: prefer petralabx PAT (PLX control-plane default), else legacy.
-  return petra || legacy || null;
+  return fromPetra() ?? fromLegacy() ?? none;
 }
 
 /**
@@ -175,9 +207,12 @@ function resolveStaticPat(repoOwner?: string | null): string | null {
  * PETRALABX_GITHUB_TOKEN (petralabx) / GITHUB_TOKEN (legacy) so the surface
  * keeps working before the App is provisioned or if a token mint transiently
  * fails; returns null when neither is configured, so callers emit an honest
- * degraded result instead of throwing. The one exception: once `opts.signal`
- * aborts, the call rejects with `signal.reason` (no warning, no PAT fallback),
- * because the caller's deadline has already passed.
+ * degraded result instead of throwing. Falling back to `PETRALABX_GITHUB_TOKEN`
+ * or its `PETRALABX_GITHUB` alias logs a loud `console.error` — coding boxes
+ * should be on a GitHub App installation token, and that PAT is rollout
+ * compatibility only. The one exception: once `opts.signal` aborts, the call
+ * rejects with `signal.reason` (no warning, no PAT fallback), because the
+ * caller's deadline has already passed.
  */
 export async function resolveGithubToken(opts: TokenOpts = {}): Promise<string | null> {
   if (githubAppConfigured() && !plxOrgNeedsPatFallback(opts.repoOwner)) {
@@ -192,5 +227,9 @@ export async function resolveGithubToken(opts: TokenOpts = {}): Promise<string |
       );
     }
   }
-  return resolveStaticPat(opts.repoOwner);
+  const pat = resolveStaticPat(opts.repoOwner);
+  if (pat.source === "PETRALABX_GITHUB_TOKEN" || pat.source === "PETRALABX_GITHUB") {
+    logPetraPatFallback(pat.source);
+  }
+  return pat.token;
 }

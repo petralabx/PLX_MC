@@ -211,7 +211,10 @@ FAKE_VALUES = {
     "MC_MCP_PRINCIPAL_ID": "sp_mcp_cursor",
     "MC_OPERATOR_EMAIL": "cos@example.test",
     "PLX_MC_MCP_ENABLED": "1",
-    "PETRALABX_GITHUB_TOKEN": "fake-gh-token",
+    "PLX_GITHUB_APP_SLUG": "plx-agents-writer",
+    "PLX_GITHUB_APP_ID": "42",
+    "PLX_GITHUB_APP_INSTALLATION_ID": "7",
+    "PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID": "plx/github/apps/plx-agents-writer/private-key",
 }
 FAKE_GRAPH = '{"tenantId":"fake-tenant","clientId":"fake-client","clientSecret":"fake-graph-secret"}'
 
@@ -240,11 +243,15 @@ def test_loader_template_has_no_warn_and_continue() -> None:
 
 def test_loader_template_declares_optional_names_explicitly() -> None:
     bootstrap = load_script()
-    assert set(bootstrap.LOADER_OPTIONAL_ENV) == {
-        "PETRALABX_GITHUB_TOKEN",
-        "SWARM_API_KEY",
-    }
+    assert set(bootstrap.LOADER_OPTIONAL_ENV) == {"SWARM_API_KEY"}
+    assert set(bootstrap.LOADER_LEGACY_PAT_ENV) == {"PETRALABX_GITHUB_TOKEN"}
     assert not set(bootstrap.LOADER_OPTIONAL_ENV) & set(bootstrap.LOADER_REQUIRED_ENV)
+    required, optional = bootstrap.loader_contract("app")
+    assert "PETRALABX_GITHUB_TOKEN" not in required + optional
+    assert "PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID" in required
+    legacy_required, legacy_optional = bootstrap.loader_contract("legacy-personal-pat")
+    assert "PETRALABX_GITHUB_TOKEN" in legacy_optional
+    assert "PLX_GITHUB_APP_ID" not in legacy_required
 
 
 def test_loader_template_rejects_undeclared_names() -> None:
@@ -263,7 +270,8 @@ PROBE = (
     "'missing=' + $global:PlxSecretsLoaderMissing; "
     "'msg=' + $msg; "
     "foreach ($n in 'MC_MCP_API_KEY','MICROSOFT_GRAPH_CLIENT_SECRET','AZURE_CLIENT_ID',"
-    "'PETRALABX_GITHUB_TOKEN') { 'env:' + $n + '=' + [Environment]::GetEnvironmentVariable($n) }"
+    "'PETRALABX_GITHUB_TOKEN','PLX_GITHUB_APP_ID') { "
+    "'env:' + $n + '=' + [Environment]::GetEnvironmentVariable($n) }"
 )
 
 
@@ -300,6 +308,8 @@ def test_pwsh_loader_assigns_everything_when_fetch_succeeds(tmp_path: Path) -> N
     assert out["env:MC_MCP_API_KEY"] == "fake-mcp-key"
     assert out["env:MICROSOFT_GRAPH_CLIENT_SECRET"] == "fake-graph-secret"
     assert out["env:AZURE_CLIENT_ID"] == "fake-client"
+    assert out["env:PLX_GITHUB_APP_ID"] == "42"
+    assert out["env:PETRALABX_GITHUB_TOKEN"] == ""
 
 
 @needs_pwsh
@@ -311,6 +321,7 @@ def test_pwsh_loader_assigns_nothing_when_fetch_fails(tmp_path: Path) -> None:
     # No partial environment: even the statically known values stay unset.
     assert out["env:MC_MCP_API_KEY"] == ""
     assert out["env:PETRALABX_GITHUB_TOKEN"] == ""
+    assert out["env:PLX_GITHUB_APP_ID"] == ""
     assert out["env:AZURE_CLIENT_ID"] == ""
     # Names only, never values.
     assert "fake-" not in out["msg"]
@@ -343,3 +354,197 @@ def test_task_614_fixtures_hold_no_secret_looking_values() -> None:
             if "suspicious" in line:
                 continue
             assert not suspicious.search(line), f"{name}: {line.strip()[:60]}"
+
+
+# --- GitHub App coding-box auth (personal PATs stay behind a flag) ---------
+
+SENTINEL_PAT = "personal-pat-sentinel"
+APP_CONFIG = {"appId": "42", "installationId": "7"}
+APP_PEM = "BEGIN PRIVATE KEY"
+
+
+def _binding(bootstrap: ModuleType) -> dict[str, str]:
+    return bootstrap.parse_github_app_config("plx-agents-writer", APP_CONFIG, APP_PEM)
+
+
+def _pat_secret() -> dict[str, str]:
+    return {
+        "PETRALABX_GITHUB_TOKEN": SENTINEL_PAT,
+        "PETRALABX_GITHUB": "alias-pat",
+        "PLX_GITHUB_PAT": "plx-pat",
+        "GITHUB_TOKEN": "legacy-pat",
+    }
+
+
+def test_app_mode_drops_every_personal_pat() -> None:
+    bootstrap = load_script()
+    binding = _binding(bootstrap)
+    values = bootstrap.github_auth_values(_pat_secret(), mode="app", binding=binding)
+    blob = "\n".join(values.values())
+    assert SENTINEL_PAT not in blob
+    assert "alias-pat" not in blob
+    assert "plx-pat" not in blob
+    assert "legacy-pat" not in blob
+    assert "PRIVATE KEY" not in blob
+    assert values["PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID"].endswith("/private-key")
+
+
+def test_app_mode_loader_rejects_a_personal_pat_value() -> None:
+    bootstrap = load_script()
+    values = dict(FAKE_VALUES)
+    values["PETRALABX_GITHUB_TOKEN"] = SENTINEL_PAT
+    with pytest.raises(SystemExit, match="not declared"):
+        bootstrap.staging_loader_lines(values, "sp_mcp_cursor", "app")
+
+
+def test_app_shell_fragment_references_the_key_and_clears_pats() -> None:
+    bootstrap = load_script()
+    text = "\n".join(bootstrap.github_app_shell_loader_lines(_binding(bootstrap)))
+    assert "export PETRALABX_GITHUB_TOKEN" not in text
+    assert (
+        "unset PETRALABX_GITHUB_TOKEN PETRALABX_GITHUB PLX_GITHUB_PAT GITHUB_TOKEN GH_TOKEN"
+        in text
+    )
+    assert "plx/github/apps/plx-agents-writer/private-key" in text
+    assert "git-credential" in text
+    assert "CIP owns merges" in text
+    assert SENTINEL_PAT not in text
+    assert "PRIVATE KEY" not in text
+
+
+def test_legacy_pat_precedence_and_flag() -> None:
+    bootstrap = load_script()
+    assert bootstrap.personal_pat_from_secret(_pat_secret()) == SENTINEL_PAT
+    assert (
+        bootstrap.personal_pat_from_secret({"PETRALABX_GITHUB": "alias-pat"})
+        == "alias-pat"
+    )
+    assert (
+        bootstrap.personal_pat_from_secret(
+            {"PLX_GITHUB_PAT": "plx-pat", "GITHUB_TOKEN": "legacy-pat"}
+        )
+        == "plx-pat"
+    )
+    assert (
+        bootstrap.personal_pat_from_secret({"GITHUB_TOKEN": "legacy-pat"})
+        == "legacy-pat"
+    )
+    legacy = bootstrap.github_auth_values(
+        _pat_secret(), mode="legacy-personal-pat", binding=None
+    )
+    assert legacy == {"PETRALABX_GITHUB_TOKEN": SENTINEL_PAT}
+    text = "\n".join(
+        bootstrap.staging_loader_lines(
+            {
+                **{
+                    k: v
+                    for k, v in FAKE_VALUES.items()
+                    if not k.startswith("PLX_GITHUB_APP")
+                },
+                **legacy,
+            },
+            "sp_mcp_cursor",
+            "legacy-personal-pat",
+        )
+    )
+    assert SENTINEL_PAT in text
+    assert "PLX_GITHUB_APP_ID" not in text
+
+
+def test_slug_rejects_path_traversal_and_defaults_to_writer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = load_script()
+    with pytest.raises(SystemExit, match="invalid github app slug"):
+        bootstrap.github_app_secret_ids("../prod/ec2-secrets")
+    config_id, key_id = bootstrap.github_app_secret_ids("cursor-cloud")
+    assert config_id == "plx/github/apps/cursor-cloud/config"
+    assert key_id == "plx/github/apps/cursor-cloud/private-key"
+    monkeypatch.delenv("PLX_GITHUB_APP_SLUG", raising=False)
+    assert bootstrap.resolve_github_app_slug(None) == "plx-agents-writer"
+    assert bootstrap.resolve_github_app_slug("cursor-cloud") == "cursor-cloud"
+    monkeypatch.setenv("PLX_GITHUB_APP_SLUG", "codex-bot")
+    assert bootstrap.resolve_github_app_slug(None) == "codex-bot"
+
+
+def test_legacy_env_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    bootstrap = load_script()
+    monkeypatch.delenv("PLX_BOOTSTRAP_LEGACY_GITHUB_PAT", raising=False)
+    assert bootstrap.legacy_personal_pat_from_env() is False
+    monkeypatch.setenv("PLX_BOOTSTRAP_LEGACY_GITHUB_PAT", "1")
+    assert bootstrap.legacy_personal_pat_from_env() is True
+    monkeypatch.setenv("PLX_BOOTSTRAP_LEGACY_GITHUB_PAT", "0")
+    assert bootstrap.legacy_personal_pat_from_env() is False
+
+
+def test_config_requires_numeric_ids_and_a_pem() -> None:
+    bootstrap = load_script()
+    with pytest.raises(SystemExit, match="numeric"):
+        bootstrap.parse_github_app_config(
+            "plx-agents-writer", {"appId": "abc", "installationId": "1"}, APP_PEM
+        )
+    with pytest.raises(SystemExit, match="PEM"):
+        bootstrap.parse_github_app_config(
+            "plx-agents-writer", {"appId": "1", "installationId": "2"}, "not-a-key"
+        )
+    binding = bootstrap.parse_github_app_config(
+        "plx-agents-writer", {"app_id": "1", "installation_id": "2"}, APP_PEM
+    )
+    assert binding["PLX_GITHUB_APP_ID"] == "1"
+    assert "PRIVATE KEY" not in "".join(binding.values())
+
+
+def test_missing_app_secret_names_the_legacy_flag() -> None:
+    from botocore.exceptions import ClientError
+
+    bootstrap = load_script()
+
+    class Missing:
+        def get_secret_value(self, SecretId: str) -> dict:
+            raise ClientError(
+                {"Error": {"Code": "ResourceNotFoundException"}},
+                "GetSecretValue",
+            )
+
+    with pytest.raises(SystemExit, match="legacy-personal-pat") as exc:
+        bootstrap.load_github_app_binding(Missing(), "plx-agents-writer")
+    assert "PRIVATE KEY" not in str(exc.value)
+    assert SENTINEL_PAT not in str(exc.value)
+
+
+def test_load_binding_keeps_the_pem_out_of_the_result() -> None:
+    bootstrap = load_script()
+
+    class Fake:
+        def get_secret_value(self, SecretId: str) -> dict:
+            if SecretId.endswith("/config"):
+                return {"SecretString": '{"appId":"12","installationId":"34"}'}
+            if SecretId.endswith("/private-key"):
+                return {"SecretString": APP_PEM}
+            raise AssertionError(SecretId)
+
+    binding = bootstrap.load_github_app_binding(Fake(), "plx-agents-writer")
+    assert binding["PLX_GITHUB_APP_ID"] == "12"
+    assert binding["PLX_GITHUB_APP_INSTALLATION_ID"] == "34"
+    assert "PRIVATE KEY" not in "".join(binding.values())
+
+
+def test_generated_wrapper_is_removed_in_legacy_mode_only(tmp_path: Path) -> None:
+    bootstrap = load_script()
+    bootstrap.write_github_app_commands(
+        tmp_path, "/usr/bin/python3", "/repo/scripts/github-app-auth.py"
+    )
+    wrapper = tmp_path / ".local" / "bin" / "gh"
+    launcher = tmp_path / ".local" / "bin" / "plx-github-app-auth"
+    assert "plx-github-app-auth" in wrapper.read_text(encoding="utf-8")
+    assert "github-app-auth.py" in launcher.read_text(encoding="utf-8")
+    assert "PRIVATE KEY" not in launcher.read_text(encoding="utf-8")
+    bootstrap.remove_generated_gh_wrapper(tmp_path)
+    assert not wrapper.exists()
+    assert not (tmp_path / ".local" / "bin" / "plx-github-app-auth").exists()
+
+    unrelated = tmp_path / ".local" / "bin" / "gh"
+    unrelated.parent.mkdir(parents=True, exist_ok=True)
+    unrelated.write_text('#!/bin/sh\nexec /usr/bin/gh "$@"\n', encoding="utf-8")
+    bootstrap.remove_generated_gh_wrapper(tmp_path)
+    assert unrelated.exists()

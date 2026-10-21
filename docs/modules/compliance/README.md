@@ -113,8 +113,9 @@ truth table is proven before any plumbing exists.
   `mc_dispatch_heads` is the checkout's ordered head chain, audited as
   `checkout.head`. A head joins it when the owning launcher records it
   (`mc_record_checkout_head`), when the `pull_request` webhook sees the first
-  head or a push whose `before` is the base SHA or a chain head (a
-  first-parent staging merge included), or when the gate finds a chain head
+  head with verified base ancestry or a push that GitHub compare proves
+  descends from a recorded head (a staging merge included); forced pushes
+  never extend the chain, or when the gate finds a chain head
   among the PR's commits. The first head with a PR number binds the chain to
   that PR. For a checkout with a launch record, `verifyPr` reports a PR head
   outside the chain (rewritten history) or a chain bound to another PR. A

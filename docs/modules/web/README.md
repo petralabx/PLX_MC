@@ -87,6 +87,11 @@ pixel-precisely in `docs/product/README.md` §6 and
   listener replays back/forward and the shell adopts the URL post-mount, so
   reloads and deep links restore the screen. The transient Insights `filter`
   is deliberately not serialized (see `routeToUrl`/`urlToRoute` in `route.ts`).
+- Path aliases for sharing: `/tasks/TASK-n` (TASK-3163), `/projects/PRJ-n` and
+  `/buckets/BKT-n` (TASK-3442) are server redirects onto the matching
+  query-string route (`/?screen=task|project|bucket&…Id=…`); a malformed id goes
+  home. MCP returns them as `link` from `taskLink`, `projectLink` and
+  `bucketLink` (`src/lib/mcp/envelope.ts`).
 - The screens live in `src/components/mc/`; they read the typed data layer in
   `src/lib/mc-data/` (faithful to `docs/product/DATA_MODEL.md`) whose store is
   now API-backed; fixtures remain the SSR/offline baseline. Each new screen is rebuilt

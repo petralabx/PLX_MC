@@ -237,3 +237,28 @@ describe("actionCheckout actor.repo receipt", () => {
     );
   });
 });
+
+// TASK-3407: every checkout names its <runtime>/<lane>.
+describe("checkout agent (TASK-3407)", () => {
+  beforeEach(() => {
+    mocks.checkout.mockClear();
+    delete process.env.PLX_MC_CHECKOUT_AGENT_REQUIRED;
+  });
+
+  it("uses the X-MC-Agent identity when the call passes no agent", async () => {
+    await actionCheckout({ ...hubIdentity, agent: "cursor-cloud/cip" }, "TASK-1206");
+    expect(mocks.checkout).toHaveBeenCalledWith(expect.objectContaining({ agent: "cursor-cloud/cip" }));
+  });
+
+  it("warns when no agent is named, while enforcement is off", async () => {
+    const receipt = await actionCheckout(hubIdentity, "TASK-1206");
+    expect(receipt.warnings?.[0]).toMatch(/^agent_missing:/);
+    expect((await actionCheckout(hubIdentity, "TASK-1206", { agent: "cursor-cloud/cip" })).warnings).toBeUndefined();
+  });
+
+  it("refuses a checkout with no agent once PLX_MC_CHECKOUT_AGENT_REQUIRED=1", async () => {
+    process.env.PLX_MC_CHECKOUT_AGENT_REQUIRED = "1";
+    await expect(actionCheckout(hubIdentity, "TASK-1206")).rejects.toMatchObject({ code: "agent_required", status: 400 });
+    expect(mocks.checkout).not.toHaveBeenCalled();
+  });
+});

@@ -510,3 +510,52 @@ describe("batch evidence findings stay small (TASK-3165)", () => {
     expect(result.body.data.evidenceFindings).toEqual({ total: 2, returned: 2, truncated: false });
   });
 });
+
+// TASK-3407: assignee and accountable owner through the API, with an audited reason.
+describe("assignee and accountable owner (TASK-3407)", () => {
+  const steward: McpIdentity = {
+    ...identity, runtime: "cursor", servicePrincipalId: "sp_mcp_ledger", agent: "cursor/ledger",
+    actor: { kind: "service", id: "sp_mcp_ledger", status: "active" },
+  };
+  const reason = "Ledger re-owns per CoS on 2026-10-20";
+
+  it("lets a task.assign holder set both, records the reason and names the lane", async () => {
+    await actionUpdateTask(steward, { taskId: "TASK-1", patch: { assignee: "stephen", accountableOwner: "Stephen@PetraSoap.com", reason } });
+    expect(h.rows.get("TASK-1")!.data).toMatchObject({ assignee: "stephen", accountableOwner: "stephen" });
+    const ev = h.events.find((e) => e.kind === "task.assignment.changed")!;
+    expect(ev.actor).toBe("cursor/ledger:vince@petrasoap.com");
+    expect(ev.payload).toMatchObject({
+      assignee: { before: null, after: "stephen" },
+      accountableOwner: { before: null, after: "stephen" },
+      reason,
+    });
+  });
+
+  it("clears the assignee with null, even on a lane-less task", async () => {
+    seed("TASK-1", { labels: [], assignee: "stephen" });
+    await actionUpdateTask(steward, { taskId: "TASK-1", patch: { assignee: null, reason } });
+    expect(h.rows.get("TASK-1")!.data.assignee).toBeNull();
+  });
+
+  it("refuses a principal without task.assign", async () => {
+    h.allowPool = true;
+    await expect(actionUpdateTask(identity, { taskId: "TASK-1", patch: { accountableOwner: "stephen", reason } }))
+      .rejects.toMatchObject({ code: "forbidden" });
+    expect(h.rows.get("TASK-1")!.data.accountableOwner).toBeUndefined();
+  });
+
+  it("requires a reason, and an accountable owner who is a person", async () => {
+    await expect(actionUpdateTask(steward, { taskId: "TASK-1", patch: { accountableOwner: "stephen" } }))
+      .rejects.toMatchObject({ code: "invalid_request" });
+    await expect(actionUpdateTask(steward, { taskId: "TASK-1", patch: { accountableOwner: "cos@petrasoap.com", reason } }))
+      .rejects.toMatchObject({ code: "invalid_request" });
+    await expect(actionUpdateTask(steward, { taskId: "TASK-1", patch: { title: "x", reason } }))
+      .rejects.toMatchObject({ code: "invalid_request" });
+  });
+
+  it("keeps agent: assignees to a signed-in person or sp_mcp_portal", async () => {
+    h.allowPool = true;
+    await expect(actionUpdateTask(steward, { taskId: "TASK-1", patch: { assignee: "agent:claude-uat", reason } }))
+      .rejects.toMatchObject({ code: "forbidden" });
+  });
+});

@@ -249,13 +249,14 @@ describe("sp_mcp_portal grant", () => {
     for (const principalId of others) {
       // sp_mcp_cursor adds task.cancel and task.reopen (TASK-3374). sp_mcp_cos
       // adds task.cancel plus task.link_merged_pr. sp_mcp_ledger adds all three (TASK-2580).
+      // Both stewards also hold task.assign (TASK-3407); no other agent does.
       const extra =
         principalId === "sp_mcp_cursor"
           ? ["task.cancel", "task.reopen"]
           : principalId === "sp_mcp_ledger"
-            ? ["task.cancel", "task.reopen", "task.link_merged_pr"]
+            ? ["task.cancel", "task.reopen", "task.link_merged_pr", "task.assign"]
             : principalId === "sp_mcp_cos"
-              ? ["task.cancel", "task.link_merged_pr"]
+              ? ["task.cancel", "task.link_merged_pr", "task.assign"]
               : [];
       expect([...capabilitiesForServicePrincipal(principalId)].sort()).toEqual(
         [...FULL_MCP_BUNDLE, ...extra].sort()

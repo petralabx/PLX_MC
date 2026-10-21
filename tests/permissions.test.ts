@@ -251,12 +251,12 @@ describe("service-principal separation", () => {
     expect(authorize({ actor: service("sp_mcp_ledger"), capability: "task.reopen" }).allowed).toBe(true);
   });
 
-  it("sp_mcp_cos is the cursor grant minus task.reopen plus exactly task.link_merged_pr", () => {
+  it("sp_mcp_cos is the cursor grant minus task.reopen plus exactly task.link_merged_pr and task.assign (TASK-3407)", () => {
     const cursor = capabilitiesForServicePrincipal("sp_mcp_cursor").filter((c) => c !== "task.reopen");
     expect([...capabilitiesForServicePrincipal("sp_mcp_cos")].sort()).toEqual(
-      [...cursor, "task.link_merged_pr"].sort()
+      [...cursor, "task.link_merged_pr", "task.assign"].sort()
     );
-    for (const capability of ["task.cancel", "task.link_merged_pr"] as const) {
+    for (const capability of ["task.cancel", "task.link_merged_pr", "task.assign"] as const) {
       expect(authorize({ actor: service("sp_mcp_cos"), capability }).allowed).toBe(true);
     }
     for (const capability of ["task.reopen", "permissions.manage", "approval.decide", "sync.service.write"] as const) {

@@ -28,6 +28,22 @@ export interface McpOperatorContext {
   runtime: string;
   workerId: string;
   repo: string;
+  /**
+   * TASK-3407: the caller's stable `<runtime>/<lane>` from X-MC-Agent, one id
+   * per actor and lane across MC, AWS and GitHub. Optional until every runtime
+   * sends it; when present it names the actor on audit events and checkouts.
+   */
+  agent?: string;
+}
+
+const AGENT_ID_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+
+/**
+ * The audit actor for an MCP request (TASK-3407): `<runtime>/<lane>:<operator>`
+ * when the caller names its lane, else the legacy `<runtime>:<operator>`.
+ */
+export function mcpAuditActor(identity: Pick<McpOperatorContext, "runtime" | "operatorEmail" | "agent">): string {
+  return `${identity.agent ?? identity.runtime}:${identity.operatorEmail}`;
 }
 
 export interface McpIdentity extends McpOperatorContext {
@@ -207,6 +223,16 @@ export function parseOperatorContext(req: Request): McpOperatorContext {
       mode: "log-only",
       source: "x-mc-repo",
     });
+  }
+  const agentHeader = (req.headers.get("x-mc-agent") ?? "").trim();
+  if (agentHeader) {
+    if (!AGENT_ID_RE.test(agentHeader)) {
+      throw new ApiError("invalid_agent", "X-MC-Agent must be <runtime>/<lane>, e.g. claude-code/claude-uat.", 400);
+    }
+    if (agentHeader.split("/")[0].toLowerCase() !== runtime.toLowerCase()) {
+      throw new ApiError("invalid_agent", `X-MC-Agent must start with the X-MC-Runtime value (${runtime}).`, 400);
+    }
+    return { operatorEmail, runtime, workerId, repo, agent: agentHeader };
   }
   return { operatorEmail, runtime, workerId, repo };
 }

@@ -1432,10 +1432,95 @@ def test_write_private_text_is_mode_0600_under_a_loose_umask(tmp_path: Path) -> 
     assert list(tmp_path.glob("nested/.loader.ps1.*.tmp")) == []
 
 
+def _loader_env(bin_dir: Path) -> dict[str, str]:
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key != "MC_MCP_API_KEY"
+        and not key.startswith(("MICROSOFT_GRAPH_", "AZURE_"))
+    }
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+    return env
+
+
+_UNIX_ENV_PROBE = """
+source "$1"
+status=$?
+printf 'status=%s\\n' "$status"
+printf 'key=%s\\n' "$MC_MCP_API_KEY"
+printf 'tenant=%s\\n' "$MICROSOFT_GRAPH_TENANT_ID"
+printf 'client=%s\\n' "$MICROSOFT_GRAPH_CLIENT_ID"
+printf 'secret=%s\\n' "$MICROSOFT_GRAPH_CLIENT_SECRET"
+printf 'azure_tenant=%s\\n' "$AZURE_TENANT_ID"
+printf 'azure_client=%s\\n' "$AZURE_CLIENT_ID"
+printf 'azure_secret=%s\\n' "$AZURE_CLIENT_SECRET"
+printf 'tmp=%s\\n' "${__plx_key-}${__plx_graph_raw-}${__plx_graph_exports-}"
+exit 0
+"""
+
+
+def _source_unix_loader(script: Path, env: dict[str, str]) -> dict[str, str]:
+    proc = subprocess.run(
+        ["bash", "-c", _UNIX_ENV_PROBE, "bash", str(script)],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    parsed = dict(
+        line.split("=", 1) for line in proc.stdout.splitlines() if "=" in line
+    )
+    parsed["__stderr"] = proc.stderr
+    return parsed
+
+
+def _install_dispatch_aws(
+    bin_dir: Path,
+    responses: list[tuple[str, str | None]],
+) -> Path:
+    """Fake aws. Each needle maps to a payload file, or None to fail closed."""
+    bin_dir.mkdir()
+    calls = bin_dir / "aws-calls.txt"
+    lines = [
+        "#!/bin/sh",
+        f'printf "%s\\n" "$*" >> {sh_quote_path(calls)}',
+        'case "$*" in',
+    ]
+    for index, (needle, payload) in enumerate(responses):
+        lines.append(f"  *{needle}*)")
+        if payload is None:
+            lines.extend(
+                [
+                    "    echo secret-echo-sentinel >&2",
+                    "    exit 1",
+                ]
+            )
+        else:
+            body = bin_dir / f"payload-{index}.txt"
+            body.write_text(payload, encoding="utf-8")
+            lines.append(f"    cat {sh_quote_path(body)}")
+        lines.append("    ;;")
+    lines.extend(
+        [
+            "  *)",
+            "    echo unexpected >&2",
+            "    exit 1",
+            "    ;;",
+            "esac",
+            "",
+        ]
+    )
+    aws = bin_dir / "aws"
+    aws.write_text("\n".join(lines), encoding="utf-8")
+    aws.chmod(0o755)
+    return calls
+
+
 def test_unix_fragment_fetches_the_lane_key_in_memory(tmp_path: Path) -> None:
     bootstrap = load_script()
     secret_id = bootstrap.lane_key_secret_id("sp_mcp_claude_code")
     sentinel = "lane-claude-runtime-key"
+    graph_secret = "sec'ret$(echo pwned)"
     text = "\n".join(
         bootstrap.staging_shell_loader_lines(
             {
@@ -1456,35 +1541,50 @@ def test_unix_fragment_fetches_the_lane_key_in_memory(tmp_path: Path) -> None:
         )
     )
     assert sentinel not in text
+    assert graph_secret not in text
     assert bootstrap.MCP_AGENT_KEYS_SECRET_ID in text
+    assert bootstrap.CURSOR_GRAPH_SECRET_ID in text
+    for line in text.splitlines():
+        if "get-secret-value" in line:
+            assert bootstrap.MCP_AGENT_KEYS_SECRET_ID not in line
     bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    aws = bin_dir / "aws"
-    aws.write_text(
-        f"#!/bin/sh\nprintf '%s\\n' '{json.dumps({'MC_MCP_API_KEY': sentinel})}'\n",
-        encoding="utf-8",
+    calls = _install_dispatch_aws(
+        bin_dir,
+        [
+            (
+                "cursor-graph",
+                json.dumps(
+                    {
+                        "tenantId": "fake-tenant",
+                        "clientId": "fake-client",
+                        "clientSecret": graph_secret,
+                    }
+                ),
+            ),
+            (secret_id, json.dumps({"MC_MCP_API_KEY": sentinel})),
+        ],
     )
-    aws.chmod(0o755)
     script = tmp_path / "loader.sh"
     script.write_text(text, encoding="utf-8")
-    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-    proc = subprocess.run(
-        [
-            "bash",
-            "-c",
-            'source "$1" && printf %s "$MC_MCP_API_KEY"',
-            "bash",
-            str(script),
-        ],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert proc.stdout == sentinel
-    assert sentinel not in proc.stderr
+    loaded = _source_unix_loader(script, _loader_env(bin_dir))
+    assert loaded["status"] == "0", loaded["__stderr"]
+    assert loaded["key"] == sentinel
+    assert loaded["tenant"] == "fake-tenant"
+    assert loaded["client"] == "fake-client"
+    assert loaded["secret"] == graph_secret
+    assert loaded["azure_tenant"] == "fake-tenant"
+    assert loaded["azure_client"] == "fake-client"
+    assert loaded["azure_secret"] == graph_secret
+    assert loaded["tmp"] == ""
+    assert sentinel not in loaded["__stderr"]
+    assert graph_secret not in loaded["__stderr"]
+    assert "pwned" not in loaded["__stderr"]
+    call_log = calls.read_text(encoding="utf-8")
+    assert "cursor-graph" in call_log
+    assert secret_id in call_log
+    assert bootstrap.MCP_AGENT_KEYS_SECRET_ID not in call_log
 
+    aws = bin_dir / "aws"
     aws.write_text(
         "#!/bin/sh\necho secret-echo-sentinel >&2\nexit 1\n", encoding="utf-8"
     )
@@ -1497,7 +1597,7 @@ def test_unix_fragment_fetches_the_lane_key_in_memory(tmp_path: Path) -> None:
             "bash",
             str(script),
         ],
-        env=env,
+        env=_loader_env(bin_dir),
         capture_output=True,
         text=True,
         check=False,
@@ -1506,6 +1606,163 @@ def test_unix_fragment_fetches_the_lane_key_in_memory(tmp_path: Path) -> None:
     assert failed.stdout == ""
     assert "missing MC_MCP_API_KEY" in failed.stderr
     assert "secret-echo-sentinel" not in failed.stderr
+
+
+def test_unix_graph_parser_names_missing_fields_without_values() -> None:
+    bootstrap = load_script()
+    assert bootstrap.GRAPH_ENV_NAMES == tuple(
+        name
+        for name in bootstrap.LOADER_REQUIRED_ENV
+        if name.startswith(("MICROSOFT_GRAPH_", "AZURE_"))
+    )
+    program = bootstrap.graph_export_program()
+    leaked = "value-must-not-leak"
+    partial = subprocess.run(
+        [sys.executable, "-c", program],
+        input=json.dumps({"tenantId": leaked, "clientId": " ", "clientSecret": 12}),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert partial.returncode == 1
+    assert partial.stdout.startswith("MISSING:")
+    assert "MICROSOFT_GRAPH_CLIENT_ID" in partial.stdout
+    assert "MICROSOFT_GRAPH_CLIENT_SECRET" in partial.stdout
+    assert "AZURE_CLIENT_ID" in partial.stdout
+    assert "AZURE_CLIENT_SECRET" in partial.stdout
+    assert "MICROSOFT_GRAPH_TENANT_ID" not in partial.stdout
+    assert leaked not in partial.stdout
+    assert leaked not in partial.stderr
+    assert partial.stderr == ""
+
+    broken = subprocess.run(
+        [sys.executable, "-c", program],
+        input="{not-json " + leaked,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert broken.returncode == 1
+    for name in bootstrap.GRAPH_ENV_NAMES:
+        assert name in broken.stdout
+    assert leaked not in broken.stdout
+    assert leaked not in broken.stderr
+
+
+def test_unix_fragment_fails_when_graph_fields_are_missing(tmp_path: Path) -> None:
+    bootstrap = load_script()
+    secret_id = bootstrap.lane_key_secret_id("sp_mcp_claude_code")
+    sentinel = "lane-key-must-stay-unset"
+    leaked = "secret-tenant-value"
+    text = "\n".join(
+        bootstrap.staging_shell_loader_lines(
+            {
+                "MC_MCP_PRINCIPAL_ID": "sp_mcp_claude_code",
+                "MC_OPERATOR_EMAIL": "cos@example.test",
+                "PLX_MC_MCP_ENABLED": "1",
+                "PLX_GITHUB_APP_SLUG": "plx-agents-writer",
+                "PLX_GITHUB_APP_ID": "42",
+                "PLX_GITHUB_APP_INSTALLATION_ID": "7",
+                "PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID": (
+                    "plx/github/apps/plx-agents-writer/private-key"
+                ),
+            },
+            "sp_mcp_claude_code",
+            "app",
+            mcp_key_secret_id=secret_id,
+            python_exe=sys.executable,
+        )
+    )
+    bin_dir = tmp_path / "bin"
+    _install_dispatch_aws(
+        bin_dir,
+        [
+            ("cursor-graph", json.dumps({"tenantId": leaked})),
+            (secret_id, json.dumps({"MC_MCP_API_KEY": sentinel})),
+        ],
+    )
+    script = tmp_path / "loader.sh"
+    script.write_text(text, encoding="utf-8")
+    loaded = _source_unix_loader(script, _loader_env(bin_dir))
+    assert loaded["status"] != "0"
+    assert loaded["key"] == ""
+    assert loaded["tenant"] == ""
+    assert loaded["client"] == ""
+    assert loaded["secret"] == ""
+    assert loaded["azure_tenant"] == ""
+    assert loaded["azure_client"] == ""
+    assert loaded["azure_secret"] == ""
+    assert loaded["tmp"] == ""
+    stderr = loaded["__stderr"]
+    for name in (
+        "MICROSOFT_GRAPH_CLIENT_ID",
+        "MICROSOFT_GRAPH_CLIENT_SECRET",
+        "AZURE_CLIENT_ID",
+        "AZURE_CLIENT_SECRET",
+    ):
+        assert name in stderr
+    assert "MICROSOFT_GRAPH_TENANT_ID" not in stderr
+    assert leaked not in stderr
+    assert sentinel not in stderr
+    assert "secret-echo-sentinel" not in stderr
+
+    denied = bin_dir / "aws"
+    denied.write_text(
+        "#!/bin/sh\n"
+        'case "$*" in\n'
+        "  *cursor-graph*)\n"
+        "    echo secret-echo-sentinel >&2\n"
+        "    exit 1\n"
+        "    ;;\n"
+        f"  *{secret_id}*)\n"
+        f"    printf '%s\\n' '{json.dumps({'MC_MCP_API_KEY': sentinel})}'\n"
+        "    ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    denied.chmod(0o755)
+    failed = _source_unix_loader(script, _loader_env(bin_dir))
+    assert failed["status"] != "0"
+    assert failed["key"] == ""
+    assert failed["tenant"] == ""
+    assert failed["secret"] == ""
+    for name in bootstrap.GRAPH_ENV_NAMES:
+        assert name in failed["__stderr"]
+    assert "secret-echo-sentinel" not in failed["__stderr"]
+    assert sentinel not in failed["__stderr"]
+
+
+def test_unix_cursor_fragment_loads_graph_matched_set(tmp_path: Path) -> None:
+    bootstrap = load_script()
+    text = "\n".join(
+        bootstrap.staging_shell_loader_lines(
+            dict(FAKE_VALUES),
+            "sp_mcp_cursor",
+            "app",
+            python_exe=sys.executable,
+        )
+    )
+    assert "fake-graph-secret" not in text
+    assert "fake-mcp-key" in text
+    assert bootstrap.CURSOR_GRAPH_SECRET_ID in text
+    for line in text.splitlines():
+        if "get-secret-value" in line:
+            assert bootstrap.MCP_AGENT_KEYS_SECRET_ID not in line
+            assert "cursor-graph" in line
+    bin_dir = tmp_path / "bin"
+    _install_dispatch_aws(bin_dir, [("cursor-graph", FAKE_GRAPH)])
+    script = tmp_path / "loader.sh"
+    script.write_text(text, encoding="utf-8")
+    loaded = _source_unix_loader(script, _loader_env(bin_dir))
+    assert loaded["status"] == "0", loaded["__stderr"]
+    assert loaded["key"] == "fake-mcp-key"
+    assert loaded["tenant"] == "fake-tenant"
+    assert loaded["client"] == "fake-client"
+    assert loaded["secret"] == "fake-graph-secret"
+    assert loaded["azure_tenant"] == loaded["tenant"]
+    assert loaded["azure_client"] == loaded["client"]
+    assert loaded["azure_secret"] == loaded["secret"]
+    assert "fake-graph-secret" not in loaded["__stderr"]
 
 
 def test_shell_parser_matches_parse_mcp_key_material() -> None:

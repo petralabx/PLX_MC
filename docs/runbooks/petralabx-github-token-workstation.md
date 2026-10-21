@@ -90,7 +90,11 @@ secret text.
 
 **Precedence (TASK-756):** AWS Secrets Manager only. Do not restore
 `~/.aws/Secret_Github.txt`. Graph credentials stay a matched set from
-`plx/prod/m365/cursor-graph/v1`.
+`plx/prod/m365/cursor-graph/v1`. The Unix staging file
+(`~/.secrets-env.staging`, or `~/.secrets-env.staging.<principal>`) fetches
+that same set when sourced and copies it to `AZURE_TENANT_ID`,
+`AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET`. A missing or partial secret
+exits non-zero and names the missing variables. It does not print their values.
 
 Profile auto-source, so agents do not forget:
 

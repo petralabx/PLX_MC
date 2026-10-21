@@ -231,6 +231,29 @@ proposal+decision rows (proposer, decider, decision, reason, timestamps,
 (`pairApprovalEvents` / `listApprovalAudit`).
 Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 
+### Questions for a named person (TASK-3567)
+
+`src/lib/compliance/questions.ts` — a bot asks one person a question with
+options and a recommendation (`mc_ask_question`, `question.ask`). A person who
+could never see the task (outside its restricted project) is refused at asking
+time (400 `addressee_no_access`), and bot-written text is stored on one line so
+it cannot add lines to the person's answer comment. The question
+appears only on that person's Approvals screen: `GET /api/questions` returns
+the session person's open questions, filtered on the server by addressee
+(`sessionAuthorId`) and by project ACL. `POST /api/questions/answer`
+(`question.answer`, which members hold and agents are context-denied) answers
+only when the session person is the addressee — any other person, an owner
+included, gets 403 `not_addressee` and an appended `question.denied` event.
+Under the task row lock the answer is stored on the question (`answer.choice`,
+`answer.text`, `answeredBy`, ISO `answeredAt`, `commentId`) and posted to the
+task as a `CMT-*` comment authored by the person; `question.answered` lands in
+the same transaction. A second answer is 409 `question_already_answered`. An
+open question never freezes the stage. `/?screen=approvals&question=<q_id>`
+scrolls to and highlights one question. Questions live in the task jsonb
+(DB-only; never mirrored to SharePoint). PLX_MC sends no notice to the person;
+the asking bot passes on the `questionLink` it gets back (TASK-3559 covers
+notifications).
+
 ### Key Files
 
 - `src/lib/compliance/risk.ts` — risk-tier classifier + per-tier bundle floor

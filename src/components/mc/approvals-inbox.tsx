@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiClientError } from "@/lib/api";
 import type { ApprovalEvidenceRef, ApprovalGate } from "@/lib/mc-data";
 import { isPlainLeftClick, navHref } from "@/components/mc/nav-model";
+import { QuestionsSection } from "@/components/mc/questions-inbox";
 import type { Nav, ScreenProps } from "@/components/mc/route";
 
 export interface PendingApprovalRow {
@@ -141,7 +142,7 @@ export function ApprovalsStatus({ load, onRetry }: { load: ApprovalsLoad; onRetr
   return null;
 }
 
-export function ApprovalsInboxView({ nav }: ScreenProps) {
+export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   const [queue, setQueue] = useState<ApprovalsLoad>({ status: "loading" });
   // A failed approve/reject — shown above the list it concerns, not as a view.
   const [actionError, setActionError] = useState<string | null>(null);
@@ -208,65 +209,72 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
     <div className="ap-page" data-testid="approvals-screen">
       <div className="ap-head">
         <h1 className="ap-title">Approvals</h1>
-        <p className="ap-sub">
+        <p className="ap-sub">Questions bots asked you, and runtime gates waiting for a human decision.</p>
+      </div>
+      <QuestionsSection nav={nav} focusId={route.question} />
+      <section aria-labelledby="ap-gates-title" data-testid="approval-gates-section">
+        <h2 id="ap-gates-title" className="aq-title">
+          Approval gates
+        </h2>
+        <p className="ap-sub ap-gates-sub">
           Runtime gates raised by agents mid-run. The task&apos;s stage is frozen until a
           human — never the requester — decides.
         </p>
-      </div>
-      <ApprovalsStatus load={queue} onRetry={retry} />
-      {view === "list" && actionError ? <div className="ap-error">{actionError}</div> : null}
-      {view === "list" ? (
-        <ul className="ap-list">
-          {rows.map((row) => (
-            <li key={row.gate.id} className="ap-item">
-              <div className="ap-item-main">
-                <ApprovalRowLinks row={row} nav={nav} />
-                <div className="ap-reason">{row.gate.reason}</div>
-                <ApprovalDecisionScope gate={row.gate} />
-                <div className="ap-meta">
-                  requested by {row.gate.requestedBy}
-                  {row.gate.requestedRuntime ? ` via ${row.gate.requestedRuntime}` : ""} ·{" "}
-                  {new Date(row.gate.requestedAt).toLocaleString()} · stage {row.stage}
+        <ApprovalsStatus load={queue} onRetry={retry} />
+        {view === "list" && actionError ? <div className="ap-error">{actionError}</div> : null}
+        {view === "list" ? (
+          <ul className="ap-list">
+            {rows.map((row) => (
+              <li key={row.gate.id} className="ap-item">
+                <div className="ap-item-main">
+                  <ApprovalRowLinks row={row} nav={nav} />
+                  <div className="ap-reason">{row.gate.reason}</div>
+                  <ApprovalDecisionScope gate={row.gate} />
+                  <div className="ap-meta">
+                    requested by {row.gate.requestedBy}
+                    {row.gate.requestedRuntime ? ` via ${row.gate.requestedRuntime}` : ""} ·{" "}
+                    {new Date(row.gate.requestedAt).toLocaleString()} · stage {row.stage}
+                  </div>
+                  {row.gate.proposal ? (
+                    <details className="ap-proposal" data-testid="approval-proposal">
+                      <summary>
+                        {row.gate.proposal.summary}
+                        {row.gate.proposal.risk ? ` · risk ${row.gate.proposal.risk}` : ""}
+                      </summary>
+                      {row.gate.proposal.action ? <p>Action: {row.gate.proposal.action}</p> : null}
+                      {row.gate.proposal.plan ? <pre>{row.gate.proposal.plan}</pre> : null}
+                      {row.gate.proposal.diff ? <pre>{row.gate.proposal.diff}</pre> : null}
+                    </details>
+                  ) : null}
+                  <input
+                    className="ap-note"
+                    placeholder="Optional decision note"
+                    value={notes[row.gate.id] ?? ""}
+                    onChange={(e) =>
+                      setNotes((prev) => ({ ...prev, [row.gate.id]: e.target.value }))
+                    }
+                  />
                 </div>
-                {row.gate.proposal ? (
-                  <details className="ap-proposal" data-testid="approval-proposal">
-                    <summary>
-                      {row.gate.proposal.summary}
-                      {row.gate.proposal.risk ? ` · risk ${row.gate.proposal.risk}` : ""}
-                    </summary>
-                    {row.gate.proposal.action ? <p>Action: {row.gate.proposal.action}</p> : null}
-                    {row.gate.proposal.plan ? <pre>{row.gate.proposal.plan}</pre> : null}
-                    {row.gate.proposal.diff ? <pre>{row.gate.proposal.diff}</pre> : null}
-                  </details>
-                ) : null}
-                <input
-                  className="ap-note"
-                  placeholder="Optional decision note"
-                  value={notes[row.gate.id] ?? ""}
-                  onChange={(e) =>
-                    setNotes((prev) => ({ ...prev, [row.gate.id]: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="ap-actions">
-                <ApprovalApproveButton
-                  gate={row.gate}
-                  busy={busyGate === row.gate.id}
-                  onApprove={() => void decide(row, "approved")}
-                />
-                <button
-                  type="button"
-                  className="ap-btn reject"
-                  disabled={busyGate === row.gate.id}
-                  onClick={() => void decide(row, "rejected")}
-                >
-                  Reject
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+                <div className="ap-actions">
+                  <ApprovalApproveButton
+                    gate={row.gate}
+                    busy={busyGate === row.gate.id}
+                    onApprove={() => void decide(row, "approved")}
+                  />
+                  <button
+                    type="button"
+                    className="ap-btn reject"
+                    disabled={busyGate === row.gate.id}
+                    onClick={() => void decide(row, "rejected")}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
     </div>
   );
 }

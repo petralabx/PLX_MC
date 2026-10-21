@@ -88,6 +88,10 @@
   outline: none;
 }
 
+a.ap-task {
+  text-decoration: none;
+}
+
 .ap-task:hover,
 .ap-task:focus-visible {
   text-decoration: underline;
@@ -151,4 +155,91 @@
 .ap-btn:focus-visible {
   outline: 2px solid var(--p-focus, var(--p-ink));
   outline-offset: 2px;
+}
+
+/* Questions for you (TASK-3567) — same tokens as the gate list. */
+
+.aq-section {
+  margin-bottom: var(--p-space-4);
+}
+
+.aq-title {
+  font-size: var(--p-text-h3, var(--p-text-body));
+  color: var(--p-ink);
+  margin: 0 0 4px;
+}
+
+.aq-section .ap-sub {
+  margin-bottom: var(--p-space-2);
+}
+
+.aq-item.aq-focus {
+  border-color: var(--p-accent, var(--p-grid));
+  box-shadow: 0 0 0 2px var(--p-accent-soft, transparent);
+}
+
+.aq-options {
+  border: 0;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aq-legend {
+  color: var(--p-muted);
+  font-size: var(--p-text-kicker);
+  margin-bottom: 4px;
+}
+
+.aq-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--p-ink);
+  cursor: pointer;
+}
+
+.aq-rec {
+  border: 1px solid var(--p-accent, var(--p-grid));
+  border-radius: var(--p-radius-sm);
+  color: var(--p-accent, var(--p-ink));
+  background: var(--p-accent-soft, transparent);
+  font-size: var(--p-text-kicker);
+  padding: 0 6px;
+}
+
+.aq-clear {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--p-muted);
+  text-decoration: underline;
+  padding: 0;
+  cursor: pointer;
+}
+
+.aq-why {
+  color: var(--p-muted);
+  font-size: var(--p-text-body);
+  margin: 6px 0 0;
+}
+
+.aq-text {
+  min-height: 3.5em;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.aq-ok {
+  border: 1px solid var(--p-ok, var(--p-grid));
+  border-radius: var(--p-radius-sm);
+  color: var(--p-ok, var(--p-ink));
+  padding: 8px 12px;
+  margin-bottom: var(--p-space-2);
+}
+
+.ap-gates-sub {
+  margin-bottom: var(--p-space-2);
 }

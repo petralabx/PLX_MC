@@ -30,6 +30,8 @@ const MEMBER_CAPABILITIES: readonly Capability[] = [
   "repo.request",
   "skill.submit",
   "skill.install",
+  // TASK-3567: the route also requires the session to be the question's addressee.
+  "question.answer",
 ];
 
 const ADMIN_CAPABILITIES: readonly Capability[] = [
@@ -85,6 +87,7 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "routing.propose",
   "routing.resolve",
   "approval.request",
+  "question.ask",
   "telemetry.report",
   "sync.mutate",
 ];

@@ -675,6 +675,23 @@ server.tool(
 );
 
 server.tool(
+  "mc_ask_question",
+  "Ask one named person (directory id or email, never an agent) a question on a task, with up to 8 options and a recommendation (TASK-3567). It shows only on their Approvals screen; only they can answer, and the answer is posted to the task as a comment. Send them the returned questionLink. Agents never answer questions.",
+  {
+    taskId: z.string().min(1),
+    addressee: z.string().min(1).max(254).describe("Directory id (e.g. ricardo) or email"),
+    question: z.string().min(1).max(500),
+    options: z.array(z.string().min(1).max(200)).max(8).optional().describe("Multiple-choice options"),
+    recommended: z.number().int().nonnegative().optional().describe("Index of the option you recommend"),
+    recommendationReason: z.string().min(1).max(1000).optional().describe("Why you recommend it"),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_ask_question");
+    return printResult(await mcFetch("/ask-question", { method: "POST", body }));
+  }
+);
+
+server.tool(
   "mc_verify_approval",
   "Check whether a signed approval on a task covers a launch {lane?, promptHash?}, a merge {repo?, pr?, headSha?} or a flag {flag?} now (TASK-3408). ok is true only for a person's unexpired, validly signed approval in scope; otherwise reason names the first failure.",
   {

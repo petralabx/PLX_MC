@@ -141,6 +141,15 @@ and owner): `POST /api/compliance/reconcile`. No service principal holds any
 of them. Under break-glass (Basic auth, no Entra session) a manual reconcile
 is `GET /api/cron/reconcile` with the `CRON_SECRET` bearer.
 
+**Questions for a named person (TASK-3567):** `question.ask` is in the shared
+agent bundle (`mc_ask_question`); no human role holds it. `question.answer`
+(member and up): `POST /api/questions/answer`, plus the task's project ACL.
+The capability alone is not enough: the session person (`sessionAuthorId`)
+must be the question's addressee, checked on the server in every enforcement
+mode, so an owner gets 403 `not_addressee` for someone else's question. The
+predicate context-denies `question.answer` to every service actor, like
+`approval.decide`, so a mistaken grant can never let a bot answer.
+
 **Audit data (TASK-620):** every enforcement call site records `allowed`,
 `reasonCode`, and `policyVersion` to `permissions_decision_log` (migration 022)
 via `src/lib/permissions/enforcement.ts` + `decision-log.ts`, including the

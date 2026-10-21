@@ -311,6 +311,9 @@ export interface Task {
   // while any gate is pending, and a human other than the requester must decide
   // it (TASK-630 separation of duties). DB-only; no SharePoint column.
   approvalGates?: ApprovalGate[];
+  // Questions a bot asks one named person (TASK-3567). Unlike a gate, an open
+  // question never freezes the stage. DB-only; no SharePoint column.
+  questions?: TaskQuestion[];
   reqs: string[];
   repos: string[];
   targetEnv?: TargetEnv;
@@ -393,6 +396,48 @@ export interface ApprovalGate {
   expiresAt?: string;
   /** TASK-3408: HMAC-SHA256 of the canonical record (approval-signature.ts); null when no signing key is set. */
   signature?: string | null;
+}
+
+// ─── Questions for a named person (TASK-3567) ────────────────────────────────
+
+export type TaskQuestionStatus = "open" | "answered";
+
+/** The named person's answer. The record, not the task comment, is the authority. */
+export interface TaskQuestionAnswer {
+  /** Index into `options`; absent for a typed answer only. */
+  choice?: number;
+  /** Free text the person typed: the whole answer, or a note on the chosen option. */
+  text?: string;
+  /** sessionAuthorId of the signed-in person who answered; always the addressee. */
+  answeredBy: string;
+  /** ISO-8601. */
+  answeredAt: string;
+  /** Id of the task comment that carries the answer. */
+  commentId: string;
+}
+
+export interface TaskQuestion {
+  /** q_* id. */
+  id: string;
+  /** Directory id ("ricardo"), or the lowercased email of a person not in the directory. */
+  addressee: string;
+  /** The one-line question. */
+  text: string;
+  /** Multiple-choice options; empty when only a typed answer makes sense. */
+  options: string[];
+  /** Index into `options` the asking bot recommends. */
+  recommended?: number;
+  /** Why the bot recommends that option. */
+  recommendationReason?: string;
+  /** Audit label of the asking operator/agent session — never a grant input. */
+  askedBy: string;
+  /** Authenticated service principal that asked. */
+  askedByPrincipal: string;
+  askedRuntime?: string;
+  /** ISO-8601. */
+  askedAt: string;
+  status: TaskQuestionStatus;
+  answer?: TaskQuestionAnswer;
 }
 
 export type InboxKind = "approval" | "review" | "conflict" | "mention" | "assigned";

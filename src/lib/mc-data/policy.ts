@@ -8,7 +8,7 @@
 
 import { AGENTS, OPERATOR_ID, HUMANS, STAGE_IDX } from "./data";
 import { bandOf, evidenceComplete } from "./helpers";
-import type { ApprovalGate, StageKey, Task } from "./types";
+import type { ApprovalGate, StageKey, Task, TaskQuestion } from "./types";
 
 // The last stage a task may occupy without a human accountable owner.
 export const ACCOUNTABLE_GATE_STAGE: StageKey = "planned";
@@ -129,6 +129,37 @@ export function pendingApprovalGates(
 
 export function inputRequired(task: Pick<Task, "approvalGates">): boolean {
   return pendingApprovalGates(task).length > 0;
+}
+
+/**
+ * The id a question is addressed to (TASK-3567): a directory id ("ricardo"),
+ * or the lowercased email of a person not in the directory. An email that
+ * belongs to a listed person becomes their directory id, so it matches
+ * sessionAuthorId and the viewer id. Null for an unknown directory id or an
+ * agent: bots never answer questions.
+ */
+export function normalizeAddressee(raw: string): string | null {
+  const value = raw.trim().toLowerCase();
+  if (!value) return null;
+  if (value.includes("@")) {
+    const listed = Object.values(HUMANS).find((h) => h.email?.toLowerCase() === value);
+    return listed ? listed.id : value;
+  }
+  if (isAgentId(value)) return null;
+  return Object.prototype.hasOwnProperty.call(HUMANS, value) ? value : null;
+}
+
+// Open questions addressed to one person (TASK-3567). `personId` is a directory
+// id or a lowercased email, as the viewer id is. The stored addressee is
+// normalized again here, so a question asked by email still reaches the person
+// once the directory lists that email.
+export function openQuestionsFor(
+  task: Pick<Task, "questions">,
+  personId: string
+): TaskQuestion[] {
+  return (task.questions ?? []).filter(
+    (q) => q.status === "open" && normalizeAddressee(q.addressee) === personId
+  );
 }
 
 // Why this task cannot move to `nextStage`, or null when the move is allowed.

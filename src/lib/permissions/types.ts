@@ -35,6 +35,9 @@ export const CAPABILITIES = [
   "sync.service.write",
   "approval.request",
   "approval.decide",
+  // TASK-3567: a bot asks one named person a question; only that person answers.
+  "question.ask",
+  "question.answer",
   "telemetry.report",
   // Read agent.report events through GET /api/cursor/agent-reports (fleet P8b).
   "agent_report.read",

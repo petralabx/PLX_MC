@@ -91,6 +91,19 @@ export async function mockApprovalsApi(
     });
   });
 
+  // The Approvals screen also loads the viewer's questions (TASK-3567); none here.
+  await page.route(/\/api\/questions(\?.*)?$/, async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: { questions: [] } }),
+    });
+  });
+
   return { decisions };
 }
 

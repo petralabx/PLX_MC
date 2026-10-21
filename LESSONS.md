@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-21 (ET) — TASK-3410 r4: the gate proved a head's ancestry with another head's commits
+
+- **What happened:** Astra's review of PR #387 found that the gate accepted a head when the PR's current commits held a recorded head. A delayed run or replay for an old, unrelated head borrowed the newer head's commits and joined the chain. A head recorded before its PR existed also stayed unbound, so one checkout could pass on two PRs.
+- **Root cause:** The proof was about the PR, not the immutable SHA under check. The PR binding was written only on insert, and every later path skipped a known head.
+- **Rule going forward:** Prove a claim about a SHA with a query on that SHA (GitHub compare), never on mutable PR state. When a later event can complete a record, fill the gap with a guarded update and fail the loser of the race.
+
 ### 2026-10-21 (ET) — TASK-3410 r3: the gate seeded a lease chain that the webhook had refused
 
 - **What happened:** Astra's review of PR #387 found that `chainVerdict` accepted any first head for a launcher checkout with a `baseSha`. A head the webhook rejected (no proven base ancestry) could pass the gate and join the chain.

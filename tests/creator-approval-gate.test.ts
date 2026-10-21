@@ -9,15 +9,33 @@ import type { McpIdentity } from "@/lib/mcp/auth";
 
 const db = vi.hoisted(() => ({
   tasks: new Map<string, Record<string, unknown>>(),
-  events: [] as { kind: string; actor: string; taskId?: string | null; payload?: Record<string, unknown> }[],
+  events: [] as {
+    kind: string;
+    actor: string;
+    taskId?: string | null;
+    payload?: Record<string, unknown>;
+    // How the event was written: inside an open transaction, or with appendEventTx.
+    inTx?: boolean;
+    viaTx?: boolean;
+  }[],
+  openTx: 0,
   dispatches: [] as { id: string; taskId: string; launchId?: string | null }[],
   created: [] as Record<string, unknown>[],
   session: { oid: "", email: "" },
+  buckets: [] as { id: string; project: string }[],
+  projects: [] as { id: string; visibility: string; members: string[] }[],
 }));
 
 vi.mock("@/lib/db", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/db")>()),
-  withTransaction: async <T,>(fn: (q: never) => Promise<T>) => fn((async () => []) as never),
+  withTransaction: async <T,>(fn: (q: never) => Promise<T>) => {
+    db.openTx += 1;
+    try {
+      return await fn((async () => []) as never);
+    } finally {
+      db.openTx -= 1;
+    }
+  },
 }));
 
 vi.mock("@/lib/sync/engine", () => ({
@@ -30,8 +48,8 @@ vi.mock("@/lib/sync/engine", () => ({
 vi.mock("@/lib/sync/repo", () => ({
   stamp: () => "2026.10.21 · 00:00",
   async getRepos() { return []; },
-  async getBuckets() { return []; },
-  async getProjects() { return []; },
+  async getBuckets() { return db.buckets; },
+  async getProjects() { return db.projects; },
   async getRegisterInboundCompletions() { return []; },
   async getEntity(type: string, id: string) {
     const data = db.tasks.get(id);
@@ -46,7 +64,11 @@ vi.mock("@/lib/sync/repo", () => ({
 
 vi.mock("@/lib/compliance/repo", () => ({
   async appendEvent(e: (typeof db.events)[number]) {
-    db.events.push(e);
+    db.events.push({ ...e, inTx: db.openTx > 0 });
+    return String(db.events.length);
+  },
+  async appendEventTx(_q: unknown, e: (typeof db.events)[number]) {
+    db.events.push({ ...e, viaTx: true });
     return String(db.events.length);
   },
   async liveDispatchesForTask() { return []; },
@@ -65,7 +87,7 @@ vi.mock("@/lib/sync", async (importOriginal) => ({
 
 vi.mock("@/lib/permissions/project-acl-guard", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/permissions/project-acl-guard")>()),
-  assertTaskProjectAccess: async () => undefined,
+  // assertTaskProjectAccess stays real: it reads db.buckets and db.projects.
   assertBucketProjectAccess: async () => undefined,
   assertProjectIdAccess: async () => undefined,
   isBucketInRestrictedProject: async () => false,
@@ -75,7 +97,7 @@ vi.mock("@/lib/routing/mutations/actors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/routing/mutations/actors")>()),
   requireMcpActor: (identity: McpIdentity) => ({ actor: identity.actor, actorId: identity.servicePrincipalId }),
   aclPrincipalFromMcp: () => ({ tokens: [] }),
-  requireSessionActor: async () => ({ actorId: db.session.oid, auditLabel: db.session.email }),
+  requireSessionActor: async () => ({ actorId: db.session.oid, auditLabel: db.session.email, actor: { id: db.session.oid } }),
 }));
 
 vi.mock("@/lib/mcp/sync-meta", () => ({ syncMetaForTask: async () => ({ status: "queued" }) }));
@@ -154,9 +176,12 @@ const blocked = () => db.events.filter((e) => e.kind === "creator_approval.block
 beforeEach(() => {
   db.tasks.clear();
   db.events.length = 0;
+  db.openTx = 0;
   db.dispatches.length = 0;
   db.created.length = 0;
   db.session = { oid: "", email: "" };
+  db.buckets.length = 0;
+  db.projects.length = 0;
 });
 afterEach(() => {
   delete process.env.PLX_MC_LAUNCHER_PRINCIPALS;
@@ -347,5 +372,45 @@ describe("non-gated tasks behave as before", () => {
     await patchTask("TASK-1", { stage: "progress" }, "someone");
     expect(task().stage).toBe("progress");
     expect(db.events.some((e) => e.kind.startsWith("creator_approval."))).toBe(false);
+  });
+});
+
+describe("astra-P1-2: the approve route checks restricted-project membership", () => {
+  const callRoute = () =>
+    (approveRoute as unknown as (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<unknown>)(
+      new Request("http://mc/api/tasks/TASK-1/creator-approval", { method: "POST", body: JSON.stringify({}) }),
+      { params: Promise.resolve({ id: "TASK-1" }) }
+    );
+  beforeEach(() => {
+    gated();
+    db.buckets.push({ id: "BKT-INFRA", project: "PRJ-CLOSED-DOOR" });
+    db.projects.push({ id: "PRJ-CLOSED-DOOR", visibility: "restricted", members: ["member.fake@example.test"] });
+    db.session = { oid: VINCE_OID, email: "vince@petrasoap.com" };
+  });
+
+  it("astra-P1-2: refuses vince@ on a restricted project without membership, and keeps the gate", async () => {
+    await expect(callRoute()).rejects.toMatchObject({ code: "project_acl_denied", status: 403 });
+    expect(task().creatorApproval?.status).toBe("pending");
+    expect(db.events.some((e) => e.kind === "creator_approval.approved")).toBe(false);
+  });
+
+  it("astra-P1-2: approves once vince@ is a member of the restricted project", async () => {
+    db.projects[0]!.members.push("vince@petrasoap.com");
+    expect(await callRoute()).toMatchObject({ taskId: "TASK-1", creatorApproval: { status: "approved" } });
+  });
+});
+
+describe("astra-P2-1 and astra-P2-2: transactions", () => {
+  beforeEach(() => gated());
+
+  it("astra-P2-1: patchTask records the refusal after its transaction closes", async () => {
+    await expect(patchTask("TASK-1", { stage: "progress" }, "someone")).rejects.toMatchObject({ code: "creator_approval_pending" });
+    expect(blocked()).toHaveLength(1);
+    expect(blocked()[0]).toMatchObject({ taskId: "TASK-1", inTx: false, payload: { action: "stage", requestedStage: "progress" } });
+  });
+
+  it("astra-P2-2: the approval event commits in the approval's transaction", async () => {
+    await approveCreatorApproval({ taskId: "TASK-1", approverOid: VINCE_OID, approverLabel: "vince@petrasoap.com" });
+    expect(db.events.find((e) => e.kind === "creator_approval.approved")).toMatchObject({ viaTx: true });
   });
 });

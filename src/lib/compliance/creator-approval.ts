@@ -17,15 +17,19 @@ export interface CreatorApprovalGuardContext {
   door?: string | null;
 }
 
-async function refuse(
+export type CreatorApprovalAction = "checkout" | "stage";
+
+/**
+ * Write one creator_approval.blocked event on its own connection. Call it
+ * after any transaction that the refusal rolls back has released its
+ * connection, so a refusal never waits on a second pool connection.
+ */
+export async function recordCreatorApprovalBlocked(
   task: Pick<Task, "id" | "creatorApproval">,
-  action: "checkout" | "stage",
-  message: string,
+  action: CreatorApprovalAction,
   ctx: CreatorApprovalGuardContext,
   requestedStage?: StageKey
-): Promise<never> {
-  // The event is written on its own connection, so it survives the rollback
-  // that the throw below triggers in a caller's transaction.
+): Promise<void> {
   await appendEvent({
     kind: "creator_approval.blocked",
     actor: ctx.actor,
@@ -39,7 +43,25 @@ async function refuse(
       door: ctx.door ?? null,
     },
   });
-  throw new ApiError("creator_approval_pending", message, 409);
+}
+
+/**
+ * A stage move that a pending creator approval refuses. patchTask throws it
+ * inside its transaction and records it after the rollback.
+ */
+export class CreatorApprovalRefusal extends ApiError {
+  constructor(
+    readonly task: Pick<Task, "id" | "creatorApproval">,
+    readonly requestedStage: StageKey,
+    readonly ctx: CreatorApprovalGuardContext,
+    message: string
+  ) {
+    super("creator_approval_pending", message, 409);
+  }
+
+  record(): Promise<void> {
+    return recordCreatorApprovalBlocked(this.task, "stage", this.ctx, this.requestedStage);
+  }
 }
 
 /** Refuse a checkout (or launch) of a task whose creator approval is pending. */
@@ -48,20 +70,24 @@ export async function assertCreatorApprovedForCheckout(
   ctx: CreatorApprovalGuardContext
 ): Promise<void> {
   if (!creatorApprovalPending(task)) return;
-  await refuse(
-    task,
-    "checkout",
+  await recordCreatorApprovalBlocked(task, "checkout", ctx);
+  throw new ApiError(
+    "creator_approval_pending",
     `${task.id} was created by ${task.creatorApproval!.principal} and waits for creator approval (vince@ or cos@) before it can be checked out or launched.`,
-    ctx
+    409
   );
 }
 
-/** Refuse a stage move that a pending creator approval blocks. */
-export async function assertCreatorApprovedForStage(
+/**
+ * Refuse a stage move that a pending creator approval blocks. It records
+ * nothing: the caller records the refusal with CreatorApprovalRefusal.record()
+ * once no transaction holds a connection.
+ */
+export function assertCreatorApprovedForStage(
   task: Pick<Task, "id" | "creatorApproval">,
   nextStage: StageKey,
   ctx: CreatorApprovalGuardContext
-): Promise<void> {
+): void {
   const violation = creatorApprovalViolation(task, nextStage);
-  if (violation) await refuse(task, "stage", violation, ctx, nextStage);
+  if (violation) throw new CreatorApprovalRefusal(task, nextStage, ctx, violation);
 }

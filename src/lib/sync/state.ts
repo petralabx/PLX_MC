@@ -40,7 +40,7 @@ import type {
   Task,
 } from "@/lib/mc-data/types";
 import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
-import { assertCreatorApprovedForStage } from "@/lib/compliance/creator-approval";
+import { assertCreatorApprovedForStage, CreatorApprovalRefusal } from "@/lib/compliance/creator-approval";
 import { assertMoveTargetProjectOpen, assertNoSharedEvidenceInRestricted } from "./bucket-move";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import { withTransaction, type TxQuery } from "@/lib/db";
@@ -717,10 +717,17 @@ export async function patchTask(
     if (patch.repos) await ensureReposSeeded();
     // Lock the row across the cancelled-stage guard and the write, so a
     // concurrent cancel cannot commit between them and be silently undone.
-    return withTransaction(async (q) => {
-      if (!(await repo.getEntity("task", id, q, true))) return null;
-      return patchTask(id, patch, actor, { ...opts, query: q });
-    });
+    try {
+      return await withTransaction(async (q) => {
+        if (!(await repo.getEntity("task", id, q, true))) return null;
+        return patchTask(id, patch, actor, { ...opts, query: q });
+      });
+    } catch (err) {
+      // Record a creator-gate refusal (TASK-3530) only after the rollback has
+      // released the transaction's connection.
+      if (err instanceof CreatorApprovalRefusal) await err.record();
+      throw err;
+    }
   }
   const row = await repo.getEntity("task", id, opts.query);
   if (!row) return null;
@@ -786,8 +793,8 @@ export async function patchTask(
   }
   if ("stage" in taskPatch && taskPatch.stage) {
     // The creator gate (TASK-3530) holds on every door, the compliance
-    // projection included, and audits each refusal.
-    await assertCreatorApprovedForStage(current, taskPatch.stage, { actor, actorId: opts.attribution?.actorId });
+    // projection included. The caller that owns the transaction audits it.
+    assertCreatorApprovedForStage(current, taskPatch.stage, { actor, actorId: opts.attribution?.actorId });
     const skipEvidenceGate =
       opts.complianceProjection &&
       (taskPatch.stage === "merged" || taskPatch.stage === "verified" || taskPatch.stage === "progress");

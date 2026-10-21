@@ -20,7 +20,8 @@ import { APPROVAL_WAIT_MAX_MS, pendingApprovalGates } from "@/lib/mc-data/policy
 import { isCreatorApprover } from "@/lib/permissions";
 import { patchTask } from "@/lib/sync";
 import { getEntities, getEntity } from "@/lib/sync/repo";
-import { appendEvent, blockDispatchOnApproval, eventsByKinds, getDispatch, type EventRow } from "./repo";
+import { withTransaction } from "@/lib/db";
+import { appendEvent, appendEventTx, blockDispatchOnApproval, eventsByKinds, getDispatch, type EventRow } from "./repo";
 
 export interface RequestApprovalInput {
   taskId: string;
@@ -280,48 +281,52 @@ export async function approveCreatorApproval(
       403
     );
   }
-  const row = await getEntity("task", input.taskId);
-  if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
-  const task = row.data as unknown as Task;
-  if (!task.creatorApproval) {
-    throw new ApiError("creator_approval_not_required", `${input.taskId} needs no creator approval.`, 409);
-  }
-  if (task.creatorApproval.status !== "pending") {
-    throw new ApiError("creator_approval_already_decided", `${input.taskId} creator approval is already ${task.creatorApproval.status}.`, 409);
-  }
-  const approvedAt = new Date().toISOString();
-  const updated = await patchTask(
-    input.taskId,
-    {
-      creatorApproval: {
-        ...task.creatorApproval,
-        status: "approved",
-        approvedBy: input.approverLabel,
-        approvedByOid: input.approverOid,
+  // The locked pending check, the task write and the audit event commit in
+  // one transaction, like the cancellation service.
+  return withTransaction(async (q) => {
+    const row = await getEntity("task", input.taskId, q, true);
+    if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+    const task = row.data as unknown as Task;
+    if (!task.creatorApproval) {
+      throw new ApiError("creator_approval_not_required", `${input.taskId} needs no creator approval.`, 409);
+    }
+    if (task.creatorApproval.status !== "pending") {
+      throw new ApiError("creator_approval_already_decided", `${input.taskId} creator approval is already ${task.creatorApproval.status}.`, 409);
+    }
+    const approvedAt = new Date().toISOString();
+    const updated = await patchTask(
+      input.taskId,
+      {
+        creatorApproval: {
+          ...task.creatorApproval,
+          status: "approved",
+          approvedBy: input.approverLabel,
+          approvedByOid: input.approverOid,
+          approvedAt,
+        },
+        activityLine: {
+          who: input.approverLabel,
+          what: `approved the task from ${task.creatorApproval.principal} (creator approval)`,
+          kind: "gate",
+        },
+      },
+      input.approverLabel,
+      { query: q, attribution: { source: "human", actorId: input.approverOid }, creatorApproval: true }
+    );
+    if (!updated) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+    await appendEventTx(q, {
+      kind: "creator_approval.approved",
+      actor: input.approverLabel,
+      taskId: input.taskId,
+      payload: {
+        creatorPrincipal: task.creatorApproval.principal,
+        approverOid: input.approverOid,
         approvedAt,
+        note: input.note ?? null,
       },
-      activityLine: {
-        who: input.approverLabel,
-        what: `approved the task from ${task.creatorApproval.principal} (creator approval)`,
-        kind: "gate",
-      },
-    },
-    input.approverLabel,
-    { attribution: { source: "human", actorId: input.approverOid }, creatorApproval: true }
-  );
-  if (!updated) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
-  await appendEvent({
-    kind: "creator_approval.approved",
-    actor: input.approverLabel,
-    taskId: input.taskId,
-    payload: {
-      creatorPrincipal: task.creatorApproval.principal,
-      approverOid: input.approverOid,
-      approvedAt,
-      note: input.note ?? null,
-    },
+    });
+    return { task: updated };
   });
-  return { task: updated };
 }
 
 const APPROVAL_POLL_INTERVAL_MS = 1_000;

@@ -6,7 +6,11 @@
 import { z } from "zod";
 import { parseBody, route } from "@/lib/api/route";
 import { approveCreatorApproval } from "@/lib/compliance/approvals";
-import { requireSessionActor } from "@/lib/routing/mutations/actors";
+import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
+import {
+  aclPrincipalFromAuthorized,
+  requireSessionActor,
+} from "@/lib/routing/mutations/actors";
 
 const creatorApprovalSchema = z.object({
   note: z.string().max(1000).optional(),
@@ -17,6 +21,8 @@ export const POST = route(async (req, ctx) => {
   const { note } = await parseBody(req, creatorApprovalSchema);
   // task.read only resolves the session; the approver allowlist is the gate.
   const authorized = await requireSessionActor("task.read", { type: "task", id });
+  // A restricted project's task is approved, and its approval read, only by a member.
+  await assertTaskProjectAccess(id, aclPrincipalFromAuthorized(authorized));
   const { task } = await approveCreatorApproval({
     taskId: id,
     approverOid: authorized.actorId,

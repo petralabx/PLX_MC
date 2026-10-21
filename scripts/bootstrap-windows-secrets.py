@@ -281,15 +281,24 @@ def gh_wrapper_cmd(python_exe: str, auth_script: str) -> str:
     )
 
 
+def write_shell_text(path: Path, text: str) -> None:
+    """Write a shell script with LF endings.
+
+    Native Windows Python translates newline=None to CRLF, which makes Git
+    Bash see `get\\r` from a credential helper and can break the shebang.
+    """
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
 def write_github_app_commands(home: Path, python_exe: str, auth_script: str) -> None:
     bin_dir = home / ".local" / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     launcher = bin_dir / "plx-github-app-auth"
-    launcher.write_text(app_auth_launcher_sh(python_exe, auth_script), encoding="utf-8")
+    write_shell_text(launcher, app_auth_launcher_sh(python_exe, auth_script))
     gh = bin_dir / "gh"
-    gh.write_text(gh_wrapper_sh(), encoding="utf-8")
+    write_shell_text(gh, gh_wrapper_sh())
     (bin_dir / "gh.cmd").write_text(
-        gh_wrapper_cmd(python_exe, auth_script), encoding="utf-8"
+        gh_wrapper_cmd(python_exe, auth_script), encoding="utf-8", newline=""
     )
     for path in (launcher, gh):
         try:
@@ -318,6 +327,70 @@ def personal_pat_powershell_clear_lines() -> list[str]:
         "Remove-Item Env:PLX_GITHUB_PAT -ErrorAction SilentlyContinue",
         "Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue",
         "Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue",
+        "Remove-Item Env:GH_ENTERPRISE_TOKEN -ErrorAction SilentlyContinue",
+    ]
+
+
+def github_app_gh_function_lines() -> list[str]:
+    """bash/zsh gh() that refuses ambient credentials when the App mint fails.
+
+    The legacy env flag is the only path that still invokes gh after a failed
+    mint. A successful mint clears GH_TOKEN, GITHUB_TOKEN, and
+    GH_ENTERPRISE_TOKEN on the child and points GH_CONFIG_DIR at an empty
+    config so a stored personal login cannot win.
+    """
+    return [
+        "# Fail closed: a failed App mint must not run gh with ambient credentials.",
+        "# Exception: PLX_BOOTSTRAP_LEGACY_GITHUB_PAT=1|true|yes.",
+        "gh() {",
+        "  _plx_legacy=$(printf '%s' \"${PLX_BOOTSTRAP_LEGACY_GITHUB_PAT:-}\" | tr '[:upper:]' '[:lower:]')",
+        '  _plx_token=$("$HOME/.local/bin/plx-github-app-auth" token)',
+        "  _plx_status=$?",
+        '  if [ "$_plx_status" -ne 0 ] || [ -z "$_plx_token" ]; then',
+        '    case "$_plx_legacy" in',
+        "      1|true|yes) ;;",
+        "      *)",
+        '        echo "GitHub App token mint failed. Refusing to run gh or git with ambient credentials." >&2',
+        "        unset _plx_legacy _plx_token _plx_status",
+        "        return 1",
+        "        ;;",
+        "    esac",
+        "    _plx_use_app=0",
+        "  else",
+        "    _plx_use_app=1",
+        "  fi",
+        "  _plx_real=''",
+        "  _plx_rest=$PATH",
+        '  while [ -n "$_plx_rest" ]; do',
+        '    case "$_plx_rest" in',
+        "      *:*) _plx_dir=${_plx_rest%%:*}; _plx_rest=${_plx_rest#*:} ;;",
+        "      *) _plx_dir=$_plx_rest; _plx_rest='' ;;",
+        "    esac",
+        '    if [ "$_plx_dir" = "$HOME/.local/bin" ]; then',
+        "      continue",
+        "    fi",
+        '    if [ -x "$_plx_dir/gh" ] && [ ! -d "$_plx_dir/gh" ]; then',
+        "      _plx_real=$_plx_dir/gh",
+        "      break",
+        "    fi",
+        "  done",
+        '  if [ -z "$_plx_real" ]; then',
+        '    echo "gh executable not found" >&2',
+        "    unset _plx_legacy _plx_token _plx_status _plx_use_app _plx_real _plx_rest _plx_dir",
+        "    return 1",
+        "  fi",
+        '  if [ "$_plx_use_app" -eq 1 ]; then',
+        '    _plx_cfg="$HOME/.config/plx-github-app/gh"',
+        '    mkdir -p "$_plx_cfg"',
+        "    _plx_rc=0",
+        '    env -u PETRALABX_GITHUB_TOKEN -u PETRALABX_GITHUB -u PLX_GITHUB_PAT -u GITHUB_TOKEN -u GH_TOKEN -u GH_ENTERPRISE_TOKEN GH_TOKEN="$_plx_token" GH_CONFIG_DIR="$_plx_cfg" "$_plx_real" "$@" || _plx_rc=$?',
+        "  else",
+        "    _plx_rc=0",
+        '    "$_plx_real" "$@" || _plx_rc=$?',
+        "  fi",
+        "  unset _plx_legacy _plx_token _plx_status _plx_use_app _plx_real _plx_rest _plx_dir _plx_cfg",
+        '  return "$_plx_rc"',
+        "}",
     ]
 
 
@@ -334,7 +407,8 @@ def github_app_shell_loader_lines(binding: dict[str, str]) -> list[str]:
         + sh_quote(binding["PLX_GITHUB_APP_INSTALLATION_ID"]),
         "export PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID="
         + sh_quote(binding["PLX_GITHUB_APP_PRIVATE_KEY_SECRET_ID"]),
-        "unset PETRALABX_GITHUB_TOKEN PETRALABX_GITHUB PLX_GITHUB_PAT GITHUB_TOKEN GH_TOKEN",
+        "unset PETRALABX_GITHUB_TOKEN PETRALABX_GITHUB PLX_GITHUB_PAT "
+        "GITHUB_TOKEN GH_TOKEN GH_ENTERPRISE_TOKEN",
         'case ":$PATH:" in',
         '  *":$HOME/.local/bin:"*) ;;',
         '  *) PATH="$HOME/.local/bin:$PATH"; export PATH ;;',
@@ -344,6 +418,7 @@ def github_app_shell_loader_lines(binding: dict[str, str]) -> list[str]:
         '  git config --global --add credential.https://github.com.helper ""',
         f"  git config --global --add credential.https://github.com.helper {sh_quote(helper)}",
         "fi",
+        *github_app_gh_function_lines(),
         "",
     ]
 
@@ -368,14 +443,34 @@ def github_app_powershell_loader_lines(
         '  $env:PATH = "$HOME\\.local\\bin;" + $env:PATH',
         "}",
         "function global:gh {",
-        "  $env:GH_TOKEN = (& "
+        "  $legacyRaw = ''",
+        "  if ($null -ne $env:PLX_BOOTSTRAP_LEGACY_GITHUB_PAT) {",
+        "    $legacyRaw = $env:PLX_BOOTSTRAP_LEGACY_GITHUB_PAT.Trim().ToLowerInvariant()",
+        "  }",
+        "  $legacyOk = @('1', 'true', 'yes') -contains $legacyRaw",
+        "  $minted = & "
         + ps_quote(python_exe)
         + " "
         + ps_quote(auth_script)
-        + " token).Trim()",
-        "  Remove-Item Env:GITHUB_TOKEN,Env:PETRALABX_GITHUB_TOKEN,Env:PETRALABX_GITHUB,Env:PLX_GITHUB_PAT -ErrorAction SilentlyContinue",
+        + " token",
+        "  $mintCode = $LASTEXITCODE",
+        "  $mintText = ''",
+        '  if ($null -ne $minted) { $mintText = ("$minted").Trim() }',
+        "  if ($mintCode -ne 0 -or [string]::IsNullOrWhiteSpace($mintText)) {",
+        "    if (-not $legacyOk) {",
+        "      Write-Error 'GitHub App token mint failed. Refusing to run gh or git with ambient credentials.' -ErrorAction Stop",
+        "    }",
+        "  } else {",
+        "    Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue",
+        "    Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue",
+        "    Remove-Item Env:GH_ENTERPRISE_TOKEN -ErrorAction SilentlyContinue",
+        "    $env:GH_TOKEN = $mintText",
+        "    $plxHome = if ($env:HOME) { $env:HOME } else { $HOME }",
+        "    $env:GH_CONFIG_DIR = Join-Path $plxHome '.config/plx-github-app/gh'",
+        "    New-Item -ItemType Directory -Force -Path $env:GH_CONFIG_DIR | Out-Null",
+        "  }",
         "  $cmd = Get-Command -Name gh -CommandType Application |",
-        "    Where-Object { $_.Source -notlike '*\\.local\\bin\\*' } |",
+        "    Where-Object { $_.Source -notlike '*\\.local\\bin\\*' -and $_.Source -notlike '*/.local/bin/*' } |",
         "    Select-Object -First 1",
         "  if (-not $cmd) { throw 'gh executable not found' }",
         "  & $cmd.Source @args",

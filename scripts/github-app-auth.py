@@ -324,12 +324,44 @@ def render_git_credential(
     return "\n".join(lines) + "\n"
 
 
+MINT_FAILED_EXIT = 126
+AMBIENT_TOKEN_ENV_NAMES = (
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+    "GH_ENTERPRISE_TOKEN",
+)
+
+
+def legacy_personal_pat_opt_in(env: dict[str, str] | None = None) -> bool:
+    source = os.environ if env is None else env
+    raw = (source.get("PLX_BOOTSTRAP_LEGACY_GITHUB_PAT") or "").strip().lower()
+    return raw in {"1", "true", "yes"}
+
+
+def gh_config_dir(env: dict[str, str]) -> str:
+    home = env.get("HOME") or str(Path.home())
+    return os.path.join(home, ".config", "plx-github-app", "gh")
+
+
 def gh_child_env(base: dict[str, str], token: str) -> dict[str, str]:
     env = dict(base)
     for name in PERSONAL_PAT_ENV_NAMES:
         env.pop(name, None)
+    for name in AMBIENT_TOKEN_ENV_NAMES:
+        env.pop(name, None)
     env["GH_TOKEN"] = token
+    env["GH_CONFIG_DIR"] = gh_config_dir(env)
     return env
+
+
+def refuse_ambient_credentials(detail: str = "") -> int:
+    print(
+        "GitHub App token mint failed. Refusing to run gh or git with ambient credentials.",
+        file=sys.stderr,
+    )
+    if detail and "ghs_" not in detail and "github_pat_" not in detail:
+        print(detail, file=sys.stderr)
+    return MINT_FAILED_EXIT
 
 
 def wrapper_skip_dirs(env: dict[str, str]) -> set[str]:
@@ -371,14 +403,31 @@ def main(argv: list[str] | None = None) -> int:
 
         token = None
         if action == "get" and fields.get("host", "") in GITHUB_HOSTS:
-            token = get_installation_token()
+            try:
+                token = get_installation_token()
+            except SystemExit as err:
+                return refuse_ambient_credentials(str(err))
+            if not str(token or "").strip():
+                return refuse_ambient_credentials()
         sys.stdout.write(
             render_git_credential(action, stdin_text, token, on_erase=erase)
         )
         return 0
     if command == "gh":
-        token = get_installation_token()
-        env = gh_child_env(dict(os.environ), token)
+        token = ""
+        mint_error = ""
+        try:
+            token = get_installation_token().strip()
+        except SystemExit as err:
+            mint_error = str(err)
+            token = ""
+        if token:
+            env = gh_child_env(dict(os.environ), token)
+            os.makedirs(env["GH_CONFIG_DIR"], mode=0o700, exist_ok=True)
+        elif legacy_personal_pat_opt_in():
+            env = dict(os.environ)
+        else:
+            return refuse_ambient_credentials(mint_error)
         real = find_real_gh(env.get("PATH", ""), wrapper_skip_dirs(env))
         os.execvpe(real, [real, *args[1:]], env)
     raise SystemExit(f"unknown command: {command}")

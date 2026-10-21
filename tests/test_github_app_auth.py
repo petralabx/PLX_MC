@@ -225,15 +225,17 @@ def test_git_credential_get_store_and_erase(auth, tmp_path: Path) -> None:
     assert auth.render_git_credential("store", "", None, on_erase=erase) == ""
 
 
-def test_gh_env_strips_personal_pats(auth) -> None:
+def test_gh_env_strips_personal_pats(auth, tmp_path: Path) -> None:
     env = auth.gh_child_env(
         {
+            "HOME": str(tmp_path),
             "PATH": "/usr/bin",
             "PETRALABX_GITHUB_TOKEN": "personal-pat-sentinel",
             "PETRALABX_GITHUB": "alias-pat",
             "PLX_GITHUB_PAT": "plx-pat",
             "GITHUB_TOKEN": "legacy-pat",
             "GH_TOKEN": "old",
+            "GH_ENTERPRISE_TOKEN": "enterprise-pat",
         },
         "ghs_app",
     )
@@ -243,9 +245,61 @@ def test_gh_env_strips_personal_pats(auth) -> None:
         "PETRALABX_GITHUB",
         "PLX_GITHUB_PAT",
         "GITHUB_TOKEN",
+        "GH_ENTERPRISE_TOKEN",
     ):
         assert name not in env
     assert "personal-pat-sentinel" not in env.values()
+    assert env["GH_CONFIG_DIR"] == str(tmp_path / ".config" / "plx-github-app" / "gh")
+
+
+def test_gh_command_mint_failure_does_not_exec(
+    auth, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def boom(**_kwargs: object) -> str:
+        raise SystemExit("secrets manager unavailable")
+
+    monkeypatch.setattr(auth, "get_installation_token", boom)
+    monkeypatch.delenv("PLX_BOOTSTRAP_LEGACY_GITHUB_PAT", raising=False)
+
+    def fake_exec(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("real gh invoked")
+
+    monkeypatch.setattr(auth.os, "execvpe", fake_exec)
+    code = auth.main(["gh", "auth", "status"])
+    assert code == 126
+    captured = capsys.readouterr()
+    assert "ambient" in captured.err.lower()
+    assert "ghs_" not in captured.err
+
+
+def test_gh_command_legacy_flag_execs_when_mint_fails(
+    auth, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = tmp_path / "gh"
+    real.write_text("#!/bin/sh\n", encoding="utf-8")
+    real.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PLX_BOOTSTRAP_LEGACY_GITHUB_PAT", "1")
+    monkeypatch.setenv("GH_ENTERPRISE_TOKEN", "ambient-enterprise")
+
+    def boom(**_kwargs: object) -> str:
+        raise SystemExit("secrets manager unavailable")
+
+    monkeypatch.setattr(auth, "get_installation_token", boom)
+    seen: dict[str, object] = {}
+
+    def fake_exec(cmd: str, argv: list[str], env: dict[str, str]) -> None:
+        seen["cmd"] = cmd
+        seen["env"] = env
+        raise SystemExit(0)
+
+    monkeypatch.setattr(auth.os, "execvpe", fake_exec)
+    with pytest.raises(SystemExit) as exc:
+        auth.main(["gh", "auth", "status"])
+    assert exc.value.code == 0
+    assert seen["cmd"] == str(real)
+    assert seen["env"]["GH_ENTERPRISE_TOKEN"] == "ambient-enterprise"
 
 
 def test_find_real_gh_skips_the_wrapper_directory(auth, tmp_path: Path) -> None:
@@ -275,6 +329,22 @@ def test_token_command_prints_only_the_token(
     captured = capsys.readouterr()
     assert captured.out == "ghs_only"
     assert captured.err == ""
+
+
+def test_git_credential_mint_failure_prints_no_password(
+    auth, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def boom(**_kwargs: object) -> str:
+        raise SystemExit("secrets manager unavailable")
+
+    monkeypatch.setattr(auth, "get_installation_token", boom)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("protocol=https\nhost=github.com\n"))
+    code = auth.main(["git-credential", "get"])
+    assert code == 126
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "password=" not in captured.out
+    assert "ambient" in captured.err.lower()
 
 
 def test_git_credential_command_skips_non_github_hosts(

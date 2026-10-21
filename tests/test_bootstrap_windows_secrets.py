@@ -402,7 +402,7 @@ def test_app_shell_fragment_references_the_key_and_clears_pats() -> None:
     text = "\n".join(bootstrap.github_app_shell_loader_lines(_binding(bootstrap)))
     assert "export PETRALABX_GITHUB_TOKEN" not in text
     assert (
-        "unset PETRALABX_GITHUB_TOKEN PETRALABX_GITHUB PLX_GITHUB_PAT GITHUB_TOKEN GH_TOKEN"
+        "unset PETRALABX_GITHUB_TOKEN PETRALABX_GITHUB PLX_GITHUB_PAT GITHUB_TOKEN GH_TOKEN GH_ENTERPRISE_TOKEN"
         in text
     )
     assert "plx/github/apps/plx-agents-writer/private-key" in text
@@ -548,3 +548,245 @@ def test_generated_wrapper_is_removed_in_legacy_mode_only(tmp_path: Path) -> Non
     unrelated.write_text('#!/bin/sh\nexec /usr/bin/gh "$@"\n', encoding="utf-8")
     bootstrap.remove_generated_gh_wrapper(tmp_path)
     assert unrelated.exists()
+
+
+def _executable(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+    path.chmod(0o755)
+
+
+def _failing_minter() -> str:
+    return "#!/bin/sh\nexit 1\n"
+
+
+def _token_minter() -> str:
+    return "#!/bin/sh\nprintf '%s' 'ghs_from_app'\nexit 0\n"
+
+
+def _recording_gh(record: Path) -> str:
+    return (
+        "#!/bin/sh\n"
+        f"printf '%s\\n' \"GH_TOKEN=${{GH_TOKEN-}}\" "
+        f'"GITHUB_TOKEN=${{GITHUB_TOKEN-unset}}" '
+        f'"GH_ENTERPRISE_TOKEN=${{GH_ENTERPRISE_TOKEN-unset}}" '
+        f'"GH_CONFIG_DIR=${{GH_CONFIG_DIR-}}" > {sh_quote_path(record)}\n'
+        "exit 0\n"
+    )
+
+
+def sh_quote_path(path: Path) -> str:
+    return "'" + str(path).replace("'", "'\"'\"'") + "'"
+
+
+def _posix_gh_env(home: Path, real_dir: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    # real gh is first. /bin and /usr/bin supply env and tr. The system gh
+    # lives elsewhere and must stay off this PATH.
+    env["PATH"] = os.pathsep.join([str(real_dir), "/usr/bin", "/bin"])
+    env["GH_TOKEN"] = "ambient-gh"
+    env["GITHUB_TOKEN"] = "ambient-github"
+    env["GH_ENTERPRISE_TOKEN"] = "ambient-enterprise"
+    env.pop("PLX_BOOTSTRAP_LEGACY_GITHUB_PAT", None)
+    env["GIT_CONFIG_GLOBAL"] = str(home / "isolated.gitconfig")
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    return env
+
+
+def test_unix_fragment_mint_failure_does_not_call_gh(tmp_path: Path) -> None:
+    """A failed App mint must not exec the real gh (ambient keyring or PATs)."""
+    bootstrap = load_script()
+    home = tmp_path / "home"
+    record = tmp_path / "gh-called"
+    _executable(home / ".local" / "bin" / "plx-github-app-auth", _failing_minter())
+    real_dir = tmp_path / "real"
+    _executable(real_dir / "gh", _recording_gh(record))
+    fragment = home / "fragment.sh"
+    fragment.write_text(
+        "\n".join(bootstrap.github_app_shell_loader_lines(_binding(bootstrap))),
+        encoding="utf-8",
+        newline="\n",
+    )
+    proc = subprocess.run(
+        ["/bin/bash", "-c", f"source {sh_quote_path(fragment)} && gh auth status"],
+        env=_posix_gh_env(home, real_dir),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert not record.exists()
+    assert proc.returncode != 0
+    assert "ambient" in proc.stderr.lower() or "mint" in proc.stderr.lower()
+
+
+def test_unix_fragment_legacy_flag_may_call_gh_when_mint_fails(tmp_path: Path) -> None:
+    bootstrap = load_script()
+    home = tmp_path / "home"
+    record = tmp_path / "gh-called"
+    _executable(home / ".local" / "bin" / "plx-github-app-auth", _failing_minter())
+    real_dir = tmp_path / "real"
+    _executable(real_dir / "gh", _recording_gh(record))
+    fragment = home / "fragment.sh"
+    fragment.write_text(
+        "\n".join(bootstrap.github_app_shell_loader_lines(_binding(bootstrap))),
+        encoding="utf-8",
+        newline="\n",
+    )
+    env = _posix_gh_env(home, real_dir)
+    env["PLX_BOOTSTRAP_LEGACY_GITHUB_PAT"] = "1"
+    proc = subprocess.run(
+        ["/bin/bash", "-c", f"source {sh_quote_path(fragment)} && gh auth status"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert record.exists()
+    text = record.read_text(encoding="utf-8")
+    assert "plx-github-app" not in text
+
+
+def test_unix_fragment_sets_isolated_gh_env_for_the_child(tmp_path: Path) -> None:
+    bootstrap = load_script()
+    home = tmp_path / "home"
+    record = tmp_path / "gh-called"
+    _executable(home / ".local" / "bin" / "plx-github-app-auth", _token_minter())
+    real_dir = tmp_path / "real"
+    _executable(real_dir / "gh", _recording_gh(record))
+    fragment = home / "fragment.sh"
+    fragment.write_text(
+        "\n".join(bootstrap.github_app_shell_loader_lines(_binding(bootstrap))),
+        encoding="utf-8",
+        newline="\n",
+    )
+    proc = subprocess.run(
+        ["/bin/bash", "-c", f"source {sh_quote_path(fragment)} && gh auth status"],
+        env=_posix_gh_env(home, real_dir),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    text = record.read_text(encoding="utf-8")
+    assert "GH_TOKEN=ghs_from_app" in text
+    assert "GITHUB_TOKEN=unset" in text
+    assert "GH_ENTERPRISE_TOKEN=unset" in text
+    assert f"GH_CONFIG_DIR={home / '.config' / 'plx-github-app' / 'gh'}" in text
+    assert "ambient-enterprise" not in text
+    assert "ambient-github" not in text
+
+
+def _pwsh() -> str | None:
+    return shutil.which("pwsh")
+
+
+def test_powershell_mint_failure_does_not_call_gh(tmp_path: Path) -> None:
+    pwsh = _pwsh()
+    if pwsh is None:
+        pytest.skip("pwsh is not installed")
+    bootstrap = load_script()
+    home = tmp_path / "home"
+    record = tmp_path / "gh-called"
+    minter = home / "mint-fail.sh"
+    _executable(minter, _failing_minter())
+    real_dir = tmp_path / "real"
+    _executable(real_dir / "gh", _recording_gh(record))
+    fragment = home / "fragment.ps1"
+    fragment.write_text(
+        "\n".join(
+            bootstrap.github_app_powershell_loader_lines(
+                _binding(bootstrap), str(minter), str(home / "github-app-auth.py")
+            )
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+    env = _posix_gh_env(home, real_dir)
+    proc = subprocess.run(
+        [
+            pwsh,
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f". '{fragment}'; gh auth status; exit $LASTEXITCODE",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert not record.exists()
+    assert proc.returncode != 0
+    combined = (proc.stderr + proc.stdout).lower()
+    assert "ambient" in combined or "mint" in combined
+
+
+def test_powershell_sets_isolated_gh_env_for_the_child(tmp_path: Path) -> None:
+    pwsh = _pwsh()
+    if pwsh is None:
+        pytest.skip("pwsh is not installed")
+    bootstrap = load_script()
+    home = tmp_path / "home"
+    record = tmp_path / "gh-called"
+    minter = home / "mint-ok.sh"
+    _executable(minter, _token_minter())
+    real_dir = tmp_path / "real"
+    _executable(real_dir / "gh", _recording_gh(record))
+    fragment = home / "fragment.ps1"
+    fragment.write_text(
+        "\n".join(
+            bootstrap.github_app_powershell_loader_lines(
+                _binding(bootstrap), str(minter), str(home / "github-app-auth.py")
+            )
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+    proc = subprocess.run(
+        [
+            pwsh,
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f". '{fragment}'; gh auth status; exit $LASTEXITCODE",
+        ],
+        env=_posix_gh_env(home, real_dir),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+    text = record.read_text(encoding="utf-8")
+    assert "GH_TOKEN=ghs_from_app" in text
+    assert "GITHUB_TOKEN=unset" in text
+    assert "GH_ENTERPRISE_TOKEN=unset" in text
+    assert f"GH_CONFIG_DIR={home / '.config' / 'plx-github-app' / 'gh'}" in text
+
+
+def test_shell_launchers_have_lf_endings_when_writes_translate_newlines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows Python translates newline=None to CRLF. Shell launchers must not."""
+    bootstrap = load_script()
+    real_write = Path.write_text
+
+    def translating(
+        self: Path,
+        data: str,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> int:
+        if isinstance(data, str) and newline is None:
+            data = data.replace("\n", "\r\n")
+        return real_write(self, data, encoding=encoding, errors=errors, newline="")
+
+    monkeypatch.setattr(Path, "write_text", translating)
+    bootstrap.write_github_app_commands(
+        tmp_path, "/usr/bin/python3", "/repo/scripts/github-app-auth.py"
+    )
+    for name in ("plx-github-app-auth", "gh"):
+        blob = (tmp_path / ".local" / "bin" / name).read_bytes()
+        assert b"\r" not in blob, name

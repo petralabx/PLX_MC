@@ -94,6 +94,11 @@ git push --dry-run origin HEAD
 `gh auth status` must show the **GitHub App** (the app's bot account), not a
 personal user. Do not print `GH_TOKEN` or the private key.
 
+If the App token cannot be minted, `gh` and `git` stop. They exit non-zero
+and do not use a stored personal login or `GH_TOKEN` / `GITHUB_TOKEN` /
+`GH_ENTERPRISE_TOKEN`. The only exception is an explicit
+`--legacy-personal-pat` (or `PLX_BOOTSTRAP_LEGACY_GITHUB_PAT=1`).
+
 ## Legacy personal PAT (rollout only)
 
 Boxes that do not yet have the App secret can keep the old export:

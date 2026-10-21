@@ -86,6 +86,19 @@ export function resolveHumanAccountableOwner(operator: string): string {
   return byEmail?.id ?? HUMANS[normalized]?.id ?? OPERATOR_ID;
 }
 
+// The email of a known person, given their directory id or email, or null when
+// the value names no person (a service alias such as cos@…, an agent, or
+// nothing). Lower-cased, so callers can compare it directly.
+export function humanEmailFor(idOrEmail: string | null | undefined): string | null {
+  const normalized = (idOrEmail ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+  const human =
+    HUMANS[normalized] ??
+    Object.values(HUMANS).find((h) => (h.email ?? "").toLowerCase() === normalized);
+  const email = human?.email?.trim().toLowerCase();
+  return email || null;
+}
+
 // Why an actor cannot be the executor of this task, or null when allowed.
 export function assignmentViolation(
   task: Pick<Task, "id" | "humanOnly">,

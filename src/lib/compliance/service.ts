@@ -7,7 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { ApiError } from "@/lib/api/route";
 import { permissionsEnforcementEnabled } from "@/lib/auth";
-import { resolveHumanAccountableOwner, type Task } from "@/lib/mc-data";
+import { humanEmailFor, resolveHumanAccountableOwner, type Task } from "@/lib/mc-data";
 import { publicMcBaseUrl } from "@/lib/mcp/envelope";
 import {
   GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
@@ -268,7 +268,7 @@ export interface CheckoutInput {
   agent?: string;
 }
 
-export async function checkout(input: CheckoutInput): Promise<{ checkoutId: string }> {
+export async function checkout(input: CheckoutInput): Promise<{ checkoutId: string; accountablePerson: string }> {
   if (input.actor) {
     const decision = authorizeStaged({
       site: "compliance.checkout",
@@ -308,10 +308,12 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
       409
     );
   }
-  if (task && !task.accountableOwner) {
+  const backfilledOwner =
+    task && !task.accountableOwner ? resolveHumanAccountableOwner(input.accountableHuman) : null;
+  if (backfilledOwner) {
     await patchTask(
       input.taskId,
-      { accountableOwner: resolveHumanAccountableOwner(input.accountableHuman) },
+      { accountableOwner: backfilledOwner },
       input.accountableHuman,
       {
         attribution: {
@@ -350,7 +352,27 @@ export async function checkout(input: CheckoutInput): Promise<{ checkoutId: stri
       agent: input.agent ?? null,
     },
   });
-  return { checkoutId };
+  const owner = backfilledOwner ?? task?.accountableOwner ?? null;
+  return { checkoutId, accountablePerson: checkoutAccountablePeople(input.accountableHuman, owner)[0] };
+}
+
+/**
+ * Who a checkout acts for (TASK-3483, Vince 2026-10-20). A checkout records the
+ * operator its MCP key was admitted under. When that operator is a person, it
+ * is the only accountable person. When it is a shared service alias (cos@…),
+ * the task's human accountable owner is the accountable person, and the alias
+ * itself stays accepted so commits written to the old record do not start
+ * failing. First entry = the person agents should name in On-Behalf-Of.
+ */
+export function checkoutAccountablePeople(
+  recorded: string,
+  taskOwner: string | null | undefined
+): string[] {
+  const operator = recorded.trim().toLowerCase();
+  const person = humanEmailFor(operator);
+  if (person) return [person];
+  const owner = humanEmailFor(taskOwner);
+  return owner && owner !== operator ? [owner, operator] : [operator];
 }
 
 // ─── Complete (the done marker, mirrors VMC complete_task) ───────────────────
@@ -575,16 +597,20 @@ function unstampedAgentCommitsReason(agentCommits: AgentCommit[]): string {
 // a non-default runtime; a legacy default-runtime checkout only warns.
 async function checkoutTrailerCheck(
   d: repo.DispatchRow,
-  rows: CommitTrailerRow[]
+  rows: CommitTrailerRow[],
+  task: Pick<Task, "accountableOwner"> | null
 ): Promise<{ reasons: string[]; notes: string[] }> {
   const reasons: string[] = [];
   const notes: string[] = [];
   if (rows.length === 0) return { reasons, notes };
   const recorded = await repo.getDispatchCheckoutAgent(d.id);
   const runtime = d.runtime.trim().toLowerCase();
+  const accountable = checkoutAccountablePeople(d.accountableHuman, task?.accountableOwner);
   for (const t of rows) {
-    if (t.onBehalfOf && t.onBehalfOf.trim().toLowerCase() !== d.accountableHuman.trim().toLowerCase()) {
-      reasons.push(`commit ${t.sha}: On-Behalf-Of ${t.onBehalfOf} does not match the checkout's accountable person`);
+    if (t.onBehalfOf && !accountable.includes(t.onBehalfOf.trim().toLowerCase())) {
+      reasons.push(
+        `commit ${t.sha}: On-Behalf-Of ${t.onBehalfOf} does not match the checkout's accountable person (${accountable.join(" or ")})`
+      );
     }
     if (!t.agent) continue;
     const agent = t.agent.trim().toLowerCase();
@@ -682,7 +708,7 @@ export async function verifyPr(
                 evidenceStoreEnabled: canUploadEvidence,
               });
     const trailerCheck = d
-      ? await checkoutTrailerCheck(d, trailerRows.filter((t) => t.checkoutId === cid))
+      ? await checkoutTrailerCheck(d, trailerRows.filter((t) => t.checkoutId === cid), task)
       : { reasons: [], notes: [] };
     const commitReasons = [...prCommitReasons, ...trailerCheck.reasons];
     const withCommits: VerifyResult = commitReasons.length

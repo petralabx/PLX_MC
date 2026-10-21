@@ -672,8 +672,46 @@ describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
     expect(r.verdict).toBe("block");
     expect(r.reasons).toEqual(expect.arrayContaining([
       "TASK-900: commit 2222222: Agent claude/claude-cos does not match the checkout's agent claude/claude-uat",
-      "TASK-900: commit 2222222: On-Behalf-Of vince@petrasoap.com does not match the checkout's accountable person",
+      "TASK-900: commit 2222222: On-Behalf-Of vince@petrasoap.com does not match the checkout's accountable person (greg.m@petrasoap.com or cos@petrasoap.com)",
     ]));
+  });
+
+  // TASK-3483 (Vince, 2026-10-20): a checkout minted through a shared service key
+  // records the operator alias (cos@), which is not a person; the task's human
+  // accountable owner is then also accepted as its accountable person.
+  it("accepts On-Behalf-Of naming the task's human owner on a service-alias checkout (TASK-3483)", async () => {
+    const cid = await stamped("claude/claude-uat");
+    github.loadPrCommits.mockResolvedValue([commit("6666666f", trailers(cid, "claude/claude-uat", "greg.m@petrasoap.com"))]);
+    expect((await verifyPr({ ...pr, checkoutIds: [cid] })).verdict).toBe("pass");
+  });
+
+  it("names both accepted people when On-Behalf-Of matches neither (TASK-3483)", async () => {
+    const cid = await stamped("claude/claude-uat");
+    github.loadPrCommits.mockResolvedValue([commit("7777777a", trailers(cid, "claude/claude-uat", "ross@petrasoap.com"))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toContain(
+      "TASK-900: commit 7777777: On-Behalf-Of ross@petrasoap.com does not match the checkout's accountable person (greg.m@petrasoap.com or cos@petrasoap.com)"
+    );
+  });
+
+  it("keeps a checkout minted by a known person strict to that person (TASK-3483)", async () => {
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    const { checkoutId: cid } = await checkout({ taskId: "TASK-900", runtime: "cursor", accountableHuman: "stephen@petrasoap.com", repo: "petralabx/PLX_MC", agent: "claude/claude-uat" });
+    github.loadPrCommits.mockResolvedValue([commit("8888888b", trailers(cid, "claude/claude-uat", "greg.m@petrasoap.com"))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toContain(
+      "TASK-900: commit 8888888: On-Behalf-Of greg.m@petrasoap.com does not match the checkout's accountable person (stephen@petrasoap.com)"
+    );
+  });
+
+  it("returns the resolved accountable person from checkout (TASK-3483)", async () => {
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg" }));
+    const r = await checkout({ taskId: "TASK-900", runtime: "cursor", accountableHuman: "cos@petrasoap.com", repo: "petralabx/PLX_MC" });
+    expect(r.accountablePerson).toBe("greg.m@petrasoap.com");
+    const own = await checkout({ taskId: "TASK-900", runtime: "cursor", accountableHuman: "Stephen@PetraSoap.com", repo: "petralabx/PLX_MC" });
+    expect(own.accountablePerson).toBe("stephen@petrasoap.com");
   });
 
   it("compares On-Behalf-Of case-insensitively", async () => {

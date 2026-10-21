@@ -443,6 +443,18 @@ describe("mc_list_checkouts", () => {
     expect(await res.text()).not.toMatch(/dsp_[A-Za-z0-9]{5,}/);
   });
 
+  it("lists who each checkout acts for: a person, or a service alias's task owner (TASK-3483)", async () => {
+    m.listDispatches.mockResolvedValue([
+      dispatch("dsp_person1", "TASK-100"),
+      dispatch("dsp_alias22", "TASK-100", { accountableHuman: "cos@petrasoap.com" }),
+    ]);
+    const { body } = await callTool("mc_list_checkouts", {});
+    expect(body.data.checkouts.map((c: { accountablePeople: string[] }) => c.accountablePeople)).toEqual([
+      ["vince@petrasoap.com"],
+      ["greg.m@petrasoap.com", "cos@petrasoap.com"],
+    ]);
+  });
+
   it("rejects a bare repo name with a structured invalid_repo error", async () => {
     const { isError, body } = await callTool("mc_list_checkouts", { repo: "PLX_MC" });
     expect(isError).toBe(true);

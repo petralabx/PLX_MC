@@ -1178,3 +1178,15 @@
 - **Rule going forward:** When restyling a page header, keep the shared hook classes (`.ph`,
   `.kk`, `.r`) and add a page class next to them. Before pushing, grep `e2e/` for the selectors
   the touched markup used and run those specs.
+
+## 2026-10-21 — TASK-3567: questions for one person were answered under another person's login
+- **What went wrong:** On 21 Oct, 47 approval gates that asked Ricardo or Vince a question were all
+  approved under Vince's login in about a minute, with no notes. Ricardo's own sign-off gate was
+  among them, so his signature had to be asked for again.
+- **Root cause:** A gate has no addressee. The decide route checks a capability and that the
+  decider is not the requester, nothing else; outside `enforce` every signed-in person is an
+  admin. A gate was also the only way a bot could ask a person anything, and it freezes the task.
+- **Rule going forward:** A question for a person names that person, and the server checks that
+  the session is that person, in every enforcement mode — never a role check alone. Bots ask with
+  `mc_ask_question`, not with a gate; the person answers on the Approvals screen, and the answer
+  is stored with who answered and posted to the task as their comment.

@@ -650,6 +650,7 @@ export interface PatchTaskInput {
   targetEnv?: Task["targetEnv"]; // pushed Target Environment column
   agentRunApproved?: boolean; // EN-005 — DB-only operator approval of an approve-mode agent run
   approvalGates?: Task["approvalGates"]; // TASK-629 — DB-only runtime approval gates (never pushed)
+  questions?: Task["questions"]; // TASK-3567 — DB-only questions for a named person (never pushed)
   prs?: PullRequest[]; // DB-only — PR links (compliance projection)
   merge?: { sha: string; on: string }; // DB-only — merge metadata (compliance projection)
   activityLine?: Pick<ActivityEntry, "who" | "what" | "kind">; // DB-only append

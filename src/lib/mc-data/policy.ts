@@ -8,7 +8,7 @@
 
 import { AGENTS, OPERATOR_ID, HUMANS, STAGE_IDX } from "./data";
 import { bandOf, evidenceComplete } from "./helpers";
-import type { ApprovalGate, StageKey, Task } from "./types";
+import type { ApprovalGate, StageKey, Task, TaskQuestion } from "./types";
 
 // The last stage a task may occupy without a human accountable owner.
 export const ACCOUNTABLE_GATE_STAGE: StageKey = "planned";
@@ -129,6 +129,15 @@ export function pendingApprovalGates(
 
 export function inputRequired(task: Pick<Task, "approvalGates">): boolean {
   return pendingApprovalGates(task).length > 0;
+}
+
+// Open questions addressed to one person (TASK-3567). `personId` is a directory
+// id or a lowercased email, as the viewer id and the question addressee are.
+export function openQuestionsFor(
+  task: Pick<Task, "questions">,
+  personId: string
+): TaskQuestion[] {
+  return (task.questions ?? []).filter((q) => q.status === "open" && q.addressee === personId);
 }
 
 // Why this task cannot move to `nextStage`, or null when the move is allowed.

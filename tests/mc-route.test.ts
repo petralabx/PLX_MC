@@ -36,6 +36,12 @@ describe("routeToUrl (P3)", () => {
     });
   });
 
+  it("carries one question on the Approvals screen (TASK-3567)", () => {
+    const route: Route = { screen: "approvals", question: "q_0123456789abcdef" };
+    expect(routeToUrl(route)).toBe("/?screen=approvals&question=q_0123456789abcdef");
+    expect(urlToRoute(routeToUrl(route))).toEqual(route);
+  });
+
   it("does NOT serialize the transient filter field", () => {
     const url = routeToUrl({ screen: "board", filter: { text: "wms", priority: ["urgent"] } });
     expect(url).toBe("/?screen=board");

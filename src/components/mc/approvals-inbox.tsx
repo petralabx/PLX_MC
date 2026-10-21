@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiClientError } from "@/lib/api";
 import type { ApprovalEvidenceRef, ApprovalGate } from "@/lib/mc-data";
 import { isPlainLeftClick, navHref } from "@/components/mc/nav-model";
+import { QuestionsSection } from "@/components/mc/questions-inbox";
 import type { Nav, ScreenProps } from "@/components/mc/route";
 
 export interface PendingApprovalRow {
@@ -141,7 +142,7 @@ export function ApprovalsStatus({ load, onRetry }: { load: ApprovalsLoad; onRetr
   return null;
 }
 
-export function ApprovalsInboxView({ nav }: ScreenProps) {
+export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   const [queue, setQueue] = useState<ApprovalsLoad>({ status: "loading" });
   // A failed approve/reject — shown above the list it concerns, not as a view.
   const [actionError, setActionError] = useState<string | null>(null);
@@ -213,6 +214,7 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
           human — never the requester — decides.
         </p>
       </div>
+      <QuestionsSection nav={nav} focusId={route.question} />
       <ApprovalsStatus load={queue} onRetry={retry} />
       {view === "list" && actionError ? <div className="ap-error">{actionError}</div> : null}
       {view === "list" ? (

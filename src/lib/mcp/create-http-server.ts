@@ -39,6 +39,7 @@ import { registerRoutingMutationTools } from "./routing-mutation-actions";
 import { registerSyncConflictTools } from "./sync-actions";
 import { registerAgentReadTools } from "./read-actions";
 import { registerApprovalTools } from "./approval-actions";
+import { registerQuestionTools } from "./question-actions";
 import { registerCheckoutHeadTools } from "./checkout-head-actions";
 import { registerCheckoutReleaseTools } from "./checkout-release-actions";
 import { registerTaskUpdateTools } from "./task-update-actions";
@@ -430,6 +431,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   // ── Wave 4: agent read tools + approval request (separate modules) ──
   registerAgentReadTools(server, identity);
   registerApprovalTools(server, identity);
+  registerQuestionTools(server, identity);
   registerCheckoutReleaseTools(server, identity);
   registerCheckoutHeadTools(server, identity);
   registerTaskUpdateTools(server, identity);

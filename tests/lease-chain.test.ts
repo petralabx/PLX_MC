@@ -68,6 +68,12 @@ describe("chainVerdict", () => {
     expect(chainVerdict(based, [head("c")], input)).toEqual({ ok: true, record: false, bind: false });
   });
 
+  it("rejects a head whose own PR disagrees with another head on the checkout", () => {
+    expect(chainVerdict(d, [head("a", 8), head("c", 7)], input)).toMatchObject({
+      ok: false, reason: expect.stringContaining("bound to PR #8, not #7"),
+    });
+  });
+
   it("names a rewritten history and a chain bound to another PR", () => {
     expect(chainVerdict(d, [head("a")], input)).toMatchObject({ ok: false, reason: expect.stringContaining("outside checkout dsp_…1234") });
     // Only a proven ancestor that is a recorded head counts; the base or any other SHA does not.

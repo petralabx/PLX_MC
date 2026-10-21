@@ -92,7 +92,7 @@ export function chainVerdict(
 ): ChainVerdict {
   const ref = `dsp_…${d.id.slice(-4)}`;
   const own = heads.find((h) => h.headSha === input.headSha);
-  const bound = own?.pr ?? boundPr(heads);
+  const bound = heads.find((h) => h.pr !== null && h.pr !== input.prNumber)?.pr ?? boundPr(heads);
   if (bound !== null && bound !== input.prNumber) {
     return { ok: false, reason: `checkout ${ref}'s SHA chain is bound to PR #${bound}, not #${input.prNumber}` };
   }

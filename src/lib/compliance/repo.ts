@@ -5,7 +5,7 @@
 // repo seam in tests/mc-patch.test.ts — so the service logic is provable without
 // a live database.
 
-import { query, type TxQuery } from "@/lib/db";
+import { query, withTransaction, type TxQuery } from "@/lib/db";
 import { announceGoLiveEventSafe } from "./go-live-announcer";
 import type { ActorKind } from "./types";
 
@@ -649,7 +649,7 @@ export async function dispatchHeads(id: string): Promise<DispatchHead[]> {
   }));
 }
 
-/** Append one head to a checkout's chain and audit it atomically. False = already on the chain. */
+/** Append one head to a checkout's chain and audit it atomically. False = already on the chain, missing checkout, or another PR holds it. */
 export async function recordDispatchHead(input: {
   dispatchId: string;
   headSha: string;
@@ -658,29 +658,43 @@ export async function recordDispatchHead(input: {
   source: DispatchHeadSource;
   recordedBy: string;
 }): Promise<boolean> {
-  const rows = await query<{ seq: string }>(
-    `WITH recorded AS (
-       INSERT INTO mc_dispatch_heads (dispatch_id, head_sha, before_sha, pr, source, recorded_by)
-       SELECT id, $2::text, $3::text, $4::integer, $5::text, $6::text FROM mc_dispatch WHERE id = $1
-       ON CONFLICT (dispatch_id, head_sha) DO NOTHING
-       RETURNING seq, dispatch_id
-     ), audited AS (
-       INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload)
-       SELECT 'checkout.head', $6::text, d.repo, d.task_id, ($4::integer)::text,
-              jsonb_build_object('checkoutId', d.id, 'headSha', $2::text, 'beforeSha', $3::text, 'source', $5::text)
-         FROM recorded r JOIN mc_dispatch d ON d.id = r.dispatch_id
-       RETURNING seq
-     )
-     SELECT seq FROM recorded`,
-    [input.dispatchId, input.headSha, input.beforeSha, input.pr, input.source, input.recordedBy]
-  );
-  return rows.length > 0;
+  return withTransaction(async (q) => {
+    // Separate statements after the row lock see the previous holder's commit.
+    // Every writer of a head or PR binding takes this same checkout lock.
+    const checkout = await q<{ id: string }>("SELECT id FROM mc_dispatch WHERE id = $1 FOR UPDATE", [input.dispatchId]);
+    if (!checkout.length) return false;
+    if (input.pr !== null) {
+      const conflicts = await q<{ pr: number }>(
+        "SELECT pr FROM mc_dispatch_heads WHERE dispatch_id = $1 AND pr IS NOT NULL AND pr <> $2::integer LIMIT 1",
+        [input.dispatchId, input.pr]
+      );
+      if (conflicts.length) return false;
+    }
+    const rows = await q<{ seq: string }>(
+      `WITH recorded AS (
+         INSERT INTO mc_dispatch_heads (dispatch_id, head_sha, before_sha, pr, source, recorded_by)
+         SELECT id, $2::text, $3::text, $4::integer, $5::text, $6::text FROM mc_dispatch WHERE id = $1
+         ON CONFLICT (dispatch_id, head_sha) DO NOTHING
+         RETURNING seq, dispatch_id
+       ), audited AS (
+         INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload)
+         SELECT 'checkout.head', $6::text, d.repo, d.task_id, ($4::integer)::text,
+                jsonb_build_object('checkoutId', d.id, 'headSha', $2::text, 'beforeSha', $3::text, 'source', $5::text)
+           FROM recorded r JOIN mc_dispatch d ON d.id = r.dispatch_id
+         RETURNING seq
+       )
+       SELECT seq FROM recorded`,
+      [input.dispatchId, input.headSha, input.beforeSha, input.pr, input.source, input.recordedBy]
+    );
+    return rows.length > 0;
+  });
 }
 
 /**
  * Bind a recorded head to its PR while it has none (a launcher can record a head
- * before the PR exists), and audit the bind. The `pr IS NULL` guard lets only one
- * PR win a race. Returns the PR the head is bound to afterwards; null = not recorded.
+ * before the PR exists), and audit the bind. The checkout row lock serializes this with
+ * all head inserts and binds, so only one PR can hold the whole checkout.
+ * Returns the conflicting PR or the head binding; null = not recorded.
  */
 export async function bindDispatchHeadPr(input: {
   dispatchId: string;
@@ -688,28 +702,37 @@ export async function bindDispatchHeadPr(input: {
   pr: number;
   recordedBy: string;
 }): Promise<number | null> {
-  const bound = await query<{ pr: number }>(
-    `WITH bound AS (
-       UPDATE mc_dispatch_heads SET pr = $3
-        WHERE dispatch_id = $1 AND head_sha = $2 AND pr IS NULL
-        RETURNING dispatch_id, pr
-     ), audited AS (
-       INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload)
-       SELECT 'checkout.head_bound', $4::text, d.repo, d.task_id, ($3::integer)::text,
-              jsonb_build_object('checkoutId', d.id, 'headSha', $2::text)
-         FROM bound b JOIN mc_dispatch d ON d.id = b.dispatch_id
-       RETURNING seq
-     )
-     SELECT pr FROM bound`,
-    [input.dispatchId, input.headSha, input.pr, input.recordedBy]
-  );
-  if (bound.length > 0) return bound[0].pr;
-  // Lost the race or already bound: a new statement reads the committed binding.
-  const rows = await query<{ pr: number | null }>(
-    `SELECT pr FROM mc_dispatch_heads WHERE dispatch_id = $1 AND head_sha = $2`,
-    [input.dispatchId, input.headSha]
-  );
-  return rows[0]?.pr ?? null;
+  return withTransaction(async (q) => {
+    const checkout = await q<{ id: string }>("SELECT id FROM mc_dispatch WHERE id = $1 FOR UPDATE", [input.dispatchId]);
+    if (!checkout.length) return null;
+    const conflicts = await q<{ pr: number }>(
+      "SELECT pr FROM mc_dispatch_heads WHERE dispatch_id = $1 AND pr IS NOT NULL AND pr <> $2::integer LIMIT 1",
+      [input.dispatchId, input.pr]
+    );
+    if (conflicts.length) return conflicts[0].pr;
+    const bound = await q<{ pr: number }>(
+      `WITH bound AS (
+         UPDATE mc_dispatch_heads SET pr = $3
+          WHERE dispatch_id = $1 AND head_sha = $2 AND pr IS NULL
+          RETURNING dispatch_id, pr
+       ), audited AS (
+         INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload)
+         SELECT 'checkout.head_bound', $4::text, d.repo, d.task_id, ($3::integer)::text,
+                jsonb_build_object('checkoutId', d.id, 'headSha', $2::text)
+           FROM bound b JOIN mc_dispatch d ON d.id = b.dispatch_id
+         RETURNING seq
+       )
+       SELECT pr FROM bound`,
+      [input.dispatchId, input.headSha, input.pr, input.recordedBy]
+    );
+    if (bound.length > 0) return bound[0].pr;
+    // Already bound or absent; read it while still holding the checkout lock.
+    const rows = await q<{ pr: number | null }>(
+      `SELECT pr FROM mc_dispatch_heads WHERE dispatch_id = $1 AND head_sha = $2`,
+      [input.dispatchId, input.headSha]
+    );
+    return rows[0]?.pr ?? null;
+  });
 }
 
 /** Release and audit atomically; a repeated close is a no-op. */

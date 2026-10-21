@@ -19,6 +19,7 @@ const db = vi.hoisted(() => ({
   heads: new Map<string, { headSha: string; beforeSha: string | null; pr: number | null; source: "launcher" | "webhook" | "gate"; recordedBy: string; recordedAt: string }[]>(),
   /** Another PR that binds the head between the gate's read and its bind (a race). */
   bindRace: null as number | null,
+  recordRace: null as number | null,
   bucketsThrow: false,
   buckets: [
     { id: "BKT-WMS", name: "WMS", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: null as string | null, project: null },
@@ -67,6 +68,11 @@ vi.mock("@/lib/compliance/repo", () => ({
   },
   async recordDispatchHead(h: { dispatchId: string; headSha: string; beforeSha: string | null; pr: number | null; source: "launcher" | "webhook" | "gate"; recordedBy: string }) {
     const chain = db.heads.get(h.dispatchId) ?? [];
+    if (db.recordRace !== null) {
+      chain.push({ ...h, pr: db.recordRace, recordedAt: new Date().toISOString() });
+      db.heads.set(h.dispatchId, chain);
+      return false;
+    }
     if (!db.dispatches.has(h.dispatchId) || chain.some((x) => x.headSha === h.headSha)) return false;
     chain.push({ headSha: h.headSha, beforeSha: h.beforeSha, pr: h.pr, source: h.source, recordedBy: h.recordedBy, recordedAt: new Date().toISOString() });
     db.heads.set(h.dispatchId, chain);
@@ -177,6 +183,7 @@ beforeEach(() => {
   db.dedupKeys.clear();
   db.heads.clear();
   db.bindRace = null;
+  db.recordRace = null;
   db.bucketsThrow = false;
   const withPrd = db.buckets.find((bucket) => bucket.id === "BKT-PRD");
   if (withPrd) withPrd.prd = "https://example.com/prd.md";
@@ -1132,6 +1139,17 @@ describe("checkout lease chain (TASK-3410)", () => {
     expect(lost.verdict).toBe("block");
     expect(lost.reasons.join(" ")).toContain("SHA chain is bound to PR #9999, not #3410");
     expect(heads(cid)).toEqual(["a:launcher:9999"]);
+  });
+
+  it("blocks when a concurrent gate wins the binding during head insertion", async () => {
+    const cid = await launch();
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane))]);
+    db.recordRace = 9999;
+    const lost = await verifyPr({ ...pr(sha("a")), checkoutIds: [cid] });
+    expect(lost.verdict).toBe("block");
+    expect(lost.reasons.join(" ")).toContain("SHA chain is bound to PR #9999, not #3410");
   });
 
   it("binds an unbound recorded head on the PR webhook and on a launcher re-record", async () => {

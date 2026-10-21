@@ -11,10 +11,10 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db", () => ({
-  query: async (text: string, params: unknown[] = []) => {
+  withTransaction: async (fn: (q: (text: string, params?: unknown[]) => Promise<Record<string, unknown>[]>) => Promise<unknown>) => fn(async (text, params = []) => {
     h.calls.push({ text, params });
     return h.results.shift() ?? [];
-  },
+  }),
 }));
 
 import { bindDispatchHeadPr } from "@/lib/compliance/repo";
@@ -29,20 +29,22 @@ beforeEach(() => {
 
 describe("bindDispatchHeadPr", () => {
   it("binds an unbound head and audits it in one guarded statement", async () => {
-    h.results = [[{ pr: 3410 }]];
+    h.results = [[{ id: input.dispatchId }], [], [{ pr: 3410 }]];
     expect(await bindDispatchHeadPr(input)).toBe(3410);
-    expect(h.calls).toHaveLength(1);
-    const sql = squash(h.calls[0].text);
+    expect(h.calls).toHaveLength(3);
+    expect(squash(h.calls[0].text)).toContain("FROM mc_dispatch WHERE id = $1 FOR UPDATE");
+    expect(squash(h.calls[1].text)).toContain("dispatch_id = $1 AND pr IS NOT NULL AND pr <> $2::integer");
+    const sql = squash(h.calls[2].text);
     expect(sql).toContain("UPDATE mc_dispatch_heads SET pr = $3 WHERE dispatch_id = $1 AND head_sha = $2 AND pr IS NULL");
     expect(sql).toContain("'checkout.head_bound'");
-    expect(h.calls[0].params).toEqual(["dsp_abc1234", "a".repeat(40), 3410, "compliance-gate"]);
+    expect(h.calls[2].params).toEqual(["dsp_abc1234", "a".repeat(40), 3410, "compliance-gate"]);
   });
 
   it("reports the PR that already holds the head instead of rebinding it", async () => {
-    h.results = [[], [{ pr: 9999 }]];
+    h.results = [[{ id: input.dispatchId }], [{ pr: 9999 }]];
     expect(await bindDispatchHeadPr(input)).toBe(9999);
-    expect(squash(h.calls[1].text)).toBe("SELECT pr FROM mc_dispatch_heads WHERE dispatch_id = $1 AND head_sha = $2");
-    expect(h.calls[1].params).toEqual(["dsp_abc1234", "a".repeat(40)]);
+    expect(squash(h.calls[1].text)).toContain("pr IS NOT NULL AND pr <> $2::integer");
+    expect(h.calls[1].params).toEqual(["dsp_abc1234", 3410]);
   });
 
   it("returns null for a head that is not recorded", async () => {

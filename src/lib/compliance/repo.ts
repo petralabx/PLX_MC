@@ -545,6 +545,43 @@ export async function hasActiveCheckoutForPrincipal(taskId: string, principalId:
   return rows.length > 0;
 }
 
+/** Live (unrevoked, unreleased, unexpired) checkouts of one task in one repo, newest lease first (TASK-3409). */
+export async function liveDispatchesForTask(taskId: string, repoSlug: string): Promise<DispatchRow[]> {
+  const rows = await query<DispatchDbRow>(
+    `SELECT ${DISPATCH_COLUMNS} FROM mc_dispatch
+      WHERE task_id = $1 AND lower(repo) = lower($2)
+        AND NOT revoked AND released_at IS NULL AND expires_at > now()
+      ORDER BY expires_at DESC`,
+    [taskId, repoSlug]
+  );
+  return rows.map(toDispatchRow);
+}
+
+/**
+ * Extend checkouts while their stamped PR is active (TASK-3409): the lease runs
+ * to at least now + ttl, and each extension is audited. A revoked or released
+ * lease is never touched; an expired, unreleased one is revived, because a push
+ * to an open PR that carries its stamp proves the work is still in flight.
+ */
+export async function renewDispatches(
+  ids: string[],
+  input: { repo: string; pr: number; ttlMinutes: number }
+): Promise<void> {
+  if (ids.length === 0) return;
+  await query(
+    `WITH renewed AS (
+       UPDATE mc_dispatch SET expires_at = GREATEST(expires_at, now() + ($4 || ' minutes')::interval)
+        WHERE id = ANY($1::text[]) AND lower(repo) = lower($2)
+          AND NOT revoked AND released_at IS NULL
+        RETURNING id, runtime, repo, task_id, expires_at
+     )
+     INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload)
+     SELECT 'checkout.renewed', runtime, repo, task_id, $3,
+            jsonb_build_object('checkoutId', id, 'expiresAt', expires_at) FROM renewed`,
+    [ids, input.repo, String(input.pr), String(input.ttlMinutes)]
+  );
+}
+
 /** Release and audit atomically; a repeated close is a no-op. */
 export async function releaseDispatches(
   ids: string[],

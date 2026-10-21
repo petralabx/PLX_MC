@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { ApprovalsInboxView } from "@/components/mc/approvals-inbox";
 import { canSendAnswer, QuestionCard, questionAnchorId, type OpenQuestionRow } from "@/components/mc/questions-inbox";
 
 const ROW: OpenQuestionRow = {
@@ -56,6 +57,16 @@ describe("QuestionCard", () => {
     expect(html).not.toContain('type="radio"');
     expect(html).toContain('aria-label="Your answer"');
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Send answer<\/button>/);
+  });
+});
+
+describe("Approvals screen layout", () => {
+  it("gives the gates their own heading, separate from the questions", () => {
+    const html = renderToStaticMarkup(createElement(ApprovalsInboxView, { route: { screen: "approvals" }, nav: () => {} }));
+    expect(html).toContain('id="ap-gates-title"');
+    expect(html).toContain("Approval gates");
+    // The questions section renders nothing until its list has loaded, so it never flashes.
+    expect(html).not.toContain("Questions for you");
   });
 });
 

@@ -26,6 +26,7 @@ const m = vi.hoisted(() => ({
   getProjects: vi.fn(),
   searchBrainAsk: vi.fn(),
   requestApprovalGate: vi.fn(),
+  askQuestion: vi.fn(),
   resolveGithubToken: vi.fn(),
 }));
 
@@ -69,6 +70,11 @@ vi.mock("@/lib/compliance/approvals", async (importOriginal) => ({
   requestApprovalGate: m.requestApprovalGate,
 }));
 
+vi.mock("@/lib/compliance/questions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/compliance/questions")>()),
+  askQuestion: m.askQuestion,
+}));
+
 vi.mock("@/lib/github-app", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/github-app")>()),
   resolveGithubToken: m.resolveGithubToken,
@@ -80,8 +86,10 @@ import { GET as listCheckoutsRoute } from "@/app/api/cursor/checkouts/route";
 import { GET as searchKnowledgeRoute } from "@/app/api/cursor/knowledge/search/route";
 import { GET as verifyRoute } from "@/app/api/cursor/verify/route";
 import { POST as requestApprovalRoute } from "@/app/api/cursor/request-approval/route";
+import { POST as askQuestionRoute } from "@/app/api/cursor/ask-question/route";
 import { actionListBuckets } from "@/lib/mcp/actions";
 import { actionRequestApproval } from "@/lib/mcp/approval-actions";
+import { actionAskQuestion } from "@/lib/mcp/question-actions";
 import type { McpIdentity } from "@/lib/mcp/auth";
 import { actionGetTask, actionListCheckouts } from "@/lib/mcp/read-actions";
 
@@ -257,6 +265,10 @@ beforeEach(() => {
   m.requestApprovalGate.mockResolvedValue({
     gate: { id: "apg_0123456789abcdef", status: "pending" },
     task: OPEN_TASK,
+  });
+  m.askQuestion.mockResolvedValue({
+    question: { id: "q_0123456789abcdef", addressee: "ricardo", status: "open" },
+    created: true,
   });
 });
 
@@ -775,6 +787,73 @@ describe("mc_request_approval", () => {
       actionRequestApproval(readOnly, { taskId: "TASK-100", reason: "x" })
     ).rejects.toMatchObject({ code: "forbidden", status: 403 });
     expect(m.requestApprovalGate).not.toHaveBeenCalled();
+  });
+});
+
+describe("mc_ask_question (TASK-3567)", () => {
+  const ask = { taskId: "TASK-100", addressee: "ricardo", question: "Which one?", options: ["A", "B"], recommended: 0 };
+
+  it("asks through the questions service as the authenticated principal", async () => {
+    const { isError, body } = await callTool("mc_ask_question", ask);
+    expect(isError).toBe(false);
+    expect(m.askQuestion).toHaveBeenCalledWith({
+      taskId: "TASK-100",
+      addressee: "ricardo",
+      text: "Which one?",
+      options: ["A", "B"],
+      recommended: 0,
+      recommendationReason: undefined,
+      askedBy: "vince@petrasoap.com",
+      askedByPrincipal: "sp_mcp_cursor",
+      runtime: "cursor",
+    });
+    expect(body.data).toMatchObject({
+      taskId: "TASK-100",
+      questionId: "q_0123456789abcdef",
+      addressee: "ricardo",
+      status: "open",
+      created: true,
+      questionLink: "https://mc.plxcustomer.io/?screen=approvals&question=q_0123456789abcdef",
+    });
+  });
+
+  it("keeps POST /api/cursor/ask-question on the same action", async () => {
+    const res = await askQuestionRoute(
+      rest("/api/cursor/ask-question", { method: "POST", body: JSON.stringify(ask) }),
+      noParams
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toMatchObject({ questionId: "q_0123456789abcdef", created: true });
+    expect(json.meta.links.task).toBe("https://mc.plxcustomer.io/tasks/TASK-100");
+  });
+
+  it("refuses a task in a restricted project the principal cannot see (MCP tool and REST)", async () => {
+    const { isError, body } = await callTool("mc_ask_question", { ...ask, taskId: "TASK-200" });
+    expect(isError).toBe(true);
+    expect(body.error.code).toBe("project_acl_denied");
+    const res = await askQuestionRoute(
+      rest("/api/cursor/ask-question", { method: "POST", body: JSON.stringify({ ...ask, taskId: "TASK-200" }) }),
+      noParams
+    );
+    expect(res.status).toBe(403);
+    expect(m.askQuestion).not.toHaveBeenCalled();
+  });
+
+  it("requires question.ask — a principal without it is refused before anything is stored", async () => {
+    const readOnly: McpIdentity = {
+      operatorEmail: "vince@petrasoap.com",
+      runtime: "cursor",
+      workerId: "w",
+      repo: "petralabx/PLX_MC",
+      servicePrincipalId: "sp_mcp_cursor",
+      actor: { kind: "service", id: "sp_sync_inbound", status: "active" },
+    };
+    await expect(actionAskQuestion(readOnly, { ...ask, options: ["A", "B"] })).rejects.toMatchObject({
+      code: "forbidden",
+      status: 403,
+    });
+    expect(m.askQuestion).not.toHaveBeenCalled();
   });
 });
 

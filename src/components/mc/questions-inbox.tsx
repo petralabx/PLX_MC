@@ -6,10 +6,12 @@
 // an answer; POST /api/questions/answer stores it and posts it to the task as
 // a comment. Only the addressee can answer — the server checks it.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, ApiClientError } from "@/lib/api";
 import type { TaskQuestion } from "@/lib/mc-data";
+import { refreshState } from "@/lib/mc-data/store";
+import { isPlainLeftClick, navHref } from "@/components/mc/nav-model";
 import type { Nav } from "@/components/mc/route";
 
 export interface OpenQuestionRow {
@@ -33,6 +35,14 @@ export function questionAnchorId(questionId: string): string {
   return `question-${questionId}`;
 }
 
+// Unsent answers survive the card unmounting (opening the task below 1600px
+// replaces the screen), until they are sent.
+interface Draft {
+  choice?: number;
+  text: string;
+}
+const drafts = new Map<string, Draft>();
+
 export type QuestionsLoad =
   | { status: "loading" }
   | { status: "error"; message: string }
@@ -52,30 +62,64 @@ export function QuestionCard({
   onSend: (choice: number | undefined, text: string) => void;
 }) {
   const q = row.question;
-  const [choice, setChoice] = useState<number | undefined>(undefined);
-  const [text, setText] = useState("");
+  const anchor = questionAnchorId(q.id);
+  const [choice, setChoiceState] = useState<number | undefined>(() => drafts.get(q.id)?.choice);
+  const [text, setTextState] = useState(() => drafts.get(q.id)?.text ?? "");
+  const firstRadio = useRef<HTMLInputElement>(null);
   const hasOptions = q.options.length > 0;
+  const setChoice = (next: number | undefined) => {
+    setChoiceState(next);
+    drafts.set(q.id, { choice: next, text });
+  };
+  const setText = (next: string) => {
+    setTextState(next);
+    drafts.set(q.id, { choice, text: next });
+  };
+  const taskTarget = { taskId: row.taskId };
   return (
-    <li id={questionAnchorId(q.id)} className={focused ? "ap-item aq-item aq-focus" : "ap-item aq-item"} data-testid="question-card">
+    <li id={anchor} className={focused ? "ap-item aq-item aq-focus" : "ap-item aq-item"} data-testid="question-card">
       <div className="ap-item-main">
         <div className="ap-links">
-          <button type="button" className="ap-task" onClick={() => nav("task", { taskId: row.taskId })}>
+          <a
+            className="ap-task"
+            href={navHref({ screen: "task", ...taskTarget })}
+            onClick={(event) => {
+              if (!isPlainLeftClick(event)) return;
+              event.preventDefault();
+              nav("task", taskTarget);
+            }}
+          >
             {row.taskId} · {row.taskTitle}
-          </button>
+          </a>
         </div>
-        <div className="ap-reason">{q.text}</div>
+        <div className="ap-reason" id={`${anchor}-text`}>
+          {q.text}
+        </div>
         {hasOptions ? (
-          <fieldset className="aq-options" disabled={busy}>
+          <fieldset className="aq-options" disabled={busy} aria-describedby={`${anchor}-text`}>
             <legend className="aq-legend">Pick one</legend>
             {q.options.map((option, i) => (
               <label key={i} className="aq-option">
-                <input type="radio" name={`aq-${q.id}`} checked={choice === i} onChange={() => setChoice(i)} />
+                <input
+                  ref={i === 0 ? firstRadio : undefined}
+                  type="radio"
+                  name={`aq-${q.id}`}
+                  checked={choice === i}
+                  onChange={() => setChoice(i)}
+                />
                 <span>{option}</span>
                 {i === q.recommended ? <span className="aq-rec">Recommended</span> : null}
               </label>
             ))}
             {choice !== undefined ? (
-              <button type="button" className="aq-clear" onClick={() => setChoice(undefined)}>
+              <button
+                type="button"
+                className="aq-clear"
+                onClick={() => {
+                  setChoice(undefined);
+                  firstRadio.current?.focus();
+                }}
+              >
                 Clear choice
               </button>
             ) : null}
@@ -85,6 +129,7 @@ export function QuestionCard({
         <textarea
           className="ap-note aq-text"
           aria-label={hasOptions ? "Note, or your own answer" : "Your answer"}
+          aria-describedby={`${anchor}-text`}
           placeholder={hasOptions ? "Optional note — or leave the options blank and type your own answer" : "Type your answer"}
           maxLength={2000}
           value={text}
@@ -112,8 +157,11 @@ export function QuestionCard({
 
 export function QuestionsSection({ nav, focusId }: { nav: Nav; focusId?: string }) {
   const [load, setLoad] = useState<QuestionsLoad>({ status: "loading" });
-  const [busy, setBusy] = useState<string | null>(null);
+  // Every card with a send in flight, so one card's send never re-enables another's.
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const noticeRef = useRef<HTMLDivElement>(null);
+  const scrolledTo = useRef<string | null>(null);
 
   const reload = useCallback((): Promise<void> => {
     return fetchOpenQuestions()
@@ -127,40 +175,53 @@ export function QuestionsSection({ nav, focusId }: { nav: Nav; focusId?: string 
     void reload();
   }, [reload]);
 
+  // Scroll to a linked question once; later reloads leave the page where it is.
   useEffect(() => {
-    if (!focusId || load.status !== "ready" || !load.rows.some((r) => r.question.id === focusId)) return;
+    if (!focusId || scrolledTo.current === focusId || load.status !== "ready") return;
+    if (!load.rows.some((r) => r.question.id === focusId)) return;
+    scrolledTo.current = focusId;
     document.getElementById(questionAnchorId(focusId))?.scrollIntoView({ block: "center" });
   }, [focusId, load]);
 
-  const rows = load.status === "ready" ? load.rows : [];
+  useEffect(() => {
+    if (notice) noticeRef.current?.focus();
+  }, [notice]);
 
   const send = useCallback(
     async (row: OpenQuestionRow, choice: number | undefined, text: string) => {
-      setBusy(row.question.id);
+      const id = row.question.id;
+      setBusy((prev) => new Set(prev).add(id));
       setNotice(null);
       try {
         await api("/questions/answer", {
           method: "POST",
-          body: JSON.stringify({
-            taskId: row.taskId,
-            questionId: row.question.id,
-            choice,
-            text: text.trim() || undefined,
-          }),
+          body: JSON.stringify({ taskId: row.taskId, questionId: id, choice, text: text.trim() || undefined }),
         });
+        drafts.delete(id);
         setNotice({ tone: "ok", text: `Answer posted to ${row.taskId}.` });
-        await reload();
+        // The store refresh brings the answer comment and the nav badge up to date.
+        await Promise.all([reload(), refreshState()]);
       } catch (err) {
         setNotice({ tone: "error", text: err instanceof ApiClientError ? err.message : "Sending the answer failed." });
+        // The question may have been answered elsewhere; show the list as it is now.
+        await reload();
       } finally {
-        setBusy(null);
+        setBusy((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       }
     },
     [reload]
   );
 
-  // Nothing to say when there are no questions: the gates below keep the screen.
-  if (load.status === "ready" && rows.length === 0 && !notice) return null;
+  const rows = load.status === "ready" ? load.rows : [];
+  const missingLink = !!focusId && load.status === "ready" && !rows.some((r) => r.question.id === focusId);
+
+  // Nothing to show while loading or when there are no questions: the gates keep the screen.
+  if (load.status === "loading") return null;
+  if (load.status === "ready" && rows.length === 0 && !notice && !missingLink) return null;
 
   return (
     <section className="aq-section" aria-labelledby="aq-title" data-testid="questions-section">
@@ -170,7 +231,6 @@ export function QuestionsSection({ nav, focusId }: { nav: Nav; focusId?: string 
       <p className="ap-sub">
         Bots asked you these. Only you can answer them; each answer is posted to its task as a comment.
       </p>
-      {load.status === "loading" ? <div className="ap-empty">Loading…</div> : null}
       {load.status === "error" ? (
         <div className="ap-error" role="alert">
           {load.message}{" "}
@@ -179,8 +239,13 @@ export function QuestionsSection({ nav, focusId }: { nav: Nav; focusId?: string 
           </button>
         </div>
       ) : null}
+      {missingLink && !notice ? (
+        <div className="ap-empty" role="status">
+          The linked question is not open for you: it has an answer, or it was asked of someone else.
+        </div>
+      ) : null}
       {notice ? (
-        <div className={notice.tone === "error" ? "ap-error" : "aq-ok"} role="status">
+        <div ref={noticeRef} tabIndex={-1} className={notice.tone === "error" ? "ap-error" : "aq-ok"} role="status">
           {notice.text}
         </div>
       ) : null}
@@ -192,7 +257,7 @@ export function QuestionsSection({ nav, focusId }: { nav: Nav; focusId?: string 
               row={row}
               nav={nav}
               focused={row.question.id === focusId}
-              busy={busy === row.question.id}
+              busy={busy.has(row.question.id)}
               onSend={(choice, text) => void send(row, choice, text)}
             />
           ))}

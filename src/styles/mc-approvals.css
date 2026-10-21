@@ -88,6 +88,10 @@
   outline: none;
 }
 
+a.ap-task {
+  text-decoration: none;
+}
+
 .ap-task:hover,
 .ap-task:focus-visible {
   text-decoration: underline;
@@ -233,5 +237,9 @@
   border-radius: var(--p-radius-sm);
   color: var(--p-ok, var(--p-ink));
   padding: 8px 12px;
+  margin-bottom: var(--p-space-2);
+}
+
+.ap-gates-sub {
   margin-bottom: var(--p-space-2);
 }

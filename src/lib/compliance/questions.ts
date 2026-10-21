@@ -11,30 +11,21 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/api/route";
 import { withTransaction } from "@/lib/db";
 import { HUMANS } from "@/lib/mc-data/data";
-import { isAgentId, openQuestionsFor } from "@/lib/mc-data/policy";
+import { normalizeAddressee, openQuestionsFor } from "@/lib/mc-data/policy";
 import type { Comment, Task, TaskQuestion } from "@/lib/mc-data/types";
 import { publicMcBaseUrl } from "@/lib/mcp/envelope";
-import type { ProjectAclPrincipal } from "@/lib/permissions/project-acl";
+import { canAccessProject, principalFromTokens, type ProjectAclPrincipal } from "@/lib/permissions/project-acl";
 import { loadProjectAclMaps, scopeHierarchy } from "@/lib/permissions/project-acl-guard";
 import { ensureSeeded, patchTask } from "@/lib/sync";
-import { getEntities, getEntity, stamp } from "@/lib/sync/repo";
+import { getBuckets, getEntities, getEntity, getProjects, stamp } from "@/lib/sync/repo";
 import { appendEvent, appendEventTx } from "./repo";
 
-/**
- * The id a question is addressed to: a directory id ("ricardo"), or the
- * lowercased email of a person not in the directory. An email that belongs to
- * a listed person becomes their directory id, so it matches sessionAuthorId.
- * Null for an unknown directory id or an agent: bots never answer questions.
- */
-export function normalizeAddressee(raw: string): string | null {
-  const value = raw.trim().toLowerCase();
-  if (!value) return null;
-  if (value.includes("@")) {
-    const listed = Object.values(HUMANS).find((h) => h.email?.toLowerCase() === value);
-    return listed ? listed.id : value;
-  }
-  if (isAgentId(value)) return null;
-  return Object.prototype.hasOwnProperty.call(HUMANS, value) ? value : null;
+export { normalizeAddressee };
+
+// Bot-written text is one line on the card and in the answer comment, so it
+// can never add its own "A:" or "Note:" lines under the person's name.
+function oneLine(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 /** Deep link that opens the Approvals screen on one question. */
@@ -73,7 +64,8 @@ export async function askQuestion(
   if (input.recommendationReason && input.recommended === undefined) {
     throw new ApiError("invalid_request", "recommendationReason needs a recommended option.", 400);
   }
-  const text = input.text.trim();
+  const text = oneLine(input.text);
+  const options = input.options.map(oneLine);
 
   // Seed on the pool before the transaction holds a connection (as applyTaskCommentOp does).
   await ensureSeeded();
@@ -81,9 +73,30 @@ export async function askQuestion(
     const row = await getEntity("task", input.taskId, q, true);
     if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
     const task = row.data as unknown as Task;
+    // A question the person could never see or answer is refused, not stored.
+    const bucket = (await getBuckets(q)).find((b) => b.id === task.bucket);
+    const project = (await getProjects(q)).find((p) => p.id === bucket?.project);
+    const addresseePrincipal = principalFromTokens(
+      addressee,
+      HUMANS[addressee]?.email,
+      addressee.includes("@") ? addressee : undefined
+    );
+    if (!canAccessProject(project, addresseePrincipal)) {
+      throw new ApiError(
+        "addressee_no_access",
+        `${addressee} is not a member of this task's restricted project, so they could never see the question.`,
+        400
+      );
+    }
     // Asking again (a bot re-run) returns the open question instead of a duplicate.
+    // A changed wording, option list or recommendation is a new question.
     const existing = (task.questions ?? []).find(
-      (x) => x.status === "open" && x.addressee === addressee && x.text === text
+      (x) =>
+        x.status === "open" &&
+        normalizeAddressee(x.addressee) === addressee &&
+        x.text === text &&
+        JSON.stringify(x.options) === JSON.stringify(options) &&
+        x.recommended === input.recommended
     );
     if (existing) return { question: existing, created: false };
 
@@ -91,9 +104,9 @@ export async function askQuestion(
       id: `q_${randomBytes(8).toString("hex")}`,
       addressee,
       text,
-      options: input.options.map((o) => o.trim()),
+      options,
       ...(input.recommended !== undefined ? { recommended: input.recommended } : {}),
-      ...(input.recommendationReason ? { recommendationReason: input.recommendationReason.trim() } : {}),
+      ...(input.recommendationReason ? { recommendationReason: oneLine(input.recommendationReason) } : {}),
       askedBy: input.askedBy,
       askedByPrincipal: input.askedByPrincipal,
       ...(input.runtime ? { askedRuntime: input.runtime } : {}),
@@ -168,10 +181,10 @@ export interface AnswerQuestionInput {
 }
 
 function answerCommentBody(question: TaskQuestion, choice: number | undefined, text: string | undefined): string {
-  const lines = [`Answer to a question from ${question.askedRuntime ?? question.askedBy} (${question.id}):`, `Q: ${question.text}`];
+  const lines = [`Answer to a question from ${question.askedRuntime ?? question.askedBy} (${question.id}):`, `Q: ${oneLine(question.text)}`];
   if (choice !== undefined) {
     const recommended = choice === question.recommended ? " (the recommended option)" : "";
-    lines.push(`A: ${question.options[choice]}${recommended}`);
+    lines.push(`A: ${oneLine(question.options[choice])}${recommended}`);
     if (text) lines.push(`Note: ${text}`);
   } else {
     lines.push(`A: ${text}`);
@@ -197,7 +210,7 @@ export async function answerQuestion(
       const task = row.data as unknown as Task;
       const question = (task.questions ?? []).find((x) => x.id === input.questionId);
       if (!question) throw new ApiError("not_found", `unknown question ${input.questionId} on ${input.taskId}`, 404);
-      if (question.addressee !== input.answeredBy) {
+      if (normalizeAddressee(question.addressee) !== input.answeredBy) {
         denial.addressee = question.addressee;
         throw new ApiError("not_addressee", "Only the person the question is addressed to can answer it.", 403);
       }
@@ -251,12 +264,17 @@ export async function answerQuestion(
   } catch (err) {
     if (denial.addressee) {
       // Outside the rolled-back transaction, so the refused attempt stays on the record.
-      await appendEvent({
-        kind: "question.denied",
-        actor: input.answeredBy,
-        taskId: input.taskId,
-        payload: { questionId: input.questionId, addressee: denial.addressee },
-      });
+      // A failed audit write must not turn the 403 into a 500.
+      try {
+        await appendEvent({
+          kind: "question.denied",
+          actor: input.answeredBy,
+          taskId: input.taskId,
+          payload: { questionId: input.questionId, addressee: denial.addressee },
+        });
+      } catch (auditErr) {
+        console.warn("[questions] question.denied audit write failed: %s", (auditErr as Error).message);
+      }
     }
     throw err;
   }

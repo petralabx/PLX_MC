@@ -257,3 +257,15 @@ export async function loadMergedPrFacts(repoFullName: string, prNumber: number):
     repoFullName: pr.base?.repo?.full_name ?? repoFullName,
   };
 }
+
+/** Prove immutable SHA ancestry without relying on a webhook's `before`. */
+export async function githubHeadDescendsFrom(repoFullName: string, baseSha: string, headSha: string): Promise<boolean> {
+  const [owner, name] = repoFullName.split("/");
+  const token = await resolveGithubToken({ repoOwner: owner });
+  if (!token) throw new ApiError("github_unavailable", "GitHub auth is unavailable for ancestry verification.", 503);
+  const comparison = await githubGet(
+    `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/compare/${encodeURIComponent(baseSha)}...${encodeURIComponent(headSha)}?per_page=1`,
+    token
+  ) as { status?: string };
+  return comparison.status === "ahead" || comparison.status === "identical";
+}

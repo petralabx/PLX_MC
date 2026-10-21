@@ -7,16 +7,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 import type { PrEvent } from "@/lib/compliance/webhook";
 
-const github = vi.hoisted(() => ({ loadPrState: vi.fn(), loadPrCommits: vi.fn() }));
+const github = vi.hoisted(() => ({ loadPrState: vi.fn(), loadPrCommits: vi.fn(), githubHeadDescendsFrom: vi.fn() }));
 vi.mock("@/lib/compliance/github-pr", () => github);
 
 const db = vi.hoisted(() => ({
-  dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string; revoked: boolean; expiresAt: string; releasedAt?: string | null; releasedReason?: string | null }>(),
+  dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string; revoked: boolean; expiresAt: string; launcherId?: string | null; releasedAt?: string | null; releasedReason?: string | null }>(),
   events: [] as { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown> }[],
   checks: [] as { id: string; verdict: string; reasons: string[]; actorKind: string; taskId: string | null }[],
   tasks: new Map<string, Task>(),
   dedupKeys: new Set<string>(),
   heads: new Map<string, { headSha: string; beforeSha: string | null; pr: number | null; source: "launcher" | "webhook" | "gate"; recordedBy: string; recordedAt: string }[]>(),
+  /** Another PR that binds the head between the gate's read and its bind (a race). */
+  bindRace: null as number | null,
+  recordRace: null as number | null,
   bucketsThrow: false,
   buckets: [
     { id: "BKT-WMS", name: "WMS", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: null as string | null, project: null },
@@ -65,11 +68,25 @@ vi.mock("@/lib/compliance/repo", () => ({
   },
   async recordDispatchHead(h: { dispatchId: string; headSha: string; beforeSha: string | null; pr: number | null; source: "launcher" | "webhook" | "gate"; recordedBy: string }) {
     const chain = db.heads.get(h.dispatchId) ?? [];
+    if (db.recordRace !== null) {
+      chain.push({ ...h, pr: db.recordRace, recordedAt: new Date().toISOString() });
+      db.heads.set(h.dispatchId, chain);
+      return false;
+    }
     if (!db.dispatches.has(h.dispatchId) || chain.some((x) => x.headSha === h.headSha)) return false;
     chain.push({ headSha: h.headSha, beforeSha: h.beforeSha, pr: h.pr, source: h.source, recordedBy: h.recordedBy, recordedAt: new Date().toISOString() });
     db.heads.set(h.dispatchId, chain);
     db.events.push({ kind: "checkout.head", actor: h.recordedBy, payload: { checkoutId: h.dispatchId, headSha: h.headSha, source: h.source } });
     return true;
+  },
+  async bindDispatchHeadPr(b: { dispatchId: string; headSha: string; pr: number; recordedBy: string }) {
+    const row = (db.heads.get(b.dispatchId) ?? []).find((x) => x.headSha === b.headSha);
+    if (!row) return null;
+    if (db.bindRace !== null && row.pr === null) row.pr = db.bindRace;
+    if (row.pr !== null) return row.pr;
+    row.pr = b.pr;
+    db.events.push({ kind: "checkout.head_bound", actor: b.recordedBy, payload: { checkoutId: b.dispatchId, headSha: b.headSha } });
+    return row.pr;
   },
   async appendEvent(e: { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown>; dedupKey?: string | null }) {
     if (e.dedupKey) {
@@ -158,12 +175,15 @@ beforeEach(() => {
   projection.projectPullRequest.mockReset();
   github.loadPrState.mockReset().mockResolvedValue({ open: true, checkoutIds: ["dsp_old"] });
   github.loadPrCommits.mockReset().mockResolvedValue([]);
+  github.githubHeadDescendsFrom.mockReset().mockResolvedValue(false);
   db.dispatches.clear();
   db.events.length = 0;
   db.checks.length = 0;
   db.tasks.clear();
   db.dedupKeys.clear();
   db.heads.clear();
+  db.bindRace = null;
+  db.recordRace = null;
   db.bucketsThrow = false;
   const withPrd = db.buckets.find((bucket) => bucket.id === "BKT-PRD");
   if (withPrd) withPrd.prd = "https://example.com/prd.md";
@@ -780,7 +800,7 @@ describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
 describe("checkout lifecycle (TASK-3409)", () => {
   const slug = "petralabx/PLX_MC";
   const mint = (over: Partial<Parameters<typeof checkout>[0]> = {}) =>
-    checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude", ...over });
+    checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude", actor: { kind: "service", id: "sp_mcp_claude_code", status: "active" }, ...over });
   beforeEach(() => {
     db.tasks.set("TASK-900", taskish({ accountableOwner: "vince", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
     delete process.env.PLX_MC_CHECKOUT_TAKEOVER_ENFORCE;
@@ -794,6 +814,35 @@ describe("checkout lifecycle (TASK-3409)", () => {
     expect((await mint()).checkoutId).not.toBe(first.checkoutId);
   });
 
+  it("never reuses a different principal's lease despite identical runtime and operator headers", async () => {
+    const held = await mint();
+    const second = await mint({ reuse: true, actor: { kind: "service", id: "sp_mcp_codex", status: "active" } });
+    expect(second.checkoutId).not.toBe(held.checkoutId);
+    expect(second.reused).toBeUndefined();
+  });
+
+  it("does not leak a launcher-owned credential through reuse", async () => {
+    process.env.PLX_MC_LAUNCHER_PRINCIPALS = "sp_mcp_ledger";
+    try {
+      const held = await mint({ actor: { kind: "service", id: "sp_mcp_ledger", status: "active" }, launchId: "launch-1" });
+      expect((await mint({ reuse: true })).checkoutId).not.toBe(held.checkoutId);
+    } finally {
+      delete process.env.PLX_MC_LAUNCHER_PRINCIPALS;
+    }
+  });
+
+  it.each([undefined, "claude-code/other"])("does not reuse an incompatible agent %s", async (agent) => {
+    const held = await mint();
+    expect((await mint({ reuse: true, agent })).checkoutId).not.toBe(held.checkoutId);
+  });
+
+  it("does not reuse legacy ownerless leases or unauthenticated requests", async () => {
+    const held = await mint({ actor: undefined });
+    expect((await mint({ reuse: true })).checkoutId).not.toBe(held.checkoutId);
+    const plain = await mint({ actor: undefined });
+    expect((await mint({ reuse: true, actor: undefined })).checkoutId).not.toBe(plain.checkoutId);
+  });
+
   it("logs a second holder and reports it, without refusing while enforcement is off", async () => {
     const held = await mint({ runtime: "cursor", agent: undefined });
     const second = await mint();
@@ -802,6 +851,19 @@ describe("checkout lifecycle (TASK-3409)", () => {
     ]);
     const ev = db.events.find((e) => e.kind === "checkout.concurrent");
     expect(ev?.payload).toMatchObject({ checkoutId: second.checkoutId, forceReason: null, enforced: false });
+  });
+
+  it.each([
+    ["another principal", { actor: { kind: "service" as const, id: "sp_mcp_codex", status: "active" as const } }],
+    ["another agent lane", { agent: "claude-code/other" }],
+  ])("counts %s with the same runtime and operator as another holder", async (_label, over) => {
+    const held = await mint();
+    const second = await mint(over);
+    expect(second.concurrent).toEqual([
+      { checkoutRef: `dsp_…${held.checkoutId.slice(-4)}`, runtime: "claude-code", accountableHuman: "cos@petrasoap.com" },
+    ]);
+    process.env.PLX_MC_CHECKOUT_TAKEOVER_ENFORCE = "1";
+    await expect(mint(over)).rejects.toMatchObject({ code: "checkout_held", status: 409 });
   });
 
   it("refuses a second holder without forceReason once enforcement is on, and logs the reason when given", async () => {
@@ -846,7 +908,13 @@ describe("checkout lifecycle (TASK-3409)", () => {
     ]);
     db.dispatches.get(checkoutId)!.revoked = true;
     const revoked = await verifyPr({ repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
-    expect(revoked.tasks[0].checkout).toMatchObject({ live: false, blockReason: "revoked" });
+    expect(revoked.tasks[0].checkout).toMatchObject({ live: false, blockReason: "revoked", expiresAt: db.dispatches.get(checkoutId)!.expiresAt });
+    Object.assign(db.dispatches.get(checkoutId)!, { revoked: false, releasedAt: "2026-10-21T00:00:00Z", releasedReason: "merged" });
+    const released = await verifyPr({ repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
+    expect(released.verdict).toBe("block");
+    expect(released.tasks[0]).toMatchObject({ taskId: null, checkout: { live: false, blockReason: "released", releasedReason: "merged" } });
+    const elsewhere = await verifyPr({ repo: "Other", repoFullName: "petralabx/Other", prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
+    expect(elsewhere.tasks[0].checkout).toMatchObject({ live: false, blockReason: "released", releasedReason: null, expiresAt: null });
   });
 });
 
@@ -958,18 +1026,29 @@ describe("checkout lease chain (TASK-3410)", () => {
     const evt = (headSha: string, beforeSha: string | null, prNumber = 3410): PrEvent => ({
       ...pr(headSha, prNumber), action: beforeSha ? "synchronize" : "opened", beforeSha, merged: false, branch: "x", title: "x", author: "agent", labels: [], checkoutId: cid, checkoutIds: [cid],
     });
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
     await ingestPullRequest(evt(sha("a"), null));
     await ingestPullRequest(evt(sha("b"), sha("a")));
     await ingestPullRequest(evt(sha("c"), sha("b"))); // first-parent merge of staging: before is the old head
-    await ingestPullRequest(evt(sha("f"), sha("9"))); // force-push: before is not on the chain
+    github.githubHeadDescendsFrom.mockResolvedValue(false);
+    await ingestPullRequest(evt(sha("f"), sha("c"))); // rebase: before is still the old head
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
+    await ingestPullRequest({ ...evt(sha("d"), sha("c")), forced: true });
     await ingestPullRequest(evt(sha("e"), sha("c"), 9999)); // another PR stamping the same checkout
     expect(heads(cid)).toEqual(["a:webhook:3410", "b:webhook:3410", "c:webhook:3410"]);
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    github.loadPrCommits.mockResolvedValue([commit(sha("f"), trailers(cid, lane))]);
+    github.githubHeadDescendsFrom.mockResolvedValue(false); // f is the rebase: no chain head is its ancestor
+    const blocked = await verifyPr({ ...pr(sha("f")), checkoutIds: [cid] });
+    expect(blocked.verdict).toBe("block");
+    expect(blocked.reasons.join(" ")).toContain("outside checkout");
   });
 
   it("passes a head that descends from a recorded head and records it", async () => {
     const cid = await launch();
     await recordHead(cid, sha("a"));
     github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane)), commit(sha("b"), trailers(cid, lane))]);
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
     const r = await verifyPr({ ...pr(sha("b")), checkoutIds: [cid] });
     expect(r.verdict).toBe("pass");
     expect(r.reasons.join(" ")).not.toContain("SHA chain");
@@ -992,6 +1071,114 @@ describe("checkout lease chain (TASK-3410)", () => {
     const otherPr = await verifyPr({ ...pr(sha("a"), 9999), checkoutIds: [cid] });
     expect(otherPr.verdict).toBe("block");
     expect(otherPr.reasons.join(" ")).toContain("SHA chain is bound to PR #3410, not #9999");
+  });
+
+  it("seeds an empty chain only with verified base ancestry, never on a failed compare", async () => {
+    const cid = await launch();
+    github.loadPrCommits.mockResolvedValue([commit(sha("c"), trailers(cid, lane))]);
+    const warned = await verifyPr({ ...pr(sha("c")), checkoutIds: [cid] });
+    expect(warned.verdict).toBe("pass");
+    expect(warned.reasons.join(" ")).toContain("warning: head ccccccc has no verified ancestry from checkout");
+    expect(github.githubHeadDescendsFrom).toHaveBeenCalledWith(slug, base, sha("c"));
+    expect(heads(cid)).toEqual([]);
+
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    expect((await verifyPr({ ...pr(sha("c")), checkoutIds: [cid] })).verdict).toBe("block");
+    github.githubHeadDescendsFrom.mockRejectedValue(new Error("github_unavailable"));
+    const failed = await verifyPr({ ...pr(sha("c")), checkoutIds: [cid] });
+    expect(failed.verdict).toBe("block");
+    expect(failed.reasons.join(" ")).toContain("no verified ancestry from checkout");
+    expect(heads(cid)).toEqual([]);
+
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
+    expect((await verifyPr({ ...pr(sha("c")), checkoutIds: [cid] })).verdict).toBe("pass");
+    expect(heads(cid)).toEqual(["c:gate:3410"]);
+  });
+
+  it("proves ancestry for the requested head itself, never from the PR's current commits", async () => {
+    const cid = await launch();
+    await recordHead(cid, sha("a"), 3410);
+    // The PR has moved on to b (a descendant of a); a delayed run or replay verifies the unrelated head f.
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane)), commit(sha("b"), trailers(cid, lane))]);
+    github.githubHeadDescendsFrom.mockImplementation(async (_repo: string, from: string, to: string) => from === sha("a") && to === sha("b"));
+    const warned = await verifyPr({ ...pr(sha("f")), checkoutIds: [cid] });
+    expect(warned.reasons.join(" ")).toContain("warning: head fffffff is outside checkout");
+    expect(github.githubHeadDescendsFrom).toHaveBeenCalledWith(slug, sha("a"), sha("f"));
+    expect(heads(cid)).toEqual(["a:launcher:3410"]);
+
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    expect((await verifyPr({ ...pr(sha("f")), checkoutIds: [cid] })).verdict).toBe("block");
+    github.githubHeadDescendsFrom.mockRejectedValue(new Error("github_unavailable"));
+    expect((await verifyPr({ ...pr(sha("b")), checkoutIds: [cid] })).verdict).toBe("block");
+    expect(heads(cid)).toEqual(["a:launcher:3410"]);
+
+    github.githubHeadDescendsFrom.mockImplementation(async (_repo: string, from: string, to: string) => from === sha("a") && to === sha("b"));
+    expect((await verifyPr({ ...pr(sha("b")), checkoutIds: [cid] })).verdict).toBe("pass");
+    expect(heads(cid)).toEqual(["a:launcher:3410", "b:gate:3410"]);
+  });
+
+  it("binds a head recorded before its PR existed to the first PR, so another PR cannot reuse the chain", async () => {
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    const cid = await launch();
+    await recordHead(cid, sha("a"));
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane))]);
+    expect((await verifyPr({ ...pr(sha("a")), checkoutIds: [cid] })).verdict).toBe("pass");
+    expect(heads(cid)).toEqual(["a:launcher:3410"]);
+    const otherPr = await verifyPr({ ...pr(sha("a"), 9999), checkoutIds: [cid] });
+    expect(otherPr.verdict).toBe("block");
+    expect(otherPr.reasons.join(" ")).toContain("SHA chain is bound to PR #3410, not #9999");
+  });
+
+  it("refuses a verify that loses the bind race to another PR", async () => {
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    const cid = await launch();
+    await recordHead(cid, sha("a"));
+    db.bindRace = 9999;
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane))]);
+    const lost = await verifyPr({ ...pr(sha("a")), checkoutIds: [cid] });
+    expect(lost.verdict).toBe("block");
+    expect(lost.reasons.join(" ")).toContain("SHA chain is bound to PR #9999, not #3410");
+    expect(heads(cid)).toEqual(["a:launcher:9999"]);
+  });
+
+  it("blocks when a concurrent gate wins the binding during head insertion", async () => {
+    const cid = await launch();
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane))]);
+    db.recordRace = 9999;
+    const lost = await verifyPr({ ...pr(sha("a")), checkoutIds: [cid] });
+    expect(lost.verdict).toBe("block");
+    expect(lost.reasons.join(" ")).toContain("SHA chain is bound to PR #9999, not #3410");
+  });
+
+  it("binds an unbound recorded head on the PR webhook and on a launcher re-record", async () => {
+    const cid = await launch();
+    await recordHead(cid, sha("a"));
+    await ingestPullRequest({
+      ...pr(sha("a")), action: "opened", beforeSha: null, merged: false, branch: "x", title: "x", author: "agent", labels: [], checkoutId: cid, checkoutIds: [cid],
+    });
+    expect(heads(cid)).toEqual(["a:launcher:3410"]);
+
+    const relaunched = await launch();
+    await recordHead(relaunched, sha("b"));
+    const again = await recordHead(relaunched, sha("b"), 3411);
+    expect(again.recorded).toBe(false);
+    expect(heads(relaunched)).toEqual(["b:launcher:3411"]);
+    await expect(recordHead(relaunched, sha("b"), 9999)).rejects.toMatchObject({ code: "chain_bound", status: 409 });
+  });
+
+  it("does not queue the event when an ordinary checkout's ancestry compare fails, but does for a launcher checkout", async () => {
+    seed();
+    const plain = (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, baseSha: base })).checkoutId;
+    const evt = (cid: string): PrEvent => ({
+      ...pr(sha("a")), action: "opened", beforeSha: null, merged: false, branch: "x", title: "x", author: "agent", labels: [], checkoutId: cid, checkoutIds: [cid],
+    });
+    github.githubHeadDescendsFrom.mockRejectedValue(new Error("github_unavailable"));
+    await expect(ingestPullRequest(evt(plain))).resolves.toMatchObject({ recorded: true });
+    expect(heads(plain)).toEqual([]);
+    const launched = await launch();
+    await expect(ingestPullRequest(evt(launched))).rejects.toThrow("github_unavailable");
   });
 
   it("blocks a commit stamped by a different actor than the checkout's", async () => {
@@ -1018,6 +1205,7 @@ describe("checkout lease chain (TASK-3410)", () => {
 
     const launched = await launch();
     github.loadPrCommits.mockResolvedValue([commit(sha("c"), trailers(launched, "claude-code/coding-1-l1"))]);
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
     expect((await verifyPr({ ...pr(sha("c"), 3412), checkoutIds: [launched] })).verdict).toBe("pass");
   });
 

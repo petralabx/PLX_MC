@@ -128,7 +128,7 @@ describe("decideApprovalGate", () => {
     process.env.PLX_MC_APPROVAL_SIGNING_KEY = "k";
     try {
       seedTask("TASK-700", { approvalGates: [{ ...pending, scope: { kind: "flags", flags: ["PLX_ALLOW_GATE_PENDING"] } }] });
-      const { gate } = await decideApprovalGate({ taskId: "TASK-700", gateId: "apg_1", decision: "approved", decidedBy: "greg@petrasoap.com" });
+      const { gate } = await decideApprovalGate({ taskId: "TASK-700", gateId: "apg_1", decision: "approved", decidedBy: "greg@petrasoap.com", renderedScope: JSON.stringify({ kind: "flags", flags: ["PLX_ALLOW_GATE_PENDING"] }, null, 2) });
       expect(gate.signature).toMatch(/^[0-9a-f]{64}$/);
       expect(Date.parse(gate.expiresAt!) - Date.parse(gate.decidedAt!)).toBe(24 * 3_600_000);
       expect(h.events[0].payload).toMatchObject({ signed: true, expiresAt: gate.expiresAt });
@@ -139,6 +139,29 @@ describe("decideApprovalGate", () => {
     } finally {
       delete process.env.PLX_MC_APPROVAL_SIGNING_KEY;
     }
+  });
+
+  it.each([
+    {},
+    { renderedScope: JSON.stringify({ kind: "flags", flags: ["different"] }, null, 2), renderedSourceRef: "ticket/1" },
+    { renderedScope: JSON.stringify({ kind: "flags", flags: ["override"] }, null, 2) },
+    { renderedScope: JSON.stringify({ kind: "flags", flags: ["override"] }, null, 2), renderedSourceRef: "ticket/old" },
+  ])("refuses scoped approval without the exact displayed scope and source: %j", async (review) => {
+    seedTask("TASK-700", { approvalGates: [{ ...pending, scope: { kind: "flags", flags: ["override"] }, sourceRef: "ticket/1" }] });
+    await expect(decideApprovalGate({ taskId: "TASK-700", gateId: pending.id, decision: "approved", decidedBy: "greg@petrasoap.com", ...review }))
+      .rejects.toMatchObject({ code: "approval_scope_not_reviewed", status: 409 });
+    expect(h.patches).toHaveLength(0);
+    expect(h.events).toHaveLength(0);
+  });
+
+  it("accepts the exact displayed scope and source and still permits rejection without review", async () => {
+    const scope = { kind: "merge" as const, repo: "petralabx/PLX_MC", pr: 385, headSha: "a".repeat(40) };
+    seedTask("TASK-700", { approvalGates: [{ ...pending, scope, sourceRef: "ticket/1" }] });
+    await expect(decideApprovalGate({ taskId: "TASK-700", gateId: pending.id, decision: "approved", decidedBy: "greg@petrasoap.com", renderedScope: JSON.stringify(scope, null, 2), renderedSourceRef: "ticket/1" }))
+      .resolves.toMatchObject({ gate: { status: "approved", scope, sourceRef: "ticket/1" } });
+    seedTask("TASK-701", { approvalGates: [{ ...pending, scope }] });
+    await expect(decideApprovalGate({ taskId: "TASK-701", gateId: pending.id, decision: "rejected", decidedBy: "greg@petrasoap.com" }))
+      .resolves.toMatchObject({ gate: { status: "rejected" } });
   });
 
   it("refuses an approval from a decider off the allowlist and audits it (TASK-3408)", async () => {

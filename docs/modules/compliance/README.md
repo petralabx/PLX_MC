@@ -99,8 +99,8 @@ truth table is proven before any plumbing exists.
   extends that checkout to at least now + 8 h (`renewDispatches`, audited as
   `checkout.renewed`); revoked or released leases are never extended.
   `checkout({ reuse: true })` hands back the caller's own live lease (same
-  runtime and operator, event `checkout.reused`). A checkout of a task that
-  another holder has a live lease on is logged as `checkout.concurrent` with
+  authenticated principal, recorded agent, runtime and operator, event `checkout.reused`). A checkout of a task that
+  another holder (any of those four differs) has a live lease on is logged as `checkout.concurrent` with
   the holders and any `forceReason`; with `PLX_MC_CHECKOUT_TAKEOVER_ENFORCE=1`
   it is refused (`checkout_held`, 409) unless `forceReason` is given. Each
   `verifyPr` task result carries `checkout` (live, expiresAt, releasedReason,
@@ -113,10 +113,18 @@ truth table is proven before any plumbing exists.
   `mc_dispatch_heads` is the checkout's ordered head chain, audited as
   `checkout.head`. A head joins it when the owning launcher records it
   (`mc_record_checkout_head`), when the `pull_request` webhook sees the first
-  head or a push whose `before` is the base SHA or a chain head (a
-  first-parent staging merge included), or when the gate finds a chain head
-  among the PR's commits. The first head with a PR number binds the chain to
-  that PR. For a checkout with a launch record, `verifyPr` reports a PR head
+  head with verified base ancestry or a push that GitHub compare proves
+  descends from a recorded head (a staging merge included); forced pushes
+  never extend the chain, or when GitHub compare proves the gate's requested
+  head itself descends from a chain head (never the PR's current commits, which
+  a delayed run or replay of an old head would borrow). The gate seeds an empty
+  chain that has a `baseSha` only when GitHub compare proves the head descends
+  from it; an unproven or failed compare leaves the head untrusted. Only
+  launcher checkouts let a failed webhook compare queue the event. The first
+  head with a PR number binds the chain to that PR; a head recorded before its
+  PR existed binds (guarded `pr IS NULL` update, audited as
+  `checkout.head_bound`) to the first PR the webhook, gate or launcher sees it
+  on, and a head bound to another PR fails verification. For a checkout with a launch record, `verifyPr` reports a PR head
   outside the chain (rewritten history) or a chain bound to another PR. A
   commit whose `Agent:` trailer names a lane in `PLX_MC_LAUNCH_LANES` (exact
   values, or prefixes ending in `*`; empty = none) needs a checkout with a
@@ -209,6 +217,9 @@ with `approval.decide` — never the requester (separation of duties, 403) —
 decides it via `POST /api/approvals/decide`. Transitions append
 `approval.requested` / `approval.decided` to `mc_events`; the Approvals inbox
 (`/?screen=approvals`) lists pending gates from `GET /api/approvals`.
+The inbox displays every scope field and the source reference beside the decision controls.
+Scoped approval requests must echo that exact displayed scope and source; missing or stale
+review data returns 409 `approval_scope_not_reviewed` before signing.
 A self-approval attempt still returns 403 `separation_of_duties` and now also
 appends one `approval.denied` event (actor = the attempting identity, payload
 `gateId`, `reasonCode: "separation_of_duties"`, `attemptedDecision`,

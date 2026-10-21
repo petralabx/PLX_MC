@@ -5,8 +5,10 @@
 // A checkout's chain is its base SHA plus every head recorded for it, oldest
 // first. A head joins the chain when the owning launcher records it, when the
 // pull_request webhook sees a fast-forward from a chain head (a first-parent
-// staging merge included), or when the gate finds a chain head among the PR's
-// commits. A rewritten history (rebase, force-push) leaves the chain.
+// staging merge included), or when the gate proves the head descends from a
+// chain head (GitHub compare of the immutable head, never the PR's current
+// commits). A rewritten history (rebase, force-push) leaves the chain. A head
+// recorded before its PR existed binds to the first PR that presents it.
 //
 // The chain and launch-record rules hold only checkouts the launcher took (a
 // launch record) and Agent trailers naming a launcher lane. Claude web, Cursor
@@ -54,52 +56,55 @@ export function boundPr(heads: readonly DispatchHead[]): number | null {
   return heads.find((h) => h.pr !== null)?.pr ?? null;
 }
 
-function onChain(d: Pick<DispatchRow, "baseSha">, heads: readonly DispatchHead[], sha: string | null | undefined): boolean {
-  if (!sha) return false;
-  return sha === d.baseSha || heads.some((h) => h.headSha === sha);
-}
-
-/**
- * Whether a pull_request webhook delivery extends the chain. An empty chain
- * attaches the PR head and binds the PR; after that only a fast-forward from a
- * chain head (the push's `before`) on the bound PR joins it.
- */
+/** A webhook needs verified ancestry, never just GitHub's previous head. */
 export function webhookExtendsChain(
   d: Pick<DispatchRow, "baseSha">,
   heads: readonly DispatchHead[],
-  evt: { prNumber: number; headSha: string; beforeSha?: string | null }
+  evt: { prNumber: number; headSha: string; forced?: boolean },
+  verifiedAncestorSha?: string | null
 ): boolean {
-  if (!FULL_SHA_RE.test(evt.headSha) || heads.some((h) => h.headSha === evt.headSha)) return false;
+  if (evt.forced || !FULL_SHA_RE.test(evt.headSha) || heads.some((h) => h.headSha === evt.headSha)) return false;
   const bound = boundPr(heads);
   if (bound !== null && bound !== evt.prNumber) return false;
-  if (heads.length === 0) return true;
-  return onChain(d, heads, evt.beforeSha);
+  if (heads.length === 0 && !d.baseSha) return true;
+  // Once heads exist, descending from the base alone does not prove continuity.
+  return !!verifiedAncestorSha && (heads.length === 0
+    ? verifiedAncestorSha === d.baseSha
+    : heads.some((h) => h.headSha === verifiedAncestorSha));
 }
 
 export type ChainVerdict =
-  | { ok: true; record: boolean }
+  | { ok: true; record: boolean; bind: boolean }
   | { ok: false; reason: string };
 
 /**
- * The gate's chain check for one launcher checkout at one PR head. `prCommitShas`
- * is every commit on the PR (ancestors of the head that are not on the base).
- * record = the head joins the chain (empty chain, or descends from a chain head).
+ * The gate's chain check for one launcher checkout at one PR head.
+ * `verifiedAncestorSha` = the chain head (or, for an empty chain, the base SHA)
+ * that a GitHub compare proved `input.headSha` itself descends from. The PR's
+ * current commits prove nothing about a delayed or replayed head.
+ * record = the head joins the chain; bind = the recorded head has no PR yet.
  */
 export function chainVerdict(
   d: Pick<DispatchRow, "id" | "baseSha">,
   heads: readonly DispatchHead[],
   input: { prNumber: number; headSha: string },
-  prCommitShas: readonly string[]
+  verifiedAncestorSha: string | null = null
 ): ChainVerdict {
   const ref = `dsp_…${d.id.slice(-4)}`;
-  const bound = boundPr(heads);
+  const own = heads.find((h) => h.headSha === input.headSha);
+  const bound = heads.find((h) => h.pr !== null && h.pr !== input.prNumber)?.pr ?? boundPr(heads);
   if (bound !== null && bound !== input.prNumber) {
     return { ok: false, reason: `checkout ${ref}'s SHA chain is bound to PR #${bound}, not #${input.prNumber}` };
   }
-  if (heads.some((h) => h.headSha === input.headSha)) return { ok: true, record: false };
-  if (heads.length === 0) return { ok: true, record: true };
-  const shas = new Set(prCommitShas);
-  if (heads.some((h) => shas.has(h.headSha))) return { ok: true, record: true };
+  if (own) return { ok: true, record: false, bind: own.pr === null };
+  if (heads.length === 0) {
+    if (!d.baseSha || (!!verifiedAncestorSha && verifiedAncestorSha === d.baseSha)) return { ok: true, record: true, bind: false };
+    return {
+      ok: false,
+      reason: `head ${input.headSha.slice(0, 7)} has no verified ancestry from checkout ${ref}'s base ${d.baseSha.slice(0, 7)} — the owning launcher must record the first head (mc_record_checkout_head)`,
+    };
+  }
+  if (verifiedAncestorSha && heads.some((h) => h.headSha === verifiedAncestorSha)) return { ok: true, record: true, bind: false };
   const last = heads[heads.length - 1].headSha.slice(0, 7);
   return {
     ok: false,

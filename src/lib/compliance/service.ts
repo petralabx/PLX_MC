@@ -56,7 +56,7 @@ import {
   webhookExtendsChain,
 } from "./lease-chain";
 import { agentSignals, commitTrailers, shortSha } from "./commit-signals";
-import { loadPrCommits, loadPrReviewLinks, loadPrState, type PrCommit, type PrState } from "./github-pr";
+import { githubHeadDescendsFrom, loadPrCommits, loadPrReviewLinks, loadPrState, type PrCommit, type PrState } from "./github-pr";
 import { projectPullRequest, projectionEnabled } from "./projection";
 import * as repo from "./repo";
 import { applyReviewLinks, reviewLinksReport, touchedModules, type ReviewLinksReport } from "./review-links";
@@ -392,8 +392,15 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   const live = await repo.liveDispatchesForTask(input.taskId, input.repo);
   const mine = holderKey(input);
   // A launch always mints its own lease (TASK-3410): reuse could hand back one without the launch record.
-  if (input.reuse && !launchId) {
-    const own = live.find((d) => holderKey(d) === mine && !d.approvalGateId);
+  if (input.reuse && !launchId && input.actor?.id) {
+    let own: repo.DispatchRow | undefined;
+    for (const d of live) {
+      if (holderKey(d) !== mine || d.approvalGateId || d.launcherId !== input.actor.id) continue;
+      const recordedAgent = await repo.getDispatchCheckoutAgent(d.id);
+      if ((recordedAgent ?? null) !== (input.agent ?? null)) continue;
+      own = d;
+      break;
+    }
     if (own) {
       await repo.appendEvent({
         kind: "checkout.reused",
@@ -405,7 +412,17 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
       return { checkoutId: own.id, accountablePerson, reused: true };
     }
   }
-  const others = live.filter((d) => holderKey(d) !== mine);
+  // Another holder differs in runtime, operator, principal or recorded agent (the reuse check's identity).
+  const others: repo.DispatchRow[] = [];
+  for (const d of live) {
+    if (
+      holderKey(d) !== mine ||
+      (d.launcherId ?? null) !== (input.actor?.id ?? null) ||
+      ((await repo.getDispatchCheckoutAgent(d.id)) ?? null) !== (input.agent ?? null)
+    ) {
+      others.push(d);
+    }
+  }
   const forceReason = input.forceReason?.trim() || null;
   if (others.length > 0 && checkoutTakeoverEnforced() && !forceReason) {
     throw new ApiError(
@@ -535,6 +552,13 @@ export async function recordCheckoutHead(input: RecordCheckoutHeadInput) {
     source: "launcher",
     recordedBy: input.principalId,
   });
+  if (!recorded && input.prNumber) {
+    const boundTo = await repo.bindDispatchHeadPr({ dispatchId: d.id, headSha, pr: input.prNumber, recordedBy: input.principalId });
+    if (boundTo !== null && boundTo !== input.prNumber) {
+      throw new ApiError("chain_bound", `This head is bound to PR #${boundTo}.`, 409);
+    }
+    return { dispatch: d, recorded, chain: await repo.dispatchHeads(d.id) };
+  }
   return { dispatch: d, recorded, chain: recorded ? await repo.dispatchHeads(d.id) : heads };
 }
 
@@ -816,7 +840,6 @@ async function leaseChainCheck(
   d: repo.DispatchRow,
   rows: CommitTrailerRow[],
   input: VerifyPrInput,
-  prCommitShas: string[],
   record: boolean
 ): Promise<{ reasons: string[]; notes: string[] }> {
   const found: string[] = [];
@@ -827,17 +850,42 @@ async function leaseChainCheck(
       }
     }
   } else if (input.event !== "merge_group") {
-    const verdict = chainVerdict(d, await repo.dispatchHeads(d.id), input, prCommitShas);
+    const heads = await repo.dispatchHeads(d.id);
+    // Prove ancestry for the requested immutable head itself, the webhook's proof: a
+    // delayed run or replay of an old head must not borrow the PR's current commits.
+    // A failed compare proves nothing.
+    const candidates =
+      !FULL_SHA_RE.test(input.headSha) || heads.some((h) => h.headSha === input.headSha)
+        ? []
+        : heads.length ? heads.map((h) => h.headSha).reverse() : d.baseSha ? [d.baseSha] : [];
+    let ancestor: string | null = null;
+    for (const sha of candidates) {
+      if (await githubHeadDescendsFrom(d.repo, sha, input.headSha).catch(() => false)) {
+        ancestor = sha;
+        break;
+      }
+    }
+    const verdict = chainVerdict(d, heads, input, ancestor);
     if (!verdict.ok) found.push(verdict.reason);
-    else if (verdict.record && record && FULL_SHA_RE.test(input.headSha)) {
-      await repo.recordDispatchHead({
-        dispatchId: d.id,
-        headSha: input.headSha,
-        beforeSha: null,
-        pr: input.prNumber,
-        source: "gate",
-        recordedBy: "compliance-gate",
-      });
+    else if (record) {
+      if (verdict.record && FULL_SHA_RE.test(input.headSha)) {
+        await repo.recordDispatchHead({
+          dispatchId: d.id,
+          headSha: input.headSha,
+          beforeSha: null,
+          pr: input.prNumber,
+          source: "gate",
+          recordedBy: "compliance-gate",
+        });
+      }
+      // Recheck the whole checkout under its row lock even for an existing head.
+      // A different head may have bound to another PR after our initial read.
+      const bound = await repo.bindDispatchHeadPr({ dispatchId: d.id, headSha: input.headSha, pr: input.prNumber, recordedBy: "compliance-gate" });
+      if (bound === null) {
+        found.push(`checkout dsp_…${d.id.slice(-4)}'s SHA chain could not bind the requested head`);
+      } else if (bound !== input.prNumber) {
+        found.push(`checkout dsp_…${d.id.slice(-4)}'s SHA chain is bound to PR #${bound}, not #${input.prNumber}`);
+      }
     }
   }
   return leaseChainEnforced()
@@ -940,8 +988,10 @@ export async function verifyPr(
     const stamped = trailerRows.filter((t) => t.checkoutId === cid);
     const trailerCheck = d ? await checkoutTrailerCheck(d, stamped, task) : { reasons: [], notes: [] };
     const chainCheck = d
-      ? await leaseChainCheck(d, stamped, input, prCommits.map((c) => c.sha), record)
+      ? await leaseChainCheck(d, stamped, input, record)
       : { reasons: [], notes: [] };
+    // Diagnostics only: a released or revoked checkout of this repo still shows why and when.
+    const shown = d ?? (await repo.getDispatch(cid).then((x) => (x && dispatchRepoMatches(x.repo, input.repo, input.repoFullName) ? x : null)));
     const commitReasons = [
       ...prCommitReasons,
       ...trailerCheck.reasons,
@@ -961,8 +1011,8 @@ export async function verifyPr(
       reasons: checked.reasons,
       checkout: {
         live: !!d && !resolution.reason,
-        expiresAt: d?.expiresAt ?? null,
-        releasedReason: d?.releasedReason ?? null,
+        expiresAt: shown?.expiresAt ?? null,
+        releasedReason: shown?.releasedReason ?? null,
         blockReason: resolution.reason ?? null,
       },
       approvals: (task?.approvalGates ?? []).map((g) => ({
@@ -1468,7 +1518,24 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
   // TASK-3410: the push extends each stamped checkout's SHA chain when it is a
   // fast-forward from a chain head (or attaches the first head to an empty chain).
   for (const d of renewable) {
-    if (webhookExtendsChain(d, await repo.dispatchHeads(d.id), evt)) {
+    const heads = await repo.dispatchHeads(d.id);
+    if (boundPr(heads) !== null && boundPr(heads) !== evt.prNumber) continue;
+    // A head recorded before its PR existed binds to this PR (the gate holds other PRs off it).
+    if (heads.some((h) => h.headSha === evt.headSha && h.pr === null)) {
+      await repo.bindDispatchHeadPr({ dispatchId: d.id, headSha: evt.headSha, pr: evt.prNumber, recordedBy: "github-webhook" });
+    }
+    if (evt.forced || heads.some((h) => h.headSha === evt.headSha)) continue;
+    const candidates = heads.length ? heads.map((h) => h.headSha).reverse() : d.baseSha ? [d.baseSha] : [];
+    let ancestor: string | null = null;
+    for (const sha of candidates) {
+      const descends = githubHeadDescendsFrom(d.repo, sha, evt.headSha);
+      // Only launcher checkouts are held to the chain; an ordinary checkout's failed compare must not queue the event.
+      if (await (d.launchId ? descends : descends.catch(() => false))) {
+        ancestor = sha;
+        break;
+      }
+    }
+    if (webhookExtendsChain(d, heads, evt, ancestor)) {
       await repo.recordDispatchHead({
         dispatchId: d.id,
         headSha: evt.headSha,

@@ -342,6 +342,16 @@ export interface Task {
 
 export type ApprovalGateStatus = "pending" | "approved" | "rejected";
 
+/**
+ * What an approval covers (TASK-3408). launch: one lane may start one prompt;
+ * merge: one PR at one head SHA; flags: named override flags. An approval
+ * outside its scope never counts.
+ */
+export type ApprovalScope =
+  | { kind: "launch"; lane: string; promptHash: string }
+  | { kind: "merge"; repo: string; pr: number; headSha: string }
+  | { kind: "flags"; flags: string[] };
+
 /** Structured proposal an agent attaches to a gate (all fields optional except summary). */
 export interface ApprovalProposal {
   summary: string;
@@ -375,6 +385,14 @@ export interface ApprovalGate {
   decidedBy?: string;
   decidedAt?: string;
   note?: string;
+  /** TASK-3408: what the approval covers; absent on legacy gates (they never satisfy a scoped check). */
+  scope?: ApprovalScope;
+  /** TASK-3408: where the request came from (a message link, a ticket); shown to the decider. */
+  sourceRef?: string;
+  /** TASK-3408: set when approved; the approval stops covering at this time. */
+  expiresAt?: string;
+  /** TASK-3408: HMAC-SHA256 of the canonical record (approval-signature.ts); null when no signing key is set. */
+  signature?: string | null;
 }
 
 export type InboxKind = "approval" | "review" | "conflict" | "mention" | "assigned";

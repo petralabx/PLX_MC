@@ -158,6 +158,7 @@ Never treat selected membership alone as consumption evidence.
 | AWS `prod/ec2-secrets` | `PLX_MC_MCP_API_KEY` | `MC_MCP_API_KEY` for compatibility principal `sp_mcp_cursor` |
 | AWS `plx/prod/mc/mcp-agent-keys/v1` | principal-id → key registry | `MC_MCP_API_KEY` for dedicated agent principals |
 | Vercel Production | `PLX_MC_MCP_API_KEY`, `PLX_MC_MCP_AGENT_KEYS` | Validated server-side on `/api/cursor/mcp` |
+| Vercel Production | `PLX_MC_APPROVAL_SIGNING_KEY` (TASK-3408) | HMAC key that signs approval decisions; unset = approvals are stored unsigned and every signed-approval check fails closed. Rotating it invalidates existing signatures, so rotate between decisions and re-approve live gates |
 
 Clients set `MC_MCP_PRINCIPAL_ID` to one reviewed id:
 `sp_mcp_cursor`, `sp_mcp_claude_code`, `sp_mcp_codex`, `sp_mcp_chatgpt`,

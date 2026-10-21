@@ -639,10 +639,37 @@ server.tool(
       .strict()
       .optional()
       .describe("Structured proposal for the reviewer (32 KB total cap)"),
+    scope: z
+      .discriminatedUnion("kind", [
+        z.object({ kind: z.literal("launch"), lane: z.string(), promptHash: z.string() }).strict(),
+        z.object({ kind: z.literal("merge"), repo: z.string(), pr: z.number().int().positive(), headSha: z.string() }).strict(),
+        z.object({ kind: z.literal("flags"), flags: z.array(z.string()).min(1).max(20) }).strict(),
+      ])
+      .optional()
+      .describe("TASK-3408: what the approval covers; the server validates the formats"),
+    sourceRef: z.string().min(1).max(500).optional().describe("Where the request came from (message link, ticket)"),
   },
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_request_approval");
     return printResult(await mcFetch("/request-approval", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_verify_approval",
+  "Check whether a signed approval on a task covers a launch {lane?, promptHash?}, a merge {repo?, pr?, headSha?} or a flag {flag?} now (TASK-3408). ok is true only for a person's unexpired, validly signed approval in scope; otherwise reason names the first failure.",
+  {
+    taskId: z.string().min(1),
+    approvalId: z.string().optional(),
+    expect: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("launch"), lane: z.string().optional(), promptHash: z.string().optional() }).strict(),
+      z.object({ kind: z.literal("merge"), repo: z.string().optional(), pr: z.number().int().positive().optional(), headSha: z.string().optional() }).strict(),
+      z.object({ kind: z.literal("flags"), flag: z.string().optional() }).strict(),
+    ]),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_verify_approval");
+    return printResult(await mcFetch("/approvals/verify", { method: "POST", body }));
   }
 );
 

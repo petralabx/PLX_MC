@@ -91,6 +91,10 @@ truth table is proven before any plumbing exists.
   the task's bucket has no PRD link. `verifyPr(input, { record: false })`
   computes the same verdict without the check row or gate event — used only by
   the read-only MCP `mc_verify_pr`, whose inputs come from `github-pr.ts`.
+- TASK-3408: a task labelled `approval:merge-required` (`MERGE_APPROVAL_LABEL`)
+  passes only when one of its approval gates is a person's signed, unexpired
+  merge approval for this repo, PR and head SHA (`checkApproval`); otherwise the
+  gate blocks and names the reason. Unlabelled tasks are unaffected.
 - TASK-3409: a push to, or reopen of, an open PR whose body carries a stamp
   extends that checkout to at least now + 8 h (`renewDispatches`, audited as
   `checkout.renewed`); revoked or released leases are never extended.

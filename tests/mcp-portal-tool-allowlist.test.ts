@@ -217,6 +217,7 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   mc_list_projects: {},
   mc_request_approval: { taskId: "TASK-1", reason: "please" },
   mc_get_approval_gate: { taskId: "TASK-1" },
+  mc_verify_approval: { taskId: "TASK-1", expect: { kind: "launch" } },
   mc_update_task: { taskId: "TASK-1", patch: { addLabels: ["lane:codex"] } },
   mc_update_tasks: { items: [{ taskId: "TASK-1", patch: { addLabels: ["lane:codex"] } }] },
   mc_release_checkout: { checkoutId: "dsp_x", reason: "stray" },

@@ -50,6 +50,7 @@ Routing behavior is unchanged; owner: Vince. No migration is needed.
 | `mc_search_knowledge` | `GET /api/cursor/knowledge/search?q=&limit=` | `task.read` | Ask the Brain hits with provenance (`id`, `source`, `namespace`, `score`) + honest `status` |
 | `mc_verify_pr` | `GET /api/cursor/verify?repo=&pr=` | `task.read` | the `/api/compliance/verify` verdict from GitHub PR stamps/labels/files; `recorded: false` (no check row, no `gate.*` event) |
 | `mc_request_approval` | `POST /api/cursor/request-approval` | `approval.request` (write) | `gateId`, `checkoutRef` (`dsp_…last4`), `status: pending`, `inputRequired: true` |
+| `mc_verify_approval` | `POST /api/cursor/approvals/verify` | `task.read` (read; any principal, the launcher included) | `ok`, `reason` (first failure), `approval` {approvalId, status, scope, decidedBy, decidedAt, expiresAt, signed}; never the proposal (TASK-3408, TASK-3444) |
 | `mc_get_approval_gate` | `GET /api/cursor/approval-gate` | `task.read` (read; only the authenticated service principal that raised the gate) | `gateId`, `checkoutRef`, `status`, `decidedBy`, `decidedAt`, `note`, `proposal`, `timedOut` |
 | `mc_release_checkout` | `POST /api/cursor/checkouts/release` | `task.checkout` + project ACL + checkout principal / Ledger-CoS steward principal (write); while `PLX_MC_MCP_PRINCIPAL_AUTHZ` is `shadow` (default) the older accountable human / admin / cos@ operator rule still decides and disagreements are logged as `authz.shadow_mismatch` | releases one lease by `checkoutId`, or by `checkoutRef` + `taskId`; returns `checkoutRef`, `releasedAt`, `releasedReason` (`manual: …`), `authz` |
 | `mc_release_checkouts` | `POST /api/cursor/checkouts/release-batch` | same, per item | `results[]` with `ok` + `data` or `ok: false` + `error`; `released`, `failed`; `refused[]` with `checkoutRef`, `taskId`, `code`, `reason` per unreleased item |
@@ -414,6 +415,21 @@ not browser Entra. Ledger owns Keep MC for stage-lag leftovers; never silent
 rows only.
 
 **Approval gates (TASK-629):** `mc_request_approval` (`POST /api/cursor/request-approval`, and the HTTP/stdio MCP tool — both call `actionRequestApproval` in `src/lib/mcp/approval-actions.ts`) raises a runtime approval gate on a task (`approval.request`); the task freezes input-required until a human decides in the Approvals inbox. Optional `checkoutId` marks that checkout blocked-on-approval (`mc_dispatch.approval_gate_id`, migration 036; the full id is never stored on the task, in events or in any response, only `checkoutRef`; a checkout with a pending gate refuses a new one with 409): `mc_complete_task` refuses with `approval_pending` while the gate is pending and `approval_rejected` after a rejection (the checkout stays blocked; raise a new gate on it or release it). Optional `proposal` `{summary, action?, diff?, plan?, risk?}` is a strict object capped at 32 KB, stored on the gate and shown in the Approvals inbox; `reason` stays a short string (max 500). `mc_get_approval_gate {checkoutId|taskId, gateId?, waitSeconds?}` is the agent resume signal: it returns pending/approved/rejected with decider, decidedAt and note; `waitSeconds` (hard cap 25) long-polls and returns early on a decision.
+
+**Signed approvals (TASK-3408):** `mc_request_approval` also takes `scope`,
+one of `{kind: "launch", lane, promptHash}` (one `<runtime>/<lane>`, one
+SHA-256 prompt hash), `{kind: "merge", repo, pr, headSha}` or
+`{kind: "flags", flags}`, plus an optional `sourceRef`, and returns the
+`approvalId` agents cite instead of free text. When a person approves, the gate
+gets `expiresAt` (launch 4 h, flags 24 h, merge or unscoped 72 h) and a
+`signature`: HMAC-SHA256 with `PLX_MC_APPROVAL_SIGNING_KEY` over the canonical
+record (`src/lib/compliance/approval-signature.ts`). `mc_verify_approval
+{taskId, approvalId?, expect}` answers whether one covers a launch, merge or
+flag now; `ok` needs approved, signed, a valid signature, unexpired, a person
+decider on `PLX_MC_APPROVAL_DECIDERS` when that allowlist is set, and a
+matching scope, else `reason` names the first failure. Deciding off the
+allowlist is refused and audited as `approval.denied` (`decider_not_allowed`).
+Legacy gates without a scope never satisfy a scoped check.
 Checkout also backfills a missing task `accountableOwner` through the same
 resolver. Operator/service aliases that are not people
 (for example `cos@petrasoap.com`) resolve to the PLX default accountable human,

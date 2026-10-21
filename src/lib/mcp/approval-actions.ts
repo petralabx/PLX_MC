@@ -10,7 +10,8 @@ import { getApprovalGateState, requestApprovalGate } from "@/lib/compliance/appr
 import * as complianceRepo from "@/lib/compliance/repo";
 import { dispatchRepoMatches } from "@/lib/compliance/service";
 import { getEntity } from "@/lib/sync/repo";
-import type { Task } from "@/lib/mc-data";
+import type { ApprovalGate, Task } from "@/lib/mc-data";
+import { checkApproval } from "@/lib/compliance/approval-signature";
 import { APPROVAL_WAIT_MAX_MS } from "@/lib/mc-data/policy";
 import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
@@ -36,11 +37,26 @@ export const approvalProposalSchema = z
     message: `proposal exceeds ${PROPOSAL_MAX_BYTES} bytes`,
   });
 
+const hex64 = z.string().trim().regex(/^[0-9a-fA-F]{64}$/, "must be a 64-character hex SHA-256");
+const laneId = z.string().trim().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "must be <runtime>/<lane>");
+const repoSlug = z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "must be owner/name");
+const headSha = z.string().trim().regex(/^[0-9a-fA-F]{40}$/, "must be a 40-character commit SHA");
+
+// TASK-3408: what an approval covers. launch = one lane, one prompt; merge = one
+// PR at one head; flags = named override flags.
+export const approvalScopeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("launch"), lane: laneId, promptHash: hex64 }).strict(),
+  z.object({ kind: z.literal("merge"), repo: repoSlug, pr: z.number().int().positive(), headSha }).strict(),
+  z.object({ kind: z.literal("flags"), flags: z.array(z.string().trim().min(1).max(64)).min(1).max(20) }).strict(),
+]);
+
 export const requestApprovalSchema = z.object({
   taskId: z.string().min(1),
   reason: z.string().min(1).max(500),
   checkoutId: z.string().min(1).optional(),
   proposal: approvalProposalSchema.optional(),
+  scope: approvalScopeSchema.optional(),
+  sourceRef: z.string().trim().min(1).max(500).optional(),
 });
 
 export type RequestApprovalActionInput = z.infer<typeof requestApprovalSchema>;
@@ -91,13 +107,73 @@ export async function actionRequestApproval(
     checkoutId: input.checkoutId,
     checkoutRef: input.checkoutId ? checkoutRef(input.checkoutId) : undefined,
     proposal: input.proposal,
+    scope: input.scope,
+    sourceRef: input.sourceRef,
   });
   return {
     taskId: input.taskId,
     checkoutRef: input.checkoutId ? checkoutRef(input.checkoutId) : null,
     gateId: gate.id,
+    // Cite this id, never free text, when the work depends on the approval (TASK-3408).
+    approvalId: gate.id,
     status: gate.status,
+    scope: gate.scope ?? null,
     inputRequired: true,
+    link: taskLink(input.taskId),
+  };
+}
+
+// ─── mc_verify_approval (TASK-3408, TASK-3444) ───────────────────────────────
+
+export const verifyApprovalSchema = z
+  .object({
+    taskId: z.string().trim().min(1),
+    approvalId: z.string().trim().regex(/^apg_[0-9a-f]+$/).optional(),
+    expect: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("launch"), lane: laneId.optional(), promptHash: hex64.optional() }).strict(),
+      z.object({ kind: z.literal("merge"), repo: repoSlug.optional(), pr: z.number().int().positive().optional(), headSha: headSha.optional() }).strict(),
+      z.object({ kind: z.literal("flags"), flag: z.string().trim().min(1).max(64).optional() }).strict(),
+    ]),
+  })
+  .strict();
+
+export type VerifyApprovalActionInput = z.infer<typeof verifyApprovalSchema>;
+
+/**
+ * Is there a signed approval on this task that covers `expect` now? Any
+ * principal holding task.read may ask, the launcher included (TASK-3444): the
+ * answer carries the decision, scope, expiry and decider, never the proposal.
+ * With approvalId, only that gate is checked; without it, any covering gate.
+ */
+export async function actionVerifyApproval(identity: McpIdentity, input: VerifyApprovalActionInput) {
+  requireMcpActor(identity, "task.read", { type: "task", id: input.taskId });
+  await assertTaskProjectAccess(input.taskId, aclPrincipalFromMcp(identity));
+  const row = await getEntity("task", input.taskId);
+  if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+  const gates = ((row.data as unknown as Task).approvalGates ?? []).filter(
+    (g) => !input.approvalId || g.id === input.approvalId
+  );
+  if (input.approvalId && gates.length === 0) {
+    throw new ApiError("not_found", `unknown approval ${input.approvalId} on ${input.taskId}`, 404);
+  }
+  const results = gates.map((gate) => ({ gate, result: checkApproval(input.taskId, gate, input.expect) }));
+  const covering = results.find((r) => r.result.ok);
+  const shown = covering ?? results[results.length - 1];
+  const view = (g: ApprovalGate) => ({
+    approvalId: g.id,
+    status: g.status,
+    scope: g.scope ?? null,
+    decidedBy: g.decidedBy ?? null,
+    decidedAt: g.decidedAt ?? null,
+    expiresAt: g.expiresAt ?? null,
+    signed: !!g.signature,
+  });
+  return {
+    taskId: input.taskId,
+    ok: !!covering,
+    reason: covering ? null : shown ? (shown.result as { reason: string }).reason : "no_approval",
+    approval: shown ? view(shown.gate) : null,
+    checkedAt: new Date().toISOString(),
     link: taskLink(input.taskId),
   };
 }
@@ -163,6 +239,12 @@ export function registerApprovalTools(server: McpServer, identity: McpIdentity):
     "Raise a runtime approval gate on a task (approval.request). Pass checkoutId to block that checkout until approved (mc_complete_task refuses); pass proposal {summary, action?, diff?, plan?, risk?} for the human reviewer. The task freezes input-required until a human other than the requester approves or rejects it in the Approvals inbox. Agents never decide gates.",
     requestApprovalSchema.shape,
     async (args) => mcpJsonResult({ data: await actionRequestApproval(identity, args) })
+  );
+  server.tool(
+    "mc_verify_approval",
+    "Check whether a signed approval on a task covers what you are about to do (TASK-3408): expect {kind: launch, lane?, promptHash?} | {kind: merge, repo?, pr?, headSha?} | {kind: flags, flag?}. ok is true only when a person approved it, the signature is valid, it has not expired, the decider is allowed and the scope matches; otherwise reason names the first failure. Optional approvalId checks one gate. Readable by any principal with task.read, the launcher included; never returns the proposal.",
+    verifyApprovalSchema.shape,
+    async (args) => mcpJsonResult({ data: await actionVerifyApproval(identity, verifyApprovalSchema.parse(args)) })
   );
   server.tool(
     "mc_get_approval_gate",

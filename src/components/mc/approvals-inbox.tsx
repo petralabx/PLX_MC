@@ -50,6 +50,31 @@ export function ApprovalRowLinks({ row, nav }: { row: PendingApprovalRow; nav: N
   );
 }
 
+/** Render every scope field verbatim; unknown future scope kinds fail closed. */
+export function approvalScopeText(gate: ApprovalGate): string | null {
+  if (!gate.scope || !["launch", "merge", "flags"].includes(gate.scope.kind)) return null;
+  return JSON.stringify(gate.scope, null, 2);
+}
+
+export function ApprovalDecisionScope({ gate }: { gate: ApprovalGate }) {
+  const text = approvalScopeText(gate);
+  return (
+    <div className="ap-proposal" data-testid="approval-scope">
+      <p>Approval scope</p>
+      {text ? <pre>{text}</pre> : <p>{gate.scope ? "Scope cannot be displayed. Approval is unavailable." : "Unscoped approval"}</p>}
+      <p>Source: {gate.sourceRef ?? "None provided"}</p>
+    </div>
+  );
+}
+
+export function ApprovalApproveButton({ gate, busy, onApprove }: { gate: ApprovalGate; busy: boolean; onApprove: () => void }) {
+  return (
+    <button type="button" className="ap-btn approve" disabled={busy || (!!gate.scope && !approvalScopeText(gate))} onClick={onApprove}>
+      Approve
+    </button>
+  );
+}
+
 interface ApprovalsResponse {
   approvals: PendingApprovalRow[];
 }
@@ -146,6 +171,11 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
 
   const decide = useCallback(
     async (row: PendingApprovalRow, decision: "approved" | "rejected") => {
+      const renderedScope = approvalScopeText(row.gate);
+      if (decision === "approved" && row.gate.scope && !renderedScope) {
+        setActionError("Scope cannot be displayed. Approval is unavailable.");
+        return;
+      }
       setBusyGate(row.gate.id);
       setActionError(null);
       try {
@@ -155,6 +185,8 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
             taskId: row.taskId,
             gateId: row.gate.id,
             decision,
+            renderedScope: renderedScope ?? undefined,
+            renderedSourceRef: row.gate.sourceRef,
             note: notes[row.gate.id]?.trim() || undefined,
           }),
         });
@@ -190,6 +222,7 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
               <div className="ap-item-main">
                 <ApprovalRowLinks row={row} nav={nav} />
                 <div className="ap-reason">{row.gate.reason}</div>
+                <ApprovalDecisionScope gate={row.gate} />
                 <div className="ap-meta">
                   requested by {row.gate.requestedBy}
                   {row.gate.requestedRuntime ? ` via ${row.gate.requestedRuntime}` : ""} ·{" "}
@@ -216,14 +249,11 @@ export function ApprovalsInboxView({ nav }: ScreenProps) {
                 />
               </div>
               <div className="ap-actions">
-                <button
-                  type="button"
-                  className="ap-btn approve"
-                  disabled={busyGate === row.gate.id}
-                  onClick={() => void decide(row, "approved")}
-                >
-                  Approve
-                </button>
+                <ApprovalApproveButton
+                  gate={row.gate}
+                  busy={busyGate === row.gate.id}
+                  onApprove={() => void decide(row, "approved")}
+                />
                 <button
                   type="button"
                   className="ap-btn reject"

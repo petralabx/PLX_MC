@@ -13,10 +13,12 @@ const decideSchema = z.object({
   gateId: z.string().min(1),
   decision: z.enum(["approved", "rejected"]),
   note: z.string().max(1000).optional(),
+  renderedScope: z.string().max(10000).optional(),
+  renderedSourceRef: z.string().max(500).optional(),
 });
 
 export const POST = route(async (req) => {
-  const { taskId, gateId, decision, note } = await parseBody(req, decideSchema);
+  const { taskId, gateId, decision, note, renderedScope, renderedSourceRef } = await parseBody(req, decideSchema);
   const authorized = await requireSessionActor("approval.decide", {
     type: "task",
     id: taskId,
@@ -27,6 +29,8 @@ export const POST = route(async (req) => {
     decision,
     decidedBy: authorized.auditLabel,
     note,
+    renderedScope,
+    renderedSourceRef,
   });
   return { gate, taskId: task.id, inputRequired: (task.approvalGates ?? []).some((g) => g.status === "pending") };
 });

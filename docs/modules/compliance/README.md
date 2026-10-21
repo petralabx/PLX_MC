@@ -210,6 +210,9 @@ with `approval.decide` — never the requester (separation of duties, 403) —
 decides it via `POST /api/approvals/decide`. Transitions append
 `approval.requested` / `approval.decided` to `mc_events`; the Approvals inbox
 (`/?screen=approvals`) lists pending gates from `GET /api/approvals`.
+The inbox displays every scope field and the source reference beside the decision controls.
+Scoped approval requests must echo that exact displayed scope and source; missing or stale
+review data returns 409 `approval_scope_not_reviewed` before signing.
 A self-approval attempt still returns 403 `separation_of_duties` and now also
 appends one `approval.denied` event (actor = the attempting identity, payload
 `gateId`, `reasonCode: "separation_of_duties"`, `attemptedDecision`,

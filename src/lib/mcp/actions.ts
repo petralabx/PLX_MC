@@ -54,12 +54,12 @@ import {
   filterTasksByAcl,
   indexById,
 } from "@/lib/permissions/project-acl";
-import type { McpIdentity } from "./auth";
+import { mcpAuditActor, type McpIdentity } from "./auth";
 import { taskSearchSchema, type SearchTasksInput } from "./task-search-schema";
 export type { SearchTasksInput } from "./task-search-schema";
 import { TERMINAL_TASK_STAGES } from "./task-update-actions";
 import { resolveCheckoutRepo } from "./checkout-repo";
-import { taskLink } from "./envelope";
+import { bucketLink, projectLink, taskLink } from "./envelope";
 import { assertEvidenceStandard } from "./evidence-standard-guard";
 import { assertMayCloseOrReopen, cancelContextFor } from "./task-cancel-actions";
 import { buildHonestyFields } from "./honesty";
@@ -367,7 +367,7 @@ export async function actionCreateProject(
       ? { members: [...creator.tokens, ...(projectInput.members ?? [])] }
       : {}),
   });
-  return { project, projectId: project.id, sync: project.sync };
+  return { project, projectId: project.id, link: projectLink(project.id), sync: project.sync };
 }
 
 export type CreateBucketActionInput = Omit<CreateBucketInput, "desc"> & {
@@ -390,7 +390,7 @@ export async function actionCreateBucket(
     desc: description,
     owner: input.owner ?? resolveHumanAccountableOwner(identity.operatorEmail),
   });
-  return { bucket, bucketId: bucket.id, sync: bucket.sync };
+  return { bucket, bucketId: bucket.id, link: bucketLink(bucket.id), sync: bucket.sync };
 }
 
 export async function actionListBuckets(
@@ -482,33 +482,74 @@ export async function actionUpdateBucket(
   }
   const bucket = await patchBucket(id, patch, authorized.auditLabel);
   if (!bucket) throw new ApiError("not_found", `unknown bucket ${id}`, 404);
-  return { bucket, bucketId: bucket.id, sync: bucket.sync };
+  return { bucket, bucketId: bucket.id, link: bucketLink(bucket.id), sync: bucket.sync };
+}
+
+/** Refuse a checkout without an agent (TASK-3407). Off by default: warn first. */
+function checkoutAgentRequired(): boolean {
+  return (process.env.PLX_MC_CHECKOUT_AGENT_REQUIRED ?? "").trim() === "1";
+}
+
+function checkoutWarnings(agent: string | undefined, concurrent: number): { warnings?: string[] } {
+  const warnings = [
+    ...(agent ? [] : ["agent_missing: pass agent (<runtime>/<lane>) or send X-MC-Agent; checkouts without one will be refused."]),
+    ...(concurrent ? ["concurrent_holder: another holder has a live checkout of this task; coordinate before pushing."] : []),
+  ];
+  return warnings.length ? { warnings } : {};
 }
 
 export async function actionCheckout(
   identity: McpIdentity,
   taskId: string,
-  options: { repo?: string; agent?: string } = {}
+  options: {
+    repo?: string;
+    agent?: string;
+    reuse?: boolean;
+    forceReason?: string;
+    baseSha?: string;
+    launchId?: string;
+  } = {}
 ) {
   const repo = resolveCheckoutRepo(identity.repo, options.repo);
   requireMcpActor(identity, "task.checkout", { type: "task", id: taskId }, {
     repositoryId: repo,
   });
   await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
-  const { checkoutId } = await checkout({
+  // TASK-3407: every checkout names its <runtime>/<lane> so the gate holds each
+  // commit's Agent trailer to it. Warn while runtimes adopt it; refuse once
+  // PLX_MC_CHECKOUT_AGENT_REQUIRED=1.
+  const agent = options.agent ?? identity.agent;
+  if (!agent && checkoutAgentRequired()) {
+    throw new ApiError(
+      "agent_required",
+      "mc_checkout_task needs agent (<runtime>/<lane>), as a parameter or the X-MC-Agent header.",
+      400
+    );
+  }
+  const { checkoutId, accountablePerson, reused, concurrent } = await checkout({
     taskId,
     runtime: identity.runtime,
     accountableHuman: identity.operatorEmail,
     repo,
     actor: identity.actor,
     door: "mcp",
-    agent: options.agent,
+    agent,
+    reuse: options.reuse,
+    forceReason: options.forceReason,
+    baseSha: options.baseSha,
+    launchId: options.launchId,
   });
   const stamp = `MC-Checkout: ${checkoutId}`;
   return {
     checkoutId,
     taskId,
     prBodyLine: stamp,
+    // The person commits name in On-Behalf-Of (TASK-3483).
+    accountablePerson,
+    // TASK-3409: an existing live checkout handed back, and other holders' leases.
+    ...(reused ? { reused: true } : {}),
+    ...(concurrent?.length ? { concurrent } : {}),
+    ...(checkoutWarnings(agent, concurrent?.length ?? 0)),
     link: taskLink(taskId),
     sync: await syncMetaForTask(taskId),
     actor: { repo },
@@ -624,7 +665,7 @@ export async function actionProgress(
   if (!task) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
   await complianceRepo.appendEvent({
     kind: "task.progress",
-    actor: `${identity.runtime}:${identity.operatorEmail}`,
+    actor: mcpAuditActor(identity),
     repo: identity.repo,
     taskId: input.taskId,
     payload: {
@@ -748,7 +789,7 @@ export async function actionComplete(
   if (autonomy && existingDispatch) {
     await complianceRepo.appendEvent({
       kind: "task.completion.autonomy",
-      actor: `${identity.runtime}:${identity.operatorEmail}`,
+      actor: mcpAuditActor(identity),
       repo: existingDispatch.repo,
       taskId: existingDispatch.taskId,
       payload: {

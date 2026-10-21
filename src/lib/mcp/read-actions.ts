@@ -12,8 +12,9 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { searchBrainAsk, searchStatusMessage } from "@/lib/brain-ask";
 import { loadPrVerifyInput } from "@/lib/compliance/github-pr";
+import { isLauncherPrincipal } from "@/lib/compliance/lease-chain";
 import * as complianceRepo from "@/lib/compliance/repo";
-import { verifyPr } from "@/lib/compliance/service";
+import { checkoutAccountablePeople, verifyPr } from "@/lib/compliance/service";
 import { filterTasksByAcl, indexById } from "@/lib/permissions/project-acl";
 import { recordReadShadowMismatch } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
@@ -47,9 +48,11 @@ function requireGithubSlug(value: string): string {
 }
 
 // A live dsp_* id is a bearer credential: complete() accepts any unrevoked,
-// unexpired id, and the dispatch row records no minting principal to prove
-// ownership against. So read tools never return a full id — active or not (one
-// rule, no expiry-race edge). An agent's own id comes from its checkout receipt.
+// unexpired id. So read tools never return a full id — active or not (one rule,
+// no expiry-race edge). An agent's own id comes from its checkout receipt. One
+// exception (TASK-3410): the dispatch row now records the principal that minted
+// it, and a launcher principal (PLX_MC_LAUNCHER_PRINCIPALS) reads the full id of
+// the checkouts it took. Every other principal sees only the checkoutRef.
 const CHECKOUT_ID_RE = /dsp_[A-Za-z0-9]+/g;
 
 /** Non-usable reference for a checkout id: `dsp_…` + its last 4 chars. */
@@ -71,13 +74,22 @@ export function redactCheckoutIds<T>(value: T): T {
   return value;
 }
 
-function toCheckoutView(row: complianceRepo.DispatchListRow, now = Date.now()) {
+function toCheckoutView(
+  row: complianceRepo.DispatchListRow,
+  taskOwner: string | null | undefined,
+  viewer: McpIdentity,
+  now = Date.now()
+) {
+  const ownLaunch = !!row.launcherId && row.launcherId === viewer.actor.id && isLauncherPrincipal(viewer.actor.id);
   return {
     checkoutRef: checkoutRef(row.id),
+    ...(ownLaunch ? { checkoutId: row.id } : {}),
     taskId: row.taskId,
     repo: row.repo,
     runtime: row.runtime,
     accountableHuman: row.accountableHuman,
+    // Who commits name in On-Behalf-Of; the gate accepts any entry (TASK-3483).
+    accountablePeople: checkoutAccountablePeople(row.accountableHuman, taskOwner),
     actorKind: row.actorKind,
     issuedAt: row.issuedAt,
     expiresAt: row.expiresAt,
@@ -105,15 +117,19 @@ export async function actionGetTask(identity: McpIdentity, id: string) {
     complianceRepo.listDispatches({ taskId, limit: GET_TASK_CHECKOUT_LIMIT }),
   ]);
   // Event payloads (checkout, task.completed) and gate reasons carry dsp_* ids.
-  return redactCheckoutIds({
+  // Checkout views are added after redaction: they carry no id but the owning
+  // launcher's own (TASK-3410).
+  const result = redactCheckoutIds({
     taskId,
     task,
     accountableOwner: task.accountableOwner,
     evidence: task.evidence ?? null,
-    checkouts: checkouts.map((row) => toCheckoutView(row)),
+    checkouts: [] as ReturnType<typeof toCheckoutView>[],
     events: events.map(compactTaskUpdatedEvent),
     link: taskLink(taskId),
   });
+  result.checkouts = checkouts.map((row) => toCheckoutView(row, task.accountableOwner, identity));
+  return result;
 }
 
 // A task.updated diff carries full before/after descriptions (up to 64 KB per
@@ -162,7 +178,10 @@ export async function actionListCheckouts(identity: McpIdentity, input: ListChec
     ).map((t) => t.id)
   );
   const hidden = new Set(snap.tasks.filter((t) => !visible.has(t.id)).map((t) => t.id));
-  const checkouts = rows.filter((row) => !hidden.has(row.taskId)).map((row) => toCheckoutView(row));
+  const owners = new Map(snap.tasks.map((t) => [t.id, t.accountableOwner]));
+  const checkouts = rows
+    .filter((row) => !hidden.has(row.taskId))
+    .map((row) => toCheckoutView(row, owners.get(row.taskId), identity));
   return { checkouts, count: checkouts.length, filter };
 }
 
@@ -209,14 +228,14 @@ export async function actionVerifyPr(identity: McpIdentity, input: { repo: strin
 export function registerAgentReadTools(server: McpServer, identity: McpIdentity): void {
   server.tool(
     "mc_get_task",
-    "Read one MC task: the task (as mc_get_context depth:full), its completedAt and cancellation (reason, replacedBy), its accountable owner and evidence, its checkouts, and its recent mc_events history (newest first; excludes mcp.tool.invoked audit rows). Checkout ids are redacted to checkoutRef (dsp_…last4) everywhere — use your own mc_checkout_task receipt to complete. Read-only; restricted-project tasks return not_found.",
+    "Read one MC task: the task (as mc_get_context depth:full), its completedAt and cancellation (reason, replacedBy), its accountable owner and evidence, its checkouts, and its recent mc_events history (newest first; excludes mcp.tool.invoked audit rows). Checkout ids are redacted to checkoutRef (dsp_…last4) everywhere — use your own mc_checkout_task receipt to complete; only a launcher principal also sees checkoutId on the checkouts it took. Read-only; restricted-project tasks return not_found.",
     { id: z.string().min(1).describe("TASK-* id") },
     async ({ id }) => mcpJsonResult({ data: await actionGetTask(identity, id) })
   );
 
   server.tool(
     "mc_list_checkouts",
-    "List checkouts (dispatches), newest first, as checkoutRef (dsp_…last4) + taskId, repo, runtime, issuedAt, expiresAt, releasedAt, releasedReason, active — never the usable dsp_* id. Filters: repo (full owner/name slug, exact match), taskId, active (true = unrevoked, unreleased and unexpired; false = inactive). Active is ledger-only; open-PR expiry exceptions are checked during verification. Read-only.",
+    "List checkouts (dispatches), newest first, as checkoutRef (dsp_…last4) + taskId, repo, runtime, issuedAt, expiresAt, releasedAt, releasedReason, active — never the usable dsp_* id, except checkoutId on the checkouts a launcher principal took, shown to that launcher only. Filters: repo (full owner/name slug, exact match), taskId, active (true = unrevoked, unreleased and unexpired; false = inactive). Active is ledger-only; open-PR expiry exceptions are checked during verification. Read-only.",
     {
       repo: z.string().min(1).optional().describe("Full GitHub slug, e.g. petralabx/PLX_MC"),
       taskId: z.string().min(1).optional(),

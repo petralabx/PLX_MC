@@ -2,7 +2,7 @@
 
 Implementation specs that an orchestrator agent reads and builds from. Each spec
 names its phases, the repo each phase touches, and the acceptance check that
-proves the phase is done. Accountable human for all three: vince@petrasoap.com.
+proves the phase is done. Accountable human for every spec here: vince@petrasoap.com.
 
 | File | Revision | Status | What it covers |
 |---|---|---|---|
@@ -12,6 +12,7 @@ proves the phase is done. Accountable human for all three: vince@petrasoap.com.
 | [`agent-fleet-review-log.md`](agent-fleet-review-log.md) | rounds 1–7, r13 pass | Record | The adversarial review of the fleet spec, finding by finding. |
 | [`swarm-retirement-spec.md`](swarm-retirement-spec.md) | r13 | D1–D13 confirmed; reviewed in seven rounds, then closed by the operator; r12 follows fleet r13 (28 Sep 2026); r13 (29 Sep 2026) amends R7 so that it leaves the Cursor Team MCP entry to frontier P14 and records `team_mcp: left to frontier P14`, on Vince's answer to frontier round-10 open question 3; its B16 and the P14 bullet of its section 10 say the same, and no decision, default or other step changed | Retire `petralabx/agentic-swarm` and VMC: measure use, move the brain to `plx_secondbrain`, retire the rest. The trading lab is not touched and keeps the repo. |
 | [`swarm-retirement-review-log.md`](swarm-retirement-review-log.md) | rounds 1–7 | Record | The adversarial review of the retirement spec, finding by finding. |
+| [`ai-review-v2.2-implementation-spec.md`](ai-review-v2.2-implementation-spec.md) | r1 | Draft for Vince's review (20 Oct 2026); documents only, nothing in any repo, setting or workflow changes under r1 | The AI reviewer process: role checks, per-tier quorum with author-family exclusion, Grok as the third family, cross-family verification, deterministic fast gate, Mission Control as the gate (plx-gate), `review-tiers.yml`, `uat/stamp`, metrics, rollout phases mapped to TASK-3426 to TASK-3437 and the GitHub Gates tasks. Research record: `artifacts/review/2026-10-20-ai-review-v2-2-design-review/REPORT.md`. |
 
 ## Round 10 — the review of frontier r13 (done 29 Sep 2026)
 

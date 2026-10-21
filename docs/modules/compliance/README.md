@@ -42,7 +42,11 @@ truth table is proven before any plumbing exists.
   `Agent:`/`On-Behalf-Of:`/`MC-Checkout:` trailer. Agent commits with no body
   stamp block. On a stamped PR, each agent commit must end with `Agent:`,
   `On-Behalf-Of:`, then `MC-Checkout:` as the last line, naming a body stamp.
-  On-Behalf-Of must equal the checkout's accountable person. Agent must equal
+  On-Behalf-Of must equal the checkout's accountable person. When the checkout
+  was minted through a shared service alias (`cos@…`, not a person), the task's
+  human accountable owner is accepted too (TASK-3483); `mc_checkout_task`
+  returns that person as `accountablePerson`, and `mc_get_task` and
+  `mc_list_checkouts` list every accepted value as `accountablePeople`. Agent must equal
   the `<runtime>/<lane>` passed as `agent` to `mc_checkout_task`, or the
   checkout's runtime when it is not the default `cursor`; otherwise it only
   warns. The merge queue skips the read; a GitHub error holds the gate.
@@ -87,6 +91,40 @@ truth table is proven before any plumbing exists.
   the task's bucket has no PRD link. `verifyPr(input, { record: false })`
   computes the same verdict without the check row or gate event — used only by
   the read-only MCP `mc_verify_pr`, whose inputs come from `github-pr.ts`.
+- TASK-3408: a task labelled `approval:merge-required` (`MERGE_APPROVAL_LABEL`)
+  passes only when one of its approval gates is a person's signed, unexpired
+  merge approval for this repo, PR and head SHA (`checkApproval`); otherwise the
+  gate blocks and names the reason. Unlabelled tasks are unaffected.
+- TASK-3409: a push to, or reopen of, an open PR whose body carries a stamp
+  extends that checkout to at least now + 8 h (`renewDispatches`, audited as
+  `checkout.renewed`); revoked or released leases are never extended.
+  `checkout({ reuse: true })` hands back the caller's own live lease (same
+  runtime and operator, event `checkout.reused`). A checkout of a task that
+  another holder has a live lease on is logged as `checkout.concurrent` with
+  the holders and any `forceReason`; with `PLX_MC_CHECKOUT_TAKEOVER_ENFORCE=1`
+  it is refused (`checkout_held`, 409) unless `forceReason` is given. Each
+  `verifyPr` task result carries `checkout` (live, expiresAt, releasedReason,
+  blockReason) and the task's approval gates as `approvals`. The merge SHA was
+  already stamped on the task by the PR projection.
+- TASK-3410 (lease chain, `lease-chain.ts`, migration 047): every checkout
+  records the principal that minted it (`mc_dispatch.launcher_id`) and an
+  optional `baseSha`; a principal listed in `PLX_MC_LAUNCHER_PRINCIPALS` may
+  also attach a `launchId` (anyone else gets 403 `not_a_launcher`).
+  `mc_dispatch_heads` is the checkout's ordered head chain, audited as
+  `checkout.head`. A head joins it when the owning launcher records it
+  (`mc_record_checkout_head`), when the `pull_request` webhook sees the first
+  head or a push whose `before` is the base SHA or a chain head (a
+  first-parent staging merge included), or when the gate finds a chain head
+  among the PR's commits. The first head with a PR number binds the chain to
+  that PR. For a checkout with a launch record, `verifyPr` reports a PR head
+  outside the chain (rewritten history) or a chain bound to another PR. A
+  commit whose `Agent:` trailer names a lane in `PLX_MC_LAUNCH_LANES` (exact
+  values, or prefixes ending in `*`; empty = none) needs a checkout with a
+  launch record. Both rules warn until `PLX_MC_LEASE_CHAIN_ENFORCE=1`, then
+  block. Checkouts without a launch record (Claude web, Cursor cloud, Codex,
+  people) are never held to them; the actor rule (Agent and On-Behalf-Of
+  against the checkout) is unchanged. The merge queue skips the chain check,
+  as it never reads GitHub.
 - TASK-2011: expired checkouts fall back to live GitHub open-PR/stamp proof,
   once per PR verification/ingestion, failing closed when GitHub is unavailable.
   Revoked/released credentials, repo mismatches, and deleted/verified tasks

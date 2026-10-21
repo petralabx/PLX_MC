@@ -286,10 +286,47 @@ server.tool(
       .describe(
         "Optional GitHub slug (e.g. petralabx/local-inference) to bind checkout actor.repo. Allowlisted consumers only. Omitted = MC_REPO / X-MC-Repo."
       ),
+    agent: z
+      .string()
+      .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/)
+      .optional()
+      .describe("Optional <runtime>/<lane> of the calling agent, recorded on the checkout; the gate holds each commit's Agent trailer to it."),
+    reuse: z.boolean().optional().describe("Return your own live checkout of this task instead of minting a second one."),
+    forceReason: z.string().min(1).max(2000).optional().describe("Why you take over a task another holder has a live checkout of."),
+    baseSha: z.string().regex(/^[0-9a-fA-F]{40}$/).optional().describe("Full commit SHA your work starts from; the root of the checkout's SHA chain."),
+    launchId: z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/).optional().describe("Launch record id; launcher principals only."),
   },
-  async ({ taskId, repo }) => {
+  async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId }) => {
     if (!MCP_ENABLED) return disabledTool("mc_checkout_task");
-    return printResult(await mcFetch("/checkout", { method: "POST", body: { taskId, ...(repo ? { repo } : {}) } }));
+    return printResult(
+      await mcFetch("/checkout", {
+        method: "POST",
+        body: {
+          taskId,
+          ...(repo ? { repo } : {}),
+          ...(agent ? { agent } : {}),
+          ...(reuse !== undefined ? { reuse } : {}),
+          ...(forceReason ? { forceReason } : {}),
+          ...(baseSha ? { baseSha } : {}),
+          ...(launchId ? { launchId } : {}),
+        },
+      })
+    );
+  }
+);
+
+server.tool(
+  "mc_record_checkout_head",
+  "Record a head you pushed on your own checkout's SHA chain (TASK-3410). Only the principal that took the checkout may record; a rebase or force-push needs this call. Idempotent per head.",
+  {
+    checkoutId: z.string().regex(/^dsp_[A-Za-z0-9]+$/),
+    headSha: z.string().regex(/^[0-9a-fA-F]{40}$/),
+    beforeSha: z.string().regex(/^[0-9a-fA-F]{40}$/).optional(),
+    pr: z.number().int().positive().optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_record_checkout_head");
+    return printResult(await mcFetch("/checkout/head", { method: "POST", body }));
   }
 );
 
@@ -621,10 +658,37 @@ server.tool(
       .strict()
       .optional()
       .describe("Structured proposal for the reviewer (32 KB total cap)"),
+    scope: z
+      .discriminatedUnion("kind", [
+        z.object({ kind: z.literal("launch"), lane: z.string(), promptHash: z.string() }).strict(),
+        z.object({ kind: z.literal("merge"), repo: z.string(), pr: z.number().int().positive(), headSha: z.string() }).strict(),
+        z.object({ kind: z.literal("flags"), flags: z.array(z.string()).min(1).max(20) }).strict(),
+      ])
+      .optional()
+      .describe("TASK-3408: what the approval covers; the server validates the formats"),
+    sourceRef: z.string().min(1).max(500).optional().describe("Where the request came from (message link, ticket)"),
   },
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_request_approval");
     return printResult(await mcFetch("/request-approval", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_verify_approval",
+  "Check whether a signed approval on a task covers a launch {lane?, promptHash?}, a merge {repo?, pr?, headSha?} or a flag {flag?} now (TASK-3408). ok is true only for a person's unexpired, validly signed approval in scope; otherwise reason names the first failure.",
+  {
+    taskId: z.string().min(1),
+    approvalId: z.string().optional(),
+    expect: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("launch"), lane: z.string().optional(), promptHash: z.string().optional() }).strict(),
+      z.object({ kind: z.literal("merge"), repo: z.string().optional(), pr: z.number().int().positive().optional(), headSha: z.string().optional() }).strict(),
+      z.object({ kind: z.literal("flags"), flag: z.string().optional() }).strict(),
+    ]),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_verify_approval");
+    return printResult(await mcFetch("/approvals/verify", { method: "POST", body }));
   }
 );
 
@@ -698,6 +762,10 @@ const taskUpdatePatch = z.object({
   }).strict().optional(),
   bucket: z.string().trim().regex(/^BKT-[A-Z0-9-]+$/).optional(),
   note: z.string().trim().min(1).max(500).optional(),
+  // TASK-3407: need task.assign and reason (10+ characters).
+  assignee: z.string().trim().min(1).max(128).nullable().optional(),
+  accountableOwner: z.string().trim().min(1).max(128).optional(),
+  reason: z.string().trim().min(10).max(2000).optional(),
 }).strict();
 
 server.registerTool("mc_update_project", {
@@ -736,7 +804,7 @@ server.registerTool("mc_list_projects", {
 });
 
 server.registerTool("mc_update_task", {
-  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, removing the only kind leaves kind:needs-review, swap with removeLabels:[old], addLabels:[new]. Exactly one lane:* must remain, unless a lane-less task only gains/loses kind:* or closed:* closure labels (or not-needed) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
+  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, removing the only kind leaves kind:needs-review, swap with removeLabels:[old], addLabels:[new]. Exactly one lane:* must remain, unless a lane-less task only gains/loses kind:* or closed:* closure labels (or not-needed) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. assignee (person id or agent:<slug>; null clears) and accountableOwner (a person) need task.assign plus reason (10+ characters); audits task.assignment.changed. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
   inputSchema: z.object({
     taskId: z.string().trim().min(1).max(128),
     patch: taskUpdatePatch,

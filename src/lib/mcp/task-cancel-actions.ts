@@ -9,7 +9,7 @@ import type { StageKey, Task } from "@/lib/mc-data/types";
 import type { Capability } from "@/lib/permissions/types";
 import { requireMcpActor } from "@/lib/routing/mutations/actors";
 import type { CancelContext } from "@/lib/sync/cancel";
-import type { McpIdentity } from "./auth";
+import { mcpAuditActor, type McpIdentity } from "./auth";
 
 export const cancelPatchSchema = z.object({
   reason: z.string().trim().min(1).describe("duplicate | obsolete | superseded | delivered_without_pr"),
@@ -44,7 +44,7 @@ export async function assertMayCloseOrReopen(
     if (!(err instanceof ApiError) || err.code !== "forbidden") throw err;
     await complianceRepo.appendEvent({
       kind: `task.${action}_denied`,
-      actor: `${identity.runtime}:${identity.operatorEmail}`,
+      actor: mcpAuditActor(identity),
       repo: identity.repo,
       taskId: task.id,
       payload: { capability, servicePrincipalId: identity.servicePrincipalId },
@@ -57,7 +57,7 @@ export function cancelContextFor(identity: McpIdentity, actorId: string): Cancel
   return {
     actor: identity.operatorEmail,
     actorId,
-    eventActor: `${identity.runtime}:${identity.operatorEmail}`,
+    eventActor: mcpAuditActor(identity),
     eventRepo: identity.repo,
     attribution: { source: "service", actorId },
     eventExtra: { servicePrincipalId: identity.servicePrincipalId, workerId: identity.workerId },

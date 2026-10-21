@@ -340,6 +340,12 @@ export interface DispatchRow {
   releasedReason: string | null;
   /** Gate (apg_*) this checkout is blocked on; null/undefined = not blocked (TASK-629). */
   approvalGateId?: string | null;
+  /** TASK-3410: service principal that minted the checkout (the owning launcher). */
+  launcherId?: string | null;
+  /** TASK-3410: the commit the checkout's work starts from. */
+  baseSha?: string | null;
+  /** TASK-3410: the launcher's launch record id; set only by an allowlisted launcher. */
+  launchId?: string | null;
 }
 
 export async function insertDispatch(d: {
@@ -350,12 +356,26 @@ export async function insertDispatch(d: {
   accountableHuman: string;
   repo: string;
   ttlMinutes: number;
+  launcherId?: string | null;
+  baseSha?: string | null;
+  launchId?: string | null;
 }): Promise<void> {
   await query(
-    `INSERT INTO mc_dispatch (id, actor_kind, runtime, task_id, accountable_human, repo, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, now() + ($7 || ' minutes')::interval)
+    `INSERT INTO mc_dispatch (id, actor_kind, runtime, task_id, accountable_human, repo, expires_at, launcher_id, base_sha, launch_id)
+     VALUES ($1, $2, $3, $4, $5, $6, now() + ($7 || ' minutes')::interval, $8, $9, $10)
      ON CONFLICT (id) DO NOTHING`,
-    [d.id, d.actorKind, d.runtime, d.taskId, d.accountableHuman, d.repo, String(d.ttlMinutes)]
+    [
+      d.id,
+      d.actorKind,
+      d.runtime,
+      d.taskId,
+      d.accountableHuman,
+      d.repo,
+      String(d.ttlMinutes),
+      d.launcherId ?? null,
+      d.baseSha ?? null,
+      d.launchId ?? null,
+    ]
   );
 }
 
@@ -371,10 +391,13 @@ type DispatchDbRow = {
   released_at: Date | null;
   released_reason: string | null;
   approval_gate_id: string | null;
+  launcher_id?: string | null;
+  base_sha?: string | null;
+  launch_id?: string | null;
 };
 
 const DISPATCH_COLUMNS =
-  "id, actor_kind, runtime, task_id, accountable_human, repo, revoked, expires_at, released_at, released_reason, approval_gate_id";
+  "id, actor_kind, runtime, task_id, accountable_human, repo, revoked, expires_at, released_at, released_reason, approval_gate_id, launcher_id, base_sha, launch_id";
 
 function toDispatchRow(r: DispatchDbRow): DispatchRow {
   return {
@@ -389,6 +412,9 @@ function toDispatchRow(r: DispatchDbRow): DispatchRow {
     releasedAt: r.released_at?.toISOString() ?? null,
     releasedReason: r.released_reason ?? null,
     approvalGateId: r.approval_gate_id ?? null,
+    launcherId: r.launcher_id ?? null,
+    baseSha: r.base_sha ?? null,
+    launchId: r.launch_id ?? null,
   };
 }
 
@@ -469,8 +495,9 @@ export async function listDispatches(f: ListDispatchesFilter): Promise<DispatchL
     expires_at: Date;
     released_at: Date | null;
     released_reason: string | null;
+    launcher_id?: string | null;
   }>(
-    `SELECT id, actor_kind, runtime, task_id, accountable_human, repo, revoked, issued_at, expires_at, released_at, released_reason
+    `SELECT id, actor_kind, runtime, task_id, accountable_human, repo, revoked, issued_at, expires_at, released_at, released_reason, launcher_id
        FROM mc_dispatch
       WHERE ($1::text IS NULL OR task_id = $1)
         AND ($2::text IS NULL OR lower(repo) = lower($2))
@@ -491,6 +518,7 @@ export async function listDispatches(f: ListDispatchesFilter): Promise<DispatchL
     expiresAt: r.expires_at.toISOString(),
     releasedAt: r.released_at?.toISOString() ?? null,
     releasedReason: r.released_reason ?? null,
+    launcherId: r.launcher_id ?? null,
   }));
 }
 
@@ -541,6 +569,110 @@ export async function hasActiveCheckoutForPrincipal(taskId: string, principalId:
         AND e.payload->>'permissionActorId' = $2
       LIMIT 1`,
     [taskId, principalId]
+  );
+  return rows.length > 0;
+}
+
+/** Live (unrevoked, unreleased, unexpired) checkouts of one task in one repo, newest lease first (TASK-3409). */
+export async function liveDispatchesForTask(taskId: string, repoSlug: string): Promise<DispatchRow[]> {
+  const rows = await query<DispatchDbRow>(
+    `SELECT ${DISPATCH_COLUMNS} FROM mc_dispatch
+      WHERE task_id = $1 AND lower(repo) = lower($2)
+        AND NOT revoked AND released_at IS NULL AND expires_at > now()
+      ORDER BY expires_at DESC`,
+    [taskId, repoSlug]
+  );
+  return rows.map(toDispatchRow);
+}
+
+/**
+ * Extend checkouts while their stamped PR is active (TASK-3409): the lease runs
+ * to at least now + ttl, and each extension is audited. A revoked or released
+ * lease is never touched; an expired, unreleased one is revived, because a push
+ * to an open PR that carries its stamp proves the work is still in flight.
+ */
+export async function renewDispatches(
+  ids: string[],
+  input: { repo: string; pr: number; ttlMinutes: number }
+): Promise<void> {
+  if (ids.length === 0) return;
+  await query(
+    `WITH renewed AS (
+       UPDATE mc_dispatch SET expires_at = GREATEST(expires_at, now() + ($4 || ' minutes')::interval)
+        WHERE id = ANY($1::text[]) AND lower(repo) = lower($2)
+          AND NOT revoked AND released_at IS NULL
+        RETURNING id, runtime, repo, task_id, expires_at
+     )
+     INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload)
+     SELECT 'checkout.renewed', runtime, repo, task_id, $3,
+            jsonb_build_object('checkoutId', id, 'expiresAt', expires_at) FROM renewed`,
+    [ids, input.repo, String(input.pr), String(input.ttlMinutes)]
+  );
+}
+
+// ─── Checkout lease chain (TASK-3410) ────────────────────────────────────────
+
+export type DispatchHeadSource = "launcher" | "webhook" | "gate";
+
+export interface DispatchHead {
+  headSha: string;
+  beforeSha: string | null;
+  pr: number | null;
+  source: DispatchHeadSource;
+  recordedBy: string;
+  recordedAt: string;
+}
+
+/** A checkout's recorded heads, oldest first: its SHA chain. */
+export async function dispatchHeads(id: string): Promise<DispatchHead[]> {
+  const rows = await query<{
+    head_sha: string;
+    before_sha: string | null;
+    pr: number | null;
+    source: DispatchHeadSource;
+    recorded_by: string;
+    recorded_at: Date;
+  }>(
+    `SELECT head_sha, before_sha, pr, source, recorded_by, recorded_at
+       FROM mc_dispatch_heads
+      WHERE dispatch_id = $1
+      ORDER BY seq`,
+    [id]
+  );
+  return rows.map((r) => ({
+    headSha: r.head_sha,
+    beforeSha: r.before_sha ?? null,
+    pr: r.pr ?? null,
+    source: r.source,
+    recordedBy: r.recorded_by,
+    recordedAt: r.recorded_at instanceof Date ? r.recorded_at.toISOString() : String(r.recorded_at),
+  }));
+}
+
+/** Append one head to a checkout's chain and audit it atomically. False = already on the chain. */
+export async function recordDispatchHead(input: {
+  dispatchId: string;
+  headSha: string;
+  beforeSha: string | null;
+  pr: number | null;
+  source: DispatchHeadSource;
+  recordedBy: string;
+}): Promise<boolean> {
+  const rows = await query<{ seq: string }>(
+    `WITH recorded AS (
+       INSERT INTO mc_dispatch_heads (dispatch_id, head_sha, before_sha, pr, source, recorded_by)
+       SELECT id, $2::text, $3::text, $4::integer, $5::text, $6::text FROM mc_dispatch WHERE id = $1
+       ON CONFLICT (dispatch_id, head_sha) DO NOTHING
+       RETURNING seq, dispatch_id
+     ), audited AS (
+       INSERT INTO mc_events (kind, actor, repo, task_id, pr, payload)
+       SELECT 'checkout.head', $6::text, d.repo, d.task_id, ($4::integer)::text,
+              jsonb_build_object('checkoutId', d.id, 'headSha', $2::text, 'beforeSha', $3::text, 'source', $5::text)
+         FROM recorded r JOIN mc_dispatch d ON d.id = r.dispatch_id
+       RETURNING seq
+     )
+     SELECT seq FROM recorded`,
+    [input.dispatchId, input.headSha, input.beforeSha, input.pr, input.source, input.recordedBy]
   );
   return rows.length > 0;
 }

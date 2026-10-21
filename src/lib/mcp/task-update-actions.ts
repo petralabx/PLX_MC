@@ -7,6 +7,8 @@ import { withTransaction } from "@/lib/db";
 import { evidenceStandardReport, requiresHumanVerification, type EvidenceStandardReport } from "@/lib/compliance";
 import { appendEventTx } from "@/lib/compliance/repo";
 import type { Task } from "@/lib/mc-data/types";
+import { HUMANS, assignmentViolation } from "@/lib/mc-data";
+import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
 import { assertProjectIdAccess, assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import { patchTask } from "@/lib/sync";
@@ -15,7 +17,7 @@ import { cancelTaskTx, reopenTaskTx } from "@/lib/sync/cancel";
 import { TASK_KIND_DEFAULT, assertValidKinds, isKindLabel, kindsOf } from "@/lib/tasks/kind";
 import { BUCKET_ID_RE } from "@/lib/sync/mapping";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
-import type { McpIdentity } from "./auth";
+import { mcpAuditActor, type McpIdentity } from "./auth";
 import { mcpJsonResult, taskLink } from "./envelope";
 import { assertEvidenceStandard } from "./evidence-standard-guard";
 import { assertMayCloseOrReopen, cancelContextFor, cancelPatchSchema, reopenPatchSchema } from "./task-cancel-actions";
@@ -50,6 +52,11 @@ export const taskUpdatePatchSchema = z.object({
   reopen: reopenPatchSchema.optional(),
   bucket: z.string().trim().regex(BUCKET_ID_RE, "bucket must be a BKT-* id").optional(),
   note: z.string().trim().min(1).max(500).optional(),
+  // TASK-3407: who executes the task (person id or agent:<slug>; null clears)
+  // and the human accountable for it. Both need task.assign and a reason.
+  assignee: z.string().trim().min(1).max(128).nullable().optional(),
+  accountableOwner: z.string().trim().min(1).max(128).optional(),
+  reason: z.string().trim().min(10).max(2000).optional(),
 }).strict().superRefine((patch, ctx) => {
   if (Object.values(patch).every((value) => value === undefined)) {
     ctx.addIssue({ code: "custom", message: "At least one patch field is required." });
@@ -70,7 +77,21 @@ export const taskUpdatePatchSchema = z.object({
   if (patch.note !== undefined && patch.bucket === undefined) {
     ctx.addIssue({ code: "custom", message: "note is only valid with bucket." });
   }
+  const assigning = patch.assignee !== undefined || patch.accountableOwner !== undefined;
+  if (assigning && patch.reason === undefined) {
+    ctx.addIssue({ code: "custom", message: "reason (10+ characters) is required to change assignee or accountableOwner." });
+  }
+  if (patch.reason !== undefined && !assigning) {
+    ctx.addIssue({ code: "custom", message: "reason is only valid with assignee or accountableOwner." });
+  }
 });
+
+/** The directory id of a person named by id or email, or null (TASK-3407). */
+function humanDirectoryId(value: string): string | null {
+  const v = value.trim().toLowerCase();
+  if (HUMANS[v]) return HUMANS[v].id;
+  return Object.values(HUMANS).find((h) => (h.email ?? "").toLowerCase() === v)?.id ?? null;
+}
 
 export const updateTaskSchema = z.object({
   taskId: z.string().trim().min(1).max(128),
@@ -84,7 +105,7 @@ export const updateTasksSchema = z.object({
   )).min(1).max(UPDATE_TASK_BATCH_MAX),
 }).strict();
 
-type EditableFields = Pick<Task, "labels" | "description" | "title" | "priority" | "bucket">;
+type EditableFields = Pick<Task, "labels" | "description" | "title" | "priority" | "bucket" | "assignee" | "accountableOwner">;
 type TaskDiff = Partial<Record<keyof EditableFields | "stage", { before: unknown; after: unknown }>>;
 
 function parseInput<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
@@ -100,6 +121,10 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
   assertMcpToolAllowed(identity, "mc_update_task");
   const { taskId, patch } = parseInput(updateTaskSchema, input);
   const authorized = requireMcpActor(identity, "task.progress", { type: "task", id: taskId });
+  if (patch.assignee !== undefined || patch.accountableOwner !== undefined) {
+    requireMcpActor(identity, "task.assign", { type: "task", id: taskId });
+    if (patch.assignee) assertAgentAssigneeAllowed(identity.actor, patch.assignee, { capability: "task.assign" });
+  }
   if (patch.cancel || patch.reopen) {
     // Authorize before the transaction: a denial is audited on its own connection
     // and must survive the rollback an exception would trigger inside it.
@@ -149,7 +174,8 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
     const closureOnly = delta.length > 0 && delta.every((label) => CLOSURE_LABELS.includes(label) || isKindLabel(label))
       && sent.every((key) => key === "labels" || key === "addLabels" || key === "removeLabels");
     const bucketOnly = sent.every((key) => key === "bucket" || key === "note");
-    const laneOptional = TERMINAL_TASK_STAGES.includes(before.stage) || closureOnly || bucketOnly;
+    const assignOnly = sent.every((key) => key === "assignee" || key === "accountableOwner" || key === "reason");
+    const laneOptional = TERMINAL_TASK_STAGES.includes(before.stage) || closureOnly || bucketOnly || assignOnly;
     if (lanes.length > 1 || (lanes.length === 1 && !lanes[0].slice("lane:".length).trim())
       || (lanes.length === 0 && !laneOptional)) {
       throw new ApiError("invalid_request", "The resulting labels must contain exactly one non-empty lane:* label. Add a lane for an unlabeled task; remove the old lane when replacing it. Lane-less tasks may only gain or lose kind:* or closure labels in a label-only patch (" + CLOSURE_LABELS.join(", ") + "), be moved by bucket alone, or be in a terminal stage.", 400);
@@ -169,6 +195,18 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
     if (patch.title !== undefined) requested.title = patch.title;
     if (patch.priority !== undefined) requested.priority = patch.priority;
     if (patch.bucket !== undefined) requested.bucket = patch.bucket;
+    if (patch.assignee !== undefined) {
+      const violation = assignmentViolation(before, patch.assignee);
+      if (violation) throw new ApiError("invalid_request", violation, 400);
+      requested.assignee = patch.assignee;
+    }
+    if (patch.accountableOwner !== undefined) {
+      const owner = humanDirectoryId(patch.accountableOwner);
+      if (!owner) {
+        throw new ApiError("invalid_request", `accountableOwner must be a person in the directory (got ${patch.accountableOwner}).`, 400);
+      }
+      requested.accountableOwner = owner;
+    }
     if (patch.description !== undefined) requested.description = patch.description;
     if (patch.appendDescription !== undefined) {
       requested.description = parseInput(z.string().max(TASK_DESCRIPTION_MAX),
@@ -183,7 +221,7 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
     const changed: Partial<EditableFields> = {};
     const diff: TaskDiff = {};
     for (const field of Object.keys(requested) as (keyof EditableFields)[]) {
-      const previous = before[field] ?? (field === "description" ? "" : []);
+      const previous = before[field] ?? (field === "description" ? "" : field === "assignee" || field === "accountableOwner" ? null : []);
       const next = requested[field];
       if (JSON.stringify(previous) === JSON.stringify(next)) continue;
       Object.assign(changed, { [field]: next });
@@ -196,7 +234,7 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
     if (!task) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
     const eventSeq = await appendEventTx(q, {
       kind: "task.updated",
-      actor: `${identity.runtime}:${identity.operatorEmail}`,
+      actor: mcpAuditActor(identity),
       repo: identity.repo,
       taskId,
       payload: {
@@ -205,15 +243,30 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
         diff,
       },
     });
+    if (diff.assignee || diff.accountableOwner) {
+      await appendEventTx(q, {
+        kind: "task.assignment.changed",
+        actor: mcpAuditActor(identity),
+        repo: identity.repo,
+        taskId,
+        payload: {
+          ...(diff.assignee ? { assignee: diff.assignee } : {}),
+          ...(diff.accountableOwner ? { accountableOwner: diff.accountableOwner } : {}),
+          reason: patch.reason ?? null,
+          servicePrincipalId: identity.servicePrincipalId,
+          workerId: identity.workerId,
+        },
+      });
+    }
     if (diff.bucket) {
       await appendEventTx(q, {
         kind: "task.moved",
-        actor: `${identity.runtime}:${identity.operatorEmail}`,
+        actor: mcpAuditActor(identity),
         repo: identity.repo,
         taskId,
         payload: {
           from: diff.bucket.before, to: diff.bucket.after, note: patch.note ?? null,
-          actor: `${identity.runtime}:${identity.operatorEmail}`,
+          actor: mcpAuditActor(identity),
           servicePrincipalId: identity.servicePrincipalId, workerId: identity.workerId,
         },
       });
@@ -310,7 +363,7 @@ export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
 export function registerTaskUpdateTools(server: McpServer, identity: McpIdentity): void {
   // Full strict schemas preserve unknown-field rejection at the MCP boundary.
   server.registerTool("mc_update_task", {
-    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority, bucket (move to a BKT-* id; optional note; audits task.moved). Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, and removing the only kind leaves kind:needs-review; swap with removeLabels:[old], addLabels:[new] in one call. Exactly one lane:* must remain, except lane-less tasks may gain/lose kind:* labels, closed:duplicate|obsolete|superseded|delivered|wontfix or not-needed, be moved by bucket alone, or be in a terminal stage; labels cannot mix with incremental fields, nor description with appendDescription. Moves reject unknown, archived or closed-project targets and restricted projects without access; stage, labels, PRs and checkouts are untouched and the ToDos bucket syncs outbound. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy?: TASK-n (required for duplicate/superseded), note?} and reopen {stage?, note?} (default: the stage before the cancel; clears cancellation, keeps completedAt): stage changes that cannot be combined with other fields; cancel needs the task.cancel capability and reopen task.reopen, granted to the authenticated principal (the operator email grants nothing); audits task.cancelled / task.reopened. Rejects all other fields, including evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. On a task a person must verify (verify:human or kind:human-test), new description text must be STE-lite: warns until 2026-10-24 (result.evidenceStandard), then refused with evidence_standard. Hub only.",
+    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority, bucket (move to a BKT-* id; optional note; audits task.moved). Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, and removing the only kind leaves kind:needs-review; swap with removeLabels:[old], addLabels:[new] in one call. Exactly one lane:* must remain, except lane-less tasks may gain/lose kind:* labels, closed:duplicate|obsolete|superseded|delivered|wontfix or not-needed, be moved by bucket alone, or be in a terminal stage; labels cannot mix with incremental fields, nor description with appendDescription. Moves reject unknown, archived or closed-project targets and restricted projects without access; stage, labels, PRs and checkouts are untouched and the ToDos bucket syncs outbound. assignee (person id or agent:<slug>; null clears) and accountableOwner (a person) need the task.assign capability plus reason (10+ characters), and audit task.assignment.changed. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy?: TASK-n (required for duplicate/superseded), note?} and reopen {stage?, note?} (default: the stage before the cancel; clears cancellation, keeps completedAt): stage changes that cannot be combined with other fields; cancel needs the task.cancel capability and reopen task.reopen, granted to the authenticated principal (the operator email grants nothing); audits task.cancelled / task.reopened. Rejects all other fields, including evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. On a task a person must verify (verify:human or kind:human-test), new description text must be STE-lite: warns until 2026-10-24 (result.evidenceStandard), then refused with evidence_standard. Hub only.",
     inputSchema: updateTaskSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateTask(identity, args) }));
   server.registerTool("mc_update_tasks", {

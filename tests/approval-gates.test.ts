@@ -1,7 +1,7 @@
 // TASK-629/630 — runtime approval gates: input-required stage freeze,
 // separation of duties, and the approval capability wiring.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { authorize } from "@/lib/permissions";
 import {
@@ -21,6 +21,7 @@ import type { ApprovalGate } from "@/lib/mc-data";
 import {
   actionGetApprovalGate,
   actionRequestApproval,
+  actionVerifyApproval,
   approvalProposalSchema,
   getApprovalGateSchema,
   PROPOSAL_MAX_BYTES,
@@ -577,5 +578,34 @@ describe("gate and checkout block are persisted together (TASK-629)", () => {
     patch.mockRestore();
     expect(mem.dispatches.get(FULL_ID)?.approvalGateId ?? null).toBeNull();
     expect(mem.tasks.get("TASK-700")!.approvalGates).toEqual([]);
+  });
+});
+
+
+// TASK-3408 / TASK-3444: any principal with task.read (the launcher included)
+// can ask whether a signed approval covers a launch; the proposal never leaks.
+describe("mc_verify_approval (TASK-3408, TASK-3444)", () => {
+  const HASH = "f".repeat(64);
+  beforeEach(() => { process.env.PLX_MC_APPROVAL_SIGNING_KEY = "verify-key"; });
+  afterEach(() => { delete process.env.PLX_MC_APPROVAL_SIGNING_KEY; });
+
+  it("answers another principal: covered for this lane and prompt, not for another", async () => {
+    const { approvalId } = await actionRequestApproval(IDENTITY, {
+      taskId: "TASK-700", reason: "launch?", proposal: PROPOSAL,
+      scope: { kind: "launch", lane: "claude-code/claude-uat", promptHash: HASH },
+      sourceRef: "https://example.com/thread/1",
+    });
+    const before = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", expect: { kind: "launch", lane: "claude-code/claude-uat", promptHash: HASH } });
+    expect(before).toMatchObject({ ok: false, reason: "not_approved" });
+    await decideApprovalGate({ taskId: "TASK-700", gateId: approvalId, decision: "approved", decidedBy: "greg@petrasoap.com" });
+    const ok = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", expect: { kind: "launch", lane: "claude-code/claude-uat", promptHash: HASH } });
+    expect(ok).toMatchObject({ ok: true, reason: null, approval: { approvalId, status: "approved", decidedBy: "greg@petrasoap.com", signed: true } });
+    expect(JSON.stringify(ok)).not.toContain(PROPOSAL.summary);
+    const wrongLane = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", approvalId, expect: { kind: "launch", lane: "claude-code/other" } });
+    expect(wrongLane).toMatchObject({ ok: false, reason: "lane_mismatch" });
+  });
+
+  it("rejects a malformed scope at request time", () => {
+    expect(requestApprovalSchema.safeParse({ taskId: "T", reason: "r", scope: { kind: "launch", lane: "nolane", promptHash: "x" } }).success).toBe(false);
   });
 });

@@ -3,7 +3,7 @@
 // technique as tests/mc-patch.test.ts), so this exercises the real orchestration:
 // tier classification, actor/task resolution from the dispatch ledger, the
 // verdict, and the recorded check + emitted events.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 import type { PrEvent } from "@/lib/compliance/webhook";
 
@@ -16,6 +16,7 @@ const db = vi.hoisted(() => ({
   checks: [] as { id: string; verdict: string; reasons: string[]; actorKind: string; taskId: string | null }[],
   tasks: new Map<string, Task>(),
   dedupKeys: new Set<string>(),
+  heads: new Map<string, { headSha: string; beforeSha: string | null; pr: number | null; source: "launcher" | "webhook" | "gate"; recordedBy: string; recordedAt: string }[]>(),
   bucketsThrow: false,
   buckets: [
     { id: "BKT-WMS", name: "WMS", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: null as string | null, project: null },
@@ -24,6 +25,17 @@ const db = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
+  async liveDispatchesForTask(taskId: string, repoSlug: string) {
+    return [...db.dispatches.values()].filter((d) => d.taskId === taskId && d.repo.toLowerCase() === repoSlug.toLowerCase() && !d.revoked && !(d as { releasedAt?: string | null }).releasedAt && new Date(d.expiresAt).getTime() > Date.now());
+  },
+  async renewDispatches(ids: string[], input: { repo: string; ttlMinutes: number }) {
+    for (const id of ids) {
+      const d = db.dispatches.get(id);
+      if (!d || d.revoked || (d as { releasedAt?: string | null }).releasedAt || d.repo.toLowerCase() !== input.repo.toLowerCase()) continue;
+      d.expiresAt = new Date(Math.max(new Date(d.expiresAt).getTime(), Date.now() + input.ttlMinutes * 60_000)).toISOString();
+      db.events.push({ kind: "checkout.renewed", actor: d.runtime, taskId: d.taskId, payload: { checkoutId: id } });
+    }
+  },
   async releaseDispatches(ids: string[], input: { repo: string; pr: number; reason: string }) {
     for (const id of ids) {
       const d = db.dispatches.get(id)!;
@@ -47,6 +59,17 @@ vi.mock("@/lib/compliance/repo", () => ({
   },
   async getDispatch(id: string) {
     return db.dispatches.get(id) ?? null;
+  },
+  async dispatchHeads(id: string) {
+    return [...(db.heads.get(id) ?? [])];
+  },
+  async recordDispatchHead(h: { dispatchId: string; headSha: string; beforeSha: string | null; pr: number | null; source: "launcher" | "webhook" | "gate"; recordedBy: string }) {
+    const chain = db.heads.get(h.dispatchId) ?? [];
+    if (!db.dispatches.has(h.dispatchId) || chain.some((x) => x.headSha === h.headSha)) return false;
+    chain.push({ headSha: h.headSha, beforeSha: h.beforeSha, pr: h.pr, source: h.source, recordedBy: h.recordedBy, recordedAt: new Date().toISOString() });
+    db.heads.set(h.dispatchId, chain);
+    db.events.push({ kind: "checkout.head", actor: h.recordedBy, payload: { checkoutId: h.dispatchId, headSha: h.headSha, source: h.source } });
+    return true;
   },
   async appendEvent(e: { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown>; dedupKey?: string | null }) {
     if (e.dedupKey) {
@@ -101,7 +124,7 @@ vi.mock("@/lib/sync", () => ({
 
 // Imported AFTER the mocks so the service's `import * as repo` + sync getEntity
 // resolve to the mocked modules.
-import { checkout, complete, dispatchRepoMatches, ingestPullRequest, verifyPr } from "@/lib/compliance/service";
+import { checkout, complete, dispatchRepoMatches, ingestPullRequest, recordCheckoutHead, verifyPr } from "@/lib/compliance/service";
 
 const projection = vi.hoisted(() => ({ projectPullRequest: vi.fn() }));
 vi.mock("@/lib/compliance/projection", () => ({
@@ -140,6 +163,7 @@ beforeEach(() => {
   db.checks.length = 0;
   db.tasks.clear();
   db.dedupKeys.clear();
+  db.heads.clear();
   db.bucketsThrow = false;
   const withPrd = db.buckets.find((bucket) => bucket.id === "BKT-PRD");
   if (withPrd) withPrd.prd = "https://example.com/prd.md";
@@ -672,8 +696,46 @@ describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
     expect(r.verdict).toBe("block");
     expect(r.reasons).toEqual(expect.arrayContaining([
       "TASK-900: commit 2222222: Agent claude/claude-cos does not match the checkout's agent claude/claude-uat",
-      "TASK-900: commit 2222222: On-Behalf-Of vince@petrasoap.com does not match the checkout's accountable person",
+      "TASK-900: commit 2222222: On-Behalf-Of vince@petrasoap.com does not match the checkout's accountable person (greg.m@petrasoap.com or cos@petrasoap.com)",
     ]));
+  });
+
+  // TASK-3483 (Vince, 2026-10-20): a checkout minted through a shared service key
+  // records the operator alias (cos@), which is not a person; the task's human
+  // accountable owner is then also accepted as its accountable person.
+  it("accepts On-Behalf-Of naming the task's human owner on a service-alias checkout (TASK-3483)", async () => {
+    const cid = await stamped("claude/claude-uat");
+    github.loadPrCommits.mockResolvedValue([commit("6666666f", trailers(cid, "claude/claude-uat", "greg.m@petrasoap.com"))]);
+    expect((await verifyPr({ ...pr, checkoutIds: [cid] })).verdict).toBe("pass");
+  });
+
+  it("names both accepted people when On-Behalf-Of matches neither (TASK-3483)", async () => {
+    const cid = await stamped("claude/claude-uat");
+    github.loadPrCommits.mockResolvedValue([commit("7777777a", trailers(cid, "claude/claude-uat", "ross@petrasoap.com"))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toContain(
+      "TASK-900: commit 7777777: On-Behalf-Of ross@petrasoap.com does not match the checkout's accountable person (greg.m@petrasoap.com or cos@petrasoap.com)"
+    );
+  });
+
+  it("keeps a checkout minted by a known person strict to that person (TASK-3483)", async () => {
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    const { checkoutId: cid } = await checkout({ taskId: "TASK-900", runtime: "cursor", accountableHuman: "stephen@petrasoap.com", repo: "petralabx/PLX_MC", agent: "claude/claude-uat" });
+    github.loadPrCommits.mockResolvedValue([commit("8888888b", trailers(cid, "claude/claude-uat", "greg.m@petrasoap.com"))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons).toContain(
+      "TASK-900: commit 8888888: On-Behalf-Of greg.m@petrasoap.com does not match the checkout's accountable person (stephen@petrasoap.com)"
+    );
+  });
+
+  it("returns the resolved accountable person from checkout (TASK-3483)", async () => {
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg" }));
+    const r = await checkout({ taskId: "TASK-900", runtime: "cursor", accountableHuman: "cos@petrasoap.com", repo: "petralabx/PLX_MC" });
+    expect(r.accountablePerson).toBe("greg.m@petrasoap.com");
+    const own = await checkout({ taskId: "TASK-900", runtime: "cursor", accountableHuman: "Stephen@PetraSoap.com", repo: "petralabx/PLX_MC" });
+    expect(own.accountablePerson).toBe("stephen@petrasoap.com");
   });
 
   it("compares On-Behalf-Of case-insensitively", async () => {
@@ -711,4 +773,268 @@ describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
     const legacy = await stamped();
     expect(db.events.find((e) => e.kind === "checkout" && e.payload?.checkoutId === legacy)?.payload).toMatchObject({ agent: null });
   });
+});
+
+// TASK-3409: checkout lifecycle — reuse, a second holder, renewal while the PR
+// is active, and the checkout's state on every verify result.
+describe("checkout lifecycle (TASK-3409)", () => {
+  const slug = "petralabx/PLX_MC";
+  const mint = (over: Partial<Parameters<typeof checkout>[0]> = {}) =>
+    checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude", ...over });
+  beforeEach(() => {
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "vince", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    delete process.env.PLX_MC_CHECKOUT_TAKEOVER_ENFORCE;
+  });
+
+  it("reuse returns the caller's own live checkout instead of minting a second", async () => {
+    const first = await mint();
+    const again = await mint({ reuse: true });
+    expect(again).toMatchObject({ checkoutId: first.checkoutId, reused: true });
+    expect(db.events.some((e) => e.kind === "checkout.reused" && e.payload?.checkoutId === first.checkoutId)).toBe(true);
+    expect((await mint()).checkoutId).not.toBe(first.checkoutId);
+  });
+
+  it("logs a second holder and reports it, without refusing while enforcement is off", async () => {
+    const held = await mint({ runtime: "cursor", agent: undefined });
+    const second = await mint();
+    expect(second.concurrent).toEqual([
+      { checkoutRef: `dsp_…${held.checkoutId.slice(-4)}`, runtime: "cursor", accountableHuman: "cos@petrasoap.com" },
+    ]);
+    const ev = db.events.find((e) => e.kind === "checkout.concurrent");
+    expect(ev?.payload).toMatchObject({ checkoutId: second.checkoutId, forceReason: null, enforced: false });
+  });
+
+  it("refuses a second holder without forceReason once enforcement is on, and logs the reason when given", async () => {
+    await mint({ runtime: "cursor", agent: undefined });
+    process.env.PLX_MC_CHECKOUT_TAKEOVER_ENFORCE = "1";
+    await expect(mint()).rejects.toMatchObject({ code: "checkout_held", status: 409 });
+    const taken = await mint({ forceReason: "cursor lane stalled for 3 h; CoS asked Claude to finish" });
+    expect(taken.concurrent).toHaveLength(1);
+    expect(db.events.findLast((e) => e.kind === "checkout.concurrent")?.payload).toMatchObject({
+      forceReason: "cursor lane stalled for 3 h; CoS asked Claude to finish",
+      enforced: true,
+    });
+  });
+
+  it("renews a stamped checkout on a push to its open PR, never a released one", async () => {
+    const live = await mint();
+    const d = db.dispatches.get(live.checkoutId)!;
+    d.expiresAt = new Date(Date.now() - 60_000).toISOString();
+    const gone = await mint({ runtime: "codex", agent: undefined });
+    db.dispatches.get(gone.checkoutId)!.releasedAt = new Date().toISOString();
+    const before = db.dispatches.get(gone.checkoutId)!.expiresAt;
+    await ingestPullRequest({
+      repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h2", changedPaths: ["src/x.ts"],
+      action: "synchronize", merged: false, branch: "b", title: "t", author: "agent", labels: [],
+      checkoutId: null, checkoutIds: [live.checkoutId, gone.checkoutId],
+    });
+    expect(new Date(db.dispatches.get(live.checkoutId)!.expiresAt).getTime()).toBeGreaterThan(Date.now() + 7 * 3_600_000);
+    expect(db.dispatches.get(gone.checkoutId)!.expiresAt).toBe(before);
+    expect(db.events.filter((e) => e.kind === "checkout.renewed").map((e) => e.payload?.checkoutId)).toEqual([live.checkoutId]);
+  });
+
+  it("reports the checkout's state and the task's approval gates on each verify result", async () => {
+    github.loadPrCommits.mockResolvedValue([]);
+    const { checkoutId } = await mint();
+    db.tasks.get("TASK-900")!.approvalGates = [
+      { id: "apg_1", reason: "yes?", requestedBy: "cos@petrasoap.com", requestedAt: "2026-10-20T16:38:03Z", status: "approved", decidedBy: "vince@petrasoap.com", decidedAt: "2026-10-20T16:50:22Z" },
+    ];
+    const r = await verifyPr({ repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
+    expect(r.tasks[0].checkout).toMatchObject({ live: true, releasedReason: null, blockReason: null });
+    expect(r.tasks[0].approvals).toEqual([
+      { gateId: "apg_1", status: "approved", decidedBy: "vince@petrasoap.com", decidedAt: "2026-10-20T16:50:22Z" },
+    ]);
+    db.dispatches.get(checkoutId)!.revoked = true;
+    const revoked = await verifyPr({ repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
+    expect(revoked.tasks[0].checkout).toMatchObject({ live: false, blockReason: "revoked" });
+  });
+});
+
+// TASK-3408: a task labelled approval:merge-required merges only under a
+// person's signed merge approval of the exact PR head.
+describe("merge approval policy (TASK-3408)", () => {
+  const slug = "petralabx/PLX_MC";
+  const head = "d".repeat(40);
+  const pr = { repo: "PLX_MC", repoFullName: slug, prNumber: 3408, headSha: head, changedPaths: ["src/x.ts"] };
+  beforeEach(() => {
+    process.env.PLX_MC_APPROVAL_SIGNING_KEY = "policy-key";
+    github.loadPrCommits.mockResolvedValue([]);
+  });
+  afterEach(() => { delete process.env.PLX_MC_APPROVAL_SIGNING_KEY; });
+
+  const seedWith = async (gates: Task["approvalGates"]) => {
+    db.tasks.set("TASK-900", taskish({ labels: ["lane:claude-cli", "approval:merge-required"], approvalGates: gates, evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    return (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude" })).checkoutId;
+  };
+  const signed = async (scopeHead: string) => {
+    const { signApproval, approvalExpiry } = await import("@/lib/compliance/approval-signature");
+    const decidedAt = new Date().toISOString();
+    const g = { id: "apg_m", reason: "merge?", requestedBy: "cos@petrasoap.com", requestedAt: decidedAt, status: "approved" as const, decidedBy: "vince@petrasoap.com", decidedAt, scope: { kind: "merge" as const, repo: slug, pr: 3408, headSha: scopeHead } };
+    const stamped = { ...g, expiresAt: approvalExpiry(g.scope, decidedAt) };
+    return { ...stamped, signature: signApproval("TASK-900", stamped) };
+  };
+
+  it("blocks without a covering approval and names why", async () => {
+    const cid = await seedWith([]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.join(" ")).toContain(`approval:merge-required: no signed merge approval covers ${slug}#3408 at ddddddd (no_merge_approval)`);
+  });
+
+  it("blocks when the approval covers another head", async () => {
+    const cid = await seedWith([await signed("e".repeat(40))]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.join(" ")).toContain("(head_sha_mismatch)");
+  });
+
+  it("passes with a signed approval of this exact head", async () => {
+    const cid = await seedWith([await signed(head)]);
+    expect((await verifyPr({ ...pr, checkoutIds: [cid] })).verdict).toBe("pass");
+  });
+});
+
+// TASK-3410: the checkout lease chain. Launcher checkouts (a launch record) hold
+// the PR head to their recorded SHA chain; a commit naming a launcher lane needs a
+// launch record. Both warn until PLX_MC_LEASE_CHAIN_ENFORCE=1. Other checkouts
+// (Claude web, Cursor cloud, Codex, people) are unaffected.
+describe("checkout lease chain (TASK-3410)", () => {
+  const slug = "petralabx/PLX_MC";
+  const launcher = { kind: "service" as const, id: "sp_mcp_ledger", status: "active" as const };
+  const other = { kind: "service" as const, id: "sp_mcp_claude_code", status: "active" as const };
+  const sha = (c: string) => c.repeat(40);
+  const base = sha("0");
+  const agentIdentity = { authorName: "PLX Agent", authorEmail: "uat@petrasoap.com", authorLogin: "", committerName: "PLX Agent", committerEmail: "uat@petrasoap.com", committerLogin: "" };
+  const lane = "claude-code/coding-1-l1";
+  const commit = (s: string, message: string) => ({ sha: s, message, ...agentIdentity });
+  const trailers = (cid: string, agent: string) =>
+    `TASK-900: change\n\nAgent: ${agent}\nOn-Behalf-Of: cos@petrasoap.com\nMC-Checkout: ${cid}`;
+  const pr = (headSha: string, prNumber = 3410) => ({ repo: "PLX_MC", repoFullName: slug, prNumber, headSha, changedPaths: ["src/x.ts"] });
+  const seed = () =>
+    db.tasks.set("TASK-900", taskish({ accountableOwner: "greg", evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+  const launch = async () => {
+    seed();
+    return (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: launcher, agent: "claude-code/coding-1-l1", baseSha: base, launchId: "launch-1" })).checkoutId;
+  };
+  const heads = (cid: string) => (db.heads.get(cid) ?? []).map((h) => `${h.headSha[0]}:${h.source}:${h.pr ?? "-"}`);
+
+  beforeEach(() => {
+    process.env.PLX_MC_LAUNCHER_PRINCIPALS = "sp_mcp_ledger";
+    github.loadPrCommits.mockResolvedValue([]);
+  });
+  afterEach(() => {
+    delete process.env.PLX_MC_LAUNCHER_PRINCIPALS;
+    delete process.env.PLX_MC_LEASE_CHAIN_ENFORCE;
+    delete process.env.PLX_MC_LAUNCH_LANES;
+  });
+
+  it("records launcherId, baseSha and launchId on the checkout", async () => {
+    const cid = await launch();
+    expect(db.dispatches.get(cid)).toMatchObject({ launcherId: "sp_mcp_ledger", baseSha: base, launchId: "launch-1" });
+    expect(db.events.find((e) => e.kind === "checkout")?.payload).toMatchObject({ baseSha: base, launchId: "launch-1", permissionActorId: "sp_mcp_ledger" });
+  });
+
+  it("mints a fresh lease for a launch even when reuse is asked", async () => {
+    seed();
+    const plain = (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: launcher })).checkoutId;
+    const launched = await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: launcher, reuse: true, launchId: "launch-3" });
+    expect(launched.checkoutId).not.toBe(plain);
+    expect(launched.reused).toBeUndefined();
+    expect(db.dispatches.get(launched.checkoutId)).toMatchObject({ launchId: "launch-3" });
+  });
+
+  it("refuses a launch record from a principal not on the launcher list, and a short base SHA", async () => {
+    seed();
+    await expect(checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, launchId: "launch-2" }))
+      .rejects.toMatchObject({ code: "not_a_launcher", status: 403 });
+    await expect(checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, baseSha: "abc1234" }))
+      .rejects.toMatchObject({ code: "invalid_request", status: 400 });
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, baseSha: base });
+    expect(db.dispatches.get(checkoutId)).toMatchObject({ launcherId: "sp_mcp_claude_code", baseSha: base, launchId: null });
+  });
+
+  it("attaches the first head, then extends the chain on a fast-forward or a staging merge, not a force-push", async () => {
+    const cid = await launch();
+    const evt = (headSha: string, beforeSha: string | null, prNumber = 3410): PrEvent => ({
+      ...pr(headSha, prNumber), action: beforeSha ? "synchronize" : "opened", beforeSha, merged: false, branch: "x", title: "x", author: "agent", labels: [], checkoutId: cid, checkoutIds: [cid],
+    });
+    await ingestPullRequest(evt(sha("a"), null));
+    await ingestPullRequest(evt(sha("b"), sha("a")));
+    await ingestPullRequest(evt(sha("c"), sha("b"))); // first-parent merge of staging: before is the old head
+    await ingestPullRequest(evt(sha("f"), sha("9"))); // force-push: before is not on the chain
+    await ingestPullRequest(evt(sha("e"), sha("c"), 9999)); // another PR stamping the same checkout
+    expect(heads(cid)).toEqual(["a:webhook:3410", "b:webhook:3410", "c:webhook:3410"]);
+  });
+
+  it("passes a head that descends from a recorded head and records it", async () => {
+    const cid = await launch();
+    await recordHead(cid, sha("a"));
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane)), commit(sha("b"), trailers(cid, lane))]);
+    const r = await verifyPr({ ...pr(sha("b")), checkoutIds: [cid] });
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).not.toContain("SHA chain");
+    expect(heads(cid)).toEqual(["a:launcher:-", "b:gate:3410"]);
+  });
+
+  it("warns, then blocks once enforced, on a head outside the chain or a chain bound to another PR", async () => {
+    const cid = await launch();
+    await recordHead(cid, sha("a"), 3410);
+    github.loadPrCommits.mockResolvedValue([commit(sha("7"), trailers(cid, lane)), commit(sha("8"), trailers(cid, lane))]); // rewritten history
+    const warned = await verifyPr({ ...pr(sha("8")), checkoutIds: [cid] });
+    expect(warned.verdict).toBe("pass");
+    expect(warned.reasons.join(" ")).toContain("warning: head 8888888 is outside checkout");
+    expect(heads(cid)).toEqual(["a:launcher:3410"]);
+
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    const blocked = await verifyPr({ ...pr(sha("8")), checkoutIds: [cid] });
+    expect(blocked.verdict).toBe("block");
+    expect(blocked.reasons.join(" ")).toContain("recorded SHA chain (last recorded aaaaaaa)");
+    const otherPr = await verifyPr({ ...pr(sha("a"), 9999), checkoutIds: [cid] });
+    expect(otherPr.verdict).toBe("block");
+    expect(otherPr.reasons.join(" ")).toContain("SHA chain is bound to PR #3410, not #9999");
+  });
+
+  it("blocks a commit stamped by a different actor than the checkout's", async () => {
+    const cid = await launch();
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, "codex/cloud"))]);
+    const r = await verifyPr({ ...pr(sha("a")), checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.join(" ")).toContain("Agent codex/cloud does not match the checkout's agent claude-code/coding-1-l1");
+  });
+
+  it("holds launcher-lane Agent trailers to a launch record, and only those", async () => {
+    process.env.PLX_MC_LAUNCH_LANES = "claude-code/coding-1-*";
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    seed();
+    const web = (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, agent: "claude-code/coding-1-l2" })).checkoutId;
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(web, "claude-code/coding-1-l2"))]);
+    const lane = await verifyPr({ ...pr(sha("a")), checkoutIds: [web] });
+    expect(lane.verdict).toBe("block");
+    expect(lane.reasons.join(" ")).toContain("names a launcher lane, but its checkout has no launch record");
+
+    const claudeWeb = (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, actor: other, agent: "claude-code/claude" })).checkoutId;
+    github.loadPrCommits.mockResolvedValue([commit(sha("b"), trailers(claudeWeb, "claude-code/claude"))]);
+    expect((await verifyPr({ ...pr(sha("b"), 3411), checkoutIds: [claudeWeb] })).verdict).toBe("pass");
+
+    const launched = await launch();
+    github.loadPrCommits.mockResolvedValue([commit(sha("c"), trailers(launched, "claude-code/coding-1-l1"))]);
+    expect((await verifyPr({ ...pr(sha("c"), 3412), checkoutIds: [launched] })).verdict).toBe("pass");
+  });
+
+  it("lets only the principal that took the checkout record its heads, while it is unreleased", async () => {
+    const cid = await launch();
+    await expect(recordCheckoutHead({ checkoutId: cid, headSha: sha("a"), principalId: "sp_mcp_claude_code" }))
+      .rejects.toMatchObject({ code: "not_checkout_launcher", status: 403 });
+    const first = await recordCheckoutHead({ checkoutId: cid, headSha: sha("a"), prNumber: 3410, principalId: "sp_mcp_ledger" });
+    expect(first.recorded).toBe(true);
+    expect((await recordCheckoutHead({ checkoutId: cid, headSha: sha("a"), principalId: "sp_mcp_ledger" })).recorded).toBe(false);
+    await expect(recordCheckoutHead({ checkoutId: cid, headSha: sha("b"), prNumber: 9999, principalId: "sp_mcp_ledger" }))
+      .rejects.toMatchObject({ code: "chain_bound", status: 409 });
+    db.dispatches.get(cid)!.releasedAt = new Date().toISOString();
+    await expect(recordCheckoutHead({ checkoutId: cid, headSha: sha("b"), principalId: "sp_mcp_ledger" }))
+      .rejects.toMatchObject({ code: "checkout_inactive", status: 409 });
+  });
+
+  const recordHead = (cid: string, headSha: string, prNumber?: number) =>
+    recordCheckoutHead({ checkoutId: cid, headSha, prNumber, principalId: "sp_mcp_ledger" });
 });

@@ -124,6 +124,37 @@ describe("decideApprovalGate", () => {
     );
   });
 
+  it("signs an approval and stamps its expiry; a rejection stays unsigned (TASK-3408)", async () => {
+    process.env.PLX_MC_APPROVAL_SIGNING_KEY = "k";
+    try {
+      seedTask("TASK-700", { approvalGates: [{ ...pending, scope: { kind: "flags", flags: ["PLX_ALLOW_GATE_PENDING"] } }] });
+      const { gate } = await decideApprovalGate({ taskId: "TASK-700", gateId: "apg_1", decision: "approved", decidedBy: "greg@petrasoap.com" });
+      expect(gate.signature).toMatch(/^[0-9a-f]{64}$/);
+      expect(Date.parse(gate.expiresAt!) - Date.parse(gate.decidedAt!)).toBe(24 * 3_600_000);
+      expect(h.events[0].payload).toMatchObject({ signed: true, expiresAt: gate.expiresAt });
+      seedTask("TASK-701", { approvalGates: [pending] });
+      const { gate: no } = await decideApprovalGate({ taskId: "TASK-701", gateId: "apg_1", decision: "rejected", decidedBy: "greg@petrasoap.com" });
+      expect(no.signature).toBeUndefined();
+      expect(no.expiresAt).toBeUndefined();
+    } finally {
+      delete process.env.PLX_MC_APPROVAL_SIGNING_KEY;
+    }
+  });
+
+  it("refuses an approval from a decider off the allowlist and audits it (TASK-3408)", async () => {
+    process.env.PLX_MC_APPROVAL_DECIDERS = "vince@petrasoap.com";
+    try {
+      seedTask("TASK-700", { approvalGates: [{ ...pending, requestedBy: "cos@petrasoap.com" }] });
+      await expect(decideApprovalGate({ taskId: "TASK-700", gateId: "apg_1", decision: "approved", decidedBy: "greg@petrasoap.com" }))
+        .rejects.toMatchObject({ code: "decider_not_allowed", status: 403 });
+      expect(h.events[0]).toMatchObject({ kind: "approval.denied", payload: { reasonCode: "decider_not_allowed" } });
+      await expect(decideApprovalGate({ taskId: "TASK-700", gateId: "apg_1", decision: "approved", decidedBy: "vince@petrasoap.com" }))
+        .resolves.toMatchObject({ gate: { status: "approved" } });
+    } finally {
+      delete process.env.PLX_MC_APPROVAL_DECIDERS;
+    }
+  });
+
   it("separation of duties: requester deciding own gate is 403", async () => {
     seedTask("TASK-700", { approvalGates: [pending] });
     await expect(

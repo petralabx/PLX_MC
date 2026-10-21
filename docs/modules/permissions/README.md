@@ -283,6 +283,7 @@ concrete rule cannot be expressed that way.
 - `db/migrations/025_grok_hermes_mcp_principals.sql` — Grok/Hermes MCP principals
 - `db/migrations/030_chatgpt_mcp_principal.sql` — ChatGPT MCP principal
 - `db/migrations/034_ledger_mcp_principal.sql` — Ledger steward MCP principal (`task.link_merged_pr`)
+- `task.assign` (TASK-3407) — set a task's assignee or accountable owner through `mc_update_task` with a reason; human admin/owner roles, `sp_mcp_ledger` and `sp_mcp_cos` only (`grants.ts`)
 - `src/lib/auth/identity.ts` — Entra `oid` session helpers, enforcement mode, sign-in `mc_users` sync
 - `src/lib/auth/gate.ts` — MC.* role → access_role mapping, admission decision, session validity
 

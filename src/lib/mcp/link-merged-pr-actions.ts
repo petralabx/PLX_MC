@@ -15,7 +15,7 @@ import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import { getEntities, getEntity, getRepos } from "@/lib/sync/repo";
 import { patchTask } from "@/lib/sync";
-import type { McpIdentity } from "./auth";
+import { mcpAuditActor, type McpIdentity } from "./auth";
 import { mcpJsonResult } from "./envelope";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 
@@ -102,7 +102,7 @@ export async function actionLinkMergedPr(
     );
   }
 
-  const actor = `${identity.runtime}:${identity.operatorEmail}`;
+  const actor = mcpAuditActor(identity);
   const link: PullRequest = { repo: repoName, num: body.prNumber, status: "merged", title: facts.title };
   if (BELOW_MERGED.has(task.stage)) {
     // The normal merged-PR projection: promote, record prs + merge, audit task.promoted.

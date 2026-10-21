@@ -45,11 +45,13 @@ Routing behavior is unchanged; owner: Vince. No migration is needed.
 
 | Tool | REST (stdio proxy) | Auth | Returns |
 |------|--------------------|------|---------|
-| `mc_get_task` | `GET /api/cursor/tasks/{id}` | `task.read` + project ACL | task (as `mc_get_context` full), `accountableOwner`, `evidence`, `checkouts`, recent `events` (excludes `mcp.tool.invoked`); every `dsp_*` id redacted |
-| `mc_list_checkouts` | `GET /api/cursor/checkouts?repo=&taskId=&active=&limit=` | `task.read` + project ACL | dispatches newest first as `checkoutRef` + `taskId`, `repo`, `runtime`, `issuedAt`, `expiresAt`, `active`; `repo` is an exact owner/name slug |
+| `mc_get_task` | `GET /api/cursor/tasks/{id}` | `task.read` + project ACL | task (as `mc_get_context` full), `accountableOwner`, `evidence`, `checkouts`, recent `events` (excludes `mcp.tool.invoked`); every `dsp_*` id redacted, except `checkoutId` on a checkout a launcher principal took, shown to that launcher only (TASK-3410) |
+| `mc_list_checkouts` | `GET /api/cursor/checkouts?repo=&taskId=&active=&limit=` | `task.read` + project ACL | dispatches newest first as `checkoutRef` + `taskId`, `repo`, `runtime`, `issuedAt`, `expiresAt`, `active`; `repo` is an exact owner/name slug; `checkoutId` only for the launcher principal that took it (TASK-3410) |
+| `mc_record_checkout_head` | `POST /api/cursor/checkout/head` | `task.checkout` + project ACL + the principal that took the checkout (write) | records `headSha` (optional `beforeSha`, `pr`) on the checkout's SHA chain; returns `checkoutRef`, `recorded`, `baseSha`, `launchRecorded`, `boundPr`, `chain`. Refuses another principal (403 `not_checkout_launcher`), a released or revoked checkout (409 `checkout_inactive`) and a PR other than the bound one (409 `chain_bound`) (TASK-3410) |
 | `mc_search_knowledge` | `GET /api/cursor/knowledge/search?q=&limit=` | `task.read` | Ask the Brain hits with provenance (`id`, `source`, `namespace`, `score`) + honest `status` |
 | `mc_verify_pr` | `GET /api/cursor/verify?repo=&pr=` | `task.read` | the `/api/compliance/verify` verdict from GitHub PR stamps/labels/files; `recorded: false` (no check row, no `gate.*` event) |
 | `mc_request_approval` | `POST /api/cursor/request-approval` | `approval.request` (write) | `gateId`, `checkoutRef` (`dsp_…last4`), `status: pending`, `inputRequired: true` |
+| `mc_verify_approval` | `POST /api/cursor/approvals/verify` | `task.read` (read; any principal, the launcher included) | `ok`, `reason` (first failure), `approval` {approvalId, status, scope, decidedBy, decidedAt, expiresAt, signed}; never the proposal (TASK-3408, TASK-3444) |
 | `mc_get_approval_gate` | `GET /api/cursor/approval-gate` | `task.read` (read; only the authenticated service principal that raised the gate) | `gateId`, `checkoutRef`, `status`, `decidedBy`, `decidedAt`, `note`, `proposal`, `timedOut` |
 | `mc_release_checkout` | `POST /api/cursor/checkouts/release` | `task.checkout` + project ACL + checkout principal / Ledger-CoS steward principal (write); while `PLX_MC_MCP_PRINCIPAL_AUTHZ` is `shadow` (default) the older accountable human / admin / cos@ operator rule still decides and disagreements are logged as `authz.shadow_mismatch` | releases one lease by `checkoutId`, or by `checkoutRef` + `taskId`; returns `checkoutRef`, `releasedAt`, `releasedReason` (`manual: …`), `authz` |
 | `mc_release_checkouts` | `POST /api/cursor/checkouts/release-batch` | same, per item | `results[]` with `ok` + `data` or `ok: false` + `error`; `released`, `failed`; `refused[]` with `checkoutRef`, `taskId`, `code`, `reason` per unreleased item |
@@ -106,6 +108,14 @@ lease. Other reasons release as before. `checkout.released`,
 `workerId` (`X-MC-Worker-Id`, the stdio client's per-session id;
 `unknown-worker` when absent).
 
+**Actor per lane (TASK-3407):** an optional `X-MC-Agent: <runtime>/<lane>`
+header (it must start with the `X-MC-Runtime` value) names one stable actor per
+runtime and lane. Every MCP audit event then records
+`<runtime>/<lane>:<operator>` instead of `<runtime>:<operator>`
+(`mcpAuditActor`), and `mc_checkout_task` uses it as `agent` when the call
+passes none. A checkout with no agent returns an `agent_missing` warning;
+`PLX_MC_CHECKOUT_AGENT_REQUIRED=1` turns that into a 400 `agent_required`.
+
 **Cancelled end stage (TASK-2529):** `cancelled` is a task stage for work that
 will never ship. It is terminal (`TERMINAL_STAGES`) but is never "done": it is
 excluded from open/remaining counts (dashboard, project and bucket progress,
@@ -155,6 +165,13 @@ stored in the jsonb payload.
 `src/lib/mcp/task-update-actions.ts`. Both HTTP MCP and stdio support them;
 stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
 
+- `assignee` (a person id or `agent:<slug>`; `null` clears it) and
+  `accountableOwner` (a person, by directory id or email) need the
+  `task.assign` capability, held by human admins and owners and the steward
+  principals `sp_mcp_ledger` and `sp_mcp_cos`, plus a `reason` of 10 or more
+  characters. Each change writes a `task.assignment.changed` event with the
+  reason; `agent:` assignees still need a signed-in person or `sp_mcp_portal`
+  (TASK-3407). An assignment-only patch needs no lane.
 - Patch fields: `labels` replaces the entire set; `addLabels` / `removeLabels`
   are incremental and cannot accompany `labels`. Removals happen before adds.
   Labels are trimmed, non-empty and deduplicated; max 128 characters per label,
@@ -368,7 +385,14 @@ tasks are not stranded at the EN-003 Planned gate. An explicit
 
 **PR stamp:** `mc_checkout_task` → `meta.links.checkoutStamp` = `MC-Checkout: dsp_*`.
 The checkout receipt also includes `taskId` and `actor.repo` (the slug bound on
-the credential). One Hub connector stamps every petralabx repo: optional `repo`
+the credential), and `accountablePerson`, the person commits name in
+`On-Behalf-Of` (TASK-3483). `reuse: true` returns your own live checkout of the
+task instead of a second one (`reused: true`); when another holder has a live
+checkout, the receipt lists it under `concurrent` with a `concurrent_holder` entry in `warnings`, and
+`forceReason` records why you take over (TASK-3409). Optional `baseSha` (full
+SHA) roots the checkout's SHA chain, and `launchId` (launcher principals in
+`PLX_MC_LAUNCHER_PRINCIPALS` only) records the launch and puts the checkout
+under the lease-chain rules (TASK-3410). One Hub connector stamps every petralabx repo: optional `repo`
 on checkout is a GitHub slug that may override the connector `X-MC-Repo` for
 allowlisted consumers (`petralabx/local-inference`, `petralabx/skills`,
 `petralabx/1hr-after`, `petralabx/furgenics`, `petralabx/for-and-against`,
@@ -395,6 +419,21 @@ not browser Entra. Ledger owns Keep MC for stage-lag leftovers; never silent
 rows only.
 
 **Approval gates (TASK-629):** `mc_request_approval` (`POST /api/cursor/request-approval`, and the HTTP/stdio MCP tool — both call `actionRequestApproval` in `src/lib/mcp/approval-actions.ts`) raises a runtime approval gate on a task (`approval.request`); the task freezes input-required until a human decides in the Approvals inbox. Optional `checkoutId` marks that checkout blocked-on-approval (`mc_dispatch.approval_gate_id`, migration 036; the full id is never stored on the task, in events or in any response, only `checkoutRef`; a checkout with a pending gate refuses a new one with 409): `mc_complete_task` refuses with `approval_pending` while the gate is pending and `approval_rejected` after a rejection (the checkout stays blocked; raise a new gate on it or release it). Optional `proposal` `{summary, action?, diff?, plan?, risk?}` is a strict object capped at 32 KB, stored on the gate and shown in the Approvals inbox; `reason` stays a short string (max 500). `mc_get_approval_gate {checkoutId|taskId, gateId?, waitSeconds?}` is the agent resume signal: it returns pending/approved/rejected with decider, decidedAt and note; `waitSeconds` (hard cap 25) long-polls and returns early on a decision.
+
+**Signed approvals (TASK-3408):** `mc_request_approval` also takes `scope`,
+one of `{kind: "launch", lane, promptHash}` (one `<runtime>/<lane>`, one
+SHA-256 prompt hash), `{kind: "merge", repo, pr, headSha}` or
+`{kind: "flags", flags}`, plus an optional `sourceRef`, and returns the
+`approvalId` agents cite instead of free text. When a person approves, the gate
+gets `expiresAt` (launch 4 h, flags 24 h, merge or unscoped 72 h) and a
+`signature`: HMAC-SHA256 with `PLX_MC_APPROVAL_SIGNING_KEY` over the canonical
+record (`src/lib/compliance/approval-signature.ts`). `mc_verify_approval
+{taskId, approvalId?, expect}` answers whether one covers a launch, merge or
+flag now; `ok` needs approved, signed, a valid signature, unexpired, a person
+decider on `PLX_MC_APPROVAL_DECIDERS` when that allowlist is set, and a
+matching scope, else `reason` names the first failure. Deciding off the
+allowlist is refused and audited as `approval.denied` (`decider_not_allowed`).
+Legacy gates without a scope never satisfy a scoped check.
 Checkout also backfills a missing task `accountableOwner` through the same
 resolver. Operator/service aliases that are not people
 (for example `cos@petrasoap.com`) resolve to the PLX default accountable human,

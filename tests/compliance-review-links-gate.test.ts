@@ -20,6 +20,16 @@ const db = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
+  async liveDispatchesForTask(taskId: string, repoSlug: string) {
+    return [...db.dispatches.values()].filter((d) => d.taskId === taskId && d.repo.toLowerCase() === repoSlug.toLowerCase() && !d.revoked && !(d as { releasedAt?: string | null }).releasedAt && new Date(d.expiresAt).getTime() > Date.now());
+  },
+  async renewDispatches(ids: string[], input: { repo: string; ttlMinutes: number }) {
+    for (const id of ids) {
+      const d = db.dispatches.get(id);
+      if (!d || d.revoked || (d as { releasedAt?: string | null }).releasedAt || d.repo.toLowerCase() !== input.repo.toLowerCase()) continue;
+      d.expiresAt = new Date(Math.max(new Date(d.expiresAt).getTime(), Date.now() + input.ttlMinutes * 60_000)).toISOString();
+    }
+  },
   async insertDispatch(d: { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string }) {
     db.dispatches.set(d.id, { ...d, revoked: false, expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
   },

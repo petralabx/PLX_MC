@@ -597,7 +597,7 @@ describe("mc_verify_approval (TASK-3408, TASK-3444)", () => {
     });
     const before = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", expect: { kind: "launch", lane: "claude-code/claude-uat", promptHash: HASH } });
     expect(before).toMatchObject({ ok: false, reason: "not_approved" });
-    await decideApprovalGate({ taskId: "TASK-700", gateId: approvalId, decision: "approved", decidedBy: "greg@petrasoap.com" });
+    await decideApprovalGate({ taskId: "TASK-700", gateId: approvalId, decision: "approved", decidedBy: "greg@petrasoap.com", renderedScope: JSON.stringify({ kind: "launch", lane: "claude-code/claude-uat", promptHash: HASH }, null, 2), renderedSourceRef: "https://example.com/thread/1" });
     const ok = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", expect: { kind: "launch", lane: "claude-code/claude-uat", promptHash: HASH } });
     expect(ok).toMatchObject({ ok: true, reason: null, approval: { approvalId, status: "approved", decidedBy: "greg@petrasoap.com", signed: true } });
     expect(JSON.stringify(ok)).not.toContain(PROPOSAL.summary);

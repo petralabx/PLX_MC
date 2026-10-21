@@ -2,12 +2,16 @@
 // approvals" at once (a failed load set rows to []). It now has exactly one of
 // four states — loading / error-with-retry / empty / list. No DOM environment
 // (vitest runs in Node), so states are rendered with renderToStaticMarkup.
+import type { ApprovalGate, ApprovalScope } from "@/lib/mc-data";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
   ApprovalRowLinks,
+  ApprovalDecisionScope,
+  ApprovalApproveButton,
+  approvalScopeText,
   ApprovalsInboxView,
   ApprovalsStatus,
   approvalEvidenceLabel,
@@ -103,5 +107,29 @@ describe("approval evidence link", () => {
     expect(withoutBundle).toContain("TASK-221 · WMS integration");
     expect(withoutBundle).toContain('href="/?screen=task&amp;taskId=TASK-221&amp;focus=evidence"');
     expect(withoutBundle).toContain("Evidence for TASK-221");
+  });
+});
+
+describe("signed approval scope on the decision surface", () => {
+  const scopes: ApprovalScope[] = [
+    { kind: "launch", lane: "codex/coding-1", promptHash: "b".repeat(64) },
+    { kind: "merge", repo: "petralabx/PLX_MC", pr: 385, headSha: "a".repeat(40) },
+    { kind: "flags", flags: ["override-one", "override-two"] },
+  ];
+  it.each(scopes)("shows every field in $kind scope and its source before enabling approval", (scope) => {
+    const gate: ApprovalGate = { ...ROW.gate, scope, sourceRef: "https://example.com/ticket/385" };
+    const html = renderToStaticMarkup(createElement(ApprovalDecisionScope, { gate }));
+    expect(approvalScopeText(gate)).toBe(JSON.stringify(scope, null, 2));
+    for (const value of Object.values(scope).flat()) expect(html).toContain(String(value));
+    expect(html).toContain(gate.sourceRef);
+    expect(html).not.toContain("<details");
+    const button = renderToStaticMarkup(createElement(ApprovalApproveButton, { gate, busy: false, onApprove: () => {} }));
+    expect(button).not.toContain("disabled");
+  });
+  it("disables approval if a scoped gate cannot render its scope", () => {
+    const gate = { ...ROW.gate, scope: { kind: "future-scope" } } as unknown as ApprovalGate;
+    expect(approvalScopeText(gate)).toBeNull();
+    expect(renderToStaticMarkup(createElement(ApprovalDecisionScope, { gate }))).toContain("Approval is unavailable");
+    expect(renderToStaticMarkup(createElement(ApprovalApproveButton, { gate, busy: false, onApprove: () => {} }))).toContain("disabled");
   });
 });

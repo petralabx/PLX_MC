@@ -7,6 +7,7 @@ vi.mock("@/lib/compliance/repo", () => ({
   eventsAfter: vi.fn(async () => [{ seq: "1", kind: "mcp.tool.invoked" }]),
 }));
 
+import { appendEvent } from "@/lib/compliance/repo";
 import { recordMcpToolCall } from "@/lib/mcp/audit";
 import type { McpIdentity } from "@/lib/mcp/auth";
 
@@ -20,6 +21,14 @@ const identity = {
 } as McpIdentity;
 
 describe("recordMcpToolCall", () => {
+  it("records the lane and retains the authenticated principal", async () => {
+    await recordMcpToolCall({ tool: "mc_self_check", identity: { ...identity, agent: "codex/codex-uat" }, requestId: "req-lane", ok: true, durationMs: 1 });
+    expect(appendEvent).toHaveBeenLastCalledWith(expect.objectContaining({
+      actor: identity.servicePrincipalId,
+      payload: expect.objectContaining({ agent: "codex/codex-uat", servicePrincipalId: identity.servicePrincipalId }),
+    }));
+  });
+
   it("returns the seq of the event it appended", async () => {
     const seq = await recordMcpToolCall({ tool: "mc_self_check", identity, requestId: "req-1", ok: true, durationMs: 3 });
     expect(seq).toBe("4242");

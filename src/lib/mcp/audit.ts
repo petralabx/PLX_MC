@@ -25,6 +25,7 @@ export async function recordMcpToolCall(input: {
       servicePrincipalId: input.identity.servicePrincipalId,
       operatorEmail: input.identity.operatorEmail,
       runtime: input.identity.runtime,
+      agent: input.identity.agent ?? null,
       workerId: input.identity.workerId,
       ok: input.ok,
       durationMs: input.durationMs,

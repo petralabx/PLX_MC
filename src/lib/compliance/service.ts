@@ -867,20 +867,25 @@ async function leaseChainCheck(
     }
     const verdict = chainVerdict(d, heads, input, ancestor);
     if (!verdict.ok) found.push(verdict.reason);
-    else if (verdict.bind && record) {
+    else if (record) {
+      if (verdict.record && FULL_SHA_RE.test(input.headSha)) {
+        await repo.recordDispatchHead({
+          dispatchId: d.id,
+          headSha: input.headSha,
+          beforeSha: null,
+          pr: input.prNumber,
+          source: "gate",
+          recordedBy: "compliance-gate",
+        });
+      }
+      // Recheck the whole checkout under its row lock even for an existing head.
+      // A different head may have bound to another PR after our initial read.
       const bound = await repo.bindDispatchHeadPr({ dispatchId: d.id, headSha: input.headSha, pr: input.prNumber, recordedBy: "compliance-gate" });
-      if (bound !== null && bound !== input.prNumber) {
+      if (bound === null) {
+        found.push(`checkout dsp_…${d.id.slice(-4)}'s SHA chain could not bind the requested head`);
+      } else if (bound !== input.prNumber) {
         found.push(`checkout dsp_…${d.id.slice(-4)}'s SHA chain is bound to PR #${bound}, not #${input.prNumber}`);
       }
-    } else if (verdict.record && record && FULL_SHA_RE.test(input.headSha)) {
-      await repo.recordDispatchHead({
-        dispatchId: d.id,
-        headSha: input.headSha,
-        beforeSha: null,
-        pr: input.prNumber,
-        source: "gate",
-        recordedBy: "compliance-gate",
-      });
     }
   }
   return leaseChainEnforced()

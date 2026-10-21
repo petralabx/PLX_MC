@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -824,6 +825,244 @@ def test_powershell_empty_helper_reset_survives_legacy_quoting(tmp_path: Path) -
     assert values[0] == ""
     assert "git-credential" in values[1]
     assert len(values) == 2
+
+
+def test_config_rejects_json_that_only_mentions_a_private_key() -> None:
+    """A JSON blob can contain the letters PRIVATE KEY and still not be a PEM."""
+    bootstrap = load_script()
+    blob = json.dumps({"note": "BEGIN PRIVATE KEY", "slug": "plx-agents-writer"})
+    with pytest.raises(SystemExit, match="PEM") as exc:
+        bootstrap.parse_github_app_config("plx-agents-writer", APP_CONFIG, blob)
+    assert "PRIVATE KEY" not in str(exc.value)
+
+
+def test_config_accepts_a_json_wrapped_pem_and_drops_it() -> None:
+    bootstrap = load_script()
+    blob = json.dumps(
+        {
+            "private_key": APP_PEM,
+            "webhook_secret": "webhook-sentinel",
+            "app_id": "1",
+        }
+    )
+    binding = bootstrap.parse_github_app_config("plx-agents-writer", APP_CONFIG, blob)
+    joined = "".join(binding.values())
+    assert binding["PLX_GITHUB_APP_ID"] == "42"
+    assert "PRIVATE KEY" not in joined
+    assert "webhook-sentinel" not in joined
+
+
+def test_config_rejects_invalid_json_private_key_secret() -> None:
+    bootstrap = load_script()
+    with pytest.raises(SystemExit, match="not valid JSON") as exc:
+        bootstrap.parse_github_app_config(
+            "plx-agents-writer", APP_CONFIG, "{not-json PRIVATE KEY"
+        )
+    assert "not-json" not in str(exc.value)
+
+
+def test_aws_profile_is_persisted_only_when_bootstrap_saw_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bootstrap = load_script()
+    binding = _binding(bootstrap)
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    shell = "\n".join(bootstrap.github_app_shell_loader_lines(binding))
+    ps = "\n".join(
+        bootstrap.github_app_powershell_loader_lines(binding, "python", "auth.py")
+    )
+    bootstrap.write_github_app_commands(tmp_path, "python", "auth.py")
+    launcher = (tmp_path / ".local" / "bin" / "plx-github-app-auth").read_text(
+        encoding="utf-8"
+    )
+    assert "AWS_PROFILE" not in shell
+    assert "AWS_PROFILE" not in ps
+    assert "AWS_PROFILE" not in launcher
+
+    monkeypatch.setenv("AWS_PROFILE", "plx-prod")
+    shell = "\n".join(bootstrap.github_app_shell_loader_lines(binding))
+    ps = "\n".join(
+        bootstrap.github_app_powershell_loader_lines(binding, "python", "auth.py")
+    )
+    bootstrap.write_github_app_commands(tmp_path, "python", "auth.py")
+    launcher = (tmp_path / ".local" / "bin" / "plx-github-app-auth").read_text(
+        encoding="utf-8"
+    )
+    assert "export AWS_PROFILE='plx-prod'" in shell
+    assert "$env:AWS_PROFILE = 'plx-prod'" in ps
+    assert "export AWS_PROFILE='plx-prod'" in launcher
+
+
+class _RecordingSecrets:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get_secret_value(self, SecretId: str) -> dict:
+        self.calls.append(SecretId)
+        if SecretId == "prod/ec2-secrets":
+            return {
+                "SecretString": json.dumps(
+                    {
+                        "PLX_MC_MCP_API_KEY": "shared-mcp-key",
+                        "SWARM_API_KEY": "swarm-key",
+                        "PETRALABX_GITHUB_TOKEN": SENTINEL_PAT,
+                    }
+                )
+            }
+        if SecretId == "plx/prod/mc/mcp-agent-keys/v1":
+            return {
+                "SecretString": json.dumps(
+                    {"sp_mcp_codex": "codex-mcp-key", "sp_mcp_grok": "grok-mcp-key"}
+                )
+            }
+        if SecretId == "plx/prod/m365/cursor-graph/v1":
+            return {
+                "SecretString": json.dumps(
+                    {
+                        "tenantId": "tenant",
+                        "clientId": "client",
+                        "clientSecret": "secret",
+                    }
+                )
+            }
+        if SecretId.endswith("/config"):
+            return {"SecretString": json.dumps({"appId": "42", "installationId": "7"})}
+        if SecretId.endswith("/private-key"):
+            return {"SecretString": APP_PEM}
+        if SecretId == "plx/coding/compat-small":
+            return {
+                "SecretString": json.dumps(
+                    {
+                        "PLX_MC_MCP_API_KEY": "small-mcp-key",
+                        "SWARM_API_KEY": "small-swarm",
+                    }
+                )
+            }
+        raise AssertionError(SecretId)
+
+
+def _run_bootstrap_main(
+    bootstrap: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    home: Path,
+    argv: list[str],
+    extra_env: dict[str, str] | None = None,
+) -> _RecordingSecrets:
+    monkeypatch.delenv("PLX_BOOTSTRAP_LEGACY_GITHUB_PAT", raising=False)
+    monkeypatch.delenv("PLX_BOOTSTRAP_COMPAT_SECRET_ID", raising=False)
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    for key, value in (extra_env or {}).items():
+        monkeypatch.setenv(key, value)
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(bootstrap, "HOME", home)
+    monkeypatch.setattr(
+        bootstrap, "OUTPUT_GITHUB_PS1", home / ".secrets-env.github.ps1"
+    )
+    monkeypatch.setattr(bootstrap, "OUTPUT_GITHUB_SH", home / ".secrets-env.github")
+    monkeypatch.setattr(
+        bootstrap,
+        "staging_output_path",
+        lambda principal_id, home_path=None: home / f"staging-{principal_id}.ps1",
+    )
+    client = _RecordingSecrets()
+    monkeypatch.setattr(bootstrap.boto3, "client", lambda *_a, **_k: client)
+    monkeypatch.setattr(sys, "argv", ["bootstrap-windows-secrets.py", *argv])
+    bootstrap.main()
+    return client
+
+
+def test_app_mode_non_default_principal_never_reads_ec2_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bootstrap = load_script()
+    client = _run_bootstrap_main(
+        bootstrap,
+        monkeypatch,
+        tmp_path / "home",
+        ["--mcp-principal-id", "sp_mcp_codex"],
+    )
+    assert bootstrap.EC2_SECRETS_ID not in client.calls
+    assert "plx/prod/mc/mcp-agent-keys/v1" in client.calls
+    staging = (tmp_path / "home" / "staging-sp_mcp_codex.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "codex-mcp-key" in staging
+    assert SENTINEL_PAT not in staging
+
+
+def test_app_mode_non_default_principal_ignores_compat_secret(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bootstrap = load_script()
+    client = _run_bootstrap_main(
+        bootstrap,
+        monkeypatch,
+        tmp_path / "home",
+        [
+            "--mcp-principal-id",
+            "sp_mcp_codex",
+            "--compat-secret-id",
+            "plx/coding/compat-small",
+        ],
+    )
+    assert bootstrap.EC2_SECRETS_ID not in client.calls
+    assert "plx/coding/compat-small" not in client.calls
+
+
+def test_app_mode_default_principal_reads_ec2_secrets_unless_compat_id_is_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bootstrap = load_script()
+    client = _run_bootstrap_main(bootstrap, monkeypatch, tmp_path / "default", [])
+    assert client.calls.count(bootstrap.EC2_SECRETS_ID) == 1
+
+    client = _run_bootstrap_main(
+        bootstrap,
+        monkeypatch,
+        tmp_path / "flag",
+        ["--compat-secret-id", "plx/coding/compat-small"],
+    )
+    assert bootstrap.EC2_SECRETS_ID not in client.calls
+    assert "plx/coding/compat-small" in client.calls
+    staging = (tmp_path / "flag" / "staging-sp_mcp_cursor.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "small-mcp-key" in staging
+    assert "small-swarm" in staging
+
+    client = _run_bootstrap_main(
+        bootstrap,
+        monkeypatch,
+        tmp_path / "env",
+        [],
+        {"PLX_BOOTSTRAP_COMPAT_SECRET_ID": "plx/coding/compat-small"},
+    )
+    assert bootstrap.EC2_SECRETS_ID not in client.calls
+    assert "plx/coding/compat-small" in client.calls
+
+
+def test_legacy_mode_still_reads_ec2_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bootstrap = load_script()
+    client = _run_bootstrap_main(
+        bootstrap,
+        monkeypatch,
+        tmp_path / "home",
+        [
+            "--legacy-personal-pat",
+            "--mcp-principal-id",
+            "sp_mcp_codex",
+            "--compat-secret-id",
+            "plx/coding/compat-small",
+        ],
+    )
+    assert bootstrap.EC2_SECRETS_ID in client.calls
+    assert "plx/coding/compat-small" not in client.calls
+    staging = (tmp_path / "home" / "staging-sp_mcp_codex.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert SENTINEL_PAT in staging
 
 
 def test_shell_launchers_have_lf_endings_when_writes_translate_newlines(

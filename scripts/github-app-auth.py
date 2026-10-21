@@ -256,13 +256,40 @@ def erase_cached_token(path: Path) -> None:
         return
 
 
+def unwrap_private_key_pem(raw: object, secret_id: str) -> str:
+    """Return a PEM from a raw secret or a JSON object with private_key.
+
+    plx/github/apps/<slug>/private-key is sometimes the PEM itself and
+    sometimes JSON (app_id, client_id, private_key, slug, webhook_secret).
+    The error names the problem and does not echo the secret body.
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        raise SystemExit(f"{secret_id}: expected a PEM private key")
+    text = raw.strip()
+    if text.startswith("{"):
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            raise SystemExit(
+                f"{secret_id}: private key secret is not valid JSON"
+            ) from None
+        if not isinstance(data, dict):
+            raise SystemExit(f"{secret_id}: private key secret is not valid JSON")
+        pem = data.get("private_key")
+        if not isinstance(pem, str) or not pem.strip():
+            raise SystemExit(f"{secret_id}: missing PEM private_key")
+        text = pem.strip()
+    text = text.replace("\\n", "\n")
+    if "BEGIN" not in text or "PRIVATE KEY" not in text:
+        raise SystemExit(f"{secret_id}: expected a PEM private key")
+    return text
+
+
 def secrets_manager_private_key(secret_id: str) -> str:
     validate_private_key_secret_id(secret_id)
     client = boto3.client("secretsmanager", region_name="us-east-1")
     raw = client.get_secret_value(SecretId=secret_id)["SecretString"]
-    if not isinstance(raw, str) or "PRIVATE KEY" not in raw:
-        raise SystemExit(f"{secret_id}: expected a PEM private key")
-    return raw
+    return unwrap_private_key_pem(raw, secret_id)
 
 
 def get_installation_token(

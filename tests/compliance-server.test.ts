@@ -17,6 +17,8 @@ const db = vi.hoisted(() => ({
   tasks: new Map<string, Task>(),
   dedupKeys: new Set<string>(),
   heads: new Map<string, { headSha: string; beforeSha: string | null; pr: number | null; source: "launcher" | "webhook" | "gate"; recordedBy: string; recordedAt: string }[]>(),
+  /** Another PR that binds the head between the gate's read and its bind (a race). */
+  bindRace: null as number | null,
   bucketsThrow: false,
   buckets: [
     { id: "BKT-WMS", name: "WMS", owner: "vince", health: "track" as const, target: "Jun 15", started: "2026.06.11", desc: "", repos: [], sync: { state: "synced" as const, ts: "—", sp: "—" }, prd: null as string | null, project: null },
@@ -70,6 +72,15 @@ vi.mock("@/lib/compliance/repo", () => ({
     db.heads.set(h.dispatchId, chain);
     db.events.push({ kind: "checkout.head", actor: h.recordedBy, payload: { checkoutId: h.dispatchId, headSha: h.headSha, source: h.source } });
     return true;
+  },
+  async bindDispatchHeadPr(b: { dispatchId: string; headSha: string; pr: number; recordedBy: string }) {
+    const row = (db.heads.get(b.dispatchId) ?? []).find((x) => x.headSha === b.headSha);
+    if (!row) return null;
+    if (db.bindRace !== null && row.pr === null) row.pr = db.bindRace;
+    if (row.pr !== null) return row.pr;
+    row.pr = b.pr;
+    db.events.push({ kind: "checkout.head_bound", actor: b.recordedBy, payload: { checkoutId: b.dispatchId, headSha: b.headSha } });
+    return row.pr;
   },
   async appendEvent(e: { kind: string; actor: string; repo?: string | null; taskId?: string | null; pr?: string | null; payload?: Record<string, unknown>; dedupKey?: string | null }) {
     if (e.dedupKey) {
@@ -165,6 +176,7 @@ beforeEach(() => {
   db.tasks.clear();
   db.dedupKeys.clear();
   db.heads.clear();
+  db.bindRace = null;
   db.bucketsThrow = false;
   const withPrd = db.buckets.find((bucket) => bucket.id === "BKT-PRD");
   if (withPrd) withPrd.prd = "https://example.com/prd.md";
@@ -889,7 +901,13 @@ describe("checkout lifecycle (TASK-3409)", () => {
     ]);
     db.dispatches.get(checkoutId)!.revoked = true;
     const revoked = await verifyPr({ repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
-    expect(revoked.tasks[0].checkout).toMatchObject({ live: false, blockReason: "revoked" });
+    expect(revoked.tasks[0].checkout).toMatchObject({ live: false, blockReason: "revoked", expiresAt: db.dispatches.get(checkoutId)!.expiresAt });
+    Object.assign(db.dispatches.get(checkoutId)!, { revoked: false, releasedAt: "2026-10-21T00:00:00Z", releasedReason: "merged" });
+    const released = await verifyPr({ repo: "PLX_MC", repoFullName: slug, prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
+    expect(released.verdict).toBe("block");
+    expect(released.tasks[0]).toMatchObject({ taskId: null, checkout: { live: false, blockReason: "released", releasedReason: "merged" } });
+    const elsewhere = await verifyPr({ repo: "Other", repoFullName: "petralabx/Other", prNumber: 3409, headSha: "h1", changedPaths: ["src/x.ts"], checkoutIds: [checkoutId] });
+    expect(elsewhere.tasks[0].checkout).toMatchObject({ live: false, blockReason: "released", releasedReason: null, expiresAt: null });
   });
 });
 
@@ -1013,6 +1031,7 @@ describe("checkout lease chain (TASK-3410)", () => {
     expect(heads(cid)).toEqual(["a:webhook:3410", "b:webhook:3410", "c:webhook:3410"]);
     process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
     github.loadPrCommits.mockResolvedValue([commit(sha("f"), trailers(cid, lane))]);
+    github.githubHeadDescendsFrom.mockResolvedValue(false); // f is the rebase: no chain head is its ancestor
     const blocked = await verifyPr({ ...pr(sha("f")), checkoutIds: [cid] });
     expect(blocked.verdict).toBe("block");
     expect(blocked.reasons.join(" ")).toContain("outside checkout");
@@ -1022,6 +1041,7 @@ describe("checkout lease chain (TASK-3410)", () => {
     const cid = await launch();
     await recordHead(cid, sha("a"));
     github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane)), commit(sha("b"), trailers(cid, lane))]);
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
     const r = await verifyPr({ ...pr(sha("b")), checkoutIds: [cid] });
     expect(r.verdict).toBe("pass");
     expect(r.reasons.join(" ")).not.toContain("SHA chain");
@@ -1066,6 +1086,68 @@ describe("checkout lease chain (TASK-3410)", () => {
     github.githubHeadDescendsFrom.mockResolvedValue(true);
     expect((await verifyPr({ ...pr(sha("c")), checkoutIds: [cid] })).verdict).toBe("pass");
     expect(heads(cid)).toEqual(["c:gate:3410"]);
+  });
+
+  it("proves ancestry for the requested head itself, never from the PR's current commits", async () => {
+    const cid = await launch();
+    await recordHead(cid, sha("a"), 3410);
+    // The PR has moved on to b (a descendant of a); a delayed run or replay verifies the unrelated head f.
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane)), commit(sha("b"), trailers(cid, lane))]);
+    github.githubHeadDescendsFrom.mockImplementation(async (_repo: string, from: string, to: string) => from === sha("a") && to === sha("b"));
+    const warned = await verifyPr({ ...pr(sha("f")), checkoutIds: [cid] });
+    expect(warned.reasons.join(" ")).toContain("warning: head fffffff is outside checkout");
+    expect(github.githubHeadDescendsFrom).toHaveBeenCalledWith(slug, sha("a"), sha("f"));
+    expect(heads(cid)).toEqual(["a:launcher:3410"]);
+
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    expect((await verifyPr({ ...pr(sha("f")), checkoutIds: [cid] })).verdict).toBe("block");
+    github.githubHeadDescendsFrom.mockRejectedValue(new Error("github_unavailable"));
+    expect((await verifyPr({ ...pr(sha("b")), checkoutIds: [cid] })).verdict).toBe("block");
+    expect(heads(cid)).toEqual(["a:launcher:3410"]);
+
+    github.githubHeadDescendsFrom.mockImplementation(async (_repo: string, from: string, to: string) => from === sha("a") && to === sha("b"));
+    expect((await verifyPr({ ...pr(sha("b")), checkoutIds: [cid] })).verdict).toBe("pass");
+    expect(heads(cid)).toEqual(["a:launcher:3410", "b:gate:3410"]);
+  });
+
+  it("binds a head recorded before its PR existed to the first PR, so another PR cannot reuse the chain", async () => {
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    const cid = await launch();
+    await recordHead(cid, sha("a"));
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane))]);
+    expect((await verifyPr({ ...pr(sha("a")), checkoutIds: [cid] })).verdict).toBe("pass");
+    expect(heads(cid)).toEqual(["a:launcher:3410"]);
+    const otherPr = await verifyPr({ ...pr(sha("a"), 9999), checkoutIds: [cid] });
+    expect(otherPr.verdict).toBe("block");
+    expect(otherPr.reasons.join(" ")).toContain("SHA chain is bound to PR #3410, not #9999");
+  });
+
+  it("refuses a verify that loses the bind race to another PR", async () => {
+    process.env.PLX_MC_LEASE_CHAIN_ENFORCE = "1";
+    const cid = await launch();
+    await recordHead(cid, sha("a"));
+    db.bindRace = 9999;
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane))]);
+    const lost = await verifyPr({ ...pr(sha("a")), checkoutIds: [cid] });
+    expect(lost.verdict).toBe("block");
+    expect(lost.reasons.join(" ")).toContain("SHA chain is bound to PR #9999, not #3410");
+    expect(heads(cid)).toEqual(["a:launcher:9999"]);
+  });
+
+  it("binds an unbound recorded head on the PR webhook and on a launcher re-record", async () => {
+    const cid = await launch();
+    await recordHead(cid, sha("a"));
+    await ingestPullRequest({
+      ...pr(sha("a")), action: "opened", beforeSha: null, merged: false, branch: "x", title: "x", author: "agent", labels: [], checkoutId: cid, checkoutIds: [cid],
+    });
+    expect(heads(cid)).toEqual(["a:launcher:3410"]);
+
+    const relaunched = await launch();
+    await recordHead(relaunched, sha("b"));
+    const again = await recordHead(relaunched, sha("b"), 3411);
+    expect(again.recorded).toBe(false);
+    expect(heads(relaunched)).toEqual(["b:launcher:3411"]);
+    await expect(recordHead(relaunched, sha("b"), 9999)).rejects.toMatchObject({ code: "chain_bound", status: 409 });
   });
 
   it("does not queue the event when an ordinary checkout's ancestry compare fails, but does for a launcher checkout", async () => {

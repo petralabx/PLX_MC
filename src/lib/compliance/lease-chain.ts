@@ -54,26 +54,21 @@ export function boundPr(heads: readonly DispatchHead[]): number | null {
   return heads.find((h) => h.pr !== null)?.pr ?? null;
 }
 
-function onChain(d: Pick<DispatchRow, "baseSha">, heads: readonly DispatchHead[], sha: string | null | undefined): boolean {
-  if (!sha) return false;
-  return sha === d.baseSha || heads.some((h) => h.headSha === sha);
-}
-
-/**
- * Whether a pull_request webhook delivery extends the chain. An empty chain
- * attaches the PR head and binds the PR; after that only a fast-forward from a
- * chain head (the push's `before`) on the bound PR joins it.
- */
+/** A webhook needs verified ancestry, never just GitHub's previous head. */
 export function webhookExtendsChain(
   d: Pick<DispatchRow, "baseSha">,
   heads: readonly DispatchHead[],
-  evt: { prNumber: number; headSha: string; beforeSha?: string | null }
+  evt: { prNumber: number; headSha: string; forced?: boolean },
+  verifiedAncestorSha?: string | null
 ): boolean {
-  if (!FULL_SHA_RE.test(evt.headSha) || heads.some((h) => h.headSha === evt.headSha)) return false;
+  if (evt.forced || !FULL_SHA_RE.test(evt.headSha) || heads.some((h) => h.headSha === evt.headSha)) return false;
   const bound = boundPr(heads);
   if (bound !== null && bound !== evt.prNumber) return false;
-  if (heads.length === 0) return true;
-  return onChain(d, heads, evt.beforeSha);
+  if (heads.length === 0 && !d.baseSha) return true;
+  // Once heads exist, descending from the base alone does not prove continuity.
+  return !!verifiedAncestorSha && (heads.length === 0
+    ? verifiedAncestorSha === d.baseSha
+    : heads.some((h) => h.headSha === verifiedAncestorSha));
 }
 
 export type ChainVerdict =

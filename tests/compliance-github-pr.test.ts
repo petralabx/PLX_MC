@@ -8,7 +8,7 @@ const m = vi.hoisted(() => ({ resolveGithubToken: vi.fn() }));
 
 vi.mock("@/lib/github-app", () => ({ resolveGithubToken: m.resolveGithubToken }));
 
-import { loadPrCommits, loadPrState, loadPrVerifyInput } from "@/lib/compliance/github-pr";
+import { githubHeadDescendsFrom, loadPrCommits, loadPrState, loadPrVerifyInput } from "@/lib/compliance/github-pr";
 
 const PR = {
   number: 7,
@@ -163,5 +163,21 @@ describe("loadPrCommits (TASK-3336)", () => {
     await expect(loadPrCommits("petralabx/PLX_MC", 7)).rejects.toMatchObject({ code: "github_unavailable" });
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ message: "odd" })));
     await expect(loadPrCommits("petralabx/PLX_MC", 7)).rejects.toMatchObject({ code: "github_error" });
+  });
+});
+
+describe("githubHeadDescendsFrom", () => {
+  it.each([ ["ahead", true], ["identical", true], ["diverged", false], ["behind", false], ["unknown", false] ])("checks compare status %s", async (status, expected) => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
+      expect(String(url)).toContain("/compare/");
+      return Response.json({ status });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await githubHeadDescendsFrom("petralabx/PLX_MC", "a".repeat(40), "b".repeat(40))).toBe(expected);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(`/compare/${"a".repeat(40)}...${"b".repeat(40)}`);
+  });
+  it("fails closed if GitHub cannot prove ancestry", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 503 })));
+    await expect(githubHeadDescendsFrom("petralabx/PLX_MC", "a".repeat(40), "b".repeat(40))).rejects.toMatchObject({ code: "github_error" });
   });
 });

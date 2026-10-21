@@ -35,14 +35,19 @@ describe("launcher lanes and principals", () => {
 
 describe("webhookExtendsChain", () => {
   const d = { baseSha: sha("0") };
-  it("extends from the base SHA and from a chain head on the bound PR only", () => {
-    expect(webhookExtendsChain(d, [], { prNumber: 7, headSha: sha("a") })).toBe(true);
-    expect(webhookExtendsChain(d, [head("a")], { prNumber: 7, headSha: sha("b"), beforeSha: sha("0") })).toBe(true);
-    expect(webhookExtendsChain(d, [head("a")], { prNumber: 7, headSha: sha("b"), beforeSha: sha("a") })).toBe(true);
-    expect(webhookExtendsChain(d, [head("a")], { prNumber: 7, headSha: sha("b"), beforeSha: sha("9") })).toBe(false);
-    expect(webhookExtendsChain(d, [head("a")], { prNumber: 8, headSha: sha("b"), beforeSha: sha("a") })).toBe(false);
-    expect(webhookExtendsChain(d, [head("a")], { prNumber: 7, headSha: sha("a"), beforeSha: sha("a") })).toBe(false);
-    expect(webhookExtendsChain(d, [], { prNumber: 7, headSha: "abc1234" })).toBe(false);
+  it("requires verified ancestry from a recorded head, or the base for the first head", () => {
+    expect(webhookExtendsChain(d, [], { prNumber: 7, headSha: sha("a") }, sha("0"))).toBe(true);
+    expect(webhookExtendsChain(d, [], { prNumber: 7, headSha: sha("a") })).toBe(false);
+    expect(webhookExtendsChain(d, [head("a")], { prNumber: 7, headSha: sha("b") }, sha("a"))).toBe(true);
+    expect(webhookExtendsChain(d, [head("a")], { prNumber: 7, headSha: sha("b") }, sha("0"))).toBe(false);
+    expect(webhookExtendsChain(d, [head("a")], { prNumber: 8, headSha: sha("b") }, sha("a"))).toBe(false);
+    expect(webhookExtendsChain(d, [head("a")], { prNumber: 7, headSha: sha("a") }, sha("a"))).toBe(false);
+    expect(webhookExtendsChain(d, [], { prNumber: 7, headSha: "abc1234" }, sha("0"))).toBe(false);
+  });
+  it("never extends forced pushes or an unverified rewritten head", () => {
+    expect(webhookExtendsChain(d, [head("a")], { prNumber: 7, headSha: sha("b"), forced: true }, sha("a"))).toBe(false);
+    expect(webhookExtendsChain(d, [], { prNumber: 7, headSha: sha("b"), forced: true }, sha("0"))).toBe(false);
+    expect(webhookExtendsChain(d, [head("a")], { prNumber: 7, headSha: sha("b") })).toBe(false);
   });
 });
 

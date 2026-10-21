@@ -78,13 +78,16 @@ export type ChainVerdict =
 /**
  * The gate's chain check for one launcher checkout at one PR head. `prCommitShas`
  * is every commit on the PR (ancestors of the head that are not on the base).
+ * `baseVerified` = GitHub compare proved the head descends from the checkout's
+ * base SHA; an empty chain with a base accepts its first head only then.
  * record = the head joins the chain (empty chain, or descends from a chain head).
  */
 export function chainVerdict(
   d: Pick<DispatchRow, "id" | "baseSha">,
   heads: readonly DispatchHead[],
   input: { prNumber: number; headSha: string },
-  prCommitShas: readonly string[]
+  prCommitShas: readonly string[],
+  baseVerified = false
 ): ChainVerdict {
   const ref = `dsp_…${d.id.slice(-4)}`;
   const bound = boundPr(heads);
@@ -92,7 +95,13 @@ export function chainVerdict(
     return { ok: false, reason: `checkout ${ref}'s SHA chain is bound to PR #${bound}, not #${input.prNumber}` };
   }
   if (heads.some((h) => h.headSha === input.headSha)) return { ok: true, record: false };
-  if (heads.length === 0) return { ok: true, record: true };
+  if (heads.length === 0) {
+    if (!d.baseSha || baseVerified) return { ok: true, record: true };
+    return {
+      ok: false,
+      reason: `head ${input.headSha.slice(0, 7)} has no verified ancestry from checkout ${ref}'s base ${d.baseSha.slice(0, 7)} — the owning launcher must record the first head (mc_record_checkout_head)`,
+    };
+  }
   const shas = new Set(prCommitShas);
   if (heads.some((h) => shas.has(h.headSha))) return { ok: true, record: true };
   const last = heads[heads.length - 1].headSha.slice(0, 7);

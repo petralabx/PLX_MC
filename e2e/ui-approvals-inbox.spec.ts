@@ -52,33 +52,38 @@ async function openApprovals(page: Page) {
   await waitForHydration(page);
   const screen = page.getByTestId(approvalsInboxRoute.testId);
   await expect(screen).toBeVisible();
-  await expect(screen.getByRole("heading", { name: "Approvals" })).toBeVisible();
-  await expect(screen.getByText("Promote the test week")).toBeVisible();
-  await expect(screen.getByText("Hold the finance deploy")).toBeVisible();
-  return { ...stub, screen };
+  // TASK-3721: the h1 is the count headline; "Approvals" is the kicker.
+  await expect(screen.getByRole("heading", { level: 1, name: /Two decisions waiting on you/ })).toBeVisible();
+  await expect(screen.locator(".ap-item", { hasText: "Promote the test week" })).toBeVisible();
+  await expect(screen.locator(".ap-item", { hasText: "Hold the finance deploy" })).toBeVisible();
+  return { ...stub, screen, sheet: screen.getByTestId("decision-sheet") };
 }
 
 test.describe("approvals inbox — approve and reject", () => {
+  // TASK-3721: a row selects its gate; Approve, Reject, the note and the
+  // evidence link live in the decision sheet beside the queue.
   test("approve posts the decision and drops only that row", async ({ page }) => {
-    const { decisions, screen } = await openApprovals(page);
-    const row = screen.locator(".ap-item", { hasText: "Promote the test week" });
+    const { decisions, screen, sheet } = await openApprovals(page);
+    await screen.locator(".ap-item", { hasText: "Promote the test week" }).click();
+    await expect(sheet.getByRole("heading", { name: "Promote the test week" })).toBeVisible();
     await expect(
-      row.getByRole("link", { name: /Evidence: Evidence-gated test week for Product Development/ })
+      sheet.getByRole("link", { name: /Evidence: Evidence-gated test week for Product Development/ })
     ).toBeVisible();
-    await row.getByRole("button", { name: "Approve" }).click();
+    await sheet.getByRole("button", { name: "Approve", exact: true }).click();
     await expect(screen.locator(".ap-item", { hasText: "Promote the test week" })).toHaveCount(0);
     await expect(screen.locator(".ap-item", { hasText: "Hold the finance deploy" })).toBeVisible();
     expect(decisions).toEqual([{ taskId: "TASK-227", gateId: "apg_approve", decision: "approved" }]);
   });
 
   test("reject posts the decision, including the note, and drops only that row", async ({ page }) => {
-    const { decisions, screen } = await openApprovals(page);
-    const row = screen.locator(".ap-item", { hasText: "Hold the finance deploy" });
+    const { decisions, screen, sheet } = await openApprovals(page);
+    await screen.locator(".ap-item", { hasText: "Hold the finance deploy" }).click();
+    await expect(sheet.getByRole("heading", { name: "Hold the finance deploy" })).toBeVisible();
     await expect(
-      row.getByRole("link", { name: /Evidence: Evidence-gated test week for Finance/ })
+      sheet.getByRole("link", { name: /Evidence: Evidence-gated test week for Finance/ })
     ).toBeVisible();
-    await row.getByPlaceholder("Optional decision note").fill("not yet");
-    await row.getByRole("button", { name: "Reject" }).click();
+    await sheet.getByLabel("Decision note").fill("not yet");
+    await sheet.getByRole("button", { name: "Reject" }).click();
     await expect(screen.locator(".ap-item", { hasText: "Hold the finance deploy" })).toHaveCount(0);
     await expect(screen.locator(".ap-item", { hasText: "Promote the test week" })).toBeVisible();
     expect(decisions).toEqual([
@@ -86,10 +91,10 @@ test.describe("approvals inbox — approve and reject", () => {
     ]);
   });
 
-  test("each row's evidence link opens that task's evidence bundle", async ({ page }) => {
-    const { screen } = await openApprovals(page);
-    const row = screen.locator(".ap-item", { hasText: "Promote the test week" });
-    await row.getByRole("link", { name: /Evidence: Evidence-gated test week for Product Development/ }).click();
+  test("each gate's evidence link opens that task's evidence bundle", async ({ page }) => {
+    const { screen, sheet } = await openApprovals(page);
+    await screen.locator(".ap-item", { hasText: "Promote the test week" }).click();
+    await sheet.getByRole("link", { name: /Evidence: Evidence-gated test week for Product Development/ }).click();
     await expect(page).toHaveURL(/screen=task/);
     await expect(page).toHaveURL(/taskId=TASK-227/);
     await expect(page).toHaveURL(/focus=evidence/);

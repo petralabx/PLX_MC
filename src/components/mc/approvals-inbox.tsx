@@ -78,6 +78,8 @@ import {
   saveDraft,
   stepSelection,
   waitingOnPeople,
+  waitingOnViewer,
+  keyEffect,
   type ApprovalScopeKey,
   type ApprovalTab,
   type Draft,
@@ -911,7 +913,11 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   const stats = !scopeReady
     ? null
     : scope === "me"
-      ? forMeStats(forMe, decided.status === "ready" ? decidedTodayCount(decided.data, new Date(now)) : null, now)
+      ? forMeStats(
+          waitingOnViewer(forMe, me),
+          decided.status === "ready" ? decidedTodayCount(decided.data, new Date(now)) : null,
+          now
+        )
       : projectStats(scopedOpen, now);
   const countOf = (kind: "question" | "gate") => scopedOpen.filter((i) => i.kind === kind).length;
   const tabCounts: Record<ApprovalTab, number | null> = {
@@ -926,6 +932,12 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
     questions.status === "ready" &&
     !questions.data.some((r) => r.question.id === route.question) &&
     !answeredHere.has(route.question);
+
+  // Ages and the reminder cooldown follow the clock while the screen stays open.
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // ── Focus and scroll ──
   // Narrow layouts hide the queue while the sheet is open, so focus follows
@@ -1119,9 +1131,11 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
         prev.status === "ready" ? { status: "ready", data: replaceProjectQuestion(prev.data, item.taskId, question) } : prev
       );
     } catch (err) {
-      // 409 (cooldown) and 403 (not your project) carry the server's reason.
+      // 409 (cooldown, or answered meanwhile) and 403 (not your project) carry the server's reason.
       setActionError({ id: item.id, message: loadError(err, "Sending the reminder failed.") });
       setBusy(null);
+      // The question may have been answered elsewhere; show the lists as they are now.
+      await reloadAll();
       return;
     }
     setBusy(null);
@@ -1133,44 +1147,34 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
     approvalsChanged(reloadAll);
   };
 
-  const submit = (): boolean => {
-    if (cur?.kind === "question" && cur.mine) {
-      void sendAnswer(cur);
-      return true;
-    }
-    if (cur?.kind === "gate") {
-      void decideGate(cur, "approved");
-      return true;
-    }
-    return false;
-  };
-
   // Keys work only while focus is inside the screen: the shell owns window-level ⌘K and `g` chords.
+  // keyEffect decides what a key may do: never decide a gate, never act on a hidden sheet.
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.defaultPrevented) return;
     const action = approvalKeyAction(event, isTypingTarget(event.target as HTMLInputElement));
     if (!action) return;
-    let handled = false;
-    if (action.type === "next" || action.type === "prev") {
-      move(action.type === "next" ? 1 : -1);
-      handled = order.length > 0;
-    } else if (action.type === "open" && cur) {
-      nav("task", { taskId: cur.taskId });
-      handled = true;
-    } else if (action.type === "pick" && cur?.kind === "question" && cur.mine && !busy) {
-      if (action.index < cur.question.options.length) {
-        updateDraft(cur.id, { ...draftOf(cur.id), choice: action.index });
-        handled = true;
-      }
-    } else if (action.type === "submit") {
-      handled = submit();
-    }
-    if (handled) event.preventDefault();
+    const sheet = sheetRef.current;
+    const effect = keyEffect(action, {
+      kind: cur?.kind ?? null,
+      mine: cur?.kind === "question" && cur.mine,
+      optionCount: cur?.kind === "question" ? cur.question.options.length : 0,
+      sheetVisible: !!sheet && getComputedStyle(sheet).display !== "none",
+      busy: !!busy,
+      hasItems: order.length > 0,
+    });
+    if (!effect) return;
+    if (effect.type === "move") move(effect.delta);
+    else if (effect.type === "open" && cur) nav("task", { taskId: cur.taskId });
+    else if (effect.type === "pick" && cur) updateDraft(cur.id, { ...draftOf(cur.id), choice: effect.index });
+    else if (effect.type === "send" && cur?.kind === "question") void sendAnswer(cur);
+    event.preventDefault();
   };
 
   // ── Render ──
   const whoFor = (item: QueueItem) => {
-    if (item.kind === "gate") return { label: "Any approver", person: null, me: false };
+    if (item.kind === "gate") {
+      return { label: raisedByViewer(item.gate, me) ? "Another approver" : "Any approver", person: null, me: false };
+    }
     if (item.kind === "question" && item.mine) {
       return { label: "On you", person: viewer ? person(viewer.id) : null, me: true };
     }
@@ -1179,12 +1183,16 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   };
   const people = waitingOnPeople(projItems, nameOf);
   const pos = curId ? order.indexOf(curId) + 1 : 0;
-  const narrowView = cur ? (sheetOpen ? "sheet" : "queue") : "both";
+  // A linked question that is not open stands in for nothing: while it is still
+  // the selection, a narrow layout shows the queue with the notice, never another
+  // item's sheet. Picking a row selects that row and opens its sheet as usual.
+  const linkStandIn = missingLink && selected === route.question;
+  const narrowView = cur ? (sheetOpen && !linkStandIn ? "sheet" : "queue") : "both";
   const itemError = (id: string) => (actionError?.id === id ? actionError.message : null);
   const empty = emptySheet({
     scope,
     tab,
-    openCount: scope === "me" ? forMe.length : projItems.length,
+    openCount: scope === "me" ? (forMeReady ? forMe.length : null) : projItems.length,
     filtered: filtered && visible.length === 0 && projItems.length > 0,
   });
 
@@ -1274,7 +1282,7 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
     >
       <ApprovalsHeader
         scope={scope}
-        count={scopeReady ? scopedOpen.length : null}
+        count={scopeReady ? (scope === "me" ? waitingOnViewer(forMe, me).length : scopedOpen.length) : null}
         projectName={projectName}
         stats={stats}
       />

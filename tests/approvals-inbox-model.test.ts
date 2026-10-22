@@ -38,9 +38,12 @@ import {
   readDrafts,
   saveDraft,
   stepSelection,
+  keyEffect,
   waitingOnPeople,
   waitingOnPerson,
+  waitingOnViewer,
   type KeyInput,
+  type KeyState,
 } from "@/components/mc/approvals-inbox.helpers";
 import { viewerTokens } from "@/components/mc/needs-me";
 import type { OpenQuestionRow } from "@/components/mc/questions-inbox";
@@ -175,6 +178,45 @@ describe("keyboard map", () => {
     expect(approvalKeyAction(key("1", { altKey: true }), false)).toBeNull();
   });
 
+  // Review B1/S1: a key acts only on the item the person can see, and a key
+  // never approves a gate (21 Oct: 47 gates approved in a minute, LESSONS TASK-3567).
+  const state = (over: Partial<KeyState> = {}): KeyState => ({
+    kind: "question",
+    mine: true,
+    optionCount: 3,
+    sheetVisible: true,
+    busy: false,
+    hasItems: true,
+    ...over,
+  });
+
+  it("never approves a gate from the keyboard, visible or not", () => {
+    expect(keyEffect({ type: "submit" }, state({ kind: "gate", mine: false }))).toBeNull();
+    expect(keyEffect({ type: "submit" }, state({ kind: "gate", mine: false, sheetVisible: false }))).toBeNull();
+  });
+
+  it("sends, picks and opens only while the sheet is visible", () => {
+    expect(keyEffect({ type: "submit" }, state())).toEqual({ type: "send" });
+    expect(keyEffect({ type: "pick", index: 1 }, state())).toEqual({ type: "pick", index: 1 });
+    expect(keyEffect({ type: "open" }, state({ kind: "gate", mine: false }))).toEqual({ type: "open" });
+    const hidden = state({ sheetVisible: false });
+    expect(keyEffect({ type: "submit" }, hidden)).toBeNull();
+    expect(keyEffect({ type: "pick", index: 0 }, hidden)).toBeNull();
+    expect(keyEffect({ type: "open" }, hidden)).toBeNull();
+    // J/K still move through the queue while it is the visible pane.
+    expect(keyEffect({ type: "next" }, hidden)).toEqual({ type: "move", delta: 1 });
+    expect(keyEffect({ type: "prev" }, hidden)).toEqual({ type: "move", delta: -1 });
+  });
+
+  it("never sends or picks on a colleague's question, while busy, or past the last option", () => {
+    expect(keyEffect({ type: "submit" }, state({ mine: false }))).toBeNull();
+    expect(keyEffect({ type: "pick", index: 0 }, state({ mine: false }))).toBeNull();
+    expect(keyEffect({ type: "submit" }, state({ busy: true }))).toBeNull();
+    expect(keyEffect({ type: "pick", index: 3 }, state())).toBeNull();
+    expect(keyEffect({ type: "next" }, state({ hasItems: false }))).toBeNull();
+    expect(keyEffect({ type: "submit" }, state({ kind: "decided", mine: false }))).toBeNull();
+  });
+
   it("treats text fields, selects and contenteditable as typing — not radios or buttons", () => {
     expect(isTypingTarget({ tagName: "TEXTAREA" })).toBe(true);
     expect(isTypingTarget({ tagName: "SELECT" })).toBe(true);
@@ -282,6 +324,20 @@ describe("headline count words", () => {
   });
 });
 
+describe("waiting on the viewer (review S3)", () => {
+  it("leaves out gates the viewer raised, as Home's What needs me does", () => {
+    const items = forMeItems(
+      [qRow("TASK-1", question("q1", hoursAgo(1)))],
+      [
+        gRow("TASK-2", gate("g-mine", hoursAgo(2), { requestedBy: "Vince@PetraSoap.com" })),
+        gRow("TASK-3", gate("g-other", hoursAgo(3))),
+      ]
+    );
+    expect(waitingOnViewer(items, ME).map((i) => i.id)).toEqual(["q1", "g-other"]);
+    expect(waitingOnViewer(items, new Set<string>()).map((i) => i.id)).toEqual(["q1", "g-mine", "g-other"]);
+  });
+});
+
 describe("ages and For me stats", () => {
   it("reads minutes, hours, days, and amber from two days", () => {
     expect(ageLabel(30_000)).toBe("1 min");
@@ -357,6 +413,12 @@ describe("decided records and empty states", () => {
       action: "reset",
     });
     expect(emptySheet({ scope: "me", tab: "decided", openCount: 3, filtered: false }).title).toBe("Nothing decided yet.");
+    // Review S2: an unknown count (a For me list failed or is loading) is never "All clear".
+    expect(emptySheet({ scope: "me", tab: "questions", openCount: null, filtered: false })).toMatchObject({
+      clear: false,
+      title: "No open questions.",
+    });
+    expect(emptySheet({ scope: "me", tab: "gates", openCount: null, filtered: false }).clear).toBe(false);
     expect(queueEmptyText("all", false)).toBe("No pending approvals.");
     expect(queueEmptyText("gates", false)).toBe("No open gates.");
   });

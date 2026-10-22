@@ -185,6 +185,38 @@ test.describe("approvals decision desk", () => {
     await expect(sheet.getByTestId("decided-record").getByText("Yes", { exact: true })).toBeVisible();
   });
 
+  test("Ctrl/Cmd+Enter never approves a gate; only a click on Approve does", async ({ page }) => {
+    const { screen, sheet } = await openDesk(page);
+    const decisions: unknown[] = [];
+    await page.route(/\/api\/approvals\/decide$/, async (route) => {
+      decisions.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: {} }) });
+    });
+    await screen.locator(".ap-item", { hasText: "Approve the merge" }).click();
+    await expect(sheet.getByTestId("approval-gate")).toBeVisible();
+    await page.keyboard.press("Control+Enter");
+    await page.keyboard.press("Meta+Enter");
+    await sheet.getByLabel("Decision note").focus();
+    await page.keyboard.press("Control+Enter");
+    // Positive control: the same probe sees a decision made with the button.
+    await sheet.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect.poll(() => decisions.length).toBe(1);
+    expect(decisions[0]).toMatchObject({ gateId: "apg_7k2m", decision: "approved" });
+  });
+
+  test("phone: a link to a question that is not open shows the queue, not another sheet", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await stubDesk(page);
+    await page.goto(`${approvalsInboxRoute.path}&question=q_gone`);
+    await waitForHydration(page);
+    const screen = page.getByTestId(approvalsInboxRoute.testId);
+    await expect(screen.getByText(/The linked question is not open for you/)).toBeVisible();
+    await expect(screen.getByTestId("decision-queue")).toBeVisible();
+    await expect(screen.getByRole("button", { name: "Back to queue" })).toBeHidden();
+    await screen.getByTestId("decision-queue").locator(".ap-item", { hasText: "DIVISION default" }).click();
+    await expect(screen.getByRole("button", { name: "Back to queue" })).toBeVisible();
+  });
+
   test("phone: the queue opens one sheet at a time and Back returns to it", async ({ page }) => {
     const { screen, sheet } = await openDesk(page, { width: 390, height: 844 });
     const queue = screen.getByTestId("decision-queue");

@@ -300,6 +300,14 @@ export function raisedByViewer(gate: Pick<ApprovalGate, "requestedBy">, me: Read
   return isViewer(gate.requestedBy, me);
 }
 
+/**
+ * The items that wait on the viewer: every gate they raised is left out, since
+ * someone else must decide it (Home's What needs me counts the same way).
+ */
+export function waitingOnViewer(items: readonly QueueItem[], me: ReadonlySet<string>): QueueItem[] {
+  return items.filter((item) => !(item.kind === "gate" && raisedByViewer(item.gate, me)));
+}
+
 /** The viewer's newest reminder on this question, if any. */
 export function myLatestReminder(question: TaskQuestion, me: ReadonlySet<string>): TaskQuestionReminder | null {
   let latest: TaskQuestionReminder | null = null;
@@ -512,8 +520,11 @@ export type EmptyAction = "decided" | "all" | "reset" | null;
 export function emptySheet(input: {
   scope: ApprovalScopeKey;
   tab: ApprovalTab;
-  /** Open items in the scope before the tab (and, on My projects, the filters) apply. */
-  openCount: number;
+  /**
+   * Open items in the scope before the tab (and, on My projects, the filters)
+   * apply; null while a list it depends on is loading or failed, which is never "All clear".
+   */
+  openCount: number | null;
   filtered: boolean;
 }): { clear: boolean; title: string; body: string; action: EmptyAction } {
   const { scope, tab, openCount, filtered } = input;
@@ -593,8 +604,9 @@ export interface KeyInput {
 
 /**
  * The screen's keys: 1–9 pick an option, J/K next/previous, E open the task,
- * ⌘/Ctrl+Enter send or approve. Bare keys never fire while typing; other
- * modifier combos are left to the shell (⌘K, `g` chords) and the browser.
+ * ⌘/Ctrl+Enter send (keyEffect decides what each may do). Bare keys never
+ * fire while typing; other modifier combos are left to the shell (⌘K, `g`
+ * chords) and the browser.
  */
 export function approvalKeyAction(input: KeyInput, typing: boolean): KeyAction | null {
   if (input.key === "Enter" && (input.metaKey || input.ctrlKey) && !input.altKey) return { type: "submit" };
@@ -605,6 +617,41 @@ export function approvalKeyAction(input: KeyInput, typing: boolean): KeyAction |
   if (key === "k") return { type: "prev" };
   if (key === "e") return { type: "open" };
   return null;
+}
+
+/** What the screen knows about the selected item when a key arrives. */
+export interface KeyState {
+  kind: QueueItem["kind"] | null;
+  /** A question addressed to the viewer. */
+  mine: boolean;
+  optionCount: number;
+  /** The decision sheet is on screen (narrow layouts hide it behind the queue). */
+  sheetVisible: boolean;
+  busy: boolean;
+  hasItems: boolean;
+}
+
+export type KeyEffect =
+  | { type: "move"; delta: 1 | -1 }
+  | { type: "open" }
+  | { type: "pick"; index: number }
+  | { type: "send" };
+
+/**
+ * What a key may do. J/K always move through the queue. Every other key acts
+ * on the item in the sheet, so only while the sheet is visible. ⌘/Ctrl+Enter
+ * only sends the viewer's own answer: no key ever approves or rejects a gate,
+ * which takes a click on a gate the person has read (LESSONS 2026-10-21).
+ */
+export function keyEffect(action: KeyAction, state: KeyState): KeyEffect | null {
+  if (action.type === "next" || action.type === "prev") {
+    return state.hasItems ? { type: "move", delta: action.type === "next" ? 1 : -1 } : null;
+  }
+  if (!state.sheetVisible || state.kind === null) return null;
+  if (action.type === "open") return { type: "open" };
+  if (state.kind !== "question" || !state.mine || state.busy) return null;
+  if (action.type === "pick") return action.index < state.optionCount ? { type: "pick", index: action.index } : null;
+  return { type: "send" };
 }
 
 const NON_TEXT_INPUTS = new Set(["radio", "checkbox", "button", "submit", "reset", "range", "color", "file", "image"]);

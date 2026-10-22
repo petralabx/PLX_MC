@@ -295,7 +295,8 @@ assignee.
   screen.
 - `mc_ask_question` takes an optional `context` (trimmed, at most
   `QUESTION_CONTEXT_MAX` = 2000 characters, omitted when empty) shown under
-  the question.
+  the question. `context` is not part of the re-ask match: asking the same
+  open question again returns the stored question with its original context.
 
 ### Key Files
 

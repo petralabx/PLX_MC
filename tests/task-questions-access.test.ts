@@ -22,6 +22,10 @@ const m = vi.hoisted(() => ({
     comment: { id: "CMT-1" },
   })),
   listOpenQuestions: vi.fn(async () => [] as unknown[]),
+  remindQuestion: vi.fn(async (input: Record<string, unknown>) => ({
+    question: { id: input.questionId, status: "open", reminders: [{ by: input.remindedBy }] },
+    comment: { id: "CMT-2" },
+  })),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -56,18 +60,20 @@ vi.mock("@/lib/sync/repo", async (importOriginal) => ({
 vi.mock("@/lib/compliance/questions", () => ({
   answerQuestion: m.answerQuestion,
   listOpenQuestions: m.listOpenQuestions,
+  remindQuestion: m.remindQuestion,
 }));
 
 import { authorize } from "@/lib/permissions";
 import { evaluateContext } from "@/lib/permissions/predicates";
 import * as answerRoute from "@/app/api/questions/answer/route";
 import * as listRoute from "@/app/api/questions/route";
+import * as remindRoute from "@/app/api/questions/remind/route";
 
 const RICARDO = { user: { oid: "oid-ricardo", email: "ricardo@petrasoap.com" } };
 const VINCE = { user: { oid: "oid-vince", email: "vince@petrasoap.com" } };
 
-const post = (body: unknown) =>
-  new Request("http://test/api/questions/answer", {
+const post = (body: unknown, path = "answer") =>
+  new Request(`http://test/api/questions/${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -167,5 +173,34 @@ describe("GET /api/questions", () => {
       "ricardo",
       expect.objectContaining({ tokens: expect.arrayContaining(["ricardo", "ricardo@petrasoap.com"]) })
     );
+  });
+});
+
+describe("POST /api/questions/remind (TASK-3720)", () => {
+  it("reminds as the session person, never a body field, under their ACL principal (member under enforce)", async () => {
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
+    const resp = await remindRoute.POST(post({ taskId: "TASK-OPEN", questionId: "q_1", remindedBy: "vince" }, "remind"), noCtx);
+    expect(resp.status).toBe(200);
+    expect(m.remindQuestion).toHaveBeenCalledWith({
+      taskId: "TASK-OPEN",
+      questionId: "q_1",
+      remindedBy: "ricardo",
+      principal: expect.objectContaining({ tokens: expect.arrayContaining(["ricardo", "ricardo@petrasoap.com"]) }),
+    });
+    const json = (await resp.json()) as { data: Record<string, unknown> };
+    expect(json.data).toEqual({ question: { id: "q_1", status: "open", reminders: [{ by: "ricardo" }] } });
+  });
+
+  it("refuses a task in a restricted project the person is not a member of (403)", async () => {
+    const resp = await remindRoute.POST(post({ taskId: "TASK-SECRET", questionId: "q_1" }, "remind"), noCtx);
+    expect(resp.status).toBe(403);
+    expect(m.remindQuestion).not.toHaveBeenCalled();
+  });
+
+  it("refuses a body without a question id (400) and a request with no session (403)", async () => {
+    expect((await remindRoute.POST(post({ taskId: "TASK-OPEN" }, "remind"), noCtx)).status).toBe(400);
+    authState.session = null;
+    expect((await remindRoute.POST(post({ taskId: "TASK-OPEN", questionId: "q_1" }, "remind"), noCtx)).status).toBe(403);
+    expect(m.remindQuestion).not.toHaveBeenCalled();
   });
 });

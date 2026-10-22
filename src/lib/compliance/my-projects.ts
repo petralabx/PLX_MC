@@ -105,3 +105,8 @@ async function loadHierarchy(principal: ProjectAclPrincipal): Promise<ProjectHie
 export async function listProjectApprovals(principal: ProjectAclPrincipal): Promise<ApprovalsProjectsResponse> {
   return projectApprovals(await loadHierarchy(principal));
 }
+
+/** The principal's projects, read now. */
+export async function loadMyProjects(principal: ProjectAclPrincipal): Promise<MyProject[]> {
+  return myProjects(await loadHierarchy(principal));
+}

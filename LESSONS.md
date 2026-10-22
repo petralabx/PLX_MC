@@ -22,6 +22,12 @@
 - **Root cause:** Both paths checked a capability only (`task.read`, `approval.decide`). `requireSessionActor` without project context never tests membership, and nothing else on either path did.
 - **Rule going forward:** Every session read or write of task-derived data also applies the project ACL: `scopeHierarchy` for a list, `assertTaskProjectAccess` for one task. Test each with a non-member admin, who passes the capability check.
 
+### 2026-10-21 (ET) — TASK-3632: a progress note rebuilt the comment thread from an unlocked read
+
+- **What happened:** `mc_report_progress` with notes read the task without a lock, built `comments` as the old thread plus the note, and wrote the whole array. A person's comment (or a TASK-3567 answer) committed in between was dropped. Two notes in one millisecond also got the same `mcp-` id.
+- **Root cause:** The `updateEntity` lock (TASK-2529) protects the merge, not a value the caller computed before it. The merge is shallow, so an array built from a stale read replaces the newer one.
+- **Rule going forward:** Build a field that extends stored data (comments, activity, evidence artifacts) from a row read `FOR UPDATE` in the same transaction as the write. Never derive an id from the clock; use `randomUUID()`.
+
 ### 2026-10-21 (ET) — TASK-3410 r4: the gate proved a head's ancestry with another head's commits
 
 - **What happened:** Astra's review of PR #387 found that the gate accepted a head when the PR's current commits held a recorded head. A delayed run or replay for an old, unrelated head borrowed the newer head's commits and joined the chain. A head recorded before its PR existed also stayed unbound, so one checkout could pass on two PRs.

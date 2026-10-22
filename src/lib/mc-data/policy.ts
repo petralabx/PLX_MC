@@ -131,6 +131,12 @@ export function inputRequired(task: Pick<Task, "approvalGates">): boolean {
   return pendingApprovalGates(task).length > 0;
 }
 
+/** TASK-3720: one reminder per person per question in this window. */
+export const QUESTION_REMIND_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+
+/** TASK-3720: the longest one-question `context` a bot may send. */
+export const QUESTION_CONTEXT_MAX = 2000;
+
 /**
  * The id a question is addressed to (TASK-3567): a directory id ("ricardo"),
  * or the lowercased email of a person not in the directory. An email that

@@ -11,7 +11,12 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/api/route";
 import { withTransaction } from "@/lib/db";
 import { HUMANS } from "@/lib/mc-data/data";
-import { normalizeAddressee, openQuestionsFor, QUESTION_REMIND_COOLDOWN_MS } from "@/lib/mc-data/policy";
+import {
+  normalizeAddressee,
+  openQuestionsFor,
+  QUESTION_CONTEXT_MAX,
+  QUESTION_REMIND_COOLDOWN_MS,
+} from "@/lib/mc-data/policy";
 import type { Comment, Task, TaskQuestion } from "@/lib/mc-data/types";
 import { publicMcBaseUrl } from "@/lib/mcp/envelope";
 import { canAccessProject, principalFromTokens, type ProjectAclPrincipal } from "@/lib/permissions/project-acl";
@@ -41,6 +46,8 @@ export interface AskQuestionInput {
   options: string[];
   recommended?: number;
   recommendationReason?: string;
+  /** TASK-3720: background shown under the question; trimmed, at most QUESTION_CONTEXT_MAX. */
+  context?: string;
   /** Audit label of the asking operator/agent session. */
   askedBy: string;
   /** Authenticated service principal (API-key identity). */
@@ -67,6 +74,11 @@ export async function askQuestion(
   }
   const text = oneLine(input.text);
   const options = input.options.map(oneLine);
+  // Background may span lines: it is shown under the question, never copied into the answer comment.
+  const context = input.context?.trim() || undefined;
+  if (context && context.length > QUESTION_CONTEXT_MAX) {
+    throw new ApiError("invalid_request", `context must be at most ${QUESTION_CONTEXT_MAX} characters.`, 400);
+  }
 
   // Seed on the pool before the transaction holds a connection (as applyTaskCommentOp does).
   await ensureSeeded();
@@ -108,6 +120,7 @@ export async function askQuestion(
       options,
       ...(input.recommended !== undefined ? { recommended: input.recommended } : {}),
       ...(input.recommendationReason ? { recommendationReason: oneLine(input.recommendationReason) } : {}),
+      ...(context ? { context } : {}),
       askedBy: input.askedBy,
       askedByPrincipal: input.askedByPrincipal,
       ...(input.runtime ? { askedRuntime: input.runtime } : {}),

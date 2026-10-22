@@ -676,7 +676,7 @@ server.tool(
 
 server.tool(
   "mc_ask_question",
-  "Ask one named person (directory id or email, never an agent) a question on a task, with up to 8 options and a recommendation (TASK-3567). It shows only on their Approvals screen; only they can answer, and the answer is posted to the task as a comment. Send them the returned questionLink. Agents never answer questions.",
+  "Ask one named person (directory id or email, never an agent) a question on a task, with up to 8 options, a recommendation (TASK-3567) and optional context shown under the question (TASK-3720). It shows only on their Approvals screen; only they can answer, and the answer is posted to the task as a comment. Send them the returned questionLink. Agents never answer questions.",
   {
     taskId: z.string().min(1),
     addressee: z.string().min(1).max(254).describe("Directory id (e.g. ricardo) or email"),
@@ -684,6 +684,7 @@ server.tool(
     options: z.array(z.string().min(1).max(200)).max(8).optional().describe("Multiple-choice options"),
     recommended: z.number().int().nonnegative().optional().describe("Index of the option you recommend"),
     recommendationReason: z.string().min(1).max(1000).optional().describe("Why you recommend it"),
+    context: z.string().trim().max(2000).optional().describe("Background shown under the question"),
   },
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_ask_question");

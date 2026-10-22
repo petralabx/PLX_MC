@@ -7,6 +7,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { askQuestion, questionLink } from "@/lib/compliance/questions";
+import { QUESTION_CONTEXT_MAX } from "@/lib/mc-data/policy";
 import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import type { McpIdentity } from "./auth";
@@ -19,6 +20,8 @@ export const askQuestionSchema = z.object({
   options: z.array(z.string().trim().min(1).max(200)).max(8).default([]),
   recommended: z.number().int().nonnegative().optional(),
   recommendationReason: z.string().trim().min(1).max(1000).optional(),
+  // TASK-3720: background shown under the question; empty after trimming is dropped.
+  context: z.string().trim().max(QUESTION_CONTEXT_MAX).optional(),
 });
 
 export type AskQuestionActionInput = z.infer<typeof askQuestionSchema>;
@@ -34,6 +37,7 @@ export async function actionAskQuestion(identity: McpIdentity, input: AskQuestio
     options: input.options,
     recommended: input.recommended,
     recommendationReason: input.recommendationReason,
+    context: input.context,
     askedBy: identity.operatorEmail,
     askedByPrincipal: identity.servicePrincipalId,
     runtime: identity.runtime,
@@ -54,7 +58,7 @@ export async function actionAskQuestion(identity: McpIdentity, input: AskQuestio
 export function registerQuestionTools(server: McpServer, identity: McpIdentity): void {
   server.tool(
     "mc_ask_question",
-    "Ask one named person a question on a task (question.ask). addressee is a directory id (e.g. ricardo) or an email, never an agent. Pass up to 8 options, the index of the option you recommend and why. The question shows only on that person's Approvals screen; only they can answer, and the answer is posted to the task as a comment (read it with mc_get_task). Asking the same open question again returns it instead of a duplicate. Send them questionLink. An open question does not freeze the task. Agents never answer questions.",
+    "Ask one named person a question on a task (question.ask). addressee is a directory id (e.g. ricardo) or an email, never an agent. Pass up to 8 options, the index of the option you recommend and why, and optional context (background shown under the question, up to 2000 characters). The question shows only on that person's Approvals screen; only they can answer, and the answer is posted to the task as a comment (read it with mc_get_task). Asking the same open question again returns it instead of a duplicate. Send them questionLink. An open question does not freeze the task. Agents never answer questions.",
     askQuestionSchema.shape,
     async (args) => mcpJsonResult({ data: await actionAskQuestion(identity, askQuestionSchema.parse(args)) })
   );

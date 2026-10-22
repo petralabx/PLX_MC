@@ -86,7 +86,7 @@ import {
   questionLink,
   remindQuestion,
 } from "@/lib/compliance/questions";
-import { QUESTION_REMIND_COOLDOWN_MS } from "@/lib/mc-data/policy";
+import { QUESTION_CONTEXT_MAX, QUESTION_REMIND_COOLDOWN_MS } from "@/lib/mc-data/policy";
 
 function seedTask(id: string, over: Partial<Task> = {}): void {
   h.tasks.set(id, {
@@ -220,6 +220,29 @@ describe("askQuestion", () => {
     const { comment } = await answerQuestion({ taskId: "TASK-1", questionId: q.id, choice: 1, answeredBy: "ricardo" });
     expect(comment.body.split("\n").filter((line) => line.startsWith("A: "))).toHaveLength(1);
     expect(comment.body.split("\n").filter((line) => line.startsWith("Note: "))).toHaveLength(0);
+  });
+
+  it("stores the context trimmed, keeps its lines, and omits it when empty (TASK-3720)", async () => {
+    seedTask("TASK-1");
+    const { question: q } = await askQuestion({ ...ask, context: "  Ledger 41499 is live.\nRAW MAT is the default.  " });
+    expect(q.context).toBe("Ledger 41499 is live.\nRAW MAT is the default.");
+    expect(stored("TASK-1").questions?.[0]?.context).toBe(q.context);
+    seedTask("TASK-2");
+    const { question: blank } = await askQuestion({ ...ask, taskId: "TASK-2", context: "   " });
+    expect(blank).not.toHaveProperty("context");
+    const { question: none } = await askQuestion({ ...ask, taskId: "TASK-2", text: "Another?" });
+    expect(none).not.toHaveProperty("context");
+  });
+
+  it("refuses a context longer than QUESTION_CONTEXT_MAX and takes one at the limit", async () => {
+    seedTask("TASK-1");
+    await expect(askQuestion({ ...ask, context: "x".repeat(QUESTION_CONTEXT_MAX + 1) })).rejects.toMatchObject({
+      code: "invalid_request",
+      status: 400,
+    });
+    expect(h.patches).toHaveLength(0);
+    const { question: q } = await askQuestion({ ...ask, context: ` ${"x".repeat(QUESTION_CONTEXT_MAX)} ` });
+    expect(q.context).toHaveLength(QUESTION_CONTEXT_MAX);
   });
 
   it("asks again as a new question when the options or recommendation change", async () => {

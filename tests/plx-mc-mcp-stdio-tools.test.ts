@@ -45,6 +45,11 @@ describe("stdio wave 4 tool parity (plus TASK-2326 release tools)", () => {
     }
   });
 
+  it("takes an optional context on mc_ask_question, capped at 2000 characters (TASK-3720)", () => {
+    const block = stdioSource.slice(stdioSource.indexOf('"mc_ask_question"'), stdioSource.indexOf('"mc_verify_approval"'));
+    expect(block).toContain("context: z.string().trim().max(2000).optional()");
+  });
+
   it("types mc_report_progress stage with the stage enum, not any string", () => {
     const block = stdioSource.slice(stdioSource.indexOf('"mc_report_progress"'));
     const stage = block.slice(block.indexOf("stage:"), block.indexOf("notes:"));

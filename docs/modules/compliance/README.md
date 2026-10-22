@@ -249,7 +249,8 @@ Under the task row lock the answer is stored on the question (`answer.choice`,
 task as a `CMT-*` comment authored by the person; `question.answered` lands in
 the same transaction. A second answer is 409 `question_already_answered`. An
 open question never freezes the stage. `/?screen=approvals&question=<q_id>`
-scrolls to and highlights one question. Questions live in the task jsonb
+selects that question in the Approvals queue and opens it in the decision
+sheet (TASK-3721). Questions live in the task jsonb
 (DB-only; never mirrored to SharePoint). PLX_MC sends no notice to the person;
 the asking bot passes on the `questionLink` it gets back (TASK-3559 covers
 notifications).

@@ -300,11 +300,11 @@ describe("ages and For me stats", () => {
       { label: "Oldest", value: "2 d", warn: true },
       { label: "Decided today", value: "4" },
     ]);
-    // Until the Decided tab loads its list, the count is unknown, not zero.
+    // Until the Decided tab loads its list, the count is unknown, not zero, so the stat is left out
+    // (an empty field drops its row; never a "—" placeholder).
     expect(forMeStats([], null, NOW)).toEqual([
       { label: "Questions", value: "0" },
       { label: "Gates", value: "0" },
-      { label: "Decided today", value: "—" },
     ]);
   });
 

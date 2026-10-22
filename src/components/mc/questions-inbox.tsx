@@ -304,7 +304,9 @@ export function ColleagueQuestionSheet({
               ? `Reminder sent. Still waiting on ${person.short}.`
               : `Waiting on ${person.short} for ${waitingFor}.`}
           </span>
-          <span className="ap-meta">A reminder posts to {taskId} as a comment</span>
+          <span className="ap-meta">
+            A reminder posts to {taskId} as a comment that mentions {person.short}
+          </span>
         </div>
         {openTask}
         <button type="button" className="ap-btn ap-primary" disabled={busy || coolingDown} onClick={onRemind}>

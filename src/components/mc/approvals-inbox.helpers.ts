@@ -401,13 +401,13 @@ export function decidedTodayCount(rows: readonly DecidedRow[], now: Date): numbe
   return rows.filter((r) => day(new Date(ts(r.decidedAt))) === today).length;
 }
 
-/** For me: Questions, Gates, Oldest, Decided today ("—" until the decided list loads). */
+/** For me: Questions, Gates, Oldest, Decided today (left out until the decided list loads). */
 export function forMeStats(items: readonly QueueItem[], decidedToday: number | null, nowMs: number): Stat[] {
   return [
     { label: "Questions", value: String(items.filter((i) => i.kind === "question").length) },
     { label: "Gates", value: String(items.filter((i) => i.kind === "gate").length) },
     ...oldestStat(items, nowMs),
-    { label: "Decided today", value: decidedToday === null ? "—" : String(decidedToday) },
+    ...(decidedToday === null ? [] : [{ label: "Decided today", value: String(decidedToday) }]),
   ];
 }
 

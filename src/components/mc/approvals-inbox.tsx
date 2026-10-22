@@ -1125,7 +1125,10 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
       return;
     }
     setBusy(null);
-    setNotice({ title: `Reminder posted to ${item.taskId}.`, body: "It is on the task as a comment from you." });
+    setNotice({
+      title: `Reminder posted to ${item.taskId}.`,
+      body: "It is on the task as a comment from you, and it shows on the question in their Approvals.",
+    });
     await Promise.all([reloadAll(), refreshState()]);
     approvalsChanged(reloadAll);
   };

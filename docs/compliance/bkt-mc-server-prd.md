@@ -79,6 +79,7 @@ Vince owns the outcome and set the rule for "my projects".
 
 - A project is one of a person's projects when they are on its member list, own it, or are assigned an open task in it.
   Open means not merged, verified or cancelled, and not in an archived bucket or project.
+  An archived or closed project is never listed, whatever the reason.
   The project ACL always bounds it: a restricted project the person cannot access is never theirs.
   See `src/lib/compliance/my-projects.ts`.
 - `GET /api/approvals/projects` lists those projects with every open question and every pending gate on their tasks, oldest first.

@@ -260,6 +260,7 @@ notifications).
 is theirs when they are on its member list, own it, or are assigned (assignee
 or coassignee) an open task in it. Open means not `isClosedStage` (merged,
 verified, cancelled) and not in an archived bucket or project (`isArchived`).
+An archived or closed project is never listed, whatever the reason.
 The hierarchy is scoped with `scopeHierarchy` first, so a restricted project
 the viewer cannot access is never theirs, even with a task assigned to them.
 Ids match with `normalizeMemberToken` over the principal's email, oid and

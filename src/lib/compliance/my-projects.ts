@@ -2,6 +2,7 @@
 // viewer's projects when they are on its member list, own it, or are assigned
 // (assignee or coassignee) an open task in it. Open means not in a terminal
 // stage (isClosedStage) and not in an archived bucket or project (isArchived).
+// An archived or closed project is never listed, whatever the reason.
 // The project ACL always bounds it: the hierarchy is scoped first, so a
 // restricted project the viewer cannot access is never theirs, even when they
 // hold a task in it. Owner, assignee and member ids match the way the ACL
@@ -54,6 +55,8 @@ function mine(scoped: Scoped, principal: ProjectAclPrincipal): MyProject[] {
     if (holds(task.assignee) || (task.coassignees ?? []).some(holds)) assigned.add(project.id);
   }
   return scoped.projects.flatMap((project) => {
+    // An archived or closed project has no live work to follow, whoever owns it.
+    if (isArchived(project) || project.status === "closed") return [];
     const reasons: MyProjectReason[] = [];
     if (normalizeProjectMembers(project.members).some((member) => tokens.has(member))) reasons.push("member");
     if (holds(project.owner)) reasons.push("owner");

@@ -172,6 +172,16 @@ describe("myProjects", () => {
     expect(ids).not.toContain("PRJ-ARCHIVED");
   });
 
+  it("does not list an archived or closed project, even to its member or owner", () => {
+    (m.projects as Project[]).push(
+      project("PRJ-ARCHIVED-OWNED", { owner: "ricardo", members: ["ricardo"], archivedAt: "2026-10-01T00:00:00.000Z" }),
+      project("PRJ-CLOSED-OWNED", { owner: "ricardo", members: ["ricardo"], status: "closed" })
+    );
+    const ids = myProjects(hierarchy()).map((p) => p.id);
+    expect(ids).not.toContain("PRJ-ARCHIVED-OWNED");
+    expect(ids).not.toContain("PRJ-CLOSED-OWNED");
+  });
+
   it("never lists a restricted project the viewer cannot access, even with a task assigned to them", () => {
     expect(myProjects(hierarchy()).map((p) => p.id)).not.toContain("PRJ-SECRET");
     expect(myProjects(hierarchy(VINCE)).find((p) => p.id === "PRJ-SECRET")?.reasons).toEqual(["member", "owner"]);

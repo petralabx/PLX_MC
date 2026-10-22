@@ -254,6 +254,47 @@ scrolls to and highlights one question. Questions live in the task jsonb
 the asking bot passes on the `questionLink` it gets back (TASK-3559 covers
 notifications).
 
+### Approvals: My projects, decided history, reminders (TASK-3720)
+
+`src/lib/compliance/my-projects.ts` resolves the viewer's projects: a project
+is theirs when they are on its member list, own it, or are assigned (assignee
+or coassignee) an open task in it. Open means not `isClosedStage` (merged,
+verified, cancelled) and not in an archived bucket or project (`isArchived`).
+The hierarchy is scoped with `scopeHierarchy` first, so a restricted project
+the viewer cannot access is never theirs, even with a task assigned to them.
+Ids match with `normalizeMemberToken` over the principal's email, oid and
+directory ids, as the ACL does. Reasons come in the order member, owner,
+assignee.
+
+- `GET /api/approvals/projects` (`task.read`) returns `{ projects, questions,
+  gates }`: every open question (to anyone) and every pending gate on the
+  tasks of those projects, oldest first, each row with `projectId`. A
+  question's text is already on the task's activity, and the whole task is
+  readable through `GET /api/state` by everyone the ACL admits, so this widens
+  nothing.
+- `GET /api/approvals/decided?days=N` (`task.read`, `src/lib/compliance/decided.ts`)
+  returns `{ decided }`, newest first, on ACL-visible tasks: questions whose
+  `answer.answeredBy` is the session `sessionAuthorId`, and approved or
+  rejected gates whose `decidedBy` equals the session audit label
+  (case-insensitive; that is what `decideApprovalGate` stores). `days`
+  defaults to 14 and is clamped to 1..90; a non-number is 400 `invalid_query`.
+- `POST /api/questions/remind {taskId, questionId}` (`task.progress` plus the
+  task's project ACL) lets a person on the task's project remind the
+  addressee. `remindQuestion` in `questions.ts` refuses, in every enforcement
+  mode: a task outside the person's projects (403 `not_my_project`), an
+  unknown task or question (404 `not_found`), an answered question (409
+  `question_already_answered`), the addressee (400 `self_reminder`) and a
+  second reminder from the same person within `QUESTION_REMIND_COOLDOWN_MS`
+  (12 h; 409 `already_reminded`). Under the task row lock it appends `{ by,
+  at, commentId }` to `question.reminders`, posts the person's `CMT-*`
+  comment `@`-mentioning the addressee (`mentions: [addressee]`) and appends
+  `question.reminded`. It returns `{ question }`. The server sends no
+  notification; the addressee sees the stored reminder on their Approvals
+  screen.
+- `mc_ask_question` takes an optional `context` (trimmed, at most
+  `QUESTION_CONTEXT_MAX` = 2000 characters, omitted when empty) shown under
+  the question.
+
 ### Key Files
 
 - `src/lib/compliance/risk.ts` — risk-tier classifier + per-tier bundle floor

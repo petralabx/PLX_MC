@@ -72,6 +72,30 @@ See `src/lib/permissions/types.ts`, `src/lib/permissions/grants.ts` and `src/lib
 
 Rollback: revert the PR. Stored questions stay in the task jsonb and are ignored; no other data changes.
 
+## TASK-3720: approvals redesign, server half
+
+Scope: the server side of the redesigned Approvals screen. The UI is built separately against the same contract in `src/lib/mc-data/types.ts`.
+Vince owns the outcome and set the rule for "my projects".
+
+- A project is one of a person's projects when they are on its member list, own it, or are assigned an open task in it.
+  Open means not merged, verified or cancelled, and not in an archived bucket or project.
+  The project ACL always bounds it: a restricted project the person cannot access is never theirs.
+  See `src/lib/compliance/my-projects.ts`.
+- `GET /api/approvals/projects` lists those projects with every open question and every pending gate on their tasks, oldest first.
+- `GET /api/approvals/decided?days=N` lists the questions the person answered and the gates they approved or rejected, newest first.
+  `days` defaults to 14 and is clamped to 1 to 90. See `src/lib/compliance/decided.ts`.
+- `POST /api/questions/remind` lets a person on the task's project remind the addressee of an open question, once per 12 hours.
+  The reminder is stored on the question and posted to the task as that person's comment, which mentions the addressee.
+  See `src/lib/compliance/questions.ts`.
+- `mc_ask_question` takes an optional `context` of up to 2000 characters, shown under the question.
+- No migration: reminders and context live on the question in the task jsonb.
+
+Principals and capabilities: none new. The two reads need `task.read`; the reminder needs `task.progress`, the task comments capability.
+The project rule, the addressee check and the cooldown run on the server in every enforcement mode.
+No file under `src/lib/permissions/` changes.
+
+Rollback: revert the PR. Stored reminders, their comments and `context` stay in the task jsonb; reminders and `context` are then ignored, and the comments stay as ordinary comments. No other data changes.
+
 ## How migration 047 is applied
 
 This change is operator-merged, with Vince's yes before production.

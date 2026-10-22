@@ -1,18 +1,19 @@
 "use client";
 
-// Questions for you (TASK-3567) — the top of the Approvals screen. Lists only
-// the open questions a bot addressed to the signed-in person (GET
-// /api/questions filters on the server). The person picks an option or types
-// an answer; POST /api/questions/answer stores it and posts it to the task as
-// a comment. Only the addressee can answer — the server checks it.
+// Questions on the Approvals screen (TASK-3567, redesigned in TASK-3721). A bot
+// asks one named person; GET /api/questions lists only the signed-in person's
+// open questions (the server filters). The person picks an option or types an
+// answer; POST /api/questions/answer stores it and posts it to the task as a
+// comment. Only the addressee can answer — the server checks it. On My
+// projects a colleague's question is read-only here: the viewer can open the
+// task or send one reminder (POST /api/questions/remind).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode, Ref } from "react";
 
-import { api, ApiClientError } from "@/lib/api";
-import type { TaskQuestion } from "@/lib/mc-data";
-import { refreshState } from "@/lib/mc-data/store";
-import { isPlainLeftClick, navHref } from "@/components/mc/nav-model";
-import type { Nav } from "@/components/mc/route";
+import { api } from "@/lib/api";
+import type { RemindQuestionRequest, TaskQuestion, TaskQuestionReminder } from "@/lib/mc-data";
+
+import { answerSummary, type Draft, type PersonRef } from "./approvals-inbox.helpers";
 
 export interface OpenQuestionRow {
   taskId: string;
@@ -25,244 +26,291 @@ export function fetchOpenQuestions(): Promise<OpenQuestionRow[]> {
   return api<{ questions: OpenQuestionRow[] }>("/questions").then((data) => data.questions);
 }
 
+/** POST /api/questions/answer — the body the server validates (unchanged by TASK-3721). */
+export function postAnswer(body: { taskId: string; questionId: string; choice?: number; text?: string }): Promise<unknown> {
+  return api("/questions/answer", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** POST /api/questions/remind. Resolves to the question with the new reminder. */
+export function remindQuestion(body: RemindQuestionRequest): Promise<TaskQuestion> {
+  return api<{ question: TaskQuestion }>("/questions/remind", { method: "POST", body: JSON.stringify(body) }).then(
+    (data) => data.question
+  );
+}
+
 /** A send needs an option, or typed text when there is no option. */
 export function canSendAnswer(choice: number | undefined, text: string): boolean {
   return choice !== undefined || text.trim().length > 0;
 }
 
-/** DOM id of a question card; the `question` route param scrolls to it. */
+/** DOM id of a question's queue row; the `question` route param scrolls to it. */
 export function questionAnchorId(questionId: string): string {
   return `question-${questionId}`;
 }
 
-// Unsent answers survive the card unmounting (opening the task below 1600px
-// replaces the screen), until they are sent.
-interface Draft {
-  choice?: number;
-  text: string;
-}
-const drafts = new Map<string, Draft>();
+const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-export type QuestionsLoad =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; rows: OpenQuestionRow[] };
-
-export function QuestionCard({
-  row,
-  nav,
-  focused,
-  busy,
-  onSend,
+/** Who reminded and when, oldest first. `about` names the addressee ("you" or a first name). */
+export function QuestionReminders({
+  reminders,
+  about,
+  nameOf,
 }: {
-  row: OpenQuestionRow;
-  nav: Nav;
-  focused: boolean;
-  busy: boolean;
-  onSend: (choice: number | undefined, text: string) => void;
+  reminders: readonly TaskQuestionReminder[] | undefined;
+  about: string;
+  nameOf: (id: string) => string;
 }) {
-  const q = row.question;
-  const anchor = questionAnchorId(q.id);
-  const [choice, setChoiceState] = useState<number | undefined>(() => drafts.get(q.id)?.choice);
-  const [text, setTextState] = useState(() => drafts.get(q.id)?.text ?? "");
-  const firstRadio = useRef<HTMLInputElement>(null);
-  const hasOptions = q.options.length > 0;
-  const setChoice = (next: number | undefined) => {
-    setChoiceState(next);
-    drafts.set(q.id, { choice: next, text });
-  };
-  const setText = (next: string) => {
-    setTextState(next);
-    drafts.set(q.id, { choice, text: next });
-  };
-  const taskTarget = { taskId: row.taskId };
+  if (!reminders || reminders.length === 0) return null;
   return (
-    <li id={anchor} className={focused ? "ap-item aq-item aq-focus" : "ap-item aq-item"} data-testid="question-card">
-      <div className="ap-item-main">
-        <div className="ap-links">
-          <a
-            className="ap-task"
-            href={navHref({ screen: "task", ...taskTarget })}
-            onClick={(event) => {
-              if (!isPlainLeftClick(event)) return;
-              event.preventDefault();
-              nav("task", taskTarget);
-            }}
-          >
-            {row.taskId} · {row.taskTitle}
-          </a>
+    <div className="ap-block">
+      <span className="ap-kicker">Reminders</span>
+      <ul className="ap-reminders">
+        {reminders.map((r) => (
+          <li key={r.commentId || `${r.by}-${r.at}`}>
+            {nameOf(r.by)} reminded {about} · {when(r.at)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** The bot's reason, shown inside the recommended option. */
+function WhyRecommended({ reason }: { reason: string }) {
+  return (
+    <span className="ap-why">
+      <strong>Why the bot recommends it.</strong> {reason}
+    </span>
+  );
+}
+
+/** The decision sheet for an open question addressed to the viewer. */
+export function MyQuestionSheet({
+  question: q,
+  taskId,
+  draft,
+  busy,
+  error,
+  nameOf,
+  onChoice,
+  onText,
+  onSend,
+  onSkip,
+  textRef,
+}: {
+  question: TaskQuestion;
+  taskId: string;
+  draft: Draft;
+  busy: boolean;
+  error: string | null;
+  nameOf: (id: string) => string;
+  onChoice: (choice: number | undefined) => void;
+  onText: (text: string) => void;
+  onSend: () => void;
+  onSkip: () => void;
+  textRef?: Ref<HTMLTextAreaElement>;
+}) {
+  const hasOptions = q.options.length > 0;
+  const recommended = q.recommended !== undefined && q.recommended < q.options.length ? q.recommended : undefined;
+  const textId = `ap-answer-${q.id}`;
+  return (
+    <div className="ap-decide" data-testid="question-card">
+      <div className="ap-sheet-body">
+        <div className="ap-titleblock">
+          <span className="ap-kicker">The question</span>
+          <h2 id="ap-sheet-title" className="ap-sheet-title" tabIndex={-1}>
+            {q.text}
+          </h2>
         </div>
-        <div className="ap-reason" id={`${anchor}-text`}>
-          {q.text}
-        </div>
+        {q.context ? <p className="ap-context">{q.context}</p> : null}
+        <QuestionReminders reminders={q.reminders} about="you" nameOf={nameOf} />
         {hasOptions ? (
-          <fieldset className="aq-options" disabled={busy} aria-describedby={`${anchor}-text`}>
-            <legend className="aq-legend">Pick one</legend>
-            {q.options.map((option, i) => (
-              <label key={i} className="aq-option">
-                <input
-                  ref={i === 0 ? firstRadio : undefined}
-                  type="radio"
-                  name={`aq-${q.id}`}
-                  checked={choice === i}
-                  onChange={() => setChoice(i)}
-                />
-                <span>{option}</span>
-                {i === q.recommended ? <span className="aq-rec">Recommended</span> : null}
-              </label>
-            ))}
-            {choice !== undefined ? (
-              <button
-                type="button"
-                className="aq-clear"
-                onClick={() => {
-                  setChoice(undefined);
-                  firstRadio.current?.focus();
-                }}
-              >
+          <fieldset className="ap-options" disabled={busy}>
+            <legend className="ap-kicker">Pick one</legend>
+            {q.options.map((option, i) => {
+              const on = draft.choice === i;
+              const rec = i === recommended;
+              return (
+                <label key={i} className={`ap-option${on ? " is-on" : ""}`}>
+                  <input
+                    type="radio"
+                    className="ap-radio"
+                    name={`ap-q-${q.id}`}
+                    checked={on}
+                    onChange={() => onChoice(i)}
+                  />
+                  <span className="ap-option-text">
+                    <span>{option}</span>
+                    {rec && q.recommendationReason ? <WhyRecommended reason={q.recommendationReason} /> : null}
+                  </span>
+                  <span className="ap-option-side">
+                    {rec ? <span className="ap-badge">Recommended</span> : null}
+                    {i < 9 ? (
+                      <kbd className="ap-kbd kbd-hint" aria-hidden="true">
+                        {i + 1}
+                      </kbd>
+                    ) : null}
+                  </span>
+                </label>
+              );
+            })}
+            {draft.choice !== undefined ? (
+              <button type="button" className="ap-link" onClick={() => onChoice(undefined)}>
                 Clear choice
               </button>
             ) : null}
           </fieldset>
         ) : null}
-        {q.recommendationReason ? <p className="aq-why">Why recommended: {q.recommendationReason}</p> : null}
-        <textarea
-          className="ap-note aq-text"
-          aria-label={hasOptions ? "Note, or your own answer" : "Your answer"}
-          aria-describedby={`${anchor}-text`}
-          placeholder={hasOptions ? "Optional note — or leave the options blank and type your own answer" : "Type your answer"}
-          maxLength={2000}
-          value={text}
-          disabled={busy}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <div className="ap-meta">
-          asked by {q.askedBy}
-          {q.askedRuntime ? ` via ${q.askedRuntime}` : ""} · {new Date(q.askedAt).toLocaleString()} · stage {row.stage}
+        {recommended === undefined && q.recommendationReason ? (
+          <p className="ap-context">
+            <WhyRecommended reason={q.recommendationReason} />
+          </p>
+        ) : null}
+        <div className="ap-field">
+          <label htmlFor={textId} className="ap-kicker">
+            {hasOptions ? "Note, or your own answer" : "Your answer"}
+          </label>
+          <textarea
+            ref={textRef}
+            id={textId}
+            className="ap-textarea"
+            rows={3}
+            maxLength={2000}
+            placeholder={
+              hasOptions
+                ? "Optional. Add context for the bot, or leave the options blank and type your own answer."
+                : "Type the answer. It posts to the task as a comment."
+            }
+            value={draft.text}
+            disabled={busy}
+            onChange={(e) => onText(e.target.value)}
+          />
         </div>
+        {error ? (
+          <p className="ap-error" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
-      <div className="ap-actions">
+      <div className="ap-bar">
+        <div className="ap-bar-text">
+          <span className="ap-bar-summary">{answerSummary(q.options, draft.choice, draft.text)}</span>
+          <span className="ap-meta">Posts to {taskId} as a comment from you</span>
+        </div>
+        <button type="button" className="ap-btn" onClick={onSkip}>
+          Skip for now
+        </button>
         <button
           type="button"
-          className="ap-btn approve"
-          disabled={busy || !canSendAnswer(choice, text)}
-          onClick={() => onSend(choice, text)}
+          className="ap-btn ap-primary"
+          disabled={busy || !canSendAnswer(draft.choice, draft.text)}
+          onClick={onSend}
         >
           Send answer
         </button>
       </div>
-    </li>
+    </div>
   );
 }
 
-export function QuestionsSection({ nav, focusId }: { nav: Nav; focusId?: string }) {
-  const [load, setLoad] = useState<QuestionsLoad>({ status: "loading" });
-  // Every card with a send in flight, so one card's send never re-enables another's.
-  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
-  const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
-  const noticeRef = useRef<HTMLDivElement>(null);
-  const scrolledTo = useRef<string | null>(null);
-
-  const reload = useCallback((): Promise<void> => {
-    return fetchOpenQuestions()
-      .then((rows) => setLoad({ status: "ready", rows }))
-      .catch((err: unknown) =>
-        setLoad({ status: "error", message: err instanceof ApiClientError ? err.message : "Failed to load questions." })
-      );
-  }, []);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  // Scroll to a linked question once; later reloads leave the page where it is.
-  useEffect(() => {
-    if (!focusId || scrolledTo.current === focusId || load.status !== "ready") return;
-    if (!load.rows.some((r) => r.question.id === focusId)) return;
-    scrolledTo.current = focusId;
-    document.getElementById(questionAnchorId(focusId))?.scrollIntoView({ block: "center" });
-  }, [focusId, load]);
-
-  useEffect(() => {
-    if (notice) noticeRef.current?.focus();
-  }, [notice]);
-
-  const send = useCallback(
-    async (row: OpenQuestionRow, choice: number | undefined, text: string) => {
-      const id = row.question.id;
-      setBusy((prev) => new Set(prev).add(id));
-      setNotice(null);
-      try {
-        await api("/questions/answer", {
-          method: "POST",
-          body: JSON.stringify({ taskId: row.taskId, questionId: id, choice, text: text.trim() || undefined }),
-        });
-        drafts.delete(id);
-        setNotice({ tone: "ok", text: `Answer posted to ${row.taskId}.` });
-        // The store refresh brings the answer comment and the nav badge up to date.
-        await Promise.all([reload(), refreshState()]);
-      } catch (err) {
-        setNotice({ tone: "error", text: err instanceof ApiClientError ? err.message : "Sending the answer failed." });
-        // The question may have been answered elsewhere; show the list as it is now.
-        await reload();
-      } finally {
-        setBusy((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      }
-    },
-    [reload]
-  );
-
-  const rows = load.status === "ready" ? load.rows : [];
-  const missingLink = !!focusId && load.status === "ready" && !rows.some((r) => r.question.id === focusId);
-
-  // Nothing to show while loading or when there are no questions: the gates keep the screen.
-  if (load.status === "loading") return null;
-  if (load.status === "ready" && rows.length === 0 && !notice && !missingLink) return null;
-
+/**
+ * A colleague's open question (My projects). Read-only: no radios, no send.
+ * The viewer can open the task or remind the addressee once per cooldown.
+ */
+export function ColleagueQuestionSheet({
+  question: q,
+  taskId,
+  person,
+  reasonText,
+  waitingFor,
+  stale,
+  coolingDown,
+  busy,
+  error,
+  nameOf,
+  openTask,
+  onRemind,
+}: {
+  question: TaskQuestion;
+  taskId: string;
+  person: PersonRef;
+  /** "You see it because you own Finance." */
+  reasonText: string;
+  /** "3 d" */
+  waitingFor: string;
+  stale: boolean;
+  coolingDown: boolean;
+  busy: boolean;
+  error: string | null;
+  nameOf: (id: string) => string;
+  /** The "Open task" link, built by the screen. */
+  openTask: ReactNode;
+  onRemind: () => void;
+}) {
+  const hasOptions = q.options.length > 0;
   return (
-    <section className="aq-section" aria-labelledby="aq-title" data-testid="questions-section">
-      <h2 id="aq-title" className="aq-title">
-        Questions for you
-      </h2>
-      <p className="ap-sub">
-        Bots asked you these. Only you can answer them; each answer is posted to its task as a comment.
-      </p>
-      {load.status === "error" ? (
-        <div className="ap-error" role="alert">
-          {load.message}{" "}
-          <button type="button" className="ap-btn" onClick={() => void reload()}>
-            Retry
-          </button>
+    <div className="ap-decide" data-testid="colleague-question">
+      <div className="ap-sheet-body">
+        <div className="ap-titleblock">
+          <span className="ap-kicker">The question</span>
+          <h2 id="ap-sheet-title" className="ap-sheet-title" tabIndex={-1}>
+            {q.text}
+          </h2>
         </div>
-      ) : null}
-      {missingLink && !notice ? (
-        <div className="ap-empty" role="status">
-          The linked question is not open for you: it has an answer, or it was asked of someone else.
+        {q.context ? <p className="ap-context">{q.context}</p> : null}
+        <div className="ap-callout">
+          <span className="ap-who is-lg" aria-hidden="true">
+            {person.init}
+          </span>
+          <p>
+            <strong>Only {person.name} can answer this.</strong> {reasonText}
+          </p>
         </div>
-      ) : null}
-      {notice ? (
-        <div ref={noticeRef} tabIndex={-1} className={notice.tone === "error" ? "ap-error" : "aq-ok"} role="status">
-          {notice.text}
+        {hasOptions ? (
+          <div className="ap-block">
+            <span className="ap-kicker">The options {person.short} sees</span>
+            <ol className="ap-readonly-options">
+              {q.options.map((option, i) => {
+                const rec = i === q.recommended;
+                return (
+                  <li key={i}>
+                    <span className="ap-num" aria-hidden="true">
+                      {i + 1}
+                    </span>
+                    <span className="ap-option-text">
+                      <span>{option}</span>
+                      {rec && q.recommendationReason ? <WhyRecommended reason={q.recommendationReason} /> : null}
+                    </span>
+                    {rec ? <span className="ap-badge">Recommended</span> : null}
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        ) : (
+          <p className="ap-context">This one has no options. {person.short} types the answer.</p>
+        )}
+        <QuestionReminders reminders={q.reminders} about={person.short} nameOf={nameOf} />
+        {error ? (
+          <p className="ap-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+      <div className="ap-bar">
+        <div className="ap-bar-text">
+          <span className={`ap-bar-summary${stale && !coolingDown ? " is-warn" : ""}`}>
+            {coolingDown
+              ? `Reminder sent. Still waiting on ${person.short}.`
+              : `Waiting on ${person.short} for ${waitingFor}.`}
+          </span>
+          <span className="ap-meta">A reminder posts to {taskId} as a comment</span>
         </div>
-      ) : null}
-      {rows.length > 0 ? (
-        <ul className="ap-list">
-          {rows.map((row) => (
-            <QuestionCard
-              key={row.question.id}
-              row={row}
-              nav={nav}
-              focused={row.question.id === focusId}
-              busy={busy.has(row.question.id)}
-              onSend={(choice, text) => void send(row, choice, text)}
-            />
-          ))}
-        </ul>
-      ) : null}
-    </section>
+        {openTask}
+        <button type="button" className="ap-btn ap-primary" disabled={busy || coolingDown} onClick={onRemind}>
+          {coolingDown ? "Reminder sent" : `Remind ${person.short}`}
+        </button>
+      </div>
+    </div>
   );
 }

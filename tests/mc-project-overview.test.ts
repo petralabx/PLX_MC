@@ -154,6 +154,47 @@ describe("task filter predicates", () => {
   });
 });
 
+// TASK-3697: a UAT ticket task (kind:code plus uat:<feedbackId>) is done when
+// the portal sets verified, and Steward's blocks reach "Needs a human".
+describe("UAT ticket tasks", () => {
+  const uat = (over: Partial<Task>) =>
+    task({ accountableOwner: "vince", labels: ["kind:code", "uat:cmfb7q2xk0001"], ...over });
+
+  it("counts a merged UAT fix as in progress until verified; other merged work stays done", () => {
+    const bucket = BUCKETS[0];
+    const tasks = [
+      uat({ bucket: bucket.id, stage: "merged" }),
+      uat({ bucket: bucket.id, stage: "verified" }),
+      task({ bucket: bucket.id, stage: "merged", labels: ["kind:code"] }),
+    ];
+    const [r] = rollupForProject([bucket], tasks);
+    expect(r).toMatchObject({ done: 2, remaining: 1, total: 3, pct: 67 });
+    expect(projectProgress(tasks)).toMatchObject({ done: 2, doing: 1, remaining: 1 });
+    expect(isOutstanding(tasks[0])).toBe(true);
+    expect(isOutstanding(tasks[1])).toBe(false);
+    expect(isOutstanding(tasks[2])).toBe(false);
+    expect(stageChipTone(tasks[0])).toBe("acc");
+    expect(stageChipTone(tasks[1])).toBe("ok");
+  });
+
+  it("puts a uat:blocked or needs-vince task under Needs a human, and shows Steward's cause", () => {
+    const blocked = uat({ stage: "progress", labels: ["kind:code", "uat:cmfb7q2xk0001", "uat:blocked", "uat:cause:quota"] });
+    const vince = task({ stage: "planned", accountableOwner: "vince", labels: ["needs-vince"] });
+    const plain = uat({ stage: "progress" });
+    expect(needsHuman(blocked)).toBe(true);
+    expect(needsHuman(vince)).toBe(true);
+    expect(needsHuman(plain)).toBe(false);
+    expect(filterTasks([blocked, vince, plain], "human")).toEqual([blocked, vince]);
+    // Closed work still needs nobody.
+    expect(needsHuman({ ...blocked, stage: "cancelled" })).toBe(false);
+    const html = renderToStaticMarkup(
+      createElement(TaskTable, { tasks: [blocked, vince], nav: () => {}, emptyText: "None" })
+    );
+    expect(html).toContain("Blocked · quota");
+    expect(html).toContain("Needs Vince");
+  });
+});
+
 describe("parseMcDate", () => {
   it("reads the seed dot format, ISO, and month labels", () => {
     expect(parseMcDate("2026.06.11", 2000)).toEqual(new Date(2026, 5, 11));

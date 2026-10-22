@@ -6,6 +6,7 @@ import { Eye, EyeOff, Hand } from "lucide-react";
 
 import { ACTORS, PRIORITY, STAGES, STAGE_IDX, hasHumanAccountableOwner, inputRequired } from "@/lib/mc-data";
 import type { PriorityKey, Task } from "@/lib/mc-data";
+import { isStewardBlocked, needsVince, uatBlockCauses } from "@/lib/tasks/uat-labels";
 
 import { Assignee } from "./atoms";
 import { cappedRows, isDoneStage, isOutstanding, stageChipTone } from "./project-overview.helpers";
@@ -71,12 +72,18 @@ export function TaskTable({
   );
 }
 
-// Why a row would sit under "Needs a human": blocked, a pending approval gate
-// (Verify), or open with no human accountable owner.
+// Why a row would sit under "Needs a human": blocked (a flag, or Steward's
+// uat:blocked with its uat:cause:* causes), needs-vince, a pending approval
+// gate (Verify), or open with no human accountable owner.
 function TaskTags({ task }: { task: Task }) {
+  const stewardBlocked = isStewardBlocked(task);
+  const causes = stewardBlocked ? uatBlockCauses(task.labels) : [];
   return (
     <>
-      {task.blocked && <span className="pv-tag warn">Blocked</span>}
+      {(task.blocked || stewardBlocked) && (
+        <span className="pv-tag warn">{causes.length > 0 ? `Blocked · ${causes.join(", ")}` : "Blocked"}</span>
+      )}
+      {needsVince(task) && <span className="pv-tag warn">Needs Vince</span>}
       {inputRequired(task) && (
         <span className="pv-tag info">
           <Hand size={9} aria-hidden="true" />

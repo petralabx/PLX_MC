@@ -1,27 +1,34 @@
-// TASK-3706 — the BKT-UAT tickets view. Invariants: every UAT ticket task in
-// the bucket gets one row with its portal fields and a link back to its portal
-// ticket, with no row cap; each filter counts the tasks whose ball it names;
-// "Needs a human" agrees with the bucket table; other buckets are unchanged.
+// TASK-3706 — the BKT-UAT tickets view and its drift check. Invariants: every
+// UAT ticket task in the bucket gets one row with its portal fields and a link
+// back to its portal ticket, with no row cap; each filter counts the tasks
+// whose ball it names; "Needs a human" agrees with the bucket table; each of
+// the five drift cases is detected and applying its fix clears it; with the
+// portal read off only the Mission Control cases run; no fix verifies a task.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { BucketDetail } from "@/components/mc/bucket-detail";
 import { needsHuman } from "@/components/mc/project-overview.helpers";
-import { UatTicketsPanel, leaseText, uatFilterCounts, uatGroup, uatHolder, uatRows } from "@/components/mc/uat-tickets";
+import { UatTicketsPanel, fixLabel, leaseText, uatFilterCounts, uatGroup, uatHolder, uatRows } from "@/components/mc/uat-tickets";
 import { TASKS } from "@/lib/mc-data";
 import type { Task } from "@/lib/mc-data";
 import { addTask, resetStore } from "@/lib/mc-data/store";
 import {
   UAT_TICKET_BUCKET,
+  findUatDrift,
   leaseState,
   portalTicketUrl,
   ticketShortCode,
+  ticketTaskDraft,
   uatAttempt,
   uatFeedbackId,
   type PortalRead,
   type PortalTicket,
+  type UatDriftFinding,
+  type UatDriftFix,
   type UatLease,
+  type UatTaskFacts,
   type UatTicketsReport,
 } from "@/lib/tasks/uat-tickets";
 
@@ -75,6 +82,8 @@ const report = (over: Partial<UatTicketsReport> = {}): UatTicketsReport => ({
   bucketId: UAT_TICKET_BUCKET,
   facts: {},
   portal: { status: "off" },
+  drift: [],
+  lastDailyCheck: null,
   ...over,
 });
 
@@ -186,6 +195,164 @@ describe("UatTicketsPanel", () => {
       "Portal read failed: The portal answered HTTP 503."
     );
     expect(renderPanel([ticketTask(FB_A)], null, "Internal error.")).toContain("Couldn’t load lease and portal fields: Internal error.");
+  });
+});
+
+const OFF: PortalRead = { status: "off" };
+
+function drift(tasks: Task[], portal: PortalRead, facts: Record<string, UatTaskFacts> = {}): UatDriftFinding[] {
+  return findUatDrift({ tasks, facts, portal, now: NOW });
+}
+
+/** What the server ends up with after each fix (the routes the page calls). */
+function applyFix(tasks: Task[], fix: UatDriftFix): Task[] {
+  if (fix.kind === "cancel") return tasks.map((t) => (t.id === fix.taskId ? { ...t, stage: "cancelled" } : t));
+  if (fix.kind !== "create") return tasks.map((t) => (t.id === fix.taskId ? { ...t, stage: "backlog" } : t));
+  const draft = ticketTaskDraft(fix);
+  return [...tasks, ticketTask(fix.feedbackId, { title: draft.title, labels: draft.labels })];
+}
+
+const withAttempt = (feedbackId: string, n: number, over: Partial<Task> = {}) =>
+  ticketTask(feedbackId, { labels: ["kind:code", `uat:${feedbackId}`, `uat-attempt:${n}`], ...over });
+
+describe("findUatDrift", () => {
+  it("finds nothing when Mission Control and the portal agree", () => {
+    const tasks = [ticketTask(FB_A, { stage: "progress" }), ticketTask(FB_B, { stage: "merged" })];
+    const facts = { [tasks[0].id]: { createdAt: at(5), lease: lease() } };
+    expect(drift(tasks, ok([ticket(FB_A), ticket(FB_B, { status: "READY_FOR_RETEST", expectsTask: false })]), facts)).toEqual([]);
+  });
+
+  it("ignores tasks that are not UAT ticket tasks", () => {
+    const loose = () => ticketTask(FB_A, { labels: ["kind:needs-review", `uat:${FB_A}`] });
+    expect(drift([loose(), loose()], OFF)).toEqual([]);
+  });
+
+  it("an open ticket with no task: detected, and the create fix clears it", () => {
+    const portal = ok([ticket(FB_A)]);
+    const findings = drift([], portal);
+    expect(findings).toEqual([expect.objectContaining({ case: "no_task", feedbackId: FB_A, taskId: null })]);
+    expect(findings[0].fix).toEqual({ kind: "create", feedbackId: FB_A, title: "Pricing: export drops the last row", attempt: 1 });
+    expect(drift(applyFix([], findings[0].fix!), portal)).toEqual([]);
+    expect(drift([], ok([ticket(FB_A, { expectsTask: false, status: "PENDING" })]))).toEqual([]);
+    expect(drift([], ok([ticket(FB_A, { status: "RESOLVED" })]))).toEqual([]);
+  });
+
+  it("a final task while the portal expects one: a cancelled task reopens, and that clears it", () => {
+    const tasks = [ticketTask(FB_A, { stage: "cancelled" })];
+    const portal = ok([ticket(FB_A, { status: "REOPENED", step: "Re-opened" })]);
+    const [finding] = drift(tasks, portal);
+    expect(finding).toMatchObject({ case: "final_task_open_ticket", taskId: tasks[0].id, fix: { kind: "reopen", taskId: tasks[0].id } });
+    expect(drift(applyFix(tasks, finding.fix!), portal)).toEqual([]);
+  });
+
+  it("never moves a verified task back: it creates the next attempt, and that clears it", () => {
+    const tasks = [withAttempt(FB_A, 2, { stage: "verified" })];
+    const portal = ok([ticket(FB_A, { status: "REOPENED", attempt: 2 })]);
+    const [finding] = drift(tasks, portal);
+    expect(finding.fix).toMatchObject({ kind: "create", feedbackId: FB_A, attempt: 3 });
+    const fixed = applyFix(tasks, finding.fix!);
+    expect(fixed[0].stage).toBe("verified");
+    expect(uatAttempt(fixed[1].labels)).toBe(3);
+    expect(drift(fixed, portal)).toEqual([]);
+    expect(drift(tasks, ok([ticket(FB_A, { status: "READY_FOR_RETEST", expectsTask: false })]))).toEqual([]);
+  });
+
+  it("an open task while the ticket is closed: cancelled as obsolete, and that clears it", () => {
+    const tasks = [ticketTask(FB_A)];
+    const portal = ok([ticket(FB_A, { status: "REJECTED", step: "Won't fix" })]);
+    const findings = drift(tasks, portal);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ case: "open_task_closed_ticket", taskId: tasks[0].id });
+    expect(findings[0].fix).toEqual({ kind: "cancel", taskId: tasks[0].id, reason: "obsolete", note: `Portal ticket ${ticketShortCode(FB_A)} is rejected.` });
+    expect(drift(applyFix(tasks, findings[0].fix!), portal)).toEqual([]);
+  });
+
+  it("offers no fix for a merged task on a resolved ticket, and reports a closed ticket once per open task", () => {
+    const merged = ticketTask(FB_A, { stage: "merged", prs: [{ repo: "plx-customer-portal", num: 2866, status: "merged", title: "fix" }] });
+    const resolved = ok([ticket(FB_A, { status: "RESOLVED" })]);
+    const [finding] = drift([merged], resolved);
+    expect(finding).toMatchObject({ case: "open_task_closed_ticket", fix: null });
+    expect(finding.text).toContain("Only the portal's verify closes it");
+    const twins = drift([ticketTask(FB_A), withAttempt(FB_A, 2)], resolved);
+    expect(twins.map((f) => f.case)).toEqual(["open_task_closed_ticket", "open_task_closed_ticket"]);
+  });
+
+  it("more than one open task per ticket: runs with the portal off, keeps the newest, and the cancels clear it", () => {
+    const [first, second, third] = [ticketTask(FB_A, { stage: "merged" }), withAttempt(FB_A, 2), withAttempt(FB_A, 3)];
+    const tasks = [second, third, first];
+    const findings = drift(tasks, OFF);
+    expect(findings.map((f) => [f.case, f.taskId])).toEqual([
+      ["duplicate_open_tasks", second.id],
+      ["duplicate_open_tasks", first.id],
+    ]);
+    for (const f of findings) expect(f.fix).toMatchObject({ kind: "cancel", reason: "superseded", replacedBy: third.id });
+    expect(drift(findings.reduce((acc, f) => applyFix(acc, f.fix!), tasks), OFF)).toEqual([]);
+  });
+
+  it("an expired lease with no PR: runs with the portal off, and the requeue clears it", () => {
+    const tasks = [ticketTask(FB_A, { stage: "progress" })];
+    const facts = { [tasks[0].id]: { createdAt: at(30), lease: lease({ expiresAt: at(3) }) } };
+    const findings = drift(tasks, OFF, facts);
+    expect(findings).toEqual([expect.objectContaining({ case: "expired_lease_no_pr", fix: { kind: "requeue", taskId: tasks[0].id } })]);
+    expect(drift(applyFix(tasks, findings[0].fix!), OFF, facts)).toEqual([]);
+  });
+
+  it("leaves a live lease, a released lease, an open PR and a backlog task alone", () => {
+    const expired = lease({ expiresAt: at(3) });
+    const live = ticketTask(FB_A, { stage: "progress" });
+    const released = ticketTask(FB_A, { stage: "review" });
+    const withPr = ticketTask(FB_B, { stage: "review", prs: [{ repo: "plx-customer-portal", num: 2871, status: "open", title: "fix" }] });
+    const queued = ticketTask(FB_B);
+    const facts = {
+      [live.id]: { createdAt: null, lease: lease() },
+      [released.id]: { createdAt: null, lease: { ...expired, releasedAt: at(2), releasedReason: "manual" } },
+      [withPr.id]: { createdAt: null, lease: expired },
+      [queued.id]: { createdAt: null, lease: expired },
+    };
+    expect(drift([live, released, withPr, queued], OFF, facts).filter((f) => f.case === "expired_lease_no_pr")).toEqual([]);
+  });
+
+  it("runs only the Mission Control cases when the portal read failed", () => {
+    expect(drift([ticketTask(FB_A, { stage: "cancelled" })], { status: "error", at: NOW.toISOString(), message: "HTTP 500" })).toEqual([]);
+  });
+});
+
+describe("ticketTaskDraft", () => {
+  it("files a portal-shaped ticket task that Steward leaves alone until a person reads it", () => {
+    const draft = ticketTaskDraft({ kind: "create", feedbackId: FB_A, title: "Pricing: export drops the last row", attempt: 2 });
+    expect(draft).toMatchObject({ bucket: UAT_TICKET_BUCKET, repos: ["portal-web"], targetEnv: "staging" });
+    expect(draft.labels).toEqual(["kind:code", `uat:${FB_A}`, "repo:petralabx/plx-customer-portal", "needs-vince", "uat-attempt:2"]);
+    expect(draft.title).toBe(`UAT ${FB_A.slice(0, 12)} — Pricing: export drops the last row`);
+    expect(draft.description).toContain(portalTicketUrl(FB_A));
+  });
+});
+
+describe("the check on the panel", () => {
+  it("shows each finding with its fix, or says the portal fixes it", () => {
+    const blocked = ticketTask(FB_A, { stage: "progress", labels: ["kind:code", `uat:${FB_A}`, "uat:blocked"] });
+    const findings = [
+      ...drift([blocked, ticketTask(FB_A)], OFF),
+      ...drift([ticketTask(FB_B, { stage: "merged" })], ok([ticket(FB_B, { status: "RESOLVED" })])),
+    ];
+    const html = renderPanel([blocked], report({ drift: findings }));
+    expect(html).toContain("2 out of sync");
+    expect(html).toContain("Cancel as replaced");
+    expect(html).toContain("Portal fixes this");
+    expect(html).toContain("Check now");
+  });
+
+  it("says in sync, and when the daily check last ran", () => {
+    const html = renderPanel([ticketTask(FB_A)], report({ lastDailyCheck: { at: at(6), findings: 0, portal: "off" } }));
+    expect(html).toContain("In sync");
+    expect(html).toContain("Daily check 6 hr ago");
+    expect(renderPanel([ticketTask(FB_A)], report())).toContain("Daily check not run yet");
+  });
+
+  it("labels every fix kind", () => {
+    expect(fixLabel({ kind: "create", feedbackId: FB_A, title: "", attempt: 1 })).toBe("Create task");
+    expect(fixLabel({ kind: "reopen", taskId: "TASK-1" })).toBe("Reopen to backlog");
+    expect(fixLabel({ kind: "requeue", taskId: "TASK-1" })).toBe("Requeue to backlog");
+    expect(fixLabel({ kind: "cancel", taskId: "TASK-1", reason: "obsolete", note: "" })).toBe("Cancel task");
   });
 });
 

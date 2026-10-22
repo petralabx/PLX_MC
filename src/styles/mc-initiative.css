@@ -360,3 +360,69 @@
 .mc .uat-note.warn {
   color: var(--p-warn-text);
 }
+
+/* The portal ↔ Mission Control check above the UAT tickets table. */
+.mc .uat-drift {
+  margin-bottom: 10px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius);
+  background: var(--p-paper);
+  font-size: var(--p-text-ui);
+}
+
+.mc .uat-drift.warn {
+  border-color: var(--p-warn);
+}
+
+.mc .uat-drift-h,
+.mc .uat-drift-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 14px;
+}
+
+.mc .uat-drift-row {
+  border-top: 1px solid var(--p-grid-2);
+}
+
+.mc .uat-drift-row .mono {
+  flex: 0 0 76px;
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  color: var(--p-muted);
+}
+
+.mc .uat-drift-row .t {
+  flex: 1 1 320px;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.mc .uat-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.mc .uat-fix {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--p-radius-sm);
+  background: var(--p-ink);
+  color: var(--p-paper);
+  cursor: pointer;
+}
+
+.mc .uat-fix:disabled,
+.mc .uat-check:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.mc .uat-note.ok {
+  color: var(--p-ok-text);
+}

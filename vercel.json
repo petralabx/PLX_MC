@@ -32,6 +32,10 @@
     {
       "path": "/api/cron/reporting-goals",
       "schedule": "0 10,11 * * 1-5"
+    },
+    {
+      "path": "/api/cron/uat-drift",
+      "schedule": "0 10 * * *"
     }
   ],
   "buildCommand": "npm run build"

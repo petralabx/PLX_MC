@@ -1,6 +1,7 @@
-// GET /api/uat-tickets — the BKT-UAT tickets view (TASK-3706): each UAT ticket
-// task's filed time and lease, and the portal read. Session read (the
-// /api/in-flight gate) behind the bucket's project ACL.
+// GET /api/uat-tickets — the BKT-UAT tickets view and its on-demand drift
+// check (TASK-3706): each UAT ticket task's filed time and lease, the portal
+// read, and the drift findings. Session read (the /api/in-flight gate) behind
+// the bucket's project ACL. Fixes run through PATCH /api/tasks/{id} and POST /api/tasks.
 
 import { route } from "@/lib/api/route";
 import { loadUatTickets } from "@/lib/compliance/uat-tickets";

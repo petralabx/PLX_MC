@@ -3,23 +3,29 @@
 // UatTickets — the BKT-UAT tickets view (TASK-3706): one row per UAT ticket
 // task with portal step, attempt, stage, lease, PR, staging, holder, age and a
 // link to the portal ticket; filters All · Needs a human · In flight · Waiting
-// on submitter · Verified; no row cap. Task fields come from the store; filed
-// time, lease and portal fields from GET /api/uat-tickets.
+// on submitter · Verified; no row cap. Above it, the portal vs Mission
+// Control check lists each disagreement with its one-click fix. Task fields
+// come from the store; filed time, lease, portal fields and drift come from
+// GET /api/uat-tickets (on open, on Check now and after each fix).
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, RefreshCw } from "lucide-react";
 
 import { api } from "@/lib/api";
 import { ACTORS, STAGES, STAGE_IDX } from "@/lib/mc-data";
 import type { Task } from "@/lib/mc-data";
+import { cancelTaskWithReason, pushNotice, refreshState, setTaskStage } from "@/lib/mc-data/store";
 import { UAT_HOLD_LABEL, isStewardBlocked, isUatTicketTask, needsVince, uatBlockCauses } from "@/lib/tasks/uat-labels";
 import {
   leaseState,
   portalTicketUrl,
   ticketShortCode,
+  ticketTaskDraft,
   uatAttempt,
   uatFeedbackId,
   type PortalTicket,
+  type UatDriftFinding,
+  type UatDriftFix,
   type UatLease,
   type UatTaskFacts,
   type UatTicketsReport,
@@ -86,6 +92,30 @@ function stageNote(task: Task): string | null {
   return task.labels.includes(UAT_HOLD_LABEL) ? "uat:hold · question open" : null;
 }
 
+export function fixLabel(fix: UatDriftFix): string {
+  if (fix.kind === "create") return "Create task";
+  if (fix.kind === "reopen") return "Reopen to backlog";
+  if (fix.kind === "requeue") return "Requeue to backlog";
+  return fix.reason === "superseded" ? "Cancel as replaced" : "Cancel task";
+}
+
+/** Run one fix through the store's normal task writes; a refused write leaves a notice. */
+export async function runUatFix(fix: UatDriftFix): Promise<void> {
+  if (fix.kind === "cancel") {
+    await cancelTaskWithReason(fix.taskId, { reason: fix.reason, replacedBy: fix.replacedBy ?? null, note: fix.note });
+  } else if (fix.kind === "create") {
+    try {
+      await api<Task>("/tasks", { method: "POST", body: JSON.stringify(ticketTaskDraft(fix)) });
+      await refreshState();
+    } catch (err) {
+      pushNotice(`Couldn't create the task for ticket ${ticketShortCode(fix.feedbackId)}. ${err instanceof Error ? err.message : ""}`);
+    }
+  } else {
+    // Reopen and requeue: leaving cancelled is a reopen on the server.
+    await setTaskStage(fix.taskId, "backlog");
+  }
+}
+
 export interface UatRow {
   task: Task;
   group: UatGroup;
@@ -119,6 +149,9 @@ export function UatTickets({ tasks, nav }: { tasks: Task[]; nav: Nav }) {
     error: null,
     at: 0,
   });
+  const [busy, setBusy] = useState(true);
+  // Bumped to load again (Check now, after a fix); the fetch runs in the effect.
+  const [loads, setLoads] = useState(0);
   useEffect(() => {
     let cancelled = false;
     api<UatTicketsReport>("/uat-tickets")
@@ -128,12 +161,36 @@ export function UatTickets({ tasks, nav }: { tasks: Task[]; nav: Nav }) {
       .catch((err: unknown) => {
         const error = err instanceof Error ? err.message : String(err);
         if (!cancelled) setView((prev) => ({ ...prev, error, at: Date.now() }));
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
-  return <UatTicketsPanel tasks={tasks} report={view.report} error={view.error} now={view.at} nav={nav} />;
+  }, [loads]);
+  const reload = () => {
+    setBusy(true);
+    setLoads((n) => n + 1);
+  };
+  const fix = async (finding: UatDriftFinding) => {
+    if (!finding.fix || busy) return;
+    setBusy(true);
+    await runUatFix(finding.fix);
+    setLoads((n) => n + 1);
+  };
+  return (
+    <UatTicketsPanel
+      tasks={tasks}
+      report={view.report}
+      error={view.error}
+      now={view.at}
+      nav={nav}
+      busy={busy}
+      onCheck={reload}
+      onFix={(finding) => void fix(finding)}
+    />
+  );
 }
 
 /** The view for one report; split from the loader so it renders in tests. */
@@ -143,12 +200,18 @@ export function UatTicketsPanel({
   error,
   now,
   nav,
+  busy = false,
+  onCheck = () => {},
+  onFix = () => {},
 }: {
   tasks: Task[];
   report: UatTicketsReport | null;
   error: string | null;
   now: number;
   nav: Nav;
+  busy?: boolean;
+  onCheck?: () => void;
+  onFix?: (finding: UatDriftFinding) => void;
 }) {
   const [filter, setFilter] = useState<UatFilterKey>("all");
   const rows = uatRows(tasks, report);
@@ -170,8 +233,11 @@ export function UatTicketsPanel({
         </div>
       </div>
       {error && <p className="uat-note warn">Couldn’t load lease and portal fields: {error}</p>}
-      {portal?.status === "off" && <p className="uat-note">Portal read is off: Portal step and Staging show “—”.</p>}
+      {portal?.status === "off" && (
+        <p className="uat-note">Portal read is off: Portal step and Staging show “—”, and the check covers duplicate tasks and expired leases only.</p>
+      )}
       {portal?.status === "error" && <p className="uat-note warn">Portal read failed: {portal.message}</p>}
+      <DriftCheck report={report} busy={busy} now={now} onCheck={onCheck} onFix={onFix} />
       <div className="uat-table">
         <div role="table" aria-label="UAT ticket tasks">
           <div className="uat-row uat-head" role="row">
@@ -228,6 +294,54 @@ function UatTicketRow({ row, facts, now, nav }: { row: UatRow; facts: UatTaskFac
       <span role="cell" className="mono">
         {closed || !facts?.createdAt ? "—" : duration(now - Date.parse(facts.createdAt))}
       </span>
+    </div>
+  );
+}
+
+function DriftCheck({
+  report,
+  busy,
+  now,
+  onCheck,
+  onFix,
+}: {
+  report: UatTicketsReport | null;
+  busy: boolean;
+  now: number;
+  onCheck: () => void;
+  onFix: (finding: UatDriftFinding) => void;
+}) {
+  const drift = report?.drift ?? [];
+  const last = report?.lastDailyCheck;
+  const tone = drift.length > 0 ? " warn" : report ? " ok" : "";
+  return (
+    <div className={`uat-drift${drift.length > 0 ? " warn" : ""}`} aria-live="polite">
+      <div className="uat-drift-h">
+        <span className="kk">Portal ↔ Mission Control check</span>
+        <span className={`uat-note${tone}`}>{!report ? "Not checked" : drift.length === 0 ? "In sync" : `${drift.length} out of sync`}</span>
+        {report && (
+          <span className="uat-note">
+            Checked {ago(report.generatedAt, now)} · Daily check {last ? ago(last.at, now) : "not run yet"}
+          </span>
+        )}
+        <button type="button" className="splink uat-check" onClick={onCheck} disabled={busy}>
+          <RefreshCw size={11} aria-hidden="true" />
+          Check now
+        </button>
+      </div>
+      {drift.map((finding) => (
+        <div className="uat-drift-row" key={`${finding.case}:${finding.taskId ?? finding.feedbackId}`}>
+          <span className="mono">{finding.taskId ?? ticketShortCode(finding.feedbackId)}</span>
+          <span className="t">{finding.text}</span>
+          {finding.fix ? (
+            <button type="button" className="uat-fix" disabled={busy} onClick={() => onFix(finding)}>
+              {fixLabel(finding.fix)}
+            </button>
+          ) : (
+            <span className="pv-tag">Portal fixes this</span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

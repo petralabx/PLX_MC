@@ -1,5 +1,6 @@
 // PLX MC cursor API actions — shared by REST routes and HTTP MCP transport.
 
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { withTransaction } from "@/lib/db";
@@ -643,25 +644,31 @@ export async function actionProgress(
   } else if (input.stage) {
     patch.stage = input.stage;
   }
-  if (input.notes) {
-    const comment = {
-      id: `mcp-${Date.now().toString(36)}`,
-      author: identity.operatorEmail,
-      body: input.notes,
-      ts: new Date().toISOString(),
-      mentions: [] as string[],
-    };
-    patch.comments = [...(current.comments ?? []), comment];
-  }
+  const note = input.notes
+    ? {
+        id: `mcp-${randomUUID()}`,
+        author: identity.operatorEmail,
+        body: input.notes,
+        ts: new Date().toISOString(),
+        mentions: [] as string[],
+      }
+    : undefined;
   if (input.subtasks) patch.subtasks = input.subtasks;
-  const task = Object.keys(patch).length === 0 && cancelResult
+  // The note joins the thread read under the task row lock, so a comment that
+  // lands meanwhile (a person's, an answer) is kept (TASK-3632).
+  const task = Object.keys(patch).length === 0 && !note && cancelResult
     ? cancelResult.task
-    : await patchTask(
-        input.taskId,
-        patch as Parameters<typeof patchTask>[1],
-        identity.operatorEmail,
-        { attribution: { source: "service", actorId: authorized.actorId } }
-      );
+    : await withTransaction(async (q) => {
+        const locked = await getEntity("task", input.taskId, q, true);
+        if (!locked) return null;
+        if (note) patch.comments = [...((locked.data as unknown as Task).comments ?? []), note];
+        return patchTask(
+          input.taskId,
+          patch as Parameters<typeof patchTask>[1],
+          identity.operatorEmail,
+          { query: q, attribution: { source: "service", actorId: authorized.actorId } }
+        );
+      });
   if (!task) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
   await complianceRepo.appendEvent({
     kind: "task.progress",

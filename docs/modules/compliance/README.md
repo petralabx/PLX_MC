@@ -217,6 +217,8 @@ with `approval.decide` — never the requester (separation of duties, 403) —
 decides it via `POST /api/approvals/decide`. Transitions append
 `approval.requested` / `approval.decided` to `mc_events`; the Approvals inbox
 (`/?screen=approvals`) lists pending gates from `GET /api/approvals`.
+Both the inbox and decide apply the project ACL (TASK-3713): a non-member never sees a restricted
+project's gate, and deciding one returns 403 `project_acl_denied`.
 The inbox displays every scope field and the source reference beside the decision controls.
 Scoped approval requests must echo that exact displayed scope and source; missing or stale
 review data returns 409 `approval_scope_not_reviewed` before signing.

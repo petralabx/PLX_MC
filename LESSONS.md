@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-22 (ET) — TASK-3713: the Approvals inbox and decide ignored the restricted-project ACL
+
+- **What happened:** `GET /api/approvals` returned every pending gate, and `POST /api/approvals/decide` let any admin decide one. A non-member of a restricted project saw its gate reason, proposal, plan, diff and scope, and could approve it. The questions inbox beside it already filtered by project ACL.
+- **Root cause:** Both paths checked a capability only (`task.read`, `approval.decide`). `requireSessionActor` without project context never tests membership, and nothing else on either path did.
+- **Rule going forward:** Every session read or write of task-derived data also applies the project ACL: `scopeHierarchy` for a list, `assertTaskProjectAccess` for one task. Test each with a non-member admin, who passes the capability check.
+
 ### 2026-10-21 (ET) — TASK-3410 r4: the gate proved a head's ancestry with another head's commits
 
 - **What happened:** Astra's review of PR #387 found that the gate accepted a head when the PR's current commits held a recorded head. A delayed run or replay for an old, unrelated head borrowed the newer head's commits and joined the chain. A head recorded before its PR existed also stayed unbound, so one checkout could pass on two PRs.

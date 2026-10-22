@@ -279,3 +279,84 @@
   letter-spacing: 0.04em;
   color: var(--p-muted);
 }
+
+/* UAT tickets (TASK-3706, BKT-UAT only): a ten-column table that scrolls
+   sideways inside its card below its minimum width. */
+.mc .uat-tickets .bh {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.mc .uat-table {
+  overflow-x: auto;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius);
+  background: var(--p-paper);
+}
+
+.mc .uat-row {
+  display: grid;
+  grid-template-columns: 84px minmax(220px, 2.2fr) 112px 36px 140px minmax(140px, 1.2fr) minmax(110px, 1fr) minmax(110px, 1fr) 112px 64px;
+  column-gap: 12px;
+  align-items: center;
+  min-width: 1180px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--p-grid-2);
+  font-size: var(--p-text-ui);
+}
+
+.mc .uat-row.uat-head {
+  border-top: 0;
+  background: var(--p-paper-2);
+  font-family: var(--mono);
+  font-size: var(--p-text-cap-2);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.mc .uat-row.uat-head,
+.mc .uat-row.g-verified,
+.mc .uat-row.g-cancelled,
+.mc .uat-note {
+  color: var(--p-muted);
+}
+
+.mc .uat-row .mono,
+.mc .uat-portal-link,
+.mc .uat-note {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  letter-spacing: var(--p-track-data);
+}
+
+.mc .uat-ticket,
+.mc .uat-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.mc .uat-ticket .ttl {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mc .uat-portal-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--p-accent);
+}
+
+.mc p.uat-note {
+  margin: 0 0 8px;
+}
+
+.mc .uat-row .mono.warn,
+.mc .uat-note.warn {
+  color: var(--p-warn-text);
+}

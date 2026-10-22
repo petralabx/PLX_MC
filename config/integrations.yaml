@@ -380,3 +380,28 @@ integrations:
       SQL text or the MCP token.
       Manual-entry history stays in report_manual_entry_version (readable by the
       report's Viewers), not in mc_events.
+
+  - id: uat-portal-read
+    name: UAT tickets view — portal ticket snapshot (read-only)
+    owner: Vince (vince@petrasoap.com)
+    criticality: Low
+    # TASK-3706. The BKT-UAT tickets view shows each ticket's portal step and
+    # staging line from this read. The portal endpoint is not built yet.
+    scope: runtime (one read-only GET per view load; gated; off by default)
+    autonomous: false # reads only
+    default_state: off
+    feature_flag: PLX_MC_UAT_PORTAL_READ_ENABLED=1 via uatPortalReadEnabled() (src/lib/secrets.ts).
+    kill_switch: Unset PLX_MC_UAT_PORTAL_READ_ENABLED; the view says the read is off and shows "—".
+    auth_source:
+      - PLX_MC_PORTAL_READ_TOKEN via portalReadToken(), a Bearer token to
+        PLX_MC_PORTAL_BASE_URL (default https://staging.plxcustomer.io)
+        /api/internal/uat-feedback/mc-snapshot. One dedicated read-only token,
+        not the portal's CRON_SECRET or INTERNAL_API_SECRET.
+    health_check: >-
+      Each load returns portal status off | ok | error with a plain message
+      (HTTP status, 8 s timeout, unexpected shape, missing token); the view
+      shows it above the table.
+    fallback_path: The view shows the Mission Control fields only, and says so.
+    data_audit_boundary: >-
+      Never writes to the portal. The snapshot stays in memory for one load and
+      is not logged; failures log one line with the reason only.

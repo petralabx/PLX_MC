@@ -174,6 +174,27 @@ export async function getTaskSummaries(
   );
 }
 
+/** One bucket's tasks, each with when its row was created (the UAT tickets view, TASK-3706). */
+export async function getBucketTasks(bucketId: string): Promise<{ task: Task; createdAt: string }[]> {
+  const rows = await query<{
+    id: string;
+    data: EntityData;
+    created_at: Date;
+    completed_at: Date | string | null;
+    cancellation: Cancellation | null;
+  }>(
+    `SELECT id, data, created_at, completed_at, cancellation
+       FROM entities
+      WHERE entity_type = 'task' AND data->>'bucket' = $1
+      ORDER BY id`,
+    [bucketId]
+  );
+  return rows.map((r) => ({
+    task: { ...withTaskColumns("task", r.data, r.completed_at, r.cancellation), id: r.id } as unknown as Task,
+    createdAt: r.created_at.toISOString(),
+  }));
+}
+
 /** When any task row was last written (ISO), or null with no tasks. */
 export async function latestTaskWriteAt(): Promise<string | null> {
   const rows = await query<{ at: Date | null }>(

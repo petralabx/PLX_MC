@@ -249,6 +249,9 @@
 - **Recurred 2026-10-14 (TASK-2946, PR #330):**
   - **What happened:** a Claude Code session opened the PR 7 s before `mc_complete_task`, and the gate blocked with "missing an evidence summary". `mc_verify_pr` showed pass once the evidence landed, and one re-run of the failed `compliance` job recovered it.
   - **Why it recurs:** the order lives in `.cursor/rules/mc-plan-hygiene-on-pr.mdc` and `docs/AGENT-PR-SOP.md`, but not in `config/governance-contract.yaml`, so the generated `CLAUDE.md` and `AGENTS.md` pipeline contracts never state it. Adding it to the contract is the promotion this lesson needs.
+- **Recurred 2026-10-22 (TASK-3713, PR #400):**
+  - **What happened:** a Claude Code session opened the PR, then called `mc_complete_task` with the PR URL. The gate verified 4 s before the evidence landed and blocked. `mc_verify_pr` then passed, and one re-run of the failed `compliance` job recovered it.
+  - **Still open:** the contract promotion above has not landed, so the generated `CLAUDE.md` still does not state the order.
 
 ### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
 

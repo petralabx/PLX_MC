@@ -10,7 +10,7 @@
 // figure comes from the page model (lib/reporting/goals/forecast.ts); this file
 // only shows it.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { ForecastFilter, ForecastReady, ForecastRow, ForecastView } from "@/lib/reporting/goals";
 import { monthLabel } from "@/lib/reporting/goals/calendar";
@@ -31,9 +31,8 @@ import {
   type ForecastKpis,
 } from "@/lib/reporting/goals/forecast-list";
 
-import { amount, count, day, dollars, price, type ReadyPage } from "./helpers";
+import { amount, count, day, dollars, plural, price, type ReadyPage } from "./helpers";
 
-const plural = (n: number, one: string, many: string) => `${count(n)} ${n === 1 ? one : many}`;
 /** Quantities to two places at most ("6,000", "12.5"). */
 const qty = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
@@ -89,9 +88,12 @@ function ForecastReadyView({ f }: { f: ForecastReady }) {
   // A refresh can drop the chosen category (or the login can lose access): fall back to All, the way the dropdown shows it.
   const category = activeCategoryFilter(chosenCategory, f.rows, categoriesRead);
   if (category !== chosenCategory) setCategory(category);
-  const filter: ForecastKpiFilter | null = customerClass === "all" && category === "all" ? null : { customerClass, category };
-  const k: ForecastKpis = filter ? filteredForecastKpis(f, filter) : f;
-  const words = filter ? filterWords(f, filter) : null;
+  // Worked out again only when the rows or the filters change, not on every refresh-step render.
+  const { k, words } = useMemo(() => {
+    const filter: ForecastKpiFilter | null = customerClass === "all" && category === "all" ? null : { customerClass, category };
+    const kpis: ForecastKpis = filter ? filteredForecastKpis(f, filter) : f;
+    return { k: kpis, words: filter ? filterWords(f, filter) : null };
+  }, [f, customerClass, category]);
 
   return (
     <>
@@ -102,7 +104,7 @@ function ForecastReadyView({ f }: { f: ForecastReady }) {
             : `For ${words.who} only. The target and the hit rate are for all customers.`}
         </p>
       ) : null}
-      <ForecastNumbers k={k} targetCents={f.targetCents} measuredFrom={f.measuredFrom} filtered={filter !== null} />
+      <ForecastNumbers k={k} targetCents={f.targetCents} measuredFrom={f.measuredFrom} filtered={words !== null} />
       <ForecastNotes f={f} k={k} words={words} />
       <ForecastList
         rows={f.rows}
@@ -184,7 +186,7 @@ export function ForecastNumbers({
   );
 }
 
-function ForecastNotes({ f, k, words }: { f: ForecastReady; k: ForecastKpis; words: { who: string | null; what: string | null } | null }) {
+export function ForecastNotes({ f, k, words }: { f: ForecastReady; k: ForecastKpis; words: { who: string | null; what: string | null } | null }) {
   // Production with no order behind it has no class or category: the note stays whole-month.
   const { unordered } = f;
   return (
@@ -194,8 +196,19 @@ function ForecastNotes({ f, k, words }: { f: ForecastReady; k: ForecastKpis; wor
           ? `Invoiced so far is the Revenue card’s ${dollars(f.invoicedCents)}: Sage invoices plus shipments entered by hand.`
           : words.what
             ? `Invoiced revenue isn’t in these numbers: Sage invoices can’t be split by item category yet. The Revenue card’s ${dollars(f.invoicedCents)} covers every category.`
-            : `Invoiced for ${words.who} is ${dollars(k.invoicedCents ?? 0)} of the Revenue card’s ${dollars(f.invoicedCents)} (Sage invoices plus shipments entered by hand, as in Revenue by customer class).`}
+            : `Invoiced for ${words.who} is ${dollars(k.invoicedCents ?? 0)} of the Revenue card’s ${dollars(f.invoicedCents)} (Sage invoices plus shipments entered by hand, as in Revenue by customer class).${
+                f.invoicedByClassMatchesCard
+                  ? ""
+                  : " Sage changed between two reads of this refresh, so the classes don’t add up to the card until the next refresh."
+              }`}
       </p>
+      {f.aoQtyUnreadable ? (
+        <p className="gp-notice" data-testid="goals-forecast-qty-unreadable">
+          {plural(f.aoQtyUnreadable, "assembly order has", "assembly orders have")} a quantity in FileMaker that isn’t a number,
+          so {f.aoQtyUnreadable === 1 ? "it covers" : "they cover"} no order line and those lines count as Not planned. Fix the
+          quantity in FileMaker and the next refresh picks it up.
+        </p>
+      ) : null}
       {unordered.count > 0 ? (
         <p className="gp-line" data-testid="goals-forecast-unordered">
           {plural(unordered.count, "assembly order", "assembly orders")} scheduled this month ({count(unordered.pieces)} pieces){" "}

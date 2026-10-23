@@ -136,7 +136,7 @@ describe("the link: Sage order number + item ↔ the AO's order list + item code
   });
 
   it("works out openOrder from the open orders of any date that share the AO's item, with the TS OE Fix", () => {
-    const base = { id: "1", ao: "AO-1", status: "Allocated", scheduled: "2026-10-20", item: "FP-1", qty: "10", units_per_box: "1", batch: null, batch_status: null };
+    const base = { id: "1", ao: "AO-1", status: "Allocated", scheduled: "2026-10-20", item: "FP-1", qty: "10", qty_unreadable: false, units_per_box: "1", batch: null, batch_status: null };
     const out = forecastAosQuery.map([
       { ...base, oe_list: "OR10 158877, OR1000160010", open_orders: ["OR1000158877", "OR1000160010"] },
       // Matched by the SQL's loose prefilter (same last six digits) but not linked: OR2000… is another order.

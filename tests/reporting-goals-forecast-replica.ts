@@ -2,7 +2,8 @@
 // (TASK-3151), shaped like the real ones: Sage order entry as space-padded text
 // with YYYYMMDD dates, including the columns the forecast must never read
 // (COMPLETE, QTYBACKORD, ORIGQTY…); FileMaker's bronze assembly orders and
-// order-entry links typed, with the calculated qtymfgleftoe_c it doesn't read;
+// order-entry links typed, with the calculated qtymfgleftoe_c it doesn't read,
+// and the quantities as text, as bronze keeps them (TASK-3791);
 // silver.finished_products. createForecastSourceTables runs before the grant
 // script, which grants on them; loadForecastSource fills them from
 // fixtures/reporting-goals/2026-10-14/forecast-source.json and adds the AOs'
@@ -25,7 +26,7 @@ export async function createForecastSourceTables(db: Client): Promise<void> {
     );
     CREATE TABLE public.assembly_order (
       id bigint PRIMARY KEY, nameamo_c text, status text, datescheduled date, idfinprod bigint, idbatch bigint,
-      idbatch_pre bigint, oelist_c text, qtytotal numeric, unitsperbox numeric, qtymfgleftoe_c numeric
+      idbatch_pre bigint, oelist_c text, qtytotal text, unitsperbox text, qtymfgleftoe_c numeric
     );
     CREATE TABLE public.order_entry (id bigint PRIMARY KEY, erpcode text);
     CREATE TABLE public.order_entry_item (id bigint PRIMARY KEY, idoe bigint);

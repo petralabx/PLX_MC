@@ -312,7 +312,8 @@ invoices the Revenue card adds up) and one per counted shipment entered by hand
 (amber, source "By hand"), by ship date, then invoice. The page model carries
 the rows (`shipments`), built from the same snapshot and entries as the cards.
 
-- **CAD.** A CAD invoice's net as it is; a USD invoice's net at the run's rate,
+- **CAD.** A CAD invoice's net as it is; a USD invoice's net at the revenue
+  rate (the run's Bank of Canada rate, or the Sage rate; see **Revenue rate**),
   rounded to the cent half to even; other currencies are not converted. A hand
   entry shows the CAD it adds to revenue (product value plus freight) and its
   reference under Invoice.
@@ -505,10 +506,14 @@ The page shows US dollar revenue at today's rate, the run's Bank of Canada rate
 (the default), or at the fixed Sage rate 1.25 (TASK-3780), the rate the
 portal's Projected Revenue books US sales at (TASK-1270).
 
-- **Where.** The switch sits above the goal cards. The choice lives in the URL
-  (`/?screen=goals&fx=sage`), so a link and Back and Forward keep it. The page
-  asks for the page model, and the workbook, at it (`?fx=sage`); today's rate
-  sends no query.
+- **Where.** The switch sits above the goal cards: "Today's rate" (or "Bank of
+  Canada" when the page shows an earlier day's refresh, "Last stored rate"
+  when the run couldn't fetch one) and "Sage rate", off when no usable Sage
+  rate is set. The choice lives in the URL (`/?screen=goals&fx=sage`), so a
+  link and Back and Forward keep it. The page asks for the page model, and the
+  workbook, at it (`?fx=sage`); the Bank of Canada rate sends no query. A Sage
+  read that fails says so beside the switch with Try again, and a Sage link
+  that can't load offers the way back to the Bank of Canada rate.
 - **What moves.** Every USD-to-CAD revenue figure: the Revenue card, its status
   and needed per day, the takeaway, the daily revenue chart and table, the
   shipments list, revenue by customer class, the forecast's rows and its four
@@ -546,7 +551,11 @@ goal cards and on the workbook's Revenue by class sheet (`revenue-by-class.ts`).
   reads `shipments`. On the reporting MCP path those are two statements, so an
   invoice posted between them is in one and not the other. The table then
   checks itself against the card (`matchesCard`) and says so with both totals,
-  and the workbook's Difference cell shows the gap, until the next refresh.
+  the forecast's class filter says so too, and the workbook's Difference cell
+  (against the card as the page shows it) shows the gap, until the next
+  refresh.
+- **Workbook.** The classes' figures are the page's values at the export's
+  rate; they don't follow an edit to Goals!B17.
 - **Server-only.** The roster ships only in the page model's results, never in
   the browser bundle (a test walks every runtime import of the page's client
   files).
@@ -618,7 +627,14 @@ goal (2 batches of 7,500 kg or more per working day).
     from `idfinprod`; the portal's `portal_product_id` override (TASK-2650,
     through a gold table) isn't read.
   - An AO's quantity is its `qtytotal`, in pieces, ÷ `unitsperbox` for a case
-    line when it is over 1. The portal values `qtymfgleftoe_c`, but FileMaker
+    line when it is over 1. Bronze keeps both as text: whitespace of any kind
+    (a trailing carriage return, a no-break space) and thousands separators are
+    dropped before reading them (TASK-3791), so "1,200" is 1200. A quantity
+    that is set but still isn't a number ("12 pcs") covers nothing; the run
+    counts those AOs (`row_counts.forecastAoQtyUnreadable`, and a log line), and
+    the forecast section and the Forecast sheet say how many. Before TASK-3791
+    only a plain number was read, and on 2026-10-23 every AO read as 0 pieces,
+    so every open line was Not planned. The portal values `qtymfgleftoe_c`, but FileMaker
     calculates it: it is 0 once an AO is packed and empty on AOs created in
     the portal, so it can't place a packed AO's goods in Ready. An AO without a
     readable quantity covers nothing.

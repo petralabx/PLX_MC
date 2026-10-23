@@ -21,7 +21,7 @@ import type ExcelJS from "exceljs";
 
 import { REPORT_TIME_ZONE, monthLabel } from "../calendar";
 import { FORECAST_BUCKET_LABELS, type ForecastBucket, type ForecastView } from "../forecast";
-import { toCents } from "../money";
+import { formatAmount, toCents } from "../money";
 import { missingByRelation } from "../queries/read-access";
 import type { RevenueByClass } from "../revenue-by-class";
 import {
@@ -246,8 +246,8 @@ function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
       ws,
       3,
       1,
-      `US dollar revenue is at ${revenueRateText(input)}. Full truckloads are still tested at the Bank of Canada rate ` +
-        `${rateText(model.truckloads.rate)}.`,
+      `US dollar revenue is at ${revenueRateText(input)}. Full truckloads are still tested at Bank of Canada rates: a CAD ` +
+        `shipment’s own day’s, else ${rateText(model.truckloads.rate)}.`,
       { note: true }
     );
   }
@@ -350,7 +350,7 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
 
   const rateNote =
     model.revenue.basis === "sage"
-      ? `Fixed Sage rate (report_goal_setting.sage_usd_cad_rate). Full truckloads are tested at the Bank of Canada rate ${rateText(model.truckloads.rate)}`
+      ? `Fixed Sage rate (report_goal_setting.sage_usd_cad_rate). Full truckloads are tested at Bank of Canada rates (else ${rateText(model.truckloads.rate)})`
       : run.fxSource === "stored"
         ? `Last stored Bank of Canada rate, for ${run.fxRateDate ?? "an unknown date"}; the refresh couldn’t fetch a newer one`
         : `Bank of Canada daily rate (FXUSDCAD) for ${run.fxRateDate ?? "an unknown date"}`;
@@ -836,6 +836,16 @@ function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
     r += 3 + months.length;
   }
   const { unordered } = forecast;
+  if (forecast.aoQtyUnreadable) {
+    put(
+      ws,
+      r++,
+      1,
+      `${count(forecast.aoQtyUnreadable)} ${forecast.aoQtyUnreadable === 1 ? "assembly order has" : "assembly orders have"} a quantity in ` +
+        "FileMaker that isn’t a number, so they cover no order line; those lines count as Not planned.",
+      { note: true }
+    );
+  }
   if (unordered.count > 0) {
     put(
       ws,
@@ -974,7 +984,8 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     2,
     1,
     "Classes are the sales workbook’s customer categories (Vince’s 5 Oct list), matched by Sage customer code; a customer " +
-      `not on it is Unclassified. USD is at ${revenueRateText(input)} (Goals!B${INPUT_ROW.rate}).`,
+      `not on it is Unclassified. USD is at ${revenueRateText(input)}: the page’s figures as exported, which don’t follow an ` +
+      `edit to Goals!B${INPUT_ROW.rate}.`,
     { note: true }
   );
   headerRow(ws, CLASS_HEADER_ROW, [
@@ -1011,8 +1022,9 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     });
   }
   let r = total + 2;
-  put(ws, r, 1, "Revenue card (Goals)");
-  put(ws, r, 7, { formula: `Goals!$G$${GOAL_ROW.revenue}` }, { numFmt: AMOUNT_FORMAT });
+  // The card as the page shows it, which the table checks itself against (Goals!G8 adds up the Daily sheet instead).
+  put(ws, r, 1, "Revenue card (on the page)");
+  put(ws, r, 7, dollars(data.cardTotalCents), { numFmt: AMOUNT_FORMAT });
   put(ws, r + 1, 1, "Difference");
   put(ws, r + 1, 7, { formula: `G${r}-G${total}` }, { numFmt: AMOUNT_FORMAT });
   r += 3;
@@ -1023,12 +1035,12 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
   if (data.unresolvedByHand.entries > 0) {
     notes.push(
       `Unclassified includes ${count(data.unresolvedByHand.entries)} ${data.unresolvedByHand.entries === 1 ? "shipment" : "shipments"} ` +
-        `entered by hand without a Sage customer (${dollars(data.unresolvedByHand.cadCents).toLocaleString("en-US", { minimumFractionDigits: 2 })} CAD).`
+        `entered by hand without a Sage customer (${formatAmount(data.unresolvedByHand.cadCents)} CAD).`
     );
   }
   for (const c of data.total.otherCurrencies) {
     notes.push(
-      `Not converted: ${c.currency} ${dollars(c.cents).toLocaleString("en-US", { minimumFractionDigits: 2 })} in ${count(c.invoices)} ` +
+      `Not converted: ${c.currency} ${formatAmount(c.cents)} in ${count(c.invoices)} ` +
         `${c.invoices === 1 ? "invoice" : "invoices"}. Only CAD and USD count, as on the Revenue card.`
     );
   }

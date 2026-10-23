@@ -257,6 +257,8 @@ export function rowCounts(d: Datasets): Record<string, number> {
     shipmentLines: d.shipmentLines.lines.length,
     forecastLines: d.forecast.lines.length,
     forecastAos: d.forecast.aos.length,
+    // AOs whose FileMaker quantity is set but isn't a number: they cover nothing (TASK-3791).
+    forecastAoQtyUnreadable: d.forecast.aos.filter((a) => a.qtyUnreadable).length,
   };
 }
 
@@ -280,6 +282,9 @@ export async function completeRun(run: RefreshRun, datasets: Datasets, fx: Resol
     }
     if (datasets.shipmentLines.access === "missing") {
       console.warn("[reporting-goals] run=%s shipment lines skipped: no read access to %s", run.id, datasets.shipmentLines.missing.join(", "));
+    }
+    if (counts.forecastAoQtyUnreadable > 0) {
+      console.warn("[reporting-goals] run=%s forecast: %s of %s assembly orders have a quantity that isn't a number", run.id, counts.forecastAoQtyUnreadable, counts.forecastAos);
     }
     const [done] = await q<RunRow>(
       `UPDATE report_refresh_run

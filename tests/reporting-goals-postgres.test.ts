@@ -42,6 +42,7 @@ import {
 import { FORECAST_CATEGORY_COLUMNS, FORECAST_COLUMNS, forecastRows, type ForecastView } from "@/lib/reporting/goals";
 import { SHIPMENT_LINE_COLUMNS, invoiceLines, loadShipmentLines } from "@/lib/reporting/goals";
 import { loadForecast } from "@/lib/reporting/goals/forecast-store";
+import { rowCounts } from "@/lib/reporting/goals/store";
 import { forecastAosQuery } from "@/lib/reporting/goals/queries/forecast-assembly-orders";
 import { missingColumns, type ColumnList } from "@/lib/reporting/goals/queries/read-access";
 import type { SourceQuery } from "@/lib/reporting/goals/source-db";
@@ -580,7 +581,43 @@ describe("revenue forecast (TASK-3151)", () => {
     expect(forecast.lines).toEqual(FORECAST.data.lines);
     // AOs: oelist_c, else FileMaker's order-entry link (AO-26301E); the bulk batch through idbatch, else
     // idbatch_pre (AO-26307B); none for an old AO on a closed order or one due next month only.
-    expect(sortedJson(forecast.aos)).toEqual(sortedJson(FORECAST.data.aos));
+    // qtyUnreadable is the refresh's own flag (TASK-3791); the fixture's AOs are stored rows, which don't carry it.
+    expect(sortedJson(forecast.aos.map((ao) => ({ ...ao, qtyUnreadable: undefined })))).toEqual(sortedJson(FORECAST.data.aos));
+    expect(forecast.aos.every((ao) => ao.qtyUnreadable === false)).toBe(true);
+  });
+
+  it("reads FileMaker's text quantities without spaces of any kind or separators, and flags the ones that aren't numbers (TASK-3791)", async () => {
+    // Bronze keeps qtytotal as text. Before TASK-3791 any of the first five read as NULL, so the AO covered nothing.
+    const quantities: [id: number, qtytotal: string | null, qty: string | null, unreadable: boolean][] = [
+      [11491, "1,200", "1200", false],
+      [11492, "192\r", "192", false],
+      [11493, "\u00a0450 ", "450", false],
+      [11494, " 7 500 ", "7500", false],
+      [11495, "36.", "36", false],
+      [11496, "", null, false],
+      [11497, null, null, false],
+      [11498, "12 pcs", null, true],
+      [11499, "1.2.3", null, true],
+    ];
+    for (const [id, qtytotal] of quantities) {
+      await reportingAdmin.query(
+        `INSERT INTO public.assembly_order (id, nameamo_c, status, datescheduled, idfinprod, oelist_c, qtytotal, unitsperbox)
+         VALUES ($1, $2, 'Allocated', '2026-10-21', 7001, 'OR1000999999', $3, '1,000')`,
+        [id, `AO-TEXT-${id}`, qtytotal]
+      );
+    }
+    try {
+      const datasets = await readDatasets(TODAY, await loadConfig());
+      const read = new Map(datasets.forecast.aos.map((ao) => [Number(ao.id), ao]));
+      for (const [id, , qty, unreadable] of quantities) {
+        expect([read.get(id)?.qty ?? null, read.get(id)?.qtyUnreadable], String(id)).toEqual([qty, unreadable]);
+        expect(read.get(id)?.unitsPerBox, String(id)).toBe("1000");
+      }
+      // The run keeps the count, and the page and the workbook say how many AOs cover nothing.
+      expect(rowCounts(datasets).forecastAoQtyUnreadable).toBe(2);
+    } finally {
+      await reportingAdmin.query(`DELETE FROM public.assembly_order WHERE id BETWEEN 11491 AND 11499`);
+    }
   });
 
   it("links every AO to its order-entry orders in one pass, not a lookup per AO", async () => {

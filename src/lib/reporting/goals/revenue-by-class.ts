@@ -62,10 +62,10 @@ function emptyTotals(): ClassRevenueTotals {
   };
 }
 
-function addOther(list: ClassRevenueTotals["otherCurrencies"], currency: string, cents: number): void {
+function addOther(list: ClassRevenueTotals["otherCurrencies"], currency: string, invoices: number, cents: number): void {
   let found = list.find((c) => c.currency === currency);
   if (!found) list.push((found = { currency, invoices: 0, cents: 0 }));
-  found.invoices += 1;
+  found.invoices += invoices;
   found.cents += cents;
 }
 
@@ -109,7 +109,7 @@ export function revenueByClass(
       sum.usd.invoices += 1;
       sum.usd.cents += row.netCents;
     } else {
-      addOther(sum.otherCurrencies, row.currency, row.netCents);
+      addOther(sum.otherCurrencies, row.currency, 1, row.netCents);
     }
   }
 
@@ -135,12 +135,7 @@ export function revenueByClass(
     total.byHand.entries += c.byHand.entries;
     total.byHand.cadCents += c.byHand.cadCents;
     total.totalCadCents += c.totalCadCents;
-    for (const o of c.otherCurrencies) {
-      let found = total.otherCurrencies.find((t) => t.currency === o.currency);
-      if (!found) total.otherCurrencies.push((found = { currency: o.currency, invoices: 0, cents: 0 }));
-      found.invoices += o.invoices;
-      found.cents += o.cents;
-    }
+    for (const o of c.otherCurrencies) addOther(total.otherCurrencies, o.currency, o.invoices, o.cents);
   }
   total.otherCurrencies.sort(byCurrency);
 

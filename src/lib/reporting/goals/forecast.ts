@@ -402,12 +402,16 @@ export interface ForecastReady extends Omit<ForecastKpis, "invoicedCents"> {
   invoicedCents: number;
   /** Each class's invoiced revenue (the Revenue by customer class table's totals), for the class filter; null when not supplied. */
   invoicedByClass: Record<CustomerClass, number> | null;
+  /** False when those totals don't add up to the Revenue card (two reads saw Sage at different moments). */
+  invoicedByClassMatchesCard: boolean;
   /** The hit-rate months and working days the numbers are worked out with, whatever the filter (TASK-3190). */
   kpiBasis: ForecastKpiBasis;
   /** The first month the hit rate measures: the first that counts (runsOnRecord), else next month. Shown until one is measured. */
   measuredFrom: IsoDate;
   /** Open AOs scheduled this month with no open order behind them: a note, never revenue. */
   unordered: { count: number; pieces: number };
+  /** AOs whose FileMaker quantity the run couldn't read, so they cover nothing (TASK-3791); null for a run stored before it was counted. */
+  aoQtyUnreadable: number | null;
   /** The item category columns the login lacked (none: rows carry their category); null for a run stored before categories. */
   categoryMissing: string[] | null;
 }
@@ -424,8 +428,11 @@ export interface ForecastInput {
   settings: GoalSettings;
   /** The Revenue card's USD/CAD rate (model.revenue.rate: the run's Bank of Canada rate, or the fixed Sage rate). */
   rate: string;
-  /** Each class's invoiced revenue (revenue-by-class.ts), for the class filter. */
+  /** Each class's invoiced revenue (revenue-by-class.ts), for the class filter, and whether it adds up to the card. */
   invoicedByClass?: Record<CustomerClass, number> | null;
+  invoicedByClassMatchesCard?: boolean;
+  /** The run's count of AOs with a quantity it couldn't read (row_counts.forecastAoQtyUnreadable). */
+  aoQtyUnreadable?: number | null;
 }
 
 export function buildForecast(input: ForecastInput): ForecastView {
@@ -450,9 +457,11 @@ export function buildForecast(input: ForecastInput): ForecastView {
     ...forecastKpis(rows, invoicedCents, kpiBasis),
     invoicedCents,
     invoicedByClass: input.invoicedByClass ?? null,
+    invoicedByClassMatchesCard: input.invoicedByClassMatchesCard ?? true,
     kpiBasis,
     measuredFrom,
     unordered: productionWithoutOrders(snapshot.data.aos, model.today),
+    aoQtyUnreadable: input.aoQtyUnreadable ?? null,
     categoryMissing: snapshot.data.categoryMissing ?? null,
   };
 }

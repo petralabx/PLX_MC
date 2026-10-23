@@ -173,6 +173,14 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     shipmentLines: shipmentLinesView(input.shipmentLines ?? null),
     settings: input.settings,
     sections: SECTION_QUERIES,
-    forecast: buildForecast({ snapshot: input.forecast ?? null, model, settings: input.settings, rate: model.revenue.rate, invoicedByClass }),
+    forecast: buildForecast({
+      snapshot: input.forecast ?? null,
+      model,
+      settings: input.settings,
+      rate: model.revenue.rate,
+      invoicedByClass,
+      invoicedByClassMatchesCard: byClass.matchesCard,
+      aoQtyUnreadable: run.rowCounts.forecastAoQtyUnreadable ?? null,
+    }),
   };
 }

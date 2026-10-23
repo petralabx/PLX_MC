@@ -555,9 +555,13 @@ async function buildFrom(page: GoalsPage, snapshot: Datasets = DATASETS): Promis
 
 const sagePage = (snapshot: Datasets = DATASETS) => goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "sage", snapshot);
 
-/** The fixture with 6¢ more US dollars this month: 17,242,882 × 1.25 = 21,553,602.5, which Excel's ROUND would make …603. */
-function halfCentMonth(): Datasets {
-  const plus6 = (v: string) => centsToDecimal(toCents(v) + 6);
+/**
+ * The fixture with `extra` cents more US dollars this month. +6: 17,242,882 × 1.25 = 21,553,602.5, an even floor that
+ * half to even keeps (Excel's ROUND would make …603); +2: 17,242,878 × 1.25 = 21,553,597.5, an odd floor that goes up
+ * (a round-half-down formula would keep …597).
+ */
+function halfCentMonth(extra = 6): Datasets {
+  const plus6 = (v: string) => centsToDecimal(toCents(v) + extra);
   const usdInvoice = DATASETS.shipments.findIndex((s) => s.currency === "USD");
   return {
     ...DATASETS,
@@ -573,16 +577,52 @@ describe("at the Sage rate", () => {
     const goals = sheet(wb, "Goals");
     expect(goals.getCell("B17").value).toBe(1.25);
     expect(goals.getCell("C17").value).toBe(
-      "Fixed Sage rate (report_goal_setting.sage_usd_cad_rate). Full truckloads are tested at the Bank of Canada rate 1.4219"
+      "Fixed Sage rate (report_goal_setting.sage_usd_cad_rate). Full truckloads are tested at Bank of Canada rates (else 1.4219)"
     );
     expect(sheet(wb, "Read me").getCell("A3").value).toBe(
-      "US dollar revenue is at the fixed Sage rate 1.25 (report_goal_setting.sage_usd_cad_rate). Full truckloads are still tested at the Bank of Canada rate 1.4219."
+      "US dollar revenue is at the fixed Sage rate 1.25 (report_goal_setting.sage_usd_cad_rate). Full truckloads are still tested at Bank of Canada rates: a CAD shipment’s own day’s, else 1.4219."
     );
     const { wb: boc } = await buildFrom(goalsPage());
     expect(sheet(boc, "Read me").getCell("A3").value).toBeNull();
     expect(sheet(boc, "Goals").getCell("C17").value).toBe("Bank of Canada daily rate (FXUSDCAD) for 2026-10-13");
     const loads = (book: ExcelJS.Workbook) => sheet(book, "Shipments").getColumn(11).values;
     expect(loads(wb)).toEqual(loads(boc));
+  });
+
+  it("marks a CAD truckload shipment Full or Partial at the Bank of Canada rate whatever rate revenue is at", async () => {
+    // CAD 24,000 to A1 American on Oct 5, a day with no stored rate: US$16,878.82 at 1.4219 is Partial; at 1.25
+    // (US$19,200) it would be Full.
+    const snapshot: Datasets = {
+      ...DATASETS,
+      truckloads: [
+        ...DATASETS.truckloads,
+        { code: "A1TEXT11", shipment: "SH-CAD-1", shipDate: "2026-10-05", productUsd: "0", productCad: "24000.00", thisMonth: true },
+      ],
+      shipments: [
+        ...DATASETS.shipments,
+        {
+          invoice: "IN-CAD-1",
+          shipment: "SH-CAD-1",
+          orderNo: null,
+          po: null,
+          customerCode: "A1TEXT11",
+          customer: "A1 American",
+          shipDate: "2026-10-05",
+          currency: "CAD",
+          productValue: "24000.00",
+          otherCharges: "0.00",
+          netBeforeTax: "24000.00",
+        },
+      ],
+    };
+    for (const basis of ["boc", "sage"] as const) {
+      const page = goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, basis, snapshot);
+      const { wb } = await buildFrom(page, snapshot);
+      const shipments = sheet(wb, "Shipments");
+      const row = shipments.getColumn(2).values.indexOf("IN-CAD-1");
+      expect(row, basis).toBeGreaterThan(1);
+      expect(shipments.getCell(`K${row}`).value, basis).toBe("Partial");
+    }
   });
 
   it("lists revenue by class as the page does: the classes' values, then formula totals and the check against Goals", async () => {
@@ -603,7 +643,8 @@ describe("at the Sage rate", () => {
     });
     expect(ws.getCell("A9").value).toBe("All classes");
     expect(formulaOf(ws.getCell("G9"))).toBe("SUM(G5:G8)");
-    expect(formulaOf(ws.getCell("G11"))).toBe("Goals!$G$8");
+    expect(ws.getCell("A11").value).toBe("Revenue card (on the page)");
+    expect(ws.getCell("G11").value).toBe(page.model!.revenue.totalCents / 100);
     expect(formulaOf(ws.getCell("G12"))).toBe("G11-G9");
     expect(String(ws.getCell("A14").value)).toContain("shared across the classes by largest remainder");
     expect(String(ws.getCell("A15").value)).toBe("Unclassified includes 1 shipment entered by hand without a Sage customer (5,000.00 CAD).");
@@ -746,14 +787,15 @@ describe("recalculated by LibreOffice (soffice --headless --convert-to xlsx)", (
 describe("recalculated by LibreOffice at the Sage rate", () => {
   it("converts US dollars half to even as the page does, even on an exact half cent, and the classes add up to Goals", async (ctx) => {
     ctx.skip(!SOFFICE, SKIP_REASON);
-    const half = halfCentMonth();
-    const pages = { sage: sagePage(), half: sagePage(half) } as const;
+    const snapshots = { sage: DATASETS, half: halfCentMonth(6), odd: halfCentMonth(2) } as const;
+    const pages = { sage: sagePage(), half: sagePage(snapshots.half), odd: sagePage(snapshots.odd) } as const;
     expect(pages.half.model!.revenue.usd).toEqual({ invoices: 13, cents: 17_242_882, cadCents: 21_553_602 });
-    expect(pages.half.revenueByClass!.matchesCard).toBe(true);
+    expect(pages.odd.model!.revenue.usd).toEqual({ invoices: 13, cents: 17_242_878, cadCents: 21_553_598 });
+    expect(pages.half.revenueByClass!.matchesCard && pages.odd.revenueByClass!.matchesCard).toBe(true);
     const dir = mkdtempSync(path.join(tmpdir(), "plx-goals-sage-"));
     try {
       for (const [name, page] of Object.entries(pages)) {
-        writeFileSync(path.join(dir, `${name}.xlsx`), (await buildFrom(page, name === "half" ? half : DATASETS)).buffer);
+        writeFileSync(path.join(dir, `${name}.xlsx`), (await buildFrom(page, snapshots[name as keyof typeof snapshots])).buffer);
       }
       const out = path.join(dir, "out");
       const run = spawnSync(

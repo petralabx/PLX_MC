@@ -152,6 +152,8 @@ describe("the Forecast sheet", () => {
     expect([ws.getCell(`G${noCategory}`).value, ws.getCell(`V${noCategory}`).value]).toEqual(["FP-1414", null]);
     // Read: no note about categories, so the rounding note stays the last line.
     expect(String(ws.getCell("A32").value)).toContain("CAD is rounded to the cent half to even, as on the page.");
+    // The run counted no assembly order whose FileMaker quantity isn't a number, so there's no note for it (TASK-3791).
+    expect(ws.getColumn(1).values.some((v) => String(v).includes("a quantity in FileMaker"))).toBe(false);
   });
 
   it("writes Sage's space-padded category trimmed in column V, and a blank one as empty (TASK-3189)", async () => {
@@ -174,6 +176,15 @@ describe("the Forecast sheet", () => {
     expect(String(waiting.ws.getCell("A33").value)).toContain("CAD is rounded to the cent half to even, as on the page.");
     const older = await build(view(null));
     expect(older.ws.getCell("A32").value).toBe("Item categories fill in at the next refresh.");
+  });
+
+  it("says under the rows how many assembly orders have a FileMaker quantity that isn't a number (TASK-3791)", async () => {
+    const page = goalsPage();
+    const forecast = page.forecast?.state === "ready" ? { ...page.forecast, aoQtyUnreadable: 3 } : null;
+    const { ws } = await build(forecast);
+    expect(ws.getColumn(1).values).toContain(
+      "3 assembly orders have a quantity in FileMaker that isn’t a number, so they cover no order line; those lines count as Not planned."
+    );
   });
 
   it("says when Realistic will be measured, and leaves it blank", async () => {

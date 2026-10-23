@@ -236,6 +236,12 @@ export interface ForecastAoRow {
   oeList: string | null;
   /** Pieces. */
   qty: string | null;
+  /**
+   * FileMaker's qtytotal is set but isn't a number (TASK-3791): the AO covers
+   * nothing. Only the refresh's read knows it; the run keeps the count
+   * (row_counts.forecastAoQtyUnreadable), the stored rows don't.
+   */
+  qtyUnreadable?: boolean;
   unitsPerBox: string | null;
   /** The bulk batch it packs from, and that batch's status. */
   batch: string | null;

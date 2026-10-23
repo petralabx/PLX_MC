@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { api, apiDownload, ApiClientError } from "@/lib/api";
 import { signInAgainAction } from "@/lib/auth/actions";
 import type { EvaluatedEntry, GoalsPage, RefreshRun, RevenueRateBasis } from "@/lib/reporting/goals";
+import { torontoDate } from "@/lib/reporting/goals/calendar";
 import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
 
 import type { ScreenProps } from "../route";
@@ -27,6 +28,7 @@ import { DeleteEntryDialog, EntryDialog, ImportDialog } from "./entries";
 import { ForecastSection } from "./forecast";
 import { GoalCards } from "./goal-cards";
 import {
+  bocRateName,
   clock,
   day,
   dollars,
@@ -157,7 +159,8 @@ export function GoalsView({ route, nav }: ScreenProps) {
   const loadSeq = useRef(0);
   const [page, setPage] = useState<GoalsPage | null>(null);
   const [status, setStatus] = useState<SectionState>("loading");
-  const [loadError, setLoadError] = useState<{ code: string; message: string } | null>(null);
+  // The rate the failed read asked for, so a failure at one rate is never shown as the other's.
+  const [loadError, setLoadError] = useState<{ code: string; message: string; basis: RevenueRateBasis } | null>(null);
   const [refresh, setRefresh] = useState<Refresh>({ kind: "idle" });
   const [download, setDownload] = useState<Download>({ kind: "idle" });
   // The run this page started or attached to: it counts toward the 5-minute
@@ -173,7 +176,8 @@ export function GoalsView({ route, nav }: ScreenProps) {
   // effect's synchronous body (react-hooks/set-state-in-effect).
   const load = useCallback((): Promise<GoalsPage | null> => {
     const seq = ++loadSeq.current;
-    return api<GoalsPage>(goalsPath(basisRef.current))
+    const wanted = basisRef.current;
+    return api<GoalsPage>(goalsPath(wanted))
       .then((data) => {
         if (seq !== loadSeq.current) return data;
         setPage(data);
@@ -184,7 +188,7 @@ export function GoalsView({ route, nav }: ScreenProps) {
       .catch((err: Error) => {
         if (seq !== loadSeq.current) return null;
         setStatus((prev) => (prev === "ready" ? prev : "failed"));
-        setLoadError({ code: err instanceof ApiClientError ? err.code : "error", message: err.message });
+        setLoadError({ code: err instanceof ApiClientError ? err.code : "error", message: err.message, basis: wanted });
         return null;
       });
   }, []);
@@ -288,8 +292,16 @@ export function GoalsView({ route, nav }: ScreenProps) {
   // The rate the figures on screen are at, and the one asked for; they differ while the other rate loads (or if it failed).
   const shownBasis = ready?.model.revenue.basis ?? basis;
   const rateWaiting = ready && shownBasis !== basis ? revenueRateLabel(basis, ready) : null;
+  const rateFailed = loadError?.basis === basis && (rateWaiting !== null || (!ready && basis === "sage"));
   const chooseBasis = (next: RevenueRateBasis) => {
-    if (next !== basis) nav("goals", next === "sage" ? { fx: "sage" } : {});
+    if (next === basis) return;
+    // A new read starts: an earlier failure (at either rate) no longer describes what's on screen.
+    setLoadError(null);
+    nav("goals", next === "sage" ? { fx: "sage" } : {});
+  };
+  const retryRate = () => {
+    setLoadError(null);
+    void load();
   };
 
   return (
@@ -365,12 +377,14 @@ export function GoalsView({ route, nav }: ScreenProps) {
                 title={ready.fx.stale ? `Last stored Bank of Canada rate, ${day(ready.fx.date)}` : `Bank of Canada, ${day(ready.fx.date)}`}
                 onClick={() => chooseBasis("boc")}
               >
-                {ready.fx.stale ? "Last stored rate" : "Today’s rate"} <span className="ct">{rate(ready.fx.rate)}</span>
+                {bocRateName(ready, torontoDate(new Date(now)))} <span className="ct">{rate(ready.fx.rate)}</span>
               </button>
               <button
                 type="button"
                 aria-pressed={basis === "sage"}
                 title="The fixed rate Sage books US dollar sales at"
+                // Without a usable Sage rate there is nothing to switch to (the read would only answer config_error).
+                disabled={!ready.settings.sageUsdCadRate && basis !== "sage"}
                 onClick={() => chooseBasis("sage")}
               >
                 Sage rate <span className="ct">{ready.settings.sageUsdCadRate ? rate(ready.settings.sageUsdCadRate) : "not set"}</span>
@@ -378,11 +392,24 @@ export function GoalsView({ route, nav }: ScreenProps) {
             </div>
             <span className="gp-rate-status" role="status" data-testid="goals-rate-status">
               {rateWaiting
-                ? loadError
+                ? rateFailed
                   ? `Couldn’t load revenue at ${rateWaiting}. The figures below are still at ${revenueRateLabel(shownBasis, ready)}.`
                   : `Loading revenue at ${rateWaiting}…`
                 : ""}
             </span>
+            {rateFailed ? (
+              <button type="button" className="btn ghost" data-testid="goals-rate-retry" onClick={retryRate}>
+                Try again
+              </button>
+            ) : null}
+          </div>
+        ) : rateFailed ? (
+          // A link at the Sage rate that can't load has no page to show the switch on: offer the way back.
+          <div className="gp-tools gp-rate" data-testid="goals-rate">
+            <span role="status">Couldn’t load revenue at the Sage rate.</span>
+            <button type="button" className="btn ghost" onClick={() => chooseBasis("boc")}>
+              Show the Bank of Canada rate
+            </button>
           </div>
         ) : null}
         {ready ? <p className="gp-takeaway">{ready.model.takeaway}</p> : null}

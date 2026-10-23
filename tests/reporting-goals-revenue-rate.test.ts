@@ -7,9 +7,9 @@ import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { ForecastNumbers } from "@/components/mc/goals/forecast";
+import { ForecastNotes, ForecastNumbers, ForecastSection } from "@/components/mc/goals/forecast";
 import { GoalCards } from "@/components/mc/goals/goal-cards";
-import { isReady, type ReadyPage } from "@/components/mc/goals/helpers";
+import { bocRateName, isReady, revenueRateLabel, type ReadyPage } from "@/components/mc/goals/helpers";
 import { RevenueByClassTable, RulesText } from "@/components/mc/goals/tables";
 import { routeToUrl, urlToRoute } from "@/components/mc/route";
 import {
@@ -29,7 +29,7 @@ import {
 } from "@/lib/reporting/goals";
 import customerClasses from "@/lib/reporting/goals/customer-classes.json";
 
-import { DATASETS, ENTRIES, FORECAST, FTL_CUSTOMERS, RUN, SETTINGS, SHIPMENT_LINES_SUMMARY, goalsPage } from "./reporting-goals-helpers";
+import { DATASETS, ENTRIES, FORECAST, FTL_CUSTOMERS, RUN, SETTINGS, SHIPMENT_LINES_SUMMARY, goalsPage, manualEntry } from "./reporting-goals-helpers";
 
 const html = <P extends object>(component: ComponentType<P>, props: P) => renderToStaticMarkup(createElement(component, props));
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
@@ -64,27 +64,41 @@ describe("allocateConvertedCents", () => {
     expect(allocateConvertedCents([], "1.25")).toEqual([]);
   });
 
-  it("always sums to convertCents of the sum, never bumps an exact part, and stays within a cent of each part", () => {
+  it("always sums to convertCents of the sum, never bumps an exact part, and gives each part its conversion rounded down or up", () => {
+    // Park–Miller: the product stays under 2^53, so every value is exact (a 1103515245 multiplier would not be).
     let seed = 7;
-    const next = () => (seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648);
-    for (const rate of ["1.25", "1.4021", "1.402100", "1.4219", "1", "0.733"]) {
-      for (let n = 0; n < 400; n += 1) {
-        const parts = Array.from({ length: 1 + (next() % 5) }, () => (next() % 3 === 0 ? 0 : (next() % 2_000_000) - 500_000));
+    const next = () => (seed = (seed * 48_271) % 2_147_483_647);
+    // Rates as scaled integers (rate = units / 10^scale), so exactness is checked in integers.
+    for (const [rate, units, scale] of [["1.25", 125, 2], ["1.4021", 14_021, 4], ["1.402100", 1_402_100, 6], ["1.4219", 14_219, 4], ["1", 1, 0], ["0.733", 733, 3]] as const) {
+      const d = 10 ** scale;
+      let bumped = 0;
+      for (let n = 0; n < 600; n += 1) {
+        // At 1.25 a part is exact when it is a multiple of 4: mix those, zeros and any others, negatives included.
+        const parts = Array.from({ length: 2 + (next() % 5) }, () => {
+          const kind = next() % 4;
+          const p = (next() % 2_000_000) - 500_000;
+          return kind === 0 ? 0 : kind === 1 ? p - (((p % 4) + 4) % 4) : p;
+        });
         const out = allocateConvertedCents(parts, rate);
         expect(out.reduce((a, b) => a + b, 0)).toBe(convertCents(parts.reduce((a, b) => a + b, 0), rate));
         parts.forEach((p, i) => {
-          const exact = (p * Number(rate)) / 1;
-          expect(Math.abs(out[i] - exact)).toBeLessThan(1 + 1e-6);
-          if (p === 0) expect(out[i]).toBe(0);
+          const product = p * units;
+          const floor = Math.floor(product / d);
+          if (product % d === 0) expect(out[i], `${p} × ${rate} is exact`).toBe(product / d);
+          else expect([floor, floor + 1], `${p} × ${rate}`).toContain(out[i]);
+          if (out[i] === floor + 1 && product % d !== 0) bumped += 1;
         });
       }
+      if (scale > 0) expect(bumped, rate).toBeGreaterThan(0);
     }
   });
 });
 
 describe("the Sage rate setting", () => {
   it("accepts a positive rate with at most six decimals and refuses anything else", () => {
-    for (const ok of ["1.25", "1.250000", "1", "0.5", " 1.4021 "]) expect(usableRate(ok)).toBe(ok.trim());
+    for (const ok of ["1.25", "1", "0.5", " 1.4021 "]) expect(usableRate(ok)).toBe(ok.trim());
+    // Postgres hands numeric back at its stored scale: trailing zeros don't count toward the six places.
+    for (const [stored, rate] of [["1.250000", "1.25"], ["1.25000000", "1.25"], ["1.", "1"], ["2.000", "2"]]) expect(usableRate(stored)).toBe(rate);
     for (const bad of [null, undefined, "", "0", "0.000", "-1.25", "+1.25", "1.2500001", "abc", "1,25", "1e2", "."]) {
       expect(usableRate(bad), String(bad)).toBeNull();
     }
@@ -129,7 +143,7 @@ describe("revenue at the Sage rate (TASK-3780)", () => {
   });
 
   it("tests a full truckload at the Bank of Canada rate whatever rate revenue is at", () => {
-    // CAD 24,000 to A1 American on Oct 5, a day with no stored rate: 24,000 ÷ 1.4219 = US$16,878.80, a partial load.
+    // CAD 24,000 to A1 American on Oct 5, a day with no stored rate: 24,000 ÷ 1.4219 = US$16,878.82, a partial load.
     // At 1.25 it would be US$19,200, a full one; the card, the shipments list and the workbook must all say partial.
     const snapshot: Datasets = {
       ...DATASETS,
@@ -164,6 +178,15 @@ describe("revenue at the Sage rate (TASK-3780)", () => {
     }
   });
 
+  it("tests a shipment entered by hand to a truckload customer at the Bank of Canada rate too", () => {
+    // CAD 24,000 to "A1 American" on Oct 5, a day with no stored rate: US$16,878.82 at 1.4219, partial (full at 1.25).
+    const entry = manualEntry({ entryId: "M901", type: "Shipment", date: "2026-10-05", reference: "PO-CAD-1", customer: "A1 American", productValue: "24000", currency: "CAD" });
+    for (const basis of ["boc", "sage"] as const) {
+      const page = ready(goalsPage({}, [...ENTRIES, entry], FORECAST, SHIPMENT_LINES_SUMMARY, basis));
+      expect(page.model.entries.find((e) => e.entryId === "M901")?.truckload, basis).toEqual({ code: "A1TEXT11", kind: "partial", productUsdCents: 1_687_882 });
+    }
+  });
+
   it("puts the forecast's rows at the Sage rate while the hit rate stays as each month measured it", () => {
     const boc = forecastOf(BOC);
     const sage = forecastOf(SAGE);
@@ -175,6 +198,16 @@ describe("revenue at the Sage rate (TASK-3780)", () => {
     expect(sage.kpiBasis).toEqual(boc.kpiBasis);
     expect(sage.realistic?.hitRate).toBe(boc.realistic?.hitRate);
     expect(sage.invoicedCents).toBe(SAGE.model.revenue.totalCents);
+  });
+
+  it("calls the Bank of Canada choice today's rate only on today's refresh", () => {
+    expect(bocRateName(BOC, "2026-10-14")).toBe("Today’s rate");
+    expect(bocRateName(BOC, "2026-10-15")).toBe("Bank of Canada");
+    const stale = { ...BOC, fx: { ...BOC.fx, source: "stored" as const, stale: true } };
+    expect(bocRateName(stale, "2026-10-14")).toBe("Last stored rate");
+    expect(revenueRateLabel("boc", BOC)).toBe("the Bank of Canada rate 1.4219 (Oct 13)");
+    expect(revenueRateLabel("boc", stale)).toBe("the last stored Bank of Canada rate 1.4219 (Oct 13)");
+    expect(revenueRateLabel("sage", SAGE)).toBe("the Sage rate 1.25");
   });
 
   it("names the rate it shows on the Revenue card and in the rules", () => {
@@ -325,7 +358,7 @@ describe("revenue by customer class (TASK-3781)", () => {
     expect(out).toContain("Exclusive Manufacturing 2 0.00 57,654.32 81,978.68 36,613.92 118,592.60 29.0%");
     expect(out).toContain("Unclassified 68 121,837.71 114,774.44 163,197.77 5,000.00 290,035.48 71.0%");
     expect(out).toContain("Total 70 121,837.71 172,428.76 245,176.45 41,613.92 408,628.08 100%");
-    expect(out).toContain("US dollars at today’s Bank of Canada rate 1.4219 (Oct 13)");
+    expect(out).toContain("US dollars at the Bank of Canada rate 1.4219 (Oct 13)");
     expect(out).toContain("So is 1 shipment entered by hand without a Sage customer ($5,000).");
     expect(text(html(RevenueByClassTable, { page: SAGE }))).toContain("US dollars at the Sage rate 1.25");
   });
@@ -392,10 +425,63 @@ describe("the forecast's four numbers follow the class and category filters (TAS
     expect(whole).toContain("Theoretical $527,018 of $1,000,000 Invoiced $408,628 + ready $53,763 + planned in time $64,628");
   });
 
+  it("says when the class split doesn't add up to the card, and stays quiet when it does", () => {
+    const em = { who: "Exclusive Manufacturing customers", what: null };
+    const k = filteredForecastKpis(f, { customerClass: "Exclusive Manufacturing", category: "all" });
+    expect(text(html(ForecastNotes, { f, k, words: em }))).not.toContain("Sage changed");
+    const off = { ...f, invoicedByClassMatchesCard: false };
+    expect(text(html(ForecastNotes, { f: off, k, words: em }))).toContain(
+      "Sage changed between two reads of this refresh, so the classes don’t add up to the card until the next refresh."
+    );
+  });
+
   it("treats a class's invoiced revenue as unknown when the page model didn't supply it", () => {
     const bare = buildForecast({ snapshot: FORECAST, model: BOC.model, settings: SETTINGS, rate: BOC.model.revenue.rate });
     if (bare.state !== "ready") throw new Error("forecast should be ready");
     expect(bare.invoicedByClass).toBeNull();
     expect(filteredForecastKpis(bare, { customerClass: "Mixed", category: "all" }).invoicedCents).toBeNull();
+  });
+});
+
+describe("assembly orders whose FileMaker quantity isn't a number (TASK-3791)", () => {
+  it("says how many on the forecast, from the run's count, and nothing when there are none", () => {
+    const counted = ready(goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "boc"));
+    expect(forecastOf(counted).aoQtyUnreadable).toBe(RUN.rowCounts.forecastAoQtyUnreadable ?? null);
+    const withCount = { ...counted, forecast: { ...forecastOf(counted), aoQtyUnreadable: 3 } };
+    expect(text(html(ForecastSection, { page: withCount }))).toContain(
+      "3 assembly orders have a quantity in FileMaker that isn’t a number, so they cover no order line and those lines count as Not planned."
+    );
+    for (const none of [0, null]) {
+      const page = { ...counted, forecast: { ...forecastOf(counted), aoQtyUnreadable: none } };
+      expect(html(ForecastSection, { page })).not.toContain("goals-forecast-qty-unreadable");
+    }
+  });
+});
+
+describe("the workbook's USD-to-CAD formula, step by step (CI has no LibreOffice)", () => {
+  // usdToCadFormula's arithmetic as Excel runs it, in doubles: N = ROUND(x*100,0)*ROUND(rate*1e6,0); q = INT(N/1e6);
+  // r = N − q·1e6; cents = q + (2r > 1e6 ? 1 : 2r < 1e6 ? 0 : ISODD(q) ? 1 : 0). LibreOffice runs the real formula in
+  // tests/reporting-goals-export.test.ts where soffice is installed.
+  const excel = (usdDollars: number, rate: number) => {
+    const n = Math.round(usdDollars * 100) * Math.round(rate * 1_000_000);
+    const q = Math.floor(n / 1_000_000);
+    const r = n - q * 1_000_000;
+    return q + (r * 2 > 1_000_000 ? 1 : r * 2 < 1_000_000 ? 0 : Math.abs(q % 2) === 1 ? 1 : 0);
+  };
+
+  it("matches convertCents on ties of both parities, negatives and large months", () => {
+    // 17,242,882 × 1.25 = …602.5 (even floor: stays); 17,242,878 × 1.25 = …597.5 (odd floor: up).
+    for (const [cents, rate] of [[17_242_882, "1.25"], [17_242_878, "1.25"], [-6, "1.25"], [-2, "1.25"], [2, "1.25"], [6, "1.25"], [25_750_00, "1.4219"]] as const) {
+      expect(excel(cents / 100, Number(rate)), `${cents} × ${rate}`).toBe(convertCents(cents, rate));
+    }
+    let seed = 11;
+    const next = () => (seed = (seed * 48_271) % 2_147_483_647);
+    for (const rate of ["1.25", "1.4021", "1.4219", "1.402100"]) {
+      for (let i = 0; i < 2_000; i += 1) {
+        // Up to about US$64 million a month, the formula's documented exact range at these rates.
+        const cents = (next() % 2_000_000_000) * (next() % 3 === 0 ? -1 : 1);
+        expect(excel(cents / 100, Number(rate)), `${cents} × ${rate}`).toBe(convertCents(cents, rate));
+      }
+    }
   });
 });

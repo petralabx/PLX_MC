@@ -82,10 +82,13 @@ export function invertCents(cents: number, rate: string): number {
   return toSafeNumber(divideHalfEven(BigInt(cents) * pow10(scale), units));
 }
 
-/** A USD/CAD rate as a usable decimal string (positive, at most 6 places, like report_fx_rate), else null. */
+/**
+ * A USD/CAD rate as a usable decimal string (positive, at most 6 places once
+ * trailing zeros go, like report_fx_rate: "1.25000000" is "1.25"), else null.
+ */
 export function usableRate(value: string | null | undefined): string | null {
-  const text = (value ?? "").trim();
-  if (!/^\d*(\.\d{0,6})?$/.test(text) || !/\d/.test(text)) return null;
+  const text = (value ?? "").trim().replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+  if (!/^\d*(\.\d{1,6})?$/.test(text) || !/\d/.test(text)) return null;
   return parseDecimal(text).units > ZERO ? text : null;
 }
 

@@ -19,7 +19,7 @@ import { toCents } from "@/lib/reporting/goals/money";
 import { filterShipments, shipmentTotals } from "@/lib/reporting/goals/shipment-list";
 import { invoiceLines, linesMismatch } from "@/lib/reporting/goals/shipment-lines";
 
-import { amount, cents, count, day, price, rate, type ReadyPage } from "./helpers";
+import { amount, cents, count, day, plural, price, rate, type ReadyPage } from "./helpers";
 
 const FILTERS: { key: ShipmentFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -36,7 +36,6 @@ const LOAD_LABELS = { full: "Full", partial: "Partial" } as const;
 /** The list's columns: the lines toggle, then the invoice's own 14. An opened invoice's lines span them all. */
 const COLUMNS = 15;
 
-const plural = (n: number, one: string, many: string) => `${count(n)} ${n === 1 ? one : many}`;
 /** Sage keeps four decimals on quantities ("400", "1,234.5"). */
 const quantity = (q: string) => Number(q).toLocaleString("en-US", { maximumFractionDigits: 4 });
 

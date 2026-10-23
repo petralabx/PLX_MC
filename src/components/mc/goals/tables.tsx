@@ -23,6 +23,7 @@ import {
   filterBatches,
   nextSort,
   oneDecimal,
+  plural,
   rate,
   revenueRateLabel,
   sortBatches,
@@ -49,7 +50,6 @@ function ClassCells({ t }: { t: ClassRevenueTotals }) {
 }
 
 const share = (s: number | null) => (s === null ? "—" : `${(s * 100).toFixed(1)}%`);
-const plural = (n: number, one: string, many: string) => `${count(n)} ${n === 1 ? one : many}`;
 
 /** The Revenue card's month by class: the rows add up to the card, to the cent. */
 export function RevenueByClassTable({ page }: { page: ReadyPage }) {

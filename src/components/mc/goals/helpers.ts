@@ -90,11 +90,24 @@ export const clock = (ts: string) => TIME.format(new Date(ts));
 /** "Oct 14, 6:00 AM" in Toronto. */
 export const when = (ts: string) => DATE_TIME.format(new Date(ts));
 
-/** How a revenue rate reads in a sentence (TASK-3780): "today’s Bank of Canada rate 1.4021 (Oct 22)", "the Sage rate 1.25". */
+/** How a revenue rate reads in a sentence (TASK-3780): "the Bank of Canada rate 1.4021 (Oct 22)", "the Sage rate 1.25". */
 export function revenueRateLabel(basis: RevenueRateBasis, page: Pick<ReadyPage, "fx" | "settings">): string {
   if (basis === "sage") return page.settings.sageUsdCadRate ? `the Sage rate ${rate(page.settings.sageUsdCadRate)}` : "the Sage rate";
-  return `${page.fx.stale ? "the last stored" : "today’s"} Bank of Canada rate ${rate(page.fx.rate)} (${day(page.fx.date)})`;
+  return `the ${page.fx.stale ? "last stored " : ""}Bank of Canada rate ${rate(page.fx.rate)} (${day(page.fx.date)})`;
 }
+
+/**
+ * The Bank of Canada choice on the rate switch: "Today’s rate" when the page
+ * shows today's refresh, "Bank of Canada" for an earlier one (this morning's
+ * failed), "Last stored rate" when the run couldn't fetch one.
+ */
+export function bocRateName(page: Pick<ReadyPage, "fx" | "run">, today: IsoDate): string {
+  if (page.fx.stale) return "Last stored rate";
+  return page.run.today === today ? "Today’s rate" : "Bank of Canada";
+}
+
+/** "1 row", "3 rows". */
+export const plural = (n: number, one: string, many: string) => `${count(n)} ${n === 1 ? one : many}`;
 
 export const RUN_STEPS: Record<string, string> = {
   claimed: "Starting",

@@ -4,6 +4,8 @@ import { legacySearchFixture } from "./helpers/task-search-fixture";
 // check out, report progress, complete, touch buckets or projects, or use any
 // other write. Every other MCP principal keeps the full MCP bundle. Fleet P8b
 // adds one read, agent_report.read, for GET /api/cursor/agent-reports.
+// TASK-3697 adds task.uat_sync: the portal mirrors a ticket onto its UAT ticket
+// task (tests/mcp-update-task.test.ts covers what that allows).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
@@ -142,6 +144,7 @@ const FULL_MCP_BUNDLE = [
   "routing.propose",
   "routing.resolve",
   "approval.request",
+  "question.ask",
   "telemetry.report",
   "sync.mutate",
 ];
@@ -206,9 +209,10 @@ describe("sp_mcp_portal grant", () => {
     expect(MCP_AGENT_SERVICE_PRINCIPAL_IDS).toContain(PORTAL);
   });
 
-  it("holds exactly task.read, task.create and agent_report.read", () => {
-    // Fleet P8b adds one read: agent reports, for the portal only.
-    const granted = ["agent_report.read", "task.create", "task.read"];
+  it("holds exactly task.read, task.create, agent_report.read and task.uat_sync", () => {
+    // Fleet P8b adds one read: agent reports, for the portal only. TASK-3697
+    // adds the UAT ticket mirror, for the portal only.
+    const granted = ["agent_report.read", "task.create", "task.read", "task.uat_sync"];
     expect([...capabilitiesForServicePrincipal(PORTAL)].sort()).toEqual(granted);
     for (const capability of CAPABILITIES) {
       const allowed = authorize({
@@ -236,6 +240,18 @@ describe("sp_mcp_portal grant", () => {
     }
     for (const role of ["member", "admin", "owner"] as const) {
       expect(capabilitiesForRole(role)).not.toContain("agent_report.read");
+    }
+  });
+
+  it("gives task.uat_sync to no other principal and no human role, so no agent can verify a task", () => {
+    for (const principalId of MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => id !== PORTAL)) {
+      expect(capabilitiesForServicePrincipal(principalId)).not.toContain("task.uat_sync");
+    }
+    for (const id of ["sp_sync_inbound", "sp_routing_maintenance", "sp_github_actions_routing", "sp_compliance_projection"]) {
+      expect(capabilitiesForServicePrincipal(id)).not.toContain("task.uat_sync");
+    }
+    for (const role of ["member", "admin", "owner"] as const) {
+      expect(capabilitiesForRole(role)).not.toContain("task.uat_sync");
     }
   });
 

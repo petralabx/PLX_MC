@@ -1,5 +1,6 @@
 // PLX MC cursor API actions — shared by REST routes and HTTP MCP transport.
 
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { ApiError } from "@/lib/api/route";
 import { withTransaction } from "@/lib/db";
@@ -42,6 +43,7 @@ import {
 import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
 import { isCreatorApprovalGated } from "@/lib/permissions";
 import { createLabelsWithKind } from "@/lib/tasks/kind";
+import { isUatTicketTask } from "@/lib/tasks/uat-labels";
 import {
   assertBucketProjectAccess,
   assertProjectIdAccess,
@@ -633,6 +635,15 @@ export async function actionProgress(
       409
     );
   }
+  // A UAT ticket task is verified only when its submitter confirms the fix: the
+  // portal's mc_update_task verify, under task.uat_sync (TASK-3697).
+  if (input.stage === "verified" && current.stage !== "verified" && isUatTicketTask(current)) {
+    throw new ApiError(
+      "forbidden",
+      `Task ${input.taskId} is a UAT ticket task; only the portal's mc_update_task verify (task.uat_sync) moves it to verified.`,
+      403
+    );
+  }
   // The authenticated principal must hold an active checkout of this task.
   // X-MC-Operator-Email is audit context only and never authorizes.
   if (!(await complianceRepo.hasActiveCheckoutForPrincipal(input.taskId, identity.actor.id))) {
@@ -655,25 +666,31 @@ export async function actionProgress(
   } else if (input.stage) {
     patch.stage = input.stage;
   }
-  if (input.notes) {
-    const comment = {
-      id: `mcp-${Date.now().toString(36)}`,
-      author: identity.operatorEmail,
-      body: input.notes,
-      ts: new Date().toISOString(),
-      mentions: [] as string[],
-    };
-    patch.comments = [...(current.comments ?? []), comment];
-  }
+  const note = input.notes
+    ? {
+        id: `mcp-${randomUUID()}`,
+        author: identity.operatorEmail,
+        body: input.notes,
+        ts: new Date().toISOString(),
+        mentions: [] as string[],
+      }
+    : undefined;
   if (input.subtasks) patch.subtasks = input.subtasks;
-  const task = Object.keys(patch).length === 0 && cancelResult
+  // The note joins the thread read under the task row lock, so a comment that
+  // lands meanwhile (a person's, an answer) is kept (TASK-3632).
+  const task = Object.keys(patch).length === 0 && !note && cancelResult
     ? cancelResult.task
-    : await patchTask(
-        input.taskId,
-        patch as Parameters<typeof patchTask>[1],
-        identity.operatorEmail,
-        { attribution: { source: "service", actorId: authorized.actorId } }
-      );
+    : await withTransaction(async (q) => {
+        const locked = await getEntity("task", input.taskId, q, true);
+        if (!locked) return null;
+        if (note) patch.comments = [...((locked.data as unknown as Task).comments ?? []), note];
+        return patchTask(
+          input.taskId,
+          patch as Parameters<typeof patchTask>[1],
+          identity.operatorEmail,
+          { query: q, attribution: { source: "service", actorId: authorized.actorId } }
+        );
+      });
   if (!task) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
   await complianceRepo.appendEvent({
     kind: "task.progress",
@@ -768,8 +785,7 @@ export async function actionComplete(
   // completion event is written; blocked/failed hand-ins remain auditable.
   if (
     task?.bucket === "BKT-UAT" &&
-    task.labels?.includes("kind:code") &&
-    task.labels.some((label) => /^uat:\S+$/.test(label)) &&
+    isUatTicketTask(task) &&
     !input.prUrl?.trim() &&
     input.outcome !== "blocked" && input.outcome !== "failed"
   ) {

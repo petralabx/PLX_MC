@@ -1,15 +1,16 @@
 // GET /api/approvals — the Approvals inbox source (TASK-631): every pending
-// runtime approval gate across tasks. Session-authenticated read.
+// runtime approval gate on the tasks the session's project ACL lets them see
+// (TASK-3713). Session-authenticated read.
 
 import { listPendingApprovals } from "@/lib/compliance/approvals";
 import { route } from "@/lib/api/route";
-import { requireSessionActor } from "@/lib/routing/mutations/actors";
+import { aclPrincipalFromAuthorized, requireSessionActor } from "@/lib/routing/mutations/actors";
 
 export const dynamic = "force-dynamic";
 
 export const GET = route(async () => {
-  await requireSessionActor("task.read");
-  const approvals = (await listPendingApprovals()).map((row) => ({
+  const authorized = await requireSessionActor("task.read");
+  const approvals = (await listPendingApprovals(aclPrincipalFromAuthorized(authorized))).map((row) => ({
     taskId: row.taskId,
     taskTitle: row.taskTitle,
     stage: row.stage,

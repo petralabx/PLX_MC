@@ -30,6 +30,8 @@ const MEMBER_CAPABILITIES: readonly Capability[] = [
   "repo.request",
   "skill.submit",
   "skill.install",
+  // TASK-3567: the route also requires the session to be the question's addressee.
+  "question.answer",
 ];
 
 const ADMIN_CAPABILITIES: readonly Capability[] = [
@@ -85,6 +87,7 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "routing.propose",
   "routing.resolve",
   "approval.request",
+  "question.ask",
   "telemetry.report",
   "sync.mutate",
 ];
@@ -130,11 +133,15 @@ const COS_MCP_CAPABILITIES: readonly Capability[] = [
 // so src/lib/mcp/tool-allowlist.ts limits the portal to mc_create_task and
 // mc_search_tasks over HTTP MCP and the cursor REST routes. Fleet P8b adds one
 // read, agent_report.read, for GET /api/cursor/agent-reports. Only the portal
-// holds it.
+// holds it. TASK-3697 adds task.uat_sync and mc_update_task: the portal mirrors
+// a ticket onto its UAT ticket task (verify, cancel, uat:hold, uat-attempt:<n>).
+// mc_update_task refuses every other patch, and every other task, from it.
+// Only the portal holds task.uat_sync, so no agent can verify a task this way.
 const PORTAL_MCP_CAPABILITIES: readonly Capability[] = [
   "task.read",
   "task.create",
   "agent_report.read",
+  "task.uat_sync",
 ];
 
 // sp_mcp_workbench (PLX Agent Workbench, tswaterloo/OntologyProject): read-only,

@@ -2,7 +2,7 @@
 
 BKT-MC-SERVER covers the server changes in PR #385, from `601640a4c5db33733d9e6ecd78aff5387a561c7a` to `0e23bb30d0a5fcbe11727b2b8f8cd1ece333a583`.
 Vince owns the outcome.
-This document describes that diff only.
+This document describes that diff. Later changes in the bucket get their own section (TASK-3567).
 
 - TASK-3483 accepts a task's human accountable owner for service-alias checkouts and returns accountable people in checkout receipts and reads. See `src/lib/compliance/service.ts`, `src/lib/mc-data/policy.ts`, and `src/lib/mcp/read-actions.ts`.
 - TASK-3409 renews stamped open-PR leases on push or reopen, supports explicit reuse, reports concurrent holders, and exposes checkout liveness. See `src/lib/compliance/repo.ts`, `src/lib/compliance/service.ts`, `src/lib/compliance/webhook.ts`, and `src/lib/mcp/actions.ts`.
@@ -48,6 +48,54 @@ Leave migration 047's additive columns and table in place; this scope contains n
 Keep enforcement flags disabled while operators review activation.
 Removing the signing key makes signed checks fail closed; rotating it invalidates existing signatures and requires live gates to be approved again.
 See `db/migrations/047_checkout_lease_chain.sql`, `src/lib/compliance/lease-chain.ts`, and `docs/FLEET-SECRETS-SOP.md`.
+
+## TASK-3567: questions for a named person
+
+Scope: a bot asks one person a question on a task, and only that person answers it.
+Vince asked for it on 21 Oct, after 47 gates addressed to Ricardo or Vince were all approved under one login.
+Vince owns the outcome.
+
+- `mc_ask_question` stores a question with options, a recommended option and the reason on the task (`Task.questions`, DB-only).
+  It refuses an agent, an unknown id, or a person outside the task's restricted project as the addressee.
+  See `src/lib/compliance/questions.ts` and `src/lib/mcp/question-actions.ts`.
+- `GET /api/questions` lists only the signed-in person's open questions, filtered on the server by addressee and project access.
+- `POST /api/questions/answer` accepts an answer only when the session person is the addressee, whatever their role.
+  It stores the answer on the question and posts it to the task as that person's comment, under the task row lock.
+- The Approvals screen shows the questions above the gates. `/?screen=approvals&question=<id>` opens one question.
+- An open question never freezes the task's stage. No migration.
+
+Principals and capabilities: `question.ask` is added to the shared MCP agent bundle; no human role holds it.
+`question.answer` is added to the member role, so admins and owners hold it too.
+The predicate context-denies `question.answer` to every service actor, as it does `approval.decide`.
+The addressee check runs in every enforcement mode, because outside `enforce` every signed-in person is an admin.
+See `src/lib/permissions/types.ts`, `src/lib/permissions/grants.ts` and `src/lib/permissions/predicates.ts`.
+
+Rollback: revert the PR. Stored questions stay in the task jsonb and are ignored; no other data changes.
+
+## TASK-3720: approvals redesign, server half
+
+Scope: the server side of the redesigned Approvals screen. The UI is built separately against the same contract in `src/lib/mc-data/types.ts`.
+Vince owns the outcome and set the rule for "my projects".
+
+- A project is one of a person's projects when they are on its member list, own it, or are assigned an open task in it.
+  Open means not merged, verified or cancelled, and not in an archived bucket or project.
+  An archived or closed project is never listed, whatever the reason.
+  The project ACL always bounds it: a restricted project the person cannot access is never theirs.
+  See `src/lib/compliance/my-projects.ts`.
+- `GET /api/approvals/projects` lists those projects with every open question and every pending gate on their tasks, oldest first.
+- `GET /api/approvals/decided?days=N` lists the questions the person answered and the gates they approved or rejected, newest first.
+  `days` defaults to 14 and is clamped to 1 to 90. See `src/lib/compliance/decided.ts`.
+- `POST /api/questions/remind` lets a person on the task's project remind the addressee of an open question, once per 12 hours.
+  The reminder is stored on the question and posted to the task as that person's comment, which mentions the addressee.
+  See `src/lib/compliance/questions.ts`.
+- `mc_ask_question` takes an optional `context` of up to 2000 characters, shown under the question.
+- No migration: reminders and context live on the question in the task jsonb.
+
+Principals and capabilities: none new. The two reads need `task.read`; the reminder needs `task.progress`, the task comments capability.
+The project rule, the addressee check and the cooldown run on the server in every enforcement mode.
+No file under `src/lib/permissions/` changes.
+
+Rollback: revert the PR. Stored reminders, their comments and `context` stay in the task jsonb; reminders and `context` are then ignored, and the comments stay as ordinary comments. No other data changes.
 
 ## How migration 047 is applied
 

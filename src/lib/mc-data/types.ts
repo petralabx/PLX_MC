@@ -316,6 +316,9 @@ export interface Task {
   // the task cannot be checked out, launched or moved into progress. Only the
   // creator-approval action clears it. DB-only; no SharePoint column.
   creatorApproval?: CreatorApproval;
+  // Questions a bot asks one named person (TASK-3567). Unlike a gate, an open
+  // question never freezes the stage. DB-only; no SharePoint column.
+  questions?: TaskQuestion[];
   reqs: string[];
   repos: string[];
   targetEnv?: TargetEnv;
@@ -409,6 +412,116 @@ export interface ApprovalGate {
   expiresAt?: string;
   /** TASK-3408: HMAC-SHA256 of the canonical record (approval-signature.ts); null when no signing key is set. */
   signature?: string | null;
+}
+
+// ─── Questions for a named person (TASK-3567) ────────────────────────────────
+
+export type TaskQuestionStatus = "open" | "answered";
+
+/** The named person's answer. The record, not the task comment, is the authority. */
+export interface TaskQuestionAnswer {
+  /** Index into `options`; absent for a typed answer only. */
+  choice?: number;
+  /** Free text the person typed: the whole answer, or a note on the chosen option. */
+  text?: string;
+  /** sessionAuthorId of the signed-in person who answered; always the addressee. */
+  answeredBy: string;
+  /** ISO-8601. */
+  answeredAt: string;
+  /** Id of the task comment that carries the answer. */
+  commentId: string;
+}
+
+export interface TaskQuestion {
+  /** q_* id. */
+  id: string;
+  /** Directory id ("ricardo"), or the lowercased email of a person not in the directory. */
+  addressee: string;
+  /** The one-line question. */
+  text: string;
+  /** Multiple-choice options; empty when only a typed answer makes sense. */
+  options: string[];
+  /** Index into `options` the asking bot recommends. */
+  recommended?: number;
+  /** Why the bot recommends that option. */
+  recommendationReason?: string;
+  /** Audit label of the asking operator/agent session — never a grant input. */
+  askedBy: string;
+  /** Authenticated service principal that asked. */
+  askedByPrincipal: string;
+  askedRuntime?: string;
+  /** ISO-8601. */
+  askedAt: string;
+  status: TaskQuestionStatus;
+  answer?: TaskQuestionAnswer;
+  /** TASK-3720: background for the one-line `text`, shown under it. Absent on older questions. */
+  context?: string;
+  /** TASK-3720: reminders project members sent the addressee, oldest first. */
+  reminders?: TaskQuestionReminder[];
+}
+
+// ─── Approvals: My projects, decided history, reminders (TASK-3720/3721) ─────
+
+/** A reminder a project member sent the addressee of an open question. */
+export interface TaskQuestionReminder {
+  /** sessionAuthorId of the person who reminded; never the addressee. */
+  by: string;
+  /** ISO-8601. */
+  at: string;
+  /** Id of the task comment that carries the reminder. */
+  commentId: string;
+}
+
+/** Why a project counts as one of the viewer's projects. The project ACL still bounds it. */
+export type MyProjectReason = "member" | "owner" | "assignee";
+
+export interface MyProject {
+  id: string;
+  name: string;
+  /** At least one reason, in the order member, owner, assignee. */
+  reasons: MyProjectReason[];
+}
+
+/** An open question on a task in one of the viewer's projects, addressed to anyone. */
+export interface ProjectQuestionRow {
+  taskId: string;
+  taskTitle: string;
+  stage: string;
+  projectId: string;
+  question: TaskQuestion;
+}
+
+/** A pending approval gate on a task in one of the viewer's projects. */
+export interface ProjectGateRow {
+  taskId: string;
+  taskTitle: string;
+  stage: string;
+  projectId: string;
+  gate: ApprovalGate;
+  evidence: ApprovalEvidenceRef | null;
+}
+
+/** GET /api/approvals/projects. Question and gate rows are oldest first. */
+export interface ApprovalsProjectsResponse {
+  projects: MyProject[];
+  questions: ProjectQuestionRow[];
+  gates: ProjectGateRow[];
+}
+
+/** One thing the viewer decided: a question they answered, or a gate they approved or rejected. */
+export type DecidedRow =
+  | { kind: "question"; taskId: string; taskTitle: string; decidedAt: string; question: TaskQuestion }
+  | { kind: "gate"; taskId: string; taskTitle: string; decidedAt: string; gate: ApprovalGate };
+
+/** GET /api/approvals/decided?days=N (default 14, max 90). Newest first. */
+export interface ApprovalsDecidedResponse {
+  decided: DecidedRow[];
+}
+
+/** POST /api/questions/remind body. The response is `{ question: TaskQuestion }` with the new reminder. */
+export interface RemindQuestionRequest {
+  taskId: string;
+  questionId: string;
 }
 
 export type InboxKind = "approval" | "review" | "conflict" | "mention" | "assigned";

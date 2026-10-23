@@ -138,6 +138,24 @@ describe("openStageCounts", () => {
   });
 });
 
+describe("UAT ticket tasks (TASK-3697)", () => {
+  const labels = ["kind:code", "uat:cmfb7q2xk0001"];
+  const uatTasks = [
+    task({ bucket: b1.id, stage: "merged", labels }),
+    task({ bucket: b1.id, stage: "verified", labels }),
+    task({ bucket: b1.id, stage: "merged", labels: ["kind:code"] }),
+  ];
+  const uatModel = buildDashboard(uatTasks, [b1], [open]);
+
+  it("keeps a merged UAT fix open until verified, in the totals, the list and the stage bars", () => {
+    expect(uatModel.buckets[0]).toMatchObject({ done: 2, inProgress: 1, remaining: 1, total: 3 });
+    expect(uatModel.remaining.map((r) => r.task.id)).toEqual([uatTasks[0].id]);
+    const counts = openStageCounts(uatModel.remaining);
+    expect(counts.find((c) => c.stage === "merged")).toMatchObject({ tasks: 1 });
+    expect(counts.reduce((n, c) => n + c.tasks, 0)).toBe(uatModel.remaining.length);
+  });
+});
+
 describe("cancelled tasks", () => {
   it("a cancelled-only project has 0 remaining and 100% progress across project, bucket and scope", () => {
     const model = buildDashboard([task({ bucket: b1.id, stage: "cancelled" })], [b1], [open]);

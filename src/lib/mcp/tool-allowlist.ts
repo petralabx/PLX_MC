@@ -42,9 +42,11 @@ export const MCP_TOOL_ALLOWLISTS: Readonly<
 > = {
   // The portal's COS delegate tool creates tasks (an agent: assignee
   // included) and searches them. The portal also reads agent reports through
-  // GET /api/cursor/agent-reports (fleet P8b). Nothing else.
-  // mc_update_task / mc_update_tasks remain Hub-only, like progress/release.
-  [PORTAL_MCP_SERVICE_PRINCIPAL_ID]: ["mc_create_task", "mc_search_tasks", "mc_list_agent_reports"],
+  // GET /api/cursor/agent-reports (fleet P8b). It mirrors a ticket onto its UAT
+  // ticket task with mc_update_task under task.uat_sync (TASK-3697); that
+  // action refuses it every other patch and task. Nothing else:
+  // mc_update_tasks remains Hub-only, like progress/release.
+  [PORTAL_MCP_SERVICE_PRINCIPAL_ID]: ["mc_create_task", "mc_search_tasks", "mc_list_agent_reports", "mc_update_task"],
   // The PLX Agent Workbench (tswaterloo/OntologyProject) only reads.
   [WORKBENCH_MCP_SERVICE_PRINCIPAL_ID]: READ_ONLY_MCP_TOOLS,
   // PLX Infra only reads, like the Workbench.

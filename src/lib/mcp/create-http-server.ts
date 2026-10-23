@@ -39,6 +39,7 @@ import { registerRoutingMutationTools } from "./routing-mutation-actions";
 import { registerSyncConflictTools } from "./sync-actions";
 import { registerAgentReadTools } from "./read-actions";
 import { registerApprovalTools } from "./approval-actions";
+import { registerQuestionTools } from "./question-actions";
 import { registerCheckoutHeadTools } from "./checkout-head-actions";
 import { registerCheckoutReleaseTools } from "./checkout-release-actions";
 import { registerTaskUpdateTools } from "./task-update-actions";
@@ -356,7 +357,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_report_progress",
-    "Report progress on a checked-out task (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing. A cancelled task must be reopened with mc_update_task {reopen} first.",
+    "Report progress on a checked-out task (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing. A cancelled task must be reopened with mc_update_task {reopen} first. stage=verified is refused on a UAT ticket task (kind:code plus uat:<feedbackId>): only the portal's mc_update_task verify sets it.",
     progressSchemaShape,
     async (body) => jsonResult(await actionProgress(identity, body))
   );
@@ -430,6 +431,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   // ── Wave 4: agent read tools + approval request (separate modules) ──
   registerAgentReadTools(server, identity);
   registerApprovalTools(server, identity);
+  registerQuestionTools(server, identity);
   registerCheckoutReleaseTools(server, identity);
   registerCheckoutHeadTools(server, identity);
   registerTaskUpdateTools(server, identity);

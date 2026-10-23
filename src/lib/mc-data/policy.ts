@@ -6,9 +6,10 @@
 //   3. a task cannot reach a done stage (merged/verified) with an incomplete
 //      evidence bundle (the completion contract — reuses evidenceComplete).
 
+import { isUatTicketTask } from "@/lib/tasks/uat-labels";
 import { AGENTS, OPERATOR_ID, HUMANS, STAGE_IDX } from "./data";
 import { bandOf, evidenceComplete } from "./helpers";
-import type { ApprovalGate, StageKey, Task } from "./types";
+import type { ApprovalGate, StageKey, Task, TaskQuestion } from "./types";
 
 // The last stage a task may occupy without a human accountable owner.
 export const ACCOUNTABLE_GATE_STAGE: StageKey = "planned";
@@ -43,16 +44,30 @@ export function taskProgressTotals(done: number, inProgress: number, notStarted:
   return { done, cancelled, closedTasks, inProgress, notStarted, remaining, total, pctDone: total > 0 ? closedTasks / total : null };
 }
 
-export function countTaskProgress(tasks: readonly Pick<Task, "stage">[]): TaskProgressCounts {
+type RollupTask = Pick<Task, "stage"> & { labels?: readonly string[] };
+
+// A UAT ticket fix is done when its submitter verifies it, not when its PR
+// merges (TASK-3697): until the portal sets verified, a merged UAT ticket task
+// is in progress, awaiting re-test. Every other task is done at merged.
+export function awaitsRetest(task: RollupTask): boolean {
+  return task.stage === "merged" && isUatTicketTask(task);
+}
+
+/** Open in progress rollups and their task lists: not closed, or awaiting re-test. */
+export function isOpenInRollup(task: RollupTask): boolean {
+  return !isClosedStage(task.stage) || awaitsRetest(task);
+}
+
+export function countTaskProgress(tasks: readonly RollupTask[]): TaskProgressCounts {
   let done = 0;
   let cancelled = 0;
   let inProgress = 0;
   let notStarted = 0;
   for (const task of tasks) {
-    if (isClosedStage(task.stage)) {
+    if (!isOpenInRollup(task)) {
       if (task.stage === "cancelled") cancelled += 1;
       else done += 1;
-    } else if (bandOf(task.stage) === "doing") inProgress += 1;
+    } else if (bandOf(task.stage) === "doing" || awaitsRetest(task)) inProgress += 1;
     else notStarted += 1;
   }
   return taskProgressTotals(done, inProgress, notStarted, cancelled);
@@ -145,6 +160,43 @@ export function creatorApprovalViolation(
   if (!creatorApprovalPending(task) || nextStage === "cancelled") return null;
   if (STAGE_IDX[nextStage] < STAGE_IDX.progress) return null;
   return `${task.id} was created by ${task.creatorApproval!.principal} and waits for creator approval (vince@ or cos@) before it can move to ${nextStage}.`;
+}
+
+/** TASK-3720: one reminder per person per question in this window. */
+export const QUESTION_REMIND_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+
+/** TASK-3720: the longest one-question `context` a bot may send. */
+export const QUESTION_CONTEXT_MAX = 2000;
+
+/**
+ * The id a question is addressed to (TASK-3567): a directory id ("ricardo"),
+ * or the lowercased email of a person not in the directory. An email that
+ * belongs to a listed person becomes their directory id, so it matches
+ * sessionAuthorId and the viewer id. Null for an unknown directory id or an
+ * agent: bots never answer questions.
+ */
+export function normalizeAddressee(raw: string): string | null {
+  const value = raw.trim().toLowerCase();
+  if (!value) return null;
+  if (value.includes("@")) {
+    const listed = Object.values(HUMANS).find((h) => h.email?.toLowerCase() === value);
+    return listed ? listed.id : value;
+  }
+  if (isAgentId(value)) return null;
+  return Object.prototype.hasOwnProperty.call(HUMANS, value) ? value : null;
+}
+
+// Open questions addressed to one person (TASK-3567). `personId` is a directory
+// id or a lowercased email, as the viewer id is. The stored addressee is
+// normalized again here, so a question asked by email still reaches the person
+// once the directory lists that email.
+export function openQuestionsFor(
+  task: Pick<Task, "questions">,
+  personId: string
+): TaskQuestion[] {
+  return (task.questions ?? []).filter(
+    (q) => q.status === "open" && normalizeAddressee(q.addressee) === personId
+  );
 }
 
 // Why this task cannot move to `nextStage`, or null when the move is allowed.

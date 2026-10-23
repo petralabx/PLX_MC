@@ -634,6 +634,10 @@
     width: 22px;
     height: 22px;
   }
+  /* An open Approvals decision sheet owns that corner for its action bar. */
+  .mc.mc-app:has(.mc-stage .ap-page[data-view="sheet"]) .mc-fab {
+    display: none;
+  }
 
   /* Context pane — phone: a page over the list, between the chrome (top bar
      and offline banner stay visible) and the tabs. Hidden until something is

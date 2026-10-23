@@ -16,7 +16,7 @@ import {
 } from "react";
 import { PanelLeft, Plus, X } from "lucide-react";
 
-import { liveAgentCount, pendingApprovalGates } from "@/lib/mc-data";
+import { liveAgentCount, openQuestionsFor, pendingApprovalGates } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import {
   allTasks,
@@ -92,10 +92,19 @@ export function useNavCounts(): NavCounts {
 
   return {
     needs,
-    // Pending runtime approval gates on the tasks this viewer can see. The
-    // Approvals screen reads GET /api/approvals, a different source — so a
-    // lower bound, never claimed exact.
-    approvals: loaded ? { n: tasks.reduce((n, t) => n + pendingApprovalGates(t).length, 0), exact: false } : UNKNOWN_COUNT,
+    // Pending runtime approval gates on the tasks this viewer can see, plus
+    // the open questions addressed to this viewer (TASK-3567). The Approvals
+    // screen reads GET /api/approvals and /api/questions, different sources —
+    // so a lower bound, never claimed exact.
+    approvals: loaded
+      ? {
+          n: tasks.reduce(
+            (n, t) => n + pendingApprovalGates(t).length + (viewer ? openQuestionsFor(t, viewer.id).length : 0),
+            0
+          ),
+          exact: false,
+        }
+      : UNKNOWN_COUNT,
     sync: loaded && conflicts > 0 ? { n: conflicts, exact: true, tone: "warn" } : undefined,
     // Honest live-agent count: agents executing in-flight work (EN-005).
     agents: loaded ? { n: liveAgentCount(tasks), exact: true, unit: "live" } : UNKNOWN_COUNT,

@@ -21,6 +21,12 @@ vi.mock("@/lib/permissions/project-acl-guard", () => ({
   loadProjectAclMaps: vi.fn(async () => ({})),
 }));
 vi.mock("@/lib/mcp/sync-meta", () => ({ syncMetaForTask: vi.fn(async () => ({})) }));
+// The write runs in a row-locked transaction; the repo seam is mocked, so the
+// transaction only needs to hand through a query function.
+vi.mock("@/lib/db", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/db")>()),
+  withTransaction: async <T,>(fn: (q: never) => Promise<T>) => fn((async () => []) as never),
+}));
 vi.mock("@/lib/sync/repo", () => ({
   getEntity: vi.fn(async (_type: string, id: string) =>
     id === h.task.id ? { data: structuredClone(h.task) } : null
@@ -115,6 +121,20 @@ describe("merged/verified regression", () => {
     seed("merged");
     await expectRefused(actionProgress(identity, { taskId: "TASK-1", stage: "qa" }), 409, "stage_regression");
     expect(h.patches).toEqual([]);
+  });
+});
+
+describe("UAT ticket tasks (TASK-3697)", () => {
+  it("refuses to move a UAT ticket task to verified, even with a checkout", async () => {
+    h.task = { id: "TASK-1", stage: "merged", labels: ["kind:code", "uat:cmfb7q2xk0001"], comments: [] };
+    await expectRefused(actionProgress(identity, { taskId: "TASK-1", stage: "verified" }), 403, "forbidden");
+    expect(h.patches).toEqual([]);
+    expect(h.events).toEqual([]);
+  });
+
+  it("still lets a checkout holder verify a task that is not a UAT ticket task", async () => {
+    h.task = { id: "TASK-1", stage: "merged", labels: ["kind:code"], comments: [], accountableOwner: "vince" };
+    await expect(actionProgress(identity, { taskId: "TASK-1", stage: "verified" })).resolves.toMatchObject({ ok: true, stage: "verified" });
   });
 });
 

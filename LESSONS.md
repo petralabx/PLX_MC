@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-22 (ET) — TASK-3713: the Approvals inbox and decide ignored the restricted-project ACL
+
+- **What happened:** `GET /api/approvals` returned every pending gate, and `POST /api/approvals/decide` let any admin decide one. A non-member of a restricted project saw its gate reason, proposal, plan, diff and scope, and could approve it. The questions inbox beside it already filtered by project ACL.
+- **Root cause:** Both paths checked a capability only (`task.read`, `approval.decide`). `requireSessionActor` without project context never tests membership, and nothing else on either path did.
+- **Rule going forward:** Every session read or write of task-derived data also applies the project ACL: `scopeHierarchy` for a list, `assertTaskProjectAccess` for one task. Test each with a non-member admin, who passes the capability check.
+
 ### 2026-10-21 (ET) — TASK-3632: a progress note rebuilt the comment thread from an unlocked read
 
 - **What happened:** `mc_report_progress` with notes read the task without a lock, built `comments` as the old thread plus the note, and wrote the whole array. A person's comment (or a TASK-3567 answer) committed in between was dropped. Two notes in one millisecond also got the same `mcp-` id.
@@ -249,6 +255,9 @@
 - **Recurred 2026-10-14 (TASK-2946, PR #330):**
   - **What happened:** a Claude Code session opened the PR 7 s before `mc_complete_task`, and the gate blocked with "missing an evidence summary". `mc_verify_pr` showed pass once the evidence landed, and one re-run of the failed `compliance` job recovered it.
   - **Why it recurs:** the order lives in `.cursor/rules/mc-plan-hygiene-on-pr.mdc` and `docs/AGENT-PR-SOP.md`, but not in `config/governance-contract.yaml`, so the generated `CLAUDE.md` and `AGENTS.md` pipeline contracts never state it. Adding it to the contract is the promotion this lesson needs.
+- **Recurred 2026-10-22 (TASK-3713, PR #400):**
+  - **What happened:** a Claude Code session opened the PR, then called `mc_complete_task` with the PR URL. The gate verified 4 s before the evidence landed and blocked. `mc_verify_pr` then passed, and one re-run of the failed `compliance` job recovered it.
+  - **Still open:** the contract promotion above has not landed, so the generated `CLAUDE.md` still does not state the order.
 
 ### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
 

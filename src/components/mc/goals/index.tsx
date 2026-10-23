@@ -24,6 +24,7 @@ import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
 import type { ScreenProps } from "../route";
 
 import { DailyLine1Chart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "./charts";
+import { CustomerRevenueSection } from "./customers";
 import { DeleteEntryDialog, EntryDialog, ImportDialog } from "./entries";
 import { ForecastSection } from "./forecast";
 import { GoalCards } from "./goal-cards";
@@ -675,6 +676,20 @@ function Body({
       >
         {ready((p) => (
           <ShipmentList page={p} />
+        ))}
+      </Section>
+
+      <Section
+        id="customers"
+        title="Revenue by customer"
+        note="Potential revenue from production for open orders, and this month's invoiced revenue, by customer and week (weeks start Monday). Amounts in CAD at the page's rate."
+        source={src("customers")}
+        state={state}
+        onRetry={onRetry} resetKey={page}
+        size="lg"
+      >
+        {ready((p) => (
+          <CustomerRevenueSection page={p} />
         ))}
       </Section>
 

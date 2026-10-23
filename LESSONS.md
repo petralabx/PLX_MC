@@ -20,7 +20,7 @@
 
 - **What happened:** In `petralabx/plx-customer-portal`, #2907 merged and MC released four checkouts that the open stacked PRs #2906, #2908, #2909 and #2910 still stamped. `mc_verify_pr` then blocked all four with `checkout released — re-checkout the task`. Closing a superseded PR did the same. A re-checkout mints a new id that cannot match the trailers already in the stacked commits, so the stack could never pass without a history rewrite.
 - **Root cause:** The merge/close path in `ingestPullRequest` released every stamp in the PR body. Only `mc_release_checkout` ran the open-PR check (`openPrHoldingCheckout`), and only for an `expired` reason. The gate treated every release as final, even for commits stamped before it.
-- **Rule going forward:** Every path that ends a lease runs `openPrHoldingCheckout` first and keeps a lease that another open PR stamps. A release must not strand commits that already carry the stamp: the pull_request gate accepts a stamp released by another PR's merge or close for those commits only. When the SOP states a lease rule, test it on every door that releases, not only the one that added it.
+- **Rule going forward:** Every path that ends a lease runs `openPrHoldingCheckout` first and keeps a lease that another open PR stamps. A release must not strand commits that already carry the stamp: the pull_request gate accepts a stamp released by another PR's merge or close for those commits only, and the merge queue accepts it only when the gate passed that exact head. When the SOP states a lease rule, test it on every door that releases, not only the one that added it.
 
 ### 2026-10-22 (ET) — TASK-3713: the Approvals inbox and decide ignored the restricted-project ACL
 

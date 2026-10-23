@@ -227,23 +227,35 @@ function gateDedupKey(repoName: string, prNumber: number, headSha: string, subje
   return `gate:${repoName}:${prNumber}:${headSha}:${subjectId ?? "none"}:${verdict}`;
 }
 
+// TASK-3813: the PR whose merge or close released this checkout of this repo,
+// when that is another PR; null for a revoked or manual release, another repo,
+// or the PR under check. Read-only.
+async function releasingOtherPr(d: repo.DispatchRow, input: PrIdentity): Promise<number | null> {
+  if (d.revoked || (d.releasedReason !== "merged" && d.releasedReason !== "closed")) return null;
+  if (!dispatchRepoMatches(d.repo, input.repo, input.repoFullName)) return null;
+  const releasedBy = await repo.releasingPrForDispatch(d.id);
+  return releasedBy !== null && releasedBy !== input.prNumber ? releasedBy : null;
+}
+
 // Frontier P16: the merge queue re-runs the gate on the head that already
 // passed, so merge_group never reads GitHub. It applies resolveDispatch as is;
-// on expiry only, it accepts the stamp when the gate passed this exact head for
-// its task (the resolveDispatchForMerge rule), and blocks as expired otherwise.
+// on expiry, or on a release by another PR's merge or close (TASK-3813), it
+// accepts the stamp when the gate passed this exact head for its task (the
+// resolveDispatchForMerge rule), and blocks as expired or released otherwise.
 function queueDispatchResolver(input: Pick<VerifyPrInput, "repo" | "repoFullName" | "prNumber" | "headSha">) {
   return async (checkoutId: string): Promise<DispatchResolution> => {
     const resolved = await resolveDispatch(checkoutId, input.repo, input.repoFullName);
-    if (resolved.reason !== "expired") return resolved;
+    if (resolved.reason !== "expired" && resolved.reason !== "released") return resolved;
     // Re-read so a revoke or release after resolveDispatch still wins.
     const d = await repo.getDispatch(checkoutId);
     if (!d) return { dispatch: null, reason: "unknown_checkout" };
     if (d.revoked) return { dispatch: null, reason: "revoked" };
-    if (d.releasedAt) return { dispatch: null, reason: "released" };
+    if (d.releasedAt && (await releasingOtherPr(d, input)) === null) return { dispatch: null, reason: "released" };
     const passedTaskId = await repo.eventTaskIdByDedupKey(
       gateDedupKey(input.repo, input.prNumber, input.headSha, d.taskId, "pass")
     );
-    return passedTaskId === d.taskId ? { dispatch: d } : { dispatch: null, reason: "expired" };
+    if (passedTaskId === d.taskId) return { dispatch: d };
+    return { dispatch: null, reason: d.releasedAt ? "released" : "expired" };
   };
 }
 
@@ -901,8 +913,8 @@ async function leaseChainCheck(
 // TASK-3813: a checkout another PR's merge or close released (the PR below a
 // stacked one) still covers this PR's commits that already carry its trailer: a
 // re-checkout cannot match them, and history is not rewritten. Read-only: the
-// release stands. Never for a revoked or manual release, the releasing PR,
-// another repo, or a PR with no such commit (the merge queue reads no commits).
+// release stands. Never for a PR with no such commit, nor where releasingOtherPr
+// says no. The merge queue reads no commits; queueDispatchResolver handles it.
 async function releasedStampForCommits(
   checkoutId: string,
   input: PrIdentity,
@@ -910,10 +922,8 @@ async function releasedStampForCommits(
 ): Promise<{ dispatch: repo.DispatchRow; note: string } | null> {
   if (stamped.length === 0) return null;
   const d = await repo.getDispatch(checkoutId);
-  if (!d || d.revoked || (d.releasedReason !== "merged" && d.releasedReason !== "closed")) return null;
-  if (!dispatchRepoMatches(d.repo, input.repo, input.repoFullName)) return null;
-  const releasedBy = await repo.releasingPrForDispatch(checkoutId);
-  if (releasedBy === null || releasedBy === input.prNumber) return null;
+  const releasedBy = d ? await releasingOtherPr(d, input) : null;
+  if (!d || releasedBy === null) return null;
   const how = d.releasedReason === "merged" ? "merge" : "close";
   const shas = stamped.map((t) => t.sha).join(", ");
   return {
@@ -1042,7 +1052,7 @@ export async function verifyPr(
       verdict: checked.verdict,
       reasons: checked.reasons,
       checkout: {
-        live: !!d && !resolution.reason,
+        live: !!d && !resolution.reason && !d.releasedAt,
         expiresAt: shown?.expiresAt ?? null,
         releasedReason: shown?.releasedReason ?? null,
         blockReason: blockReason ?? null,

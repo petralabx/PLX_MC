@@ -149,7 +149,11 @@ truth table is proven before any plumbing exists.
   `releasingPrForDispatch` event lookup) still passes for this PR's commits
   whose trailer names it, with a note; it stays released and its SHA chain is
   not extended. Revoked, manually released, foreign-repo stamps, the releasing
-  PR itself, and a PR with no such commit still block, as does the merge queue.
+  PR itself, and a PR with no such commit still block. The merge queue reads no
+  commits: it accepts such a stamp only when the gate passed that exact head
+  (the P16 expiry rule), and blocks it as released otherwise. A trailer has the
+  same trust as any trailer: MC cannot tell a trailer copied onto a new commit
+  from an original, since commit dates are caller-set.
 - `verify` route auth is dual-path: GitHub Actions OIDC is the preferred
   first-class auth for `POST /api/compliance/verify`, with
   `COMPLIANCE_CI_TOKEN` bearer as fallback/break-glass during dogfood. The route

@@ -293,7 +293,8 @@ Rules:
   commits whose `MC-Checkout` trailer names it. The gate notes this and
   accepts the lease for those commits only. A PR with no such commit still
   blocks. A revoked lease and a manual release still block. The merge queue
-  reads no commits, so it still blocks such a lease.
+  reads no commits. It accepts such a lease only when the pull_request gate
+  already passed that exact head.
 - `already_released` means there is nothing to do. MC writes no second event.
 - A PR reopen does not undo a manual release.
 

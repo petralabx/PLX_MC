@@ -44,6 +44,10 @@ vi.mock("@/lib/compliance/repo", () => ({
   async eventTaskIdByDedupKey(key: string) {
     return db.dedupKeys.has(key) ? "TASK-900" : null;
   },
+  async releasingPrForDispatch(id: string) {
+    const e = db.events.findLast((x) => x.kind === "checkout.released" && x.payload?.checkoutId === id);
+    return e?.pr ? Number(e.pr) : null;
+  },
   async insertDispatch(d: { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string }) {
     db.dispatches.set(d.id, { ...d, revoked: false, expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
   },
@@ -195,6 +199,45 @@ describe("verifyPr in merge_group mode (frontier P16)", () => {
     expect(result.verdict).toBe("block");
     expect(result.tasks[0].reasons).toEqual(["checkout released — re-checkout the task"]);
     expect(github.loadPrState).not.toHaveBeenCalled();
+  });
+
+  // TASK-3813: stacked PR #2908 carries a stamp that #2907's merge or close
+  // released. The queue reads no commits, so it accepts that stamp only when the
+  // pull_request gate already passed this exact head (the expiry rule above).
+  describe("merge_group: a stamp released by another PR's merge or close (TASK-3813)", () => {
+    const releasedBy = (pr: number, reason = "merged") => {
+      Object.assign(db.dispatches.get("dsp_old")!, { expiresAt: live(), releasedAt: new Date().toISOString(), releasedReason: reason });
+      db.events.push({ kind: "checkout.released", actor: "codex", taskId: "TASK-900", pr: String(pr), payload: { checkoutId: "dsp_old", reason } });
+    };
+
+    it.each(["merged", "closed"])("passes on the gate's pass of this head when another PR was %s", async (reason) => {
+      releasedBy(2007, reason);
+      db.dedupKeys.add(priorPass);
+      const result = await verifyPr(queue);
+      expect(result).toMatchObject({ verdict: "pass", taskId: "TASK-900" });
+      expect(result.tasks[0].checkout).toMatchObject({ live: false, releasedReason: reason, blockReason: null });
+      expect(db.dispatches.get("dsp_old")).toMatchObject({ releasedReason: reason, releasedAt: expect.any(String) });
+      expect(github.loadPrState).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["on a head the gate never passed", "checkout released — re-checkout the task"],
+      ["when the PR being merged released it", "checkout released — re-checkout the task"],
+      ["when revoked", "checkout revoked — re-checkout the task"],
+      ["after a release for expiry", "checkout released — re-checkout the task"],
+      ["in another repo", "checkout released — re-checkout the task"],
+    ])("blocks %s", async (condition, reason) => {
+      releasedBy(condition === "when the PR being merged released it" ? pullRequest.prNumber : 2007);
+      db.dedupKeys.add(condition === "on a head the gate never passed" ? "gate:PLX_MC:2011:other:TASK-900:pass" : priorPass);
+      const d = db.dispatches.get("dsp_old")!;
+      if (condition === "when revoked") d.revoked = true;
+      if (condition === "after a release for expiry") d.releasedReason = "manual: expired";
+      if (condition === "in another repo") d.repo = "foreign/PLX_MC";
+      const result = await verifyPr(queue);
+      expect(result.verdict).toBe("block");
+      expect(result.tasks[0].reasons).toEqual([reason]);
+      expect(github.loadPrState).not.toHaveBeenCalled();
+    });
   });
 
   it.each([

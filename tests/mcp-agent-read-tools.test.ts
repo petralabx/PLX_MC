@@ -828,6 +828,34 @@ describe("mc_ask_question (TASK-3567)", () => {
     expect(json.meta.links.task).toBe("https://mc.plxcustomer.io/tasks/TASK-100");
   });
 
+  it("passes an optional context through, trimmed, on the MCP tool and REST (TASK-3720)", async () => {
+    const { isError } = await callTool("mc_ask_question", { ...ask, context: "  Ledger 41499 is live.\nRAW MAT is the default.  " });
+    expect(isError).toBe(false);
+    expect(m.askQuestion).toHaveBeenLastCalledWith(
+      expect.objectContaining({ context: "Ledger 41499 is live.\nRAW MAT is the default." })
+    );
+    const res = await askQuestionRoute(
+      rest("/api/cursor/ask-question", { method: "POST", body: JSON.stringify({ ...ask, context: "Why it matters" }) }),
+      noParams
+    );
+    expect(res.status).toBe(200);
+    expect(m.askQuestion).toHaveBeenLastCalledWith(expect.objectContaining({ context: "Why it matters" }));
+  });
+
+  it("refuses a context longer than 2000 characters before anything is stored", async () => {
+    const res = await askQuestionRoute(
+      rest("/api/cursor/ask-question", { method: "POST", body: JSON.stringify({ ...ask, context: "x".repeat(2001) }) }),
+      noParams
+    );
+    expect(res.status).toBe(400);
+    // The SDK refuses the tool arguments against the schema, with a plain-text error.
+    const result = (await rpc("tools/call", { name: "mc_ask_question", arguments: { ...ask, context: "x".repeat(2001) } })) as {
+      isError?: boolean;
+    };
+    expect(result.isError).toBe(true);
+    expect(m.askQuestion).not.toHaveBeenCalled();
+  });
+
   it("refuses a task in a restricted project the principal cannot see (MCP tool and REST)", async () => {
     const { isError, body } = await callTool("mc_ask_question", { ...ask, taskId: "TASK-200" });
     expect(isError).toBe(true);

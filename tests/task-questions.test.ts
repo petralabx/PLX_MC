@@ -57,7 +57,7 @@ vi.mock("@/lib/sync/repo", () => ({
     { id: "BKT-SECRET", project: "PRJ-SECRET" },
   ],
   getProjects: async () => [
-    { id: "PRJ-OPEN", visibility: "shared" },
+    { id: "PRJ-OPEN", visibility: "shared", owner: "vince" },
     { id: "PRJ-SECRET", visibility: "restricted", members: ["vince"] },
   ],
   stamp: () => "2026.10.21 · 17:00",
@@ -84,7 +84,9 @@ import {
   normalizeAddressee,
   openQuestionRows,
   questionLink,
+  remindQuestion,
 } from "@/lib/compliance/questions";
+import { QUESTION_CONTEXT_MAX, QUESTION_REMIND_COOLDOWN_MS } from "@/lib/mc-data/policy";
 
 function seedTask(id: string, over: Partial<Task> = {}): void {
   h.tasks.set(id, {
@@ -220,6 +222,29 @@ describe("askQuestion", () => {
     expect(comment.body.split("\n").filter((line) => line.startsWith("Note: "))).toHaveLength(0);
   });
 
+  it("stores the context trimmed, keeps its lines, and omits it when empty (TASK-3720)", async () => {
+    seedTask("TASK-1");
+    const { question: q } = await askQuestion({ ...ask, context: "  Ledger 41499 is live.\nRAW MAT is the default.  " });
+    expect(q.context).toBe("Ledger 41499 is live.\nRAW MAT is the default.");
+    expect(stored("TASK-1").questions?.[0]?.context).toBe(q.context);
+    seedTask("TASK-2");
+    const { question: blank } = await askQuestion({ ...ask, taskId: "TASK-2", context: "   " });
+    expect(blank).not.toHaveProperty("context");
+    const { question: none } = await askQuestion({ ...ask, taskId: "TASK-2", text: "Another?" });
+    expect(none).not.toHaveProperty("context");
+  });
+
+  it("refuses a context longer than QUESTION_CONTEXT_MAX and takes one at the limit", async () => {
+    seedTask("TASK-1");
+    await expect(askQuestion({ ...ask, context: "x".repeat(QUESTION_CONTEXT_MAX + 1) })).rejects.toMatchObject({
+      code: "invalid_request",
+      status: 400,
+    });
+    expect(h.patches).toHaveLength(0);
+    const { question: q } = await askQuestion({ ...ask, context: ` ${"x".repeat(QUESTION_CONTEXT_MAX)} ` });
+    expect(q.context).toHaveLength(QUESTION_CONTEXT_MAX);
+  });
+
   it("asks again as a new question when the options or recommendation change", async () => {
     seedTask("TASK-1");
     const first = await askQuestion(ask);
@@ -344,5 +369,100 @@ describe("answerQuestion", () => {
     await expect(answerQuestion({ taskId: "TASK-404", questionId: "q_1", choice: 0, answeredBy: "ricardo" })).rejects.toMatchObject({ status: 404 });
     expect(h.patches).toHaveLength(0);
     expect(h.events).toHaveLength(0);
+  });
+});
+
+describe("remindQuestion (TASK-3720)", () => {
+  const VINCE = { tokens: ["oid-vince", "vince@petrasoap.com", "vince"] };
+  const RICARDO = { tokens: ["oid-ricardo", "ricardo@petrasoap.com", "ricardo"] };
+  const STEPHEN = { tokens: ["oid-stephen", "stephen@petrasoap.com", "stephen"] };
+  const remind = (over: Partial<Parameters<typeof remindQuestion>[0]> = {}) =>
+    remindQuestion({ taskId: "TASK-1", questionId: "q_1", remindedBy: "vince", principal: VINCE, ...over });
+  const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
+  it("stores the reminder and posts the person's comment mentioning the addressee, in one locked write", async () => {
+    seedTask("TASK-1", { questions: [question()], comments: [{ id: "CMT-0", author: "ricardo", body: "hi", ts: "x", mentions: [] }] });
+    const { question: q, comment } = await remind();
+    expect(comment).toMatchObject({ author: "vince", ts: "2026.10.21 · 17:00", mentions: ["ricardo"] });
+    expect(comment.id).toMatch(/^CMT-/);
+    expect(comment.body.startsWith("@ricardo ")).toBe(true);
+    expect(comment.body).toContain("q_1");
+    expect(comment.body).toContain("Q: Which posting group?");
+    expect(q.reminders).toEqual([{ by: "vince", at: expect.any(String), commentId: comment.id }]);
+    expect(Math.abs(Date.parse(q.reminders![0].at) - Date.now())).toBeLessThan(60_000);
+    expect(q.status).toBe("open");
+    const task = stored("TASK-1");
+    expect(task.questions).toEqual([q]);
+    expect(task.comments?.map((c) => c.id)).toEqual(["CMT-0", comment.id]);
+    expect(h.locked).toEqual(["TASK-1"]);
+    expect(h.patches).toHaveLength(1);
+    expect(h.patches[0]?.opts.query).toBe("tx");
+    expect(h.patches[0]?.actor).toBe("vince");
+    expect(h.txEvents).toEqual([
+      expect.objectContaining({
+        kind: "question.reminded",
+        actor: "vince",
+        taskId: "TASK-1",
+        payload: { questionId: "q_1", addressee: "ricardo", commentId: comment.id },
+      }),
+    ]);
+  });
+
+  it("refuses a person whose projects do not include the task's project (403)", async () => {
+    seedTask("TASK-1", { questions: [question()] });
+    await expect(remind({ remindedBy: "stephen", principal: STEPHEN })).rejects.toMatchObject({ code: "not_my_project", status: 403 });
+    expect(h.patches).toHaveLength(0);
+  });
+
+  it("refuses an assignee of a restricted project's task who is not a member (403)", async () => {
+    seedTask("TASK-9", { bucket: "BKT-SECRET", assignee: "stephen", questions: [question({ addressee: "vince" })] });
+    await expect(
+      remind({ taskId: "TASK-9", remindedBy: "stephen", principal: STEPHEN })
+    ).rejects.toMatchObject({ code: "not_my_project", status: 403 });
+    expect(h.patches).toHaveLength(0);
+  });
+
+  it("counts an open task assigned to the person as their project", async () => {
+    seedTask("TASK-1", { questions: [question()] });
+    seedTask("TASK-2", { coassignees: ["stephen"] });
+    const { question: q } = await remind({ remindedBy: "stephen", principal: STEPHEN });
+    expect(q.reminders?.[0]?.by).toBe("stephen");
+  });
+
+  it("refuses the addressee reminding themselves", async () => {
+    seedTask("TASK-1", { assignee: "ricardo", questions: [question()] });
+    await expect(remind({ remindedBy: "ricardo", principal: RICARDO })).rejects.toMatchObject({ code: "self_reminder", status: 400 });
+    expect(h.patches).toHaveLength(0);
+  });
+
+  it("refuses a second reminder from the same person inside the cooldown (409)", async () => {
+    seedTask("TASK-1", { questions: [question()] });
+    await remind();
+    await expect(remind()).rejects.toMatchObject({ code: "already_reminded", status: 409 });
+    expect(stored("TASK-1").questions?.[0]?.reminders).toHaveLength(1);
+    expect(stored("TASK-1").comments).toHaveLength(1);
+    expect(h.txEvents).toHaveLength(1);
+  });
+
+  it("allows the next reminder once the cooldown has passed, and another person's inside it", async () => {
+    const window = QUESTION_REMIND_COOLDOWN_MS / (60 * 60 * 1000);
+    seedTask("TASK-1", {
+      coassignees: ["stephen"],
+      questions: [question({ reminders: [{ by: "vince", at: hoursAgo(window + 1), commentId: "CMT-a" }] })],
+    });
+    await remind();
+    const { question: q } = await remind({ remindedBy: "stephen", principal: STEPHEN });
+    expect(q.reminders?.map((r) => r.by)).toEqual(["vince", "vince", "stephen"]);
+    seedTask("TASK-3", { questions: [question({ reminders: [{ by: "vince", at: hoursAgo(window - 1), commentId: "CMT-b" }] })] });
+    await expect(remind({ taskId: "TASK-3" })).rejects.toMatchObject({ code: "already_reminded", status: 409 });
+  });
+
+  it("refuses an answered question (409), an unknown question and an unknown task (404)", async () => {
+    seedTask("TASK-1", { questions: [question({ status: "answered" })] });
+    await expect(remind()).rejects.toMatchObject({ code: "question_already_answered", status: 409 });
+    await expect(remind({ questionId: "q_x" })).rejects.toMatchObject({ code: "not_found", status: 404 });
+    await expect(remind({ taskId: "TASK-404" })).rejects.toMatchObject({ code: "not_found", status: 404 });
+    expect(h.patches).toHaveLength(0);
+    expect(h.txEvents).toHaveLength(0);
   });
 });

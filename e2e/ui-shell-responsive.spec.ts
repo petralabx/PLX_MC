@@ -486,6 +486,10 @@ test.describe("shell — review round 3 regressions", () => {
         body: JSON.stringify({ data: { approvals: decided ? [] : [row] } }),
       });
     });
+    // TASK-3721: questions and gates share one queue, so its empty state needs both lists.
+    await page.route(/\/api\/questions(\?.*)?$/, async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { questions: [] } }) });
+    });
     await page.addInitScript(() => {
       window.localStorage.setItem("mc.live.pinned", "1");
       window.localStorage.setItem("mc.live.kind", "approvals");
@@ -493,7 +497,10 @@ test.describe("shell — review round 3 regressions", () => {
     await open(page, 2560, "/", 1100);
     const homeSection = page.locator("[data-testid='inbox-screen'] .needs-sec").filter({ hasText: /Approvals waiting/i });
     await expect(homeSection).toContainText("Promote to Approved");
-    await page.locator("aside.mc-live").getByRole("button", { name: "Approve" }).click();
+    // The narrow column shows the queue; a row opens its decision sheet.
+    const live = page.locator("aside.mc-live");
+    await live.locator(".ap-item", { hasText: "Promote to Approved" }).click();
+    await live.getByTestId("decision-sheet").getByRole("button", { name: "Approve", exact: true }).click();
     await expect(page.locator("aside.mc-live")).toContainText(/No pending approvals/);
     await expect(homeSection).not.toContainText("Promote to Approved");
   });

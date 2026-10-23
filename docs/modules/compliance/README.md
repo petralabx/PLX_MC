@@ -176,9 +176,15 @@ truth table is proven before any plumbing exists.
   tasks for **checked-out** work: open/sync → `progress`, merge → `merged` +
   `prs[]` + `task.promoted`. Open, reopen, sync and ready-for-review also put
   the PR on `prs[]` as `open` (or `draft`); a close without merge sets `closed`;
-  the merged row always wins; one row per repo + PR number (TASK-3743). PRs
-  opened before that are linked by `scripts/backfill-open-pr-links.mjs` (dry
-  run by default; `--apply` writes; non-production `--approved-db` guard).
+  the merged row always wins; one row per repo + PR number (TASK-3743). A close
+  or merge also sets `closed` on every other task that already holds a row for
+  the PR (moved stamp, expired or released checkout), with no stage move; rows
+  are rewritten under the task row lock. `ready_for_review` logs as
+  `pr.ready_for_review` (open-PR readers count it; the timelines do not). Only a
+  merged row counts as a PR link for the unattributed-merge report and
+  `pr_linked_elsewhere`. PRs opened before that are linked by
+  `scripts/backfill-open-pr-links.mjs` (dry run by default; `--apply` writes;
+  non-production `--approved-db` guard; links only PRs GitHub still shows open).
   Every mutation requires
   `authorize(...)` for durable `sp_compliance_projection` (`task.progress` /
   `task.link`). **Sparse operator Task creation is retired** — unrouted operator

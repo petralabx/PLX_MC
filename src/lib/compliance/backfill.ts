@@ -111,9 +111,10 @@ function prLinkKey(repoName: string, num: number): string {
 }
 
 /**
- * Pure: link keys for every PR on a task's prs[]. prs[].repo is either a bare
- * GitHub name (compliance projection) or an MC registry id (UI links), so ids
- * resolve through the MC repos table to their GitHub name.
+ * Pure: link keys for every merged PR on a task's prs[]. prs[].repo is either a
+ * bare GitHub name (compliance projection) or an MC registry id (UI links), so
+ * ids resolve through the MC repos table to their GitHub name. An open, draft
+ * or closed row (TASK-3743) is not a delivered link, so it is not keyed.
  */
 export function prLinkKeys(
   tasks: Array<{ prs?: PullRequest[] }>,
@@ -123,7 +124,7 @@ export function prLinkKeys(
   const keys = new Set<string>();
   for (const task of tasks) {
     for (const link of task.prs ?? []) {
-      keys.add(prLinkKey(nameById.get(link.repo) ?? link.repo, link.num));
+      if (link.status === "merged") keys.add(prLinkKey(nameById.get(link.repo) ?? link.repo, link.num));
     }
   }
   return keys;

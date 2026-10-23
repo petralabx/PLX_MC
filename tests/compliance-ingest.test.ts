@@ -198,12 +198,13 @@ describe("ingestPullRequest", () => {
     expect(db.events.length).toBe(0);
   });
 
-  it("records a PR marked ready for review, so the projection can show it as open (TASK-3743)", async () => {
+  it("records a PR marked ready for review under its own kind, never a second pr.opened (TASK-3743)", async () => {
     const evt = parsePullRequestEvent(prPayload({ action: "ready_for_review" }))!;
     const r = await ingestPullRequest(evt);
     expect(r.recorded).toBe(true);
-    expect(db.events.filter((e) => e.kind === "pr.opened").map((e) => e.dedupKey)).toEqual([
-      "pr.opened:PLX_MC:42:abc123:ready_for_review",
+    expect(db.events.some((e) => e.kind === "pr.opened")).toBe(false);
+    expect(db.events.filter((e) => e.kind === "pr.ready_for_review").map((e) => e.dedupKey)).toEqual([
+      "pr.ready_for_review:PLX_MC:42:abc123:ready_for_review",
     ]);
   });
 

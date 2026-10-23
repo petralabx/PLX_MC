@@ -64,10 +64,16 @@ vi.mock("@/lib/permissions/enforcement", () => ({
 }));
 
 // patchTask runs in a row-locked transaction; the repo seam is mocked, so the
-// transaction only needs to hand through a query function.
+// transaction hands through a query function. Transactions run one at a time,
+// the way the task row lock serializes concurrent writers.
+const tx = vi.hoisted(() => ({ chain: Promise.resolve() as Promise<unknown> }));
 vi.mock("@/lib/db", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/db")>()),
-  withTransaction: async <T,>(fn: (q: never) => Promise<T>) => fn((async () => []) as never),
+  withTransaction: <T,>(fn: (q: never) => Promise<T>) => {
+    const run = tx.chain.then(() => fn((async () => []) as never));
+    tx.chain = run.catch(() => undefined);
+    return run;
+  },
 }));
 
 vi.mock("@/lib/sync/engine", () => ({
@@ -111,6 +117,12 @@ vi.mock("@/lib/sync/repo", () => ({
     if (opts.dirtyFields !== undefined) row.dirty_fields = opts.dirtyFields;
   },
   async appendAudit() {},
+  async taskIdsWithPr(repoName: string, prNumber: number) {
+    return [...store.rows.values()]
+      .filter((r) => r.entity_type === "task")
+      .filter((r) => ((r.data.prs ?? []) as { repo: string; num: number }[]).some((p) => p.repo.toLowerCase() === repoName.toLowerCase() && p.num === prNumber))
+      .map((r) => r.id);
+  },
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
@@ -416,5 +428,15 @@ describe("projectPullRequest — open PR links", () => {
     await projectPullRequest(prEvt({ action: "opened" }), { ...agent, taskIds: ["TASK-606"] });
     expect(taskOf("TASK-606").prs).toEqual([{ repo: "PLX_MC", num: 41, status: "merged", title: "prior" }, row("open")]);
     expect(taskOf("TASK-606").stage).toBe("merged");
+  });
+
+  it("keeps both writes when a merge and another PR's ready land at the same time", async () => {
+    seedTask({ id: "TASK-607", stage: "progress", prs: [{ repo: "PLX_MC", num: 42, status: "open", title: "Add the thing" }] });
+    await Promise.all([
+      projectPullRequest(prEvt({ action: "closed", merged: true, mergeSha: "m1" }), { ...agent, taskIds: ["TASK-607"] }),
+      projectPullRequest(prEvt({ action: "ready_for_review", prNumber: 43, title: "Other" }), { ...agent, taskIds: ["TASK-607"] }),
+    ]);
+    expect(taskOf("TASK-607").prs).toEqual([row("merged"), { repo: "PLX_MC", num: 43, status: "open", title: "Other" }]);
+    expect(taskOf("TASK-607").stage).toBe("merged");
   });
 });

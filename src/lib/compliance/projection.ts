@@ -14,8 +14,9 @@ import {
   recordUnresolvedActorDenial,
   resolveStagedServicePrincipal,
 } from "@/lib/permissions/enforcement";
-import { patchTask } from "@/lib/sync/state";
-import { getEntity } from "@/lib/sync/repo";
+import { withTransaction } from "@/lib/db";
+import { patchTask, type PatchTaskInput } from "@/lib/sync/state";
+import { getEntity, taskIdsWithPr } from "@/lib/sync/repo";
 import * as complianceRepo from "./repo";
 import type { ActorKind } from "./types";
 import type { PrEvent } from "./webhook";
@@ -141,27 +142,41 @@ async function skipCancelled(task: Task, evt: PrEvent): Promise<boolean> {
   return true;
 }
 
-// TASK-3743: show the PR on its task before merge (open / draft / closed). The
-// merged entry wins, and an unchanged row is not rewritten, so replays are no-ops.
-// A cancelled task is never touched (TASK-2529; setProgress records the skip).
-async function linkPr(taskId: string, evt: PrEvent, status: PullRequest["status"]): Promise<void> {
-  const task = await loadTask(taskId);
-  if (!task || task.stage === "cancelled") return;
+// Read-modify-write under the task row lock: the patch is built from the locked
+// row, so two PR events landing at once never write a stale prs list over each
+// other. `build` returns null to write nothing.
+async function patchLocked(taskId: string, build: (task: Task) => PatchTaskInput | null, completedAt?: string): Promise<void> {
+  await withTransaction(async (q) => {
+    const row = await getEntity("task", taskId, q, true);
+    const patch = row ? build(row.data as unknown as Task) : null;
+    if (patch) await patchTask(taskId, patch, PROJECTION_ACTOR, { complianceProjection: true, completedAt, query: q });
+  });
+}
+
+// The prs patch that sets this PR's row to `status`, or null when nothing changes:
+// a cancelled task (TASK-2529), a merged row (it always wins), an unchanged row,
+// or, with `onlyExisting`, a task that holds no row for the PR.
+function prRowPatch(task: Task, evt: PrEvent, status: PullRequest["status"], onlyExisting: boolean): PatchTaskInput | null {
+  if (task.stage === "cancelled") return null;
   const prs = task.prs ?? [];
   const prior = prs.find((p) => samePr(p, { repo: evt.repo, num: evt.prNumber }));
-  if (prior?.status === "merged" || (prior?.status === status && prior.title === evt.title)) return;
+  if ((onlyExisting && !prior) || prior?.status === "merged") return null;
+  if (prior?.status === status && prior.title === evt.title) return null;
+  return { prs: appendPr(prs, { repo: evt.repo, num: evt.prNumber, status, title: evt.title }) };
+}
+
+// TASK-3743: show the PR on its task before merge (open / draft / closed). Replays
+// are no-ops, and setProgress records the skip for a cancelled task.
+async function linkPr(taskId: string, evt: PrEvent, status: PullRequest["status"], onlyExisting = false): Promise<void> {
+  const task = await loadTask(taskId);
+  if (!task || !prRowPatch(task, evt, status, onlyExisting)) return;
 
   await requireProjectionAuthorized(
     "task.link",
     { type: "task", id: taskId, repos: task.repos, stage: task.stage }
   );
 
-  await patchTask(
-    taskId,
-    { prs: appendPr(prs, { repo: evt.repo, num: evt.prNumber, status, title: evt.title }) },
-    PROJECTION_ACTOR,
-    { complianceProjection: true }
-  );
+  await patchLocked(taskId, (locked) => prRowPatch(locked, evt, status, onlyExisting));
 }
 
 async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
@@ -180,25 +195,23 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
     status: "merged",
     title: evt.title,
   };
-  const prs = appendPr(task.prs ?? [], pr);
   const mergeOn = new Date().toISOString().slice(0, 10);
   const mergeSha = evt.mergeSha || evt.headSha;
 
-  await patchTask(
+  await patchLocked(
     taskId,
-    {
+    (locked) => ({
       stage: "merged",
-      prs,
+      prs: appendPr(locked.prs ?? [], pr),
       merge: { sha: mergeSha, on: mergeOn },
       activityLine: {
         who: PROJECTION_ACTOR,
         what: `PR #${evt.prNumber} merged — promoted to Merged (compliance projection)`,
         kind: "move",
       },
-    },
-    PROJECTION_ACTOR,
+    }),
     // completed_at is the PR merge time, not this projection run (TASK-2528).
-    { complianceProjection: true, completedAt: validIso(evt.mergedAt) }
+    validIso(evt.mergedAt)
   );
 
   await complianceRepo.appendEvent({
@@ -218,8 +231,9 @@ export interface ProjectionInput {
   taskIds: string[];
   /**
    * Legacy flag: previously triggered sparse Task creation for operator PRs.
-   * Sparse creation is retired — when true with empty taskIds, projection is a
-   * no-op (routing proposal + action_required deep link owns that path).
+   * Sparse creation is retired — when true with empty taskIds, an open is a
+   * no-op (routing proposal + action_required deep link owns that path); a
+   * close still updates the PR rows that tasks already hold.
    */
   sparse: boolean;
 }
@@ -229,16 +243,22 @@ export async function projectPullRequest(evt: PrEvent, input: ProjectionInput): 
 
   const taskIds = [...input.taskIds];
 
-  // Sparse-task retirement: never auto-create Tasks for operator PRs.
-  if (input.sparse && taskIds.length === 0) {
-    return;
-  }
-
   if (evt.action === "closed") {
     for (const tid of taskIds) {
       if (evt.merged) await promoteMerged(tid, evt);
       else await linkPr(tid, evt, "closed");
     }
+    // Any other task that holds a row for this PR (its stamp moved, or its
+    // checkout expired or was released) sees it closed, with no stage move. Only
+    // a stamped task gets `merged` and the promotion; a merged row stays merged.
+    for (const tid of await taskIdsWithPr(evt.repo, evt.prNumber)) {
+      if (!taskIds.includes(tid)) await linkPr(tid, evt, "closed", true);
+    }
+    return;
+  }
+
+  // Sparse-task retirement: never auto-create Tasks for operator PRs.
+  if (input.sparse && taskIds.length === 0) {
     return;
   }
 

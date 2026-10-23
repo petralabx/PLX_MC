@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 import { formatReport, planLinks, runBackfill, runGuarded } from "../scripts/backfill-open-pr-links.mjs";
 import { parseApprovedSpec } from "../scripts/lib/db-identity.mjs";
 
-type Ev = { seq: number; kind: string; repo: string; pr: string; task_id: string | null; payload: Record<string, unknown> };
+type Ev = { seq: number; ts: string; kind: string; repo: string; pr: string; task_id: string | null; payload: Record<string, unknown> };
 type PrRow = { repo: string; num: number; status: string; title: string };
 type TaskRow = { id: string; data: { stage: string; prs?: PrRow[] } };
 
+// Event n is logged on 2026-10-n, so a candidate's newest event date is easy to read.
 const ev = (seq: number, kind: string, repo: string, pr: number, taskId: string | null, payload: Record<string, unknown> = {}): Ev => ({
   seq,
+  ts: new Date(Date.UTC(2026, 9, seq, 12)).toISOString(),
   kind,
   repo,
   pr: String(pr),
@@ -51,10 +53,10 @@ const events: Ev[] = [
 ];
 
 const EXPECTED_LINKS = [
-  { taskId: "TASK-1", repo: "PLX_MC", num: 10, status: "open", title: "Ten" },
-  { taskId: "TASK-2", repo: "plx-customer-portal", num: 10, status: "open", title: "Portal ten" },
-  { taskId: "TASK-5", repo: "plx-customer-portal", num: 10, status: "open", title: "Portal ten" },
-  { taskId: "TASK-5", repo: "PLX_MC", num: 18, status: "open", title: "Eighteen again" },
+  { taskId: "TASK-1", repo: "PLX_MC", num: 10, status: "open", title: "Ten", lastEventAt: "2026-10-01" },
+  { taskId: "TASK-2", repo: "plx-customer-portal", num: 10, status: "open", title: "Portal ten", lastEventAt: "2026-10-07" },
+  { taskId: "TASK-5", repo: "plx-customer-portal", num: 10, status: "open", title: "Portal ten", lastEventAt: "2026-10-07" },
+  { taskId: "TASK-5", repo: "PLX_MC", num: 18, status: "open", title: "Eighteen again", lastEventAt: "2026-10-14" },
 ];
 
 describe("planLinks", () => {
@@ -66,15 +68,57 @@ describe("planLinks", () => {
 
   it("lists what it skips, with a reason, and counts unrouted open PRs", () => {
     expect(plan.skipped).toEqual([
-      { taskId: "TASK-3", repo: "plx_mc", num: 14, reason: "already linked" },
-      { taskId: "TASK-4", repo: "PLX_MC", num: 15, reason: "task cancelled" },
-      { taskId: "TASK-404", repo: "PLX_MC", num: 16, reason: "task not found" },
+      { taskId: "TASK-3", repo: "plx_mc", num: 14, reason: "already linked", lastEventAt: "2026-10-08" },
+      { taskId: "TASK-4", repo: "PLX_MC", num: 15, reason: "task cancelled", lastEventAt: "2026-10-09" },
+      { taskId: "TASK-404", repo: "PLX_MC", num: 16, reason: "task not found", lastEventAt: "2026-10-10" },
     ]);
     expect(plan.unrouted).toBe(1);
   });
+
+  it("treats a PR marked ready for review as open, linked to the tasks that event names", () => {
+    const ready = [
+      ev(1, "pr.opened", "PLX_MC", 20, null, { title: "Draft", taskIds: [] }),
+      ev(2, "pr.ready_for_review", "PLX_MC", 20, "TASK-1", { title: "Ready", taskIds: ["TASK-1"] }),
+    ];
+    expect(planLinks(fixtureTasks(), ready).links).toEqual([
+      { taskId: "TASK-1", repo: "PLX_MC", num: 20, status: "open", title: "Ready", lastEventAt: "2026-10-02" },
+    ]);
+  });
+
+  it("links only a PR GitHub still shows open; a closed or unreadable PR is skipped", () => {
+    const live = new Map<string, boolean | null>([
+      ["plx_mc#10", false],
+      ["plx-customer-portal#10", null],
+      ["plx_mc#18", true],
+    ]);
+    const checked = planLinks(fixtureTasks(), events, live);
+    expect(checked.links).toEqual([EXPECTED_LINKS[3]]);
+    expect(checked.skipped.slice(0, 3)).toEqual([
+      { taskId: "TASK-1", repo: "PLX_MC", num: 10, reason: "closed on GitHub", lastEventAt: "2026-10-01" },
+      { taskId: "TASK-2", repo: "plx-customer-portal", num: 10, reason: "live state unknown", lastEventAt: "2026-10-07" },
+      { taskId: "TASK-5", repo: "plx-customer-portal", num: 10, reason: "live state unknown", lastEventAt: "2026-10-07" },
+    ]);
+  });
 });
 
-function fakeDb(tasks: TaskRow[] = fixtureTasks()) {
+// GitHub as the gh CLI would answer, by full slug; every call is recorded.
+function fakeGithub(closed: string[] = []) {
+  const calls: string[] = [];
+  return {
+    calls,
+    prIsOpen: (slug: string, num: number) => {
+      calls.push(`${slug}#${num}`);
+      return !closed.includes(`${slug}#${num}`);
+    },
+  };
+}
+
+const REGISTRY = [
+  { name: "PLX_MC", owner: "petralabx" },
+  { name: "plx-customer-portal", owner: "petralabx" },
+];
+
+function fakeDb(tasks: TaskRow[] = fixtureTasks(), repos: { name: string; owner: string }[] = REGISTRY) {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const updates: { sql: string; params: unknown[] }[] = [];
   return {
@@ -84,6 +128,7 @@ function fakeDb(tasks: TaskRow[] = fixtureTasks()) {
       if (/^\s*(BEGIN|COMMIT|ROLLBACK)/.test(sql)) return { rows: [], rowCount: 0 };
       if (/current_database\(\)/.test(sql)) return { rows: [{ db: "plx_mc", addr: null }], rowCount: 1 };
       if (/FROM mc_events/.test(sql)) return { rows: events, rowCount: events.length };
+      if (/SELECT name, owner FROM repos/.test(sql)) return { rows: repos, rowCount: repos.length };
       if (/FROM entities WHERE entity_type = 'task' AND id = ANY\(\$1::text\[\]\)/.test(sql)) {
         const ids = params[0] as string[];
         const rows = ids.flatMap((id) => (byId.has(id) ? [structuredClone(byId.get(id)!)] : []));
@@ -107,7 +152,8 @@ function fakeDb(tasks: TaskRow[] = fixtureTasks()) {
 describe("runBackfill", () => {
   it("dry run (default) lists the PRs it would link and writes nothing", async () => {
     const db = fakeDb();
-    const report = await runBackfill(db);
+    const gh = fakeGithub();
+    const report = await runBackfill(db, { prIsOpen: gh.prIsOpen });
     expect(report.apply).toBe(false);
     expect(report.updated).toBe(0);
     expect(report.links).toEqual(EXPECTED_LINKS);
@@ -116,28 +162,63 @@ describe("runBackfill", () => {
     const text = formatReport(report, "uat");
     expect(text).toMatch(/DRY RUN/);
     expect(text).toMatch(/to link: 4/);
-    expect(text).toMatch(/TASK-1 <- PLX_MC#10 \(open\) Ten/);
-    expect(text).toMatch(/TASK-5 <- PLX_MC#18 \(open\) Eighteen again/);
+    expect(text).toMatch(/TASK-1 <- PLX_MC#10 \(open, last event 2026-10-01\) Ten/);
+    expect(text).toMatch(/TASK-5 <- PLX_MC#18 \(open, last event 2026-10-14\) Eighteen again/);
+    expect(text).toMatch(/TASK-404 <- PLX_MC#16: task not found \(last event 2026-10-10\)/);
     expect(text).toMatch(/no rows written \(pass --apply to write\)/);
+    // One live read per PR that still has a task to link, by full slug. Already
+    // linked (#14), cancelled (#15), unknown-task (#16) and unrouted (#17) PRs are not read.
+    expect(gh.calls).toEqual(["petralabx/PLX_MC#10", "petralabx/plx-customer-portal#10", "petralabx/PLX_MC#18"]);
+  });
+
+  it("asks GitHub nothing on a second --apply, and never guesses the owner of a shared repo name", async () => {
+    const db = fakeDb();
+    const gh = fakeGithub();
+    await runBackfill(db, { apply: true, prIsOpen: gh.prIsOpen });
+    gh.calls.length = 0;
+    await runBackfill(db, { apply: true, prIsOpen: gh.prIsOpen });
+    expect(gh.calls).toEqual([]);
+
+    const shared = fakeDb(fixtureTasks(), [
+      { name: "PLX_MC", owner: "petralabx" },
+      { name: "plx-customer-portal", owner: "petralabx" },
+      { name: "plx-customer-portal", owner: "taylorvalton" },
+    ]);
+    const report = await runBackfill(shared, { prIsOpen: fakeGithub().prIsOpen });
+    expect(report.skipped.filter((s) => s.reason === "live state unknown").map((s) => `${s.taskId} ${s.repo}#${s.num}`)).toEqual([
+      "TASK-2 plx-customer-portal#10",
+      "TASK-5 plx-customer-portal#10",
+    ]);
+  });
+
+  it("skips a PR the event log calls open but GitHub shows closed, dry run and apply alike", async () => {
+    const db = fakeDb();
+    const gh = fakeGithub(["petralabx/PLX_MC#10"]);
+    const dry = await runBackfill(db, { prIsOpen: gh.prIsOpen });
+    expect(formatReport(dry, "uat")).toMatch(/TASK-1 <- PLX_MC#10: closed on GitHub \(last event 2026-10-01\)/);
+    const applied = await runBackfill(db, { apply: true, prIsOpen: gh.prIsOpen });
+    expect(applied.updated).toBe(3);
+    expect(db.byId.get("TASK-1")!.data.prs).toEqual([]);
   });
 
   it("--apply links each PR once; a second --apply changes 0 rows", async () => {
     const db = fakeDb();
-    const first = await runBackfill(db, { apply: true });
+    const { prIsOpen } = fakeGithub();
+    const first = await runBackfill(db, { apply: true, prIsOpen });
     expect(first.updated).toBe(4);
     expect(db.byId.get("TASK-5")!.data.prs).toEqual([
       { repo: "plx-customer-portal", num: 10, status: "open", title: "Portal ten" },
       { repo: "PLX_MC", num: 18, status: "open", title: "Eighteen again" },
     ]);
     expect(db.byId.get("TASK-3")!.data.prs).toEqual([{ repo: "PLX_MC", num: 14, status: "merged", title: "done" }]);
-    const second = await runBackfill(db, { apply: true });
+    const second = await runBackfill(db, { apply: true, prIsOpen });
     expect(second.links).toEqual([]);
     expect(second.updated).toBe(0);
   });
 
   it("writes one parameterized UPDATE per link, bounded to that task and re-checked in SQL", async () => {
     const db = fakeDb();
-    await runBackfill(db, { apply: true });
+    await runBackfill(db, { apply: true, prIsOpen: fakeGithub().prIsOpen });
     expect(db.updates).toHaveLength(4);
     for (const { sql } of db.updates) {
       expect(sql).toMatch(/WHERE entity_type = 'task' AND id = \$1/);

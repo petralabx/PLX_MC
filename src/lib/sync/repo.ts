@@ -174,6 +174,21 @@ export async function getTaskSummaries(
   );
 }
 
+/** Ids of the tasks whose data.prs holds this PR (repo name matched without case). */
+export async function taskIdsWithPr(repoName: string, prNumber: number): Promise<string[]> {
+  const rows = await query<{ id: string }>(
+    `SELECT id FROM entities
+      WHERE entity_type = 'task'
+        AND EXISTS (
+          SELECT 1
+            FROM jsonb_array_elements(CASE WHEN jsonb_typeof(data->'prs') = 'array' THEN data->'prs' ELSE '[]'::jsonb END) AS p
+           WHERE lower(p->>'repo') = lower($1) AND p->>'num' = $2)
+      ORDER BY id`,
+    [repoName, String(prNumber)]
+  );
+  return rows.map((r) => r.id);
+}
+
 /** When any task row was last written (ISO), or null with no tasks. */
 export async function latestTaskWriteAt(): Promise<string | null> {
   const rows = await query<{ at: Date | null }>(

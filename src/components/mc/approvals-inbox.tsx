@@ -1108,8 +1108,21 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
         }),
       });
     } catch (err) {
-      setActionError({ id: item.id, message: loadError(err, "Decision failed.") });
       setBusy(null);
+      // Someone decided this gate first (TASK-3796): say so and move on as after
+      // a decision, so the sheet never swaps to another gate without a word.
+      if (err instanceof ApiClientError && err.code === "gate_already_decided") {
+        dropDraft(item.id);
+        await afterDecision(
+          item,
+          `Gate on ${item.taskId} was already decided.`,
+          `It was decided elsewhere first, so your ${decision === "approved" ? "approval" : "rejection"} was not recorded.`
+        );
+        return;
+      }
+      setActionError({ id: item.id, message: loadError(err, "Decision failed.") });
+      // The gate may have changed elsewhere; show the lists as they are now.
+      await reloadAll();
       return;
     }
     dropDraft(item.id);

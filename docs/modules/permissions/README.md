@@ -157,6 +157,13 @@ mode, so an owner gets 403 `not_addressee` for someone else's question. The
 predicate context-denies `question.answer` to every service actor, like
 `approval.decide`, so a mistaken grant can never let a bot answer.
 
+**Approvals redesign (TASK-3720):** no new capability. `GET
+/api/approvals/projects` and `GET /api/approvals/decided` need `task.read` and
+are project-ACL scoped. `POST /api/questions/remind` needs `task.progress` (the
+task comments capability) plus the task's project ACL; the server also requires
+the task's project to be one of the person's projects, in every enforcement
+mode.
+
 **Audit data (TASK-620):** every enforcement call site records `allowed`,
 `reasonCode`, and `policyVersion` to `permissions_decision_log` (migration 022)
 via `src/lib/permissions/enforcement.ts` + `decision-log.ts`, including the

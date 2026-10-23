@@ -21,6 +21,12 @@ vi.mock("@/lib/permissions/project-acl-guard", () => ({
   loadProjectAclMaps: vi.fn(async () => ({})),
 }));
 vi.mock("@/lib/mcp/sync-meta", () => ({ syncMetaForTask: vi.fn(async () => ({})) }));
+// The write runs in a row-locked transaction; the repo seam is mocked, so the
+// transaction only needs to hand through a query function.
+vi.mock("@/lib/db", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/db")>()),
+  withTransaction: async <T,>(fn: (q: never) => Promise<T>) => fn((async () => []) as never),
+}));
 vi.mock("@/lib/sync/repo", () => ({
   getEntity: vi.fn(async (_type: string, id: string) =>
     id === h.task.id ? { data: structuredClone(h.task) } : null

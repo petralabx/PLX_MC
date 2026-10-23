@@ -17,6 +17,8 @@ import {
 } from "@/lib/mc-data";
 import { approvalExpiry, deciderViolation, signApproval } from "./approval-signature";
 import { APPROVAL_WAIT_MAX_MS, pendingApprovalGates } from "@/lib/mc-data/policy";
+import type { ProjectAclPrincipal } from "@/lib/permissions/project-acl";
+import { loadProjectAclMaps, scopeHierarchy } from "@/lib/permissions/project-acl-guard";
 import { patchTask } from "@/lib/sync";
 import { getEntities, getEntity } from "@/lib/sync/repo";
 import { appendEvent, blockDispatchOnApproval, eventsByKinds, getDispatch, type EventRow } from "./repo";
@@ -334,12 +336,12 @@ export interface PendingApprovalRow {
   evidence: ApprovalEvidenceRef | null;
 }
 
-/** Approvals inbox source (TASK-631): every pending gate across all tasks. */
-export async function listPendingApprovals(): Promise<PendingApprovalRow[]> {
-  const rows = await getEntities("task");
+/** Approvals inbox source (TASK-631): every pending gate on the tasks the principal's project ACL lets them see. */
+export async function listPendingApprovals(principal: ProjectAclPrincipal): Promise<PendingApprovalRow[]> {
+  const [rows, { projects, buckets }] = await Promise.all([getEntities("task"), loadProjectAclMaps()]);
+  const tasks = rows.map((row) => row.data as unknown as Task);
   const out: PendingApprovalRow[] = [];
-  for (const row of rows) {
-    const task = row.data as unknown as Task;
+  for (const task of scopeHierarchy({ tasks, buckets, projects, principal }).tasks) {
     for (const gate of pendingApprovalGates(task)) {
       out.push({
         taskId: task.id,

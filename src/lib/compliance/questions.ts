@@ -11,13 +11,19 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/api/route";
 import { withTransaction } from "@/lib/db";
 import { HUMANS } from "@/lib/mc-data/data";
-import { normalizeAddressee, openQuestionsFor } from "@/lib/mc-data/policy";
+import {
+  normalizeAddressee,
+  openQuestionsFor,
+  QUESTION_CONTEXT_MAX,
+  QUESTION_REMIND_COOLDOWN_MS,
+} from "@/lib/mc-data/policy";
 import type { Comment, Task, TaskQuestion } from "@/lib/mc-data/types";
 import { publicMcBaseUrl } from "@/lib/mcp/envelope";
 import { canAccessProject, principalFromTokens, type ProjectAclPrincipal } from "@/lib/permissions/project-acl";
 import { loadProjectAclMaps, scopeHierarchy } from "@/lib/permissions/project-acl-guard";
 import { ensureSeeded, patchTask } from "@/lib/sync";
 import { getBuckets, getEntities, getEntity, getProjects, stamp } from "@/lib/sync/repo";
+import { loadMyProjects } from "./my-projects";
 import { appendEvent, appendEventTx } from "./repo";
 
 export { normalizeAddressee };
@@ -40,6 +46,8 @@ export interface AskQuestionInput {
   options: string[];
   recommended?: number;
   recommendationReason?: string;
+  /** TASK-3720: background shown under the question; trimmed, at most QUESTION_CONTEXT_MAX. */
+  context?: string;
   /** Audit label of the asking operator/agent session. */
   askedBy: string;
   /** Authenticated service principal (API-key identity). */
@@ -66,6 +74,11 @@ export async function askQuestion(
   }
   const text = oneLine(input.text);
   const options = input.options.map(oneLine);
+  // Background may span lines: it is shown under the question, never copied into the answer comment.
+  const context = input.context?.trim() || undefined;
+  if (context && context.length > QUESTION_CONTEXT_MAX) {
+    throw new ApiError("invalid_request", `context must be at most ${QUESTION_CONTEXT_MAX} characters.`, 400);
+  }
 
   // Seed on the pool before the transaction holds a connection (as applyTaskCommentOp does).
   await ensureSeeded();
@@ -107,6 +120,7 @@ export async function askQuestion(
       options,
       ...(input.recommended !== undefined ? { recommended: input.recommended } : {}),
       ...(input.recommendationReason ? { recommendationReason: oneLine(input.recommendationReason) } : {}),
+      ...(context ? { context } : {}),
       askedBy: input.askedBy,
       askedByPrincipal: input.askedByPrincipal,
       ...(input.runtime ? { askedRuntime: input.runtime } : {}),
@@ -278,4 +292,88 @@ export async function answerQuestion(
     }
     throw err;
   }
+}
+
+export interface RemindQuestionInput {
+  taskId: string;
+  questionId: string;
+  /** sessionAuthorId of the signed-in person — never a body field. */
+  remindedBy: string;
+  /** ACL principal of the signed-in person: decides whether the task's project is theirs. */
+  principal: ProjectAclPrincipal;
+}
+
+function reminderCommentBody(question: TaskQuestion, addressee: string): string {
+  return [
+    `@${addressee} a reminder: this question (${question.id}) is waiting for your answer.`,
+    `Q: ${oneLine(question.text)}`,
+    `Answer it on the Approvals screen: ${questionLink(question.id)}`,
+  ].join("\n");
+}
+
+/**
+ * A project member reminds the addressee of an open question (TASK-3720).
+ * Every rule is checked here, in every enforcement mode: the task's project is
+ * one of the person's projects, the question is open, the person is not the
+ * addressee, and they have not reminded about it within the cooldown. Under
+ * the task row lock the reminder is stored on the question and posted to the
+ * task as the person's comment, which @mentions the addressee.
+ */
+export async function remindQuestion(
+  input: RemindQuestionInput
+): Promise<{ question: TaskQuestion; comment: Comment }> {
+  // Reads every task (an open assigned task makes a project theirs), so on the pool before the lock.
+  const mine = new Set((await loadMyProjects(input.principal)).map((project) => project.id));
+  await ensureSeeded();
+  return withTransaction(async (q) => {
+    const row = await getEntity("task", input.taskId, q, true);
+    if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+    const task = row.data as unknown as Task;
+    const projectId = (await getBuckets(q)).find((b) => b.id === task.bucket)?.project;
+    if (!projectId || !mine.has(projectId)) {
+      throw new ApiError("not_my_project", "Only people on this task's project can send a reminder.", 403);
+    }
+    const question = (task.questions ?? []).find((x) => x.id === input.questionId);
+    if (!question) throw new ApiError("not_found", `unknown question ${input.questionId} on ${input.taskId}`, 404);
+    if (question.status !== "open") {
+      throw new ApiError("question_already_answered", "This question already has an answer.", 409);
+    }
+    const addressee = normalizeAddressee(question.addressee) ?? question.addressee;
+    if (addressee === input.remindedBy) {
+      throw new ApiError("self_reminder", "The question is addressed to you; answer it instead.", 400);
+    }
+    const now = Date.now();
+    const reminders = question.reminders ?? [];
+    if (reminders.some((r) => r.by === input.remindedBy && now - Date.parse(r.at) < QUESTION_REMIND_COOLDOWN_MS)) {
+      throw new ApiError("already_reminded", "You already sent a reminder for this question in the last 12 hours.", 409);
+    }
+
+    const comment: Comment = {
+      id: `CMT-${randomUUID()}`,
+      author: input.remindedBy,
+      body: reminderCommentBody(question, addressee),
+      ts: stamp(),
+      mentions: [addressee],
+    };
+    const reminded: TaskQuestion = {
+      ...question,
+      reminders: [...reminders, { by: input.remindedBy, at: new Date(now).toISOString(), commentId: comment.id }],
+    };
+    await patchTask(
+      input.taskId,
+      {
+        questions: (task.questions ?? []).map((x) => (x.id === question.id ? reminded : x)),
+        comments: [...(task.comments ?? []), comment],
+      },
+      input.remindedBy,
+      { query: q, attribution: { source: "human", actorId: input.remindedBy } }
+    );
+    await appendEventTx(q, {
+      kind: "question.reminded",
+      actor: input.remindedBy,
+      taskId: input.taskId,
+      payload: { questionId: question.id, addressee, commentId: comment.id },
+    });
+    return { question: reminded, comment };
+  });
 }

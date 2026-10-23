@@ -1,16 +1,20 @@
 // TASK-629/630 — approvals service: gate lifecycle, audit events, separation
 // of duties, and the pending-approvals inbox source.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/route";
 import type { ApprovalGate, Task } from "@/lib/mc-data";
+import { principalFromTokens } from "@/lib/permissions/project-acl";
 
 const h = vi.hoisted(() => ({
   tasks: new Map<string, Record<string, unknown>>(),
   patches: [] as { id: string; patch: Record<string, unknown>; actor: string }[],
   events: [] as Record<string, unknown>[],
   stored: [] as unknown[],
+  buckets: [] as unknown[],
+  projects: [] as unknown[],
+  session: null as { user?: { oid?: string | null; email?: string | null } } | null,
 }));
 
 vi.mock("@/lib/sync", () => ({
@@ -27,6 +31,8 @@ vi.mock("@/lib/sync", () => ({
 vi.mock("@/lib/sync/repo", () => ({
   getEntity: async (_type: string, id: string) => h.tasks.get(id) ?? null,
   getEntities: async () => [...h.tasks.values()],
+  getBuckets: async () => h.buckets,
+  getProjects: async () => h.projects,
 }));
 
 vi.mock("@/lib/compliance/repo", () => ({
@@ -36,6 +42,26 @@ vi.mock("@/lib/compliance/repo", () => ({
   eventsByKinds: async () => h.stored,
 }));
 
+// Route seams (as in tests/task-questions-access.test.ts): the real
+// requireSessionActor → authorize path and the real ACL guard run; only the
+// session and the identity row (an admin, who holds approval.decide) are faked.
+vi.mock("@/lib/auth", () => ({
+  auth: async () => h.session,
+  oidcEnabled: () => true,
+}));
+vi.mock("@/lib/permissions/repository", () => ({
+  findMcUserByEntraOid: async (oid: string) => ({
+    id: "u1",
+    entraOid: oid,
+    email: h.session?.user?.email ?? "",
+    accessRole: "admin",
+    status: "active",
+  }),
+  findServicePrincipalById: async () => null,
+}));
+vi.mock("@/lib/permissions/decision-log", () => ({ recordPermissionDecision: vi.fn(async () => true) }));
+vi.mock("@/lib/permissions/shadow-mismatch", () => ({ recordShadowMismatch: vi.fn(async () => undefined) }));
+
 import {
   decideApprovalGate,
   listApprovalAudit,
@@ -43,6 +69,8 @@ import {
   listPendingApprovals,
   requestApprovalGate,
 } from "@/lib/compliance/approvals";
+import * as approvalsRoute from "@/app/api/approvals/route";
+import * as decideRoute from "@/app/api/approvals/decide/route";
 
 function seedTask(id: string, over: Partial<Task> = {}): void {
   h.tasks.set(id, {
@@ -57,6 +85,9 @@ beforeEach(() => {
   h.patches.length = 0;
   h.events.length = 0;
   h.stored = [];
+  h.buckets = [];
+  h.projects = [];
+  h.session = null;
 });
 
 describe("requestApprovalGate", () => {
@@ -240,7 +271,7 @@ describe("listPendingApprovals", () => {
         { id: "apg_c", reason: "done", requestedBy: "x", requestedAt: "2026-07-23T00:00:00Z", status: "approved" },
       ],
     });
-    const rows = await listPendingApprovals();
+    const rows = await listPendingApprovals(principalFromTokens());
     expect(rows.map((r) => r.gate.id)).toEqual(["apg_b", "apg_a"]);
     expect(rows[0]).toMatchObject({ taskId: "TASK-2", stage: "progress", evidence: null });
   });
@@ -269,13 +300,99 @@ describe("listPendingApprovals", () => {
         { id: "apg_none", reason: "none", requestedBy: "x", requestedAt: "2026-07-23T02:00:00Z", status: "pending" },
       ],
     });
-    const rows = await listPendingApprovals();
+    const rows = await listPendingApprovals(principalFromTokens());
     expect(rows.find((r) => r.taskId === "TASK-1")?.evidence).toBeNull();
     expect(rows.find((r) => r.taskId === "TASK-2")?.evidence).toEqual({
       summary: "Shipped the gate",
       itemKeys: ["qa"],
     });
     expect(rows.find((r) => r.taskId === "TASK-3")?.evidence).toBeNull();
+  });
+});
+
+// TASK-3713: a gate is as private as its task. On a restricted project only
+// members see it in the inbox or decide it — an admin who is not a member
+// gets neither, though approval.decide alone would let them.
+describe("restricted-project ACL on the inbox and decide (TASK-3713)", () => {
+  const GREG = { user: { oid: "oid-greg", email: "greg@petrasoap.com" } };
+  const VINCE = { user: { oid: "oid-vince", email: "vince@petrasoap.com" } };
+  const noCtx = { params: Promise.resolve({} as Record<string, string>) };
+  const pending = (id: string): ApprovalGate => ({
+    id,
+    reason: "ship?",
+    requestedBy: "cos@petrasoap.com",
+    requestedAt: "2026-10-22T00:00:00Z",
+    status: "pending",
+  });
+  const decide = (body: Record<string, unknown>) =>
+    decideRoute.POST(
+      new Request("http://test/api/approvals/decide", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      noCtx
+    );
+  const secretGate = () => (h.tasks.get("TASK-SECRET")?.data as Task).approvalGates?.[0];
+
+  beforeEach(() => {
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
+    h.buckets = [
+      { id: "BKT-OPEN", project: "PRJ-OPEN" },
+      { id: "BKT-SECRET", project: "PRJ-SECRET" },
+    ];
+    h.projects = [
+      { id: "PRJ-OPEN" },
+      { id: "PRJ-SECRET", visibility: "restricted", members: ["vince@petrasoap.com"] },
+    ];
+    seedTask("TASK-OPEN", { bucket: "BKT-OPEN", approvalGates: [pending("apg_open")] });
+    seedTask("TASK-SECRET", {
+      bucket: "BKT-SECRET",
+      approvalGates: [{ ...pending("apg_secret"), proposal: { summary: "secret acquisition plan" } }],
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("listPendingApprovals returns a restricted project's gates to members only", async () => {
+    const outsider = await listPendingApprovals(principalFromTokens("greg@petrasoap.com"));
+    expect(outsider.map((r) => r.gate.id)).toEqual(["apg_open"]);
+    const member = await listPendingApprovals(principalFromTokens("vince@petrasoap.com"));
+    expect(member.map((r) => r.gate.id).sort()).toEqual(["apg_open", "apg_secret"]);
+  });
+
+  it("GET /api/approvals filters under the session's ACL principal", async () => {
+    h.session = GREG;
+    const resp = await approvalsRoute.GET(new Request("http://test/api/approvals"), noCtx);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { data: { approvals: { gate: ApprovalGate }[] } };
+    expect(body.data.approvals.map((r) => r.gate.id)).toEqual(["apg_open"]);
+    expect(JSON.stringify(body)).not.toContain("secret acquisition plan");
+
+    h.session = VINCE;
+    const memberResp = await approvalsRoute.GET(new Request("http://test/api/approvals"), noCtx);
+    const memberBody = (await memberResp.json()) as { data: { approvals: { gate: ApprovalGate }[] } };
+    expect(memberBody.data.approvals.map((r) => r.gate.id).sort()).toEqual(["apg_open", "apg_secret"]);
+  });
+
+  it("POST /api/approvals/decide refuses a non-member admin and leaves the gate pending", async () => {
+    h.session = GREG;
+    const resp = await decide({ taskId: "TASK-SECRET", gateId: "apg_secret", decision: "approved" });
+    expect(resp.status).toBe(403);
+    expect(((await resp.json()) as { error: { code: string } }).error.code).toBe("project_acl_denied");
+    expect(h.patches).toEqual([]);
+    expect(h.events).toEqual([]);
+    expect(secretGate()?.status).toBe("pending");
+  });
+
+  it("a member admin still decides the restricted gate", async () => {
+    h.session = VINCE;
+    const resp = await decide({ taskId: "TASK-SECRET", gateId: "apg_secret", decision: "approved" });
+    expect(resp.status).toBe(200);
+    expect(secretGate()?.status).toBe("approved");
+    expect(h.events[0]).toMatchObject({ kind: "approval.decided", actor: "vince@petrasoap.com" });
   });
 });
 

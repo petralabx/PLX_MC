@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { authorize } from "@/lib/permissions";
+import { principalFromTokens } from "@/lib/permissions/project-acl";
 import {
   APPROVAL_WAIT_MAX_MS,
   inputRequired,
@@ -96,6 +97,8 @@ vi.mock("@/lib/compliance/repo", () => ({
 vi.mock("@/lib/permissions/project-acl-guard", () => ({
   assertTaskProjectAccess: async () => undefined,
   recordReadShadowMismatch: () => undefined,
+  loadProjectAclMaps: async () => ({ projects: [], buckets: [] }),
+  scopeHierarchy: ({ tasks }: { tasks: unknown[] }) => ({ tasks, buckets: [], projects: [] }),
 }));
 
 function gate(over: Partial<ApprovalGate> = {}): ApprovalGate {
@@ -520,7 +523,7 @@ describe("checkout credential stays out of task-read surfaces (TASK-629 credenti
       storedTask: mem.tasks.get("TASK-700"),
       events: mem.events,
       decide: decided,
-      inbox: await listPendingApprovals(),
+      inbox: await listPendingApprovals(principalFromTokens()),
       gate: await actionGetApprovalGate(IDENTITY, { checkoutId: FULL_ID }),
       gateByTask: await actionGetApprovalGate(IDENTITY, { taskId: "TASK-700" }),
       contextFull: await actionGetContext({ depth: "full", taskIds: ["TASK-700"] }),

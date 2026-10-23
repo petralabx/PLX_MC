@@ -217,6 +217,8 @@ with `approval.decide` — never the requester (separation of duties, 403) —
 decides it via `POST /api/approvals/decide`. Transitions append
 `approval.requested` / `approval.decided` to `mc_events`; the Approvals inbox
 (`/?screen=approvals`) lists pending gates from `GET /api/approvals`.
+Both the inbox and decide apply the project ACL (TASK-3713): a non-member never sees a restricted
+project's gate, and deciding one returns 403 `project_acl_denied`.
 The inbox displays every scope field and the source reference beside the decision controls.
 Scoped approval requests must echo that exact displayed scope and source; missing or stale
 review data returns 409 `approval_scope_not_reviewed` before signing.
@@ -249,10 +251,54 @@ Under the task row lock the answer is stored on the question (`answer.choice`,
 task as a `CMT-*` comment authored by the person; `question.answered` lands in
 the same transaction. A second answer is 409 `question_already_answered`. An
 open question never freezes the stage. `/?screen=approvals&question=<q_id>`
-scrolls to and highlights one question. Questions live in the task jsonb
+selects that question in the Approvals queue and opens it in the decision
+sheet (TASK-3721). Questions live in the task jsonb
 (DB-only; never mirrored to SharePoint). PLX_MC sends no notice to the person;
 the asking bot passes on the `questionLink` it gets back (TASK-3559 covers
 notifications).
+
+### Approvals: My projects, decided history, reminders (TASK-3720)
+
+`src/lib/compliance/my-projects.ts` resolves the viewer's projects: a project
+is theirs when they are on its member list, own it, or are assigned (assignee
+or coassignee) an open task in it. Open means not `isClosedStage` (merged,
+verified, cancelled) and not in an archived bucket or project (`isArchived`).
+An archived or closed project is never listed, whatever the reason.
+The hierarchy is scoped with `scopeHierarchy` first, so a restricted project
+the viewer cannot access is never theirs, even with a task assigned to them.
+Ids match with `normalizeMemberToken` over the principal's email, oid and
+directory ids, as the ACL does. Reasons come in the order member, owner,
+assignee.
+
+- `GET /api/approvals/projects` (`task.read`) returns `{ projects, questions,
+  gates }`: every open question (to anyone) and every pending gate on the
+  tasks of those projects, oldest first, each row with `projectId`. A
+  question's text is already on the task's activity, and the whole task is
+  readable through `GET /api/state` by everyone the ACL admits, so this widens
+  nothing.
+- `GET /api/approvals/decided?days=N` (`task.read`, `src/lib/compliance/decided.ts`)
+  returns `{ decided }`, newest first, on ACL-visible tasks: questions whose
+  `answer.answeredBy` is the session `sessionAuthorId`, and approved or
+  rejected gates whose `decidedBy` equals the session audit label
+  (case-insensitive; that is what `decideApprovalGate` stores). `days`
+  defaults to 14 and is clamped to 1..90; a non-number is 400 `invalid_query`.
+- `POST /api/questions/remind {taskId, questionId}` (`task.progress` plus the
+  task's project ACL) lets a person on the task's project remind the
+  addressee. `remindQuestion` in `questions.ts` refuses, in every enforcement
+  mode: a task outside the person's projects (403 `not_my_project`), an
+  unknown task or question (404 `not_found`), an answered question (409
+  `question_already_answered`), the addressee (400 `self_reminder`) and a
+  second reminder from the same person within `QUESTION_REMIND_COOLDOWN_MS`
+  (12 h; 409 `already_reminded`). Under the task row lock it appends `{ by,
+  at, commentId }` to `question.reminders`, posts the person's `CMT-*`
+  comment `@`-mentioning the addressee (`mentions: [addressee]`) and appends
+  `question.reminded`. It returns `{ question }`. The server sends no
+  notification; the addressee sees the stored reminder on their Approvals
+  screen.
+- `mc_ask_question` takes an optional `context` (trimmed, at most
+  `QUESTION_CONTEXT_MAX` = 2000 characters, omitted when empty) shown under
+  the question. `context` is not part of the re-ask match: asking the same
+  open question again returns the stored question with its original context.
 
 ### UAT tickets view (TASK-3706)
 

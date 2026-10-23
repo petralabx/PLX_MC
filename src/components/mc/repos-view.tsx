@@ -19,8 +19,9 @@ import { Avatar } from "./atoms";
 import { deriveRepoRows } from "./record-logic";
 import type { ScreenProps } from "./route";
 
-const PR_STATUS_TONE: Record<"open" | "merged" | "closed", "acc" | "ok" | "muted"> = {
+const PR_STATUS_TONE: Record<"open" | "draft" | "merged" | "closed", "acc" | "info" | "ok" | "muted"> = {
   open: "acc",
+  draft: "info",
   merged: "ok",
   closed: "muted",
 };

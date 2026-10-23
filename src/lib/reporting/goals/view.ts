@@ -6,6 +6,7 @@
 
 import { buildForecast, type CustomerClass, type ForecastSnapshot, type ForecastView } from "./forecast";
 import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
+import { revenueScope, type RevenueScopeView } from "./revenue-scope";
 import { computeGoals, type GoalsModel } from "./rules";
 import { buildShipmentList, type ShipmentListRow } from "./shipment-list";
 import { shipmentLinesView, type ShipmentLinesView } from "./shipment-lines";
@@ -76,6 +77,8 @@ export interface GoalsView {
   shipments: ShipmentListRow[];
   /** The Revenue card's month by customer class (TASK-3781), from the shipments list; null without a model. */
   revenueByClass: RevenueByClass | null;
+  /** The Revenue card's month for manufacturing customers (every class but Exclusive Distribution), read from revenueByClass; shown on the card at `scope=mfg`. */
+  revenueScope: RevenueScopeView | null;
   /** Whether the run has its invoices' lines (TASK-3144); the page fetches them on demand. null without a model. */
   shipmentLines: ShipmentLinesView | null;
   /** The goal settings the model was built with (the page's definitions and rules text quote them). */
@@ -125,6 +128,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       model: null,
       shipments: [],
       revenueByClass: null,
+      revenueScope: null,
       shipmentLines: null,
       settings: null,
       sections: SECTION_QUERIES,
@@ -170,6 +174,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     model,
     shipments,
     revenueByClass: byClass,
+    revenueScope: revenueScope(byClass, "mfg", model.revenue.targetCents),
     shipmentLines: shipmentLinesView(input.shipmentLines ?? null),
     settings: input.settings,
     sections: SECTION_QUERIES,

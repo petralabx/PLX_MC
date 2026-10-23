@@ -1021,6 +1021,10 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
       amber: col === 6,
     });
   }
+  // Manufacturing customers (the page's `scope=mfg` line): every class but Exclusive Distribution, as a formula on the rows above.
+  const distribution = data.rows.findIndex((c) => c.customerClass === "Exclusive Distribution");
+  put(ws, total + 1, 1, "Manufacturing customers (all but Exclusive Distribution)");
+  put(ws, total + 1, 7, { formula: distribution >= 0 ? `G${total}-G${first + distribution}` : `G${total}` }, { numFmt: AMOUNT_FORMAT });
   let r = total + 2;
   // The card as the page shows it, which the table checks itself against (Goals!G8 adds up the Daily sheet instead).
   put(ws, r, 1, "Revenue card (on the page)");

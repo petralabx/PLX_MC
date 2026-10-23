@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { api, apiDownload, ApiClientError } from "@/lib/api";
 import { signInAgainAction } from "@/lib/auth/actions";
-import type { EvaluatedEntry, GoalsPage, RefreshRun, RevenueRateBasis } from "@/lib/reporting/goals";
+import type { EvaluatedEntry, GoalsPage, RefreshRun, RevenueRateBasis, RevenueScope } from "@/lib/reporting/goals";
 import { torontoDate } from "@/lib/reporting/goals/calendar";
 import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
 
@@ -150,6 +150,8 @@ const goalsPath = (basis: RevenueRateBasis) => (basis === "sage" ? "/reporting/g
 
 export function GoalsView({ route, nav }: ScreenProps) {
   const basis: RevenueRateBasis = route.fx === "sage" ? "sage" : "boc";
+  // Manufacturing customers only (`scope=mfg`): a display choice on the loaded page, so it needs no new read.
+  const scope: RevenueScope = route.scope === "mfg" ? "mfg" : "all";
   // load() reads the chosen rate from here, so it keeps one identity and a rate change never stops a refresh being followed.
   const basisRef = useRef(basis);
   useEffect(() => {
@@ -297,7 +299,11 @@ export function GoalsView({ route, nav }: ScreenProps) {
     if (next === basis) return;
     // A new read starts: an earlier failure (at either rate) no longer describes what's on screen.
     setLoadError(null);
-    nav("goals", next === "sage" ? { fx: "sage" } : {});
+    nav("goals", { ...(next === "sage" ? { fx: "sage" as const } : {}), ...(scope === "mfg" ? { scope: "mfg" as const } : {}) });
+  };
+  const chooseScope = (next: RevenueScope) => {
+    if (next === scope) return;
+    nav("goals", { ...(basis === "sage" ? { fx: "sage" as const } : {}), ...(next === "mfg" ? { scope: "mfg" as const } : {}) });
   };
   const retryRate = () => {
     setLoadError(null);
@@ -412,6 +418,24 @@ export function GoalsView({ route, nav }: ScreenProps) {
             </button>
           </div>
         ) : null}
+        {ready ? (
+          <div className="gp-tools gp-rate" data-testid="goals-scope">
+            <span id="goals-scope-label">Customers</span>
+            <div className="gp-seg" role="group" aria-labelledby="goals-scope-label">
+              <button type="button" aria-pressed={scope === "all"} onClick={() => chooseScope("all")}>
+                All
+              </button>
+              <button
+                type="button"
+                aria-pressed={scope === "mfg"}
+                title="Every customer class but Exclusive Distribution"
+                onClick={() => chooseScope("mfg")}
+              >
+                Manufacturing customers
+              </button>
+            </div>
+          </div>
+        ) : null}
         {ready ? <p className="gp-takeaway">{ready.model.takeaway}</p> : null}
         <p id="goals-refresh-status" className="gp-status" role="status">
           {line ||
@@ -442,7 +466,7 @@ export function GoalsView({ route, nav }: ScreenProps) {
         ) : page && !ready ? (
           <NotReady page={page} editor={editor} />
         ) : (
-          <Body page={ready} status={status} onRetry={retry} entryActions={entryActions} />
+          <Body page={ready} status={status} onRetry={retry} entryActions={entryActions} scope={scope} />
         )}
 
         {ready && editor && entryDialog ? (
@@ -503,11 +527,13 @@ function Body({
   status,
   onRetry,
   entryActions,
+  scope = "all",
 }: {
   page: ReadyPage | null;
   status: SectionState;
   onRetry: () => void;
   entryActions?: EntryActions;
+  scope?: RevenueScope;
 }) {
   const state: SectionState = page ? "ready" : status === "ready" ? "failed" : status;
   const src = (key: string) => (page ? sourceText(page.run, page.sections[key] ?? []) : null);
@@ -538,7 +564,7 @@ function Body({
 
       <Section id="goals" title="This month’s goals" state={state} onRetry={onRetry} resetKey={page} size="lg" bare>
         {ready((p) => (
-          <GoalCards page={p} />
+          <GoalCards page={p} scope={scope} />
         ))}
       </Section>
 

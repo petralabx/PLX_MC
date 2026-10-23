@@ -93,6 +93,11 @@ describe("parsePullRequestEvent", () => {
     expect(parsePullRequestEvent(prPayload())?.beforeSha).toBeNull();
   });
 
+  it("carries GitHub's draft flag (TASK-3743)", () => {
+    expect(parsePullRequestEvent(prPayload({}, { draft: true }))?.draft).toBe(true);
+    expect(parsePullRequestEvent(prPayload())?.draft).toBe(false);
+  });
+
   it("returns null for a non-pull_request payload", () => {
     expect(parsePullRequestEvent({ action: "push" })).toBeNull();
     expect(parsePullRequestEvent(null)).toBeNull();
@@ -191,6 +196,15 @@ describe("ingestPullRequest", () => {
     const r = await ingestPullRequest(evt);
     expect(r.recorded).toBe(false);
     expect(db.events.length).toBe(0);
+  });
+
+  it("records a PR marked ready for review, so the projection can show it as open (TASK-3743)", async () => {
+    const evt = parsePullRequestEvent(prPayload({ action: "ready_for_review" }))!;
+    const r = await ingestPullRequest(evt);
+    expect(r.recorded).toBe(true);
+    expect(db.events.filter((e) => e.kind === "pr.opened").map((e) => e.dedupKey)).toEqual([
+      "pr.opened:PLX_MC:42:abc123:ready_for_review",
+    ]);
   });
 
   it("records a synchronize as pr.synchronized (T5)", async () => {

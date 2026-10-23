@@ -299,7 +299,8 @@ describe("projectPullRequest", () => {
       taskIds: ["TASK-202"],
       sparse: false,
     });
-    expect(store.completedAtArgs).toEqual([undefined]);
+    // Open writes the stage and then the PR link (TASK-3743); neither carries a completion time.
+    expect(store.completedAtArgs).toEqual([undefined, undefined]);
   });
 
   it("does NOT create a sparse task for operator PRs with no checkout (retired)", async () => {
@@ -349,5 +350,71 @@ describe("projectPullRequest", () => {
       sparse: false,
     });
     expect((store.rows.get("task:TASK-400")!.data as unknown as Task).stage).toBe("merged");
+  });
+});
+
+// TASK-3743: a task shows its open PRs before merge, one row per repo and PR.
+describe("projectPullRequest — open PR links", () => {
+  const agent = { actorKind: "agent" as const, actorIdentity: "dsp_abc", sparse: false };
+  const taskOf = (id: string) => store.rows.get(`task:${id}`)!.data as unknown as Task;
+  const row = (status: string) => ({ repo: "PLX_MC", num: 42, status, title: "Add the thing" });
+
+  it("shows an opened draft PR as draft, then as open once marked ready", async () => {
+    seedTask({ id: "TASK-600", stage: "planned" });
+    await projectPullRequest(prEvt({ action: "opened", draft: true }), { ...agent, taskIds: ["TASK-600"] });
+    expect(taskOf("TASK-600").prs).toEqual([row("draft")]);
+    expect(taskOf("TASK-600").stage).toBe("progress");
+
+    await projectPullRequest(prEvt({ action: "ready_for_review", draft: false }), { ...agent, taskIds: ["TASK-600"] });
+    expect(taskOf("TASK-600").prs).toEqual([row("open")]);
+    expect(store.authorizeCalls.some((c) => c.capability === "task.link")).toBe(true);
+  });
+
+  it("links the PR on a task that is already in progress", async () => {
+    seedTask({ id: "TASK-601", stage: "progress" });
+    await projectPullRequest(prEvt({ action: "opened" }), { ...agent, taskIds: ["TASK-601"] });
+    expect(taskOf("TASK-601").prs).toEqual([row("open")]);
+  });
+
+  it("keeps one row per repo and PR number, and an unchanged replay writes nothing", async () => {
+    seedTask({ id: "TASK-602", stage: "planned" });
+    for (const action of ["opened", "synchronize", "reopened", "synchronize"]) {
+      await projectPullRequest(prEvt({ action }), { ...agent, taskIds: ["TASK-602"] });
+    }
+    expect(taskOf("TASK-602").prs).toEqual([row("open")]);
+    const writes = store.completedAtArgs.length;
+    await projectPullRequest(prEvt({ action: "synchronize", headSha: "def456" }), { ...agent, taskIds: ["TASK-602"] });
+    expect(store.completedAtArgs.length).toBe(writes);
+  });
+
+  it("shows a merged PR once as merged, with no stale open row, even after late replays", async () => {
+    seedTask({ id: "TASK-603", stage: "planned" });
+    await projectPullRequest(prEvt({ action: "opened" }), { ...agent, taskIds: ["TASK-603"] });
+    await projectPullRequest(prEvt({ action: "closed", merged: true, mergeSha: "m1" }), { ...agent, taskIds: ["TASK-603"] });
+    await projectPullRequest(prEvt({ action: "synchronize" }), { ...agent, taskIds: ["TASK-603"] });
+    await projectPullRequest(prEvt({ action: "closed" }), { ...agent, taskIds: ["TASK-603"] });
+    expect(taskOf("TASK-603").prs).toEqual([row("merged")]);
+    expect(taskOf("TASK-603").stage).toBe("merged");
+  });
+
+  it("shows a closed unmerged PR as closed and leaves the stage alone", async () => {
+    seedTask({ id: "TASK-604", stage: "planned" });
+    await projectPullRequest(prEvt({ action: "opened" }), { ...agent, taskIds: ["TASK-604"] });
+    await projectPullRequest(prEvt({ action: "closed" }), { ...agent, taskIds: ["TASK-604"] });
+    expect(taskOf("TASK-604").prs).toEqual([row("closed")]);
+    expect(taskOf("TASK-604").stage).toBe("progress");
+  });
+
+  it("treats the repo name case-insensitively, so a merge replaces the open row", async () => {
+    seedTask({ id: "TASK-605", stage: "progress", prs: [{ repo: "plx_mc", num: 42, status: "open", title: "Add the thing" }] });
+    await projectPullRequest(prEvt({ action: "closed", merged: true, mergeSha: "m1" }), { ...agent, taskIds: ["TASK-605"] });
+    expect(taskOf("TASK-605").prs).toEqual([row("merged")]);
+  });
+
+  it("keeps other PRs on the task and links a new PR on a merged task without moving it", async () => {
+    seedTask({ id: "TASK-606", stage: "merged", prs: [{ repo: "PLX_MC", num: 41, status: "merged", title: "prior" }] });
+    await projectPullRequest(prEvt({ action: "opened" }), { ...agent, taskIds: ["TASK-606"] });
+    expect(taskOf("TASK-606").prs).toEqual([{ repo: "PLX_MC", num: 41, status: "merged", title: "prior" }, row("open")]);
+    expect(taskOf("TASK-606").stage).toBe("merged");
   });
 });

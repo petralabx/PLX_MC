@@ -22,6 +22,7 @@ import type { PrEvent } from "./webhook";
 
 const PROJECTION_ACTOR = "compliance-projection";
 const DONE_STAGES: StageKey[] = ["merged", "verified"];
+const OPEN_ACTIONS = ["opened", "reopened", "synchronize", "ready_for_review"];
 
 export function projectionEnabled(): boolean {
   return process.env.COMPLIANCE_PROJECTION_ENABLED !== "0";
@@ -32,8 +33,13 @@ async function loadTask(taskId: string): Promise<Task | null> {
   return row ? (row.data as unknown as Task) : null;
 }
 
+// One row per repo and PR number; GitHub repo names are case-insensitive.
+function samePr(a: PullRequest, b: Pick<PullRequest, "repo" | "num">): boolean {
+  return a.repo.toLowerCase() === b.repo.toLowerCase() && a.num === b.num;
+}
+
 function appendPr(existing: PullRequest[], pr: PullRequest): PullRequest[] {
-  const idx = existing.findIndex((p) => p.repo === pr.repo && p.num === pr.num);
+  const idx = existing.findIndex((p) => samePr(p, pr));
   if (idx >= 0) {
     const next = [...existing];
     next[idx] = pr;
@@ -135,6 +141,29 @@ async function skipCancelled(task: Task, evt: PrEvent): Promise<boolean> {
   return true;
 }
 
+// TASK-3743: show the PR on its task before merge (open / draft / closed). The
+// merged entry wins, and an unchanged row is not rewritten, so replays are no-ops.
+// A cancelled task is never touched (TASK-2529; setProgress records the skip).
+async function linkPr(taskId: string, evt: PrEvent, status: PullRequest["status"]): Promise<void> {
+  const task = await loadTask(taskId);
+  if (!task || task.stage === "cancelled") return;
+  const prs = task.prs ?? [];
+  const prior = prs.find((p) => samePr(p, { repo: evt.repo, num: evt.prNumber }));
+  if (prior?.status === "merged" || (prior?.status === status && prior.title === evt.title)) return;
+
+  await requireProjectionAuthorized(
+    "task.link",
+    { type: "task", id: taskId, repos: task.repos, stage: task.stage }
+  );
+
+  await patchTask(
+    taskId,
+    { prs: appendPr(prs, { repo: evt.repo, num: evt.prNumber, status, title: evt.title }) },
+    PROJECTION_ACTOR,
+    { complianceProjection: true }
+  );
+}
+
 async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task) return;
@@ -206,16 +235,17 @@ export async function projectPullRequest(evt: PrEvent, input: ProjectionInput): 
   }
 
   if (evt.action === "closed") {
-    if (!evt.merged) return;
     for (const tid of taskIds) {
-      await promoteMerged(tid, evt);
+      if (evt.merged) await promoteMerged(tid, evt);
+      else await linkPr(tid, evt, "closed");
     }
     return;
   }
 
-  if (["opened", "reopened", "synchronize"].includes(evt.action)) {
+  if (OPEN_ACTIONS.includes(evt.action)) {
     for (const tid of taskIds) {
       await setProgress(tid, evt);
+      await linkPr(tid, evt, evt.draft ? "draft" : "open");
     }
   }
 }

@@ -189,7 +189,7 @@ export interface Bucket extends ArchiveFields {
 export interface PullRequest {
   repo: string;
   num: number;
-  status: "open" | "merged" | "closed";
+  status: "open" | "draft" | "merged" | "closed";
   title: string;
 }
 

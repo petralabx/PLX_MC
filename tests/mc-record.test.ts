@@ -66,6 +66,22 @@ describe("deriveRepoRows", () => {
     expect(portal?.prs).toHaveLength(2);
   });
 
+  it("counts a draft PR as open, and a closed one as not open (TASK-3743)", () => {
+    const base = TASKS.find((t) => t.id === "TASK-222")!;
+    const drafts: Task[] = [
+      {
+        ...base,
+        id: "TASK-9006",
+        repos: ["plx-mc"],
+        prs: [
+          { repo: "PLX_MC", num: 300, status: "draft", title: "wip" },
+          { repo: "PLX_MC", num: 301, status: "closed", title: "abandoned" },
+        ],
+      },
+    ];
+    expect(deriveRepoRows(REPOS, drafts).find((row) => row.repo.id === "plx-mc")?.openPrCount).toBe(1);
+  });
+
   it("attributes projected PRs stored under the GitHub name or owner/name slug", () => {
     // The compliance projection stores `pr.repo` as the GitHub repo name
     // (plx-customer-portal, PLX_MC) or a full slug, not the registry id.

@@ -174,7 +174,12 @@ truth table is proven before any plumbing exists.
   authenticated MC deep link. Agent hard-gate remains unchanged.
 - `projectPullRequest` (projection) — after `mc_events` are appended, mutates sync
   tasks for **checked-out** work: open/sync → `progress`, merge → `merged` +
-  `prs[]` + `task.promoted`. Every mutation requires
+  `prs[]` + `task.promoted`. Open, reopen, sync and ready-for-review also put
+  the PR on `prs[]` as `open` (or `draft`); a close without merge sets `closed`;
+  the merged row always wins; one row per repo + PR number (TASK-3743). PRs
+  opened before that are linked by `scripts/backfill-open-pr-links.mjs` (dry
+  run by default; `--apply` writes; non-production `--approved-db` guard).
+  Every mutation requires
   `authorize(...)` for durable `sp_compliance_projection` (`task.progress` /
   `task.link`). **Sparse operator Task creation is retired** — unrouted operator
   PRs do not create Tasks. Kill switch: `COMPLIANCE_PROJECTION_ENABLED=0`.

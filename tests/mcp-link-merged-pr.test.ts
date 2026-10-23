@@ -150,6 +150,14 @@ describe("idempotency (acceptance 3)", () => {
     expect(store.events.filter((e) => e.kind === "task.pr.linked")).toHaveLength(1);
     expect(store.events.filter((e) => e.kind === "task.promoted")).toHaveLength(1);
   });
+
+  // TASK-3743: the projection now leaves open rows on prs[]; a missed merge must still link.
+  it.each(["progress", "merged"])("turns an open row for the PR into one merged row on a %s task", async (stage) => {
+    seedTask("TASK-100", { stage, prs: [{ repo: "PLX_MC", num: 42, status: "open", title: "Old work" }] } as Partial<Task>);
+    const result = await actionLinkMergedPr(ledger, input(), facts());
+    expect(result).toMatchObject({ linked: true, unchanged: false });
+    expect(taskOf("TASK-100").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "merged", title: "Old work" }]);
+  });
 });
 
 describe("audit entry (acceptance 4)", () => {

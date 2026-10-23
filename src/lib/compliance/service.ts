@@ -1046,7 +1046,8 @@ export interface IngestResult {
   deepLink?: string | null;
 }
 
-const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "closed"]);
+// ready_for_review logs as pr.opened so the projection shows the PR as open (TASK-3743).
+const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "ready_for_review", "closed"]);
 const IDLE_TTL_MS = 24 * 60 * 60 * 1000;
 const ABSOLUTE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 

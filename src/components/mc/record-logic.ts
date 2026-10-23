@@ -56,7 +56,7 @@ export interface RepoPrRow {
   taskId: string;
   num: number;
   title: string;
-  status: "open" | "merged" | "closed";
+  status: "open" | "draft" | "merged" | "closed";
 }
 
 export interface RepoTaskRow {
@@ -155,7 +155,7 @@ export function deriveRepoRows(repos: Record<string, Repo>, tasks: Task[]): Repo
 
     return {
       repo,
-      openPrCount: prs.filter((pr) => pr.status === "open").length,
+      openPrCount: prs.filter((pr) => pr.status === "open" || pr.status === "draft").length,
       prs,
       tasks: taskRows,
     };

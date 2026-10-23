@@ -92,6 +92,11 @@ pixel-precisely in `docs/product/README.md` §6 and
   query-string route (`/?screen=task|project|bucket&…Id=…`); a malformed id goes
   home. MCP returns them as `link` from `taskLink`, `projectLink` and
   `bucketLink` (`src/lib/mcp/envelope.ts`).
+- Approvals and My tasks links (TASK-3559): `/?screen=approvals&gate=<apg_id>`
+  opens one gate (`gateLink` in `envelope.ts`; `questionLink` does the same
+  with `question=`), and `/?screen=my-tasks` is the stable name for My tasks
+  (screen `mine`). Neither names a person: the session decides whose approvals
+  and tasks show. Both survive the sign-in redirect, which keeps the query.
 - The screens live in `src/components/mc/`; they read the typed data layer in
   `src/lib/mc-data/` (faithful to `docs/product/DATA_MODEL.md`) whose store is
   now API-backed; fixtures remain the SSR/offline baseline. Each new screen is rebuilt

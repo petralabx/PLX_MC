@@ -42,6 +42,12 @@ describe("routeToUrl (P3)", () => {
     expect(urlToRoute(routeToUrl(route))).toEqual(route);
   });
 
+  it("carries one gate on the Approvals screen (TASK-3559)", () => {
+    const route: Route = { screen: "approvals", gate: "apg_0123456789abcdef" };
+    expect(routeToUrl(route)).toBe("/?screen=approvals&gate=apg_0123456789abcdef");
+    expect(urlToRoute(routeToUrl(route))).toEqual(route);
+  });
+
   it("does NOT serialize the transient filter field", () => {
     const url = routeToUrl({ screen: "board", filter: { text: "wms", priority: ["urgent"] } });
     expect(url).toBe("/?screen=board");
@@ -84,6 +90,11 @@ describe("urlToRoute (P3)", () => {
     expect(urlToRoute("/?screen=BOARD")).toEqual({ screen: "home" }); // case-sensitive
     expect(urlToRoute("total %% garbage ?? &&= junk")).toEqual({ screen: "home" });
     expect(urlToRoute("/?utm_source=mail&foo=bar")).toEqual({ screen: "home" });
+  });
+
+  it("reads ?screen=my-tasks, the stable link name, as My tasks (TASK-3559)", () => {
+    expect(urlToRoute("/?screen=my-tasks")).toEqual({ screen: "mine" });
+    expect(urlToRoute("/?screen=MY-TASKS")).toEqual({ screen: "home" }); // case-sensitive, like every screen
   });
 
   it("keeps entity ids even when the screen falls back to home", () => {

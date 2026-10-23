@@ -642,7 +642,7 @@ server.tool(
 
 server.tool(
   "mc_request_approval",
-  "Raise a runtime approval gate on a task. The task freezes input-required until a human other than the requester decides it in the Approvals inbox.",
+  "Raise a runtime approval gate on a task. The task freezes input-required until a human other than the requester decides it in the Approvals inbox. Send the approver the returned gateLink.",
   {
     taskId: z.string().min(1),
     reason: z.string().min(1).max(500),

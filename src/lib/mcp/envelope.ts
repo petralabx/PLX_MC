@@ -48,6 +48,11 @@ export function bucketLink(bucketId: string): string {
   return `${publicMcBaseUrl()}/buckets/${encodeURIComponent(bucketId)}`;
 }
 
+/** Approval gate deep link (TASK-3559): opens the gate on the Approvals screen; the session decides who sees it. */
+export function gateLink(gateId: string): string {
+  return `${publicMcBaseUrl()}/?screen=approvals&gate=${encodeURIComponent(gateId)}`;
+}
+
 export function buildMeta(
   identity: McpIdentity,
   partial: Partial<Omit<McpResponseMeta, "requestId" | "ts" | "actor">> = {}

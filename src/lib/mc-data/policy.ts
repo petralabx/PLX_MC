@@ -6,6 +6,7 @@
 //   3. a task cannot reach a done stage (merged/verified) with an incomplete
 //      evidence bundle (the completion contract — reuses evidenceComplete).
 
+import { isUatTicketTask } from "@/lib/tasks/uat-labels";
 import { AGENTS, OPERATOR_ID, HUMANS, STAGE_IDX } from "./data";
 import { bandOf, evidenceComplete } from "./helpers";
 import type { ApprovalGate, StageKey, Task, TaskQuestion } from "./types";
@@ -43,16 +44,30 @@ export function taskProgressTotals(done: number, inProgress: number, notStarted:
   return { done, cancelled, closedTasks, inProgress, notStarted, remaining, total, pctDone: total > 0 ? closedTasks / total : null };
 }
 
-export function countTaskProgress(tasks: readonly Pick<Task, "stage">[]): TaskProgressCounts {
+type RollupTask = Pick<Task, "stage"> & { labels?: readonly string[] };
+
+// A UAT ticket fix is done when its submitter verifies it, not when its PR
+// merges (TASK-3697): until the portal sets verified, a merged UAT ticket task
+// is in progress, awaiting re-test. Every other task is done at merged.
+export function awaitsRetest(task: RollupTask): boolean {
+  return task.stage === "merged" && isUatTicketTask(task);
+}
+
+/** Open in progress rollups and their task lists: not closed, or awaiting re-test. */
+export function isOpenInRollup(task: RollupTask): boolean {
+  return !isClosedStage(task.stage) || awaitsRetest(task);
+}
+
+export function countTaskProgress(tasks: readonly RollupTask[]): TaskProgressCounts {
   let done = 0;
   let cancelled = 0;
   let inProgress = 0;
   let notStarted = 0;
   for (const task of tasks) {
-    if (isClosedStage(task.stage)) {
+    if (!isOpenInRollup(task)) {
       if (task.stage === "cancelled") cancelled += 1;
       else done += 1;
-    } else if (bandOf(task.stage) === "doing") inProgress += 1;
+    } else if (bandOf(task.stage) === "doing" || awaitsRetest(task)) inProgress += 1;
     else notStarted += 1;
   }
   return taskProgressTotals(done, inProgress, notStarted, cancelled);
@@ -130,6 +145,12 @@ export function pendingApprovalGates(
 export function inputRequired(task: Pick<Task, "approvalGates">): boolean {
   return pendingApprovalGates(task).length > 0;
 }
+
+/** TASK-3720: one reminder per person per question in this window. */
+export const QUESTION_REMIND_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+
+/** TASK-3720: the longest one-question `context` a bot may send. */
+export const QUESTION_CONTEXT_MAX = 2000;
 
 /**
  * The id a question is addressed to (TASK-3567): a directory id ("ricardo"),

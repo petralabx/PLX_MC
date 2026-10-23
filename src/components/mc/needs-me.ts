@@ -50,7 +50,8 @@ export function isOwnerOrAdmin(viewer: Pick<Human, "role">): boolean {
   return role === "owner" || role === "admin";
 }
 
-const viewerTokens = (viewer: Pick<Human, "id" | "email">): Set<string> =>
+/** The labels that name this viewer (id and email, lowercased); the Approvals screen reuses it. */
+export const viewerTokens = (viewer: Pick<Human, "id" | "email">): Set<string> =>
   new Set([viewer.id, viewer.email ?? ""].map((v) => v.trim().toLowerCase()).filter(Boolean));
 
 /** Every pending approval gate on these tasks — the shape GET /api/approvals returns. */

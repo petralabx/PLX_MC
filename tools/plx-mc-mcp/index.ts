@@ -332,7 +332,7 @@ server.tool(
 
 server.tool(
   "mc_report_progress",
-  "Report task progress (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing.",
+  "Report task progress (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing. stage=verified is refused on a UAT ticket task (kind:code plus uat:<feedbackId>): only the portal's mc_update_task verify sets it.",
   {
     taskId: z.string().min(1),
     stage: z
@@ -676,7 +676,7 @@ server.tool(
 
 server.tool(
   "mc_ask_question",
-  "Ask one named person (directory id or email, never an agent) a question on a task, with up to 8 options and a recommendation (TASK-3567). It shows only on their Approvals screen; only they can answer, and the answer is posted to the task as a comment. Send them the returned questionLink. Agents never answer questions.",
+  "Ask one named person (directory id or email, never an agent) a question on a task, with up to 8 options, a recommendation (TASK-3567) and optional context shown under the question (TASK-3720). It shows only on their Approvals screen; only they can answer, and the answer is posted to the task as a comment. Send them the returned questionLink. Agents never answer questions.",
   {
     taskId: z.string().min(1),
     addressee: z.string().min(1).max(254).describe("Directory id (e.g. ricardo) or email"),
@@ -684,6 +684,7 @@ server.tool(
     options: z.array(z.string().min(1).max(200)).max(8).optional().describe("Multiple-choice options"),
     recommended: z.number().int().nonnegative().optional().describe("Index of the option you recommend"),
     recommendationReason: z.string().min(1).max(1000).optional().describe("Why you recommend it"),
+    context: z.string().trim().max(2000).optional().describe("Background shown under the question"),
   },
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_ask_question");
@@ -821,7 +822,7 @@ server.registerTool("mc_list_projects", {
 });
 
 server.registerTool("mc_update_task", {
-  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, removing the only kind leaves kind:needs-review, swap with removeLabels:[old], addLabels:[new]. Exactly one lane:* must remain, unless a lane-less task only gains/loses kind:* or closed:* closure labels (or not-needed) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. assignee (person id or agent:<slug>; null clears) and accountableOwner (a person) need task.assign plus reason (10+ characters); audits task.assignment.changed. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
+  description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, removing the only kind leaves kind:needs-review, swap with removeLabels:[old], addLabels:[new]. Exactly one lane:* must remain, unless a lane-less task only gains/loses kind:* or closed:* closure labels (or not-needed; on a UAT ticket task with kind:code plus uat:<feedbackId>, also uat:hold and uat-attempt:<n>) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. assignee (person id or agent:<slug>; null clears) and accountableOwner (a person) need task.assign plus reason (10+ characters); audits task.assignment.changed. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
   inputSchema: z.object({
     taskId: z.string().trim().min(1).max(128),
     patch: taskUpdatePatch,

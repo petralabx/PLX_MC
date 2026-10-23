@@ -97,6 +97,13 @@ role does. It is the only MCP principal that may set an
 `isAgentAssignee` and `mayAssignAgent` live in `agent-assignee.ts`; the
 server-only guard `assertAgentAssigneeAllowed` (`agent-assignee-guard.ts`)
 throws 403 in `actionCreateTask` and `PATCH /api/tasks/[id]`.
+TASK-3697 adds `task.uat_sync` and the allowlist name `mc_update_task`. The
+portal uses them to mirror a ticket onto its UAT ticket task (`kind:code` plus
+`uat:<feedbackId>`). It may verify the task (merged to verified), cancel it,
+or add and remove `uat:hold`, `uat-attempt:<n>`, `kind:*` and closure labels.
+`mc_update_task` refuses it every other patch field and every other task. Only
+`sp_mcp_portal` holds `task.uat_sync`; no other principal and no human role
+does. An agent that sends `verify` gets 403 and a `task.verify_denied` event.
 
 **Vendor spend (TASK-2928):** `vendor_spend.write` authorizes saving a vendor
 budget (`PATCH /api/vendor-spend/budgets`) and entering a manual cost snapshot
@@ -149,6 +156,13 @@ must be the question's addressee, checked on the server in every enforcement
 mode, so an owner gets 403 `not_addressee` for someone else's question. The
 predicate context-denies `question.answer` to every service actor, like
 `approval.decide`, so a mistaken grant can never let a bot answer.
+
+**Approvals redesign (TASK-3720):** no new capability. `GET
+/api/approvals/projects` and `GET /api/approvals/decided` need `task.read` and
+are project-ACL scoped. `POST /api/questions/remind` needs `task.progress` (the
+task comments capability) plus the task's project ACL; the server also requires
+the task's project to be one of the person's projects, in every enforcement
+mode.
 
 **Audit data (TASK-620):** every enforcement call site records `allowed`,
 `reasonCode`, and `policyVersion` to `permissions_decision_log` (migration 022)
@@ -293,6 +307,7 @@ concrete rule cannot be expressed that way.
 - `db/migrations/030_chatgpt_mcp_principal.sql` — ChatGPT MCP principal
 - `db/migrations/034_ledger_mcp_principal.sql` — Ledger steward MCP principal (`task.link_merged_pr`)
 - `task.assign` (TASK-3407) — set a task's assignee or accountable owner through `mc_update_task` with a reason; human admin/owner roles, `sp_mcp_ledger` and `sp_mcp_cos` only (`grants.ts`)
+- `task.uat_sync` (TASK-3697) — mirror a portal ticket onto its UAT ticket task through `mc_update_task` (verify, cancel, UAT labels); `sp_mcp_portal` only (`grants.ts`)
 - `src/lib/auth/identity.ts` — Entra `oid` session helpers, enforcement mode, sign-in `mc_users` sync
 - `src/lib/auth/gate.ts` — MC.* role → access_role mapping, admission decision, session validity
 

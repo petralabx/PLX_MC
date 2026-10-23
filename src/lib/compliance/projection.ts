@@ -197,22 +197,41 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
   };
   const mergeOn = new Date().toISOString().slice(0, 10);
   const mergeSha = evt.mergeSha || evt.headSha;
+  // A merge never moves a verified task back to merged: the portal sets
+  // verified when the submitter confirms the fix (TASK-3697). The PR and merge
+  // are still recorded, and task.promotion_skipped says why the stage held.
+  const verified = task.stage === "verified";
 
   await patchLocked(
     taskId,
     (locked) => ({
-      stage: "merged",
+      ...(verified ? {} : { stage: "merged" as const }),
       prs: appendPr(locked.prs ?? [], pr),
       merge: { sha: mergeSha, on: mergeOn },
       activityLine: {
         who: PROJECTION_ACTOR,
-        what: `PR #${evt.prNumber} merged — promoted to Merged (compliance projection)`,
+        what: verified
+          ? `PR #${evt.prNumber} merged — stays Verified (compliance projection)`
+          : `PR #${evt.prNumber} merged — promoted to Merged (compliance projection)`,
         kind: "move",
       },
     }),
     // completed_at is the PR merge time, not this projection run (TASK-2528).
-    validIso(evt.mergedAt)
+    verified ? undefined : validIso(evt.mergedAt)
   );
+
+  if (verified) {
+    await complianceRepo.appendEvent({
+      kind: "task.promotion_skipped",
+      actor: PROJECTION_ACTOR,
+      repo: evt.repo,
+      taskId,
+      pr: String(evt.prNumber),
+      payload: { reason: "task_verified", sha: mergeSha },
+      dedupKey: `task.promotion_skipped:${evt.repo}:${evt.prNumber}:${evt.headSha}:${taskId}`,
+    });
+    return;
+  }
 
   await complianceRepo.appendEvent({
     kind: "task.promoted",

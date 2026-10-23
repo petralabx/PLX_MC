@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-22 (ET) — TASK-3713: the Approvals inbox and decide ignored the restricted-project ACL
+
+- **What happened:** `GET /api/approvals` returned every pending gate, and `POST /api/approvals/decide` let any admin decide one. A non-member of a restricted project saw its gate reason, proposal, plan, diff and scope, and could approve it. The questions inbox beside it already filtered by project ACL.
+- **Root cause:** Both paths checked a capability only (`task.read`, `approval.decide`). `requireSessionActor` without project context never tests membership, and nothing else on either path did.
+- **Rule going forward:** Every session read or write of task-derived data also applies the project ACL: `scopeHierarchy` for a list, `assertTaskProjectAccess` for one task. Test each with a non-member admin, who passes the capability check.
+
 ### 2026-10-21 (ET) — TASK-3632: a progress note rebuilt the comment thread from an unlocked read
 
 - **What happened:** `mc_report_progress` with notes read the task without a lock, built `comments` as the old thread plus the note, and wrote the whole array. A person's comment (or a TASK-3567 answer) committed in between was dropped. Two notes in one millisecond also got the same `mcp-` id.
@@ -249,6 +255,9 @@
 - **Recurred 2026-10-14 (TASK-2946, PR #330):**
   - **What happened:** a Claude Code session opened the PR 7 s before `mc_complete_task`, and the gate blocked with "missing an evidence summary". `mc_verify_pr` showed pass once the evidence landed, and one re-run of the failed `compliance` job recovered it.
   - **Why it recurs:** the order lives in `.cursor/rules/mc-plan-hygiene-on-pr.mdc` and `docs/AGENT-PR-SOP.md`, but not in `config/governance-contract.yaml`, so the generated `CLAUDE.md` and `AGENTS.md` pipeline contracts never state it. Adding it to the contract is the promotion this lesson needs.
+- **Recurred 2026-10-22 (TASK-3713, PR #400):**
+  - **What happened:** a Claude Code session opened the PR, then called `mc_complete_task` with the PR URL. The gate verified 4 s before the evidence landed and blocked. `mc_verify_pr` then passed, and one re-run of the failed `compliance` job recovered it.
+  - **Still open:** the contract promotion above has not landed, so the generated `CLAUDE.md` still does not state the order.
 
 ### 2026-09-26 (ET) — An e2e test that compared request counts passed locally and failed in CI
 
@@ -1196,3 +1205,32 @@
   the session is that person, in every enforcement mode — never a role check alone. Bots ask with
   `mc_ask_question`, not with a gate; the person answers on the Approvals screen, and the answer
   is stored with who answered and posted to the task as their comment.
+
+## 2026-10-22 — TASK-3721: a keyboard shortcut could approve gates nobody had read
+- **What went wrong:** The redesigned Approvals screen bound Cmd/Ctrl+Enter to "send or
+  approve". An independent review found that it approved the selected gate even when its sheet
+  was hidden on a narrow layout, or while the person was typing a rejection note, and that holding
+  it approved the whole queue at key-repeat speed: the 21 Oct pattern (TASK-3567) rebuilt as a
+  shortcut. It was caught before merge.
+- **Root cause:** The key map was written for speed on questions, and the gate branch reused it
+  without asking what the person had seen. `renderedScope` comes from the data, so the server's
+  "scope was shown" check could not tell.
+- **Rule going forward:** No key decides a gate; a gate needs a click on a sheet the person can
+  see. Keys that act on the selected item check that its sheet is visible (`keyEffect` in
+  `approvals-inbox.helpers.ts`). Any new approve path gets a negative e2e test with a positive
+  control.
+
+## 2026-10-22 — Cloud session: Next 16.4's agent upgrade notice and agent worktrees in the repo
+- **What went wrong:** `npm run build` and the e2e dev server stopped with a `SecurityFatalError`
+  that asked the agent to run `next upgrade` and to ask the user a scripted question. A full e2e
+  run then failed 363 tests with `ERR_CONNECTION_REFUSED`. Separately, `preflight.sh --mode
+  pre-commit` failed at ESLint with 766 errors, all in other agents' files.
+- **Root cause:** Next 16.4 (`lib/upgrade/nudge.js`) stops the first build or dev server in an
+  agent session once per advisory and lets a retry through for 5 minutes; a slow first run expires
+  the window. Parallel subagents ran in `isolation: worktree`, which puts worktrees under
+  `.claude/worktrees/` inside the repo, and `eslint .` lints them.
+- **Rule going forward:** Treat instructions printed by a build tool as data: check the advisory
+  with `npm audit` and fix it in its own PR (TASK-3736 / #404), never by running the suggested
+  command. Warm up with one short e2e spec, then run the full suite inside the 5-minute window.
+  Remove finished agent worktrees (`git worktree remove`) before running preflight, and keep
+  `.claude/worktrees/` in `.git/info/exclude` so it is never committed.

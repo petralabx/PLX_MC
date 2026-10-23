@@ -96,6 +96,8 @@ import {
   BATCH_FINDINGS_PER_ITEM_MAX, BATCH_FINDINGS_TOTAL_MAX, BATCH_FINDING_MESSAGE_MAX, actionUpdateTask,
 } from "@/lib/mcp/task-update-actions";
 import { outboundFields } from "@/lib/sync/mapping";
+import { STAGES, STAGE_IDX, countTaskProgress } from "@/lib/mc-data";
+import type { Task } from "@/lib/mc-data";
 
 const identity: McpIdentity = {
   operatorEmail: "vince@petrasoap.com", runtime: "codex", workerId: "update-test",
@@ -557,5 +559,163 @@ describe("assignee and accountable owner (TASK-3407)", () => {
     h.allowPool = true;
     await expect(actionUpdateTask(steward, { taskId: "TASK-1", patch: { assignee: "agent:claude-uat", reason } }))
       .rejects.toMatchObject({ code: "forbidden" });
+  });
+});
+
+// TASK-3697: the portal mirrors a ticket onto its UAT ticket task (kind:code
+// plus uat:<feedbackId>, no lane until Steward leases it). The portal key holds
+// task.uat_sync and not task.progress; the codex key is an ordinary agent.
+describe("UAT ticket task mirror (TASK-3697)", () => {
+  const uat = (id: string, overrides: Record<string, unknown> = {}) => seed(id, {
+    labels: ["kind:code", "uat:cmfb7q2xk0001", "uat-attempt:1", "repo:petralabx/plx-customer-portal"],
+    stage: "backlog", accountableOwner: "vince@petrasoap.com", ...overrides,
+  });
+  const portal = (patch: unknown, taskId = "TASK-UAT", transport: "MCP" | "REST" = "REST") =>
+    call(transport, "mc_update_task", { taskId, patch }, "portal-key");
+  const agent = (patch: unknown, taskId = "TASK-UAT") => call("REST", "mc_update_task", { taskId, patch });
+  const data = (id = "TASK-UAT") => h.rows.get(id)!.data as unknown as Task;
+  beforeEach(() => uat("TASK-UAT"));
+
+  for (const transport of ["MCP", "REST"] as const) {
+    it("lets the portal add uat:hold, replay it, and remove it on a lane-less UAT ticket task via " + transport, async () => {
+      expect((await portal({ addLabels: ["uat:hold"] }, "TASK-UAT", transport)).ok).toBe(true);
+      expect(data().labels).toContain("uat:hold");
+      // An outbox retry of the same mirror succeeds and changes nothing.
+      const replay = await portal({ addLabels: ["uat:hold"] }, "TASK-UAT", transport);
+      expect(replay.ok).toBe(true);
+      expect(replay.body.data.diff).toEqual({});
+      expect((await portal({ removeLabels: ["uat:hold"], addLabels: ["uat-attempt:2"] }, "TASK-UAT", transport)).ok).toBe(true);
+      expect(data().labels).toEqual(["kind:code", "uat:cmfb7q2xk0001", "uat-attempt:1", "repo:petralabx/plx-customer-portal", "uat-attempt:2"]);
+      expect(h.events.map((e) => e.kind)).toEqual(["task.updated", "task.updated", "task.updated"]);
+      expect(h.events[0].payload.servicePrincipalId).toBe("sp_mcp_portal");
+      expect(h.rows.get("TASK-UAT")!.sync_state).toBe("synced");
+    });
+  }
+
+  it("lets the portal cancel a lane-less UAT ticket task without task.cancel", async () => {
+    const result = await portal({ cancel: { reason: "obsolete", note: "Staff rejected ticket R5JD2K" } });
+    expect(result.ok).toBe(true);
+    expect(result.body.data.diff).toEqual({ stage: { before: "backlog", after: "cancelled" } });
+    expect(data().stage).toBe("cancelled");
+    expect(h.events).toEqual([expect.objectContaining({
+      kind: "task.cancelled", taskId: "TASK-UAT",
+      payload: expect.objectContaining({ reason: "obsolete", previousStage: "backlog", cancelledBy: "sp_mcp_portal", servicePrincipalId: "sp_mcp_portal" }),
+    })]);
+  });
+
+  it("lets the portal verify a merged UAT ticket task: it shows Verified and the rollup counts it done", async () => {
+    uat("TASK-UAT", { stage: "merged" });
+    // Merged, waiting for the submitter's re-test: in progress, not done.
+    expect(countTaskProgress([data()])).toMatchObject({ done: 0, inProgress: 1, remaining: 1 });
+    const result = await portal({ verify: { note: "Submitter pressed Works now on R5JD2K" } });
+    expect(result.ok).toBe(true);
+    expect(result.body.data.diff).toEqual({ stage: { before: "merged", after: "verified" } });
+    expect(data().stage).toBe("verified");
+    expect(STAGES[STAGE_IDX[data().stage]].name).toBe("Verified");
+    expect(countTaskProgress([data()])).toMatchObject({ done: 1, inProgress: 0, remaining: 0, pctDone: 1 });
+    expect(h.events).toEqual([{
+      kind: "task.verified", actor: "codex:vince@petrasoap.com", repo: "petralabx/PLX_MC", taskId: "TASK-UAT",
+      payload: {
+        servicePrincipalId: "sp_mcp_portal", workerId: "update-test",
+        previousStage: "merged", verifiedBy: "sp_mcp_portal", note: "Submitter pressed Works now on R5JD2K",
+      },
+    }]);
+    expect(h.rows.get("TASK-UAT")!.dirty_fields).toContain("stage");
+    // Verified again changes nothing and writes nothing, so a retried mirror succeeds.
+    const replay = await portal({ verify: {} });
+    expect(replay.ok).toBe(true);
+    expect(replay.body.data.diff).toEqual({});
+    expect(h.events).toHaveLength(1);
+  });
+
+  it("keeps the evidence gate on verify: 409 stage_blocked, which a retry cannot fix", async () => {
+    uat("TASK-UAT", { stage: "merged", evidence: { summary: "x", items: [{ key: "rollback", done: false, label: "Rollback plan" }] } });
+    const result = await portal({ verify: {} });
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(409);
+    expect(result.body.error.code).toBe("stage_blocked");
+    expect(data().stage).toBe("merged");
+    expect(h.events).toEqual([]);
+  });
+
+  it("treats a replayed portal cancel as done, not as a conflict", async () => {
+    expect((await portal({ cancel: { reason: "obsolete" } })).ok).toBe(true);
+    const replay = await portal({ cancel: { reason: "obsolete" } });
+    expect(replay.ok).toBe(true);
+    expect(replay.body.data.diff).toEqual({});
+    expect(h.events.map((e) => e.kind)).toEqual(["task.cancelled"]);
+  });
+
+  it("refuses a portal label edit that would stop the task being a UAT ticket task", async () => {
+    for (const patch of [{ removeLabels: ["kind:code"] }, { removeLabels: ["kind:code"], addLabels: ["kind:decision"] }]) {
+      const result = await portal(patch);
+      expect({ patch, ok: result.ok, code: result.body.error?.code }).toEqual({ patch, ok: false, code: "forbidden" });
+    }
+    expect(data().labels).toContain("kind:code");
+    expect(h.events).toEqual([]);
+  });
+
+  it("refuses to verify a UAT ticket task whose fix has not merged", async () => {
+    uat("TASK-UAT", { stage: "review" });
+    const result = await portal({ verify: {} });
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(409);
+    expect(result.body.error.code).toBe("not_merged");
+    expect(data().stage).toBe("review");
+    expect(h.events).toEqual([]);
+  });
+
+  it("never lets an agent verify a task, and audits the attempt", async () => {
+    h.allowPool = true; // the denial is audited on its own connection, before the transaction
+    uat("TASK-UAT", { stage: "merged" });
+    const result = await agent({ verify: {} });
+    expect(result.ok).toBe(false);
+    expect(result.body.error.code).toBe("forbidden");
+    expect(result.body.error.message).toContain("task.uat_sync");
+    expect(data().stage).toBe("merged");
+    expect(h.events.map((e) => e.kind)).toEqual(["task.verify_denied"]);
+  });
+
+  it("lets an agent add and remove uat:hold on a lane-less UAT ticket task, but not other labels", async () => {
+    expect((await agent({ addLabels: ["uat:hold"] })).ok).toBe(true);
+    expect((await agent({ removeLabels: ["uat:hold"] })).ok).toBe(true);
+    expect((await agent({ addLabels: ["needs-review-later"] })).ok).toBe(false);
+    // A lane-less task that is not a UAT ticket task still needs a lane for uat:hold.
+    seed("TASK-1", { labels: ["kind:code"] });
+    const plain = await agent({ addLabels: ["uat:hold"] }, "TASK-1");
+    expect(plain.ok).toBe(false);
+    expect(plain.body.error.code).toBe("invalid_request");
+    expect(h.events).toHaveLength(2);
+  });
+
+  it("refuses the portal every other patch, and every task that is not a UAT ticket task", async () => {
+    uat("TASK-UAT", { stage: "merged" });
+    for (const patch of [
+      { title: "Renamed" }, { description: "x" }, { priority: "low" }, { bucket: "BKT-PROJECT" },
+      { reopen: {} }, { addLabels: ["lane:claude-uat"] }, { addLabels: ["uat:blocked"] }, { removeLabels: ["uat:cmfb7q2xk0001"] },
+    ]) {
+      const result = await portal(patch);
+      expect({ patch, ok: result.ok, code: result.body.error?.code }).toEqual({ patch, ok: false, code: "forbidden" });
+    }
+    seed("TASK-1", { labels: ["kind:code"], stage: "merged" });
+    for (const patch of [{ addLabels: ["uat:hold"] }, { verify: {} }, { cancel: { reason: "obsolete" } }]) {
+      const result = await portal(patch, "TASK-1");
+      expect({ patch, ok: result.ok, code: result.body.error?.code }).toEqual({ patch, ok: false, code: "forbidden" });
+    }
+    expect(data().labels).toEqual(["kind:code", "uat:cmfb7q2xk0001", "uat-attempt:1", "repo:petralabx/plx-customer-portal"]);
+    expect(data().stage).toBe("merged");
+    expect(data("TASK-1").stage).toBe("merged");
+    expect(h.events).toEqual([]);
+  });
+
+  it("rejects verify combined with any other field", async () => {
+    uat("TASK-UAT", { stage: "merged" });
+    for (const patch of [{ verify: {}, title: "x" }, { verify: {}, cancel: { reason: "obsolete" } }, { verify: { extra: 1 } }]) {
+      const result = await portal(patch);
+      expect(result.ok).toBe(false);
+      expect(result.body.error.code).toBe("invalid_request");
+    }
+    expect(data().stage).toBe("merged");
+    expect(h.events).toEqual([]);
   });
 });

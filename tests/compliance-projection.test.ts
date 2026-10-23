@@ -292,6 +292,24 @@ describe("projectPullRequest", () => {
     expect(store.events.some((e) => e.kind === "task.promoted")).toBe(false);
   });
 
+  it("never moves a verified task back to merged, but still records the PR (TASK-3697)", async () => {
+    // The portal sets verified when the submitter confirms the fix; a late or
+    // replayed merge webhook must not undo it.
+    seedTask({ id: "TASK-220", stage: "verified", labels: ["kind:code", "uat:cmfb7q2xk0001"] });
+    await projectPullRequest(
+      prEvt({ action: "closed", merged: true, headSha: "deadbeef", mergeSha: "deadbeef" }),
+      { actorKind: "agent", actorIdentity: "dsp_abc", taskIds: ["TASK-220"], sparse: false }
+    );
+    const task = store.rows.get("task:TASK-220")!.data as unknown as Task;
+    expect(task.stage).toBe("verified");
+    expect(task.prs).toMatchObject([{ repo: "PLX_MC", num: 42, status: "merged" }]);
+    expect(task.merge).toMatchObject({ sha: "deadbeef" });
+    expect(store.events.filter((e) => e.kind === "task.promotion_skipped")).toMatchObject([
+      { taskId: "TASK-220", payload: { reason: "task_verified", sha: "deadbeef" } },
+    ]);
+    expect(store.events.some((e) => e.kind === "task.promoted")).toBe(false);
+  });
+
   it("stamps completed_at with the PR merge time, not the projection run time", async () => {
     seedTask({ id: "TASK-201", stage: "progress" });
     await projectPullRequest(

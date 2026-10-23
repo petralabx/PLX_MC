@@ -1,19 +1,21 @@
 "use client";
 
-// Goals & Production tables and tiles (brief §Screens 5–10): truckloads by
-// customer, the entries made by hand, batches completed and scheduled by size,
-// the searchable batch list and the rules in plain words. Amber (class "hand")
-// marks everything entered by hand; entries that no longer count are dimmed.
+// Goals & Production tables and tiles (brief §Screens 5–10): revenue by
+// customer class (TASK-3781), truckloads by customer, the entries made by hand,
+// batches completed and scheduled by size, the searchable batch list and the
+// rules in plain words. Amber (class "hand") marks everything entered by hand;
+// entries that no longer count are dimmed.
 
 import { useState } from "react";
 
-import type { BandCount, BandTile, EvaluatedEntry, LoadTally } from "@/lib/reporting/goals";
+import type { BandCount, BandTile, ClassRevenueTotals, EvaluatedEntry, LoadTally } from "@/lib/reporting/goals";
 
 import {
   BATCH_FILTERS,
   DEFAULT_BATCH_SORT,
   STAGE_LABELS,
   amount,
+  cents,
   count,
   day,
   decimal,
@@ -21,6 +23,8 @@ import {
   filterBatches,
   nextSort,
   oneDecimal,
+  rate,
+  revenueRateLabel,
   sortBatches,
   usd,
   type BatchFilter,
@@ -28,6 +32,88 @@ import {
   type BatchSortKey,
   type ReadyPage,
 } from "./helpers";
+
+// ─── Revenue by customer class (TASK-3781) ────────────────────────────────
+
+function ClassCells({ t }: { t: ClassRevenueTotals }) {
+  return (
+    <>
+      <td className="num">{count(t.invoices)}</td>
+      <td className="num">{amount(t.cad.cents)}</td>
+      <td className="num">{amount(t.usd.cents)}</td>
+      <td className="num">{amount(t.usd.cadCents)}</td>
+      <td className="num hand">{amount(t.byHand.cadCents)}</td>
+      <td className="num">{amount(t.totalCadCents)}</td>
+    </>
+  );
+}
+
+const share = (s: number | null) => (s === null ? "—" : `${(s * 100).toFixed(1)}%`);
+const plural = (n: number, one: string, many: string) => `${count(n)} ${n === 1 ? one : many}`;
+
+/** The Revenue card's month by class: the rows add up to the card, to the cent. */
+export function RevenueByClassTable({ page }: { page: ReadyPage }) {
+  const data = page.revenueByClass;
+  if (!data) throw new Error("a ready page model has revenue by class");
+  const { unresolvedByHand: loose, total } = data;
+  return (
+    <>
+      <div className="gp-table-wrap" role="region" aria-label="Revenue by customer class" tabIndex={0}>
+        <table className="gp-table">
+          <thead>
+            <tr>
+              <th scope="col">Customer class</th>
+              <th scope="col" className="num">Invoices</th>
+              <th scope="col" className="num">CAD</th>
+              <th scope="col" className="num">USD (US$)</th>
+              <th scope="col" className="num">USD in CAD</th>
+              <th scope="col" className="num hand">By hand, CAD</th>
+              <th scope="col" className="num">Total, CAD</th>
+              <th scope="col" className="num">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((r) => (
+              <tr key={r.customerClass}>
+                <th scope="row">{r.customerClass}</th>
+                <ClassCells t={r} />
+                <td className="num">{share(r.share)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">Total</th>
+              <ClassCells t={total} />
+              <td className="num">{total.totalCadCents > 0 ? "100%" : "—"}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="gp-line">
+        US dollars at {revenueRateLabel(page.model.revenue.basis, page)}, converted once for the month as on the Revenue card
+        and then shared across the classes, so a class can be a cent off its own US dollars converted alone. A customer
+        that isn’t on the list is Unclassified.
+        {loose.entries > 0
+          ? ` So ${loose.entries === 1 ? "is" : "are"} ${plural(loose.entries, "shipment", "shipments")} entered by hand without a Sage customer (${dollars(loose.cadCents)}).`
+          : ""}
+      </p>
+      {total.otherCurrencies.length > 0 ? (
+        <p className="gp-line">
+          Not converted:{" "}
+          {total.otherCurrencies.map((c) => `${c.currency} ${amount(c.cents)} (${plural(c.invoices, "invoice", "invoices")})`).join(", ")}.
+          Only CAD and USD count, as on the Revenue card.
+        </p>
+      ) : null}
+      {!data.matchesCard ? (
+        <p className="gp-notice" data-testid="goals-classes-mismatch">
+          These invoices add up to {cents(total.totalCadCents)}, not the Revenue card’s {cents(data.cardTotalCents)}:
+          Sage changed between two reads of this refresh. The next refresh lines them up.
+        </p>
+      ) : null}
+    </>
+  );
+}
 
 // ─── Truckloads by customer ───────────────────────────────────────────────
 
@@ -321,6 +407,7 @@ export function BatchList({ page }: { page: ReadyPage }) {
 
 export function RulesText({ page }: { page: ReadyPage }) {
   const { settings, model } = page;
+  const sage = model.revenue.basis === "sage";
   const customers = model.truckloads.customers.map((c) => c.name);
   const list =
     customers.length > 1 ? `${customers.slice(0, -1).join(", ")} or ${customers[customers.length - 1]}` : customers.join("");
@@ -342,12 +429,21 @@ export function RulesText({ page }: { page: ReadyPage }) {
         <b>Full truckloads</b> are Sage shipments (all invoices on one shipment number; an invoice without one counts
         on its own) to {list} with{" "}
         {usd(settings.fullTruckloadMinUsdCents)} or more of product, before tax and freight. Smaller shipments to them
-        are partial loads. A shipment counts in the month it ships.
+        are partial loads. A shipment counts in the month it ships. Canadian dollar product is converted to US dollars
+        for this test at the Bank of Canada rate, whichever rate the revenue is shown at.
       </li>
       <li>
         <b>Revenue</b> is the net before tax (product, freight and other charges) of invoices shipped this month. US
-        dollars are converted at the Bank of Canada rate and each amount is rounded to the cent. Credit notes are not
-        deducted. The target is {dollars(settings.revenueTargetCadCents)} a month, spread evenly over its working days.
+        dollars are converted at{" "}
+        {sage ? `the fixed Sage rate ${rate(model.revenue.rate)}` : "the Bank of Canada rate"}, or at{" "}
+        {sage ? "the Bank of Canada rate" : `the fixed Sage rate${settings.sageUsdCadRate ? ` ${rate(settings.sageUsdCadRate)}` : ""}`}{" "}
+        with the switch above the cards, and each amount is rounded to the cent. Credit notes are not deducted. The
+        target is {dollars(settings.revenueTargetCadCents)} a month, spread evenly over its working days.
+      </li>
+      <li>
+        <b>Revenue by customer class</b> splits that revenue by the class of each invoice’s Sage customer, from the
+        sales workbook’s customer categories (Vince’s 5 Oct list). A shipment entered by hand takes the class of the
+        Sage customer picked for it, else of the truckload customer its name matches; anything else is Unclassified.
       </li>
       <li>
         <b>Shipments this month</b> lists those invoices one by one, and the shipments entered by hand that count. A US
@@ -373,13 +469,15 @@ export function RulesText({ page }: { page: ReadyPage }) {
       </li>
       <li>
         <b>Revenue forecast</b> takes every open Sage order line expected to ship by month end, overdue ones included,
-        at the quantity still to ship × its unit price (US dollars at the Bank of Canada rate). Each line is matched to
+        at the quantity still to ship × its unit price (US dollars at {sage ? "the Sage rate" : "the Bank of Canada rate"}). Each line is matched to
         its FileMaker assembly order by order number and item: Ready when the assembly order is packed or its bulk batch
         is made (unless it’s scheduled after month end), Planned in time when it’s scheduled from today to month end,
         Late when it’s scheduled after month end or past its date, Not planned when there is none. Theoretical is the
         invoiced revenue plus Ready and Planned in time; At risk is Late plus Not planned. Realistic applies the share
-        of Ready and Planned in time actually invoiced in the last complete months (up to three); Pace extends the
-        invoiced revenue over the month’s working days.
+        of Ready and Planned in time actually invoiced in the last complete months (up to three, each measured at its
+        own Bank of Canada rate); Pace extends the invoiced revenue over the month’s working days. With a customer
+        class or item category chosen, the four numbers count only those open orders, and that class’s invoices.
+        Invoices aren’t split by item category yet, so with a category the numbers count open orders only.
       </li>
     </ul>
   );

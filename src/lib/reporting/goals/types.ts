@@ -10,6 +10,12 @@ export type RefreshTrigger = "cron" | "user";
 export type RunStatus = "running" | "succeeded" | "failed";
 /** boc: fetched from the Bank of Canada during the run; stored: the fetch failed and the last stored rate was used. */
 export type FxSource = "boc" | "stored";
+/**
+ * The rate USD revenue converts to CAD at on the page (TASK-3780): boc, the
+ * run's Bank of Canada rate; sage, the fixed Sage rate (GoalSettings.sageUsdCadRate).
+ * Truckload tests and every stored figure stay on the Bank of Canada rate.
+ */
+export type RevenueRateBasis = "boc" | "sage";
 
 export interface RefreshRun {
   id: number;
@@ -136,6 +142,12 @@ export interface GoalSettings {
   revenueTargetCadCents: number;
   /** null until the business sets a monthly full-truckload target. */
   fullTruckloadsPerMonth: number | null;
+  /**
+   * The fixed Sage USD/CAD rate the page can show revenue at (TASK-3780):
+   * report_goal_setting.sage_usd_cad_rate, else 1.25. null when that row is
+   * set but isn't a usable rate; only a request for the Sage rate fails on it.
+   */
+  sageUsdCadRate: string | null;
 }
 
 export interface FtlCustomer {

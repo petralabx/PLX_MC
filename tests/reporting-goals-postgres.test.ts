@@ -474,6 +474,7 @@ describe("migration 042: Line 1 bulk settings, expand only", () => {
       fullTruckloadMinUsdCents: 1_800_000,
       revenueTargetCadCents: 100_000_000,
       fullTruckloadsPerMonth: null,
+      sageUsdCadRate: "1.25",
     });
     const line1 = (await loadGoalsView()).model!.line1;
     // The retired rows change nothing, even unset; an unset Line 1 row is an error, never a silent 0.
@@ -516,6 +517,26 @@ describe("migration 042: Line 1 bulk settings, expand only", () => {
       ]);
     } finally {
       await mcQuery(`DELETE FROM report_refresh_run WHERE id = $1`, [id]);
+    }
+  });
+});
+
+describe("the Sage USD/CAD rate setting (TASK-3780)", () => {
+  it("is 1.25 without a row, the row's value when set, and an unusable row fails only a Sage-rate read", async () => {
+    expect((await loadConfig()).settings.sageUsdCadRate).toBe("1.25");
+    const boc = await loadGoalsView();
+    expect(boc.model).not.toBeNull();
+    try {
+      await mcQuery(`INSERT INTO report_goal_setting (key, value, note, updated_by) VALUES ('sage_usd_cad_rate', 1.3, 'test', 'test')`);
+      expect((await loadConfig()).settings.sageUsdCadRate).toBe("1.3");
+      expect((await loadGoalsView("sage")).model!.revenue).toMatchObject({ basis: "sage", rate: "1.3" });
+      await mcQuery(`UPDATE report_goal_setting SET value = NULL WHERE key = 'sage_usd_cad_rate'`);
+      // Refreshes read the same config: an unset row must not fail them, only a request for the Sage rate.
+      expect((await loadConfig()).settings.sageUsdCadRate).toBeNull();
+      await expect(loadGoalsView("sage")).rejects.toMatchObject({ code: "config_error", status: 500 });
+      expect((await loadGoalsView()).model).toEqual(boc.model);
+    } finally {
+      await mcQuery(`DELETE FROM report_goal_setting WHERE key = 'sage_usd_cad_rate'`);
     }
   });
 });

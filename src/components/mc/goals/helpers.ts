@@ -10,6 +10,7 @@ import type {
   GoalsPage,
   IsoDate,
   RefreshRun,
+  RevenueRateBasis,
 } from "@/lib/reporting/goals";
 import { formatAmount, formatDollars } from "@/lib/reporting/goals/money";
 
@@ -88,6 +89,12 @@ const DATE_TIME = new Intl.DateTimeFormat("en-US", {
 export const clock = (ts: string) => TIME.format(new Date(ts));
 /** "Oct 14, 6:00 AM" in Toronto. */
 export const when = (ts: string) => DATE_TIME.format(new Date(ts));
+
+/** How a revenue rate reads in a sentence (TASK-3780): "today’s Bank of Canada rate 1.4021 (Oct 22)", "the Sage rate 1.25". */
+export function revenueRateLabel(basis: RevenueRateBasis, page: Pick<ReadyPage, "fx" | "settings">): string {
+  if (basis === "sage") return page.settings.sageUsdCadRate ? `the Sage rate ${rate(page.settings.sageUsdCadRate)}` : "the Sage rate";
+  return `${page.fx.stale ? "the last stored" : "today’s"} Bank of Canada rate ${rate(page.fx.rate)} (${day(page.fx.date)})`;
+}
 
 export const RUN_STEPS: Record<string, string> = {
   claimed: "Starting",

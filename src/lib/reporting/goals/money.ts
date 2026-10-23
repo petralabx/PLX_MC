@@ -82,6 +82,43 @@ export function invertCents(cents: number, rate: string): number {
   return toSafeNumber(divideHalfEven(BigInt(cents) * pow10(scale), units));
 }
 
+/** A USD/CAD rate as a usable decimal string (positive, at most 6 places, like report_fx_rate), else null. */
+export function usableRate(value: string | null | undefined): string | null {
+  const text = (value ?? "").trim();
+  if (!/^\d*(\.\d{0,6})?$/.test(text) || !/\d/.test(text)) return null;
+  return parseDecimal(text).units > ZERO ? text : null;
+}
+
+/** p ÷ d rounded toward −∞ (d > 0); BigInt division truncates toward zero. */
+function floorDiv(p: bigint, d: bigint): bigint {
+  return p >= ZERO ? p / d : -((-p + d - ONE) / d);
+}
+
+/**
+ * Converts each part (cents) at `rate` so the parts add up to convertCents of
+ * their sum exactly (TASK-3781): every part is floored, then the cents still
+ * owed go one each to the parts with the largest remainders, ties to the
+ * earlier part. A part converted exactly is never bumped, and each result is
+ * its own conversion rounded down or up, so a part can be a cent off
+ * convertCents of that part alone.
+ */
+export function allocateConvertedCents(parts: readonly number[], rate: string): number[] {
+  const { units, scale } = parseDecimal(rate);
+  const d = pow10(scale);
+  const products = parts.map((c) => BigInt(c) * units);
+  const floors = products.map((p) => floorDiv(p, d));
+  const remainders = products.map((p, i) => p - floors[i] * d);
+  const target = divideHalfEven(products.reduce((n, p) => n + p, ZERO), d);
+  let owed = Number(target - floors.reduce((n, f) => n + f, ZERO));
+  const order = parts.map((_, i) => i).sort((a, b) => (remainders[b] > remainders[a] ? 1 : remainders[b] < remainders[a] ? -1 : a - b));
+  for (const i of order) {
+    if (owed === 0 || remainders[i] === ZERO) break;
+    floors[i] += ONE;
+    owed -= 1;
+  }
+  return floors.map(toSafeNumber);
+}
+
 /** numerator × factor ÷ divisor in cents, rounded half to even (pro-rata targets). */
 export function prorateCents(cents: number, factor: number, divisor: number): number {
   if (divisor <= 0) return 0;

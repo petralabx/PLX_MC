@@ -17,12 +17,14 @@ import { missingByRelation } from "./queries/read-access";
 import type { GoalsModel } from "./rules";
 import type { ForecastAoRow, ForecastDatasets, ForecastLineRow, GoalSettings, IsoDate } from "./types";
 import {
-  FORECAST_BUCKETS,
+  bucketTotals,
   channelOf,
-  otherCurrencyTotals,
+  forecastKpis,
   type Channel,
   type CustomerClass,
   type ForecastBucket,
+  type ForecastKpiBasis,
+  type ForecastKpis,
 } from "./forecast-list";
 
 // The browser's share lives in forecast-list.ts (no customer roster); re-exported so every caller keeps one import.
@@ -160,7 +162,7 @@ export interface ForecastRow {
   currency: string;
   /** Quantity × unit price in the order's currency, cents rounded half to even. */
   valueCents: number;
-  /** CAD at the run's rate; null for currencies other than CAD and USD (never converted). */
+  /** CAD at the revenue rate (the run's Bank of Canada rate, or the fixed Sage rate); null for currencies other than CAD and USD (never converted). */
   cadCents: number | null;
   bucket: ForecastBucket;
   ao: { id: string; number: string; scheduled: IsoDate | null; status: string | null } | null;
@@ -270,19 +272,7 @@ export function forecastRows(data: Pick<ForecastDatasets, "lines" | "aos">, toda
   return rowsByLine.flat();
 }
 
-function bucketTotals(rows: readonly ForecastRow[]): Record<ForecastBucket, { cents: number; rows: number }> {
-  const totals = Object.fromEntries(FORECAST_BUCKETS.map((b) => [b, { cents: 0, rows: 0 }])) as Record<
-    ForecastBucket,
-    { cents: number; rows: number }
-  >;
-  for (const row of rows) {
-    totals[row.bucket].rows += 1;
-    totals[row.bucket].cents += row.cadCents ?? 0;
-  }
-  return totals;
-}
-
-/** What each run stores (Sage and FileMaker only, no entries by hand): the hit rate is measured from it. */
+/** What each run stores (Sage and FileMaker only, no entries by hand), always at the run's Bank of Canada rate: the hit rate is measured from it. */
 export interface ForecastSummary {
   lines: number;
   rows: number;
@@ -339,7 +329,7 @@ export interface HitRateMonth {
   /** The last good run of the month after: its "last month" invoices are the month's, complete. */
   closingRunId: number;
   readyPlannedCents: number;
-  /** Sage revenue invoiced in the month after its first run, at that run's rate. */
+  /** Sage revenue invoiced in the month after its first run, at that run's Bank of Canada rate. */
   invoicedAfterCents: number;
 }
 
@@ -403,24 +393,19 @@ export interface ForecastSnapshot {
   history: ForecastRunPoint[];
 }
 
-export interface ForecastReady {
+/** The whole month's four numbers (forecastKpis over every row, with the Revenue card's invoiced revenue), plus what the filters need. */
+export interface ForecastReady extends Omit<ForecastKpis, "invoicedCents"> {
   state: "ready";
   rows: ForecastRow[];
   targetCents: number;
-  /** The Revenue card's figure: Sage invoices at the Bank of Canada rate plus counted shipments entered by hand. */
+  /** The Revenue card's figure: Sage invoices at the revenue rate plus counted shipments entered by hand. */
   invoicedCents: number;
-  buckets: Record<ForecastBucket, { cents: number; rows: number }>;
-  /** Invoiced + Ready + Planned in time. */
-  theoreticalCents: number;
-  /** Late + Not planned. */
-  atRiskCents: number;
-  /** Invoiced + (Ready + Planned in time) × the average hit rate; null until a complete month is measured. */
-  realistic: { cents: number; hitRate: number; months: HitRateMonth[] } | null;
+  /** Each class's invoiced revenue (the Revenue by customer class table's totals), for the class filter; null when not supplied. */
+  invoicedByClass: Record<CustomerClass, number> | null;
+  /** The hit-rate months and working days the numbers are worked out with, whatever the filter (TASK-3190). */
+  kpiBasis: ForecastKpiBasis;
   /** The first month the hit rate measures: the first that counts (runsOnRecord), else next month. Shown until one is measured. */
   measuredFrom: IsoDate;
-  /** Invoiced ÷ revenue working days covered × working days in the month; null before a day is covered. */
-  pace: { cents: number; coveredDays: number; workingDays: number } | null;
-  otherCurrencies: { currency: string; cents: number; rows: number }[];
   /** Open AOs scheduled this month with no open order behind them: a note, never revenue. */
   unordered: { count: number; pieces: number };
   /** The item category columns the login lacked (none: rows carry their category); null for a run stored before categories. */
@@ -437,8 +422,10 @@ export interface ForecastInput {
   snapshot: ForecastSnapshot | null;
   model: GoalsModel;
   settings: GoalSettings;
-  /** The run's USD/CAD rate (the Revenue card's). */
+  /** The Revenue card's USD/CAD rate (model.revenue.rate: the run's Bank of Canada rate, or the fixed Sage rate). */
   rate: string;
+  /** Each class's invoiced revenue (revenue-by-class.ts), for the class filter. */
+  invoicedByClass?: Record<CustomerClass, number> | null;
 }
 
 export function buildForecast(input: ForecastInput): ForecastView {
@@ -447,38 +434,24 @@ export function buildForecast(input: ForecastInput): ForecastView {
   if (snapshot.data.access === "missing") return { state: "waiting_for_access", missing: missingByRelation(snapshot.data.missing) };
 
   const rows = forecastRows(snapshot.data, model.today, rate);
-  const buckets = bucketTotals(rows);
   const invoicedCents = model.revenue.totalCents;
-  const readyPlanned = buckets.ready.cents + buckets.planned.cents;
-
-  const months = hitRateMonths(snapshot.history, model.today);
-  const terms = months.map((m) => prorateCents(readyPlanned, m.invoicedAfterCents, m.readyPlannedCents));
-  const realistic =
-    months.length > 0
-      ? {
-          cents: invoicedCents + prorateCents(terms.reduce((n, t) => n + t, 0), 1, months.length),
-          hitRate: months.reduce((n, m) => n + m.invoicedAfterCents / m.readyPlannedCents, 0) / months.length,
-          months,
-        }
-      : null;
   const record = runsOnRecord(snapshot.history);
   const measuredFrom = record.months.find(record.counts) ?? monthStart(addDays(monthEnd(model.today), 1));
-
-  const workingDays = model.calendar.workingDays;
-  const coveredDays = model.calendar.days.filter((d) => d.isWorkingDay && d.day <= model.coveredThrough.revenue).length;
+  const kpiBasis: ForecastKpiBasis = {
+    months: hitRateMonths(snapshot.history, model.today),
+    coveredDays: model.calendar.days.filter((d) => d.isWorkingDay && d.day <= model.coveredThrough.revenue).length,
+    workingDays: model.calendar.workingDays,
+  };
 
   return {
     state: "ready",
     rows,
     targetCents: settings.revenueTargetCadCents,
+    ...forecastKpis(rows, invoicedCents, kpiBasis),
     invoicedCents,
-    buckets,
-    theoreticalCents: invoicedCents + readyPlanned,
-    atRiskCents: buckets.late.cents + buckets.not_planned.cents,
-    realistic,
+    invoicedByClass: input.invoicedByClass ?? null,
+    kpiBasis,
     measuredFrom,
-    pace: coveredDays > 0 ? { cents: prorateCents(invoicedCents, workingDays, coveredDays), coveredDays, workingDays } : null,
-    otherCurrencies: otherCurrencyTotals(rows),
     unordered: productionWithoutOrders(snapshot.data.aos, model.today),
     categoryMissing: snapshot.data.categoryMissing ?? null,
   };

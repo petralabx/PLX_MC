@@ -25,6 +25,7 @@ import {
   type ForecastReady,
   type ForecastView,
 } from "@/lib/reporting/goals";
+import { usdToCadFormula } from "@/lib/reporting/goals/excel/export";
 
 import { DATASETS, FORECAST, RATE, RUN, SETTINGS, TODAY, goalsPage } from "./reporting-goals-helpers";
 
@@ -124,7 +125,7 @@ describe("the Forecast sheet", () => {
         r.currency,
         r.valueCents / 100,
       ]);
-      expect(formulaOf(ws.getCell(`N${n}`))).toBe(`IF(L${n}="CAD",M${n},IF(L${n}="USD",ROUND(M${n}*Goals!$B$17,2),""))`);
+      expect(formulaOf(ws.getCell(`N${n}`))).toBe(`IF(L${n}="CAD",M${n},IF(L${n}="USD",${usdToCadFormula(`M${n}`)},""))`);
       expect(ws.getCell(`P${n}`).value).toBe(r.ao?.number ?? null);
       expect([ws.getCell(`U${n}`).value, ws.getCell(`V${n}`).value]).toEqual([r.customerClass, r.category]);
     });
@@ -150,7 +151,7 @@ describe("the Forecast sheet", () => {
     const noCategory = 7 + FORECAST_VIEW.rows.findIndex((r) => r.item === "FP-1414");
     expect([ws.getCell(`G${noCategory}`).value, ws.getCell(`V${noCategory}`).value]).toEqual(["FP-1414", null]);
     // Read: no note about categories, so the rounding note stays the last line.
-    expect(String(ws.getCell("A32").value)).toContain("CAD uses Excel’s ROUND");
+    expect(String(ws.getCell("A32").value)).toContain("CAD is rounded to the cent half to even, as on the page.");
   });
 
   it("writes Sage's space-padded category trimmed in column V, and a blank one as empty (TASK-3189)", async () => {
@@ -170,7 +171,7 @@ describe("the Forecast sheet", () => {
       "Item category is blank: the reporting login can’t read sage.oe_order_detail.category yet. A database administrator " +
         "grants it by re-running docs/modules/reporting-goals/readonly-grants-forecast.sql."
     );
-    expect(String(waiting.ws.getCell("A33").value)).toContain("CAD uses Excel’s ROUND");
+    expect(String(waiting.ws.getCell("A33").value)).toContain("CAD is rounded to the cent half to even, as on the page.");
     const older = await build(view(null));
     expect(older.ws.getCell("A32").value).toBe("Item categories fill in at the next refresh.");
   });

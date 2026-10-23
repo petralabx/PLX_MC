@@ -9,7 +9,7 @@
 // (quotes, standing orders, COMPLETE never read, misc lines, the expected-date
 // fallback) are tested against Postgres in tests/reporting-goals-postgres.test.ts.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { createElement } from "react";
@@ -662,19 +662,41 @@ describe("the list: customer class and item category (TASK-3177)", () => {
     expect(filterForecastRows(padded, { filter: "all", query: "", category: "none" }).map((r) => r.orderNo)).toEqual(["OR1000000003", "OR1000000004"]);
   });
 
-  it("keeps the customer roster out of the browser bundle: the page's client code never imports forecast.ts or customer-classes.json", () => {
-    // Anything the client component imports ships in /_next/static, which is served without sign-in.
+  it("keeps the customer roster out of the browser bundle: no client code of the page reaches forecast.ts or customer-classes.json", () => {
+    // Anything the client components import, however deep, ships in /_next/static, which is served without sign-in.
+    const root = process.cwd();
     const runtimeImports = (file: string) => {
-      const source = readFileSync(path.join(process.cwd(), file), "utf8");
-      return [...source.matchAll(/^import\s+(type\s+)?[\s\S]*?\sfrom\s+"([^"]+)";/gm)].filter((m) => !m[1]).map((m) => m[2]);
+      const source = readFileSync(path.join(root, file), "utf8");
+      return [...source.matchAll(/^(?:import|export)\s+(type\s+)?[^;]*?\sfrom\s+"([^"]+)";/gm)].filter((m) => !m[1]).map((m) => m[2]);
     };
-    const forbidden = /customer-classes|\/forecast$|\.\/forecast$|\/reporting\/goals$|\/reporting\/goals\/index$/;
-    for (const file of ["src/components/mc/goals/forecast.tsx", "src/lib/reporting/goals/forecast-list.ts"]) {
-      const imports = runtimeImports(file);
-      expect(imports.length).toBeGreaterThan(0);
-      expect(imports.filter((specifier) => forbidden.test(specifier))).toEqual([]);
-    }
-    expect(runtimeImports("src/components/mc/goals/forecast.tsx")).toContain("@/lib/reporting/goals/forecast-list");
+    /** A specifier as a repo file, for this module's own code only (the walk doesn't follow the rest of the app). */
+    const resolve = (from: string, specifier: string): string | null => {
+      const base = specifier.startsWith("@/") ? path.join("src", specifier.slice(2)) : specifier.startsWith(".") ? path.join(path.dirname(from), specifier) : null;
+      if (!base || !/^src\/(lib\/reporting\/goals|components\/mc\/(goals|charts))(\/|$)/.test(base)) return null;
+      for (const candidate of [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts"), path.join(base, "index.tsx")]) {
+        if (existsSync(path.join(root, candidate)) && statSync(path.join(root, candidate)).isFile()) return candidate;
+      }
+      throw new Error(`can't resolve ${specifier} from ${from}`);
+    };
+    const clientFiles = readdirSync(path.join(root, "src/components/mc/goals"))
+      .map((name) => `src/components/mc/goals/${name}`)
+      .filter((file) => /\.tsx?$/.test(file) && readFileSync(path.join(root, file), "utf8").startsWith('"use client"'));
+    expect(clientFiles).toContain("src/components/mc/goals/forecast.tsx");
+    const forbidden = /customer-classes\.json$|\/forecast\.ts$|\/revenue-by-class\.ts$|\/reporting\/goals\/index\.ts$/;
+    const reached = new Set<string>();
+    const walk = (file: string, via: string[]) => {
+      if (reached.has(file)) return;
+      reached.add(file);
+      expect(forbidden.test(file), [...via, file].join(" → ")).toBe(false);
+      if (file.endsWith(".json")) return;
+      for (const specifier of runtimeImports(file)) {
+        const next = resolve(file, specifier);
+        if (next) walk(next, [...via, file]);
+      }
+    };
+    for (const file of clientFiles) walk(file, []);
+    expect(reached).toContain("src/lib/reporting/goals/forecast-list.ts");
+    expect(reached).toContain("src/lib/reporting/goals/shipment-list.ts");
     expect(customerClassOf("NIUB01")).toBe("Exclusive Manufacturing");
   });
 

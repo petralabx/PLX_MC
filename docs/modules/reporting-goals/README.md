@@ -9,7 +9,9 @@ monthly goals for Petra Lab-X against the business's definitions:
 - Line 1 bulk: 20,000 kg per working day, counting batches of 5,000 kg or more
   (it replaced the large-batch goal on 2026-10-16; see "Line 1 bulk" below)
 - full truckloads: US$18,000 or more of product per shipment to five customers
-- shipped revenue: $1,000,000 CAD a month
+- shipped revenue: $1,000,000 CAD a month, with US dollars at today's Bank of
+  Canada rate or, on the switch above the cards, the fixed Sage rate 1.25
+  (TASK-3780), and split by customer class (TASK-3781)
 
 Figures come from FileMaker (`silver.batches`) and Sage 300
 (`sage.oe_invoice_header`, `sage.ar_customer`) on the read-only PLX reporting
@@ -45,7 +47,9 @@ traceable to a refresh run and a named query.
    covered-through dates, the data-is-behind rule and the takeaway sentence.
    Money is integer cents parsed exactly from decimal strings. Each converted
    amount is rounded to the cent, half to even: 25,750 × 1.4219 = 36,613.925
-   gives 36,613.92.
+   gives 36,613.92. A sum split into parts (revenue by class) converts the
+   whole once and shares it by largest remainder (`allocateConvertedCents`), so
+   the parts add up to it to the cent.
 3. **Queries** — `queries/*.ts`, one per dataset: `cutoffs`, `daily`,
    `truckloads`, `revenue-by-currency`, `shipments`, `shipment-lines`,
    `batches`, `batch-history`, `references` and `customers` (and the
@@ -65,7 +69,9 @@ traceable to a refresh run and a named query.
       - Users may start one refresh per 5 minutes.
    2. The rate comes from the Bank of Canada Valet (`FXUSDCAD`), and every
       fetched rate is stored. If the fetch fails, the run uses the last stored
-      rate and flags it.
+      rate and flags it. Everything a run stores, the forecast summary the hit
+      rate is measured from included, is at this rate; the Sage rate is applied
+      only when a page or export asks for it (**Revenue rate**).
    3. Every query runs in one `REPEATABLE READ READ ONLY` transaction on the
       replica (or through plx-reporting-mcp, see **Reporting MCP path**), with
       a 120-second budget per attempt. A transient error is
@@ -79,7 +85,8 @@ traceable to a refresh run and a named query.
    successful snapshot plus the live manual entries, evaluated at read time. It
    carries the run (cutoffs, rate, row counts) and the query behind each
    section. The newest run is reported beside it when it failed or is still
-   running.
+   running. It is built at a revenue rate (`?fx=`, **Revenue rate**) and
+   carries revenue by customer class (**Revenue by customer class**).
 6. **Access** — `access.ts`. Two Entra app roles on Mission Control's sign-in
    app, `Goals.Viewer` (see and export) and `Goals.Editor` (also refresh and
    manual entries), are assigned to the two Entra groups.
@@ -93,11 +100,11 @@ traceable to a refresh run and a named query.
 
    | Route | Who | Does |
    |---|---|---|
-   | `GET /api/reporting/goals` | Viewer | The page model, plus `viewer.editor` (whether this viewer may refresh) |
+   | `GET /api/reporting/goals` | Viewer | The page model, plus `viewer.editor` (whether this viewer may refresh). `?fx=sage` converts USD revenue at the fixed Sage rate (absent or `boc`: the run's Bank of Canada rate; anything else 400 `invalid_request`; 500 `config_error` when the Sage rate setting isn't usable). |
    | `POST /api/reporting/goals/refresh` | Editor | Claims a run and answers 202 with it; the run finishes in `after()`. 409 while one is running, 429 within 5 minutes of the last, 503 if the reporting database is not connected. |
    | `GET /api/reporting/goals/runs/[id]` | Viewer | One run's status, for polling |
    | `GET /api/reporting/goals/runs/[id]/shipment-lines` | Viewer | One good run's Sage invoice lines and whether the login could read them (`{ access, missing, lines }`), which the shipments list fetches once (TASK-3144). 404 when the run has none stored. |
-   | `GET /api/reporting/goals/export` | Viewer | The workbook (step 10) as `PLX goals and production YYYY-MM-DD.xlsx`, dated by the run's Toronto day. 404 `no_data` before the first good refresh. |
+   | `GET /api/reporting/goals/export` | Viewer | The workbook (step 10) as `PLX goals and production YYYY-MM-DD.xlsx`, dated by the run's Toronto day; `?fx=sage` at the Sage rate, as `… YYYY-MM-DD (Sage rate).xlsx`. 404 `no_data` before the first good refresh. |
    | `GET /api/reporting/goals/entries` | Viewer | The live manual entries, oldest first |
    | `POST /api/reporting/goals/entries` | Editor | Adds an entry: 201 with it (next `M001`-style ID; entered by the signed-in Editor). 400 `invalid_entry` with the problems. |
    | `PATCH`, `DELETE /api/reporting/goals/entries/[id]` | Editor | Changes the fields sent (nothing is written when nothing changes), or soft-deletes the entry. 404 when there is no such live entry. |
@@ -110,14 +117,15 @@ traceable to a refresh run and a named query.
    `mc.screens` layer). One read of the page model, so every section comes
    from the same snapshot.
    - Header: the month's title, "Data as of" with both cutoffs, the amber
-     legend, the takeaway, Export to Excel and, for Editors, Refresh, Import
+     legend, the revenue rate switch ("US dollars at": Today's rate or Sage
+     rate), the takeaway, Export to Excel and, for Editors, Refresh, Import
      manual entries and Add entry. Refresh follows the run through
      `GET …/runs/[id]` every 2 s and reloads when it ends; it shows when the
      5-minute limit lifts. Export downloads through `apiDownload()` (next to
      `api()` in `src/lib/api`); its progress and errors use the same status
      line.
-   - Sections: the three goal cards, the day-by-day charts, truckloads by
-     customer, entries by hand, completed and scheduled batches by size, the
+   - Sections: the three goal cards, revenue by customer class, the day-by-day
+     charts, truckloads by customer, entries by hand, completed and scheduled batches by size, the
      batch list (search, filters, "Line 1 only" toggle, sortable columns) and
      the rules in plain words.
    - Charts: `StackedColumns` and `RunningLines` in
@@ -132,17 +140,18 @@ traceable to a refresh run and a named query.
      and shipments by hand (see **Shipments list** below).
 9. **Audit**
    - `mc_events` records `reporting.goals.refresh.succeeded|failed` (run id,
-     counts and error code, never values), `reporting.goals.export` (who and
-     the run id) and `reporting.goals.denied`.
+     counts and error code, never values), `reporting.goals.export` (who, the
+     run id and the rate, `fx`) and `reporting.goals.denied`.
    - It also records `reporting.goals.entry.created|updated|deleted` (the
      entry id and, for an edit, the names of the fields changed) and
      `reporting.goals.import.confirmed` (import id and counts). Never values.
    - Entry history goes to `report_manual_entry_version`, which only the
      report's Viewers can read.
 10. **Workbook** — `excel/export.ts` (pure, exceljs) builds the brief's seven
-    sheets, the Shipment lines sheet (see **Shipments list**) and the Forecast
-    sheet (step 12), from the page model plus the run's Sage invoices, their
-    lines and truckload shipments (`loadGoalsExport()`). Sheet
+    sheets, the Revenue by class sheet (TASK-3781), the Shipment lines sheet
+    (see **Shipments list**) and the Forecast sheet (step 12), from the page
+    model plus the run's Sage invoices, their lines and truckload shipments
+    (`loadGoalsExport()`), at the page's revenue rate (Goals!B17). Sheet
     names and order, the file name and the "Manual entries" columns come from
     `excel/layout.ts`, the contract shared with the import.
     - House styles: Arial 10, 14-pt bold titles, header rows bold on light
@@ -155,9 +164,11 @@ traceable to a refresh run and a named query.
       Daily and Truckloads totals; on Daily the running revenue and target to
       date; the truckload totals; Line 1 on Batches. Figures from FileMaker,
       Sage and the entries are values, to the cent, as the page computed them.
-    - In-system revenue converts USD with Excel's `ROUND` (half away from
-      zero), while the page rounds half to even, so the two differ only when a
-      conversion lands on exactly half a cent.
+    - USD converts to CAD half to even, as on the page, through an integer
+      formula (`usdToCadFormula`), not Excel's `ROUND` (half away from zero),
+      which at 1.25 lands on a half cent for one amount in four. It is exact
+      while USD cents × rate × 10⁶ stays under 2⁵³ (about US$64 million at
+      1.4). LibreOffice recalculates it to the page's figures in the tests.
     - "Manual entries" is the import template: the entries in amber, then
       formatted blank rows with the Type and Currency lists to row 200.
 11. **Manual entries and import** — `entry-input.ts` (validation, pure),
@@ -226,16 +237,17 @@ traceable to a refresh run and a named query.
       scheduled from today to month end → Planned in time; before today →
       Late; no AO (or an AO with no date) → Not planned.
     - **Values.** Quantity still to ship × unit price in the order's currency,
-      to the cent; CAD as the Revenue card converts (USD at the run's Bank of
-      Canada rate, half to even, per row; other currencies listed, never
-      converted).
+      to the cent; CAD as the Revenue card converts (USD at the revenue rate,
+      the run's Bank of Canada rate or the Sage rate, half to even, per row;
+      other currencies listed, never converted).
     - **The four numbers**, against `revenue_target_cad`. Theoretical =
       invoiced so far (the Revenue card's total, by hand included) + Ready +
       Planned in time. At risk = Late + Not planned. Pace = invoiced ÷ revenue
       working days covered × working days in the month. Realistic = invoiced +
       (Ready + Planned in time) × the average hit rate of up to the three latest
       complete months. A month's hit rate is the Sage revenue invoiced in it
-      after its first good run, at that run's rate (the month's invoices as the
+      after its first good run, at that run's Bank of Canada rate (whatever rate
+      the page shows revenue at) (the month's invoices as the
       last run of the next month sees them, less those at the first run), ÷
       that run's Ready + Planned in time. A month counts only when that first
       run had a forecast and an earlier month is still on record (runs are kept
@@ -252,8 +264,15 @@ traceable to a refresh run and a named query.
       bulk batch), bucket chips with counts, a search (order, customer, PO, item,
       description, AO) and CAD totals that follow both.
     - **Filters** (TASK-3177): customer class and item category, beside the
-      search. They change the list, the chip counts and the CAD total, never
-      the four numbers. **Customer class** comes from the sales workbook's
+      search. They change the list, the chip counts and the CAD total, and the
+      four numbers (TASK-3190): `forecastKpis` works the numbers out over the
+      rows they keep, the same function as the whole month's, so with neither
+      filter the numbers are the whole month's to the cent. Invoiced follows the
+      class (Revenue by customer class); invoices can't be split by item
+      category yet, so with a category the numbers count open orders only and
+      Pace waits. The target and the hit rate stay all customers'. The bucket
+      chips and the search change only the list, and the workbook's four
+      numbers stay whole-month (its columns U and V let Excel filter). **Customer class** comes from the sales workbook's
       "Customer categories" sheet (Vince's 5 Oct list, plus customers derived
       from the item categories they bought): Exclusive Manufacturing, Exclusive
       Distribution or Mixed; a customer not on it is Unclassified. It is
@@ -480,6 +499,58 @@ disable `mc-goals-report` in the token map.
    should be a real difference (a line missing on the replica, a manual
    adjustment), not a rule.
 
+### Revenue rate
+
+The page shows US dollar revenue at today's rate, the run's Bank of Canada rate
+(the default), or at the fixed Sage rate 1.25 (TASK-3780), the rate the
+portal's Projected Revenue books US sales at (TASK-1270).
+
+- **Where.** The switch sits above the goal cards. The choice lives in the URL
+  (`/?screen=goals&fx=sage`), so a link and Back and Forward keep it. The page
+  asks for the page model, and the workbook, at it (`?fx=sage`); today's rate
+  sends no query.
+- **What moves.** Every USD-to-CAD revenue figure: the Revenue card, its status
+  and needed per day, the takeaway, the daily revenue chart and table, the
+  shipments list, revenue by customer class, the forecast's rows and its four
+  numbers, and the workbook's rate cell (Goals!B17) and the formulas over it.
+- **What doesn't.** The US$18,000 full-truckload test converts CAD product at
+  the Bank of Canada rate whatever rate revenue is at (`model.truckloads.rate`).
+  So do the hit rate's months, measured at each first run's rate. Everything a
+  refresh stores stays at the Bank of Canada rate.
+- **The setting.** `report_goal_setting.sage_usd_cad_rate`. No row means 1.25
+  (`DEFAULT_SAGE_USD_CAD_RATE`), so the switch needed no migration. A row
+  overrides it; add or change it through the approved migration workflow, as
+  the other settings. A row that isn't a positive rate with at most 6 decimals
+  fails only a Sage-rate read (500 `config_error`); refreshes and today's rate
+  never read it.
+- It is a fixed rate, not each invoice's own Sage rate (`inrate`), which the
+  reporting login can't read.
+
+### Revenue by customer class
+
+The Revenue card's month by customer class (TASK-3781), in a section under the
+goal cards and on the workbook's Revenue by class sheet (`revenue-by-class.ts`).
+
+- **Class.** The sales workbook's customer categories, as the forecast's
+  Customer class filter reads them (`customer-classes.json`, by Sage customer
+  code). A shipment entered by hand takes the class of the Sage customer picked
+  for it, else of the truckload customer its name matches (as the Truckloads
+  card matches it), else it is Unclassified, and the note says how much.
+- **Rows.** The shipments list's rows: this month's Sage invoices and the
+  counted shipments entered by hand. Each class shows invoices, CAD, USD (US$),
+  USD in CAD, by hand (amber), total and share.
+- **To the cent.** The month's USD is converted once, as on the card, and
+  shared across the classes by largest remainder, so the classes add up to the
+  card and a class can be a cent off its own USD converted alone.
+- **When they don't match.** The card reads `revenue-by-currency` and the list
+  reads `shipments`. On the reporting MCP path those are two statements, so an
+  invoice posted between them is in one and not the other. The table then
+  checks itself against the card (`matchesCard`) and says so with both totals,
+  and the workbook's Difference cell shows the gap, until the next refresh.
+- **Server-only.** The roster ships only in the page model's results, never in
+  the browser bundle (a test walks every runtime import of the page's client
+  files).
+
 ### Line 1 bulk
 
 Approved by Vince Alton on 2026-10-16 (TASK-3142), in place of the large-batch
@@ -537,6 +608,10 @@ goal (2 batches of 7,500 kg or more per working day).
     description says TEST are left out.
   - The expected date is the line's EXPDATE, else the order's. A line with
     neither is left out.
+  - A shipment entered by hand counts as invoiced until its reference shows up
+    in Sage, while the same goods can still be an open order line (Sage hasn't
+    lowered its quantity yet). Nothing matches the two, so in that window
+    Theoretical and Realistic count it twice.
   - An AO links to the first order in its list only, as the portal joins, so
     a second order on the list shows Not planned unless it has its own AO.
     Order numbers and item codes match exactly, trimmed. The item code comes
@@ -608,6 +683,7 @@ Depended on by: nothing yet.
 ### Key Files
 
 - `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, source-mcp, sql-literal, fx, store, refresh, loader, access, entry-input, entries, excel/)
+- Revenue rate and revenue by class (TASK-3780, TASK-3781): `revenue-by-class.ts`, `money.ts` (`allocateConvertedCents`, `usableRate`), `excel/export.ts` (`usdToCadFormula`); `tests/reporting-goals-revenue-rate.test.ts` and the Sage-rate blocks of `tests/reporting-goals-export.test.ts`; `e2e/goals-rate.spec.ts`
 - Reporting MCP path (TASK-3489): `source-mcp.ts`, `sql-literal.ts`; `tests/reporting-goals-source-mcp.test.ts` (a fake plx-reporting-mcp), `tests/reporting-goals-sql-literal.test.ts`, `tests/reporting-goals-source-select.test.ts`
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)
 - `db/migrations/042_reporting_goals_line1.sql` (+ `db/rollback/042_reporting_goals_line1_rollback.sql`) — the Line 1 settings

@@ -17,6 +17,7 @@ import type {
   GoalSettings,
   IsoDate,
   ManualEntry,
+  RevenueRateBasis,
   SnapshotData,
   TruckloadRow,
 } from "./types";
@@ -173,8 +174,12 @@ export interface GoalsInput {
   holidays: ReadonlySet<IsoDate>;
   settings: GoalSettings;
   ftlCustomers: readonly FtlCustomer[];
-  /** USD/CAD for revenue (the run's rate). */
+  /** The run's Bank of Canada USD/CAD rate: revenue's unless `revenueRate` is given, and always the truckload test's fallback. */
   rate: string;
+  /** USD/CAD for revenue (TASK-3780): the fixed Sage rate on the Sage view; omitted, `rate`. */
+  revenueRate?: string;
+  /** Which rate `revenueRate` is; omitted, boc. */
+  revenueBasis?: RevenueRateBasis;
   /** Stored rate history, for a CAD shipment's own-day rate. */
   rates: readonly FxRate[];
   data: SnapshotData;
@@ -293,6 +298,8 @@ export interface GoalsModel {
   };
   truckloads: {
     target: number | null;
+    /** The Bank of Canada rate a CAD truckload product converts at when its ship date has no stored rate: never the Sage rate. */
+    rate: string;
     full: LoadCounts;
     partial: LoadCounts;
     lastMonth: LoadTally;
@@ -307,7 +314,9 @@ export interface GoalsModel {
     totalCents: number;
     status: GoalStatus;
     neededPerDayCents: number;
+    /** The USD/CAD rate revenue converts at: the run's Bank of Canada rate, or the fixed Sage rate (`basis`). */
     rate: string;
+    basis: RevenueRateBasis;
     cad: { invoices: number; cents: number };
     usd: { invoices: number; cents: number; cadCents: number };
     /** Currencies other than CAD and USD are not converted; listed so they are never silently dropped. */
@@ -377,6 +386,7 @@ function emptyStageGrams(): Record<BatchStage, number> {
 
 export function computeGoals(input: GoalsInput): GoalsModel {
   const { today, holidays, settings, data, rate } = input;
+  const revenueRate = input.revenueRate ?? rate;
   const start = monthStart(today);
   const end = monthEnd(today);
   const days = eachDay(start, end);
@@ -426,7 +436,7 @@ export function computeGoals(input: GoalsInput): GoalsModel {
       }
     } else {
       const valueCents = toCents(entry.productValue) + toCents(entry.freight);
-      evaluated.revenueCadCents = entry.currency === "USD" ? convertCents(valueCents, rate) : valueCents;
+      evaluated.revenueCadCents = entry.currency === "USD" ? convertCents(valueCents, revenueRate) : valueCents;
       const customer = truckloadCustomerFor(entry, input.ftlCustomers);
       if (customer) {
         const productCents = toCents(entry.productValue);
@@ -489,14 +499,14 @@ export function computeGoals(input: GoalsInput): GoalsModel {
   const usd = revenueRow("USD", true);
   const cadCents = toCents(cad?.netBeforeTax);
   const usdCents = toCents(usd?.netBeforeTax);
-  const usdCadCents = convertCents(usdCents, rate);
+  const usdCadCents = convertCents(usdCents, revenueRate);
   const inSystemCents = cadCents + usdCadCents;
   const byHandCents = countedShipments.reduce((n, e) => n + e.revenueCadCents, 0);
   const totalCents = inSystemCents + byHandCents;
   const targetCents = settings.revenueTargetCadCents;
   const dueSoFarCents = prorateCents(targetCents, revenueCovered, workingDays);
   const lastMonthCadCents =
-    toCents(revenueRow("CAD", false)?.netBeforeTax) + convertCents(toCents(revenueRow("USD", false)?.netBeforeTax), rate);
+    toCents(revenueRow("CAD", false)?.netBeforeTax) + convertCents(toCents(revenueRow("USD", false)?.netBeforeTax), revenueRate);
 
   // ── Batch list: FileMaker rows, with hand entries merged in ──
   const batches: BatchListRow[] = data.batches.map((b) => {
@@ -597,7 +607,7 @@ export function computeGoals(input: GoalsInput): GoalsModel {
     cumCadLast += toCents(row?.cadLast);
     cumUsdLast += toCents(row?.usdLast);
     cumByHand += dayByHand;
-    const sageToDateCents = cumCad + convertCents(cumUsd, rate);
+    const sageToDateCents = cumCad + convertCents(cumUsd, revenueRate);
     return {
       day,
       isWorkingDay: working,
@@ -612,7 +622,7 @@ export function computeGoals(input: GoalsInput): GoalsModel {
       sageToDateCents,
       withHandToDateCents: sageToDateCents + cumByHand,
       targetToDateCents: prorateCents(targetCents, wdToDate, workingDays),
-      lastMonthToDateCents: cumCadLast + convertCents(cumUsdLast, rate),
+      lastMonthToDateCents: cumCadLast + convertCents(cumUsdLast, revenueRate),
     };
   });
 
@@ -683,6 +693,7 @@ export function computeGoals(input: GoalsInput): GoalsModel {
     },
     truckloads: {
       target: settings.fullTruckloadsPerMonth,
+      rate,
       full: { inSystem: fullInSystem, byHand: fullByHand, total: fullInSystem + fullByHand },
       partial: { inSystem: partialInSystem, byHand: partialByHand, total: partialInSystem + partialByHand },
       lastMonth: {
@@ -701,7 +712,8 @@ export function computeGoals(input: GoalsInput): GoalsModel {
       totalCents,
       status: totalCents >= dueSoFarCents ? "on_track" : "behind",
       neededPerDayCents: remaining > 0 ? prorateCents(Math.max(0, targetCents - totalCents), 1, remaining) : 0,
-      rate,
+      rate: revenueRate,
+      basis: input.revenueBasis ?? "boc",
       cad: { invoices: cad?.invoices ?? 0, cents: cadCents },
       usd: { invoices: usd?.invoices ?? 0, cents: usdCents, cadCents: usdCadCents },
       otherCurrencies: data.revenue

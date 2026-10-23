@@ -53,6 +53,7 @@ import { GET as runGet } from "@/app/api/reporting/goals/runs/[id]/route";
 import { GET as linesGet } from "@/app/api/reporting/goals/runs/[id]/shipment-lines/route";
 import { appendEvent } from "@/lib/compliance/repo";
 import { goalsRolesFromClaims, resolveGoalsActor } from "@/lib/reporting/goals";
+import { loadGoalsView } from "@/lib/reporting/goals/loader";
 import { runRefresh, startRefresh } from "@/lib/reporting/goals/refresh";
 
 const ctx = { params: Promise.resolve({}) };
@@ -121,6 +122,21 @@ describe("GET /api/reporting/goals", () => {
     signedIn(["Goals.Editor"]);
     const editor = await viewGet(new Request("http://localhost/api/reporting/goals"), ctx);
     expect(await editor.json()).toEqual({ data: { state: "ready", viewer: { editor: true } } });
+  });
+
+  it("reads ?fx=: absent or boc is the Bank of Canada rate, sage the fixed Sage rate, anything else 400 (TASK-3780)", async () => {
+    signedIn(["Goals.Viewer"]);
+    vi.mocked(loadGoalsView).mockClear();
+    for (const [query, basis] of [["", "boc"], ["?fx=boc", "boc"], ["?fx=sage", "sage"]] as const) {
+      expect((await viewGet(new Request(`http://localhost/api/reporting/goals${query}`), ctx)).status).toBe(200);
+      expect(vi.mocked(loadGoalsView)).toHaveBeenLastCalledWith(basis);
+    }
+    const bad = await viewGet(new Request("http://localhost/api/reporting/goals?fx=usd"), ctx);
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({ error: { code: "invalid_request", message: "fx must be boc or sage." } });
+    // The role check comes first: no session is still 401, whatever the query.
+    h.session = null;
+    expect((await viewGet(new Request("http://localhost/api/reporting/goals?fx=usd"), ctx)).status).toBe(401);
   });
 });
 

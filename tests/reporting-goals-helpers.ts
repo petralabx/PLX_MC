@@ -11,6 +11,7 @@ import type {
   GoalSettings,
   ManualEntry,
   RefreshRun,
+  RevenueRateBasis,
   ShipmentLineRow,
   ShipmentLinesSummary,
 } from "@/lib/reporting/goals/types";
@@ -47,6 +48,7 @@ export const SETTINGS: GoalSettings = {
   fullTruckloadMinUsdCents: 1_800_000,
   revenueTargetCadCents: 100_000_000,
   fullTruckloadsPerMonth: null,
+  sageUsdCadRate: "1.25",
 };
 
 /** The truckload customers migration 039 seeds. */
@@ -111,18 +113,20 @@ export const RUN: RefreshRun = {
   rowCounts: {},
 };
 
-/** What GET /api/reporting/goals returns for the fixture with M1–M7 entered (the page tests use it). */
+/** What GET /api/reporting/goals returns for the fixture with M1–M7 entered (the page tests use it); `?fx=sage` with basis "sage" (TASK-3780). */
 export function goalsPage(
   overrides: Partial<GoalsPage> = {},
   entries: ManualEntry[] = ENTRIES,
   forecast: ForecastSnapshot | null = FORECAST,
-  shipmentLines: ShipmentLinesSummary | null = SHIPMENT_LINES_SUMMARY
+  shipmentLines: ShipmentLinesSummary | null = SHIPMENT_LINES_SUMMARY,
+  basis: RevenueRateBasis = "boc",
+  snapshot: Datasets = DATASETS
 ): GoalsPage {
   const view = buildGoalsView({
     configured: true,
     run: RUN,
     latestRun: RUN,
-    snapshot: DATASETS,
+    snapshot,
     entries,
     filemakerRefs: refsOf("filemaker"),
     sageRefs: refsOf("sage"),
@@ -132,6 +136,7 @@ export function goalsPage(
     rates: [{ date: TODAY, rate: RATE }],
     forecast,
     shipmentLines,
+    revenueBasis: basis,
   });
   return { ...view, viewer: { editor: true }, ...overrides };
 }

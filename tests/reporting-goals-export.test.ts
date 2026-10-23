@@ -1,5 +1,5 @@
 // Goals & Production workbook (TASK-2898), built from the 2026-10-14 fixture
-// with and without M1–M7 and read back with exceljs: the nine sheets in the
+// with and without M1–M7 and read back with exceljs: the ten sheets in the
 // shared order, the house styles, real dates and number formats, formulas
 // wherever the brief derives a value, amber for everything entered by hand,
 // and the "Manual entries" import template. LibreOffice then recalculates it:
@@ -57,12 +57,29 @@ import {
   centsToDecimal,
   loadGoalsExport,
   loadGoalsView,
+  toCents,
+  type Datasets,
   type GoalsModel,
+  type GoalsPage,
   type ManualEntry,
 } from "@/lib/reporting/goals";
-import { loadShipmentLines, loadSnapshot } from "@/lib/reporting/goals/store";
+import { usdToCadFormula } from "@/lib/reporting/goals/excel/export";
+import { loadConfig, loadShipmentLines, loadSnapshot } from "@/lib/reporting/goals/store";
 
-import { DATASETS, ENTRIES, RATE, RUN, SETTINGS, SHIPMENT_LINES, TODAY, goalsPage } from "./reporting-goals-helpers";
+import {
+  DATASETS,
+  ENTRIES,
+  FORECAST,
+  FTL_CUSTOMERS,
+  HOLIDAYS,
+  RATE,
+  RUN,
+  SETTINGS,
+  SHIPMENT_LINES,
+  SHIPMENT_LINES_SUMMARY,
+  TODAY,
+  goalsPage,
+} from "./reporting-goals-helpers";
 
 const EXPORTED_AT = new Date("2026-10-14T14:42:00Z");
 const DATE_FORMAT = "yyyy-mm-dd";
@@ -102,7 +119,7 @@ const formulaOf = (cell: ExcelJS.Cell) =>
 const utcDay = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
 describe("the workbook", () => {
-  it("has the nine sheets in the shared order, set to recalculate on open", async () => {
+  it("has the ten sheets in the shared order, set to recalculate on open", async () => {
     const { wb, buffer } = await build();
     expect(wb.worksheets.map((ws) => ws.name)).toEqual([...WORKBOOK_SHEETS]);
     // exceljs reads calcPr back without its attributes, so look at the file itself
@@ -113,7 +130,7 @@ describe("the workbook", () => {
 
   it("is Arial 10 throughout, with 14-point bold titles", async () => {
     const { wb } = await build();
-    const titles = new Set(["Read me!A1", "Goals!A1", "Forecast!A1"]);
+    const titles = new Set(["Read me!A1", "Goals!A1", "Revenue by class!A1", "Forecast!A1"]);
     for (const ws of wb.worksheets) {
       ws.eachRow((row) =>
         row.eachCell((cell) => {
@@ -205,7 +222,7 @@ describe("Goals", () => {
       F7: "Truckloads!F7",
       B8: "B16",
       C8: "ROUND(B16*B21/B11,2)",
-      E8: "ROUND(Daily!F33+Daily!G33*B17,2)",
+      E8: `Daily!F33+${usdToCadFormula("Daily!G33")}`,
       F8: "Daily!H33",
     };
     for (const row of [5, 6, 7, 8]) {
@@ -297,7 +314,7 @@ describe("Daily, Truckloads and Batches", () => {
       expect(daily.getCell(`H${r}`).value).toBe(day.byHandCadCents / 100);
       expect(isAmber(daily.getCell(`D${r}`)) && isAmber(daily.getCell(`H${r}`))).toBe(true);
       expect(isAmber(daily.getCell(`C${r}`)) || isAmber(daily.getCell(`F${r}`))).toBe(false);
-      expect(formulaOf(daily.getCell(`I${r}`))).toBe(`SUM($F$2:F${r})+SUM($G$2:G${r})*Goals!$B$17+SUM($H$2:H${r})`);
+      expect(formulaOf(daily.getCell(`I${r}`))).toBe(`SUM($F$2:F${r})+${usdToCadFormula(`SUM($G$2:G${r})`)}+SUM($H$2:H${r})`);
       expect(formulaOf(daily.getCell(`J${r}`))).toBe(`ROUND(Goals!$B$16*COUNTIF($B$2:B${r},"Yes")/Goals!$B$11,2)`);
     });
     expect(daily.getCell("A33").value).toBe("Total");
@@ -518,6 +535,95 @@ describe("loadGoalsExport", () => {
   });
 });
 
+// ─── At the Sage rate (TASK-3780) and revenue by class (TASK-3781) ─────────
+
+/** The workbook of a page model, as the export route builds it (revenue by class included). */
+async function buildFrom(page: GoalsPage, snapshot: Datasets = DATASETS): Promise<{ buffer: Buffer; wb: ExcelJS.Workbook }> {
+  const buffer = await buildGoalsWorkbook({
+    run: RUN,
+    model: page.model!,
+    settings: SETTINGS,
+    shipments: snapshot.shipments,
+    truckloads: snapshot.truckloads,
+    rates: [{ date: TODAY, rate: RATE }],
+    exportedAt: EXPORTED_AT,
+    forecast: page.forecast,
+    revenueByClass: page.revenueByClass,
+  });
+  return { buffer, wb: await readXlsx(buffer) };
+}
+
+const sagePage = (snapshot: Datasets = DATASETS) => goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "sage", snapshot);
+
+/** The fixture with 6¢ more US dollars this month: 17,242,882 × 1.25 = 21,553,602.5, which Excel's ROUND would make …603. */
+function halfCentMonth(): Datasets {
+  const plus6 = (v: string) => centsToDecimal(toCents(v) + 6);
+  const usdInvoice = DATASETS.shipments.findIndex((s) => s.currency === "USD");
+  return {
+    ...DATASETS,
+    daily: DATASETS.daily.map((d) => (d.day === TODAY ? { ...d, usdThis: plus6(d.usdThis) } : d)),
+    revenue: DATASETS.revenue.map((r) => (r.currency === "USD" && r.thisMonth ? { ...r, netBeforeTax: plus6(r.netBeforeTax) } : r)),
+    shipments: DATASETS.shipments.map((s, i) => (i === usdInvoice ? { ...s, netBeforeTax: plus6(s.netBeforeTax) } : s)),
+  };
+}
+
+describe("at the Sage rate", () => {
+  it("puts 1.25 in the rate cell, says so on Read me and Goals, and keeps truckloads on the Bank of Canada rate", async () => {
+    const { wb } = await buildFrom(sagePage());
+    const goals = sheet(wb, "Goals");
+    expect(goals.getCell("B17").value).toBe(1.25);
+    expect(goals.getCell("C17").value).toBe(
+      "Fixed Sage rate (report_goal_setting.sage_usd_cad_rate). Full truckloads are tested at the Bank of Canada rate 1.4219"
+    );
+    expect(sheet(wb, "Read me").getCell("A3").value).toBe(
+      "US dollar revenue is at the fixed Sage rate 1.25 (report_goal_setting.sage_usd_cad_rate). Full truckloads are still tested at the Bank of Canada rate 1.4219."
+    );
+    const { wb: boc } = await buildFrom(goalsPage());
+    expect(sheet(boc, "Read me").getCell("A3").value).toBeNull();
+    expect(sheet(boc, "Goals").getCell("C17").value).toBe("Bank of Canada daily rate (FXUSDCAD) for 2026-10-13");
+    const loads = (book: ExcelJS.Workbook) => sheet(book, "Shipments").getColumn(11).values;
+    expect(loads(wb)).toEqual(loads(boc));
+  });
+
+  it("lists revenue by class as the page does: the classes' values, then formula totals and the check against Goals", async () => {
+    const page = goalsPage();
+    const { wb } = await buildFrom(page);
+    const ws = sheet(wb, "Revenue by class");
+    expect(ws.getCell("A4").value).toBe("Customer class");
+    page.revenueByClass!.rows.forEach((c, i) => {
+      const r = 5 + i;
+      expect([ws.getCell(`A${r}`).value, ws.getCell(`B${r}`).value, ws.getCell(`E${r}`).value, ws.getCell(`F${r}`).value]).toEqual([
+        c.customerClass,
+        c.invoices,
+        c.usd.cadCents / 100,
+        c.byHand.cadCents / 100,
+      ]);
+      expect(formulaOf(ws.getCell(`G${r}`))).toBe(`C${r}+E${r}+F${r}`);
+      expect(isAmber(ws.getCell(`F${r}`))).toBe(true);
+    });
+    expect(ws.getCell("A9").value).toBe("All classes");
+    expect(formulaOf(ws.getCell("G9"))).toBe("SUM(G5:G8)");
+    expect(formulaOf(ws.getCell("G11"))).toBe("Goals!$G$8");
+    expect(formulaOf(ws.getCell("G12"))).toBe("G11-G9");
+    expect(String(ws.getCell("A14").value)).toContain("shared across the classes by largest remainder");
+    expect(String(ws.getCell("A15").value)).toBe("Unclassified includes 1 shipment entered by hand without a Sage customer (5,000.00 CAD).");
+  });
+
+  it("says when the export has no revenue by class", async () => {
+    const { wb } = await build();
+    expect(sheet(wb, "Revenue by class").getCell("A2").value).toBe("Revenue by customer class isn’t in this export.");
+  });
+
+  it("refuses the Sage rate when its setting isn't a usable rate, and still serves today's rate", async () => {
+    store.succeeded = RUN;
+    const broken = { settings: { ...SETTINGS, sageUsdCadRate: null }, ftlCustomers: FTL_CUSTOMERS, holidays: HOLIDAYS };
+    vi.mocked(loadConfig).mockResolvedValueOnce(broken);
+    await expect(loadGoalsView("sage")).rejects.toMatchObject({ code: "config_error", status: 500 });
+    vi.mocked(loadConfig).mockResolvedValueOnce(broken);
+    expect((await loadGoalsView("boc")).model?.revenue.basis).toBe("boc");
+  });
+});
+
 // ─── LibreOffice ────────────────────────────────────────────────────────────
 
 const SOFFICE = spawnSync("soffice", ["--version"], { encoding: "utf8" }).status === 0;
@@ -631,6 +737,58 @@ describe("recalculated by LibreOffice (soffice --headless --convert-to xlsx)", (
         expect(line1Kg).toBeCloseTo(model.line1.ifAllRunKg, 6);
       }
       expect([plain.model.line1.ifAllRunKg, entered.model.line1.ifAllRunKg]).toEqual([286_147, 295_197]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 180_000);
+});
+
+describe("recalculated by LibreOffice at the Sage rate", () => {
+  it("converts US dollars half to even as the page does, even on an exact half cent, and the classes add up to Goals", async (ctx) => {
+    ctx.skip(!SOFFICE, SKIP_REASON);
+    const half = halfCentMonth();
+    const pages = { sage: sagePage(), half: sagePage(half) } as const;
+    expect(pages.half.model!.revenue.usd).toEqual({ invoices: 13, cents: 17_242_882, cadCents: 21_553_602 });
+    expect(pages.half.revenueByClass!.matchesCard).toBe(true);
+    const dir = mkdtempSync(path.join(tmpdir(), "plx-goals-sage-"));
+    try {
+      for (const [name, page] of Object.entries(pages)) {
+        writeFileSync(path.join(dir, `${name}.xlsx`), (await buildFrom(page, name === "half" ? half : DATASETS)).buffer);
+      }
+      const out = path.join(dir, "out");
+      const run = spawnSync(
+        "soffice",
+        [
+          `-env:UserInstallation=${pathToFileURL(path.join(dir, "profile")).href}`,
+          "--headless",
+          "--convert-to",
+          "xlsx",
+          "--outdir",
+          out,
+          ...Object.keys(pages).map((name) => path.join(dir, `${name}.xlsx`)),
+        ],
+        { encoding: "utf8", timeout: 120_000 }
+      );
+      expect(run.status, run.stderr).toBe(0);
+      for (const [name, page] of Object.entries(pages)) {
+        const wb = await readXlsx(readFileSync(path.join(out, `${name}.xlsx`)));
+        expect(formulaErrors(wb), name).toEqual([]);
+        const model = page.model!;
+        const goals = sheet(wb, "Goals");
+        expect(resultOf(goals.getCell("E8")), `${name} E8`).toBeCloseTo(model.revenue.inSystemCents / 100, 6);
+        expect(resultOf(goals.getCell("G8")), `${name} G8`).toBeCloseTo(model.revenue.totalCents / 100, 6);
+        const daily = sheet(wb, "Daily");
+        const last = model.daily[model.daily.length - 1];
+        expect(resultOf(daily.getCell("I32")), `${name} Daily!I32`).toBeCloseTo(last.withHandToDateCents / 100, 6);
+        const classes = sheet(wb, "Revenue by class");
+        expect(resultOf(classes.getCell("G9")), `${name} classes`).toBeCloseTo(model.revenue.totalCents / 100, 6);
+        expect(resultOf(classes.getCell("G12")), `${name} difference`).toBeCloseTo(0, 6);
+        const forecast = sheet(wb, "Forecast");
+        const rows = page.forecast?.state === "ready" ? page.forecast.rows : [];
+        rows.forEach((r, i) => {
+          if (r.cadCents !== null) expect(resultOf(forecast.getCell(`N${7 + i}`)), `${name} Forecast!N${7 + i}`).toBeCloseTo(r.cadCents / 100, 6);
+        });
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

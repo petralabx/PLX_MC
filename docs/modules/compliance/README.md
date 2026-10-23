@@ -316,6 +316,24 @@ yet: `GET /api/internal/uat-feedback/mc-snapshot`, Bearer
 in `src/lib/tasks/uat-tickets.ts`) for open tickets and those closed in the last
 30 days. Declaration: `config/integrations.yaml` → `uat-portal-read`.
 
+Above the table, the portal ↔ Mission Control check lists each disagreement
+with a one-click fix. Fixes run through `PATCH /api/tasks/{id}` and
+`POST /api/tasks` under the person's session, so the usual capabilities and
+audit apply. Mission Control never verifies a ticket task from this check.
+
+| Case | Needs the portal read | Fix |
+|---|---|---|
+| Open ticket with no task | yes | Create the ticket task, with `needs-vince` so Steward waits for a person |
+| Final task while the portal expects one | yes | Reopen a cancelled task to backlog; after Verified, create the next attempt |
+| Open task while the ticket is closed | yes | Cancel as `obsolete`; a merged task on a resolved ticket has no fix (only the portal verifies) |
+| More than one open task per ticket | no | Cancel the older ones as `superseded` by the newest attempt |
+| Expired lease with no PR, past backlog | no | Requeue to backlog |
+
+The check runs on page open, on **Check now**, after each fix, and daily:
+`GET /api/cron/uat-drift` (`CRON_SECRET`, kill switch
+`PLX_MC_UAT_DRIFT_CRON_ENABLED`, default off) records one `uat.drift.checked`
+event and fixes nothing.
+
 ### Key Files
 
 - `src/lib/compliance/risk.ts` — risk-tier classifier + per-tier bundle floor
@@ -340,7 +358,7 @@ in `src/lib/tasks/uat-tickets.ts`) for open tickets and those closed in the last
 - `src/lib/compliance/backfill.ts` — nightly GitHub backfill: merged PRs (last N days) per registry repo with no resolvable `MC-Checkout` stamp and no task `prs[]` link; injected GitHub client (stubbed in tests), fail-open per repo, one `github.backfill.report` row in `mc_events`; cron `src/app/api/cron/github-backfill/route.ts`, kill switch `PLX_MC_GITHUB_BACKFILL_ENABLED` (default off)
 - `src/lib/compliance/activity.ts` — per-registry-repo activity summary (last activity, open/unstamped PRs, unattributed merges from the newest backfill report, 30-day gate block rate, freshness), a pure fold over `mc_events` served by session-gated `GET /api/activity` to the Activity screen (`/?screen=activity`, `src/components/mc/activity-view.tsx`); unknown is `null`, never 0
 - `src/lib/compliance/in-flight.ts` — the Dashboard's live In flight view (TASK-2592): open checkouts grouped by task with each task's latest event, flags (several open checkouts, quiet 2 h+, ending within the hour), the newest 30 events of the last 24 h, and a task-write marker the client uses to reload its snapshot. A pure fold (`computeInFlight`) plus a loader that filters by project access like `/api/events` and `mc_list_checkouts`; it sends no checkout ids and no raw payloads. Served by session-gated `GET /api/in-flight`, polled every 20 s by `src/components/mc/dashboard-live.tsx`
-- `src/lib/compliance/uat-tickets.ts` — the BKT-UAT tickets loader (TASK-3706): ticket tasks' filed time and lease (no checkout ids) and the portal read (`uat-portal-read.ts`). Types: `src/lib/tasks/uat-tickets.ts`; route `src/app/api/uat-tickets/route.ts`; view `src/components/mc/uat-tickets.tsx`
+- `src/lib/compliance/uat-tickets.ts` — the BKT-UAT tickets loader (TASK-3706): ticket tasks' filed time and lease (no checkout ids), the portal read (`uat-portal-read.ts`), the drift findings (`findUatDrift`) and `recordUatDriftCheck`; cron `src/app/api/cron/uat-drift/route.ts`. Types: `src/lib/tasks/uat-tickets.ts`; route `src/app/api/uat-tickets/route.ts`; view `src/components/mc/uat-tickets.tsx`
 - `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts`
 - `src/app/api/routing/propose/route.ts` — OIDC propose (middleware carve-out exact)
 - `src/middleware.ts` — exact self-auth carve-outs including `api/routing/propose`

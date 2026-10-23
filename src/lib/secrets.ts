@@ -247,6 +247,12 @@ export function portalBaseUrl(): string {
   return (process.env.PLX_MC_PORTAL_BASE_URL || DEFAULT_PORTAL_BASE_URL).replace(/\/$/, "");
 }
 
+// The daily drift check (/api/cron/uat-drift) writes one uat.drift.checked row
+// to mc_events. Default OFF. Kill switch.
+export function uatDriftCronEnabled(): boolean {
+  return (process.env.PLX_MC_UAT_DRIFT_CRON_ENABLED ?? "0").trim() === "1";
+}
+
 // Company-brain search for Ask (`/?screen=brain-ask`). Source: prod/ec2-secrets
 // VMC_API_KEY on Vercel Production/Preview. Missing key → Ask fail-opens empty.
 const DEFAULT_VMC_BASE_URL = "https://missioncontrol.tayloralton.com";

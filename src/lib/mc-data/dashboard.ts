@@ -3,7 +3,8 @@
 // One read over the viewer's projects, buckets and tasks (the store's
 // ACL-scoped snapshot): delivery progress by project and by bucket, open work by
 // stage, and the tasks still to do. No React, no store reads. Closed progress
-// includes merged, verified and cancelled; delivered work
+// includes merged, verified and cancelled, except that a merged UAT ticket task
+// stays in progress until verified (TASK-3697); delivered work
 // remains the done band, "in progress" the doing band and "not started"
 // the todo band — the same split mc_list_projects and the project overview use,
 // so every surface counts progress identically.
@@ -12,7 +13,7 @@
 // Tasks whose bucket is unknown, or has no project, are reported as `unfiled`
 // so the screen can say why its totals differ from the raw task count.
 
-import { STAGES, bandOf, isProjectClosed, isArchived, isClosedStage, countTaskProgress, taskProgressTotals } from "@/lib/mc-data";
+import { STAGES, bandOf, isProjectClosed, isArchived, isOpenInRollup, countTaskProgress, taskProgressTotals } from "@/lib/mc-data";
 import type { Band, Bucket, Project, StageKey, Task, TaskProgressCounts } from "@/lib/mc-data";
 
 /** Which projects the figures cover: open ones, closed ones, or all of them. */
@@ -128,7 +129,7 @@ export function buildDashboard(
   const remaining: RemainingTask[] = [];
   for (const row of bucketRows) {
     for (const task of tasksByBucket.get(row.bucket.id)!) {
-      if (!isClosedStage(task.stage)) {
+      if (isOpenInRollup(task)) {
         remaining.push({ task, bucket: row.bucket, project: row.project, closed: row.closed });
       }
     }
@@ -156,15 +157,18 @@ export function buildDashboard(
     buckets: bucketRows,
     remaining,
     scopes,
-    unfiled: { tasks: unfiled.length, open: unfiled.filter((t) => !isClosedStage(t.stage)).length },
+    unfiled: { tasks: unfiled.length, open: unfiled.filter(isOpenInRollup).length },
   };
 }
 
-/** Open tasks per stage, in pipeline order (Backlog → In Review), zeros kept. */
+/**
+ * Open tasks per stage, in pipeline order (Backlog → In Review), zeros kept.
+ * Merged joins only while a UAT ticket fix awaits re-test (TASK-3697).
+ */
 export function openStageCounts(rows: readonly RemainingTask[]): StageCount[] {
   const counts = new Map<string, number>();
   for (const row of rows) counts.set(row.task.stage, (counts.get(row.task.stage) ?? 0) + 1);
-  return STAGES.filter((s) => s.band !== "done" && s.band !== "cancelled").map((s) => ({
+  return STAGES.filter((s) => s.band === "todo" || s.band === "doing" || (s.key === "merged" && counts.has(s.key))).map((s) => ({
     stage: s.key,
     name: s.name,
     band: s.band,

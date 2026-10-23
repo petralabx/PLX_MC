@@ -41,6 +41,7 @@ import {
 } from "@/lib/routing/mutations/actors";
 import { assertAgentAssigneeAllowed } from "@/lib/permissions/agent-assignee-guard";
 import { createLabelsWithKind } from "@/lib/tasks/kind";
+import { isUatTicketTask } from "@/lib/tasks/uat-labels";
 import {
   assertBucketProjectAccess,
   assertProjectIdAccess,
@@ -622,6 +623,15 @@ export async function actionProgress(
       409
     );
   }
+  // A UAT ticket task is verified only when its submitter confirms the fix: the
+  // portal's mc_update_task verify, under task.uat_sync (TASK-3697).
+  if (input.stage === "verified" && current.stage !== "verified" && isUatTicketTask(current)) {
+    throw new ApiError(
+      "forbidden",
+      `Task ${input.taskId} is a UAT ticket task; only the portal's mc_update_task verify (task.uat_sync) moves it to verified.`,
+      403
+    );
+  }
   // The authenticated principal must hold an active checkout of this task.
   // X-MC-Operator-Email is audit context only and never authorizes.
   if (!(await complianceRepo.hasActiveCheckoutForPrincipal(input.taskId, identity.actor.id))) {
@@ -763,8 +773,7 @@ export async function actionComplete(
   // completion event is written; blocked/failed hand-ins remain auditable.
   if (
     task?.bucket === "BKT-UAT" &&
-    task.labels?.includes("kind:code") &&
-    task.labels.some((label) => /^uat:\S+$/.test(label)) &&
+    isUatTicketTask(task) &&
     !input.prUrl?.trim() &&
     input.outcome !== "blocked" && input.outcome !== "failed"
   ) {

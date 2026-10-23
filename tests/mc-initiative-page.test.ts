@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { BucketDetail, docRowsForBucket, specForBucket } from "@/components/mc/bucket-detail";
-import { addBucket, resetStore, updateBucket } from "@/lib/mc-data/store";
+import { addBucket, addTask, resetStore, updateBucket } from "@/lib/mc-data/store";
 
 // The body of the first `@container main (max-width: 599px)` block in a stylesheet.
 function phoneTier(file: string): string {
@@ -112,6 +112,17 @@ describe("BucketDetail strip and tasks", () => {
     expect(html).toMatch(/0 tasks · 0 done · 0 cancelled · 0 in\s+flight · <span class="">0 blocked<\/span>/);
     expect(html).toContain('aria-label="Task filter"');
     expect(html).toContain("No tasks in this initiative yet.");
+  });
+
+  it("counts a Steward block (uat:blocked) as blocked in the header, as on its row (TASK-3697)", () => {
+    const bucket = addBucket({ name: "UAT tickets" });
+    addTask({
+      title: "Ticket R5JD2K", bucket: bucket.id, stage: "progress", accountableOwner: "vince",
+      labels: ["kind:code", "uat:cmfb7q2xk0001", "uat:blocked", "uat:cause:quota"],
+    });
+    const html = render(bucket.id);
+    expect(html).toMatch(/1 in\s+flight · <span class="warn">1 blocked<\/span>/);
+    expect(html).toContain("Blocked · quota");
   });
 });
 

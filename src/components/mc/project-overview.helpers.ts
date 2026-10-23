@@ -1,16 +1,19 @@
 // Pure rollup math for the Project Overview lens (no store reads — buckets and
 // tasks are INJECTED, the same contract as work-views.helpers). "Done" is the
 // explicit stage band (merged/verified); progress counts cancelled as closed.
+// A merged UAT ticket task stays outstanding until verified (TASK-3697).
 
 import {
   STAGES,
   STAGE_IDX,
   countTaskProgress,
+  awaitsRetest,
   hasHumanAccountableOwner,
   inputRequired,
-  isClosedStage,
+  isOpenInRollup,
 } from "@/lib/mc-data";
 import type { Bucket, Task } from "@/lib/mc-data";
+import { hasHumanBlockLabel } from "@/lib/tasks/uat-labels";
 
 export interface InitiativeRollup {
   bucket: Bucket;
@@ -50,8 +53,9 @@ export function projectProgress(tasks: Task[]) {
 
 // Stage → chip tone for the rollup task table. Uses the dedicated status TEXT
 // tokens (brand contrast remediation) so chips hold WCAG AA on 12% fills.
-export function stageChipTone(task: Pick<Task, "stage">): "muted" | "info" | "acc" | "warn" | "ok" {
+export function stageChipTone(task: Pick<Task, "stage"> & { labels?: readonly string[] }): "muted" | "info" | "acc" | "warn" | "ok" {
   const stage = STAGES[STAGE_IDX[task.stage]];
+  if (awaitsRetest(task)) return "acc";
   if (stage.band === "done") return "ok";
   if (stage.band === "cancelled") return "muted";
   if (stage.key === "qa") return "warn";
@@ -64,19 +68,20 @@ export function stageChipTone(task: Pick<Task, "stage">): "muted" | "info" | "ac
 
 export type TaskFilterKey = "open" | "human" | "all";
 
-/** Outstanding: the stage band is neither done nor cancelled. */
-export function isOutstanding(task: Pick<Task, "stage">): boolean {
-  return !isClosedStage(task.stage);
+/** Outstanding: the stage band is neither done nor cancelled, or a UAT fix awaits re-test. */
+export function isOutstanding(task: Pick<Task, "stage" | "labels">): boolean {
+  return isOpenInRollup(task);
 }
 
 // Needs a human: an open task waiting on a person — a pending runtime approval
-// gate (the A2A input-required state), a blocked flag, or no human accountable
+// gate (the A2A input-required state), a blocked flag, a Steward block
+// (uat:blocked) or needs-vince label (TASK-3697), or no human accountable
 // owner (the needs-me.ts unownedTasks rule). Closed work needs nobody.
 export function needsHuman(
-  task: Pick<Task, "stage" | "approvalGates" | "blocked" | "accountableOwner">
+  task: Pick<Task, "stage" | "approvalGates" | "blocked" | "accountableOwner" | "labels">
 ): boolean {
   if (!isOutstanding(task)) return false;
-  return inputRequired(task) || !!task.blocked || !hasHumanAccountableOwner(task);
+  return inputRequired(task) || !!task.blocked || hasHumanBlockLabel(task) || !hasHumanAccountableOwner(task);
 }
 
 export function filterTasks<T extends Task>(tasks: readonly T[], filter: TaskFilterKey): T[] {

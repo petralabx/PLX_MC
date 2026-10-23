@@ -37,6 +37,7 @@ import {
   type SharePointRegisterKey,
 } from "@/lib/mc-data/doc-links";
 import { useMcVersion } from "@/lib/mc-data/hooks";
+import { isStewardBlocked } from "@/lib/tasks/uat-labels";
 import {
   addBucketComment,
   allRepos,
@@ -263,7 +264,8 @@ export function BucketDetail({ route, nav }: ScreenProps) {
   // (e.g. a tracked repo's docs); the header kicker links it.
   const spec = specForBucket(bucket.prd);
   const progress = projectProgress(rollups.tasks);
-  const blocked = rollups.tasks.filter((t) => t.blocked && isOutstanding(t)).length;
+  // Steward's uat:blocked counts too, as on the row tag (TASK-3697).
+  const blocked = rollups.tasks.filter((t) => (t.blocked || isStewardBlocked(t)) && isOutstanding(t)).length;
   const started = parseMcDate(bucket.started, new Date().getFullYear());
   const commitTarget = (raw: string) => {
     const target = raw.trim() || "—";

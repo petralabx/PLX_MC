@@ -185,7 +185,10 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   `not-needed`), (b) be moved by `bucket` alone, or (c) be in a terminal stage
   (`merged`, `verified`). Any other label change on a lane-less non-terminal
   task still needs a lane, and a closure label combined with any other field
-  change (title, description, priority) is rejected (TASK-2533).
+  change (title, description, priority) is rejected (TASK-2533). On a UAT
+  ticket task (`kind:code` plus `uat:<feedbackId>`), (a) also covers `uat:hold`
+  and `uat-attempt:<n>`, and a label-only patch that changes nothing succeeds,
+  so a retried portal mirror does not fail (TASK-3697).
 - `bucket` (`BKT-*`, optional `note`) moves the task. The target must exist,
   must not be archived or in a closed project (each guard enforces once the
   record exposes an `archived`/`archivedAt` flag or project `status:"closed"`),
@@ -202,11 +205,28 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
 - Empty patches and unknown fields are rejected, including all stage,
   Verified, evidence and checkout fields, at the root and within `patch`.
   The tools never change evidence or checkouts, and change stage only through
-  `cancel` / `reopen` (next section).
+  `cancel` / `reopen` (next section) and `verify` (below).
+- `verify {note?}` (TASK-3697) mirrors a submitter's Verify from the portal.
+  It moves a merged UAT ticket task to `verified` and audits `task.verified`
+  (`previousStage`, `verifiedBy`, `note`). It cannot be combined with other
+  fields. A verified task returns an empty `diff` and writes nothing. Any other
+  stage gives 409 `not_merged`, and a task that is not a UAT ticket task gives
+  400. The owner, evidence and approval-gate checks still apply (409
+  `stage_blocked`). It needs `task.uat_sync`, which only `sp_mcp_portal` holds.
+  An agent gets 403 and a `task.verify_denied` event, and `mc_report_progress`
+  refuses `stage: "verified"` on a UAT ticket task. A PR merge never moves a
+  verified task back to merged: the projection records the PR and writes
+  `task.promotion_skipped` (`reason: task_verified`).
 - Auth: existing MCP key/operator checks, `task.progress` and the task's
-  restricted-project ACL. **Hub only**: the portal/consumer principal remains
-  excluded by its existing tool allowlist; no capability grants were added.
-  Unknown task ids return `not_found` (REST 404).
+  restricted-project ACL. The portal principal (`sp_mcp_portal`) holds
+  `task.uat_sync` instead of `task.progress` (TASK-3697). Its tool allowlist
+  adds `mc_update_task` only, not `mc_update_tasks`. It may send `verify`,
+  `cancel` (no `task.cancel` needed), or a label-only patch of `kind:*`,
+  closure, `uat:hold` and `uat-attempt:<n>` labels, on UAT ticket tasks only.
+  The result must keep `kind:code` and `uat:<feedbackId>`. Every other field or
+  task gives 403 `forbidden`. A replayed portal cancel returns an empty `diff`
+  instead of 409 `already_cancelled`. Unknown task ids return `not_found`
+  (REST 404).
 - The locked task row, normal `patchTask` mutation and `appendEventTx` commit
   together. Task/project ACL reads reuse that transaction connection; the
   existing-row edit skips fixture bootstrap to avoid borrowing another connection. `mc_events.kind = task.updated`, `actor = runtime:operatorEmail`,
@@ -282,7 +302,10 @@ route gives `forbidden` (403) before it runs, reads included (`mc_get_context`,
 later is refused too until the allowlist names it. Other principals have no
 allowlist. Fleet P8b adds one read: the grant gains `agent_report.read` and the
 allowlist gains `mc_list_agent_reports` (`GET /api/cursor/agent-reports`). No
-other principal holds that capability. The portal's existing MC key does not change. `mc_search_tasks`
+other principal holds that capability. TASK-3697 adds `task.uat_sync` and the
+allowlist name `mc_update_task`: the portal mirrors a ticket onto its UAT
+ticket task (`verify`, `cancel`, `uat:hold`, `uat-attempt:<n>`; see Task
+metadata edits above). The portal's existing MC key does not change. `mc_search_tasks`
 (HTTP MCP and `GET /api/cursor/tasks`) returns the calling principal in
 `meta.actor.servicePrincipalId`. Key rotation uses that search to verify the
 portal key, because `mc_self_check` stays forbidden to it.

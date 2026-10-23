@@ -231,6 +231,11 @@ export: `approval.requested` joined to `approval.decided` by `gateId` into
 proposal+decision rows (proposer, decider, decision, reason, timestamps,
 `pending` when undecided) with each gate's `denials` attached
 (`pairApprovalEvents` / `listApprovalAudit`).
+Raising and deciding a gate read the task `FOR UPDATE` and write the gate list and its
+event in one transaction (TASK-3796), so a decision never drops a gate raised meanwhile,
+and a new gate never undoes a decision. A decision on a gate that is no longer pending
+returns 409 `gate_already_decided` and changes nothing; the Approvals screen then says
+the gate was already decided and moves to the next item.
 Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 
 ### Questions for a named person (TASK-3567)

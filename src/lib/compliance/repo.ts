@@ -765,6 +765,22 @@ export async function unreleaseDispatches(ids: string[], input: { repo: string }
 }
 
 /**
+ * TASK-3813: the PR whose merge or close last released a checkout (its newest
+ * checkout.released event), or null. A manual release records no PR.
+ */
+export async function releasingPrForDispatch(id: string): Promise<number | null> {
+  const rows = await query<{ pr: string | null }>(
+    `SELECT pr FROM mc_events
+      WHERE kind = 'checkout.released' AND payload->>'checkoutId' = $1
+      ORDER BY seq DESC
+      LIMIT 1`,
+    [id]
+  );
+  const pr = Number(rows[0]?.pr);
+  return Number.isInteger(pr) && pr > 0 ? pr : null;
+}
+
+/**
  * Manual release (mc_release_checkout): set released_at/released_reason and
  * append checkout.released in one statement. Null = nothing changed (the
  * lease is already released or revoked), so a repeat writes no second event.

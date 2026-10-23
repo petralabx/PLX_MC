@@ -185,10 +185,15 @@ async function resolveDispatchForOpenPr(
  * The open PR that keeps an expired checkout valid, or null. Same proof as
  * resolveDispatchForOpenPr: the live PR is open and its body carries the
  * stamp. Candidates come from the task's PR events in the checkout's repo.
- * GitHub errors propagate, so a caller can fail closed.
+ * GitHub errors propagate, so a caller can fail closed. exceptPr skips the PR
+ * being merged or closed, so it is never read.
  */
-export async function openPrHoldingCheckout(d: Pick<repo.DispatchRow, "id" | "taskId" | "repo">): Promise<number | null> {
+export async function openPrHoldingCheckout(
+  d: Pick<repo.DispatchRow, "id" | "taskId" | "repo">,
+  exceptPr?: number
+): Promise<number | null> {
   for (const prNumber of await repo.openPrCandidatesForTask(d.taskId, d.repo)) {
+    if (prNumber === exceptPr) continue;
     const state = await loadPrState(d.repo, prNumber);
     if (state.open && state.checkoutIds.includes(d.id)) return prNumber;
   }
@@ -893,6 +898,30 @@ async function leaseChainCheck(
     : { reasons: [], notes: found.map((r) => `warning: ${r} (PLX_MC_LEASE_CHAIN_ENFORCE is off)`) };
 }
 
+// TASK-3813: a checkout another PR's merge or close released (the PR below a
+// stacked one) still covers this PR's commits that already carry its trailer: a
+// re-checkout cannot match them, and history is not rewritten. Read-only: the
+// release stands. Never for a revoked or manual release, the releasing PR,
+// another repo, or a PR with no such commit (the merge queue reads no commits).
+async function releasedStampForCommits(
+  checkoutId: string,
+  input: PrIdentity,
+  stamped: CommitTrailerRow[]
+): Promise<{ dispatch: repo.DispatchRow; note: string } | null> {
+  if (stamped.length === 0) return null;
+  const d = await repo.getDispatch(checkoutId);
+  if (!d || d.revoked || (d.releasedReason !== "merged" && d.releasedReason !== "closed")) return null;
+  if (!dispatchRepoMatches(d.repo, input.repo, input.repoFullName)) return null;
+  const releasedBy = await repo.releasingPrForDispatch(checkoutId);
+  if (releasedBy === null || releasedBy === input.prNumber) return null;
+  const how = d.releasedReason === "merged" ? "merge" : "close";
+  const shas = stamped.map((t) => t.sha).join(", ");
+  return {
+    dispatch: d,
+    note: `checkout dsp_…${checkoutId.slice(-4)} released by #${releasedBy} ${how}; accepted for commits already stamped with it: ${shas}`,
+  };
+}
+
 /** Opt-in policy label (TASK-3408): this task merges only under a signed merge approval of the exact head. */
 export const MERGE_APPROVAL_LABEL = "approval:merge-required";
 
@@ -958,7 +987,10 @@ export async function verifyPr(
   ]);
   for (const cid of ids) {
     const resolution = await resolveForPr(cid);
-    const d = resolution.dispatch;
+    const stamped = trailerRows.filter((t) => t.checkoutId === cid);
+    const reuse = resolution.reason === "released" ? await releasedStampForCommits(cid, input, stamped) : null;
+    const blockReason = reuse ? undefined : resolution.reason;
+    const d = resolution.dispatch ?? reuse?.dispatch ?? null;
     const taskId = d?.taskId ?? null;
     const actorIdentity = d?.runtime ?? "agent";
     const task = await loadTask(taskId);
@@ -970,8 +1002,8 @@ export async function verifyPr(
       evidenceStoreEnabled() &&
       !ownEvidenceSite(d?.repo ?? "") &&
       !(await isBucketInRestrictedProject(task.bucket));
-    const result: VerifyResult = resolution.reason
-      ? { verdict: "block", reasons: [checkoutBlockReason(resolution.reason)] }
+    const result: VerifyResult = blockReason
+      ? { verdict: "block", reasons: [checkoutBlockReason(blockReason)] }
       : !task
         ? { verdict: "block", reasons: [checkoutBlockReason("task_deleted")] }
         : task.stage === "verified"
@@ -985,10 +1017,10 @@ export async function verifyPr(
                 bucketPrd,
                 evidenceStoreEnabled: canUploadEvidence,
               });
-    const stamped = trailerRows.filter((t) => t.checkoutId === cid);
     const trailerCheck = d ? await checkoutTrailerCheck(d, stamped, task) : { reasons: [], notes: [] };
+    // A released checkout's SHA chain is never extended or bound (reuse is read-only).
     const chainCheck = d
-      ? await leaseChainCheck(d, stamped, input, record)
+      ? await leaseChainCheck(d, stamped, input, record && !reuse)
       : { reasons: [], notes: [] };
     // Diagnostics only: a released or revoked checkout of this repo still shows why and when.
     const shown = d ?? (await repo.getDispatch(cid).then((x) => (x && dispatchRepoMatches(x.repo, input.repo, input.repoFullName) ? x : null)));
@@ -998,7 +1030,7 @@ export async function verifyPr(
       ...chainCheck.reasons,
       ...mergeApprovalReasons(task, input),
     ];
-    const notes = [...trailerCheck.notes, ...chainCheck.notes];
+    const notes = [...(reuse ? [reuse.note] : []), ...trailerCheck.notes, ...chainCheck.notes];
     const withCommits: VerifyResult = commitReasons.length
       ? { verdict: "block", reasons: [...commitReasons, ...result.reasons, ...notes] }
       : { ...result, reasons: [...result.reasons, ...notes] };
@@ -1013,7 +1045,7 @@ export async function verifyPr(
         live: !!d && !resolution.reason,
         expiresAt: shown?.expiresAt ?? null,
         releasedReason: shown?.releasedReason ?? null,
-        blockReason: resolution.reason ?? null,
+        blockReason: blockReason ?? null,
       },
       approvals: (task?.approvalGates ?? []).map((g) => ({
         gateId: g.id,
@@ -1494,10 +1526,22 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
     }
     // Attribute/project the merge before release. Release is not revocation:
     // resolveDispatchForMerge must still attribute a replay of the same head.
+    // TASK-3813: a checkout another open PR still stamps (a stacked PR) stays
+    // live. A GitHub error throws, so ingestOrQueue replays the release later.
+    const reason = evt.merged ? "merged" : "closed";
     for (const cid of new Set(ids)) {
       const d = await repo.getDispatch(cid);
-      if (!d || d.revoked || !dispatchRepoMatches(d.repo, evt.repo, evt.repoFullName)) continue;
-      await repo.releaseDispatches([cid], { repo: d.repo, pr: evt.prNumber, reason: evt.merged ? "merged" : "closed" });
+      if (!d || d.revoked || d.releasedAt || !dispatchRepoMatches(d.repo, evt.repo, evt.repoFullName)) continue;
+      const openPr = await openPrHoldingCheckout(d, evt.prNumber);
+      if (openPr !== null) {
+        await repo.appendEvent({
+          kind: "checkout.release_refused", actor: d.runtime, repo: d.repo, taskId: d.taskId, pr: String(openPr),
+          payload: { checkoutId: cid, reason, code: "open_pr_holds_checkout", closedPr: evt.prNumber },
+          dedupKey: `checkout.release_refused:${idBase}:${cid}`,
+        });
+        continue;
+      }
+      await repo.releaseDispatches([cid], { repo: d.repo, pr: evt.prNumber, reason });
     }
     return { action: evt.action, actorKind, taskId, recorded: true, proposalId, deepLink };
   }

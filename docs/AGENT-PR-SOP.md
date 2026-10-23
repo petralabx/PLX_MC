@@ -287,6 +287,13 @@ Rules:
   enforces this for an `expired` reason: it returns
   `open_pr_expiry_exception` and keeps the lease. Bulk releases list each
   unreleased item in `refused[]`.
+- MC also keeps that lease when another PR that stamps it merges or closes.
+  It records `checkout.release_refused` with code `open_pr_holds_checkout`.
+- A lease released by another PR's merge or close still covers this PR's
+  commits whose `MC-Checkout` trailer names it. The gate notes this and
+  accepts the lease for those commits only. A PR with no such commit still
+  blocks. A revoked lease and a manual release still block. The merge queue
+  reads no commits, so it still blocks such a lease.
 - `already_released` means there is nothing to do. MC writes no second event.
 - A PR reopen does not undo a manual release.
 

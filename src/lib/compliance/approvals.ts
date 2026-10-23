@@ -17,11 +17,13 @@ import {
 } from "@/lib/mc-data";
 import { approvalExpiry, deciderViolation, signApproval } from "./approval-signature";
 import { APPROVAL_WAIT_MAX_MS, pendingApprovalGates } from "@/lib/mc-data/policy";
+import { isCreatorApprover } from "@/lib/permissions";
 import type { ProjectAclPrincipal } from "@/lib/permissions/project-acl";
 import { loadProjectAclMaps, scopeHierarchy } from "@/lib/permissions/project-acl-guard";
 import { patchTask } from "@/lib/sync";
 import { getEntities, getEntity } from "@/lib/sync/repo";
-import { appendEvent, blockDispatchOnApproval, eventsByKinds, getDispatch, type EventRow } from "./repo";
+import { withTransaction } from "@/lib/db";
+import { appendEvent, appendEventTx, blockDispatchOnApproval, eventsByKinds, getDispatch, type EventRow } from "./repo";
 
 export interface RequestApprovalInput {
   taskId: string;
@@ -249,6 +251,84 @@ export async function decideApprovalGate(
     },
   });
   return { gate: decided, task: updated };
+}
+
+export interface ApproveCreatorInput {
+  taskId: string;
+  /** Session Entra object id: the only identity the approver check trusts. */
+  approverOid: string;
+  /** Session audit label (email), recorded with the approval. */
+  approverLabel: string;
+  note?: string;
+}
+
+/**
+ * Clear a task's pending creator approval (TASK-3530). Only a creator approver
+ * (permissions/grants.ts) may do it; every other caller is refused and
+ * audited. approval.decide and task.update never reach this state.
+ */
+export async function approveCreatorApproval(
+  input: ApproveCreatorInput
+): Promise<{ task: Task }> {
+  if (!isCreatorApprover(input.approverOid)) {
+    await appendEvent({
+      kind: "creator_approval.denied",
+      actor: input.approverLabel,
+      taskId: input.taskId,
+      payload: { reasonCode: "approver_not_allowed", approverOid: input.approverOid },
+    });
+    throw new ApiError(
+      "creator_approver_not_allowed",
+      "Only vince@ or cos@ can approve a task from a gated creator principal.",
+      403
+    );
+  }
+  // The locked pending check, the task write and the audit event commit in
+  // one transaction, like the cancellation service.
+  return withTransaction(async (q) => {
+    const row = await getEntity("task", input.taskId, q, true);
+    if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+    const task = row.data as unknown as Task;
+    if (!task.creatorApproval) {
+      throw new ApiError("creator_approval_not_required", `${input.taskId} needs no creator approval.`, 409);
+    }
+    if (task.creatorApproval.status !== "pending") {
+      throw new ApiError("creator_approval_already_decided", `${input.taskId} creator approval is already ${task.creatorApproval.status}.`, 409);
+    }
+    const approvedAt = new Date().toISOString();
+    const updated = await patchTask(
+      input.taskId,
+      {
+        creatorApproval: {
+          ...task.creatorApproval,
+          status: "approved",
+          approvedBy: input.approverLabel,
+          approvedByOid: input.approverOid,
+          approvedAt,
+        },
+        activityLine: {
+          who: input.approverLabel,
+          what: `approved the task from ${task.creatorApproval.principal} (creator approval)`,
+          kind: "gate",
+        },
+      },
+      input.approverLabel,
+      { query: q, attribution: { source: "human", actorId: input.approverOid }, creatorApproval: true }
+    );
+    if (!updated) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+    await appendEventTx(q, {
+      kind: "creator_approval.approved",
+      actor: input.approverLabel,
+      taskId: input.taskId,
+      payload: {
+        creatorPrincipal: task.creatorApproval.principal,
+        approverOid: input.approverOid,
+        approvedAt,
+        note: input.note ?? null,
+      },
+    });
+    return { task: updated };
+  });
 }
 
 const APPROVAL_POLL_INTERVAL_MS = 1_000;

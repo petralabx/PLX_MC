@@ -146,6 +146,22 @@ export function inputRequired(task: Pick<Task, "approvalGates">): boolean {
   return pendingApprovalGates(task).length > 0;
 }
 
+// Creator-principal approval gate (TASK-3530): true while a gated creator's
+// task still waits for a creator approver.
+export function creatorApprovalPending(task: Pick<Task, "creatorApproval">): boolean {
+  return task.creatorApproval?.status === "pending";
+}
+
+// Why a pending creator approval blocks a move to `nextStage`, or null.
+export function creatorApprovalViolation(
+  task: Pick<Task, "id" | "creatorApproval">,
+  nextStage: StageKey
+): string | null {
+  if (!creatorApprovalPending(task) || nextStage === "cancelled") return null;
+  if (STAGE_IDX[nextStage] < STAGE_IDX.progress) return null;
+  return `${task.id} was created by ${task.creatorApproval!.principal} and waits for creator approval (vince@ or cos@) before it can move to ${nextStage}.`;
+}
+
 /** TASK-3720: one reminder per person per question in this window. */
 export const QUESTION_REMIND_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 
@@ -187,7 +203,7 @@ export function openQuestionsFor(
 export function stageAdvanceViolation(
   task: Pick<
     Task,
-    "id" | "accountableOwner" | "evidence" | "assignee" | "agentRunApproved" | "approvalGates"
+    "id" | "accountableOwner" | "evidence" | "assignee" | "agentRunApproved" | "approvalGates" | "creatorApproval"
   >,
   nextStage: StageKey
 ): string | null {
@@ -195,6 +211,8 @@ export function stageAdvanceViolation(
   // cancel service (reason, replacedBy), not by the advance gates (TASK-2529).
   if (nextStage === "cancelled") return null;
   const nextIdx = STAGE_IDX[nextStage];
+  const creatorGate = creatorApprovalViolation(task, nextStage);
+  if (creatorGate) return creatorGate;
   if (nextIdx > STAGE_IDX[ACCOUNTABLE_GATE_STAGE] && !hasHumanAccountableOwner(task)) {
     return `${task.id} needs a human accountable owner before it can move past Planned.`;
   }

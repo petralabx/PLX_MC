@@ -531,6 +531,28 @@ portal's Projected Revenue books US sales at (TASK-1270).
 - It is a fixed rate, not each invoice's own Sage rate (`inrate`), which the
   reporting login can't read.
 
+### Manufacturing customers
+
+A "Customers" switch beside the rate switch (Progress Huddle, 23 Oct 2026):
+"All" (the default) or "Manufacturing customers", every customer class but
+Exclusive Distribution (Exclusive Manufacturing, Mixed and Unclassified stay).
+
+- **Where.** The choice lives in the URL (`/?screen=goals&scope=mfg`, kept
+  with `fx=sage`); "All" sends nothing. It is a display choice on the loaded
+  page, so switching it makes no new read.
+- **What it shows.** A line on the Revenue card: the manufacturing customers'
+  month, its share of the monthly target and the Exclusive Distribution amount
+  left out (`revenueScope` on the page model, from
+  `src/lib/reporting/goals/revenue-scope.ts`). It is read from revenue by
+  customer class, so it adds up with that table to the cent, at whichever rate
+  the page is at; when the class split and the card are a refresh apart the
+  line says so.
+- **What doesn't move.** The card's headline, status, goal and every other
+  section stay on all customers.
+- **The workbook.** The Revenue by class sheet always carries a "Manufacturing
+  customers (all but Exclusive Distribution)" row under the total, as a formula
+  over the class rows.
+
 ### Revenue by customer class
 
 The Revenue card's month by customer class (TASK-3781), in a section under the

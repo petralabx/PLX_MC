@@ -7,7 +7,7 @@
 
 import type { ReactNode } from "react";
 
-import type { GoalStatus } from "@/lib/reporting/goals";
+import type { GoalStatus, RevenueScope } from "@/lib/reporting/goals";
 
 import {
   barParts,
@@ -87,8 +87,9 @@ function Card({
   );
 }
 
-export function GoalCards({ page }: { page: ReadyPage }) {
+export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: RevenueScope }) {
   const { model, settings, run, fx, sections } = page;
+  const mfg = scope === "mfg" ? page.revenueScope : null;
   const l1 = model.line1;
   const tl = model.truckloads;
   const rev = model.revenue;
@@ -200,6 +201,13 @@ export function GoalCards({ page }: { page: ReadyPage }) {
             CAD {dollars(rev.cad.cents)} ({count(rev.cad.invoices)} invoices) + USD {usd(rev.usd.cents)} (
             {count(rev.usd.invoices)} invoices) = {dollars(rev.usd.cadCents)} at {rateText}
           </li>
+          {mfg ? (
+            <li data-testid="goals-revenue-mfg">
+              Manufacturing customers: <b>{dollars(mfg.totalCadCents)}</b>
+              {mfg.progress !== null ? ` (${pct(mfg.progress)} of target)` : ""}, leaving out {dollars(mfg.excludedCadCents)} from Exclusive
+              Distribution{mfg.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the card until the next one"}
+            </li>
+          ) : null}
           {rev.otherCurrencies.length > 0 ? (
             <li>
               Not converted:{" "}

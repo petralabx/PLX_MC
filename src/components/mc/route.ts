@@ -56,6 +56,8 @@ export interface Route {
   question?: string;
   /** Goals & Production revenue at the Sage rate (TASK-3780): `/?screen=goals&fx=sage`; absent = the run's Bank of Canada rate. */
   fx?: "sage";
+  /** Goals & Production revenue for manufacturing customers only (every class but Exclusive Distribution): `/?screen=goals&scope=mfg`; absent = all customers. */
+  scope?: "mfg";
   // Module E (SPEC §3.B.3): an Insights chart segment click navigates to the
   // board carrying a FilterState here; WorkViews adopts it on mount/route change
   // through F's sanitizeFilterState. Optional, so all existing nav() sites carry
@@ -89,6 +91,7 @@ export function routeToUrl(route: Route): string {
   }
   if (route.focus === "evidence") params.set("focus", "evidence");
   if (route.fx === "sage") params.set("fx", "sage");
+  if (route.scope === "mfg") params.set("scope", "mfg");
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
 }
@@ -111,5 +114,6 @@ export function urlToRoute(url: string): Route {
   }
   if (params.get("focus") === "evidence") route.focus = "evidence";
   if (params.get("fx") === "sage") route.fx = "sage";
+  if (params.get("scope") === "mfg") route.scope = "mfg";
   return route;
 }

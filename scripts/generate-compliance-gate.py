@@ -98,6 +98,7 @@ jobs:
           PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_BASE_REF: ${{ github.base_ref }}
           REPO_NAME: ${{ github.event.repository.name }}
           REPO_FULL_NAME: ${{ github.repository }}
@@ -134,6 +135,7 @@ jobs:
               PR_HEAD_SHA=$(printf '%s' "$pr" | jq -r '.head.sha // ""')
               PR_BODY=$(printf '%s' "$pr" | jq -r '.body // ""')
               PR_LABELS=$(printf '%s' "$pr" | jq -c '[(.labels // [])[].name]')
+              PR_AUTHOR=$(printf '%s' "$pr" | jq -r '.user.login // ""')
               changed=$(printf '%s' "$files" | jq -R -s 'split("\n") | map(select(length>0))')
             fi
           else
@@ -144,6 +146,32 @@ jobs:
             # JSON crashes the --argjson below and hard-fails this otherwise-soft gate.
             diff_out=$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" 2>/dev/null || true)
             changed=$(printf '%s' "$diff_out" | jq -R -s 'split("\n") | map(select(length>0))')
+          fi
+          # PR-drain (6): docs-only and Dependabot lockfile-only PRs post a passing
+          # `compliance` with a clear "skipped" verdict. The skip is inside the job, not
+          # a paths-ignore, so the required check always reports. Never skips when the
+          # file list is empty/unknown, when any file is code, or for agent-instruction
+          # markdown (AGENTS.md, CLAUDE.md, SKILL.md) or anything under .github/,
+          # .claude/, .cursor/ or skills/.
+          n_changed=$(printf '%s' "$changed" | jq 'length')
+          if [ "$n_changed" -gt 0 ] && [ "$n_changed" -lt 3000 ]; then
+            non_docs=$(printf '%s' "$changed" | jq '[.[] | select(
+                ((test("^docs/") or test("\\.md$")) and
+                 (test("(^|/)(AGENTS|CLAUDE|SKILL)\\.md$") or test("^(\\.github|\\.claude|\\.cursor|skills)/") | not)) | not
+              )] | length')
+            non_lock=$(printf '%s' "$changed" | jq '[.[] | select(
+                test("(^|/)(package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock|poetry\\.lock|uv\\.lock|Cargo\\.lock|go\\.sum|Gemfile\\.lock|composer\\.lock|bun\\.lockb?)$") | not
+              )] | length')
+            if [ "$non_docs" -eq 0 ]; then
+              echo "verdict=pass (skipped: docs-only, ${n_changed} file(s))"
+              echo "Compliance gate: PASS — skipped: docs-only"
+              exit 0
+            fi
+            if [ "$non_lock" -eq 0 ] && [ "${PR_AUTHOR:-}" = "dependabot[bot]" ]; then
+              echo "verdict=pass (skipped: dependabot lockfile-only, ${n_changed} file(s))"
+              echo "Compliance gate: PASS — skipped: dependabot lockfile-only"
+              exit 0
+            fi
           fi
           if [ "${GITHUB_EVENT_NAME:-}" = "merge_group" ] && [ -z "$PR_HEAD_SHA" ]; then
             echo "merge_group: could not resolve the pull request"

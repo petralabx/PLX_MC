@@ -1,9 +1,13 @@
 # update-branches (PR-drain item 4): keep open PRs current with their base.
 #
-# For each open, non-draft, same-repo PR that is behind its base, calls
+# Only for PRs that are on their way to merge: open, non-draft, same-repo PRs
+# that have auto-merge enabled OR carry a queue label (`auto-merge`, `automerge`,
+# `merge-queue`, `ready-to-merge`), and are behind their base. For those it calls
 #   PUT /repos/{owner}/{repo}/pulls/{n}/update-branch
 # which MERGES the base into the head branch. It never rebases or force-pushes.
-# Skips forks, drafts, and PRs labelled `hold` or `do-not-update`.
+# Skips forks, drafts, other PRs, and PRs labelled `hold` or `do-not-update`.
+# At most MAX_UPDATES (5) branches are updated per run; the rest wait for the
+# next run (reported as `deferred`).
 #
 # SAFE BY DEFAULT: report-only. It updates branches only when BOTH are true:
 #   1. repo variable UPDATE_BRANCHES_ENABLED == 'true'
@@ -48,20 +52,28 @@ jobs:
           permission-pull-requests: write
       - uses: actions/github-script@v7
         env:
-          APP_TOKEN: ${{ steps.app.outputs.token }}
+          HAS_APP_TOKEN: ${{ steps.app.outputs.token != '' }}
         with:
+          # Enabled mode: the provided `github` client is authenticated with the
+          # App token (so update-branch merges trigger pull_request workflows).
+          # Report-only: falls back to the read-only GITHUB_TOKEN.
+          github-token: ${{ steps.app.outputs.token || github.token }}
           script: |
             const { owner, repo } = context.repo;
             const SKIP = new Set(['hold', 'do-not-update']);
-            const writer = process.env.APP_TOKEN ? getOctokit(process.env.APP_TOKEN) : null;
-            const mode = writer ? 'update' : 'report-only';
-            core.info(`mode=${mode}`);
+            const QUEUE = new Set(['auto-merge', 'automerge', 'merge-queue', 'ready-to-merge']);
+            const MAX_UPDATES = 5;
+            const canWrite = process.env.HAS_APP_TOKEN === 'true';
+            const mode = canWrite ? 'update' : 'report-only';
+            core.info(`mode=${mode} max_updates=${MAX_UPDATES}`);
+            let updated = 0;
             const prs = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 });
             const rows = [];
             for (const pr of prs) {
               const why = pr.draft ? 'draft'
                 : pr.head.repo?.full_name !== `${owner}/${repo}` ? 'fork'
                 : pr.labels.some(l => SKIP.has(l.name.toLowerCase())) ? 'label'
+                : !(pr.auto_merge || pr.labels.some(l => QUEUE.has(l.name.toLowerCase()))) ? 'not-queued'
                 : null;
               if (why) { rows.push([pr.number, 'skip', why]); continue; }
               let cmp;
@@ -69,9 +81,11 @@ jobs:
                 cmp = (await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${pr.base.ref}...${pr.head.sha}`, per_page: 1 })).data;
               } catch (e) { rows.push([pr.number, 'error', e.message]); continue; }
               if (!cmp.behind_by) { rows.push([pr.number, 'current', '']); continue; }
-              if (!writer) { rows.push([pr.number, 'behind', `${cmp.behind_by} commits (report-only)`]); continue; }
+              if (!canWrite) { rows.push([pr.number, 'behind', `${cmp.behind_by} commits (report-only)`]); continue; }
+              if (updated >= MAX_UPDATES) { rows.push([pr.number, 'deferred', `cap of ${MAX_UPDATES} reached`]); continue; }
               try {
-                await writer.request('PUT /repos/{owner}/{repo}/pulls/{pull_number}/update-branch',
+                updated++;
+                await github.request('PUT /repos/{owner}/{repo}/pulls/{pull_number}/update-branch',
                   { owner, repo, pull_number: pr.number, expected_head_sha: pr.head.sha });
                 rows.push([pr.number, 'updated', `merged ${cmp.behind_by} base commits`]);
               } catch (e) {

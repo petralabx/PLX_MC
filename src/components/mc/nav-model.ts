@@ -154,6 +154,21 @@ export function navHref(route: Route): string {
 }
 
 /**
+ * The sidebar scrollTop that brings the current row into view (TASK-3837):
+ * unchanged when the row is already fully visible, otherwise the row centred.
+ * Both edges are viewport-relative (getBoundingClientRect).
+ */
+export function revealScrollTop(
+  view: { top: number; bottom: number },
+  row: { top: number; bottom: number },
+  scrollTop: number
+): number {
+  if (row.top >= view.top && row.bottom <= view.bottom) return scrollTop;
+  const centred = row.top - view.top - (view.bottom - view.top - (row.bottom - row.top)) / 2;
+  return Math.max(0, Math.round(scrollTop + centred));
+}
+
+/**
  * Nav links are real <a href>s; only a plain primary click becomes a
  * client-side nav(). Modified or middle clicks (new tab, new window, download)
  * are left to the browser.

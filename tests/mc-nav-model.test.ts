@@ -19,6 +19,7 @@ import {
   navCommands,
   navGroupOf,
   navHref,
+  revealScrollTop,
   screenTitle,
   tabOf,
   tabScreens,
@@ -137,6 +138,27 @@ describe("nav links are real URLs", () => {
     expect(isPlainLeftClick({ ...click, shiftKey: true })).toBe(false);
     expect(isPlainLeftClick({ ...click, altKey: true })).toBe(false);
     expect(isPlainLeftClick({ ...click, button: 1 })).toBe(false);
+  });
+});
+
+// TASK-3837: a deep link to a row low in the sidebar scrolls the sidebar so the
+// current row shows. Rects are viewport-relative; the sidebar spans 100–700.
+describe("revealScrollTop", () => {
+  const view = { top: 100, bottom: 700 };
+
+  it("leaves a fully visible row where it is", () => {
+    expect(revealScrollTop(view, { top: 400, bottom: 432 }, 50)).toBe(50);
+    expect(revealScrollTop(view, { top: 100, bottom: 132 }, 0)).toBe(0);
+  });
+
+  it("centres a row below the fold", () => {
+    // Row 1000–1032: its centre (1016) moves to the view's centre (400).
+    expect(revealScrollTop(view, { top: 1000, bottom: 1032 }, 0)).toBe(616);
+  });
+
+  it("centres a row above the view, never past the top", () => {
+    expect(revealScrollTop(view, { top: -200, bottom: -168 }, 900)).toBe(316);
+    expect(revealScrollTop(view, { top: 60, bottom: 92 }, 10)).toBe(0);
   });
 });
 

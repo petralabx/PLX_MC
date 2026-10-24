@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Sidebar, useNavCounts, type NavCounts } from "@/components/mc/chrome";
 import { CountBadge } from "@/components/mc/count-badge";
 import type { Route } from "@/components/mc/route";
+import type { Task } from "@/lib/mc-data/types";
 import {
   __setStateLoaderForTests,
   allTasks,
@@ -92,6 +93,19 @@ describe("Sidebar", () => {
     expect(html).toMatch(/<button type="button" class="item side-new-initiative"[^>]*>.*New initiative/);
   });
 
+  // TASK-3837: an initiative page also lights its parent project, but the
+  // initiative stays the only current row.
+  it("marks the open initiative's parent project as on-path, not current", () => {
+    const html = render({ screen: "bucket", bucketId: "BKT-WMS" });
+    expect(html).toContain('href="/?screen=bucket&amp;bucketId=BKT-WMS" class="item active" aria-current="page"');
+    expect(html).toContain('href="/?screen=project&amp;projectId=PRJ-PORTAL-GOLIVE" class="item on-path"');
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+    // The project page itself is current, as before; nothing is on-path.
+    const project = render({ screen: "project", projectId: "PRJ-PORTAL-GOLIVE" });
+    expect(project).toContain('projectId=PRJ-PORTAL-GOLIVE" class="item active" aria-current="page"');
+    expect(project).not.toContain("on-path");
+  });
+
   it("collapses Admin & health by default behind a disclosure button", () => {
     const html = render({ screen: "home" });
     expect(html).toContain(
@@ -156,10 +170,40 @@ describe("useNavCounts once the store is live", () => {
     // Live agents are derived from the store alone: exact.
     expect(live.agents).toMatchObject({ exact: true, unit: "live" });
     expect(typeof live.agents?.n).toBe("number");
-    // Approvals come from GET /api/approvals on their page; the store's gates
-    // are not the same source, so the badge is never claimed exact.
-    expect(live.approvals?.exact).toBe(false);
     // No viewer on the server render → the Home count is unknown.
     expect(live.needs).toEqual({ n: null, exact: false });
+  });
+
+  // TASK-3837: once live, Approvals is an attention badge. Its page reads GET
+  // /api/approvals and /api/questions, not the store, so a shown count is a
+  // lower bound, never exact; with nothing waiting it is hidden, not "—".
+  it("hides Approvals while nothing waits, and shows a lower bound once a gate is pending", async () => {
+    const [task] = allTasks();
+    const gate = {
+      id: "apg_test",
+      reason: "Approve the deploy",
+      requestedBy: "agent:test",
+      requestedAt: "2026-10-24T12:00:00Z",
+      status: "pending" as const,
+    };
+    const live = (tasks: Task[]) => async () => ({
+      tasks,
+      risks: [],
+      files: [],
+      conflicts: openConflicts(),
+      errors: openErrors(),
+      audit: [],
+      counts: {},
+      lastSweep: "2026.10.24 · 12:00",
+    });
+    __setStateLoaderForTests(live([{ ...task, approvalGates: [] }]));
+    await hydrate();
+    expect(dataSource()).toBe("live");
+    expect(counts().approvals).toBeUndefined();
+    expect(renderToStaticMarkup(createElement(CountBadge, { count: counts().approvals }))).toBe("");
+
+    __setStateLoaderForTests(live([{ ...task, approvalGates: [gate] }]));
+    await hydrate();
+    expect(counts().approvals).toEqual({ n: 1, exact: false });
   });
 });

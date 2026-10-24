@@ -625,6 +625,19 @@ test.describe("shell — touch targets and current page", () => {
       "page"
     );
   });
+
+  // TASK-3837: a deep link to an initiative low in the list shows its row by
+  // scrolling the sidebar, never the page, and lights its parent project.
+  test("a deep link scrolls the sidebar, not the page, to the current initiative", async ({ page }) => {
+    await open(page, 1440, "/?screen=bucket&bucketId=BKT-UAT", 520);
+    const side = page.locator("nav.mc-side");
+    const row = side.getByRole("link", { name: "UAT", exact: true });
+    await expect(row).toHaveAttribute("aria-current", "page");
+    await expect(row).toBeInViewport({ ratio: 1 });
+    expect(await side.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await expect(side.getByRole("link", { name: "PLX Portal Go-Live" })).toHaveClass(/\bon-path\b/);
+  });
 });
 
 test.describe("shell — offline banner", () => {

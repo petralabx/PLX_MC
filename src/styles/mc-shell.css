@@ -440,11 +440,12 @@
     border: 0;
     background: none;
     font-family: var(--p-font-mono);
-    font-size: var(--p-text-cap);
+    font-size: var(--p-text-meta);
+    font-weight: 600;
     letter-spacing: var(--p-track-tick);
     text-transform: uppercase;
     text-align: left;
-    color: var(--p-muted);
+    color: var(--p-ink-2);
   }
   .mc .mc-side .h-toggle {
     min-height: var(--p-touch);
@@ -486,6 +487,11 @@
   }
   .mc .mc-side .item[aria-current="page"] .ic {
     color: var(--p-accent);
+  }
+  /* The open initiative's parent project (TASK-3837): lit, but not current. */
+  .mc .mc-side .item.on-path {
+    font-weight: 500;
+    color: var(--p-ink);
   }
   /* Projects / Initiatives lists. Reset the task-detail subtask row skin
      (mc-task.css `.mc .sub`), which shares the class name. */

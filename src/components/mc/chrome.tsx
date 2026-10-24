@@ -20,6 +20,7 @@ import { liveAgentCount, openQuestionsFor, pendingApprovalGates } from "@/lib/mc
 import { useMcNotices, useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import {
   allTasks,
+  bucketById,
   dataSource,
   dismissNotice,
   hydrate,
@@ -40,6 +41,7 @@ import {
   navGroupOf,
   navHref,
   nextDrawerOpen,
+  revealScrollTop,
   visibleNavGroups,
   type DrawerEvent,
   type NavBadge,
@@ -66,8 +68,8 @@ const noClockSubscribe = () => () => {};
  * More sheet always agree. A count is known only once the server has answered
  * (dataSource "live"); before that — seed fixtures, or the offline fallback
  * showing cached or demo data — it is "—", never a fabricated or "confirmed"
- * 0. Attention badges (sync, AI spend) stay hidden until they have something
- * to say.
+ * 0. Attention badges (sync, AI spend, and Approvals once live) stay hidden
+ * until they have something to say.
  */
 export function useNavCounts(): NavCounts {
   useMcVersion();
@@ -89,22 +91,22 @@ export function useNavCounts(): NavCounts {
     loaded && viewer && today !== null && viewerLoadState(viewer, viewerSettled()) === "ready"
       ? { n: needsMeCount(viewer, tasks, today, sc) + unreadCount(), exact: false }
       : UNKNOWN_COUNT;
+  // Pending runtime approval gates on the tasks this viewer can see, plus
+  // the open questions addressed to this viewer (TASK-3567).
+  const waiting = loaded
+    ? tasks.reduce(
+        (n, t) => n + pendingApprovalGates(t).length + (viewer ? openQuestionsFor(t, viewer.id).length : 0),
+        0
+      )
+    : 0;
 
   return {
     needs,
-    // Pending runtime approval gates on the tasks this viewer can see, plus
-    // the open questions addressed to this viewer (TASK-3567). The Approvals
-    // screen reads GET /api/approvals and /api/questions, different sources —
-    // so a lower bound, never claimed exact.
-    approvals: loaded
-      ? {
-          n: tasks.reduce(
-            (n, t) => n + pendingApprovalGates(t).length + (viewer ? openQuestionsFor(t, viewer.id).length : 0),
-            0
-          ),
-          exact: false,
-        }
-      : UNKNOWN_COUNT,
+    // The Approvals screen reads GET /api/approvals and /api/questions,
+    // different sources — so a lower bound, never claimed exact. Once live it
+    // is an attention badge (TASK-3837): hidden while the store sees nothing
+    // waiting, where a lower bound of 0 read "—" and looked broken.
+    approvals: !loaded ? UNKNOWN_COUNT : waiting > 0 ? { n: waiting, exact: false } : undefined,
     sync: loaded && conflicts > 0 ? { n: conflicts, exact: true, tone: "warn" } : undefined,
     // Honest live-agent count: agents executing in-flight work (EN-005).
     agents: loaded ? { n: liveAgentCount(tasks), exact: true, unit: "live" } : UNKNOWN_COUNT,
@@ -185,13 +187,34 @@ export function Sidebar({
     }
   }, [route.screen]);
 
+  // …and keep the current row in view (TASK-3837): a deep link to a project or
+  // initiative low in the list scrolls the sidebar itself, never the page.
+  // Once per current row (opening a task pane is not a new row), and only once
+  // the row is laid out (projects arrive with the store; Admin & health opens a
+  // render later), so a manual scroll stays.
+  const routeKey = `${route.screen}:${route.projectId ?? ""}:${route.bucketId ?? ""}`;
+  const revealedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (revealedFor.current === routeKey) return;
+    const row = document.querySelector<HTMLElement>('#mc-nav .item[aria-current="page"]');
+    const side = row?.closest<HTMLElement>("#mc-nav");
+    if (!row || !side || row.getClientRects().length === 0) return;
+    revealedFor.current = routeKey;
+    side.scrollTop = revealScrollTop(side.getBoundingClientRect(), row.getBoundingClientRect(), side.scrollTop);
+  });
+
+  // An initiative page also lights its parent project (TASK-3837). The
+  // initiative keeps the one aria-current; the project row is only on-path.
+  const openProjectId =
+    route.screen === "bucket" && route.bucketId ? (bucketById(route.bucketId)?.project ?? null) : null;
+
   // Items are real links (open in a new tab, copy the URL); a plain click stays
   // a client-side nav() so screens switch without a reload.
-  const link = (key: string, target: Route, active: boolean, label: string, body: ReactNode) => (
+  const link = (key: string, target: Route, active: boolean, label: string, body: ReactNode, onPath = false) => (
     <a
       key={key}
       href={navHref(target)}
-      className={`item${active ? " active" : ""}`}
+      className={`item${active ? " active" : onPath ? " on-path" : ""}`}
       aria-current={active ? "page" : undefined}
       title={label}
       onClick={(event) => {
@@ -221,7 +244,8 @@ export function Sidebar({
             <>
               <span className={`hl ${p.health}`} aria-hidden="true" />
               <span className="nm">{p.name}</span>
-            </>
+            </>,
+            p.id === openProjectId
           )
         )}
         <button

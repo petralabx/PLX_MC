@@ -36,4 +36,19 @@ test.describe("insights a11y (G4)", () => {
     const violations = results.violations.filter((v) => !allowed.has(v.id));
     expect(violations).toEqual([]);
   });
+
+  // Hover is a state too (WCAG 1.4.3). Test it on purpose: the scan above only
+  // saw it when the sidebar click happened to leave the pointer on this KPI.
+  test("a hovered Unassigned KPI keeps its contrast", async ({ page }) => {
+    const allowed = allowedRuleIds();
+    const kpi = page.locator('[data-testid="insights-screen"] .kpi.clickable');
+    await expect(kpi).toBeEnabled();
+    await kpi.hover();
+    const results = await new AxeBuilder({ page })
+      .include('[data-testid="insights-screen"] .kpis')
+      .withTags(TAGS)
+      .analyze();
+    const violations = results.violations.filter((v) => !allowed.has(v.id));
+    expect(violations).toEqual([]);
+  });
 });

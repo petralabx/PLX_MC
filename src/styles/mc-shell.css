@@ -403,9 +403,10 @@
     z-index: var(--p-z-drawer);
     width: var(--p-drawer-w);
     /* The top padding lives on the sticky .side-head, so nothing scrolls
-       above it; scroll-padding keeps keyboard focus clear of it (TASK-3837). */
+       above it. scroll-padding keeps a focused row and its 4px focus ring
+       below the head (8px + touch + 8px), per WCAG 2.4.11 (TASK-3837). */
     padding: 0 0 24px;
-    scroll-padding-top: calc(var(--p-safe-t) + var(--p-touch) + 16px);
+    scroll-padding-top: calc(var(--p-safe-t) + var(--p-touch) + 20px);
     overflow-y: auto;
     overscroll-behavior: contain;
     border-right: 1px solid var(--p-grid);
@@ -967,7 +968,7 @@
       width: var(--p-rail-w);
       height: calc(100dvh - var(--p-chrome-h));
       padding: 0 0 16px;
-      scroll-padding-top: calc(var(--p-touch) + 16px);
+      scroll-padding-top: calc(var(--p-touch) + 20px);
       overflow-x: hidden;
       transform: none;
       visibility: visible;
@@ -1032,7 +1033,7 @@
       width: var(--p-drawer-w);
       height: auto;
       padding: 0 0 24px;
-      scroll-padding-top: calc(var(--p-safe-t) + var(--p-touch) + 16px);
+      scroll-padding-top: calc(var(--p-safe-t) + var(--p-touch) + 20px);
     }
     .mc .mc-side.open .side-head {
       justify-content: flex-end;

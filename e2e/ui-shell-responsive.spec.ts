@@ -676,7 +676,8 @@ test.describe("shell — touch targets and current page", () => {
         const head = nav.querySelector(".side-head")!;
         const focused = document.activeElement as HTMLElement | null;
         if (!focused || !nav.contains(focused) || head.contains(focused)) return null;
-        return focused.getBoundingClientRect().top < head.getBoundingClientRect().bottom - 1 ? focused.textContent : null;
+        // The 4px focus ring (2px outline, 2px offset) must clear the head too.
+        return focused.getBoundingClientRect().top + 0.5 < head.getBoundingClientRect().bottom + 4 ? focused.textContent : null;
       });
       expect(hidden, `focus hidden under the head after ${i + 1} Shift+Tab`).toBeNull();
     }

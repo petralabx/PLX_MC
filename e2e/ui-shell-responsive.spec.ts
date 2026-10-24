@@ -4,7 +4,7 @@ import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { waitForHydration } from "./helpers";
+import { openSidebar, waitForHydration } from "./helpers";
 
 // ADR-005 — the mobile-first shell. This spec walks its own widths (it is not
 // in the tablet / mobile-chrome projects), so it runs once, in the default
@@ -739,6 +739,232 @@ test.describe("shell — axe at every tier (allowlist unchanged)", () => {
       await open(page, width, "/?screen=board");
       await page.locator(".mc").first().evaluate((el) => el.classList.add("dark"));
       expect(await shellViolations(page), `dark @ ${width}`).toEqual([]);
+    }
+  });
+});
+
+// TASK-3840 — the zoned sidebar (portal ADR-011). The build flag is off here;
+// these tests opt in per browser, as UAT does (localStorage mc.nav.zones).
+test.describe("shell — zoned sidebar", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem("mc.nav.zones", "1"));
+  });
+
+  const side = (page: Page) => page.locator("nav.mc-side");
+  const flyout = (page: Page) => page.locator("#mc-nav-admin-flyout");
+  const footToggle = (page: Page) => side(page).getByRole("button", { name: "Admin & health" });
+
+  async function openDrawer(page: Page, width: number) {
+    if (width < 641) {
+      await page.locator("nav.mc-tabs").getByRole("button", { name: "More" }).click();
+      await page.getByRole("dialog", { name: "More" }).getByRole("button", { name: /All screens/ }).click();
+    } else {
+      await page.getByTestId("nav-drawer-toggle").click();
+    }
+    await expect(side(page)).toHaveClass(/\bopen\b/);
+  }
+
+  test("no horizontal page scroll, 360 to 3440", async ({ page }) => {
+    for (const width of SWEEP) {
+      await open(page, width, "/");
+      expect(await horizontalOverflow(page), `@ ${width}`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  test("1440: a 248px sidebar in zones, with its footer in view", async ({ page }) => {
+    await open(page, 1440, "/?screen=board", 600);
+    const nav = side(page);
+    expect(Math.round((await nav.boundingBox())!.width)).toBe(248);
+    await expect(nav.locator(".grp > .h")).toHaveText([/^My work$/, /^Plan$/, /^Reporting$/, /^Knowledge/]);
+    await expect(nav.getByRole("group", { name: "Reporting", exact: true }).getByRole("link")).toHaveText([
+      /^Dashboard/,
+      /^Insights/,
+      /^Goals & production/,
+      /^AI spend/,
+    ]);
+    // Rows are 28px for a mouse (ADR-011).
+    expect(Math.round((await nav.getByRole("link", { name: "Board", exact: true }).boundingBox())!.height)).toBe(28);
+    // The list scrolls under a footer that stays put.
+    expect(await nav.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+    for (const scrollTop of [0, 10_000]) {
+      await nav.evaluate((el, top) => {
+        el.scrollTop = top;
+      }, scrollTop);
+      await expect(footToggle(page)).toBeInViewport({ ratio: 1 });
+      await expect(nav.getByRole("link", { name: "Help and shortcuts" })).toBeInViewport({ ratio: 1 });
+    }
+  });
+
+  test("820: the 64px rail keeps every zone's icons and the footer, 44px targets", async ({ page }) => {
+    await open(page, 820, "/?screen=board");
+    const nav = side(page);
+    expect(Math.round((await nav.boundingBox())!.width)).toBe(64);
+    await expect(nav.getByRole("link", { name: "Skills directory" })).toBeVisible();
+    for (const target of [footToggle(page), nav.getByRole("link", { name: "Help and shortcuts" })]) {
+      await expect(target).toBeInViewport({ ratio: 1 });
+      const box = (await target.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test("the Admin & health flyout opens beside the nav, closes on Esc, outside and on navigating", async ({ page }) => {
+    for (const width of [1440, 820]) {
+      await open(page, width, "/?screen=board");
+      const toggle = footToggle(page);
+      const panel = flyout(page);
+      await expect(panel).toBeHidden();
+      await toggle.click();
+      await expect(panel).toBeVisible();
+      await expect(toggle).toHaveAttribute("aria-expanded", "true");
+      const nav = (await side(page).boundingBox())!;
+      const box = (await panel.boundingBox())!;
+      expect(box.x, `beside the nav @ ${width}`).toBeGreaterThanOrEqual(nav.x + nav.width);
+      expect(Math.round(box.width)).toBe(264);
+      expect(box.y + box.height).toBeLessThanOrEqual(900);
+      await expect(panel.locator(".fly-h")).toHaveText(["Operations", "Sync and data", "Engineering"]);
+      expect(await shellViolations(page, ["#mc-nav-admin-flyout"]), `axe @ ${width}`).toEqual([]);
+
+      // Esc on the toggle, or from inside the panel, closes it; focus stays on the toggle.
+      await page.keyboard.press("Escape");
+      await expect(panel).toBeHidden();
+      await expect(toggle).toBeFocused();
+      await expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await toggle.click();
+      await page.keyboard.press("Tab");
+      await expect(panel.getByRole("link").first()).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(panel).toBeHidden();
+      await expect(toggle).toBeFocused();
+
+      // A click outside closes it.
+      await toggle.click();
+      await page.locator("main#mc-main").click({ position: { x: 4, y: 4 } });
+      await expect(panel).toBeHidden();
+
+      // An item navigates and closes it; the toggle is lit on that screen.
+      await toggle.click();
+      await panel.getByRole("link", { name: /^Repos/ }).click();
+      await expect(page.locator("[data-testid='repos-screen']")).toBeVisible();
+      await expect(panel).toBeHidden();
+      await expect(toggle).toHaveClass(/\bon-path\b/);
+    }
+  });
+
+  // Review round 1: the flyout owns Esc from anywhere, keeps it from the
+  // screen, closes when focus moves on, and sizes its icons like the shell.
+  test("the flyout owns Esc, keeps it from the screen, and closes when focus moves on", async ({ page }) => {
+    await open(page, 1440, "/?screen=board");
+    await page.evaluate(() => {
+      const w = window as unknown as { __esc: number };
+      w.__esc = 0;
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") w.__esc += 1;
+      });
+    });
+    const toggle = footToggle(page);
+    const panel = flyout(page);
+    await toggle.click();
+    await expect(panel).toBeVisible();
+    expect(Math.round((await panel.locator(".item .ic").first().boundingBox())!.width)).toBe(16);
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    expect(await page.evaluate(() => (window as unknown as { __esc: number }).__esc)).toBe(0);
+
+    // Tab past the last item: focus moves on to Help and the flyout closes.
+    await toggle.click();
+    await page.keyboard.press("Tab");
+    for (let i = 0; i < 20 && (await panel.isVisible()); i += 1) await page.keyboard.press("Tab");
+    await expect(panel).toBeHidden();
+    await expect(side(page).getByRole("link", { name: "Help and shortcuts" })).toBeFocused();
+
+    // ⌘K takes focus to the palette, and the flyout gets out of its way.
+    await toggle.click();
+    await expect(panel).toBeVisible();
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(page.getByTestId("cmdk")).toBeVisible();
+    await expect(panel).toBeHidden();
+  });
+
+  test("in a drawer, Esc with focus elsewhere closes the flyout, not the drawer", async ({ page }) => {
+    await open(page, 820, "/?screen=board");
+    await openDrawer(page, 820);
+    await footToggle(page).click();
+    await expect(flyout(page)).toBeVisible();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press("Escape");
+    await expect(flyout(page)).toBeHidden();
+    await expect(side(page)).toHaveClass(/\bopen\b/);
+  });
+
+  test("on Help, the footer row is current and the list does not scroll", async ({ page }) => {
+    await open(page, 1440, "/?screen=help", 600);
+    const nav = side(page);
+    await expect(nav.getByRole("link", { name: "Help and shortcuts" })).toHaveAttribute("aria-current", "page");
+    expect(await nav.evaluate((el) => el.scrollTop)).toBe(0);
+  });
+
+  test("in a drawer, Esc closes the flyout first, then the drawer", async ({ page }) => {
+    await open(page, 820, "/?screen=board");
+    await openDrawer(page, 820);
+    await footToggle(page).click();
+    await expect(flyout(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(flyout(page)).toBeHidden();
+    await expect(side(page)).toHaveClass(/\bopen\b/);
+    await page.keyboard.press("Escape");
+    await expect(side(page)).not.toHaveClass(/\bopen\b/);
+    await expect(page.getByTestId("nav-drawer-toggle")).toBeFocused();
+  });
+
+  test("393: the flyout is a sheet along the bottom of the drawer, with 44px rows", async ({ page }) => {
+    await open(page, 393, "/?screen=board", 851);
+    await openDrawer(page, 393);
+    const toggle = footToggle(page);
+    await expect(toggle).toBeInViewport({ ratio: 1 });
+    await toggle.click();
+    const panel = flyout(page);
+    await expect(panel).toBeVisible();
+    const box = (await panel.boundingBox())!;
+    expect(Math.round(box.x)).toBe(12);
+    expect(Math.round(box.width)).toBe(393 - 24);
+    expect(Math.round(851 - (box.y + box.height))).toBe(12);
+    for (const link of await panel.getByRole("link").all()) {
+      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await shellViolations(page, ["#mc-nav-admin-flyout"])).toEqual([]);
+    await panel.getByRole("link", { name: /^SharePoint sync/ }).click();
+    await expect(page.locator("[data-testid='sync-console-screen']")).toBeVisible();
+    await expect(panel).toBeHidden();
+    await expect(side(page)).not.toHaveClass(/\bopen\b/);
+  });
+
+  // WCAG 2.4.11: the sticky footer never hides the focused row.
+  test("in the phone drawer, the sticky footer never covers keyboard focus", async ({ page }) => {
+    await open(page, 393, "/?screen=board", 700);
+    await openDrawer(page, 393);
+    for (let i = 0; i < 30; i += 1) {
+      await page.keyboard.press("Tab");
+      const hidden = await page.evaluate(() => {
+        const nav = document.querySelector("nav.mc-side")!;
+        const foot = nav.querySelector(".side-foot")!;
+        const focused = document.activeElement as HTMLElement | null;
+        if (!focused || !nav.contains(focused) || foot.contains(focused)) return null;
+        // The 4px focus ring (2px outline, 2px offset) must clear the footer too.
+        return focused.getBoundingClientRect().bottom - 0.5 > foot.getBoundingClientRect().top - 4 ? focused.textContent : null;
+      });
+      expect(hidden, `focus hidden under the footer after ${i + 1} Tab`).toBeNull();
+    }
+  });
+
+  test("helpers reach a Knowledge screen and an Admin & health screen at every tier", async ({ page }) => {
+    for (const width of TIERS) {
+      await open(page, width, "/");
+      await openSidebar(page, "Skills directory");
+      await expect(page.locator("[data-testid='sk-screen']"), `@ ${width}`).toBeVisible();
+      await open(page, width, "/");
+      await openSidebar(page, "Repos");
+      await expect(page.locator("[data-testid='repos-screen']"), `@ ${width}`).toBeVisible();
     }
   });
 });

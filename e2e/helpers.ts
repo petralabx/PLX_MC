@@ -168,7 +168,9 @@ export async function openSidebar(page: Page, label: string): Promise<void> {
   // elsewhere (e.g. the "Board" view tab). Below 1025px the sidebar is a drawer
   // (ADR-005): on tablet behind the icon rail's toggle, on phone behind
   // More → All screens. "Admin & health" starts collapsed — open whichever
-  // stands between us and the item.
+  // stands between us and the item. The zoned sidebar (TASK-3840) starts
+  // Knowledge collapsed and keeps the system screens in its footer's Admin &
+  // health flyout, a popover outside the nav.
   const nav = page.locator("nav.mc-side");
   const railToggle = page.locator("[data-testid='nav-drawer-toggle']");
   const more = page.locator("nav.mc-tabs").getByRole("button", { name: "More" });
@@ -180,16 +182,25 @@ export async function openSidebar(page: Page, label: string): Promise<void> {
     await page.getByRole("dialog", { name: "More" }).getByRole("button", { name: /All screens/ }).click();
     await expect(nav).toHaveClass(/\bopen\b/);
   }
-  const adminToggle = nav.locator("button[aria-controls='mc-nav-admin']");
-  const inAdmin = nav.locator("#mc-nav-admin .item", { hasText: label });
-  if ((await inAdmin.count()) > 0 && (await adminToggle.getAttribute("aria-expanded")) !== "true") {
-    await adminToggle.click();
-    await expect(adminToggle).toHaveAttribute("aria-expanded", "true");
+  const flyout = page.locator("#mc-nav-admin-flyout");
+  const scope = (await flyout.locator(".item", { hasText: label }).count()) > 0 ? flyout : nav;
+  if (scope === flyout) {
+    const flyoutToggle = nav.locator("button.foot-toggle");
+    if ((await flyoutToggle.getAttribute("aria-expanded")) !== "true") await flyoutToggle.click();
+    await expect(flyout).toBeVisible();
+  } else {
+    for (const toggle of await nav.locator("button.h-toggle").all()) {
+      const body = nav.locator(`#${await toggle.getAttribute("aria-controls")}`);
+      if ((await body.locator(".item", { hasText: label }).count()) > 0 && (await toggle.getAttribute("aria-expanded")) !== "true") {
+        await toggle.click();
+        await expect(toggle).toHaveAttribute("aria-expanded", "true");
+      }
+    }
   }
   // Prefer the item whose label is exactly `label` ("Board", not "Dashboard"),
   // then fall back to a substring match ("Sync" → "SharePoint sync issues").
-  const exact = nav.locator(".item").filter({ has: page.locator(".nm").getByText(label, { exact: true }) });
-  const target = (await exact.count()) > 0 ? exact : nav.locator(".item", { hasText: label });
+  const exact = scope.locator(".item").filter({ has: page.locator(".nm").getByText(label, { exact: true }) });
+  const target = (await exact.count()) > 0 ? exact : scope.locator(".item", { hasText: label });
   await target.first().click();
 }
 

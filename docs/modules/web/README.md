@@ -49,6 +49,17 @@ closes only the topmost, focus returns to its trigger. Nav badges speak one
 honest vocabulary (`count-badge.tsx`): n, n+ (lower bound), — (unknown),
 hidden only at a confirmed zero.
 
+**Zoned sidebar (TASK-3840, default off).** The navigation redesign's sidebar,
+built to the shared PLX shell contract (portal ADR-011): My work · Plan ·
+Reporting · Knowledge (collapsed by default), then a footer pinned to the
+bottom with Help and an Admin & health popover (Operations · Sync and data ·
+Engineering). It is 248px wide, with 28px rows for a mouse and 44px on touch.
+Its items, URLs, badges and flags are the default sidebar's (`ZONED_NAV_GROUPS`
+and `ADMIN_FLYOUT` in `nav-model.ts`). `NEXT_PUBLIC_PLX_MC_NAV_ZONES=1` turns
+it on for a build; localStorage `mc.nav.zones` = "1" turns it on for one
+browser (`nav-zones.ts`). Phone tabs and ⌘K keep the default groups until
+TASK-3843.
+
 **Project detail** (`project` screen): rolls up initiatives (buckets) under a
 Project with an initiative card grid; inline edit for health, accountable
 owner, target, and description via `updateProject` → optimistic
@@ -131,6 +142,7 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/count-badge.tsx` — honest count badge (n · n+ · —)
 - `src/components/mc/nav-icon.tsx` — Lucide icon map for the nav
 - `src/components/mc/nav-model.ts` — nav groups/items, phone tabs, tab memory, pane screens — shared by every nav surface, ⌘K and tests
+- `src/components/mc/nav-zones.ts` — the zoned-sidebar flag (build env, or a per-browser opt-in; default off)
 - `src/components/mc/project-detail.tsx` — Project detail + initiative card grid
 - `src/components/mc/inbox.tsx` — Home: "What needs me today" (rules in `needs-me.ts`)
 - `src/components/mc/help.tsx` — Help: how Mission Control works + glossary

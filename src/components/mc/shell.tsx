@@ -29,6 +29,7 @@ import { ContextPane, LiveColumn, PaneEmpty } from "./context-pane";
 import { InboxView } from "./inbox";
 import { MoreSheet } from "./more-sheet";
 import { isPaneScreen } from "./nav-model";
+import { useNavZones } from "./nav-zones";
 import { NewInitiativeModal } from "./new-initiative-modal";
 import { NewProjectModal } from "./new-project-modal";
 import { NewTaskModal } from "./new-task-modal";
@@ -73,6 +74,7 @@ export function MissionControlShell() {
   const mainRef = useRef<HTMLElement | null>(null);
   const tier = useContentTier(mainRef);
   const counts = useNavCounts();
+  const navZones = useNavZones();
   const flags = navFlags();
 
   // Wide-tier preferences (ADR-005): the pane width and hidden state, and the
@@ -378,6 +380,7 @@ export function MissionControlShell() {
       </div>
       <div
         className="mc-body"
+        data-nav={navZones ? "zones" : undefined}
         data-pane={persistentPane ? "open" : "closed"}
         data-live={showLive ? "pinned" : "off"}
         style={bodyStyle}

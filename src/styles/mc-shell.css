@@ -59,7 +59,7 @@
   }
   /* Lucide icons in shell surfaces only — screens size their own .ic.
      :where() keeps this at (0,2,0) so the per-control sizes below win. */
-  .mc :where(.mc-chrome, .mc-side, .mc-tabs, .mc-fab, .mc-sheet, .mc-pane > .pane-head, .mc-live > .live-h) .ic {
+  .mc :where(.mc-chrome, .mc-side, .mc-tabs, .mc-fab, .mc-sheet, .mc-flyout, .mc-pane > .pane-head, .mc-live > .live-h) .ic {
     width: 16px;
     height: 16px;
     flex: 0 0 auto;
@@ -549,7 +549,7 @@
 
   /* Count badges — n · n+ (partial) · — (unknown); zero is hidden only once
      confirmed. Attention tone is warn, never hot (hot is a lost write). */
-  .mc :where(.mc-side, .mc-tabs, .mc-sheet) .badge {
+  .mc :where(.mc-side, .mc-tabs, .mc-sheet, .mc-flyout) .badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -566,11 +566,11 @@
     white-space: nowrap;
     color: var(--p-accent);
   }
-  .mc :where(.mc-side, .mc-tabs, .mc-sheet) .badge.warn {
+  .mc :where(.mc-side, .mc-tabs, .mc-sheet, .mc-flyout) .badge.warn {
     border-color: var(--p-warn);
     color: var(--p-warn-text);
   }
-  .mc :where(.mc-side, .mc-tabs, .mc-sheet) .badge.unk {
+  .mc :where(.mc-side, .mc-tabs, .mc-sheet, .mc-flyout) .badge.unk {
     border-style: dashed;
     border-color: var(--p-grid);
     color: var(--p-muted);
@@ -1379,6 +1379,133 @@
     from {
       transform: translateX(24px);
       opacity: 0;
+    }
+  }
+
+  /* ─── Zoned sidebar (TASK-3840, portal ADR-011) — .mc-body[data-nav="zones"]
+     The --p-shell-* fallbacks stand in until MC pins design-system 1.5.0:
+     248px wide, 28px pointer rows, system tools in a footer pinned to the
+     bottom, and the Admin & health flyout (a top-layer popover beside it). */
+  .mc .mc-body[data-nav="zones"] {
+    --p-side-w: var(--p-shell-sidebar, 248px);
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 0;
+    /* A focused row and its 4px ring stay above the sticky footer (WCAG 2.4.11). */
+    scroll-padding-bottom: calc(2 * var(--p-touch) + 24px + var(--p-safe-b, 0px));
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side > * {
+    flex-shrink: 0;
+  }
+  .mc .mc-side .side-foot {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    padding: 8px 12px calc(8px + var(--p-safe-b, 0px));
+    border-top: 1px solid var(--p-grid-2);
+    background: var(--p-rail);
+  }
+  /* Phone: a sheet along the bottom of the drawer. From 641px it sits beside
+     the rail, drawer or sidebar (useAdminFlyout sets --fly-left/bottom). */
+  .mc .mc-flyout[popover] {
+    position: fixed;
+    inset: auto 12px calc(12px + var(--p-safe-b, 0px)) 12px;
+    width: auto; /* the UA popover style is fit-content */
+    max-height: min(70vh, 560px);
+    margin: 0;
+    padding: 8px;
+    overflow-y: auto;
+    /* The account menu's popover skin. */
+    border: 1px solid var(--p-grid);
+    background: var(--p-paper);
+    box-shadow: 0 8px 28px color-mix(in srgb, var(--p-ink) 12%, transparent);
+    color: var(--p-ink);
+  }
+  .mc .mc-flyout .fly-sec + .fly-sec {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--p-grid-2);
+  }
+  .mc .mc-flyout .fly-h {
+    margin: 0 0 4px;
+    padding: 0 8px;
+    font-family: var(--p-font-mono);
+    font-size: var(--p-text-meta);
+    font-weight: 600;
+    letter-spacing: var(--p-track-tick);
+    text-transform: uppercase;
+    color: var(--p-ink-2);
+  }
+  .mc .mc-flyout .item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: var(--p-touch);
+    padding: 0 8px;
+    border-left: 2px solid transparent;
+    font-size: var(--p-text-ui);
+    text-decoration: none;
+    color: var(--p-ink-2);
+  }
+  .mc .mc-flyout .item .ic {
+    color: var(--p-muted);
+  }
+  .mc .mc-flyout .item .nm {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  @media (hover: hover) {
+    .mc .mc-flyout .item:hover {
+      background: var(--p-paper-2);
+    }
+  }
+  .mc .mc-flyout .item:focus-visible {
+    outline: 2px solid var(--p-accent);
+    outline-offset: -2px;
+  }
+  .mc .mc-flyout .item[aria-current="page"] {
+    border-left-color: var(--p-accent);
+    background: var(--p-paper-2);
+    font-weight: 500;
+    color: var(--p-ink);
+  }
+  .mc .mc-flyout .item[aria-current="page"] .ic {
+    color: var(--p-accent);
+  }
+  /* Without the Popover API the panel would sit in the page: leave it out. */
+  @supports not selector(:popover-open) {
+    .mc .mc-flyout {
+      display: none;
+    }
+  }
+  @media (min-width: 641px) {
+    .mc .mc-flyout[popover] {
+      inset: auto auto var(--fly-bottom, 8px) var(--fly-left, 8px);
+      width: var(--p-shell-flyout, 264px);
+    }
+    /* The icon rail's footer: icons centred, like its rows. */
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {
+      padding: 8px 0;
+    }
+  }
+  @media (min-width: 1025px) {
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {
+      padding: 8px 12px;
+    }
+  }
+  /* 28px rows for a fine pointer only: a coarse one keeps 44px targets. */
+  @media (min-width: 1025px) and (pointer: fine) {
+    .mc .mc-body[data-nav="zones"] .mc-side {
+      scroll-padding-bottom: calc(2 * var(--p-shell-row, 28px) + 24px);
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side .item,
+    .mc .mc-flyout .item {
+      min-height: var(--p-shell-row, 28px);
     }
   }
 }

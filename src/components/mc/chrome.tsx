@@ -10,9 +10,11 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type RefObject,
+  type ToggleEvent as ReactToggleEvent,
 } from "react";
 import { PanelLeft, Plus, X } from "lucide-react";
 
@@ -36,19 +38,24 @@ import { routingInboxEnabled } from "@/components/mc/routing-inbox/flag";
 import { CountBadge, UNKNOWN_COUNT, type Count } from "./count-badge";
 import { NavIcon } from "./nav-icon";
 import {
+  HELP_NAV_ITEM,
   createNavGroupState,
   isPlainLeftClick,
   navGroupOf,
   navHref,
   nextDrawerOpen,
   revealScrollTop,
+  visibleAdminFlyout,
   visibleNavGroups,
+  visibleZonedNavGroups,
+  zonedNavPlaceOf,
   type DrawerEvent,
   type NavBadge,
   type NavFlags,
   type NavGroupId,
   type NavList,
 } from "./nav-model";
+import { useNavZones } from "./nav-zones";
 import { needsMeCount, todayGridDay, viewerLoadState } from "./needs-me";
 import type { Nav, Route } from "./route";
 import { useLayer } from "./use-layer";
@@ -159,6 +166,81 @@ function useNavGroupOpen(id: NavGroupId): boolean {
   );
 }
 
+const ADMIN_FLYOUT_ID = "mc-nav-admin-flyout";
+
+/**
+ * The zoned sidebar's Admin & health flyout (TASK-3840, portal ADR-011): a
+ * popover in the top layer, so the scrolling sidebar cannot clip it. It opens
+ * on click beside its toggle. A click outside, navigating, or focus moving to
+ * another control (Tab past the end, ⌘K) closes it. While it is open it owns
+ * Esc, from anywhere: the nav drawer and the screen underneath never see that
+ * key, and focus goes back to the toggle if it was in the flyout.
+ */
+function useAdminFlyout(routeKey: string) {
+  const toggleRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  // Beside the nav (sidebar, rail or drawer), level with the toggle's bottom.
+  const onBeforeToggle = useCallback((event: ReactToggleEvent<HTMLDivElement>) => {
+    const toggle = toggleRef.current;
+    const side = toggle?.closest("nav");
+    if (event.newState !== "open" || !toggle || !side) return;
+    const panel = event.currentTarget;
+    panel.style.setProperty("--fly-left", `${Math.round(side.getBoundingClientRect().right + 8)}px`);
+    panel.style.setProperty("--fly-bottom", `${Math.max(8, Math.round(window.innerHeight - toggle.getBoundingClientRect().bottom))}px`);
+  }, []);
+  const onToggle = useCallback((event: ReactToggleEvent<HTMLDivElement>) => setOpen(event.newState === "open"), []);
+
+  const hide = useCallback(() => {
+    try {
+      panelRef.current?.hidePopover();
+    } catch {
+      // not open, or no popover support — nothing to close
+    }
+  }, []);
+
+  // Navigating closes it.
+  useEffect(() => hide(), [routeKey, hide]);
+
+  // Document capture phase: ahead of use-layer.ts and every screen handler.
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => {
+      const panel = panelRef.current;
+      if (event.key !== "Escape" || !panel || !isPopoverOpen(panel)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const focused = document.activeElement;
+      const inside = panel.contains(focused) || focused === toggleRef.current;
+      hide();
+      if (inside) toggleRef.current?.focus();
+    };
+    document.addEventListener("keydown", onEscape, true);
+    return () => document.removeEventListener("keydown", onEscape, true);
+  }, [hide]);
+
+  // On the panel and on its toggle. No relatedTarget is a click on the
+  // panel's padding, or the window losing focus: the flyout stays.
+  const onBlur = useCallback(
+    (event: ReactFocusEvent<HTMLElement>) => {
+      const next = event.relatedTarget;
+      if (!next || panelRef.current?.contains(next) || toggleRef.current?.contains(next)) return;
+      hide();
+    },
+    [hide]
+  );
+
+  return { toggleRef, panelRef, open, hide, onBlur, onBeforeToggle, onToggle };
+}
+
+function isPopoverOpen(el: HTMLElement): boolean {
+  try {
+    return el.matches(":popover-open");
+  } catch {
+    return false; // no popover support
+  }
+}
+
 export function Sidebar({
   route,
   nav,
@@ -182,15 +264,29 @@ export function Sidebar({
   onDrawerKeyDown?: (event: ReactKeyboardEvent<HTMLElement>) => void;
 }) {
   useMcVersion();
+  const zoned = useNavZones();
   const adminOpen = useNavGroupOpen("admin");
+  const knowledgeOpen = useNavGroupOpen("knowledge");
+  const {
+    toggleRef: flyoutToggleRef,
+    panelRef: flyoutRef,
+    open: flyoutOpen,
+    hide: hideFlyout,
+    onBlur: onFlyoutBlur,
+    onBeforeToggle: onFlyoutBeforeToggle,
+    onToggle: onFlyoutToggle,
+  } = useAdminFlyout(`${route.screen}:${route.projectId ?? ""}:${route.bucketId ?? ""}`);
 
-  // Keep the active screen visible: arriving on an Admin & health screen (deep
-  // link, ⌘K, the topbar sync pill) expands that group.
+  // Keep the active screen visible: arriving on a screen in the collapsible
+  // group (Admin & health; Knowledge in the zoned sidebar) expands it. The
+  // zoned flyout never opens itself: it opens on click (ADR-011).
   useEffect(() => {
-    if (navGroupOf(route.screen) === "admin" && !navGroupState.isOpen("admin")) {
-      navGroupState.setOpen("admin", true);
+    const collapsible: NavGroupId = zoned ? "knowledge" : "admin";
+    const holding = zoned ? zonedNavPlaceOf(route.screen) : navGroupOf(route.screen);
+    if (holding === collapsible && !navGroupState.isOpen(collapsible)) {
+      navGroupState.setOpen(collapsible, true);
     }
-  }, [route.screen]);
+  }, [route.screen, zoned]);
 
   // …and keep the current row in view (TASK-3837): a deep link to a project or
   // initiative low in the list scrolls the labelled list itself (the desktop
@@ -208,15 +304,20 @@ export function Sidebar({
       revealedFor.current = null;
       return;
     }
+    // The zoned footer's rows (Help) are always in view.
+    if (row.closest(".side-foot")) return;
     const labelled = drawerOpen || window.matchMedia("(min-width: 1025px)").matches;
     const side = row.closest<HTMLElement>("#mc-nav");
     if (!labelled || !side || revealedFor.current === revealKey || row.getClientRects().length === 0) return;
     revealedFor.current = revealKey;
-    // In the drawer forms the sticky head covers the top of the list.
+    // In the drawer forms the sticky head covers the top of the list; in the
+    // zoned sidebar the sticky footer covers its bottom.
     const view = side.getBoundingClientRect();
     const head = side.querySelector<HTMLElement>(".side-head");
+    const foot = side.querySelector<HTMLElement>(".side-foot");
     const top = head && head.getClientRects().length > 0 ? head.getBoundingClientRect().bottom : view.top;
-    side.scrollTop = revealScrollTop({ top, bottom: view.bottom }, row.getBoundingClientRect(), side.scrollTop);
+    const bottom = foot ? foot.getBoundingClientRect().top : view.bottom;
+    side.scrollTop = revealScrollTop({ top, bottom }, row.getBoundingClientRect(), side.scrollTop);
   });
 
   // An initiative page also lights its parent project (TASK-3837). The
@@ -309,9 +410,12 @@ export function Sidebar({
     ),
   };
 
-  const groups = visibleNavGroups(navFlags());
+  const flags = navFlags();
+  const groups = zoned ? visibleZonedNavGroups(flags) : visibleNavGroups(flags);
+  const flyoutSections = zoned ? visibleAdminFlyout(flags) : [];
+  const onAdminScreen = zoned && zonedNavPlaceOf(route.screen) === "admin";
 
-  return (
+  const sidebar = (
     <nav
       className={`mc-side${drawerOpen ? " open" : ""}`}
       id="mc-nav"
@@ -346,7 +450,7 @@ export function Sidebar({
       {groups.map((group) => {
         const headingId = `mc-nav-h-${group.id}`;
         const bodyId = `mc-nav-${group.id}`;
-        const open = !group.collapsible || adminOpen;
+        const open = !group.collapsible || (group.id === "knowledge" ? knowledgeOpen : adminOpen);
         return (
           <div className="grp" role="group" aria-labelledby={headingId} key={group.id}>
             {group.collapsible ? (
@@ -387,7 +491,81 @@ export function Sidebar({
           </div>
         );
       })}
+      {zoned ? (
+        <div className="side-foot">
+          <button
+            ref={flyoutToggleRef}
+            type="button"
+            className={`item foot-toggle${onAdminScreen ? " on-path" : ""}`}
+            title="Admin & health"
+            popoverTarget={ADMIN_FLYOUT_ID}
+            aria-controls={ADMIN_FLYOUT_ID}
+            aria-expanded={flyoutOpen}
+            onBlur={onFlyoutBlur}
+          >
+            <NavIcon name="Settings" />
+            <span className="nm">Admin & health</span>
+            <CountBadge count={counts.sync} />
+          </button>
+          {link(
+            HELP_NAV_ITEM.screen,
+            { screen: HELP_NAV_ITEM.screen },
+            route.screen === HELP_NAV_ITEM.screen,
+            HELP_NAV_ITEM.label,
+            <>
+              <NavIcon name={HELP_NAV_ITEM.lucide} />
+              <span className="nm">{HELP_NAV_ITEM.label}</span>
+            </>
+          )}
+        </div>
+      ) : null}
     </nav>
+  );
+
+  if (!zoned) return sidebar;
+  return (
+    <>
+      {sidebar}
+      {/* A sibling of the nav: the rail form's icon-only styles must not reach it. */}
+      <div
+        ref={flyoutRef}
+        id={ADMIN_FLYOUT_ID}
+        popover="auto"
+        onBeforeToggle={onFlyoutBeforeToggle}
+        onToggle={onFlyoutToggle}
+        className="mc-flyout"
+        role="group"
+        aria-label="Admin & health"
+        onBlur={onFlyoutBlur}
+        onClick={(event) => {
+          if ((event.target as Element).closest("a")) hideFlyout();
+        }}
+      >
+        {flyoutSections.map((section) => {
+          const headingId = `mc-fly-h-${section.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+          return (
+            <div className="fly-sec" role="group" aria-labelledby={headingId} key={section.label}>
+              <p className="fly-h" id={headingId}>
+                {section.label}
+              </p>
+              {section.items.map((item) =>
+                link(
+                  item.screen,
+                  { screen: item.screen },
+                  route.screen === item.screen,
+                  item.label,
+                  <>
+                    <NavIcon name={item.lucide} />
+                    <span className="nm">{item.label}</span>
+                    {item.badge ? <CountBadge count={counts[item.badge]} /> : null}
+                  </>
+                )
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 

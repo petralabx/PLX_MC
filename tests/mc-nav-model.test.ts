@@ -7,10 +7,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { CommandPalette } from "@/components/mc/command-palette";
 import {
+  ADMIN_FLYOUT,
   GROUP_TAB,
+  HELP_NAV_ITEM,
   NAV_GROUPS,
   NAV_TABS,
   PANE_SCREENS,
+  ZONED_NAV_GROUPS,
   createNavGroupState,
   createTabMemory,
   isPaneScreen,
@@ -23,7 +26,10 @@ import {
   screenTitle,
   tabOf,
   tabScreens,
+  visibleAdminFlyout,
   visibleNavGroups,
+  visibleZonedNavGroups,
+  zonedNavPlaceOf,
   type NavFlags,
 } from "@/components/mc/nav-model";
 import { SCREEN_VALUES, type Screen } from "@/components/mc/route";
@@ -119,6 +125,82 @@ describe("nav model — grouped by task", () => {
     expect(navGroupOf("goals")).toBe("reporting");
     expect(navGroupOf("home")).toBe("my-work");
     expect(navGroupOf("task")).toBeNull();
+  });
+});
+
+// TASK-3840 — the zoned sidebar (behind the nav-zones flag, portal ADR-011):
+// personal work first, then Plan, Reporting and Knowledge, with system tools in
+// the footer's Admin & health flyout. Same items as above, only placed anew.
+describe("zoned sidebar model", () => {
+  const zonedScreensOf = (flags: NavFlags, id: string): Screen[] =>
+    visibleZonedNavGroups(flags)
+      .find((g) => g.id === id)!
+      .items.map((i) => i.screen);
+  const flyoutOf = (flags: NavFlags) =>
+    visibleAdminFlyout(flags).map((section) => [section.label, section.items.map((i) => i.screen)]);
+
+  it("reads My work, Plan, Reporting, then a collapsible Knowledge", () => {
+    expect(ZONED_NAV_GROUPS.map((g) => g.label)).toEqual(["My work", "Plan", "Reporting", "Knowledge"]);
+    expect(zonedScreensOf(OFF, "my-work")).toEqual(["home", "mine", "approvals"]);
+    expect(zonedScreensOf(OFF, "plan")).toEqual(["board", "list", "timeline"]);
+    expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.lists).toEqual(["projects", "initiatives"]);
+    expect(zonedScreensOf(OFF, "reporting")).toEqual(["dashboard", "insights", "goals", "ai-spend"]);
+    expect(zonedScreensOf(OFF, "knowledge")).toEqual(["brain-ask", "governance-sops", "skills-directory", "architecture"]);
+    expect(ZONED_NAV_GROUPS.filter((g) => g.collapsible).map((g) => g.id)).toEqual(["knowledge"]);
+  });
+
+  it("puts system tools in the Admin & health flyout; flagged screens only when on", () => {
+    expect(flyoutOf(OFF)).toEqual([
+      ["Operations", ["feed"]],
+      ["Sync and data", ["sync", "files", "loop-ledgers"]],
+      ["Engineering", ["repos", "activity", "matrix"]],
+    ]);
+    expect(flyoutOf(ON)[0]).toEqual(["Operations", ["feed", "intake", "routing-inbox"]]);
+    for (const flags of [OFF, ON, { ...OFF, meetingIntake: true }, { ...OFF, routingInbox: true }]) {
+      for (const section of visibleAdminFlyout(flags)) expect(section.items.length).toBeGreaterThan(0);
+    }
+    expect(HELP_NAV_ITEM.screen).toBe("help");
+  });
+
+  it("places every sidebar screen exactly once: in a zone, the flyout, or the footer's Help", () => {
+    const placed = [
+      ...visibleZonedNavGroups(ON).flatMap((g) => g.items.map((i) => i.screen)),
+      ...visibleAdminFlyout(ON).flatMap((section) => section.items.map((i) => i.screen)),
+      HELP_NAV_ITEM.screen,
+    ];
+    expect(new Set(placed).size).toBe(placed.length);
+    const classic = visibleNavGroups(ON).flatMap((g) => g.items.map((i) => i.screen));
+    expect([...placed].sort()).toEqual([...classic].sort());
+  });
+
+  it("reuses the classic items: same URL, icon, badge and flag; only two labels change", () => {
+    const classic = new Map(NAV_GROUPS.flatMap((g) => g.items).map((i) => [i.screen, i]));
+    const zoned = [...ZONED_NAV_GROUPS.flatMap((g) => g.items), ...ADMIN_FLYOUT.flatMap((s) => s.items), HELP_NAV_ITEM];
+    const renamed: Record<string, string> = {};
+    for (const item of zoned) {
+      const { label, ...rest } = classic.get(item.screen)!;
+      const { label: zonedLabel, ...zonedRest } = item;
+      expect(zonedRest, item.screen).toEqual(rest);
+      if (zonedLabel !== label) renamed[item.screen] = zonedLabel;
+    }
+    expect(renamed).toEqual({ sync: "SharePoint sync", help: "Help and shortcuts" });
+    for (const { label } of zoned) expect(label).not.toMatch(/bucket|sync \/ conflicts|system of record/i);
+  });
+
+  it("knows where a screen sits (to expand Knowledge and light the flyout's toggle)", () => {
+    expect(zonedNavPlaceOf("home")).toBe("my-work");
+    expect(zonedNavPlaceOf("dashboard")).toBe("reporting");
+    expect(zonedNavPlaceOf("skills-directory")).toBe("knowledge");
+    expect(zonedNavPlaceOf("repos")).toBe("admin");
+    expect(zonedNavPlaceOf("routing-inbox")).toBe("admin");
+    expect(zonedNavPlaceOf("help")).toBe("help");
+    expect(zonedNavPlaceOf("task")).toBeNull();
+  });
+
+  it("leaves the phone tabs and the palette on the classic groups (TASK-3843)", () => {
+    expect(tabScreens("plan", OFF).map((i) => i.screen)).toEqual(["board", "list", "timeline", "insights"]);
+    expect(tabOf("dashboard")).toBe("my-work");
+    expect(navCommands(OFF).map((c) => c.label)).toContain("Go to SharePoint sync issues");
   });
 });
 

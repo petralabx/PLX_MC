@@ -24,7 +24,7 @@ export type NavIconName =
   | "House" | "LayoutDashboard" | "CircleUser" | "SquareCheck" | "SquareKanban" | "List" | "CalendarRange" | "ChartPie"
   | "BookOpen" | "ClipboardList" | "Wrench" | "Network" | "CircleHelp" | "GitBranch" | "Activity"
   | "File" | "RefreshCw" | "FileText" | "CircleDollarSign" | "Grid3x3" | "Radio" | "Inbox" | "Route"
-  | "Target" | "Ellipsis";
+  | "Target" | "Ellipsis" | "Settings";
 
 export interface NavItem {
   screen: Screen;
@@ -141,6 +141,84 @@ export function visibleNavGroups(flags: NavFlags): NavGroup[] {
     ...group,
     items: group.items.filter((item) => !item.flag || flags[item.flag]),
   }));
+}
+
+// ─── Zoned sidebar (navigation redesign Phase 2, TASK-3840) ─────────────────
+// Behind the nav-zones flag (nav-zones.ts), to the shared PLX shell contract
+// (portal ADR-011): personal items first, then Plan, Reporting and Knowledge,
+// with system tools in a footer flyout. Every row is a NAV_GROUPS item, so the
+// screens, hrefs, badges and flags are identical; only where they sit (and two
+// labels) change. Phone tabs and ⌘K keep NAV_GROUPS until TASK-3843.
+
+const NAV_ITEM_BY_SCREEN = new Map(NAV_GROUPS.flatMap((group) => group.items).map((item) => [item.screen, item]));
+
+function navItem(screen: Screen, label?: string): NavItem {
+  const item = NAV_ITEM_BY_SCREEN.get(screen);
+  if (!item) throw new Error(`no nav item for ${screen}`);
+  return label ? { ...item, label } : item;
+}
+
+export const ZONED_NAV_GROUPS: readonly NavGroup[] = [
+  { id: "my-work", label: "My work", items: [navItem("home"), navItem("mine"), navItem("approvals")] },
+  {
+    id: "plan",
+    label: "Plan",
+    items: [navItem("board"), navItem("list"), navItem("timeline")],
+    lists: ["projects", "initiatives"],
+  },
+  {
+    id: "reporting",
+    label: "Reporting",
+    items: [navItem("dashboard"), navItem("insights"), navItem("goals"), navItem("ai-spend")],
+  },
+  {
+    id: "knowledge",
+    label: "Knowledge",
+    collapsible: true,
+    items: [navItem("brain-ask"), navItem("governance-sops"), navItem("skills-directory"), navItem("architecture")],
+  },
+];
+
+export interface NavFlyoutSection {
+  label: string;
+  items: NavItem[];
+}
+
+/** The footer's Admin & health flyout, in three sections. */
+export const ADMIN_FLYOUT: readonly NavFlyoutSection[] = [
+  { label: "Operations", items: [navItem("feed"), navItem("intake"), navItem("routing-inbox")] },
+  {
+    label: "Sync and data",
+    items: [navItem("sync", "SharePoint sync"), navItem("files"), navItem("loop-ledgers")],
+  },
+  { label: "Engineering", items: [navItem("repos"), navItem("activity"), navItem("matrix")] },
+];
+
+/** The footer's last row. */
+export const HELP_NAV_ITEM: NavItem = navItem("help", "Help and shortcuts");
+
+/** The zoned groups with flag-gated items removed when their flag is off. */
+export function visibleZonedNavGroups(flags: NavFlags): NavGroup[] {
+  return ZONED_NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.flag || flags[item.flag]),
+  }));
+}
+
+/** The Admin & health sections, flag-gated items removed; empty sections drop. */
+export function visibleAdminFlyout(flags: NavFlags): NavFlyoutSection[] {
+  return ADMIN_FLYOUT.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => !item.flag || flags[item.flag]),
+  })).filter((section) => section.items.length > 0);
+}
+
+/** Where a screen sits in the zoned sidebar: a group, the flyout, help, or nowhere (detail screens). */
+export function zonedNavPlaceOf(screen: Screen): NavGroupId | "admin" | "help" | null {
+  if (screen === HELP_NAV_ITEM.screen) return "help";
+  const group = ZONED_NAV_GROUPS.find((g) => g.items.some((i) => i.screen === screen));
+  if (group) return group.id;
+  return ADMIN_FLYOUT.some((section) => section.items.some((i) => i.screen === screen)) ? "admin" : null;
 }
 
 /** The group a screen's nav item lives in (null for detail screens). */

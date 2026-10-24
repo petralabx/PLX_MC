@@ -5,10 +5,11 @@
 // No DOM environment (vitest runs in Node) — rendered with renderToStaticMarkup.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { Sidebar, approvalsBadge, useNavCounts, type NavCounts } from "@/components/mc/chrome";
 import { CountBadge } from "@/components/mc/count-badge";
+import { setNavZonesBuildFlag } from "@/components/mc/nav-zones";
 import type { Route } from "@/components/mc/route";
 import type { Task } from "@/lib/mc-data/types";
 import {
@@ -114,6 +115,79 @@ describe("Sidebar", () => {
     expect(html).toContain('<div id="mc-nav-admin" class="grp-body" hidden="">');
     // The items are still in the document (so the disclosure has something to reveal).
     expect(html).toContain("SharePoint sync issues");
+  });
+});
+
+// TASK-3840: the zoned sidebar, built on (NEXT_PUBLIC_PLX_MC_NAV_ZONES=1 or
+// the localStorage opt-in; tests stand in for the build flag).
+describe("Sidebar — zoned", () => {
+  beforeEach(() => setNavZonesBuildFlag(true));
+  afterEach(() => setNavZonesBuildFlag(false));
+
+  const nav = (html: string) => html.slice(0, html.indexOf("</nav>"));
+  const flyout = (html: string) => html.slice(html.indexOf('<div id="mc-nav-admin-flyout"'));
+
+  it("reads My work, Plan, Reporting, Knowledge, then a footer with Admin & health and Help", () => {
+    const html = nav(render({ screen: "home" }));
+    const headings = [...html.matchAll(/id="mc-nav-h-([a-z-]+)"/g)].map((m) => m[1]);
+    expect(headings).toEqual(["my-work", "plan", "projects", "initiatives", "reporting", "knowledge"]);
+    expect(html).not.toContain("mc-nav-h-admin");
+    // HTML attribute names are case-insensitive: React writes popoverTarget.
+    expect(html).toMatch(
+      /<div class="side-foot"><button type="button" class="item foot-toggle" title="Admin &amp; health" popovertarget="mc-nav-admin-flyout" aria-controls="mc-nav-admin-flyout" aria-expanded="false">/i
+    );
+    expect(html).toContain('href="/?screen=help" class="item" title="Help and shortcuts"');
+  });
+
+  it("collapses Knowledge by default behind a disclosure button", () => {
+    const html = render({ screen: "home" });
+    expect(html).toContain('id="mc-nav-h-knowledge" aria-expanded="false" aria-controls="mc-nav-knowledge"');
+    expect(html).toContain('<div id="mc-nav-knowledge" class="grp-body" hidden="">');
+    expect(html).toContain("Skills directory");
+  });
+
+  it("puts the system screens in a popover beside the nav, in three labelled sections", () => {
+    const html = render({ screen: "home" });
+    expect(html.indexOf("</nav>")).toBeLessThan(html.indexOf('id="mc-nav-admin-flyout"'));
+    const panel = flyout(html);
+    expect(panel).toMatch(/^<div id="mc-nav-admin-flyout" popover="auto" class="mc-flyout" role="group" aria-label="Admin &amp; health">/);
+    for (const [slug, label] of [
+      ["operations", "Operations"],
+      ["sync-and-data", "Sync and data"],
+      ["engineering", "Engineering"],
+    ]) {
+      expect(panel).toContain(`<div class="fly-sec" role="group" aria-labelledby="mc-fly-h-${slug}"><p class="fly-h" id="mc-fly-h-${slug}">${label}</p>`);
+    }
+    for (const screen of ["feed", "sync", "files", "loop-ledgers", "repos", "activity", "matrix"]) {
+      expect(panel).toContain(`href="/?screen=${screen}"`);
+      expect(nav(html)).not.toContain(`href="/?screen=${screen}"`);
+    }
+    expect(panel).toContain('<span class="nm">SharePoint sync</span>');
+  });
+
+  it("marks an Admin & health screen current in the flyout and lights its toggle", () => {
+    const html = render({ screen: "repos" });
+    expect(flyout(html)).toContain('href="/?screen=repos" class="item active" aria-current="page"');
+    expect(nav(html)).toContain('class="item foot-toggle on-path"');
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(render({ screen: "home" })).not.toContain("foot-toggle on-path");
+  });
+
+  it("carries the sync count on the toggle, so a closed flyout still shows it", () => {
+    const html = render({ screen: "home" }, { sync: { n: 2, exact: true, tone: "warn" } });
+    const badge = '<span class="badge warn"><span aria-hidden="true">2</span><span class="vh">, 2</span></span>';
+    const start = html.indexOf('class="item foot-toggle"');
+    expect(html.slice(start, html.indexOf("</button>", start))).toContain(`Admin &amp; health</span>${badge}`);
+    expect(flyout(html)).toContain(badge);
+  });
+
+  it("renders the classic sidebar when the flag is off: no footer, no flyout", () => {
+    setNavZonesBuildFlag(false);
+    const html = render({ screen: "home" });
+    expect(html).toContain('id="mc-nav-h-admin"');
+    expect(html).not.toContain("side-foot");
+    expect(html).not.toContain("mc-flyout");
+    expect(html).toMatch(/<\/nav>$/);
   });
 });
 

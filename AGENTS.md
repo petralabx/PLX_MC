@@ -197,7 +197,10 @@ Before first edit or any `PR_CREATE` on a tracked consumer:
 6. Local push uses the consumer's pre-push handshake when present.
    Never `--no-verify`.
 7. Portal required merge checks: `lint-typecheck-build`, `compliance`,
-   `Validate ledgers`.
+   `Validate ledgers`, `workbench-api`, `ai-review/verdict`, and
+   `compliance-group` on merge queue groups. The merge queue lands portal
+   PRs: arm auto-merge, never squash, never bypass (Vince, 2026-10-24; see
+   the Merge path rule below).
 8. On portal, `silent-failure-audit` is a real fail. Do not raise
    `BASELINE`. Fix new catch-empty-returns with `QueryResult<T>`.
 
@@ -260,7 +263,10 @@ Swarm dispatch is **composed into PLX-MC** (`dispatch_to_swarm`, `list_swarm_tea
 - Explainer video (TASK-3167): complex work is a high-risk change, a procedure of more than 5 steps, or work on 2 or more systems. When a person must verify complex work, make a short video with the `plx-knowledge-video` skill. Upload it with `mc_upload_evidence` (kind `video`, mp4 or webm, 100 MiB or less). The gate warns while uploads are off and until 2026-11-01, then it blocks.
 - Local push uses the consumer's pre-push handshake when present. Never `--no-verify`.
 - Confirm `meta.actor.repo` equals the exact full slug of the repo under edit before accepting a checkout stamp; never stamp a Portal- or Hub-scoped `dsp_*` on a different repo (decision 3).
-- Portal required merge checks: `lint-typecheck-build`, `compliance`, `Validate ledgers`. On portal, `silent-failure-audit` is a real fail — do not raise BASELINE; fix new catch-empty-returns with `QueryResult<T>`.
+- Portal required merge checks: `lint-typecheck-build`, `compliance`, `Validate ledgers`, `workbench-api`, `ai-review/verdict`, and `compliance-group` on merge queue groups. On portal, `silent-failure-audit` is a real fail — do not raise BASELINE; fix new catch-empty-returns with `QueryResult<T>`.
+- Merge path (Vince, 2026-10-24; report `docs/ci-redesign-2026-10.md` in agentic-swarm): on a branch with a merge queue (portal `staging` today) the queue is the only merge path, and it lands with a merge commit. Arm auto-merge at Ready for review with `gh pr merge <num> --auto` and no merge method; CIP adds the rest to the queue. Never squash into portal `staging`. Where there is no queue yet (PLX_MC and agentic-swarm `main`), CIP lands. Agents never merge by hand. A `hold` label that stops a PR is not live yet (TASK-3860).
+- Vince's OK first: never arm or land a migration, backfill, revert or production-data change, or a change that touches trading, money or keys, without his explicit OK on the PR or its task. Production migrations also need his click on `mc-live-release`. Workflow files, rulesets, CODEOWNERS and compliance-gate code need his approval, and he merges workflow-file PRs.
+- No bypass: never use a ruleset bypass, an admin merge (`gh pr merge --admin`) or a force-push, even when your token allows it. An open P0 or P1 AI-review finding blocks the PR. A re-cut PR carries the open P0/P1 findings of the PR it replaces until a review of its own head clears them.
 - These rules apply to every agent runtime (Cursor, Claude Code, ChatGPT/Codex, Grok, the swarm). This contract is the single source — change it here, regenerate, and every runtime's rule file updates.
 
 ## Repo Hygiene

@@ -35,7 +35,7 @@ updated in a separate PR — do not edit those repos from here.
 | 3 | Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and open a PR. If tools are missing, **stop — do not open the PR**. |
 | 4 | `mc_complete_task` must include non-empty `verificationCommands` **AND** `rollback`. |
 | 5 | Local push uses the consumer's pre-push handshake when present. Never `--no-verify`. |
-| 6 | Portal required merge checks: `lint-typecheck-build`, `compliance`, `Validate ledgers`. |
+| 6 | Portal required merge checks: `lint-typecheck-build`, `compliance`, `Validate ledgers`, `workbench-api`, `ai-review/verdict`, and `compliance-group` on merge queue groups. The merge queue lands portal PRs with a merge commit: arm auto-merge (`gh pr merge NUMBER --auto`), never squash, never bypass (Vince, 2026-10-24). |
 | 7 | On portal, `silent-failure-audit` is a real fail. Do not raise `BASELINE`. Fix new catch-empty-returns with `QueryResult<T>`. |
 
 There is no create-a-task-then-stamp shortcut. A pending stamp is not a
@@ -517,7 +517,7 @@ Playwright or a Next.js `next build` into the org-required floor.
 | Repo | Before commit / push |
 |------|----------------------|
 | `PLX_MC` | `./scripts/preflight.sh --mode pre-commit` then `--mode pre-push` |
-| `plx-customer-portal` | Portal test/build/hygiene per `docs/runbooks/CONTRIBUTING.md`. Required merge checks: `lint-typecheck-build`, `compliance`, `Validate ledgers`. `silent-failure-audit` is a real fail. |
+| `plx-customer-portal` | Portal test/build/hygiene per `docs/runbooks/CONTRIBUTING.md`. Required merge checks: `lint-typecheck-build`, `compliance`, `Validate ledgers`, `workbench-api`, `ai-review/verdict`, and `compliance-group` (merge queue groups). `silent-failure-audit` is a real fail. |
 | `agentic-swarm` | Repo preflight / wterm gate as documented there |
 
 Never `--no-verify`. Use the consumer's pre-push handshake when present.

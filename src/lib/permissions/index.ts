@@ -58,6 +58,8 @@ export { isAgentAssignee, mayAssignAgent } from "./agent-assignee";
 export {
   capabilitiesForRole,
   capabilitiesForServicePrincipal,
+  isCreatorApprovalGated,
+  isCreatorApprover,
   isKnownServicePrincipal,
 } from "./grants";
 export {

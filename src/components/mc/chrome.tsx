@@ -16,7 +16,7 @@ import {
 } from "react";
 import { PanelLeft, Plus, X } from "lucide-react";
 
-import { liveAgentCount, openQuestionsFor, pendingApprovalGates } from "@/lib/mc-data";
+import { liveAgentCount, openQuestionsFor, pendingApprovalGates, type Human, type Task } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import {
   allTasks,
@@ -64,6 +64,20 @@ export function navFlags(): NavFlags {
 const noClockSubscribe = () => () => {};
 
 /**
+ * The Approvals badge: pending runtime approval gates on the tasks this viewer
+ * can see, plus the open questions addressed to them (TASK-3567). Its screen
+ * reads GET /api/approvals and /api/questions, different sources, so a count
+ * is a lower bound, never exact. Unknown ("—") until the store is live and the
+ * viewer known (questions are per viewer); then an attention badge, hidden
+ * while nothing waits (TASK-3837), where a lower bound of 0 read "—".
+ */
+export function approvalsBadge(loaded: boolean, viewer: Pick<Human, "id"> | null, tasks: readonly Task[]): Count | undefined {
+  if (!loaded || !viewer) return UNKNOWN_COUNT;
+  const waiting = tasks.reduce((n, t) => n + pendingApprovalGates(t).length + openQuestionsFor(t, viewer.id).length, 0);
+  return waiting > 0 ? { n: waiting, exact: false } : undefined;
+}
+
+/**
  * Every nav badge, computed once per shell so the sidebar, rail, tabs and
  * More sheet always agree. A count is known only once the server has answered
  * (dataSource "live"); before that — seed fixtures, or the offline fallback
@@ -91,22 +105,10 @@ export function useNavCounts(): NavCounts {
     loaded && viewer && today !== null && viewerLoadState(viewer, viewerSettled()) === "ready"
       ? { n: needsMeCount(viewer, tasks, today, sc) + unreadCount(), exact: false }
       : UNKNOWN_COUNT;
-  // Pending runtime approval gates on the tasks this viewer can see, plus
-  // the open questions addressed to this viewer (TASK-3567).
-  const waiting = loaded
-    ? tasks.reduce(
-        (n, t) => n + pendingApprovalGates(t).length + (viewer ? openQuestionsFor(t, viewer.id).length : 0),
-        0
-      )
-    : 0;
 
   return {
     needs,
-    // The Approvals screen reads GET /api/approvals and /api/questions,
-    // different sources — so a lower bound, never claimed exact. Once live it
-    // is an attention badge (TASK-3837): hidden while the store sees nothing
-    // waiting, where a lower bound of 0 read "—" and looked broken.
-    approvals: !loaded ? UNKNOWN_COUNT : waiting > 0 ? { n: waiting, exact: false } : undefined,
+    approvals: approvalsBadge(loaded, viewer, tasks),
     sync: loaded && conflicts > 0 ? { n: conflicts, exact: true, tone: "warn" } : undefined,
     // Honest live-agent count: agents executing in-flight work (EN-005).
     agents: loaded ? { n: liveAgentCount(tasks), exact: true, unit: "live" } : UNKNOWN_COUNT,
@@ -188,18 +190,25 @@ export function Sidebar({
   }, [route.screen]);
 
   // …and keep the current row in view (TASK-3837): a deep link to a project or
-  // initiative low in the list scrolls the sidebar itself, never the page.
-  // Once per current row (opening a task pane is not a new row), and only once
-  // the row is laid out (projects arrive with the store; Admin & health opens a
-  // render later), so a manual scroll stays.
-  const routeKey = `${route.screen}:${route.projectId ?? ""}:${route.bucketId ?? ""}`;
+  // initiative low in the list scrolls the labelled list itself (the desktop
+  // sidebar, or an open drawer), never the page or the icon rail. Once per
+  // current row and form, so a manual scroll stays and opening a task pane does
+  // not move it. Not on seed data (the live lists move the rows) and not before
+  // the row is laid out (Admin & health opens a render later). A screen with no
+  // current row re-arms it.
+  const revealKey = `${route.screen}:${route.projectId ?? ""}:${route.bucketId ?? ""}:${drawerOpen ? "drawer" : "side"}`;
   const revealedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (revealedFor.current === routeKey) return;
+    if (dataSource() === "seed") return;
     const row = document.querySelector<HTMLElement>('#mc-nav .item[aria-current="page"]');
-    const side = row?.closest<HTMLElement>("#mc-nav");
-    if (!row || !side || row.getClientRects().length === 0) return;
-    revealedFor.current = routeKey;
+    if (!row) {
+      revealedFor.current = null;
+      return;
+    }
+    const labelled = drawerOpen || window.matchMedia("(min-width: 1025px)").matches;
+    const side = row.closest<HTMLElement>("#mc-nav");
+    if (!labelled || !side || revealedFor.current === revealKey || row.getClientRects().length === 0) return;
+    revealedFor.current = revealKey;
     side.scrollTop = revealScrollTop(side.getBoundingClientRect(), row.getBoundingClientRect(), side.scrollTop);
   });
 

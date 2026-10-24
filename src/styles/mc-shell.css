@@ -415,10 +415,16 @@
     visibility: visible;
   }
   .mc .mc-side .side-head {
+    /* Sticky (TASK-3837): when the list scrolls to the current row, the
+       drawer's close button and the rail's expand toggle stay in view. */
+    position: sticky;
+    top: 0;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: flex-end;
     padding: 0 12px 8px;
+    background: var(--p-rail);
   }
   .mc .mc-side .rail-toggle {
     display: none;

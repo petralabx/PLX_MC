@@ -7,7 +7,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { Sidebar, useNavCounts, type NavCounts } from "@/components/mc/chrome";
+import { Sidebar, approvalsBadge, useNavCounts, type NavCounts } from "@/components/mc/chrome";
 import { CountBadge } from "@/components/mc/count-badge";
 import type { Route } from "@/components/mc/route";
 import type { Task } from "@/lib/mc-data/types";
@@ -174,20 +174,12 @@ describe("useNavCounts once the store is live", () => {
     expect(live.needs).toEqual({ n: null, exact: false });
   });
 
-  // TASK-3837: once live, Approvals is an attention badge. Its page reads GET
-  // /api/approvals and /api/questions, not the store, so a shown count is a
-  // lower bound, never exact; with nothing waiting it is hidden, not "—".
-  it("hides Approvals while nothing waits, and shows a lower bound once a gate is pending", async () => {
+  // Questions are per viewer, and the server render has none: even with a
+  // pending gate in a live store, Approvals stays unknown here.
+  it("keeps Approvals unknown until the viewer is known", async () => {
     const [task] = allTasks();
-    const gate = {
-      id: "apg_test",
-      reason: "Approve the deploy",
-      requestedBy: "agent:test",
-      requestedAt: "2026-10-24T12:00:00Z",
-      status: "pending" as const,
-    };
-    const live = (tasks: Task[]) => async () => ({
-      tasks,
+    __setStateLoaderForTests(async () => ({
+      tasks: [{ ...task, approvalGates: [PENDING_GATE] }],
       risks: [],
       files: [],
       conflicts: openConflicts(),
@@ -195,15 +187,54 @@ describe("useNavCounts once the store is live", () => {
       audit: [],
       counts: {},
       lastSweep: "2026.10.24 · 12:00",
-    });
-    __setStateLoaderForTests(live([{ ...task, approvalGates: [] }]));
+    }));
     await hydrate();
     expect(dataSource()).toBe("live");
-    expect(counts().approvals).toBeUndefined();
-    expect(renderToStaticMarkup(createElement(CountBadge, { count: counts().approvals }))).toBe("");
+    expect(counts().approvals).toEqual({ n: null, exact: false });
+  });
+});
 
-    __setStateLoaderForTests(live([{ ...task, approvalGates: [gate] }]));
-    await hydrate();
-    expect(counts().approvals).toEqual({ n: 1, exact: false });
+const PENDING_GATE = {
+  id: "apg_test",
+  reason: "Approve the deploy",
+  requestedBy: "agent:test",
+  requestedAt: "2026-10-24T12:00:00Z",
+  status: "pending" as const,
+};
+
+// TASK-3837: once live and the viewer is known, Approvals is an attention
+// badge. Its page reads GET /api/approvals and /api/questions, not the store,
+// so a shown count is a lower bound, never exact; with nothing waiting it is
+// hidden, not "—".
+describe("approvalsBadge", () => {
+  const viewer = { id: "vince" };
+  const question = (addressee: string, status: "open" | "answered" = "open") => ({
+    id: `q_${addressee}_${status}`,
+    addressee,
+    text: "Ship it?",
+    options: [],
+    askedBy: "agent:test",
+    askedByPrincipal: "sp_test",
+    askedAt: "2026-10-24T12:00:00Z",
+    status,
+  });
+  const task = (extra: Partial<Task>): Task => ({ ...allTasks()[0], approvalGates: [], questions: [], ...extra });
+
+  it("is unknown until the store is live and the viewer known", () => {
+    expect(approvalsBadge(false, viewer, [task({ approvalGates: [PENDING_GATE] })])).toEqual({ n: null, exact: false });
+    expect(approvalsBadge(true, null, [task({ approvalGates: [PENDING_GATE] })])).toEqual({ n: null, exact: false });
+  });
+
+  it("is hidden while nothing waits on the viewer", () => {
+    const badge = approvalsBadge(true, viewer, [task({ questions: [question("greg"), question("vince", "answered")] })]);
+    expect(badge).toBeUndefined();
+    expect(renderToStaticMarkup(createElement(CountBadge, { count: badge }))).toBe("");
+  });
+
+  it("counts pending gates and the viewer's open questions as a lower bound", () => {
+    expect(approvalsBadge(true, viewer, [task({ approvalGates: [PENDING_GATE], questions: [question("vince")] })])).toEqual({
+      n: 2,
+      exact: false,
+    });
   });
 });

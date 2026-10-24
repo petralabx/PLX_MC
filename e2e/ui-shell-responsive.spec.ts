@@ -638,6 +638,28 @@ test.describe("shell — touch targets and current page", () => {
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     await expect(side.getByRole("link", { name: "PLX Portal Go-Live" })).toHaveClass(/\bon-path\b/);
   });
+
+  test("on a phone, the drawer opens on the current initiative with its close button in view", async ({ page }) => {
+    await open(page, 393, "/?screen=bucket&bucketId=BKT-UAT", 700);
+    await page.locator("nav.mc-tabs").getByRole("button", { name: "More" }).click();
+    await page.getByRole("dialog", { name: "More" }).getByRole("button", { name: /All screens/ }).click();
+    const side = page.locator("nav.mc-side");
+    await expect(side).toHaveClass(/\bopen\b/);
+    await expect(side.getByRole("link", { name: "UAT", exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(side.getByRole("button", { name: "Close navigation" })).toBeInViewport({ ratio: 1 });
+  });
+
+  test("on a tablet, the rail keeps its expand toggle and the drawer opens on the current initiative", async ({ page }) => {
+    await open(page, 820, "/?screen=bucket&bucketId=BKT-UAT", 600);
+    const side = page.locator("nav.mc-side");
+    const toggle = page.getByTestId("nav-drawer-toggle");
+    await expect(toggle).toBeInViewport({ ratio: 1 });
+    expect(await side.evaluate((el) => el.scrollTop)).toBe(0);
+    await toggle.click();
+    await expect(side).toHaveClass(/\bopen\b/);
+    await expect(side.getByRole("link", { name: "UAT", exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(side.getByRole("button", { name: "Close navigation" })).toBeInViewport({ ratio: 1 });
+  });
 });
 
 test.describe("shell — offline banner", () => {

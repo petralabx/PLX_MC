@@ -278,7 +278,9 @@ def test_docs_only_skip_posts_pass_and_guards_agent_files():
 def _docs_only_filter(script: str) -> str:
     import re
 
-    m = re.search(r"non_docs=\$\(printf '%s' \"\$changed\" \| jq '(.*?)'\)", script, re.S)
+    m = re.search(
+        r"non_docs=\$\(printf '%s' \"\$changed\" \| jq '(.*?)'\)", script, re.DOTALL
+    )
     assert m, "docs-only jq filter not found"
     return m.group(1)
 
@@ -287,15 +289,34 @@ def _docs_only_filter(script: str) -> str:
 def test_docs_only_skip_never_counts_agent_policy_files_as_docs():
     docs = ["README.md", "docs/guide.md", "docs/a/b/Notes.MD"]
     agent = [
-        "TOOLS.md", "SOUL.md", "CODEX.md", "GROK.md", "HERMES.md", "AGENTS.override.md",
-        "AGENTS.md", "CLAUDE.local.md", "sub/dir/agents.md", "deep/x/Soul.md", "pkg/tools.MD",
-        "x/copilot-instructions.md", ".cursor/rules/a.md", "a/.Cursor/b.md", "rules/a.mdc",
-        "skills/x/SKILL.md", "a/Prompts/p.md", "x/docs/training/t.md", ".github/README.md",
+        "TOOLS.md",
+        "SOUL.md",
+        "CODEX.md",
+        "GROK.md",
+        "HERMES.md",
+        "AGENTS.override.md",
+        "AGENTS.md",
+        "CLAUDE.local.md",
+        "sub/dir/agents.md",
+        "deep/x/Soul.md",
+        "pkg/tools.MD",
+        "x/copilot-instructions.md",
+        ".cursor/rules/a.md",
+        "a/.Cursor/b.md",
+        "rules/a.mdc",
+        "skills/x/SKILL.md",
+        "a/Prompts/p.md",
+        "x/docs/training/t.md",
+        ".github/README.md",
     ]
     for variant in ("canonical", "downstream"):
         jq_filter = _docs_only_filter(_gate_script(_run("--emit", variant).stdout))
         for path in docs + agent:
             out = subprocess.run(
-                ["jq", jq_filter], input=json.dumps([path]), capture_output=True, text=True, check=True
+                ["jq", jq_filter],
+                input=json.dumps([path]),
+                capture_output=True,
+                text=True,
+                check=True,
             ).stdout.strip()
             assert out == ("0" if path in docs else "1"), (variant, path, out)

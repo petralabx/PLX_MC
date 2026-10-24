@@ -43,6 +43,7 @@ import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import { checkApproval } from "./approval-signature";
 import { bucketPrdForTask } from "./bucket-prd";
+import { assertCreatorApprovedForCheckout } from "./creator-approval";
 import { ownEvidenceSite } from "./evidence-artifacts";
 import type { EventsQuery } from "./events";
 import {
@@ -370,6 +371,16 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
       `Task ${input.taskId} is cancelled${task.cancellation ? ` (${task.cancellation.reason}${task.cancellation.replacedBy ? ` → ${task.cancellation.replacedBy}` : ""})` : ""}; it cannot be checked out. Reopen it first, or check out the replacement task.`,
       409
     );
+  }
+  // TASK-3530: a gated creator's task waits for creator approval. This covers
+  // both checkout doors and every launch, which always takes a checkout.
+  if (task) {
+    await assertCreatorApprovedForCheckout(task, {
+      actor: input.runtime,
+      actorId: input.actor?.id ?? null,
+      repo: input.repo,
+      door: input.door ?? null,
+    });
   }
   const backfilledOwner =
     task && !task.accountableOwner ? resolveHumanAccountableOwner(input.accountableHuman) : null;

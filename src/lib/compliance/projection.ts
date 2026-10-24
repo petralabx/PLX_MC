@@ -5,6 +5,7 @@
 
 import { ApiError } from "@/lib/api/route";
 import type { PullRequest, StageKey, Task } from "@/lib/mc-data";
+import { creatorApprovalPending } from "@/lib/mc-data/policy";
 import {
   COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
   type PermissionActor,
@@ -98,7 +99,7 @@ async function setProgress(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task || DONE_STAGES.includes(task.stage)) return;
   if (task.stage === "progress") return;
-  if (await skipCancelled(task, evt)) return;
+  if (await skipBlockedPromotion(task, evt)) return;
 
   await requireProjectionAuthorized(
     "task.progress",
@@ -126,17 +127,21 @@ function validIso(value: string | null | undefined): string | undefined {
   return Number.isNaN(ms) ? undefined : new Date(ms).toISOString();
 }
 
-// A PR never reopens or promotes a cancelled task (TASK-2529); it leaves a
+// A PR never reopens or promotes a cancelled task (TASK-2529), or a task that
+// still waits for creator approval (TASK-3530); it leaves a
 // task.promotion_skipped event so the PR check and the task history both show why.
-async function skipCancelled(task: Task, evt: PrEvent): Promise<boolean> {
-  if (task.stage !== "cancelled") return false;
+async function skipBlockedPromotion(task: Task, evt: PrEvent): Promise<boolean> {
+  const creatorPending = creatorApprovalPending(task);
+  if (task.stage !== "cancelled" && !creatorPending) return false;
   await complianceRepo.appendEvent({
     kind: "task.promotion_skipped",
     actor: PROJECTION_ACTOR,
     repo: evt.repo,
     taskId: task.id,
     pr: String(evt.prNumber),
-    payload: { reason: "task_cancelled", cancellation: task.cancellation ?? null },
+    payload: task.stage === "cancelled"
+      ? { reason: "task_cancelled", cancellation: task.cancellation ?? null }
+      : { reason: "creator_approval_pending", creatorPrincipal: task.creatorApproval?.principal ?? null },
     dedupKey: `task.promotion_skipped:${evt.repo}:${evt.prNumber}:${evt.headSha}:${task.id}`,
   });
   return true;
@@ -182,7 +187,7 @@ async function linkPr(taskId: string, evt: PrEvent, status: PullRequest["status"
 async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task) return;
-  if (await skipCancelled(task, evt)) return;
+  if (await skipBlockedPromotion(task, evt)) return;
 
   await requireProjectionAuthorized(
     "task.link",

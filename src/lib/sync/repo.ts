@@ -21,7 +21,7 @@ import type {
   SyncState,
   Task,
 } from "@/lib/mc-data/types";
-import { TERMINAL_STAGES } from "@/lib/mc-data/policy";
+import { creatorApprovalViolation, TERMINAL_STAGES } from "@/lib/mc-data/policy";
 import type { Cancellation } from "@/lib/mc-data/cancellation";
 import { ApiError } from "@/lib/api/route";
 import type {
@@ -189,6 +189,27 @@ export async function taskIdsWithPr(repoName: string, prNumber: number): Promise
   return rows.map((r) => r.id);
 }
 
+/** One bucket's tasks, each with when its row was created (the UAT tickets view, TASK-3706). */
+export async function getBucketTasks(bucketId: string): Promise<{ task: Task; createdAt: string }[]> {
+  const rows = await query<{
+    id: string;
+    data: EntityData;
+    created_at: Date;
+    completed_at: Date | string | null;
+    cancellation: Cancellation | null;
+  }>(
+    `SELECT id, data, created_at, completed_at, cancellation
+       FROM entities
+      WHERE entity_type = 'task' AND data->>'bucket' = $1
+      ORDER BY id`,
+    [bucketId]
+  );
+  return rows.map((r) => ({
+    task: { ...withTaskColumns("task", r.data, r.completed_at, r.cancellation), id: r.id } as unknown as Task,
+    createdAt: r.created_at.toISOString(),
+  }));
+}
+
 /** When any task row was last written (ISO), or null with no tasks. */
 export async function latestTaskWriteAt(): Promise<string | null> {
   const rows = await query<{ at: Date | null }>(
@@ -279,6 +300,12 @@ export async function updateEntity(
   const leavesCancelled = type === "task" && wasCancelled && nextStage !== undefined && nextStage !== "cancelled";
   if (leavesCancelled && !opts.reopen) {
     throw new ApiError("reopen_required", `${id} is cancelled; it can only leave that stage through the reopen service (task.reopen).`, 409);
+  }
+  // Creator-principal approval gate (TASK-3530), held here so a SharePoint
+  // inbound pull or a conflict keep-SP cannot skip it. Callers audit the refusal.
+  if (type === "task" && nextStage !== undefined && nextStage !== row.data.stage) {
+    const violation = creatorApprovalViolation({ id, creatorApproval: (data as Partial<Task>).creatorApproval }, nextStage);
+    if (violation) throw new ApiError("creator_approval_pending", violation, 409);
   }
   if (entersCancelled && !opts.cancellation) {
     throw new ApiError(

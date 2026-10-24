@@ -12,9 +12,11 @@
 // (TASK-628; see docs/modules/sync/README.md).
 
 import { ACTORS, BUCKETS, FILES, HUMANS, PROJECTS, REPOS, RISKS, SP_CONFLICTS, SP_ERRORS, TASKS } from "@/lib/mc-data/data";
-import type { Bucket, FileEntry, SyncState, Task } from "@/lib/mc-data/types";
+import type { Bucket, FileEntry, StageKey, SyncState, Task } from "@/lib/mc-data/types";
 import type { Cancellation } from "@/lib/mc-data/cancellation";
 import { appendEventTx } from "@/lib/compliance/repo";
+import { recordCreatorApprovalBlocked } from "@/lib/compliance/creator-approval";
+import { creatorApprovalViolation } from "@/lib/mc-data/policy";
 import { withTransaction, type TxQuery } from "@/lib/db";
 import { inboundCancellation } from "./cancel-validate";
 import {
@@ -893,6 +895,23 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType, rec
         note: "Moved out of Cancelled in SharePoint; reopening needs task.reopen in Mission Control, so the Status was not applied.",
       });
     }
+    // A pending creator approval (TASK-3530) holds an inbound move into progress
+    // or later: the Status is not applied and the row raises a Sync conflict.
+    if (type === "task" && "stage" in apply) {
+      const requested = apply.stage as StageKey;
+      if (creatorApprovalViolation(row.data as unknown as Task, requested)) {
+        delete apply.stage;
+        const idx = clearedDirty.indexOf("stage");
+        if (idx >= 0) clearedDirty.splice(idx, 1);
+        conflicts.push({
+          field: "stage",
+          mcVal: displayValue(row.data.stage),
+          spVal: displayValue(requested),
+          note: CREATOR_APPROVAL_INBOUND_NOTE,
+        });
+        await recordCreatorApprovalBlocked(row.data as unknown as Task, "stage", { actor: SYNC_ACTOR, door: "sharepoint" }, requested);
+      }
+    }
     for (const ev of attributionEvents) {
       await repo.appendAudit(
         SYNC_ACTOR,
@@ -964,28 +983,36 @@ async function pullList(ctx: SiteContext, listKey: string, type: EntityType, rec
         await applyInbound();
       } catch (err) {
         // updateEntity re-reads the row under its lock: a cancel that committed after
-        // this pull's snapshot refuses the inbound stage move. Raise a Sync conflict
-        // (never a silent reopen) and still apply the remaining fields (TASK-2529).
-        if (!(err instanceof ApiError) || err.code !== "reopen_required") throw err;
+        // this pull's snapshot refuses the inbound stage move (TASK-2529), and so does
+        // a pending creator approval (TASK-3530). Raise a Sync conflict (never a
+        // silent reopen or promotion) and still apply the remaining fields.
+        if (!(err instanceof ApiError) || (err.code !== "reopen_required" && err.code !== "creator_approval_pending")) throw err;
+        const creatorGated = err.code === "creator_approval_pending";
         const requested = apply.stage;
         delete apply.stage;
         const idx = clearedDirty.indexOf("stage");
         if (idx >= 0) clearedDirty.splice(idx, 1);
-        const note = "Moved out of Cancelled in SharePoint; reopening needs task.reopen in Mission Control, so the Status was not applied.";
+        const note = creatorGated
+          ? CREATOR_APPROVAL_INBOUND_NOTE
+          : "Moved out of Cancelled in SharePoint; reopening needs task.reopen in Mission Control, so the Status was not applied.";
+        const mcVal = creatorGated ? displayValue(row.data.stage) : displayValue("cancelled");
         await repo.insertConflict({
           id: `cf-${row.id.toLowerCase()}-stage-${Date.now()}`,
           entityType: type,
           entityId: row.id,
           field: displayFieldFor(type, "stage") ?? "stage",
-          mcVal: displayValue("cancelled"),
+          mcVal,
           spVal: displayValue(requested),
           by: SYNC_ACTOR,
           note,
         });
         await repo.updateEntity(type, row.id, {
           syncState: "conflict",
-          syncExtras: { wsVal: displayValue("cancelled"), spVal: displayValue(requested) },
+          syncExtras: { wsVal: mcVal, spVal: displayValue(requested) },
         });
+        if (creatorGated) {
+          await recordCreatorApprovalBlocked(row.data as unknown as Task, "stage", { actor: SYNC_ACTOR, door: "sharepoint" }, requested as StageKey);
+        }
         await repo.appendAudit(SYNC_ACTOR, `Conflict detected on ${row.id} · ${displayFieldFor(type, "stage") ?? "stage"} (edited both sides).`, "conflict");
         result.conflicts += 1;
         if (Object.keys(apply).length > 0 || clearedDirty.length > 0) await applyInbound();
@@ -1832,6 +1859,26 @@ async function pushPlanningSingleField(
   return true;
 }
 
+const CREATOR_APPROVAL_INBOUND_NOTE =
+  "Moved to a working stage in SharePoint while the task waits for creator approval (vince@ or cos@), so the Status was not applied.";
+
+// Keep-SP on a Status conflict cannot skip a pending creator approval (TASK-3530).
+async function refuseKeepSpCreatorGate(
+  task: Task,
+  requested: StageKey,
+  conflict: { entityId: string; field: string },
+  actor: string,
+  message: string
+): Promise<never> {
+  await recordCreatorApprovalBlocked(task, "stage", { actor, door: "sync_conflict_keep_sp" }, requested);
+  await repo.appendAudit(
+    actor,
+    `Conflict on ${conflict.entityId} · ${conflict.field} left unresolved — SharePoint value refused: ${message}`,
+    "error"
+  );
+  throw new ApiError("creator_approval_pending", message, 409);
+}
+
 export async function resolveConflict(conflictId: string, winner: "mc" | "sp", actor: string): Promise<boolean> {
   const conflict = await repo.getConflict(conflictId);
   if (!conflict) return false;
@@ -1860,6 +1907,13 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
     if (value === undefined) return false;
     // Keep-SP must not reopen a cancelled task: that needs task.reopen (TASK-2529).
     if (subject === "task" && mcField === "stage" && entityRow?.data.stage === "cancelled" && value !== "cancelled") return false;
+    // Nor move a task past a pending creator approval (TASK-3530). Refuse before
+    // any write, leave the conflict open, and audit why.
+    if (subject === "task" && mcField === "stage" && entityRow) {
+      const task = entityRow.data as unknown as Task;
+      const violation = creatorApprovalViolation(task, value as StageKey);
+      if (violation) await refuseKeepSpCreatorGate(task, value as StageKey, conflict, actor, violation);
+    }
     // Closed-project rule (TASK-2530): SharePoint cannot move work into a closed
     // project. Refuse before any write, leave the conflict open, and say why.
     const targetProjectId =
@@ -1899,6 +1953,9 @@ export async function resolveConflict(conflictId: string, winner: "mc" | "sp", a
       } catch (err) {
         // The row was cancelled after entityRow was read: the locked write refused it.
         if (err instanceof ApiError && err.code === "reopen_required") return false;
+        if (err instanceof ApiError && err.code === "creator_approval_pending") {
+          await refuseKeepSpCreatorGate(entityRow.data as unknown as Task, value as StageKey, conflict, actor, err.message);
+        }
         throw err;
       }
     } else if (planningRow) {

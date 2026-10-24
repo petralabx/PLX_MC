@@ -38,6 +38,7 @@ import {
 } from "@/lib/mc-data/doc-links";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import { isStewardBlocked } from "@/lib/tasks/uat-labels";
+import { UAT_TICKET_BUCKET } from "@/lib/tasks/uat-tickets";
 import {
   addBucketComment,
   allRepos,
@@ -71,6 +72,7 @@ import type { ScreenProps } from "./route";
 import { TaskFilter } from "./task-filter";
 import { TaskTable } from "./task-table";
 import { Timeline } from "./timeline";
+import { UatTickets } from "./uat-tickets";
 
 // A static fallback (first fixture initiative) so the detail view always
 // resolves to a real bucket; live resolution goes through bucketById (EN-005).
@@ -541,6 +543,9 @@ export function BucketDetail({ route, nav }: ScreenProps) {
                 </div>
               </div>
             )}
+
+            {/* BKT-UAT: one row per portal ticket task, plus the drift check (TASK-3706). */}
+            {bucket.id === UAT_TICKET_BUCKET && <UatTickets tasks={rollups.tasks} nav={nav} />}
 
             <div className="blk">
               <div className="bh pv-ovh">

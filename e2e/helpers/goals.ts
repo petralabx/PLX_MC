@@ -2,7 +2,7 @@ import type { Page, Route } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 import type { GoalsPage, RefreshRun, ShipmentLinesDataset } from "../../src/lib/reporting/goals";
-import { RUN, SHIPMENT_LINES, goalsPage } from "../../tests/reporting-goals-helpers";
+import { ENTRIES, FORECAST, RUN, SHIPMENT_LINES, SHIPMENT_LINES_SUMMARY, goalsPage } from "../../tests/reporting-goals-helpers";
 
 import { waitForHydration } from "../helpers";
 
@@ -12,26 +12,37 @@ import { waitForHydration } from "../helpers";
 
 export { RUN, SHIPMENT_LINES, goalsPage };
 
+/** The same page model at the Sage rate (`?fx=sage`, TASK-3780). */
+export const sageGoalsPage = (): GoalsPage => goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "sage");
+
 const json = (route: Route, status: number, body: unknown) =>
   route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
 type ErrorEnvelope = { status: number; code: string; message: string };
 
 /**
- * Serve GET /api/reporting/goals (a page model, or an error envelope), and each
- * run's invoice lines from GET …/runs/[id]/shipment-lines (TASK-3144; the
- * fixture's by default). Says how many times the lines were fetched.
+ * Serve GET /api/reporting/goals (a page model, or an error envelope) and, at
+ * the Sage rate, GET /api/reporting/goals?fx=sage (TASK-3780; the fixture at
+ * 1.25 by default), and each run's invoice lines from GET
+ * …/runs/[id]/shipment-lines (TASK-3144; the fixture's by default). Says how
+ * many times the lines were fetched.
  */
 export async function mockGoalsApi(
   page: Page,
   view: GoalsPage | ErrorEnvelope = goalsPage(),
-  lines: ShipmentLinesDataset | ErrorEnvelope = { access: "read", missing: [], lines: SHIPMENT_LINES }
+  lines: ShipmentLinesDataset | ErrorEnvelope = { access: "read", missing: [], lines: SHIPMENT_LINES },
+  sage: GoalsPage | ErrorEnvelope = sageGoalsPage()
 ): Promise<{ linesFetched: () => number }> {
-  await page.route("**/api/reporting/goals", (route) => {
-    if (route.request().method() !== "GET") return route.fulfill({ status: 405, body: "Method Not Allowed" });
-    if ("code" in view) return json(route, view.status, { error: { code: view.code, message: view.message } });
-    return json(route, 200, { data: view });
-  });
+  for (const [pattern, served] of [
+    ["**/api/reporting/goals", view],
+    ["**/api/reporting/goals?fx=sage", sage],
+  ] as const) {
+    await page.route(pattern, (route) => {
+      if (route.request().method() !== "GET") return route.fulfill({ status: 405, body: "Method Not Allowed" });
+      if ("code" in served) return json(route, served.status, { error: { code: served.code, message: served.message } });
+      return json(route, 200, { data: served });
+    });
+  }
   let fetched = 0;
   await page.route("**/api/reporting/goals/runs/*/shipment-lines", (route) => {
     fetched += 1;

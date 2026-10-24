@@ -12,9 +12,19 @@ import type { ForecastAoRow } from "../types";
 import { OPEN_LINES_CTE } from "./forecast-orders";
 import { MONTH_WINDOW, type DatasetQuery } from "./shared";
 
-/** A FileMaker number column read defensively (bronze columns can hold text): NULL unless it is a plain number. */
-function fmNumberSql(column: string): string {
-  return `CASE WHEN trim(${column}::text) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN trim(${column}::text)::numeric END`;
+/**
+ * A FileMaker number column as text without whitespace of any kind (a trailing
+ * carriage return, a no-break space) or thousands separators: bronze columns
+ * such as assembly_order.qtytotal are text, and "1,200" or "192\r" are numbers
+ * there. Blank for NULL (TASK-3791).
+ */
+function fmNumberTextSql(column: string): string {
+  return `regexp_replace(COALESCE(${column}::text, ''), '[[:space:],\u00a0]+', '', 'g')`;
+}
+
+/** That text as a number, or NULL unless it is a plain decimal ("12 pcs" and "1e3" stay NULL, so a cast can never fail the refresh). */
+function fmNumberSql(text: string): string {
+  return `CASE WHEN ${text} ~ '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$' THEN ${text}::numeric END`;
 }
 
 /** A FileMaker date column read defensively: NULL unless it starts YYYY-MM-DD (the portal's SAFE_DAY). */
@@ -56,6 +66,8 @@ interface Row {
   item: string | null;
   oe_list: string | null;
   qty: string | null;
+  /** qtytotal is set but isn't a number even without spaces and separators. */
+  qty_unreadable: boolean;
   units_per_box: string | null;
   batch: string | null;
   batch_status: string | null;
@@ -75,8 +87,8 @@ ao AS (
          ${fmDateSql("ao.datescheduled")} AS scheduled,
          ${AO_ITEM_SQL} AS item,
          ${AO_ORDER_LIST_SQL} AS oe_list,
-         ${fmNumberSql("ao.qtytotal")} AS qty,
-         ${fmNumberSql("ao.unitsperbox")} AS units_per_box,
+         ${fmNumberTextSql("ao.qtytotal")} AS qty_text,
+         ${fmNumberTextSql("ao.unitsperbox")} AS units_per_box_text,
          ao.idbatch::text AS idbatch,
          ao.idbatch_pre::text AS idbatch_pre
   FROM public.assembly_order ao
@@ -92,7 +104,10 @@ cand AS (
   CROSS JOIN cut
   GROUP BY a.id
 )
-SELECT a.id, a.ao, a.status, a.scheduled::text AS scheduled, a.item, a.oe_list, a.qty, a.units_per_box,
+SELECT a.id, a.ao, a.status, a.scheduled::text AS scheduled, a.item, a.oe_list,
+       ${fmNumberSql("a.qty_text")} AS qty,
+       (a.qty_text <> '' AND ${fmNumberSql("a.qty_text")} IS NULL) AS qty_unreadable,
+       ${fmNumberSql("a.units_per_box_text")} AS units_per_box,
        COALESCE(bt.display_batch_number, btp.display_batch_number) AS batch,
        CASE WHEN bt.id IS NOT NULL THEN bt.status ELSE btp.status END AS batch_status,
        COALESCE(c.open_orders, ARRAY[]::text[]) AS open_orders
@@ -112,6 +127,7 @@ ORDER BY a.scheduled NULLS FIRST, a.id`,
       item: r.item,
       oeList: r.oe_list,
       qty: r.qty,
+      qtyUnreadable: r.qty_unreadable,
       unitsPerBox: r.units_per_box,
       batch: r.batch,
       batchStatus: r.batch_status,

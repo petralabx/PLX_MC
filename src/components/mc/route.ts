@@ -54,6 +54,8 @@ export interface Route {
   focus?: "evidence";
   /** One question on the Approvals screen (TASK-3567): `/?screen=approvals&question=<q_id>`. */
   question?: string;
+  /** Goals & Production revenue at the Sage rate (TASK-3780): `/?screen=goals&fx=sage`; absent = the run's Bank of Canada rate. */
+  fx?: "sage";
   // Module E (SPEC §3.B.3): an Insights chart segment click navigates to the
   // board carrying a FilterState here; WorkViews adopts it on mount/route change
   // through F's sanitizeFilterState. Optional, so all existing nav() sites carry
@@ -86,6 +88,7 @@ export function routeToUrl(route: Route): string {
     if (value) params.set(key, value);
   }
   if (route.focus === "evidence") params.set("focus", "evidence");
+  if (route.fx === "sage") params.set("fx", "sage");
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
 }
@@ -107,5 +110,6 @@ export function urlToRoute(url: string): Route {
     if (value) route[key] = value;
   }
   if (params.get("focus") === "evidence") route.focus = "evidence";
+  if (params.get("fx") === "sage") route.fx = "sage";
   return route;
 }

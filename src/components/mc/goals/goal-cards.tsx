@@ -97,7 +97,11 @@ export function GoalCards({ page }: { page: ReadyPage }) {
   const revSource = sourceText(run, sections.revenue);
   const scheduled = Math.max(0, l1.ifAllRunKg - l1.totalKg);
   const fullScale = Math.max(tl.lastMonth.full, tl.full.total, 1);
-  const rateText = `${rate(fx.rate)} (${fx.stale ? `stored rate from ${day(fx.date)}; the Bank of Canada rate couldn't be fetched` : `Bank of Canada, ${day(fx.date)}`})`;
+  // The rate the figures are at: the run's Bank of Canada rate, or the fixed Sage rate (TASK-3780).
+  const rateText =
+    rev.basis === "sage"
+      ? `${rate(rev.rate)} (Sage rate)`
+      : `${rate(fx.rate)} (${fx.stale ? `stored rate from ${day(fx.date)}; the Bank of Canada rate couldn't be fetched` : `Bank of Canada, ${day(fx.date)}`})`;
 
   return (
     <div className="gp-cards">

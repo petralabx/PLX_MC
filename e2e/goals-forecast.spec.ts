@@ -96,8 +96,42 @@ test.describe("goals revenue forecast", () => {
     await section(page).getByLabel("Item category").selectOption("none");
     await expect(list.locator("tbody tr")).toHaveCount(1);
     await expect(list.locator("tbody tr")).toContainText("FP-1414");
-    // The four numbers never follow the filters.
-    await expect(section(page).getByTestId("goals-forecast-numbers").locator("li").nth(1)).toContainText("At risk$40,703");
+    // The four numbers follow the class and category filters (TASK-3190): FP-1414's $1,000 alone is at risk.
+    const numbers = section(page).getByTestId("goals-forecast-numbers").locator("li");
+    await expect(numbers.nth(1)).toContainText("At risk$1,000");
+    await section(page).getByLabel("Item category").selectOption("all");
+    await expect(numbers.nth(1)).toContainText("At risk$40,703");
+  });
+
+  test("the four numbers follow the class and category filters, never the chips or the search (TASK-3190)", async ({ page }) => {
+    await mockGoalsApi(page);
+    await gotoGoals(page);
+    const numbers = section(page).getByTestId("goals-forecast-numbers").locator("li");
+    const caption = section(page).getByTestId("goals-forecast-filtered");
+    await expect(caption).toHaveCount(0);
+    await expect(numbers.nth(0)).toContainText("Theoretical$527,018of $1,000,000");
+
+    await section(page).getByLabel("Customer class").selectOption("Exclusive Manufacturing");
+    await expect(caption).toHaveText("For Exclusive Manufacturing customers only. The target and the hit rate are for all customers.");
+    await expect(numbers.nth(0)).toContainText("Theoretical$215,787of $1,000,000 (all customers)Invoiced $118,593 + ready $53,763 + planned in time $43,432");
+    await expect(numbers.nth(1)).toContainText("At risk$35,983");
+    await expect(numbers.nth(2)).toContainText("Realistic$196,348");
+    await expect(numbers.nth(3)).toContainText("Pace$276,716");
+    await expect(section(page).getByText("Invoiced for Exclusive Manufacturing customers is $118,593 of the Revenue card’s $408,628")).toBeVisible();
+    // The chips and the search change the list only.
+    await section(page).getByRole("button", { name: /^Late/ }).click();
+    await section(page).getByRole("searchbox", { name: "Search open orders" }).fill("a1 american");
+    await expect(numbers.nth(0)).toContainText("Theoretical$215,787");
+
+    await section(page).getByLabel("Customer class").selectOption("all");
+    await section(page).getByLabel("Item category").selectOption("channel:Distribution");
+    await expect(caption).toContainText("For Distribution items only. Invoices aren’t split by item category yet");
+    await expect(numbers.nth(0)).toContainText("Theoretical$57,395Open orders only: ready $19,563 + planned in time $37,832");
+    await expect(numbers.nth(3)).toContainText("Pace—Needs invoices split by item category (not available yet)");
+
+    await section(page).getByLabel("Item category").selectOption("all");
+    await expect(caption).toHaveCount(0);
+    await expect(numbers.nth(0)).toContainText("Theoretical$527,018of $1,000,000Invoiced $408,628");
   });
 
   test("while the login can't read the orders it says so, names what's missing, and the rest of the page stays", async ({ page }) => {

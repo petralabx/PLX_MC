@@ -1,8 +1,9 @@
 // The Goals & Production workbook (TASK-2898): the report and the import
 // template in one .xlsx, built from the page model of one good refresh plus that
-// run's Sage invoices, their lines (TASK-3144) and truckload shipments. The nine
+// run's Sage invoices, their lines (TASK-3144) and truckload shipments. The ten
 // sheets, their order and the "Manual entries" layout come from ./layout.ts,
-// shared with the import (TASK-2897).
+// shared with the import (TASK-2897). USD revenue is at the page's revenue rate,
+// the run's Bank of Canada rate or the fixed Sage rate (TASK-3780).
 //
 // House rules (brief, "Workbook rules"): Arial 10 throughout and 14-pt bold
 // titles; header rows bold on light grey and frozen; everything entered by hand
@@ -20,8 +21,9 @@ import type ExcelJS from "exceljs";
 
 import { REPORT_TIME_ZONE, monthLabel } from "../calendar";
 import { FORECAST_BUCKET_LABELS, type ForecastBucket, type ForecastView } from "../forecast";
-import { toCents } from "../money";
+import { formatAmount, toCents } from "../money";
 import { missingByRelation } from "../queries/read-access";
+import type { RevenueByClass } from "../revenue-by-class";
 import {
   classifyLoad,
   truckloadProductUsdCents,
@@ -73,6 +75,8 @@ export interface GoalsWorkbookInput {
   forecast?: ForecastView | null;
   /** The run's invoice lines (TASK-3144); absent, or not read: the Shipment lines sheet says why. */
   shipmentLines?: ShipmentLinesDataset | null;
+  /** The page's revenue by customer class (TASK-3781); absent: the Revenue by class sheet says so. */
+  revenueByClass?: RevenueByClass | null;
 }
 
 // ─── Fixed cells (the brief's formulas name them: =B13*B11, Goals!$B$17, …) ─
@@ -95,6 +99,31 @@ const INPUT_ROW = {
 } as const;
 
 const goalsInput = (row: number) => `Goals!$B$${row}`;
+
+/**
+ * `usd` (US dollars) at the rate in Goals!B17 as CAD dollars, rounded to the
+ * cent half to even as the page converts (money.convertCents), not with Excel's
+ * ROUND (half away from zero): at a rate like 1.25 one amount in four lands on
+ * a half cent. Integer arithmetic, exact while |USD cents × rate × 10⁶| < 2⁵³
+ * (about US$64 million at 1.4).
+ */
+export function usdToCadFormula(usd: string): string {
+  const n = `(ROUND(${usd}*100,0)*ROUND(${goalsInput(INPUT_ROW.rate)}*1000000,0))`;
+  const q = `INT(${n}/1000000)`;
+  const r = `(${n}-${q}*1000000)`;
+  return `((${q}+IF(${r}*2>1000000,1,IF(${r}*2<1000000,0,IF(ISODD(${q}),1,0))))/100)`;
+}
+
+/** A stored rate as text without trailing zeros ("1.421900" → "1.4219"). */
+const rateText = (rate: string | null) => (rate === null ? "—" : String(Number(rate)));
+
+/** How the workbook's revenue rate (Goals!B17) is described. */
+function revenueRateText(input: GoalsWorkbookInput): string {
+  const { model, run } = input;
+  return model.revenue.basis === "sage"
+    ? `the fixed Sage rate ${rateText(model.revenue.rate)} (report_goal_setting.sage_usd_cad_rate)`
+    : `the Bank of Canada rate ${rateText(run.fxRate)} for ${run.fxRateDate ?? "an unknown date"}`;
+}
 
 const DATE_FORMAT = "yyyy-mm-dd";
 const RATE_FORMAT = "0.0000";
@@ -212,6 +241,16 @@ function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
       `Sage through ${model.cutoffs.sageCutoff ?? "—"}.`,
     { note: true }
   );
+  if (model.revenue.basis === "sage") {
+    put(
+      ws,
+      3,
+      1,
+      `US dollar revenue is at ${revenueRateText(input)}. Full truckloads are still tested at Bank of Canada rates: a CAD ` +
+        `shipment’s own day’s, else ${rateText(model.truckloads.rate)}.`,
+      { note: true }
+    );
+  }
   put(ws, 4, 1, "Colour", { bold: true });
   put(ws, 5, 1, "Amber cells", { amber: true });
   put(ws, 5, 2, "were entered by hand by your team and aren’t in FileMaker or Sage yet. Everything else comes from the system data.");
@@ -298,21 +337,23 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
   put(ws, R.partial, 6, { formula: `Truckloads!F${trucks.total}` }, { numFmt: COUNT_FORMAT, amber: true });
   put(ws, R.partial, 7, total(R.partial), { numFmt: COUNT_FORMAT, bold: true });
 
-  // Revenue in the system: CAD plus USD at the rate, rounded to the cent like the model.
+  // Revenue in the system: CAD plus USD at the rate, rounded to the cent half to even like the model.
   put(ws, R.revenue, 1, "Revenue, CAD (shipped, net before tax)");
   put(ws, R.revenue, 2, { formula: `B${I.revenueTarget}` }, { numFmt: DOLLAR_FORMAT });
   put(ws, R.revenue, 3, { formula: `ROUND(B${I.revenueTarget}*B${I.revenueCovered}/B${I.workingDays},2)` }, { numFmt: DOLLAR_FORMAT });
   put(ws, R.revenue, 4, excelDate(model.revenue.dueBy), { numFmt: DATE_FORMAT });
-  put(ws, R.revenue, 5, { formula: `ROUND(Daily!F${daily.total}+Daily!G${daily.total}*B${I.rate},2)` }, { numFmt: DOLLAR_FORMAT });
+  put(ws, R.revenue, 5, { formula: `Daily!F${daily.total}+${usdToCadFormula(`Daily!G${daily.total}`)}` }, { numFmt: DOLLAR_FORMAT });
   put(ws, R.revenue, 6, { formula: `Daily!H${daily.total}` }, { numFmt: DOLLAR_FORMAT, amber: true });
   put(ws, R.revenue, 7, total(R.revenue), { numFmt: DOLLAR_FORMAT, bold: true });
   put(ws, R.revenue, 8, status(R.revenue));
   put(ws, R.revenue, 9, needed(R.revenue), { numFmt: DOLLAR_FORMAT });
 
   const rateNote =
-    run.fxSource === "stored"
-      ? `Last stored Bank of Canada rate, for ${run.fxRateDate ?? "an unknown date"}; the refresh couldn’t fetch a newer one`
-      : `Bank of Canada daily rate (FXUSDCAD) for ${run.fxRateDate ?? "an unknown date"}`;
+    model.revenue.basis === "sage"
+      ? `Fixed Sage rate (report_goal_setting.sage_usd_cad_rate). Full truckloads are tested at Bank of Canada rates (else ${rateText(model.truckloads.rate)})`
+      : run.fxSource === "stored"
+        ? `Last stored Bank of Canada rate, for ${run.fxRateDate ?? "an unknown date"}; the refresh couldn’t fetch a newer one`
+        : `Bank of Canada daily rate (FXUSDCAD) for ${run.fxRateDate ?? "an unknown date"}`;
   const inputs: [row: number, label: string, value: ExcelJS.CellValue, numFmt: string | undefined, note: string | null][] = [
     [I.workingDays, "Working days this month", model.calendar.workingDays, COUNT_FORMAT, "Monday to Friday, less Ontario public holidays"],
     [I.workingDaysLeft, "Working days left, from today", model.calendar.remaining, COUNT_FORMAT, `${model.today} to ${model.month.end}, today included`],
@@ -376,7 +417,7 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
     put(ws, r, 6, dollars(d.cadCents), { numFmt: DOLLAR_FORMAT });
     put(ws, r, 7, dollars(d.usdCents), { numFmt: DOLLAR_FORMAT });
     put(ws, r, 8, dollars(d.byHandCadCents), { numFmt: DOLLAR_FORMAT, amber: true });
-    put(ws, r, 9, { formula: `SUM($F$2:F${r})+SUM($G$2:G${r})*${goalsInput(I.rate)}+SUM($H$2:H${r})` }, { numFmt: DOLLAR_FORMAT });
+    put(ws, r, 9, { formula: `SUM($F$2:F${r})+${usdToCadFormula(`SUM($G$2:G${r})`)}+SUM($H$2:H${r})` }, { numFmt: DOLLAR_FORMAT });
     put(
       ws,
       r,
@@ -384,7 +425,7 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
       { formula: `ROUND(${goalsInput(I.revenueTarget)}*COUNTIF($B$2:B${r},"Yes")/${goalsInput(I.workingDays)},2)` },
       { numFmt: DOLLAR_FORMAT }
     );
-    // Last month on the same day of the month, at today's rate (its daily figures aren't in the workbook).
+    // Last month on the same day of the month, at the revenue rate (its daily figures aren't in the workbook).
     put(ws, r, 11, dollars(d.lastMonthToDateCents), { numFmt: DOLLAR_FORMAT });
   });
   const total = 2 + input.model.daily.length;
@@ -502,7 +543,8 @@ function loadKinds(input: GoalsWorkbookInput): Map<string, LoadKind> {
   const kinds = new Map<string, LoadKind>();
   for (const row of input.truckloads) {
     if (!row.thisMonth) continue;
-    const kind = classifyLoad(truckloadProductUsdCents(row, input.rates, input.model.revenue.rate), input.settings);
+    // The Bank of Canada rate, as the Truckloads card tests a load, whatever rate revenue is at.
+    const kind = classifyLoad(truckloadProductUsdCents(row, input.rates, input.model.truckloads.rate), input.settings);
     if (kind) kinds.set(shipmentKey(row.code, row.shipment), kind);
   }
   return kinds;
@@ -712,7 +754,7 @@ function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
     2,
     1,
     `Open Sage order lines expected to ship by ${model.month.end} (overdue ones included), at the quantity still to ship × the ` +
-      `unit price, matched to FileMaker’s plan through their assembly orders. CAD at the run’s rate (Goals!B${INPUT_ROW.rate}). ` +
+      `unit price, matched to FileMaker’s plan through their assembly orders. CAD at the revenue rate (Goals!B${INPUT_ROW.rate}). ` +
       "Theoretical = invoiced + Ready + Planned in time; At risk = Late + Not planned.",
     { note: true }
   );
@@ -739,8 +781,8 @@ function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
     put(ws, row, 11, Number(r.unitPrice), { numFmt: PRICE_FORMAT });
     put(ws, row, 12, r.currency);
     put(ws, row, 13, dollars(r.valueCents), { numFmt: AMOUNT_FORMAT });
-    // As the Revenue card converts: USD at the run's rate; other currencies never.
-    put(ws, row, 14, { formula: `IF(L${row}="CAD",M${row},IF(L${row}="USD",ROUND(M${row}*${goalsInput(INPUT_ROW.rate)},2),""))` }, { numFmt: AMOUNT_FORMAT });
+    // As the Revenue card converts: USD at the revenue rate, half to even; other currencies never.
+    put(ws, row, 14, { formula: `IF(L${row}="CAD",M${row},IF(L${row}="USD",${usdToCadFormula(`M${row}`)},""))` }, { numFmt: AMOUNT_FORMAT });
     put(ws, row, 15, FORECAST_BUCKET_LABELS[r.bucket]);
     put(ws, row, 16, r.ao?.number ?? null);
     put(ws, row, 17, excelDate(r.ao?.scheduled ?? null), { numFmt: DATE_FORMAT });
@@ -780,7 +822,7 @@ function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
       { text: "First run of the month" },
       { text: "Ready + planned in time then" },
       { text: "Sage invoiced in the month after it" },
-      { text: "Hit rate" },
+      { text: "Hit rate (each at that run’s Bank of Canada rate)" },
     ]);
     months.forEach((m, i) => {
       const row = r + 2 + i;
@@ -794,6 +836,16 @@ function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
     r += 3 + months.length;
   }
   const { unordered } = forecast;
+  if (forecast.aoQtyUnreadable) {
+    put(
+      ws,
+      r++,
+      1,
+      `${count(forecast.aoQtyUnreadable)} ${forecast.aoQtyUnreadable === 1 ? "assembly order has" : "assembly orders have"} a quantity in ` +
+        "FileMaker that isn’t a number, so they cover no order line; those lines count as Not planned.",
+      { note: true }
+    );
+  }
   if (unordered.count > 0) {
     put(
       ws,
@@ -819,7 +871,7 @@ function forecastSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
       { note: true }
     );
   }
-  put(ws, r, 1, "CAD uses Excel’s ROUND (half away from zero) while the page rounds half to even, so the two differ only on an exact half cent.", { note: true });
+  put(ws, r, 1, "CAD is rounded to the cent half to even, as on the page.", { note: true });
 }
 
 // ─── Shipment lines (TASK-3144) ─────────────────────────────────────────────
@@ -908,9 +960,101 @@ function shipmentLinesSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): v
   for (const text of off) put(ws, r++, 1, text, { note: true });
 }
 
+// ─── Revenue by customer class (TASK-3781) ──────────────────────────────────
+
+const CLASS_HEADER_ROW = 4;
+
+/**
+ * The Revenue card's month by customer class, as the page's table shows it:
+ * the classes' figures are the page's values (USD in CAD is the month's USD
+ * converted once and shared by largest remainder); totals, shares and the check
+ * against the Goals sheet are formulas.
+ */
+function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
+  const { model } = input;
+  const data = input.revenueByClass ?? null;
+  columns(ws, [26, 12, 16, 18, 16, 18, 16, 10]);
+  put(ws, 1, 1, `Revenue by customer class — ${model.month.label}`, { title: true });
+  if (!data) {
+    put(ws, 2, 1, "Revenue by customer class isn’t in this export.", { note: true });
+    return;
+  }
+  put(
+    ws,
+    2,
+    1,
+    "Classes are the sales workbook’s customer categories (Vince’s 5 Oct list), matched by Sage customer code; a customer " +
+      `not on it is Unclassified. USD is at ${revenueRateText(input)}: the page’s figures as exported, which don’t follow an ` +
+      `edit to Goals!B${INPUT_ROW.rate}.`,
+    { note: true }
+  );
+  headerRow(ws, CLASS_HEADER_ROW, [
+    { text: "Customer class" },
+    { text: "Invoices (Sage)" },
+    { text: "CAD invoiced (Sage)" },
+    { text: "USD invoiced, US$ (Sage)" },
+    { text: "USD in CAD" },
+    { text: "Revenue by hand, CAD", amber: true },
+    { text: "Total, CAD" },
+    { text: "Share" },
+  ]);
+  freeze(ws, CLASS_HEADER_ROW);
+  const first = CLASS_HEADER_ROW + 1;
+  const total = first + data.rows.length;
+  data.rows.forEach((c, i) => {
+    const r = first + i;
+    put(ws, r, 1, c.customerClass);
+    put(ws, r, 2, c.invoices, { numFmt: COUNT_FORMAT });
+    put(ws, r, 3, dollars(c.cad.cents), { numFmt: AMOUNT_FORMAT });
+    put(ws, r, 4, dollars(c.usd.cents), { numFmt: AMOUNT_FORMAT });
+    put(ws, r, 5, dollars(c.usd.cadCents), { numFmt: AMOUNT_FORMAT });
+    put(ws, r, 6, dollars(c.byHand.cadCents), { numFmt: AMOUNT_FORMAT, amber: true });
+    put(ws, r, 7, { formula: `C${r}+E${r}+F${r}` }, { numFmt: AMOUNT_FORMAT, bold: true });
+    put(ws, r, 8, { formula: `IF($G$${total}>0,G${r}/$G$${total},"")` }, { numFmt: PERCENT_FORMAT });
+  });
+  put(ws, total, 1, "All classes", { bold: true });
+  for (let col = 2; col <= 7; col += 1) {
+    const letter = ws.getColumn(col).letter;
+    put(ws, total, col, { formula: `SUM(${letter}${first}:${letter}${total - 1})` }, {
+      numFmt: col === 2 ? COUNT_FORMAT : AMOUNT_FORMAT,
+      bold: true,
+      amber: col === 6,
+    });
+  }
+  let r = total + 2;
+  // The card as the page shows it, which the table checks itself against (Goals!G8 adds up the Daily sheet instead).
+  put(ws, r, 1, "Revenue card (on the page)");
+  put(ws, r, 7, dollars(data.cardTotalCents), { numFmt: AMOUNT_FORMAT });
+  put(ws, r + 1, 1, "Difference");
+  put(ws, r + 1, 7, { formula: `G${r}-G${total}` }, { numFmt: AMOUNT_FORMAT });
+  r += 3;
+  const notes = [
+    "USD is converted once for the month, as on the Revenue card, then shared across the classes by largest remainder, so a " +
+      "class can be a cent off its own USD converted alone.",
+  ];
+  if (data.unresolvedByHand.entries > 0) {
+    notes.push(
+      `Unclassified includes ${count(data.unresolvedByHand.entries)} ${data.unresolvedByHand.entries === 1 ? "shipment" : "shipments"} ` +
+        `entered by hand without a Sage customer (${formatAmount(data.unresolvedByHand.cadCents)} CAD).`
+    );
+  }
+  for (const c of data.total.otherCurrencies) {
+    notes.push(
+      `Not converted: ${c.currency} ${formatAmount(c.cents)} in ${count(c.invoices)} ` +
+        `${c.invoices === 1 ? "invoice" : "invoices"}. Only CAD and USD count, as on the Revenue card.`
+    );
+  }
+  if (!data.matchesCard) {
+    notes.push(
+      "These invoices don’t match the Revenue card’s exactly: Sage changed between two reads of this refresh. The next refresh lines them up."
+    );
+  }
+  for (const text of notes) put(ws, r++, 1, text, { note: true });
+}
+
 // ─── The workbook ───────────────────────────────────────────────────────────
 
-/** The nine-sheet workbook as .xlsx bytes. */
+/** The ten-sheet workbook as .xlsx bytes. */
 export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buffer> {
   const { Workbook } = await loadExcelJS();
   const wb = new Workbook();
@@ -925,6 +1069,7 @@ export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buf
   const daily = dailySheet(sheets.Daily, input);
   const trucks = truckloadSheet(sheets.Truckloads, input);
   goalsSheet(sheets.Goals, input, daily, trucks);
+  revenueByClassSheet(sheets["Revenue by class"], input);
   batchSheet(sheets.Batches, input);
   shipmentSheet(sheets.Shipments, input);
   shipmentLinesSheet(sheets["Shipment lines"], input);

@@ -11,7 +11,7 @@ import { query, withTransaction, type TxQuery } from "@/lib/db";
 
 import { forecastTableRows } from "./forecast-store";
 import { FX_SERIES } from "./fx";
-import { toCents } from "./money";
+import { toCents, usableRate } from "./money";
 import type {
   Datasets,
   FtlCustomer,
@@ -257,6 +257,8 @@ export function rowCounts(d: Datasets): Record<string, number> {
     shipmentLines: d.shipmentLines.lines.length,
     forecastLines: d.forecast.lines.length,
     forecastAos: d.forecast.aos.length,
+    // AOs whose FileMaker quantity is set but isn't a number: they cover nothing (TASK-3791).
+    forecastAoQtyUnreadable: d.forecast.aos.filter((a) => a.qtyUnreadable).length,
   };
 }
 
@@ -280,6 +282,9 @@ export async function completeRun(run: RefreshRun, datasets: Datasets, fx: Resol
     }
     if (datasets.shipmentLines.access === "missing") {
       console.warn("[reporting-goals] run=%s shipment lines skipped: no read access to %s", run.id, datasets.shipmentLines.missing.join(", "));
+    }
+    if (counts.forecastAoQtyUnreadable > 0) {
+      console.warn("[reporting-goals] run=%s forecast: %s of %s assembly orders have a quantity that isn't a number", run.id, counts.forecastAoQtyUnreadable, counts.forecastAos);
     }
     const [done] = await q<RunRow>(
       `UPDATE report_refresh_run
@@ -467,6 +472,10 @@ export async function loadReferenceMatches(
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
+/** The report_goal_setting key of the fixed Sage USD/CAD rate (TASK-3780), and its value while no row sets it. */
+export const SAGE_RATE_KEY = "sage_usd_cad_rate";
+export const DEFAULT_SAGE_USD_CAD_RATE = "1.25";
+
 export interface GoalsConfig {
   settings: GoalSettings;
   ftlCustomers: FtlCustomer[];
@@ -484,6 +493,7 @@ export async function loadConfig(): Promise<GoalsConfig> {
     return value;
   };
   const truckTarget = setting.get("full_truckloads_per_month");
+  const sageRate = setting.get(SAGE_RATE_KEY);
   // Other keys, such as 039's retired large_batch* rows, are ignored.
   const settings: GoalSettings = {
     line1KgPerWorkingDay: Number(required("line1_kg_per_working_day")),
@@ -491,6 +501,8 @@ export async function loadConfig(): Promise<GoalsConfig> {
     fullTruckloadMinUsdCents: toCents(required("full_truckload_min_usd")),
     revenueTargetCadCents: toCents(required("revenue_target_cad")),
     fullTruckloadsPerMonth: truckTarget === undefined || truckTarget === null ? null : Number(truckTarget),
+    // No row: the fixed 1.25 (TASK-3780). A row that isn't a usable rate fails only a Sage-rate read, never a refresh.
+    sageUsdCadRate: sageRate === undefined ? DEFAULT_SAGE_USD_CAD_RATE : usableRate(sageRate),
   };
   const customers = await query<{ code: string; display_name: string; name_patterns: string[]; sort_order: number }>(
     `SELECT code, display_name, name_patterns, sort_order FROM report_ftl_customer WHERE active ORDER BY sort_order, code`

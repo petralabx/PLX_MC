@@ -49,13 +49,13 @@ export type ShipmentListRow =
   | (RowFields & {
       source: "Sage";
       entryId: null;
-      /** CAD as invoiced, USD at the run's rate (half to even); null for other currencies, which are never converted. */
+      /** CAD as invoiced, USD at the revenue rate (half to even); null for other currencies, which are never converted. */
       cadCents: number | null;
     })
   | (RowFields & {
       source: "By hand";
       entryId: string;
-      /** The entry's revenue in CAD (product value plus freight; USD at the run's rate). */
+      /** The entry's revenue in CAD (product value plus freight; USD at the revenue rate). */
       cadCents: number;
     });
 
@@ -66,8 +66,10 @@ export interface ShipmentListInput {
   truckloads: readonly TruckloadRow[];
   /** The model's evaluated entries; the counted shipments are listed. */
   entries: readonly EvaluatedEntry[];
-  /** The run's USD/CAD rate. */
+  /** The USD/CAD rate revenue converts at (model.revenue.rate: Bank of Canada, or the fixed Sage rate). */
   rate: string;
+  /** The run's Bank of Canada rate (model.truckloads.rate), for the truckload test: never the Sage rate. */
+  truckloadRate: string;
   /** Stored rates: a CAD truckload invoice converts at its ship date's rate, as on the card. */
   rates: readonly FxRate[];
   settings: GoalSettings;
@@ -84,7 +86,7 @@ export function buildShipmentList(input: ShipmentListInput): ShipmentListRow[] {
   const loads = new Map<string, LoadKind>();
   for (const row of input.truckloads) {
     if (!row.thisMonth || !codes.has(row.code)) continue;
-    const kind = classifyLoad(truckloadProductUsdCents(row, input.rates, rate), input.settings);
+    const kind = classifyLoad(truckloadProductUsdCents(row, input.rates, input.truckloadRate), input.settings);
     if (kind) loads.set(loadKey(row.code, row.shipment), kind);
   }
 

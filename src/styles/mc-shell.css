@@ -1477,6 +1477,43 @@
   .mc .mc-flyout .item[aria-current="page"] .ic {
     color: var(--p-accent);
   }
+  /* Projects tree (TASK-3841): project rows under the Projects row, their
+     initiatives a step further in, then a quiet View all row. The icon rail
+     shows the Projects icon alone. */
+  .mc .mc-side .tree-row {
+    display: flex;
+    align-items: center;
+  }
+  .mc .mc-side .tree-row > .item {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .mc .mc-side .tree .item {
+    padding-left: 22px;
+  }
+  .mc .mc-side .tree-kids > .item {
+    padding-left: calc(8px + var(--p-shell-indent, 34px));
+  }
+  .mc .mc-side .tree > a.item {
+    color: var(--p-muted);
+  }
+  .mc .mc-side .tree-toggle {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: var(--p-touch);
+    min-height: var(--p-touch);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--p-muted);
+    cursor: pointer;
+  }
+  .mc .mc-side .tree-toggle:focus-visible {
+    outline: 2px solid var(--p-accent);
+    outline-offset: -2px;
+  }
   /* Without the Popover API the panel would sit in the page: leave it out. */
   @supports not selector(:popover-open) {
     .mc .mc-flyout {
@@ -1492,10 +1529,16 @@
     .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {
       padding: 8px 0;
     }
+    .mc .mc-side:not(.open) .tree {
+      display: none;
+    }
   }
   @media (min-width: 1025px) {
     .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {
       padding: 8px 12px;
+    }
+    .mc .mc-side:not(.open) .tree {
+      display: block;
     }
   }
   /* 28px rows for a fine pointer only: a coarse one keeps 44px targets. */
@@ -1505,6 +1548,10 @@
     }
     .mc .mc-body[data-nav="zones"] .mc-side .item,
     .mc .mc-flyout .item {
+      min-height: var(--p-shell-row, 28px);
+    }
+    .mc .mc-side .tree-toggle {
+      width: var(--p-shell-row, 28px);
       min-height: var(--p-shell-row, 28px);
     }
   }

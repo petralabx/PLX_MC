@@ -5,6 +5,8 @@
 // Grouped by what a colleague is doing — My work · Plan · Knowledge · Reporting
 // · Admin & health — not by system internals. Pure: no React, no store reads (badge
 // counts are resolved by the shell; icon names map to Lucide in nav-icon.tsx).
+import type { Bucket, Human, Project } from "@/lib/mc-data";
+
 import type { Route, Screen } from "./route";
 import { SCREEN_VALUES, routeToUrl } from "./route";
 
@@ -14,7 +16,7 @@ export type NavBadge = "needs" | "approvals" | "sync" | "agents" | "ai-spend";
 /** Feature flags that gate an item (off → hidden from sidebar and palette). */
 export type NavFlag = "meetingIntake" | "routingInbox";
 /** Live record lists the sidebar renders after a group's items. */
-export type NavList = "projects" | "initiatives";
+export type NavList = "projects" | "initiatives" | "project-tree";
 
 /**
  * Lucide icon names (design system: Lucide, small, currentColor). Resolved to
@@ -24,7 +26,7 @@ export type NavIconName =
   | "House" | "LayoutDashboard" | "CircleUser" | "SquareCheck" | "SquareKanban" | "List" | "CalendarRange" | "ChartPie"
   | "BookOpen" | "ClipboardList" | "Wrench" | "Network" | "CircleHelp" | "GitBranch" | "Activity"
   | "File" | "RefreshCw" | "FileText" | "CircleDollarSign" | "Grid3x3" | "Radio" | "Inbox" | "Route"
-  | "Target" | "Ellipsis" | "Settings";
+  | "Target" | "Ellipsis" | "Settings" | "FolderKanban";
 
 export interface NavItem {
   screen: Screen;
@@ -158,13 +160,22 @@ function navItem(screen: Screen, label?: string): NavItem {
   return label ? { ...item, label } : item;
 }
 
+/** The Projects page (TASK-3841): every open project and its initiatives. */
+export const PROJECTS_NAV_ITEM: NavItem = {
+  screen: "projects",
+  label: "Projects",
+  icon: "▤",
+  lucide: "FolderKanban",
+  hint: "every project and its initiatives",
+};
+
 export const ZONED_NAV_GROUPS: readonly NavGroup[] = [
   { id: "my-work", label: "My work", items: [navItem("home"), navItem("mine"), navItem("approvals")] },
   {
     id: "plan",
     label: "Plan",
-    items: [navItem("board"), navItem("list"), navItem("timeline")],
-    lists: ["projects", "initiatives"],
+    items: [navItem("board"), navItem("list"), navItem("timeline"), PROJECTS_NAV_ITEM],
+    lists: ["project-tree"],
   },
   {
     id: "reporting",
@@ -219,6 +230,62 @@ export function zonedNavPlaceOf(screen: Screen): NavGroupId | "admin" | "help" |
   const group = ZONED_NAV_GROUPS.find((g) => g.items.some((i) => i.screen === screen));
   if (group) return group.id;
   return ADMIN_FLYOUT.some((section) => section.items.some((i) => i.screen === screen)) ? "admin" : null;
+}
+
+// ─── Projects tree (zoned sidebar, TASK-3841) ───────────────────────────────
+// Each open project with its open initiatives nested under it: the viewer's
+// own projects first, then the rest by name, at most PROJECT_TREE_CAP rows.
+// The current project always makes the cut. Callers pass the nav-visible
+// records (navProjects, navBuckets), so closed and archived ones stay out.
+// Initiatives without an open project sit under No project on the Projects
+// page.
+
+export const PROJECT_TREE_CAP = 6;
+
+export interface ProjectTreeNode {
+  project: Project;
+  initiatives: Bucket[];
+}
+
+export interface ProjectTree {
+  nodes: ProjectTreeNode[];
+  /** Every open project, shown or not: "View all N projects". */
+  total: number;
+}
+
+/** The viewer owns the project or is one of its members. */
+export function isViewerProject(project: Project, viewer: Pick<Human, "id" | "email"> | null): boolean {
+  if (!viewer) return false;
+  if (project.owner === viewer.id) return true;
+  const tokens = new Set([viewer.id, viewer.email].filter((t): t is string => !!t).map((t) => t.trim().toLowerCase()));
+  return (project.members ?? []).some((member) => tokens.has(member.trim().toLowerCase()));
+}
+
+export function projectTree(
+  projects: readonly Project[],
+  initiatives: readonly Bucket[],
+  viewer: Pick<Human, "id" | "email"> | null,
+  currentProjectId: string | null = null,
+  cap: number = PROJECT_TREE_CAP
+): ProjectTree {
+  const ordered = [...projects].sort(
+    (a, b) =>
+      Number(isViewerProject(b, viewer)) - Number(isViewerProject(a, viewer)) ||
+      a.name.localeCompare(b.name, undefined, { numeric: true })
+  );
+  let shown = ordered.slice(0, cap);
+  const current = ordered.find((p) => p.id === currentProjectId);
+  if (current && !shown.includes(current)) shown = [...shown.slice(0, Math.max(0, cap - 1)), current];
+  return {
+    nodes: shown.map((project) => ({ project, initiatives: initiatives.filter((b) => b.project === project.id) })),
+    total: ordered.length,
+  };
+}
+
+/** Initiatives with no open project: the Projects page's No project group. */
+export function unfiledInitiatives(projects: readonly Project[], initiatives: readonly Bucket[]): Bucket[] {
+  const open = new Set(projects.map((p) => p.id));
+  return initiatives.filter((b) => !b.project || !open.has(b.project));
 }
 
 /** The group a screen's nav item lives in (null for detail screens). */
@@ -318,8 +385,15 @@ export const NAV_TABS: readonly NavTab[] = [
   { id: "more", label: "More", lucide: "Ellipsis", badge: "sync" },
 ];
 
-const DETAIL_TAB: Partial<Record<Screen, NavTabId>> = { task: "plan", bucket: "plan", project: "plan" };
-const DETAIL_TITLE: Partial<Record<Screen, string>> = { task: "Task", bucket: "Initiative", project: "Project" };
+// Screens outside the default sidebar: the detail screens, and the zoned
+// sidebar's Projects page (TASK-3841).
+const DETAIL_TAB: Partial<Record<Screen, NavTabId>> = { task: "plan", bucket: "plan", project: "plan", projects: "plan" };
+const DETAIL_TITLE: Partial<Record<Screen, string>> = {
+  task: "Task",
+  bucket: "Initiative",
+  project: "Project",
+  projects: "Projects",
+};
 
 /** The tab a screen lives under (detail screens → the tab they open from). */
 export function tabOf(screen: Screen): NavTabId {

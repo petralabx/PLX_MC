@@ -58,7 +58,10 @@ Its items, URLs, badges and flags are the default sidebar's (`ZONED_NAV_GROUPS`
 and `ADMIN_FLYOUT` in `nav-model.ts`). `NEXT_PUBLIC_PLX_MC_NAV_ZONES=1` turns
 it on for a build; localStorage `mc.nav.zones` = "1" turns it on for one
 browser (`nav-zones.ts`). Phone tabs and ⌘K keep the default groups until
-TASK-3843.
+TASK-3843. Plan nests each initiative under its project (TASK-3841): the
+viewer's projects first, at most six rows (the current project always shows),
+then View all, which opens the Projects page (`projects`). That page lists
+every open project with its initiatives, and No project for the rest.
 
 **Project detail** (`project` screen): rolls up initiatives (buckets) under a
 Project with an initiative card grid; inline edit for health, accountable
@@ -144,6 +147,7 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/nav-model.ts` — nav groups/items, phone tabs, tab memory, pane screens — shared by every nav surface, ⌘K and tests
 - `src/components/mc/nav-zones.ts` — the zoned-sidebar flag (build env, or a per-browser opt-in; default off)
 - `src/components/mc/project-detail.tsx` — Project detail + initiative card grid
+- `src/components/mc/projects-view.tsx` — Projects page: every open project with its initiatives, then No project
 - `src/components/mc/inbox.tsx` — Home: "What needs me today" (rules in `needs-me.ts`)
 - `src/components/mc/help.tsx` — Help: how Mission Control works + glossary
 - `src/components/mc/atoms.tsx` — Avatar, Confidence, PMark

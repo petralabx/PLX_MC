@@ -44,6 +44,7 @@ import {
   navGroupOf,
   navHref,
   nextDrawerOpen,
+  projectTree,
   revealScrollTop,
   visibleAdminFlyout,
   visibleNavGroups,
@@ -265,6 +266,8 @@ export function Sidebar({
 }) {
   useMcVersion();
   const zoned = useNavZones();
+  const viewer = useViewer();
+  const [treeOpen, setTreeOpen] = useState<Record<string, boolean>>({});
   const adminOpen = useNavGroupOpen("admin");
   const knowledgeOpen = useNavGroupOpen("knowledge");
   const {
@@ -324,6 +327,10 @@ export function Sidebar({
   // initiative keeps the one aria-current; the project row is only on-path.
   const openProjectId =
     route.screen === "bucket" && route.bucketId ? (bucketById(route.bucketId)?.project ?? null) : null;
+  // The zoned sidebar's Projects tree (TASK-3841) keeps this project in its
+  // rows and opens it.
+  const currentProjectId = route.screen === "project" ? (route.projectId ?? null) : openProjectId;
+  const tree = zoned ? projectTree(navProjects(), navBuckets(), viewer, currentProjectId) : null;
 
   // Items are real links (open in a new tab, copy the URL); a plain click stays
   // a client-side nav() so screens switch without a reload.
@@ -346,6 +353,33 @@ export function Sidebar({
     </a>
   );
 
+  const newProjectButton = (
+    <button
+      type="button"
+      className="item side-new-initiative"
+      onClick={() => {
+        onDrawer?.("navigate");
+        onNewProject();
+      }}
+    >
+      <Plus className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+      <span className="nm">New project</span>
+    </button>
+  );
+  const newInitiativeButton = (
+    <button
+      type="button"
+      className="item side-new-initiative"
+      onClick={() => {
+        onDrawer?.("navigate");
+        onNewInitiative();
+      }}
+    >
+      <Plus className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+      <span className="nm">New initiative</span>
+    </button>
+  );
+
   const lists: Record<NavList, ReactNode> = {
     projects: (
       <div className="sub" role="group" aria-labelledby="mc-nav-h-projects" key="projects">
@@ -365,17 +399,7 @@ export function Sidebar({
             p.id === openProjectId
           )
         )}
-        <button
-          type="button"
-          className="item side-new-initiative"
-          onClick={() => {
-            onDrawer?.("navigate");
-            onNewProject();
-          }}
-        >
-          <Plus className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
-          <span className="nm">New project</span>
-        </button>
+        {newProjectButton}
       </div>
     ),
     initiatives: (
@@ -395,19 +419,77 @@ export function Sidebar({
             </>
           )
         )}
-        <button
-          type="button"
-          className="item side-new-initiative"
-          onClick={() => {
-            onDrawer?.("navigate");
-            onNewInitiative();
-          }}
-        >
-          <Plus className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
-          <span className="nm">New initiative</span>
-        </button>
+        {newInitiativeButton}
       </div>
     ),
+    // The capped projects, each with a disclosure for its initiatives, then
+    // View all. The current project starts open.
+    "project-tree": tree ? (
+      <div className="tree" role="group" aria-label="Projects" key="project-tree">
+        {tree.nodes.map(({ project, initiatives }) => {
+          const bodyId = `mc-nav-tree-${project.id}`;
+          const expanded = treeOpen[project.id] ?? project.id === currentProjectId;
+          return (
+            <div className="tree-node" key={project.id}>
+              <div className="tree-row">
+                {link(
+                  `project:${project.id}`,
+                  { screen: "project", projectId: project.id },
+                  route.screen === "project" && route.projectId === project.id,
+                  project.name,
+                  <>
+                    <span className={`hl ${project.health}`} aria-hidden="true" />
+                    <span className="nm">{project.name}</span>
+                  </>,
+                  project.id === openProjectId
+                )}
+                {initiatives.length > 0 ? (
+                  <button
+                    type="button"
+                    className="tree-toggle"
+                    aria-expanded={expanded}
+                    aria-controls={bodyId}
+                    aria-label={`${expanded ? "Hide" : "Show"} initiatives in ${project.name}`}
+                    onClick={() => setTreeOpen((prev) => ({ ...prev, [project.id]: !expanded }))}
+                  >
+                    <span className="chev" aria-hidden="true">
+                      {expanded ? "▾" : "▸"}
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+              {initiatives.length > 0 ? (
+                <div id={bodyId} className="tree-kids" hidden={!expanded}>
+                  {initiatives.map((b) =>
+                    link(
+                      `bucket:${b.id}`,
+                      { screen: "bucket", bucketId: b.id },
+                      route.screen === "bucket" && route.bucketId === b.id,
+                      b.name,
+                      <>
+                        <span className={`hl ${b.health}`} aria-hidden="true" />
+                        <span className="nm">{b.name}</span>
+                      </>
+                    )
+                  )}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+        {link(
+          "projects:all",
+          { screen: "projects" },
+          false,
+          `View all ${tree.total} ${tree.total === 1 ? "project" : "projects"}`,
+          <span className="nm">
+            View all {tree.total} {tree.total === 1 ? "project" : "projects"}
+          </span>
+        )}
+        {newProjectButton}
+        {newInitiativeButton}
+      </div>
+    ) : null,
   };
 
   const flags = navFlags();

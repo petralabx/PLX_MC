@@ -13,19 +13,24 @@ import {
   NAV_GROUPS,
   NAV_TABS,
   PANE_SCREENS,
+  PROJECTS_NAV_ITEM,
+  PROJECT_TREE_CAP,
   ZONED_NAV_GROUPS,
   createNavGroupState,
   createTabMemory,
   isPaneScreen,
   isPlainLeftClick,
   isScreen,
+  isViewerProject,
   navCommands,
   navGroupOf,
   navHref,
+  projectTree,
   revealScrollTop,
   screenTitle,
   tabOf,
   tabScreens,
+  unfiledInitiatives,
   visibleAdminFlyout,
   visibleNavGroups,
   visibleZonedNavGroups,
@@ -33,6 +38,7 @@ import {
   type NavFlags,
 } from "@/components/mc/nav-model";
 import { SCREEN_VALUES, type Screen } from "@/components/mc/route";
+import type { Bucket, Project } from "@/lib/mc-data";
 import { resetRoutingInboxFlag, setRoutingInboxEnabled } from "@/components/mc/routing-inbox/flag";
 
 afterEach(() => resetRoutingInboxFlag());
@@ -114,8 +120,9 @@ describe("nav model — grouped by task", () => {
     const listed = visibleNavGroups(ON).flatMap((g) => g.items.map((i) => i.screen));
     expect(new Set(listed).size).toBe(listed.length);
     const unlisted = SCREEN_VALUES.filter((s) => !listed.includes(s));
-    // Detail screens are reached from their lists/rows, never as a bare nav item.
-    expect(unlisted.sort()).toEqual(["bucket", "project", "task"]);
+    // Detail screens are reached from their lists/rows, never as a bare nav
+    // item; the Projects page is the zoned sidebar's (TASK-3841).
+    expect(unlisted.sort()).toEqual(["bucket", "project", "projects", "task"]);
   });
 
   it("knows which group a screen belongs to (to auto-expand Admin & health)", () => {
@@ -142,8 +149,8 @@ describe("zoned sidebar model", () => {
   it("reads My work, Plan, Reporting, then a collapsible Knowledge", () => {
     expect(ZONED_NAV_GROUPS.map((g) => g.label)).toEqual(["My work", "Plan", "Reporting", "Knowledge"]);
     expect(zonedScreensOf(OFF, "my-work")).toEqual(["home", "mine", "approvals"]);
-    expect(zonedScreensOf(OFF, "plan")).toEqual(["board", "list", "timeline"]);
-    expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.lists).toEqual(["projects", "initiatives"]);
+    expect(zonedScreensOf(OFF, "plan")).toEqual(["board", "list", "timeline", "projects"]);
+    expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.lists).toEqual(["project-tree"]);
     expect(zonedScreensOf(OFF, "reporting")).toEqual(["dashboard", "insights", "goals", "ai-spend"]);
     expect(zonedScreensOf(OFF, "knowledge")).toEqual(["brain-ask", "governance-sops", "skills-directory", "architecture"]);
     expect(ZONED_NAV_GROUPS.filter((g) => g.collapsible).map((g) => g.id)).toEqual(["knowledge"]);
@@ -169,15 +176,17 @@ describe("zoned sidebar model", () => {
       HELP_NAV_ITEM.screen,
     ];
     expect(new Set(placed).size).toBe(placed.length);
+    // Every classic screen, plus the Projects page (TASK-3841).
     const classic = visibleNavGroups(ON).flatMap((g) => g.items.map((i) => i.screen));
-    expect([...placed].sort()).toEqual([...classic].sort());
+    expect([...placed].sort()).toEqual([...classic, "projects"].sort());
   });
 
   it("reuses the classic items: same URL, icon, badge and flag; only two labels change", () => {
     const classic = new Map(NAV_GROUPS.flatMap((g) => g.items).map((i) => [i.screen, i]));
     const zoned = [...ZONED_NAV_GROUPS.flatMap((g) => g.items), ...ADMIN_FLYOUT.flatMap((s) => s.items), HELP_NAV_ITEM];
+    expect(zoned.filter((item) => !classic.has(item.screen))).toEqual([PROJECTS_NAV_ITEM]);
     const renamed: Record<string, string> = {};
-    for (const item of zoned) {
+    for (const item of zoned.filter((i) => classic.has(i.screen))) {
       const { label, ...rest } = classic.get(item.screen)!;
       const { label: zonedLabel, ...zonedRest } = item;
       expect(zonedRest, item.screen).toEqual(rest);
@@ -201,6 +210,71 @@ describe("zoned sidebar model", () => {
     expect(tabScreens("plan", OFF).map((i) => i.screen)).toEqual(["board", "list", "timeline", "insights"]);
     expect(tabOf("dashboard")).toBe("my-work");
     expect(navCommands(OFF).map((c) => c.label)).toContain("Go to SharePoint sync issues");
+  });
+});
+
+// TASK-3841 — the zoned sidebar's Projects tree and the Projects page.
+describe("projects tree model", () => {
+  const project = (id: string, name: string, extra: Partial<Project> = {}): Project => ({
+    id,
+    name,
+    owner: "greg",
+    health: "track",
+    target: "—",
+    started: "2026.10.01",
+    desc: "",
+    repos: [],
+    sync: { state: "pending", ts: "—", sp: "Projects · unprovisioned" },
+    prd: null,
+    ...extra,
+  });
+  const initiative = (id: string, projectId: string | null): Bucket => ({
+    id,
+    name: id,
+    owner: "greg",
+    health: "track",
+    target: "—",
+    started: "2026.10.01",
+    desc: "",
+    repos: [],
+    sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" },
+    prd: null,
+    project: projectId,
+  });
+  const vince = { id: "vince", email: "Vince@petrasoap.com" };
+  const names = (tree: ReturnType<typeof projectTree>) => tree.nodes.map((n) => n.project.name);
+
+  it("knows the viewer's projects: owned, or a member by id or email in any case", () => {
+    expect(isViewerProject(project("P1", "A", { owner: "vince" }), vince)).toBe(true);
+    expect(isViewerProject(project("P2", "B", { members: [" vince@PETRASOAP.com "] }), vince)).toBe(true);
+    expect(isViewerProject(project("P3", "C", { members: ["vince"] }), vince)).toBe(true);
+    expect(isViewerProject(project("P4", "D", { members: ["greg@petrasoap.com"] }), vince)).toBe(false);
+    expect(isViewerProject(project("P5", "E", { owner: "vince" }), null)).toBe(false);
+  });
+
+  it("nests each initiative under its project, the viewer's projects first, then by name", () => {
+    const projects = [project("P1", "Zeta"), project("P2", "Alpha"), project("P3", "Mine", { owner: "vince" })];
+    const tree = projectTree(projects, [initiative("B1", "P1"), initiative("B2", "P2"), initiative("B3", "P1")], vince);
+    expect(names(tree)).toEqual(["Mine", "Alpha", "Zeta"]);
+    expect(tree.nodes.map((n) => n.initiatives.map((b) => b.id))).toEqual([[], ["B2"], ["B1", "B3"]]);
+    expect(tree.total).toBe(3);
+  });
+
+  it(`caps the rows at ${PROJECT_TREE_CAP}, keeps the current project in, and counts every project`, () => {
+    const projects = Array.from({ length: 9 }, (_, i) => project(`P${i + 1}`, `Project ${i + 1}`));
+    expect(names(projectTree(projects, [], null))).toEqual(projects.slice(0, PROJECT_TREE_CAP).map((p) => p.name));
+    const withCurrent = projectTree(projects, [], null, "P9");
+    expect(withCurrent.nodes).toHaveLength(PROJECT_TREE_CAP);
+    expect(names(withCurrent).at(-1)).toBe("Project 9");
+    expect(names(withCurrent)).not.toContain(`Project ${PROJECT_TREE_CAP}`);
+    expect(withCurrent.total).toBe(9);
+    expect(projectTree(projects, [], null, "P2").nodes).toHaveLength(PROJECT_TREE_CAP);
+  });
+
+  it("puts initiatives with no open project under No project", () => {
+    const projects = [project("P1", "Open")];
+    const unfiled = unfiledInitiatives(projects, [initiative("B1", "P1"), initiative("B2", null), initiative("B3", "P-GONE")]);
+    expect(unfiled.map((b) => b.id)).toEqual(["B2", "B3"]);
   });
 });
 

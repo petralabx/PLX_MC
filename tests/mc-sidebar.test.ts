@@ -130,7 +130,7 @@ describe("Sidebar — zoned", () => {
   it("reads My work, Plan, Reporting, Knowledge, then a footer with Admin & health and Help", () => {
     const html = nav(render({ screen: "home" }));
     const headings = [...html.matchAll(/id="mc-nav-h-([a-z-]+)"/g)].map((m) => m[1]);
-    expect(headings).toEqual(["my-work", "plan", "projects", "initiatives", "reporting", "knowledge"]);
+    expect(headings).toEqual(["my-work", "plan", "reporting", "knowledge"]);
     expect(html).not.toContain("mc-nav-h-admin");
     // HTML attribute names are case-insensitive: React writes popoverTarget.
     expect(html).toMatch(
@@ -179,6 +179,36 @@ describe("Sidebar — zoned", () => {
     const start = html.indexOf('class="item foot-toggle"');
     expect(html.slice(start, html.indexOf("</button>", start))).toContain(`Admin &amp; health</span>${badge}`);
     expect(flyout(html)).toContain(badge);
+  });
+
+  // TASK-3841: initiatives sit under their project in a capped tree.
+  it("nests initiatives under their project, collapsed until that project is open", () => {
+    const html = nav(render({ screen: "home" }));
+    expect(html).toContain('<div class="tree" role="group" aria-label="Projects">');
+    expect(html).toContain('href="/?screen=projects" class="item" title="Projects"');
+    expect(html).not.toContain("mc-nav-h-projects");
+    expect(html).toContain('href="/?screen=project&amp;projectId=PRJ-PORTAL-GOLIVE" class="item"');
+    expect(html).toContain(
+      'aria-expanded="false" aria-controls="mc-nav-tree-PRJ-PORTAL-GOLIVE" aria-label="Show initiatives in PLX Portal Go-Live"'
+    );
+    expect(html).toContain('<div id="mc-nav-tree-PRJ-PORTAL-GOLIVE" class="tree-kids" hidden="">');
+    expect(html).toContain('<span class="nm">View all 1 project</span>');
+    expect(html).toMatch(/New project.*New initiative/);
+  });
+
+  it("opens the current project, and the open initiative's project, with one current row", () => {
+    for (const route of [
+      { screen: "project", projectId: "PRJ-PORTAL-GOLIVE" },
+      { screen: "bucket", bucketId: "BKT-WMS" },
+    ] as Route[]) {
+      const html = nav(render(route));
+      expect(html).toContain('aria-expanded="true" aria-controls="mc-nav-tree-PRJ-PORTAL-GOLIVE"');
+      expect(html).toContain('<div id="mc-nav-tree-PRJ-PORTAL-GOLIVE" class="tree-kids">');
+      expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+    }
+    const initiative = nav(render({ screen: "bucket", bucketId: "BKT-WMS" }));
+    expect(initiative).toContain('href="/?screen=bucket&amp;bucketId=BKT-WMS" class="item active" aria-current="page"');
+    expect(initiative).toContain('projectId=PRJ-PORTAL-GOLIVE" class="item on-path"');
   });
 
   it("renders the classic sidebar when the flag is off: no footer, no flyout", () => {

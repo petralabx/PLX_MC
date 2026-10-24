@@ -800,6 +800,9 @@ test.describe("shell — zoned sidebar", () => {
     const nav = side(page);
     expect(Math.round((await nav.boundingBox())!.width)).toBe(64);
     await expect(nav.getByRole("link", { name: "Skills directory" })).toBeVisible();
+    // The Projects tree (TASK-3841) stays in the drawer: the rail shows its icon.
+    await expect(nav.getByRole("link", { name: "Projects", exact: true })).toBeVisible();
+    await expect(nav.getByRole("group", { name: "Projects", exact: true })).toBeHidden();
     for (const target of [footToggle(page), nav.getByRole("link", { name: "Help and shortcuts" })]) {
       await expect(target).toBeInViewport({ ratio: 1 });
       const box = (await target.boundingBox())!;
@@ -965,6 +968,53 @@ test.describe("shell — zoned sidebar", () => {
       await open(page, width, "/");
       await openSidebar(page, "Repos");
       await expect(page.locator("[data-testid='repos-screen']"), `@ ${width}`).toBeVisible();
+      await open(page, width, "/");
+      await openSidebar(page, "UAT");
+      await expect(page.getByTestId("bucket-kicker"), `@ ${width}`).toContainText("Initiative · BKT-UAT");
+    }
+  });
+
+  // TASK-3841: initiatives sit under their project in a capped tree.
+  test("the Projects tree opens a project's initiatives, and View all lands on Projects", async ({ page }) => {
+    await open(page, 1440, "/?screen=board");
+    const nav = side(page);
+    const tree = nav.getByRole("group", { name: "Projects", exact: true });
+    await expect(tree.getByRole("link", { name: "WMS Integration" })).toBeHidden();
+    await tree.getByRole("button", { name: "Show initiatives in PLX Portal Go-Live" }).click();
+    await expect(tree.getByRole("link", { name: "WMS Integration" })).toBeVisible();
+    await expect(tree.getByRole("button", { name: "Hide initiatives in PLX Portal Go-Live" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    await tree.getByRole("link", { name: "View all 1 project" }).click();
+    const screen = page.getByTestId("projects-screen");
+    await expect(screen).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Projects", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(screen.getByRole("link", { name: "PLX Portal Go-Live" })).toBeVisible();
+    await screen.getByRole("link", { name: "UAT", exact: true }).click();
+    await expect(page.getByTestId("bucket-kicker")).toContainText("Initiative · BKT-UAT");
+    expect(await shellViolations(page)).toEqual([]);
+  });
+
+  test("deep links to the project and to every initiative open that screen, with its row lit", async ({ page }) => {
+    await open(page, 1440, "/?screen=project&projectId=PRJ-PORTAL-GOLIVE");
+    await expect(page.getByTestId("project-screen")).toBeVisible();
+    await expect(side(page).getByRole("link", { name: "PLX Portal Go-Live" })).toHaveAttribute("aria-current", "page");
+    for (const [id, name] of [
+      ["BKT-WMS", "WMS Integration"],
+      ["BKT-DAPI", "Decoupling API"],
+      ["BKT-PROD", "Product Development"],
+      ["BKT-FIN", "Finance"],
+      ["BKT-QMS", "QMS"],
+      ["BKT-SHOP", "Shopify → Business Central"],
+      ["BKT-INFRA", "Backend Infra"],
+      ["BKT-UAT", "UAT"],
+    ]) {
+      await open(page, 1440, `/?screen=bucket&bucketId=${id}`);
+      await expect(page.getByTestId("bucket-kicker")).toContainText(`Initiative · ${id}`);
+      const row = side(page).getByRole("link", { name, exact: true });
+      await expect(row, id).toHaveAttribute("aria-current", "page");
+      await expect(row, id).toBeVisible();
     }
   });
 });

@@ -657,7 +657,7 @@ export interface PatchTaskInput {
   creatorApproval?: Task["creatorApproval"]; // TASK-3530 — DB-only; written only with opts.creatorApproval
   questions?: Task["questions"]; // TASK-3567 — DB-only questions for a named person (never pushed)
   prs?: PullRequest[]; // DB-only — PR links (compliance projection)
-  merge?: { sha: string; on: string }; // DB-only — merge metadata (compliance projection)
+  merge?: { sha: string; on: string; held?: boolean }; // DB-only — merge metadata (compliance projection)
   activityLine?: Pick<ActivityEntry, "who" | "what" | "kind">; // DB-only append
 }
 

@@ -191,6 +191,8 @@ export interface PullRequest {
   num: number;
   status: "open" | "draft" | "merged" | "closed";
   title: string;
+  /** Branch a merged PR went into; only a merge into the repo's integration branch promotes (TASK-3797). */
+  base?: string;
 }
 
 // Sub-task status (EN-001 / WS-3 medium depth). `done` stays the canonical
@@ -336,7 +338,8 @@ export interface Task {
   evidence?: Evidence;
   blocked?: boolean;
   blockedReason?: string;
-  merge?: { sha: string; on: string };
+  /** `held`: the merge reached the integration branch while another PR was open (TASK-3797). */
+  merge?: { sha: string; on: string; held?: boolean };
   // ISO-8601 first entry into a terminal stage. Read-only: merged in from
   // entities.completed_at on read, never stored in the jsonb payload (TASK-2528).
   completedAt?: string;

@@ -612,7 +612,7 @@ export function TaskDetailView({ route, nav }: ScreenProps) {
                             <span className="pid">#{pr.num}</span>
                             <div>
                               <div className="t">{pr.title}</div>
-                              <div className="sub">{pr.repo}</div>
+                              <div className="sub">{pr.base ? `${pr.repo} · into ${pr.base}` : pr.repo}</div>
                             </div>
                             <span className="pill muted">
                               <span className="dot" />

@@ -185,6 +185,21 @@ truth table is proven before any plumbing exists.
   `pr_linked_elsewhere`. PRs opened before that are linked by
   `scripts/backfill-open-pr-links.mjs` (dry run by default; `--apply` writes;
   non-production `--approved-db` guard; links only PRs GitHub still shows open).
+  A merge promotes only when the PR's base is the repo's `integration_branch`
+  in `config/tracked-repos-registry.json` (`integrationBranchFor`: staging for
+  the portal, main for the others) and no other PR on the task is `open` or
+  `draft` (TASK-3797). The merged row records its `base`. A merge into another
+  branch is recorded with no stage move (`task.promotion_skipped`,
+  `not_integration_branch`). A merge while another PR is open holds the task
+  (`open_pr`, `merge.held`, with the open PR numbers in the activity line). The
+  close or merge of that last open PR then promotes it and clears the hold
+  (`completionSource: "held_merge"`). Only a hold promotes this way: an older
+  integration merge on a task moved back never does. A closed row opens again
+  only on `reopened`, so a late or replayed open event cannot hold a task.
+  Tasks promoted by a feature-branch merge before this are moved back to In
+  Progress by `scripts/repair-non-integration-merges.mjs` (dry run by default;
+  `--apply` writes under the row lock; never repairs a task twice; same
+  non-production guard).
   Every mutation requires
   `authorize(...)` for durable `sp_compliance_projection` (`task.progress` /
   `task.link`). **Sparse operator Task creation is retired** — unrouted operator

@@ -105,7 +105,13 @@ export async function actionLinkMergedPr(
   }
 
   const actor = mcpAuditActor(identity);
-  const link: PullRequest = { repo: repoName, num: body.prNumber, status: "merged", title: facts.title };
+  const link: PullRequest = {
+    repo: repoName,
+    num: body.prNumber,
+    status: "merged",
+    title: facts.title,
+    ...(facts.baseBranch ? { base: facts.baseBranch } : {}),
+  };
   if (BELOW_MERGED.has(task.stage)) {
     // The normal merged-PR projection: promote, record prs + merge, audit task.promoted.
     await projectPullRequest(
@@ -118,6 +124,8 @@ export async function actionLinkMergedPr(
         headSha: facts.headSha,
         mergeSha: facts.mergeSha,
         branch: "",
+        // The projection promotes only a merge into the integration branch (TASK-3797).
+        baseBranch: facts.baseBranch || undefined,
         title: facts.title,
         author: "",
         labels: [],

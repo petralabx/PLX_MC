@@ -6,8 +6,11 @@
 #   PUT /repos/{owner}/{repo}/pulls/{n}/update-branch
 # which MERGES the base into the head branch. It never rebases or force-pushes.
 # Skips forks, drafts, other PRs, and PRs labelled `hold` or `do-not-update`.
-# At most MAX_UPDATES (5) branches are updated per run; the rest wait for the
-# next run (reported as `deferred`).
+# AR-02: only the next PR to land is kept current. Queued PRs are taken oldest
+# first (by creation time) and at most MAX_UPDATES (1) branch is updated per run;
+# only a successful update counts toward the cap. A failed update (conflict,
+# head moved) is reported and the next-oldest queued PR is tried. The rest wait
+# for the next run (reported as `deferred`).
 #
 # SAFE BY DEFAULT: report-only. It updates branches only when BOTH are true:
 #   1. repo variable UPDATE_BRANCHES_ENABLED == 'true'
@@ -62,12 +65,13 @@ jobs:
             const { owner, repo } = context.repo;
             const SKIP = new Set(['hold', 'do-not-update']);
             const QUEUE = new Set(['auto-merge', 'automerge', 'merge-queue', 'ready-to-merge']);
-            const MAX_UPDATES = 5;
+            const MAX_UPDATES = 1; // AR-02: only the next PR to land
             const canWrite = process.env.HAS_APP_TOKEN === 'true';
             const mode = canWrite ? 'update' : 'report-only';
             core.info(`mode=${mode} max_updates=${MAX_UPDATES}`);
             let updated = 0;
-            const prs = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 });
+            const prs = (await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', sort: 'created', direction: 'asc', per_page: 100 }))
+              .sort((x, y) => new Date(x.created_at) - new Date(y.created_at) || x.number - y.number); // oldest queued first
             const rows = [];
             for (const pr of prs) {
               const why = pr.draft ? 'draft'
@@ -84,9 +88,9 @@ jobs:
               if (!canWrite) { rows.push([pr.number, 'behind', `${cmp.behind_by} commits (report-only)`]); continue; }
               if (updated >= MAX_UPDATES) { rows.push([pr.number, 'deferred', `cap of ${MAX_UPDATES} reached`]); continue; }
               try {
-                updated++;
                 await github.request('PUT /repos/{owner}/{repo}/pulls/{pull_number}/update-branch',
                   { owner, repo, pull_number: pr.number, expected_head_sha: pr.head.sha });
+                updated++; // only successes count toward the cap
                 rows.push([pr.number, 'updated', `merged ${cmp.behind_by} base commits`]);
               } catch (e) {
                 // 422 = merge conflict or head moved; leave it for a human/agent.

@@ -98,6 +98,7 @@ jobs:
           PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_BASE_REF: ${{ github.base_ref }}
           REPO_NAME: ${{ github.event.repository.name }}
           REPO_FULL_NAME: ${{ github.repository }}
@@ -129,11 +130,12 @@ jobs:
               | sed -nE 's#^(refs/heads/)?gh-readonly-queue/[^/]+/pr-([0-9]+)-[0-9a-f]+$#\2#p')
             if [ -n "$N" ] \
               && pr=$(gh api "repos/${REPO_FULL_NAME}/pulls/${N}") \
-              && files=$(gh api --paginate "repos/${REPO_FULL_NAME}/pulls/${N}/files" --jq '.[].filename'); then
+              && files=$(gh api --paginate "repos/${REPO_FULL_NAME}/pulls/${N}/files" --jq '.[] | .filename, (.previous_filename // empty)'); then
               PR_NUMBER="$N"
               PR_HEAD_SHA=$(printf '%s' "$pr" | jq -r '.head.sha // ""')
               PR_BODY=$(printf '%s' "$pr" | jq -r '.body // ""')
               PR_LABELS=$(printf '%s' "$pr" | jq -c '[(.labels // [])[].name]')
+              PR_AUTHOR=$(printf '%s' "$pr" | jq -r '.user.login // ""')
               changed=$(printf '%s' "$files" | jq -R -s 'split("\n") | map(select(length>0))')
             fi
           else
@@ -142,8 +144,37 @@ jobs:
             # double-emits ([] from jq AND [] from the ||) when git diff prints nothing
             # AND fails (a shallow fetch of a busy base has no merge base) — that invalid
             # JSON crashes the --argjson below and hard-fails this otherwise-soft gate.
-            diff_out=$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" 2>/dev/null || true)
+            diff_out=$(git diff --name-only --no-renames "origin/${PR_BASE_REF}...HEAD" 2>/dev/null || true)
             changed=$(printf '%s' "$diff_out" | jq -R -s 'split("\n") | map(select(length>0))')
+          fi
+          # PR-drain (6): docs-only and Dependabot lockfile-only PRs post a passing
+          # `compliance` with a clear "skipped" verdict. The skip is inside the job, not
+          # a paths-ignore, so the required check always reports. Never skips when the
+          # file list is empty/unknown, or for any non-Markdown file (docs/** code and
+          # build inputs included). Agent/runtime instructions never count as docs:
+          # AGENTS/CLAUDE/SKILL/GEMINI/SYSTEM.md, anything under .github/, .claude/,
+          # .cursor/, skills/, prompts/ or docs/training/. Renames are classified on
+          # BOTH paths (--no-renames; previous_filename in merge_group).
+          n_changed=$(printf '%s' "$changed" | jq 'length')
+          if [ "$n_changed" -gt 0 ] && [ "$n_changed" -lt 3000 ]; then
+            non_docs=$(printf '%s' "$changed" | jq '[.[] | select(
+                (test("\\.md$"; "i") and
+                 (test("(^|/)(\\.github|\\.claude|\\.cursor|skills|prompts)/") or test("^docs/training/")
+                  or test("(^|/)(AGENTS|CLAUDE|SKILL|GEMINI|SYSTEM)\\.md$"; "i") | not)) | not
+              )] | length')
+            non_lock=$(printf '%s' "$changed" | jq '[.[] | select(
+                test("(^|/)(package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock|poetry\\.lock|uv\\.lock|Cargo\\.lock|go\\.sum|Gemfile\\.lock|composer\\.lock|bun\\.lockb?)$") | not
+              )] | length')
+            if [ "$non_docs" -eq 0 ]; then
+              echo "verdict=pass (skipped: docs-only, ${n_changed} file(s))"
+              echo "Compliance gate: PASS — skipped: docs-only"
+              exit 0
+            fi
+            if [ "$non_lock" -eq 0 ] && [ "${PR_AUTHOR:-}" = "dependabot[bot]" ]; then
+              echo "verdict=pass (skipped: dependabot lockfile-only, ${n_changed} file(s))"
+              echo "Compliance gate: PASS — skipped: dependabot lockfile-only"
+              exit 0
+            fi
           fi
           if [ "${GITHUB_EVENT_NAME:-}" = "merge_group" ] && [ -z "$PR_HEAD_SHA" ]; then
             echo "merge_group: could not resolve the pull request"

@@ -153,7 +153,9 @@ jobs:
           # file list is empty/unknown, or for any non-Markdown file (docs/** code and
           # build inputs included). Agent/runtime instructions never count as docs:
           # AGENTS*/CLAUDE*/CODEX*/GROK*/HERMES*/GEMINI*/COPILOT*.md (e.g. AGENTS.override.md),
-          # SKILL/SYSTEM/TOOLS/SOUL/IDENTITY/USER/HEARTBEAT/MEMORY/LESSONS.md, and anything
+          # SKILL/SYSTEM/TOOLS/SOUL/IDENTITY/USER/HEARTBEAT/MEMORY/LESSONS.md, any
+          # *PROMPT*.md or *RUNBOOK*.md (e.g. docs/JBB_SYSTEM_PROMPT.md, copied into the
+          # live AGENTS.md by the runtime guard), and anything
           # under .github/, .claude/, .cursor/, .codex/, .grok/, .agents/, .windsurf/,
           # skills/, prompts/ or docs/training/ — at any depth, case-insensitive. Only
           # *.md can skip, so *.mdc rules and .cursorrules never do. Renames are
@@ -165,7 +167,8 @@ jobs:
                  (test("(^|/)(\\.github|\\.claude|\\.cursor|\\.codex|\\.grok|\\.agents?|\\.windsurf|skills|prompts)/"; "i")
                   or test("(^|/)docs/training/"; "i")
                   or test("(^|/)(AGENTS|CLAUDE|CODEX|GROK|HERMES|GEMINI|COPILOT)[^/]*\\.md$"; "i")
-                  or test("(^|/)(SKILL|SYSTEM|TOOLS|SOUL|IDENTITY|USER|HEARTBEAT|MEMORY|LESSONS|copilot-instructions)\\.md$"; "i") | not)) | not
+                  or test("(^|/)(SKILL|SYSTEM|TOOLS|SOUL|IDENTITY|USER|HEARTBEAT|MEMORY|LESSONS|copilot-instructions)\\.md$"; "i")
+                  or test("(^|/)[^/]*(PROMPT|RUNBOOK)[^/]*\\.md$"; "i") | not)) | not
               )] | length')
             non_lock=$(printf '%s' "$changed" | jq '[.[] | select(
                 test("(^|/)(package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock|poetry\\.lock|uv\\.lock|Cargo\\.lock|go\\.sum|Gemfile\\.lock|composer\\.lock|bun\\.lockb?)$") | not

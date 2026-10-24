@@ -268,8 +268,34 @@ def test_docs_only_skip_posts_pass_and_guards_agent_files():
         assert "Compliance gate: PASS — skipped: docs-only" in script
         assert "Compliance gate: PASS — skipped: dependabot lockfile-only" in script
         assert '"${PR_AUTHOR:-}" = "dependabot[bot]"' in script
-        assert "(AGENTS|CLAUDE|SKILL|GEMINI|SYSTEM)" in script
+        assert "(AGENTS|CLAUDE|CODEX|GROK|HERMES|GEMINI|COPILOT)[^/]*" in script
         assert "prompts" in script
         assert "--no-renames" in script
         assert "previous_filename" in _run("--emit", variant).stdout
         assert '[ "$n_changed" -gt 0 ]' in script
+
+
+def _docs_only_filter(script: str) -> str:
+    import re
+
+    m = re.search(r"non_docs=\$\(printf '%s' \"\$changed\" \| jq '(.*?)'\)", script, re.S)
+    assert m, "docs-only jq filter not found"
+    return m.group(1)
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq not installed")
+def test_docs_only_skip_never_counts_agent_policy_files_as_docs():
+    docs = ["README.md", "docs/guide.md", "docs/a/b/Notes.MD"]
+    agent = [
+        "TOOLS.md", "SOUL.md", "CODEX.md", "GROK.md", "HERMES.md", "AGENTS.override.md",
+        "AGENTS.md", "CLAUDE.local.md", "sub/dir/agents.md", "deep/x/Soul.md", "pkg/tools.MD",
+        "x/copilot-instructions.md", ".cursor/rules/a.md", "a/.Cursor/b.md", "rules/a.mdc",
+        "skills/x/SKILL.md", "a/Prompts/p.md", "x/docs/training/t.md", ".github/README.md",
+    ]
+    for variant in ("canonical", "downstream"):
+        jq_filter = _docs_only_filter(_gate_script(_run("--emit", variant).stdout))
+        for path in docs + agent:
+            out = subprocess.run(
+                ["jq", jq_filter], input=json.dumps([path]), capture_output=True, text=True, check=True
+            ).stdout.strip()
+            assert out == ("0" if path in docs else "1"), (variant, path, out)

@@ -165,7 +165,8 @@ def test_merge_group_adds_no_exit_and_no_skip():
 
         script = _gate_script(workflow)
 
-        assert script.count("exit 0") == 4, variant
+        # 4 original passes + 2 PR-drain (6) skips (docs-only, dependabot lockfile-only).
+        assert script.count("exit 0") == 6, variant
         assert script.count("exit 1") == 2, variant
         assert "continue-on-error" not in workflow
         assert "\n    if:" not in workflow
@@ -259,3 +260,13 @@ def test_merge_group_support_leaves_the_pull_request_payload_without_event(tmp_p
     assert "event" not in payload
     assert payload["prNumber"] == 7
     assert payload["checkoutIds"] == ["dsp_one"]
+
+
+def test_docs_only_skip_posts_pass_and_guards_agent_files():
+    for variant in ("canonical", "downstream"):
+        script = _gate_script(_run("--emit", variant).stdout)
+        assert "Compliance gate: PASS — skipped: docs-only" in script
+        assert "Compliance gate: PASS — skipped: dependabot lockfile-only" in script
+        assert '"${PR_AUTHOR:-}" = "dependabot[bot]"' in script
+        assert "(AGENTS|CLAUDE|SKILL)" in script
+        assert '[ "$n_changed" -gt 0 ]' in script

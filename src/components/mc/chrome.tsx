@@ -67,13 +67,16 @@ const noClockSubscribe = () => () => {};
  * The Approvals badge: pending runtime approval gates on the tasks this viewer
  * can see, plus the open questions addressed to them (TASK-3567). Its screen
  * reads GET /api/approvals and /api/questions, different sources, so a count
- * is a lower bound, never exact. Unknown ("—") until the store is live and the
- * viewer known (questions are per viewer); then an attention badge, hidden
+ * is a lower bound, never exact. Unknown ("—") until the store is live. Until
+ * the viewer is known, questions cannot be counted: gates alone show as "n+",
+ * and none reads "—". Once both are known it is an attention badge, hidden
  * while nothing waits (TASK-3837), where a lower bound of 0 read "—".
  */
 export function approvalsBadge(loaded: boolean, viewer: Pick<Human, "id"> | null, tasks: readonly Task[]): Count | undefined {
-  if (!loaded || !viewer) return UNKNOWN_COUNT;
-  const waiting = tasks.reduce((n, t) => n + pendingApprovalGates(t).length + openQuestionsFor(t, viewer.id).length, 0);
+  if (!loaded) return UNKNOWN_COUNT;
+  const gates = tasks.reduce((n, t) => n + pendingApprovalGates(t).length, 0);
+  if (!viewer) return gates > 0 ? { n: gates, exact: false } : UNKNOWN_COUNT;
+  const waiting = gates + tasks.reduce((n, t) => n + openQuestionsFor(t, viewer.id).length, 0);
   return waiting > 0 ? { n: waiting, exact: false } : undefined;
 }
 
@@ -209,7 +212,11 @@ export function Sidebar({
     const side = row.closest<HTMLElement>("#mc-nav");
     if (!labelled || !side || revealedFor.current === revealKey || row.getClientRects().length === 0) return;
     revealedFor.current = revealKey;
-    side.scrollTop = revealScrollTop(side.getBoundingClientRect(), row.getBoundingClientRect(), side.scrollTop);
+    // In the drawer forms the sticky head covers the top of the list.
+    const view = side.getBoundingClientRect();
+    const head = side.querySelector<HTMLElement>(".side-head");
+    const top = head && head.getClientRects().length > 0 ? head.getBoundingClientRect().bottom : view.top;
+    side.scrollTop = revealScrollTop({ top, bottom: view.bottom }, row.getBoundingClientRect(), side.scrollTop);
   });
 
   // An initiative page also lights its parent project (TASK-3837). The

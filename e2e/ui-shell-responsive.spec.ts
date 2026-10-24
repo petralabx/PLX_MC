@@ -660,6 +660,32 @@ test.describe("shell — touch targets and current page", () => {
     await expect(side.getByRole("link", { name: "UAT", exact: true })).toBeInViewport({ ratio: 1 });
     await expect(side.getByRole("button", { name: "Close navigation" })).toBeInViewport({ ratio: 1 });
   });
+
+  // WCAG 2.4.11: the sticky drawer head never hides the focused row, and it
+  // sits flush with the drawer's top edge, so nothing scrolls above it.
+  test("in the phone drawer, the sticky head never covers keyboard focus or leaves a gap", async ({ page }) => {
+    await open(page, 393, "/?screen=bucket&bucketId=BKT-UAT", 700);
+    await page.locator("nav.mc-tabs").getByRole("button", { name: "More" }).click();
+    await page.getByRole("dialog", { name: "More" }).getByRole("button", { name: /All screens/ }).click();
+    const side = page.locator("nav.mc-side");
+    await expect(side).toHaveClass(/\bopen\b/);
+    for (let i = 0; i < 30; i += 1) {
+      await page.keyboard.press("Shift+Tab");
+      const hidden = await page.evaluate(() => {
+        const nav = document.querySelector("nav.mc-side")!;
+        const head = nav.querySelector(".side-head")!;
+        const focused = document.activeElement as HTMLElement | null;
+        if (!focused || !nav.contains(focused) || head.contains(focused)) return null;
+        return focused.getBoundingClientRect().top < head.getBoundingClientRect().bottom - 1 ? focused.textContent : null;
+      });
+      expect(hidden, `focus hidden under the head after ${i + 1} Shift+Tab`).toBeNull();
+    }
+    await side.evaluate((el) => {
+      el.scrollTop = 300;
+    });
+    const gap = await side.evaluate((el) => el.querySelector(".side-head")!.getBoundingClientRect().top - el.getBoundingClientRect().top);
+    expect(Math.abs(gap)).toBeLessThanOrEqual(1);
+  });
 });
 
 test.describe("shell — offline banner", () => {

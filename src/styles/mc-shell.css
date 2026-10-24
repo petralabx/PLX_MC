@@ -402,7 +402,10 @@
     inset: 0 auto 0 0;
     z-index: var(--p-z-drawer);
     width: var(--p-drawer-w);
-    padding: calc(var(--p-safe-t) + 8px) 0 24px;
+    /* The top padding lives on the sticky .side-head, so nothing scrolls
+       above it; scroll-padding keeps keyboard focus clear of it (TASK-3837). */
+    padding: 0 0 24px;
+    scroll-padding-top: calc(var(--p-safe-t) + var(--p-touch) + 16px);
     overflow-y: auto;
     overscroll-behavior: contain;
     border-right: 1px solid var(--p-grid);
@@ -423,7 +426,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding: 0 12px 8px;
+    padding: calc(var(--p-safe-t) + 8px) 12px 8px;
     background: var(--p-rail);
   }
   .mc .mc-side .rail-toggle {
@@ -963,14 +966,15 @@
       z-index: 20;
       width: var(--p-rail-w);
       height: calc(100dvh - var(--p-chrome-h));
-      padding: 8px 0 16px;
+      padding: 0 0 16px;
+      scroll-padding-top: calc(var(--p-touch) + 16px);
       overflow-x: hidden;
       transform: none;
       visibility: visible;
     }
     .mc .mc-side .side-head {
       justify-content: center;
-      padding: 0 0 8px;
+      padding: 8px 0;
     }
     .mc .mc-side .rail-toggle {
       display: inline-flex;
@@ -1027,11 +1031,12 @@
       z-index: var(--p-z-drawer);
       width: var(--p-drawer-w);
       height: auto;
-      padding: calc(var(--p-safe-t) + 8px) 0 24px;
+      padding: 0 0 24px;
+      scroll-padding-top: calc(var(--p-safe-t) + var(--p-touch) + 16px);
     }
     .mc .mc-side.open .side-head {
       justify-content: flex-end;
-      padding: 0 12px 8px;
+      padding: calc(var(--p-safe-t) + 8px) 12px 8px;
     }
     .mc .mc-side.open .rail-toggle {
       display: none;
@@ -1120,6 +1125,7 @@
       width: var(--p-side-w);
       height: calc(100dvh - var(--p-chrome-h));
       padding: 14px 0 24px;
+      scroll-padding-top: 0;
     }
     .mc .mc-side .side-head {
       display: none;

@@ -174,9 +174,9 @@ describe("useNavCounts once the store is live", () => {
     expect(live.needs).toEqual({ n: null, exact: false });
   });
 
-  // Questions are per viewer, and the server render has none: even with a
-  // pending gate in a live store, Approvals stays unknown here.
-  it("keeps Approvals unknown until the viewer is known", async () => {
+  // Questions are per viewer, and the server render has none: a live store's
+  // pending gates still show, as a lower bound.
+  it("counts Approvals gates alone until the viewer is known", async () => {
     const [task] = allTasks();
     __setStateLoaderForTests(async () => ({
       tasks: [{ ...task, approvalGates: [PENDING_GATE] }],
@@ -190,7 +190,7 @@ describe("useNavCounts once the store is live", () => {
     }));
     await hydrate();
     expect(dataSource()).toBe("live");
-    expect(counts().approvals).toEqual({ n: null, exact: false });
+    expect(counts().approvals).toEqual({ n: 1, exact: false });
   });
 });
 
@@ -220,9 +220,13 @@ describe("approvalsBadge", () => {
   });
   const task = (extra: Partial<Task>): Task => ({ ...allTasks()[0], approvalGates: [], questions: [], ...extra });
 
-  it("is unknown until the store is live and the viewer known", () => {
+  it("is unknown until the store is live", () => {
     expect(approvalsBadge(false, viewer, [task({ approvalGates: [PENDING_GATE] })])).toEqual({ n: null, exact: false });
-    expect(approvalsBadge(true, null, [task({ approvalGates: [PENDING_GATE] })])).toEqual({ n: null, exact: false });
+  });
+
+  it("counts gates alone until the viewer is known, and never hides then", () => {
+    expect(approvalsBadge(true, null, [task({ approvalGates: [PENDING_GATE] })])).toEqual({ n: 1, exact: false });
+    expect(approvalsBadge(true, null, [task({ questions: [question("vince")] })])).toEqual({ n: null, exact: false });
   });
 
   it("is hidden while nothing waits on the viewer", () => {

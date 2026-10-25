@@ -30,6 +30,8 @@ export interface PrEvent {
   title: string;
   author: string;
   labels: string[];
+  /** GitHub pull_request.draft — the projection shows a draft PR as "draft" (TASK-3743). */
+  draft?: boolean;
   // Parsed from the PR-body markers the capture hook stamps (P3): "MC-Checkout:
   // dsp_…". `checkoutId` is the first (back-compat); `checkoutIds` is every stamp
   // on the PR — a multi-task PR completes N tasks, so ingestion attributes all.
@@ -114,6 +116,7 @@ export function parsePullRequestEvent(payload: unknown): PrEvent | null {
     title: asStr(pr.title),
     author: asStr(user.login),
     labels: labelsRaw.map((l) => asStr(asObj(l).name)).filter((s) => s.length > 0),
+    draft: pr.draft === true,
     checkoutId: checkoutIds[0] ?? null,
     checkoutIds,
     body,

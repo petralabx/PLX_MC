@@ -2,7 +2,7 @@
 // Real action, authorize(), projection and patchTask; only the sync repo, the
 // event log and the GitHub reader are faked. No network, no database.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Task } from "@/lib/mc-data";
+import type { PullRequest, Task } from "@/lib/mc-data";
 import type { McpIdentity } from "@/lib/mcp/auth";
 import type { MergedPrFacts } from "@/lib/compliance/github-pr";
 
@@ -53,6 +53,11 @@ vi.mock("@/lib/sync/repo", () => ({
     if (row) row.data = { ...row.data, ...(opts.patch ?? {}) };
   },
   async appendAudit() {},
+  async taskIdsWithPr(repoName: string, prNumber: number) {
+    return [...store.rows.entries()]
+      .filter(([k, row]) => k.startsWith("task:") && ((row.data.prs ?? []) as PullRequest[]).some((p) => p.repo.toLowerCase() === repoName.toLowerCase() && p.num === prNumber))
+      .map(([, row]) => row.id);
+  },
 }));
 vi.mock("@/lib/compliance/repo", () => ({
   async appendEvent(e: { kind: string; actor: string; dedupKey?: string | null }) {
@@ -150,6 +155,14 @@ describe("idempotency (acceptance 3)", () => {
     expect(store.events.filter((e) => e.kind === "task.pr.linked")).toHaveLength(1);
     expect(store.events.filter((e) => e.kind === "task.promoted")).toHaveLength(1);
   });
+
+  // TASK-3743: the projection now leaves open rows on prs[]; a missed merge must still link.
+  it.each(["progress", "merged"])("turns an open row for the PR into one merged row on a %s task", async (stage) => {
+    seedTask("TASK-100", { stage, prs: [{ repo: "PLX_MC", num: 42, status: "open", title: "Old work" }] } as Partial<Task>);
+    const result = await actionLinkMergedPr(ledger, input(), facts());
+    expect(result).toMatchObject({ linked: true, unchanged: false });
+    expect(taskOf("TASK-100").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "merged", title: "Old work" }]);
+  });
 });
 
 describe("audit entry (acceptance 4)", () => {
@@ -211,6 +224,17 @@ describe("PR already linked to another task (acceptance 7)", () => {
     expect(taskOf("TASK-100").prs).toHaveLength(1);
     const evt = store.events.find((e) => e.kind === "task.pr.linked")!;
     expect(evt.payload).toMatchObject({ override: true, overrideReason: "PR delivered both tasks", otherTaskIds: ["TASK-200"] });
+  });
+});
+
+// TASK-3743: an open or closed row is not a delivered link.
+describe("PR held elsewhere only as an open row", () => {
+  it("links without override, and the other task's stale row turns closed with no stage move", async () => {
+    seedTask("TASK-201", { prs: [{ repo: "PLX_MC", num: 42, status: "open", title: "Old work" }], stage: "progress" } as Partial<Task>);
+    await expect(actionLinkMergedPr(ledger, input(), facts())).resolves.toMatchObject({ linked: true });
+    expect(taskOf("TASK-100").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "merged", title: "Old work" }]);
+    expect(taskOf("TASK-201").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "closed", title: "Old work" }]);
+    expect(taskOf("TASK-201").stage).toBe("progress");
   });
 });
 

@@ -146,6 +146,15 @@ describe("computeRepoActivity", () => {
     expect(report.backfill).toEqual({ generatedAt: hoursAgo(5), windowDays: 7, stale: false });
   });
 
+  it("counts a PR marked ready for review as open (TASK-3743)", () => {
+    const events = [
+      ev("pr.opened", "PLX_MC", hoursAgo(5), { pr: "8", payload: { title: "Draft", taskIds: [] } }),
+      ev("pr.ready_for_review", "PLX_MC", hoursAgo(4), { pr: "8", taskId: "TASK-8", payload: { title: "Ready", taskIds: ["TASK-8"] } }),
+    ];
+    const plx = computeRepoActivity({ events, registry: REGISTRY, backfill: backfill(), now: NOW }).repos[0];
+    expect(plx.openPrs).toEqual({ open: 1, unstamped: 0, items: [{ pr: "8", title: "Ready", stamped: true, at: hoursAgo(4) }] });
+  });
+
   it("marks dormant repos, a stale/missing backfill, and a truncated event sample", () => {
     const events = [ev("checkout", "petralabx/PLX_MC", hoursAgo(24 * 45))];
     const stale = computeRepoActivity({

@@ -814,7 +814,7 @@ export async function openPrCandidatesForTask(taskId: string, repoFullName: stri
      WHERE kind NOT IN ('pr.merged', 'pr.closed')
      ORDER BY seq DESC LIMIT $5`,
     [
-      ["pr.opened", "pr.synchronized", "pr.merged", "pr.closed", "gate.passed", "gate.blocked"],
+      ["pr.opened", "pr.synchronized", "pr.ready_for_review", "pr.merged", "pr.closed", "gate.passed", "gate.blocked"],
       repoFullName,
       bareName,
       taskId,

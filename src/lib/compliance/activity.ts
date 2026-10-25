@@ -14,14 +14,16 @@ export const ACTIVITY_EVENT_KINDS = [
   "task.completed",
   "pr.opened",
   "pr.synchronized",
+  "pr.ready_for_review",
   "pr.merged",
   "pr.closed",
   "gate.passed",
   "gate.blocked",
 ] as const;
 
-const PR_KINDS = new Set(["pr.opened", "pr.synchronized", "pr.merged", "pr.closed"]);
-const OPEN_PR_KINDS = new Set(["pr.opened", "pr.synchronized"]);
+// pr.ready_for_review (TASK-3743) keeps a PR open, like a push.
+const PR_KINDS = new Set(["pr.opened", "pr.synchronized", "pr.ready_for_review", "pr.merged", "pr.closed"]);
+const OPEN_PR_KINDS = new Set(["pr.opened", "pr.synchronized", "pr.ready_for_review"]);
 const EVENT_SAMPLE_LIMIT = 5000;
 const GATE_WINDOW_DAYS = 30;
 // Mirrors the loop-ledgers registry freshness (warn 7d / stale 30d).

@@ -280,7 +280,7 @@ describe("verifyPr — visual evidence (TASK-3166)", () => {
 
   it("blocks a PLX task without visual evidence, and only warns for Trading Lab", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-26T12:00:00Z"));
+    vi.setSystemTime(new Date("2026-11-02T12:00:00Z")); // after the visual-evidence warn week
     vi.stubEnv("PLX_MC_EVIDENCE_STORE_ENABLED", "1");
     db.tasks.set("TASK-1", taskish({ id: "TASK-1", labels: ["verify:human"], evidence: complete }));
     db.tasks.set("TASK-2", taskish({ id: "TASK-2", labels: ["verify:human"], evidence: complete }));
@@ -298,7 +298,7 @@ describe("verifyPr — visual evidence (TASK-3166)", () => {
 
   it("only warns for a task in a restricted project", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-26T12:00:00Z"));
+    vi.setSystemTime(new Date("2026-11-02T12:00:00Z")); // after the visual-evidence warn week
     vi.stubEnv("PLX_MC_EVIDENCE_STORE_ENABLED", "1");
     db.tasks.set("TASK-3", taskish({ id: "TASK-3", bucket: "BKT-SECRET", labels: ["verify:human"], evidence: complete }));
     const secret = await checkout({ taskId: "TASK-3", runtime: "claude", accountableHuman: "vince", repo: "petralabx/PLX_MC" });

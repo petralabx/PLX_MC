@@ -22,6 +22,7 @@ const EXPECTED_SCREENS = {
   feed: true,
   bucket: true,
   project: true,
+  projects: true,
   repos: true,
   files: true,
   sync: true,

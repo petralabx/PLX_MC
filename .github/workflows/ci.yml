@@ -99,3 +99,19 @@ jobs:
 
       - name: Launcher smoke (offline handshake, placeholder key, no secrets)
         run: node tools/plx-mc-mcp/smoke-launch.mjs
+
+  # One roll-up check per repo (TASK-3902): the one org ruleset requires `ci` in
+  # every repo instead of each repo's job names. It covers today's required job.
+  ci:
+    name: ci
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every required job passed or was skipped
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          echo "$RESULTS" | jq -e 'all(.[]; . == "success" or . == "skipped")' > /dev/null

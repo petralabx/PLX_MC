@@ -9,13 +9,13 @@
 # Outputs (existing files are overwritten; full hub scaffold is NOT a no-op):
 #   --routing-only: .github/workflows/mc-routing-metadata.yml,
 #     .github/plx-mc-routing-manifest.json, .plx/mc-routing.json (3 files).
-#   --workflows-only: all 3 workflows (mc-routing-metadata.yml,
-#     plx-mc-compliance.yml, compliance-gate-drift.yml) under .github/workflows/,
-#     scripts/compliance-pr-verify.mjs, scripts/compliance-checkout.mjs (5 files).
+#   --workflows-only: .github/workflows/mc-routing-metadata.yml,
+#     scripts/compliance-pr-verify.mjs, scripts/compliance-checkout.mjs (3 files).
+#     No compliance gate copy: the gate is org-required in every repo (D4).
 #   Full, all tiers: workflows-only outputs + both routing manifests above
-#     + docs/GOVERNANCE.md (8 files). Hub skips only CONTRIBUTING.md;
+#     + docs/GOVERNANCE.md (6 files). Hub skips only CONTRIBUTING.md;
 #     product_app, product_platform, skills, tooling, sandbox also overwrite
-#     CONTRIBUTING.md (9 files); tier changes its content, not the file set.
+#     CONTRIBUTING.md (7 files); tier changes its content, not the file set.
 # Creates parent directories; attempts chmod +x on both copied helper scripts.
 # Reads source git HEAD, registry and pilot descriptors; no git writes,
 # network calls or registry writes. Full scaffold may leave partial files on
@@ -26,7 +26,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # (cd + git rather than `git -C`: native Windows git cannot parse MSYS /c/... paths)
-GEN_SHA="$(cd "$ROOT" && git rev-parse HEAD)"
 WORKFLOWS_ONLY=0
 ROUTING_ONLY=0
 
@@ -176,18 +175,9 @@ fi
 WF_DIR="$TARGET/.github/workflows"
 mkdir -p "$WF_DIR"
 
-echo "==> Emitting plx-mc-compliance.yml (GEN_SHA=$GEN_SHA)"
-"${PYTHON[@]}" "$ROOT_NATIVE/scripts/generate-compliance-gate.py" --emit downstream \
-  > "$WF_DIR/plx-mc-compliance.yml"
-
 echo "==> Emitting mc-routing-metadata.yml"
 "${PYTHON[@]}" "$ROOT_NATIVE/scripts/generate-routing-workflow.py" --emit \
   > "$WF_DIR/mc-routing-metadata.yml"
-
-echo "==> Writing compliance-gate-drift.yml"
-sed "s/{{GEN_SHA}}/$GEN_SHA/g" \
-  "$ROOT_NATIVE/docs/templates/compliance-gate-drift.yml.tpl" \
-  > "$WF_DIR/compliance-gate-drift.yml"
 
 echo "==> Copying compliance-pr-verify.mjs + compliance-checkout.mjs"
 mkdir -p "$TARGET/scripts"
@@ -288,9 +278,7 @@ PY
 
 echo "==> Wrote $CONTRIB_PATH"
 echo "==> Wrote $GOV_DIR/GOVERNANCE.md"
-echo "==> Wrote $WF_DIR/plx-mc-compliance.yml"
 echo "==> Wrote $WF_DIR/mc-routing-metadata.yml"
-echo "==> Wrote $WF_DIR/compliance-gate-drift.yml"
 echo "==> Wrote $ROUTING_MANIFEST"
 echo "==> Wrote $TARGET/.plx/mc-routing.json"
 echo ""

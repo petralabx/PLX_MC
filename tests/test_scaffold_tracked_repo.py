@@ -201,9 +201,7 @@ def test_full_scaffold_also_emits_local_routing_manifest(tmp_path: Path):
 
 
 WORKFLOW_FILES = {
-    ".github/workflows/plx-mc-compliance.yml",
     ".github/workflows/mc-routing-metadata.yml",
-    ".github/workflows/compliance-gate-drift.yml",
     "scripts/compliance-pr-verify.mjs",
     "scripts/compliance-checkout.mjs",
 }
@@ -277,7 +275,7 @@ def test_full_non_hub_scaffold_exact_file_contract(
 )
 def test_sandbox_scaffold_current_file_contract(tmp_path: Path, mode: str | None):
     # The registered sandbox has no routing pilot: full mode fails after the
-    # first five writes, whereas workflows-only returns successfully earlier.
+    # first three writes, whereas workflows-only returns successfully earlier.
     result = _run_full(
         tmp_path,
         repo="petralabx/test-perms-check",
@@ -309,4 +307,4 @@ def test_scaffold_help_describes_hub_and_restricted_modes():
     assert "Hub skips only CONTRIBUTING.md" in result.stdout
     assert "--routing-only:" in result.stdout
     assert "--workflows-only:" in result.stdout
-    assert "scripts/compliance-checkout.mjs (5 files)" in result.stdout
+    assert "scripts/compliance-checkout.mjs (3 files)" in result.stdout

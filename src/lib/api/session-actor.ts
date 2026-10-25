@@ -15,6 +15,7 @@ import {
 } from "@/lib/permissions";
 import { authorizeStaged, recordUnresolvedActorDenial } from "@/lib/permissions/enforcement";
 import { findMcUserByEntraOid } from "@/lib/permissions/repository";
+import { requireSessionActor } from "@/lib/routing/mutations/actors";
 
 import { ApiError } from "./route";
 
@@ -102,6 +103,16 @@ export async function requireRepoApprover(
 // Dormant (no-OIDC) local/test mode has no session provider, so no viewer can
 // be read from a session: the hub operator stands in — explicitly, only there.
 export const DORMANT_OPERATOR_ID = OPERATOR_ID;
+
+// Whose personal settings a request reads and writes (stars, TASK-3842; the
+// navigation switch, TASK-3855): the session's Entra object id, which survives
+// an email or directory change. Anyone who can read Mission Control
+// (task.read) keeps their own, and the body never names the person. Dormant
+// mode has no session, so the operator stands in, as in resolveViewer.
+export async function sessionPersonId(): Promise<string> {
+  if (!oidcEnabled()) return DORMANT_OPERATOR_ID;
+  return (await requireSessionActor("task.read")).actorId;
+}
 
 // A signed-in person who is not in the directory (HUMANS) is shown as
 // themselves: id = the normalized email (no directory id contains "@", so it

@@ -22,17 +22,14 @@ Canonical inputs (all in this repo — the SSOT):
 | Fleet registry | `config/tracked-repos-registry.json` |
 | Scaffold script | `scripts/scaffold-tracked-repo.sh` |
 | CONTRIBUTING stub | `docs/templates/CONTRIBUTING.repo-stub.md` |
-| Drift-check template | `docs/templates/compliance-gate-drift.yml.tpl` |
 | Org CI process (L0–L3) | `docs/runbooks/CI-PIPELINE.md` |
 
 Consumer repos get thin layers only — **never copy the contract**:
 
 - `docs/GOVERNANCE.md` — pointer to PLX_MC (no duplicated rules)
 - `CONTRIBUTING.md` — branch / deploy / validation specifics only
-- `.github/workflows/plx-mc-compliance.yml` — generated from
-  `scripts/generate-compliance-gate.py --emit downstream`
-- `.github/workflows/compliance-gate-drift.yml` — pins the generator SHA and
-  fails CI if the committed gate drifts from the PLX_MC source
+- no compliance gate copy: the gate is the org-required workflow from PLX_MC
+  in every repo (decision D4, TASK-3902)
 - `.github/workflows/mc-routing-metadata.yml` — generated metadata-only routing
 - `.github/plx-mc-routing-manifest.json` — copied routing declaration/digest
 - `.plx/mc-routing.json` — minimal non-authoritative local routing declaration
@@ -44,11 +41,9 @@ Consumer repos get thin layers only — **never copy the contract**:
 Each **write** creates or unconditionally overwrites the named file; **skip**
 leaves an existing file untouched. These sets describe successful runs:
 
-| Target-relative file | `--routing-only` (3) | `--workflows-only` (5) | Full `hub` (8) | Full other tiers (9) |
+| Target-relative file | `--routing-only` (3) | `--workflows-only` (3) | Full `hub` (6) | Full other tiers (7) |
 |---|---|---|---|---|
 | `.github/workflows/mc-routing-metadata.yml` | write | write | write | write |
-| `.github/workflows/plx-mc-compliance.yml` | skip | write | write | write |
-| `.github/workflows/compliance-gate-drift.yml` | skip | write | write | write |
 | `scripts/compliance-pr-verify.mjs` | skip | write | write | write |
 | `scripts/compliance-checkout.mjs` | skip | write | write | write |
 | `.github/plx-mc-routing-manifest.json` | write | skip | write | write |
@@ -57,15 +52,14 @@ leaves an existing file untouched. These sets describe successful runs:
 | `CONTRIBUTING.md` | skip | skip | skip | write |
 
 Other full tiers are `product_app`, `product_platform`, `skills`, `tooling`,
-and `sandbox`; they share the nine-file set, with tier-specific CONTRIBUTING
-content. **Hub full scaffold is not a no-op**: it writes eight files before
+and `sandbox`; they share the seven-file set, with tier-specific CONTRIBUTING
+content. **Hub full scaffold is not a no-op**: it writes six files before
 exiting the tier switch, skipping only CONTRIBUTING. Both restricted modes
 return before the tier switch, so their file sets are the same for every
 eligible tier. The two mode flags are mutually exclusive.
 
 The script creates missing parent directories and attempts `chmod +x` on the
-two copied helper scripts (chmod failures are ignored). All modes read the
-source clone's git HEAD; the drift workflow embeds it as `GEN_SHA`. There is
+two copied helper scripts (chmod failures are ignored). There is
 no target git initialization, commit, push, network call, GitHub operation,
 registry write or pilot-descriptor write. Generated workflows and copied
 helpers can call external services when subsequently run; scaffolding only
@@ -79,8 +73,8 @@ writes the five workflows-only files first (and creates `docs/`) before this
 validation, so a failed run can leave partial output. Workflows-only does not
 validate registry/pilot entries and does not write either routing manifest.
 The current registered sandbox has no pilot descriptor: its full scaffold
-fails after the first five writes, while workflows-only succeeds. A successful
-sandbox full run would use the nine-file non-hub set.
+fails after the first three writes, while workflows-only succeeds. A successful
+sandbox full run would use the seven-file non-hub set.
 The target must already be a directory. No files are removed; unrelated files
 are untouched. Review existing target files before running any mode.
 
@@ -247,18 +241,15 @@ From a PLX_MC clone root, with the target repo cloned locally:
   --routing-only
 ```
 
-- `--workflows-only` overwrites three workflows and both helper scripts (five
-  files); it skips governance, CONTRIBUTING and both routing manifests.
+- `--workflows-only` overwrites the routing workflow and both helper scripts
+  (three files); it skips governance, CONTRIBUTING and both routing manifests.
 - `--routing-only` validates the repo is active/non-sandbox, tier and branch
   match the registry, and one enabled/fuzzy-off pilot descriptor exists. It is
   idempotent and writes only the three routing files.
 - Full normal scaffold also writes `.plx/mc-routing.json`. Its empty
   `path_rules` are non-authoritative and not consumed by the current runtime.
-- The script embeds the current PLX_MC HEAD SHA as `GEN_SHA` in the drift
-  check. Commit from a PLX_MC checkout that is on `main` (or the merged hub
-  commit) so the pinned SHA is fetchable from GitHub raw.
 - **Hub warning:** full `--tier hub` is not a no-op. Before its tier switch exits,
-  it overwrites the three generated workflows, both helper scripts, both routing
+  it overwrites the generated routing workflow, both helper scripts, both routing
   manifests, and `docs/GOVERNANCE.md`; it only skips `CONTRIBUTING.md`. Do not use full scaffold
   against PLX_MC. Hub governance uses the central files directly; for a hub
   routing-artifact refresh, use validated `--routing-only`.
@@ -380,10 +371,6 @@ outside the fleet.
 
 ## Troubleshooting
 
-- **`drift` check fails on the consumer repo** — the committed
-  `plx-mc-compliance.yml` no longer matches the pinned generator. Re-run the
-  scaffold with `--workflows-only` from current PLX_MC `main`, or bump
-  `GEN_SHA` if the generator changed intentionally.
 - **Gate startup-fails calling a reusable workflow** — expected; that's why
   the gate is a generated self-contained copy, not a `workflow_call` (private
   repo → public reusable with `secrets: inherit` startup-fails).

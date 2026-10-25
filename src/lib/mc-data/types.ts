@@ -189,8 +189,10 @@ export interface Bucket extends ArchiveFields {
 export interface PullRequest {
   repo: string;
   num: number;
-  status: "open" | "merged" | "closed";
+  status: "open" | "draft" | "merged" | "closed";
   title: string;
+  /** Branch a merged PR went into; only a merge into the repo's integration branch promotes (TASK-3797). */
+  base?: string;
 }
 
 // Sub-task status (EN-001 / WS-3 medium depth). `done` stays the canonical
@@ -311,6 +313,11 @@ export interface Task {
   // while any gate is pending, and a human other than the requester must decide
   // it (TASK-630 separation of duties). DB-only; no SharePoint column.
   approvalGates?: ApprovalGate[];
+  // Creator-principal approval gate (TASK-3530): set at create time when a
+  // gated principal (permissions/grants.ts) creates the task. While pending,
+  // the task cannot be checked out, launched or moved into progress. Only the
+  // creator-approval action clears it. DB-only; no SharePoint column.
+  creatorApproval?: CreatorApproval;
   // Questions a bot asks one named person (TASK-3567). Unlike a gate, an open
   // question never freezes the stage. DB-only; no SharePoint column.
   questions?: TaskQuestion[];
@@ -331,7 +338,8 @@ export interface Task {
   evidence?: Evidence;
   blocked?: boolean;
   blockedReason?: string;
-  merge?: { sha: string; on: string };
+  /** `held`: the merge reached the integration branch while another PR was open (TASK-3797). */
+  merge?: { sha: string; on: string; held?: boolean };
   // ISO-8601 first entry into a terminal stage. Read-only: merged in from
   // entities.completed_at on read, never stored in the jsonb payload (TASK-2528).
   completedAt?: string;
@@ -339,6 +347,17 @@ export interface Task {
   // entities.cancellation on read, never stored in the jsonb payload; null/absent unless stage is cancelled.
   cancellation?: Cancellation;
   userCreated?: boolean;
+}
+
+export interface CreatorApproval {
+  /** The gated service principal that created the task. */
+  principal: string;
+  status: "pending" | "approved";
+  requestedAt: string;
+  /** Approver audit label and Entra object id, set on approval. */
+  approvedBy?: string;
+  approvedByOid?: string;
+  approvedAt?: string;
 }
 
 // ─── Runtime approval gates (TASK-629/630) ───────────────────────────────────

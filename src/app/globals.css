@@ -25,6 +25,7 @@
 @import "../styles/mc-dashboard.css" layer(mc.screens);
 @import "../styles/mc-goals.css" layer(mc.screens);
 @import "../styles/mc-initiative.css" layer(mc.screens);
+@import "../styles/mc-projects.css" layer(mc.screens);
 
 * {
   box-sizing: border-box;

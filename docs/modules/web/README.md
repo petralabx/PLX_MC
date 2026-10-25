@@ -57,8 +57,12 @@ Engineering). It is 248px wide, with 28px rows for a mouse and 44px on touch.
 Its items, URLs, badges and flags are the default sidebar's (`ZONED_NAV_GROUPS`
 and `ADMIN_FLYOUT` in `nav-model.ts`). `NEXT_PUBLIC_PLX_MC_NAV_ZONES=1` turns
 it on for a build; localStorage `mc.nav.zones` = "1" turns it on for one
-browser (`nav-zones.ts`). Phone tabs and ⌘K keep the default groups until
-TASK-3843. Plan nests each initiative under its project (TASK-3841): the
+browser (`nav-zones.ts`). Plan's Board, List and Timeline share one All work
+row, lit on each view, and the views stay tabs on that screen with their URLs
+and g b, g l and g t keys (TASK-3843). The phone tabs are Home, My tasks,
+Projects, Search (⌘K) and More; More holds Reporting, Knowledge, Admin &
+health's sections and Help. ⌘K keeps the default groups. Plan nests each
+initiative under its project (TASK-3841): the
 viewer's projects first, at most six rows (the current project always shows),
 then View all, which opens the Projects page (`projects`). That page lists
 every open project with its initiatives, and No project for the rest. In the
@@ -142,7 +146,7 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/chrome.tsx` — Sidebar (drawer · rail · sidebar), nav counts, offline banner, toasts
 - `src/components/mc/top-bar.tsx` — top bar (slots per tier, workspace label or the zoned PLX app switcher, sync pill)
 - `src/components/mc/use-flyout.ts` — a shell control's flyout: top-layer popover, placement, Esc, close on blur, navigating or resize
-- `src/components/mc/bottom-tabs.tsx` — phone tabs (with tab memory), group strip, New-task FAB
+- `src/components/mc/bottom-tabs.tsx` — phone tabs (with tab memory; the zoned set when the flag is on), group strip, New-task FAB
 - `src/components/mc/more-sheet.tsx` — phone More sheet (Admin & health, All screens, appearance)
 - `src/components/mc/context-pane.tsx` — context pane (page <641, overlay <1600, resizable column ≥1600) + live column
 - `src/components/mc/use-layer.ts` — layer stack: Esc (topmost only), focus in/back, Tab wrap, scroll lock

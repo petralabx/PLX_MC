@@ -125,8 +125,8 @@ export function MissionControlShell() {
   // Each phone tab remembers the last screen it showed — only once the URL has
   // been adopted (`ready`), so the pre-adoption "home" render never overwrites it.
   useEffect(() => {
-    if (ready) rememberTabScreen(route.screen);
-  }, [ready, route.screen]);
+    if (ready) rememberTabScreen(route.screen, navZones);
+  }, [ready, route.screen, navZones]);
 
   // The latest route and pane preference, for nav() to read at click time
   // without re-creating nav (every screen receives it).
@@ -459,6 +459,8 @@ export function MissionControlShell() {
         moreOpen={moreOpen}
         onMore={() => setMoreOpen((open) => !open)}
         moreRef={moreRef}
+        searchOpen={paletteOpen}
+        onSearch={openPalette}
       />
       <MoreSheet
         open={moreOpen}

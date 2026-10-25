@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CommandPalette } from "@/components/mc/command-palette";
 import {
   ADMIN_FLYOUT,
+  ALL_WORK_NAV_ITEM,
   GROUP_TAB,
   HELP_NAV_ITEM,
   NAV_GROUPS,
@@ -16,9 +17,13 @@ import {
   PROJECTS_NAV_ITEM,
   PROJECT_TREE_CAP,
   ZONED_NAV_GROUPS,
+  ZONED_NAV_TABS,
   createNavGroupState,
   createTabMemory,
+  createZonedTabMemory,
+  isNavItemCurrent,
   isPaneScreen,
+  navItemTarget,
   isPlainLeftClick,
   isScreen,
   navCommands,
@@ -35,6 +40,8 @@ import {
   visibleNavGroups,
   visibleZonedNavGroups,
   zonedNavPlaceOf,
+  zonedTabOf,
+  zonedTabScreens,
   type NavFlags,
 } from "@/components/mc/nav-model";
 import { SCREEN_VALUES, type Screen } from "@/components/mc/route";
@@ -149,7 +156,9 @@ describe("zoned sidebar model", () => {
   it("reads My work, Plan, Reporting, then a collapsible Knowledge", () => {
     expect(ZONED_NAV_GROUPS.map((g) => g.label)).toEqual(["My work", "Plan", "Reporting", "Knowledge"]);
     expect(zonedScreensOf(OFF, "my-work")).toEqual(["home", "mine", "approvals"]);
-    expect(zonedScreensOf(OFF, "plan")).toEqual(["board", "list", "timeline", "projects"]);
+    // Board, List and Timeline share the All work row (TASK-3843).
+    expect(zonedScreensOf(OFF, "plan")).toEqual(["board", "projects"]);
+    expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.items[0]).toBe(ALL_WORK_NAV_ITEM);
     expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.lists).toEqual(["project-tree"]);
     expect(zonedScreensOf(OFF, "reporting")).toEqual(["dashboard", "insights", "goals", "ai-spend"]);
     expect(zonedScreensOf(OFF, "knowledge")).toEqual(["brain-ask", "governance-sops", "skills-directory", "architecture"]);
@@ -171,7 +180,7 @@ describe("zoned sidebar model", () => {
 
   it("places every sidebar screen exactly once: in a zone, the flyout, or the footer's Help", () => {
     const placed = [
-      ...visibleZonedNavGroups(ON).flatMap((g) => g.items.map((i) => i.screen)),
+      ...visibleZonedNavGroups(ON).flatMap((g) => g.items.flatMap((i) => [i.screen, ...(i.also ?? [])])),
       ...visibleAdminFlyout(ON).flatMap((section) => section.items.map((i) => i.screen)),
       HELP_NAV_ITEM.screen,
     ];
@@ -185,8 +194,15 @@ describe("zoned sidebar model", () => {
     const classic = new Map(NAV_GROUPS.flatMap((g) => g.items).map((i) => [i.screen, i]));
     const zoned = [...ZONED_NAV_GROUPS.flatMap((g) => g.items), ...ADMIN_FLYOUT.flatMap((s) => s.items), HELP_NAV_ITEM];
     expect(zoned.filter((item) => !classic.has(item.screen))).toEqual([PROJECTS_NAV_ITEM]);
+    // All work is Board's item, renamed, standing for List and Timeline too (TASK-3843).
+    expect(ALL_WORK_NAV_ITEM).toEqual({
+      ...classic.get("board"),
+      label: "All work",
+      hint: "board, list and timeline",
+      also: ["list", "timeline"],
+    });
     const renamed: Record<string, string> = {};
-    for (const item of zoned.filter((i) => classic.has(i.screen))) {
+    for (const item of zoned.filter((i) => classic.has(i.screen) && i !== ALL_WORK_NAV_ITEM)) {
       const { label, ...rest } = classic.get(item.screen)!;
       const { label: zonedLabel, ...zonedRest } = item;
       expect(zonedRest, item.screen).toEqual(rest);
@@ -206,10 +222,72 @@ describe("zoned sidebar model", () => {
     expect(zonedNavPlaceOf("task")).toBeNull();
   });
 
-  it("leaves the phone tabs and the palette on the classic groups (TASK-3843)", () => {
+  it("leaves the classic phone tabs and the palette on the classic groups", () => {
     expect(tabScreens("plan", OFF).map((i) => i.screen)).toEqual(["board", "list", "timeline", "insights"]);
     expect(tabOf("dashboard")).toBe("my-work");
     expect(navCommands(OFF).map((c) => c.label)).toContain("Go to SharePoint sync issues");
+  });
+});
+
+// TASK-3843 — the zoned shell's phone tabs, strip and tab memory.
+describe("zoned phone tabs", () => {
+  it("reads Home, My tasks, Projects, Search and More; Search and More open a dialog, not a screen", () => {
+    expect(ZONED_NAV_TABS.map((t) => t.label)).toEqual(["Home", "My tasks", "Projects", "Search", "More"]);
+    expect(ZONED_NAV_TABS.filter((t) => t.home).map((t) => t.home)).toEqual(["home", "mine", "projects"]);
+    expect(ZONED_NAV_TABS.filter((t) => t.badge).map((t) => [t.id, t.badge])).toEqual([
+      ["home", "needs"],
+      ["more", "sync"],
+    ]);
+  });
+
+  it("puts every screen under one tab: Approvals with Home, Plan and its detail screens with Projects", () => {
+    const byTab: Record<string, Screen[]> = {};
+    for (const screen of SCREEN_VALUES) (byTab[zonedTabOf(screen)] ??= []).push(screen);
+    expect(byTab.home).toEqual(["home", "approvals"]);
+    expect(byTab.mine).toEqual(["mine"]);
+    expect([...byTab.projects].sort()).toEqual(["board", "bucket", "list", "project", "projects", "task", "timeline"]);
+    expect(byTab.search).toBeUndefined();
+    expect(byTab.more).toHaveLength(SCREEN_VALUES.length - 10);
+    for (const screen of ["dashboard", "brain-ask", "repos", "sync", "help"] as const) expect(byTab.more).toContain(screen);
+  });
+
+  it("lights All work for Board, List and Timeline, in the sidebar and in the strip", () => {
+    for (const screen of ["board", "list", "timeline"] as const) {
+      expect(isNavItemCurrent(ALL_WORK_NAV_ITEM, screen)).toBe(true);
+      expect(zonedNavPlaceOf(screen)).toBe("plan");
+    }
+    expect(isNavItemCurrent(ALL_WORK_NAV_ITEM, "projects")).toBe(false);
+    // Lit, it keeps the view; elsewhere it opens Board.
+    expect(navItemTarget(ALL_WORK_NAV_ITEM, "timeline")).toBe("timeline");
+    expect(navItemTarget(ALL_WORK_NAV_ITEM, "projects")).toBe("board");
+    // The phone title follows the row: All work, zoned; the view's name, classic.
+    expect(screenTitle("list", true)).toBe("All work");
+    expect(screenTitle("list")).toBe("List");
+    expect(screenTitle("dashboard", true)).toBe("Dashboard");
+    expect(zonedTabScreens("home", OFF).map((i) => i.screen)).toEqual(["home", "approvals"]);
+    expect(zonedTabScreens("projects", OFF).map((i) => i.label)).toEqual(["All work", "Projects"]);
+    for (const tab of ["mine", "search", "more"] as const) expect(zonedTabScreens(tab, OFF)).toEqual([]);
+  });
+
+  it("remembers each zoned tab's last screen, the Projects page included, never a detail screen", () => {
+    const data = new Map<string, string>();
+    const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+    const memory = createZonedTabMemory(() => storage);
+    memory.remember("timeline");
+    expect(memory.last("projects")).toBe("timeline");
+    memory.remember("projects");
+    memory.remember("task");
+    memory.remember("project");
+    memory.remember("bucket");
+    expect(memory.last("projects")).toBe("projects");
+    memory.remember("approvals");
+    expect(memory.last("home")).toBe("approvals");
+    memory.remember("dashboard");
+    expect(memory.last("more")).toBeUndefined();
+    // Its own keys: the classic tabs' memory is untouched.
+    expect([...data.keys()].sort()).toEqual(["mc.tab.home.last", "mc.tab.projects.last"]);
+    expect(createZonedTabMemory(() => storage).last("projects")).toBe("projects");
+    expect(createTabMemory(() => storage).last("plan")).toBeUndefined();
   });
 });
 

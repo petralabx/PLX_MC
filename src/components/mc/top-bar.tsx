@@ -214,7 +214,7 @@ export function Topbar({
           <span>PLX Engineering</span>
         </span>
       )}
-      <span className="title">{screenTitle(route.screen)}</span>
+      <span className="title">{screenTitle(route.screen, zoned)}</span>
       <div className="r">
         <button type="button" className="search" onClick={onOpenPalette}>
           <Search className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />

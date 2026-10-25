@@ -141,6 +141,18 @@ describe("Sidebar — zoned", () => {
     expect(html).toContain('href="/?screen=help" class="item" title="Help and shortcuts"');
   });
 
+  // TASK-3843: one All work row for Board, List and Timeline.
+  it("shows one All work row, lit on Board, List and Timeline, each at its own URL", () => {
+    for (const screen of ["board", "list", "timeline"] as const) {
+      const html = nav(render({ screen }));
+      // Lit, it stays on the view: a click never swaps List for Board.
+      expect(html).toContain(`href="/?screen=${screen}" class="item active" aria-current="page" title="All work"`);
+      expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+      expect(html).not.toMatch(/title="(Board|List|Timeline)"/);
+    }
+    expect(nav(render({ screen: "projects" }))).toContain('href="/?screen=board" class="item" title="All work"');
+  });
+
   it("collapses Knowledge by default behind a disclosure button", () => {
     const html = render({ screen: "home" });
     expect(html).toContain('id="mc-nav-h-knowledge" aria-expanded="false" aria-controls="mc-nav-knowledge"');

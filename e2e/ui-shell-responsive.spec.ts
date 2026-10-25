@@ -783,7 +783,7 @@ test.describe("shell — zoned sidebar", () => {
       /^AI spend/,
     ]);
     // Rows are 28px for a mouse (ADR-011).
-    expect(Math.round((await nav.getByRole("link", { name: "Board", exact: true }).boundingBox())!.height)).toBe(28);
+    expect(Math.round((await nav.getByRole("link", { name: "All work", exact: true }).boundingBox())!.height)).toBe(28);
     // The list scrolls under a footer that stays put.
     expect(await nav.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
     for (const scrollTop of [0, 10_000]) {
@@ -972,6 +972,86 @@ test.describe("shell — zoned sidebar", () => {
       await openSidebar(page, "UAT");
       await expect(page.getByTestId("bucket-kicker"), `@ ${width}`).toContainText("Initiative · BKT-UAT");
     }
+  });
+
+  // TASK-3843: one All work row, and the zoned phone tabs.
+  test("1440: All work is one row, lit on each view, and g b, g l and g t still switch views", async ({ page }) => {
+    await open(page, 1440, "/?screen=list");
+    const allWork = side(page).getByRole("link", { name: "All work", exact: true });
+    await expect(allWork).toHaveAttribute("aria-current", "page");
+    // Lit, it stays on the view it is lit for.
+    await expect(allWork).toHaveAttribute("href", "/?screen=list");
+    for (const label of ["Board", "List", "Timeline"]) {
+      await expect(side(page).getByRole("link", { name: label, exact: true })).toHaveCount(0);
+    }
+    const views = page.locator(".mc-main .vsw");
+    await expect(views.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+    for (const [key, view] of [["t", "timeline"], ["b", "board"], ["l", "list"]] as const) {
+      await page.locator("body").press("g");
+      await page.locator("body").press(key);
+      await expect(page.locator(`[data-testid='board-screen'][data-mc-view='${view}']`)).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`screen=${view}`));
+      await expect(allWork).toHaveAttribute("aria-current", "page");
+      await expect(allWork).toHaveAttribute("href", `/?screen=${view}`);
+    }
+  });
+
+  test("393: the tabs are Home, My tasks, Projects, Search and More; Search opens ⌘K", async ({ page }) => {
+    await open(page, 393, "/?screen=board");
+    const tabs = page.locator("nav.mc-tabs");
+    await expect(tabs.locator("a, button")).toHaveText([/^Home/, /^My tasks/, /^Projects/, /^Search/, /^More/]);
+    // One row of five equal tabs, each inside the viewport, each 44px or more.
+    const boxes = await tabs.locator("a, button").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()));
+    const view = page.viewportSize()!;
+    for (const box of boxes) {
+      expect(box.top).toBe(boxes[0].top);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(view.width);
+      expect(box.bottom).toBeLessThanOrEqual(view.height);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(Math.round(box.width)).toBe(Math.round(boxes[0].width));
+    }
+    await expect(tabs.getByRole("link", { name: /^Projects/ })).toHaveAttribute("aria-current", "page");
+    // Under Projects: All work and Projects, with All work lit on any view.
+    const strip = page.getByRole("navigation", { name: "Projects screens" });
+    await expect(strip.getByRole("link")).toHaveText(["All work", "Projects"]);
+    await expect(strip.getByRole("link", { name: "All work" })).toHaveAttribute("aria-current", "page");
+    await tabs.getByRole("button", { name: "Search" }).click();
+    await expect(page.getByLabel("Command palette search")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByLabel("Command palette search")).toHaveCount(0);
+  });
+
+  test("393: each zoned tab returns to its last screen", async ({ page }) => {
+    await open(page, 393, "/?screen=board");
+    await page.locator(".mc-main .vsw").getByRole("button", { name: "Timeline" }).click();
+    await expect(page.locator("[data-testid='board-screen'][data-mc-view='timeline']")).toBeVisible();
+    const tabs = page.locator("nav.mc-tabs");
+    await tabs.getByRole("link", { name: /^Home/ }).press("Enter");
+    await expect(page.locator("[data-testid='inbox-screen']")).toBeVisible();
+    await expect(tabs.getByRole("link", { name: /^Projects/ })).toHaveAttribute("href", "/?screen=timeline");
+    await tabs.getByRole("link", { name: /^Projects/ }).press("Enter");
+    await expect(page.locator("[data-testid='board-screen'][data-mc-view='timeline']")).toBeVisible();
+  });
+
+  test("393: More holds Reporting, Knowledge, Admin & health and Help", async ({ page }) => {
+    await open(page, 393, "/?screen=home");
+    await page.locator("nav.mc-tabs").getByRole("button", { name: "More" }).click();
+    const sheet = page.getByRole("dialog", { name: "More" });
+    await expect(sheet.locator(".grp-h")).toHaveText([
+      "Reporting",
+      "Knowledge",
+      "Operations",
+      "Sync and data",
+      "Engineering",
+      "Help",
+      "Navigate",
+      "Appearance",
+    ]);
+    await sheet.getByRole("link", { name: "Ask the Brain" }).click();
+    await expect(sheet).toHaveCount(0);
+    await expect(page).toHaveURL(/screen=brain-ask/);
+    await expect(page.locator("nav.mc-tabs").getByRole("button", { name: "More" })).toHaveClass(/\bon\b/);
   });
 
   // TASK-3844: the workspace label is the PLX app switcher.

@@ -26,7 +26,7 @@ export type NavIconName =
   | "House" | "LayoutDashboard" | "CircleUser" | "SquareCheck" | "SquareKanban" | "List" | "CalendarRange" | "ChartPie"
   | "BookOpen" | "ClipboardList" | "Wrench" | "Network" | "CircleHelp" | "GitBranch" | "Activity"
   | "File" | "RefreshCw" | "FileText" | "CircleDollarSign" | "Grid3x3" | "Radio" | "Inbox" | "Route"
-  | "Target" | "Ellipsis" | "Settings" | "FolderKanban";
+  | "Target" | "Ellipsis" | "Settings" | "FolderKanban" | "Search";
 
 export interface NavItem {
   screen: Screen;
@@ -41,6 +41,18 @@ export interface NavItem {
   flag?: NavFlag;
   /** Extra ⌘K entries that land on the same screen (search synonyms). */
   aliases?: { label: string; hint: string }[];
+  /** Other screens this row stands for, lit on them too (All work: List, Timeline). */
+  also?: readonly Screen[];
+}
+
+/** Whether a nav row is the current one for a screen: its own, or one it stands for. */
+export function isNavItemCurrent(item: NavItem, screen: Screen): boolean {
+  return item.screen === screen || (item.also?.includes(screen) ?? false);
+}
+
+/** Where a nav row goes: its screen, or, when lit for another (List under All work), that one. */
+export function navItemTarget(item: NavItem, screen: Screen): Screen {
+  return isNavItemCurrent(item, screen) ? screen : item.screen;
 }
 
 export interface NavGroup {
@@ -150,7 +162,8 @@ export function visibleNavGroups(flags: NavFlags): NavGroup[] {
 // (portal ADR-011): personal items first, then Plan, Reporting and Knowledge,
 // with system tools in a footer flyout. Every row is a NAV_GROUPS item, so the
 // screens, hrefs, badges and flags are identical; only where they sit (and two
-// labels) change. Phone tabs and ⌘K keep NAV_GROUPS until TASK-3843.
+// labels) change, and Board, List and Timeline share one All work row
+// (TASK-3843). The phone tabs follow them (ZONED_NAV_TABS); ⌘K keeps NAV_GROUPS.
 
 const NAV_ITEM_BY_SCREEN = new Map(NAV_GROUPS.flatMap((group) => group.items).map((item) => [item.screen, item]));
 
@@ -169,12 +182,23 @@ export const PROJECTS_NAV_ITEM: NavItem = {
   hint: "every project and its initiatives",
 };
 
+/**
+ * Board, List and Timeline as one row (TASK-3843): the views are tabs on the
+ * screen, and each keeps its URL and its g b, g l or g t key.
+ */
+export const ALL_WORK_NAV_ITEM: NavItem = {
+  ...navItem("board"),
+  label: "All work",
+  hint: "board, list and timeline",
+  also: ["list", "timeline"],
+};
+
 export const ZONED_NAV_GROUPS: readonly NavGroup[] = [
   { id: "my-work", label: "My work", items: [navItem("home"), navItem("mine"), navItem("approvals")] },
   {
     id: "plan",
     label: "Plan",
-    items: [navItem("board"), navItem("list"), navItem("timeline"), PROJECTS_NAV_ITEM],
+    items: [ALL_WORK_NAV_ITEM, PROJECTS_NAV_ITEM],
     lists: ["project-tree"],
   },
   {
@@ -227,7 +251,7 @@ export function visibleAdminFlyout(flags: NavFlags): NavFlyoutSection[] {
 /** Where a screen sits in the zoned sidebar: a group, the flyout, help, or nowhere (detail screens). */
 export function zonedNavPlaceOf(screen: Screen): NavGroupId | "admin" | "help" | null {
   if (screen === HELP_NAV_ITEM.screen) return "help";
-  const group = ZONED_NAV_GROUPS.find((g) => g.items.some((i) => i.screen === screen));
+  const group = ZONED_NAV_GROUPS.find((g) => g.items.some((i) => isNavItemCurrent(i, screen)));
   if (group) return group.id;
   return ADMIN_FLYOUT.some((section) => section.items.some((i) => i.screen === screen)) ? "admin" : null;
 }
@@ -379,7 +403,7 @@ export function navCommands(flags: NavFlags): NavCommand[] {
 // Four bottom tabs; Reporting and Admin & health live behind "More". Detail
 // screens (task / bucket / project) belong to Plan, the tab they open from.
 
-export type NavTabId = "my-work" | "plan" | "knowledge" | "more";
+export type NavTabId = "my-work" | "plan" | "knowledge" | "more" | "home" | "mine" | "projects" | "search";
 
 export interface NavTab {
   id: NavTabId;
@@ -428,8 +452,39 @@ export function tabScreens(tab: NavTabId, flags: NavFlags): NavItem[] {
   return visibleNavGroups(flags).find((group) => GROUP_TAB[group.id] === tab)?.items ?? [];
 }
 
-/** The phone top-bar title: the nav label, or the detail screen's noun. */
-export function screenTitle(screen: Screen): string {
+// The zoned shell's phone tabs (TASK-3843): Home, My tasks, Projects, Search
+// and More. Search opens ⌘K; More's sheet holds Reporting, Knowledge, Admin &
+// health and Help.
+export const ZONED_NAV_TABS: readonly NavTab[] = [
+  { id: "home", label: "Home", lucide: "House", home: "home", badge: "needs" },
+  { id: "mine", label: "My tasks", lucide: "CircleUser", home: "mine" },
+  { id: "projects", label: "Projects", lucide: "FolderKanban", home: "projects" },
+  { id: "search", label: "Search", lucide: "Search" },
+  { id: "more", label: "More", lucide: "Ellipsis", badge: "sync" },
+];
+
+// The zoned tabs' screens, in one place: My work's screens have tabs of their
+// own (Approvals goes with Home), Plan and its detail screens go with
+// Projects, and every other screen with More.
+const ZONED_SCREEN_TAB: Partial<Record<Screen, NavTabId>> = { home: "home", approvals: "home", mine: "mine" };
+
+/** The zoned tab a screen lives under: Approvals with Home, all of Plan and its detail screens with Projects. */
+export function zonedTabOf(screen: Screen): NavTabId {
+  const tab = ZONED_SCREEN_TAB[screen];
+  if (tab) return tab;
+  return zonedNavPlaceOf(screen) === "plan" || DETAIL_TAB[screen] ? "projects" : "more";
+}
+
+/** The zoned phone strip: a tab's screens when it has two or more (Home and Approvals; All work and Projects). */
+export function zonedTabScreens(tab: NavTabId, flags: NavFlags): NavItem[] {
+  if (tab === "more") return [];
+  const items = visibleZonedNavGroups(flags).flatMap((group) => group.items.filter((item) => zonedTabOf(item.screen) === tab));
+  return items.length > 1 ? items : [];
+}
+
+/** The phone top-bar title: the nav label, or the detail screen's noun. Zoned, the views read All work. */
+export function screenTitle(screen: Screen, zoned = false): string {
+  if (zoned && isNavItemCurrent(ALL_WORK_NAV_ITEM, screen)) return ALL_WORK_NAV_ITEM.label;
   for (const group of NAV_GROUPS) {
     const item = group.items.find((i) => i.screen === screen);
     if (item) return item.label;
@@ -463,7 +518,16 @@ export interface TabMemory {
   subscribe(listener: () => void): () => void;
 }
 
-export function createTabMemory(getStorage: () => NavStorage | null): TabMemory {
+/**
+ * Tab memory for one tab set: the default tabs (tabOf), or the zoned ones
+ * (zonedTabOf). Detail screens are never a landing spot; `landing` says which
+ * other screens are.
+ */
+export function createTabMemory(
+  getStorage: () => NavStorage | null,
+  tabOfScreen: (screen: Screen) => NavTabId = tabOf,
+  landing: (screen: Screen) => boolean = (screen) => !DETAIL_TAB[screen]
+): TabMemory {
   const memory = new Map<NavTabId, Screen>();
   const listeners = new Set<() => void>();
   const storage = (): NavStorage | null => {
@@ -479,15 +543,15 @@ export function createTabMemory(getStorage: () => NavStorage | null): TabMemory 
       if (held) return held;
       try {
         const raw = storage()?.getItem(tabKey(tab));
-        return raw && isScreen(raw) && tabOf(raw) === tab && !DETAIL_TAB[raw] ? raw : undefined;
+        return raw && isScreen(raw) && tabOfScreen(raw) === tab && landing(raw) ? raw : undefined;
       } catch {
         return undefined;
       }
     },
     remember(screen) {
-      const tab = tabOf(screen);
+      const tab = tabOfScreen(screen);
       // Detail screens are not landing spots, and More opens a sheet.
-      if (tab === "more" || DETAIL_TAB[screen] || memory.get(tab) === screen) return;
+      if (tab === "more" || !landing(screen) || memory.get(tab) === screen) return;
       memory.set(tab, screen);
       try {
         storage()?.setItem(tabKey(tab), screen);
@@ -501,6 +565,11 @@ export function createTabMemory(getStorage: () => NavStorage | null): TabMemory 
       return () => listeners.delete(listener);
     },
   };
+}
+
+/** The zoned tabs' memory (TASK-3843): the Projects page is a landing spot; detail screens are not. */
+export function createZonedTabMemory(getStorage: () => NavStorage | null): TabMemory {
+  return createTabMemory(getStorage, zonedTabOf, (screen) => !DETAIL_TAB[screen] || screen === "projects");
 }
 
 // ─── Collapsible group state (Admin & health) ───────────────────────────────

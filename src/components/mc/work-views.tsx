@@ -824,6 +824,7 @@ export function WorkViews({ route, nav }: ScreenProps) {
                 key={tab.key}
                 type="button"
                 className={view === tab.key ? "on" : ""}
+                aria-pressed={view === tab.key}
                 onClick={() => goView(tab.key as "board" | "list" | "timeline")}
               >
                 {tab.label}

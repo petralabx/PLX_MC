@@ -38,9 +38,11 @@ import { NavIcon } from "./nav-icon";
 import {
   HELP_NAV_ITEM,
   createNavGroupState,
+  isNavItemCurrent,
   isPlainLeftClick,
   navGroupOf,
   navHref,
+  navItemTarget,
   nextDrawerOpen,
   projectTree,
   revealScrollTop,
@@ -507,8 +509,8 @@ export function Sidebar({
               {group.items.map((item) =>
                 link(
                   item.screen,
-                  { screen: item.screen },
-                  route.screen === item.screen,
+                  { screen: navItemTarget(item, route.screen) },
+                  isNavItemCurrent(item, route.screen),
                   item.label,
                   <>
                     <NavIcon name={item.lucide} />

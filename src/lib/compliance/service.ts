@@ -1057,7 +1057,9 @@ export interface IngestResult {
   deepLink?: string | null;
 }
 
-const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "closed"]);
+// ready_for_review: the projection shows the PR as open (TASK-3743). It logs as
+// pr.ready_for_review, which no timeline lists, so "PR #N opened" shows once.
+const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "ready_for_review", "closed"]);
 const IDLE_TTL_MS = 24 * 60 * 60 * 1000;
 const ABSOLUTE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -1558,7 +1560,8 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
     }
   }
 
-  const kind = evt.action === "synchronize" ? "pr.synchronized" : "pr.opened";
+  const kind =
+    evt.action === "synchronize" ? "pr.synchronized" : evt.action === "ready_for_review" ? "pr.ready_for_review" : "pr.opened";
   await repo.appendEvent({
     kind,
     actor: actorIdentity,

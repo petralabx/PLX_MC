@@ -230,6 +230,29 @@ export function githubBackfillEnabled(): boolean {
   return (process.env.PLX_MC_GITHUB_BACKFILL_ENABLED ?? "0").trim() === "1";
 }
 
+// UAT tickets view (TASK-3706): the portal's read-only ticket snapshot
+// (GET <portal>/api/internal/uat-feedback/mc-snapshot, Bearer
+// PLX_MC_PORTAL_READ_TOKEN). Default OFF: the portal does not serve it yet.
+const DEFAULT_PORTAL_BASE_URL = "https://staging.plxcustomer.io";
+
+export function uatPortalReadEnabled(): boolean {
+  return (process.env.PLX_MC_UAT_PORTAL_READ_ENABLED ?? "0").trim() === "1";
+}
+
+export function portalReadToken(): string {
+  return requireSecret("PLX_MC_PORTAL_READ_TOKEN");
+}
+
+export function portalBaseUrl(): string {
+  return (process.env.PLX_MC_PORTAL_BASE_URL || DEFAULT_PORTAL_BASE_URL).replace(/\/$/, "");
+}
+
+// The daily drift check (/api/cron/uat-drift) writes one uat.drift.checked row
+// to mc_events. Default OFF. Kill switch.
+export function uatDriftCronEnabled(): boolean {
+  return (process.env.PLX_MC_UAT_DRIFT_CRON_ENABLED ?? "0").trim() === "1";
+}
+
 // Company-brain search for Ask (`/?screen=brain-ask`). Source: prod/ec2-secrets
 // VMC_API_KEY on Vercel Production/Preview. Missing key → Ask fail-opens empty.
 const DEFAULT_VMC_BASE_URL = "https://missioncontrol.tayloralton.com";

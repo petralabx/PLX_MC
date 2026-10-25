@@ -19,6 +19,7 @@ export const SCREEN_VALUES = [
   "feed",
   "bucket",
   "project",
+  "projects",
   "repos",
   "files",
   "sync",

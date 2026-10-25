@@ -350,9 +350,17 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         .regex(/^[A-Za-z0-9._:-]{1,128}$/)
         .optional()
         .describe("Launch record id. Launcher principals only (PLX_MC_LAUNCHER_PRINCIPALS); puts the checkout under the lease-chain rules."),
+      branch: z
+        .string()
+        .trim()
+        .regex(/^[A-Za-z0-9._/-]{1,255}$/)
+        .optional()
+        .describe(
+          "The PR head branch. For petralabx/plx-customer-portal it selects the lane (claude/, task/, cip/, Feature Map) whose open-PR cap the checkout enforces: a full lane refuses a checkout for a new PR with lane_cap_full (D15). A branch that already has an open PR always passes. Omitted = not checked; the result warns."
+        ),
     },
-    async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId }) =>
-      jsonResult(await actionCheckout(identity, taskId, { repo, agent, reuse, forceReason, baseSha, launchId }))
+    async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId, branch }) =>
+      jsonResult(await actionCheckout(identity, taskId, { repo, agent, reuse, forceReason, baseSha, launchId, branch }))
   );
 
   server.tool(
@@ -371,7 +379,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_upload_evidence",
-    "Upload evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it), web-page (html) or video (mp4, webm). Send the file as contentBase64, 3 MiB or less, with a caption. A larger video (100 MiB or less): send size and sha256 for an upload session, PUT the file to upload.url, then send uploadedName and sha256. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). Complex work a person must verify also needs a video from the plx-knowledge-video skill (warning only until 2026-11-01). evidence_store_unavailable says what a person must set up.",
+    "Upload evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it), web-page (html) or video (mp4, webm). Send the file as contentBase64, 3 MiB or less, with a caption. A larger video (100 MiB or less): send size and sha256 for an upload session, PUT the file to upload.url, then send uploadedName and sha256. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-11-01). Complex work a person must verify also needs a video from the plx-knowledge-video skill (warning only until 2026-11-01). evidence_store_unavailable says what a person must set up.",
     uploadEvidenceInputShape,
     async (body) => jsonResult(await actionUploadEvidence(identity, body))
   );

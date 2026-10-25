@@ -17,8 +17,11 @@ export function evidenceStandardMode(now: number = Date.now()): EvidenceStandard
   return now >= Date.parse(EVIDENCE_STANDARD_ENFORCE_FROM) ? "block" : "warn";
 }
 
-/** Midnight 2026-10-25 America/Toronto: visual evidence (TASK-3166) gets its own warn-only week. */
-export const VISUAL_EVIDENCE_ENFORCE_FROM = "2026-10-25T04:00:00.000Z";
+/**
+ * Midnight 2026-11-01 America/Toronto: visual evidence (TASK-3166) gets its own warn-only week.
+ * Vince moved it from 2026-10-25 on 2026-10-25: uploads were still off, so no agent could upload during the first week.
+ */
+export const VISUAL_EVIDENCE_ENFORCE_FROM = "2026-11-01T04:00:00.000Z";
 
 /**
  * Whether a missing visual artifact blocks: only after the warn-only week and

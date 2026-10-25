@@ -40,6 +40,7 @@ import type {
   Task,
 } from "@/lib/mc-data/types";
 import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
+import { assertCreatorApprovedForStage, CreatorApprovalRefusal } from "@/lib/compliance/creator-approval";
 import { assertMoveTargetProjectOpen, assertNoSharedEvidenceInRestricted } from "./bucket-move";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
 import { withTransaction, type TxQuery } from "@/lib/db";
@@ -509,6 +510,8 @@ export interface CreateTaskInput {
   /** Merged into labels as kind:<kind>; omitted defaults to kind:needs-review. */
   kind?: TaskKind;
   due?: string;
+  /** Set only by actionCreateTask for a gated creator principal (TASK-3530). */
+  creatorApproval?: Task["creatorApproval"];
 }
 
 export interface MutationAttribution {
@@ -574,6 +577,7 @@ export async function createTask(
       reporter: input.reporter,
       accountableOwner: input.accountableOwner ?? null,
       humanOnly: input.humanOnly,
+      ...(input.creatorApproval ? { creatorApproval: input.creatorApproval } : {}),
       reqs: input.reqs ?? [],
       repos,
       targetEnv: input.targetEnv ?? "staging",
@@ -650,9 +654,10 @@ export interface PatchTaskInput {
   targetEnv?: Task["targetEnv"]; // pushed Target Environment column
   agentRunApproved?: boolean; // EN-005 — DB-only operator approval of an approve-mode agent run
   approvalGates?: Task["approvalGates"]; // TASK-629 — DB-only runtime approval gates (never pushed)
+  creatorApproval?: Task["creatorApproval"]; // TASK-3530 — DB-only; written only with opts.creatorApproval
   questions?: Task["questions"]; // TASK-3567 — DB-only questions for a named person (never pushed)
   prs?: PullRequest[]; // DB-only — PR links (compliance projection)
-  merge?: { sha: string; on: string }; // DB-only — merge metadata (compliance projection)
+  merge?: { sha: string; on: string; held?: boolean }; // DB-only — merge metadata (compliance projection)
   activityLine?: Pick<ActivityEntry, "who" | "what" | "kind">; // DB-only append
 }
 
@@ -671,6 +676,8 @@ export interface PatchTaskOptions {
   reopen?: boolean;
   /** Refuse a bucket move into a closed project, checked inside the locked transaction (TASK-2558). */
   enforceClosedProject?: boolean;
+  /** Set only by approveCreatorApproval (TASK-3530); required to write creatorApproval. */
+  creatorApproval?: boolean;
 }
 
 // Persistence tiers:
@@ -711,10 +718,17 @@ export async function patchTask(
     if (patch.repos) await ensureReposSeeded();
     // Lock the row across the cancelled-stage guard and the write, so a
     // concurrent cancel cannot commit between them and be silently undone.
-    return withTransaction(async (q) => {
-      if (!(await repo.getEntity("task", id, q, true))) return null;
-      return patchTask(id, patch, actor, { ...opts, query: q });
-    });
+    try {
+      return await withTransaction(async (q) => {
+        if (!(await repo.getEntity("task", id, q, true))) return null;
+        return patchTask(id, patch, actor, { ...opts, query: q });
+      });
+    } catch (err) {
+      // Record a creator-gate refusal (TASK-3530) only after the rollback has
+      // released the transaction's connection.
+      if (err instanceof CreatorApprovalRefusal) await err.record();
+      throw err;
+    }
   }
   const row = await repo.getEntity("task", id, opts.query);
   if (!row) return null;
@@ -765,11 +779,23 @@ export async function patchTask(
       409
     );
   }
+  // A creator approval changes only through the creator-approval action
+  // (TASK-3530): a generic task update must never clear or forge it.
+  if (taskPatch.creatorApproval !== undefined && !opts.creatorApproval) {
+    throw new ApiError(
+      "creator_approval_required",
+      `${id}: creatorApproval changes only through the creator-approval action.`,
+      403
+    );
+  }
   if ("assignee" in taskPatch) {
     const violation = assignmentViolation(effective, taskPatch.assignee ?? null);
     if (violation) throw new ApiError("human_only_violation", violation, 409);
   }
   if ("stage" in taskPatch && taskPatch.stage) {
+    // The creator gate (TASK-3530) holds on every door, the compliance
+    // projection included. The caller that owns the transaction audits it.
+    assertCreatorApprovedForStage(current, taskPatch.stage, { actor, actorId: opts.attribution?.actorId });
     const skipEvidenceGate =
       opts.complianceProjection &&
       (taskPatch.stage === "merged" || taskPatch.stage === "verified" || taskPatch.stage === "progress");

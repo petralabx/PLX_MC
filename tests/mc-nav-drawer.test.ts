@@ -8,12 +8,20 @@ import { join } from "node:path";
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { NavScrim, Sidebar } from "@/components/mc/chrome";
 import { nextDrawerOpen, wrapFocusIndex, type DrawerEvent } from "@/components/mc/nav-model";
+import { setNavZonesBuildFlag } from "@/components/mc/nav-zones";
 import { Topbar } from "@/components/mc/top-bar";
-import { resetStore } from "@/lib/mc-data/store";
+import {
+  __setStateLoaderForTests,
+  allTasks,
+  hydrate,
+  openConflicts,
+  openErrors,
+  resetStore,
+} from "@/lib/mc-data/store";
 
 beforeEach(() => resetStore());
 
@@ -115,6 +123,67 @@ describe("shell markup", () => {
   it("never claims Synced before the server answers", () => {
     expect(topbar()).toContain("Checking…");
     expect(topbar()).not.toContain("Synced");
+  });
+});
+
+// TASK-3844: in the zoned shell the top bar says what to resolve, and the
+// workspace label is the PLX app switcher. Off, the bar is unchanged.
+describe("zoned top bar", () => {
+  afterEach(() => {
+    setNavZonesBuildFlag(false);
+    __setStateLoaderForTests(null);
+  });
+
+  async function syncWith(conflict: number, error: number) {
+    __setStateLoaderForTests(async () => ({
+      tasks: allTasks(),
+      risks: [],
+      files: [],
+      conflicts: openConflicts(),
+      errors: openErrors(),
+      audit: [],
+      counts: { todos: { synced: 0, pending: 0, conflict, error } },
+      lastSweep: "2026.10.25 · 00:00",
+    }));
+    await hydrate();
+  }
+
+  it("names what to resolve: sync conflicts, sync errors, or both", async () => {
+    await syncWith(2, 1);
+    expect(topbar()).toContain('<span class="lb">3 to resolve</span>');
+    setNavZonesBuildFlag(true);
+    const cases: [number, number, string, string][] = [
+      [2, 1, "2 sync conflicts, 1 error", "2 conflicts and 1 error"],
+      [1, 0, "1 sync conflict", "1 conflict"],
+      [0, 3, "3 sync errors", "3 errors"],
+    ];
+    for (const [conflict, error, label, title] of cases) {
+      await syncWith(conflict, error);
+      const html = topbar();
+      expect(html).toContain(`<span class="lb">${label}</span>`);
+      expect(html).toContain(`title="SharePoint sync: ${title} to review"`);
+    }
+  });
+
+  it("makes the workspace label the PLX app switcher, with a link to each app", () => {
+    setNavZonesBuildFlag(true);
+    const html = topbar();
+    expect(html).toMatch(
+      /<button type="button" class="ws ws-switch" popovertarget="mc-apps-flyout" aria-controls="mc-apps-flyout" aria-expanded="false" aria-label="PLX Engineering · PLX apps">/i
+    );
+    expect(html).toContain('id="mc-apps-flyout" popover="auto" class="mc-flyout drop apps" role="group" aria-label="PLX apps"');
+    const apps = Array.from(
+      html.matchAll(/<a href="([^"]+)" class="item app"( aria-current="true")?>[\s\S]*?<span class="nm">([^<]+)<\/span>/g),
+      (m) => [m[3], m[1], Boolean(m[2])]
+    );
+    expect(apps).toEqual([
+      ["Mission Control", "/", true],
+      ["MRP Suite", "https://staging.plxcustomer.io/mrp", false],
+      ["Admin portal", "https://staging.plxcustomer.io/admin/dashboard", false],
+      ["Customer portal", "https://staging.plxcustomer.io/dashboard", false],
+    ]);
+    expect(html).toContain('<p class="fly-foot">Workspace · PLX Engineering</p>');
+    expect(html).not.toContain('<span class="ws" title="Workspace">');
   });
 });
 

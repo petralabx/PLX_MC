@@ -70,7 +70,9 @@ export async function actionLinkMergedPr(
 
   const repoName = bareName(body.repo);
   const sameLink = (p: PullRequest) => bareName(p.repo).toLowerCase() === repoName.toLowerCase() && p.num === body.prNumber;
-  if ((task.prs ?? []).some(sameLink)) {
+  // An open, draft or closed row for this PR (TASK-3743) does not count as linked.
+  const mergedLink = (p: PullRequest) => sameLink(p) && p.status === "merged";
+  if ((task.prs ?? []).some(mergedLink)) {
     return { taskId: task.id, repo: body.repo, prNumber: body.prNumber, stage: task.stage, linked: false, unchanged: true };
   }
 
@@ -127,11 +129,11 @@ export async function actionLinkMergedPr(
   }
   // Already merged/verified keeps its stage; the projection kill switch only skips promotion.
   const after = (await getEntity("task", task.id))?.data as unknown as Task | undefined;
-  if (!(after?.prs ?? []).some(sameLink)) {
+  if (!(after?.prs ?? []).some(mergedLink)) {
     await patchTask(
       task.id,
       {
-        prs: [...(after?.prs ?? task.prs ?? []), link],
+        prs: [...(after?.prs ?? task.prs ?? []).filter((p) => !sameLink(p)), link],
         ...(task.merge ? {} : { merge: { sha: facts.mergeSha, on: new Date().toISOString().slice(0, 10) } }),
         activityLine: {
           who: authorized.auditLabel,

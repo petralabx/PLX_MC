@@ -59,7 +59,7 @@
   }
   /* Lucide icons in shell surfaces only — screens size their own .ic.
      :where() keeps this at (0,2,0) so the per-control sizes below win. */
-  .mc :where(.mc-chrome, .mc-side, .mc-tabs, .mc-fab, .mc-sheet, .mc-pane > .pane-head, .mc-live > .live-h) .ic {
+  .mc :where(.mc-chrome, .mc-side, .mc-tabs, .mc-fab, .mc-sheet, .mc-flyout, .mc-pane > .pane-head, .mc-live > .live-h) .ic {
     width: 16px;
     height: 16px;
     flex: 0 0 auto;
@@ -150,6 +150,37 @@
   }
   .mc .mc-top .ws .pm {
     flex: 0 0 auto;
+  }
+  /* The zoned shell's PLX app switcher (TASK-3844): the same label, as the
+     toggle of a flyout below it. */
+  .mc .mc-top .ws-switch {
+    align-self: stretch;
+    border: 0;
+    border-left: 1px solid var(--p-grid);
+    background: none;
+    font: inherit;
+    font-size: var(--p-text-mono);
+    color: var(--p-ink-2);
+    cursor: pointer;
+  }
+  .mc .mc-top .ws-switch .chev {
+    color: var(--p-muted);
+    transition: rotate var(--p-dur-fast) var(--p-ease);
+  }
+  .mc .mc-top .ws-switch[aria-expanded="true"] .chev {
+    rotate: 180deg;
+  }
+  @media (hover: hover) {
+    .mc .mc-top .ws-switch:hover {
+      color: var(--p-ink);
+    }
+  }
+  .mc .mc-top .ws-switch:focus-visible {
+    outline: 2px solid var(--p-accent);
+    outline-offset: -2px;
+  }
+  .mc .mc-top .ws-switch .ws-name {
+    display: none;
   }
   .mc .mc-top .title {
     flex: 1 1 auto;
@@ -262,6 +293,33 @@
   .mc .usermenu-item .ic {
     width: 16px;
     height: 16px;
+  }
+  /* The navigation switch (TASK-3855): a track that fills with the accent and
+     a knob that sits at the end when on. */
+  .mc .usermenu-switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 16px;
+    margin-left: auto;
+    border-radius: 8px;
+    background: var(--p-muted);
+  }
+  .mc .usermenu-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--p-paper);
+  }
+  .mc .usermenu-item[aria-checked="true"] .usermenu-switch {
+    background: var(--p-accent);
+  }
+  .mc .usermenu-item[aria-checked="true"] .usermenu-switch::after {
+    left: 14px;
   }
   .mc .iconbtn {
     position: relative;
@@ -402,7 +460,11 @@
     inset: 0 auto 0 0;
     z-index: var(--p-z-drawer);
     width: var(--p-drawer-w);
-    padding: calc(var(--p-safe-t) + 8px) 0 24px;
+    /* The top padding lives on the sticky .side-head, so nothing scrolls
+       above it. scroll-padding keeps a focused row and its 4px focus ring
+       below the head (8px + touch + 8px), per WCAG 2.4.11 (TASK-3837). */
+    padding: 0 0 24px;
+    scroll-padding-top: calc(var(--p-safe-t) + var(--p-touch) + 20px);
     overflow-y: auto;
     overscroll-behavior: contain;
     border-right: 1px solid var(--p-grid);
@@ -415,10 +477,16 @@
     visibility: visible;
   }
   .mc .mc-side .side-head {
+    /* Sticky (TASK-3837): when the list scrolls to the current row, the
+       drawer's close button and the rail's expand toggle stay in view. */
+    position: sticky;
+    top: 0;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding: 0 12px 8px;
+    padding: calc(var(--p-safe-t) + 8px) 12px 8px;
+    background: var(--p-rail);
   }
   .mc .mc-side .rail-toggle {
     display: none;
@@ -440,11 +508,12 @@
     border: 0;
     background: none;
     font-family: var(--p-font-mono);
-    font-size: var(--p-text-cap);
+    font-size: var(--p-text-meta);
+    font-weight: 600;
     letter-spacing: var(--p-track-tick);
     text-transform: uppercase;
     text-align: left;
-    color: var(--p-muted);
+    color: var(--p-ink-2);
   }
   .mc .mc-side .h-toggle {
     min-height: var(--p-touch);
@@ -487,6 +556,11 @@
   .mc .mc-side .item[aria-current="page"] .ic {
     color: var(--p-accent);
   }
+  /* The open initiative's parent project (TASK-3837): lit, but not current. */
+  .mc .mc-side .item.on-path {
+    font-weight: 500;
+    color: var(--p-ink);
+  }
   /* Projects / Initiatives lists. Reset the task-detail subtask row skin
      (mc-task.css `.mc .sub`), which shares the class name. */
   .mc .mc-side .sub {
@@ -495,8 +569,9 @@
     padding: 0;
     border-bottom: 0;
   }
-  /* Project / initiative health tick */
-  .mc .mc-side .item .hl {
+  /* Project / initiative health tick (the sidebar; the More sheet's Starred rows) */
+  .mc .mc-side .item .hl,
+  .mc .mc-sheet .row .hl {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -504,7 +579,8 @@
     width: 16px;
     height: 16px;
   }
-  .mc .mc-side .item .hl::before {
+  .mc .mc-side .item .hl::before,
+  .mc .mc-sheet .row .hl::before {
     content: "";
     width: 2px;
     height: 11px;
@@ -514,13 +590,16 @@
   .mc .mc-side .item[aria-current="page"] .hl::before {
     height: 13px;
   }
-  .mc .mc-side .item .hl.track::before {
+  .mc .mc-side .item .hl.track::before,
+  .mc .mc-sheet .row .hl.track::before {
     background: var(--p-ok);
   }
-  .mc .mc-side .item .hl.risk::before {
+  .mc .mc-side .item .hl.risk::before,
+  .mc .mc-sheet .row .hl.risk::before {
     background: var(--p-warn);
   }
-  .mc .mc-side .item .hl.off::before {
+  .mc .mc-side .item .hl.off::before,
+  .mc .mc-sheet .row .hl.off::before {
     background: var(--p-hot);
   }
 
@@ -533,7 +612,7 @@
 
   /* Count badges — n · n+ (partial) · — (unknown); zero is hidden only once
      confirmed. Attention tone is warn, never hot (hot is a lost write). */
-  .mc :where(.mc-side, .mc-tabs, .mc-sheet) .badge {
+  .mc :where(.mc-side, .mc-tabs, .mc-sheet, .mc-flyout) .badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -550,11 +629,11 @@
     white-space: nowrap;
     color: var(--p-accent);
   }
-  .mc :where(.mc-side, .mc-tabs, .mc-sheet) .badge.warn {
+  .mc :where(.mc-side, .mc-tabs, .mc-sheet, .mc-flyout) .badge.warn {
     border-color: var(--p-warn);
     color: var(--p-warn-text);
   }
-  .mc :where(.mc-side, .mc-tabs, .mc-sheet) .badge.unk {
+  .mc :where(.mc-side, .mc-tabs, .mc-sheet, .mc-flyout) .badge.unk {
     border-style: dashed;
     border-color: var(--p-grid);
     color: var(--p-muted);
@@ -566,7 +645,9 @@
     inset: auto 0 0 0;
     z-index: 40;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    /* One equal column per tab: four classic, five zoned (TASK-3843). */
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
     height: calc(var(--p-tabs-h) + var(--p-safe-b));
     padding-bottom: var(--p-safe-b);
     border-top: 1px solid var(--p-grid);
@@ -838,6 +919,16 @@
     .mc .mc-top .ws {
       display: inline-flex;
     }
+    .mc .mc-top .ws-switch .ws-name {
+      display: inline;
+    }
+  }
+  /* The app switcher shows from 641px, as the mark alone until the bar has
+     room for the workspace name. */
+  @media (min-width: 641px) {
+    .mc .mc-top .ws-switch {
+      display: inline-flex;
+    }
   }
   @container chrome (min-width: 1280px) {
     .mc .mc-top .brand .sub {
@@ -951,14 +1042,15 @@
       z-index: 20;
       width: var(--p-rail-w);
       height: calc(100dvh - var(--p-chrome-h));
-      padding: 8px 0 16px;
+      padding: 0 0 16px;
+      scroll-padding-top: calc(var(--p-touch) + 20px);
       overflow-x: hidden;
       transform: none;
       visibility: visible;
     }
     .mc .mc-side .side-head {
       justify-content: center;
-      padding: 0 0 8px;
+      padding: 8px 0;
     }
     .mc .mc-side .rail-toggle {
       display: inline-flex;
@@ -1015,11 +1107,12 @@
       z-index: var(--p-z-drawer);
       width: var(--p-drawer-w);
       height: auto;
-      padding: calc(var(--p-safe-t) + 8px) 0 24px;
+      padding: 0 0 24px;
+      scroll-padding-top: calc(var(--p-safe-t) + var(--p-touch) + 20px);
     }
     .mc .mc-side.open .side-head {
       justify-content: flex-end;
-      padding: 0 12px 8px;
+      padding: calc(var(--p-safe-t) + 8px) 12px 8px;
     }
     .mc .mc-side.open .rail-toggle {
       display: none;
@@ -1108,6 +1201,7 @@
       width: var(--p-side-w);
       height: calc(100dvh - var(--p-chrome-h));
       padding: 14px 0 24px;
+      scroll-padding-top: 0;
     }
     .mc .mc-side .side-head {
       display: none;
@@ -1360,6 +1454,304 @@
     from {
       transform: translateX(24px);
       opacity: 0;
+    }
+  }
+
+  /* ─── Zoned sidebar (TASK-3840, portal ADR-011) — .mc-body[data-nav="zones"]
+     The --p-shell-* fallbacks stand in until MC pins design-system 1.5.0:
+     248px wide, 28px pointer rows, system tools in a footer pinned to the
+     bottom, and the Admin & health flyout (a top-layer popover beside it). */
+  .mc .mc-body[data-nav="zones"] {
+    --p-side-w: var(--p-shell-sidebar, 248px);
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 0;
+    /* A focused row and its 4px ring stay above the sticky footer (WCAG 2.4.11). */
+    scroll-padding-bottom: calc(2 * var(--p-touch) + 24px + var(--p-safe-b, 0px));
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side > * {
+    flex-shrink: 0;
+  }
+  .mc .mc-side .side-foot {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    padding: 8px 12px calc(8px + var(--p-safe-b, 0px));
+    border-top: 1px solid var(--p-grid-2);
+    background: var(--p-rail);
+  }
+  /* Phone: a sheet along the bottom of the drawer. From 641px it sits beside
+     the rail, drawer or sidebar (useAdminFlyout sets --fly-left/bottom). */
+  .mc .mc-flyout[popover] {
+    position: fixed;
+    inset: auto 12px calc(12px + var(--p-safe-b, 0px)) 12px;
+    width: auto; /* the UA popover style is fit-content */
+    max-height: min(70vh, 560px);
+    margin: 0;
+    padding: 8px;
+    overflow-y: auto;
+    /* The account menu's popover skin. */
+    border: 1px solid var(--p-grid);
+    background: var(--p-paper);
+    box-shadow: 0 8px 28px color-mix(in srgb, var(--p-ink) 12%, transparent);
+    color: var(--p-ink);
+  }
+  .mc .mc-flyout .fly-sec + .fly-sec {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--p-grid-2);
+  }
+  .mc .mc-flyout .fly-h {
+    margin: 0 0 4px;
+    padding: 0 8px;
+    font-family: var(--p-font-mono);
+    font-size: var(--p-text-meta);
+    font-weight: 600;
+    letter-spacing: var(--p-track-tick);
+    text-transform: uppercase;
+    color: var(--p-ink-2);
+  }
+  .mc .mc-flyout .item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: var(--p-touch);
+    padding: 0 8px;
+    border-left: 2px solid transparent;
+    font-size: var(--p-text-ui);
+    text-decoration: none;
+    color: var(--p-ink-2);
+  }
+  .mc .mc-flyout .item .ic {
+    color: var(--p-muted);
+  }
+  .mc .mc-flyout .item .nm {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  @media (hover: hover) {
+    .mc .mc-flyout .item:hover {
+      background: var(--p-paper-2);
+    }
+  }
+  .mc .mc-flyout .item:focus-visible {
+    outline: 2px solid var(--p-accent);
+    outline-offset: -2px;
+  }
+  .mc .mc-flyout .item[aria-current="page"] {
+    border-left-color: var(--p-accent);
+    background: var(--p-paper-2);
+    font-weight: 500;
+    color: var(--p-ink);
+  }
+  .mc .mc-flyout .item[aria-current="page"] .ic {
+    color: var(--p-accent);
+  }
+  /* The app switcher's rows: a tile, the app and what it is for. */
+  .mc .mc-flyout .item.app {
+    padding-block: 4px;
+  }
+  .mc .mc-flyout .item.app[aria-current="true"] {
+    background: var(--p-paper-2);
+  }
+  .mc .mc-flyout .app-tile {
+    display: inline-flex;
+    flex: 0 0 26px;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    box-sizing: border-box;
+    border-radius: 4px;
+  }
+  .mc .mc-flyout .app-tile.ink {
+    background: var(--p-ink);
+    color: var(--p-paper);
+  }
+  .mc .mc-flyout .app-tile.acc {
+    background: var(--p-accent);
+    color: var(--p-paper);
+  }
+  .mc .mc-flyout .app-tile.line {
+    border: 1px solid var(--p-grid);
+    color: var(--p-ink-2);
+  }
+  .mc .mc-flyout .app-tile .ic {
+    color: inherit;
+  }
+  .mc .mc-flyout .app-txt {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .mc .mc-flyout .item.app .nm {
+    font-weight: 600;
+    color: var(--p-ink);
+  }
+  .mc .mc-flyout .app-sub {
+    overflow: hidden;
+    font-size: var(--p-text-small);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--p-muted);
+  }
+  .mc .mc-flyout .item.app .cur {
+    color: var(--p-accent);
+  }
+  .mc .mc-flyout .fly-foot {
+    margin: 6px 0 0;
+    padding: 6px 8px 0;
+    border-top: 1px solid var(--p-grid-2);
+    font-size: var(--p-text-small);
+    color: var(--p-muted);
+  }
+  /* Starred (TASK-3842): the person's copies under My work. The icon rail
+     shows one Starred button, which opens the labelled drawer; every
+     labelled form lists the stars. */
+  .mc .mc-side .star-rail {
+    display: none;
+  }
+  /* A star toggle (the top bar's, a Projects row's): filled when starred. */
+  .mc .star-toggle[aria-pressed="true"] .ic {
+    fill: currentColor;
+    color: var(--p-accent);
+  }
+  .mc .star-toggle:disabled {
+    color: var(--p-muted);
+    cursor: default;
+  }
+  /* Projects tree (TASK-3841): project rows under the Projects row, their
+     initiatives a step further in, then a quiet View all row. The icon rail
+     shows the Projects icon alone. */
+  .mc .mc-side .tree-row {
+    display: flex;
+    align-items: center;
+  }
+  .mc .mc-side .tree-row > .item {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .mc .mc-side .tree .item {
+    padding-left: 22px;
+  }
+  .mc .mc-side .tree-kids > .item {
+    padding-left: calc(8px + var(--p-shell-indent, 34px));
+  }
+  .mc .mc-side .tree > a.item {
+    color: var(--p-muted);
+  }
+  @media (hover: hover) {
+    .mc .mc-side .tree > a.item:hover {
+      color: var(--p-ink);
+    }
+  }
+  .mc .mc-side .tree-toggle {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: var(--p-touch);
+    min-height: var(--p-touch);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--p-muted);
+    cursor: pointer;
+  }
+  .mc .mc-side .tree-toggle:focus-visible {
+    outline: 2px solid var(--p-accent);
+    outline-offset: -2px;
+  }
+  /* Without the Popover API the panel would sit in the page: leave it out. */
+  @supports not selector(:popover-open) {
+    .mc .mc-flyout {
+      display: none;
+    }
+  }
+  @media (min-width: 641px) {
+    .mc .mc-flyout[popover] {
+      inset: auto auto var(--fly-bottom, 8px) var(--fly-left, 8px);
+      width: var(--p-shell-flyout, 264px);
+    }
+    /* Below its toggle (the top bar's app switcher; use-flyout.ts sets it),
+       wide enough for each app's line about what it is for. */
+    .mc .mc-flyout.drop[popover] {
+      inset: var(--fly-top, 8px) auto auto var(--fly-left, 8px);
+      width: 280px;
+    }
+    /* The icon rail's footer: icons centred, like its rows. */
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {
+      padding: 8px 0;
+    }
+    .mc .mc-side:not(.open) .tree,
+    .mc .mc-side:not(.open) .star-rows {
+      display: none;
+    }
+    .mc .mc-side:not(.open) .star-rail {
+      display: flex;
+    }
+  }
+  @media (min-width: 1025px) {
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {
+      padding: 8px 12px;
+    }
+    .mc .mc-side:not(.open) .tree,
+    .mc .mc-side:not(.open) .star-rows {
+      display: block;
+    }
+    .mc .mc-side:not(.open) .star-rail {
+      display: none;
+    }
+  }
+  /* 28px rows for a fine pointer only: a coarse one keeps 44px targets. */
+  @media (min-width: 1025px) and (pointer: fine) {
+    .mc .mc-body[data-nav="zones"] .mc-side {
+      scroll-padding-bottom: calc(2 * var(--p-shell-row, 28px) + 24px);
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side .item,
+    .mc .mc-flyout .item {
+      min-height: var(--p-shell-row, 28px);
+    }
+    .mc .mc-side .tree-toggle {
+      width: var(--p-shell-row, 28px);
+      min-height: var(--p-shell-row, 28px);
+    }
+  }
+  /* The one-screen tour of the new navigation (nav-tour.tsx, TASK-3855), on
+     the New … modals' card: each zone's name, then what sits there. */
+  .mc .ntm .nav-tour-points {
+    margin: 0;
+    list-style: none;
+    gap: var(--p-space-3);
+  }
+  .mc .ntm .nav-tour-points li {
+    display: grid;
+    gap: 2px;
+    font-size: var(--p-text-small);
+    line-height: 1.45;
+    color: var(--p-ink-2);
+  }
+  .mc .ntm .nav-tour-points b {
+    font-weight: 500;
+    color: var(--p-ink);
+  }
+  /* Phone: the hint takes its own line, so each button keeps its words on one. */
+  .mc .nav-tour .ntm-foot {
+    flex-wrap: wrap;
+  }
+  .mc .nav-tour .ntm-acts .btn {
+    white-space: nowrap;
+  }
+  @media (min-width: 641px) {
+    .mc .ntm .nav-tour-points li {
+      grid-template-columns: 9.5rem 1fr;
+      gap: var(--p-space-3);
     }
   }
 }

@@ -19,6 +19,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Install Python dependencies (governance tooling)
         run: pip install -r requirements.txt
@@ -27,6 +29,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install Node dependencies
         run: |
@@ -38,8 +42,11 @@ jobs:
       - name: Full suite (same command as pre-push)
         run: ./scripts/preflight.sh --mode pre-push
 
+  # Full 6-job Windows/Ubuntu matrix runs on push to main only (PR-drain 8).
+  # PRs get the single lightweight job below. None of these are required checks.
   mcp-wrapper:
     name: MCP wrapper (${{ matrix.os }}, Node ${{ matrix.node }})
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -56,6 +63,32 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: tools/plx-mc-mcp/package-lock.json
+
+      - name: Install wrapper dependencies
+        working-directory: tools/plx-mc-mcp
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: ESM and CommonJS import check (offline)
+        run: node tools/plx-mc-mcp/check-imports.mjs
+
+      - name: Launcher smoke (offline handshake, placeholder key, no secrets)
+        run: node tools/plx-mc-mcp/smoke-launch.mjs
+
+  mcp-wrapper-pr:
+    name: MCP wrapper (PR, ubuntu-latest, Node 24)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: tools/plx-mc-mcp/package-lock.json
 
       - name: Install wrapper dependencies
         working-directory: tools/plx-mc-mcp

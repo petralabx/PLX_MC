@@ -1,0 +1,144 @@
+/* Projects screen (TASK-3841) — imported into the mc.screens layer (ADR-005):
+   phone-first, hover under (hover: hover), --p-* tokens only. Each project
+   is a row with its initiatives listed under it; the health tick is the
+   sidebar's (.hl). */
+
+.mc .pj-sec {
+  padding: 18px var(--mc-page-edge, var(--p-gutter)) 8px;
+}
+.mc .pj-h {
+  margin: 0 0 10px;
+  font-family: var(--p-font-mono);
+  font-size: var(--p-text-meta);
+  font-weight: 600;
+  letter-spacing: var(--p-track-tick);
+  text-transform: uppercase;
+  color: var(--p-ink-2);
+}
+.mc .pj-list,
+.mc .pj-inits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mc .pj-row {
+  padding: 10px 0;
+  border-top: 1px solid var(--p-grid-2);
+}
+.mc .pj-name,
+.mc .pj-init {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--p-touch);
+  text-decoration: none;
+  color: var(--p-ink);
+}
+.mc .pj-name {
+  font-size: var(--p-text-ui);
+  font-weight: 500;
+}
+.mc .pj-init {
+  padding-left: 24px;
+  font-size: var(--p-text-ui);
+  color: var(--p-ink-2);
+}
+.mc .pj-name:focus-visible,
+.mc .pj-init:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+.mc .pj-none {
+  margin: 0;
+  padding: 4px 0 4px 24px;
+  font-size: var(--p-text-meta);
+  color: var(--p-muted);
+}
+.mc .pj .hl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+.mc .pj .hl::before {
+  content: "";
+  width: 2px;
+  height: 11px;
+  border-radius: 1px;
+  background: var(--p-muted);
+}
+.mc .pj .hl.track::before {
+  background: var(--p-ok);
+}
+.mc .pj .hl.risk::before {
+  background: var(--p-warn);
+}
+.mc .pj .hl.off::before {
+  background: var(--p-hot);
+}
+
+/* A row's star toggle (TASK-3842), right after its name. */
+.mc .pj-head,
+.mc .pj-inits > li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mc .pj-head > .pj-name,
+.mc .pj-inits > li > .pj-init {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.mc .pj-star {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--p-touch);
+  height: var(--p-touch);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--p-muted);
+  cursor: pointer;
+}
+.mc .pj-star .ic {
+  width: 16px;
+  height: 16px;
+}
+.mc .pj-star:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .mc .pj-name:hover,
+  .mc .pj-init:hover {
+    text-decoration: underline;
+  }
+  .mc .pj-star:not(:disabled):hover {
+    color: var(--p-ink);
+  }
+}
+
+/* A wide main puts the initiatives beside their project. */
+@container main (min-width: 48rem) {
+  .mc .pj-row {
+    display: grid;
+    grid-template-columns: minmax(200px, 1fr) 2fr;
+    gap: 16px;
+  }
+}
+/* A fine pointer gets denser rows; a coarse one keeps 44px targets. */
+@media (pointer: fine) {
+  .mc .pj-name,
+  .mc .pj-init {
+    min-height: 28px;
+  }
+  .mc .pj-star {
+    width: 28px;
+    height: 28px;
+  }
+}

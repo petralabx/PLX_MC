@@ -30,9 +30,6 @@ jobs:
   compliance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Verify against PLX MC
         env:
           MC_BASE_URL: ${{ secrets.PLX_MC_BASE_URL }}
@@ -48,6 +45,9 @@ jobs:
           REPO_FULL_NAME: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
           MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          # "api" (default) reads the PR body and labels as they are now, so a body fix plus a plain
+          # re-run clears a block. "event" restores the old behaviour (the payload frozen at the event).
+          BODY_SOURCE: ${{ vars.COMPLIANCE_BODY_SOURCE || 'api' }}
         run: |
           set -euo pipefail
           if [ -z "${MC_BASE_URL:-}" ]; then
@@ -74,7 +74,8 @@ jobs:
               | sed -nE 's#^(refs/heads/)?gh-readonly-queue/[^/]+/pr-([0-9]+)-[0-9a-f]+$#\2#p')
             if [ -n "$N" ] \
               && pr=$(gh api "repos/${REPO_FULL_NAME}/pulls/${N}") \
-              && files=$(gh api --paginate "repos/${REPO_FULL_NAME}/pulls/${N}/files" --jq '.[] | .filename, (.previous_filename // empty)'); then
+              && files=$(gh api --paginate "repos/${REPO_FULL_NAME}/pulls/${N}/files" \
+                --jq '.[] | .filename, (.previous_filename // empty)'); then
               PR_NUMBER="$N"
               PR_HEAD_SHA=$(printf '%s' "$pr" | jq -r '.head.sha // ""')
               PR_BODY=$(printf '%s' "$pr" | jq -r '.body // ""')
@@ -83,13 +84,19 @@ jobs:
               changed=$(printf '%s' "$files" | jq -R -s 'split("\n") | map(select(length>0))')
             fi
           else
-            git fetch --no-tags --depth=1 origin "$PR_BASE_REF" || true
-            # Capture the diff separately from jq. Piping `git diff | jq ... || echo '[]'`
-            # double-emits ([] from jq AND [] from the ||) when git diff prints nothing
-            # AND fails (a shallow fetch of a busy base has no merge base) — that invalid
-            # JSON crashes the --argjson below and hard-fails this otherwise-soft gate.
-            diff_out=$(git diff --name-only --no-renames "origin/${PR_BASE_REF}...HEAD" 2>/dev/null || true)
-            changed=$(printf '%s' "$diff_out" | jq -R -s 'split("\n") | map(select(length>0))')
+            # Changed paths from the API: no checkout needed. Both sides of a rename count, so a
+            # rename out of a protected path cannot look like a docs-only change. Capture the
+            # output separately from jq: an API failure gives [] (as the old checkout-based diff did)
+            # instead of invalid JSON that would hard-fail this otherwise-soft gate.
+            files_out=$(gh api --paginate "repos/${REPO_FULL_NAME}/pulls/${PR_NUMBER}/files" \
+              --jq '.[] | .filename, (.previous_filename // empty)' 2>/dev/null || true)
+            changed=$(printf '%s' "$files_out" | jq -R -s 'split("\n") | map(select(length>0))')
+            if [ "${BODY_SOURCE:-api}" = "api" ] \
+              && pr=$(gh api "repos/${REPO_FULL_NAME}/pulls/${PR_NUMBER}" 2>/dev/null) \
+              && [ -n "$pr" ]; then
+              PR_BODY=$(printf '%s' "$pr" | jq -r '.body // ""')
+              PR_LABELS=$(printf '%s' "$pr" | jq -c '[(.labels // [])[].name]')
+            fi
           fi
           # PR-drain (6): docs-only and Dependabot lockfile-only PRs post a passing
           # `compliance` with a clear "skipped" verdict. The skip is inside the job, not

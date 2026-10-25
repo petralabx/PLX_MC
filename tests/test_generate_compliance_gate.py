@@ -255,11 +255,75 @@ def test_merge_group_support_leaves_the_pull_request_payload_without_event(tmp_p
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "gh-called" not in result.stderr
     payload = json.loads((tmp_path / "payload.json").read_text())
     assert "event" not in payload
     assert payload["prNumber"] == 7
+    # gh fails here (exit 1): the event body and an empty path list are the fallback.
     assert payload["checkoutIds"] == ["dsp_one"]
+    assert payload["changedPaths"] == []
+
+
+GH_PR7_STUB = """#!/bin/sh
+echo "gh $*" >> "$STUB_DIR/gh.log"
+case "$*" in
+  *pulls/7/files*) printf 'docs/new.md\\nAGENTS.md\\n' ;;
+  *pulls/7*) printf '%s' '{"body":"MC-Checkout: dsp_live","labels":[{"name":"risk:high"}]}' ;;
+  *) exit 1 ;;
+esac
+"""
+
+PR7_EVENT_ENV = {
+    "GITHUB_EVENT_NAME": "pull_request",
+    "MC_CI_TOKEN": "ci",
+    "PR_BODY": "MC-Checkout: dsp_stale",
+    "PR_NUMBER": "7",
+    "PR_HEAD_SHA": "def456",
+    "PR_BASE_REF": "main",
+}
+
+
+def test_pull_request_reads_the_live_body_labels_and_rename_sources(tmp_path):
+    # B1 (TASK-3861): a body fix plus a plain re-run clears a block, and a rename out of a
+    # protected path still counts as touching it. The stub prints what gh --jq would print.
+    result = _run_gate(
+        tmp_path, "hard", "", 0, gh_script=GH_PR7_STUB, extra_env=PR7_EVENT_ENV
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads((tmp_path / "payload.json").read_text())
+    assert payload["checkoutIds"] == ["dsp_live"]
+    assert payload["labels"] == ["risk:high"]
+    assert payload["changedPaths"] == ["docs/new.md", "AGENTS.md"]
+    calls = (tmp_path / "gh.log").read_text()
+    assert "pulls/7/files" in calls and "previous_filename" in calls
+
+
+def test_body_source_event_keeps_the_event_payload_body(tmp_path):
+    # Rollback switch: vars.COMPLIANCE_BODY_SOURCE=event restores the frozen event body.
+    result = _run_gate(
+        tmp_path,
+        "hard",
+        "",
+        0,
+        gh_script=GH_PR7_STUB,
+        extra_env={**PR7_EVENT_ENV, "BODY_SOURCE": "event"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads((tmp_path / "payload.json").read_text())
+    assert payload["checkoutIds"] == ["dsp_stale"]
+    assert payload["labels"] == []
+    assert payload["changedPaths"] == ["docs/new.md", "AGENTS.md"]
+
+
+def test_gate_needs_no_checkout():
+    for variant in ("canonical", "downstream"):
+        workflow = _run("--emit", variant).stdout
+        assert "actions/checkout" not in workflow, variant
+        assert "git diff" not in workflow, variant
+        assert "BODY_SOURCE: ${{ vars.COMPLIANCE_BODY_SOURCE || 'api' }}" in workflow, (
+            variant
+        )
 
 
 def test_docs_only_skip_posts_pass_and_guards_agent_files():
@@ -270,7 +334,6 @@ def test_docs_only_skip_posts_pass_and_guards_agent_files():
         assert '"${PR_AUTHOR:-}" = "dependabot[bot]"' in script
         assert "(AGENTS|CLAUDE|CODEX|GROK|HERMES|GEMINI|COPILOT)[^/]*" in script
         assert "prompts" in script
-        assert "--no-renames" in script
         assert "previous_filename" in _run("--emit", variant).stdout
         assert '[ "$n_changed" -gt 0 ]' in script
 

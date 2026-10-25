@@ -43,6 +43,7 @@ import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import { checkApproval } from "./approval-signature";
 import { bucketPrdForTask } from "./bucket-prd";
+import { assertCreatorApprovedForCheckout } from "./creator-approval";
 import { ownEvidenceSite } from "./evidence-artifacts";
 import type { EventsQuery } from "./events";
 import {
@@ -370,6 +371,16 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
       `Task ${input.taskId} is cancelled${task.cancellation ? ` (${task.cancellation.reason}${task.cancellation.replacedBy ? ` → ${task.cancellation.replacedBy}` : ""})` : ""}; it cannot be checked out. Reopen it first, or check out the replacement task.`,
       409
     );
+  }
+  // TASK-3530: a gated creator's task waits for creator approval. This covers
+  // both checkout doors and every launch, which always takes a checkout.
+  if (task) {
+    await assertCreatorApprovedForCheckout(task, {
+      actor: input.runtime,
+      actorId: input.actor?.id ?? null,
+      repo: input.repo,
+      door: input.door ?? null,
+    });
   }
   const backfilledOwner =
     task && !task.accountableOwner ? resolveHumanAccountableOwner(input.accountableHuman) : null;
@@ -1046,7 +1057,9 @@ export interface IngestResult {
   deepLink?: string | null;
 }
 
-const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "closed"]);
+// ready_for_review: the projection shows the PR as open (TASK-3743). It logs as
+// pr.ready_for_review, which no timeline lists, so "PR #N opened" shows once.
+const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "ready_for_review", "closed"]);
 const IDLE_TTL_MS = 24 * 60 * 60 * 1000;
 const ABSOLUTE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -1547,7 +1560,8 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
     }
   }
 
-  const kind = evt.action === "synchronize" ? "pr.synchronized" : "pr.opened";
+  const kind =
+    evt.action === "synchronize" ? "pr.synchronized" : evt.action === "ready_for_review" ? "pr.ready_for_review" : "pr.opened";
   await repo.appendEvent({
     kind,
     actor: actorIdentity,

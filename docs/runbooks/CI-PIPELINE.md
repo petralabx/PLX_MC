@@ -191,7 +191,7 @@ further repos that are **not** in that list.
 | Repo | Registry | L0 today | Extra required (repo) | Notes |
 |------|----------|----------|------------------------|--------|
 | `petralabx/PLX_MC` | hub, hard, active | `compliance` | `Preflight + full suite` | Generator SSOT. No downstream `drift` copy. |
-| `petralabx/plx-customer-portal` | product_app, hard, active | `compliance` (+ `drift`) | `lint-typecheck-build`, `Validate ledgers (vmc-quality-ledger/v1)`, `workbench-api`, `ai-review/verdict`, `compliance-group` (read 2026-10-24) | Staging is the integration branch, with a merge queue. `silent-failure-audit` is not in the ruleset but is a real fail — do not raise `BASELINE`. |
+| `petralabx/plx-customer-portal` | product_app, hard, active | `compliance` (+ `drift`) | `lint-typecheck-build`, `Validate ledgers (vmc-quality-ledger/v1)`, `workbench-api`, `ai-review/verdict`, `compliance-group` (read 2026-10-24), `merge-hold` (added 2026-10-25) | Staging is the integration branch, with a merge queue. `silent-failure-audit` is not in the ruleset but is a real fail — do not raise `BASELINE`. |
 | `petralabx/agentic-swarm` | product_platform, hard, active | `compliance` (+ `drift`, not required) | `Swarm (Python)`, `VMC Web (TypeScript)`, `Change Impact Analysis`, `smoke`, `Playwright PR Smoke`, `Agentic PR Evidence` (read 2026-10-24; none pinned to an app) | |
 | `petralabx/skills` | skills, hard, active | `compliance` + `drift` | | |
 | `petralabx/local-inference` | tooling, hard, active | `compliance` + `drift` | | |
@@ -202,8 +202,8 @@ further repos that are **not** in that list.
 | `petralabx/plx_secondbrain` | tooling, **registry=soft**, active | `compliance` + `drift` (live) | | Enrolled TASK-1165. L0 landed via https://github.com/petralabx/plx_secondbrain/pull/2. Stays soft; do not flip hard. |
 
 Most enrolled non-hub repos require **`compliance` + `drift`**. Portal adds
-`lint-typecheck-build`, `Validate ledgers`, `workbench-api`, `ai-review/verdict`
-and `compliance-group`; `silent-failure-audit` stays a real fail outside the
+`lint-typecheck-build`, `Validate ledgers`, `workbench-api`, `ai-review/verdict`,
+`compliance-group` and `merge-hold`; `silent-failure-audit` stays a real fail outside the
 ruleset. Do not org-require those extras.
 
 ---

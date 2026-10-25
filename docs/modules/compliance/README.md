@@ -95,6 +95,14 @@ truth table is proven before any plumbing exists.
   passes only when one of its approval gates is a person's signed, unexpired
   merge approval for this repo, PR and head SHA (`checkApproval`); otherwise the
   gate blocks and names the reason. Unlabelled tasks are unaffected.
+- TASK-3901: an agent PR that touches money, migrations or workflows needs the
+  same signed merge approval of its head, whatever its labels. `approval-paths.ts`
+  sets the paths: payments, billing, invoices, ledgers, pricing, costs, ERP and
+  Business Central posting, and trading; migration folders and backfill, purge
+  and migrate scripts; and `.github/workflows` and `.github/actions`. Docs never
+  count. `PLX_MC_APPROVAL_DECIDERS` lists who may approve. `PLX_MC_PATH_APPROVAL`
+  is `enforce`, `warn` or `off`. Unset, it enforces once `PLX_MC_APPROVAL_SIGNING_KEY`
+  and the decider list are set, and warns until then. Operator PRs stay ungated.
 - TASK-3409: a push to, or reopen of, an open PR whose body carries a stamp
   extends that checkout to at least now + 8 h (`renewDispatches`, audited as
   `checkout.renewed`); revoked or released leases are never extended.

@@ -12,7 +12,7 @@ panel and activity strip polled from `GET /api/in-flight`), **Insights**,
 **Skills Directory**, **Architecture**, **AI Spend**, and **Ask the Brain** — along with the ⌘K
 command palette, New Task / New Initiative / New Project modals, and
 PeoplePicker (Petra domain rule enforced in the UI). The screen registry
-(`src/components/mc/screens.tsx`) maps twenty-six `Screen` keys to components;
+(`src/components/mc/screens.tsx`) maps twenty-nine `Screen` keys to components;
 Board, List, Timeline, and My Tasks share `WorkViews`. State flows through the runtime store
 (`src/lib/mc-data/store.ts`) — since 2026-06-11 a client cache over the sync
 module's API: it hydrates from `GET /api/state` after mount (the signed-in

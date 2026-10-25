@@ -1,0 +1,226 @@
+/* CI scorecard screen (TASK-3913) — imported into the mc.screens layer (ADR-005):
+   phone-first, wider tiers by @container main, --p-* tokens only. One card per repo and one for the fleet; a
+   grade chip says met, near or missed, and the letter carries the week's score. */
+
+.mc .cs-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  padding: 8px var(--mc-page-edge, var(--p-gutter)) 16px;
+}
+@container main (min-width: 64rem) {
+  .mc .cs-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.mc .cs-card,
+.mc .cs-trend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius);
+  background: var(--p-card);
+}
+.mc .cs-trend {
+  margin: 8px var(--mc-page-edge, var(--p-gutter)) 0;
+}
+
+.mc .cs-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mc .cs-card h2,
+.mc .cs-trend h2 {
+  margin: 0;
+  font-size: var(--p-text-h3);
+  font-weight: 600;
+  color: var(--p-ink);
+}
+.mc .cs-met {
+  margin: 0;
+  font-size: var(--p-text-meta);
+  color: var(--p-ink-2);
+}
+
+/* The letter and score: the band's tone, text in the matching -text token. */
+.mc .cs-letter {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--p-grid);
+  font-family: var(--p-font-mono);
+  font-size: var(--p-text-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--p-ink);
+}
+.mc .cs-letter.cs-big {
+  font-size: var(--p-text-body);
+  font-weight: 600;
+}
+.mc .cs-l-A,
+.mc .cs-l-B {
+  border-color: var(--p-ok);
+  color: var(--p-ok-text);
+}
+.mc .cs-l-C,
+.mc .cs-l-D {
+  border-color: var(--p-warn);
+  color: var(--p-warn-text);
+}
+.mc .cs-l-F {
+  border-color: var(--p-hot);
+  color: var(--p-hot-text);
+}
+.mc .cs-l-none {
+  color: var(--p-muted);
+}
+
+.mc .cs-table-wrap {
+  position: relative;
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+}
+.mc .cs-table-wrap:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
+}
+.mc .cs-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--p-text-small);
+  font-variant-numeric: tabular-nums;
+}
+.mc .cs-table thead th {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--p-grid);
+  background: var(--p-card);
+  font-family: var(--p-font-mono);
+  font-size: var(--p-text-tick);
+  font-weight: 400;
+  letter-spacing: var(--p-track-tick);
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--p-ink-2);
+}
+.mc .cs-table :is(td, tbody th) {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--p-grid);
+  text-align: left;
+  font-weight: 400;
+  vertical-align: top;
+  color: var(--p-ink);
+}
+.mc .cs-table tbody tr:last-child :is(td, th) {
+  border-bottom: 0;
+}
+.mc .cs-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+.mc .cs-metric {
+  display: block;
+  min-width: 11rem;
+  font-weight: 500;
+}
+.mc .cs-detail,
+.mc .cs-note,
+.mc .cs-next {
+  display: block;
+  max-width: 24rem;
+  margin-top: 2px;
+  font-size: var(--p-text-tick);
+  line-height: 1.35;
+  white-space: normal;
+  color: var(--p-muted);
+}
+.mc .cs-note {
+  color: var(--p-warn-text);
+}
+
+/* Grade chips: tone from the status tokens. */
+.mc .cs-grade {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--p-grid);
+  font-size: var(--p-text-tick);
+  white-space: nowrap;
+  color: var(--p-ink-2);
+}
+.mc .cs-g-met {
+  border-color: var(--p-ok);
+  background: color-mix(in srgb, var(--p-ok) 14%, transparent);
+  color: var(--p-ok-text);
+}
+.mc .cs-g-near {
+  border-color: var(--p-warn);
+  background: color-mix(in srgb, var(--p-warn) 14%, transparent);
+  color: var(--p-warn-text);
+}
+.mc .cs-g-missed {
+  border-color: var(--p-hot);
+  background: color-mix(in srgb, var(--p-hot) 14%, transparent);
+  color: var(--p-hot-text);
+}
+.mc .cs-g-no-data,
+.mc .cs-g-no-target {
+  color: var(--p-muted);
+}
+.mc .cs-t-better {
+  color: var(--p-ok-text);
+}
+.mc .cs-t-worse {
+  color: var(--p-hot-text);
+}
+
+.mc .cs-data,
+.mc .cs-how {
+  font-size: var(--p-text-small);
+  color: var(--p-ink-2);
+}
+.mc .cs-how {
+  margin: 0 var(--mc-page-edge, var(--p-gutter)) 24px;
+}
+.mc .cs-how ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.mc .cs-how li + li {
+  margin-top: 4px;
+}
+.mc .cs-data summary,
+.mc .cs-how summary {
+  min-height: var(--p-touch);
+  cursor: pointer;
+  color: var(--p-ink);
+}
+
+.mc .cs-empty,
+.mc .cs-loading,
+.mc .cs-err,
+.mc .cs-note-box {
+  margin: 12px var(--mc-page-edge, var(--p-gutter));
+  font-size: var(--p-text-ui);
+  color: var(--p-ink-2);
+}
+.mc .cs-err {
+  color: var(--p-hot-text);
+}
+.mc .cs-note-box {
+  padding: 10px 12px;
+  border: 1px solid var(--p-warn);
+  border-radius: var(--p-radius-sm);
+  color: var(--p-warn-text);
+}

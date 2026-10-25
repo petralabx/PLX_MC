@@ -34,6 +34,7 @@ const EXPECTED_SCREENS = {
   architecture: true,
   "brain-ask": true,
   "ai-spend": true,
+  "ci-scorecard": true,
   "routing-inbox": true,
   approvals: true,
   activity: true,

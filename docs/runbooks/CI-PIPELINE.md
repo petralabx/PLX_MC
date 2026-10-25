@@ -141,6 +141,27 @@ Hub `PLX_MC` local equivalent is `./scripts/preflight.sh` (pre-commit / pre-push
 CI) — that is **this repo’s** product gate, not an org-wide Next/Playwright
 requirement.
 
+### AI review verdict (`ai-review/verdict`)
+
+The portal posts `ai-review/verdict` from its own `ai-review-verdict.yml`. Every
+other repo uses one shared rule (TASK-3902):
+
+- `.github/workflows/ai-review-verdict-shared.yml` on PLX_MC `main` holds the
+  rule. It is the portal's rule, with the base branch and the caller file as
+  inputs.
+- Each repo adds `.github/workflows/ai-review-verdict.yml`: a copy of PLX_MC's
+  caller with its own `base_branch`. The caller pins the rule to PLX_MC `main`,
+  so a PR cannot change the rule that grades it.
+- A marker counts when the plx-agents app posts it, or when a petralabx member
+  (author association `OWNER` or `MEMBER`) who did not open the PR posts it
+  (Vince, 2026-10-25). CIP's own markers (`plx-cip[bot]`) do not count.
+- Phase 2 of the org ruleset requires `ai-review/verdict` in every repo. Add the
+  caller first, or the repo's PRs wait for a status that never comes.
+- A change to the shared file changes the rule in every repo at once. It is a
+  workflow change, so it needs an MC approval.
+- Public repos can call the shared file only while PLX_MC is public. Before
+  PLX_MC goes private (TASK-3867), move it with the org compliance gate.
+
 ---
 
 ## 5. L2 — HITL (not org-required)

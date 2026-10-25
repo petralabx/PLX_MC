@@ -47,5 +47,6 @@
   "046_cip_auto_undraft_mcp_principal.sql",
   "047_checkout_lease_chain.sql",
   "048_workbench_intake_mcp_principal.sql",
-  "049_nav_stars.sql"
+  "049_nav_stars.sql",
+  "050_nav_prefs.sql"
 ]

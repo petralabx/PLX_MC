@@ -58,8 +58,8 @@ would be lost on the next device, so Vince chose server-side stars on
 
 - `db` (`query`), `secrets` (`databaseConfigured`), `sync/mapping` (project
   and initiative id rules).
-- `api/route`, `api/session-actor`, `auth` and `routing/mutations/actors` for
-  the route.
+- `api/route` and `api/session-actor` (`sessionPersonId`, shared with
+  `nav-prefs`) for the route.
 - Used by the web module's zoned sidebar, top bar, Projects page and More
   sheet.
 

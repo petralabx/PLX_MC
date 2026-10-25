@@ -7,15 +7,13 @@
 // another's stars. Stars are a personal preference (TASK-3842): anyone who can
 // read Mission Control (task.read) keeps their own, under their Entra object
 // id, which survives an email or directory change; the body never names the
-// person. Dormant local/test mode has no session, so the operator stands in,
-// as GET /api/viewer does (resolveViewer).
+// person (sessionPersonId). Dormant local/test mode has no session, so the
+// operator stands in, as GET /api/viewer does (resolveViewer).
 
 import { z } from "zod";
 
 import { ApiError, parseBody, route } from "@/lib/api/route";
-import { DORMANT_OPERATOR_ID } from "@/lib/api/session-actor";
-import { oidcEnabled } from "@/lib/auth";
-import { requireSessionActor } from "@/lib/routing/mutations/actors";
+import { sessionPersonId } from "@/lib/api/session-actor";
 import type { StarChange } from "@/lib/stars";
 import { MAX_STAR_KEY_LENGTH, StarsFullError, changeStars, isStarKey, readStars } from "@/lib/stars/store";
 
@@ -27,16 +25,10 @@ const changeSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("remove"), key: z.string().min(1).max(MAX_STAR_KEY_LENGTH) }),
 ]);
 
-/** Whose stars these are: the session's Entra object id. */
-async function starOwner(): Promise<string> {
-  if (!oidcEnabled()) return DORMANT_OPERATOR_ID;
-  return (await requireSessionActor("task.read")).actorId;
-}
-
-export const GET = route(async () => ({ stars: await readStars(await starOwner()) }));
+export const GET = route(async () => ({ stars: await readStars(await sessionPersonId()) }));
 
 export const PATCH = route(async (req) => {
-  const owner = await starOwner();
+  const owner = await sessionPersonId();
   const change = await parseBody(req, changeSchema);
   try {
     return { stars: await changeStars(owner, change as StarChange) };

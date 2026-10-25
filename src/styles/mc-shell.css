@@ -294,6 +294,33 @@
     width: 16px;
     height: 16px;
   }
+  /* The navigation switch (TASK-3855): a track that fills with the accent and
+     a knob that sits at the end when on. */
+  .mc .usermenu-switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 16px;
+    margin-left: auto;
+    border-radius: 8px;
+    background: var(--p-muted);
+  }
+  .mc .usermenu-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--p-paper);
+  }
+  .mc .usermenu-item[aria-checked="true"] .usermenu-switch {
+    background: var(--p-accent);
+  }
+  .mc .usermenu-item[aria-checked="true"] .usermenu-switch::after {
+    left: 14px;
+  }
   .mc .iconbtn {
     position: relative;
     display: inline-flex;
@@ -1694,6 +1721,37 @@
     .mc .mc-side .tree-toggle {
       width: var(--p-shell-row, 28px);
       min-height: var(--p-shell-row, 28px);
+    }
+  }
+  /* The one-screen tour of the new navigation (nav-tour.tsx, TASK-3855), on
+     the New … modals' card: each zone's name, then what sits there. */
+  .mc .ntm .nav-tour-points {
+    margin: 0;
+    list-style: none;
+    gap: var(--p-space-3);
+  }
+  .mc .ntm .nav-tour-points li {
+    display: grid;
+    gap: 2px;
+    font-size: var(--p-text-small);
+    line-height: 1.45;
+    color: var(--p-ink-2);
+  }
+  .mc .ntm .nav-tour-points b {
+    font-weight: 500;
+    color: var(--p-ink);
+  }
+  /* Phone: the hint takes its own line, so each button keeps its words on one. */
+  .mc .nav-tour .ntm-foot {
+    flex-wrap: wrap;
+  }
+  .mc .nav-tour .ntm-acts .btn {
+    white-space: nowrap;
+  }
+  @media (min-width: 641px) {
+    .mc .ntm .nav-tour-points li {
+      grid-template-columns: 9.5rem 1fr;
+      gap: var(--p-space-3);
     }
   }
 }

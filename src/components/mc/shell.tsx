@@ -30,7 +30,8 @@ import { InboxView } from "./inbox";
 import { MoreSheet } from "./more-sheet";
 import { navFlags } from "./nav-flags";
 import { isPaneScreen, recentKeyOf, type StarRow } from "./nav-model";
-import { useNavZones } from "./nav-zones";
+import { NavTour } from "./nav-tour";
+import { loadNavPrefs, useNavTour, useNavZones } from "./nav-zones";
 import { NewInitiativeModal } from "./new-initiative-modal";
 import { NewProjectModal } from "./new-project-modal";
 import { NewTaskModal } from "./new-task-modal";
@@ -77,6 +78,7 @@ export function MissionControlShell() {
   const tier = useContentTier(mainRef);
   const counts = useNavCounts();
   const navZones = useNavZones();
+  const navTour = useNavTour();
   const flags = navFlags();
   const stars = useStars(navZones);
 
@@ -103,6 +105,15 @@ export function MissionControlShell() {
   // snapshot from the API.
   useEffect(() => {
     hydrate();
+  }, []);
+
+  // The person's "Try the new navigation" switch (TASK-3855), from the server,
+  // in either shell: they may have turned it on on another device. A failed
+  // read is tried again when the window gets focus.
+  useEffect(() => {
+    loadNavPrefs();
+    window.addEventListener("focus", loadNavPrefs);
+    return () => window.removeEventListener("focus", loadNavPrefs);
   }, []);
 
   // P3 deep links — route state ⇄ URL. The URL is adopted AFTER mount (not in
@@ -497,6 +508,8 @@ export function MissionControlShell() {
         dark={dark}
         setDark={setDark}
       />
+      {/* Before the palette, so ⌘K over the tour opens on top of it. */}
+      {navTour ? <NavTour /> : null}
       {paletteOpen ? (
         <CommandPalette
           onClose={closePalette}

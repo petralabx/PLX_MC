@@ -30,3 +30,4 @@ key files change, update its contract in the same PR.
 | reporting-goals | Vince | Medium | `docs/modules/reporting-goals/README.md` |
 | architecture | Vince | Medium | `docs/modules/architecture/README.md` |
 | stars | Vince | Low | `docs/modules/stars/README.md` |
+| nav-prefs | Vince | Low | `docs/modules/nav-prefs/README.md` |

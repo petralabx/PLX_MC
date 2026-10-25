@@ -56,8 +56,16 @@ bottom with Help and an Admin & health popover (Operations · Sync and data ·
 Engineering). It is 248px wide, with 28px rows for a mouse and 44px on touch.
 Its items, URLs, badges and flags are the default sidebar's (`ZONED_NAV_GROUPS`
 and `ADMIN_FLYOUT` in `nav-model.ts`). `NEXT_PUBLIC_PLX_MC_NAV_ZONES=1` turns
-it on for a build; localStorage `mc.nav.zones` = "1" turns it on for one
-browser (`nav-zones.ts`). Plan's Board, List and Timeline share one All work
+it on for a build, with no switch. Otherwise each person turns it on with
+"Try the new navigation" in the account menu (TASK-3855), and turns it off
+there to switch back. The switch lives on the server per person (`GET|PATCH
+/api/nav-prefs`, module `nav-prefs`), so it follows them to every device;
+this browser keeps a copy in localStorage `mc.nav.zones` ("on" / "off") for
+the next load, and drops it when the server holds no switch (another person
+signed in). "1" there still opts one browser in by hand for a person who
+never used the switch (`nav-zones.ts`). The first time the switch
+is on, a one-screen tour names each zone, with Got it and Switch back
+(`nav-tour.tsx`); the server keeps that it was seen. Plan's Board, List and Timeline share one All work
 row, lit on each view, and the views stay tabs on that screen with their URLs
 and g b, g l and g t keys (TASK-3843). The phone tabs are Home, My tasks,
 Projects, Search (⌘K) and More; More holds Reporting, Knowledge, Admin &
@@ -173,7 +181,8 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/count-badge.tsx` — honest count badge (n · n+ · —)
 - `src/components/mc/nav-icon.tsx` — Lucide icon map for the nav
 - `src/components/mc/nav-model.ts` — nav groups/items, phone tabs, tab memory, stars, recents, pane screens — shared by every nav surface, ⌘K and tests
-- `src/components/mc/nav-zones.ts` — the zoned-sidebar flag (build env, or a per-browser opt-in; default off)
+- `src/components/mc/nav-zones.ts` — who sees the zoned sidebar: the build env, else the person's "Try the new navigation" switch (server, with a copy per browser), else a by-hand opt-in per browser; default off
+- `src/components/mc/nav-tour.tsx` — the one-screen tour the first time the switch is on (Got it, Switch back)
 - `src/components/mc/project-detail.tsx` — Project detail + initiative card grid
 - `src/components/mc/projects-view.tsx` — Projects page: every open project with its initiatives, then No project
 - `src/components/mc/inbox.tsx` — Home: "What needs me today" (rules in `needs-me.ts`)

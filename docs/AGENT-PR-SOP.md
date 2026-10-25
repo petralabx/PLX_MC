@@ -449,7 +449,7 @@ MC stores the file on the PLX SharePoint site, in the `Mission Control` library,
 
 A person must create the library and allow the Mission Control app to use the site. Then the operator sets `PLX_MC_EVIDENCE_STORE_ENABLED=1`. Until then, the call returns `evidence_store_unavailable` and says what is missing. Report that message. Never create a library or grant access yourself.
 
-The `compliance` check warns while uploads are off. When uploads are on, it warns until 2026-10-25 and then blocks a task without visual evidence.
+The `compliance` check warns while uploads are off. When uploads are on, it warns until 2026-11-01 and then blocks a task without visual evidence.
 
 ### Explainer video (TASK-3167)
 

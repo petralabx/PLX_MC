@@ -1497,6 +1497,11 @@
   .mc .mc-side .tree > a.item {
     color: var(--p-muted);
   }
+  @media (hover: hover) {
+    .mc .mc-side .tree > a.item:hover {
+      color: var(--p-ink);
+    }
+  }
   .mc .mc-side .tree-toggle {
     display: inline-flex;
     flex: 0 0 auto;

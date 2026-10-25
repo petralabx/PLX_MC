@@ -5,7 +5,7 @@
 // Grouped by what a colleague is doing — My work · Plan · Knowledge · Reporting
 // · Admin & health — not by system internals. Pure: no React, no store reads (badge
 // counts are resolved by the shell; icon names map to Lucide in nav-icon.tsx).
-import type { Bucket, Human, Project } from "@/lib/mc-data";
+import { isClosedStage, type Bucket, type Human, type Project, type Task } from "@/lib/mc-data";
 
 import type { Route, Screen } from "./route";
 import { SCREEN_VALUES, routeToUrl } from "./route";
@@ -235,10 +235,10 @@ export function zonedNavPlaceOf(screen: Screen): NavGroupId | "admin" | "help" |
 // ─── Projects tree (zoned sidebar, TASK-3841) ───────────────────────────────
 // Each open project with its open initiatives nested under it: the viewer's
 // own projects first, then the rest by name, at most PROJECT_TREE_CAP rows.
-// The current project always makes the cut. Callers pass the nav-visible
-// records (navProjects, navBuckets), so closed and archived ones stay out.
-// Initiatives without an open project sit under No project on the Projects
-// page.
+// The current project always makes the cut, and View all shows when rows are
+// left out. Callers pass the nav-visible records (navProjects, navBuckets), so
+// closed and archived ones stay out. Initiatives without an open project sit
+// under No project on the Projects page.
 
 export const PROJECT_TREE_CAP = 6;
 
@@ -253,25 +253,46 @@ export interface ProjectTree {
   total: number;
 }
 
-/** The viewer owns the project or is one of its members. */
-export function isViewerProject(project: Project, viewer: Pick<Human, "id" | "email"> | null): boolean {
-  if (!viewer) return false;
-  if (project.owner === viewer.id) return true;
-  const tokens = new Set([viewer.id, viewer.email].filter((t): t is string => !!t).map((t) => t.trim().toLowerCase()));
-  return (project.members ?? []).some((member) => tokens.has(member.trim().toLowerCase()));
+const memberToken = (raw: string) => raw.trim().toLowerCase();
+
+/**
+ * The viewer's projects, by the Approvals screen's My projects rule
+ * (src/lib/compliance/my-projects.ts, TASK-3720): a member, the owner, or
+ * assigned (assignee or coassignee) an open task in one of its initiatives.
+ * Ids match case-insensitively on the viewer's id or email.
+ */
+export function viewerProjectIds(
+  projects: readonly Project[],
+  initiatives: readonly Bucket[],
+  tasks: readonly Task[],
+  viewer: Pick<Human, "id" | "email"> | null
+): Set<string> {
+  const mine = new Set<string>();
+  if (!viewer) return mine;
+  const tokens = new Set([viewer.id, viewer.email].filter((t): t is string => !!t).map(memberToken));
+  const holds = (raw: string | null | undefined) => !!raw && tokens.has(memberToken(raw));
+  const projectOf = new Map(initiatives.map((b) => [b.id, b.project ?? null]));
+  for (const task of tasks) {
+    const projectId = projectOf.get(task.bucket);
+    if (projectId && !isClosedStage(task.stage) && (holds(task.assignee) || (task.coassignees ?? []).some(holds))) {
+      mine.add(projectId);
+    }
+  }
+  for (const project of projects) {
+    if (holds(project.owner) || (project.members ?? []).some(holds)) mine.add(project.id);
+  }
+  return mine;
 }
 
 export function projectTree(
   projects: readonly Project[],
   initiatives: readonly Bucket[],
-  viewer: Pick<Human, "id" | "email"> | null,
+  mine: ReadonlySet<string>,
   currentProjectId: string | null = null,
   cap: number = PROJECT_TREE_CAP
 ): ProjectTree {
   const ordered = [...projects].sort(
-    (a, b) =>
-      Number(isViewerProject(b, viewer)) - Number(isViewerProject(a, viewer)) ||
-      a.name.localeCompare(b.name, undefined, { numeric: true })
+    (a, b) => Number(mine.has(b.id)) - Number(mine.has(a.id)) || a.name.localeCompare(b.name, undefined, { numeric: true })
   );
   let shown = ordered.slice(0, cap);
   const current = ordered.find((p) => p.id === currentProjectId);

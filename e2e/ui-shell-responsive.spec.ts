@@ -975,18 +975,19 @@ test.describe("shell — zoned sidebar", () => {
   });
 
   // TASK-3841: initiatives sit under their project in a capped tree.
-  test("the Projects tree opens a project's initiatives, and View all lands on Projects", async ({ page }) => {
+  test("the Projects tree opens a project's initiatives, and the Projects row lands on Projects", async ({ page }) => {
     await open(page, 1440, "/?screen=board");
     const nav = side(page);
     const tree = nav.getByRole("group", { name: "Projects", exact: true });
+    const toggle = tree.getByRole("button", { name: "Initiatives in PLX Portal Go-Live" });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(tree.getByRole("link", { name: "WMS Integration" })).toBeHidden();
-    await tree.getByRole("button", { name: "Show initiatives in PLX Portal Go-Live" }).click();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(tree.getByRole("link", { name: "WMS Integration" })).toBeVisible();
-    await expect(tree.getByRole("button", { name: "Hide initiatives in PLX Portal Go-Live" })).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
-    await tree.getByRole("link", { name: "View all 1 project" }).click();
+    // One fixture project: nothing is left out, so no View all row.
+    await expect(tree.getByRole("link", { name: /^View all/ })).toHaveCount(0);
+    await nav.getByRole("link", { name: "Projects", exact: true }).click();
     const screen = page.getByTestId("projects-screen");
     await expect(screen).toBeVisible();
     await expect(nav.getByRole("link", { name: "Projects", exact: true })).toHaveAttribute("aria-current", "page");
@@ -994,6 +995,21 @@ test.describe("shell — zoned sidebar", () => {
     await screen.getByRole("link", { name: "UAT", exact: true }).click();
     await expect(page.getByTestId("bucket-kicker")).toContainText("Initiative · BKT-UAT");
     expect(await shellViolations(page)).toEqual([]);
+  });
+
+  // Review round 1: closing the current project keeps it shut on that screen,
+  // and arriving on another of its initiatives opens it again.
+  test("a project closed by hand opens again on arriving at one of its initiatives", async ({ page }) => {
+    await open(page, 1440, "/?screen=project&projectId=PRJ-PORTAL-GOLIVE");
+    const tree = side(page).getByRole("group", { name: "Projects", exact: true });
+    const toggle = tree.getByRole("button", { name: "Initiatives in PLX Portal Go-Live" });
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await page.getByTestId("project-screen").locator(".pv-open").first().click();
+    await expect(page.getByTestId("bucket-kicker")).toBeVisible();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(tree.locator('[aria-current="page"]')).toBeVisible();
   });
 
   test("deep links to the project and to every initiative open that screen, with its row lit", async ({ page }) => {

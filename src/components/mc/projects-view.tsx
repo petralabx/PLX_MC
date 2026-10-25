@@ -9,9 +9,9 @@ import type { ReactNode } from "react";
 
 import type { Bucket } from "@/lib/mc-data";
 import { useMcVersion, useViewer } from "@/lib/mc-data/hooks";
-import { navBuckets, navProjects } from "@/lib/mc-data/store";
+import { allTasks, navBuckets, navProjects } from "@/lib/mc-data/store";
 
-import { isPlainLeftClick, isViewerProject, navHref, projectTree, unfiledInitiatives } from "./nav-model";
+import { isPlainLeftClick, navHref, projectTree, unfiledInitiatives, viewerProjectIds } from "./nav-model";
 import type { Nav, Route, ScreenProps } from "./route";
 
 function NavLink({ nav, target, className, children }: { nav: Nav; target: Route; className: string; children: ReactNode }) {
@@ -52,9 +52,10 @@ export function ProjectsView({ nav }: ScreenProps) {
   const viewer = useViewer();
   const projects = navProjects();
   const initiatives = navBuckets();
-  const { nodes } = projectTree(projects, initiatives, viewer, null, Infinity);
-  const mine = nodes.filter((n) => isViewerProject(n.project, viewer));
-  const others = nodes.filter((n) => !isViewerProject(n.project, viewer));
+  const viewers = viewerProjectIds(projects, initiatives, allTasks(), viewer);
+  const { nodes } = projectTree(projects, initiatives, viewers, null, Infinity);
+  const mine = nodes.filter((n) => viewers.has(n.project.id));
+  const others = nodes.filter((n) => !viewers.has(n.project.id));
   const unfiled = unfiledInitiatives(projects, initiatives);
   const sections = [
     { id: "mine", title: "Your projects", nodes: mine },

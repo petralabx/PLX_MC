@@ -28,7 +28,7 @@ describe("Projects page", () => {
     const html = render();
     expect(html).toContain('data-testid="projects-screen"');
     expect(html).toContain("<h1>Projects</h1>");
-    expect(html).toContain("<b>1</b> project");
+    expect(html).toContain("<b>1</b> project</span>");
     // No viewer on the server render, so nothing is "yours" yet.
     expect(html).toContain('id="pj-h-others">All projects</h2>');
     expect(html).toContain('href="/?screen=project&amp;projectId=PRJ-PORTAL-GOLIVE" class="pj-name"');

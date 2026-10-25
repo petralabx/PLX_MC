@@ -14,6 +14,8 @@ import type { Route } from "@/components/mc/route";
 import type { Task } from "@/lib/mc-data/types";
 import {
   __setStateLoaderForTests,
+  allBuckets,
+  allProjects,
   allTasks,
   dataSource,
   hydrate,
@@ -189,11 +191,45 @@ describe("Sidebar — zoned", () => {
     expect(html).not.toContain("mc-nav-h-projects");
     expect(html).toContain('href="/?screen=project&amp;projectId=PRJ-PORTAL-GOLIVE" class="item"');
     expect(html).toContain(
-      'aria-expanded="false" aria-controls="mc-nav-tree-PRJ-PORTAL-GOLIVE" aria-label="Show initiatives in PLX Portal Go-Live"'
+      'aria-expanded="false" aria-controls="mc-nav-tree-PRJ-PORTAL-GOLIVE" aria-label="Initiatives in PLX Portal Go-Live"'
     );
     expect(html).toContain('<div id="mc-nav-tree-PRJ-PORTAL-GOLIVE" class="tree-kids" hidden="">');
-    expect(html).toContain('<span class="nm">View all 1 project</span>');
+    // Nothing is left out, so there is no View all row.
+    expect(html).not.toContain("View all");
     expect(html).toMatch(/New project.*New initiative/);
+  });
+
+  it("caps the tree at six projects, keeps the current one in, and leaves closed and archived out", async () => {
+    const [project] = allProjects();
+    const [bucket] = allBuckets();
+    const projects = Array.from({ length: 8 }, (_, i) => ({ ...project, id: `PRJ-${i + 1}`, name: `Project ${i + 1}` }));
+    __setStateLoaderForTests(async () => ({
+      tasks: allTasks().slice(0, 1),
+      risks: [],
+      files: [],
+      conflicts: openConflicts(),
+      errors: openErrors(),
+      audit: [],
+      counts: {},
+      lastSweep: "2026.10.24 · 12:00",
+      projects: [
+        ...projects,
+        { ...project, id: "PRJ-DONE", name: "Done project", status: "closed" as const },
+        { ...project, id: "PRJ-OLD", name: "Archived project", archivedAt: "2026-10-01T00:00:00Z" },
+      ],
+      buckets: [{ ...bucket, id: "BKT-8", name: "Eighth work", project: "PRJ-8" }],
+    }));
+    await hydrate();
+    const rows = (html: string) => [...html.matchAll(/projectId=(PRJ-[^"&]+)" class="item/g)].map((m) => m[1]);
+    const home = nav(render({ screen: "home" }));
+    expect(rows(home)).toEqual(["PRJ-1", "PRJ-2", "PRJ-3", "PRJ-4", "PRJ-5", "PRJ-6"]);
+    expect(home).toContain('<span class="nm">View all 8 projects</span>');
+    expect(home).not.toMatch(/Done project|Archived project/);
+    // The current project, beyond the cap, takes the last row and opens.
+    const initiative = nav(render({ screen: "bucket", bucketId: "BKT-8" }));
+    expect(rows(initiative)).toEqual(["PRJ-1", "PRJ-2", "PRJ-3", "PRJ-4", "PRJ-5", "PRJ-8"]);
+    expect(initiative).toContain('aria-expanded="true" aria-controls="mc-nav-tree-PRJ-8"');
+    expect(initiative).toContain('href="/?screen=bucket&amp;bucketId=BKT-8" class="item active" aria-current="page"');
   });
 
   it("opens the current project, and the open initiative's project, with one current row", () => {

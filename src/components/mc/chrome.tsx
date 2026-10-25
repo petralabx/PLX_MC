@@ -46,6 +46,7 @@ import {
   nextDrawerOpen,
   projectTree,
   revealScrollTop,
+  viewerProjectIds,
   visibleAdminFlyout,
   visibleNavGroups,
   visibleZonedNavGroups,
@@ -330,7 +331,28 @@ export function Sidebar({
   // The zoned sidebar's Projects tree (TASK-3841) keeps this project in its
   // rows and opens it.
   const currentProjectId = route.screen === "project" ? (route.projectId ?? null) : openProjectId;
-  const tree = zoned ? projectTree(navProjects(), navBuckets(), viewer, currentProjectId) : null;
+  const treeProjects = zoned ? navProjects() : [];
+  const treeInitiatives = zoned ? navBuckets() : [];
+  const tree = zoned
+    ? projectTree(
+        treeProjects,
+        treeInitiatives,
+        viewerProjectIds(treeProjects, treeInitiatives, allTasks(), viewer),
+        currentProjectId
+      )
+    : null;
+
+  // Arriving on a project or one of its initiatives opens it; after that it
+  // keeps the person's choice, like Knowledge and Admin & health (ADR-011).
+  // Adjusted while rendering: React's pattern for state that follows a prop.
+  const arrival = zoned && currentProjectId ? `${currentProjectId} ${route.screen} ${route.bucketId ?? ""}` : null;
+  const [openedOn, setOpenedOn] = useState<string | null>(null);
+  if (arrival !== openedOn) {
+    setOpenedOn(arrival);
+    if (currentProjectId && arrival && !treeOpen[currentProjectId]) {
+      setTreeOpen((prev) => ({ ...prev, [currentProjectId]: true }));
+    }
+  }
 
   // Items are real links (open in a new tab, copy the URL); a plain click stays
   // a client-side nav() so screens switch without a reload.
@@ -428,7 +450,7 @@ export function Sidebar({
       <div className="tree" role="group" aria-label="Projects" key="project-tree">
         {tree.nodes.map(({ project, initiatives }) => {
           const bodyId = `mc-nav-tree-${project.id}`;
-          const expanded = treeOpen[project.id] ?? project.id === currentProjectId;
+          const expanded = treeOpen[project.id] === true;
           return (
             <div className="tree-node" key={project.id}>
               <div className="tree-row">
@@ -449,7 +471,7 @@ export function Sidebar({
                     className="tree-toggle"
                     aria-expanded={expanded}
                     aria-controls={bodyId}
-                    aria-label={`${expanded ? "Hide" : "Show"} initiatives in ${project.name}`}
+                    aria-label={`Initiatives in ${project.name}`}
                     onClick={() => setTreeOpen((prev) => ({ ...prev, [project.id]: !expanded }))}
                   >
                     <span className="chev" aria-hidden="true">
@@ -477,15 +499,15 @@ export function Sidebar({
             </div>
           );
         })}
-        {link(
-          "projects:all",
-          { screen: "projects" },
-          false,
-          `View all ${tree.total} ${tree.total === 1 ? "project" : "projects"}`,
-          <span className="nm">
-            View all {tree.total} {tree.total === 1 ? "project" : "projects"}
-          </span>
-        )}
+        {tree.total > tree.nodes.length
+          ? link(
+              "projects:all",
+              { screen: "projects" },
+              false,
+              `View all ${tree.total} projects`,
+              <span className="nm">View all {tree.total} projects</span>
+            )
+          : null}
         {newProjectButton}
         {newInitiativeButton}
       </div>

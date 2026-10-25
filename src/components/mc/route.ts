@@ -55,6 +55,8 @@ export interface Route {
   focus?: "evidence";
   /** One question on the Approvals screen (TASK-3567): `/?screen=approvals&question=<q_id>`. */
   question?: string;
+  /** One approval gate on the Approvals screen (TASK-3559): `/?screen=approvals&gate=<apg_id>`. */
+  gate?: string;
   // Module E (SPEC §3.B.3): an Insights chart segment click navigates to the
   // board carrying a FilterState here; WorkViews adopts it on mount/route change
   // through F's sanitizeFilterState. Optional, so all existing nav() sites carry
@@ -76,7 +78,11 @@ export interface ScreenProps {
 // serialized (see NOTES.md in the phase artifacts): it is a complex nested
 // object carried by one Insights → Board hand-off, not a shareable location.
 
-const ENTITY_PARAMS = ["projectId", "bucketId", "taskId", "sop", "diagram", "node", "question"] as const;
+const ENTITY_PARAMS = ["projectId", "bucketId", "taskId", "sop", "diagram", "node", "question", "gate"] as const;
+
+// Stable link names that read as another screen (TASK-3559): `?screen=my-tasks`
+// is the shareable name for My tasks, whose screen key is "mine".
+const SCREEN_ALIASES: ReadonlyMap<string, Screen> = new Map([["my-tasks", "mine"]]);
 
 /** Serialize a Route to a path + query string ("/", "/?screen=board", …). */
 export function routeToUrl(route: Route): string {
@@ -101,7 +107,9 @@ export function urlToRoute(url: string): Route {
   const params = new URLSearchParams(idx >= 0 ? url.slice(idx + 1) : "");
   const raw = params.get("screen");
   const screen: Screen =
-    raw !== null && (SCREEN_VALUES as readonly string[]).includes(raw) ? (raw as Screen) : "home";
+    raw !== null && (SCREEN_VALUES as readonly string[]).includes(raw)
+      ? (raw as Screen)
+      : ((raw !== null && SCREEN_ALIASES.get(raw)) || "home");
   const route: Route = { screen };
   for (const key of ENTITY_PARAMS) {
     const value = params.get(key);

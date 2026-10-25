@@ -542,8 +542,9 @@
     padding: 0;
     border-bottom: 0;
   }
-  /* Project / initiative health tick */
-  .mc .mc-side .item .hl {
+  /* Project / initiative health tick (the sidebar; the More sheet's Starred rows) */
+  .mc .mc-side .item .hl,
+  .mc .mc-sheet .row .hl {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -551,7 +552,8 @@
     width: 16px;
     height: 16px;
   }
-  .mc .mc-side .item .hl::before {
+  .mc .mc-side .item .hl::before,
+  .mc .mc-sheet .row .hl::before {
     content: "";
     width: 2px;
     height: 11px;
@@ -561,13 +563,16 @@
   .mc .mc-side .item[aria-current="page"] .hl::before {
     height: 13px;
   }
-  .mc .mc-side .item .hl.track::before {
+  .mc .mc-side .item .hl.track::before,
+  .mc .mc-sheet .row .hl.track::before {
     background: var(--p-ok);
   }
-  .mc .mc-side .item .hl.risk::before {
+  .mc .mc-side .item .hl.risk::before,
+  .mc .mc-sheet .row .hl.risk::before {
     background: var(--p-warn);
   }
-  .mc .mc-side .item .hl.off::before {
+  .mc .mc-side .item .hl.off::before,
+  .mc .mc-sheet .row .hl.off::before {
     background: var(--p-hot);
   }
 
@@ -1579,6 +1584,21 @@
     font-size: var(--p-text-small);
     color: var(--p-muted);
   }
+  /* Starred (TASK-3842): the person's copies under My work. The icon rail
+     shows one Starred button, which opens the labelled drawer; every
+     labelled form lists the stars. */
+  .mc .mc-side .star-rail {
+    display: none;
+  }
+  /* A star toggle (the top bar's, a Projects row's): filled when starred. */
+  .mc .star-toggle[aria-pressed="true"] .ic {
+    fill: currentColor;
+    color: var(--p-accent);
+  }
+  .mc .star-toggle:disabled {
+    color: var(--p-muted);
+    cursor: default;
+  }
   /* Projects tree (TASK-3841): project rows under the Projects row, their
      initiatives a step further in, then a quiet View all row. The icon rail
      shows the Projects icon alone. */
@@ -1642,16 +1662,24 @@
     .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {
       padding: 8px 0;
     }
-    .mc .mc-side:not(.open) .tree {
+    .mc .mc-side:not(.open) .tree,
+    .mc .mc-side:not(.open) .star-rows {
       display: none;
+    }
+    .mc .mc-side:not(.open) .star-rail {
+      display: flex;
     }
   }
   @media (min-width: 1025px) {
     .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {
       padding: 8px 12px;
     }
-    .mc .mc-side:not(.open) .tree {
+    .mc .mc-side:not(.open) .tree,
+    .mc .mc-side:not(.open) .star-rows {
       display: block;
+    }
+    .mc .mc-side:not(.open) .star-rail {
+      display: none;
     }
   }
   /* 28px rows for a fine pointer only: a coarse one keeps 44px targets. */

@@ -6,6 +6,7 @@
 // · Admin & health — not by system internals. Pure: no React, no store reads (badge
 // counts are resolved by the shell; icon names map to Lucide in nav-icon.tsx).
 import { isClosedStage, type Bucket, type Human, type Project, type Task } from "@/lib/mc-data";
+import { STAR_CAP, type StarChange, type StarKey } from "@/lib/stars";
 
 import type { Route, Screen } from "./route";
 import { SCREEN_VALUES, routeToUrl } from "./route";
@@ -331,6 +332,109 @@ export function projectTree(
 export function unfiledInitiatives(projects: readonly Project[], initiatives: readonly Bucket[]): Bucket[] {
   const open = new Set(projects.map((p) => p.id));
   return initiatives.filter((b) => !b.project || !open.has(b.project));
+}
+
+// ─── Starred (zoned sidebar, TASK-3842) ─────────────────────────────────────
+// Copies of the screens, projects and initiatives a person starred, at most
+// STAR_CAP, in the order they starred them, kept on the server (src/lib/stars).
+// A copy is never the lit row; the item's own row is. Screens carry their zoned
+// label, and Board, List and Timeline are one All work star. A closed or
+// archived project or initiative still shows: the person starred it. A screen
+// behind an off flag does not show, but keeps its place: flags can differ
+// between devices. Only a dead star (its record is gone, or its key no longer
+// names anything) makes room when the list is full and the person stars
+// something new.
+
+export interface StarRow {
+  key: StarKey;
+  label: string;
+  target: Route;
+  /** A screen's icon; a project or initiative shows its health tick instead. */
+  lucide?: NavIconName;
+  health?: Project["health"];
+}
+
+const STAR_SCREENS = new Map<Screen, NavItem>(
+  [...ZONED_NAV_GROUPS.flatMap((group) => group.items), ...ADMIN_FLYOUT.flatMap((section) => section.items), HELP_NAV_ITEM].flatMap(
+    (item) => [item.screen, ...(item.also ?? [])].map((screen): [Screen, NavItem] => [screen, item])
+  )
+);
+
+/** The star key for the page a route shows; null for a page that cannot be starred (a task). */
+export function starKeyOf(route: Route): StarKey | null {
+  if (route.screen === "project") return route.projectId ? `project:${route.projectId}` : null;
+  if (route.screen === "bucket") return route.bucketId ? `bucket:${route.bucketId}` : null;
+  const item = STAR_SCREENS.get(route.screen);
+  return item ? `screen:${item.screen}` : null;
+}
+
+function splitStar(key: string): { kind: string; id: string } {
+  const colon = key.indexOf(":");
+  return { kind: key.slice(0, colon), id: key.slice(colon + 1) };
+}
+
+/**
+ * The rows for a person's stars, in their order. Pass every project and
+ * initiative (allProjects, allBuckets): a closed or archived one still shows.
+ * A star whose record is gone, or whose screen is behind an off flag, does not.
+ */
+export function starRows(
+  stars: readonly string[],
+  projects: readonly Project[],
+  initiatives: readonly Bucket[],
+  flags: NavFlags
+): StarRow[] {
+  const projectById = new Map(projects.map((p) => [p.id, p]));
+  const initiativeById = new Map(initiatives.map((b) => [b.id, b]));
+  return stars.flatMap((stored): StarRow[] => {
+    const key = stored as StarKey;
+    const { kind, id } = splitStar(key);
+    if (kind === "project") {
+      const project = projectById.get(id);
+      return project ? [{ key, label: project.name, target: { screen: "project", projectId: id }, health: project.health }] : [];
+    }
+    if (kind === "bucket") {
+      const initiative = initiativeById.get(id);
+      return initiative ? [{ key, label: initiative.name, target: { screen: "bucket", bucketId: id }, health: initiative.health }] : [];
+    }
+    const item = kind === "screen" ? STAR_SCREENS.get(id as Screen) : undefined;
+    return item && (!item.flag || flags[item.flag])
+      ? [{ key, label: item.label, target: { screen: item.screen }, lucide: item.lucide }]
+      : [];
+  });
+}
+
+/**
+ * The stars that can never show: a project or initiative these records do not
+ * hold, or a key that names no screen, project or initiative. A screen behind
+ * an off flag is not dead. Pass the live records only: seed or cached data
+ * would make real records look gone.
+ */
+export function deadStars(stars: readonly string[], projects: readonly Project[], initiatives: readonly Bucket[]): Set<string> {
+  const projectIds = new Set(projects.map((p) => p.id));
+  const initiativeIds = new Set(initiatives.map((b) => b.id));
+  return new Set(
+    stars.filter((key) => {
+      const { kind, id } = splitStar(key);
+      if (kind === "project") return !projectIds.has(id);
+      if (kind === "bucket") return !initiativeIds.has(id);
+      return kind !== "screen" || !STAR_SCREENS.has(id as Screen);
+    })
+  );
+}
+
+/**
+ * The changes that star or unstar `key`. Unstarring removes it. Starring adds
+ * it last; when STAR_CAP stars are stored, it first removes as many `dead`
+ * stars as make room. Null when there is no room.
+ */
+export function starChanges(stars: readonly string[], dead: ReadonlySet<string>, key: StarKey): StarChange[] | null {
+  if (stars.includes(key)) return [{ op: "remove", key }];
+  const over = stars.length - STAR_CAP + 1;
+  if (over <= 0) return [{ op: "add", key }];
+  const removable = stars.filter((k) => dead.has(k));
+  if (removable.length < over) return null;
+  return [...removable.slice(0, over).map((k): StarChange => ({ op: "remove", key: k })), { op: "add", key }];
 }
 
 /** The group a screen's nav item lives in (null for detail screens). */

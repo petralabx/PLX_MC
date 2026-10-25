@@ -5,6 +5,7 @@
 // tabs, strip and FAB in bottom-tabs.tsx; the More sheet in more-sheet.tsx.
 // Counts come from the runtime store so badges stay live after store actions.
 import {
+  Fragment,
   useCallback,
   useEffect,
   useRef,
@@ -14,7 +15,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { PanelLeft, Plus, X } from "lucide-react";
+import { PanelLeft, Plus, Star, X } from "lucide-react";
 
 import { liveAgentCount, openQuestionsFor, pendingApprovalGates, type Human, type Task } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion, useViewer } from "@/lib/mc-data/hooks";
@@ -30,10 +31,9 @@ import {
   unreadCount,
   viewerSettled,
 } from "@/lib/mc-data/store";
-import { meetingIntakeEnabled } from "@/lib/meeting-intake";
-import { routingInboxEnabled } from "@/components/mc/routing-inbox/flag";
 
 import { CountBadge, UNKNOWN_COUNT, type Count } from "./count-badge";
+import { navFlags } from "./nav-flags";
 import { NavIcon } from "./nav-icon";
 import {
   HELP_NAV_ITEM,
@@ -53,7 +53,6 @@ import {
   zonedNavPlaceOf,
   type DrawerEvent,
   type NavBadge,
-  type NavFlags,
   type NavGroupId,
   type NavList,
 } from "./nav-model";
@@ -62,14 +61,10 @@ import { needsMeCount, todayGridDay, viewerLoadState } from "./needs-me";
 import type { Nav, Route } from "./route";
 import { useFlyout } from "./use-flyout";
 import { useLayer } from "./use-layer";
+import { useStars } from "./use-stars";
 import { useVendorAlertCount } from "./vendor-spend/use-alert-badge";
 
 export type NavCounts = Partial<Record<NavBadge, Count>>;
-
-/** The feature flags that gate nav items, resolved once for every surface. */
-export function navFlags(): NavFlags {
-  return { meetingIntake: meetingIntakeEnabled(), routingInbox: routingInboxEnabled() };
-}
 
 const noClockSubscribe = () => () => {};
 
@@ -197,6 +192,8 @@ export function Sidebar({
   useMcVersion();
   const zoned = useNavZones();
   const viewer = useViewer();
+  const flags = navFlags();
+  const stars = useStars(zoned);
   const [treeOpen, setTreeOpen] = useState<Record<string, boolean>>({});
   const adminOpen = useNavGroupOpen("admin");
   const knowledgeOpen = useNavGroupOpen("knowledge");
@@ -443,7 +440,43 @@ export function Sidebar({
     ) : null,
   };
 
-  const flags = navFlags();
+  // Starred (TASK-3842): copies in the person's order, right after My work,
+  // never the lit row. The icon rail shows one Starred button instead, which
+  // opens the labelled drawer.
+  const starredZone =
+    stars.rows.length > 0 ? (
+      <div className="grp stars" role="group" aria-labelledby="mc-nav-h-starred">
+        <div className="h" id="mc-nav-h-starred">
+          Starred
+        </div>
+        <button
+          type="button"
+          className="item star-rail"
+          title="Starred"
+          aria-controls="mc-nav"
+          aria-expanded={drawerOpen}
+          onClick={() => onDrawer?.("toggle")}
+        >
+          <Star className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+          <span className="nm">Starred</span>
+        </button>
+        <div className="grp-body star-rows">
+          {stars.rows.map((row) =>
+            link(
+              `star:${row.key}`,
+              row.target,
+              false,
+              row.label,
+              <>
+                {row.lucide ? <NavIcon name={row.lucide} /> : <span className={`hl ${row.health}`} aria-hidden="true" />}
+                <span className="nm">{row.label}</span>
+              </>
+            )
+          )}
+        </div>
+      </div>
+    ) : null;
+
   const groups = zoned ? visibleZonedNavGroups(flags) : visibleNavGroups(flags);
   const flyoutSections = zoned ? visibleAdminFlyout(flags) : [];
   const onAdminScreen = zoned && zonedNavPlaceOf(route.screen) === "admin";
@@ -485,43 +518,46 @@ export function Sidebar({
         const bodyId = `mc-nav-${group.id}`;
         const open = !group.collapsible || (group.id === "knowledge" ? knowledgeOpen : adminOpen);
         return (
-          <div className="grp" role="group" aria-labelledby={headingId} key={group.id}>
-            {group.collapsible ? (
-              <button
-                type="button"
-                className="h h-toggle"
-                id={headingId}
-                aria-expanded={open}
-                aria-controls={bodyId}
-                onClick={() => navGroupState.setOpen(group.id, !open)}
-              >
-                {group.label}
-                <span className="chev" aria-hidden="true">
-                  {open ? "▾" : "▸"}
-                </span>
-              </button>
-            ) : (
-              <div className="h" id={headingId}>
-                {group.label}
-              </div>
-            )}
-            <div id={bodyId} className="grp-body" hidden={!open}>
-              {group.items.map((item) =>
-                link(
-                  item.screen,
-                  { screen: navItemTarget(item, route.screen) },
-                  isNavItemCurrent(item, route.screen),
-                  item.label,
-                  <>
-                    <NavIcon name={item.lucide} />
-                    <span className="nm">{item.label}</span>
-                    {item.badge ? <CountBadge count={counts[item.badge]} /> : null}
-                  </>
-                )
+          <Fragment key={group.id}>
+            <div className="grp" role="group" aria-labelledby={headingId}>
+              {group.collapsible ? (
+                <button
+                  type="button"
+                  className="h h-toggle"
+                  id={headingId}
+                  aria-expanded={open}
+                  aria-controls={bodyId}
+                  onClick={() => navGroupState.setOpen(group.id, !open)}
+                >
+                  {group.label}
+                  <span className="chev" aria-hidden="true">
+                    {open ? "▾" : "▸"}
+                  </span>
+                </button>
+              ) : (
+                <div className="h" id={headingId}>
+                  {group.label}
+                </div>
               )}
-              {group.lists?.map((list) => lists[list])}
+              <div id={bodyId} className="grp-body" hidden={!open}>
+                {group.items.map((item) =>
+                  link(
+                    item.screen,
+                    { screen: navItemTarget(item, route.screen) },
+                    isNavItemCurrent(item, route.screen),
+                    item.label,
+                    <>
+                      <NavIcon name={item.lucide} />
+                      <span className="nm">{item.label}</span>
+                      {item.badge ? <CountBadge count={counts[item.badge]} /> : null}
+                    </>
+                  )
+                )}
+                {group.lists?.map((list) => lists[list])}
+              </div>
             </div>
-          </div>
+            {group.id === "my-work" ? starredZone : null}
+          </Fragment>
         );
       })}
       {zoned ? (

@@ -70,6 +70,16 @@ top bar (TASK-3844) the workspace label is the PLX app switcher (Mission
 Control, MRP Suite, Admin portal, Customer portal), the mark alone below a
 900px bar, and the sync pill names what to resolve ("2 sync conflicts, 1
 error"). The switcher and the Admin & health popover share `use-flyout.ts`.
+Starred (TASK-3842) follows My work: copies of the screens, projects and
+initiatives the person starred, at most six, in the order starred, never the
+lit row. Screens carry their zoned label, and Board, List and Timeline are one
+All work star. The stars live on the server per person (`GET|PATCH
+/api/stars`, module `stars`), so they follow the person to every device. The
+top bar's star toggle stars the page, and each Projects page row has one; the
+icon rail shows one Starred button that opens the drawer, and the phone More
+sheet lists Starred first. Each change shows at once and goes to the server
+one at a time; a refused change is put back with a notice (`use-stars.ts`).
+The nav flags live in `nav-flags.ts`.
 
 **Project detail** (`project` screen): rolls up initiatives (buckets) under a
 Project with an initiative card grid; inline edit for health, accountable
@@ -144,10 +154,13 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/route.ts` — `Screen` union + `Route` / `nav` contract
 - `src/components/mc/screens.tsx` — screen registry (`SCREENS`)
 - `src/components/mc/chrome.tsx` — Sidebar (drawer · rail · sidebar), nav counts, offline banner, toasts
-- `src/components/mc/top-bar.tsx` — top bar (slots per tier, workspace label or the zoned PLX app switcher, sync pill)
+- `src/components/mc/top-bar.tsx` — top bar (slots per tier, workspace label or the zoned PLX app switcher, the page's star toggle, sync pill)
+- `src/components/mc/use-stars.ts` — the person's stars: load (and refresh on focus), each change at once then one at a time to the server, a refused one put back with a notice
+- `src/components/mc/nav-flags.ts` — the feature flags that gate nav items
+- `src/components/mc/star-toggle.tsx` — the star toggle (top bar, Projects rows)
 - `src/components/mc/use-flyout.ts` — a shell control's flyout: top-layer popover, placement, Esc, close on blur, navigating or resize
 - `src/components/mc/bottom-tabs.tsx` — phone tabs (with tab memory; the zoned set when the flag is on), group strip, New-task FAB
-- `src/components/mc/more-sheet.tsx` — phone More sheet (Admin & health, All screens, appearance)
+- `src/components/mc/more-sheet.tsx` — phone More sheet (Starred, Admin & health, All screens, appearance)
 - `src/components/mc/context-pane.tsx` — context pane (page <641, overlay <1600, resizable column ≥1600) + live column
 - `src/components/mc/use-layer.ts` — layer stack: Esc (topmost only), focus in/back, Tab wrap, scroll lock
 - `src/components/mc/shell-prefs.ts` — pane width / hidden, live pin and pick (localStorage + memory), tier hooks

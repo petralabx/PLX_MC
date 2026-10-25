@@ -5,6 +5,7 @@
 // project. The zoned sidebar's Projects row and "View all N projects" land
 // here. Closed and archived projects stay off it, as they stay out of the
 // sidebar; the Dashboard's Closed scope and deep links still reach them.
+// In the zoned shell each row has a star toggle (TASK-3842).
 import type { ReactNode } from "react";
 
 import type { Bucket } from "@/lib/mc-data";
@@ -12,7 +13,10 @@ import { useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import { allTasks, navBuckets, navProjects } from "@/lib/mc-data/store";
 
 import { isPlainLeftClick, navHref, projectTree, unfiledInitiatives, viewerProjectIds } from "./nav-model";
+import { useNavZones } from "./nav-zones";
 import type { Nav, Route, ScreenProps } from "./route";
+import { StarToggle } from "./star-toggle";
+import { useStars, type Stars } from "./use-stars";
 
 function NavLink({ nav, target, className, children }: { nav: Nav; target: Route; className: string; children: ReactNode }) {
   return (
@@ -31,7 +35,7 @@ function NavLink({ nav, target, className, children }: { nav: Nav; target: Route
   );
 }
 
-function Initiatives({ nav, initiatives }: { nav: Nav; initiatives: readonly Bucket[] }) {
+function Initiatives({ nav, initiatives, stars }: { nav: Nav; initiatives: readonly Bucket[]; stars: Stars }) {
   if (initiatives.length === 0) return <p className="pj-none">No open initiatives</p>;
   return (
     <ul className="pj-inits">
@@ -41,6 +45,7 @@ function Initiatives({ nav, initiatives }: { nav: Nav; initiatives: readonly Buc
             <span className={`hl ${b.health}`} aria-hidden="true" />
             {b.name}
           </NavLink>
+          {stars.off ? null : <StarToggle stars={stars} starKey={`bucket:${b.id}`} label={b.name} className="pj-star" />}
         </li>
       ))}
     </ul>
@@ -50,6 +55,8 @@ function Initiatives({ nav, initiatives }: { nav: Nav; initiatives: readonly Buc
 export function ProjectsView({ nav }: ScreenProps) {
   useMcVersion();
   const viewer = useViewer();
+  const zoned = useNavZones();
+  const stars = useStars(zoned);
   const projects = navProjects();
   const initiatives = navBuckets();
   const viewers = viewerProjectIds(projects, initiatives, allTasks(), viewer);
@@ -84,11 +91,16 @@ export function ProjectsView({ nav }: ScreenProps) {
           <ul className="pj-list">
             {section.nodes.map(({ project, initiatives: own }) => (
               <li className="pj-row" key={project.id}>
-                <NavLink nav={nav} target={{ screen: "project", projectId: project.id }} className="pj-name">
-                  <span className={`hl ${project.health}`} aria-hidden="true" />
-                  {project.name}
-                </NavLink>
-                <Initiatives nav={nav} initiatives={own} />
+                <div className="pj-head">
+                  <NavLink nav={nav} target={{ screen: "project", projectId: project.id }} className="pj-name">
+                    <span className={`hl ${project.health}`} aria-hidden="true" />
+                    {project.name}
+                  </NavLink>
+                  {stars.off ? null : (
+                    <StarToggle stars={stars} starKey={`project:${project.id}`} label={project.name} className="pj-star" />
+                  )}
+                </div>
+                <Initiatives nav={nav} initiatives={own} stars={stars} />
               </li>
             ))}
           </ul>
@@ -99,7 +111,7 @@ export function ProjectsView({ nav }: ScreenProps) {
           <h2 className="pj-h" id="pj-h-none">
             No project
           </h2>
-          <Initiatives nav={nav} initiatives={unfiled} />
+          <Initiatives nav={nav} initiatives={unfiled} stars={stars} />
         </section>
       ) : null}
     </div>

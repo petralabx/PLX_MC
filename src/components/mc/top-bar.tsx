@@ -6,6 +6,7 @@
 //           bar is ≥900 wide and "Mission Control" when ≥1280 (container queries).
 //           In the zoned shell (TASK-3844) that label is the PLX app switcher,
 //           and the sync pill counts "sync conflicts".
+//           The zoned shell adds the page's star toggle (TASK-3842) at every tier.
 //   ≥1600   + details-pane toggle on collection screens
 //   ≥2200   + pin the live column
 import type { ReactNode, RefObject } from "react";
@@ -17,10 +18,12 @@ import { dataSource, storeSyncCounts } from "@/lib/mc-data/store";
 import { PORTAL_ORIGIN } from "@/lib/tasks/uat-tickets";
 
 import { PMark } from "./atoms";
-import { isPlainLeftClick, navHref, screenTitle } from "./nav-model";
+import { isPlainLeftClick, navHref, screenTitle, starKeyOf } from "./nav-model";
 import { useNavZones } from "./nav-zones";
 import type { Nav, Route } from "./route";
+import { StarToggle } from "./star-toggle";
 import { useFlyout } from "./use-flyout";
+import { useStars } from "./use-stars";
 import { UserMenu } from "./user-menu";
 
 const SYNC_TITLE = "SharePoint sync issues · review queue";
@@ -183,6 +186,10 @@ export function Topbar({
   const viewer = useViewer();
   const zoned = useNavZones();
   const sync = syncStatus(zoned);
+  const stars = useStars(zoned);
+  // The page's own star: shown only when its row would show in Starred.
+  const starKey = stars.off ? null : starKeyOf(route);
+  const starRow = starKey ? stars.rowFor(starKey) : undefined;
 
   return (
     <header className="mc-top">
@@ -224,6 +231,7 @@ export function Topbar({
         <button type="button" className="iconbtn search-icon" aria-label="Search, jump or create" onClick={onOpenPalette}>
           <Search className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
         </button>
+        {starRow ? <StarToggle stars={stars} starKey={starRow.key} label={starRow.label} className="iconbtn" /> : null}
         {pane ? (
           <button
             type="button"

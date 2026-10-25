@@ -79,10 +79,47 @@
   background: var(--p-hot);
 }
 
+/* A row's star toggle (TASK-3842), right after its name. */
+.mc .pj-head,
+.mc .pj-inits > li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mc .pj-head > .pj-name,
+.mc .pj-inits > li > .pj-init {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.mc .pj-star {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--p-touch);
+  height: var(--p-touch);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--p-muted);
+  cursor: pointer;
+}
+.mc .pj-star .ic {
+  width: 16px;
+  height: 16px;
+}
+.mc .pj-star:focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: -2px;
+}
+
 @media (hover: hover) {
   .mc .pj-name:hover,
   .mc .pj-init:hover {
     text-decoration: underline;
+  }
+  .mc .pj-star:not(:disabled):hover {
+    color: var(--p-ink);
   }
 }
 
@@ -99,5 +136,9 @@
   .mc .pj-name,
   .mc .pj-init {
     min-height: 28px;
+  }
+  .mc .pj-star {
+    width: 28px;
+    height: 28px;
   }
 }

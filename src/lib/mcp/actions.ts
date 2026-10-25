@@ -63,6 +63,7 @@ import { taskSearchSchema, type SearchTasksInput } from "./task-search-schema";
 export type { SearchTasksInput } from "./task-search-schema";
 import { TERMINAL_TASK_STAGES } from "./task-update-actions";
 import { resolveCheckoutRepo } from "./checkout-repo";
+import { checkoutLaneCap, laneCapCheckoutMode, laneCapRefusal, type LaneCapResult } from "./checkout-lane-cap";
 import { bucketLink, projectLink, taskLink } from "./envelope";
 import { assertEvidenceStandard } from "./evidence-standard-guard";
 import { assertMayCloseOrReopen, cancelContextFor } from "./task-cancel-actions";
@@ -504,10 +505,22 @@ function checkoutAgentRequired(): boolean {
   return (process.env.PLX_MC_CHECKOUT_AGENT_REQUIRED ?? "").trim() === "1";
 }
 
-function checkoutWarnings(agent: string | undefined, concurrent: number): { warnings?: string[] } {
+function checkoutWarnings(
+  agent: string | undefined,
+  concurrent: number,
+  laneCap: LaneCapResult | null
+): { warnings?: string[] } {
   const warnings = [
     ...(agent ? [] : ["agent_missing: pass agent (<runtime>/<lane>) or send X-MC-Agent; checkouts without one will be refused."]),
     ...(concurrent ? ["concurrent_holder: another holder has a live checkout of this task; coordinate before pushing."] : []),
+    ...(laneCap?.status === "unverified"
+      ? [
+          laneCap.reason === "no_branch"
+            ? "lane_cap_unverified: pass branch (the PR head branch) so the portal lane cap can be checked."
+            : `lane_cap_unverified: the portal lane cap could not be read (${laneCap.reason}); the checkout proceeds.`,
+        ]
+      : []),
+    ...(laneCap?.status === "blocked" ? [`lane_cap_full (warn mode): ${laneCapRefusal(laneCap)}`] : []),
   ];
   return warnings.length ? { warnings } : {};
 }
@@ -522,6 +535,7 @@ export async function actionCheckout(
     forceReason?: string;
     baseSha?: string;
     launchId?: string;
+    branch?: string;
   } = {}
 ) {
   const repo = resolveCheckoutRepo(identity.repo, options.repo);
@@ -539,6 +553,11 @@ export async function actionCheckout(
       "mc_checkout_task needs agent (<runtime>/<lane>), as a parameter or the X-MC-Agent header.",
       400
     );
+  }
+  // D15 (TASK-3863): a full portal lane refuses a checkout for a new PR.
+  const laneCap = await checkoutLaneCap({ repo, branch: options.branch });
+  if (laneCap?.status === "blocked" && laneCapCheckoutMode() === "enforce") {
+    throw new ApiError("lane_cap_full", laneCapRefusal(laneCap), 409);
   }
   const { checkoutId, accountablePerson, reused, concurrent } = await checkout({
     taskId,
@@ -563,7 +582,8 @@ export async function actionCheckout(
     // TASK-3409: an existing live checkout handed back, and other holders' leases.
     ...(reused ? { reused: true } : {}),
     ...(concurrent?.length ? { concurrent } : {}),
-    ...(checkoutWarnings(agent, concurrent?.length ?? 0)),
+    ...(laneCap ? { laneCap } : {}),
+    ...(checkoutWarnings(agent, concurrent?.length ?? 0, laneCap)),
     link: taskLink(taskId),
     sync: await syncMetaForTask(taskId),
     actor: { repo },

@@ -295,8 +295,13 @@ server.tool(
     forceReason: z.string().min(1).max(2000).optional().describe("Why you take over a task another holder has a live checkout of."),
     baseSha: z.string().regex(/^[0-9a-fA-F]{40}$/).optional().describe("Full commit SHA your work starts from; the root of the checkout's SHA chain."),
     launchId: z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/).optional().describe("Launch record id; launcher principals only."),
+    branch: z
+      .string()
+      .regex(/^[A-Za-z0-9._/-]{1,255}$/)
+      .optional()
+      .describe("The PR head branch. On the portal a full lane refuses a checkout for a new PR (lane_cap_full); a branch with an open PR always passes."),
   },
-  async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId }) => {
+  async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId, branch }) => {
     if (!MCP_ENABLED) return disabledTool("mc_checkout_task");
     return printResult(
       await mcFetch("/checkout", {
@@ -309,6 +314,7 @@ server.tool(
           ...(forceReason ? { forceReason } : {}),
           ...(baseSha ? { baseSha } : {}),
           ...(launchId ? { launchId } : {}),
+          ...(branch ? { branch } : {}),
         },
       })
     );

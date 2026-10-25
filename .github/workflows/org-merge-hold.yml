@@ -1,0 +1,56 @@
+name: org-merge-hold
+# Org-required workflow in the one org ruleset (TASK-3901, phase 2; TASK-3902).
+# It reports `merge-hold` in every repo: the check fails while the PR has the
+# `hold` label. GitHub runs a ruleset-required workflow only when a PR is opened,
+# pushed or reopened, and when it enters the merge queue, never on a label
+# change. So the job reads the labels from the API when it runs, and in a merge
+# group it checks the PR the group was built for. A PR held after its checks
+# passed is bounced from the queue: remove the label, then queue it again.
+on:
+  pull_request:
+  merge_group:
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+jobs:
+  merge-hold:
+    name: merge-hold
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Fail while the PR has the hold label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+        run: |
+          set -euo pipefail
+          n="${PR_NUMBER:-}"
+          if [ "$EVENT" = "merge_group" ]; then
+            # refs/heads/gh-readonly-queue/<base>/pr-<number>-<sha>
+            n=$(printf '%s' "${QUEUE_REF:-}" | sed -n 's#.*/pr-\([0-9][0-9]*\)-[0-9a-f]*$#\1#p')
+          fi
+          if [ -z "$n" ]; then
+            echo "::error::Could not tell which PR this run is for (event $EVENT, queue ref ${QUEUE_REF:-none})."
+            exit 1
+          fi
+          labels="__unread__"
+          for attempt in 1 2 3; do
+            if out=$(gh api "repos/$REPO/issues/$n/labels" --jq '.[].name'); then
+              labels="$out"
+              break
+            fi
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 5))
+          done
+          if [ "$labels" = "__unread__" ]; then
+            echo "::error::Could not read the labels of #$n. A hold must hold, so this check fails. Re-run it."
+            exit 1
+          fi
+          if printf '%s\n' "$labels" | grep -qx 'hold'; then
+            echo "::error::#$n has the 'hold' label. Remove the label to let it land."
+            exit 1
+          fi
+          echo "#$n has no hold label."

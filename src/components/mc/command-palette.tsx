@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { AGENTS, isClosedStage } from "@/lib/mc-data";
 import { useMcVersion } from "@/lib/mc-data/hooks";
 import {
+  allBuckets,
+  allProjects,
   allTasks,
   assignableViewerId,
   navBuckets,
@@ -15,9 +17,11 @@ import {
 } from "@/lib/mc-data/store";
 import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 
-import { navCommands } from "./nav-model";
-import type { Nav } from "./route";
+import { RECENTS_CAP, createRecents, navCommands, recentKeyOf, type RecentKey } from "./nav-model";
+import { useNavZones } from "./nav-zones";
+import type { Nav, Route } from "./route";
 import { routingInboxEnabled } from "./routing-inbox/flag";
+import { useStars } from "./use-stars";
 
 export interface PaletteItem {
   key: string;
@@ -52,20 +56,67 @@ interface PaletteCommand extends PaletteItem {
   run: () => void;
 }
 
+// Recents (TASK-3853): the pages the zoned shell opened last, in this browser,
+// as the phone tabs' memory is (bottom-tabs.tsx). The palette mounts only when
+// someone opens it, never in the server's HTML, so one snapshot serves both.
+const browserStorage = () => (typeof window === "undefined" ? null : window.localStorage);
+let recents = createRecents(browserStorage);
+
+/** Called by the shell each time the zoned shell opens a page. */
+export function rememberRecent(key: RecentKey) {
+  recents.visit(key);
+}
+
+/** Tests only: forget the recents. */
+export function __resetRecentsForTests() {
+  recents = createRecents(browserStorage);
+}
+
+/**
+ * The command a recent or starred key opens: a screen's Go to, or the record's
+ * own row. A closed or archived project or initiative, left out of the
+ * palette's lists, still resolves: it may be starred, or just opened.
+ */
+function recordCommand(key: string, listed: ReadonlyMap<string, PaletteCommand>, nav: Nav): PaletteCommand | undefined {
+  if (key.startsWith("screen:")) return listed.get(`nav:${key.slice("screen:".length)}`);
+  const own = listed.get(key);
+  if (own) return own;
+  const id = key.slice(key.indexOf(":") + 1);
+  if (key.startsWith("project:")) {
+    const project = allProjects().find((p) => p.id === id);
+    return project
+      ? { key, icon: "◫", label: `Project · ${project.name}`, hint: project.id, run: () => nav("project", { projectId: id }) }
+      : undefined;
+  }
+  if (key.startsWith("bucket:")) {
+    const bucket = allBuckets().find((b) => b.id === id);
+    return bucket
+      ? { key, icon: "●", label: `Initiative · ${bucket.name}`, hint: bucket.id, run: () => nav("bucket", { bucketId: id }) }
+      : undefined;
+  }
+  return undefined;
+}
+
 export function CommandPalette({
   onClose,
   nav,
+  route,
   onOpenNewTask,
   onOpenNewInitiative,
   onOpenNewProject,
 }: {
   onClose: () => void;
   nav: Nav;
+  /** The page the palette opened over: left out of Recent. */
+  route?: Route;
   onOpenNewTask: () => void;
   onOpenNewInitiative: () => void;
   onOpenNewProject: () => void;
 }) {
   const version = useMcVersion();
+  const zoned = useNavZones();
+  const recentKeys = useSyncExternalStore(recents.subscribe, recents.list, recents.list);
+  const stars = useStars(zoned);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -88,7 +139,7 @@ export function CommandPalette({
     // Screen jumps come from the shared nav model (nav-model.ts) — the same
     // groups, labels and flags as the sidebar; the three detail jumps follow.
     const navigate: PaletteCommand[] = [
-      ...navCommands({ meetingIntake: meetingIntakeEnabled(), routingInbox: routingInboxEnabled() }).map(
+      ...navCommands({ meetingIntake: meetingIntakeEnabled(), routingInbox: routingInboxEnabled() }, zoned).map(
         ({ screen, ...command }) => ({ ...command, run: () => nav(screen) })
       ),
       {
@@ -203,9 +254,38 @@ export function CommandPalette({
       { title: "Tasks", items: taskCommands },
       { title: "Assign agents", items: assignAgents },
     ];
-  }, [nav, onOpenNewTask, onOpenNewInitiative, version]);
+  }, [nav, onOpenNewTask, onOpenNewInitiative, version, zoned]);
 
-  const filtered = useMemo(() => filterPaletteGroups(groups, query), [groups, query]);
+  // The zoned shell opens on Recent and Starred (TASK-3853), until the person
+  // types: then every group is searched as before. Starred lists the stars in
+  // their order, with the g 1 to g 6 keys that open them.
+  const currentKey = route ? recentKeyOf(route) : null;
+  const leading = useMemo<PaletteGroup<PaletteCommand>[]>(() => {
+    if (!zoned) return [];
+    const listed = new Map(groups.flatMap((group) => group.items).map((item) => [item.key, item]));
+    const recent = recentKeys
+      .flatMap((key): PaletteCommand[] => {
+        const command = key === currentKey ? undefined : recordCommand(key, listed, nav);
+        return command ? [{ ...command, key: `recent:${key}` }] : [];
+      })
+      .slice(0, RECENTS_CAP);
+    const starred = stars.rows.flatMap((row, index): PaletteCommand[] => {
+      const command = recordCommand(row.key, listed, nav);
+      if (!command) return [];
+      // A screen star reads as its zoned row does (All work, not Board).
+      const label = row.key.startsWith("screen:") ? `Go to ${row.label}` : command.label;
+      return [{ ...command, key: `star:${row.key}`, label, hint: `g ${index + 1}` }];
+    });
+    return [
+      { title: "Recent", items: recent },
+      { title: "Starred", items: starred },
+    ].filter((group) => group.items.length > 0);
+  }, [zoned, groups, recentKeys, currentKey, stars.rows, nav]);
+
+  const filtered = useMemo(
+    () => (query.trim() ? filterPaletteGroups(groups, query) : [...leading, ...groups]),
+    [groups, leading, query]
+  );
   const flat = useMemo(() => filtered.flatMap((group) => group.items), [filtered]);
   const selectedIndex = flat.length === 0 ? 0 : Math.min(selected, flat.length - 1);
   const indexedGroups = useMemo(() => {

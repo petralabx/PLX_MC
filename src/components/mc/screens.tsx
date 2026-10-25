@@ -7,6 +7,7 @@ import { AgentFeed } from "./agent-feed";
 import { BucketDetail } from "./bucket-detail";
 import { DashboardView } from "./dashboard";
 import { ProjectDetail } from "./project-detail";
+import { ProjectsView } from "./projects-view";
 import { FilesView } from "./files-view";
 import { GoalsView } from "./goals";
 import { ArchitectureView } from "./architecture";
@@ -40,6 +41,7 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   feed: AgentFeed,
   bucket: BucketDetail,
   project: ProjectDetail,
+  projects: ProjectsView,
   repos: ReposView,
   files: FilesView,
   sync: SyncConsole,

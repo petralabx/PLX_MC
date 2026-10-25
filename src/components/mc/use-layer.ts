@@ -115,7 +115,9 @@ export function useLayer(
     const release = pushLayer(entry);
     const panel = panelRef.current;
     const first = panel?.querySelector<HTMLElement>("[data-autofocus]") ?? (panel ? focusablesIn(panel)[0] : null);
-    first?.focus();
+    // preventScroll: focusing the close button must not scroll the nav drawer
+    // back to the top, undoing the sidebar's reveal of the current row.
+    first?.focus({ preventScroll: true });
     return () => {
       entryRef.current = null;
       release();

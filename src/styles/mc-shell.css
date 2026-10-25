@@ -151,6 +151,37 @@
   .mc .mc-top .ws .pm {
     flex: 0 0 auto;
   }
+  /* The zoned shell's PLX app switcher (TASK-3844): the same label, as the
+     toggle of a flyout below it. */
+  .mc .mc-top .ws-switch {
+    align-self: stretch;
+    border: 0;
+    border-left: 1px solid var(--p-grid);
+    background: none;
+    font: inherit;
+    font-size: var(--p-text-mono);
+    color: var(--p-ink-2);
+    cursor: pointer;
+  }
+  .mc .mc-top .ws-switch .chev {
+    color: var(--p-muted);
+    transition: rotate var(--p-dur-fast) var(--p-ease);
+  }
+  .mc .mc-top .ws-switch[aria-expanded="true"] .chev {
+    rotate: 180deg;
+  }
+  @media (hover: hover) {
+    .mc .mc-top .ws-switch:hover {
+      color: var(--p-ink);
+    }
+  }
+  .mc .mc-top .ws-switch:focus-visible {
+    outline: 2px solid var(--p-accent);
+    outline-offset: -2px;
+  }
+  .mc .mc-top .ws-switch .ws-name {
+    display: none;
+  }
   .mc .mc-top .title {
     flex: 1 1 auto;
     min-width: 0;
@@ -854,6 +885,16 @@
     .mc .mc-top .ws {
       display: inline-flex;
     }
+    .mc .mc-top .ws-switch .ws-name {
+      display: inline;
+    }
+  }
+  /* The app switcher shows from 641px, as the mark alone until the bar has
+     room for the workspace name. */
+  @media (min-width: 641px) {
+    .mc .mc-top .ws-switch {
+      display: inline-flex;
+    }
   }
   @container chrome (min-width: 1280px) {
     .mc .mc-top .brand .sub {
@@ -1477,6 +1518,65 @@
   .mc .mc-flyout .item[aria-current="page"] .ic {
     color: var(--p-accent);
   }
+  /* The app switcher's rows: a tile, the app and what it is for. */
+  .mc .mc-flyout .item.app {
+    padding-block: 4px;
+  }
+  .mc .mc-flyout .item.app[aria-current="true"] {
+    background: var(--p-paper-2);
+  }
+  .mc .mc-flyout .app-tile {
+    display: inline-flex;
+    flex: 0 0 26px;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    box-sizing: border-box;
+    border-radius: 4px;
+  }
+  .mc .mc-flyout .app-tile.ink {
+    background: var(--p-ink);
+    color: var(--p-paper);
+  }
+  .mc .mc-flyout .app-tile.acc {
+    background: var(--p-accent);
+    color: var(--p-paper);
+  }
+  .mc .mc-flyout .app-tile.line {
+    border: 1px solid var(--p-grid);
+    color: var(--p-ink-2);
+  }
+  .mc .mc-flyout .app-tile .ic {
+    color: inherit;
+  }
+  .mc .mc-flyout .app-txt {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .mc .mc-flyout .item.app .nm {
+    font-weight: 600;
+    color: var(--p-ink);
+  }
+  .mc .mc-flyout .app-sub {
+    overflow: hidden;
+    font-size: var(--p-text-small);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--p-muted);
+  }
+  .mc .mc-flyout .item.app .cur {
+    color: var(--p-accent);
+  }
+  .mc .mc-flyout .fly-foot {
+    margin: 6px 0 0;
+    padding: 6px 8px 0;
+    border-top: 1px solid var(--p-grid-2);
+    font-size: var(--p-text-small);
+    color: var(--p-muted);
+  }
   /* Projects tree (TASK-3841): project rows under the Projects row, their
      initiatives a step further in, then a quiet View all row. The icon rail
      shows the Projects icon alone. */
@@ -1529,6 +1629,12 @@
     .mc .mc-flyout[popover] {
       inset: auto auto var(--fly-bottom, 8px) var(--fly-left, 8px);
       width: var(--p-shell-flyout, 264px);
+    }
+    /* Below its toggle (the top bar's app switcher; use-flyout.ts sets it),
+       wide enough for each app's line about what it is for. */
+    .mc .mc-flyout.drop[popover] {
+      inset: var(--fly-top, 8px) auto auto var(--fly-left, 8px);
+      width: 280px;
     }
     /* The icon rail's footer: icons centred, like its rows. */
     .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {

@@ -974,6 +974,53 @@ test.describe("shell — zoned sidebar", () => {
     }
   });
 
+  // TASK-3844: the workspace label is the PLX app switcher.
+  test("the PLX app switcher opens below its label, links each app, and closes on Esc", async ({ page }) => {
+    await open(page, 1440, "/?screen=board");
+    const toggle = page.locator(".mc-top").getByRole("button", { name: "PLX Engineering · PLX apps" });
+    const panel = page.locator("#mc-apps-flyout");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.click();
+    await expect(panel).toBeVisible();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const t = (await toggle.boundingBox())!;
+    const f = (await panel.boundingBox())!;
+    expect(Math.round(f.x)).toBe(Math.round(t.x));
+    expect(f.y - (t.y + t.height)).toBeGreaterThanOrEqual(0);
+    expect(f.y - (t.y + t.height)).toBeLessThanOrEqual(8);
+    const apps = panel.getByRole("link");
+    await expect(apps).toHaveText([/^Mission Control/, /^MRP Suite/, /^Admin portal/, /^Customer portal/]);
+    await expect(apps.first()).toHaveAttribute("aria-current", "true");
+    await expect(apps.nth(1)).toHaveAttribute("href", "https://staging.plxcustomer.io/mrp");
+    // It owns Esc, and focus goes back to its toggle.
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(toggle).toBeFocused();
+    // Mission Control goes home and closes it.
+    await toggle.click();
+    await apps.first().click();
+    await expect(panel).toBeHidden();
+    await expect(side(page).getByRole("link", { name: /^Home\b/ })).toHaveAttribute("aria-current", "page");
+  });
+
+  test("820: the app switcher is the mark alone, and still opens", async ({ page }) => {
+    await open(page, 820, "/?screen=board");
+    const toggle = page.locator(".mc-top").getByRole("button", { name: "PLX Engineering · PLX apps" });
+    await expect(toggle).toBeVisible();
+    await expect(toggle.locator(".ws-name")).toBeHidden();
+    const box = (await toggle.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    await toggle.click();
+    await expect(page.locator("#mc-apps-flyout").getByRole("link")).toHaveCount(4);
+  });
+
+  test("393: no app switcher in the phone's top bar", async ({ page }) => {
+    await open(page, 393, "/?screen=board");
+    await expect(page.locator(".mc-top").getByRole("button", { name: "PLX Engineering · PLX apps" })).toBeHidden();
+  });
+
+
   // TASK-3841: initiatives sit under their project in a capped tree.
   test("the Projects tree opens a project's initiatives, and the Projects row lands on Projects", async ({ page }) => {
     await open(page, 1440, "/?screen=board");

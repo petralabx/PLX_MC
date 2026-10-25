@@ -10,11 +10,9 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type RefObject,
-  type ToggleEvent as ReactToggleEvent,
 } from "react";
 import { PanelLeft, Plus, X } from "lucide-react";
 
@@ -60,6 +58,7 @@ import {
 import { useNavZones } from "./nav-zones";
 import { needsMeCount, todayGridDay, viewerLoadState } from "./needs-me";
 import type { Nav, Route } from "./route";
+import { useFlyout } from "./use-flyout";
 import { useLayer } from "./use-layer";
 import { useVendorAlertCount } from "./vendor-spend/use-alert-badge";
 
@@ -168,80 +167,8 @@ function useNavGroupOpen(id: NavGroupId): boolean {
   );
 }
 
+// The zoned sidebar's Admin & health flyout (TASK-3840): use-flyout.ts.
 const ADMIN_FLYOUT_ID = "mc-nav-admin-flyout";
-
-/**
- * The zoned sidebar's Admin & health flyout (TASK-3840, portal ADR-011): a
- * popover in the top layer, so the scrolling sidebar cannot clip it. It opens
- * on click beside its toggle. A click outside, navigating, or focus moving to
- * another control (Tab past the end, ⌘K) closes it. While it is open it owns
- * Esc, from anywhere: the nav drawer and the screen underneath never see that
- * key, and focus goes back to the toggle if it was in the flyout.
- */
-function useAdminFlyout(routeKey: string) {
-  const toggleRef = useRef<HTMLButtonElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const [open, setOpen] = useState(false);
-
-  // Beside the nav (sidebar, rail or drawer), level with the toggle's bottom.
-  const onBeforeToggle = useCallback((event: ReactToggleEvent<HTMLDivElement>) => {
-    const toggle = toggleRef.current;
-    const side = toggle?.closest("nav");
-    if (event.newState !== "open" || !toggle || !side) return;
-    const panel = event.currentTarget;
-    panel.style.setProperty("--fly-left", `${Math.round(side.getBoundingClientRect().right + 8)}px`);
-    panel.style.setProperty("--fly-bottom", `${Math.max(8, Math.round(window.innerHeight - toggle.getBoundingClientRect().bottom))}px`);
-  }, []);
-  const onToggle = useCallback((event: ReactToggleEvent<HTMLDivElement>) => setOpen(event.newState === "open"), []);
-
-  const hide = useCallback(() => {
-    try {
-      panelRef.current?.hidePopover();
-    } catch {
-      // not open, or no popover support — nothing to close
-    }
-  }, []);
-
-  // Navigating closes it.
-  useEffect(() => hide(), [routeKey, hide]);
-
-  // Document capture phase: ahead of use-layer.ts and every screen handler.
-  useEffect(() => {
-    const onEscape = (event: KeyboardEvent) => {
-      const panel = panelRef.current;
-      if (event.key !== "Escape" || !panel || !isPopoverOpen(panel)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const focused = document.activeElement;
-      const inside = panel.contains(focused) || focused === toggleRef.current;
-      hide();
-      if (inside) toggleRef.current?.focus();
-    };
-    document.addEventListener("keydown", onEscape, true);
-    return () => document.removeEventListener("keydown", onEscape, true);
-  }, [hide]);
-
-  // On the panel and on its toggle. No relatedTarget is a click on the
-  // panel's padding, or the window losing focus: the flyout stays.
-  const onBlur = useCallback(
-    (event: ReactFocusEvent<HTMLElement>) => {
-      const next = event.relatedTarget;
-      if (!next || panelRef.current?.contains(next) || toggleRef.current?.contains(next)) return;
-      hide();
-    },
-    [hide]
-  );
-
-  return { toggleRef, panelRef, open, hide, onBlur, onBeforeToggle, onToggle };
-}
-
-function isPopoverOpen(el: HTMLElement): boolean {
-  try {
-    return el.matches(":popover-open");
-  } catch {
-    return false; // no popover support
-  }
-}
 
 export function Sidebar({
   route,
@@ -279,7 +206,7 @@ export function Sidebar({
     onBlur: onFlyoutBlur,
     onBeforeToggle: onFlyoutBeforeToggle,
     onToggle: onFlyoutToggle,
-  } = useAdminFlyout(`${route.screen}:${route.projectId ?? ""}:${route.bucketId ?? ""}`);
+  } = useFlyout(navHref(route), "beside-nav");
 
   // Keep the active screen visible: arriving on a screen in the collapsible
   // group (Admin & health; Knowledge in the zoned sidebar) expands it. The

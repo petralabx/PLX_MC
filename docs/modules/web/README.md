@@ -61,7 +61,11 @@ browser (`nav-zones.ts`). Phone tabs and ⌘K keep the default groups until
 TASK-3843. Plan nests each initiative under its project (TASK-3841): the
 viewer's projects first, at most six rows (the current project always shows),
 then View all, which opens the Projects page (`projects`). That page lists
-every open project with its initiatives, and No project for the rest.
+every open project with its initiatives, and No project for the rest. In the
+top bar (TASK-3844) the workspace label is the PLX app switcher (Mission
+Control, MRP Suite, Admin portal, Customer portal), the mark alone below a
+900px bar, and the sync pill names what to resolve ("2 sync conflicts, 1
+error"). The switcher and the Admin & health popover share `use-flyout.ts`.
 
 **Project detail** (`project` screen): rolls up initiatives (buckets) under a
 Project with an initiative card grid; inline edit for health, accountable
@@ -136,7 +140,8 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/route.ts` — `Screen` union + `Route` / `nav` contract
 - `src/components/mc/screens.tsx` — screen registry (`SCREENS`)
 - `src/components/mc/chrome.tsx` — Sidebar (drawer · rail · sidebar), nav counts, offline banner, toasts
-- `src/components/mc/top-bar.tsx` — top bar (slots per tier, static workspace label, sync pill)
+- `src/components/mc/top-bar.tsx` — top bar (slots per tier, workspace label or the zoned PLX app switcher, sync pill)
+- `src/components/mc/use-flyout.ts` — a shell control's flyout: top-layer popover, placement, Esc, close on blur, navigating or resize
 - `src/components/mc/bottom-tabs.tsx` — phone tabs (with tab memory), group strip, New-task FAB
 - `src/components/mc/more-sheet.tsx` — phone More sheet (Admin & health, All screens, appearance)
 - `src/components/mc/context-pane.tsx` — context pane (page <641, overlay <1600, resizable column ≥1600) + live column

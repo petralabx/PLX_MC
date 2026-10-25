@@ -4,7 +4,7 @@
 // action_required routing proposals (see proposeRoutingFromPr in service.ts).
 
 import { ApiError } from "@/lib/api/route";
-import type { PullRequest, StageKey, Task } from "@/lib/mc-data";
+import { STAGES, type PullRequest, type StageKey, type Task } from "@/lib/mc-data";
 import { creatorApprovalPending } from "@/lib/mc-data/policy";
 import {
   COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
@@ -19,12 +19,14 @@ import { withTransaction } from "@/lib/db";
 import { patchTask, type PatchTaskInput } from "@/lib/sync/state";
 import { getEntity, taskIdsWithPr } from "@/lib/sync/repo";
 import * as complianceRepo from "./repo";
+import { integrationBranchFor } from "./tracked-repos";
 import type { ActorKind } from "./types";
 import type { PrEvent } from "./webhook";
 
 const PROJECTION_ACTOR = "compliance-projection";
 const DONE_STAGES: StageKey[] = ["merged", "verified"];
 const OPEN_ACTIONS = ["opened", "reopened", "synchronize", "ready_for_review"];
+const STAGE_NAME = new Map<string, string>(STAGES.map((s) => [s.key, s.name]));
 
 export function projectionEnabled(): boolean {
   return process.env.COMPLIANCE_PROJECTION_ENABLED !== "0";
@@ -147,31 +149,80 @@ async function skipBlockedPromotion(task: Task, evt: PrEvent): Promise<boolean> 
   return true;
 }
 
+interface LockedPatch<R> {
+  patch: PatchTaskInput;
+  completedAt?: string;
+  result?: R;
+}
+
 // Read-modify-write under the task row lock: the patch is built from the locked
 // row, so two PR events landing at once never write a stale prs list over each
-// other. `build` returns null to write nothing.
-async function patchLocked(taskId: string, build: (task: Task) => PatchTaskInput | null, completedAt?: string): Promise<void> {
-  await withTransaction(async (q) => {
+// other. `build` returns null to write nothing; patchLocked returns its result.
+async function patchLocked<R = undefined>(taskId: string, build: (task: Task) => LockedPatch<R> | null): Promise<R | undefined> {
+  return withTransaction(async (q) => {
     const row = await getEntity("task", taskId, q, true);
-    const patch = row ? build(row.data as unknown as Task) : null;
-    if (patch) await patchTask(taskId, patch, PROJECTION_ACTOR, { complianceProjection: true, completedAt, query: q });
+    const built = row ? build(row.data as unknown as Task) : null;
+    if (!built) return undefined;
+    await patchTask(taskId, built.patch, PROJECTION_ACTOR, { complianceProjection: true, completedAt: built.completedAt, query: q });
+    return built.result;
+  });
+}
+
+const isOpenRow = (p: PullRequest): boolean => p.status === "open" || p.status === "draft";
+
+// TASK-3797: a task's work has landed only when a PR merged into the repo's
+// integration branch (config/tracked-repos-registry.json). A row merged before
+// TASK-3797 has no base, so it never counts.
+function reachedIntegration(p: PullRequest): boolean {
+  return p.status === "merged" && p.base !== undefined && p.base === integrationBranchFor(p.repo);
+}
+
+// A held task (its work reached the integration branch while another of its PRs
+// was open: merge.held) is promoted once none of its PRs is open or draft.
+// Returns the PR that reached the integration branch, or null. Only a hold
+// counts: an older integration merge on a task moved back stays history.
+function heldMergeReady(task: Task, prs: PullRequest[]): PullRequest | null {
+  if (!task.merge?.held) return null;
+  if (DONE_STAGES.includes(task.stage) || task.stage === "cancelled" || creatorApprovalPending(task)) return null;
+  if (prs.some(isOpenRow)) return null;
+  return prs.find(reachedIntegration) ?? null;
+}
+
+// The task's merge record with the hold cleared, once a held task is promoted.
+function endHold(task: Task): PatchTaskInput["merge"] {
+  return task.merge ? { sha: task.merge.sha, on: task.merge.on } : undefined;
+}
+
+async function recordHeldPromotion(taskId: string, evt: PrEvent, sha: string | undefined): Promise<void> {
+  await complianceRepo.appendEvent({
+    kind: "task.promoted",
+    actor: PROJECTION_ACTOR,
+    repo: evt.repo,
+    taskId,
+    pr: String(evt.prNumber),
+    payload: { sha: sha ?? null, stage: "merged", completionSource: "held_merge" },
+    dedupKey: `task.promoted:${evt.repo}:${evt.prNumber}:${sha ?? evt.headSha}:${taskId}`,
   });
 }
 
 // The prs patch that sets this PR's row to `status`, or null when nothing changes:
 // a cancelled task (TASK-2529), a merged row (it always wins), an unchanged row,
-// or, with `onlyExisting`, a task that holds no row for the PR.
+// or, with `onlyExisting`, a task that holds no row for the PR. A closed row
+// opens again only on `reopened`: a late or replayed open event would otherwise
+// leave an open row that holds the task forever (TASK-3797).
 function prRowPatch(task: Task, evt: PrEvent, status: PullRequest["status"], onlyExisting: boolean): PatchTaskInput | null {
   if (task.stage === "cancelled") return null;
   const prs = task.prs ?? [];
   const prior = prs.find((p) => samePr(p, { repo: evt.repo, num: evt.prNumber }));
   if ((onlyExisting && !prior) || prior?.status === "merged") return null;
+  if (prior?.status === "closed" && status !== "closed" && evt.action !== "reopened") return null;
   if (prior?.status === status && prior.title === evt.title) return null;
   return { prs: appendPr(prs, { repo: evt.repo, num: evt.prNumber, status, title: evt.title }) };
 }
 
 // TASK-3743: show the PR on its task before merge (open / draft / closed). Replays
-// are no-ops, and setProgress records the skip for a cancelled task.
+// are no-ops, and setProgress records the skip for a cancelled task. A close that
+// leaves a held task with no open PR promotes it (TASK-3797).
 async function linkPr(taskId: string, evt: PrEvent, status: PullRequest["status"], onlyExisting = false): Promise<void> {
   const task = await loadTask(taskId);
   if (!task || !prRowPatch(task, evt, status, onlyExisting)) return;
@@ -181,9 +232,38 @@ async function linkPr(taskId: string, evt: PrEvent, status: PullRequest["status"
     { type: "task", id: taskId, repos: task.repos, stage: task.stage }
   );
 
-  await patchLocked(taskId, (locked) => prRowPatch(locked, evt, status, onlyExisting));
+  const promoted = await patchLocked<{ sha?: string }>(taskId, (locked) => {
+    const patch = prRowPatch(locked, evt, status, onlyExisting);
+    if (!patch) return null;
+    const landed = status === "closed" ? heldMergeReady(locked, patch.prs ?? []) : null;
+    if (!landed) return { patch };
+    return {
+      patch: {
+        ...patch,
+        stage: "merged",
+        merge: endHold(locked),
+        activityLine: {
+          who: PROJECTION_ACTOR,
+          what: `PR #${evt.prNumber} closed — promoted to Merged: PR #${landed.num} reached ${landed.base} (compliance projection)`,
+          kind: "move",
+        },
+      },
+      result: { sha: locked.merge?.sha },
+    };
+  });
+  if (promoted) await recordHeldPromotion(taskId, evt, promoted.sha);
 }
 
+type MergeOutcome =
+  | { kind: "promoted" }
+  | { kind: "verified" }
+  | { kind: "held"; openPrs: number[] }
+  | { kind: "elsewhere"; integrationBranch: string }
+  | { kind: "held_ended"; landed: PullRequest; sha?: string };
+
+// A merged PR always shows on its task as merged, with the branch it went into.
+// The task moves to Merged only when the work reached the repo's integration
+// branch and none of the task's other PRs is still open or draft (TASK-3797).
 async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task) return;
@@ -194,59 +274,114 @@ async function promoteMerged(taskId: string, evt: PrEvent): Promise<void> {
     { type: "task", id: taskId, repos: task.repos, stage: task.stage }
   );
 
+  const integrationBranch = integrationBranchFor(evt.repoFullName || evt.repo);
+  // A webhook always carries the base. A caller that cannot read it counts as
+  // the integration branch, as before TASK-3797.
+  const base = evt.baseBranch || integrationBranch;
   const pr: PullRequest = {
     repo: evt.repo,
     num: evt.prNumber,
     status: "merged",
     title: evt.title,
+    base,
   };
   const mergeOn = new Date().toISOString().slice(0, 10);
   const mergeSha = evt.mergeSha || evt.headSha;
-  // A merge never moves a verified task back to merged: the portal sets
-  // verified when the submitter confirms the fix (TASK-3697). The PR and merge
-  // are still recorded, and task.promotion_skipped says why the stage held.
-  const verified = task.stage === "verified";
+  const line = (what: string) => ({ who: PROJECTION_ACTOR, what: `${what} (compliance projection)`, kind: "move" as const });
 
-  await patchLocked(
-    taskId,
-    (locked) => ({
-      ...(verified ? {} : { stage: "merged" as const }),
-      prs: appendPr(locked.prs ?? [], pr),
-      merge: { sha: mergeSha, on: mergeOn },
-      activityLine: {
-        who: PROJECTION_ACTOR,
-        what: verified
-          ? `PR #${evt.prNumber} merged — stays Verified (compliance projection)`
-          : `PR #${evt.prNumber} merged — promoted to Merged (compliance projection)`,
-        kind: "move",
+  const outcome = await patchLocked<MergeOutcome>(taskId, (locked): LockedPatch<MergeOutcome> => {
+    const prs = appendPr(locked.prs ?? [], pr);
+    // A merge never moves a verified task back to merged: the portal sets
+    // verified when the submitter confirms the fix (TASK-3697). The PR and merge
+    // are still recorded, and task.promotion_skipped says why the stage held.
+    if (locked.stage === "verified") {
+      return {
+        patch: { prs, merge: { sha: mergeSha, on: mergeOn }, activityLine: line(`PR #${evt.prNumber} merged — stays Verified`) },
+        result: { kind: "verified" },
+      };
+    }
+    if (base !== integrationBranch) {
+      // A merge into another branch can still end a hold: the task's own work is
+      // on the integration branch and this was its last open PR.
+      const landed = heldMergeReady(locked, prs);
+      if (landed) {
+        return {
+          patch: {
+            stage: "merged",
+            prs,
+            merge: endHold(locked),
+            activityLine: line(`PR #${evt.prNumber} merged into ${base} — promoted to Merged: PR #${landed.num} reached ${landed.base}`),
+          },
+          completedAt: validIso(evt.mergedAt),
+          result: { kind: "held_ended", landed, sha: locked.merge?.sha },
+        };
+      }
+      return {
+        patch: { prs, activityLine: line(`PR #${evt.prNumber} merged into ${base}, not promoted: ${integrationBranch} is the integration branch`) },
+        result: { kind: "elsewhere", integrationBranch },
+      };
+    }
+    const openPrs = prs.filter(isOpenRow).map((p) => p.num);
+    if (openPrs.length > 0 && !DONE_STAGES.includes(locked.stage)) {
+      const stageName = STAGE_NAME.get(locked.stage) ?? locked.stage;
+      return {
+        patch: {
+          prs,
+          merge: { sha: mergeSha, on: mergeOn, held: true },
+          activityLine: line(`PR #${evt.prNumber} merged — held at ${stageName}: PR ${openPrs.map((n) => `#${n}`).join(", ")} still open`),
+        },
+        result: { kind: "held", openPrs },
+      };
+    }
+    return {
+      patch: {
+        stage: "merged",
+        prs,
+        merge: { sha: mergeSha, on: mergeOn },
+        activityLine: line(`PR #${evt.prNumber} merged — promoted to Merged`),
       },
-    }),
-    // completed_at is the PR merge time, not this projection run (TASK-2528).
-    verified ? undefined : validIso(evt.mergedAt)
-  );
+      // completed_at is the PR merge time, not this projection run (TASK-2528).
+      completedAt: validIso(evt.mergedAt),
+      result: { kind: "promoted" },
+    };
+  });
+  if (!outcome) return;
 
-  if (verified) {
-    await complianceRepo.appendEvent({
+  const skip = (payload: Record<string, unknown>) =>
+    complianceRepo.appendEvent({
       kind: "task.promotion_skipped",
       actor: PROJECTION_ACTOR,
       repo: evt.repo,
       taskId,
       pr: String(evt.prNumber),
-      payload: { reason: "task_verified", sha: mergeSha },
+      payload: { ...payload, sha: mergeSha },
       dedupKey: `task.promotion_skipped:${evt.repo}:${evt.prNumber}:${evt.headSha}:${taskId}`,
     });
-    return;
-  }
 
-  await complianceRepo.appendEvent({
-    kind: "task.promoted",
-    actor: PROJECTION_ACTOR,
-    repo: evt.repo,
-    taskId,
-    pr: String(evt.prNumber),
-    payload: { sha: mergeSha, stage: "merged", completionSource: "pr_merge" },
-    dedupKey: `task.promoted:${evt.repo}:${evt.prNumber}:${mergeSha}:${taskId}`,
-  });
+  switch (outcome.kind) {
+    case "verified":
+      await skip({ reason: "task_verified" });
+      return;
+    case "elsewhere":
+      await skip({ reason: "not_integration_branch", base, integrationBranch: outcome.integrationBranch });
+      return;
+    case "held":
+      await skip({ reason: "open_pr", openPrs: outcome.openPrs });
+      return;
+    case "held_ended":
+      await recordHeldPromotion(taskId, evt, outcome.sha);
+      return;
+    case "promoted":
+      await complianceRepo.appendEvent({
+        kind: "task.promoted",
+        actor: PROJECTION_ACTOR,
+        repo: evt.repo,
+        taskId,
+        pr: String(evt.prNumber),
+        payload: { sha: mergeSha, stage: "merged", completionSource: "pr_merge" },
+        dedupKey: `task.promoted:${evt.repo}:${evt.prNumber}:${mergeSha}:${taskId}`,
+      });
+  }
 }
 
 export interface ProjectionInput {

@@ -89,7 +89,7 @@ function seedTask(id: string, over: Partial<Task> = {}): void {
   store.rows.set(`task:${id}`, { entity_type: "task", id, data: base as unknown as Record<string, unknown>, sync_state: "synced", sp_item_id: "1", dirty_fields: [] });
 }
 const taskOf = (id: string) => store.rows.get(`task:${id}`)!.data as unknown as Task;
-const merged: MergedPrFacts = { merged: true, state: "closed", headSha: "h".repeat(40), mergeSha: "m".repeat(40), title: "Old work", repoFullName: "petralabx/PLX_MC" };
+const merged: MergedPrFacts = { merged: true, state: "closed", headSha: "h".repeat(40), mergeSha: "m".repeat(40), title: "Old work", repoFullName: "petralabx/PLX_MC", baseBranch: "main" };
 const facts = (over: Partial<MergedPrFacts> = {}) => ({ loadFacts: vi.fn(async () => ({ ...merged, ...over })) });
 const input = (over: Record<string, unknown> = {}) => ({ taskId: "TASK-100", repo: "petralabx/PLX_MC", prNumber: 42, reason: "delivered months ago", ...over });
 
@@ -161,7 +161,7 @@ describe("idempotency (acceptance 3)", () => {
     seedTask("TASK-100", { stage, prs: [{ repo: "PLX_MC", num: 42, status: "open", title: "Old work" }] } as Partial<Task>);
     const result = await actionLinkMergedPr(ledger, input(), facts());
     expect(result).toMatchObject({ linked: true, unchanged: false });
-    expect(taskOf("TASK-100").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "merged", title: "Old work" }]);
+    expect(taskOf("TASK-100").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "merged", title: "Old work", base: "main" }]);
   });
 });
 
@@ -181,7 +181,7 @@ describe("audit entry (acceptance 4)", () => {
       overrideReason: null,
     });
     expect(result).toMatchObject({ headSha: merged.headSha, mergeSha: merged.mergeSha, eventSeq: expect.any(String) });
-    expect(taskOf("TASK-100").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "merged", title: "Old work" }]);
+    expect(taskOf("TASK-100").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "merged", title: "Old work", base: "main" }]);
   });
 });
 
@@ -192,6 +192,14 @@ describe("stage effects (acceptance 5 and 6)", () => {
     expect(taskOf("TASK-100").stage).toBe("merged");
     expect(taskOf("TASK-100").merge?.sha).toBe(merged.mergeSha);
     expect(result).toMatchObject({ promoted: true, stage: "merged" });
+  });
+
+  it("links a PR that merged into another branch without promoting the task (TASK-3797)", async () => {
+    seedTask("TASK-100", { stage: "progress" } as Partial<Task>);
+    const result = await actionLinkMergedPr(ledger, input(), facts({ baseBranch: "task/TASK-99" }));
+    expect(taskOf("TASK-100").stage).toBe("progress");
+    expect(taskOf("TASK-100").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "merged", title: "Old work", base: "task/TASK-99" }]);
+    expect(result).toMatchObject({ linked: true, promoted: false, stage: "progress" });
   });
 
   it.each(["merged", "verified"])("keeps a %s task's stage and promotes nothing", async (stage) => {
@@ -232,7 +240,7 @@ describe("PR held elsewhere only as an open row", () => {
   it("links without override, and the other task's stale row turns closed with no stage move", async () => {
     seedTask("TASK-201", { prs: [{ repo: "PLX_MC", num: 42, status: "open", title: "Old work" }], stage: "progress" } as Partial<Task>);
     await expect(actionLinkMergedPr(ledger, input(), facts())).resolves.toMatchObject({ linked: true });
-    expect(taskOf("TASK-100").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "merged", title: "Old work" }]);
+    expect(taskOf("TASK-100").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "merged", title: "Old work", base: "main" }]);
     expect(taskOf("TASK-201").prs).toEqual([{ repo: "PLX_MC", num: 42, status: "closed", title: "Old work" }]);
     expect(taskOf("TASK-201").stage).toBe("progress");
   });

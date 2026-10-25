@@ -225,6 +225,8 @@ export interface MergedPrFacts {
   title: string;
   /** Base repository full name (owner/name) as GitHub reports it. */
   repoFullName: string;
+  /** Branch the PR merged into (GitHub base.ref); "" when GitHub omits it (TASK-3797). */
+  baseBranch: string;
 }
 
 /** Merge facts for one PR, read from GitHub only (mc_link_merged_pr). Never returns the body. */
@@ -243,7 +245,7 @@ export async function loadMergedPrFacts(repoFullName: string, prNumber: number):
     title?: string;
     head?: { sha?: string };
     merge_commit_sha?: string | null;
-    base?: { repo?: { full_name?: string } };
+    base?: { ref?: string; repo?: { full_name?: string } };
   };
   if (pr?.number !== prNumber || !["open", "closed"].includes(pr.state ?? "")) {
     throw new ApiError("github_error", "GitHub returned an unrecognized pull request payload.", 502);
@@ -255,6 +257,7 @@ export async function loadMergedPrFacts(repoFullName: string, prNumber: number):
     mergeSha: pr.merge_commit_sha ?? "",
     title: pr.title ?? "",
     repoFullName: pr.base?.repo?.full_name ?? repoFullName,
+    baseBranch: pr.base?.ref ?? "",
   };
 }
 

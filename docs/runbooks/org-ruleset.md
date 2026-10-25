@@ -21,7 +21,8 @@ Phase 1, which every repo meets today:
 Phase 2 adds:
 
 - The required checks `ci` and `ai-review/verdict`, from GitHub Actions only.
-  Each repo reports `ci` from one roll-up job that waits for all its own jobs.
+  Each repo reports `ci` from one roll-up job. It needs the repo's required
+  jobs and waits for the required checks its other workflows report.
 - The org-wide merge-hold workflow (`.github/workflows/org-merge-hold.yml` on
   PLX_MC `main`). It reads the `hold` label live when a PR enters the queue.
 - A merge queue: merge commits, all-green groups of up to 5, 60-minute timeout.
@@ -49,6 +50,15 @@ runs both on `merge_group`.
 2. Delete the repo rulesets that phase 2 replaces: portal `staging-protection`,
    PLX_MC `PLX_MC main required checks`, agentic-swarm `agentic-main-promotion`,
    and both `cip-only-merge`.
+3. Delete the old branch protection rules (repo Settings → Branches). The
+   rulesets pages do not show them, and they apply to admins too. On
+   2026-10-25 they were on PLX_MC `main` (`compliance`), portal `staging`
+   (`lint-typecheck-build`, `compliance`, `Validate ledgers (vmc-quality-ledger/v1)`),
+   and local-inference and skills `main` (`compliance`, branches up to date).
+   agentic-swarm and plx_secondbrain had none. Check every other repo too.
+4. In the portal, delete `.github/workflows/merge-hold.yml` in a PR. The org
+   workflow reports `merge-hold` now, and two producers of one check confuse
+   the queue.
 
 ## Roll back
 

@@ -1,0 +1,21 @@
+name: merge-hold
+# Required check. Fails while the PR has the `hold` label, so auto-merge and the merge queue wait.
+# A PR already in the queue is not re-checked: remove it from the queue to stop it.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  merge_group:
+    types: [checks_requested]
+permissions: {}
+jobs:
+  merge-hold:
+    name: merge-hold
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail while the PR has the hold label
+        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'hold')
+        run: |
+          echo "::error::This PR has the 'hold' label. Remove the label to let it land."
+          exit 1
+      - run: echo "No hold label."

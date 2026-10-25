@@ -488,7 +488,7 @@ async function uploadVideoFile(filePath: string, fileName: string, fields: Recor
 
 server.tool(
   "mc_upload_evidence",
-  "Upload evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html), 3 MiB or less, or video (mp4, webm; 100 MiB or less, send filePath) with a caption. Send filePath (an absolute path to a local file) or contentBase64 with fileName. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). evidence_store_unavailable says what a person must set up. Complex work a person must verify also needs a video from the plx-knowledge-video skill (warning only until 2026-11-01).",
+  "Upload evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html), 3 MiB or less, or video (mp4, webm; 100 MiB or less, send filePath) with a caption. Send filePath (an absolute path to a local file) or contentBase64 with fileName. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-11-01). evidence_store_unavailable says what a person must set up. Complex work a person must verify also needs a video from the plx-knowledge-video skill (warning only until 2026-11-01).",
   {
     checkoutId: z.string().min(1),
     kind: z.enum(["diagram", "screenshot", "web-page", "video"]),

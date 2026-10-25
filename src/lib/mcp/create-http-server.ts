@@ -350,9 +350,17 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
         .regex(/^[A-Za-z0-9._:-]{1,128}$/)
         .optional()
         .describe("Launch record id. Launcher principals only (PLX_MC_LAUNCHER_PRINCIPALS); puts the checkout under the lease-chain rules."),
+      branch: z
+        .string()
+        .trim()
+        .regex(/^[A-Za-z0-9._/-]{1,255}$/)
+        .optional()
+        .describe(
+          "The PR head branch. For petralabx/plx-customer-portal it selects the lane (claude/, task/, cip/, Feature Map) whose open-PR cap the checkout enforces: a full lane refuses a checkout for a new PR with lane_cap_full (D15). A branch that already has an open PR always passes. Omitted = not checked; the result warns."
+        ),
     },
-    async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId }) =>
-      jsonResult(await actionCheckout(identity, taskId, { repo, agent, reuse, forceReason, baseSha, launchId }))
+    async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId, branch }) =>
+      jsonResult(await actionCheckout(identity, taskId, { repo, agent, reuse, forceReason, baseSha, launchId, branch }))
   );
 
   server.tool(

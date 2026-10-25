@@ -79,7 +79,13 @@ top bar's star toggle stars the page, and each Projects page row has one; the
 icon rail shows one Starred button that opens the drawer, and the phone More
 sheet lists Starred first. Each change shows at once and goes to the server
 one at a time; a refused change is put back with a notice (`use-stars.ts`).
-The nav flags live in `nav-flags.ts`.
+The nav flags live in `nav-flags.ts`. In the zoned shell the ⌘K palette
+(TASK-3853) opens on **Recent**, the last 8 screens, projects, initiatives and
+tasks opened in this browser, newest first and without the page under the
+palette, then **Starred**, each star with its key: g 1 to g 6 open the first
+six stars from anywhere. Typing searches every group, as before. The palette
+also offers Go to Projects there. Recents stay in this browser
+(`createRecents` in `nav-model.ts`, localStorage `mc.nav.recents`).
 
 **Project detail** (`project` screen): rolls up initiatives (buckets) under a
 Project with an initiative card grid; inline edit for health, accountable
@@ -166,7 +172,7 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/shell-prefs.ts` — pane width / hidden, live pin and pick (localStorage + memory), tier hooks
 - `src/components/mc/count-badge.tsx` — honest count badge (n · n+ · —)
 - `src/components/mc/nav-icon.tsx` — Lucide icon map for the nav
-- `src/components/mc/nav-model.ts` — nav groups/items, phone tabs, tab memory, pane screens — shared by every nav surface, ⌘K and tests
+- `src/components/mc/nav-model.ts` — nav groups/items, phone tabs, tab memory, stars, recents, pane screens — shared by every nav surface, ⌘K and tests
 - `src/components/mc/nav-zones.ts` — the zoned-sidebar flag (build env, or a per-browser opt-in; default off)
 - `src/components/mc/project-detail.tsx` — Project detail + initiative card grid
 - `src/components/mc/projects-view.tsx` — Projects page: every open project with its initiatives, then No project

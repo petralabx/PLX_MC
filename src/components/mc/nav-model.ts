@@ -487,10 +487,10 @@ export interface NavCommand {
 
 const slug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
-/** ⌘K "Go to …" commands for every visible item, plus its search synonyms. */
-export function navCommands(flags: NavFlags): NavCommand[] {
-  return visibleNavGroups(flags).flatMap((group) =>
-    group.items.flatMap((item) => [
+/** ⌘K "Go to …" commands for every visible item, plus its search synonyms; the zoned shell adds its Projects page. */
+export function navCommands(flags: NavFlags, zoned = false): NavCommand[] {
+  const items = [...visibleNavGroups(flags).flatMap((group) => group.items), ...(zoned ? [PROJECTS_NAV_ITEM] : [])];
+  return items.flatMap((item) => [
       { key: `nav:${item.screen}`, icon: item.icon, label: `Go to ${item.label}`, hint: item.hint, screen: item.screen },
       ...(item.aliases ?? []).map((alias) => ({
         key: `nav:${slug(alias.label)}`,
@@ -499,8 +499,7 @@ export function navCommands(flags: NavFlags): NavCommand[] {
         hint: alias.hint,
         screen: item.screen,
       })),
-    ])
-  );
+  ]);
 }
 
 // ─── Phone tabs (<641px) — ADR-005 ──────────────────────────────────────────
@@ -634,13 +633,7 @@ export function createTabMemory(
 ): TabMemory {
   const memory = new Map<NavTabId, Screen>();
   const listeners = new Set<() => void>();
-  const storage = (): NavStorage | null => {
-    try {
-      return getStorage();
-    } catch {
-      return null;
-    }
-  };
+  const storage = safeStorage(getStorage);
   return {
     last(tab) {
       const held = memory.get(tab);
@@ -682,6 +675,17 @@ export function createZonedTabMemory(getStorage: () => NavStorage | null): TabMe
 
 type NavStorage = Pick<Storage, "getItem" | "setItem">;
 
+/** Storage, or null when even reaching it throws (blocked site data). */
+function safeStorage(getStorage: () => NavStorage | null): () => NavStorage | null {
+  return () => {
+    try {
+      return getStorage();
+    } catch {
+      return null;
+    }
+  };
+}
+
 export interface NavGroupState {
   isOpen(id: NavGroupId): boolean;
   setOpen(id: NavGroupId, open: boolean): void;
@@ -693,13 +697,7 @@ const storageKey = (id: NavGroupId) => `mc.nav.${id}.open`;
 export function createNavGroupState(getStorage: () => NavStorage | null): NavGroupState {
   const memory = new Map<NavGroupId, boolean>();
   const listeners = new Set<() => void>();
-  const storage = (): NavStorage | null => {
-    try {
-      return getStorage();
-    } catch {
-      return null; // storage access itself can throw (blocked site data)
-    }
-  };
+  const storage = safeStorage(getStorage);
   return {
     isOpen(id) {
       const held = memory.get(id);
@@ -716,6 +714,76 @@ export function createNavGroupState(getStorage: () => NavStorage | null): NavGro
         storage()?.setItem(storageKey(id), open ? "1" : "0");
       } catch {
         // not persisted (private mode / quota) — still open for this page
+      }
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+// ─── Recents (⌘K, TASK-3853) ────────────────────────────────────────────────
+// The screens, projects, initiatives and tasks a person opened last in this
+// browser, newest first, at most RECENTS_CAP. The zoned shell's palette lists
+// them first. They stay in this browser: unlike stars, recents are a trail,
+// not a choice.
+
+export const RECENTS_CAP = 8;
+/** Kept beyond the cap: the page under the palette, and a record since gone, do not show. */
+export const RECENTS_KEPT = 12;
+
+export type RecentKey = StarKey | `task:${string}`;
+
+const RECENT_KEY_RE = /^(screen|project|bucket|task):\S+$/;
+
+/** The recents key for the page a route shows; null for a detail route without its id. */
+export function recentKeyOf(route: Route): RecentKey | null {
+  if (route.screen === "task") return route.taskId ? `task:${route.taskId}` : null;
+  if (route.screen === "project" || route.screen === "bucket") return starKeyOf(route);
+  // The exact view (List, not All work): a recent goes back to what was open.
+  return `screen:${route.screen}`;
+}
+
+export interface Recents {
+  /** Newest first. The same array until the next visit, so a snapshot can hold it. */
+  list(): readonly RecentKey[];
+  visit(key: RecentKey): void;
+  subscribe(listener: () => void): () => void;
+}
+
+const RECENTS_STORAGE_KEY = "mc.nav.recents";
+
+export function createRecents(getStorage: () => NavStorage | null): Recents {
+  const storage = safeStorage(getStorage);
+  let held: RecentKey[] | null = null;
+  const listeners = new Set<() => void>();
+  const read = (): RecentKey[] => {
+    try {
+      const parsed: unknown = JSON.parse(storage()?.getItem(RECENTS_STORAGE_KEY) ?? "[]");
+      return Array.isArray(parsed)
+        ? parsed.filter((key): key is RecentKey => typeof key === "string" && RECENT_KEY_RE.test(key)).slice(0, RECENTS_KEPT)
+        : [];
+    } catch {
+      return []; // unreadable → none yet
+    }
+  };
+  return {
+    list() {
+      held ??= read();
+      return held;
+    },
+    visit(key) {
+      // Read again first: another tab may have written since this one read.
+      const current = storage() ? read() : (held ?? []);
+      const next = [key, ...current.filter((k) => k !== key)].slice(0, RECENTS_KEPT);
+      if (held && next.length === held.length && next.every((k, i) => k === held?.[i])) return;
+      held = next;
+      try {
+        storage()?.setItem(RECENTS_STORAGE_KEY, JSON.stringify(held));
+      } catch {
+        // not persisted (private mode / quota) — still listed for this page
       }
       for (const listener of listeners) listener();
     },

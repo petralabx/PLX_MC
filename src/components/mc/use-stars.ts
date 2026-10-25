@@ -9,7 +9,7 @@
 // toggle, said on the store's notice channel, and the list is read again, so a
 // lost star is never silent. A failed load retries, and on focus. Rows, dead
 // stars and the cap are nav-model.ts's.
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { ApiClientError, api } from "@/lib/api";
 import { useMcVersion } from "@/lib/mc-data/hooks";
@@ -39,6 +39,7 @@ const defaultClient: StarsClient = {
 };
 
 const RETRY_MS = [5_000, 30_000, 120_000];
+const NO_ROWS: StarRow[] = [];
 
 let client = defaultClient;
 let status: StarsStatus = "idle";
@@ -191,7 +192,7 @@ export interface Stars {
 
 /** The person's stars, for the zoned shell only (`enabled`); off, nothing loads. */
 export function useStars(enabled: boolean): Stars {
-  useMcVersion();
+  const version = useMcVersion();
   const current = useSyncExternalStore(subscribe, snapshot, snapshot);
   useEffect(() => {
     if (!enabled) return;
@@ -201,7 +202,12 @@ export function useStars(enabled: boolean): Stars {
   }, [enabled]);
   const ready = enabled && current.status === "ready";
   const flags = navFlags();
-  const rows = ready ? starRows(current.stars, allProjects(), allBuckets(), flags) : [];
+  const { meetingIntake, routingInbox } = flags;
+  // One array until the stars, the store or a flag change, so callers can memoize on it.
+  const rows = useMemo(() => {
+    void version;
+    return ready ? starRows(current.stars, allProjects(), allBuckets(), { meetingIntake, routingInbox }) : NO_ROWS;
+  }, [ready, current.stars, version, meetingIntake, routingInbox]);
   // Until the server's data is live the records are seed or cached, so no star counts as dead.
   const dead = dataSource() === "live" ? deadStars(current.stars, allProjects(), allBuckets()) : new Set<string>();
   return {

@@ -24,12 +24,12 @@ import { AgentFeed } from "./agent-feed";
 import { ApprovalsInboxView } from "./approvals-inbox";
 import { BottomTabs, GroupStrip, NewTaskFab, rememberTabScreen } from "./bottom-tabs";
 import { NavScrim, NoticeHost, OfflineBanner, Sidebar, useNavCounts, useNavDrawer } from "./chrome";
-import { CommandPalette } from "./command-palette";
+import { CommandPalette, rememberRecent } from "./command-palette";
 import { ContextPane, LiveColumn, PaneEmpty } from "./context-pane";
 import { InboxView } from "./inbox";
 import { MoreSheet } from "./more-sheet";
 import { navFlags } from "./nav-flags";
-import { isPaneScreen } from "./nav-model";
+import { isPaneScreen, recentKeyOf, type StarRow } from "./nav-model";
 import { useNavZones } from "./nav-zones";
 import { NewInitiativeModal } from "./new-initiative-modal";
 import { NewProjectModal } from "./new-project-modal";
@@ -51,6 +51,7 @@ import {
 import { TaskDetailView } from "./task-detail";
 import { Topbar } from "./top-bar";
 import { hasOpenLayer, useLayerSlot } from "./use-layer";
+import { useStars } from "./use-stars";
 
 export function MissionControlShell() {
   const [dark, setDark] = useState(false);
@@ -77,6 +78,7 @@ export function MissionControlShell() {
   const counts = useNavCounts();
   const navZones = useNavZones();
   const flags = navFlags();
+  const stars = useStars(navZones);
 
   // Wide-tier preferences (ADR-005): the pane width and hidden state, and the
   // pinned live column. CSS owns the layout; these only pick the form.
@@ -128,6 +130,18 @@ export function MissionControlShell() {
   useEffect(() => {
     if (ready) rememberTabScreen(route.screen, navZones);
   }, [ready, route.screen, navZones]);
+
+  // …and the zoned palette's Recent group (TASK-3853) records each page opened.
+  const recentKey = recentKeyOf(route);
+  useEffect(() => {
+    if (ready && navZones && recentKey) rememberRecent(recentKey);
+  }, [ready, navZones, recentKey]);
+
+  // The stars g 1 to g 6 open (TASK-3853), for the key handler to read at key time.
+  const starRowsRef = useRef<StarRow[]>([]);
+  useEffect(() => {
+    starRowsRef.current = stars.rows;
+  });
 
   // The latest route and pane preference, for nav() to read at click time
   // without re-creating nav (every screen receives it).
@@ -270,8 +284,9 @@ export function MissionControlShell() {
     drawer.send("toggle");
   }, [drawer]);
 
-  // Pending `g`-prefix for two-key view chords (g b / g l / g t / g m / g i). A
-  // ref (not state) so arming the prefix never triggers a render.
+  // Pending `g`-prefix for two-key view chords (g b / g l / g t / g m / g i, and
+  // in the zoned shell g 1 to g 6 for the stars). A ref (not state) so arming
+  // the prefix never triggers a render.
   const gPrefix = useRef<number | null>(null);
 
   useEffect(() => {
@@ -319,6 +334,14 @@ export function MissionControlShell() {
         if (screen) {
           event.preventDefault();
           nav(screen);
+          return;
+        }
+        // g 1 to g 6: the person's first six stars, in their order.
+        const star = navZones && /^[1-6]$/.test(key) ? starRowsRef.current[Number(key) - 1] : undefined;
+        if (star) {
+          event.preventDefault();
+          const { screen: starScreen, ...extra } = star.target;
+          nav(starScreen, extra);
         }
         return;
       }
@@ -337,7 +360,7 @@ export function MissionControlShell() {
       window.removeEventListener("keydown", onKeyDown);
       if (gPrefix.current !== null) window.clearTimeout(gPrefix.current);
     };
-  }, [nav, newTaskOpen, newInitiativeOpen, paletteOpen]);
+  }, [nav, navZones, newTaskOpen, newInitiativeOpen, paletteOpen]);
 
   // Flip the readiness flag once, AFTER mount — i.e. after the client effects
   // above (notably the global ⌘K / `g _` chord keydown listener) have attached.
@@ -478,6 +501,7 @@ export function MissionControlShell() {
         <CommandPalette
           onClose={closePalette}
           nav={nav}
+          route={route}
           onOpenNewTask={() => openNewTask({ bucketId: route.bucketId })}
           onOpenNewInitiative={openNewInitiative}
           onOpenNewProject={openNewProject}

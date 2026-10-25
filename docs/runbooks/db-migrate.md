@@ -142,12 +142,14 @@ WARNING: ledger says 0xx_name.sql is applied but 1 key object(s) are missing; le
 Empty extraction says `no checkable objects found in 0xx_name.sql`. Unread DB
 says `unknown (DB not read)`; refused identity says `skipped (identity not MATCH)`.
 **This warning does not change apply_ready or pending_hash.** Existence alone
-cannot establish complete schema equivalence; Vince reviews warnings before apply.
+cannot establish complete schema equivalence; whoever dispatches apply reviews the warnings first.
 
-Vince plans the intended ref, copies both first-line values, then dispatches
-on the same ref with `mode=apply`, `confirm=MIGRATE_LIVE`,
-`plan_sha=<plan_commit_sha>` and `pending_hash=<pending_hash>`, and approves the
-`mc-live-release` environment. The existing environment has a required reviewer.
+Plan the intended ref, copy both first-line values, then dispatch on the same
+ref with `mode=apply`, `confirm=MIGRATE_LIVE`, `plan_sha=<plan_commit_sha>` and
+`pending_hash=<pending_hash>`. Anyone with write access may do this (Vince,
+2026-10-25, TASK-3901). The person's OK is the signed MC approval on the
+migration PR, which the compliance gate checks before it merges. Once Vince
+removes the required reviewer from `mc-live-release`, there is no second click.
 Branch refs are allowed only through the SHA pin; an admin may additionally
 add a deployment-branch policy to the environment.
 
@@ -205,9 +207,12 @@ Never mark unapplied migrations applied to bypass a failure.
 
 ## Environment-scoped migration secrets and agent policy
 
-Policy: **Agents may run staging and UAT migrations freely (plan, status-only
-and deploy after reviewing the plan). MC live apply stays Vince-approved via
-`mc-live-release`.**
+Policy (Vince, 2026-10-25, TASK-3901): **anyone with write access, agents
+included, may run staging, UAT and live migrations after reviewing the plan.
+The person's approval is the signed MC approval on the migration PR (Vince,
+Ricardo, Rishi or Stephen), which the compliance gate checks at merge.
+`mc-live-release` keeps the live secrets and its `main`-only branch policy,
+without a required reviewer.**
 
 Migration credentials are GitHub environment secrets, each environment limited
 to `main` by a deployment branch policy, so a workflow edited on another branch
@@ -217,7 +222,7 @@ cannot read them:
 |---|---|---|---|
 | `uat-migrate` | none | `MC_UAT_DATABASE_URL` (+ `MC_STAGING_DATABASE_URL` when set) | `DB Migrate (UAT, staging when configured)` |
 | `mc-live-plan` | none | `MC_LIVE_PLAN_DATABASE_URL` (read-only `plx_mc_schema_check` URL), `MICROSOFT_GRAPH_*` | live `plan` job |
-| `mc-live-release` | Vince only, self-review prevented | `MC_LIVE_DATABASE_URL`, `MICROSOFT_GRAPH_*` | live `apply` job |
+| `mc-live-release` | none once Vince removes his reviewer (TASK-3901); the migration PR's MC approval is the gate | `MC_LIVE_DATABASE_URL`, `MICROSOFT_GRAPH_*` | live `apply` job |
 
 The live `plan` job now runs only on `main` (the environment branch policy
 refuses other refs). Plan on `main` after the migration PR merges, then apply with

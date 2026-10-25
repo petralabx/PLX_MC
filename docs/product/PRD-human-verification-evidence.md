@@ -40,7 +40,7 @@ Work is complex when one of these is true:
 | Step | Task | What ships | State |
 |------|------|------------|-------|
 | 1 | TASK-3165 | STE-lite check on agent text; warns until 2026-10-24 | Shipped (#352, #353) |
-| 2 | TASK-3166 | `mc_upload_evidence` and the visual-evidence gate; warns until 2026-10-25 | #354 |
+| 2 | TASK-3166 | `mc_upload_evidence` and the visual-evidence gate; warns until 2026-11-01 (moved from 2026-10-25: uploads were still off) | #354 |
 | 3 | TASK-3167 | Explainer video for complex work | Not started |
 | 4 | TASK-3168 | PR deep-link check | Not started |
 

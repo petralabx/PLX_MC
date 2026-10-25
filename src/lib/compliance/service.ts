@@ -41,7 +41,8 @@ import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask, snapshot } from "@/lib/sync";
 import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
-import { checkApproval } from "./approval-signature";
+import { approvalPathClasses, pathApprovalMode } from "./approval-paths";
+import { approvalDeciderAllowlist, checkApproval } from "./approval-signature";
 import { bucketPrdForTask } from "./bucket-prd";
 import { assertCreatorApprovedForCheckout } from "./creator-approval";
 import { ownEvidenceSite } from "./evidence-artifacts";
@@ -907,17 +908,33 @@ async function leaseChainCheck(
 /** Opt-in policy label (TASK-3408): this task merges only under a signed merge approval of the exact head. */
 export const MERGE_APPROVAL_LABEL = "approval:merge-required";
 
-function mergeApprovalReasons(task: Task | null, input: VerifyPrInput): string[] {
-  if (!task || !(task.labels ?? []).includes(MERGE_APPROVAL_LABEL)) return [];
+/**
+ * A signed merge approval of the exact head is required when the task carries
+ * MERGE_APPROVAL_LABEL, or when the PR touches money, migrations or workflows
+ * (TASK-3901). The path rule only warns while pathApprovalMode() says warn.
+ */
+function mergeApprovalCheck(task: Task | null, input: VerifyPrInput): { reasons: string[]; notes: string[] } {
+  const none = { reasons: [], notes: [] };
+  if (!task) return none;
+  const labelled = (task.labels ?? []).includes(MERGE_APPROVAL_LABEL);
+  const classes = approvalPathClasses(input.changedPaths);
+  const path = classes.length > 0 ? pathApprovalMode() : { mode: "off" as const, why: null };
+  if (!labelled && path.mode === "off") return none;
   const repoSlug = input.repoFullName ?? input.repo;
   const want = { kind: "merge" as const, repo: repoSlug, pr: input.prNumber, headSha: input.headSha };
   const gates = task.approvalGates ?? [];
-  if (gates.some((g) => checkApproval(task.id, g, want).ok)) return [];
+  if (gates.some((g) => checkApproval(task.id, g, want).ok)) return none;
   const last = gates.findLast((g) => g.scope?.kind === "merge");
   const why = last ? (checkApproval(task.id, last, want) as { reason: string }).reason : "no_merge_approval";
-  return [
-    `${MERGE_APPROVAL_LABEL}: no signed merge approval covers ${repoSlug}#${input.prNumber} at ${input.headSha.slice(0, 7)} (${why})`,
-  ];
+  const covers = `no signed merge approval covers ${repoSlug}#${input.prNumber} at ${input.headSha.slice(0, 7)} (${why})`;
+  if (labelled) return { reasons: [`${MERGE_APPROVAL_LABEL}: ${covers}`], notes: [] };
+  const deciders = approvalDeciderAllowlist();
+  const reason =
+    `${classes.join(", ")} change: ${covers}. Raise one with mc_request_approval (merge scope, this head); ` +
+    `${deciders.length ? deciders.join(", ") : "a person"} can approve it in MC`;
+  return path.mode === "enforce"
+    ? { reasons: [reason], notes: [] }
+    : { reasons: [], notes: [`warning: ${reason} (not enforced: ${path.why ?? "PLX_MC_PATH_APPROVAL=warn"})`] };
 }
 
 export async function verifyPr(
@@ -1003,13 +1020,14 @@ export async function verifyPr(
       : { reasons: [], notes: [] };
     // Diagnostics only: a released or revoked checkout of this repo still shows why and when.
     const shown = d ?? (await repo.getDispatch(cid).then((x) => (x && dispatchRepoMatches(x.repo, input.repo, input.repoFullName) ? x : null)));
+    const approvalCheck = mergeApprovalCheck(task, input);
     const commitReasons = [
       ...prCommitReasons,
       ...trailerCheck.reasons,
       ...chainCheck.reasons,
-      ...mergeApprovalReasons(task, input),
+      ...approvalCheck.reasons,
     ];
-    const notes = [...trailerCheck.notes, ...chainCheck.notes];
+    const notes = [...trailerCheck.notes, ...chainCheck.notes, ...approvalCheck.notes];
     const withCommits: VerifyResult = commitReasons.length
       ? { verdict: "block", reasons: [...commitReasons, ...result.reasons, ...notes] }
       : { ...result, reasons: [...result.reasons, ...notes] };
@@ -1057,7 +1075,9 @@ export interface IngestResult {
   deepLink?: string | null;
 }
 
-const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "closed"]);
+// ready_for_review: the projection shows the PR as open (TASK-3743). It logs as
+// pr.ready_for_review, which no timeline lists, so "PR #N opened" shows once.
+const HANDLED_ACTIONS = new Set(["opened", "reopened", "synchronize", "ready_for_review", "closed"]);
 const IDLE_TTL_MS = 24 * 60 * 60 * 1000;
 const ABSOLUTE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -1558,7 +1578,8 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
     }
   }
 
-  const kind = evt.action === "synchronize" ? "pr.synchronized" : "pr.opened";
+  const kind =
+    evt.action === "synchronize" ? "pr.synchronized" : evt.action === "ready_for_review" ? "pr.ready_for_review" : "pr.opened";
   await repo.appendEvent({
     kind,
     actor: actorIdentity,

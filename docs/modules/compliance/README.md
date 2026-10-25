@@ -95,6 +95,14 @@ truth table is proven before any plumbing exists.
   passes only when one of its approval gates is a person's signed, unexpired
   merge approval for this repo, PR and head SHA (`checkApproval`); otherwise the
   gate blocks and names the reason. Unlabelled tasks are unaffected.
+- TASK-3901: an agent PR that touches money, migrations or workflows needs the
+  same signed merge approval of its head, whatever its labels. `approval-paths.ts`
+  sets the paths: payments, billing, invoices, ledgers, pricing, costs, ERP and
+  Business Central posting, and trading; migration folders and backfill, purge
+  and migrate scripts; and `.github/workflows` and `.github/actions`. Docs never
+  count. `PLX_MC_APPROVAL_DECIDERS` lists who may approve. `PLX_MC_PATH_APPROVAL`
+  is `enforce`, `warn` or `off`. Unset, it enforces once `PLX_MC_APPROVAL_SIGNING_KEY`
+  and the decider list are set, and warns until then. Operator PRs stay ungated.
 - TASK-3409: a push to, or reopen of, an open PR whose body carries a stamp
   extends that checkout to at least now + 8 h (`renewDispatches`, audited as
   `checkout.renewed`); revoked or released leases are never extended.
@@ -174,7 +182,33 @@ truth table is proven before any plumbing exists.
   authenticated MC deep link. Agent hard-gate remains unchanged.
 - `projectPullRequest` (projection) — after `mc_events` are appended, mutates sync
   tasks for **checked-out** work: open/sync → `progress`, merge → `merged` +
-  `prs[]` + `task.promoted`. Every mutation requires
+  `prs[]` + `task.promoted`. Open, reopen, sync and ready-for-review also put
+  the PR on `prs[]` as `open` (or `draft`); a close without merge sets `closed`;
+  the merged row always wins; one row per repo + PR number (TASK-3743). A close
+  or merge also sets `closed` on every other task that already holds a row for
+  the PR (moved stamp, expired or released checkout), with no stage move; rows
+  are rewritten under the task row lock. `ready_for_review` logs as
+  `pr.ready_for_review` (open-PR readers count it; the timelines do not). Only a
+  merged row counts as a PR link for the unattributed-merge report and
+  `pr_linked_elsewhere`. PRs opened before that are linked by
+  `scripts/backfill-open-pr-links.mjs` (dry run by default; `--apply` writes;
+  non-production `--approved-db` guard; links only PRs GitHub still shows open).
+  A merge promotes only when the PR's base is the repo's `integration_branch`
+  in `config/tracked-repos-registry.json` (`integrationBranchFor`: staging for
+  the portal, main for the others) and no other PR on the task is `open` or
+  `draft` (TASK-3797). The merged row records its `base`. A merge into another
+  branch is recorded with no stage move (`task.promotion_skipped`,
+  `not_integration_branch`). A merge while another PR is open holds the task
+  (`open_pr`, `merge.held`, with the open PR numbers in the activity line). The
+  close or merge of that last open PR then promotes it and clears the hold
+  (`completionSource: "held_merge"`). Only a hold promotes this way: an older
+  integration merge on a task moved back never does. A closed row opens again
+  only on `reopened`, so a late or replayed open event cannot hold a task.
+  Tasks promoted by a feature-branch merge before this are moved back to In
+  Progress by `scripts/repair-non-integration-merges.mjs` (dry run by default;
+  `--apply` writes under the row lock; never repairs a task twice; same
+  non-production guard).
+  Every mutation requires
   `authorize(...)` for durable `sp_compliance_projection` (`task.progress` /
   `task.link`). **Sparse operator Task creation is retired** — unrouted operator
   PRs do not create Tasks. Kill switch: `COMPLIANCE_PROJECTION_ENABLED=0`.

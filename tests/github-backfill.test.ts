@@ -199,6 +199,17 @@ describe("prLinkKeys", () => {
     );
     expect([...keys].sort()).toEqual(["plx-customer-portal#12", "plx_mc#7"]);
   });
+
+  it("keys only merged rows: an open, draft or closed row does not attribute a merge (TASK-3743)", () => {
+    const keys = prLinkKeys(
+      [
+        { prs: [{ repo: "PLX_MC", num: 8, status: "open", title: "a" }, { repo: "PLX_MC", num: 9, status: "draft", title: "b" }] },
+        { prs: [{ repo: "PLX_MC", num: 10, status: "closed", title: "c" }, { repo: "PLX_MC", num: 11, status: "merged", title: "d" }] },
+      ],
+      [{ id: "plx-mc", name: "PLX_MC" }]
+    );
+    expect([...keys]).toEqual(["plx_mc#11"]);
+  });
 });
 
 describe("parseBackfillDays", () => {

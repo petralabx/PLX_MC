@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ACTIVE_TRACKED_REPO_SLUGS, registryDrift, TRACKED_REPO_SLUGS } from "@/lib/compliance";
+import { ACTIVE_TRACKED_REPO_SLUGS, integrationBranchFor, registryDrift, TRACKED_REPO_SLUGS } from "@/lib/compliance";
 import { GO_LIVE_BARE_REPO_SLUGS, GO_LIVE_GITHUB_ORG } from "@/lib/compliance/go-live-announcer";
 import { parseRegistryJson } from "@/lib/loop-ledgers";
 import { REPOS } from "@/lib/mc-data/data";
@@ -117,5 +117,22 @@ describe("registryDrift detects an injected mismatch (the checker is not vacuous
       missing: ["o/b"],
       duplicates: [],
     });
+  });
+});
+
+describe("integrationBranchFor (TASK-3797)", () => {
+  it("reads integration_branch from the registry by slug or bare name, ignoring case", () => {
+    expect(integrationBranchFor("petralabx/plx-customer-portal")).toBe("staging");
+    expect(integrationBranchFor("plx-customer-portal")).toBe("staging");
+    expect(integrationBranchFor("PLX_MC")).toBe("main");
+    expect(integrationBranchFor("petralabx/plx_mc")).toBe("main");
+  });
+
+  it("falls back to the bare name when the owner is not the registry's", () => {
+    expect(integrationBranchFor("taylorvalton/plx-customer-portal")).toBe("staging");
+  });
+
+  it("falls back to main for a repo the registry does not list", () => {
+    expect(integrationBranchFor("someone/elsewhere")).toBe("main");
   });
 });

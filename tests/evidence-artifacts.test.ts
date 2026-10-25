@@ -136,7 +136,8 @@ const artifact = (kind: EvidenceArtifact["kind"]): EvidenceArtifact => ({
 
 describe("visual evidence at the gate", () => {
   const BEFORE = Date.parse("2026-10-20T12:00:00Z");
-  const AFTER = Date.parse("2026-10-26T12:00:00Z");
+  const FIRST_WEEK = Date.parse("2026-10-26T12:00:00Z");
+  const AFTER = Date.parse("2026-11-02T12:00:00Z");
   const evidence = (artifacts?: EvidenceArtifact[]): Evidence => ({
     summary: "The flow is in the diagram.",
     items: [{ key: "a", label: "a", done: true }],
@@ -154,8 +155,10 @@ describe("visual evidence at the gate", () => {
     verifyCompliance({ task: t, actor: "agent", tier: "standard", bucketPrd: "present", now, evidenceStoreEnabled });
 
   it("blocks only after its week and only while uploads are on", () => {
-    expect(VISUAL_EVIDENCE_ENFORCE_FROM).toBe("2026-10-25T04:00:00.000Z");
+    expect(VISUAL_EVIDENCE_ENFORCE_FROM).toBe("2026-11-01T04:00:00.000Z");
     expect(visualEvidenceMode(AFTER, true)).toBe("block");
+    // The first week passed with uploads off, so the warn-only week moved (Vince, 2026-10-25).
+    expect(visualEvidenceMode(FIRST_WEEK, true)).toBe("warn");
     expect(visualEvidenceMode(BEFORE, true)).toBe("warn");
     expect(visualEvidenceMode(AFTER, false)).toBe("warn");
   });
@@ -167,7 +170,7 @@ describe("visual evidence at the gate", () => {
   });
 
   it("warns during the week when uploads are on, then blocks", () => {
-    expect(verify(task({ evidence: evidence() }), BEFORE, true).reasons.join(" ")).toMatch(/Warning only until 2026-10-25\./);
+    expect(verify(task({ evidence: evidence() }), BEFORE, true).reasons.join(" ")).toMatch(/Warning only until 2026-11-01\./);
     const blocked = verify(task({ evidence: evidence() }), AFTER, true);
     expect(blocked.verdict).toBe("block");
     expect(blocked.reasons[0]).toMatch(/^no visual evidence: upload a diagram, annotated screenshot or web page/);

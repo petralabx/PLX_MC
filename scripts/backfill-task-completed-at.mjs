@@ -6,7 +6,8 @@
 // anything it cannot date from evidence is listed as unresolved with a reason.
 //
 // Resolution order (per task):
-//   PR-linked (task.prs non-empty or a pr.merged event names the task):
+//   PR-linked (a merged row on task.prs, or a pr.merged event names the task;
+//   an open, draft or closed row is not delivery evidence):
 //     1. earliest pr.merged event for the task  -> source pr_merge:event
 //     2. else task.merge.on                     -> source pr_merge:merge.on
 //     else unresolved (a stage-event date is NOT used for PR-linked tasks:
@@ -91,7 +92,7 @@ export function resolveCompletions(tasks, events) {
     const data = task.data ?? {};
     const terminalNow = TERMINAL_STAGES.includes(data.stage);
     if (!terminalNow && !wasTerminal.has(task.id) && !prMerged.has(task.id)) continue; // not a candidate
-    const prLinked = (Array.isArray(data.prs) && data.prs.length > 0) || prMerged.has(task.id);
+    const prLinked = (Array.isArray(data.prs) && data.prs.some((p) => p?.status === "merged")) || prMerged.has(task.id);
 
     if (prLinked) {
       if (prMerged.has(task.id)) {

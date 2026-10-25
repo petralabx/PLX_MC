@@ -7,11 +7,11 @@ type Ev = { seq: number; ts: string; kind: string; task_id: string | null; paylo
 
 const tasks = [
   // Merged 07-23, only promoted to Merged on 10-06 (the TASK-625 shape).
-  { id: "TASK-625", data: { stage: "merged", prs: [{ repo: "PLX_MC", num: 1 }], merge: { sha: "a", on: "2026-10-06" } } },
+  { id: "TASK-625", data: { stage: "merged", prs: [{ repo: "PLX_MC", num: 1, status: "merged" }], merge: { sha: "a", on: "2026-10-06" } } },
   // Bulk-promoted 10-04; PR merge date lives only in merge.on.
-  { id: "TASK-700", data: { stage: "merged", prs: [{ repo: "PLX_MC", num: 2 }], merge: { sha: "b", on: "2026-09-30" } } },
+  { id: "TASK-700", data: { stage: "merged", prs: [{ repo: "PLX_MC", num: 2, status: "merged" }], merge: { sha: "b", on: "2026-09-30" } } },
   // PR-linked, nothing to date it from.
-  { id: "TASK-701", data: { stage: "merged", prs: [{ repo: "PLX_MC", num: 3 }] } },
+  { id: "TASK-701", data: { stage: "merged", prs: [{ repo: "PLX_MC", num: 3, status: "merged" }] } },
   // No PR, closed via stage events; re-synced 09-09..09-11 without a stage change.
   { id: "TASK-800", data: { stage: "verified", prs: [] } },
   // No PR, terminal, no events at all.
@@ -62,6 +62,18 @@ describe("resolveCompletions", () => {
     expect(byId["TASK-802"]).toBeUndefined();
     expect(byId["TASK-701"]).toBeUndefined();
     expect(byId["TASK-801"]).toBeUndefined();
+  });
+
+  it("does not treat open, draft or closed PR rows as PR-linked (TASK-3743)", () => {
+    const own = resolveCompletions(
+      [{ id: "TASK-803", data: { stage: "merged", prs: [{ repo: "PLX_MC", num: 4, status: "closed" }, { repo: "PLX_MC", num: 5, status: "open" }] } }],
+      [
+        { seq: 1, ts: "2026-09-24T08:00:00Z", kind: "task.progress", task_id: "TASK-803", payload: { stage: "progress" } },
+        { seq: 2, ts: "2026-09-25T08:00:00Z", kind: "task.progress", task_id: "TASK-803", payload: { stage: "merged" } },
+      ]
+    );
+    expect(own.resolved).toEqual([{ id: "TASK-803", completedAt: "2026-09-25T08:00:00.000Z", source: "stage_event" }]);
+    expect(own.unresolved).toEqual([]);
   });
 
   it("skips tasks that never reached a terminal stage", () => {

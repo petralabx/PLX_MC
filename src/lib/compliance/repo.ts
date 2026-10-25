@@ -474,6 +474,8 @@ export interface DispatchListRow extends DispatchRow {
 
 export interface ListDispatchesFilter {
   taskId?: string;
+  /** Any of these tasks (the UAT tickets view, TASK-3706). */
+  taskIds?: string[];
   /** Exact full owner/name slug, case-insensitive. */
   repo?: string;
   /** true = unrevoked, unreleased and unexpired; false = inactive; omitted = both. */
@@ -502,9 +504,10 @@ export async function listDispatches(f: ListDispatchesFilter): Promise<DispatchL
       WHERE ($1::text IS NULL OR task_id = $1)
         AND ($2::text IS NULL OR lower(repo) = lower($2))
         AND ($3::boolean IS NULL OR (NOT revoked AND released_at IS NULL AND expires_at > now()) = $3)
+        AND ($5::text[] IS NULL OR task_id = ANY($5::text[]))
       ORDER BY issued_at DESC
       LIMIT $4`,
-    [f.taskId ?? null, f.repo ?? null, f.active ?? null, f.limit]
+    [f.taskId ?? null, f.repo ?? null, f.active ?? null, f.limit, f.taskIds ?? null]
   );
   return rows.map((r) => ({
     id: r.id,
@@ -811,7 +814,7 @@ export async function openPrCandidatesForTask(taskId: string, repoFullName: stri
      WHERE kind NOT IN ('pr.merged', 'pr.closed')
      ORDER BY seq DESC LIMIT $5`,
     [
-      ["pr.opened", "pr.synchronized", "pr.merged", "pr.closed", "gate.passed", "gate.blocked"],
+      ["pr.opened", "pr.synchronized", "pr.ready_for_review", "pr.merged", "pr.closed", "gate.passed", "gate.blocked"],
       repoFullName,
       bareName,
       taskId,

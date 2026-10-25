@@ -48,7 +48,7 @@ describe("MCP service principal auth", () => {
     }
   );
 
-  it.each(["petralabx/unknown-repo", "petralabx/test-perms-check", "misplaced-secret"])(
+  it.each(["petralabx/unknown-repo", "petralabx/agent-runner", "misplaced-secret"])(
     "logs and admits unallowlisted repo header %s in log-only mode without leaking headers",
     async (repo) => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

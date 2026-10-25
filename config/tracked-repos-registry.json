@@ -241,7 +241,7 @@
       "quality_ledger": {
         "enabled": false
       },
-      "status": "pending_adoption",
+      "status": "active",
       "contributing_path": "CONTRIBUTING.md",
       "notes": "Temporary permissions sandbox \u2014 adopt governance or archive."
     }

@@ -45,14 +45,10 @@ describe("fleet registry is the single source of truth", () => {
       missing: [],
       duplicates: [],
     });
-    // Non-active entries (agent-runner and test-perms-check are
-    // pending_adoption) stay fail-closed.
+    // Non-active entries (agent-runner is pending_adoption) stay fail-closed.
     expect(MCP_CHECKOUT_REPO_ALLOWLIST).not.toContain("petralabx/agent-runner");
-    expect(MCP_CHECKOUT_REPO_ALLOWLIST).not.toContain("petralabx/test-perms-check");
-    expect(registryDrift(MCP_CHECKOUT_REPO_ALLOWLIST).missing).toEqual([
-      "petralabx/agent-runner",
-      "petralabx/test-perms-check",
-    ]);
+    expect(MCP_CHECKOUT_REPO_ALLOWLIST).toContain("petralabx/test-perms-check");
+    expect(registryDrift(MCP_CHECKOUT_REPO_ALLOWLIST).missing).toEqual(["petralabx/agent-runner"]);
   });
 
   it("the active set is the registry filtered to status === active", () => {
@@ -65,7 +61,7 @@ describe("fleet registry is the single source of truth", () => {
     expect(ACTIVE_TRACKED_REPO_SLUGS).toContain("petralabx/plx_secondbrain");
     expect(registryDrift(ACTIVE_TRACKED_REPO_SLUGS)).toEqual({
       unknown: [],
-      missing: ["petralabx/agent-runner", "petralabx/test-perms-check"],
+      missing: ["petralabx/agent-runner"],
       duplicates: [],
     });
   });

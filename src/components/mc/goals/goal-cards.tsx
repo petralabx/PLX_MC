@@ -96,6 +96,10 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
   const l1Source = sourceText(run, sections.line1);
   const tlSource = sourceText(run, sections.truckloads);
   const revSource = sourceText(run, sections.revenue);
+  // At scope=mfg the headline, status and pace follow manufacturing customers; the goal stays the same target (TASK-3934).
+  const revTotal = mfg ? mfg.totalCadCents : rev.totalCents;
+  const revStatus = mfg ? (mfg.status ?? rev.status) : rev.status;
+  const revNeeded = mfg ? (mfg.neededPerDayCents ?? rev.neededPerDayCents) : rev.neededPerDayCents;
   const scheduled = Math.max(0, l1.ifAllRunKg - l1.totalKg);
   const fullScale = Math.max(tl.lastMonth.full, tl.full.total, 1);
   // The rate the figures are at: the run's Bank of Canada rate, or the fixed Sage rate (TASK-3780).
@@ -174,20 +178,32 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
       <Card
         id="revenue"
         title="Revenue"
-        status={rev.status}
-        definition={`Invoiced in CAD, product and charges before tax, against ${dollars(rev.targetCents)} a month.`}
-        big={dollars(rev.totalCents)}
+        status={revStatus}
+        definition={`Invoiced in CAD, product and charges before tax${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
+        big={dollars(revTotal)}
         of={`of ${dollars(rev.targetCents)}`}
         source={revSource}
       >
-        <Split
-          system={`${dollars(rev.inSystemCents)} in Sage`}
-          byHand={`${dollars(rev.byHandCents)} entered by hand`}
-          hasHand={rev.byHandCents !== 0}
-          title={revSource}
-        />
+        {mfg ? (
+          <p className="gp-split" title={revSource} data-testid="goals-revenue-mfg">
+            + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out = {dollars(mfg.totalCadCents + mfg.excludedCadCents)} all
+            customers
+            {mfg.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the class table until the next one"}
+          </p>
+        ) : (
+          <Split
+            system={`${dollars(rev.inSystemCents)} in Sage`}
+            byHand={`${dollars(rev.byHandCents)} entered by hand`}
+            hasHand={rev.byHandCents !== 0}
+            title={revSource}
+          />
+        )}
         <Bar
-          parts={barParts({ inSystem: rev.inSystemCents, byHand: rev.byHandCents, scale: rev.targetCents, tickAt: rev.dueSoFarCents })}
+          parts={
+            mfg
+              ? barParts({ inSystem: mfg.totalCadCents, byHand: 0, scale: rev.targetCents, tickAt: rev.dueSoFarCents })
+              : barParts({ inSystem: rev.inSystemCents, byHand: rev.byHandCents, scale: rev.targetCents, tickAt: rev.dueSoFarCents })
+          }
           tickLabel={`Due so far: ${dollars(rev.dueSoFarCents)}`}
         />
         <ul className="gp-details" title={revSource}>
@@ -195,19 +211,12 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
             Due so far: <b>{dollars(rev.dueSoFarCents)}</b> by {day(rev.dueBy)}
           </li>
           <li>
-            Needed per working day: <b>{dollars(rev.neededPerDayCents)}</b>
+            Needed per working day: <b>{dollars(revNeeded)}</b>
           </li>
           <li>
             CAD {dollars(rev.cad.cents)} ({count(rev.cad.invoices)} invoices) + USD {usd(rev.usd.cents)} (
             {count(rev.usd.invoices)} invoices) = {dollars(rev.usd.cadCents)} at {rateText}
           </li>
-          {mfg ? (
-            <li data-testid="goals-revenue-mfg">
-              Manufacturing customers: <b>{dollars(mfg.totalCadCents)}</b>
-              {mfg.progress !== null ? ` (${pct(mfg.progress)} of target)` : ""}, leaving out {dollars(mfg.excludedCadCents)} from Exclusive
-              Distribution{mfg.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the card until the next one"}
-            </li>
-          ) : null}
           {rev.otherCurrencies.length > 0 ? (
             <li>
               Not converted:{" "}

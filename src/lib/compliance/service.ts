@@ -947,22 +947,49 @@ async function releasedStampForCommits(
 /** Opt-in policy label (TASK-3408): this task merges only under a signed merge approval of the exact head. */
 export const MERGE_APPROVAL_LABEL = "approval:merge-required";
 
+const mergeWant = (input: VerifyPrInput) => ({
+  kind: "merge" as const,
+  repo: input.repoFullName ?? input.repo,
+  pr: input.prNumber,
+  headSha: input.headSha,
+});
+
+/**
+ * TASK-3916: a person approves a PR's head, not a task. A signed approval of the
+ * exact head on any task the PR stamps covers every task on it, so a PR with many
+ * tasks needs one approval, not one per task. The scope pins repo, PR and head.
+ */
+async function anyTaskApprovesHead(checkoutIds: string[], input: VerifyPrInput): Promise<boolean> {
+  const want = mergeWant(input);
+  for (const cid of checkoutIds) {
+    const d = await repo.getDispatch(cid);
+    const task = d ? await loadTask(d.taskId) : null;
+    if (task && (task.approvalGates ?? []).some((g) => checkApproval(task.id, g, want).ok)) return true;
+  }
+  return false;
+}
+
 /**
  * A signed merge approval of the exact head is required when the task carries
  * MERGE_APPROVAL_LABEL, or when the PR touches money, migrations or workflows
  * (TASK-3901). The path rule only warns while pathApprovalMode() says warn.
  */
-function mergeApprovalCheck(task: Task | null, input: VerifyPrInput): { reasons: string[]; notes: string[] } {
+async function mergeApprovalCheck(
+  task: Task | null,
+  input: VerifyPrInput,
+  headApprovedOnPr: () => Promise<boolean>
+): Promise<{ reasons: string[]; notes: string[] }> {
   const none = { reasons: [], notes: [] };
   if (!task) return none;
   const labelled = (task.labels ?? []).includes(MERGE_APPROVAL_LABEL);
   const classes = approvalPathClasses(input.changedPaths);
   const path = classes.length > 0 ? pathApprovalMode() : { mode: "off" as const, why: null };
   if (!labelled && path.mode === "off") return none;
-  const repoSlug = input.repoFullName ?? input.repo;
-  const want = { kind: "merge" as const, repo: repoSlug, pr: input.prNumber, headSha: input.headSha };
+  const want = mergeWant(input);
+  const repoSlug = want.repo;
   const gates = task.approvalGates ?? [];
   if (gates.some((g) => checkApproval(task.id, g, want).ok)) return none;
+  if (await headApprovedOnPr()) return none;
   const last = gates.findLast((g) => g.scope?.kind === "merge");
   const why = last ? (checkApproval(task.id, last, want) as { reason: string }).reason : "no_merge_approval";
   const covers = `no signed merge approval covers ${repoSlug}#${input.prNumber} at ${input.headSha.slice(0, 7)} (${why})`;
@@ -1023,6 +1050,9 @@ export async function verifyPr(
       ? [`commit ${t.sha}: MC-Checkout trailer ${t.checkoutId} does not match a stamp in the PR body`]
       : []),
   ]);
+  // TASK-3916: looked up once, and only when a task's own gates do not cover the head.
+  let headApproval: Promise<boolean> | null = null;
+  const headApprovedOnPr = () => (headApproval ??= anyTaskApprovesHead(ids, input));
   for (const cid of ids) {
     const resolution = await resolveForPr(cid);
     const stamped = trailerRows.filter((t) => t.checkoutId === cid);
@@ -1062,7 +1092,7 @@ export async function verifyPr(
       : { reasons: [], notes: [] };
     // Diagnostics only: a released or revoked checkout of this repo still shows why and when.
     const shown = d ?? (await repo.getDispatch(cid).then((x) => (x && dispatchRepoMatches(x.repo, input.repo, input.repoFullName) ? x : null)));
-    const approvalCheck = mergeApprovalCheck(task, input);
+    const approvalCheck = await mergeApprovalCheck(task, input, headApprovedOnPr);
     const commitReasons = [
       ...prCommitReasons,
       ...trailerCheck.reasons,

@@ -1070,12 +1070,12 @@ describe("merge approval policy (TASK-3408)", () => {
     db.tasks.set("TASK-900", taskish({ labels: ["lane:claude-cli", "approval:merge-required"], approvalGates: gates, evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
     return (await checkout({ taskId: "TASK-900", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude" })).checkoutId;
   };
-  const signed = async (scopeHead: string) => {
+  const signed = async (scopeHead: string, taskId = "TASK-900") => {
     const { signApproval, approvalExpiry } = await import("@/lib/compliance/approval-signature");
     const decidedAt = new Date().toISOString();
     const g = { id: "apg_m", reason: "merge?", requestedBy: "cos@petrasoap.com", requestedAt: decidedAt, status: "approved" as const, decidedBy: "vince@petrasoap.com", decidedAt, scope: { kind: "merge" as const, repo: slug, pr: 3408, headSha: scopeHead } };
     const stamped = { ...g, expiresAt: approvalExpiry(g.scope, decidedAt) };
-    return { ...stamped, signature: signApproval("TASK-900", stamped) };
+    return { ...stamped, signature: signApproval(taskId, stamped) };
   };
 
   it("blocks without a covering approval and names why", async () => {
@@ -1095,6 +1095,15 @@ describe("merge approval policy (TASK-3408)", () => {
   it("passes with a signed approval of this exact head", async () => {
     const cid = await seedWith([await signed(head)]);
     expect((await verifyPr({ ...pr, checkoutIds: [cid] })).verdict).toBe("pass");
+  });
+
+  it("passes when another task on the PR holds the signed approval of this exact head (TASK-3916)", async () => {
+    const labelled = await seedWith([]);
+    db.tasks.set("TASK-903", taskish({ id: "TASK-903", labels: ["lane:claude-cli"], approvalGates: [await signed(head, "TASK-903")], evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    const holder = (await checkout({ taskId: "TASK-903", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude" })).checkoutId;
+    const r = await verifyPr({ ...pr, checkoutIds: [labelled, holder] });
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).not.toContain("approval:merge-required");
   });
 });
 
@@ -1120,10 +1129,10 @@ describe("path approval (TASK-3901)", () => {
     db.tasks.set("TASK-901", taskish({ id: "TASK-901", labels: ["lane:claude-cli"], approvalGates: gates, evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
     return (await checkout({ taskId: "TASK-901", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude" })).checkoutId;
   };
-  const approvedBy = async (decidedBy: string) => {
+  const approvedBy = async (decidedBy: string, approvedHead = head) => {
     const { signApproval, approvalExpiry } = await import("@/lib/compliance/approval-signature");
     const decidedAt = new Date().toISOString();
-    const g = { id: "apg_p", reason: "money change", requestedBy: "cos@petrasoap.com", requestedAt: decidedAt, status: "approved" as const, decidedBy, decidedAt, scope: { kind: "merge" as const, repo: slug, pr: 3901, headSha: head } };
+    const g = { id: "apg_p", reason: "money change", requestedBy: "cos@petrasoap.com", requestedAt: decidedAt, status: "approved" as const, decidedBy, decidedAt, scope: { kind: "merge" as const, repo: slug, pr: 3901, headSha: approvedHead } };
     const stamped = { ...g, expiresAt: approvalExpiry(g.scope, decidedAt) };
     return { ...stamped, signature: signApproval("TASK-901", stamped) };
   };
@@ -1147,6 +1156,32 @@ describe("path approval (TASK-3901)", () => {
     expect(r.verdict).toBe("block");
     expect(r.reasons.join(" ")).toContain("money change: no signed merge approval covers");
     expect(r.reasons.join(" ")).toContain("(decider_not_allowed)");
+  });
+
+  // TASK-3916: a person approves the PR's head, not a task. A PR that stamps
+  // several tasks needs one signed approval of that head, on any of them.
+  const seedSecond = async () => {
+    db.tasks.set("TASK-902", taskish({ id: "TASK-902", labels: ["lane:claude-cli"], approvalGates: [], evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    return (await checkout({ taskId: "TASK-902", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude" })).checkoutId;
+  };
+
+  it("passes a multi-task PR on one approval of its head, on any of its tasks", async () => {
+    const approved = await seedWith([await approvedBy("vince@petrasoap.com")]);
+    const other = await seedSecond();
+    const r = await verifyPr({ ...pr, checkoutIds: [other, approved] });
+    expect(r.verdict).toBe("pass");
+    expect(r.tasks.map((t) => t.verdict)).toEqual(["pass", "pass"]);
+    expect(r.reasons.join(" ")).not.toContain("merge approval");
+  });
+
+  it("blocks every task of a multi-task PR when no task has an approval of its head", async () => {
+    const approved = await seedWith([await approvedBy("vince@petrasoap.com", "e".repeat(40))]);
+    const other = await seedSecond();
+    const r = await verifyPr({ ...pr, checkoutIds: [other, approved] });
+    expect(r.verdict).toBe("block");
+    expect(r.tasks.map((t) => t.verdict)).toEqual(["block", "block"]);
+    expect(r.reasons.join(" ")).toContain(`TASK-902: money change: no signed merge approval covers ${slug}#3901 at fffffff (no_merge_approval)`);
+    expect(r.reasons.join(" ")).toContain(`TASK-901: money change: no signed merge approval covers ${slug}#3901 at fffffff (head_sha_mismatch)`);
   });
 
   it("needs no approval for other changes, docs included", async () => {

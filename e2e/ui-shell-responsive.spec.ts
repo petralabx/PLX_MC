@@ -875,12 +875,13 @@ test.describe("shell — zoned sidebar", () => {
     await expect(panel).toBeHidden();
     expect(await page.evaluate(() => (window as unknown as { __esc: number }).__esc)).toBe(0);
 
-    // Tab past the last item: focus moves on to Help and the flyout closes.
+    // Tab past the last item: focus moves on and the flyout closes. The
+    // sidebar is one tab stop (TASK-3955), so Help is not next: the page is.
     await toggle.click();
     await page.keyboard.press("Tab");
     for (let i = 0; i < 20 && (await panel.isVisible()); i += 1) await page.keyboard.press("Tab");
     await expect(panel).toBeHidden();
-    await expect(side(page).getByRole("link", { name: "Help and shortcuts" })).toBeFocused();
+    expect(await page.evaluate(() => !!document.activeElement?.closest("#mc-main"))).toBe(true);
 
     // ⌘K takes focus to the palette, and the flyout gets out of its way.
     await toggle.click();
@@ -943,12 +944,14 @@ test.describe("shell — zoned sidebar", () => {
     await expect(side(page)).not.toHaveClass(/\bopen\b/);
   });
 
-  // WCAG 2.4.11: the sticky footer never hides the focused row.
+  // WCAG 2.4.11: the sticky footer never hides the focused row. The rows
+  // are one tree (TASK-3955): Tab reaches it, ↓ walks it.
   test("in the phone drawer, the sticky footer never covers keyboard focus", async ({ page }) => {
     await open(page, 393, "/?screen=board", 700);
     await openDrawer(page, 393);
+    await side(page).getByRole("link", { name: "All work" }).focus();
     for (let i = 0; i < 30; i += 1) {
-      await page.keyboard.press("Tab");
+      await page.keyboard.press("ArrowDown");
       const hidden = await page.evaluate(() => {
         const nav = document.querySelector("nav.mc-side")!;
         const foot = nav.querySelector(".side-foot")!;
@@ -1160,5 +1163,117 @@ test.describe("shell — zoned sidebar", () => {
       await expect(row, id).toHaveAttribute("aria-current", "page");
       await expect(row, id).toBeVisible();
     }
+  });
+
+  // TASK-3955 — the v2 sidebar (portal ADR-011 v2 amendment).
+  test("1440: one row grid: every label starts at one line, the action column ends at one line", async ({ page }) => {
+    await open(page, 1440, "/?screen=bucket&bucketId=BKT-WMS");
+    const nav = side(page);
+    const left = async (row: ReturnType<Page["locator"]>) => Math.round((await row.locator(".nm").boundingBox())!.x);
+    const rows = [
+      nav.getByRole("link", { name: /^Home/ }),
+      nav.getByRole("link", { name: "All work", exact: true }),
+      nav.getByRole("link", { name: "Projects", exact: true }),
+      nav.getByRole("link", { name: "PLX Portal Go-Live" }),
+      nav.getByRole("link", { name: "WMS Integration" }),
+      nav.getByRole("link", { name: /^Dashboard/ }),
+      footToggle(page),
+    ];
+    const starts = await Promise.all(rows.map(left));
+    expect(new Set(starts).size, `label starts ${starts.join(", ")}`).toBe(1);
+    // The chevron sits in the icon column, the + and the › end the action column.
+    const chevron = (await nav.getByRole("button", { name: "Initiatives in PLX Portal Go-Live" }).boundingBox())!;
+    expect(chevron.x + chevron.width).toBeLessThanOrEqual(starts[0]);
+    const plus = (await nav.getByRole("button", { name: "New project or initiative" }).boundingBox())!;
+    const more = (await footToggle(page).locator(".act").boundingBox())!;
+    expect(Math.round(plus.x + plus.width)).toBe(Math.round(more.x + more.width + 5));
+    expect(await shellViolations(page)).toEqual([]);
+  });
+
+  test("the sidebar is one tab stop: arrows, → and ←, a letter, then Tab out and back", async ({ page }) => {
+    await open(page, 1440, "/?screen=dashboard");
+    const nav = side(page);
+    const focused = (name: string | RegExp) => expect(nav.getByRole("link", { name })).toBeFocused();
+    // Shift+Tab from the page lands on the current row: the tree's one stop.
+    await page.locator("#mc-main").focus();
+    await page.keyboard.press("Shift+Tab");
+    await focused(/^Dashboard/);
+    await page.keyboard.press("ArrowDown");
+    await focused(/^Insights/);
+    await page.keyboard.press("ArrowUp");
+    await focused(/^Dashboard/);
+    await page.keyboard.press("Home");
+    await focused(/^Home/);
+    await page.keyboard.press("End");
+    await focused("Help and shortcuts");
+    // A letter only jumps: g goes to Goals, and g b does not switch to Board.
+    await page.keyboard.press("g");
+    await focused(/^Goals & production/);
+    await page.keyboard.press("b");
+    await expect(page).toHaveURL(/screen=dashboard/);
+    // p, p: Projects, then the project; → opens it, → enters, ← climbs, ← closes.
+    await page.keyboard.press("p");
+    await focused("Projects");
+    await page.keyboard.press("p");
+    await focused("PLX Portal Go-Live");
+    const toggle = nav.getByRole("button", { name: "Initiatives in PLX Portal Go-Live" });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await page.keyboard.press("ArrowRight");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("ArrowRight");
+    await focused("WMS Integration");
+    await page.keyboard.press("ArrowLeft");
+    await focused("PLX Portal Go-Live");
+    await page.keyboard.press("ArrowLeft");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // Tab leaves the tree; Shift+Tab comes back to the same row.
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => !!document.activeElement?.closest("nav.mc-side"))).toBe(false);
+    await page.keyboard.press("Shift+Tab");
+    await focused("PLX Portal Go-Live");
+    expect(await nav.locator('[data-tree-key][tabindex="0"]').count()).toBe(1);
+  });
+
+  test("/ focuses the Projects filter, which narrows the tree; ↓ enters it and Esc clears it", async ({ page }) => {
+    await open(page, 1440, "/?screen=dashboard");
+    const nav = side(page);
+    const filter = nav.getByRole("searchbox", { name: "Filter projects and initiatives" });
+    await page.locator("#mc-main").focus();
+    await page.keyboard.press("/");
+    await expect(filter).toBeFocused();
+    await page.keyboard.type("wms");
+    await expect(nav.getByRole("link", { name: "WMS Integration" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Decoupling API" })).toHaveCount(0);
+    await page.keyboard.press("ArrowDown");
+    await expect(nav.getByRole("link", { name: "PLX Portal Go-Live" })).toBeFocused();
+    await filter.fill("nothing like this");
+    await expect(nav.getByRole("status")).toHaveText("No project or initiative matches.");
+    expect(await shellViolations(page)).toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(filter).toHaveValue("");
+    await expect(nav.getByRole("link", { name: "PLX Portal Go-Live" })).toBeVisible();
+    // A page with its own filter keeps / for it.
+    await open(page, 1440, "/?screen=board");
+    await page.locator("#mc-main").focus();
+    await page.keyboard.press("/");
+    await expect(page.locator("[data-page-filter]")).toBeFocused();
+  });
+
+  test("the + on Projects opens New project or New initiative, by click or Shift+F10", async ({ page }) => {
+    await open(page, 1440, "/?screen=dashboard");
+    const nav = side(page);
+    const menu = page.locator("#mc-nav-new-menu");
+    await expect(nav.getByRole("button", { name: /^New (project|initiative)$/ })).toHaveCount(0);
+    await nav.getByRole("button", { name: "New project or initiative" }).click();
+    await expect(menu.getByRole("button")).toHaveText(["New project", "New initiative"]);
+    expect(await shellViolations(page, ["#mc-nav-new-menu"])).toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await nav.getByRole("link", { name: "Projects", exact: true }).focus();
+    await page.keyboard.press("Shift+F10");
+    await expect(menu.getByRole("button", { name: "New project" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeHidden();
+    await expect(page.getByRole("dialog", { name: "Create a new project" })).toBeVisible();
   });
 });

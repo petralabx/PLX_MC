@@ -492,6 +492,8 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
         <input
           ref={inputRef}
           className="fb-input"
+          // The page's own filter: `/` focuses it, not the sidebar's (chrome.tsx).
+          data-page-filter=""
           value={filters.text ?? ""}
           placeholder="Filter tasks…"
           onChange={(event) => setText(event.target.value)}

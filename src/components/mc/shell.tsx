@@ -332,8 +332,9 @@ export function MissionControlShell() {
       // surface; PeoplePicker's capture-phase Esc closes a picker first).
       if (newTaskOpen || newInitiativeOpen || paletteOpen || hasOpenLayer()) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      // In the zoned sidebar's tree (chrome.tsx) a letter only jumps between rows.
       const target = event.target as HTMLElement | null;
-      if (target?.closest?.("input,textarea,[contenteditable]")) return;
+      if (target?.closest?.("input,textarea,[contenteditable],[data-tree-key]")) return;
 
       const key = event.key.toLowerCase();
 

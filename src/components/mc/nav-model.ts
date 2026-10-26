@@ -27,7 +27,7 @@ export type NavIconName =
   | "House" | "LayoutDashboard" | "CircleUser" | "SquareCheck" | "SquareKanban" | "List" | "CalendarRange" | "ChartPie"
   | "BookOpen" | "ClipboardList" | "Wrench" | "Network" | "CircleHelp" | "GitBranch" | "Activity"
   | "File" | "RefreshCw" | "FileText" | "CircleDollarSign" | "Grid3x3" | "Radio" | "Inbox" | "Route"
-  | "Target" | "Ellipsis" | "Settings" | "FolderKanban" | "Search";
+  | "Target" | "Ellipsis" | "Settings" | "FolderKanban" | "Search" | "Gauge";
 
 export interface NavItem {
   screen: Screen;
@@ -142,6 +142,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { screen: "loop-ledgers", label: "Loop ledgers", icon: "◰", lucide: "FileText" },
       { screen: "activity", label: "Repo activity", icon: "↯", lucide: "Activity", hint: "cross-repo freshness" },
       { screen: "ai-spend", label: "AI spend", icon: "◎", lucide: "CircleDollarSign", badge: "ai-spend" },
+      { screen: "ci-scorecard", label: "CI scorecard", icon: "◫", lucide: "Gauge", hint: "weekly CI grades against the targets" },
       { screen: "matrix", label: "Traceability", icon: "⊞", lucide: "Grid3x3" },
       { screen: "feed", label: "Agent activity", icon: "◉", lucide: "Radio", badge: "agents" },
       { screen: "intake", label: "Meeting intake", icon: "🗒", lucide: "Inbox", flag: "meetingIntake" },
@@ -205,7 +206,7 @@ export const ZONED_NAV_GROUPS: readonly NavGroup[] = [
   {
     id: "reporting",
     label: "Reporting",
-    items: [navItem("dashboard"), navItem("insights"), navItem("goals"), navItem("ai-spend")],
+    items: [navItem("dashboard"), navItem("insights"), navItem("goals"), navItem("ai-spend"), navItem("ci-scorecard")],
   },
   {
     id: "knowledge",

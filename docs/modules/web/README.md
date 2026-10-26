@@ -70,10 +70,20 @@ row, lit on each view, and the views stay tabs on that screen with their URLs
 and g b, g l and g t keys (TASK-3843). The phone tabs are Home, My tasks,
 Projects, Search (⌘K) and More; More holds Reporting, Knowledge, Admin &
 health's sections and Help. ⌘K keeps the default groups. Plan nests each
-initiative under its project (TASK-3841): the
-viewer's projects first, at most six rows (the current project always shows),
-then View all, which opens the Projects page (`projects`). That page lists
-every open project with its initiatives, and No project for the rest. In the
+initiative under its project (TASK-3841). The v2 sidebar (TASK-3955, portal
+ADR-011's v2 amendment) lists every active project A to Z under a filter
+that matches projects and initiatives, then a Closed (n) row that opens to the
+closed projects; archived ones never show. One + on the Projects row opens New
+project or New initiative. Every row shares one grid (icon, label, count,
+action); counts are figures in the count column: Home's and Approvals' action
+counts, Admin & health's sync count, and each project's and initiative's open
+tasks from live data, with a warn square when it is at risk or off track. Zero
+and unknown show nothing. The sidebar is one keyboard tree with one tab stop
+(plus the filter): ↑ ↓ Home End move, → and ← open, enter and close, a letter
+jumps, Shift F10 opens the Projects row's + menu, and `/` focuses the page's
+own filter or else this one. The Projects page (`projects`) lists the
+viewer's projects first, then every other open project with its initiatives,
+and No project for the rest. In the
 top bar (TASK-3844) the workspace label is the PLX app switcher (Mission
 Control, MRP Suite, Admin portal, Customer portal), the mark alone below a
 900px bar, and the sync pill names what to resolve ("2 sync conflicts, 1

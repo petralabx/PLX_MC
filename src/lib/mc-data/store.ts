@@ -304,6 +304,8 @@ export const bucketsForProject = (projectId: string): Bucket[] =>
 // reachable by deep link.
 export const navProjects = (): Project[] =>
   allProjects().filter((p) => isNavVisible(p) && !isProjectClosed(p));
+// The zoned sidebar's Closed row (TASK-3955): closed projects that are not archived.
+export const closedNavProjects = (): Project[] => allProjects().filter((p) => isNavVisible(p) && isProjectClosed(p));
 export const navBuckets = (): Bucket[] =>
   allBuckets().filter(
     (b) => isNavVisible(b) && !(b.project && (!isNavVisible(state.projects[b.project] ?? {}) || isProjectClosed(state.projects[b.project])))

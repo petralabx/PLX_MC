@@ -60,7 +60,7 @@ export function ProjectsView({ nav }: ScreenProps) {
   const projects = navProjects();
   const initiatives = navBuckets();
   const viewers = viewerProjectIds(projects, initiatives, allTasks(), viewer);
-  const { nodes } = projectTree(projects, initiatives, viewers, null, Infinity);
+  const nodes = projectTree(projects, initiatives, viewers);
   const mine = nodes.filter((n) => viewers.has(n.project.id));
   const others = nodes.filter((n) => !viewers.has(n.project.id));
   const unfiled = unfiledInitiatives(projects, initiatives);

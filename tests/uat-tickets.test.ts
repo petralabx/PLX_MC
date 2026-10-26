@@ -82,6 +82,7 @@ const report = (over: Partial<UatTicketsReport> = {}): UatTicketsReport => ({
   bucketId: UAT_TICKET_BUCKET,
   facts: {},
   portal: { status: "off" },
+  portalOrigin: "https://staging.plxcustomer.io",
   drift: [],
   lastDailyCheck: null,
   ...over,
@@ -97,6 +98,7 @@ describe("ticket identity from labels", () => {
     expect(uatFeedbackId(labels)).toBe(FB_A);
     expect(ticketShortCode(FB_A)).toBe("AAAAA1");
     expect(portalTicketUrl(FB_A)).toBe(`https://staging.plxcustomer.io/uat?ticket=${FB_A}`);
+    expect(portalTicketUrl(FB_A, "https://uat.portal.test")).toBe(`https://uat.portal.test/uat?ticket=${FB_A}`);
     expect(uatAttempt(labels)).toBe(3);
     expect(uatAttempt(["kind:code"])).toBe(1);
   });
@@ -171,6 +173,8 @@ describe("UatTicketsPanel", () => {
       expect(html).toContain(`href="${portalTicketUrl(uatFeedbackId(t.labels)!)}"`);
     }
     expect(html).toContain(`${ticketShortCode(first)} · Open in portal`);
+    // TASK-3975: the rows link to the origin the report names.
+    expect(renderPanel(tasks, report({ portalOrigin: "https://uat.portal.test" }))).toContain(`href="https://uat.portal.test/uat?ticket=${first}"`);
     for (const text of ["Agent fixing", "Live · smoke passed", "Claude Code · ends in 2 hr", "1 day"]) expect(html).toContain(text);
     expect(html).not.toContain("Show all");
     expect(html).not.toContain("Portal read is off");
@@ -324,6 +328,9 @@ describe("ticketTaskDraft", () => {
     expect(draft.labels).toEqual(["kind:code", `uat:${FB_A}`, "repo:petralabx/plx-customer-portal", "needs-vince", "uat-attempt:2"]);
     expect(draft.title).toBe(`UAT ${FB_A.slice(0, 12)} — Pricing: export drops the last row`);
     expect(draft.description).toContain(portalTicketUrl(FB_A));
+    // TASK-3975: the link follows the origin the server names.
+    const elsewhere = ticketTaskDraft({ kind: "create", feedbackId: FB_A, title: "x", attempt: 1 }, "https://uat.portal.test");
+    expect(elsewhere.description).toContain(`https://uat.portal.test/uat?ticket=${FB_A}`);
   });
 });
 

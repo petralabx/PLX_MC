@@ -10,7 +10,10 @@ import type { StageKey, Task } from "@/lib/mc-data";
 import { NEEDS_VINCE_LABEL, UAT_LABEL_PREFIX, isUatTicketTask, uatTicketLabel } from "./uat-labels";
 
 export const UAT_TICKET_BUCKET = "BKT-UAT";
-/** Ticket links go to the portal's canonical tester host (staging only). */
+/**
+ * The portal's canonical tester host (staging only): the top bar's app links,
+ * and ticket links until the report names the configured origin (TASK-3975).
+ */
 export const PORTAL_ORIGIN = "https://staging.plxcustomer.io";
 
 const UAT_ATTEMPT_RE = /^uat-attempt:([1-9]\d*)$/;
@@ -27,8 +30,8 @@ export function ticketShortCode(feedbackId: string): string {
 }
 
 /** The portal ticket page: /uat?ticket=<feedbackId> (the portal's one link rule). */
-export function portalTicketUrl(feedbackId: string): string {
-  return `${PORTAL_ORIGIN}/uat?ticket=${encodeURIComponent(feedbackId)}`;
+export function portalTicketUrl(feedbackId: string, origin = PORTAL_ORIGIN): string {
+  return `${origin}/uat?ticket=${encodeURIComponent(feedbackId)}`;
 }
 
 /** The attempt from uat-attempt:<n>; a first attempt carries no label, so 1. */
@@ -101,6 +104,8 @@ export interface UatTicketsReport {
   bucketId: string;
   facts: Record<string, UatTaskFacts>;
   portal: PortalRead;
+  /** PLX_MC_PORTAL_BASE_URL: the host the read calls and ticket links open (TASK-3975). */
+  portalOrigin: string;
   drift: UatDriftFinding[];
   lastDailyCheck: { at: string; findings: number; portal: PortalRead["status"] } | null;
 }
@@ -246,13 +251,13 @@ export function findUatDrift(input: {
 }
 
 /** POST /api/tasks body for a create fix: the portal's ticket task, minus its fenced ticket text. */
-export function ticketTaskDraft(fix: Extract<UatDriftFix, { kind: "create" }>) {
+export function ticketTaskDraft(fix: Extract<UatDriftFix, { kind: "create" }>, origin = PORTAL_ORIGIN) {
   const labels = ["kind:code", `${UAT_LABEL_PREFIX}${fix.feedbackId}`, "repo:petralabx/plx-customer-portal", NEEDS_VINCE_LABEL];
   if (fix.attempt > 1) labels.push(`uat-attempt:${fix.attempt}`);
   return {
     title: `UAT ${fix.feedbackId.slice(0, 12)} — ${fix.title || "UAT feedback"}`.slice(0, 200),
     // needs-vince keeps Steward off it: this task has no ticket text for an agent.
-    description: `Created by the Mission Control drift check: portal ticket ${ticketShortCode(fix.feedbackId)} was open with no open task. Read the ticket, then remove needs-vince so Steward can lease it: ${portalTicketUrl(fix.feedbackId)}`,
+    description: `Created by the Mission Control drift check: portal ticket ${ticketShortCode(fix.feedbackId)} was open with no open task. Read the ticket, then remove needs-vince so Steward can lease it: ${portalTicketUrl(fix.feedbackId, origin)}`,
     bucket: UAT_TICKET_BUCKET,
     priority: "medium" as const,
     repos: ["portal-web"],

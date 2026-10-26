@@ -4,6 +4,7 @@
 // through the normal task routes. The daily cron records each run as one
 // uat.drift.checked event; the page shows the newest one.
 
+import { portalBaseUrl } from "@/lib/secrets";
 import { getBucketTasks } from "@/lib/sync/repo";
 import { isUatTicketTask } from "@/lib/tasks/uat-labels";
 import {
@@ -54,6 +55,7 @@ export async function loadUatTickets(now = new Date()): Promise<UatTicketsReport
     bucketId: UAT_TICKET_BUCKET,
     facts,
     portal,
+    portalOrigin: portalBaseUrl(),
     drift: findUatDrift({ tasks: rows.map((row) => row.task), facts, portal, now }),
     lastDailyCheck: last[0]
       ? {

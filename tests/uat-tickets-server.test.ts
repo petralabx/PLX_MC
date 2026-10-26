@@ -217,6 +217,23 @@ describe("loadUatTickets", () => {
     expect(report.lastDailyCheck).toEqual({ at: at(6), findings: 2, portal: "off" });
   });
 
+  // TASK-3975: one setting, PLX_MC_PORTAL_BASE_URL, for the read and the ticket links.
+  it("names the portal origin the read calls, so ticket links follow PLX_MC_PORTAL_BASE_URL", async () => {
+    expect((await loadUatTickets(NOW)).portalOrigin).toBe("https://staging.plxcustomer.io");
+    vi.stubEnv("PLX_MC_PORTAL_BASE_URL", "https://uat.portal.test/");
+    try {
+      h.portalReadEnabled.mockReturnValue(true);
+      const fetchImpl = vi.fn(async () => jsonResponse({ tickets: [] }));
+      await readPortalTickets(NOW, fetchImpl);
+      const [url] = fetchImpl.mock.calls[0] as unknown as [string];
+      expect(url).toBe(`https://uat.portal.test${PORTAL_SNAPSHOT_PATH}`);
+      h.portalReadEnabled.mockReturnValue(false);
+      expect((await loadUatTickets(NOW)).portalOrigin).toBe("https://uat.portal.test");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("skips the checkout read with no ticket tasks", async () => {
     expect(await loadUatTickets(NOW)).toMatchObject({ facts: {}, drift: [], lastDailyCheck: null });
     expect(h.dispatches).not.toHaveBeenCalled();
@@ -310,5 +327,11 @@ describe("runUatFix", () => {
     h.api.mockRejectedValue(new Error("forbidden"));
     await runUatFix({ kind: "create", feedbackId: FB, title: "Export", attempt: 1 });
     expect(h.notice).toHaveBeenCalledWith(expect.stringContaining("forbidden"));
+  });
+
+  it("links the created task to the report's portal origin (TASK-3975)", async () => {
+    await runUatFix({ kind: "create", feedbackId: FB, title: "Export", attempt: 1 }, "https://uat.portal.test");
+    const [, init] = h.api.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).description).toContain(`https://uat.portal.test/uat?ticket=${FB}`);
   });
 });

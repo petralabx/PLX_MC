@@ -190,7 +190,10 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   change (title, description, priority) is rejected (TASK-2533). On a UAT
   ticket task (`kind:code` plus `uat:<feedbackId>`), (a) also covers `uat:hold`
   and `uat-attempt:<n>`, and a label-only patch that changes nothing succeeds,
-  so a retried portal mirror does not fail (TASK-3697).
+  so a retried portal mirror does not fail (TASK-3697). It also covers
+  Steward's block labels, `uat:blocked` and `uat:cause:<x>`, so Steward can mark
+  a ticket it gave up on before any lane is leased; the portal principal still
+  may not write them (TASK-3967).
 - `bucket` (`BKT-*`, optional `note`) moves the task. The target must exist,
   must not be archived or in a closed project (each guard enforces once the
   record exposes an `archived`/`archivedAt` flag or project `status:"closed"`),

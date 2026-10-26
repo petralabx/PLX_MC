@@ -16,7 +16,7 @@ import { patchTask } from "@/lib/sync";
 import { bucketMoveTargetViolation } from "@/lib/sync/bucket-move";
 import { cancelTaskTx, reopenTaskTx, type CancelContext } from "@/lib/sync/cancel";
 import { TASK_KIND_DEFAULT, assertValidKinds, isKindLabel, kindsOf } from "@/lib/tasks/kind";
-import { isUatSyncLabel, isUatTicketTask } from "@/lib/tasks/uat-labels";
+import { isUatBlockLabel, isUatSyncLabel, isUatTicketTask } from "@/lib/tasks/uat-labels";
 import { BUCKET_ID_RE } from "@/lib/sync/mapping";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
 import { mcpAuditActor, type McpIdentity } from "./auth";
@@ -246,12 +246,14 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
     const delta = [...labels.filter((label) => !(before.labels ?? []).includes(label)),
       ...(before.labels ?? []).filter((label) => !labels.includes(label))];
     const sent = Object.entries(patch).filter(([, value]) => value !== undefined).map(([key]) => key);
-    const laneFree = (label: string) =>
+    const syncLabel = (label: string) =>
       CLOSURE_LABELS.includes(label) || isKindLabel(label) || (uatTicket && isUatSyncLabel(label));
+    // Steward blocks a ticket task before any lane is leased (TASK-3967); the portal may not.
+    const laneFree = (label: string) => syncLabel(label) || (uatTicket && isUatBlockLabel(label));
     const labelOnly = sent.every((key) => key === "labels" || key === "addLabels" || key === "removeLabels");
     // A UAT ticket task's no-op replay passes too, so a retried mirror succeeds.
     const closureOnly = (delta.length > 0 || uatTicket) && delta.every(laneFree) && labelOnly;
-    if (uatSyncOnly && !closureOnly) {
+    if (uatSyncOnly && !(closureOnly && delta.every(syncLabel))) {
       throw uatSyncForbidden("it may only add or remove uat:hold, uat-attempt:<n>, kind:* or closure labels.");
     }
     // The portal's edit must leave a UAT ticket task, or its next mirror is refused.
@@ -263,7 +265,7 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
     const laneOptional = TERMINAL_TASK_STAGES.includes(before.stage) || closureOnly || bucketOnly || assignOnly;
     if (lanes.length > 1 || (lanes.length === 1 && !lanes[0].slice("lane:".length).trim())
       || (lanes.length === 0 && !laneOptional)) {
-      throw new ApiError("invalid_request", "The resulting labels must contain exactly one non-empty lane:* label. Add a lane for an unlabeled task; remove the old lane when replacing it. Lane-less tasks may only gain or lose kind:* or closure labels in a label-only patch (" + CLOSURE_LABELS.join(", ") + "; on a UAT ticket task also uat:hold and uat-attempt:<n>), be moved by bucket alone, or be in a terminal stage.", 400);
+      throw new ApiError("invalid_request", "The resulting labels must contain exactly one non-empty lane:* label. Add a lane for an unlabeled task; remove the old lane when replacing it. Lane-less tasks may only gain or lose kind:* or closure labels in a label-only patch (" + CLOSURE_LABELS.join(", ") + "; on a UAT ticket task also uat:hold, uat-attempt:<n>, uat:blocked and uat:cause:<x>), be moved by bucket alone, or be in a terminal stage.", 400);
     }
 
     if (patch.bucket !== undefined && patch.bucket !== before.bucket) {

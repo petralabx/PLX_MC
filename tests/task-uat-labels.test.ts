@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   hasHumanBlockLabel,
+  isUatBlockLabel,
   isUatSyncLabel,
   isUatTicketTask,
   uatBlockCauses,
@@ -30,6 +31,13 @@ describe("uat ticket labels", () => {
     for (const label of ["uat:hold", "uat-attempt:1", "uat-attempt:12"]) expect(isUatSyncLabel(label)).toBe(true);
     for (const label of ["uat:blocked", "uat:cause:quota", "uat-attempt:0", "uat-attempt:x", "uat:cmfb7q2xk0001", "lane:claude-uat"]) {
       expect({ label, sync: isUatSyncLabel(label) }).toEqual({ label, sync: false });
+    }
+  });
+
+  it("names Steward's block labels: uat:blocked and a non-empty uat:cause:<x> (TASK-3967)", () => {
+    for (const label of ["uat:blocked", "uat:cause:quota"]) expect(isUatBlockLabel(label)).toBe(true);
+    for (const label of ["uat:cause:", "uat:hold", "uat-attempt:1", "uat:cmfb7q2xk0001", "lane:claude-uat"]) {
+      expect({ label, block: isUatBlockLabel(label) }).toEqual({ label, block: false });
     }
   });
 

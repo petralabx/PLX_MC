@@ -4,11 +4,13 @@
 // four numbers against the revenue target, the notes behind them, and this
 // month's open Sage order lines with bucket chips, customer class and item
 // category filters (TASK-3177), a search and CAD totals that follow them (the
-// batch list's tools, tables.tsx). The filters change the list, never the four
-// numbers. Every figure comes from the
-// page model (lib/reporting/goals/forecast.ts); this file only shows it.
+// batch list's tools, tables.tsx). The four numbers follow the class and
+// category filters too (TASK-3190), worked out by the same function as the
+// whole month's; the bucket chips and the search change only the list. Every
+// figure comes from the page model (lib/reporting/goals/forecast.ts); this file
+// only shows it.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { ForecastFilter, ForecastReady, ForecastRow, ForecastView } from "@/lib/reporting/goals";
 import { monthLabel } from "@/lib/reporting/goals/calendar";
@@ -18,17 +20,19 @@ import {
   FORECAST_FILTERS,
   activeCategoryFilter,
   filterForecastRows,
+  filteredForecastKpis,
   forecastCadCents,
   forecastCategoryOptions,
   otherCurrencyTotals,
   type ForecastBucket,
   type ForecastCategoryFilter,
   type ForecastClassFilter,
+  type ForecastKpiFilter,
+  type ForecastKpis,
 } from "@/lib/reporting/goals/forecast-list";
 
-import { amount, count, day, dollars, price, type ReadyPage } from "./helpers";
+import { amount, count, day, dollars, plural, price, type ReadyPage } from "./helpers";
 
-const plural = (n: number, one: string, many: string) => `${count(n)} ${n === 1 ? one : many}`;
 /** Quantities to two places at most ("6,000", "12.5"). */
 const qty = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
@@ -60,32 +64,92 @@ export function ForecastSection({ page }: { page: ReadyPage }) {
       </div>
     );
   }
+  return <ForecastReadyView f={forecast} />;
+}
+
+/** How the chosen filters read in a sentence: "Exclusive Manufacturing customers", "PLABEL (Manufacturing) items". */
+function filterWords(f: ForecastReady, filter: ForecastKpiFilter): { who: string | null; what: string | null } {
+  const label = forecastCategoryOptions(f.rows).find((o) => o.key === filter.category)?.label ?? null;
+  return {
+    who: filter.customerClass === "all" ? null : `${filter.customerClass} customers`,
+    what: filter.category === "all" ? null : filter.category === "none" ? "items with no category" : `${label} items`,
+  };
+}
+
+/**
+ * The ready forecast. The class and category filters live here, so the four
+ * numbers and the list follow the same ones; with neither chosen the numbers
+ * are the page model's whole-month numbers, exactly as before.
+ */
+function ForecastReadyView({ f }: { f: ForecastReady }) {
+  const [customerClass, setCustomerClass] = useState<ForecastClassFilter>("all");
+  const [chosenCategory, setCategory] = useState<ForecastCategoryFilter>("all");
+  const categoriesRead = f.categoryMissing !== null && f.categoryMissing.length === 0;
+  // A refresh can drop the chosen category (or the login can lose access): fall back to All, the way the dropdown shows it.
+  const category = activeCategoryFilter(chosenCategory, f.rows, categoriesRead);
+  if (category !== chosenCategory) setCategory(category);
+  // Worked out again only when the rows or the filters change, not on every refresh-step render.
+  const { k, words } = useMemo(() => {
+    const filter: ForecastKpiFilter | null = customerClass === "all" && category === "all" ? null : { customerClass, category };
+    const kpis: ForecastKpis = filter ? filteredForecastKpis(f, filter) : f;
+    return { k: kpis, words: filter ? filterWords(f, filter) : null };
+  }, [f, customerClass, category]);
+
   return (
     <>
-      <ForecastNumbers f={forecast} />
-      <ForecastNotes f={forecast} />
-      <ForecastList rows={forecast.rows} categoryMissing={forecast.categoryMissing} />
+      {words ? (
+        <p className="gp-line" data-testid="goals-forecast-filtered">
+          {words.what
+            ? `For ${words.what}${words.who ? ` of ${words.who}` : ""} only. Invoices aren’t split by item category yet, so these count open orders only. The hit rate is for all customers.`
+            : `For ${words.who} only. The target and the hit rate are for all customers.`}
+        </p>
+      ) : null}
+      <ForecastNumbers k={k} targetCents={f.targetCents} measuredFrom={f.measuredFrom} filtered={words !== null} />
+      <ForecastNotes f={f} k={k} words={words} />
+      <ForecastList
+        rows={f.rows}
+        categoryMissing={f.categoryMissing}
+        categoriesRead={categoriesRead}
+        customerClass={customerClass}
+        category={category}
+        onClass={setCustomerClass}
+        onCategory={setCategory}
+      />
     </>
   );
 }
 
-function ForecastNumbers({ f }: { f: ForecastReady }) {
-  const b = f.buckets;
-  const target = `of ${dollars(f.targetCents)}`;
-  const hitRate = f.realistic ? `${(f.realistic.hitRate * 100).toFixed(1)}%` : "";
+export function ForecastNumbers({
+  k,
+  targetCents,
+  measuredFrom,
+  filtered,
+}: {
+  k: ForecastKpis;
+  targetCents: number;
+  measuredFrom: string;
+  filtered: boolean;
+}) {
+  const b = k.buckets;
+  // Invoices can't be split by item category: with one chosen, the numbers count open orders only.
+  const ordersOnly = k.invoicedCents === null;
+  const target = `of ${dollars(targetCents)}${filtered ? " (all customers)" : ""}`;
+  const hitRate = k.realistic ? `${(k.realistic.hitRate * 100).toFixed(1)}%` : "";
   return (
     <ul className="gp-tiles" data-testid="goals-forecast-numbers">
       <li>
         <span className="k">Theoretical</span>
-        <span className="v">{dollars(f.theoreticalCents)}</span>
-        <span className="s">{target}</span>
+        <span className="v">{dollars(k.theoreticalCents)}</span>
+        {ordersOnly ? null : <span className="s">{target}</span>}
         <span className="s">
-          Invoiced {dollars(f.invoicedCents)} + ready {dollars(b.ready.cents)} + planned in time {dollars(b.planned.cents)}
+          {ordersOnly
+            ? `Open orders only: ready ${dollars(b.ready.cents)} + planned in time ${dollars(b.planned.cents)}`
+            : `Invoiced ${dollars(k.invoicedCents ?? 0)} + ready ${dollars(b.ready.cents)} + planned in time ${dollars(b.planned.cents)}`}
         </span>
       </li>
       <li>
         <span className="k">At risk</span>
-        <span className="v">{dollars(f.atRiskCents)}</span>
+        <span className="v">{dollars(k.atRiskCents)}</span>
         <span className="s">
           Late {dollars(b.late.cents)} + not planned {dollars(b.not_planned.cents)}
         </span>
@@ -93,40 +157,58 @@ function ForecastNumbers({ f }: { f: ForecastReady }) {
       </li>
       <li>
         <span className="k">Realistic</span>
-        <span className="v">{f.realistic ? dollars(f.realistic.cents) : "—"}</span>
-        {f.realistic ? (
+        <span className="v">{k.realistic ? dollars(k.realistic.cents) : "—"}</span>
+        {k.realistic ? (
           <>
-            <span className="s">{target}</span>
+            {ordersOnly ? null : <span className="s">{target}</span>}
             <span className="s">
-              Invoiced + (ready + planned in time) × {hitRate} hit rate, measured over{" "}
-              {f.realistic.months.map((m) => m.label).join(", ")}
+              {ordersOnly ? "Open orders only: (ready + planned in time)" : "Invoiced + (ready + planned in time)"} × {hitRate} hit
+              rate{filtered ? " (all customers)" : ""}, measured over {k.realistic.months.map((m) => m.label).join(", ")}
             </span>
           </>
         ) : (
-          <span className="s">Measured from {monthLabel(f.measuredFrom)}, once a full month of forecasts has ended</span>
+          <span className="s">Measured from {monthLabel(measuredFrom)}, once a full month of forecasts has ended</span>
         )}
       </li>
       <li>
         <span className="k">Pace</span>
-        <span className="v">{f.pace ? dollars(f.pace.cents) : "—"}</span>
-        <span className="s">{target}</span>
+        <span className="v">{k.pace ? dollars(k.pace.cents) : "—"}</span>
+        {ordersOnly ? null : <span className="s">{target}</span>}
         <span className="s">
-          {f.pace
-            ? `Invoiced ÷ ${count(f.pace.coveredDays)} working days covered × ${count(f.pace.workingDays)}`
-            : "No working day covered yet"}
+          {k.pace
+            ? `Invoiced ÷ ${count(k.pace.coveredDays)} working days covered × ${count(k.pace.workingDays)}`
+            : ordersOnly
+              ? "Needs invoices split by item category (not available yet)"
+              : "No working day covered yet"}
         </span>
       </li>
     </ul>
   );
 }
 
-function ForecastNotes({ f }: { f: ForecastReady }) {
+export function ForecastNotes({ f, k, words }: { f: ForecastReady; k: ForecastKpis; words: { who: string | null; what: string | null } | null }) {
+  // Production with no order behind it has no class or category: the note stays whole-month.
   const { unordered } = f;
   return (
     <>
       <p className="gp-line">
-        Invoiced so far is the Revenue card’s {dollars(f.invoicedCents)}: Sage invoices plus shipments entered by hand.
+        {!words
+          ? `Invoiced so far is the Revenue card’s ${dollars(f.invoicedCents)}: Sage invoices plus shipments entered by hand.`
+          : words.what
+            ? `Invoiced revenue isn’t in these numbers: Sage invoices can’t be split by item category yet. The Revenue card’s ${dollars(f.invoicedCents)} covers every category.`
+            : `Invoiced for ${words.who} is ${dollars(k.invoicedCents ?? 0)} of the Revenue card’s ${dollars(f.invoicedCents)} (Sage invoices plus shipments entered by hand, as in Revenue by customer class).${
+                f.invoicedByClassMatchesCard
+                  ? ""
+                  : " Sage changed between two reads of this refresh, so the classes don’t add up to the card until the next refresh."
+              }`}
       </p>
+      {f.aoQtyUnreadable ? (
+        <p className="gp-notice" data-testid="goals-forecast-qty-unreadable">
+          {plural(f.aoQtyUnreadable, "assembly order has", "assembly orders have")} a quantity in FileMaker that isn’t a number,
+          so {f.aoQtyUnreadable === 1 ? "it covers" : "they cover"} no order line and those lines count as Not planned. Fix the
+          quantity in FileMaker and the next refresh picks it up.
+        </p>
+      ) : null}
       {unordered.count > 0 ? (
         <p className="gp-line" data-testid="goals-forecast-unordered">
           {plural(unordered.count, "assembly order", "assembly orders")} scheduled this month ({count(unordered.pieces)} pieces){" "}
@@ -134,10 +216,10 @@ function ForecastNotes({ f }: { f: ForecastReady }) {
           not revenue, so {unordered.count === 1 ? "it isn’t" : "they aren’t"} counted.
         </p>
       ) : null}
-      {f.otherCurrencies.length > 0 ? (
+      {k.otherCurrencies.length > 0 ? (
         <p className="gp-line">
           Not converted:{" "}
-          {f.otherCurrencies.map((c) => `${c.currency} ${amount(c.cents)} (${plural(c.rows, "row", "rows")})`).join(", ")}. Only CAD
+          {k.otherCurrencies.map((c) => `${c.currency} ${amount(c.cents)} (${plural(c.rows, "row", "rows")})`).join(", ")}. Only CAD
           and USD count, as on the Revenue card.
         </p>
       ) : null}
@@ -150,15 +232,26 @@ function aoText(row: ForecastRow): string {
   return [row.ao.number, row.ao.scheduled ? day(row.ao.scheduled) : "no date", row.ao.status].filter(Boolean).join(" · ");
 }
 
-function ForecastList({ rows: all, categoryMissing }: { rows: readonly ForecastRow[]; categoryMissing: string[] | null }) {
+/** The open order rows: the bucket chips and the search are its own; the class and category filters are the section's (ForecastReadyView). */
+function ForecastList({
+  rows: all,
+  categoryMissing,
+  categoriesRead,
+  customerClass,
+  category,
+  onClass,
+  onCategory,
+}: {
+  rows: readonly ForecastRow[];
+  categoryMissing: string[] | null;
+  categoriesRead: boolean;
+  customerClass: ForecastClassFilter;
+  category: ForecastCategoryFilter;
+  onClass: (value: ForecastClassFilter) => void;
+  onCategory: (value: ForecastCategoryFilter) => void;
+}) {
   const [filter, setFilter] = useState<ForecastFilter>("all");
-  const [customerClass, setCustomerClass] = useState<ForecastClassFilter>("all");
-  const [chosenCategory, setCategory] = useState<ForecastCategoryFilter>("all");
   const [query, setQuery] = useState("");
-  const categoriesRead = categoryMissing !== null && categoryMissing.length === 0;
-  // A refresh can drop the chosen category (or the login can lose access): fall back to All, the way the dropdown shows it.
-  const category = activeCategoryFilter(chosenCategory, all, categoriesRead);
-  if (category !== chosenCategory) setCategory(category);
   const rows = filterForecastRows(all, { filter, query, customerClass, category });
   const cad = forecastCadCents(rows);
   const others = otherCurrencyTotals(rows);
@@ -180,7 +273,7 @@ function ForecastList({ rows: all, categoryMissing }: { rows: readonly ForecastR
         />
         <label className="gp-select">
           Customer class
-          <select value={customerClass} onChange={(event) => setCustomerClass(event.target.value as ForecastClassFilter)}>
+          <select value={customerClass} onChange={(event) => onClass(event.target.value as ForecastClassFilter)}>
             <option value="all">All classes</option>
             {CUSTOMER_CLASSES.map((c) => (
               <option key={c} value={c}>
@@ -194,7 +287,7 @@ function ForecastList({ rows: all, categoryMissing }: { rows: readonly ForecastR
           <select
             value={category}
             disabled={!categoriesRead}
-            onChange={(event) => setCategory(event.target.value as ForecastCategoryFilter)}
+            onChange={(event) => onCategory(event.target.value as ForecastCategoryFilter)}
           >
             {forecastCategoryOptions(all).map((o) => (
               <option key={o.key} value={o.key}>

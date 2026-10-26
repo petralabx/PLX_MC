@@ -33,8 +33,9 @@ import { GET as exportGet } from "@/app/api/reporting/goals/export/route";
 import { ApiClientError, apiDownload, dispositionFileName } from "@/lib/api";
 import { appendEvent } from "@/lib/compliance/repo";
 import { WORKBOOK_SHEETS, XLSX_CONTENT_TYPE, type GoalsExportData } from "@/lib/reporting/goals";
+import { loadGoalsExport } from "@/lib/reporting/goals/loader";
 
-import { DATASETS, RATE, SHIPMENT_LINES, TODAY, goalsPage } from "./reporting-goals-helpers";
+import { DATASETS, ENTRIES, FORECAST, RATE, SHIPMENT_LINES, SHIPMENT_LINES_SUMMARY, TODAY, goalsPage } from "./reporting-goals-helpers";
 
 const ctx = { params: Promise.resolve({}) };
 const FILE = "PLX goals and production 2026-10-14.xlsx";
@@ -93,8 +94,29 @@ describe("GET /api/reporting/goals/export", () => {
     expect(appendEvent).toHaveBeenCalledWith({
       kind: "reporting.goals.export",
       actor: "human:stephen@petrasoap.com",
-      payload: { runId: 41 },
+      payload: { runId: 41, fx: "boc" },
     });
+  });
+
+  it("exports at the Sage rate under its own name with ?fx=sage, and refuses any other fx (TASK-3780)", async () => {
+    signedIn(["Goals.Viewer"]);
+    h.data = exportData(goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "sage"));
+    const resp = await exportGet(new Request("http://localhost/api/reporting/goals/export?fx=sage"), ctx);
+    expect(resp.status).toBe(200);
+    expect(vi.mocked(loadGoalsExport)).toHaveBeenLastCalledWith("sage");
+    expect(resp.headers.get("content-disposition")).toBe('attachment; filename="PLX goals and production 2026-10-14 (Sage rate).xlsx"');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await resp.arrayBuffer());
+    expect(wb.getWorksheet("Goals")!.getCell("B17").value).toBe(1.25);
+    expect(wb.getWorksheet("Revenue by class")!.getCell("A5").value).toBe("Exclusive Manufacturing");
+    expect(appendEvent).toHaveBeenLastCalledWith({
+      kind: "reporting.goals.export",
+      actor: "human:stephen@petrasoap.com",
+      payload: { runId: 41, fx: "sage" },
+    });
+    const bad = await exportGet(new Request("http://localhost/api/reporting/goals/export?fx=1.25"), ctx);
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({ error: { code: "invalid_request" } });
   });
 
   it("lets Editors and read-only break-glass sessions export too", async () => {

@@ -23,6 +23,7 @@ export type {
   ReferenceRow,
   RefreshRun,
   RefreshTrigger,
+  RevenueRateBasis,
   RevenueRow,
   RunStatus,
   ShipmentLineKind,
@@ -52,7 +53,18 @@ export {
 } from "./calendar";
 export type { Holiday } from "./calendar";
 
-export { centsToDecimal, convertCents, formatAmount, formatDollars, invertCents, prorateCents, sumToCents, toCents } from "./money";
+export {
+  allocateConvertedCents,
+  centsToDecimal,
+  convertCents,
+  formatAmount,
+  formatDollars,
+  invertCents,
+  prorateCents,
+  sumToCents,
+  toCents,
+  usableRate,
+} from "./money";
 
 export {
   ENTRY_STATUS_LABELS,
@@ -179,7 +191,7 @@ export { invoiceLines, linesMismatch, linesSearchText, shipmentLinesView } from 
 export type { InvoiceHeader, InvoiceLines, LinesCheck, ShipmentLinesView } from "./shipment-lines";
 export { SHIPMENT_LINE_COLUMNS } from "./queries/shipment-lines";
 
-export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView } from "./view";
+export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView, revenueBasisParam } from "./view";
 export type { DatasetQuery, GoalsPage, GoalsView, GoalsViewInput, GoalsViewState, GoalsViewer } from "./view";
 
 export { FX_SERIES, fetchUsdCadRates } from "./fx";
@@ -199,9 +211,11 @@ export {
 export type { RefreshDeps, RefreshStep } from "./refresh";
 
 export {
+  DEFAULT_SAGE_USD_CAD_RATE,
   LIST_RETENTION_RUNS,
   RATE_LIMIT_SECONDS,
   RETENTION_DAYS,
+  SAGE_RATE_KEY,
   STALE_RUN_MINUTES,
   getRun,
   latestRuns,
@@ -223,7 +237,8 @@ export {
 export type { GoalsActor, GoalsRole } from "./access";
 
 // Revenue forecast (TASK-3151): its exports go below this line. forecast.ts is
-// pure; client components take its runtime helpers from ./forecast directly.
+// pure but holds the customer roster; client components take its runtime
+// helpers from ./forecast-list directly, never from ./forecast or this barrel.
 export {
   CHANNELS,
   CUSTOMER_CLASSES,
@@ -242,7 +257,10 @@ export {
   fixOeNumber,
   forecastCadCents,
   activeCategoryFilter,
+  bucketTotals,
+  filteredForecastKpis,
   forecastCategoryOptions,
+  forecastKpis,
   forecastRows,
   forecastSummary,
   hitRateMonths,
@@ -259,10 +277,14 @@ export type {
   Channel,
   CustomerClass,
   ForecastBucket,
+  ForecastBucketTotals,
   ForecastCategoryFilter,
   ForecastClassFilter,
   ForecastFilter,
   ForecastInput,
+  ForecastKpiBasis,
+  ForecastKpiFilter,
+  ForecastKpis,
   ForecastListFilters,
   ForecastReady,
   ForecastRow,
@@ -274,3 +296,7 @@ export type {
 } from "./forecast";
 export type { ForecastAccess, ForecastAoRow, ForecastDatasets, ForecastLineRow } from "./types";
 export { FORECAST_CATEGORY_COLUMNS, FORECAST_COLUMNS } from "./queries/forecast-access";
+
+// Revenue by customer class (TASK-3781): its exports go below this line. Server-only (it reads the customer roster).
+export { revenueByClass } from "./revenue-by-class";
+export type { ClassRevenueRow, ClassRevenueTotals, RevenueByClass } from "./revenue-by-class";

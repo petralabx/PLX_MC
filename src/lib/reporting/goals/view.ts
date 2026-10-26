@@ -1,8 +1,11 @@
 // The Goals & Production page model: the latest good snapshot combined with the
 // live manual entries (rules.computeGoals), plus the run it came from and the
 // query behind each section, so every figure can name its query and run. Pure.
+// USD revenue converts at the run's Bank of Canada rate, or at the fixed Sage
+// rate when the page asks for it (TASK-3780); truckloads stay on the Bank of Canada rate.
 
-import { buildForecast, type ForecastSnapshot, type ForecastView } from "./forecast";
+import { buildForecast, type CustomerClass, type ForecastSnapshot, type ForecastView } from "./forecast";
+import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
 import { computeGoals, type GoalsModel } from "./rules";
 import { buildShipmentList, type ShipmentListRow } from "./shipment-list";
 import { shipmentLinesView, type ShipmentLinesView } from "./shipment-lines";
@@ -14,6 +17,7 @@ import type {
   IsoDate,
   ManualEntry,
   RefreshRun,
+  RevenueRateBasis,
   ShipmentLinesSummary,
   SnapshotData,
 } from "./types";
@@ -42,6 +46,7 @@ export const SECTION_QUERIES: Record<string, readonly DatasetQuery[]> = {
   line1: [DATASET_QUERIES.batches],
   truckloads: [DATASET_QUERIES.truckloads],
   revenue: [DATASET_QUERIES.revenue],
+  classes: [DATASET_QUERIES.shipments],
   daily: [DATASET_QUERIES.daily, DATASET_QUERIES.batches],
   entries: [DATASET_QUERIES.references, DATASET_QUERIES.batches],
   sizes: [DATASET_QUERIES.batches, DATASET_QUERIES.batchHistory],
@@ -51,6 +56,12 @@ export const SECTION_QUERIES: Record<string, readonly DatasetQuery[]> = {
 };
 
 export type GoalsViewState = "ready" | "not_configured" | "no_data";
+
+/** A Goals request's `fx` (TASK-3780): absent or boc, the run's Bank of Canada rate; sage, the fixed Sage rate; anything else null (the routes answer 400). */
+export function revenueBasisParam(value: string | null): RevenueRateBasis | null {
+  if (value === null || value === "boc") return "boc";
+  return value === "sage" ? "sage" : null;
+}
 
 export interface GoalsView {
   /** not_configured: no reporting database and no stored run; no_data: configured but nothing has refreshed yet. */
@@ -63,6 +74,8 @@ export interface GoalsView {
   model: GoalsModel | null;
   /** This month's shipments list (shipment-list.ts), from the same snapshot and entries as the model; empty without one. */
   shipments: ShipmentListRow[];
+  /** The Revenue card's month by customer class (TASK-3781), from the shipments list; null without a model. */
+  revenueByClass: RevenueByClass | null;
   /** Whether the run has its invoices' lines (TASK-3144); the page fetches them on demand. null without a model. */
   shipmentLines: ShipmentLinesView | null;
   /** The goal settings the model was built with (the page's definitions and rules text quote them). */
@@ -96,6 +109,8 @@ export interface GoalsViewInput {
   forecast?: ForecastSnapshot | null;
   /** The run's stored summary of its invoice lines; null or absent when the run predates them. */
   shipmentLines?: ShipmentLinesSummary | null;
+  /** The rate USD revenue converts at (TASK-3780); absent, the run's Bank of Canada rate. */
+  revenueBasis?: RevenueRateBasis;
 }
 
 export function buildGoalsView(input: GoalsViewInput): GoalsView {
@@ -109,18 +124,25 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       fx: null,
       model: null,
       shipments: [],
+      revenueByClass: null,
       shipmentLines: null,
       settings: null,
       sections: SECTION_QUERIES,
       forecast: null,
     };
   }
+  const basis = input.revenueBasis ?? "boc";
+  const revenueRate = basis === "sage" ? input.settings.sageUsdCadRate : run.fxRate;
+  // The loader refuses a Sage-rate read without a usable rate; this guards direct callers.
+  if (!revenueRate) throw new RangeError("report_goal_setting.sage_usd_cad_rate is not a usable USD/CAD rate");
   const model = computeGoals({
     today: run.today,
     holidays: input.holidays,
     settings: input.settings,
     ftlCustomers: input.ftlCustomers,
     rate: run.fxRate,
+    revenueRate,
+    revenueBasis: basis,
     rates: input.rates,
     data: input.snapshot,
     entries: input.entries,
@@ -128,24 +150,37 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     sageRefs: input.sageRefs,
   });
   const fxSource = run.fxSource ?? "boc";
+  const shipments = buildShipmentList({
+    shipments: input.snapshot.shipments,
+    truckloads: input.snapshot.truckloads,
+    entries: model.entries,
+    rate: model.revenue.rate,
+    truckloadRate: model.truckloads.rate,
+    rates: input.rates,
+    settings: input.settings,
+    ftlCustomers: input.ftlCustomers,
+  });
+  const byClass = revenueByClass(shipments, model, input.ftlCustomers);
+  const invoicedByClass = Object.fromEntries(byClass.rows.map((r) => [r.customerClass, r.totalCadCents])) as Record<CustomerClass, number>;
   return {
     state: "ready",
     run,
     latestAttempt,
     fx: { rate: run.fxRate, date: run.fxRateDate, source: fxSource, stale: fxSource === "stored" },
     model,
-    shipments: buildShipmentList({
-      shipments: input.snapshot.shipments,
-      truckloads: input.snapshot.truckloads,
-      entries: model.entries,
-      rate: run.fxRate,
-      rates: input.rates,
-      settings: input.settings,
-      ftlCustomers: input.ftlCustomers,
-    }),
+    shipments,
+    revenueByClass: byClass,
     shipmentLines: shipmentLinesView(input.shipmentLines ?? null),
     settings: input.settings,
     sections: SECTION_QUERIES,
-    forecast: buildForecast({ snapshot: input.forecast ?? null, model, settings: input.settings, rate: run.fxRate }),
+    forecast: buildForecast({
+      snapshot: input.forecast ?? null,
+      model,
+      settings: input.settings,
+      rate: model.revenue.rate,
+      invoicedByClass,
+      invoicedByClassMatchesCard: byClass.matchesCard,
+      aoQtyUnreadable: run.rowCounts.forecastAoQtyUnreadable ?? null,
+    }),
   };
 }

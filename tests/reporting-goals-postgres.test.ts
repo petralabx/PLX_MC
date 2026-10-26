@@ -42,6 +42,7 @@ import {
 import { FORECAST_CATEGORY_COLUMNS, FORECAST_COLUMNS, forecastRows, type ForecastView } from "@/lib/reporting/goals";
 import { SHIPMENT_LINE_COLUMNS, invoiceLines, loadShipmentLines } from "@/lib/reporting/goals";
 import { loadForecast } from "@/lib/reporting/goals/forecast-store";
+import { rowCounts } from "@/lib/reporting/goals/store";
 import { forecastAosQuery } from "@/lib/reporting/goals/queries/forecast-assembly-orders";
 import { missingColumns, type ColumnList } from "@/lib/reporting/goals/queries/read-access";
 import type { SourceQuery } from "@/lib/reporting/goals/source-db";
@@ -474,6 +475,7 @@ describe("migration 042: Line 1 bulk settings, expand only", () => {
       fullTruckloadMinUsdCents: 1_800_000,
       revenueTargetCadCents: 100_000_000,
       fullTruckloadsPerMonth: null,
+      sageUsdCadRate: "1.25",
     });
     const line1 = (await loadGoalsView()).model!.line1;
     // The retired rows change nothing, even unset; an unset Line 1 row is an error, never a silent 0.
@@ -520,6 +522,26 @@ describe("migration 042: Line 1 bulk settings, expand only", () => {
   });
 });
 
+describe("the Sage USD/CAD rate setting (TASK-3780)", () => {
+  it("is 1.25 without a row, the row's value when set, and an unusable row fails only a Sage-rate read", async () => {
+    expect((await loadConfig()).settings.sageUsdCadRate).toBe("1.25");
+    const boc = await loadGoalsView();
+    expect(boc.model).not.toBeNull();
+    try {
+      await mcQuery(`INSERT INTO report_goal_setting (key, value, note, updated_by) VALUES ('sage_usd_cad_rate', 1.3, 'test', 'test')`);
+      expect((await loadConfig()).settings.sageUsdCadRate).toBe("1.3");
+      expect((await loadGoalsView("sage")).model!.revenue).toMatchObject({ basis: "sage", rate: "1.3" });
+      await mcQuery(`UPDATE report_goal_setting SET value = NULL WHERE key = 'sage_usd_cad_rate'`);
+      // Refreshes read the same config: an unset row must not fail them, only a request for the Sage rate.
+      expect((await loadConfig()).settings.sageUsdCadRate).toBeNull();
+      await expect(loadGoalsView("sage")).rejects.toMatchObject({ code: "config_error", status: 500 });
+      expect((await loadGoalsView()).model).toEqual(boc.model);
+    } finally {
+      await mcQuery(`DELETE FROM report_goal_setting WHERE key = 'sage_usd_cad_rate'`);
+    }
+  });
+});
+
 describe("revenue forecast (TASK-3151)", () => {
   const sortedJson = <T>(rows: T[]) => rows.map((r) => JSON.stringify(r)).sort();
   // Every forecast column but silver.batches' (granted with the report itself), as the refresh names them.
@@ -559,7 +581,43 @@ describe("revenue forecast (TASK-3151)", () => {
     expect(forecast.lines).toEqual(FORECAST.data.lines);
     // AOs: oelist_c, else FileMaker's order-entry link (AO-26301E); the bulk batch through idbatch, else
     // idbatch_pre (AO-26307B); none for an old AO on a closed order or one due next month only.
-    expect(sortedJson(forecast.aos)).toEqual(sortedJson(FORECAST.data.aos));
+    // qtyUnreadable is the refresh's own flag (TASK-3791); the fixture's AOs are stored rows, which don't carry it.
+    expect(sortedJson(forecast.aos.map((ao) => ({ ...ao, qtyUnreadable: undefined })))).toEqual(sortedJson(FORECAST.data.aos));
+    expect(forecast.aos.every((ao) => ao.qtyUnreadable === false)).toBe(true);
+  });
+
+  it("reads FileMaker's text quantities without spaces of any kind or separators, and flags the ones that aren't numbers (TASK-3791)", async () => {
+    // Bronze keeps qtytotal as text. Before TASK-3791 any of the first five read as NULL, so the AO covered nothing.
+    const quantities: [id: number, qtytotal: string | null, qty: string | null, unreadable: boolean][] = [
+      [11491, "1,200", "1200", false],
+      [11492, "192\r", "192", false],
+      [11493, "\u00a0450 ", "450", false],
+      [11494, " 7 500 ", "7500", false],
+      [11495, "36.", "36", false],
+      [11496, "", null, false],
+      [11497, null, null, false],
+      [11498, "12 pcs", null, true],
+      [11499, "1.2.3", null, true],
+    ];
+    for (const [id, qtytotal] of quantities) {
+      await reportingAdmin.query(
+        `INSERT INTO public.assembly_order (id, nameamo_c, status, datescheduled, idfinprod, oelist_c, qtytotal, unitsperbox)
+         VALUES ($1, $2, 'Allocated', '2026-10-21', 7001, 'OR1000999999', $3, '1,000')`,
+        [id, `AO-TEXT-${id}`, qtytotal]
+      );
+    }
+    try {
+      const datasets = await readDatasets(TODAY, await loadConfig());
+      const read = new Map(datasets.forecast.aos.map((ao) => [Number(ao.id), ao]));
+      for (const [id, , qty, unreadable] of quantities) {
+        expect([read.get(id)?.qty ?? null, read.get(id)?.qtyUnreadable], String(id)).toEqual([qty, unreadable]);
+        expect(read.get(id)?.unitsPerBox, String(id)).toBe("1000");
+      }
+      // The run keeps the count, and the page and the workbook say how many AOs cover nothing.
+      expect(rowCounts(datasets).forecastAoQtyUnreadable).toBe(2);
+    } finally {
+      await reportingAdmin.query(`DELETE FROM public.assembly_order WHERE id BETWEEN 11491 AND 11499`);
+    }
   });
 
   it("links every AO to its order-entry orders in one pass, not a lookup per AO", async () => {

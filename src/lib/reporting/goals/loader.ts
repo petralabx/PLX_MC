@@ -2,6 +2,7 @@
 // and the references they match, then hands them to the pure view builder. The
 // export also gets that snapshot's invoices, their lines and truckload shipments.
 
+import { ApiError } from "@/lib/api/route";
 import { databaseConfigured, reportingDatabaseConfigured } from "@/lib/secrets";
 
 import { previousMonthStart } from "./calendar";
@@ -17,7 +18,7 @@ import {
   loadShipmentLines,
   loadSnapshot,
 } from "./store";
-import type { FxRate, ShipmentLinesDataset, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
+import type { FxRate, RevenueRateBasis, ShipmentLinesDataset, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
 import { buildGoalsView, type GoalsView } from "./view";
 
 const EMPTY_SETTINGS = {
@@ -26,10 +27,12 @@ const EMPTY_SETTINGS = {
   fullTruckloadMinUsdCents: 0,
   revenueTargetCadCents: 0,
   fullTruckloadsPerMonth: null,
+  sageUsdCadRate: null,
 };
 
-export async function loadGoalsView(): Promise<GoalsView> {
-  return (await loadGoals()).view;
+/** The page model with USD revenue at `basis` (TASK-3780): the run's Bank of Canada rate, or the fixed Sage rate. */
+export async function loadGoalsView(basis: RevenueRateBasis = "boc"): Promise<GoalsView> {
+  return (await loadGoals(basis)).view;
 }
 
 /** The page model plus what the workbook adds, from the same run: its Sage invoices and their lines, truckload shipments and the stored rates. */
@@ -42,14 +45,14 @@ export interface GoalsExportData {
   rates: FxRate[];
 }
 
-export async function loadGoalsExport(): Promise<GoalsExportData> {
-  const { view, snapshot, rates } = await loadGoals();
+export async function loadGoalsExport(basis: RevenueRateBasis = "boc"): Promise<GoalsExportData> {
+  const { view, snapshot, rates } = await loadGoals(basis);
   // Only the workbook reads them here; the page fetches them on demand (GET …/runs/[id]/shipment-lines).
   const shipmentLines = view.run ? await loadShipmentLines(view.run.id) : null;
   return { view, shipments: snapshot?.shipments ?? [], shipmentLines, truckloads: snapshot?.truckloads ?? [], rates };
 }
 
-async function loadGoals(): Promise<{ view: GoalsView; snapshot: SnapshotData | null; rates: FxRate[] }> {
+async function loadGoals(basis: RevenueRateBasis): Promise<{ view: GoalsView; snapshot: SnapshotData | null; rates: FxRate[] }> {
   const configured = reportingDatabaseConfigured();
   const empty = {
     configured,
@@ -68,6 +71,13 @@ async function loadGoals(): Promise<{ view: GoalsView; snapshot: SnapshotData | 
   if (!succeeded) return { ...none, view: buildGoalsView({ ...empty, run: null, latestRun: latest, snapshot: null }) };
   // Sequential on purpose: Mission Control's pool is small (5).
   const config = await loadConfig();
+  if (basis === "sage" && !config.settings.sageUsdCadRate) {
+    throw new ApiError(
+      "config_error",
+      "The Sage rate isn’t set up: report_goal_setting.sage_usd_cad_rate must be a positive rate with at most 6 decimals.",
+      500
+    );
+  }
   const snapshot = await loadSnapshot(succeeded);
   const entries = await listEntries();
   const rates = await loadRates(previousMonthStart(succeeded.today), succeeded.today);
@@ -91,6 +101,7 @@ async function loadGoals(): Promise<{ view: GoalsView; snapshot: SnapshotData | 
     rates,
     forecast,
     shipmentLines,
+    revenueBasis: basis,
   });
   return { view, snapshot, rates };
 }

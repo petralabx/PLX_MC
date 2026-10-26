@@ -260,13 +260,32 @@ export function ApprovalApproveButton({
 
 // ─── Sources ─────────────────────────────────────────────────────────────────
 
+/** A task from a gated creator principal that waits for creator approval (TASK-3530, TASK-3629). */
+export interface PendingCreatorApprovalRow {
+  taskId: string;
+  taskTitle: string;
+  stage: string;
+  principal: string;
+  requestedAt: string;
+}
+
 interface ApprovalsResponse {
   approvals: PendingApprovalRow[];
+  /** Only a creator approver (vince@, cos@) gets rows; everyone else gets none. */
+  creatorApprovals?: PendingCreatorApprovalRow[];
+}
+
+/** GET /api/approvals: the gates, plus the creator approvals a creator approver may clear (TASK-3629). */
+export function fetchApprovalsSource(): Promise<{ approvals: PendingApprovalRow[]; creatorApprovals: PendingCreatorApprovalRow[] }> {
+  return api<ApprovalsResponse>("/approvals").then((data) => ({
+    approvals: data.approvals,
+    creatorApprovals: data.creatorApprovals ?? [],
+  }));
 }
 
 // The gate source (GET /api/approvals), shared with Home's "What needs me".
 export function fetchPendingApprovals(): Promise<PendingApprovalRow[]> {
-  return api<ApprovalsResponse>("/approvals").then((data) => data.approvals);
+  return fetchApprovalsSource().then((data) => data.approvals);
 }
 
 /** GET /api/approvals/projects — loaded when My projects is first opened. */
@@ -557,6 +576,81 @@ function QueueRow({
   );
 }
 
+// ─── Creator approvals ───────────────────────────────────────────────────────
+
+/**
+ * Tasks a gated creator principal made, waiting for creator approval (TASK-3530).
+ * Until a creator approver clears one, it cannot be checked out, launched or
+ * moved into progress. Only creator approvers get rows, so only they see this.
+ */
+export function CreatorApprovalsPanel({
+  rows,
+  busyTaskId,
+  error,
+  done,
+  nowMs,
+  nav,
+  onApprove,
+}: {
+  rows: readonly PendingCreatorApprovalRow[];
+  busyTaskId: string | null;
+  error: { taskId: string; message: string } | null;
+  /** The task approved last on this screen, for the status line. */
+  done: string | null;
+  nowMs: number;
+  nav: Nav;
+  onApprove: (row: PendingCreatorApprovalRow) => void;
+}) {
+  if (rows.length === 0 && !done) return null;
+  return (
+    <section className="ap-queue ap-creators" aria-label="Creator approvals" data-testid="creator-approvals">
+      <div className="ap-queue-head">
+        <span className="ap-meta">Creator approvals · {rows.length}</span>
+        <span className="ap-meta">New tasks from a gated creator</span>
+      </div>
+      {done ? (
+        <p className="ap-creators-done" role="status">
+          {done} approved. It can now be checked out, launched and moved into progress.
+        </p>
+      ) : null}
+      <ul className="ap-rows">
+        {rows.map((row) => {
+          const age = itemAge(row.requestedAt, nowMs);
+          return (
+            <li key={row.taskId} className="ap-item ap-creator" data-kind="creator">
+              <div className="ap-creator-text">
+                <span className="ap-row-top">
+                  <Pill tone="warn" dot>
+                    Creator approval
+                  </Pill>
+                  <span className={`ap-age${age.stale ? " is-warn" : ""}`}>{age.text}</span>
+                </span>
+                <TaskLink taskId={row.taskId} nav={nav} className="ap-row-ask">
+                  {row.taskId} · {row.taskTitle}
+                </TaskLink>
+                <span className="ap-row-meta">Created by {row.principal}. Blocked from checkout, launch and progress until approved.</span>
+                {error?.taskId === row.taskId ? (
+                  <p className="ap-error ap-inline" role="alert">
+                    {error.message}
+                  </p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="ap-btn ap-primary"
+                disabled={busyTaskId !== null}
+                onClick={() => onApprove(row)}
+              >
+                {busyTaskId === row.taskId ? "Approving…" : "Approve task"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 // ─── Sheet ───────────────────────────────────────────────────────────────────
 
 /** The decision sheet for a pending gate. */
@@ -785,6 +879,11 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   const [waitingOn, setWaitingOn] = useState<WaitingOn>(WAITING_ANYONE);
   const [questions, setQuestions] = useState<SourceLoad<OpenQuestionRow[]>>({ status: "loading" });
   const [gates, setGates] = useState<ApprovalsLoad>({ status: "loading" });
+  // Creator approvals (TASK-3629): rows only for a creator approver.
+  const [creators, setCreators] = useState<PendingCreatorApprovalRow[]>([]);
+  const [creatorBusy, setCreatorBusy] = useState<string | null>(null);
+  const [creatorError, setCreatorError] = useState<{ taskId: string; message: string } | null>(null);
+  const [creatorDone, setCreatorDone] = useState<string | null>(null);
   const [projects, setProjects] = useState<SourceLoad<ApprovalsProjectsResponse>>({ status: "idle" });
   const [decided, setDecided] = useState<SourceLoad<DecidedRow[]>>({ status: "idle" });
   // A link opens one item: a question (TASK-3567) or a gate (TASK-3559).
@@ -828,8 +927,11 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
           (rows) => setQuestions({ status: "ready", data: rows }),
           (err: unknown) => setQuestions({ status: "error", message: loadError(err, "Failed to load questions.") })
         ),
-        fetchPendingApprovals().then(
-          (rows) => setGates({ status: "ready", data: rows }),
+        fetchApprovalsSource().then(
+          (data) => {
+            setGates({ status: "ready", data: data.approvals });
+            setCreators(data.creatorApprovals);
+          },
           (err: unknown) => setGates({ status: "error", message: approvalsLoadError(err) })
         ),
       ]).then(() => setNow(Date.now())),
@@ -1062,6 +1164,28 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
     setSettledHere((prev) => new Set(prev).add(item.id));
     setSelected(nextId);
     setNotice({ title, body: `${body} ${nextUpText(nextItem)}` });
+    await Promise.all([reloadAll(), refreshState()]);
+    approvalsChanged(reloadAll);
+  };
+
+  // TASK-3629: clear a creator approval through the TASK-3530 route. The server
+  // checks the session oid against the creator approvers; this only shows the result.
+  const approveCreator = async (row: PendingCreatorApprovalRow) => {
+    if (creatorBusy) return;
+    setCreatorBusy(row.taskId);
+    setCreatorError(null);
+    setCreatorDone(null);
+    try {
+      await api(`/tasks/${encodeURIComponent(row.taskId)}/creator-approval`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      setCreatorDone(row.taskId);
+    } catch (err) {
+      setCreatorError({ taskId: row.taskId, message: loadError(err, "Approval failed.") });
+    }
+    setCreatorBusy(null);
+    // Approved here or elsewhere first: show the list as it is now.
     await Promise.all([reloadAll(), refreshState()]);
     approvalsChanged(reloadAll);
   };
@@ -1384,6 +1508,17 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
               ? "The linked gate is not waiting for a decision: it was decided, or it is on a project you cannot open."
               : "The linked question is not open for you: it has an answer, or it was asked of someone else."}
           </div>
+        ) : null}
+        {scope === "me" && (tab === "all" || tab === "gates") ? (
+          <CreatorApprovalsPanel
+            rows={creators}
+            busyTaskId={creatorBusy}
+            error={creatorError}
+            done={creatorDone}
+            nowMs={now}
+            nav={nav}
+            onApprove={(row) => void approveCreator(row)}
+          />
         ) : null}
         <ApprovalsStatus loads={sources} rowCount={visible.length} onRetry={retry} />
         {view === "list" || view === "empty" ? (

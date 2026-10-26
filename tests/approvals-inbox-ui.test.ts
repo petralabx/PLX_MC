@@ -15,11 +15,13 @@ import {
   ApprovalsInboxView,
   ApprovalsQueue,
   ApprovalsStatus,
+  CreatorApprovalsPanel,
   GateSheet,
   approvalEvidenceLabel,
   approvalScopeFields,
   approvalScopeText,
   type PendingApprovalRow,
+  type PendingCreatorApprovalRow,
 } from "@/components/mc/approvals-inbox";
 import {
   REJECT_NOTE_REQUIRED,
@@ -314,5 +316,59 @@ describe("queue rows", () => {
     expect(html).toContain("claude-code · 2 options");
     expect(html).toContain("· Draft kept");
     expect(html).toContain("Waiting 3 d");
+  });
+});
+
+// TASK-3629: a creator approver sees the tasks a gated creator made and can
+// approve them from the inbox. Everyone else gets no rows, so nothing renders.
+describe("creator approvals panel", () => {
+  const CREATOR_ROW: PendingCreatorApprovalRow = {
+    taskId: "TASK-901",
+    taskTitle: "Intake from the workbench",
+    stage: "backlog",
+    principal: "sp_mcp_workbench_intake",
+    requestedAt: "2026-10-26T20:00:00.000Z",
+  };
+  const panel = (over: Partial<Parameters<typeof CreatorApprovalsPanel>[0]> = {}) =>
+    renderToStaticMarkup(
+      createElement(CreatorApprovalsPanel, {
+        rows: [CREATOR_ROW],
+        busyTaskId: null,
+        error: null,
+        done: null,
+        nowMs: Date.parse("2026-10-26T21:00:00.000Z"),
+        nav: () => {},
+        onApprove: () => {},
+        ...over,
+      })
+    );
+
+  it("renders nothing without rows", () => {
+    expect(panel({ rows: [] })).toBe("");
+  });
+
+  it("lists the task, its creator and an enabled Approve button", () => {
+    const html = panel();
+    expect(html).toContain('data-testid="creator-approvals"');
+    expect(html).toContain("TASK-901");
+    expect(html).toContain("Intake from the workbench");
+    expect(html).toContain("Created by sp_mcp_workbench_intake");
+    expect(html).toContain("Approve task");
+    expect(html).not.toContain("disabled");
+  });
+
+  it("disables every button while one approval is in flight and shows its error inline", () => {
+    const busy = panel({ busyTaskId: "TASK-901" });
+    expect(busy).toContain("Approving…");
+    expect(busy).toContain("disabled");
+    const failed = panel({ error: { taskId: "TASK-901", message: "Only vince@ or cos@ can approve" } });
+    expect(failed).toContain('role="alert"');
+    expect(failed).toContain("Only vince@ or cos@ can approve");
+  });
+
+  it("confirms the approval after the last row is gone", () => {
+    const html = panel({ rows: [], done: "TASK-901" });
+    expect(html).toContain('role="status"');
+    expect(html).toContain("TASK-901 approved");
   });
 });

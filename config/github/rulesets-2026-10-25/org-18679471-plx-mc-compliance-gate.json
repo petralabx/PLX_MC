@@ -1,0 +1,38 @@
+{
+  "id": 18679471,
+  "name": "PLX MC Compliance Gate",
+  "target": "branch",
+  "source_type": "Organization",
+  "source": "petralabx",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "~DEFAULT_BRANCH"
+      ]
+    }
+  },
+  "rules": [
+    {
+      "type": "workflows",
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "workflows": [
+          {
+            "repository_id": 1265176198,
+            "path": ".github/workflows/compliance-gate.yml",
+            "ref": "refs/heads/main"
+          }
+        ]
+      }
+    }
+  ],
+  "bypass_actors": [
+    {
+      "actor_id": null,
+      "actor_type": "OrganizationAdmin",
+      "bypass_mode": "always"
+    }
+  ]
+}

@@ -1098,6 +1098,74 @@ describe("merge approval policy (TASK-3408)", () => {
   });
 });
 
+// TASK-3901: an agent PR that touches money, migrations or workflows needs a
+// person's signed merge approval of the exact head, from the decider list. Other
+// changes need none. Unset mode warns until approvals can be signed.
+describe("path approval (TASK-3901)", () => {
+  const slug = "petralabx/PLX_MC";
+  const head = "f".repeat(40);
+  const pr = { repo: "PLX_MC", repoFullName: slug, prNumber: 3901, headSha: head, changedPaths: ["src/billing/invoice.ts"] };
+  beforeEach(() => {
+    process.env.PLX_MC_APPROVAL_SIGNING_KEY = "path-key";
+    process.env.PLX_MC_APPROVAL_DECIDERS = "vince@petrasoap.com,ricardo@petrasoap.com";
+    github.loadPrCommits.mockResolvedValue([]);
+  });
+  afterEach(() => {
+    delete process.env.PLX_MC_APPROVAL_SIGNING_KEY;
+    delete process.env.PLX_MC_APPROVAL_DECIDERS;
+    delete process.env.PLX_MC_PATH_APPROVAL;
+  });
+
+  const seedWith = async (gates: Task["approvalGates"]) => {
+    db.tasks.set("TASK-901", taskish({ id: "TASK-901", labels: ["lane:claude-cli"], approvalGates: gates, evidence: { summary: "ok", items: [{ key: "a", label: "a", done: true }], rollback: "revert the PR" } }));
+    return (await checkout({ taskId: "TASK-901", runtime: "claude-code", accountableHuman: "cos@petrasoap.com", repo: slug, agent: "claude-code/claude" })).checkoutId;
+  };
+  const approvedBy = async (decidedBy: string) => {
+    const { signApproval, approvalExpiry } = await import("@/lib/compliance/approval-signature");
+    const decidedAt = new Date().toISOString();
+    const g = { id: "apg_p", reason: "money change", requestedBy: "cos@petrasoap.com", requestedAt: decidedAt, status: "approved" as const, decidedBy, decidedAt, scope: { kind: "merge" as const, repo: slug, pr: 3901, headSha: head } };
+    const stamped = { ...g, expiresAt: approvalExpiry(g.scope, decidedAt) };
+    return { ...stamped, signature: signApproval("TASK-901", stamped) };
+  };
+
+  it("blocks a workflow change without a covering approval and names the approvers", async () => {
+    const cid = await seedWith([]);
+    const r = await verifyPr({ ...pr, changedPaths: [".github/workflows/ci.yml"], checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.join(" ")).toContain(`workflow change: no signed merge approval covers ${slug}#3901 at fffffff (no_merge_approval)`);
+    expect(r.reasons.join(" ")).toContain("vince@petrasoap.com, ricardo@petrasoap.com can approve it in MC");
+  });
+
+  it("passes a money change approved for this head by a listed decider", async () => {
+    const cid = await seedWith([await approvedBy("ricardo@petrasoap.com")]);
+    expect((await verifyPr({ ...pr, checkoutIds: [cid] })).verdict).toBe("pass");
+  });
+
+  it("does not count an approval from someone off the decider list", async () => {
+    const cid = await seedWith([await approvedBy("tanush@petrasoap.com")]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("block");
+    expect(r.reasons.join(" ")).toContain("money change: no signed merge approval covers");
+    expect(r.reasons.join(" ")).toContain("(decider_not_allowed)");
+  });
+
+  it("needs no approval for other changes, docs included", async () => {
+    const cid = await seedWith([]);
+    const r = await verifyPr({ ...pr, changedPaths: ["src/x.ts", "docs/runbooks/BC-CRON-HTTP-PACER.md"], checkoutIds: [cid] });
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).not.toContain("merge approval");
+  });
+
+  it("warns instead of blocking until MC can sign approvals", async () => {
+    delete process.env.PLX_MC_APPROVAL_SIGNING_KEY;
+    const cid = await seedWith([]);
+    const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+    expect(r.verdict).toBe("pass");
+    expect(r.reasons.join(" ")).toContain("warning: money change: no signed merge approval covers");
+    expect(r.reasons.join(" ")).toContain("(not enforced: PLX_MC_APPROVAL_SIGNING_KEY is not set)");
+  });
+});
+
 // TASK-3410: the checkout lease chain. Launcher checkouts (a launch record) hold
 // the PR head to their recorded SHA chain; a commit naming a launcher lane needs a
 // launch record. Both warn until PLX_MC_LEASE_CHAIN_ENFORCE=1. Other checkouts

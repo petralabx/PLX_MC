@@ -7,25 +7,45 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { CommandPalette } from "@/components/mc/command-palette";
 import {
+  ADMIN_FLYOUT,
+  ALL_WORK_NAV_ITEM,
   GROUP_TAB,
+  HELP_NAV_ITEM,
   NAV_GROUPS,
   NAV_TABS,
   PANE_SCREENS,
+  PROJECTS_NAV_ITEM,
+  PROJECT_TREE_CAP,
+  ZONED_NAV_GROUPS,
+  ZONED_NAV_TABS,
   createNavGroupState,
   createTabMemory,
+  createZonedTabMemory,
+  isNavItemCurrent,
   isPaneScreen,
+  navItemTarget,
   isPlainLeftClick,
   isScreen,
   navCommands,
   navGroupOf,
   navHref,
+  projectTree,
+  revealScrollTop,
   screenTitle,
   tabOf,
   tabScreens,
+  unfiledInitiatives,
+  viewerProjectIds,
+  visibleAdminFlyout,
   visibleNavGroups,
+  visibleZonedNavGroups,
+  zonedNavPlaceOf,
+  zonedTabOf,
+  zonedTabScreens,
   type NavFlags,
 } from "@/components/mc/nav-model";
 import { SCREEN_VALUES, type Screen } from "@/components/mc/route";
+import type { Bucket, Project, Task } from "@/lib/mc-data";
 import { resetRoutingInboxFlag, setRoutingInboxEnabled } from "@/components/mc/routing-inbox/flag";
 
 afterEach(() => resetRoutingInboxFlag());
@@ -80,7 +100,17 @@ describe("nav model — grouped by task", () => {
     const admin = NAV_GROUPS.find((g) => g.id === "admin")!;
     expect(admin.collapsible).toBe(true);
     expect(NAV_GROUPS.filter((g) => g.collapsible).map((g) => g.id)).toEqual(["admin"]);
-    expect(screensOf(OFF, "admin")).toEqual(["repos", "files", "sync", "loop-ledgers", "activity", "ai-spend", "matrix", "feed"]);
+    expect(screensOf(OFF, "admin")).toEqual([
+      "repos",
+      "files",
+      "sync",
+      "loop-ledgers",
+      "activity",
+      "ai-spend",
+      "ci-scorecard",
+      "matrix",
+      "feed",
+    ]);
     expect(screensOf(ON, "admin")).toEqual([
       "repos",
       "files",
@@ -88,6 +118,7 @@ describe("nav model — grouped by task", () => {
       "loop-ledgers",
       "activity",
       "ai-spend",
+      "ci-scorecard",
       "matrix",
       "feed",
       "intake",
@@ -107,8 +138,9 @@ describe("nav model — grouped by task", () => {
     const listed = visibleNavGroups(ON).flatMap((g) => g.items.map((i) => i.screen));
     expect(new Set(listed).size).toBe(listed.length);
     const unlisted = SCREEN_VALUES.filter((s) => !listed.includes(s));
-    // Detail screens are reached from their lists/rows, never as a bare nav item.
-    expect(unlisted.sort()).toEqual(["bucket", "project", "task"]);
+    // Detail screens are reached from their lists/rows, never as a bare nav
+    // item; the Projects page is the zoned sidebar's (TASK-3841).
+    expect(unlisted.sort()).toEqual(["bucket", "project", "projects", "task"]);
   });
 
   it("knows which group a screen belongs to (to auto-expand Admin & health)", () => {
@@ -118,6 +150,233 @@ describe("nav model — grouped by task", () => {
     expect(navGroupOf("goals")).toBe("reporting");
     expect(navGroupOf("home")).toBe("my-work");
     expect(navGroupOf("task")).toBeNull();
+  });
+});
+
+// TASK-3840 — the zoned sidebar (behind the nav-zones flag, portal ADR-011):
+// personal work first, then Plan, Reporting and Knowledge, with system tools in
+// the footer's Admin & health flyout. Same items as above, only placed anew.
+describe("zoned sidebar model", () => {
+  const zonedScreensOf = (flags: NavFlags, id: string): Screen[] =>
+    visibleZonedNavGroups(flags)
+      .find((g) => g.id === id)!
+      .items.map((i) => i.screen);
+  const flyoutOf = (flags: NavFlags) =>
+    visibleAdminFlyout(flags).map((section) => [section.label, section.items.map((i) => i.screen)]);
+
+  it("reads My work, Plan, Reporting, then a collapsible Knowledge", () => {
+    expect(ZONED_NAV_GROUPS.map((g) => g.label)).toEqual(["My work", "Plan", "Reporting", "Knowledge"]);
+    expect(zonedScreensOf(OFF, "my-work")).toEqual(["home", "mine", "approvals"]);
+    // Board, List and Timeline share the All work row (TASK-3843).
+    expect(zonedScreensOf(OFF, "plan")).toEqual(["board", "projects"]);
+    expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.items[0]).toBe(ALL_WORK_NAV_ITEM);
+    expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.lists).toEqual(["project-tree"]);
+    expect(zonedScreensOf(OFF, "reporting")).toEqual(["dashboard", "insights", "goals", "ai-spend", "ci-scorecard"]);
+    expect(zonedScreensOf(OFF, "knowledge")).toEqual(["brain-ask", "governance-sops", "skills-directory", "architecture"]);
+    expect(ZONED_NAV_GROUPS.filter((g) => g.collapsible).map((g) => g.id)).toEqual(["knowledge"]);
+  });
+
+  it("puts system tools in the Admin & health flyout; flagged screens only when on", () => {
+    expect(flyoutOf(OFF)).toEqual([
+      ["Operations", ["feed"]],
+      ["Sync and data", ["sync", "files", "loop-ledgers"]],
+      ["Engineering", ["repos", "activity", "matrix"]],
+    ]);
+    expect(flyoutOf(ON)[0]).toEqual(["Operations", ["feed", "intake", "routing-inbox"]]);
+    for (const flags of [OFF, ON, { ...OFF, meetingIntake: true }, { ...OFF, routingInbox: true }]) {
+      for (const section of visibleAdminFlyout(flags)) expect(section.items.length).toBeGreaterThan(0);
+    }
+    expect(HELP_NAV_ITEM.screen).toBe("help");
+  });
+
+  it("places every sidebar screen exactly once: in a zone, the flyout, or the footer's Help", () => {
+    const placed = [
+      ...visibleZonedNavGroups(ON).flatMap((g) => g.items.flatMap((i) => [i.screen, ...(i.also ?? [])])),
+      ...visibleAdminFlyout(ON).flatMap((section) => section.items.map((i) => i.screen)),
+      HELP_NAV_ITEM.screen,
+    ];
+    expect(new Set(placed).size).toBe(placed.length);
+    // Every classic screen, plus the Projects page (TASK-3841).
+    const classic = visibleNavGroups(ON).flatMap((g) => g.items.map((i) => i.screen));
+    expect([...placed].sort()).toEqual([...classic, "projects"].sort());
+  });
+
+  it("reuses the classic items: same URL, icon, badge and flag; only two labels change", () => {
+    const classic = new Map(NAV_GROUPS.flatMap((g) => g.items).map((i) => [i.screen, i]));
+    const zoned = [...ZONED_NAV_GROUPS.flatMap((g) => g.items), ...ADMIN_FLYOUT.flatMap((s) => s.items), HELP_NAV_ITEM];
+    expect(zoned.filter((item) => !classic.has(item.screen))).toEqual([PROJECTS_NAV_ITEM]);
+    // All work is Board's item, renamed, standing for List and Timeline too (TASK-3843).
+    expect(ALL_WORK_NAV_ITEM).toEqual({
+      ...classic.get("board"),
+      label: "All work",
+      hint: "board, list and timeline",
+      also: ["list", "timeline"],
+    });
+    const renamed: Record<string, string> = {};
+    for (const item of zoned.filter((i) => classic.has(i.screen) && i !== ALL_WORK_NAV_ITEM)) {
+      const { label, ...rest } = classic.get(item.screen)!;
+      const { label: zonedLabel, ...zonedRest } = item;
+      expect(zonedRest, item.screen).toEqual(rest);
+      if (zonedLabel !== label) renamed[item.screen] = zonedLabel;
+    }
+    expect(renamed).toEqual({ sync: "SharePoint sync", help: "Help and shortcuts" });
+    for (const { label } of zoned) expect(label).not.toMatch(/bucket|sync \/ conflicts|system of record/i);
+  });
+
+  it("knows where a screen sits (to expand Knowledge and light the flyout's toggle)", () => {
+    expect(zonedNavPlaceOf("home")).toBe("my-work");
+    expect(zonedNavPlaceOf("dashboard")).toBe("reporting");
+    expect(zonedNavPlaceOf("skills-directory")).toBe("knowledge");
+    expect(zonedNavPlaceOf("repos")).toBe("admin");
+    expect(zonedNavPlaceOf("routing-inbox")).toBe("admin");
+    expect(zonedNavPlaceOf("help")).toBe("help");
+    expect(zonedNavPlaceOf("task")).toBeNull();
+  });
+
+  it("leaves the classic phone tabs and the palette on the classic groups", () => {
+    expect(tabScreens("plan", OFF).map((i) => i.screen)).toEqual(["board", "list", "timeline", "insights"]);
+    expect(tabOf("dashboard")).toBe("my-work");
+    expect(navCommands(OFF).map((c) => c.label)).toContain("Go to SharePoint sync issues");
+  });
+});
+
+// TASK-3843 — the zoned shell's phone tabs, strip and tab memory.
+describe("zoned phone tabs", () => {
+  it("reads Home, My tasks, Projects, Search and More; Search and More open a dialog, not a screen", () => {
+    expect(ZONED_NAV_TABS.map((t) => t.label)).toEqual(["Home", "My tasks", "Projects", "Search", "More"]);
+    expect(ZONED_NAV_TABS.filter((t) => t.home).map((t) => t.home)).toEqual(["home", "mine", "projects"]);
+    expect(ZONED_NAV_TABS.filter((t) => t.badge).map((t) => [t.id, t.badge])).toEqual([
+      ["home", "needs"],
+      ["more", "sync"],
+    ]);
+  });
+
+  it("puts every screen under one tab: Approvals with Home, Plan and its detail screens with Projects", () => {
+    const byTab: Record<string, Screen[]> = {};
+    for (const screen of SCREEN_VALUES) (byTab[zonedTabOf(screen)] ??= []).push(screen);
+    expect(byTab.home).toEqual(["home", "approvals"]);
+    expect(byTab.mine).toEqual(["mine"]);
+    expect([...byTab.projects].sort()).toEqual(["board", "bucket", "list", "project", "projects", "task", "timeline"]);
+    expect(byTab.search).toBeUndefined();
+    expect(byTab.more).toHaveLength(SCREEN_VALUES.length - 10);
+    for (const screen of ["dashboard", "brain-ask", "repos", "sync", "help"] as const) expect(byTab.more).toContain(screen);
+  });
+
+  it("lights All work for Board, List and Timeline, in the sidebar and in the strip", () => {
+    for (const screen of ["board", "list", "timeline"] as const) {
+      expect(isNavItemCurrent(ALL_WORK_NAV_ITEM, screen)).toBe(true);
+      expect(zonedNavPlaceOf(screen)).toBe("plan");
+    }
+    expect(isNavItemCurrent(ALL_WORK_NAV_ITEM, "projects")).toBe(false);
+    // Lit, it keeps the view; elsewhere it opens Board.
+    expect(navItemTarget(ALL_WORK_NAV_ITEM, "timeline")).toBe("timeline");
+    expect(navItemTarget(ALL_WORK_NAV_ITEM, "projects")).toBe("board");
+    // The phone title follows the row: All work, zoned; the view's name, classic.
+    expect(screenTitle("list", true)).toBe("All work");
+    expect(screenTitle("list")).toBe("List");
+    expect(screenTitle("dashboard", true)).toBe("Dashboard");
+    expect(zonedTabScreens("home", OFF).map((i) => i.screen)).toEqual(["home", "approvals"]);
+    expect(zonedTabScreens("projects", OFF).map((i) => i.label)).toEqual(["All work", "Projects"]);
+    for (const tab of ["mine", "search", "more"] as const) expect(zonedTabScreens(tab, OFF)).toEqual([]);
+  });
+
+  it("remembers each zoned tab's last screen, the Projects page included, never a detail screen", () => {
+    const data = new Map<string, string>();
+    const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+    const memory = createZonedTabMemory(() => storage);
+    memory.remember("timeline");
+    expect(memory.last("projects")).toBe("timeline");
+    memory.remember("projects");
+    memory.remember("task");
+    memory.remember("project");
+    memory.remember("bucket");
+    expect(memory.last("projects")).toBe("projects");
+    memory.remember("approvals");
+    expect(memory.last("home")).toBe("approvals");
+    memory.remember("dashboard");
+    expect(memory.last("more")).toBeUndefined();
+    // Its own keys: the classic tabs' memory is untouched.
+    expect([...data.keys()].sort()).toEqual(["mc.tab.home.last", "mc.tab.projects.last"]);
+    expect(createZonedTabMemory(() => storage).last("projects")).toBe("projects");
+    expect(createTabMemory(() => storage).last("plan")).toBeUndefined();
+  });
+});
+
+// TASK-3841 — the zoned sidebar's Projects tree and the Projects page.
+describe("projects tree model", () => {
+  const project = (id: string, name: string, extra: Partial<Project> = {}): Project => ({
+    id,
+    name,
+    owner: "greg",
+    health: "track",
+    target: "—",
+    started: "2026.10.01",
+    desc: "",
+    repos: [],
+    sync: { state: "pending", ts: "—", sp: "Projects · unprovisioned" },
+    prd: null,
+    ...extra,
+  });
+  const initiative = (id: string, projectId: string | null): Bucket => ({
+    id,
+    name: id,
+    owner: "greg",
+    health: "track",
+    target: "—",
+    started: "2026.10.01",
+    desc: "",
+    repos: [],
+    sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" },
+    prd: null,
+    project: projectId,
+  });
+  const vince = { id: "vince", email: "Vince@petrasoap.com" };
+  const names = (tree: ReturnType<typeof projectTree>) => tree.nodes.map((n) => n.project.name);
+  const task = (bucket: string, extra: Partial<Task>): Task => ({ id: `T-${bucket}`, bucket, stage: "approved", assignee: "greg", coassignees: [], ...extra }) as Task;
+
+  it("knows the viewer's projects by the Approvals rule: member, owner, or an open task", () => {
+    const projects = [
+      project("P1", "Owned", { owner: "VINCE@petrasoap.com" }),
+      project("P2", "Member", { members: [" vince "] }),
+      project("P3", "Assigned"),
+      project("P4", "Coassigned"),
+      project("P5", "Closed task"),
+      project("P6", "Someone else's", { members: ["greg@petrasoap.com"] }),
+    ];
+    const initiatives = ["P3", "P4", "P5", "P6"].map((id) => initiative(`B-${id}`, id));
+    const tasks = [
+      task("B-P3", { assignee: "vince" }),
+      task("B-P4", { coassignees: ["vince@petrasoap.com"] }),
+      task("B-P5", { assignee: "vince", stage: "verified" }),
+    ];
+    expect([...viewerProjectIds(projects, initiatives, tasks, vince)].sort()).toEqual(["P1", "P2", "P3", "P4"]);
+    expect(viewerProjectIds(projects, initiatives, tasks, null).size).toBe(0);
+  });
+
+  it("nests each initiative under its project, the viewer's projects first, then by name", () => {
+    const projects = [project("P1", "Zeta"), project("P2", "Alpha"), project("P3", "Mine", { owner: "vince" })];
+    const tree = projectTree(projects, [initiative("B1", "P1"), initiative("B2", "P2"), initiative("B3", "P1")], new Set(["P3"]));
+    expect(names(tree)).toEqual(["Mine", "Alpha", "Zeta"]);
+    expect(tree.nodes.map((n) => n.initiatives.map((b) => b.id))).toEqual([[], ["B2"], ["B1", "B3"]]);
+    expect(tree.total).toBe(3);
+  });
+
+  it(`caps the rows at ${PROJECT_TREE_CAP}, keeps the current project in, and counts every project`, () => {
+    const projects = Array.from({ length: 9 }, (_, i) => project(`P${i + 1}`, `Project ${i + 1}`));
+    const none = new Set<string>();
+    expect(names(projectTree(projects, [], none))).toEqual(projects.slice(0, PROJECT_TREE_CAP).map((p) => p.name));
+    const withCurrent = projectTree(projects, [], none, "P9");
+    expect(withCurrent.nodes).toHaveLength(PROJECT_TREE_CAP);
+    expect(names(withCurrent).at(-1)).toBe("Project 9");
+    expect(names(withCurrent)).not.toContain(`Project ${PROJECT_TREE_CAP}`);
+    expect(withCurrent.total).toBe(9);
+    expect(projectTree(projects, [], none, "P2").nodes).toHaveLength(PROJECT_TREE_CAP);
+  });
+
+  it("puts initiatives with no open project under No project", () => {
+    const projects = [project("P1", "Open")];
+    const unfiled = unfiledInitiatives(projects, [initiative("B1", "P1"), initiative("B2", null), initiative("B3", "P-GONE")]);
+    expect(unfiled.map((b) => b.id)).toEqual(["B2", "B3"]);
   });
 });
 
@@ -137,6 +396,27 @@ describe("nav links are real URLs", () => {
     expect(isPlainLeftClick({ ...click, shiftKey: true })).toBe(false);
     expect(isPlainLeftClick({ ...click, altKey: true })).toBe(false);
     expect(isPlainLeftClick({ ...click, button: 1 })).toBe(false);
+  });
+});
+
+// TASK-3837: a deep link to a row low in the sidebar scrolls the sidebar so the
+// current row shows. Rects are viewport-relative; the sidebar spans 100–700.
+describe("revealScrollTop", () => {
+  const view = { top: 100, bottom: 700 };
+
+  it("leaves a fully visible row where it is", () => {
+    expect(revealScrollTop(view, { top: 400, bottom: 432 }, 50)).toBe(50);
+    expect(revealScrollTop(view, { top: 100, bottom: 132 }, 0)).toBe(0);
+  });
+
+  it("centres a row below the fold", () => {
+    // Row 1000–1032: its centre (1016) moves to the view's centre (400).
+    expect(revealScrollTop(view, { top: 1000, bottom: 1032 }, 0)).toBe(616);
+  });
+
+  it("centres a row above the view, never past the top", () => {
+    expect(revealScrollTop(view, { top: -200, bottom: -168 }, 900)).toBe(316);
+    expect(revealScrollTop(view, { top: 60, bottom: 92 }, 10)).toBe(0);
   });
 });
 

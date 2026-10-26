@@ -95,6 +95,14 @@ truth table is proven before any plumbing exists.
   passes only when one of its approval gates is a person's signed, unexpired
   merge approval for this repo, PR and head SHA (`checkApproval`); otherwise the
   gate blocks and names the reason. Unlabelled tasks are unaffected.
+- TASK-3901: an agent PR that touches money, migrations or workflows needs the
+  same signed merge approval of its head, whatever its labels. `approval-paths.ts`
+  sets the paths: payments, billing, invoices, ledgers, pricing, costs, ERP and
+  Business Central posting, and trading; migration folders and backfill, purge
+  and migrate scripts; and `.github/workflows` and `.github/actions`. Docs never
+  count. `PLX_MC_APPROVAL_DECIDERS` lists who may approve. `PLX_MC_PATH_APPROVAL`
+  is `enforce`, `warn` or `off`. Unset, it enforces once `PLX_MC_APPROVAL_SIGNING_KEY`
+  and the decider list are set, and warns until then. Operator PRs stay ungated.
 - TASK-3409: a push to, or reopen of, an open PR whose body carries a stamp
   extends that checkout to at least now + 8 h (`renewDispatches`, audited as
   `checkout.renewed`); revoked or released leases are never extended.
@@ -187,7 +195,33 @@ truth table is proven before any plumbing exists.
   authenticated MC deep link. Agent hard-gate remains unchanged.
 - `projectPullRequest` (projection) — after `mc_events` are appended, mutates sync
   tasks for **checked-out** work: open/sync → `progress`, merge → `merged` +
-  `prs[]` + `task.promoted`. Every mutation requires
+  `prs[]` + `task.promoted`. Open, reopen, sync and ready-for-review also put
+  the PR on `prs[]` as `open` (or `draft`); a close without merge sets `closed`;
+  the merged row always wins; one row per repo + PR number (TASK-3743). A close
+  or merge also sets `closed` on every other task that already holds a row for
+  the PR (moved stamp, expired or released checkout), with no stage move; rows
+  are rewritten under the task row lock. `ready_for_review` logs as
+  `pr.ready_for_review` (open-PR readers count it; the timelines do not). Only a
+  merged row counts as a PR link for the unattributed-merge report and
+  `pr_linked_elsewhere`. PRs opened before that are linked by
+  `scripts/backfill-open-pr-links.mjs` (dry run by default; `--apply` writes;
+  non-production `--approved-db` guard; links only PRs GitHub still shows open).
+  A merge promotes only when the PR's base is the repo's `integration_branch`
+  in `config/tracked-repos-registry.json` (`integrationBranchFor`: staging for
+  the portal, main for the others) and no other PR on the task is `open` or
+  `draft` (TASK-3797). The merged row records its `base`. A merge into another
+  branch is recorded with no stage move (`task.promotion_skipped`,
+  `not_integration_branch`). A merge while another PR is open holds the task
+  (`open_pr`, `merge.held`, with the open PR numbers in the activity line). The
+  close or merge of that last open PR then promotes it and clears the hold
+  (`completionSource: "held_merge"`). Only a hold promotes this way: an older
+  integration merge on a task moved back never does. A closed row opens again
+  only on `reopened`, so a late or replayed open event cannot hold a task.
+  Tasks promoted by a feature-branch merge before this are moved back to In
+  Progress by `scripts/repair-non-integration-merges.mjs` (dry run by default;
+  `--apply` writes under the row lock; never repairs a task twice; same
+  non-production guard).
+  Every mutation requires
   `authorize(...)` for durable `sp_compliance_projection` (`task.progress` /
   `task.link`). **Sparse operator Task creation is retired** — unrouted operator
   PRs do not create Tasks. Kill switch: `COMPLIANCE_PROJECTION_ENABLED=0`.
@@ -244,6 +278,11 @@ export: `approval.requested` joined to `approval.decided` by `gateId` into
 proposal+decision rows (proposer, decider, decision, reason, timestamps,
 `pending` when undecided) with each gate's `denials` attached
 (`pairApprovalEvents` / `listApprovalAudit`).
+Raising and deciding a gate read the task `FOR UPDATE` and write the gate list and its
+event in one transaction (TASK-3796), so a decision never drops a gate raised meanwhile,
+and a new gate never undoes a decision. A decision on a gate that is no longer pending
+returns 409 `gate_already_decided` and changes nothing; the Approvals screen then says
+the gate was already decided and moves to the next item.
 Gates live in the task jsonb (DB-only; never mirrored to SharePoint).
 
 ### Questions for a named person (TASK-3567)
@@ -313,6 +352,40 @@ assignee.
   the question. `context` is not part of the re-ask match: asking the same
   open question again returns the stored question with its original context.
 
+### UAT tickets view (TASK-3706)
+
+The BKT-UAT initiative page (`/?screen=bucket&bucketId=BKT-UAT`) shows one row
+per UAT ticket task (`kind:code` plus `uat:<feedbackId>`): portal step, attempt,
+stage, lease, PR, staging, holder, age, and a link to the portal ticket
+(`https://staging.plxcustomer.io/uat?ticket=<feedbackId>`). Filters: All, Needs
+a human (the bucket table's rule), In flight, Waiting on submitter (`uat:hold`,
+or merged and awaiting re-test) and Verified. No row cap.
+
+Portal step and staging come from the portal's read-only ticket snapshot, off by
+default (`PLX_MC_UAT_PORTAL_READ_ENABLED`). The portal endpoint does not exist
+yet: `GET /api/internal/uat-feedback/mc-snapshot`, Bearer
+`PLX_MC_PORTAL_READ_TOKEN`, answering `{ "tickets": PortalTicket[] }` (the type
+in `src/lib/tasks/uat-tickets.ts`) for open tickets and those closed in the last
+30 days. Declaration: `config/integrations.yaml` → `uat-portal-read`.
+
+Above the table, the portal ↔ Mission Control check lists each disagreement
+with a one-click fix. Fixes run through `PATCH /api/tasks/{id}` and
+`POST /api/tasks` under the person's session, so the usual capabilities and
+audit apply. Mission Control never verifies a ticket task from this check.
+
+| Case | Needs the portal read | Fix |
+|---|---|---|
+| Open ticket with no task | yes | Create the ticket task, with `needs-vince` so Steward waits for a person |
+| Final task while the portal expects one | yes | Reopen a cancelled task to backlog; after Verified, create the next attempt |
+| Open task while the ticket is closed | yes | Cancel as `obsolete`; a merged task on a resolved ticket has no fix (only the portal verifies) |
+| More than one open task per ticket | no | Cancel the older ones as `superseded` by the newest attempt |
+| Expired lease with no PR, past backlog | no | Requeue to backlog |
+
+The check runs on page open, on **Check now**, after each fix, and daily:
+`GET /api/cron/uat-drift` (`CRON_SECRET`, kill switch
+`PLX_MC_UAT_DRIFT_CRON_ENABLED`, default off) records one `uat.drift.checked`
+event and fixes nothing.
+
 ### Key Files
 
 - `src/lib/compliance/risk.ts` — risk-tier classifier + per-tier bundle floor
@@ -337,6 +410,7 @@ assignee.
 - `src/lib/compliance/backfill.ts` — nightly GitHub backfill: merged PRs (last N days) per registry repo with no resolvable `MC-Checkout` stamp and no task `prs[]` link; injected GitHub client (stubbed in tests), fail-open per repo, one `github.backfill.report` row in `mc_events`; cron `src/app/api/cron/github-backfill/route.ts`, kill switch `PLX_MC_GITHUB_BACKFILL_ENABLED` (default off)
 - `src/lib/compliance/activity.ts` — per-registry-repo activity summary (last activity, open/unstamped PRs, unattributed merges from the newest backfill report, 30-day gate block rate, freshness), a pure fold over `mc_events` served by session-gated `GET /api/activity` to the Activity screen (`/?screen=activity`, `src/components/mc/activity-view.tsx`); unknown is `null`, never 0
 - `src/lib/compliance/in-flight.ts` — the Dashboard's live In flight view (TASK-2592): open checkouts grouped by task with each task's latest event, flags (several open checkouts, quiet 2 h+, ending within the hour), the newest 30 events of the last 24 h, and a task-write marker the client uses to reload its snapshot. A pure fold (`computeInFlight`) plus a loader that filters by project access like `/api/events` and `mc_list_checkouts`; it sends no checkout ids and no raw payloads. Served by session-gated `GET /api/in-flight`, polled every 20 s by `src/components/mc/dashboard-live.tsx`
+- `src/lib/compliance/uat-tickets.ts` — the BKT-UAT tickets loader (TASK-3706): ticket tasks' filed time and lease (no checkout ids), the portal read (`uat-portal-read.ts`), the drift findings (`findUatDrift`) and `recordUatDriftCheck`; cron `src/app/api/cron/uat-drift/route.ts`. Types: `src/lib/tasks/uat-tickets.ts`; route `src/app/api/uat-tickets/route.ts`; view `src/components/mc/uat-tickets.tsx`
 - `src/app/api/compliance/{checkout,complete,verify,webhook}/route.ts`, `src/app/api/events/route.ts`
 - `src/app/api/routing/propose/route.ts` — OIDC propose (middleware carve-out exact)
 - `src/middleware.ts` — exact self-auth carve-outs including `api/routing/propose`

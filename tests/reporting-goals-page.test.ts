@@ -367,7 +367,7 @@ describe("charts", () => {
 
 describe("page shell", () => {
   it("renders skeletons, not spinners, before the page model arrives", () => {
-    const markup = html(GoalsView, {});
+    const markup = html(GoalsView, { route: { screen: "goals" }, nav: () => {} });
     expect(text(markup)).toContain("Loading the latest refresh…");
     // One skeleton per section, the shipments list and the revenue forecast included.
     expect(markup).toContain('data-testid="goals-shipments"');

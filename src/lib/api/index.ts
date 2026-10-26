@@ -21,6 +21,9 @@ function signInIfRequired(status: number, code: string | undefined, method: stri
   if (status !== 401 || code !== "signin_required" || typeof window === "undefined") return;
   if ((method ?? "GET").toUpperCase() !== "GET") return;
   const here = `${window.location.pathname}${window.location.search}`;
+  // A full page load on purpose (TASK-3821): it drops the ended session's
+  // client state, and api() is not a component, so there is no router to push.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full load on purpose, see above
   window.location.assign(`/signin?callbackUrl=${encodeURIComponent(here)}`);
 }
 

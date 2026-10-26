@@ -8,26 +8,35 @@
 // which this page follows step by step until the new snapshot is in, and add,
 // edit, delete and import the entries made by hand (./entries.tsx, TASK-2897).
 // Viewers and Editors can export it all to Excel (GET /api/reporting/goals/export).
+// US dollar revenue shows at today's Bank of Canada rate or at the fixed Sage
+// rate (TASK-3780): the choice lives in the URL (`fx=sage`), and the page model
+// and the export are asked for at it (`?fx=sage`), so every figure agrees.
 // Module contract: docs/modules/reporting-goals/README.md.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { api, apiDownload, ApiClientError } from "@/lib/api";
 import { signInAgainAction } from "@/lib/auth/actions";
-import type { EvaluatedEntry, GoalsPage, RefreshRun } from "@/lib/reporting/goals";
+import type { EvaluatedEntry, GoalsPage, RefreshRun, RevenueRateBasis } from "@/lib/reporting/goals";
+import { torontoDate } from "@/lib/reporting/goals/calendar";
 import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
+
+import type { ScreenProps } from "../route";
 
 import { DailyLine1Chart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "./charts";
 import { DeleteEntryDialog, EntryDialog, ImportDialog } from "./entries";
 import { ForecastSection } from "./forecast";
 import { GoalCards } from "./goal-cards";
 import {
+  bocRateName,
   clock,
   day,
   dollars,
   isReady,
   newestRun,
   nextRefreshAt,
+  rate,
+  revenueRateLabel,
   refreshedText,
   sourceText,
   stepText,
@@ -41,6 +50,7 @@ import {
   BatchList,
   CompletedTiles,
   EntriesTable,
+  RevenueByClassTable,
   RulesText,
   ScheduledTiles,
   TruckloadTable,
@@ -135,10 +145,22 @@ function saveFile(blob: Blob, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export function GoalsView() {
+/** The page model's path at a revenue rate: today's rate needs no query, so the default request stays exactly as it was. */
+const goalsPath = (basis: RevenueRateBasis) => (basis === "sage" ? "/reporting/goals?fx=sage" : "/reporting/goals");
+
+export function GoalsView({ route, nav }: ScreenProps) {
+  const basis: RevenueRateBasis = route.fx === "sage" ? "sage" : "boc";
+  // load() reads the chosen rate from here, so it keeps one identity and a rate change never stops a refresh being followed.
+  const basisRef = useRef(basis);
+  useEffect(() => {
+    basisRef.current = basis;
+  });
+  // Every read is numbered; only the newest one is shown, so a slower answer at the other rate never overwrites it.
+  const loadSeq = useRef(0);
   const [page, setPage] = useState<GoalsPage | null>(null);
   const [status, setStatus] = useState<SectionState>("loading");
-  const [loadError, setLoadError] = useState<{ code: string; message: string } | null>(null);
+  // The rate the failed read asked for, so a failure at one rate is never shown as the other's.
+  const [loadError, setLoadError] = useState<{ code: string; message: string; basis: RevenueRateBasis } | null>(null);
   const [refresh, setRefresh] = useState<Refresh>({ kind: "idle" });
   const [download, setDownload] = useState<Download>({ kind: "idle" });
   // The run this page started or attached to: it counts toward the 5-minute
@@ -152,22 +174,24 @@ export function GoalsView() {
 
   // setState only runs in promise continuations and handlers, never in an
   // effect's synchronous body (react-hooks/set-state-in-effect).
-  const load = useCallback(
-    (): Promise<GoalsPage | null> =>
-      api<GoalsPage>("/reporting/goals")
-        .then((data) => {
-          setPage(data);
-          setStatus("ready");
-          setLoadError(null);
-          return data;
-        })
-        .catch((err: Error) => {
-          setStatus((prev) => (prev === "ready" ? prev : "failed"));
-          setLoadError({ code: err instanceof ApiClientError ? err.code : "error", message: err.message });
-          return null;
-        }),
-    []
-  );
+  const load = useCallback((): Promise<GoalsPage | null> => {
+    const seq = ++loadSeq.current;
+    const wanted = basisRef.current;
+    return api<GoalsPage>(goalsPath(wanted))
+      .then((data) => {
+        if (seq !== loadSeq.current) return data;
+        setPage(data);
+        setStatus("ready");
+        setLoadError(null);
+        return data;
+      })
+      .catch((err: Error) => {
+        if (seq !== loadSeq.current) return null;
+        setStatus((prev) => (prev === "ready" ? prev : "failed"));
+        setLoadError({ code: err instanceof ApiClientError ? err.code : "error", message: err.message, basis: wanted });
+        return null;
+      });
+  }, []);
 
   const follow = useCallback(
     (run: RefreshRun) => {
@@ -198,6 +222,14 @@ export function GoalsView() {
     });
     return () => watcher.current?.stop();
   }, [load, follow]);
+
+  // A new rate (the toggle, or Back and Forward) reads the page model again at it; the first render's read is above.
+  const loadedBasis = useRef(basis);
+  useEffect(() => {
+    if (loadedBasis.current === basis) return;
+    loadedBasis.current = basis;
+    void load();
+  }, [basis, load]);
 
   const retry = () => {
     setStatus((prev) => (prev === "failed" ? "loading" : prev));
@@ -231,12 +263,13 @@ export function GoalsView() {
     }
   }
 
-  async function exportWorkbook(today: string) {
+  /** The workbook at the rate the figures on screen are at (not one still loading). */
+  async function exportWorkbook(today: string, shown: RevenueRateBasis) {
     setEntryNotice("");
     setDownload({ kind: "working" });
     try {
-      const { blob, fileName } = await apiDownload("/reporting/goals/export");
-      const name = fileName ?? workbookFileName(today);
+      const { blob, fileName } = await apiDownload(shown === "sage" ? "/reporting/goals/export?fx=sage" : "/reporting/goals/export");
+      const name = fileName ?? workbookFileName(today, shown);
       saveFile(blob, name);
       setDownload({ kind: "done", fileName: name });
     } catch (err) {
@@ -256,6 +289,20 @@ export function GoalsView() {
     : undefined;
   // Without a Goals role (or a session) there is nothing to retry: say what is missing.
   const noAccess = !page && loadError && (loadError.code === "forbidden" || loadError.code === "not_authenticated") ? loadError : null;
+  // The rate the figures on screen are at, and the one asked for; they differ while the other rate loads (or if it failed).
+  const shownBasis = ready?.model.revenue.basis ?? basis;
+  const rateWaiting = ready && shownBasis !== basis ? revenueRateLabel(basis, ready) : null;
+  const rateFailed = loadError?.basis === basis && (rateWaiting !== null || (!ready && basis === "sage"));
+  const chooseBasis = (next: RevenueRateBasis) => {
+    if (next === basis) return;
+    // A new read starts: an earlier failure (at either rate) no longer describes what's on screen.
+    setLoadError(null);
+    nav("goals", next === "sage" ? { fx: "sage" } : {});
+  };
+  const retryRate = () => {
+    setLoadError(null);
+    void load();
+  };
 
   return (
     <div className="mc-main" data-testid="goals-screen">
@@ -294,7 +341,7 @@ export function GoalsView() {
               <button
                 type="button"
                 className={canRefresh ? "btn ghost" : "btn"}
-                onClick={() => void exportWorkbook(ready.model.today)}
+                onClick={() => void exportWorkbook(ready.model.today, shownBasis)}
                 disabled={download.kind === "working"}
                 aria-describedby="goals-refresh-status"
               >
@@ -320,6 +367,51 @@ export function GoalsView() {
           <span className="sw" aria-hidden="true" />
           Amber marks figures your team entered by hand that aren’t in FileMaker or Sage yet.
         </p>
+        {ready ? (
+          <div className="gp-tools gp-rate" data-testid="goals-rate">
+            <span id="goals-rate-label">US dollars at</span>
+            <div className="gp-seg" role="group" aria-labelledby="goals-rate-label">
+              <button
+                type="button"
+                aria-pressed={basis === "boc"}
+                title={ready.fx.stale ? `Last stored Bank of Canada rate, ${day(ready.fx.date)}` : `Bank of Canada, ${day(ready.fx.date)}`}
+                onClick={() => chooseBasis("boc")}
+              >
+                {bocRateName(ready, torontoDate(new Date(now)))} <span className="ct">{rate(ready.fx.rate)}</span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={basis === "sage"}
+                title="The fixed rate Sage books US dollar sales at"
+                // Without a usable Sage rate there is nothing to switch to (the read would only answer config_error).
+                disabled={!ready.settings.sageUsdCadRate && basis !== "sage"}
+                onClick={() => chooseBasis("sage")}
+              >
+                Sage rate <span className="ct">{ready.settings.sageUsdCadRate ? rate(ready.settings.sageUsdCadRate) : "not set"}</span>
+              </button>
+            </div>
+            <span className="gp-rate-status" role="status" data-testid="goals-rate-status">
+              {rateWaiting
+                ? rateFailed
+                  ? `Couldn’t load revenue at ${rateWaiting}. The figures below are still at ${revenueRateLabel(shownBasis, ready)}.`
+                  : `Loading revenue at ${rateWaiting}…`
+                : ""}
+            </span>
+            {rateFailed ? (
+              <button type="button" className="btn ghost" data-testid="goals-rate-retry" onClick={retryRate}>
+                Try again
+              </button>
+            ) : null}
+          </div>
+        ) : rateFailed ? (
+          // A link at the Sage rate that can't load has no page to show the switch on: offer the way back.
+          <div className="gp-tools gp-rate" data-testid="goals-rate">
+            <span role="status">Couldn’t load revenue at the Sage rate.</span>
+            <button type="button" className="btn ghost" onClick={() => chooseBasis("boc")}>
+              Show the Bank of Canada rate
+            </button>
+          </div>
+        ) : null}
         {ready ? <p className="gp-takeaway">{ready.model.takeaway}</p> : null}
         <p id="goals-refresh-status" className="gp-status" role="status">
           {line ||
@@ -451,6 +543,20 @@ function Body({
       </Section>
 
       <Section
+        id="classes"
+        title="Revenue by customer class"
+        note="The Revenue card’s month split by each customer’s class, from Vince’s 5 Oct list."
+        source={src("classes")}
+        state={state}
+        onRetry={onRetry}
+        resetKey={page}
+      >
+        {ready((p) => (
+          <RevenueByClassTable page={p} />
+        ))}
+      </Section>
+
+      <Section
         id="daily"
         title="Day by day"
         note="Weekends and holidays are shaded. Point at or tap a day for its numbers, or open the table under the charts."
@@ -549,7 +655,9 @@ function Body({
       <Section
         id="forecast"
         title="Revenue forecast"
-        note="This month’s open Sage orders, matched to FileMaker’s plan through their assembly orders. Amounts in CAD at the run’s Bank of Canada rate."
+        note={`This month’s open Sage orders, matched to FileMaker’s plan through their assembly orders. Amounts in CAD at ${
+          page?.model.revenue.basis === "sage" ? `the Sage rate ${rate(page.model.revenue.rate)}` : "the run’s Bank of Canada rate"
+        }.`}
         source={src("forecast")}
         state={state}
         onRetry={onRetry} resetKey={page}

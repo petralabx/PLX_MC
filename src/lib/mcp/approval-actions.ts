@@ -17,7 +17,7 @@ import { assertTaskProjectAccess } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
 import type { McpIdentity } from "./auth";
 import { resolveCheckoutRepo } from "./checkout-repo";
-import { mcpJsonResult, taskLink } from "./envelope";
+import { gateLink, mcpJsonResult, taskLink } from "./envelope";
 import { checkoutRef } from "./read-actions";
 
 export const PROPOSAL_MAX_BYTES = 32 * 1024;
@@ -120,6 +120,8 @@ export async function actionRequestApproval(
     scope: gate.scope ?? null,
     inputRequired: true,
     link: taskLink(input.taskId),
+    // TASK-3559: send the approver here; it opens this gate on the Approvals screen.
+    gateLink: gateLink(gate.id),
   };
 }
 
@@ -175,6 +177,7 @@ export async function actionVerifyApproval(identity: McpIdentity, input: VerifyA
     approval: shown ? view(shown.gate) : null,
     checkedAt: new Date().toISOString(),
     link: taskLink(input.taskId),
+    gateLink: shown ? gateLink(shown.gate.id) : null,
   };
 }
 
@@ -230,13 +233,13 @@ export async function actionGetApprovalGate(
     requesterPrincipal: identity.servicePrincipalId,
     waitMs: (input.waitSeconds ?? 0) * 1000,
   });
-  return { ...state, link: taskLink(taskId) };
+  return { ...state, link: taskLink(taskId), gateLink: gateLink(state.gateId) };
 }
 
 export function registerApprovalTools(server: McpServer, identity: McpIdentity): void {
   server.tool(
     "mc_request_approval",
-    "Raise a runtime approval gate on a task (approval.request). Pass checkoutId to block that checkout until approved (mc_complete_task refuses); pass proposal {summary, action?, diff?, plan?, risk?} for the human reviewer. The task freezes input-required until a human other than the requester approves or rejects it in the Approvals inbox. Agents never decide gates.",
+    "Raise a runtime approval gate on a task (approval.request). Pass checkoutId to block that checkout until approved (mc_complete_task refuses); pass proposal {summary, action?, diff?, plan?, risk?} for the human reviewer. The task freezes input-required until a human other than the requester approves or rejects it in the Approvals inbox. Send the approver gateLink: it opens this gate on the Approvals screen. Agents never decide gates.",
     requestApprovalSchema.shape,
     async (args) => mcpJsonResult({ data: await actionRequestApproval(identity, args) })
   );

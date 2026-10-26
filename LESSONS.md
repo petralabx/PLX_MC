@@ -33,6 +33,10 @@
 - **What happened:** `mc_report_progress` with notes read the task without a lock, built `comments` as the old thread plus the note, and wrote the whole array. A person's comment (or a TASK-3567 answer) committed in between was dropped. Two notes in one millisecond also got the same `mcp-` id.
 - **Root cause:** The `updateEntity` lock (TASK-2529) protects the merge, not a value the caller computed before it. The merge is shallow, so an array built from a stale read replaces the newer one.
 - **Rule going forward:** Build a field that extends stored data (comments, activity, evidence artifacts) from a row read `FOR UPDATE` in the same transaction as the write. Never derive an id from the clock; use `randomUUID()`.
+- **Recurred 2026-10-23 (TASK-3796):**
+  - **What happened:** `requestApprovalGate` and `decideApprovalGate` built `approvalGates` from an unlocked read. A decision could drop a gate raised in between, a new gate could undo a decision, and two people could both decide one gate. A review of the Approvals redesign found it; no incident is known.
+  - **Fix:** both read the task `FOR UPDATE` and write the gate list and its event in one transaction. Checks on fields a gate never changes still use the first read, so refused attempts are still audited outside the transaction.
+  - **Promotion:** this is the second time. A third time promotes the rule to `.cursor/rules/`.
 
 ### 2026-10-21 (ET) — TASK-3410 r4: the gate proved a head's ancestry with another head's commits
 

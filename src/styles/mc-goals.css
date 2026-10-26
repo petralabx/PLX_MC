@@ -57,6 +57,14 @@
   color: var(--p-ink-2);
 }
 
+/* The revenue rate switch (TASK-3780): never amber, which means "by hand". Its
+   status stays rendered while empty, so screen readers announce what fills it. */
+.mc .goals .gp-rate {
+  margin: 0;
+  font-size: var(--p-text-small);
+  color: var(--p-ink-2);
+}
+
 .mc .goals .gp-notice {
   margin: 0;
   padding: 8px 12px;

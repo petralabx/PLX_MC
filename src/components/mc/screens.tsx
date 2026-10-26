@@ -5,8 +5,10 @@ import { ActivityView } from "./activity-view";
 import { AiSpendView } from "./vendor-spend";
 import { AgentFeed } from "./agent-feed";
 import { BucketDetail } from "./bucket-detail";
+import { CiScorecardView } from "./ci-scorecard";
 import { DashboardView } from "./dashboard";
 import { ProjectDetail } from "./project-detail";
+import { ProjectsView } from "./projects-view";
 import { FilesView } from "./files-view";
 import { GoalsView } from "./goals";
 import { ArchitectureView } from "./architecture";
@@ -40,6 +42,7 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   feed: AgentFeed,
   bucket: BucketDetail,
   project: ProjectDetail,
+  projects: ProjectsView,
   repos: ReposView,
   files: FilesView,
   sync: SyncConsole,
@@ -51,6 +54,7 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   architecture: ArchitectureView,
   "brain-ask": BrainAskView,
   "ai-spend": AiSpendView,
+  "ci-scorecard": CiScorecardView,
   "routing-inbox": RoutingInboxView,
   approvals: ApprovalsInboxView,
   activity: ActivityView,

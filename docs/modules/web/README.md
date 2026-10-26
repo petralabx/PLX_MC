@@ -12,7 +12,7 @@ panel and activity strip polled from `GET /api/in-flight`), **Insights**,
 **Skills Directory**, **Architecture**, **AI Spend**, and **Ask the Brain** — along with the ⌘K
 command palette, New Task / New Initiative / New Project modals, and
 PeoplePicker (Petra domain rule enforced in the UI). The screen registry
-(`src/components/mc/screens.tsx`) maps twenty-six `Screen` keys to components;
+(`src/components/mc/screens.tsx`) maps twenty-nine `Screen` keys to components;
 Board, List, Timeline, and My Tasks share `WorkViews`. State flows through the runtime store
 (`src/lib/mc-data/store.ts`) — since 2026-06-11 a client cache over the sync
 module's API: it hydrates from `GET /api/state` after mount (the signed-in
@@ -48,6 +48,52 @@ live column (Agent activity or Approvals, the user's pick). Every layer
 closes only the topmost, focus returns to its trigger. Nav badges speak one
 honest vocabulary (`count-badge.tsx`): n, n+ (lower bound), — (unknown),
 hidden only at a confirmed zero.
+
+**Zoned sidebar (TASK-3840, default off).** The navigation redesign's sidebar,
+built to the shared PLX shell contract (portal ADR-011): My work · Plan ·
+Reporting · Knowledge (collapsed by default), then a footer pinned to the
+bottom with Help and an Admin & health popover (Operations · Sync and data ·
+Engineering). It is 248px wide, with 28px rows for a mouse and 44px on touch.
+Its items, URLs, badges and flags are the default sidebar's (`ZONED_NAV_GROUPS`
+and `ADMIN_FLYOUT` in `nav-model.ts`). `NEXT_PUBLIC_PLX_MC_NAV_ZONES=1` turns
+it on for a build, with no switch. Otherwise each person turns it on with
+"Try the new navigation" in the account menu (TASK-3855), and turns it off
+there to switch back. The switch lives on the server per person (`GET|PATCH
+/api/nav-prefs`, module `nav-prefs`), so it follows them to every device;
+this browser keeps a copy in localStorage `mc.nav.zones` ("on" / "off") for
+the next load, and drops it when the server holds no switch (another person
+signed in). "1" there still opts one browser in by hand for a person who
+never used the switch (`nav-zones.ts`). The first time the switch
+is on, a one-screen tour names each zone, with Got it and Switch back
+(`nav-tour.tsx`); the server keeps that it was seen. Plan's Board, List and Timeline share one All work
+row, lit on each view, and the views stay tabs on that screen with their URLs
+and g b, g l and g t keys (TASK-3843). The phone tabs are Home, My tasks,
+Projects, Search (⌘K) and More; More holds Reporting, Knowledge, Admin &
+health's sections and Help. ⌘K keeps the default groups. Plan nests each
+initiative under its project (TASK-3841): the
+viewer's projects first, at most six rows (the current project always shows),
+then View all, which opens the Projects page (`projects`). That page lists
+every open project with its initiatives, and No project for the rest. In the
+top bar (TASK-3844) the workspace label is the PLX app switcher (Mission
+Control, MRP Suite, Admin portal, Customer portal), the mark alone below a
+900px bar, and the sync pill names what to resolve ("2 sync conflicts, 1
+error"). The switcher and the Admin & health popover share `use-flyout.ts`.
+Starred (TASK-3842) follows My work: copies of the screens, projects and
+initiatives the person starred, at most six, in the order starred, never the
+lit row. Screens carry their zoned label, and Board, List and Timeline are one
+All work star. The stars live on the server per person (`GET|PATCH
+/api/stars`, module `stars`), so they follow the person to every device. The
+top bar's star toggle stars the page, and each Projects page row has one; the
+icon rail shows one Starred button that opens the drawer, and the phone More
+sheet lists Starred first. Each change shows at once and goes to the server
+one at a time; a refused change is put back with a notice (`use-stars.ts`).
+The nav flags live in `nav-flags.ts`. In the zoned shell the ⌘K palette
+(TASK-3853) opens on **Recent**, the last 8 screens, projects, initiatives and
+tasks opened in this browser, newest first and without the page under the
+palette, then **Starred**, each star with its key: g 1 to g 6 open the first
+six stars from anywhere. Typing searches every group, as before. The palette
+also offers Go to Projects there. Recents stay in this browser
+(`createRecents` in `nav-model.ts`, localStorage `mc.nav.recents`).
 
 **Project detail** (`project` screen): rolls up initiatives (buckets) under a
 Project with an initiative card grid; inline edit for health, accountable
@@ -92,6 +138,11 @@ pixel-precisely in `docs/product/README.md` §6 and
   query-string route (`/?screen=task|project|bucket&…Id=…`); a malformed id goes
   home. MCP returns them as `link` from `taskLink`, `projectLink` and
   `bucketLink` (`src/lib/mcp/envelope.ts`).
+- Approvals and My tasks links (TASK-3559): `/?screen=approvals&gate=<apg_id>`
+  opens one gate (`gateLink` in `envelope.ts`; `questionLink` does the same
+  with `question=`), and `/?screen=my-tasks` is the stable name for My tasks
+  (screen `mine`). Neither names a person: the session decides whose approvals
+  and tasks show. Both survive the sign-in redirect, which keeps the query.
 - The screens live in `src/components/mc/`; they read the typed data layer in
   `src/lib/mc-data/` (faithful to `docs/product/DATA_MODEL.md`) whose store is
   now API-backed; fixtures remain the SSR/offline baseline. Each new screen is rebuilt
@@ -122,16 +173,23 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/route.ts` — `Screen` union + `Route` / `nav` contract
 - `src/components/mc/screens.tsx` — screen registry (`SCREENS`)
 - `src/components/mc/chrome.tsx` — Sidebar (drawer · rail · sidebar), nav counts, offline banner, toasts
-- `src/components/mc/top-bar.tsx` — top bar (slots per tier, static workspace label, sync pill)
-- `src/components/mc/bottom-tabs.tsx` — phone tabs (with tab memory), group strip, New-task FAB
-- `src/components/mc/more-sheet.tsx` — phone More sheet (Admin & health, All screens, appearance)
+- `src/components/mc/top-bar.tsx` — top bar (slots per tier, workspace label or the zoned PLX app switcher, the page's star toggle, sync pill)
+- `src/components/mc/use-stars.ts` — the person's stars: load (and refresh on focus), each change at once then one at a time to the server, a refused one put back with a notice
+- `src/components/mc/nav-flags.ts` — the feature flags that gate nav items
+- `src/components/mc/star-toggle.tsx` — the star toggle (top bar, Projects rows)
+- `src/components/mc/use-flyout.ts` — a shell control's flyout: top-layer popover, placement, Esc, close on blur, navigating or resize
+- `src/components/mc/bottom-tabs.tsx` — phone tabs (with tab memory; the zoned set when the flag is on), group strip, New-task FAB
+- `src/components/mc/more-sheet.tsx` — phone More sheet (Starred, Admin & health, All screens, appearance)
 - `src/components/mc/context-pane.tsx` — context pane (page <641, overlay <1600, resizable column ≥1600) + live column
 - `src/components/mc/use-layer.ts` — layer stack: Esc (topmost only), focus in/back, Tab wrap, scroll lock
 - `src/components/mc/shell-prefs.ts` — pane width / hidden, live pin and pick (localStorage + memory), tier hooks
 - `src/components/mc/count-badge.tsx` — honest count badge (n · n+ · —)
 - `src/components/mc/nav-icon.tsx` — Lucide icon map for the nav
-- `src/components/mc/nav-model.ts` — nav groups/items, phone tabs, tab memory, pane screens — shared by every nav surface, ⌘K and tests
+- `src/components/mc/nav-model.ts` — nav groups/items, phone tabs, tab memory, stars, recents, pane screens — shared by every nav surface, ⌘K and tests
+- `src/components/mc/nav-zones.ts` — who sees the zoned sidebar: the build env, else the person's "Try the new navigation" switch (server, with a copy per browser), else a by-hand opt-in per browser; default off
+- `src/components/mc/nav-tour.tsx` — the one-screen tour the first time the switch is on (Got it, Switch back)
 - `src/components/mc/project-detail.tsx` — Project detail + initiative card grid
+- `src/components/mc/projects-view.tsx` — Projects page: every open project with its initiatives, then No project
 - `src/components/mc/inbox.tsx` — Home: "What needs me today" (rules in `needs-me.ts`)
 - `src/components/mc/help.tsx` — Help: how Mission Control works + glossary
 - `src/components/mc/atoms.tsx` — Avatar, Confidence, PMark

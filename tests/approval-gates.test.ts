@@ -29,6 +29,7 @@ import {
   requestApprovalSchema,
 } from "@/lib/mcp/approval-actions";
 import type { McpIdentity } from "@/lib/mcp/auth";
+import { gateLink } from "@/lib/mcp/envelope";
 import { actionComplete, actionGetContext } from "@/lib/mcp/actions";
 import { actionGetTask, checkoutRef } from "@/lib/mcp/read-actions";
 
@@ -47,7 +48,8 @@ const dial = vi.hoisted(() => ({ repos: {} as Record<string, string>, buckets: {
 vi.mock("../config/autonomy-dial.json", () => ({ default: dial }));
 vi.mock("@/lib/mcp/sync-meta", () => ({ syncMetaForTask: async () => ({ status: "queued" }) }));
 
-// mc_complete_task writes the evidence under a row lock (TASK-3166); run it in memory.
+// mc_complete_task writes the evidence (TASK-3166), and gates are raised and
+// decided (TASK-3796), under a row lock; run them in memory.
 vi.mock("@/lib/db", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/db")>()),
   withTransaction: async (fn: (q: unknown) => unknown) => fn({}),
@@ -67,6 +69,7 @@ vi.mock("@/lib/sync", () => ({
     errors: [],
     lastSweep: null,
   }),
+  ensureSeeded: async () => true,
   patchTask: async (id: string, patch: Record<string, unknown>) => {
     const next = { ...mem.tasks.get(id), ...patch };
     delete next.activityLine;
@@ -76,6 +79,10 @@ vi.mock("@/lib/sync", () => ({
 }));
 vi.mock("@/lib/compliance/repo", () => ({
   appendEvent: async (e: { kind: string; payload?: Record<string, unknown> }) => {
+    mem.events.push(e);
+    return "1";
+  },
+  appendEventTx: async (_q: unknown, e: { kind: string; payload?: Record<string, unknown> }) => {
     mem.events.push(e);
     return "1";
   },
@@ -610,5 +617,23 @@ describe("mc_verify_approval (TASK-3408, TASK-3444)", () => {
 
   it("rejects a malformed scope at request time", () => {
     expect(requestApprovalSchema.safeParse({ taskId: "T", reason: "r", scope: { kind: "launch", lane: "nolane", promptHash: "x" } }).success).toBe(false);
+  });
+});
+
+// TASK-3559: each approval tool result carries the link that opens its gate on
+// the Approvals screen, so the agent can send the approver straight to it.
+describe("approval tool results link to the gate (TASK-3559)", () => {
+  it("mc_request_approval and mc_get_approval_gate return gateLink", async () => {
+    const res = await actionRequestApproval(IDENTITY, { taskId: "TASK-700", reason: "ok?" });
+    expect(res.gateLink).toBe(gateLink(res.gateId));
+    expect((await actionGetApprovalGate(IDENTITY, { taskId: "TASK-700" })).gateLink).toBe(gateLink(res.gateId));
+  });
+
+  it("mc_verify_approval links the approval it reports, and none when there is no approval", async () => {
+    const none = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", expect: { kind: "flags" } });
+    expect(none).toMatchObject({ approval: null, gateLink: null });
+    const { approvalId } = await actionRequestApproval(IDENTITY, { taskId: "TASK-700", reason: "flags?" });
+    const pending = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", expect: { kind: "flags" } });
+    expect(pending).toMatchObject({ ok: false, gateLink: gateLink(approvalId) });
   });
 });

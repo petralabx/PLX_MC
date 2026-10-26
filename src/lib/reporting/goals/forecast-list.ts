@@ -1,11 +1,14 @@
 // The pieces of the revenue forecast the browser needs (TASK-3177): the bucket,
-// class and channel names, the list's filters and its CAD totals. This module
-// must never import forecast.ts (or customer-classes.json) at run time: the
-// customer roster lives in forecast.ts, and anything the page's client code
-// imports ships in the public static bundle. forecast.ts re-exports all of this.
+// class and channel names, the list's filters and its CAD totals, and the four
+// numbers worked out over any filtered rows (TASK-3190), the one function the
+// server uses for the whole month too. This module must never import
+// forecast.ts (or customer-classes.json) at run time: the customer roster lives
+// in forecast.ts, and anything the page's client code imports ships in the
+// public static bundle. forecast.ts re-exports all of this.
 
+import { prorateCents } from "./money";
 import { normalizeName } from "./rules";
-import type { ForecastRow } from "./forecast";
+import type { ForecastReady, ForecastRow, HitRateMonth } from "./forecast";
 
 // ─── Buckets ────────────────────────────────────────────────────────────────
 
@@ -133,4 +136,96 @@ export function filterForecastRows(rows: readonly ForecastRow[], opts: ForecastL
             .join(" ")
         ).includes(needle))
   );
+}
+
+// ─── The four numbers (TASK-3190) ───────────────────────────────────────────
+
+export type ForecastBucketTotals = Record<ForecastBucket, { cents: number; rows: number }>;
+
+/** CAD and row count per bucket; rows in other currencies count as rows with 0 CAD. */
+export function bucketTotals(rows: readonly ForecastRow[]): ForecastBucketTotals {
+  const totals = Object.fromEntries(FORECAST_BUCKETS.map((b) => [b, { cents: 0, rows: 0 }])) as ForecastBucketTotals;
+  for (const row of rows) {
+    totals[row.bucket].rows += 1;
+    totals[row.bucket].cents += row.cadCents ?? 0;
+  }
+  return totals;
+}
+
+/** What the four numbers need besides the rows and the invoiced revenue: whole-month figures, never filtered. */
+export interface ForecastKpiBasis {
+  /** The complete months the hit rate averages over (hitRateMonths, newest first); empty until one is measured. */
+  months: HitRateMonth[];
+  /** Working days the revenue covers so far, and in the month. */
+  coveredDays: number;
+  workingDays: number;
+}
+
+export interface ForecastKpis {
+  buckets: ForecastBucketTotals;
+  /** The invoiced revenue the numbers include; null when it can't be split the way the rows are (by item category). */
+  invoicedCents: number | null;
+  /** Invoiced + Ready + Planned in time (just the orders when invoiced is null). */
+  theoreticalCents: number;
+  /** Late + Not planned. */
+  atRiskCents: number;
+  /** Invoiced + (Ready + Planned in time) × the average hit rate; null until a complete month is measured. */
+  realistic: { cents: number; hitRate: number; months: HitRateMonth[] } | null;
+  /** Invoiced ÷ revenue working days covered × working days in the month; null before a day is covered, or when invoiced is null. */
+  pace: { cents: number; coveredDays: number; workingDays: number } | null;
+  otherCurrencies: { currency: string; cents: number; rows: number }[];
+}
+
+export function forecastKpis(rows: readonly ForecastRow[], invoicedCents: number | null, basis: ForecastKpiBasis): ForecastKpis {
+  const buckets = bucketTotals(rows);
+  const readyPlanned = buckets.ready.cents + buckets.planned.cents;
+  const invoiced = invoicedCents ?? 0;
+  const { months, coveredDays, workingDays } = basis;
+  const terms = months.map((m) => prorateCents(readyPlanned, m.invoicedAfterCents, m.readyPlannedCents));
+  return {
+    buckets,
+    invoicedCents,
+    theoreticalCents: invoiced + readyPlanned,
+    atRiskCents: buckets.late.cents + buckets.not_planned.cents,
+    realistic:
+      months.length > 0
+        ? {
+            cents: invoiced + prorateCents(terms.reduce((n, t) => n + t, 0), 1, months.length),
+            hitRate: months.reduce((n, m) => n + m.invoicedAfterCents / m.readyPlannedCents, 0) / months.length,
+            months,
+          }
+        : null,
+    pace:
+      invoicedCents !== null && coveredDays > 0
+        ? { cents: prorateCents(invoicedCents, workingDays, coveredDays), coveredDays, workingDays }
+        : null,
+    otherCurrencies: otherCurrencyTotals(rows),
+  };
+}
+
+/** The class and category filters the four numbers follow (the bucket chips and the search change only the list). */
+export interface ForecastKpiFilter {
+  customerClass: ForecastClassFilter;
+  /** The active category filter (activeCategoryFilter), never just the one chosen. */
+  category: ForecastCategoryFilter;
+}
+
+/**
+ * The four numbers over the rows the class and category filters keep. Invoiced
+ * follows the class (the Revenue by customer class table's total); invoices
+ * can't be split by item category, so with a category it is null. With neither
+ * filter this is the whole month's numbers exactly.
+ */
+export function filteredForecastKpis(
+  f: Pick<ForecastReady, "rows" | "invoicedCents" | "invoicedByClass" | "kpiBasis">,
+  filter: ForecastKpiFilter
+): ForecastKpis {
+  const rows = filterForecastRows(f.rows, { filter: "all", query: "", ...filter });
+  const invoiced =
+    filter.category !== "all"
+      ? null
+      : filter.customerClass === "all"
+        ? f.invoicedCents
+        : (f.invoicedByClass?.[filter.customerClass] ?? null);
+  return forecastKpis(rows, invoiced, f.kpiBasis);
 }

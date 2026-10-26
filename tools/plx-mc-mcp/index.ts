@@ -295,8 +295,13 @@ server.tool(
     forceReason: z.string().min(1).max(2000).optional().describe("Why you take over a task another holder has a live checkout of."),
     baseSha: z.string().regex(/^[0-9a-fA-F]{40}$/).optional().describe("Full commit SHA your work starts from; the root of the checkout's SHA chain."),
     launchId: z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/).optional().describe("Launch record id; launcher principals only."),
+    branch: z
+      .string()
+      .regex(/^[A-Za-z0-9._/-]{1,255}$/)
+      .optional()
+      .describe("The PR head branch. On the portal a full lane refuses a checkout for a new PR (lane_cap_full); a branch with an open PR always passes."),
   },
-  async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId }) => {
+  async ({ taskId, repo, agent, reuse, forceReason, baseSha, launchId, branch }) => {
     if (!MCP_ENABLED) return disabledTool("mc_checkout_task");
     return printResult(
       await mcFetch("/checkout", {
@@ -309,6 +314,7 @@ server.tool(
           ...(forceReason ? { forceReason } : {}),
           ...(baseSha ? { baseSha } : {}),
           ...(launchId ? { launchId } : {}),
+          ...(branch ? { branch } : {}),
         },
       })
     );
@@ -488,7 +494,7 @@ async function uploadVideoFile(filePath: string, fileName: string, fields: Recor
 
 server.tool(
   "mc_upload_evidence",
-  "Upload evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html), 3 MiB or less, or video (mp4, webm; 100 MiB or less, send filePath) with a caption. Send filePath (an absolute path to a local file) or contentBase64 with fileName. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-10-25). evidence_store_unavailable says what a person must set up. Complex work a person must verify also needs a video from the plx-knowledge-video skill (warning only until 2026-11-01).",
+  "Upload evidence that a person opens to verify the work: kind diagram (svg, png), screenshot (png, jpeg, webp; annotate it) or web-page (html), 3 MiB or less, or video (mp4, webm; 100 MiB or less, send filePath) with a caption. Send filePath (an absolute path to a local file) or contentBase64 with fileName. Needs a live checkout. MC stores it on SharePoint under <system>/<project>/<bucket>/<task id> and records the link and SHA-256 on the task. A task a person must verify needs one before the compliance gate passes (warning only while uploads are off, then until 2026-11-01). evidence_store_unavailable says what a person must set up. Complex work a person must verify also needs a video from the plx-knowledge-video skill (warning only until 2026-11-01).",
   {
     checkoutId: z.string().min(1),
     kind: z.enum(["diagram", "screenshot", "web-page", "video"]),
@@ -642,7 +648,7 @@ server.tool(
 
 server.tool(
   "mc_request_approval",
-  "Raise a runtime approval gate on a task. The task freezes input-required until a human other than the requester decides it in the Approvals inbox.",
+  "Raise a runtime approval gate on a task. The task freezes input-required until a human other than the requester decides it in the Approvals inbox. Send the approver the returned gateLink.",
   {
     taskId: z.string().min(1),
     reason: z.string().min(1).max(500),

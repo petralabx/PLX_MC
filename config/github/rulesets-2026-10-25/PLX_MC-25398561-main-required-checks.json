@@ -1,0 +1,42 @@
+{
+  "id": 25398561,
+  "name": "PLX_MC main required checks",
+  "target": "branch",
+  "source_type": "Repository",
+  "source": "petralabx/PLX_MC",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "~DEFAULT_BRANCH"
+      ]
+    }
+  },
+  "rules": [
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "compliance",
+            "integration_id": 15368
+          },
+          {
+            "context": "Preflight + full suite",
+            "integration_id": 15368
+          }
+        ]
+      }
+    }
+  ],
+  "bypass_actors": [
+    {
+      "actor_id": null,
+      "actor_type": "OrganizationAdmin",
+      "bypass_mode": "always"
+    }
+  ]
+}

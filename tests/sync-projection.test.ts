@@ -116,6 +116,7 @@ vi.mock("@/lib/sync/repo", () => ({
   getProjectRows: async () => [],
   getBucketRows: async () => [],
   markRegisterInboundComplete: async () => {},
+  taskIdsWithPr: async () => [],
 }));
 
 import { projectPullRequest } from "@/lib/compliance/projection";

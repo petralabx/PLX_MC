@@ -3,15 +3,26 @@
 // "Manual entries" sheet the import reads, and the house styles. Taken from
 // the prototype workbook (PLX goals and production 2026-10-14.xlsx). Pure.
 
-import type { IsoDate } from "../types";
+import type { IsoDate, RevenueRateBasis } from "../types";
 
 /** Sheets, in order. */
-export const WORKBOOK_SHEETS = ["Read me", "Goals", "Daily", "Truckloads", "Batches", "Shipments", "Shipment lines", "Forecast", "Manual entries"] as const;
+export const WORKBOOK_SHEETS = [
+  "Read me",
+  "Goals",
+  "Revenue by class",
+  "Daily",
+  "Truckloads",
+  "Batches",
+  "Shipments",
+  "Shipment lines",
+  "Forecast",
+  "Manual entries",
+] as const;
 export type WorkbookSheet = (typeof WORKBOOK_SHEETS)[number];
 
-/** "PLX goals and production 2026-10-14.xlsx". */
-export function workbookFileName(today: IsoDate): string {
-  return `PLX goals and production ${today}.xlsx`;
+/** "PLX goals and production 2026-10-14.xlsx"; at the Sage rate, "… 2026-10-14 (Sage rate).xlsx" (TASK-3780). */
+export function workbookFileName(today: IsoDate, basis: RevenueRateBasis = "boc"): string {
+  return `PLX goals and production ${today}${basis === "sage" ? " (Sage rate)" : ""}.xlsx`;
 }
 
 // ─── The "Manual entries" sheet (the import template) ──────────────────────

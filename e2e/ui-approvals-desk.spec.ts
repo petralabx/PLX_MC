@@ -204,6 +204,54 @@ test.describe("approvals decision desk", () => {
     expect(decisions[0]).toMatchObject({ gateId: "apg_7k2m", decision: "approved" });
   });
 
+  // TASK-3796: a second decider now gets 409 gate_already_decided instead of overwriting the first.
+  test("a gate decided elsewhere first is explained and dropped, not swapped for another sheet", async ({ page }) => {
+    const { screen, sheet } = await openDesk(page);
+    let decidedElsewhere = false;
+    await page.route(/\/api\/approvals(\?.*)?$/, async (route) => {
+      if (route.request().method() !== "GET" || !decidedElsewhere) return route.fallback();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { approvals: [] } }) });
+    });
+    await page.route(/\/api\/approvals\/decide$/, async (route) => {
+      decidedElsewhere = true;
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "gate_already_decided", message: "approval gate apg_7k2m is already approved." } }),
+      });
+    });
+    await screen.locator(".ap-item", { hasText: "Approve the merge" }).click();
+    await sheet.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(screen.getByText("Gate on TASK-3302 was already decided.")).toBeVisible();
+    await expect(screen.getByText(/so your approval was not recorded/)).toBeVisible();
+    await expect(screen.locator(".ap-item", { hasText: "Approve the merge" })).toHaveCount(0);
+    await expect(sheet.getByTestId("approval-gate")).toHaveCount(0);
+  });
+
+  test("a refused decision keeps the gate, shows the reason and reloads the lists", async ({ page }) => {
+    const { screen, sheet } = await openDesk(page);
+    // Only loads made after the refusal count, so the reload is attributed to it (LESSONS 2026-09-26).
+    let refused = false;
+    let reloadsAfterRefusal = 0;
+    await page.route(/\/api\/approvals(\?.*)?$/, async (route) => {
+      if (route.request().method() === "GET" && refused) reloadsAfterRefusal += 1;
+      await route.fallback();
+    });
+    await page.route(/\/api\/approvals\/decide$/, async (route) => {
+      refused = true;
+      await route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "decider_not_allowed", message: "decider vince@petrasoap.com is not on the approval decider allowlist." } }),
+      });
+    });
+    await screen.locator(".ap-item", { hasText: "Approve the merge" }).click();
+    await sheet.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(sheet.getByText(/is not on the approval decider allowlist/)).toBeVisible();
+    await expect.poll(() => reloadsAfterRefusal).toBeGreaterThan(0);
+    await expect(sheet.getByTestId("approval-gate")).toBeVisible();
+  });
+
   test("phone: a link to a question that is not open shows the queue, not another sheet", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await stubDesk(page);
@@ -227,5 +275,28 @@ test.describe("approvals decision desk", () => {
     await expect(queue).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  // TASK-3559: gateLink() sends an approver straight to one gate.
+  test("a gate link opens that gate's sheet, not the first item in the queue", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await stubDesk(page);
+    await page.goto(`${approvalsInboxRoute.path}&gate=${GATE_ROW.gate.id}`);
+    await waitForHydration(page);
+    const screen = page.getByTestId(approvalsInboxRoute.testId);
+    const sheet = screen.getByTestId("decision-sheet");
+    await expect(sheet.getByTestId("approval-gate")).toBeVisible();
+    await expect(sheet.getByRole("heading", { name: GATE_ROW.gate.reason })).toBeVisible();
+  });
+
+  test("phone: a link to a gate that is not waiting shows the queue and says why", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await stubDesk(page);
+    await page.goto(`${approvalsInboxRoute.path}&gate=apg_gone`);
+    await waitForHydration(page);
+    const screen = page.getByTestId(approvalsInboxRoute.testId);
+    await expect(screen.getByText(/The linked gate is not waiting for a decision/)).toBeVisible();
+    await expect(screen.getByTestId("decision-queue")).toBeVisible();
+    await expect(screen.getByRole("button", { name: "Back to queue" })).toBeHidden();
   });
 });

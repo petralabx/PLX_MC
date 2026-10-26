@@ -114,7 +114,7 @@ describe("openPrCandidatesForTask (TASK-2965)", () => {
     expect(sql).toContain("WHERE kind NOT IN ('pr.merged', 'pr.closed')");
     expect(sql).not.toMatch(/UPDATE|DELETE|INSERT/);
     expect(h.calls[0].params).toEqual([
-      ["pr.opened", "pr.synchronized", "pr.merged", "pr.closed", "gate.passed", "gate.blocked"],
+      ["pr.opened", "pr.synchronized", "pr.ready_for_review", "pr.merged", "pr.closed", "gate.passed", "gate.blocked"],
       "petralabx/plx-customer-portal",
       "plx-customer-portal",
       "TASK-1",

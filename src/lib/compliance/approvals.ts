@@ -7,6 +7,7 @@
 import { randomBytes } from "node:crypto";
 
 import { ApiError } from "@/lib/api/route";
+import { withTransaction } from "@/lib/db";
 import {
   approvalEvidenceRef,
   type ApprovalEvidenceRef,
@@ -17,11 +18,12 @@ import {
 } from "@/lib/mc-data";
 import { approvalExpiry, deciderViolation, signApproval } from "./approval-signature";
 import { APPROVAL_WAIT_MAX_MS, pendingApprovalGates } from "@/lib/mc-data/policy";
+import { isCreatorApprover } from "@/lib/permissions";
 import type { ProjectAclPrincipal } from "@/lib/permissions/project-acl";
 import { loadProjectAclMaps, scopeHierarchy } from "@/lib/permissions/project-acl-guard";
-import { patchTask } from "@/lib/sync";
+import { ensureSeeded, patchTask } from "@/lib/sync";
 import { getEntities, getEntity } from "@/lib/sync/repo";
-import { appendEvent, blockDispatchOnApproval, eventsByKinds, getDispatch, type EventRow } from "./repo";
+import { appendEvent, appendEventTx, blockDispatchOnApproval, eventsByKinds, getDispatch, type EventRow } from "./repo";
 
 export interface RequestApprovalInput {
   taskId: string;
@@ -93,19 +95,45 @@ export async function requestApprovalGate(
   };
   let updated: Task | null | undefined;
   try {
-    updated = await patchTask(
-      input.taskId,
-      {
-        approvalGates: [...(task.approvalGates ?? []), gate],
-        activityLine: {
-          who: input.runtime ?? input.requestedBy,
-          what: `raised an approval gate — ${gate.reason}`,
-          kind: "gate",
+    // Append to the gate list read FOR UPDATE, and record the event in the same
+    // transaction (TASK-3796): a list built from the read above would undo a
+    // decision, or drop a gate, committed in between.
+    await ensureSeeded();
+    updated = await withTransaction(async (q) => {
+      const locked = await getEntity("task", input.taskId, q, true);
+      if (!locked) return null;
+      const current = locked.data as unknown as Task;
+      const next = await patchTask(
+        input.taskId,
+        {
+          approvalGates: [...(current.approvalGates ?? []), gate],
+          activityLine: {
+            who: input.runtime ?? input.requestedBy,
+            what: `raised an approval gate — ${gate.reason}`,
+            kind: "gate",
+          },
         },
-      },
-      input.requestedBy,
-      { attribution: { source: "service", actorId: input.requestedBy } }
-    );
+        input.requestedBy,
+        { query: q, attribution: { source: "service", actorId: input.requestedBy } }
+      );
+      if (next) {
+        await appendEventTx(q, {
+          kind: "approval.requested",
+          actor: input.requestedBy,
+          taskId: input.taskId,
+          payload: {
+            gateId: gate.id,
+            checkoutRef: input.checkoutRef ?? null,
+            hasProposal: !!input.proposal,
+            reason: gate.reason,
+            runtime: input.runtime ?? null,
+            scope: input.scope ?? null,
+            sourceRef: input.sourceRef ?? null,
+          },
+        });
+      }
+      return next;
+    });
   } catch (err) {
     await unblock();
     throw err;
@@ -114,21 +142,6 @@ export async function requestApprovalGate(
     await unblock();
     throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
   }
-
-  await appendEvent({
-    kind: "approval.requested",
-    actor: input.requestedBy,
-    taskId: input.taskId,
-    payload: {
-      gateId: gate.id,
-      checkoutRef: input.checkoutRef ?? null,
-      hasProposal: !!input.proposal,
-      reason: gate.reason,
-      runtime: input.runtime ?? null,
-      scope: input.scope ?? null,
-      sourceRef: input.sourceRef ?? null,
-    },
-  });
   return { gate, task: updated };
 }
 
@@ -206,49 +219,144 @@ export async function decideApprovalGate(
     throw new ApiError("approval_scope_not_reviewed", "Review the current approval scope and source before approving.", 409);
   }
 
-  const decidedAt = new Date().toISOString();
-  const base: ApprovalGate = {
-    ...gate,
-    status: input.decision,
-    decidedBy: input.decidedBy,
-    decidedAt,
-    note: input.note,
-  };
-  // An approval is stamped with its expiry, then signed over the whole record.
-  const stamped: ApprovalGate =
-    input.decision === "approved" ? { ...base, expiresAt: approvalExpiry(gate.scope, decidedAt) } : base;
-  const decided: ApprovalGate =
-    input.decision === "approved" ? { ...stamped, signature: signApproval(input.taskId, stamped) } : stamped;
-  const updated = await patchTask(
-    input.taskId,
-    {
-      approvalGates: gates.map((g) => (g.id === gate.id ? decided : g)),
-      activityLine: {
-        who: input.decidedBy,
-        what: `${input.decision} the approval gate — ${gate.reason}`,
-        kind: "gate",
-      },
-    },
-    input.decidedBy,
-    { attribution: { source: "human", actorId: input.decidedBy } }
-  );
-  if (!updated) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+  // The checks above read fields a gate never changes (requester, scope,
+  // source). Its status and the gate list are read again FOR UPDATE and
+  // written with the event in one transaction (TASK-3796): a list built from
+  // the read above would drop a gate raised in between, and two people
+  // deciding at once would both pass the pending check.
+  await ensureSeeded();
+  return withTransaction(async (q) => {
+    const locked = await getEntity("task", input.taskId, q, true);
+    if (!locked) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+    const latest = (locked.data as unknown as Task).approvalGates ?? [];
+    const fresh = latest.find((g) => g.id === gate.id);
+    if (!fresh) throw new ApiError("not_found", `unknown approval gate ${input.gateId}`, 404);
+    if (fresh.status !== "pending") {
+      throw new ApiError("gate_already_decided", `approval gate ${gate.id} is already ${fresh.status}.`, 409);
+    }
 
-  await appendEvent({
-    kind: "approval.decided",
-    actor: input.decidedBy,
-    taskId: input.taskId,
-    payload: {
-      gateId: gate.id,
-      decision: input.decision,
-      reason: gate.reason,
-      requestedBy: gate.requestedBy,
-      note: input.note ?? null,
-      expiresAt: decided.expiresAt ?? null,
-      signed: !!decided.signature,
-    },
+    const decidedAt = new Date().toISOString();
+    const base: ApprovalGate = {
+      ...fresh,
+      status: input.decision,
+      decidedBy: input.decidedBy,
+      decidedAt,
+      note: input.note,
+    };
+    // An approval is stamped with its expiry, then signed over the whole record.
+    const stamped: ApprovalGate =
+      input.decision === "approved" ? { ...base, expiresAt: approvalExpiry(fresh.scope, decidedAt) } : base;
+    const decided: ApprovalGate =
+      input.decision === "approved" ? { ...stamped, signature: signApproval(input.taskId, stamped) } : stamped;
+    const updated = await patchTask(
+      input.taskId,
+      {
+        approvalGates: latest.map((g) => (g.id === gate.id ? decided : g)),
+        activityLine: {
+          who: input.decidedBy,
+          what: `${input.decision} the approval gate — ${fresh.reason}`,
+          kind: "gate",
+        },
+      },
+      input.decidedBy,
+      { query: q, attribution: { source: "human", actorId: input.decidedBy } }
+    );
+    if (!updated) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+
+    await appendEventTx(q, {
+      kind: "approval.decided",
+      actor: input.decidedBy,
+      taskId: input.taskId,
+      payload: {
+        gateId: gate.id,
+        decision: input.decision,
+        reason: fresh.reason,
+        requestedBy: fresh.requestedBy,
+        note: input.note ?? null,
+        expiresAt: decided.expiresAt ?? null,
+        signed: !!decided.signature,
+      },
+    });
+    return { gate: decided, task: updated };
   });
-  return { gate: decided, task: updated };
+}
+
+export interface ApproveCreatorInput {
+  taskId: string;
+  /** Session Entra object id: the only identity the approver check trusts. */
+  approverOid: string;
+  /** Session audit label (email), recorded with the approval. */
+  approverLabel: string;
+  note?: string;
+}
+
+/**
+ * Clear a task's pending creator approval (TASK-3530). Only a creator approver
+ * (permissions/grants.ts) may do it; every other caller is refused and
+ * audited. approval.decide and task.update never reach this state.
+ */
+export async function approveCreatorApproval(
+  input: ApproveCreatorInput
+): Promise<{ task: Task }> {
+  if (!isCreatorApprover(input.approverOid)) {
+    await appendEvent({
+      kind: "creator_approval.denied",
+      actor: input.approverLabel,
+      taskId: input.taskId,
+      payload: { reasonCode: "approver_not_allowed", approverOid: input.approverOid },
+    });
+    throw new ApiError(
+      "creator_approver_not_allowed",
+      "Only vince@ or cos@ can approve a task from a gated creator principal.",
+      403
+    );
+  }
+  // The locked pending check, the task write and the audit event commit in
+  // one transaction, like the cancellation service.
+  return withTransaction(async (q) => {
+    const row = await getEntity("task", input.taskId, q, true);
+    if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+    const task = row.data as unknown as Task;
+    if (!task.creatorApproval) {
+      throw new ApiError("creator_approval_not_required", `${input.taskId} needs no creator approval.`, 409);
+    }
+    if (task.creatorApproval.status !== "pending") {
+      throw new ApiError("creator_approval_already_decided", `${input.taskId} creator approval is already ${task.creatorApproval.status}.`, 409);
+    }
+    const approvedAt = new Date().toISOString();
+    const updated = await patchTask(
+      input.taskId,
+      {
+        creatorApproval: {
+          ...task.creatorApproval,
+          status: "approved",
+          approvedBy: input.approverLabel,
+          approvedByOid: input.approverOid,
+          approvedAt,
+        },
+        activityLine: {
+          who: input.approverLabel,
+          what: `approved the task from ${task.creatorApproval.principal} (creator approval)`,
+          kind: "gate",
+        },
+      },
+      input.approverLabel,
+      { query: q, attribution: { source: "human", actorId: input.approverOid }, creatorApproval: true }
+    );
+    if (!updated) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
+    await appendEventTx(q, {
+      kind: "creator_approval.approved",
+      actor: input.approverLabel,
+      taskId: input.taskId,
+      payload: {
+        creatorPrincipal: task.creatorApproval.principal,
+        approverOid: input.approverOid,
+        approvedAt,
+        note: input.note ?? null,
+      },
+    });
+    return { task: updated };
+  });
 }
 
 const APPROVAL_POLL_INTERVAL_MS = 1_000;

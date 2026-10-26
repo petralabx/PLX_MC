@@ -31,6 +31,11 @@ export function isUatSyncLabel(label: string): boolean {
   return label === UAT_HOLD_LABEL || UAT_ATTEMPT_RE.test(label);
 }
 
+/** Labels Steward writes when it gives up on a ticket: uat:blocked and uat:cause:<cause>. */
+export function isUatBlockLabel(label: string): boolean {
+  return label === UAT_BLOCKED_LABEL || (label.startsWith(UAT_CAUSE_PREFIX) && label.length > UAT_CAUSE_PREFIX.length);
+}
+
 /** The causes Steward gave for a block (uat:cause:<cause>), in label order. */
 export function uatBlockCauses(labels: readonly string[] | undefined): string[] {
   return (labels ?? [])

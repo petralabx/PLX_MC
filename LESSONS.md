@@ -1250,3 +1250,25 @@
   command. Warm up with one short e2e spec, then run the full suite inside the 5-minute window.
   Remove finished agent worktrees (`git worktree remove`) before running preflight, and keep
   `.claude/worktrees/` in `.git/info/exclude` so it is never committed.
+
+## 2026-10-26 — Portal PRs #3012 and #3017: a re-checkout stamp missing from the PR body blocked compliance (TASK-3890, TASK-3896)
+- **What went wrong:** A follow-up commit on a Ready PR passed the pre-push hook with a fresh
+  `MC-Checkout` trailer, then the `compliance` check blocked with "MC-Checkout trailer dsp_… does
+  not match a stamp in the PR body". It happened on two portal PRs the same morning.
+- **Root cause:** The first checkout had been completed, so the second push needed a re-checkout of
+  the same task. The Hub verifier matches every commit's trailer against the stamps in the PR body.
+  The hook checks the receipt, not the body, so it cannot catch this.
+- **Rule going forward:** When a push carries a new `dsp_*`, add its `MC-Checkout:` line to the PR
+  body (keep the old one) before the push, then hand in evidence for the new checkout. Re-run the
+  failed `compliance` job once after the body edit; never push an empty commit to re-trigger it.
+
+## 2026-10-26 — Portal PRs #3012 and #3017: the strict RBAC audit only ran after Ready for review (TASK-3890, TASK-3896)
+- **What went wrong:** Both PRs were green as drafts. After Ready for review the `lint` job failed on
+  `npm run audit:rbac` ("Unexplained raw role authorization reads: 1"), and `build` was released early
+  because lint failed, so it looked like two failures.
+- **Root cause:** Drafts skip heavy CI, and the strict RBAC coverage audit is a step in the `lint`
+  job. A new `subject.role` / `session.user.role` read in a non-UI file is unexplained unless the coarse
+  gate owns the decision or `RAW_ROLE_COMPATIBILITY_REASONS` classifies it.
+- **Rule going forward:** Run `cd portal && npm run audit:rbac` locally before marking a portal PR
+  Ready, alongside lint and tsc. Prefer letting `evaluateCoarseAccess` decide over reading the role;
+  classify a read only when it truly selects presentation, never when it grants access.

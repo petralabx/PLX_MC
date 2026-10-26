@@ -27,7 +27,13 @@ export interface RevenueScopeView {
   totalCadCents: number;
   /** Of totalCadCents, freight and other charges: left out of the goal. */
   chargesCadCents: number;
-  /** totalCadCents less chargesCadCents: what counts toward the goal (the card's headline). */
+  /** Returns (TASK-3987): the scope's credit notes' product value before tax, in CAD; comes off the goal. Not inside totalCadCents. */
+  returnsCadCents: number;
+  /** The scope's credit notes counted (every currency). */
+  returnsNotes: number;
+  /** The scope's credited freight and other charges, CAD: never part of the goal, so not in returnsCadCents. */
+  returnsChargesCadCents: number;
+  /** totalCadCents less chargesCadCents less returnsCadCents: what counts toward the goal (the card's headline). */
   goalCadCents: number;
   /** Of goalCadCents, shipments entered by hand (their product value; freight is in chargesCadCents). */
   byHandGoalCadCents: number;
@@ -60,6 +66,9 @@ export function revenueScope(
   let excludedCadCents = 0;
   let chargesCadCents = 0;
   let byHandGoalCadCents = 0;
+  let returnsCadCents = 0;
+  let returnsNotes = 0;
+  let returnsChargesCadCents = 0;
   for (const row of byClass.rows) {
     if (excluded.includes(row.customerClass)) {
       excludedCadCents += row.totalCadCents;
@@ -68,13 +77,19 @@ export function revenueScope(
     totalCadCents += row.totalCadCents;
     chargesCadCents += row.charges.totalCadCents;
     byHandGoalCadCents += row.byHand.cadCents - row.charges.byHandCadCents;
+    returnsCadCents += (row.returns?.productCadCents ?? 0);
+    returnsNotes += (row.returns?.notes ?? 0);
+    returnsChargesCadCents += (row.returns?.chargesCadCents ?? 0);
   }
-  const goalCadCents = totalCadCents - chargesCadCents;
+  const goalCadCents = totalCadCents - chargesCadCents - returnsCadCents;
   return {
     scope,
     excluded,
     totalCadCents,
     chargesCadCents,
+    returnsCadCents,
+    returnsNotes,
+    returnsChargesCadCents,
     goalCadCents,
     byHandGoalCadCents,
     excludedCadCents,

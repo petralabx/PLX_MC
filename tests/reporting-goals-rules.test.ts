@@ -555,7 +555,7 @@ describe("page view", () => {
     expect(view.latestAttempt?.id).toBe(8);
     expect(money(view.model!.revenue.inSystemCents)).toBe("367014.16");
     expect(view.fx).toEqual({ rate: "1.421900", date: "2026-10-13", source: "boc", stale: false });
-    expect(view.sections.revenue).toEqual(["revenue-by-currency"]);
+    expect(view.sections.revenue).toEqual(["revenue-by-currency", "credit-notes"]);
     // Line 1 is built from the batch list; the day-by-day charts add it to the revenue per day.
     expect(view.sections.line1).toEqual(["batches"]);
     expect(view.sections.daily).toEqual(["daily", "batches"]);

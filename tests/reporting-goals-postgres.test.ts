@@ -99,6 +99,10 @@ async function loadReplica(db: Client): Promise<void> {
       invnetnotx text, audtdate text, inrate text DEFAULT '1.25'
     );
     CREATE TABLE sage.ar_customer (idcust text, namecust text, codecurn text, swactv text DEFAULT '1');
+    CREATE TABLE sage.oe_credit_note_header (
+      crdnumber text, invnumber text, customer text, bilname text, crddate text, crdsourcurr text,
+      crditmtot text, crddiscamt text, crdmisc text, crdnetnotx text, adjtype text
+    );
   `);
   for (const b of source.batches) {
     await db.query(

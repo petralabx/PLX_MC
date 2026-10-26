@@ -20,6 +20,7 @@ import type {
   ManualEntry,
   RefreshRun,
   RevenueRateBasis,
+  CreditNotesAccess,
   ShipmentLinesSummary,
   SnapshotData,
 } from "./types";
@@ -32,6 +33,7 @@ export const DATASET_QUERIES = {
   revenue: "revenue-by-currency",
   shipments: "shipments",
   shipmentLines: "shipment-lines",
+  creditNotes: "credit-notes",
   batches: "batches",
   batchHistory: "batch-history",
   references: "references",
@@ -47,8 +49,8 @@ export const SECTION_QUERIES: Record<string, readonly DatasetQuery[]> = {
   freshness: [DATASET_QUERIES.cutoffs],
   line1: [DATASET_QUERIES.batches],
   truckloads: [DATASET_QUERIES.truckloads],
-  revenue: [DATASET_QUERIES.revenue],
-  classes: [DATASET_QUERIES.shipments],
+  revenue: [DATASET_QUERIES.revenue, DATASET_QUERIES.creditNotes],
+  classes: [DATASET_QUERIES.shipments, DATASET_QUERIES.creditNotes],
   daily: [DATASET_QUERIES.daily, DATASET_QUERIES.batches],
   entries: [DATASET_QUERIES.references, DATASET_QUERIES.batches],
   sizes: [DATASET_QUERIES.batches, DATASET_QUERIES.batchHistory],
@@ -83,6 +85,13 @@ export interface GoalsView {
   revenueScope: RevenueScopeView | null;
   /** The Revenue card's month for every customer, freight and other charges left out (TASK-3952): the card's headline, status and pace at `scope=all`. */
   revenueGoal: RevenueScopeView | null;
+  /**
+   * Whether the run read this month's credit notes (TASK-3987), which the
+   * Revenue card subtracts: read (notes: how many), or missing (the columns the
+   * login lacked, so returns aren't deducted). null without a model, or for a
+   * run stored before migration 051.
+   */
+  creditNotes: { access: CreditNotesAccess; missing: string[]; notes: number } | null;
   /** Whether the run has its invoices' lines (TASK-3144); the page fetches them on demand. null without a model. */
   shipmentLines: ShipmentLinesView | null;
   /** The goal settings the model was built with (the page's definitions and rules text quote them). */
@@ -136,6 +145,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       revenueByClass: null,
       revenueScope: null,
       revenueGoal: null,
+      creditNotes: null,
       shipmentLines: null,
       settings: null,
       sections: SECTION_QUERIES,
@@ -172,7 +182,8 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     settings: input.settings,
     ftlCustomers: input.ftlCustomers,
   });
-  const byClass = revenueByClass(shipments, model, input.ftlCustomers);
+  const notes = input.snapshot.creditNotes ?? null;
+  const byClass = revenueByClass(shipments, model, input.ftlCustomers, notes?.access === "read" ? notes.notes : []);
   const invoicedByClass = Object.fromEntries(byClass.rows.map((r) => [r.customerClass, r.totalCadCents])) as Record<CustomerClass, number>;
   const forecast = buildForecast({
     snapshot: input.forecast ?? null,
@@ -199,6 +210,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       dueSoFarCents: model.revenue.dueSoFarCents,
       remaining: model.calendar.remaining,
     }),
+    creditNotes: notes ? { access: notes.access, missing: notes.missing, notes: notes.notes.length } : null,
     shipmentLines: shipmentLinesView(input.shipmentLines ?? null),
     settings: input.settings,
     sections: SECTION_QUERIES,

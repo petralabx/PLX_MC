@@ -48,5 +48,6 @@
   "047_checkout_lease_chain.sql",
   "048_workbench_intake_mcp_principal.sql",
   "049_nav_stars.sql",
-  "050_nav_prefs.sql"
+  "050_nav_prefs.sql",
+  "051_reporting_goals_credit_notes.sql"
 ]

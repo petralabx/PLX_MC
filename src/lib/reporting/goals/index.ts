@@ -28,6 +28,9 @@ export type {
   RunStatus,
   ShipmentLineKind,
   ShipmentLineRow,
+  CreditNoteRow,
+  CreditNotesAccess,
+  CreditNotesDataset,
   ShipmentLinesAccess,
   ShipmentLinesDataset,
   ShipmentLinesSummary,
@@ -190,6 +193,7 @@ export type { ShipmentFilter, ShipmentListInput, ShipmentListRow, ShipmentTotals
 export { invoiceLines, linesMismatch, linesSearchText, shipmentLinesView } from "./shipment-lines";
 export type { InvoiceHeader, InvoiceLines, LinesCheck, ShipmentLinesView } from "./shipment-lines";
 export { SHIPMENT_LINE_COLUMNS } from "./queries/shipment-lines";
+export { CREDIT_NOTE_COLUMNS } from "./queries/credit-notes";
 
 export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView, revenueBasisParam } from "./view";
 export type { DatasetQuery, GoalsPage, GoalsView, GoalsViewInput, GoalsViewState, GoalsViewer } from "./view";

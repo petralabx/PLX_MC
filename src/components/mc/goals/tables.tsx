@@ -437,8 +437,9 @@ export function RulesText({ page }: { page: ReadyPage }) {
         dollars are converted at{" "}
         {sage ? `the fixed Sage rate ${rate(model.revenue.rate)}` : "the Bank of Canada rate"}, or at{" "}
         {sage ? "the Bank of Canada rate" : `the fixed Sage rate${settings.sageUsdCadRate ? ` ${rate(settings.sageUsdCadRate)}` : ""}`}{" "}
-        with the switch above the cards, and each amount is rounded to the cent. Credit notes are not deducted. The
-        target is {dollars(settings.revenueTargetCadCents)} a month, spread evenly over its working days.
+        with the switch above the cards, and each amount is rounded to the cent. Returns come off it: this month&apos;s
+        Sage credit notes, by the credit note&apos;s date, their product value before tax (credited freight and other
+        charges are left out, as charges are). The target is {dollars(settings.revenueTargetCadCents)} a month, spread evenly over its working days.
       </li>
       <li>
         <b>Revenue by customer class</b> splits that revenue by the class of each invoice’s Sage customer, from the

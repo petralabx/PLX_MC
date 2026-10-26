@@ -23,6 +23,7 @@ import type {
   RefreshRun,
   RefreshTrigger,
   RunStatus,
+  CreditNotesAccess,
   ShipmentLinesAccess,
   ShipmentLinesDataset,
   ShipmentLinesSummary,
@@ -217,6 +218,25 @@ async function insertSnapshot(q: TxQuery, runId: number, d: Datasets): Promise<v
     [["run_id", "bigint"], ["access", "text"], ["missing", "jsonb"], ["lines", "integer"]],
     id([[d.shipmentLines.access, JSON.stringify(d.shipmentLines.missing), d.shipmentLines.lines.length]])
   );
+  // This month's credit notes (TASK-3987), and whether the login could read
+  // them, so the page can tell "no returns" from "can't read yet" (migration 051).
+  if (d.creditNotes) {
+    await insertRows(
+      q,
+      "report_snap_credit_note",
+      [["run_id", "bigint"], ["row_no", "integer"], ["credit_note", "text"], ["invoice", "text"], ["customer_code", "text"],
+        ["customer", "text"], ["credit_date", "date"], ["currency", "text"], ["product_value", "numeric"],
+        ["other_charges", "numeric"], ["net_before_tax", "numeric"]],
+      id(d.creditNotes.notes.map((r, i) => [i + 1, r.creditNote, r.invoice, r.customerCode, r.customer, r.creditDate, r.currency,
+        r.productValue, r.otherCharges, r.netBeforeTax]))
+    );
+    await insertRows(
+      q,
+      "report_snap_credit_note_summary",
+      [["run_id", "bigint"], ["access", "text"], ["missing", "jsonb"], ["notes", "integer"]],
+      id([[d.creditNotes.access, JSON.stringify(d.creditNotes.missing), d.creditNotes.notes.length]])
+    );
+  }
   await insertRows(
     q,
     "report_snap_batch",
@@ -255,6 +275,7 @@ export function rowCounts(d: Datasets): Record<string, number> {
     references: d.references.length,
     customers: d.customers.length,
     shipmentLines: d.shipmentLines.lines.length,
+    ...(d.creditNotes ? { creditNotes: d.creditNotes.notes.length } : {}),
     forecastLines: d.forecast.lines.length,
     forecastAos: d.forecast.aos.length,
     // AOs whose FileMaker quantity is set but isn't a number: they cover nothing (TASK-3791).
@@ -282,6 +303,9 @@ export async function completeRun(run: RefreshRun, datasets: Datasets, fx: Resol
     }
     if (datasets.shipmentLines.access === "missing") {
       console.warn("[reporting-goals] run=%s shipment lines skipped: no read access to %s", run.id, datasets.shipmentLines.missing.join(", "));
+    }
+    if (datasets.creditNotes?.access === "missing") {
+      console.warn("[reporting-goals] run=%s credit notes skipped: no read access to %s", run.id, datasets.creditNotes.missing.join(", "));
     }
     if (counts.forecastAoQtyUnreadable > 0) {
       console.warn("[reporting-goals] run=%s forecast: %s of %s assembly orders have a quantity that isn't a number", run.id, counts.forecastAoQtyUnreadable, counts.forecastAos);
@@ -318,6 +342,7 @@ export async function completeRun(run: RefreshRun, datasets: Datasets, fx: Resol
         rowCounts: counts,
         fxSource: fx.source,
         shipmentLines: datasets.shipmentLines.access,
+        ...(datasets.creditNotes ? { creditNotes: datasets.creditNotes.access } : {}),
         forecast: datasets.forecast.access,
       },
     });
@@ -387,6 +412,22 @@ export async function loadSnapshot(run: RefreshRun): Promise<SnapshotData> {
          FROM report_snap_batch_history WHERE run_id = $1 ORDER BY day, batch`,
       [run.id]
     );
+    // The run's credit notes (TASK-3987): none stored for a run before migration 051.
+    const [notesSummary] = await q<{ access: CreditNotesAccess; missing: string[] }>(
+      `SELECT access, missing FROM report_snap_credit_note_summary WHERE run_id = $1`,
+      [run.id]
+    );
+    const notes = notesSummary
+      ? await q<{
+          credit_note: string; invoice: string | null; customer_code: string | null; customer: string | null; credit_date: string;
+          currency: string; product_value: string; other_charges: string; net_before_tax: string;
+        }>(
+          `SELECT credit_note, invoice, customer_code, customer, credit_date::text AS credit_date, currency,
+                  product_value::text AS product_value, other_charges::text AS other_charges, net_before_tax::text AS net_before_tax
+             FROM report_snap_credit_note WHERE run_id = $1 ORDER BY row_no`,
+          [run.id]
+        )
+      : [];
     return {
       cutoffs: { productionCutoff: run.productionCutoff, sageCutoff: run.sageCutoff },
       daily: daily.map((r) => ({
@@ -409,6 +450,19 @@ export async function loadSnapshot(run: RefreshRun): Promise<SnapshotData> {
         line: r.line, date: r.day, kg: r.kg,
       })),
       batchHistory: history.map((r) => ({ id: r.batch_id, batch: r.batch, date: r.day, kg: r.kg, statusQc: r.status_qc })),
+      ...(notesSummary
+        ? {
+            creditNotes: {
+              access: notesSummary.access,
+              missing: notesSummary.missing,
+              notes: notes.map((r) => ({
+                creditNote: r.credit_note, invoice: r.invoice, customerCode: r.customer_code, customer: r.customer,
+                creditDate: r.credit_date, currency: r.currency, productValue: r.product_value,
+                otherCharges: r.other_charges, netBeforeTax: r.net_before_tax,
+              })),
+            },
+          }
+        : {}),
     };
   });
 }

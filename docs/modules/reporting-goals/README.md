@@ -480,7 +480,14 @@ disable `mc-goals-report` in the token map.
    plx-reporting-mcp, run it for the server's role with `-v role=<role>`
    instead. Until then an opened invoice waits for read access and everything
    else works.
-8. Before relying on the "Lines don't add up" marks, reconcile three invoices
+8. Returns (TASK-3987): apply migration 051 the same way before its code
+   deploys. Confirm the replica's name for Sage's credit note header (assumed
+   `sage.oe_credit_note_header`, OECRDH's columns lower-cased; see
+   `queries/credit-notes.ts`), then a DBA runs `readonly-grants-credit-notes.sql`
+   for the existing `mc_goals_ro` login (or `-v role=<role>` through
+   plx-reporting-mcp). Until then the Revenue card says returns aren't deducted
+   and everything else works.
+9. Before relying on the "Lines don't add up" marks, reconcile three invoices
    against Sage's O/E Invoice Inquiry (or the printed invoice), one rule each.
    Each rule is one named fragment or function, so a correction is one edit:
    1. An invoice with freight or another miscellaneous charge: each charge
@@ -640,6 +647,12 @@ goal (2 batches of 7,500 kg or more per working day).
 
 ### Interpretations to confirm
 
+- Returns (TASK-3987): a credit note counts in the month of its own date
+  (`crddate`), not its invoice's ship date, and comes off the goal at its
+  product value before tax (`crditmtot - crddiscamt`); credited charges
+  (`crdmisc`) are left out, as invoice charges are. Debit notes (`adjtype` 2)
+  are not returns. A credit note takes the class of its own Sage customer.
+
 - Covered-through dates never run past today. A manual entry dated later this
   month does not raise "due so far" early.
 - Production's covered-through date moves with a counted Line 1 batch entered
@@ -755,7 +768,7 @@ Depended on by: nothing yet.
 - `db/migrations/042_reporting_goals_line1.sql` (+ `db/rollback/042_reporting_goals_line1_rollback.sql`) — the Line 1 settings
 - `src/app/api/reporting/goals/` — read, refresh, run, export, entry, customer and import routes; `src/app/api/cron/reporting-goals/` — the daily refresh
 - `src/components/mc/goals/` — the page; `src/components/mc/charts/column-chart.tsx` — its charts; `src/styles/mc-goals.css`
-- `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants; `readonly-grants-forecast.sql` — the forecast's grants for the existing login; `readonly-grants-shipment-lines.sql` — the invoice lines' grants for the existing login
+- `docs/modules/reporting-goals/readonly-grants.sql` — the replica login's grants; `readonly-grants-forecast.sql` — the forecast's grants for the existing login; `readonly-grants-shipment-lines.sql` — the invoice lines' grants for the existing login; `readonly-grants-credit-notes.sql` — the credit notes' grants for the existing login
 - What shipped (TASK-3144): `src/lib/reporting/goals/shipment-lines.ts` (pure), `queries/shipment-lines.ts`, `queries/read-access.ts` (the catalog check it shares with the forecast); `src/app/api/reporting/goals/runs/[id]/shipment-lines/route.ts`; `db/migrations/044_reporting_goals_shipment_lines.sql` (+ rollback); `tests/reporting-goals-shipment-lines{,-export}.test.ts` and the shipment lines block of `tests/reporting-goals-postgres.test.ts` (`tests/reporting-goals-shipment-lines-replica.ts` loads `shipment-lines-source.json`); `e2e/goals-shipment-lines.spec.ts`
 - Revenue forecast (TASK-3151): `src/lib/reporting/goals/forecast.ts` (pure), `forecast-read.ts`, `forecast-store.ts`, `queries/forecast-{orders,assembly-orders,access}.ts`, `customer-classes.json` (written by `scripts/goals-customer-classes.mjs`, TASK-3177); `src/components/mc/goals/forecast.tsx`; `db/migrations/043_reporting_goals_forecast.sql` and `045_reporting_goals_forecast_category.sql` (+ rollbacks); `tests/reporting-goals-forecast*.test.ts` and the forecast block of `tests/reporting-goals-postgres.test.ts` (`tests/reporting-goals-forecast-replica.ts` builds the source tables from `forecast-source.json`); `e2e/goals-forecast.spec.ts`
 - `tests/reporting-goals-*.test.ts`, `tests/fixtures/reporting-goals/2026-10-14/` — rules, SQL (disposable PG16), route, page and workbook tests against the 2026-10-14 figures (the workbook's LibreOffice recalculation skips where `soffice` isn't installed, as in CI, and logs why); `tests/reporting-goals-entries*.test.ts` — validation, the import plan, and the entry and import routes against PG16 (`tests/reporting-goals-workbook.ts` builds the workbooks); `tests/reporting-goals-roundtrip.test.ts` — the real export read back by the import (the round-trip guarantee)

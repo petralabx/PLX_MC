@@ -28,7 +28,7 @@ test.describe("goals & production", () => {
     await expect(page.getByTestId("goals-card-revenue")).toContainText("$390,827 of $1,000,000");
     await expect(page.getByTestId("goals-card-revenue").locator(".gp-big")).toHaveAttribute(
       "title",
-      "From query revenue-by-currency · run #41, Oct 14, 6:00 AM"
+      "From queries revenue-by-currency, credit-notes · run #41, Oct 14, 6:00 AM"
     );
     await expect(page.getByTestId("goals-truckloads")).toContainText("From query truckloads · run #41");
     await expect(page.getByTestId("goals-behind")).toHaveCount(0);

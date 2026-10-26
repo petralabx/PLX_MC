@@ -125,6 +125,8 @@ export interface Datasets {
   customers: CustomerRow[];
   /** The lines of this month's Sage invoices (TASK-3144), when the login can read them. */
   shipmentLines: ShipmentLinesDataset;
+  /** This month's credit notes (TASK-3987); absent on a run stored before migration 051. */
+  creditNotes?: CreditNotesDataset;
   forecast: ForecastDatasets;
 }
 
@@ -302,4 +304,33 @@ export interface ShipmentLinesSummary {
   access: ShipmentLinesAccess;
   missing: string[];
   lines: number;
+}
+
+// ─── Credit notes: this month's returns (TASK-3987) ────────────────────────
+
+/** read: the credit notes were read. missing: the login lacked SELECT on the columns listed in `missing`. */
+export type CreditNotesAccess = "read" | "missing";
+
+/** One Sage credit note dated this month (queries/credit-notes.ts); amounts as Sage keeps them (positive), in the note's currency. */
+export interface CreditNoteRow {
+  creditNote: string;
+  /** The invoice it credits, when Sage has one. */
+  invoice: string | null;
+  customerCode: string | null;
+  customer: string | null;
+  /** The credit note's date: the month it lands in. */
+  creditDate: IsoDate;
+  currency: string;
+  /** Items less discount, before tax: what comes off the goal. */
+  productValue: string;
+  /** Credited freight and other charges (never part of the goal). */
+  otherCharges: string;
+  /** productValue + otherCharges, before tax. */
+  netBeforeTax: string;
+}
+
+export interface CreditNotesDataset {
+  access: CreditNotesAccess;
+  missing: string[];
+  notes: CreditNoteRow[];
 }

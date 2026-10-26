@@ -18,7 +18,7 @@ import {
   loadShipmentLines,
   loadSnapshot,
 } from "./store";
-import type { FxRate, RevenueRateBasis, ShipmentLinesDataset, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
+import type { CreditNotesDataset, FxRate, RevenueRateBasis, ShipmentLinesDataset, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
 import { buildGoalsView, type GoalsView } from "./view";
 
 const EMPTY_SETTINGS = {
@@ -43,13 +43,22 @@ export interface GoalsExportData {
   shipmentLines: ShipmentLinesDataset | null;
   truckloads: TruckloadRow[];
   rates: FxRate[];
+  /** The run's credit notes (TASK-3987); null for a run stored before them. */
+  creditNotes?: CreditNotesDataset | null;
 }
 
 export async function loadGoalsExport(basis: RevenueRateBasis = "boc"): Promise<GoalsExportData> {
   const { view, snapshot, rates } = await loadGoals(basis);
   // Only the workbook reads them here; the page fetches them on demand (GET …/runs/[id]/shipment-lines).
   const shipmentLines = view.run ? await loadShipmentLines(view.run.id) : null;
-  return { view, shipments: snapshot?.shipments ?? [], shipmentLines, truckloads: snapshot?.truckloads ?? [], rates };
+  return {
+    view,
+    shipments: snapshot?.shipments ?? [],
+    shipmentLines,
+    truckloads: snapshot?.truckloads ?? [],
+    rates,
+    creditNotes: snapshot?.creditNotes ?? null,
+  };
 }
 
 async function loadGoals(basis: RevenueRateBasis): Promise<{ view: GoalsView; snapshot: SnapshotData | null; rates: FxRate[] }> {

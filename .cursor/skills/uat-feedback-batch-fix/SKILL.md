@@ -1,7 +1,7 @@
 ---
 name: uat-feedback-batch-fix
 description: >-
-  Diagnose and fix one PLX UAT Feedback session batch: one PR into staging with
+  HISTORICAL (retired 2026-10-26; do not use for new UAT work, see uat-runner): Diagnose and fix one PLX UAT Feedback session batch: one PR into staging with
   a plain UAT-Feedback: <ids> stamp, wait for Vercel Ready + mark-ready, then
   email submitters from cos@petrasoap.com to retest. Use when given a session
   batch, a master-prompt pack of UAT tickets, BATCH-WORKER placeholders, or
@@ -10,6 +10,12 @@ description: >-
 ---
 
 # UAT Feedback Batch Fix
+
+> **Historical (retired 2026-10-26).** The weekly SharePoint batch loop no longer runs.
+> UAT feedback tickets follow the per-ticket Mission Control contract: one `kind:code` +
+> `uat:<feedbackId>` task per ticket attempt in `BKT-UAT`, created by the portal and leased
+> by PLX Steward. Use the `uat-runner` skill and `PLX_MC/docs/modules/uat/README.md`.
+> UAT results are PASS, FAIL or unverified, never Verified. Kept for history only.
 
 Fix **one** SharePoint UAT Feedback session batch end-to-end. Policy details live
 in the portal worktree at `.orchestrator/uat-weekly-batch-loop/SPEC.md` when

@@ -1,7 +1,7 @@
 ---
 name: uat-weekly-batch-loop
 description: >-
-  Run one weekly PLX UAT session-batch cycle: select ≤5 batches from Open /
+  HISTORICAL (retired 2026-10-26; do not use for new UAT work, see uat-runner): Run one weekly PLX UAT session-batch cycle: select ≤5 batches from Open /
   In Progress / Failed Retest, get Vince's one approval, dispatch one worker
   session/PR per batch, email submitters after staging Ready, and close the
   week with WEEKLY-LOG + lessons + brain_ingest. Use when asked to run the
@@ -10,6 +10,12 @@ description: >-
 ---
 
 # UAT Weekly Batch Loop
+
+> **Historical (retired 2026-10-26).** The weekly SharePoint batch loop no longer runs.
+> UAT feedback tickets follow the per-ticket Mission Control contract: one `kind:code` +
+> `uat:<feedbackId>` task per ticket attempt in `BKT-UAT`, created by the portal and leased
+> by PLX Steward. Use the `uat-runner` skill and `PLX_MC/docs/modules/uat/README.md`.
+> UAT results are PASS, FAIL or unverified, never Verified. Kept for history only.
 
 Orchestrate **one week** of UAT Feedback session batches. Per-batch fix work
 belongs in **uat-feedback-batch-fix** (or paste

@@ -1,7 +1,7 @@
 ---
 name: uat-loop-invariants
 description: >-
-  Frozen pass/fail gates for the PLX UAT weekly session-batch loop (V0 week-list,
+  HISTORICAL (retired 2026-10-26; do not use for new UAT work, see uat-runner): Frozen pass/fail gates for the PLX UAT weekly session-batch loop (V0 week-list,
   V2 PR stamp, V4 mail, V5 smoke, V6 no agent-Verified, V9 week closeout) plus
   independent verify (fresh subagent, score > 8) and OUTPUT/MEMORY artifacts.
   Use before Vince approves the week list, before merge/email, and at week
@@ -9,6 +9,12 @@ description: >-
 ---
 
 # UAT Loop Invariants
+
+> **Historical (retired 2026-10-26).** The weekly SharePoint batch loop no longer runs.
+> UAT feedback tickets follow the per-ticket Mission Control contract: one `kind:code` +
+> `uat:<feedbackId>` task per ticket attempt in `BKT-UAT`, created by the portal and leased
+> by PLX Steward. Use the `uat-runner` skill and `PLX_MC/docs/modules/uat/README.md`.
+> UAT results are PASS, FAIL or unverified, never Verified. Kept for history only.
 
 Frozen validators for the weekly UAT batch loop. **Fail closed.** Do not weaken
 caps, URL rules, or Verified ownership to make a run look green.

@@ -21,6 +21,13 @@ SERVER_PRINCIPALS = REPO_ROOT / "src" / "lib" / "permissions" / "types.ts"
 CLIENT_SELECTOR = REPO_ROOT / "tools" / "plx-mc-mcp" / "lib" / "key-resolution.mjs"
 
 
+@pytest.fixture(autouse=True)
+def _no_host_mcp_principal(monkeypatch: pytest.MonkeyPatch) -> None:
+    # main() defaults --mcp-principal-id to MC_MCP_PRINCIPAL_ID; a coding box or
+    # cloud session sets it, so clear it for every test (TASK-3875).
+    monkeypatch.delenv("MC_MCP_PRINCIPAL_ID", raising=False)
+
+
 def _posix_mode(path: Path) -> int:
     if os.name == "nt":
         pytest.skip("Unix file mode is not meaningful on Windows")

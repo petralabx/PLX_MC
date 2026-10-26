@@ -276,4 +276,27 @@ test.describe("approvals decision desk", () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   });
+
+  // TASK-3559: gateLink() sends an approver straight to one gate.
+  test("a gate link opens that gate's sheet, not the first item in the queue", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await stubDesk(page);
+    await page.goto(`${approvalsInboxRoute.path}&gate=${GATE_ROW.gate.id}`);
+    await waitForHydration(page);
+    const screen = page.getByTestId(approvalsInboxRoute.testId);
+    const sheet = screen.getByTestId("decision-sheet");
+    await expect(sheet.getByTestId("approval-gate")).toBeVisible();
+    await expect(sheet.getByRole("heading", { name: GATE_ROW.gate.reason })).toBeVisible();
+  });
+
+  test("phone: a link to a gate that is not waiting shows the queue and says why", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await stubDesk(page);
+    await page.goto(`${approvalsInboxRoute.path}&gate=apg_gone`);
+    await waitForHydration(page);
+    const screen = page.getByTestId(approvalsInboxRoute.testId);
+    await expect(screen.getByText(/The linked gate is not waiting for a decision/)).toBeVisible();
+    await expect(screen.getByTestId("decision-queue")).toBeVisible();
+    await expect(screen.getByRole("button", { name: "Back to queue" })).toBeHidden();
+  });
 });

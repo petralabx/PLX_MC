@@ -12,7 +12,7 @@ panel and activity strip polled from `GET /api/in-flight`), **Insights**,
 **Skills Directory**, **Architecture**, **AI Spend**, and **Ask the Brain** — along with the ⌘K
 command palette, New Task / New Initiative / New Project modals, and
 PeoplePicker (Petra domain rule enforced in the UI). The screen registry
-(`src/components/mc/screens.tsx`) maps twenty-six `Screen` keys to components;
+(`src/components/mc/screens.tsx`) maps twenty-nine `Screen` keys to components;
 Board, List, Timeline, and My Tasks share `WorkViews`. State flows through the runtime store
 (`src/lib/mc-data/store.ts`) — since 2026-06-11 a client cache over the sync
 module's API: it hydrates from `GET /api/state` after mount (the signed-in
@@ -138,6 +138,11 @@ pixel-precisely in `docs/product/README.md` §6 and
   query-string route (`/?screen=task|project|bucket&…Id=…`); a malformed id goes
   home. MCP returns them as `link` from `taskLink`, `projectLink` and
   `bucketLink` (`src/lib/mcp/envelope.ts`).
+- Approvals and My tasks links (TASK-3559): `/?screen=approvals&gate=<apg_id>`
+  opens one gate (`gateLink` in `envelope.ts`; `questionLink` does the same
+  with `question=`), and `/?screen=my-tasks` is the stable name for My tasks
+  (screen `mine`). Neither names a person: the session decides whose approvals
+  and tasks show. Both survive the sign-in redirect, which keeps the query.
 - The screens live in `src/components/mc/`; they read the typed data layer in
   `src/lib/mc-data/` (faithful to `docs/product/DATA_MODEL.md`) whose store is
   now API-backed; fixtures remain the SSR/offline baseline. Each new screen is rebuilt

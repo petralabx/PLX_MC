@@ -787,15 +787,18 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   const [gates, setGates] = useState<ApprovalsLoad>({ status: "loading" });
   const [projects, setProjects] = useState<SourceLoad<ApprovalsProjectsResponse>>({ status: "idle" });
   const [decided, setDecided] = useState<SourceLoad<DecidedRow[]>>({ status: "idle" });
-  const [selected, setSelected] = useState<string | null>(route.question ?? null);
-  const [sheetOpen, setSheetOpen] = useState(!!route.question);
-  const [linkFor, setLinkFor] = useState(route.question);
+  // A link opens one item: a question (TASK-3567) or a gate (TASK-3559).
+  const linked = route.question ?? route.gate;
+  const [selected, setSelected] = useState<string | null>(linked ?? null);
+  const [sheetOpen, setSheetOpen] = useState(!!linked);
+  const [linkFor, setLinkFor] = useState(linked);
   const [notice, setNotice] = useState<{ title: string; body: string } | null>(null);
   const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
   const [noteError, setNoteError] = useState<{ id: string; message: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [draftMap, setDraftMap] = useState<Record<string, Draft>>(() => readDrafts());
-  const [answeredHere, setAnsweredHere] = useState<ReadonlySet<string>>(() => new Set());
+  // Answered or decided on this screen, so its link is not reported as not open.
+  const [settledHere, setSettledHere] = useState<ReadonlySet<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
 
   const wantProjects = useRef(false);
@@ -807,13 +810,13 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   const focusRow = useRef<string | null>(null);
   const scrolledTo = useRef<string | null>(null);
 
-  // A new question link while the screen is already open selects that question.
-  if (route.question !== linkFor) {
-    setLinkFor(route.question);
-    if (route.question) {
+  // A new link while the screen is already open selects that item.
+  if (linked !== linkFor) {
+    setLinkFor(linked);
+    if (linked) {
       setScope("me");
       setTab("all");
-      setSelected(route.question);
+      setSelected(linked);
       setSheetOpen(true);
     }
   }
@@ -927,11 +930,18 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
     decided: decided.status === "ready" ? decided.data.length : null,
   };
 
-  const missingLink =
+  const questionLinkGone =
     !!route.question &&
     questions.status === "ready" &&
     !questions.data.some((r) => r.question.id === route.question) &&
-    !answeredHere.has(route.question);
+    !settledHere.has(route.question);
+  const gateLinkGone =
+    !route.question &&
+    !!route.gate &&
+    gates.status === "ready" &&
+    !gates.data.some((r) => r.gate.id === route.gate) &&
+    !settledHere.has(route.gate);
+  const missingLink = questionLinkGone || gateLinkGone;
 
   // Ages and the reminder cooldown follow the clock while the screen stays open.
   useEffect(() => {
@@ -962,14 +972,17 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
     if (notice) noticeRef.current?.focus();
   }, [notice]);
 
-  // Scroll to a linked question once; later reloads leave the page where it is.
+  // Scroll to a linked question or gate once; later reloads leave the page where it is.
   useEffect(() => {
-    const id = route.question;
-    if (!id || scrolledTo.current === id || questions.status !== "ready") return;
-    if (!questions.data.some((r) => r.question.id === id)) return;
+    const id = route.question ?? route.gate;
+    if (!id || scrolledTo.current === id) return;
+    const listed = route.question
+      ? questions.status === "ready" && questions.data.some((r) => r.question.id === id)
+      : gates.status === "ready" && gates.data.some((r) => r.gate.id === id);
+    if (!listed) return;
     scrolledTo.current = id;
-    document.getElementById(questionAnchorId(id))?.scrollIntoView({ block: "center" });
-  }, [route.question, questions]);
+    document.getElementById(route.question ? questionAnchorId(id) : rowDomId(id))?.scrollIntoView({ block: "center" });
+  }, [route.question, route.gate, questions, gates]);
 
   // ── Actions ──
   const clearMessages = () => {
@@ -1046,6 +1059,7 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   const afterDecision = async (item: QueueItem, title: string, body: string) => {
     const nextId = nextAfterDecision(order, item.id);
     const nextItem = visible.find((i) => i.id === nextId) ?? null;
+    setSettledHere((prev) => new Set(prev).add(item.id));
     setSelected(nextId);
     setNotice({ title, body: `${body} ${nextUpText(nextItem)}` });
     await Promise.all([reloadAll(), refreshState()]);
@@ -1072,7 +1086,6 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
       return;
     }
     dropDraft(item.id);
-    setAnsweredHere((prev) => new Set(prev).add(item.id));
     setBusy(null);
     await afterDecision(item, `Answer posted to ${item.taskId}.`, "It is on the task as a comment from you.");
   };
@@ -1196,10 +1209,10 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
   };
   const people = waitingOnPeople(projItems, nameOf);
   const pos = curId ? order.indexOf(curId) + 1 : 0;
-  // A linked question that is not open stands in for nothing: while it is still
+  // A linked question or gate that is not open stands in for nothing: while it is still
   // the selection, a narrow layout shows the queue with the notice, never another
   // item's sheet. Picking a row selects that row and opens its sheet as usual.
-  const linkStandIn = missingLink && selected === route.question;
+  const linkStandIn = missingLink && selected === linked;
   const narrowView = cur ? (sheetOpen && !linkStandIn ? "sheet" : "queue") : "both";
   const itemError = (id: string) => (actionError?.id === id ? actionError.message : null);
   const empty = emptySheet({
@@ -1367,7 +1380,9 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
         </div>
         {missingLink ? (
           <div className="ap-empty" role="status">
-            The linked question is not open for you: it has an answer, or it was asked of someone else.
+            {gateLinkGone
+              ? "The linked gate is not waiting for a decision: it was decided, or it is on a project you cannot open."
+              : "The linked question is not open for you: it has an answer, or it was asked of someone else."}
           </div>
         ) : null}
         <ApprovalsStatus loads={sources} rowCount={visible.length} onRetry={retry} />

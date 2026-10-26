@@ -242,6 +242,9 @@ branch_hygiene:
     - "Delete branches immediately after PR merge or abandonment"
     - "Do not let multiple agents push to the same branch without coordination"
     - "File issues for code defects only — not for environment or toolchain problems"
+    - "Workstream protocol (Vince, 2026-10-26, TASK-3953): one workstream per branch and worktree. Flag any edit outside your workstream's scope before you make it. A one-PR change needs no workstream."
+    - "At session start, read your workstream's note, docs/workstreams/<slug>.md; the index in docs/workstreams/README.md maps branches to slugs. Before you end a session, and after any significant decision, update that note in the same branch (/handoff in Claude Code and Cursor; /resume-workstream picks it up)."
+    - "Change a workstream's index row (owner, branch, status, dependencies) only when it opens, closes or changes status. SharePoint Agent Handoffs/ stays the system of record for durable handoffs; the note is the agents' working copy, and SharePoint wins when they disagree."
 
 testing:
   rules:

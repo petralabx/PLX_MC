@@ -39,6 +39,7 @@ jobs:
           PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_BASE_REF: ${{ github.base_ref }}
           REPO_NAME: ${{ github.event.repository.name }}
           REPO_FULL_NAME: ${{ github.repository }}
@@ -79,6 +80,7 @@ jobs:
               PR_HEAD_SHA=$(printf '%s' "$pr" | jq -r '.head.sha // ""')
               PR_BODY=$(printf '%s' "$pr" | jq -r '.body // ""')
               PR_LABELS=$(printf '%s' "$pr" | jq -c '[(.labels // [])[].name]')
+              PR_AUTHOR=$(printf '%s' "$pr" | jq -r '.user.login // ""')
               changed=$(printf '%s' "$files" | jq -R -s 'split("\n") | map(select(length>0))')
             fi
           else
@@ -94,6 +96,43 @@ jobs:
               && [ -n "$pr" ]; then
               PR_BODY=$(printf '%s' "$pr" | jq -r '.body // ""')
               PR_LABELS=$(printf '%s' "$pr" | jq -c '[(.labels // [])[].name]')
+            fi
+          fi
+          # PR-drain (6): docs-only and Dependabot lockfile-only PRs post a passing
+          # `compliance` with a clear "skipped" verdict. The skip is inside the job, not
+          # a paths-ignore, so the required check always reports. Never skips when the
+          # file list is empty/unknown, or for any non-Markdown file (docs/** code and
+          # build inputs included). Agent/runtime instructions never count as docs:
+          # AGENTS*/CLAUDE*/CODEX*/GROK*/HERMES*/GEMINI*/COPILOT*.md (e.g. AGENTS.override.md),
+          # SKILL/SYSTEM/TOOLS/SOUL/IDENTITY/USER/HEARTBEAT/MEMORY/LESSONS.md, any
+          # *PROMPT*.md or *RUNBOOK*.md (e.g. docs/JBB_SYSTEM_PROMPT.md, copied into the
+          # live AGENTS.md by the runtime guard), and anything
+          # under .github/, .claude/, .cursor/, .codex/, .grok/, .agents/, .windsurf/,
+          # skills/, prompts/ or docs/training/ — at any depth, case-insensitive. Only
+          # *.md can skip, so *.mdc rules and .cursorrules never do. Renames are
+          # classified on BOTH paths (--no-renames; previous_filename in merge_group).
+          n_changed=$(printf '%s' "$changed" | jq 'length')
+          if [ "$n_changed" -gt 0 ] && [ "$n_changed" -lt 3000 ]; then
+            non_docs=$(printf '%s' "$changed" | jq '[.[] | select(
+                (test("\\.md$"; "i") and
+                 (test("(^|/)(\\.github|\\.claude|\\.cursor|\\.codex|\\.grok|\\.agents?|\\.windsurf|skills|prompts)/"; "i")
+                  or test("(^|/)docs/training/"; "i")
+                  or test("(^|/)(AGENTS|CLAUDE|CODEX|GROK|HERMES|GEMINI|COPILOT)[^/]*\\.md$"; "i")
+                  or test("(^|/)(SKILL|SYSTEM|TOOLS|SOUL|IDENTITY|USER|HEARTBEAT|MEMORY|LESSONS|copilot-instructions)\\.md$"; "i")
+                  or test("(^|/)[^/]*(PROMPT|RUNBOOK)[^/]*\\.md$"; "i") | not)) | not
+              )] | length')
+            non_lock=$(printf '%s' "$changed" | jq '[.[] | select(
+                test("(^|/)(package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock|poetry\\.lock|uv\\.lock|Cargo\\.lock|go\\.sum|Gemfile\\.lock|composer\\.lock|bun\\.lockb?)$") | not
+              )] | length')
+            if [ "$non_docs" -eq 0 ]; then
+              echo "verdict=pass (skipped: docs-only, ${n_changed} file(s))"
+              echo "Compliance gate: PASS — skipped: docs-only"
+              exit 0
+            fi
+            if [ "$non_lock" -eq 0 ] && [ "${PR_AUTHOR:-}" = "dependabot[bot]" ]; then
+              echo "verdict=pass (skipped: dependabot lockfile-only, ${n_changed} file(s))"
+              echo "Compliance gate: PASS — skipped: dependabot lockfile-only"
+              exit 0
             fi
           fi
           if [ "${GITHUB_EVENT_NAME:-}" = "merge_group" ] && [ -z "$PR_HEAD_SHA" ]; then

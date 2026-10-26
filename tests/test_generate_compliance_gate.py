@@ -165,7 +165,8 @@ def test_merge_group_adds_no_exit_and_no_skip():
 
         script = _gate_script(workflow)
 
-        assert script.count("exit 0") == 4, variant
+        # 4 original passes + 2 PR-drain (6) skips (docs-only, dependabot lockfile-only).
+        assert script.count("exit 0") == 6, variant
         assert script.count("exit 1") == 2, variant
         assert "continue-on-error" not in workflow
         assert "\n    if:" not in workflow
@@ -323,3 +324,66 @@ def test_gate_needs_no_checkout():
         assert "BODY_SOURCE: ${{ vars.COMPLIANCE_BODY_SOURCE || 'api' }}" in workflow, (
             variant
         )
+
+
+def test_docs_only_skip_posts_pass_and_guards_agent_files():
+    for variant in ("canonical", "downstream"):
+        script = _gate_script(_run("--emit", variant).stdout)
+        assert "Compliance gate: PASS — skipped: docs-only" in script
+        assert "Compliance gate: PASS — skipped: dependabot lockfile-only" in script
+        assert '"${PR_AUTHOR:-}" = "dependabot[bot]"' in script
+        assert "(AGENTS|CLAUDE|CODEX|GROK|HERMES|GEMINI|COPILOT)[^/]*" in script
+        assert "prompts" in script
+        assert "previous_filename" in _run("--emit", variant).stdout
+        assert '[ "$n_changed" -gt 0 ]' in script
+
+
+def _docs_only_filter(script: str) -> str:
+    import re
+
+    m = re.search(
+        r"non_docs=\$\(printf '%s' \"\$changed\" \| jq '(.*?)'\)", script, re.DOTALL
+    )
+    assert m, "docs-only jq filter not found"
+    return m.group(1)
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq not installed")
+def test_docs_only_skip_never_counts_agent_policy_files_as_docs():
+    docs = ["README.md", "docs/guide.md", "docs/a/b/Notes.MD"]
+    agent = [
+        "TOOLS.md",
+        "SOUL.md",
+        "CODEX.md",
+        "GROK.md",
+        "HERMES.md",
+        "AGENTS.override.md",
+        "AGENTS.md",
+        "CLAUDE.local.md",
+        "sub/dir/agents.md",
+        "deep/x/Soul.md",
+        "pkg/tools.MD",
+        "x/copilot-instructions.md",
+        ".cursor/rules/a.md",
+        "a/.Cursor/b.md",
+        "rules/a.mdc",
+        "skills/x/SKILL.md",
+        "docs/JBB_SYSTEM_PROMPT.md",
+        "docs/COSPLX_SYSTEM_PROMPT.md",
+        "a/b/review_prompt.MD",
+        "ops/Deploy-Runbook.md",
+        "a/Prompts/p.md",
+        "x/docs/training/t.md",
+        ".github/README.md",
+    ]
+    for variant in ("canonical", "downstream"):
+        jq_filter = _docs_only_filter(_gate_script(_run("--emit", variant).stdout))
+        for path in docs + agent:
+            out = subprocess.run(
+                ["jq", jq_filter],
+                input=json.dumps([path]),
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+            assert out == ("0" if path in docs else "1"), (variant, path, out)

@@ -89,20 +89,27 @@ top bar (TASK-3844) the workspace label is the PLX app switcher (Mission
 Control, MRP Suite, Admin portal, Customer portal), the mark alone below a
 900px bar, and the sync pill names what to resolve ("2 sync conflicts, 1
 error"). The switcher and the Admin & health popover share `use-flyout.ts`.
-Starred (TASK-3842) follows My work: copies of the screens, projects and
-initiatives the person starred, at most six, in the order starred, never the
-lit row. Screens carry their zoned label, and Board, List and Timeline are one
-All work star. The stars live on the server per person (`GET|PATCH
-/api/stars`, module `stars`), so they follow the person to every device. The
-top bar's star toggle stars the page; the
-icon rail shows one Starred button that opens the drawer, and the phone More
-sheet lists Starred first. Each change shows at once and goes to the server
-one at a time; a refused change is put back with a notice (`use-stars.ts`).
+Starred (TASK-3842; v2, TASK-3956) follows My work: copies of the screens,
+reports, projects and initiatives the person starred, at most 10, in their
+order, never the lit row. Its heading counts them ("3 / 10"). Each copy shows
+its kind's icon and the digit g opens it with (1 to 9, then 0); a closed,
+archived or deleted one is marked and keeps its slot until removed, and an
+eleventh star is refused. Screens carry their zoned label, and Board, List and
+Timeline are one All work star. The stars live on the server per person
+(`GET|PATCH /api/stars`, module `stars`), so they follow the person to every
+device. Every sidebar row has a star in its action column, out of the Tab
+order and shown on hover and focus (always on touch); Shift S stars the
+focused row, else the page, and the top bar's star toggle stars the page. Drag
+a copy by its grip, or press Alt with ↑ or ↓ on it, to move it. The icon rail
+shows one Starred button that opens the drawer, and the phone More sheet lists
+Starred first. Each change shows at once and goes to the server one at a time;
+a refused change is put back with a notice (`use-stars.ts`).
 The nav flags live in `nav-flags.ts`. In the zoned shell the ⌘K palette
 (TASK-3853) opens on **Recent**, the last 8 screens, projects, initiatives and
 tasks opened in this browser, newest first and without the page under the
-palette, then **Starred**, each star with its key: g 1 to g 6 open the first
-six stars from anywhere. Typing searches every group, as before. The palette
+palette, then **Starred**, each star with its key (g then its digit opens it
+from anywhere), closed by Star or Unstar this page and Edit starred, which
+focuses the first copy. Typing searches every group, as before. The palette
 also offers Go to Projects there. Recents stay in this browser
 (`createRecents` in `nav-model.ts`, localStorage `mc.nav.recents`).
 
@@ -187,7 +194,7 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/top-bar.tsx` — top bar (slots per tier, workspace label or the zoned PLX app switcher, the page's star toggle, sync pill)
 - `src/components/mc/use-stars.ts` — the person's stars: load (and refresh on focus), each change at once then one at a time to the server, a refused one put back with a notice
 - `src/components/mc/nav-flags.ts` — the feature flags that gate nav items
-- `src/components/mc/star-toggle.tsx` — the star toggle (top bar, Projects rows)
+- `src/components/mc/star-toggle.tsx` — the star toggle (top bar, sidebar rows)
 - `src/components/mc/use-flyout.ts` — a shell control's flyout: top-layer popover, placement, Esc, close on blur, navigating or resize
 - `src/components/mc/bottom-tabs.tsx` — phone tabs (with tab memory; the zoned set when the flag is on), group strip, New-task FAB
 - `src/components/mc/more-sheet.tsx` — phone More sheet (Starred, Admin & health, All screens, appearance)

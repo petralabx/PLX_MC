@@ -110,8 +110,11 @@ export function MoreSheet({
                     onClose();
                   }}
                 >
-                  {row.lucide ? <NavIcon name={row.lucide} /> : <span className={`hl ${row.health}`} aria-hidden="true" />}
-                  <span className="nm">{row.label}</span>
+                  <NavIcon name={row.lucide} />
+                  <span className="nm">
+                    {row.label}
+                    {row.mark ? ` · ${row.mark === "gone" ? "deleted" : row.mark}` : null}
+                  </span>
                 </a>
               ))}
             </div>

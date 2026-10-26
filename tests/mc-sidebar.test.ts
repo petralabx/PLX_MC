@@ -207,7 +207,9 @@ describe("Sidebar — zoned", () => {
     expect(html).not.toContain("mc-nav-h-projects");
     expect(html).toContain('href="/?screen=project&amp;projectId=PRJ-PORTAL-GOLIVE" class="item"');
     // The link says whether it is open too: → and ← open it with focus on the link.
-    expect(html).toContain('data-tree-key="project:PRJ-PORTAL-GOLIVE" data-tree-open="false" tabindex="-1" aria-expanded="false" href=');
+    expect(html).toContain(
+      'data-tree-key="project:PRJ-PORTAL-GOLIVE" data-tree-open="false" tabindex="-1" aria-expanded="false" data-star-key="project:PRJ-PORTAL-GOLIVE" href='
+    );
     expect(html).toContain(
       'aria-expanded="false" aria-controls="mc-nav-tree-PRJ-PORTAL-GOLIVE" aria-label="Initiatives in PLX Portal Go-Live"'
     );

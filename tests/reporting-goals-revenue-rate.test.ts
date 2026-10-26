@@ -212,9 +212,9 @@ describe("revenue at the Sage rate (TASK-3780)", () => {
 
   it("names the rate it shows on the Revenue card and in the rules", () => {
     expect(text(html(GoalCards, { page: SAGE }))).toContain(
-      "CAD $121,838 (57 invoices) + USD US$172,429 (13 invoices) = $215,536 at 1.25 (Sage rate)"
+      "CAD $121,838 (57 invoices) + USD US$172,429 (13 invoices, $215,536 at 1.25 (Sage rate)) + $37,188 entered by hand = $374,561, charges included"
     );
-    expect(text(html(GoalCards, { page: BOC }))).toContain("= $245,176 at 1.4219 (Bank of Canada, Oct 13)");
+    expect(text(html(GoalCards, { page: BOC }))).toContain("$245,176 at 1.4219 (Bank of Canada, Oct 13))");
     const rules = text(html(RulesText, { page: SAGE }));
     expect(rules).toContain("US dollars are converted at the fixed Sage rate 1.25, or at the Bank of Canada rate with the switch above the cards");
     expect(rules).toContain("at the Bank of Canada rate, whichever rate the revenue is shown at");

@@ -2,7 +2,10 @@
 // liquid sales"): the Revenue card's month with chosen customer classes left
 // out, read from revenueByClass so it adds up with the class table to the cent.
 // At scope=mfg the card's headline, status and pace read this figure; the
-// goal stays the same monthly target (TASK-3934). Pure.
+// goal stays the same monthly target (TASK-3934). Freight and other charges
+// (Sage line type 2, an entry's freight) never count toward the goal
+// (TASK-3952): goalCadCents leaves them out and progress, status and pace read
+// it. Pure.
 
 import type { CustomerClass } from "./forecast-list";
 import { prorateCents } from "./money";
@@ -20,9 +23,15 @@ export const SCOPE_EXCLUDES: Record<RevenueScope, readonly CustomerClass[]> = {
 export interface RevenueScopeView {
   scope: RevenueScope;
   excluded: readonly CustomerClass[];
-  /** CAD cents for the classes in scope. */
+  /** CAD cents for the classes in scope, charges included (the class table's figure). */
   totalCadCents: number;
-  /** CAD cents left out. */
+  /** Of totalCadCents, freight and other charges: left out of the goal. */
+  chargesCadCents: number;
+  /** totalCadCents less chargesCadCents: what counts toward the goal (the card's headline). */
+  goalCadCents: number;
+  /** Of goalCadCents, shipments entered by hand (their product value; freight is in chargesCadCents). */
+  byHandGoalCadCents: number;
+  /** CAD cents of the classes left out, their charges included. */
   excludedCadCents: number;
   /** Of the monthly target; null when the target isn't positive. */
   progress: number | null;
@@ -49,20 +58,31 @@ export function revenueScope(
   const excluded = SCOPE_EXCLUDES[scope];
   let totalCadCents = 0;
   let excludedCadCents = 0;
+  let chargesCadCents = 0;
+  let byHandGoalCadCents = 0;
   for (const row of byClass.rows) {
-    if (excluded.includes(row.customerClass)) excludedCadCents += row.totalCadCents;
-    else totalCadCents += row.totalCadCents;
+    if (excluded.includes(row.customerClass)) {
+      excludedCadCents += row.totalCadCents;
+      continue;
+    }
+    totalCadCents += row.totalCadCents;
+    chargesCadCents += row.charges.totalCadCents;
+    byHandGoalCadCents += row.byHand.cadCents - row.charges.byHandCadCents;
   }
+  const goalCadCents = totalCadCents - chargesCadCents;
   return {
     scope,
     excluded,
     totalCadCents,
+    chargesCadCents,
+    goalCadCents,
+    byHandGoalCadCents,
     excludedCadCents,
-    progress: targetCents > 0 ? totalCadCents / targetCents : null,
-    status: pace ? (totalCadCents >= pace.dueSoFarCents ? "on_track" : "behind") : null,
+    progress: targetCents > 0 ? goalCadCents / targetCents : null,
+    status: pace ? (goalCadCents >= pace.dueSoFarCents ? "on_track" : "behind") : null,
     neededPerDayCents: pace
       ? pace.remaining > 0
-        ? prorateCents(Math.max(0, targetCents - totalCadCents), 1, pace.remaining)
+        ? prorateCents(Math.max(0, targetCents - goalCadCents), 1, pace.remaining)
         : 0
       : null,
     matchesCard: byClass.matchesCard,

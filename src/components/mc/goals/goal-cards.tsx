@@ -97,9 +97,11 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
   const tlSource = sourceText(run, sections.truckloads);
   const revSource = sourceText(run, sections.revenue);
   // At scope=mfg the headline, status and pace follow manufacturing customers; the goal stays the same target (TASK-3934).
-  const revTotal = mfg ? mfg.totalCadCents : rev.totalCents;
-  const revStatus = mfg ? (mfg.status ?? rev.status) : rev.status;
-  const revNeeded = mfg ? (mfg.neededPerDayCents ?? rev.neededPerDayCents) : rev.neededPerDayCents;
+  // Freight and other charges never count toward the goal (TASK-3952): the headline is the scope's goalCadCents.
+  const goal = mfg ?? page.revenueGoal;
+  const revTotal = goal ? goal.goalCadCents : rev.totalCents;
+  const revStatus = goal ? (goal.status ?? rev.status) : rev.status;
+  const revNeeded = goal ? (goal.neededPerDayCents ?? rev.neededPerDayCents) : rev.neededPerDayCents;
   const scheduled = Math.max(0, l1.ifAllRunKg - l1.totalKg);
   const fullScale = Math.max(tl.lastMonth.full, tl.full.total, 1);
   // The rate the figures are at: the run's Bank of Canada rate, or the fixed Sage rate (TASK-3780).
@@ -179,17 +181,30 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
         id="revenue"
         title="Revenue"
         status={revStatus}
-        definition={`Invoiced in CAD, product and charges before tax${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
+        definition={`Invoiced in CAD, product before tax (freight and other charges left out)${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
         big={dollars(revTotal)}
         of={`of ${dollars(rev.targetCents)}`}
         source={revSource}
       >
         {mfg ? (
           <p className="gp-split" title={revSource} data-testid="goals-revenue-mfg">
-            + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out = {dollars(mfg.totalCadCents + mfg.excludedCadCents)} all
-            customers
+            + {dollars(mfg.chargesCadCents)} freight &amp; other charges + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out ={" "}
+            {dollars(mfg.totalCadCents + mfg.excludedCadCents)} all customers, charges included
             {mfg.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the class table until the next one"}
           </p>
+        ) : goal ? (
+          <>
+            <Split
+              system={`${dollars(goal.goalCadCents - goal.byHandGoalCadCents)} in Sage`}
+              byHand={`${dollars(goal.byHandGoalCadCents)} entered by hand`}
+              hasHand={goal.byHandGoalCadCents !== 0}
+              title={revSource}
+            />
+            <p className="gp-split" title={revSource} data-testid="goals-revenue-charges">
+              + {dollars(goal.chargesCadCents)} freight &amp; other charges left out = {dollars(goal.totalCadCents)} invoiced
+              {goal.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the card until the next one"}
+            </p>
+          </>
         ) : (
           <Split
             system={`${dollars(rev.inSystemCents)} in Sage`}
@@ -201,7 +216,14 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
         <Bar
           parts={
             mfg
-              ? barParts({ inSystem: mfg.totalCadCents, byHand: 0, scale: rev.targetCents, tickAt: rev.dueSoFarCents })
+              ? barParts({ inSystem: mfg.goalCadCents, byHand: 0, scale: rev.targetCents, tickAt: rev.dueSoFarCents })
+              : goal
+              ? barParts({
+                  inSystem: goal.goalCadCents - goal.byHandGoalCadCents,
+                  byHand: goal.byHandGoalCadCents,
+                  scale: rev.targetCents,
+                  tickAt: rev.dueSoFarCents,
+                })
               : barParts({ inSystem: rev.inSystemCents, byHand: rev.byHandCents, scale: rev.targetCents, tickAt: rev.dueSoFarCents })
           }
           tickLabel={`Due so far: ${dollars(rev.dueSoFarCents)}`}
@@ -213,9 +235,11 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
           <li>
             Needed per working day: <b>{dollars(revNeeded)}</b>
           </li>
-          <li>
-            CAD {dollars(rev.cad.cents)} ({count(rev.cad.invoices)} invoices) + USD {usd(rev.usd.cents)} (
-            {count(rev.usd.invoices)} invoices) = {dollars(rev.usd.cadCents)} at {rateText}
+          <li data-testid="goals-revenue-currency">
+            {/* Adds up to the all-in total (TASK-3952): before, the figure after "=" was only the USD converted. */}
+            CAD {dollars(rev.cad.cents)} ({count(rev.cad.invoices)} invoices) + USD {usd(rev.usd.cents)} ({count(rev.usd.invoices)}{" "}
+            invoices, {dollars(rev.usd.cadCents)} at {rateText})
+            {rev.byHandCents !== 0 ? ` + ${dollars(rev.byHandCents)} entered by hand` : ""} = {dollars(rev.totalCents)}, charges included
           </li>
           {rev.otherCurrencies.length > 0 ? (
             <li>

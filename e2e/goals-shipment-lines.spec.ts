@@ -125,7 +125,7 @@ test.describe("goals shipment lines", () => {
     expect(api.linesFetched()).toBe(0);
     // Everything else is there.
     await expect(list(page).locator("tbody tr:not(.gp-lines-row)")).toHaveCount(72);
-    await expect(page.getByTestId("goals-card-revenue")).toContainText("$408,628 of $1,000,000");
+    await expect(page.getByTestId("goals-card-revenue")).toContainText("$390,827 of $1,000,000");
   });
 
   test("a failed fetch says so in place, and Retry loads the lines", async ({ page }) => {

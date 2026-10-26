@@ -976,7 +976,7 @@ const CLASS_HEADER_ROW = 4;
 function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   const { model } = input;
   const data = input.revenueByClass ?? null;
-  columns(ws, [26, 12, 16, 18, 16, 18, 16, 10]);
+  columns(ws, [26, 12, 16, 18, 16, 18, 16, 10, 20, 18]);
   put(ws, 1, 1, `Revenue by customer class — ${model.month.label}`, { title: true });
   if (!data) {
     put(ws, 2, 1, "Revenue by customer class isn’t in this export.", { note: true });
@@ -1000,6 +1000,8 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     { text: "Revenue by hand, CAD", amber: true },
     { text: "Total, CAD" },
     { text: "Share" },
+    { text: "Freight & other charges, CAD" },
+    { text: "Toward the goal, CAD" },
   ]);
   freeze(ws, CLASS_HEADER_ROW);
   const first = CLASS_HEADER_ROW + 1;
@@ -1013,7 +1015,10 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     put(ws, r, 5, dollars(c.usd.cadCents), { numFmt: AMOUNT_FORMAT });
     put(ws, r, 6, dollars(c.byHand.cadCents), { numFmt: AMOUNT_FORMAT, amber: true });
     put(ws, r, 7, { formula: `C${r}+E${r}+F${r}` }, { numFmt: AMOUNT_FORMAT, bold: true });
-    put(ws, r, 8, { formula: `IF($G$${total}>0,G${r}/$G$${total},"")` }, { numFmt: PERCENT_FORMAT });
+    put(ws, r, 8, { formula: `IF($G${total}>0,G${r}/$G${total},"")` }, { numFmt: PERCENT_FORMAT });
+    // TASK-3952: charges are inside Total; the goal counts Total less them.
+    put(ws, r, 9, dollars(c.charges.totalCadCents), { numFmt: AMOUNT_FORMAT });
+    put(ws, r, 10, { formula: `G${r}-I${r}` }, { numFmt: AMOUNT_FORMAT, bold: true });
   });
   put(ws, total, 1, "All classes", { bold: true });
   for (let col = 2; col <= 7; col += 1) {
@@ -1024,10 +1029,16 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
       amber: col === 6,
     });
   }
+  for (const col of [9, 10]) {
+    const letter = ws.getColumn(col).letter;
+    put(ws, total, col, { formula: `SUM(${letter}${first}:${letter}${total - 1})` }, { numFmt: AMOUNT_FORMAT, bold: true });
+  }
   // Manufacturing customers (the page's `scope=mfg` line): every class but Exclusive Distribution, as a formula on the rows above.
   const distribution = data.rows.findIndex((c) => c.customerClass === "Exclusive Distribution");
   put(ws, total + 1, 1, "Manufacturing customers (all but Exclusive Distribution)");
   put(ws, total + 1, 7, { formula: distribution >= 0 ? `G${total}-G${first + distribution}` : `G${total}` }, { numFmt: AMOUNT_FORMAT });
+  put(ws, total + 1, 9, { formula: distribution >= 0 ? `I${total}-I${first + distribution}` : `I${total}` }, { numFmt: AMOUNT_FORMAT });
+  put(ws, total + 1, 10, { formula: `G${total + 1}-I${total + 1}` }, { numFmt: AMOUNT_FORMAT });
   let r = total + 2;
   // The card as the page shows it, which the table checks itself against (Goals!G8 adds up the Daily sheet instead).
   put(ws, r, 1, "Revenue card (on the page)");
@@ -1038,6 +1049,9 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
   const notes = [
     "USD is converted once for the month, as on the Revenue card, then shared across the classes by largest remainder, so a " +
       "class can be a cent off its own USD converted alone.",
+    "Freight & other charges are each invoice's other charges (Sage line type 2, such as freight, lab and service charges) " +
+      "and the freight of shipments entered by hand. They are inside Total and left out of the goal: the Revenue card's " +
+      "headline is Toward the goal. The Shipment lines sheet lists each charge line.",
   ];
   if (data.unresolvedByHand.entries > 0) {
     notes.push(

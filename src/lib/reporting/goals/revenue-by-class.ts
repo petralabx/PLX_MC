@@ -9,7 +9,7 @@
 
 import { customerClassOf } from "./forecast";
 import { CUSTOMER_CLASSES, type CustomerClass } from "./forecast-list";
-import { allocateConvertedCents } from "./money";
+import { allocateConvertedCents, convertCents } from "./money";
 import { truckloadCustomerFor, type GoalsModel } from "./rules";
 import type { ShipmentListRow } from "./shipment-list";
 import type { FtlCustomer } from "./types";
@@ -26,6 +26,13 @@ export interface ClassRevenueTotals {
   byHand: { entries: number; cadCents: number };
   /** cad + usd.cadCents + byHand. */
   totalCadCents: number;
+  /**
+   * Freight and other charges inside totalCadCents (TASK-3952): a Sage invoice's
+   * other charges (invmisc, the sum of its line type 2 lines) and an entry's
+   * freight. CAD as invoiced; USD converted once for the month and shared by
+   * largest remainder, as usd.cadCents is; by hand at the revenue rate.
+   */
+  charges: { cadCents: number; usdCents: number; usdCadCents: number; byHandCadCents: number; totalCadCents: number };
 }
 
 export interface ClassRevenueRow extends ClassRevenueTotals {
@@ -59,6 +66,7 @@ function emptyTotals(): ClassRevenueTotals {
     otherCurrencies: [],
     byHand: { entries: 0, cadCents: 0 },
     totalCadCents: 0,
+    charges: { cadCents: 0, usdCents: 0, usdCadCents: 0, byHandCadCents: 0, totalCadCents: 0 },
   };
 }
 
@@ -95,6 +103,7 @@ export function revenueByClass(
     if (row.source === "By hand") {
       sum.byHand.entries += 1;
       sum.byHand.cadCents += row.cadCents;
+      sum.charges.byHandCadCents += row.currency === "USD" ? convertCents(row.otherCents, model.revenue.rate) : row.otherCents;
       if (!resolved) {
         unresolvedByHand.entries += 1;
         unresolvedByHand.cadCents += row.cadCents;
@@ -105,9 +114,11 @@ export function revenueByClass(
     if (row.currency === "CAD") {
       sum.cad.invoices += 1;
       sum.cad.cents += row.netCents;
+      sum.charges.cadCents += row.otherCents;
     } else if (row.currency === "USD") {
       sum.usd.invoices += 1;
       sum.usd.cents += row.netCents;
+      sum.charges.usdCents += row.otherCents;
     } else {
       addOther(sum.otherCurrencies, row.currency, 1, row.netCents);
     }
@@ -118,8 +129,14 @@ export function revenueByClass(
     classes.map((c) => c.usd.cents),
     model.revenue.rate
   );
+  const chargesUsdCad = allocateConvertedCents(
+    classes.map((c) => c.charges.usdCents),
+    model.revenue.rate
+  );
   classes.forEach((c, i) => {
     c.usd.cadCents = usdCad[i];
+    c.charges.usdCadCents = chargesUsdCad[i];
+    c.charges.totalCadCents = c.charges.cadCents + c.charges.usdCadCents + c.charges.byHandCadCents;
     c.otherCurrencies.sort(byCurrency);
     c.totalCadCents = c.cad.cents + c.usd.cadCents + c.byHand.cadCents;
   });
@@ -135,6 +152,11 @@ export function revenueByClass(
     total.byHand.entries += c.byHand.entries;
     total.byHand.cadCents += c.byHand.cadCents;
     total.totalCadCents += c.totalCadCents;
+    total.charges.cadCents += c.charges.cadCents;
+    total.charges.usdCents += c.charges.usdCents;
+    total.charges.usdCadCents += c.charges.usdCadCents;
+    total.charges.byHandCadCents += c.charges.byHandCadCents;
+    total.charges.totalCadCents += c.charges.totalCadCents;
     for (const o of c.otherCurrencies) addOther(total.otherCurrencies, o.currency, o.invoices, o.cents);
   }
   total.otherCurrencies.sort(byCurrency);

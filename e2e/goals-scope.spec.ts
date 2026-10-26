@@ -25,21 +25,40 @@ test.describe("goals customer scope", () => {
     await expect(all(page)).toHaveAttribute("aria-pressed", "true");
     await expect(mfgLine(page)).toHaveCount(0);
     const total = scoped!.totalCadCents + scoped!.excludedCadCents;
-    await expect(headline(page)).toHaveText(formatDollars(goalsPage().model!.revenue.totalCents));
+    await expect(headline(page)).toHaveText(formatDollars(goalsPage().revenueGoal!.goalCadCents));
     const goal = await page.getByTestId("goals-card-revenue").locator(".gp-big .of").textContent();
 
     await mfg(page).click();
     await expect(page).toHaveURL(/[?&]scope=mfg\b/);
     await expect(mfg(page)).toHaveAttribute("aria-pressed", "true");
-    await expect(headline(page)).toHaveText(formatDollars(scoped!.totalCadCents));
-    await expect(mfgLine(page)).toContainText(`+ ${formatDollars(scoped!.excludedCadCents)} Exclusive Distribution left out`);
+    await expect(headline(page)).toHaveText(formatDollars(scoped!.goalCadCents));
+    await expect(mfgLine(page)).toContainText(
+      `+ ${formatDollars(scoped!.chargesCadCents)} freight & other charges + ${formatDollars(scoped!.excludedCadCents)} Exclusive Distribution left out`
+    );
     await expect(mfgLine(page)).toContainText(`= ${formatDollars(total)} all`);
     await expect(page.getByTestId("goals-card-revenue").locator(".gp-big .of")).toHaveText(goal!);
+
+    await expect(page.getByTestId("goals-revenue-charges")).toHaveCount(0);
 
     await all(page).click();
     await expect(page).not.toHaveURL(/scope=mfg/);
     await expect(mfgLine(page)).toHaveCount(0);
-    await expect(headline(page)).toHaveText(formatDollars(goalsPage().model!.revenue.totalCents));
+    await expect(headline(page)).toHaveText(formatDollars(goalsPage().revenueGoal!.goalCadCents));
+  });
+
+  test("freight & other charges are out of the headline, and the currency line adds up to the all-in total (TASK-3952)", async ({ page }) => {
+    const p = goalsPage();
+    const goal = p.revenueGoal!;
+    const rev = p.model!.revenue;
+    await mockGoalsApi(page);
+    await gotoGoals(page);
+    await expect(headline(page)).toHaveText(formatDollars(goal.goalCadCents));
+    const charges = page.getByTestId("goals-revenue-charges");
+    await expect(charges).toContainText(`+ ${formatDollars(goal.chargesCadCents)} freight & other charges left out`);
+    await expect(charges).toContainText(`= ${formatDollars(rev.totalCents)} invoiced`);
+    const currency = page.getByTestId("goals-revenue-currency");
+    await expect(currency).toContainText(`= ${formatDollars(rev.totalCents)}, charges included`);
+    expect(rev.cad.cents + rev.usd.cadCents + rev.byHandCents).toBe(rev.totalCents);
   });
 
   test("a scope=mfg link keeps the Sage rate when the rate changes", async ({ page }) => {

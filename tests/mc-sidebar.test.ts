@@ -136,7 +136,7 @@ describe("Sidebar — zoned", () => {
     expect(html).not.toContain("mc-nav-h-admin");
     // HTML attribute names are case-insensitive: React writes popoverTarget.
     expect(html).toMatch(
-      /<div class="side-foot"><button type="button" class="item foot-toggle" title="Admin &amp; health" popovertarget="mc-nav-admin-flyout" aria-controls="mc-nav-admin-flyout" aria-expanded="false">/i
+      /<div class="side-foot"><button type="button" class="item foot-toggle" data-tree-key="admin" tabindex="-1" title="Admin &amp; health" popovertarget="mc-nav-admin-flyout" aria-controls="mc-nav-admin-flyout" aria-expanded="false">/i
     );
     expect(html).toContain('href="/?screen=help" class="item" title="Help and shortcuts"');
   });
@@ -189,29 +189,43 @@ describe("Sidebar — zoned", () => {
 
   it("carries the sync count on the toggle, so a closed flyout still shows it", () => {
     const html = render({ screen: "home" }, { sync: { n: 2, exact: true, tone: "warn" } });
-    const badge = '<span class="badge warn"><span aria-hidden="true">2</span><span class="vh">, 2</span></span>';
+    // The sidebar shows a figure in the count column (portal ADR-011 v2,
+    // Counts), then the › of a row that opens a flyout; the flyout keeps its badge.
+    const figure = '<span class="cnt warn"><span aria-hidden="true">2</span><span class="vh">, 2</span></span>';
     const start = html.indexOf('class="item foot-toggle"');
-    expect(html.slice(start, html.indexOf("</button>", start))).toContain(`Admin &amp; health</span>${badge}`);
-    expect(flyout(html)).toContain(badge);
+    expect(html.slice(start, html.indexOf("</button>", start))).toMatch(
+      new RegExp(`Admin &amp; health</span>${figure}<svg[^>]*class="lucide lucide-chevron-right act"`)
+    );
+    expect(flyout(html)).toContain('<span class="badge warn"><span aria-hidden="true">2</span><span class="vh">, 2</span></span>');
   });
 
-  // TASK-3841: initiatives sit under their project in a capped tree.
+  // TASK-3841: initiatives sit under their project in the tree.
   it("nests initiatives under their project, collapsed until that project is open", () => {
     const html = nav(render({ screen: "home" }));
     expect(html).toContain('<div class="tree" role="group" aria-label="Projects">');
     expect(html).toContain('href="/?screen=projects" class="item" title="Projects"');
     expect(html).not.toContain("mc-nav-h-projects");
     expect(html).toContain('href="/?screen=project&amp;projectId=PRJ-PORTAL-GOLIVE" class="item"');
+    // The link says whether it is open too: → and ← open it with focus on the link.
+    expect(html).toContain('data-tree-key="project:PRJ-PORTAL-GOLIVE" data-tree-open="false" tabindex="-1" aria-expanded="false" href=');
     expect(html).toContain(
       'aria-expanded="false" aria-controls="mc-nav-tree-PRJ-PORTAL-GOLIVE" aria-label="Initiatives in PLX Portal Go-Live"'
     );
     expect(html).toContain('<div id="mc-nav-tree-PRJ-PORTAL-GOLIVE" class="tree-kids" hidden="">');
-    // Nothing is left out, so there is no View all row.
     expect(html).not.toContain("View all");
-    expect(html).toMatch(/New project.*New initiative/);
+    // One + on the Projects row, out of the Tab order, opens New project or
+    // New initiative (portal ADR-011 v2, Lists 4).
+    expect(html).not.toContain("side-new-initiative");
+    expect(html).toContain(
+      '<button type="button" class="row-act" tabindex="-1" title="New project or initiative" aria-label="New project or initiative" popoverTarget="mc-nav-new-menu" aria-controls="mc-nav-new-menu" aria-expanded="false" data-tree-menu-for="screen:projects">'
+    );
+    const full = render({ screen: "home" });
+    const menu = full.slice(full.indexOf('<div id="mc-nav-new-menu"'));
+    expect(menu).toMatch(/^<div id="mc-nav-new-menu" popover="auto" class="mc-flyout drop new-menu" role="group" aria-label="New">/);
+    expect(menu).toMatch(/New project.*New initiative/);
   });
 
-  it("caps the tree at six projects, keeps the current one in, and leaves closed and archived out", async () => {
+  it("lists every active project A to Z, then a Closed row; archived ones never show", async () => {
     const [project] = allProjects();
     const [bucket] = allBuckets();
     const projects = Array.from({ length: 8 }, (_, i) => ({ ...project, id: `PRJ-${i + 1}`, name: `Project ${i + 1}` }));
@@ -232,16 +246,84 @@ describe("Sidebar — zoned", () => {
       buckets: [{ ...bucket, id: "BKT-8", name: "Eighth work", project: "PRJ-8" }],
     }));
     await hydrate();
-    const rows = (html: string) => [...html.matchAll(/projectId=(PRJ-[^"&]+)" class="item/g)].map((m) => m[1]);
+    const rows = (html: string) => [...html.matchAll(/data-tree-key="project:(PRJ-[^"]+)"/g)].map((m) => m[1]);
     const home = nav(render({ screen: "home" }));
-    expect(rows(home)).toEqual(["PRJ-1", "PRJ-2", "PRJ-3", "PRJ-4", "PRJ-5", "PRJ-6"]);
-    expect(home).toContain('<span class="nm">View all 8 projects</span>');
-    expect(home).not.toMatch(/Done project|Archived project/);
-    // The current project, beyond the cap, takes the last row and opens.
+    expect(rows(home)).toEqual(["PRJ-1", "PRJ-2", "PRJ-3", "PRJ-4", "PRJ-5", "PRJ-6", "PRJ-7", "PRJ-8"]);
+    expect(home).not.toContain("View all");
+    expect(home).not.toContain("Archived project");
+    // Closed (1), collapsed; its project is a muted leaf under it.
+    expect(home).toContain(
+      '<button type="button" class="item" data-tree-key="closed" data-tree-open="false" tabindex="-1" data-tree-toggles="closed" aria-expanded="false" aria-controls="mc-nav-closed">'
+    );
+    expect(home).toMatch(/<span class="nm">Closed<\/span><span class="cnt"><span aria-hidden="true">1<\/span><span class="vh">, (<!-- -->)?1(<!-- -->)? project/);
+    expect(home).toContain('<div id="mc-nav-closed" class="tree-kids" hidden="">');
+    expect(home).toContain('data-tree-key="closed:PRJ-DONE" data-tree-parent="closed"');
+    // The open initiative's project opens; a closed project opens the Closed row.
     const initiative = nav(render({ screen: "bucket", bucketId: "BKT-8" }));
-    expect(rows(initiative)).toEqual(["PRJ-1", "PRJ-2", "PRJ-3", "PRJ-4", "PRJ-5", "PRJ-8"]);
     expect(initiative).toContain('aria-expanded="true" aria-controls="mc-nav-tree-PRJ-8"');
     expect(initiative).toContain('href="/?screen=bucket&amp;bucketId=BKT-8" class="item active" aria-current="page"');
+    const closed = nav(render({ screen: "project", projectId: "PRJ-DONE" }));
+    expect(closed).toContain('<div id="mc-nav-closed" class="tree-kids">');
+    expect(closed).toContain('href="/?screen=project&amp;projectId=PRJ-DONE" class="item active" aria-current="page"');
+  });
+
+  // TASK-3955: counts are figures in the count column (portal ADR-011 v2, Counts).
+  it("shows counts as figures: an action count, open tasks, at risk; zero and unknown show nothing", async () => {
+    const [project] = allProjects();
+    const [bucket] = allBuckets();
+    const [first] = allTasks();
+    __setStateLoaderForTests(async () => ({
+      tasks: [
+        { ...first, id: "T-1", bucket: "BKT-A", stage: "approved" as const },
+        { ...first, id: "T-2", bucket: "BKT-A", stage: "verified" as const },
+      ],
+      risks: [],
+      files: [],
+      conflicts: openConflicts(),
+      errors: openErrors(),
+      audit: [],
+      counts: {},
+      lastSweep: "2026.10.24 · 12:00",
+      projects: [
+        { ...project, id: "PRJ-A", name: "Alpha", health: "risk" as const },
+        { ...project, id: "PRJ-B", name: "Beta", health: "track" as const },
+        { ...project, id: "PRJ-C", name: "Gamma", health: "off" as const },
+      ],
+      buckets: [{ ...bucket, id: "BKT-A", name: "Alpha work", project: "PRJ-A", health: "track" as const }],
+    }));
+    await hydrate();
+    const html = nav(
+      render({ screen: "project", projectId: "PRJ-A" }, { needs: { n: 3, exact: false }, approvals: { n: null, exact: false } })
+    );
+    expect(html).toContain(
+      '<span class="nm">Home</span><span class="cnt acc"><span aria-hidden="true">3+</span><span class="vh">, at least 3</span></span>'
+    );
+    // Unknown shows nothing, no dash.
+    expect(html).toMatch(/<span class="nm">Approvals<\/span><\/a>/);
+    expect(html).not.toContain("—");
+    expect(html).toMatch(
+      /<span class="nm">Alpha<\/span><span class="cnt tasks risk"><span class="sq" aria-hidden="true"><\/span><span aria-hidden="true">1<\/span><span class="vh">, (<!-- -->)?at risk, 1 open task<\/span><\/span>/
+    );
+    expect(html).toContain('<span class="nm">Beta</span></a>');
+    // Off track has its own colour class, apart from at risk, and says so.
+    expect(html).toMatch(
+      /<span class="nm">Gamma<\/span><span class="cnt tasks off"><span class="sq" aria-hidden="true"><\/span><span class="vh">, (<!-- -->)?off track<\/span><\/span>/
+    );
+    expect(html).toContain('<span class="nm">Alpha work</span><span class="cnt tasks"><span aria-hidden="true">1</span>');
+  });
+
+  // TASK-3955: one keyboard tree (portal ADR-011 v2, Keys 4–7).
+  it("makes every row a tree row out of the Tab order until it is the stop, with a labelled filter", () => {
+    const html = nav(render({ screen: "home" }));
+    const rows = [...html.matchAll(/<(a|button)[^>]*data-tree-key="[^"]+"[^>]*>/g)].map((m) => m[0]);
+    expect(rows.length).toBeGreaterThan(15);
+    for (const row of rows) expect(row).toContain('tabindex="-1"');
+    // Chevrons and the + stay out of the Tab order and outside the tree.
+    expect(html).toMatch(/<button type="button" class="tree-toggle" tabindex="-1"/);
+    expect(html).toContain('<input type="search" class="tree-q" aria-label="Filter projects and initiatives"');
+    expect(html).toContain('<p class="tree-none" role="status"></p>');
+    expect(html).toContain('data-tree-key="screen:brain-ask" data-tree-parent="group:knowledge"');
+    expect(html).toContain('data-tree-key="group:knowledge" data-tree-open="false" tabindex="-1" data-tree-toggles="group:knowledge"');
   });
 
   it("opens the current project, and the open initiative's project, with one current row", () => {
@@ -259,12 +341,13 @@ describe("Sidebar — zoned", () => {
     expect(initiative).toContain('projectId=PRJ-PORTAL-GOLIVE" class="item on-path"');
   });
 
-  it("renders the classic sidebar when the flag is off: no footer, no flyout", () => {
+  it("renders the classic sidebar when the flag is off: no footer, no flyout, no tree", () => {
     setNavZonesBuildFlag(false);
     const html = render({ screen: "home" });
     expect(html).toContain('id="mc-nav-h-admin"');
     expect(html).not.toContain("side-foot");
     expect(html).not.toContain("mc-flyout");
+    expect(html).not.toMatch(/data-tree-|tabindex|class="cnt/);
     expect(html).toMatch(/<\/nav>$/);
   });
 });

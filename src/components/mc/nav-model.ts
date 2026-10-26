@@ -5,7 +5,7 @@
 // Grouped by what a colleague is doing — My work · Plan · Knowledge · Reporting
 // · Admin & health — not by system internals. Pure: no React, no store reads (badge
 // counts are resolved by the shell; icon names map to Lucide in nav-icon.tsx).
-import { isClosedStage, type Bucket, type Human, type Project, type Task } from "@/lib/mc-data";
+import { isClosedStage, type Bucket, type Project, type Task } from "@/lib/mc-data";
 import { STAR_CAP, type StarChange, type StarKey } from "@/lib/stars";
 
 import type { Route, Screen } from "./route";
@@ -175,13 +175,13 @@ function navItem(screen: Screen, label?: string): NavItem {
   return label ? { ...item, label } : item;
 }
 
-/** The Projects page (TASK-3841): every open project and its initiatives. */
+/** Projects (TASK-3841): opens the project Dashboard (TASK-3996). */
 export const PROJECTS_NAV_ITEM: NavItem = {
   screen: "projects",
   label: "Projects",
   icon: "▤",
   lucide: "FolderKanban",
-  hint: "every project and its initiatives",
+  hint: "the project dashboard",
 };
 
 /**
@@ -258,81 +258,114 @@ export function zonedNavPlaceOf(screen: Screen): NavGroupId | "admin" | "help" |
   return ADMIN_FLYOUT.some((section) => section.items.some((i) => i.screen === screen)) ? "admin" : null;
 }
 
-// ─── Projects tree (zoned sidebar, TASK-3841) ───────────────────────────────
-// Each open project with its open initiatives nested under it: the viewer's
-// own projects first, then the rest by name, at most PROJECT_TREE_CAP rows.
-// The current project always makes the cut, and View all shows when rows are
-// left out. Callers pass the nav-visible records (navProjects, navBuckets), so
-// closed and archived ones stay out. Initiatives without an open project sit
-// under No project on the Projects page.
-
-export const PROJECT_TREE_CAP = 6;
+// ─── Projects tree (zoned sidebar, TASK-3841; v2, TASK-3955) ────────────────
+// Every open project A to Z with its open initiatives nested under it (portal
+// ADR-011 v2, Lists). Callers pass the nav-visible records (navProjects,
+// navBuckets), so closed and archived ones stay out.
 
 export interface ProjectTreeNode {
   project: Project;
   initiatives: Bucket[];
 }
 
-export interface ProjectTree {
-  nodes: ProjectTreeNode[];
-  /** Every open project, shown or not: "View all N projects". */
-  total: number;
-}
+/** Names A to Z, numbers in order (Phase 2 before Phase 10). */
+export const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, undefined, { numeric: true });
 
-const memberToken = (raw: string) => raw.trim().toLowerCase();
+export function projectTree(projects: readonly Project[], initiatives: readonly Bucket[]): ProjectTreeNode[] {
+  return [...projects]
+    .sort(byName)
+    .map((project) => ({ project, initiatives: initiatives.filter((b) => b.project === project.id) }));
+}
 
 /**
- * The viewer's projects, by the Approvals screen's My projects rule
- * (src/lib/compliance/my-projects.ts, TASK-3720): a member, the owner, or
- * assigned (assignee or coassignee) an open task in one of its initiatives.
- * Ids match case-insensitively on the viewer's id or email.
+ * The tree rows the sidebar's Projects filter keeps: a project whose name
+ * holds the query keeps all its initiatives; otherwise only the initiatives
+ * whose names hold it, and a project with none drops. Case-insensitive.
  */
-export function viewerProjectIds(
-  projects: readonly Project[],
-  initiatives: readonly Bucket[],
-  tasks: readonly Task[],
-  viewer: Pick<Human, "id" | "email"> | null
-): Set<string> {
-  const mine = new Set<string>();
-  if (!viewer) return mine;
-  const tokens = new Set([viewer.id, viewer.email].filter((t): t is string => !!t).map(memberToken));
-  const holds = (raw: string | null | undefined) => !!raw && tokens.has(memberToken(raw));
+export function filterProjectTree(nodes: readonly ProjectTreeNode[], query: string): ProjectTreeNode[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...nodes];
+  return nodes.flatMap((node) => {
+    if (node.project.name.toLowerCase().includes(q)) return [node];
+    const initiatives = node.initiatives.filter((b) => b.name.toLowerCase().includes(q));
+    return initiatives.length > 0 ? [{ project: node.project, initiatives }] : [];
+  });
+}
+
+export interface OpenTaskCounts {
+  byInitiative: Map<string, number>;
+  byProject: Map<string, number>;
+}
+
+/**
+ * Open tasks (every stage but merged, verified and cancelled) per initiative,
+ * and per project across its initiatives: the sidebar's count column
+ * (portal ADR-011 v2, Counts). Pass every initiative, so a project counts
+ * tasks in all of its own.
+ */
+export function openTaskCounts(tasks: readonly Task[], initiatives: readonly Bucket[]): OpenTaskCounts {
   const projectOf = new Map(initiatives.map((b) => [b.id, b.project ?? null]));
+  const byInitiative = new Map<string, number>();
+  const byProject = new Map<string, number>();
   for (const task of tasks) {
+    if (isClosedStage(task.stage)) continue;
+    byInitiative.set(task.bucket, (byInitiative.get(task.bucket) ?? 0) + 1);
     const projectId = projectOf.get(task.bucket);
-    if (projectId && !isClosedStage(task.stage) && (holds(task.assignee) || (task.coassignees ?? []).some(holds))) {
-      mine.add(projectId);
+    if (projectId) byProject.set(projectId, (byProject.get(projectId) ?? 0) + 1);
+  }
+  return { byInitiative, byProject };
+}
+
+// ─── Sidebar keys (zoned sidebar, TASK-3955) ────────────────────────────────
+// The zoned sidebar is one keyboard tree (portal ADR-011 v2, Keys 4–7): one
+// tab stop, ↑ ↓ Home End between rows, → opens a group or enters it, ← closes
+// it or goes up to its parent, and a letter jumps to the next row starting
+// with it. The sidebar reads its shown rows from the page in order and acts
+// on what this returns.
+
+export interface TreeRow {
+  key: string;
+  /** The group row it sits under, if any. */
+  parent: string | null;
+  /** A group row's state; null for a row that holds nothing. */
+  open: boolean | null;
+  label: string;
+}
+
+export type TreeAction = { focus: number } | { toggle: number } | null;
+
+export function treeKeyAction(rows: readonly TreeRow[], index: number, key: string): TreeAction {
+  const row = rows[index];
+  if (!row) return null;
+  const last = rows.length - 1;
+  switch (key) {
+    case "ArrowDown":
+      return index < last ? { focus: index + 1 } : null;
+    case "ArrowUp":
+      return index > 0 ? { focus: index - 1 } : null;
+    case "Home":
+      return { focus: 0 };
+    case "End":
+      return { focus: last };
+    case "ArrowRight": {
+      if (row.open === false) return { toggle: index };
+      if (row.open !== true) return null;
+      const child = rows.findIndex((r, i) => i > index && r.parent === row.key);
+      return child >= 0 ? { focus: child } : null;
+    }
+    case "ArrowLeft": {
+      if (row.open === true) return { toggle: index };
+      const parent = row.parent === null ? -1 : rows.findIndex((r) => r.key === row.parent);
+      return parent >= 0 ? { focus: parent } : null;
     }
   }
-  for (const project of projects) {
-    if (holds(project.owner) || (project.members ?? []).some(holds)) mine.add(project.id);
+  if (key.length !== 1 || !/\S/.test(key)) return null;
+  const letter = key.toLowerCase();
+  for (let step = 1; step <= rows.length; step++) {
+    const at = (index + step) % rows.length;
+    if (rows[at].label.trim().toLowerCase().startsWith(letter)) return { focus: at };
   }
-  return mine;
-}
-
-export function projectTree(
-  projects: readonly Project[],
-  initiatives: readonly Bucket[],
-  mine: ReadonlySet<string>,
-  currentProjectId: string | null = null,
-  cap: number = PROJECT_TREE_CAP
-): ProjectTree {
-  const ordered = [...projects].sort(
-    (a, b) => Number(mine.has(b.id)) - Number(mine.has(a.id)) || a.name.localeCompare(b.name, undefined, { numeric: true })
-  );
-  let shown = ordered.slice(0, cap);
-  const current = ordered.find((p) => p.id === currentProjectId);
-  if (current && !shown.includes(current)) shown = [...shown.slice(0, Math.max(0, cap - 1)), current];
-  return {
-    nodes: shown.map((project) => ({ project, initiatives: initiatives.filter((b) => b.project === project.id) })),
-    total: ordered.length,
-  };
-}
-
-/** Initiatives with no open project: the Projects page's No project group. */
-export function unfiledInitiatives(projects: readonly Project[], initiatives: readonly Bucket[]): Bucket[] {
-  const open = new Set(projects.map((p) => p.id));
-  return initiatives.filter((b) => !b.project || !open.has(b.project));
+  return null;
 }
 
 // ─── Starred (zoned sidebar, TASK-3842) ─────────────────────────────────────
@@ -488,7 +521,7 @@ export interface NavCommand {
 
 const slug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
-/** ⌘K "Go to …" commands for every visible item, plus its search synonyms; the zoned shell adds its Projects page. */
+/** ⌘K "Go to …" commands for every visible item, plus its search synonyms; the zoned shell adds Projects. */
 export function navCommands(flags: NavFlags, zoned = false): NavCommand[] {
   const items = [...visibleNavGroups(flags).flatMap((group) => group.items), ...(zoned ? [PROJECTS_NAV_ITEM] : [])];
   return items.flatMap((item) => [
@@ -535,7 +568,7 @@ export const NAV_TABS: readonly NavTab[] = [
 ];
 
 // Screens outside the default sidebar: the detail screens, and the zoned
-// sidebar's Projects page (TASK-3841).
+// sidebar's Projects row, which opens the project Dashboard (TASK-3841, TASK-3996).
 const DETAIL_TAB: Partial<Record<Screen, NavTabId>> = { task: "plan", bucket: "plan", project: "plan", projects: "plan" };
 const DETAIL_TITLE: Partial<Record<Screen, string>> = {
   task: "Task",
@@ -665,7 +698,7 @@ export function createTabMemory(
   };
 }
 
-/** The zoned tabs' memory (TASK-3843): the Projects page is a landing spot; detail screens are not. */
+/** The zoned tabs' memory (TASK-3843): Projects (the project Dashboard) is a landing spot; detail screens are not. */
 export function createZonedTabMemory(getStorage: () => NavStorage | null): TabMemory {
   return createTabMemory(getStorage, zonedTabOf, (screen) => !DETAIL_TAB[screen] || screen === "projects");
 }

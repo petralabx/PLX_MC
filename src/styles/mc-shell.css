@@ -1478,7 +1478,7 @@
     position: sticky;
     bottom: 0;
     margin-top: auto;
-    padding: 8px 12px calc(8px + var(--p-safe-b, 0px));
+    padding: 8px 8px calc(8px + var(--p-safe-b, 0px));
     border-top: 1px solid var(--p-grid-2);
     background: var(--p-rail);
   }
@@ -1523,6 +1523,19 @@
     font-size: var(--p-text-ui);
     text-decoration: none;
     color: var(--p-ink-2);
+  }
+  /* A button row (the Projects + menu's) reads like a link row. */
+  .mc .mc-flyout button.item {
+    width: 100%;
+    border-top: 0;
+    border-right: 0;
+    border-bottom: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--p-text-ui);
+    text-align: left;
+    color: var(--p-ink-2);
+    cursor: pointer;
   }
   .mc .mc-flyout .item .ic {
     color: var(--p-muted);
@@ -1611,10 +1624,109 @@
     font-size: var(--p-text-small);
     color: var(--p-muted);
   }
+  /* ─── v2 row grid (TASK-3955, portal ADR-011 v2 amendment) ──────────────
+     Every labelled row has four columns: icon 16 · label · count 40 ·
+     action 24, 10px apart, 10px in front of the icon and 4px after the
+     action. A group row's chevron sits in the icon column, a child row's
+     guide line too, so a child's label starts where its parent's does. The
+     641–1024px icon rail keeps its centred icons (below). */
+  .mc .mc-body[data-nav="zones"] .mc-side .grp {
+    padding-inline: 8px;
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .h {
+    padding: 0 4px 0 10px;
+    letter-spacing: var(--p-track-meta);
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .item {
+    display: grid;
+    grid-template-columns:
+      var(--p-icon, 16px) minmax(0, 1fr) var(--p-shell-col-count, 40px)
+      var(--p-shell-col-action, 24px);
+    column-gap: 10px;
+    align-items: center;
+    padding: 0 4px 0 10px;
+    border-left: 0;
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .item[aria-current="page"] {
+    box-shadow: inset 2px 0 0 var(--p-accent);
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .item > :is(.ic, .hl, .chev, .guide) {
+    grid-column: 1;
+    justify-self: center;
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .item > .nm {
+    grid-column: 2;
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .item > .cnt {
+    grid-column: 3;
+    justify-self: end;
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .item > .act {
+    grid-column: 4;
+    justify-self: center;
+    width: 14px;
+    height: 14px;
+    color: var(--p-muted);
+  }
+  /* One line; the full name shows on hover (title) and on focus. */
+  .mc .mc-body[data-nav="zones"] .mc-side .item:focus-visible > .nm {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* Counts are figures (Counts 1–4): an action count accent at 600, an
+     attention count and an at-risk one warn, an off-track one hot, an
+     open-task count muted. */
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt {
+    font-family: var(--p-font-mono);
+    font-size: var(--p-text-meta);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    color: var(--p-muted);
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt.acc {
+    font-weight: 600;
+    color: var(--p-accent);
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt.warn,
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt.risk {
+    color: var(--p-warn-text);
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt .sq {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    vertical-align: 1px;
+    background: var(--p-warn-text);
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt .sq + [aria-hidden] {
+    margin-left: 5px;
+  }
+  /* Off track has its own colour: the brand's, as on the health pills. */
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt.off {
+    color: var(--p-hot-text);
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt.off .sq {
+    background: var(--p-hot-text);
+  }
+  .mc .mc-side .chev:is(svg) {
+    width: 12px;
+    height: 12px;
+    color: var(--p-muted);
+  }
+  .mc .mc-side [aria-expanded="true"] > .chev:is(svg) {
+    transform: rotate(90deg);
+  }
+  .mc .mc-side .guide {
+    align-self: stretch;
+    width: 1px;
+    background: var(--p-grid);
+  }
   /* Starred (TASK-3842): the person's copies under My work. The icon rail
      shows one Starred button, which opens the labelled drawer; every
-     labelled form lists the stars. */
-  .mc .mc-side .star-rail {
+     labelled form lists the stars. Its rules name .item, so they outrank
+     the v2 row grid's display. */
+  .mc .mc-body[data-nav="zones"] .mc-side .item.star-rail {
     display: none;
   }
   /* A star toggle (the top bar's, a Projects row's): filled when starred. */
@@ -1626,47 +1738,108 @@
     color: var(--p-muted);
     cursor: default;
   }
-  /* Projects tree (TASK-3841): project rows under the Projects row, their
-     initiatives a step further in, then a quiet View all row. The icon rail
-     shows the Projects icon alone. */
+  /* Projects tree (TASK-3841, v2 TASK-3955): the filter, every active
+     project A to Z with its initiatives, then the Closed row. A project's
+     chevron and the Projects row's + are buttons over the row's icon and
+     action columns, outside the link and the Tab order. The icon rail shows
+     the Projects icon alone. */
   .mc .mc-side .tree-row {
+    position: relative;
+  }
+  .mc .mc-side .tree-row > :is(.tree-toggle, .row-act) {
+    position: absolute;
+    top: 0;
+    bottom: 0;
     display: flex;
     align-items: center;
-  }
-  .mc .mc-side .tree-row > .item {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  .mc .mc-side .tree .item {
-    padding-left: 22px;
-  }
-  .mc .mc-side .tree-kids > .item {
-    padding-left: calc(8px + var(--p-shell-indent, 34px));
-  }
-  .mc .mc-side .tree > a.item {
-    color: var(--p-muted);
-  }
-  @media (hover: hover) {
-    .mc .mc-side .tree > a.item:hover {
-      color: var(--p-ink);
-    }
-  }
-  .mc .mc-side .tree-toggle {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
     justify-content: center;
-    width: var(--p-touch);
-    min-height: var(--p-touch);
+    width: var(--p-shell-col-action, 24px);
     padding: 0;
     border: 0;
     background: none;
     color: var(--p-muted);
     cursor: pointer;
   }
-  .mc .mc-side .tree-toggle:focus-visible {
-    outline: 2px solid var(--p-accent);
-    outline-offset: -2px;
+  .mc .mc-side .tree-row > .tree-toggle {
+    left: 6px;
+  }
+  .mc .mc-side .tree-row > .row-act {
+    right: 4px;
+  }
+  .mc .mc-side .tree-row > .row-act[aria-expanded="true"] {
+    color: var(--p-accent);
+  }
+  .mc .mc-side .tree-kids > .item {
+    font-size: var(--p-text-small);
+  }
+  .mc .mc-side .tree-filter {
+    display: grid;
+    grid-template-columns: var(--p-icon, 16px) minmax(0, 1fr);
+    column-gap: 10px;
+    align-items: center;
+    padding: 2px 4px 4px 10px;
+  }
+  .mc .mc-side .tree-filter > .ic {
+    justify-self: center;
+    width: 14px;
+    height: 14px;
+    color: var(--p-muted);
+  }
+  .mc .mc-side .tree-q {
+    width: 100%;
+    min-width: 0;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--p-grid);
+    border-radius: 0;
+    background: var(--p-paper);
+    font: inherit;
+    font-size: var(--p-text-ui);
+    color: var(--p-ink);
+  }
+  .mc .mc-side .tree-q::placeholder {
+    color: var(--p-muted);
+  }
+  /* Esc clears it; the browser's own clear icon is off-palette. */
+  .mc .mc-side .tree-q::-webkit-search-cancel-button {
+    appearance: none;
+  }
+  .mc .mc-side .tree-none {
+    margin: 4px 4px 8px 36px;
+    font-size: var(--p-text-small);
+    color: var(--p-muted);
+  }
+  .mc .mc-side .tree-none:empty {
+    margin: 0;
+  }
+  .mc .mc-side .tree-closed {
+    margin-top: 4px;
+    border-top: 1px solid var(--p-grid-2);
+  }
+  .mc .mc-side .tree-closed > .item,
+  .mc .mc-side .tree-closed .tree-kids > .item:not([aria-current="page"]) {
+    color: var(--p-muted);
+  }
+  @media (hover: hover) {
+    .mc .mc-side .tree-row:hover > .item {
+      background: var(--p-paper-2);
+      color: var(--p-ink);
+    }
+    .mc .mc-side .tree-row > :is(.tree-toggle, .row-act):hover {
+      color: var(--p-ink);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .mc .mc-side .chev:is(svg) {
+      transition: transform var(--p-dur) var(--p-ease);
+    }
+  }
+  /* A coarse pointer: 44px targets, and 16px type so a phone does not zoom. */
+  @media (pointer: coarse) {
+    .mc .mc-side .tree-q {
+      height: var(--p-touch);
+      font-size: 16px;
+    }
   }
   /* Without the Popover API the panel would sit in the page: leave it out. */
   @supports not selector(:popover-open) {
@@ -1685,6 +1858,10 @@
       inset: var(--fly-top, 8px) auto auto var(--fly-left, 8px);
       width: 280px;
     }
+    /* The Projects row's + menu: two rows. */
+    .mc .mc-flyout.new-menu[popover] {
+      width: 200px;
+    }
     /* The icon rail's footer: icons centred, like its rows. */
     .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {
       padding: 8px 0;
@@ -1693,19 +1870,70 @@
     .mc .mc-side:not(.open) .star-rows {
       display: none;
     }
-    .mc .mc-side:not(.open) .star-rail {
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item.star-rail {
       display: flex;
+    }
+    /* The icon rail keeps its centred icons; a count shows as a dot. From
+       1025px the closed sidebar is labelled again (below). */
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .grp {
+      padding-inline: 0;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item {
+      display: flex;
+      padding: 0;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item > .act,
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .row-act {
+      display: none;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item > .cnt:not(.tasks) {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item > .cnt:not(.tasks) > [aria-hidden] {
+      display: none;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item > .cnt:not(.tasks)::before {
+      content: "";
+      display: block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
     }
   }
   @media (min-width: 1025px) {
     .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .side-foot {
-      padding: 8px 12px;
+      padding: 8px;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .grp {
+      padding-inline: 8px;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item {
+      display: grid;
+      padding: 0 4px 0 10px;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item > .act {
+      display: block;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .row-act {
+      display: flex;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item > .cnt:not(.tasks) {
+      position: static;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item > .cnt:not(.tasks) > [aria-hidden] {
+      display: inline;
+    }
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item > .cnt:not(.tasks)::before {
+      content: none;
     }
     .mc .mc-side:not(.open) .tree,
     .mc .mc-side:not(.open) .star-rows {
       display: block;
     }
-    .mc .mc-side:not(.open) .star-rail {
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item.star-rail {
       display: none;
     }
   }
@@ -1716,10 +1944,6 @@
     }
     .mc .mc-body[data-nav="zones"] .mc-side .item,
     .mc .mc-flyout .item {
-      min-height: var(--p-shell-row, 28px);
-    }
-    .mc .mc-side .tree-toggle {
-      width: var(--p-shell-row, 28px);
       min-height: var(--p-shell-row, 28px);
     }
   }

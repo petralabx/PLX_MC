@@ -110,27 +110,17 @@ test.describe("Starred", () => {
     }
   });
 
-  test("1440: star a project and an initiative from their Projects rows, in the order starred", async ({ page }) => {
-    await open(page, 1440, "/?screen=projects");
-    const screen = page.getByTestId("projects-screen");
-    const project = screen.getByRole("button", { name: "Star PLX Portal Go-Live" });
-    const initiative = screen.locator(".pj-inits .pj-star").first();
-    const initiativeName = ((await initiative.getAttribute("aria-label")) ?? "").replace(/^Star /, "");
-    await initiative.click();
-    await project.click();
-    await expect(initiative).toHaveAttribute("aria-pressed", "true");
-    await expect(project).toHaveAttribute("aria-pressed", "true");
-    await expect(starred(page).getByRole("link")).toHaveText([initiativeName, "PLX Portal Go-Live"]);
-    // Each star toggle is a 28px target for a mouse, and the page passes axe.
-    const box = (await project.boundingBox())!;
-    expect(Math.round(box.width)).toBe(28);
-    expect(Math.round(box.height)).toBe(28);
-    const results = await new AxeBuilder({ page }).withTags(TAGS).include(".mc-chrome").include("nav.mc-side").include("[data-testid='projects-screen']").analyze();
-    expect(results.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) }))).toEqual([]);
-    // The project's page has the same star, already pressed.
-    await starred(page).getByRole("link", { name: "PLX Portal Go-Live" }).click();
-    await expect(page).toHaveURL(/screen=project&projectId=PRJ-PORTAL-GOLIVE/);
+  // TASK-3996: the Projects list page is gone; each page's own star stars it.
+  test("1440: star an initiative, then a project, from their pages, in the order starred", async ({ page }) => {
+    await open(page, 1440, "/?screen=bucket&bucketId=BKT-WMS");
+    await pageStar(page, "WMS Integration").click();
+    await expect(pageStar(page, "WMS Integration")).toHaveAttribute("aria-pressed", "true");
+    await open(page, 1440, "/?screen=project&projectId=PRJ-PORTAL-GOLIVE");
+    await pageStar(page, "PLX Portal Go-Live").click();
     await expect(pageStar(page, "PLX Portal Go-Live")).toHaveAttribute("aria-pressed", "true");
+    await expect(starred(page).getByRole("link")).toHaveText(["WMS Integration", "PLX Portal Go-Live"]);
+    const results = await new AxeBuilder({ page }).withTags(TAGS).include(".mc-chrome").include("nav.mc-side").analyze();
+    expect(results.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) }))).toEqual([]);
   });
 
   test("a seventh star is refused with a notice, and nothing changes", async ({ page }) => {

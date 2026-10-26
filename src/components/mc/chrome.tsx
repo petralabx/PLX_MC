@@ -8,6 +8,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -15,13 +16,15 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { PanelLeft, Plus, Star, X } from "lucide-react";
+import { ChevronRight, PanelLeft, Plus, Search, Star, X } from "lucide-react";
 
 import { liveAgentCount, openQuestionsFor, pendingApprovalGates, type Human, type Task } from "@/lib/mc-data";
 import { useMcNotices, useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import {
+  allBuckets,
   allTasks,
   bucketById,
+  closedNavProjects,
   dataSource,
   dismissNotice,
   hydrate,
@@ -32,21 +35,24 @@ import {
   viewerSettled,
 } from "@/lib/mc-data/store";
 
-import { CountBadge, UNKNOWN_COUNT, type Count } from "./count-badge";
+import { CountBadge, CountFigure, OpenCount, UNKNOWN_COUNT, type Count } from "./count-badge";
 import { navFlags } from "./nav-flags";
 import { NavIcon } from "./nav-icon";
 import {
   HELP_NAV_ITEM,
+  byName,
   createNavGroupState,
+  filterProjectTree,
   isNavItemCurrent,
   isPlainLeftClick,
   navGroupOf,
   navHref,
   navItemTarget,
   nextDrawerOpen,
+  openTaskCounts,
   projectTree,
   revealScrollTop,
-  viewerProjectIds,
+  treeKeyAction,
   visibleAdminFlyout,
   visibleNavGroups,
   visibleZonedNavGroups,
@@ -54,13 +60,15 @@ import {
   type DrawerEvent,
   type NavBadge,
   type NavGroupId,
+  type NavItem,
   type NavList,
+  type TreeRow,
 } from "./nav-model";
 import { useNavZones } from "./nav-zones";
 import { needsMeCount, todayGridDay, viewerLoadState } from "./needs-me";
 import type { Nav, Route } from "./route";
 import { useFlyout } from "./use-flyout";
-import { useLayer } from "./use-layer";
+import { hasOpenLayer, useLayer } from "./use-layer";
 import { useStars } from "./use-stars";
 import { useVendorAlertCount } from "./vendor-spend/use-alert-badge";
 
@@ -166,6 +174,38 @@ function useNavGroupOpen(id: NavGroupId): boolean {
 
 // The zoned sidebar's Admin & health flyout (TASK-3840): use-flyout.ts.
 const ADMIN_FLYOUT_ID = "mc-nav-admin-flyout";
+// The menu behind the Projects row's + (TASK-3955): New project, New initiative.
+const NEW_MENU_ID = "mc-nav-new-menu";
+
+// The zoned sidebar is one keyboard tree (TASK-3955, portal ADR-011 v2 Keys):
+// every row carries data-tree-key, a group row data-tree-open, a row inside a
+// group data-tree-parent, and the control that opens a group or a row's menu
+// data-tree-toggles or data-tree-menu-for. One row is in the Tab order.
+interface TreeAttrs {
+  "data-tree-key"?: string;
+  "data-tree-parent"?: string;
+  "data-tree-open"?: "true" | "false";
+  /** A project link's own disclosure state: → and ← open it with focus on the link. */
+  "aria-expanded"?: boolean;
+  tabIndex?: number;
+}
+
+function shownTreeRows(side: HTMLElement): HTMLElement[] {
+  return Array.from(side.querySelectorAll<HTMLElement>("[data-tree-key]")).filter((el) => el.getClientRects().length > 0);
+}
+
+function treeRowOf(el: HTMLElement): TreeRow {
+  return {
+    key: el.dataset.treeKey ?? "",
+    parent: el.dataset.treeParent ?? null,
+    open: el.dataset.treeOpen === undefined ? null : el.dataset.treeOpen === "true",
+    label: el.querySelector(".nm")?.textContent ?? el.textContent ?? "",
+  };
+}
+
+function treeControl(side: HTMLElement, attr: "data-tree-toggles" | "data-tree-menu-for", key: string): HTMLElement | null {
+  return side.querySelector<HTMLElement>(`[${attr}="${CSS.escape(key)}"]`);
+}
 
 export function Sidebar({
   route,
@@ -189,12 +229,15 @@ export function Sidebar({
   drawerRef?: RefObject<HTMLElement | null>;
   onDrawerKeyDown?: (event: ReactKeyboardEvent<HTMLElement>) => void;
 }) {
-  useMcVersion();
+  const version = useMcVersion();
   const zoned = useNavZones();
-  const viewer = useViewer();
   const flags = navFlags();
   const stars = useStars(zoned);
   const [treeOpen, setTreeOpen] = useState<Record<string, boolean>>({});
+  const [closedOpen, setClosedOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [treeStop, setTreeStop] = useState<string | null>(null);
+  const filterRef = useRef<HTMLInputElement | null>(null);
   const adminOpen = useNavGroupOpen("admin");
   const knowledgeOpen = useNavGroupOpen("knowledge");
   const {
@@ -206,6 +249,15 @@ export function Sidebar({
     onBeforeToggle: onFlyoutBeforeToggle,
     onToggle: onFlyoutToggle,
   } = useFlyout(navHref(route), "beside-nav");
+  const {
+    toggleRef: newToggleRef,
+    panelRef: newPanelRef,
+    open: newOpen,
+    hide: hideNew,
+    onBlur: onNewBlur,
+    onBeforeToggle: onNewBeforeToggle,
+    onToggle: onNewToggle,
+  } = useFlyout(navHref(route), "below");
 
   // Keep the active screen visible: arriving on a screen in the collapsible
   // group (Admin & health; Knowledge in the zoned sidebar) expands it. The
@@ -257,34 +309,164 @@ export function Sidebar({
   // The zoned sidebar's Projects tree (TASK-3841) keeps this project in its
   // rows and opens it.
   const currentProjectId = route.screen === "project" ? (route.projectId ?? null) : openProjectId;
-  const treeProjects = zoned ? navProjects() : [];
-  const treeInitiatives = zoned ? navBuckets() : [];
-  const tree = zoned
-    ? projectTree(
-        treeProjects,
-        treeInitiatives,
-        viewerProjectIds(treeProjects, treeInitiatives, allTasks(), viewer),
-        currentProjectId
-      )
-    : null;
+  // v2 (TASK-3955, portal ADR-011 v2 Lists): every active project A to Z, the
+  // filter's matches while it holds a query, then the closed projects behind
+  // the Closed row. The count column shows each one's open tasks.
+  // Once per store change, not per render: arrow keys re-render the sidebar.
+  const live = dataSource() === "live";
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tree = useMemo(() => (zoned ? projectTree(navProjects(), navBuckets()) : []), [zoned, version]);
+  const filtering = filter.trim() !== "";
+  const shownTree = filtering ? filterProjectTree(tree, filter) : tree;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const closedProjects = useMemo(() => (zoned ? closedNavProjects().sort(byName) : []), [zoned, version]);
+  // Counts only from live data: cached or demo tasks would make them up
+  // (useNavCounts's rule).
+  const openCounts = useMemo(
+    () => (zoned ? openTaskCounts(live ? allTasks() : [], allBuckets()) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [zoned, live, version]
+  );
 
-  // Arriving on a project or one of its initiatives opens it; after that it
-  // keeps the person's choice, like Knowledge and Admin & health (ADR-011).
-  // Adjusted while rendering: React's pattern for state that follows a prop.
+  // Arriving on a project or one of its initiatives opens it (a closed one
+  // opens the Closed row); after that it keeps the person's choice, like
+  // Knowledge and Admin & health (ADR-011). Adjusted while rendering: React's
+  // pattern for state that follows a prop.
   const arrival = zoned && currentProjectId ? `${currentProjectId} ${route.screen} ${route.bucketId ?? ""}` : null;
   const [openedOn, setOpenedOn] = useState<string | null>(null);
   if (arrival !== openedOn) {
     setOpenedOn(arrival);
-    if (currentProjectId && arrival && !treeOpen[currentProjectId]) {
-      setTreeOpen((prev) => ({ ...prev, [currentProjectId]: true }));
+    if (currentProjectId && arrival) {
+      if (closedProjects.some((p) => p.id === currentProjectId)) {
+        if (!closedOpen) setClosedOpen(true);
+      } else if (!treeOpen[currentProjectId]) {
+        setTreeOpen((prev) => ({ ...prev, [currentProjectId]: true }));
+      }
     }
   }
 
+  // One tab stop for the tree (portal ADR-011 v2, Keys 4): the row the
+  // person focused last, else the current row, else the first. A focused row
+  // that is no longer shown (its group closed, or the rail hides it) gives
+  // way, and the stop follows the current row again.
+  const stopChosen = useRef(false);
+  // When Shift F10 or the Menu key last opened a row menu (onTreeKeyDown).
+  const menuKeyAt = useRef(Number.NEGATIVE_INFINITY);
+  const keepTreeStop = useCallback(() => {
+    const side = zoned ? document.getElementById("mc-nav") : null;
+    if (!side) return;
+    const rows = shownTreeRows(side);
+    const stop = rows.find((el) => el.tabIndex === 0);
+    if (stop && stopChosen.current) return;
+    if (!stop) stopChosen.current = false;
+    const next = rows.find((el) => el.getAttribute("aria-current") === "page") ?? stop ?? rows[0];
+    if (next && next !== stop) setTreeStop(next.dataset.treeKey ?? null);
+  }, [zoned]);
+  // Whether a row is shown is layout React cannot see, so the check runs
+  // after each commit; it sets state only when the stop must move, and the
+  // next render puts it there, so it settles in one pass.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => keepTreeStop());
+  useEffect(() => {
+    if (!zoned) return;
+    const forms = ["(min-width: 641px)", "(min-width: 1025px)"].map((query) => window.matchMedia(query));
+    for (const form of forms) form.addEventListener("change", keepTreeStop);
+    return () => {
+      for (const form of forms) form.removeEventListener("change", keepTreeStop);
+    };
+  }, [zoned, keepTreeStop]);
+
+  // `/` focuses the page's own filter where it has one (work-views.tsx), else
+  // the Projects filter (portal ADR-011 v2, Keys 2). Never from a field or
+  // the tree, nor while a layer owns the keyboard.
+  useEffect(() => {
+    if (!zoned) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.("input,textarea,[contenteditable],[data-tree-key]") || hasOpenLayer()) return;
+      if (document.querySelector("[data-page-filter]")) return;
+      const input = filterRef.current;
+      // Not while the closed phone drawer hides it (visibility: hidden).
+      if (!input || input.getClientRects().length === 0 || getComputedStyle(input).visibility === "hidden") return;
+      event.preventDefault();
+      input.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [zoned]);
+
+  // A row's tree attributes: zoned only, so the classic sidebar keeps its
+  // plain links in the Tab order.
+  const treeRow = (key: string, parent: string | null = null, open: boolean | null = null): TreeAttrs =>
+    zoned
+      ? {
+          "data-tree-key": key,
+          "data-tree-parent": parent ?? undefined,
+          "data-tree-open": open === null ? undefined : open ? "true" : "false",
+          tabIndex: key === treeStop ? 0 : -1,
+        }
+      : {};
+
+  const onTreeKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const row = event.target as HTMLElement;
+    const key = row.dataset?.treeKey;
+    if (!key || event.altKey || event.ctrlKey || event.metaKey) return;
+    const side = event.currentTarget;
+    // The row menu (portal ADR-011 v2, Keys 7): the Projects row's + menu.
+    if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
+      const menu = treeControl(side, "data-tree-menu-for", key);
+      // The icon rail hides the +: nothing to place the menu under.
+      if (!menu || menu.getClientRects().length === 0) return;
+      event.preventDefault();
+      // Some browsers still fire contextmenu for these keys: the nav drops it.
+      menuKeyAt.current = event.timeStamp;
+      menu.click();
+      document.getElementById(menu.getAttribute("aria-controls") ?? "")?.querySelector<HTMLElement>("button, a[href]")?.focus();
+      return;
+    }
+    // Shift and a letter stays free for Shift S (TASK-3956).
+    if (event.shiftKey && event.key.length === 1) return;
+    const rows = shownTreeRows(side);
+    const action = treeKeyAction(rows.map(treeRowOf), rows.indexOf(row), event.key);
+    if (!action) return;
+    event.preventDefault();
+    if ("focus" in action) rows[action.focus].focus();
+    else treeControl(side, "data-tree-toggles", rows[action.toggle].dataset.treeKey ?? "")?.click();
+  };
+
+  // ↓ from the filter enters the tree; Esc clears a query first.
+  const onFilterKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    if (event.key === "ArrowDown") {
+      const side = input.closest<HTMLElement>("#mc-nav");
+      const next = side
+        ? shownTreeRows(side).find((el) => input.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
+        : undefined;
+      if (next) {
+        event.preventDefault();
+        next.focus();
+      }
+    } else if (event.key === "Escape" && filter) {
+      event.preventDefault();
+      setFilter("");
+    }
+  };
+
   // Items are real links (open in a new tab, copy the URL); a plain click stays
   // a client-side nav() so screens switch without a reload.
-  const link = (key: string, target: Route, active: boolean, label: string, body: ReactNode, onPath = false) => (
+  const link = (
+    key: string,
+    target: Route,
+    active: boolean,
+    label: string,
+    body: ReactNode,
+    onPath = false,
+    tree: TreeAttrs = {}
+  ) => (
     <a
       key={key}
+      {...tree}
       href={navHref(target)}
       className={`item${active ? " active" : onPath ? " on-path" : ""}`}
       aria-current={active ? "page" : undefined}
@@ -306,6 +488,7 @@ export function Sidebar({
       type="button"
       className="item side-new-initiative"
       onClick={() => {
+        hideNew();
         onDrawer?.("navigate");
         onNewProject();
       }}
@@ -319,6 +502,7 @@ export function Sidebar({
       type="button"
       className="item side-new-initiative"
       onClick={() => {
+        hideNew();
         onDrawer?.("navigate");
         onNewInitiative();
       }}
@@ -370,43 +554,65 @@ export function Sidebar({
         {newInitiativeButton}
       </div>
     ),
-    // The capped projects, each with a disclosure for its initiatives, then
-    // View all. The current project starts open.
-    "project-tree": tree ? (
+    // The filter, every active project with a disclosure for its initiatives,
+    // then the Closed row. The current project starts open; while the filter
+    // holds a query its matches show open.
+    "project-tree": openCounts ? (
       <div className="tree" role="group" aria-label="Projects" key="project-tree">
-        {tree.nodes.map(({ project, initiatives }) => {
+        <div className="tree-filter">
+          <Search className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+          <input
+            ref={filterRef}
+            type="search"
+            className="tree-q"
+            aria-label="Filter projects and initiatives"
+            placeholder="Filter projects"
+            autoComplete="off"
+            spellCheck={false}
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            onKeyDown={onFilterKeyDown}
+          />
+        </div>
+        <p className="tree-none" role="status">
+          {filtering && shownTree.length === 0 ? "No project or initiative matches." : ""}
+        </p>
+        {shownTree.map(({ project, initiatives }) => {
+          const key = `project:${project.id}`;
           const bodyId = `mc-nav-tree-${project.id}`;
-          const expanded = treeOpen[project.id] === true;
+          const holds = initiatives.length > 0;
+          const expanded = filtering || treeOpen[project.id] === true;
           return (
             <div className="tree-node" key={project.id}>
               <div className="tree-row">
                 {link(
-                  `project:${project.id}`,
+                  key,
                   { screen: "project", projectId: project.id },
                   route.screen === "project" && route.projectId === project.id,
                   project.name,
                   <>
-                    <span className={`hl ${project.health}`} aria-hidden="true" />
                     <span className="nm">{project.name}</span>
+                    <OpenCount n={openCounts.byProject.get(project.id) ?? 0} health={project.health} />
                   </>,
-                  project.id === openProjectId
+                  project.id === openProjectId,
+                  holds && !filtering ? { ...treeRow(key, null, expanded), "aria-expanded": expanded } : treeRow(key)
                 )}
-                {initiatives.length > 0 ? (
+                {holds && !filtering ? (
                   <button
                     type="button"
                     className="tree-toggle"
+                    tabIndex={-1}
                     aria-expanded={expanded}
                     aria-controls={bodyId}
                     aria-label={`Initiatives in ${project.name}`}
+                    data-tree-toggles={key}
                     onClick={() => setTreeOpen((prev) => ({ ...prev, [project.id]: !expanded }))}
                   >
-                    <span className="chev" aria-hidden="true">
-                      {expanded ? "▾" : "▸"}
-                    </span>
+                    <ChevronRight className="chev" aria-hidden="true" focusable="false" strokeWidth={2} />
                   </button>
                 ) : null}
               </div>
-              {initiatives.length > 0 ? (
+              {holds ? (
                 <div id={bodyId} className="tree-kids" hidden={!expanded}>
                   {initiatives.map((b) =>
                     link(
@@ -415,9 +621,12 @@ export function Sidebar({
                       route.screen === "bucket" && route.bucketId === b.id,
                       b.name,
                       <>
-                        <span className={`hl ${b.health}`} aria-hidden="true" />
+                        <span className="guide" aria-hidden="true" />
                         <span className="nm">{b.name}</span>
-                      </>
+                        <OpenCount n={openCounts.byInitiative.get(b.id) ?? 0} health={b.health} />
+                      </>,
+                      false,
+                      treeRow(`bucket:${b.id}`, key)
                     )
                   )}
                 </div>
@@ -425,17 +634,44 @@ export function Sidebar({
             </div>
           );
         })}
-        {tree.total > tree.nodes.length
-          ? link(
-              "projects:all",
-              { screen: "projects" },
-              false,
-              `View all ${tree.total} projects`,
-              <span className="nm">View all {tree.total} projects</span>
-            )
-          : null}
-        {newProjectButton}
-        {newInitiativeButton}
+        {!filtering && closedProjects.length > 0 ? (
+          <div className="tree-closed">
+            <button
+              type="button"
+              className="item"
+              {...treeRow("closed", null, closedOpen)}
+              data-tree-toggles="closed"
+              aria-expanded={closedOpen}
+              aria-controls="mc-nav-closed"
+              onClick={() => setClosedOpen((prev) => !prev)}
+            >
+              <ChevronRight className="chev" aria-hidden="true" focusable="false" strokeWidth={2} />
+              <span className="nm">Closed</span>
+              <span className="cnt">
+                <span aria-hidden="true">{closedProjects.length}</span>
+                <span className="vh">
+                  , {closedProjects.length} project{closedProjects.length === 1 ? "" : "s"}
+                </span>
+              </span>
+            </button>
+            <div id="mc-nav-closed" className="tree-kids" hidden={!closedOpen}>
+              {closedProjects.map((p) =>
+                link(
+                  `closed:${p.id}`,
+                  { screen: "project", projectId: p.id },
+                  route.screen === "project" && route.projectId === p.id,
+                  p.name,
+                  <>
+                    <span className="guide" aria-hidden="true" />
+                    <span className="nm">{p.name}</span>
+                  </>,
+                  false,
+                  treeRow(`closed:${p.id}`, "closed")
+                )
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     ) : null,
   };
@@ -452,6 +688,7 @@ export function Sidebar({
         <button
           type="button"
           className="item star-rail"
+          {...treeRow("star-rail")}
           title="Starred"
           aria-controls="mc-nav"
           aria-expanded={drawerOpen}
@@ -470,7 +707,9 @@ export function Sidebar({
               <>
                 {row.lucide ? <NavIcon name={row.lucide} /> : <span className={`hl ${row.health}`} aria-hidden="true" />}
                 <span className="nm">{row.label}</span>
-              </>
+              </>,
+              false,
+              treeRow(`star:${row.key}`)
             )
           )}
         </div>
@@ -481,13 +720,42 @@ export function Sidebar({
   const flyoutSections = zoned ? visibleAdminFlyout(flags) : [];
   const onAdminScreen = zoned && zonedNavPlaceOf(route.screen) === "admin";
 
+  // A nav item's row: its icon, label and count. Zoned, the count is a figure
+  // in the count column (portal ADR-011 v2, Counts).
+  const itemRow = (item: NavItem, parent: string | null) =>
+    link(
+      item.screen,
+      { screen: navItemTarget(item, route.screen) },
+      isNavItemCurrent(item, route.screen),
+      item.label,
+      <>
+        <NavIcon name={item.lucide} />
+        <span className="nm">{item.label}</span>
+        {!item.badge ? null : zoned ? <CountFigure count={counts[item.badge]} /> : <CountBadge count={counts[item.badge]} />}
+      </>,
+      false,
+      treeRow(`screen:${item.screen}`, parent)
+    );
+
   const sidebar = (
     <nav
       className={`mc-side${drawerOpen ? " open" : ""}`}
       id="mc-nav"
       aria-label="Main"
       ref={drawerRef}
-      onKeyDown={drawerOpen ? onDrawerKeyDown : undefined}
+      onKeyDown={(event) => {
+        if (drawerOpen) onDrawerKeyDown?.(event);
+        if (zoned) onTreeKeyDown(event);
+      }}
+      onContextMenu={(event) => {
+        if (event.timeStamp - menuKeyAt.current < 1000) event.preventDefault();
+      }}
+      onFocus={(event) => {
+        const key = zoned ? (event.target as HTMLElement).dataset?.treeKey : undefined;
+        if (!key) return;
+        stopChosen.current = true;
+        if (key !== treeStop) setTreeStop(key);
+      }}
     >
       <div className="side-head">
         {/* 641–1024px only (CSS): expands the icon rail into the labelled drawer. */}
@@ -517,13 +785,16 @@ export function Sidebar({
         const headingId = `mc-nav-h-${group.id}`;
         const bodyId = `mc-nav-${group.id}`;
         const open = !group.collapsible || (group.id === "knowledge" ? knowledgeOpen : adminOpen);
+        const groupKey = group.collapsible ? `group:${group.id}` : null;
         return (
           <Fragment key={group.id}>
             <div className="grp" role="group" aria-labelledby={headingId}>
-              {group.collapsible ? (
+              {groupKey ? (
                 <button
                   type="button"
                   className="h h-toggle"
+                  {...treeRow(groupKey, null, open)}
+                  data-tree-toggles={zoned ? groupKey : undefined}
                   id={headingId}
                   aria-expanded={open}
                   aria-controls={bodyId}
@@ -541,16 +812,29 @@ export function Sidebar({
               )}
               <div id={bodyId} className="grp-body" hidden={!open}>
                 {group.items.map((item) =>
-                  link(
-                    item.screen,
-                    { screen: navItemTarget(item, route.screen) },
-                    isNavItemCurrent(item, route.screen),
-                    item.label,
-                    <>
-                      <NavIcon name={item.lucide} />
-                      <span className="nm">{item.label}</span>
-                      {item.badge ? <CountBadge count={counts[item.badge]} /> : null}
-                    </>
+                  // The zoned Projects row carries the one + (portal ADR-011
+                  // v2, Lists 4): New project or New initiative.
+                  zoned && item.screen === "projects" ? (
+                    <div className="tree-row" key={item.screen}>
+                      {itemRow(item, groupKey)}
+                      <button
+                        ref={newToggleRef}
+                        type="button"
+                        className="row-act"
+                        tabIndex={-1}
+                        title="New project or initiative"
+                        aria-label="New project or initiative"
+                        popoverTarget={NEW_MENU_ID}
+                        aria-controls={NEW_MENU_ID}
+                        aria-expanded={newOpen}
+                        data-tree-menu-for={`screen:${item.screen}`}
+                        onBlur={onNewBlur}
+                      >
+                        <Plus className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+                      </button>
+                    </div>
+                  ) : (
+                    itemRow(item, groupKey)
                   )
                 )}
                 {group.lists?.map((list) => lists[list])}
@@ -566,6 +850,7 @@ export function Sidebar({
             ref={flyoutToggleRef}
             type="button"
             className={`item foot-toggle${onAdminScreen ? " on-path" : ""}`}
+            {...treeRow("admin")}
             title="Admin & health"
             popoverTarget={ADMIN_FLYOUT_ID}
             aria-controls={ADMIN_FLYOUT_ID}
@@ -574,7 +859,8 @@ export function Sidebar({
           >
             <NavIcon name="Settings" />
             <span className="nm">Admin & health</span>
-            <CountBadge count={counts.sync} />
+            <CountFigure count={counts.sync} />
+            <ChevronRight className="act" aria-hidden="true" focusable="false" strokeWidth={1.5} />
           </button>
           {link(
             HELP_NAV_ITEM.screen,
@@ -584,7 +870,9 @@ export function Sidebar({
             <>
               <NavIcon name={HELP_NAV_ITEM.lucide} />
               <span className="nm">{HELP_NAV_ITEM.label}</span>
-            </>
+            </>,
+            false,
+            treeRow("help")
           )}
         </div>
       ) : null}
@@ -595,7 +883,7 @@ export function Sidebar({
   return (
     <>
       {sidebar}
-      {/* A sibling of the nav: the rail form's icon-only styles must not reach it. */}
+      {/* Siblings of the nav: the rail form's icon-only styles must not reach them. */}
       <div
         ref={flyoutRef}
         id={ADMIN_FLYOUT_ID}
@@ -633,6 +921,20 @@ export function Sidebar({
             </div>
           );
         })}
+      </div>
+      <div
+        ref={newPanelRef}
+        id={NEW_MENU_ID}
+        popover="auto"
+        onBeforeToggle={onNewBeforeToggle}
+        onToggle={onNewToggle}
+        className="mc-flyout drop new-menu"
+        role="group"
+        aria-label="New"
+        onBlur={onNewBlur}
+      >
+        {newProjectButton}
+        {newInitiativeButton}
       </div>
     </>
   );

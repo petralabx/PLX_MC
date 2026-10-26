@@ -74,9 +74,12 @@ function pushLayer(entry: LayerEntry): () => void {
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// Only what Tab reaches: a tabindex="-1" link or button (the zoned sidebar's
+// tree rows other than its one stop, TASK-3955) is focusable but out of the
+// Tab order, so it must not count as the first or last stop.
 function focusablesIn(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-    (el) => el.getClientRects().length > 0
+    (el) => el.tabIndex >= 0 && el.getClientRects().length > 0
   );
 }
 

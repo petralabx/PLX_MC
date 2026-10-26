@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-26 (UTC) — TASK-3955, TASK-3996: one commit stamped two checkouts, and the gate blocked the PR for good
+
+- **What happened:** PLX_MC #466 carried two tasks. Its second commit ended with two `MC-Checkout` trailers, one per task. `compliance` blocked with `commit ad01cea: more than one MC-Checkout trailer`, and no later commit could clear it. The PR was re-cut on a new branch, because the rules forbid a force-push.
+- **Root cause:** `commitTrailers` (`src/lib/compliance/commit-signals.ts`) takes exactly one `Agent`, `On-Behalf-Of` and `MC-Checkout` trailer per agent commit. The gate reads every commit in the PR, not only the head. The PR body may list several stamps, but a commit may carry only one.
+- **Rule going forward:** In a PR with several tasks, put each task's work in its own commit, and end each commit with that task's one trailer block. Before the first push, check every commit with `git log --format=%B origin/main..HEAD | grep -c '^MC-Checkout:'`. The count must equal the number of commits.
+
 ### 2026-10-26 (UTC) — TASK-3921: a Google Fonts hiccup failed the production build on main
 
 - **What happened:** On `main` at 41625e6, the `Preflight + full suite` job (run 40248011453) passed every test, then failed its production build with 28 `next/font/google` errors. A re-run of the same commit passed 20 minutes later.

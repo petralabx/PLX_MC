@@ -589,6 +589,8 @@ export function WorkViews({ route, nav }: ScreenProps) {
         "input,textarea,[contenteditable]"
       );
       if (event.key === "/" && !inField) {
+        // The sidebar's tree (chrome.tsx) owns its keys: there `/` does nothing.
+        if ((event.target as HTMLElement | null)?.closest?.("[data-tree-key]")) return;
         // A shell layer (drawer, More sheet, overlay pane) owns the keyboard.
         if (hasOpenLayer()) return;
         event.preventDefault();

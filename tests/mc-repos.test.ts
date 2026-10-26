@@ -54,6 +54,7 @@ describe("registry shape", () => {
       "furgenics",
       "local-inference",
       "plx-mc",
+      "plx-secondbrain",
       "portal-web",
       "skills",
     ]);

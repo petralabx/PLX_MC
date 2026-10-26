@@ -4,6 +4,7 @@
 
 import { ApiError } from "@/lib/api/route";
 import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
+import { isCreatorApprovalGated } from "@/lib/permissions";
 import { withTransaction, type TxQuery } from "@/lib/db";
 import { assertAutonomyAllowsConfirmation } from "@/lib/routing/autonomy";
 import {
@@ -615,6 +616,17 @@ export async function createConfirmedTask(
             },
           ],
           userCreated: true,
+          // TASK-3631: a gated creator's routed task starts with a pending
+          // creator approval, as on the direct create path (TASK-3530).
+          ...(authorized.actorKind === "service" && isCreatorApprovalGated(authorized.actorId)
+            ? {
+                creatorApproval: {
+                  principal: authorized.actorId,
+                  status: "pending" as const,
+                  requestedAt: new Date().toISOString(),
+                },
+              }
+            : {}),
         };
         await insertTaskRow(q, task, {
           title: nowAttr,

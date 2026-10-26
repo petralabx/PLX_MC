@@ -15,6 +15,16 @@ const txState = vi.hoisted(() => ({
   links: 0,
 }));
 
+// TASK-3631: the gated creator list is reviewed code; a test marks a principal gated here.
+const gated = vi.hoisted(() => ({ ids: new Set<string>() }));
+vi.mock("@/lib/permissions", async (orig) => {
+  const actual = await orig<typeof import("@/lib/permissions")>();
+  return {
+    ...actual,
+    isCreatorApprovalGated: (id: string | null | undefined) => (!!id && gated.ids.has(id)) || actual.isCreatorApprovalGated(id),
+  };
+});
+
 vi.mock("@/lib/db", () => ({
   withTransaction: async <T>(fn: (q: unknown) => Promise<T>) => {
     const q = async (text: string, params: unknown[] = []) => {
@@ -147,6 +157,7 @@ const serviceActor: AuthorizedActor = {
 
 beforeEach(() => {
   process.env.PLX_MC_ROUTING_CONFIRM_ENABLED = "1";
+  gated.ids.clear();
   txState.proposals.clear();
   txState.intents.length = 0;
   txState.entities.clear();
@@ -285,6 +296,40 @@ describe("createConfirmedTask", () => {
     });
     expect(result.created).toBe(true);
     expect(result.taskId).toMatch(/^TASK-\d+$/);
+  });
+
+  it("starts a gated service creator's routed task with a pending creator approval (TASK-3631)", async () => {
+    gated.ids.add("sp_mcp_cursor");
+    const result = await createConfirmedTask(serviceActor, {
+      proposalId: "prop-create",
+      bucketId: "BKT-OPS",
+      title: "Gated routed create",
+      accountableOwnerId: "oid-human",
+      authorizationTrust: "persisted_decision",
+    });
+    const task = txState.entityData.get(result.taskId) as unknown as { creatorApproval?: Record<string, unknown> };
+    expect(task.creatorApproval).toMatchObject({ principal: "sp_mcp_cursor", status: "pending" });
+    expect(typeof task.creatorApproval?.requestedAt).toBe("string");
+  });
+
+  it("sets no creator approval for an ungated service or a person", async () => {
+    const svc = await createConfirmedTask(serviceActor, {
+      proposalId: "prop-create",
+      bucketId: "BKT-OPS",
+      title: "Ungated routed create",
+      accountableOwnerId: "oid-human",
+      authorizationTrust: "persisted_decision",
+    });
+    expect((txState.entityData.get(svc.taskId) as unknown as { creatorApproval?: unknown }).creatorApproval).toBeUndefined();
+    txState.proposals.get("prop-create")!.state = "action_required";
+    gated.ids.add("oid-1"); // a person's oid is never a gated creator, even if listed
+    const person = await createConfirmedTask(human, {
+      proposalId: "prop-create",
+      bucketId: "BKT-OPS",
+      title: "Person routed create",
+      accountableOwnerId: "oid-1",
+    });
+    expect((txState.entityData.get(person.taskId) as unknown as { creatorApproval?: unknown }).creatorApproval).toBeUndefined();
   });
 
   it("rejects missing bucket", async () => {

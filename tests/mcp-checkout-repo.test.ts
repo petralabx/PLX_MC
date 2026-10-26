@@ -103,12 +103,12 @@ describe("resolveCheckoutRepo", () => {
     );
   });
 
-  it("rejects a registry repo that is not active (pending_adoption test-perms-check)", () => {
-    expect(() => resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/test-perms-check")).toThrow(
+  it("rejects a registry repo that is not active (pending_adoption agent-runner)", () => {
+    expect(() => resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/agent-runner")).toThrow(
       ApiError
     );
     try {
-      resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/test-perms-check");
+      resolveCheckoutRepo("petralabx/PLX_MC", "petralabx/agent-runner");
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError);
       expect((err as ApiError).code).toBe("repo_not_allowlisted");

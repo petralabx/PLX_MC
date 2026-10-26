@@ -618,6 +618,39 @@ describe("mc_verify_approval (TASK-3408, TASK-3444)", () => {
   it("rejects a malformed scope at request time", () => {
     expect(requestApprovalSchema.safeParse({ taskId: "T", reason: "r", scope: { kind: "launch", lane: "nolane", promptHash: "x" } }).success).toBe(false);
   });
+
+  // TASK-3630: the gated-creator approval (TASK-3530) sits next to the signed gates.
+  it("reports the creator approval: pending, then approved, and none on an ungated task", async () => {
+    const none = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", expect: { kind: "creator" } });
+    expect(none).toMatchObject({ ok: true, reason: null, approval: null, creatorApproval: null, gateLink: null });
+    const requestedAt = "2026-10-26T20:00:00.000Z";
+    mem.tasks.get("TASK-700")!.creatorApproval = { principal: "sp_mcp_workbench_intake", status: "pending", requestedAt };
+    const pending = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", expect: { kind: "creator" } });
+    expect(pending).toMatchObject({
+      ok: false,
+      reason: "creator_approval_pending",
+      creatorApproval: { principal: "sp_mcp_workbench_intake", status: "pending", requestedAt, approvedBy: null, approvedAt: null },
+    });
+    // The other kinds carry it too, unchanged otherwise.
+    const flags = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", expect: { kind: "flags" } });
+    expect(flags).toMatchObject({ ok: false, reason: "no_approval", creatorApproval: { status: "pending" } });
+    mem.tasks.get("TASK-700")!.creatorApproval = {
+      principal: "sp_mcp_workbench_intake", status: "approved", requestedAt,
+      approvedBy: "vince@petrasoap.com", approvedByOid: "oid-v", approvedAt: "2026-10-26T21:00:00.000Z",
+    };
+    const approved = await actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", expect: { kind: "creator" } });
+    expect(approved).toMatchObject({
+      ok: true, reason: null,
+      creatorApproval: { status: "approved", approvedBy: "vince@petrasoap.com", approvedAt: "2026-10-26T21:00:00.000Z" },
+    });
+    expect(JSON.stringify(approved)).not.toContain("oid-v");
+  });
+
+  it("refuses an approvalId with the creator kind", async () => {
+    await expect(
+      actionVerifyApproval(OTHER_PRINCIPAL, { taskId: "TASK-700", approvalId: "apg_abc", expect: { kind: "creator" } })
+    ).rejects.toMatchObject({ code: "invalid_request", status: 400 });
+  });
 });
 
 // TASK-3559: each approval tool result carries the link that opens its gate on

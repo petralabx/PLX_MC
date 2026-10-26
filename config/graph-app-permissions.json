@@ -1,6 +1,6 @@
 {
   "$comment": "Least-privilege contract for the app-only Microsoft Graph app registration (TASK-621). scripts/audit-graph-app-permissions.mjs decodes the app token's roles claim and fails on drift. Owner: Vince. Enforcement: preflight-invocable audit script + runbook docs/runbooks/graph-least-privilege.md.",
-  "appRegistration": "plx-mission-control-graph (app-only; MICROSOFT_GRAPH_CLIENT_ID)",
+  "appRegistration": "PLX Mission Control Sync (7c73cbc9; app-only; MICROSOFT_GRAPH_CLIENT_ID)",
   "requiredRoles": [
     "Sites.Selected"
   ],
@@ -9,6 +9,11 @@
       "site": "/sites/plx-mission-control",
       "permission": "write",
       "$comment": "Granted per-site via POST /sites/{siteId}/permissions once Sites.Selected replaces the broad role."
+    },
+    {
+      "site": "/sites/PLXSite",
+      "permission": "write",
+      "$comment": "MC evidence store: mc_upload_evidence writes to the \"Mission Control\" library on PLXSite (src/lib/compliance/evidence-artifacts.ts). Granted per-site by Azure admin 2026-10-26; MC never creates the library or grants access."
     }
   ],
   "transitionalRoles": [

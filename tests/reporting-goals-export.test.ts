@@ -130,7 +130,7 @@ describe("the workbook", () => {
 
   it("is Arial 10 throughout, with 14-point bold titles", async () => {
     const { wb } = await build();
-    const titles = new Set(["Read me!A1", "Goals!A1", "Revenue by class!A1", "Forecast!A1"]);
+    const titles = new Set(["Read me!A1", "Goals!A1", "Revenue by class!A1", "Customers!A1", "Forecast!A1"]);
     for (const ws of wb.worksheets) {
       ws.eachRow((row) =>
         row.eachCell((cell) => {

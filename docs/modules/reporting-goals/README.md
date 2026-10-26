@@ -531,6 +531,49 @@ portal's Projected Revenue books US sales at (TASK-1270).
 - It is a fixed rate, not each invoice's own Sage rate (`inrate`), which the
   reporting login can't read.
 
+### Manufacturing customers
+
+A "Customers" switch beside the rate switch (Progress Huddle, 23 Oct 2026):
+"All" (the default) or "Manufacturing customers", every customer class but
+Exclusive Distribution (Exclusive Manufacturing, Mixed and Unclassified stay).
+
+- **Where.** The choice lives in the URL (`/?screen=goals&scope=mfg`, kept
+  with `fx=sage`); "All" sends nothing. It is a display choice on the loaded
+  page, so switching it makes no new read.
+- **What it shows.** A line on the Revenue card: the manufacturing customers'
+  month, its share of the monthly target and the Exclusive Distribution amount
+  left out (`revenueScope` on the page model, from
+  `src/lib/reporting/goals/revenue-scope.ts`). It is read from revenue by
+  customer class, so it adds up with that table to the cent, at whichever rate
+  the page is at; when the class split and the card are a refresh apart the
+  line says so.
+- **What doesn't move.** The card's headline, status, goal and every other
+  section stay on all customers.
+- **The workbook.** The Revenue by class sheet always carries a "Manufacturing
+  customers (all but Exclusive Distribution)" row under the total, as a formula
+  over the class rows.
+
+### Revenue by customer
+
+A section above the forecast, and the workbook's Customers sheet
+(`customer-revenue.ts`, from the Progress Huddle of 2026-10-23). A search box
+filters both tables by customer name or Sage code. Weeks start on Monday.
+Amounts are in CAD at the page's rate.
+
+- **Potential.** Each forecast portion with an assembly order (AO) that isn't
+  cancelled or invoiced. It is priced from its linked Sage order line and sits
+  in the week of the AO's scheduled date. Packed AOs count until invoiced.
+- **Unpriced.** These are counted, never valued. Open AOs this month with no
+  open order show as pieces. Batches no AO packs from yet show as kg, dated 5
+  working days after the batch's completed or scheduled date.
+- **Realized.** This month's invoices by customer and ship week. USD is
+  converted once for the month and shared across customers, so the total
+  matches the Revenue card to the cent.
+- **Defaults.** FileMaker's AO realized date isn't readable, so the scheduled
+  date stands in. No price list is read, because `ic_pricp` has no grant.
+- **Data.** It reads only what the run already stores, so it needs no new
+  grant and no migration.
+
 ### Revenue by customer class
 
 The Revenue card's month by customer class (TASK-3781), in a section under the
@@ -700,6 +743,7 @@ Depended on by: nothing yet.
 
 - `src/lib/reporting/goals/` — the module (barrel `index.ts`; calendar, money, rules, view, queries/, source-db, source-mcp, sql-literal, fx, store, refresh, loader, access, entry-input, entries, excel/)
 - Revenue rate and revenue by class (TASK-3780, TASK-3781): `revenue-by-class.ts`, `money.ts` (`allocateConvertedCents`, `usableRate`), `excel/export.ts` (`usdToCadFormula`); `tests/reporting-goals-revenue-rate.test.ts` and the Sage-rate blocks of `tests/reporting-goals-export.test.ts`; `e2e/goals-rate.spec.ts`
+- Revenue by customer: `customer-revenue.ts`, `customer-search.ts`, `src/components/mc/goals/customers.tsx`, the Customers sheet in `excel/export.ts`; `tests/reporting-goals-customer-revenue.test.ts`; `e2e/goals-customers.spec.ts`
 - Reporting MCP path (TASK-3489): `source-mcp.ts`, `sql-literal.ts`; `tests/reporting-goals-source-mcp.test.ts` (a fake plx-reporting-mcp), `tests/reporting-goals-sql-literal.test.ts`, `tests/reporting-goals-source-select.test.ts`
 - `db/migrations/039_reporting_goals.sql` (+ `db/rollback/039_reporting_goals_rollback.sql`)
 - `db/migrations/042_reporting_goals_line1.sql` (+ `db/rollback/042_reporting_goals_line1_rollback.sql`) — the Line 1 settings

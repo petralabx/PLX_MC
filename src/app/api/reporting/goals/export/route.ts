@@ -45,6 +45,7 @@ export const GET = route(async (req) => {
     exportedAt: new Date(),
     forecast: view.forecast,
     revenueByClass: view.revenueByClass,
+    customerRevenue: view.customerRevenue,
   });
   await appendEvent({ kind: "reporting.goals.export", actor: `human:${actor.label}`, payload: { runId: run.id, fx: basis } });
   return new Response(new Uint8Array(workbook), {

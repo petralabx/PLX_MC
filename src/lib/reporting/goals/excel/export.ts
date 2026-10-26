@@ -20,6 +20,7 @@
 import type ExcelJS from "exceljs";
 
 import { REPORT_TIME_ZONE, monthLabel } from "../calendar";
+import type { CustomerRanking, CustomerRevenue } from "../customer-revenue";
 import { FORECAST_BUCKET_LABELS, type ForecastBucket, type ForecastView } from "../forecast";
 import { formatAmount, toCents } from "../money";
 import { missingByRelation } from "../queries/read-access";
@@ -77,6 +78,8 @@ export interface GoalsWorkbookInput {
   shipmentLines?: ShipmentLinesDataset | null;
   /** The page's revenue by customer class (TASK-3781); absent: the Revenue by class sheet says so. */
   revenueByClass?: RevenueByClass | null;
+  /** The page's potential and realized revenue by customer; absent: the Customers sheet says so. */
+  customerRevenue?: CustomerRevenue | null;
 }
 
 // ─── Fixed cells (the brief's formulas name them: =B13*B11, Goals!$B$17, …) ─
@@ -1021,6 +1024,10 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
       amber: col === 6,
     });
   }
+  // Manufacturing customers (the page's `scope=mfg` line): every class but Exclusive Distribution, as a formula on the rows above.
+  const distribution = data.rows.findIndex((c) => c.customerClass === "Exclusive Distribution");
+  put(ws, total + 1, 1, "Manufacturing customers (all but Exclusive Distribution)");
+  put(ws, total + 1, 7, { formula: distribution >= 0 ? `G${total}-G${first + distribution}` : `G${total}` }, { numFmt: AMOUNT_FORMAT });
   let r = total + 2;
   // The card as the page shows it, which the table checks itself against (Goals!G8 adds up the Daily sheet instead).
   put(ws, r, 1, "Revenue card (on the page)");
@@ -1052,9 +1059,76 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
   for (const text of notes) put(ws, r++, 1, text, { note: true });
 }
 
+function rankingBlock(ws: ExcelJS.Worksheet, start: number, title: string, ranking: CustomerRanking): number {
+  put(ws, start, 1, title, { bold: true });
+  const undated = ranking.customers.some((c) => c.undatedCadCents !== 0);
+  const weekCols = ranking.weeks.length + (undated ? 1 : 0);
+  const totalCol = 4 + weekCols;
+  headerRow(ws, start + 1, [
+    { text: "Rank" },
+    { text: "Customer" },
+    { text: "Sage code" },
+    ...ranking.weeks.map((w) => ({ text: `Week of ${w}` })),
+    ...(undated ? [{ text: "No date" }] : []),
+    { text: "Total, CAD" },
+  ]);
+  const first = start + 2;
+  ranking.customers.forEach((c, i) => {
+    const r = first + i;
+    put(ws, r, 1, i + 1, { numFmt: COUNT_FORMAT });
+    put(ws, r, 2, c.customer ?? c.key);
+    put(ws, r, 3, c.customerCode ?? "");
+    ranking.weeks.forEach((w, k) => put(ws, r, 4 + k, dollars(c.byWeek[w] ?? 0), { numFmt: AMOUNT_FORMAT }));
+    if (undated) put(ws, r, 4 + ranking.weeks.length, dollars(c.undatedCadCents), { numFmt: AMOUNT_FORMAT });
+    const a = ws.getColumn(4).letter;
+    const b = ws.getColumn(totalCol - 1).letter;
+    put(ws, r, totalCol, weekCols > 0 ? { formula: `SUM(${a}${r}:${b}${r})` } : 0, { numFmt: AMOUNT_FORMAT, bold: true });
+  });
+  const total = first + ranking.customers.length;
+  put(ws, total, 2, "All customers", { bold: true });
+  for (let col = 4; col <= totalCol; col += 1) {
+    const letter = ws.getColumn(col).letter;
+    put(ws, total, col, ranking.customers.length ? { formula: `SUM(${letter}${first}:${letter}${total - 1})` } : 0, {
+      numFmt: AMOUNT_FORMAT,
+      bold: true,
+    });
+  }
+  return total + 2;
+}
+
+function customersSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
+  const data = input.customerRevenue ?? null;
+  columns(ws, [8, 34, 12, 16, 16, 16, 16, 16, 16, 16]);
+  put(ws, 1, 1, `Revenue by customer - ${input.model.month.label}`, { title: true });
+  if (!data) {
+    put(ws, 2, 1, "Revenue by customer isn't in this export.", { note: true });
+    return;
+  }
+  put(
+    ws,
+    2,
+    1,
+    `CAD, USD at ${revenueRateText(input)}. Weeks start Monday. Potential: assembly orders not yet invoiced, priced from ` +
+      "their Sage order line and placed in their scheduled week. Realized: this month's invoices by ship week.",
+    { note: true }
+  );
+  let r = rankingBlock(ws, 4, "Potential: in production for an open order", data.potential);
+  r = rankingBlock(ws, r, "Realized: invoiced this month", data.realized);
+  const u = data.unpriced;
+  const notes = [
+    `Unpriced: ${count(u.aos.count)} open assembly orders this month with no open order (${count(u.aos.pieces)} pieces).`,
+    `Unpriced: ${count(u.batches.count)} batches with no assembly order yet (${u.batches.kg.toFixed(1)} kg), dated 5 working days after the batch: ` +
+      (Object.keys(u.batches.byWeek).sort().map((w) => `week of ${w} ${u.batches.byWeek[w].toFixed(1)} kg`).join(", ") || "none") +
+      ".",
+    `Realized adds up to ${formatAmount(data.realized.totalCadCents)} CAD; the Revenue card shows ${formatAmount(data.cardTotalCents)} CAD.`,
+  ];
+  if (u.otherCurrencyRows > 0) notes.push(`Not converted: ${count(u.otherCurrencyRows)} lines in a currency other than CAD or USD.`);
+  for (const text of notes) put(ws, r++, 1, text, { note: true });
+}
+
 // ─── The workbook ───────────────────────────────────────────────────────────
 
-/** The ten-sheet workbook as .xlsx bytes. */
+/** The eleven-sheet workbook as .xlsx bytes. */
 export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buffer> {
   const { Workbook } = await loadExcelJS();
   const wb = new Workbook();
@@ -1074,6 +1148,7 @@ export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buf
   shipmentSheet(sheets.Shipments, input);
   shipmentLinesSheet(sheets["Shipment lines"], input);
   forecastSheet(sheets.Forecast, input);
+  customersSheet(sheets.Customers, input);
   entriesSheet(sheets[ENTRIES_SHEET], input);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

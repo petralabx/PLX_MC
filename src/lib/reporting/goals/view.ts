@@ -4,8 +4,10 @@
 // USD revenue converts at the run's Bank of Canada rate, or at the fixed Sage
 // rate when the page asks for it (TASK-3780); truckloads stay on the Bank of Canada rate.
 
+import { customerRevenue, type CustomerRevenue } from "./customer-revenue";
 import { buildForecast, type CustomerClass, type ForecastSnapshot, type ForecastView } from "./forecast";
 import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
+import { revenueScope, type RevenueScopeView } from "./revenue-scope";
 import { computeGoals, type GoalsModel } from "./rules";
 import { buildShipmentList, type ShipmentListRow } from "./shipment-list";
 import { shipmentLinesView, type ShipmentLinesView } from "./shipment-lines";
@@ -53,6 +55,7 @@ export const SECTION_QUERIES: Record<string, readonly DatasetQuery[]> = {
   batches: [DATASET_QUERIES.batches],
   shipments: [DATASET_QUERIES.shipments, DATASET_QUERIES.truckloads, DATASET_QUERIES.shipmentLines],
   forecast: [DATASET_QUERIES.revenue, DATASET_QUERIES.forecastOrders, DATASET_QUERIES.forecastAos],
+  customers: [DATASET_QUERIES.shipments, DATASET_QUERIES.batches, DATASET_QUERIES.forecastOrders, DATASET_QUERIES.forecastAos],
 };
 
 export type GoalsViewState = "ready" | "not_configured" | "no_data";
@@ -76,6 +79,8 @@ export interface GoalsView {
   shipments: ShipmentListRow[];
   /** The Revenue card's month by customer class (TASK-3781), from the shipments list; null without a model. */
   revenueByClass: RevenueByClass | null;
+  /** The Revenue card's month for manufacturing customers (every class but Exclusive Distribution), read from revenueByClass; shown on the card at `scope=mfg`. */
+  revenueScope: RevenueScopeView | null;
   /** Whether the run has its invoices' lines (TASK-3144); the page fetches them on demand. null without a model. */
   shipmentLines: ShipmentLinesView | null;
   /** The goal settings the model was built with (the page's definitions and rules text quote them). */
@@ -83,6 +88,8 @@ export interface GoalsView {
   sections: Record<string, readonly DatasetQuery[]>;
   /** The revenue forecast (TASK-3151); null when the page has no model. */
   forecast: ForecastView | null;
+  /** Potential and realized revenue by customer (customer-revenue.ts); null without a model. */
+  customerRevenue: CustomerRevenue | null;
 }
 
 /** What the signed-in viewer may do on the page (from the Entra app roles). */
@@ -125,10 +132,12 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       model: null,
       shipments: [],
       revenueByClass: null,
+      revenueScope: null,
       shipmentLines: null,
       settings: null,
       sections: SECTION_QUERIES,
       forecast: null,
+      customerRevenue: null,
     };
   }
   const basis = input.revenueBasis ?? "boc";
@@ -162,6 +171,15 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
   });
   const byClass = revenueByClass(shipments, model, input.ftlCustomers);
   const invoicedByClass = Object.fromEntries(byClass.rows.map((r) => [r.customerClass, r.totalCadCents])) as Record<CustomerClass, number>;
+  const forecast = buildForecast({
+    snapshot: input.forecast ?? null,
+    model,
+    settings: input.settings,
+    rate: model.revenue.rate,
+    invoicedByClass,
+    invoicedByClassMatchesCard: byClass.matchesCard,
+    aoQtyUnreadable: run.rowCounts.forecastAoQtyUnreadable ?? null,
+  });
   return {
     state: "ready",
     run,
@@ -170,17 +188,20 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     model,
     shipments,
     revenueByClass: byClass,
+    revenueScope: revenueScope(byClass, "mfg", model.revenue.targetCents),
     shipmentLines: shipmentLinesView(input.shipmentLines ?? null),
     settings: input.settings,
     sections: SECTION_QUERIES,
-    forecast: buildForecast({
-      snapshot: input.forecast ?? null,
-      model,
-      settings: input.settings,
+    forecast,
+    customerRevenue: customerRevenue({
+      today: run.today,
+      holidays: input.holidays,
+      forecastRows: forecast.state === "ready" ? forecast.rows : [],
+      aos: forecast.state === "ready" ? (input.forecast?.data.aos ?? []) : [],
+      batches: input.snapshot.batches,
+      shipments,
       rate: model.revenue.rate,
-      invoicedByClass,
-      invoicedByClassMatchesCard: byClass.matchesCard,
-      aoQtyUnreadable: run.rowCounts.forecastAoQtyUnreadable ?? null,
+      cardTotalCents: model.revenue.totalCents,
     }),
   };
 }

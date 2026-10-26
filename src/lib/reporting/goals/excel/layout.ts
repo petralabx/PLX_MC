@@ -10,6 +10,7 @@ export const WORKBOOK_SHEETS = [
   "Read me",
   "Goals",
   "Revenue by class",
+  "Customers",
   "Daily",
   "Truckloads",
   "Batches",

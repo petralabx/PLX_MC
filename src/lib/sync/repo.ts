@@ -189,8 +189,13 @@ export async function taskIdsWithPr(repoName: string, prNumber: number): Promise
   return rows.map((r) => r.id);
 }
 
-/** One bucket's tasks, each with when its row was created (the UAT tickets view, TASK-3706). */
-export async function getBucketTasks(bucketId: string): Promise<{ task: Task; createdAt: string }[]> {
+/**
+ * Tasks labelled kind:code plus a uat:* label, in any bucket but the hidden
+ * ones, each with when its row was created (the UAT tickets view, TASK-3706).
+ * A ticket's task counts wherever it sits (TASK-3973); callers keep
+ * isUatTicketTask's exact rule, this only narrows the read.
+ */
+export async function getUatTicketTasks(hiddenBuckets: string[] = []): Promise<{ task: Task; createdAt: string }[]> {
   const rows = await query<{
     id: string;
     data: EntityData;
@@ -200,9 +205,15 @@ export async function getBucketTasks(bucketId: string): Promise<{ task: Task; cr
   }>(
     `SELECT id, data, created_at, completed_at, cancellation
        FROM entities
-      WHERE entity_type = 'task' AND data->>'bucket' = $1
+      WHERE entity_type = 'task'
+        AND COALESCE(data->'labels', '[]'::jsonb) ? 'kind:code'
+        AND EXISTS (
+          SELECT 1
+            FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(data->'labels') = 'array' THEN data->'labels' ELSE '[]'::jsonb END) AS label
+           WHERE label LIKE 'uat:%')
+        AND NOT (COALESCE(data->>'bucket', '') = ANY($1::text[]))
       ORDER BY id`,
-    [bucketId]
+    [hiddenBuckets]
   );
   return rows.map((r) => ({
     task: { ...withTaskColumns("task", r.data, r.completed_at, r.cancellation), id: r.id } as unknown as Task,

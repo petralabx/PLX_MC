@@ -19,7 +19,8 @@ const h = vi.hoisted(() => ({
   cronConfigured: vi.fn(() => true),
   cronSecret: vi.fn(() => "topsecret"),
   driftCronEnabled: vi.fn(() => true),
-  bucketTasks: vi.fn(),
+  ticketTasks: vi.fn(),
+  aclMaps: vi.fn(),
   dispatches: vi.fn(),
   lastEvents: vi.fn(),
   append: vi.fn(),
@@ -42,7 +43,7 @@ vi.mock("@/lib/secrets", async (importOriginal) => ({
 }));
 vi.mock("@/lib/sync/repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sync/repo")>()),
-  getBucketTasks: h.bucketTasks,
+  getUatTicketTasks: h.ticketTasks,
   getEntities: async () => {
     throw new Error("the view must not read the whole task table");
   },
@@ -59,6 +60,7 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
 }));
 vi.mock("@/lib/permissions/project-acl-guard", () => ({
   assertBucketProjectAccess: h.assertBucketProjectAccess,
+  loadProjectAclMaps: h.aclMaps,
 }));
 
 vi.mock("@/lib/mc-data/store", async (importOriginal) => ({
@@ -122,7 +124,8 @@ beforeEach(() => {
   vi.restoreAllMocks();
   h.portalReadEnabled.mockReset().mockReturnValue(false);
   h.portalReadToken.mockReset().mockReturnValue("portal-token");
-  h.bucketTasks.mockReset().mockResolvedValue([]);
+  h.ticketTasks.mockReset().mockResolvedValue([]);
+  h.aclMaps.mockReset().mockResolvedValue({ projects: [], buckets: [], projectsById: new Map(), bucketsById: new Map() });
   h.dispatches.mockReset().mockResolvedValue([]);
   h.cronConfigured.mockReset().mockReturnValue(true);
   h.cronSecret.mockReset().mockReturnValue("topsecret");
@@ -198,7 +201,7 @@ describe("pickLease", () => {
 
 describe("loadUatTickets", () => {
   it("folds facts for UAT ticket tasks only, without checkout ids", async () => {
-    h.bucketTasks.mockResolvedValue([
+    h.ticketTasks.mockResolvedValue([
       { task: ticketTask("TASK-11"), createdAt: at(30) },
       { task: ticketTask("TASK-12", { labels: ["kind:code"] }), createdAt: at(3) },
     ]);
@@ -207,7 +210,7 @@ describe("loadUatTickets", () => {
       { seq: "9", ts: at(6), kind: UAT_DRIFT_EVENT_KIND, actor: "mc-uat-drift", repo: null, taskId: null, pr: null, payload: { portal: "off", findings: [{}, {}] } } satisfies EventRow,
     ]);
     const report = await loadUatTickets(NOW);
-    expect(h.bucketTasks).toHaveBeenCalledWith(UAT_TICKET_BUCKET);
+    expect(h.ticketTasks).toHaveBeenCalledWith([]);
     expect(h.dispatches).toHaveBeenCalledWith({ taskIds: ["TASK-11"], limit: 2000 });
     expect(report).toMatchObject({ generatedAt: NOW.toISOString(), bucketId: UAT_TICKET_BUCKET, portal: { status: "off" } });
     expect(Object.keys(report.facts)).toEqual(["TASK-11"]);
@@ -215,6 +218,19 @@ describe("loadUatTickets", () => {
     expect(JSON.stringify(report)).not.toContain("dsp_");
     expect(report.drift.map((f) => [f.case, f.taskId])).toEqual([["expired_lease_no_pr", "TASK-11"]]);
     expect(report.lastDailyCheck).toEqual({ at: at(6), findings: 2, portal: "off" });
+  });
+
+  it("counts a ticket task in any bucket: its open ticket gets no no_task finding and no Create (TASK-3973)", async () => {
+    h.portalReadEnabled.mockReturnValue(true);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ tickets: [portalTicket] }));
+    h.ticketTasks.mockResolvedValue([
+      { task: ticketTask("TASK-3076", { bucket: "BKT-STRANDED-UAT-FIXES-OCT-1", stage: "backlog" }), createdAt: at(30) },
+    ]);
+    const report = await loadUatTickets(NOW);
+    expect(report.portal.status).toBe("ok");
+    expect(Object.keys(report.facts)).toEqual(["TASK-3076"]);
+    expect(report.drift.filter((f) => f.case === "no_task")).toEqual([]);
+    expect(report.drift.some((f) => f.fix?.kind === "create")).toBe(false);
   });
 
   it("skips the checkout read with no ticket tasks", async () => {
@@ -238,7 +254,28 @@ describe("GET /api/uat-tickets", () => {
     h.assertBucketProjectAccess.mockRejectedValue(new ApiError("not_found", "unknown bucket", 404));
     const resp = await GET(new Request("http://test/api/uat-tickets"), ctx);
     expect(resp.status).toBe(404);
-    expect(h.bucketTasks).not.toHaveBeenCalled();
+    expect(h.ticketTasks).not.toHaveBeenCalled();
+  });
+
+  it("leaves out ticket tasks in restricted projects the viewer can't see (TASK-3973)", async () => {
+    const projects = [
+      { id: "PRJ-UAT", visibility: "shared" },
+      { id: "PRJ-SECRET", visibility: "restricted", members: ["someone-else@petrasoap.com"] },
+    ];
+    const buckets = [
+      { id: UAT_TICKET_BUCKET, project: "PRJ-UAT" },
+      { id: "BKT-SECRET", project: "PRJ-SECRET" },
+      { id: "BKT-LOOSE", project: null },
+    ];
+    h.aclMaps.mockResolvedValue({
+      projects,
+      buckets,
+      projectsById: new Map(projects.map((p) => [p.id, p])),
+      bucketsById: new Map(buckets.map((b) => [b.id, b])),
+    });
+    const resp = await GET(new Request("http://test/api/uat-tickets"), ctx);
+    expect(resp.status).toBe(200);
+    expect(h.ticketTasks).toHaveBeenCalledWith(["BKT-SECRET"]);
   });
 });
 
@@ -253,20 +290,20 @@ describe("GET /api/cron/uat-drift", () => {
     h.cronConfigured.mockReturnValue(true);
     expect((await call()).status).toBe(401);
     expect((await call("Bearer nope")).status).toBe(401);
-    expect(h.bucketTasks).not.toHaveBeenCalled();
+    expect(h.ticketTasks).not.toHaveBeenCalled();
     expect(h.append).not.toHaveBeenCalled();
   });
 
   it("kill switch off: enabled false, no reads, no writes", async () => {
     h.driftCronEnabled.mockReturnValue(false);
     expect(await (await call("Bearer topsecret")).json()).toEqual({ data: { enabled: false } });
-    expect(h.bucketTasks).not.toHaveBeenCalled();
+    expect(h.ticketTasks).not.toHaveBeenCalled();
     expect(h.append).not.toHaveBeenCalled();
   });
 
   it("records one uat.drift.checked event with each finding's case and task, and fixes nothing", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
-    h.bucketTasks.mockResolvedValue([{ task: ticketTask("TASK-11"), createdAt: at(30) }]);
+    h.ticketTasks.mockResolvedValue([{ task: ticketTask("TASK-11"), createdAt: at(30) }]);
     h.dispatches.mockResolvedValue([dispatch("TASK-11")]);
     expect(await (await call("Bearer topsecret")).json()).toEqual({ data: { enabled: true, findings: 1, portal: "off" } });
     expect(h.append).toHaveBeenCalledTimes(1);

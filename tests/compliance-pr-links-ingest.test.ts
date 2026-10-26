@@ -90,6 +90,7 @@ vi.mock("@/lib/compliance/repo", () => ({
   },
   dispatchHeads: async () => [],
   recordDispatchHead: async () => true,
+  openPrCandidatesForTask: async () => [],
   async appendEvent(e: { kind: string; taskId?: string | null; dedupKey?: string | null }) {
     h.events.push(e);
   },

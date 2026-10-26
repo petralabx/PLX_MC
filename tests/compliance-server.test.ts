@@ -45,7 +45,7 @@ vi.mock("@/lib/compliance/repo", () => ({
       if (d.revoked || d.releasedAt || d.repo !== input.repo) continue;
       d.releasedAt = new Date().toISOString();
       d.releasedReason = input.reason;
-      db.events.push({ kind: "checkout.released", actor: d.runtime, taskId: d.taskId });
+      db.events.push({ kind: "checkout.released", actor: d.runtime, taskId: d.taskId, pr: String(input.pr), payload: { checkoutId: id, reason: input.reason } });
     }
   },
   async unreleaseDispatches(ids: string[]) {
@@ -54,8 +54,27 @@ vi.mock("@/lib/compliance/repo", () => ({
       if (!d.revoked) { d.releasedAt = null; d.releasedReason = null; }
     }
   },
+  async releasingPrForDispatch(id: string) {
+    const e = db.events.findLast((x) => x.kind === "checkout.released" && x.payload?.checkoutId === id);
+    return e?.pr ? Number(e.pr) : null;
+  },
   async eventTaskIdByDedupKey(key: string) {
     return db.dedupKeys.has(key) ? "TASK-900" : null;
+  },
+  // In-memory twin of the SQL: the task's PRs in this repo (full or bare name)
+  // whose newest pr.*/gate.* event is not a merge or close, newest first.
+  async openPrCandidatesForTask(taskId: string, repoFullName: string) {
+    const kinds = ["pr.opened", "pr.synchronized", "pr.merged", "pr.closed", "gate.passed", "gate.blocked"];
+    const repos = [repoFullName, repoFullName.split("/").pop()].map((r) => r?.toLowerCase());
+    const newest = new Map<string, string>();
+    for (const e of db.events) {
+      const taskIds = e.payload?.taskIds;
+      if (!kinds.includes(e.kind) || !e.pr || !repos.includes(e.repo?.toLowerCase())) continue;
+      if (e.taskId !== taskId && !(Array.isArray(taskIds) && taskIds.includes(taskId))) continue;
+      newest.delete(e.pr);
+      newest.set(e.pr, e.kind);
+    }
+    return [...newest].filter(([, kind]) => kind !== "pr.merged" && kind !== "pr.closed").map(([pr]) => Number(pr)).reverse();
   },
   async insertDispatch(d: { id: string; actorKind: "agent" | "operator"; runtime: string; taskId: string; accountableHuman: string; repo: string }) {
     db.dispatches.set(d.id, { ...d, revoked: false, expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
@@ -319,6 +338,62 @@ describe("open PR checkout lifetime (TASK-2011)", () => {
     await ingestPullRequest(event({ action: "reopened" }));
     expect(d.releasedAt).toBe("2026-09-27T00:00:00Z");
     expect(github.loadPrState).not.toHaveBeenCalled();
+  });
+
+  // TASK-3813: stacked PRs carry the stamps of the PRs below them. Merging or
+  // closing one PR must not release a checkout another open PR still stamps.
+  describe("while another open PR stamps the checkout", () => {
+    const stacked = 2908;
+    beforeEach(async () => {
+      db.dispatches.get("dsp_old")!.expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+      await ingestPullRequest(event({ prNumber: stacked, headSha: "stack" }));
+      github.loadPrState.mockReset().mockImplementation(async (_repo: string, pr: number) => ({ open: pr === stacked, checkoutIds: ["dsp_old"] }));
+    });
+    const refused = () => db.events.filter((e) => e.kind === "checkout.release_refused");
+
+    it.each([true, false])("keeps it on close merged=%s, records why, and releases it with the last PR", async (merged) => {
+      await ingestPullRequest(event({ action: "closed", merged }));
+      await ingestPullRequest(event({ action: "closed", merged })); // a redelivery records nothing new
+      expect(db.dispatches.get("dsp_old")).toMatchObject({ revoked: false, releasedAt: null });
+      expect(db.events.some((e) => e.kind === "checkout.released")).toBe(false);
+      expect(refused()).toEqual([{
+        kind: "checkout.release_refused", actor: "codex", repo: input.repoFullName, taskId: "TASK-900", pr: String(stacked),
+        payload: { checkoutId: "dsp_old", reason: merged ? "merged" : "closed", code: "open_pr_holds_checkout", closedPr: input.prNumber },
+        dedupKey: expect.any(String),
+      }]);
+      // Only the other PR is read on GitHub, never the one being closed.
+      expect(github.loadPrState.mock.calls.every(([repo, pr]) => repo === input.repoFullName && pr === stacked)).toBe(true);
+      expect((await verifyPr({ ...input, prNumber: stacked, headSha: "stack" })).verdict).toBe("pass");
+
+      github.loadPrState.mockResolvedValue({ open: false, checkoutIds: ["dsp_old"] });
+      await ingestPullRequest(event({ action: "closed", merged, prNumber: stacked, headSha: "stack" }));
+      expect(db.dispatches.get("dsp_old")).toMatchObject({ releasedReason: merged ? "merged" : "closed", releasedAt: expect.any(String) });
+    });
+
+    it.each([
+      ["is closed on GitHub", { open: false, checkoutIds: ["dsp_old"] }],
+      ["no longer carries the stamp", { open: true, checkoutIds: ["dsp_other"] }],
+    ])("releases as before when that PR %s", async (_case, state) => {
+      github.loadPrState.mockResolvedValue(state);
+      await ingestPullRequest(event({ action: "closed", merged: true }));
+      expect(db.dispatches.get("dsp_old")).toMatchObject({ releasedReason: "merged", releasedAt: expect.any(String) });
+      expect(refused()).toHaveLength(0);
+    });
+
+    it("ignores an open PR in another repo that carries the same id", async () => {
+      db.events.length = 0;
+      db.events.push({ kind: "pr.opened", actor: "codex", repo: "petralabx/other", taskId: "TASK-900", pr: String(stacked), payload: { taskIds: ["TASK-900"] } });
+      await ingestPullRequest(event({ action: "closed", merged: true }));
+      expect(db.dispatches.get("dsp_old")).toMatchObject({ releasedReason: "merged", releasedAt: expect.any(String) });
+      expect(github.loadPrState).not.toHaveBeenCalled();
+      expect(refused()).toHaveLength(0);
+    });
+
+    it("fails closed when GitHub cannot rule out the open PR", async () => {
+      github.loadPrState.mockRejectedValue(new Error("GitHub down"));
+      await expect(ingestPullRequest(event({ action: "closed", merged: true }))).rejects.toThrow("GitHub down");
+      expect(db.dispatches.get("dsp_old")).toMatchObject({ releasedAt: null });
+    });
   });
 });
 
@@ -793,6 +868,67 @@ describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
     const legacy = await stamped();
     expect(db.events.find((e) => e.kind === "checkout" && e.payload?.checkoutId === legacy)?.payload).toMatchObject({ agent: null });
   });
+
+  // TASK-3813: #2907's merge released a checkout that stacked #2908 still
+  // stamps, and #2908's own commit carries its trailer. A re-checkout cannot
+  // match that trailer, so the gate accepts the released stamp for the commits
+  // already stamped with it, and never unreleases it.
+  describe("a stamp released by another PR's merge or close (TASK-3813)", () => {
+    const stack = { ...pr, prNumber: 2908, headSha: "h2" };
+    const releasedBy = async (cid: string, merged: boolean) => {
+      await ingestPullRequest({ ...pr, prNumber: 2907, headSha: "h1", action: "closed", merged, branch: "b", title: "t", author: "agent", labels: [], checkoutId: cid, checkoutIds: [cid] });
+      expect(db.dispatches.get(cid)).toMatchObject({ releasedReason: merged ? "merged" : "closed", releasedAt: expect.any(String) });
+    };
+
+    it.each([[true, "merge"], [false, "close"]])("passes a stacked PR whose own commit carries it (merged=%s)", async (merged, how) => {
+      const cid = await stamped("claude/claude-uat");
+      await releasedBy(cid, merged);
+      const before = { ...db.dispatches.get(cid)! };
+      db.dispatches.get(cid)!.expiresAt = new Date(Date.now() - 1000).toISOString();
+      github.loadPrCommits.mockResolvedValue([commit("5bc29a29", trailers(cid)), commit("aaaaaaa1", "human fix", human)]);
+      const r = await verifyPr({ ...stack, checkoutIds: [cid] });
+      expect(r.verdict).toBe("pass");
+      expect(r.reasons).toContain(`TASK-900: checkout dsp_…${cid.slice(-4)} released by #2907 ${how}; accepted for commits already stamped with it: 5bc29a2`);
+      expect(r.tasks[0].checkout).toMatchObject({ live: false, releasedReason: before.releasedReason, blockReason: null });
+      expect(db.dispatches.get(cid)).toMatchObject({ releasedAt: before.releasedAt, releasedReason: before.releasedReason });
+    });
+
+    it("blocks a PR with no commit that carries it", async () => {
+      const cid = await stamped("claude/claude-uat");
+      await releasedBy(cid, true);
+      github.loadPrCommits.mockResolvedValue([commit("aaaaaaa1", "human fix", human)]);
+      const r = await verifyPr({ ...stack, checkoutIds: [cid] });
+      expect(r.verdict).toBe("block");
+      expect(r.tasks[0].reasons).toEqual(["checkout released — re-checkout the task"]);
+    });
+
+    it("blocks the PR whose own merge or close released it", async () => {
+      const cid = await stamped("claude/claude-uat");
+      await releasedBy(cid, false);
+      github.loadPrCommits.mockResolvedValue([commit("5bc29a29", trailers(cid))]);
+      const r = await verifyPr({ ...pr, prNumber: 2907, headSha: "h1", checkoutIds: [cid] });
+      expect(r.tasks[0].reasons).toEqual(["checkout released — re-checkout the task"]);
+    });
+
+    it.each([
+      ["revoked", "checkout revoked — re-checkout the task"],
+      ["released as expired", "checkout released — re-checkout the task"],
+      ["released by hand", "checkout released — re-checkout the task"],
+      ["bound to another repo", "checkout released — re-checkout the task"],
+    ])("still blocks a checkout %s", async (condition, reason) => {
+      const cid = await stamped("claude/claude-uat");
+      await releasedBy(cid, true);
+      const d = db.dispatches.get(cid)!;
+      if (condition === "revoked") d.revoked = true;
+      if (condition === "released as expired") d.releasedReason = "manual: expired";
+      if (condition === "released by hand") d.releasedReason = "manual: stray from a stopped run";
+      if (condition === "bound to another repo") d.repo = "petralabx/other";
+      github.loadPrCommits.mockResolvedValue([commit("5bc29a29", trailers(cid))]);
+      const r = await verifyPr({ ...stack, checkoutIds: [cid] });
+      expect(r.verdict).toBe("block");
+      expect(r.tasks[0].reasons).toEqual([reason]);
+    });
+  });
 });
 
 // TASK-3409: checkout lifecycle — reuse, a second holder, renewal while the PR
@@ -1110,6 +1246,17 @@ describe("checkout lease chain (TASK-3410)", () => {
     const blocked = await verifyPr({ ...pr(sha("f")), checkoutIds: [cid] });
     expect(blocked.verdict).toBe("block");
     expect(blocked.reasons.join(" ")).toContain("outside checkout");
+  });
+
+  it("records no head for a checkout another PR's merge released (TASK-3813)", async () => {
+    const cid = await launch();
+    await recordHead(cid, sha("a"));
+    await ingestPullRequest({ ...pr(sha("a"), 2907), action: "closed", merged: true, branch: "x", title: "x", author: "agent", labels: [], checkoutId: cid, checkoutIds: [cid] });
+    github.loadPrCommits.mockResolvedValue([commit(sha("a"), trailers(cid, lane)), commit(sha("b"), trailers(cid, lane))]);
+    github.githubHeadDescendsFrom.mockResolvedValue(true);
+    const r = await verifyPr({ ...pr(sha("b"), 2908), checkoutIds: [cid] });
+    expect(r.verdict).toBe("pass");
+    expect(heads(cid)).toEqual(["a:launcher:-"]);
   });
 
   it("passes a head that descends from a recorded head and records it", async () => {

@@ -20,6 +20,7 @@ const renewDispatches = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock("@/lib/compliance/repo", () => ({
   releaseDispatches: vi.fn(async () => {}),
+  openPrCandidatesForTask: async () => [],
   renewDispatches,
   dispatchHeads: async () => [],
   recordDispatchHead: async () => true,

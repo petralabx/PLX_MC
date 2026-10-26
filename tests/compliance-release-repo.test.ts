@@ -23,6 +23,7 @@ import {
   hasActiveCheckoutForPrincipal,
   openPrCandidatesForTask,
   releaseDispatchManually,
+  releasingPrForDispatch,
   unreleaseDispatches,
 } from "@/lib/compliance/repo";
 
@@ -119,5 +120,22 @@ describe("openPrCandidatesForTask (TASK-2965)", () => {
       "TASK-1",
       10,
     ]);
+  });
+});
+
+describe("releasingPrForDispatch (TASK-3813)", () => {
+  it("reads the PR on the checkout's newest release event, read-only", async () => {
+    h.rows = [{ pr: "2907" }];
+    expect(await releasingPrForDispatch("dsp_abc1234")).toBe(2907);
+    const sql = squash(h.calls[0].text);
+    expect(sql).toContain("WHERE kind = 'checkout.released' AND payload->>'checkoutId' = $1");
+    expect(sql).toContain("ORDER BY seq DESC LIMIT 1");
+    expect(sql).not.toMatch(/UPDATE|DELETE|INSERT/);
+    expect(h.calls[0].params).toEqual(["dsp_abc1234"]);
+    // A manual release records no PR.
+    h.rows = [{ pr: null }];
+    expect(await releasingPrForDispatch("dsp_abc1234")).toBeNull();
+    h.rows = [];
+    expect(await releasingPrForDispatch("dsp_abc1234")).toBeNull();
   });
 });

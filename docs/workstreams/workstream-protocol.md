@@ -3,7 +3,7 @@
 - Slug: `workstream-protocol`
 - Owner: Vince Alton (accountable) · agents: claude-code/claude-code
 - Branches: `claude/trusting-albattani-44ngue` (one PR in each of the 10 repos)
-- MC tasks: TASK-3953
+- MC tasks: TASK-3953 (rollout), TASK-3988 (package and CI decisions)
 - SharePoint handoff: n/a
 
 ## Goal
@@ -15,7 +15,8 @@ gitignored worktree folders.
 
 ## Status
 
-active, as of 2026-10-26. One PR is open in each of the 10 repos.
+active, as of 2026-10-26. The rollout landed in all 10 repos. The package PR,
+[petralabx/skills#44](https://github.com/petralabx/skills/pull/44), is open.
 
 ## Done
 
@@ -31,14 +32,28 @@ active, as of 2026-10-26. One PR is open in each of the 10 repos.
 - The canonical skills are in petralabx/skills (catalog v1.6.12). PLX_MC and agentic-swarm carry
   the protocol in `config/governance-contract.yaml`, so their Codex, Grok, Gemini, Hermes and
   Cursor files regenerate with it.
+- Landed in all 10 repos on 2026-10-26 (TASK-3953), each with a merge commit:
+  [PLX_MC#457](https://github.com/petralabx/PLX_MC/pull/457),
+  [agentic-swarm#1790](https://github.com/petralabx/agentic-swarm/pull/1790),
+  [plx-customer-portal#3026](https://github.com/petralabx/plx-customer-portal/pull/3026),
+  [local-inference#68](https://github.com/petralabx/local-inference/pull/68),
+  [skills#43](https://github.com/petralabx/skills/pull/43),
+  [plx_secondbrain#8](https://github.com/petralabx/plx_secondbrain/pull/8),
+  [1hr-after#44](https://github.com/petralabx/1hr-after/pull/44),
+  [for-and-against#31](https://github.com/petralabx/for-and-against/pull/31),
+  [furgenics#18](https://github.com/petralabx/furgenics/pull/18),
+  [test-perms-check#3](https://github.com/petralabx/test-perms-check/pull/3).
 
 ## Next steps
 
-1. Land the 10 PRs (TASK-3953).
+1. Land [petralabx/skills#44](https://github.com/petralabx/skills/pull/44) (TASK-3988):
+   `handoff` and `resume-workstream` join `plx-engineering-core`, catalog v1.6.13. Then run
+   `scripts/distribute-to-repos.sh`, so consumers' `.cursor/skills/` get them. After that run,
+   check whether Cursor lists both the skill and the `.cursor/commands/` copy, and drop the command
+   copies if it does.
 2. Watch the Stop reminder in real sessions and tune it if it nags.
-3. Decide whether CI runs `node scripts/workstream-note.mjs check --strict`. That is a workflow
-   change in each repo, so each needs an MC approval. Consider a CI scorecard metric for PRs that
-   update a workstream note.
+3. Hold `node scripts/workstream-note.mjs check --strict` out of CI until org ruleset phase 2.
+   Then add it as one workflow PR per repo, each with its own signed MC merge approval.
 4. Add Cursor hooks once Cursor's hook docs can be read. They were unreachable from the building
    session, and a Cursor forum report says `sessionStart` `additional_context` is not injected.
    Cursor gets the rule and the two commands meanwhile.
@@ -55,12 +70,17 @@ active, as of 2026-10-26. One PR is open in each of the 10 repos.
 - 2026-10-26 The brand repos keep `docs/sessions.md` as their per-session log; notes cover work
   that spans more than one PR or session. Why: the brand team's session rules use the log.
   Decided by the building session; Vince can overrule.
+- 2026-10-26 `check --strict` stays out of CI until org ruleset phase 2. It then lands as one
+  workflow PR per repo, each with its own signed MC merge approval. Decided by Vince.
+- 2026-10-26 `handoff` and `resume-workstream` join the `plx-engineering-core` package, so
+  `distribute-to-repos.sh` carries them to new repos. Decided by Vince.
 
 ## Open questions
 
-- Should CI enforce the note format, or stay advisory? (Vince)
-- Should `handoff` and `resume-workstream` join the `plx-engineering-core` package, so
-  `distribute-to-repos.sh` carries them to new repos? (Vince)
+- `distribute-to-repos.sh` writes only `.cursor/skills/`. A new repo still needs
+  `scripts/workstream-note.mjs`, `docs/workstreams/`, the Claude Code hooks and the
+  `.claude/skills/` copies from the workstream bundle. Should the distribute script carry those
+  too? (Vince)
 
 ## Files / areas touched
 
@@ -68,6 +88,7 @@ active, as of 2026-10-26. One PR is open in each of the 10 repos.
   `scripts/workstream-note.mjs` and its test, `.claude/settings.json` hooks,
   `.claude/skills/handoff/` and `.claude/skills/resume-workstream/`,
   `.cursor/rules/workstreams.mdc`, `.cursor/commands/`, the PR template, `.gitignore`.
+- petralabx/skills: `manifest.json` (the `plx-engineering-core` package, v1.6.13).
 
 ## How to run the tests
 
@@ -75,12 +96,16 @@ active, as of 2026-10-26. One PR is open in each of the 10 repos.
 node --test scripts/workstream-note.test.mjs
 node scripts/workstream-note.mjs check --strict
 npx vitest run tests/workstream-note.test.ts   # PLX_MC only
+python scripts/validate-manifest.py            # petralabx/skills only
 ```
 
 ## Blockers or dependencies on other workstreams
 
 - Part of [ci-redesign](https://github.com/petralabx/agentic-swarm/blob/main/docs/workstreams/ci-redesign.md).
-  No blockers.
+  Next step 3 waits on its org ruleset phase 2.
+- Owned elsewhere (Chief of Staff, 2026-10-26): CIP has the AI-review marker gap outside the
+  portal; Ledger has adding plx_secondbrain and test-perms-check to Mission Control's task-repo
+  list.
 
 ## Last updated
 

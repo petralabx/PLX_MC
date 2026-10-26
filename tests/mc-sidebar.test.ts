@@ -206,6 +206,8 @@ describe("Sidebar — zoned", () => {
     expect(html).toContain('href="/?screen=projects" class="item" title="Projects"');
     expect(html).not.toContain("mc-nav-h-projects");
     expect(html).toContain('href="/?screen=project&amp;projectId=PRJ-PORTAL-GOLIVE" class="item"');
+    // The link says whether it is open too: → and ← open it with focus on the link.
+    expect(html).toContain('data-tree-key="project:PRJ-PORTAL-GOLIVE" data-tree-open="false" tabindex="-1" aria-expanded="false" href=');
     expect(html).toContain(
       'aria-expanded="false" aria-controls="mc-nav-tree-PRJ-PORTAL-GOLIVE" aria-label="Initiatives in PLX Portal Go-Live"'
     );
@@ -285,6 +287,7 @@ describe("Sidebar — zoned", () => {
       projects: [
         { ...project, id: "PRJ-A", name: "Alpha", health: "risk" as const },
         { ...project, id: "PRJ-B", name: "Beta", health: "track" as const },
+        { ...project, id: "PRJ-C", name: "Gamma", health: "off" as const },
       ],
       buckets: [{ ...bucket, id: "BKT-A", name: "Alpha work", project: "PRJ-A", health: "track" as const }],
     }));
@@ -302,6 +305,10 @@ describe("Sidebar — zoned", () => {
       /<span class="nm">Alpha<\/span><span class="cnt tasks risk"><span class="sq" aria-hidden="true"><\/span><span aria-hidden="true">1<\/span><span class="vh">, (<!-- -->)?at risk, 1 open task<\/span><\/span>/
     );
     expect(html).toContain('<span class="nm">Beta</span></a>');
+    // Off track has its own colour class, apart from at risk, and says so.
+    expect(html).toMatch(
+      /<span class="nm">Gamma<\/span><span class="cnt tasks off"><span class="sq" aria-hidden="true"><\/span><span class="vh">, (<!-- -->)?off track<\/span><\/span>/
+    );
     expect(html).toContain('<span class="nm">Alpha work</span><span class="cnt tasks"><span aria-hidden="true">1</span>');
   });
 

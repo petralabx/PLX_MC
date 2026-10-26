@@ -5,7 +5,7 @@
 // Grouped by what a colleague is doing — My work · Plan · Knowledge · Reporting
 // · Admin & health — not by system internals. Pure: no React, no store reads (badge
 // counts are resolved by the shell; icon names map to Lucide in nav-icon.tsx).
-import { isClosedStage, type Bucket, type Human, type Project, type Task } from "@/lib/mc-data";
+import { isClosedStage, type Bucket, type Project, type Task } from "@/lib/mc-data";
 import { STAR_CAP, type StarChange, type StarKey } from "@/lib/stars";
 
 import type { Route, Screen } from "./route";
@@ -175,13 +175,13 @@ function navItem(screen: Screen, label?: string): NavItem {
   return label ? { ...item, label } : item;
 }
 
-/** The Projects page (TASK-3841): every open project and its initiatives. */
+/** Projects (TASK-3841): opens the project Dashboard (TASK-3996). */
 export const PROJECTS_NAV_ITEM: NavItem = {
   screen: "projects",
   label: "Projects",
   icon: "▤",
   lucide: "FolderKanban",
-  hint: "every project and its initiatives",
+  hint: "the project dashboard",
 };
 
 /**
@@ -259,59 +259,21 @@ export function zonedNavPlaceOf(screen: Screen): NavGroupId | "admin" | "help" |
 }
 
 // ─── Projects tree (zoned sidebar, TASK-3841; v2, TASK-3955) ────────────────
-// Each open project with its open initiatives nested under it, by name. The
-// Projects page passes the viewer's own projects to list them first; the
-// sidebar lists every one A to Z (portal ADR-011 v2, Lists). Callers pass the
-// nav-visible records (navProjects, navBuckets), so closed and archived ones
-// stay out. Initiatives without an open project sit under No project on the
-// Projects page.
+// Every open project A to Z with its open initiatives nested under it (portal
+// ADR-011 v2, Lists). Callers pass the nav-visible records (navProjects,
+// navBuckets), so closed and archived ones stay out.
 
 export interface ProjectTreeNode {
   project: Project;
   initiatives: Bucket[];
 }
 
-const memberToken = (raw: string) => raw.trim().toLowerCase();
-
-/**
- * The viewer's projects, by the Approvals screen's My projects rule
- * (src/lib/compliance/my-projects.ts, TASK-3720): a member, the owner, or
- * assigned (assignee or coassignee) an open task in one of its initiatives.
- * Ids match case-insensitively on the viewer's id or email.
- */
-export function viewerProjectIds(
-  projects: readonly Project[],
-  initiatives: readonly Bucket[],
-  tasks: readonly Task[],
-  viewer: Pick<Human, "id" | "email"> | null
-): Set<string> {
-  const mine = new Set<string>();
-  if (!viewer) return mine;
-  const tokens = new Set([viewer.id, viewer.email].filter((t): t is string => !!t).map(memberToken));
-  const holds = (raw: string | null | undefined) => !!raw && tokens.has(memberToken(raw));
-  const projectOf = new Map(initiatives.map((b) => [b.id, b.project ?? null]));
-  for (const task of tasks) {
-    const projectId = projectOf.get(task.bucket);
-    if (projectId && !isClosedStage(task.stage) && (holds(task.assignee) || (task.coassignees ?? []).some(holds))) {
-      mine.add(projectId);
-    }
-  }
-  for (const project of projects) {
-    if (holds(project.owner) || (project.members ?? []).some(holds)) mine.add(project.id);
-  }
-  return mine;
-}
-
 /** Names A to Z, numbers in order (Phase 2 before Phase 10). */
 export const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, undefined, { numeric: true });
 
-export function projectTree(
-  projects: readonly Project[],
-  initiatives: readonly Bucket[],
-  mine: ReadonlySet<string> = new Set()
-): ProjectTreeNode[] {
+export function projectTree(projects: readonly Project[], initiatives: readonly Bucket[]): ProjectTreeNode[] {
   return [...projects]
-    .sort((a, b) => Number(mine.has(b.id)) - Number(mine.has(a.id)) || byName(a, b))
+    .sort(byName)
     .map((project) => ({ project, initiatives: initiatives.filter((b) => b.project === project.id) }));
 }
 
@@ -404,12 +366,6 @@ export function treeKeyAction(rows: readonly TreeRow[], index: number, key: stri
     if (rows[at].label.trim().toLowerCase().startsWith(letter)) return { focus: at };
   }
   return null;
-}
-
-/** Initiatives with no open project: the Projects page's No project group. */
-export function unfiledInitiatives(projects: readonly Project[], initiatives: readonly Bucket[]): Bucket[] {
-  const open = new Set(projects.map((p) => p.id));
-  return initiatives.filter((b) => !b.project || !open.has(b.project));
 }
 
 // ─── Starred (zoned sidebar, TASK-3842) ─────────────────────────────────────
@@ -565,7 +521,7 @@ export interface NavCommand {
 
 const slug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
-/** ⌘K "Go to …" commands for every visible item, plus its search synonyms; the zoned shell adds its Projects page. */
+/** ⌘K "Go to …" commands for every visible item, plus its search synonyms; the zoned shell adds Projects. */
 export function navCommands(flags: NavFlags, zoned = false): NavCommand[] {
   const items = [...visibleNavGroups(flags).flatMap((group) => group.items), ...(zoned ? [PROJECTS_NAV_ITEM] : [])];
   return items.flatMap((item) => [
@@ -612,7 +568,7 @@ export const NAV_TABS: readonly NavTab[] = [
 ];
 
 // Screens outside the default sidebar: the detail screens, and the zoned
-// sidebar's Projects page (TASK-3841).
+// sidebar's Projects row, which opens the project Dashboard (TASK-3841, TASK-3996).
 const DETAIL_TAB: Partial<Record<Screen, NavTabId>> = { task: "plan", bucket: "plan", project: "plan", projects: "plan" };
 const DETAIL_TITLE: Partial<Record<Screen, string>> = {
   task: "Task",
@@ -742,7 +698,7 @@ export function createTabMemory(
   };
 }
 
-/** The zoned tabs' memory (TASK-3843): the Projects page is a landing spot; detail screens are not. */
+/** The zoned tabs' memory (TASK-3843): Projects (the project Dashboard) is a landing spot; detail screens are not. */
 export function createZonedTabMemory(getStorage: () => NavStorage | null): TabMemory {
   return createTabMemory(getStorage, zonedTabOf, (screen) => !DETAIL_TAB[screen] || screen === "projects");
 }

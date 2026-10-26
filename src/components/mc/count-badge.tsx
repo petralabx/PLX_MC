@@ -39,8 +39,9 @@ export function CountFigure({ count }: { count: Count | undefined }) {
 
 /**
  * A project's or initiative's open tasks in the zoned sidebar's count column,
- * muted. At risk or off track, a warn square leads and the figure turns warn;
- * the row's name says so. Zero shows nothing but that square.
+ * muted. At risk, a warn square leads and the figure turns warn; off track,
+ * the same in the brand's off-track colour (Vince, 2026-10-26). The row's
+ * name says which. Zero shows nothing but that square.
  */
 export function OpenCount({ n, health }: { n: number; health?: Health }) {
   const flagged = health === "risk" || health === "off";
@@ -49,7 +50,7 @@ export function OpenCount({ n, health }: { n: number; health?: Health }) {
     .filter(Boolean)
     .join(", ");
   return (
-    <span className={`cnt tasks${flagged ? " risk" : ""}`}>
+    <span className={`cnt tasks${flagged ? ` ${health}` : ""}`}>
       {flagged ? <span className="sq" aria-hidden="true" /> : null}
       {n > 0 ? <span aria-hidden="true">{n}</span> : null}
       <span className="vh">, {said}</span>

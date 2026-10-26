@@ -36,8 +36,6 @@ import {
   tabOf,
   tabScreens,
   treeKeyAction,
-  unfiledInitiatives,
-  viewerProjectIds,
   visibleAdminFlyout,
   visibleNavGroups,
   visibleZonedNavGroups,
@@ -305,7 +303,7 @@ describe("zoned phone tabs", () => {
   });
 });
 
-// TASK-3841, v2 TASK-3955 — the zoned sidebar's Projects tree and the Projects page.
+// TASK-3841, v2 TASK-3955 — the zoned sidebar's Projects tree.
 describe("projects tree model", () => {
   const project = (id: string, name: string, extra: Partial<Project> = {}): Project => ({
     id,
@@ -333,34 +331,14 @@ describe("projects tree model", () => {
     prd: null,
     project: projectId,
   });
-  const vince = { id: "vince", email: "Vince@petrasoap.com" };
   const names = (tree: ReturnType<typeof projectTree>) => tree.map((n) => n.project.name);
   const task = (bucket: string, extra: Partial<Task>): Task => ({ id: `T-${bucket}`, bucket, stage: "approved", assignee: "greg", coassignees: [], ...extra }) as Task;
 
-  it("knows the viewer's projects by the Approvals rule: member, owner, or an open task", () => {
-    const projects = [
-      project("P1", "Owned", { owner: "VINCE@petrasoap.com" }),
-      project("P2", "Member", { members: [" vince "] }),
-      project("P3", "Assigned"),
-      project("P4", "Coassigned"),
-      project("P5", "Closed task"),
-      project("P6", "Someone else's", { members: ["greg@petrasoap.com"] }),
-    ];
-    const initiatives = ["P3", "P4", "P5", "P6"].map((id) => initiative(`B-${id}`, id));
-    const tasks = [
-      task("B-P3", { assignee: "vince" }),
-      task("B-P4", { coassignees: ["vince@petrasoap.com"] }),
-      task("B-P5", { assignee: "vince", stage: "verified" }),
-    ];
-    expect([...viewerProjectIds(projects, initiatives, tasks, vince)].sort()).toEqual(["P1", "P2", "P3", "P4"]);
-    expect(viewerProjectIds(projects, initiatives, tasks, null).size).toBe(0);
-  });
-
-  it("nests each initiative under its project, the viewer's projects first, then by name", () => {
-    const projects = [project("P1", "Zeta"), project("P2", "Alpha"), project("P3", "Mine", { owner: "vince" })];
-    const tree = projectTree(projects, [initiative("B1", "P1"), initiative("B2", "P2"), initiative("B3", "P1")], new Set(["P3"]));
-    expect(names(tree)).toEqual(["Mine", "Alpha", "Zeta"]);
-    expect(tree.map((n) => n.initiatives.map((b) => b.id))).toEqual([[], ["B2"], ["B1", "B3"]]);
+  it("nests each initiative under its project, the projects A to Z", () => {
+    const projects = [project("P1", "Zeta"), project("P2", "Alpha"), project("P3", "Mine")];
+    const tree = projectTree(projects, [initiative("B1", "P1"), initiative("B2", "P2"), initiative("B3", "P1")]);
+    expect(names(tree)).toEqual(["Alpha", "Mine", "Zeta"]);
+    expect(tree.map((n) => n.initiatives.map((b) => b.id))).toEqual([["B2"], [], ["B1", "B3"]]);
   });
 
   // The sidebar (portal ADR-011 v2, Lists 1): no cap, no View all.
@@ -399,11 +377,6 @@ describe("projects tree model", () => {
     expect(Object.fromEntries(byProject)).toEqual({ P1: 3 });
   });
 
-  it("puts initiatives with no open project under No project", () => {
-    const projects = [project("P1", "Open")];
-    const unfiled = unfiledInitiatives(projects, [initiative("B1", "P1"), initiative("B2", null), initiative("B3", "P-GONE")]);
-    expect(unfiled.map((b) => b.id)).toEqual(["B2", "B3"]);
-  });
 });
 
 // TASK-3955 — the zoned sidebar's keyboard tree (portal ADR-011 v2, Keys 5).

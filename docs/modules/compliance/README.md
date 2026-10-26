@@ -103,6 +103,10 @@ truth table is proven before any plumbing exists.
   count. `PLX_MC_APPROVAL_DECIDERS` lists who may approve. `PLX_MC_PATH_APPROVAL`
   is `enforce`, `warn` or `off`. Unset, it enforces once `PLX_MC_APPROVAL_SIGNING_KEY`
   and the decider list are set, and warns until then. Operator PRs stay ungated.
+- TASK-3916: a person approves a PR's head, not a task. For both rules above, a
+  signed approval of the exact head on any task the PR stamps covers every task
+  on it, so a PR with many tasks needs one approval. The approval's scope still
+  pins the repo, PR and head SHA, so it covers nothing else.
 - TASK-3409: a push to, or reopen of, an open PR whose body carries a stamp
   extends that checkout to at least now + 8 h (`renewDispatches`, audited as
   `checkout.renewed`); revoked or released leases are never extended.

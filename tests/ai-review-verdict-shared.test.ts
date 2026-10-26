@@ -48,6 +48,8 @@ interface Comment {
   user: User;
   author_association: string;
   created_at: string;
+  updated_at?: string;
+  node_id?: string;
 }
 interface Status {
   sha: string;
@@ -81,6 +83,8 @@ interface RunOptions {
   eventName?: string;
   blobs?: Record<string, string>;
   mergeGroup?: boolean;
+  edits?: Record<string, { lastEditedAt: string | null; editor: { login: string; __typename: string } | null }>;
+  sameHeadPrs?: number[];
 }
 
 async function run(o: RunOptions = {}) {
@@ -106,6 +110,9 @@ async function run(o: RunOptions = {}) {
   const notices: string[] = [];
   const contentPaths: string[] = [];
   const github = {
+    graphql: async (_q: string, { ids }: { ids: string[] }) => ({
+      nodes: ids.map((id) => ({ id, ...(o.edits?.[id] ?? { lastEditedAt: null, editor: null }) })),
+    }),
     paginate: async (f: (a?: unknown) => unknown, a?: unknown) => f(a),
     request: async (route: string) => {
       if (route.includes(`/compare/${BASE_SHA}...${MERGE}`)) return { data: { total_commits: 2, commits: queueCommits } };
@@ -114,7 +121,7 @@ async function run(o: RunOptions = {}) {
     },
     rest: {
       pulls: {
-        list: () => [pr],
+        list: () => [pr, ...(o.sameHeadPrs ?? []).map((n) => ({ ...pr, number: n }))],
         listReviews: () => [],
         listCommits: () => (o.agents ?? []).map((a) => ({ commit: { message: `subject\n\nAgent: ${a}\nOn-Behalf-Of: x@y` } })),
         get: async () => ({ data: pr }),
@@ -225,6 +232,51 @@ describe("ai-review-verdict-shared.yml: who may post a marker", () => {
     const { posted } = await run({ agents: ["claude-code/claude-code"], comments: [comment(marker({ reviewer: "claude" }), agentsBot)] });
     expect(posted[0].state).toBe("pending");
     expect(posted[0].description).toMatch(/author family claude not counted/);
+  });
+});
+
+describe("ai-review-verdict-shared.yml: edited markers and shared heads (Sol P1s, TASK-3832)", () => {
+  const withNode = (c: Comment, id: string, edited = false): Comment =>
+    ({ ...c, node_id: id, updated_at: edited ? "2026-10-25T19:00:00Z" : c.created_at });
+  it("counts an unedited bot marker", async () => {
+    const { posted } = await run({ comments: [withNode(comment(marker(), agentsBot), "IC_1")] });
+    expect(posted[0].state).toBe("success");
+  });
+  it("ignores a bot marker edited by the PR author", async () => {
+    const { posted } = await run({
+      comments: [withNode(comment(marker(), agentsBot), "IC_1", true)],
+      edits: { IC_1: { lastEditedAt: "2026-10-25T19:00:00Z", editor: { login: "pr-author", __typename: "User" } } },
+    });
+    expect(posted[0].state).toBe("pending");
+  });
+  it("counts a bot marker edited by the bot itself", async () => {
+    const { posted } = await run({
+      comments: [withNode(comment(marker(), agentsBot), "IC_1", true)],
+      edits: { IC_1: { lastEditedAt: "2026-10-25T19:00:00Z", editor: { login: "plx-agents", __typename: "Bot" } } },
+    });
+    expect(posted[0].state).toBe("success");
+  });
+  it("ignores a member's marker edited by another member, counts the member's own edit", async () => {
+    const c0 = withNode(comment(marker(), { login: "reviewer", type: "User" }, "MEMBER"), "IC_2", true);
+    const other = await run({ env: { TRUST_ORG_MEMBERS: "true" }, comments: [c0],
+      edits: { IC_2: { lastEditedAt: "x", editor: { login: "pr-author", __typename: "User" } } } });
+    expect(other.posted[0].state).toBe("pending");
+    const own = await run({ env: { TRUST_ORG_MEMBERS: "true" }, comments: [c0],
+      edits: { IC_2: { lastEditedAt: "x", editor: { login: "reviewer", __typename: "User" } } } });
+    expect(own.posted[0].state).toBe("success");
+  });
+  it("ignores an edited marker with no node id", async () => {
+    const c0 = { ...comment(marker(), agentsBot), updated_at: "2026-10-25T19:00:00Z" };
+    const { posted } = await run({ comments: [c0] });
+    expect(posted[0].state).toBe("pending");
+  });
+  it("never lets two open PRs on one head share a pass", async () => {
+    const { posted } = await run({ comments: [comment(marker(), agentsBot)], sameHeadPrs: [8] });
+    expect(posted.length).toBeGreaterThan(0);
+    for (const s of posted) {
+      expect(s.state).toBe("failure");
+      expect(s.description).toMatch(/shared by open PRs #7, #8/);
+    }
   });
 });
 

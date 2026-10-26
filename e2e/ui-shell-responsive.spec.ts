@@ -1105,8 +1105,9 @@ test.describe("shell — zoned sidebar", () => {
   });
 
 
-  // TASK-3841: initiatives sit under their project in a capped tree.
-  test("the Projects tree opens a project's initiatives, and the Projects row lands on Projects", async ({ page }) => {
+  // TASK-3841: initiatives sit under their project in the tree. TASK-3996:
+  // the Projects row opens the project Dashboard.
+  test("the Projects tree opens a project's initiatives, and the Projects row opens the Dashboard", async ({ page }) => {
     await open(page, 1440, "/?screen=board");
     const nav = side(page);
     const tree = nav.getByRole("group", { name: "Projects", exact: true });
@@ -1119,12 +1120,15 @@ test.describe("shell — zoned sidebar", () => {
     // One fixture project: nothing is left out, so no View all row.
     await expect(tree.getByRole("link", { name: /^View all/ })).toHaveCount(0);
     await nav.getByRole("link", { name: "Projects", exact: true }).click();
-    const screen = page.getByTestId("projects-screen");
-    await expect(screen).toBeVisible();
+    await expect(page).toHaveURL(/screen=projects/);
+    await expect(page.getByTestId("dashboard-screen")).toBeVisible();
+    // One current row: Projects, not Reporting's Dashboard, which keeps its own URL.
     await expect(nav.getByRole("link", { name: "Projects", exact: true })).toHaveAttribute("aria-current", "page");
-    await expect(screen.getByRole("link", { name: "PLX Portal Go-Live" })).toBeVisible();
-    await screen.getByRole("link", { name: "UAT", exact: true }).click();
-    await expect(page.getByTestId("bucket-kicker")).toContainText("Initiative · BKT-UAT");
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
+    await nav.getByRole("link", { name: /^Dashboard/ }).click();
+    await expect(page).toHaveURL(/screen=dashboard/);
+    await expect(page.getByTestId("dashboard-screen")).toBeVisible();
+    await expect(nav.getByRole("link", { name: /^Dashboard/ })).toHaveAttribute("aria-current", "page");
     expect(await shellViolations(page)).toEqual([]);
   });
 

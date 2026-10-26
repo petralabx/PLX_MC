@@ -27,7 +27,7 @@ export const TOUR_POINTS: readonly TourPoint[] = [
   },
   {
     zone: "Plan",
-    text: "All work holds Board, List and Timeline as tabs. Projects lists yours first, each with its initiatives.",
+    text: "All work holds Board, List and Timeline as tabs. Projects opens the project dashboard; every project is listed under it, A to Z.",
     labels: ["All work", "Projects"],
   },
   {

@@ -32,7 +32,7 @@ import { useNavZones } from "./nav-zones";
 import type { Nav, Route, Screen } from "./route";
 
 // Last screen per tab — per browser, with an in-memory fallback. The zoned
-// tabs keep their own; the Projects page is one of Projects' landing spots.
+// tabs keep their own; Projects (the project Dashboard) is one of Projects' landing spots.
 const storage = () => (typeof window === "undefined" ? null : window.localStorage);
 const tabMemory = createTabMemory(storage);
 const zonedTabMemory = createZonedTabMemory(storage);

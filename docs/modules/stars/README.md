@@ -60,8 +60,7 @@ would be lost on the next device, so Vince chose server-side stars on
   and initiative id rules).
 - `api/route` and `api/session-actor` (`sessionPersonId`, shared with
   `nav-prefs`) for the route.
-- Used by the web module's zoned sidebar, top bar, Projects page and More
-  sheet.
+- Used by the web module's zoned sidebar, top bar and More sheet.
 
 ### Key Files
 

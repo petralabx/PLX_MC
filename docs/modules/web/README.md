@@ -82,9 +82,9 @@ tasks from live data, with a warn square when it is at risk and a hot one
 nothing. The sidebar is one keyboard tree with one tab stop
 (plus the filter): ↑ ↓ Home End move, → and ← open, enter and close, a letter
 jumps, Shift F10 opens the Projects row's + menu, and `/` focuses the page's
-own filter or else this one. The Projects page (`projects`) lists the
-viewer's projects first, then every other open project with its initiatives,
-and No project for the rest. In the
+own filter or else this one. The Projects row, the phone Projects tab and Go
+to Projects open the project Dashboard at `projects` (TASK-3996); Reporting
+keeps its Dashboard row at `dashboard`, and each row is lit on its own URL. In the
 top bar (TASK-3844) the workspace label is the PLX app switcher (Mission
 Control, MRP Suite, Admin portal, Customer portal), the mark alone below a
 900px bar, and the sync pill names what to resolve ("2 sync conflicts, 1
@@ -94,7 +94,7 @@ initiatives the person starred, at most six, in the order starred, never the
 lit row. Screens carry their zoned label, and Board, List and Timeline are one
 All work star. The stars live on the server per person (`GET|PATCH
 /api/stars`, module `stars`), so they follow the person to every device. The
-top bar's star toggle stars the page, and each Projects page row has one; the
+top bar's star toggle stars the page; the
 icon rail shows one Starred button that opens the drawer, and the phone More
 sheet lists Starred first. Each change shows at once and goes to the server
 one at a time; a refused change is put back with a notice (`use-stars.ts`).
@@ -200,7 +200,6 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/nav-zones.ts` — who sees the zoned sidebar: the build env, else the person's "Try the new navigation" switch (server, with a copy per browser), else a by-hand opt-in per browser; default off
 - `src/components/mc/nav-tour.tsx` — the one-screen tour the first time the switch is on (Got it, Switch back)
 - `src/components/mc/project-detail.tsx` — Project detail + initiative card grid
-- `src/components/mc/projects-view.tsx` — Projects page: every open project with its initiatives, then No project
 - `src/components/mc/inbox.tsx` — Home: "What needs me today" (rules in `needs-me.ts`)
 - `src/components/mc/help.tsx` — Help: how Mission Control works + glossary
 - `src/components/mc/atoms.tsx` — Avatar, Confidence, PMark

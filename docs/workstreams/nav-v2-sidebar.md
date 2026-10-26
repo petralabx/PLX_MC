@@ -2,8 +2,8 @@
 
 - Slug: `nav-v2-sidebar` (this file is `docs/workstreams/nav-v2-sidebar.md`)
 - Owner: Vince · agents: Claude Code on the web
-- Branches: `claude/exciting-keller-c1t6o5`
-- MC tasks: TASK-3954, TASK-3955, TASK-3956, TASK-3957, TASK-3958, TASK-3959, TASK-3960, TASK-3961
+- Branches: `claude/nav-v2-sidebar`
+- MC tasks: TASK-3954, TASK-3955, TASK-3956, TASK-3957, TASK-3958, TASK-3959, TASK-3960, TASK-3961, TASK-3996
 - SharePoint handoff: n/a
 
 ## Goal
@@ -16,7 +16,10 @@ width, one row grid, figures for counts, and one keyboard tree.
 
 active, as of 2026-10-26. The contract (TASK-3954) merged. TASK-3955 is built on this branch:
 the zoned sidebar's row grid, every active project A to Z, the Projects filter, the Closed row,
-one + on Projects, open-task counts, figures in the count column and the keyboard tree.
+one + on Projects, open-task counts, figures in the count column and the keyboard tree. TASK-3996
+rides in the same PR: the Projects row opens the project Dashboard, and the Projects list page
+is gone. The PR is a re-cut of PLX_MC #466, which stamped two checkouts in one commit (see
+LESSONS.md).
 
 ## Done
 
@@ -38,9 +41,13 @@ one + on Projects, open-task counts, figures in the count column and the keyboar
   approximately. Why: tokens and the ADR outrank a drawing. Decided by: Vince.
 - 2026-10-26 Open-task counts show only from live data. Why: cached or demo tasks would make
   them up, the rule `useNavCounts` already follows. Decided by: Claude (TASK-3955).
-- 2026-10-26 Off-track projects and initiatives get the same warn square as at-risk ones, and
-  their row's name says "off track". Why: the amendment names at-risk only, and dropping the
-  health tick must not hide an off-track project. Decided by: Claude (TASK-3955).
+- 2026-10-26 Off track has its own colour in the count column: a square and figure in
+  `--p-hot-text`, the brand's off-track colour (as on the health pills), apart from at-risk's
+  amber. The row's name says "off track". Why: the amendment names at-risk only, and an
+  off-track project must not look at-risk or fine. The brand has no red. Decided by: Vince.
+- 2026-10-26 The Projects row opens the project Dashboard, and the Projects list page goes
+  (TASK-3996). Reporting keeps its Dashboard row. Why: Vince does not want the list page.
+  Decided by: Vince.
 
 ## Open questions
 

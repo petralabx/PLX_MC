@@ -15,7 +15,6 @@ import { Sidebar } from "@/components/mc/chrome";
 import { MoreSheet } from "@/components/mc/more-sheet";
 import { deadStars, starChanges, starKeyOf, starRows, type NavFlags } from "@/components/mc/nav-model";
 import { setNavZonesBuildFlag } from "@/components/mc/nav-zones";
-import { ProjectsView } from "@/components/mc/projects-view";
 import { SCREEN_VALUES, type Route } from "@/components/mc/route";
 import { Topbar } from "@/components/mc/top-bar";
 import {
@@ -503,20 +502,6 @@ describe("Starred in the zoned shell", () => {
     loaded(["screen:goals"]);
     setNavZonesBuildFlag(false);
     expect(topbar({ screen: "goals" })).not.toContain("star-toggle");
-  });
-
-  it("puts a star toggle on each Projects row: the project and each initiative", () => {
-    const [bucket] = allBuckets();
-    loaded([`bucket:${bucket.id}`]);
-    const html = renderToStaticMarkup(createElement(ProjectsView, { route: { screen: "projects" }, nav: () => {} }));
-    expect(html).toContain('class="pj-star star-toggle" aria-label="Star PLX Portal Go-Live" aria-pressed="false"');
-    for (const b of allBuckets()) {
-      expect(html).toContain(`aria-label="Star ${b.name}" aria-pressed="${b.id === bucket.id}"`);
-    }
-    setNavZonesBuildFlag(false);
-    expect(renderToStaticMarkup(createElement(ProjectsView, { route: { screen: "projects" }, nav: () => {} }))).not.toContain(
-      "star-toggle"
-    );
   });
 
   it("opens the phone More sheet with Starred, as links that are never lit", () => {

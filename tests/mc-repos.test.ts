@@ -104,6 +104,7 @@ describe("registry shape", () => {
       expect(REPOS[id].visibility).toBe("public");
     }
     expect(REPOS["portal-web"].visibility).toBe("private");
+    expect(REPOS["plx-secondbrain"]).toMatchObject({ name: "plx_secondbrain", owner: REPO_ORG_PLX, visibility: "private" });
     expect(REPOS["agentic-swarm"].visibility).toBe("private");
   });
 });

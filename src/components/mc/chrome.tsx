@@ -8,6 +8,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -184,6 +185,8 @@ interface TreeAttrs {
   "data-tree-key"?: string;
   "data-tree-parent"?: string;
   "data-tree-open"?: "true" | "false";
+  /** A project link's own disclosure state: → and ← open it with focus on the link. */
+  "aria-expanded"?: boolean;
   tabIndex?: number;
 }
 
@@ -226,7 +229,7 @@ export function Sidebar({
   drawerRef?: RefObject<HTMLElement | null>;
   onDrawerKeyDown?: (event: ReactKeyboardEvent<HTMLElement>) => void;
 }) {
-  useMcVersion();
+  const version = useMcVersion();
   const zoned = useNavZones();
   const flags = navFlags();
   const stars = useStars(zoned);
@@ -309,13 +312,21 @@ export function Sidebar({
   // v2 (TASK-3955, portal ADR-011 v2 Lists): every active project A to Z, the
   // filter's matches while it holds a query, then the closed projects behind
   // the Closed row. The count column shows each one's open tasks.
-  const tree = zoned ? projectTree(navProjects(), navBuckets()) : [];
+  // Once per store change, not per render: arrow keys re-render the sidebar.
+  const live = dataSource() === "live";
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tree = useMemo(() => (zoned ? projectTree(navProjects(), navBuckets()) : []), [zoned, version]);
   const filtering = filter.trim() !== "";
   const shownTree = filtering ? filterProjectTree(tree, filter) : tree;
-  const closedProjects = zoned ? closedNavProjects().sort(byName) : [];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const closedProjects = useMemo(() => (zoned ? closedNavProjects().sort(byName) : []), [zoned, version]);
   // Counts only from live data: cached or demo tasks would make them up
   // (useNavCounts's rule).
-  const openCounts = zoned ? openTaskCounts(dataSource() === "live" ? allTasks() : [], allBuckets()) : null;
+  const openCounts = useMemo(
+    () => (zoned ? openTaskCounts(live ? allTasks() : [], allBuckets()) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [zoned, live, version]
+  );
 
   // Arriving on a project or one of its initiatives opens it (a closed one
   // opens the Closed row); after that it keeps the person's choice, like
@@ -339,6 +350,8 @@ export function Sidebar({
   // that is no longer shown (its group closed, or the rail hides it) gives
   // way, and the stop follows the current row again.
   const stopChosen = useRef(false);
+  // When Shift F10 or the Menu key last opened a row menu (onTreeKeyDown).
+  const menuKeyAt = useRef(Number.NEGATIVE_INFINITY);
   const keepTreeStop = useCallback(() => {
     const side = zoned ? document.getElementById("mc-nav") : null;
     if (!side) return;
@@ -374,7 +387,8 @@ export function Sidebar({
       if (target?.closest?.("input,textarea,[contenteditable],[data-tree-key]") || hasOpenLayer()) return;
       if (document.querySelector("[data-page-filter]")) return;
       const input = filterRef.current;
-      if (!input || input.getClientRects().length === 0) return;
+      // Not while the closed phone drawer hides it (visibility: hidden).
+      if (!input || input.getClientRects().length === 0 || getComputedStyle(input).visibility === "hidden") return;
       event.preventDefault();
       input.focus();
     };
@@ -405,6 +419,8 @@ export function Sidebar({
       // The icon rail hides the +: nothing to place the menu under.
       if (!menu || menu.getClientRects().length === 0) return;
       event.preventDefault();
+      // Some browsers still fire contextmenu for these keys: the nav drops it.
+      menuKeyAt.current = event.timeStamp;
       menu.click();
       document.getElementById(menu.getAttribute("aria-controls") ?? "")?.querySelector<HTMLElement>("button, a[href]")?.focus();
       return;
@@ -579,7 +595,7 @@ export function Sidebar({
                     <OpenCount n={openCounts.byProject.get(project.id) ?? 0} health={project.health} />
                   </>,
                   project.id === openProjectId,
-                  treeRow(key, null, holds && !filtering ? expanded : null)
+                  holds && !filtering ? { ...treeRow(key, null, expanded), "aria-expanded": expanded } : treeRow(key)
                 )}
                 {holds && !filtering ? (
                   <button
@@ -730,6 +746,9 @@ export function Sidebar({
       onKeyDown={(event) => {
         if (drawerOpen) onDrawerKeyDown?.(event);
         if (zoned) onTreeKeyDown(event);
+      }}
+      onContextMenu={(event) => {
+        if (event.timeStamp - menuKeyAt.current < 1000) event.preventDefault();
       }}
       onFocus={(event) => {
         const key = zoned ? (event.target as HTMLElement).dataset?.treeKey : undefined;

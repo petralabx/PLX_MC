@@ -454,7 +454,8 @@ describe("Starred in the zoned shell", () => {
     expect(headings).toEqual(["my-work", "starred", "plan", "reporting", "knowledge"]);
     const starred = zone(html);
     expect(starred).toContain('<div class="h" id="mc-nav-h-starred">Starred</div>');
-    const links = [...starred.matchAll(/<a href="([^"]+)" class="([^"]+)"/g)].map((m) => [m[1], m[2]]);
+    // Each copy is a row of the sidebar's keyboard tree (TASK-3955), keyed apart from the item's own row.
+    const links = [...starred.matchAll(/<a data-tree-key="star:[^"]+" tabindex="-1" href="([^"]+)" class="([^"]+)"/g)].map((m) => [m[1], m[2]]);
     expect(links).toEqual([
       ["/?screen=goals", "item"],
       ["/?screen=project&amp;projectId=PRJ-PORTAL-GOLIVE", "item"],
@@ -468,7 +469,7 @@ describe("Starred in the zoned shell", () => {
   it("gives the icon rail one Starred button that opens the labelled drawer", () => {
     loaded(["screen:goals"]);
     expect(zone(sidebar({ screen: "home" }))).toContain(
-      '<button type="button" class="item star-rail" title="Starred" aria-controls="mc-nav" aria-expanded="false">'
+      '<button type="button" class="item star-rail" data-tree-key="star-rail" tabindex="-1" title="Starred" aria-controls="mc-nav" aria-expanded="false">'
     );
   });
 

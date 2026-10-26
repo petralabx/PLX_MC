@@ -1674,7 +1674,8 @@
     overflow-wrap: anywhere;
   }
   /* Counts are figures (Counts 1–4): an action count accent at 600, an
-     attention count and an at-risk one warn, an open-task count muted. */
+     attention count and an at-risk one warn, an off-track one hot, an
+     open-task count muted. */
   .mc .mc-body[data-nav="zones"] .mc-side .cnt {
     font-family: var(--p-font-mono);
     font-size: var(--p-text-meta);
@@ -1687,7 +1688,8 @@
     font-weight: 600;
     color: var(--p-accent);
   }
-  .mc .mc-body[data-nav="zones"] .mc-side .cnt:is(.warn, .risk) {
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt.warn,
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt.risk {
     color: var(--p-warn-text);
   }
   .mc .mc-body[data-nav="zones"] .mc-side .cnt .sq {
@@ -1699,6 +1701,13 @@
   }
   .mc .mc-body[data-nav="zones"] .mc-side .cnt .sq + [aria-hidden] {
     margin-left: 5px;
+  }
+  /* Off track has its own colour: the brand's, as on the health pills. */
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt.off {
+    color: var(--p-hot-text);
+  }
+  .mc .mc-body[data-nav="zones"] .mc-side .cnt.off .sq {
+    background: var(--p-hot-text);
   }
   .mc .mc-side .chev:is(svg) {
     width: 12px;
@@ -1715,8 +1724,9 @@
   }
   /* Starred (TASK-3842): the person's copies under My work. The icon rail
      shows one Starred button, which opens the labelled drawer; every
-     labelled form lists the stars. */
-  .mc .mc-side .star-rail {
+     labelled form lists the stars. Its rules name .item, so they outrank
+     the v2 row grid's display. */
+  .mc .mc-body[data-nav="zones"] .mc-side .item.star-rail {
     display: none;
   }
   /* A star toggle (the top bar's, a Projects row's): filled when starred. */
@@ -1860,7 +1870,7 @@
     .mc .mc-side:not(.open) .star-rows {
       display: none;
     }
-    .mc .mc-side:not(.open) .star-rail {
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item.star-rail {
       display: flex;
     }
     /* The icon rail keeps its centred icons; a count shows as a dot. From
@@ -1923,7 +1933,7 @@
     .mc .mc-side:not(.open) .star-rows {
       display: block;
     }
-    .mc .mc-side:not(.open) .star-rail {
+    .mc .mc-body[data-nav="zones"] .mc-side:not(.open) .item.star-rail {
       display: none;
     }
   }

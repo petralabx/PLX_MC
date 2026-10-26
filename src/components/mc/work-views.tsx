@@ -585,11 +585,12 @@ export function WorkViews({ route, nav }: ScreenProps) {
   // picker before this bubble-phase handler runs.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      // The sidebar's tree (chrome.tsx) owns its keys too: there `/` does nothing.
       const inField = !!(event.target as HTMLElement | null)?.closest?.(
-        "input,textarea,[contenteditable],[data-tree-key]"
+        "input,textarea,[contenteditable]"
       );
       if (event.key === "/" && !inField) {
+        // The sidebar's tree (chrome.tsx) owns its keys: there `/` does nothing.
+        if ((event.target as HTMLElement | null)?.closest?.("[data-tree-key]")) return;
         // A shell layer (drawer, More sheet, overlay pane) owns the keyboard.
         if (hasOpenLayer()) return;
         event.preventDefault();

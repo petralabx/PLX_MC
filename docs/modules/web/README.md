@@ -77,8 +77,9 @@ closed projects; archived ones never show. One + on the Projects row opens New
 project or New initiative. Every row shares one grid (icon, label, count,
 action); counts are figures in the count column: Home's and Approvals' action
 counts, Admin & health's sync count, and each project's and initiative's open
-tasks from live data, with a warn square when it is at risk or off track. Zero
-and unknown show nothing. The sidebar is one keyboard tree with one tab stop
+tasks from live data, with a warn square when it is at risk and a hot one
+(the brand's off-track colour) when it is off track. Zero and unknown show
+nothing. The sidebar is one keyboard tree with one tab stop
 (plus the filter): ↑ ↓ Home End move, → and ← open, enter and close, a letter
 jumps, Shift F10 opens the Projects row's + menu, and `/` focuses the page's
 own filter or else this one. The Projects page (`projects`) lists the

@@ -77,6 +77,7 @@ import {
   listApprovalAudit,
   pairApprovalEvents,
   listPendingApprovals,
+  listPendingCreatorApprovals,
   requestApprovalGate,
 } from "@/lib/compliance/approvals";
 import * as approvalsRoute from "@/app/api/approvals/route";
@@ -403,6 +404,58 @@ describe("restricted-project ACL on the inbox and decide (TASK-3713)", () => {
     expect(resp.status).toBe(200);
     expect(secretGate()?.status).toBe("approved");
     expect(h.events[0]).toMatchObject({ kind: "approval.decided", actor: "vince@petrasoap.com" });
+  });
+});
+
+// TASK-3629: tasks from a gated creator show in the inbox for creator approvers only.
+describe("creator approvals in the inbox source (TASK-3629)", () => {
+  const noCtx = { params: Promise.resolve({} as Record<string, string>) };
+  // The creator approver oids are reviewed code in permissions/grants.ts.
+  const VINCE_APPROVER = { user: { oid: "29e05178-0bd1-49b9-be6e-b01be1975f70", email: "vince@petrasoap.com" } };
+  const GREG = { user: { oid: "oid-greg", email: "greg@petrasoap.com" } };
+  const creator = (status: "pending" | "approved", requestedAt: string) => ({
+    creatorApproval: { principal: "sp_mcp_workbench_intake", status, requestedAt },
+  });
+  const get = async () => {
+    const resp = await approvalsRoute.GET(new Request("http://test/api/approvals"), noCtx);
+    expect(resp.status).toBe(200);
+    return ((await resp.json()) as { data: { creatorApprovals: { taskId: string }[] } }).data.creatorApprovals;
+  };
+
+  beforeEach(() => {
+    vi.stubEnv("PLX_MC_PERMISSIONS_ENFORCEMENT_MODE", "enforce");
+    seedTask("TASK-NEW2", { stage: "backlog", ...creator("pending", "2026-10-26T21:00:00Z") });
+    seedTask("TASK-NEW1", { stage: "backlog", ...creator("pending", "2026-10-26T20:00:00Z") });
+    seedTask("TASK-DONE", { stage: "backlog", ...creator("approved", "2026-10-26T19:00:00Z") });
+    seedTask("TASK-GONE", { stage: "cancelled", ...creator("pending", "2026-10-26T18:00:00Z") });
+    seedTask("TASK-PLAIN", { stage: "backlog" });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("lists pending creator approvals oldest first, without approved, cancelled or ungated tasks", async () => {
+    const rows = await listPendingCreatorApprovals(principalFromTokens("vince@petrasoap.com"));
+    expect(rows).toEqual([
+      { taskId: "TASK-NEW1", taskTitle: "Task TASK-NEW1", stage: "backlog", principal: "sp_mcp_workbench_intake", requestedAt: "2026-10-26T20:00:00Z" },
+      { taskId: "TASK-NEW2", taskTitle: "Task TASK-NEW2", stage: "backlog", principal: "sp_mcp_workbench_intake", requestedAt: "2026-10-26T21:00:00Z" },
+    ]);
+  });
+
+  it("GET /api/approvals returns them to a creator approver and an empty list to anyone else", async () => {
+    h.session = VINCE_APPROVER;
+    expect((await get()).map((r) => r.taskId)).toEqual(["TASK-NEW1", "TASK-NEW2"]);
+    h.session = GREG;
+    expect(await get()).toEqual([]);
+  });
+
+  it("keeps a restricted project's creator approvals from a creator approver who is not a member", async () => {
+    h.buckets = [{ id: "BKT-SECRET", project: "PRJ-SECRET" }];
+    h.projects = [{ id: "PRJ-SECRET", visibility: "restricted", members: ["greg@petrasoap.com"] }];
+    seedTask("TASK-SECRET-NEW", { stage: "backlog", bucket: "BKT-SECRET", ...creator("pending", "2026-10-26T17:00:00Z") });
+    h.session = VINCE_APPROVER;
+    expect((await get()).map((r) => r.taskId)).not.toContain("TASK-SECRET-NEW");
   });
 });
 

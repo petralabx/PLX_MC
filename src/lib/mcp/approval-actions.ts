@@ -135,11 +135,26 @@ export const verifyApprovalSchema = z
       z.object({ kind: z.literal("launch"), lane: laneId.optional(), promptHash: hex64.optional() }).strict(),
       z.object({ kind: z.literal("merge"), repo: repoSlug.optional(), pr: z.number().int().positive().optional(), headSha: headSha.optional() }).strict(),
       z.object({ kind: z.literal("flags"), flag: z.string().trim().min(1).max(64).optional() }).strict(),
+      // TASK-3630: the gated-creator approval (TASK-3530). It has no signed gate, so approvalId does not apply.
+      z.object({ kind: z.literal("creator") }).strict(),
     ]),
   })
   .strict();
 
 export type VerifyApprovalActionInput = z.infer<typeof verifyApprovalSchema>;
+
+/** A task's gated-creator approval (TASK-3530) as mc_verify_approval reports it; null when the task needs none. */
+function creatorApprovalView(task: Task) {
+  const ca = task.creatorApproval;
+  if (!ca) return null;
+  return {
+    principal: ca.principal,
+    status: ca.status,
+    requestedAt: ca.requestedAt,
+    approvedBy: ca.approvedBy ?? null,
+    approvedAt: ca.approvedAt ?? null,
+  };
+}
 
 /**
  * Is there a signed approval on this task that covers `expect` now? Any
@@ -152,13 +167,33 @@ export async function actionVerifyApproval(identity: McpIdentity, input: VerifyA
   await assertTaskProjectAccess(input.taskId, aclPrincipalFromMcp(identity));
   const row = await getEntity("task", input.taskId);
   if (!row) throw new ApiError("not_found", `unknown task ${input.taskId}`, 404);
-  const gates = ((row.data as unknown as Task).approvalGates ?? []).filter(
+  const task = row.data as unknown as Task;
+  // TASK-3630: every answer carries the gated-creator approval next to the signed gates.
+  const creatorApproval = creatorApprovalView(task);
+  const want = input.expect;
+  if (want.kind === "creator") {
+    if (input.approvalId) {
+      throw new ApiError("invalid_request", "The creator approval has no approval id. Drop approvalId.", 400);
+    }
+    const pending = creatorApproval?.status === "pending";
+    return {
+      taskId: input.taskId,
+      ok: !pending,
+      reason: pending ? "creator_approval_pending" : null,
+      approval: null,
+      creatorApproval,
+      checkedAt: new Date().toISOString(),
+      link: taskLink(input.taskId),
+      gateLink: null,
+    };
+  }
+  const gates = (task.approvalGates ?? []).filter(
     (g) => !input.approvalId || g.id === input.approvalId
   );
   if (input.approvalId && gates.length === 0) {
     throw new ApiError("not_found", `unknown approval ${input.approvalId} on ${input.taskId}`, 404);
   }
-  const results = gates.map((gate) => ({ gate, result: checkApproval(input.taskId, gate, input.expect) }));
+  const results = gates.map((gate) => ({ gate, result: checkApproval(input.taskId, gate, want) }));
   const covering = results.find((r) => r.result.ok);
   const shown = covering ?? results[results.length - 1];
   const view = (g: ApprovalGate) => ({
@@ -175,6 +210,7 @@ export async function actionVerifyApproval(identity: McpIdentity, input: VerifyA
     ok: !!covering,
     reason: covering ? null : shown ? (shown.result as { reason: string }).reason : "no_approval",
     approval: shown ? view(shown.gate) : null,
+    creatorApproval,
     checkedAt: new Date().toISOString(),
     link: taskLink(input.taskId),
     gateLink: shown ? gateLink(shown.gate.id) : null,
@@ -245,7 +281,7 @@ export function registerApprovalTools(server: McpServer, identity: McpIdentity):
   );
   server.tool(
     "mc_verify_approval",
-    "Check whether a signed approval on a task covers what you are about to do (TASK-3408): expect {kind: launch, lane?, promptHash?} | {kind: merge, repo?, pr?, headSha?} | {kind: flags, flag?}. ok is true only when a person approved it, the signature is valid, it has not expired, the decider is allowed and the scope matches; otherwise reason names the first failure. Optional approvalId checks one gate. Readable by any principal with task.read, the launcher included; never returns the proposal.",
+    "Check whether a signed approval on a task covers what you are about to do (TASK-3408): expect {kind: launch, lane?, promptHash?} | {kind: merge, repo?, pr?, headSha?} | {kind: flags, flag?} | {kind: creator}. ok is true only when a person approved it, the signature is valid, it has not expired, the decider is allowed and the scope matches; otherwise reason names the first failure. Optional approvalId checks one gate. Every answer also carries creatorApproval: the gated-creator approval (principal, status pending or approved, approvedBy, approvedAt), or null when the task needs none. {kind: creator} checks only that approval: ok unless it is pending (reason creator_approval_pending). Readable by any principal with task.read, the launcher included; never returns the proposal.",
     verifyApprovalSchema.shape,
     async (args) => mcpJsonResult({ data: await actionVerifyApproval(identity, verifyApprovalSchema.parse(args)) })
   );

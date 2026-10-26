@@ -4,13 +4,14 @@ import { gotoBoard, gotoSkillsDirectory, openSidebar, waitForHydration } from ".
 
 // Brand font invariant (G1, ui-ux-design-loop): every rendered text node must
 // compute to one of the three brand families loaded by app/layout.tsx —
-// maziusDisplay (next/font/local), Inter, or JetBrains Mono. Form elements do
+// maziusDisplay, inter or jetbrainsMono. All three use next/font/local, which
+// names each family after its const in layout.tsx (TASK-3921). Form elements do
 // NOT inherit fonts per the UA stylesheet, so any <button>/<input> missing a
 // font-family silently renders Arial/Times (regression 2026-07-02: SOP + skill
 // row titles); the .mc form-element reset in mc-surface.css guards this, and
 // this spec guards the reset.
 
-const BRAND_FAMILIES = ["maziusDisplay", "Inter", "JetBrains Mono"];
+const BRAND_FAMILIES = ["maziusDisplay", "inter", "jetbrainsMono"];
 
 async function offBrandFonts(page: import("@playwright/test").Page): Promise<string[]> {
   return page.evaluate((ok) => {

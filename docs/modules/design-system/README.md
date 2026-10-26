@@ -46,7 +46,7 @@ Depended on by: web (all screens).
 
 - `src/styles/brand-tokens.css` — runtime tokens (imported by global CSS)
 - `src/components/brand/` — primitives + barrel `index.ts`
-- `public/brand/`, `public/fonts/mazius/` — logos, favicons, webfonts (OFL 1.1)
+- `public/brand/`, `public/fonts/mazius/`, `public/fonts/inter/`, `public/fonts/jetbrains-mono/` — logos, favicons, webfonts (OFL 1.1)
 - `docs/design-system/` — canonical governance copy (tokens, ADRs, specs)
 - `config/brand-portal-parity.json` — SHA-256 manifest (portal upstream checksums)
 - `scripts/sync-brand-from-portal.sh` — one-command sync from portal

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
 import localFont from "next/font/local";
 
 import "./globals.css";
@@ -21,16 +20,59 @@ const maziusDisplay = localFont({
   display: "swap",
 });
 
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+// Inter and JetBrains Mono are the latin variable files Google Fonts used to
+// serve at build time (TASK-3921): one file per family, one face per weight, so
+// the build needs no network.
+const inter = localFont({
+  src: [
+    {
+      path: "../../public/fonts/inter/Inter-latin-wght.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/inter/Inter-latin-wght.woff2",
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/inter/Inter-latin-wght.woff2",
+      weight: "600",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/inter/Inter-latin-wght.woff2",
+      weight: "700",
+      style: "normal",
+    },
+  ],
   variable: "--font-inter",
   display: "swap",
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+const jetbrainsMono = localFont({
+  src: [
+    {
+      path: "../../public/fonts/jetbrains-mono/JetBrainsMono-latin-wght.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/jetbrains-mono/JetBrainsMono-latin-wght.woff2",
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/jetbrains-mono/JetBrainsMono-latin-wght.woff2",
+      weight: "600",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/jetbrains-mono/JetBrainsMono-latin-wght.woff2",
+      weight: "700",
+      style: "normal",
+    },
+  ],
   variable: "--font-jetbrains-mono",
   display: "swap",
 });

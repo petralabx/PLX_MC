@@ -42,3 +42,7 @@ Thumbs.db
 
 # Session-brain offline queue (fail-open local capture; not evidence bundles)
 artifacts/session-brain/
+
+# Local worktrees (workstream protocol, TASK-3953)
+.worktrees/
+.claude/worktrees/

@@ -69,7 +69,7 @@ blocked flag, no human owner) (`src/components/mc/project-overview.helpers.ts`).
 - **View:** a block on the `BKT-UAT` bucket page (`src/components/mc/uat-tickets.tsx`,
   `GET /api/uat-tickets`). One row per ticket task, with lease, PR, holder and age.
 - **Drift check:** `src/lib/compliance/uat-tickets.ts` `findUatDrift` finds five
-  cases. A daily cron (`/api/cron/uat-drift`, 10:00 UTC) records one
+  cases. It counts a ticket's task in any bucket, not only `BKT-UAT` (TASK-3973). A daily cron (`/api/cron/uat-drift`, 10:00 UTC) records one
   `uat.drift.checked` event and fixes nothing.
 - **Portal read:** the view and three of the five drift cases need the portal's
   ticket snapshot, `GET /api/internal/uat-feedback/mc-snapshot`. That endpoint is

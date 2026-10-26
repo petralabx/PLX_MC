@@ -616,6 +616,26 @@ goal cards and on the workbook's Revenue by class sheet (`revenue-by-class.ts`).
   the browser bundle (a test walks every runtime import of the page's client
   files).
 
+### Shipped, not yet invoiced (interim, TASK-3992)
+
+Until go-live, Sage posts a shipment (OESHIH/OESHID) before AR posts its
+invoice. The Revenue card adds each posted shipment dated this month (by ship
+date) that no posted invoice names yet (`oe_invoice_header.shinumber`), as an
+estimate: order price x quantity shipped less discount, before tax, item lines
+only (charges left out), USD at the card's rate, classed by the shipment's
+customer (so `scope=mfg` leaves Exclusive Distribution out). It moves the
+headline, status chip, bar and pace; the side line reads "$A invoiced + $B
+shipped, not yet invoiced (estimate) - $R returns". The export lists them on
+the Pending shipments sheet and adds columns N-O to Revenue by class (Toward
+the goal becomes `G-I-L+O` when they were read). Without the grant
+(`readonly-grants-shipments-pending.sql`, for a DBA) the card says "Shipped,
+not invoiced: not included (needs access)" and the refresh carries on.
+`GOALS_PENDING_SHIPMENTS=off` turns it off; to remove it, delete
+`pending-shipments.ts`, `queries/pending-shipments.ts` and the lines marked
+TASK-3992, then run `db/rollback/052_reporting_goals_pending_shipments_rollback.sql`.
+Open: shipments entered by hand are unchanged, so one also entered by hand
+before AR invoices it counts twice until then.
+
 ### Line 1 bulk
 
 Approved by Vince Alton on 2026-10-16 (TASK-3142), in place of the large-batch

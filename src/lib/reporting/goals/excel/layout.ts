@@ -16,6 +16,7 @@ export const WORKBOOK_SHEETS = [
   "Batches",
   "Shipments",
   "Shipment lines",
+  "Pending shipments",
   "Forecast",
   "Manual entries",
 ] as const;

@@ -105,6 +105,8 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
   // Returns (TASK-3987): the run's credit notes, subtracted from the headline; null for a run stored before them.
   const creditNotes = page.creditNotes;
   const returned = page.revenueByClass?.total.returns ?? null;
+  // INTERIM (TASK-3992): shipped, not yet invoiced, inside goal.goalCadCents as an estimate; null when not read.
+  const pending = page.pendingShipments;
   const returnsPlus = (s: { returnsCadCents: number }) => (s.returnsCadCents !== 0 ? ` + ${dollars(s.returnsCadCents)} returns` : "");
   const scheduled = Math.max(0, l1.ifAllRunKg - l1.totalKg);
   const fullScale = Math.max(tl.lastMonth.full, tl.full.total, 1);
@@ -185,7 +187,7 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
         id="revenue"
         title="Revenue"
         status={revStatus}
-        definition={`Invoiced in CAD, product before tax (freight and other charges left out${creditNotes?.access === "read" ? ", returns deducted" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
+        definition={`Invoiced in CAD, product before tax (freight and other charges left out${creditNotes?.access === "read" ? ", returns deducted" : ""}${pending?.access === "read" ? ", shipped but not yet invoiced added as an estimate" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
         big={dollars(revTotal)}
         of={`of ${dollars(rev.targetCents)}`}
         source={revSource}
@@ -228,6 +230,19 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
           ) : (
             <p className="gp-split gp-amber" title={revSource} data-testid="goals-revenue-returns">
               Returns not deducted: Sage&apos;s credit notes can&apos;t be read yet (needs {creditNotes.missing.join(", ")})
+            </p>
+          )
+        ) : null}
+        {goal && pending ? (
+          pending.access === "read" ? (
+            <p className="gp-split" title={revSource} data-testid="goals-revenue-pending">
+              {dollars(goal.invoicedProductCadCents)} invoiced + {dollars(goal.pendingCadCents)} shipped, not yet invoiced (estimate,{" "}
+              {count(goal.pendingShipments)} {goal.pendingShipments === 1 ? "shipment" : "shipments"})
+              {goal.returnsCadCents !== 0 ? ` − ${dollars(goal.returnsCadCents)} returns` : ""} = {dollars(goal.goalCadCents)}
+            </p>
+          ) : (
+            <p className="gp-split gp-amber" title={revSource} data-testid="goals-revenue-pending">
+              Shipped, not invoiced: not included (needs access)
             </p>
           )
         ) : null}

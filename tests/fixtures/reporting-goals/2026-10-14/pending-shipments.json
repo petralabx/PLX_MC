@@ -1,0 +1,9 @@
+{
+  "access": "read",
+  "missing": [],
+  "shipments": [
+    { "shipment": "SH0009101", "order": "ORD0045101", "customerCode": "1HRA01", "customer": "Fixture Manufacturing Co", "shipDate": "2026-10-13", "currency": "CAD", "lines": 2, "productValue": "2000.00" },
+    { "shipment": "SH0009102", "order": "ORD0045102", "customerCode": "5STA10", "customer": "Fixture Mixed Ltd", "shipDate": "2026-10-13", "currency": "USD", "lines": 1, "productValue": "1000.00" },
+    { "shipment": "SH0009103", "order": "ORD0045103", "customerCode": "ACECA01", "customer": "Fixture Distribution Inc", "shipDate": "2026-10-14", "currency": "CAD", "lines": 1, "productValue": "400.00" }
+  ]
+}

@@ -127,6 +127,8 @@ export interface Datasets {
   shipmentLines: ShipmentLinesDataset;
   /** This month's credit notes (TASK-3987); absent on a run stored before migration 051. */
   creditNotes?: CreditNotesDataset;
+  /** INTERIM (TASK-3992): posted shipments not yet invoiced; absent before migration 052 or with GOALS_PENDING_SHIPMENTS=off. */
+  pendingShipments?: PendingShipmentsDataset;
   forecast: ForecastDatasets;
 }
 
@@ -327,6 +329,27 @@ export interface CreditNoteRow {
   otherCharges: string;
   /** productValue + otherCharges, before tax. */
   netBeforeTax: string;
+}
+
+// INTERIM (TASK-3992): shipped, not yet invoiced (queries/pending-shipments.ts).
+export interface PendingShipmentRow {
+  shipment: string;
+  order: string | null;
+  customerCode: string | null;
+  customer: string | null;
+  /** The ship date: the month the estimate lands in. */
+  shipDate: IsoDate;
+  currency: string;
+  /** Item lines counted. */
+  lines: number;
+  /** Order price x quantity shipped less discount, before tax, in the shipment's currency. */
+  productValue: string;
+}
+
+export interface PendingShipmentsDataset {
+  access: "read" | "missing";
+  missing: string[];
+  shipments: PendingShipmentRow[];
 }
 
 export interface CreditNotesDataset {

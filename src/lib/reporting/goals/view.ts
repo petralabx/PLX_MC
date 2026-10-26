@@ -6,6 +6,7 @@
 
 import { customerRevenue, type CustomerRevenue } from "./customer-revenue";
 import { buildForecast, type CustomerClass, type ForecastSnapshot, type ForecastView } from "./forecast";
+import { pendingShipmentsByClass } from "./pending-shipments";
 import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
 import { revenueScope, type RevenueScopeView } from "./revenue-scope";
 import { computeGoals, type GoalsModel } from "./rules";
@@ -34,6 +35,7 @@ export const DATASET_QUERIES = {
   shipments: "shipments",
   shipmentLines: "shipment-lines",
   creditNotes: "credit-notes",
+  pendingShipments: "pending-shipments",
   batches: "batches",
   batchHistory: "batch-history",
   references: "references",
@@ -92,6 +94,17 @@ export interface GoalsView {
    * run stored before migration 051.
    */
   creditNotes: { access: CreditNotesAccess; missing: string[]; notes: number } | null;
+  /**
+   * INTERIM (TASK-3992): whether the run read Sage's posted shipments not yet
+   * invoiced, which the Revenue card adds as an estimate. null without a model,
+   * for a run before migration 052, or with GOALS_PENDING_SHIPMENTS=off.
+   */
+  pendingShipments: {
+    access: "read" | "missing";
+    missing: string[];
+    shipments: number;
+    otherCurrencies: { currency: string; shipments: number; cents: number }[];
+  } | null;
   /** Whether the run has its invoices' lines (TASK-3144); the page fetches them on demand. null without a model. */
   shipmentLines: ShipmentLinesView | null;
   /** The goal settings the model was built with (the page's definitions and rules text quote them). */
@@ -146,6 +159,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       revenueScope: null,
       revenueGoal: null,
       creditNotes: null,
+    pendingShipments: null,
       shipmentLines: null,
       settings: null,
       sections: SECTION_QUERIES,
@@ -184,6 +198,9 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
   });
   const notes = input.snapshot.creditNotes ?? null;
   const byClass = revenueByClass(shipments, model, input.ftlCustomers, notes?.access === "read" ? notes.notes : []);
+  // INTERIM (TASK-3992): shipped, not yet invoiced, added to the card as an estimate.
+  const pendingData = input.snapshot.pendingShipments ?? null;
+  const pending = pendingData?.access === "read" ? pendingShipmentsByClass(pendingData.shipments, model.revenue.rate) : null;
   const invoicedByClass = Object.fromEntries(byClass.rows.map((r) => [r.customerClass, r.totalCadCents])) as Record<CustomerClass, number>;
   const forecast = buildForecast({
     snapshot: input.forecast ?? null,
@@ -205,11 +222,14 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     revenueScope: revenueScope(byClass, "mfg", model.revenue.targetCents, {
       dueSoFarCents: model.revenue.dueSoFarCents,
       remaining: model.calendar.remaining,
-    }),
+    }, pending),
     revenueGoal: revenueScope(byClass, "all", model.revenue.targetCents, {
       dueSoFarCents: model.revenue.dueSoFarCents,
       remaining: model.calendar.remaining,
-    }),
+    }, pending),
+    pendingShipments: pendingData
+      ? { access: pendingData.access, missing: pendingData.missing, shipments: pendingData.shipments.length, otherCurrencies: pending?.otherCurrencies ?? [] }
+      : null,
     creditNotes: notes ? { access: notes.access, missing: notes.missing, notes: notes.notes.length } : null,
     shipmentLines: shipmentLinesView(input.shipmentLines ?? null),
     settings: input.settings,

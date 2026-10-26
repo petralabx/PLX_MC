@@ -35,7 +35,8 @@ import {
   type LoadTally,
 } from "../rules";
 import { invoiceLines, linesMismatch, type InvoiceHeader } from "../shipment-lines";
-import type { CreditNotesDataset, FxRate, GoalSettings, IsoDate, RefreshRun, ShipmentLinesDataset, ShipmentRow, TruckloadRow } from "../types";
+import { pendingShipmentsByClass } from "../pending-shipments";
+import type { PendingShipmentsDataset, CreditNotesDataset, FxRate, GoalSettings, IsoDate, RefreshRun, ShipmentLinesDataset, ShipmentRow, TruckloadRow } from "../types";
 import {
   AMBER_FILL,
   AMBER_FONT,
@@ -80,6 +81,8 @@ export interface GoalsWorkbookInput {
   revenueByClass?: RevenueByClass | null;
   /** The run's credit notes (TASK-3987), listed under Revenue by class; absent: a run stored before them. */
   creditNotes?: CreditNotesDataset | null;
+  /** INTERIM (TASK-3992): the run's shipments not yet invoiced (the Pending shipments sheet); absent: a run stored before them. */
+  pendingShipments?: PendingShipmentsDataset | null;
   /** The page's potential and realized revenue by customer; absent: the Customers sheet says so. */
   customerRevenue?: CustomerRevenue | null;
 }
@@ -978,7 +981,11 @@ const CLASS_HEADER_ROW = 4;
 function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   const { model } = input;
   const data = input.revenueByClass ?? null;
-  columns(ws, [26, 12, 16, 18, 16, 18, 16, 10, 20, 18, 12, 18, 20]);
+  columns(ws, [26, 12, 16, 18, 16, 18, 16, 10, 20, 18, 12, 18, 20, 16, 22]);
+  // INTERIM (TASK-3992): shipped, not yet invoiced, added to Toward the goal only when the run read them.
+  const pendingData = input.pendingShipments?.access === "read" ? input.pendingShipments : null;
+  const pending = pendingData ? pendingShipmentsByClass(pendingData.shipments, input.model.revenue.rate) : null;
+  const plusO = (r: number) => (pending ? `+O${r}` : "");
   put(ws, 1, 1, `Revenue by customer class — ${model.month.label}`, { title: true });
   if (!data) {
     put(ws, 2, 1, "Revenue by customer class isn’t in this export.", { note: true });
@@ -1007,6 +1014,8 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     { text: "Credit notes (Sage)" },
     { text: "Returns, CAD" },
     { text: "Credited charges, CAD" },
+    { text: "Shipped, not invoiced (shipments)", amber: true },
+    { text: "Shipped, not invoiced, CAD (estimate)", amber: true },
   ]);
   freeze(ws, CLASS_HEADER_ROW);
   const first = CLASS_HEADER_ROW + 1;
@@ -1024,10 +1033,13 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     // TASK-3952: charges are inside Total; the goal counts Total less them.
     put(ws, r, 9, dollars(c.charges.totalCadCents), { numFmt: AMOUNT_FORMAT });
     // TASK-3987: returns (credit notes' product before tax) come off the goal; their credited charges never counted.
-    put(ws, r, 10, { formula: `G${r}-I${r}-L${r}` }, { numFmt: AMOUNT_FORMAT, bold: true });
+    put(ws, r, 10, { formula: `G${r}-I${r}-L${r}${plusO(r)}` }, { numFmt: AMOUNT_FORMAT, bold: true });
     put(ws, r, 11, c.returns.notes, { numFmt: COUNT_FORMAT });
     put(ws, r, 12, dollars(c.returns.productCadCents), { numFmt: AMOUNT_FORMAT });
     put(ws, r, 13, dollars(c.returns.chargesCadCents), { numFmt: AMOUNT_FORMAT });
+    const p = pending?.rows[c.customerClass];
+    put(ws, r, 14, p ? p.shipments : "", { numFmt: COUNT_FORMAT, amber: true });
+    put(ws, r, 15, p ? dollars(p.totalCadCents) : "", { numFmt: AMOUNT_FORMAT, amber: true });
   });
   put(ws, total, 1, "All classes", { bold: true });
   for (let col = 2; col <= 7; col += 1) {
@@ -1038,10 +1050,10 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
       amber: col === 6,
     });
   }
-  for (const col of [9, 10, 11, 12, 13]) {
+  for (const col of [9, 10, 11, 12, 13, ...(pending ? [14, 15] : [])]) {
     const letter = ws.getColumn(col).letter;
     put(ws, total, col, { formula: `SUM(${letter}${first}:${letter}${total - 1})` }, {
-      numFmt: col === 11 ? COUNT_FORMAT : AMOUNT_FORMAT,
+      numFmt: col === 11 || col === 14 ? COUNT_FORMAT : AMOUNT_FORMAT,
       bold: true,
     });
   }
@@ -1050,12 +1062,13 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
   put(ws, total + 1, 1, "Manufacturing customers (all but Exclusive Distribution)");
   put(ws, total + 1, 7, { formula: distribution >= 0 ? `G${total}-G${first + distribution}` : `G${total}` }, { numFmt: AMOUNT_FORMAT });
   put(ws, total + 1, 9, { formula: distribution >= 0 ? `I${total}-I${first + distribution}` : `I${total}` }, { numFmt: AMOUNT_FORMAT });
-  for (const [col, letter] of [[11, "K"], [12, "L"], [13, "M"]] as const) {
+  const mfgCols: (readonly [number, string])[] = [[11, "K"], [12, "L"], [13, "M"], ...(pending ? ([[14, "N"], [15, "O"]] as const) : [])];
+  for (const [col, letter] of mfgCols) {
     put(ws, total + 1, col, { formula: distribution >= 0 ? `${letter}${total}-${letter}${first + distribution}` : `${letter}${total}` }, {
-      numFmt: col === 11 ? COUNT_FORMAT : AMOUNT_FORMAT,
+      numFmt: col === 11 || col === 14 ? COUNT_FORMAT : AMOUNT_FORMAT,
     });
   }
-  put(ws, total + 1, 10, { formula: `G${total + 1}-I${total + 1}-L${total + 1}` }, { numFmt: AMOUNT_FORMAT });
+  put(ws, total + 1, 10, { formula: `G${total + 1}-I${total + 1}-L${total + 1}${plusO(total + 1)}` }, { numFmt: AMOUNT_FORMAT });
   let r = total + 2;
   // The card as the page shows it, which the table checks itself against (Goals!G8 adds up the Daily sheet instead).
   put(ws, r, 1, "Revenue card (on the page)");
@@ -1090,8 +1103,67 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
       "These invoices don’t match the Revenue card’s exactly: Sage changed between two reads of this refresh. The next refresh lines them up."
     );
   }
+  // INTERIM (TASK-3992).
+  if (input.pendingShipments) notes.push(
+    pending
+      ? "Shipped, not invoiced (estimate) is each posted Sage shipment this month that no posted invoice names yet: order price " +
+          "x quantity shipped less discount, before tax, charges left out, by the shipment's customer. It's added to Toward the " +
+          "goal until AR posts the invoice, and isn't inside Total. The Pending shipments sheet lists each one."
+      : `Shipped, not invoiced: not included (needs access to ${input.pendingShipments.missing.join(", ")}).`
+  );
   for (const text of notes) put(ws, r++, 1, text, { note: true });
   creditNotesBlock(ws, r + 1, input.creditNotes ?? null);
+}
+
+/** INTERIM (TASK-3992): every shipment behind Revenue by class's Shipped, not invoiced column. */
+function pendingShipmentsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
+  columns(ws, [16, 14, 14, 30, 24, 12, 10, 8, 20]);
+  put(ws, 1, 1, `Shipped, not yet invoiced (estimate) - ${input.model.month.label}`, { bold: true });
+  const data = input.pendingShipments ?? null;
+  if (!data) {
+    put(ws, 2, 1, "Shipped, not invoiced: not included (this run didn't read Sage's shipments).", { note: true });
+    return;
+  }
+  if (data.access === "missing") {
+    put(ws, 2, 1, `Shipped, not invoiced: not included (needs access to ${data.missing.join(", ")}).`, { note: true });
+    return;
+  }
+  put(
+    ws,
+    2,
+    1,
+    "Interim, until go-live: posted Sage shipments dated this month that no posted invoice names yet. Value is order price x " +
+      "quantity shipped less discount, before tax, item lines only. An estimate: the invoice AR posts can differ.",
+    { note: true }
+  );
+  if (data.shipments.length === 0) {
+    put(ws, 3, 1, "No shipments waiting for an invoice.", { note: true });
+    return;
+  }
+  headerRow(ws, 4, [
+    { text: "Shipment" },
+    { text: "Order" },
+    { text: "Customer code" },
+    { text: "Customer" },
+    { text: "Customer class" },
+    { text: "Ship date" },
+    { text: "Currency" },
+    { text: "Lines" },
+    { text: "Product before tax (estimate)" },
+  ]);
+  freeze(ws, 4);
+  data.shipments.forEach((s, i) => {
+    const r = 5 + i;
+    put(ws, r, 1, s.shipment);
+    put(ws, r, 2, s.order);
+    put(ws, r, 3, s.customerCode);
+    put(ws, r, 4, s.customer);
+    put(ws, r, 5, customerClassOf(s.customerCode));
+    put(ws, r, 6, excelDate(s.shipDate), { numFmt: DATE_FORMAT });
+    put(ws, r, 7, s.currency);
+    put(ws, r, 8, s.lines, { numFmt: COUNT_FORMAT });
+    put(ws, r, 9, decimal(s.productValue), { numFmt: AMOUNT_FORMAT, amber: true });
+  });
 }
 
 /** Every credit note behind the Returns column (TASK-3987), so the export drops none. */
@@ -1224,6 +1296,7 @@ export async function buildGoalsWorkbook(input: GoalsWorkbookInput): Promise<Buf
   batchSheet(sheets.Batches, input);
   shipmentSheet(sheets.Shipments, input);
   shipmentLinesSheet(sheets["Shipment lines"], input);
+  pendingShipmentsSheet(sheets["Pending shipments"], input);
   forecastSheet(sheets.Forecast, input);
   customersSheet(sheets.Customers, input);
   entriesSheet(sheets[ENTRIES_SHEET], input);

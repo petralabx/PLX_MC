@@ -18,7 +18,7 @@ import {
   loadShipmentLines,
   loadSnapshot,
 } from "./store";
-import type { CreditNotesDataset, FxRate, RevenueRateBasis, ShipmentLinesDataset, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
+import type { CreditNotesDataset, PendingShipmentsDataset, FxRate, RevenueRateBasis, ShipmentLinesDataset, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
 import { buildGoalsView, type GoalsView } from "./view";
 
 const EMPTY_SETTINGS = {
@@ -45,6 +45,8 @@ export interface GoalsExportData {
   rates: FxRate[];
   /** The run's credit notes (TASK-3987); null for a run stored before them. */
   creditNotes?: CreditNotesDataset | null;
+  /** INTERIM (TASK-3992): the run's shipments not yet invoiced; null for a run stored before them. */
+  pendingShipments?: PendingShipmentsDataset | null;
 }
 
 export async function loadGoalsExport(basis: RevenueRateBasis = "boc"): Promise<GoalsExportData> {
@@ -58,6 +60,7 @@ export async function loadGoalsExport(basis: RevenueRateBasis = "boc"): Promise<
     truckloads: snapshot?.truckloads ?? [],
     rates,
     creditNotes: snapshot?.creditNotes ?? null,
+    pendingShipments: snapshot?.pendingShipments ?? null,
   };
 }
 

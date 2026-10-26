@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-26 (UTC) — TASK-3921: a Google Fonts hiccup failed the production build on main
+
+- **What happened:** On `main` at 41625e6, the `Preflight + full suite` job (run 40248011453) passed every test, then failed its production build with 28 `next/font/google` errors. A re-run of the same commit passed 20 minutes later.
+- **Root cause:** `src/app/layout.tsx` loaded Inter and JetBrains Mono with `next/font/google`, so every `next build` fetched Google Fonts CSS and files. One bad response on the runner broke the build.
+- **Rule going forward:** The build fetches nothing from the network. Self-host every font with `next/font/local` from `public/fonts/`, and vendor the exact bytes the build served before, so rendering stays the same. Prove it with a build under `unshare -n`.
+
 ### 2026-10-23 (ET) — TASK-3813: a merge released checkouts that open stacked PRs still stamped
 
 - **What happened:** In `petralabx/plx-customer-portal`, #2907 merged and MC released four checkouts that the open stacked PRs #2906, #2908, #2909 and #2910 still stamped. `mc_verify_pr` then blocked all four with `checkout released — re-checkout the task`. Closing a superseded PR did the same. A re-checkout mints a new id that cannot match the trailers already in the stacked commits, so the stack could never pass without a history rewrite.

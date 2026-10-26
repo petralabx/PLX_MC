@@ -218,13 +218,16 @@ describe("goal cards (2026-10-14 with M1–M7)", () => {
     expect(out).toContain("Last month: 7 full, 5 partial, US$215,066 of product");
   });
 
-  it("shows revenue: $408,628 of $1,000,000, the split, the rate and what's needed", () => {
+  it("shows revenue: $390,827 of $1,000,000 with charges left out, the split, the rate and what's needed", () => {
     expect(out).toContain("Revenue Behind");
-    expect(out).toContain("$408,628 of $1,000,000");
-    expect(out).toContain("$367,014 in Sage + $41,614 entered by hand");
+    expect(out).toContain("$390,827 of $1,000,000");
+    expect(out).toContain("$350,990 in Sage + $39,837 entered by hand");
+    expect(out).toContain("+ $17,801 freight & other charges left out = $408,628 invoiced");
     expect(out).toContain("Due so far: $428,571 by Oct 14");
-    expect(out).toContain("Needed per working day: $45,490");
-    expect(out).toContain("CAD $121,838 (57 invoices) + USD US$172,429 (13 invoices) = $245,176 at 1.4219 (Bank of Canada, Oct 13)");
+    expect(out).toContain("Needed per working day: $46,859");
+    expect(out).toContain(
+      "CAD $121,838 (57 invoices) + USD US$172,429 (13 invoices, $245,176 at 1.4219 (Bank of Canada, Oct 13)) + $41,614 entered by hand = $408,628, charges included"
+    );
   });
 
   it("marks the by-hand figures amber and names query and run in the tooltips", () => {

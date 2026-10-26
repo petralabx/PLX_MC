@@ -81,6 +81,8 @@ export interface GoalsView {
   revenueByClass: RevenueByClass | null;
   /** The Revenue card's month for manufacturing customers (every class but Exclusive Distribution), read from revenueByClass; the card's headline, status and pace at `scope=mfg`. */
   revenueScope: RevenueScopeView | null;
+  /** The Revenue card's month for every customer, freight and other charges left out (TASK-3952): the card's headline, status and pace at `scope=all`. */
+  revenueGoal: RevenueScopeView | null;
   /** Whether the run has its invoices' lines (TASK-3144); the page fetches them on demand. null without a model. */
   shipmentLines: ShipmentLinesView | null;
   /** The goal settings the model was built with (the page's definitions and rules text quote them). */
@@ -133,6 +135,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       shipments: [],
       revenueByClass: null,
       revenueScope: null,
+      revenueGoal: null,
       shipmentLines: null,
       settings: null,
       sections: SECTION_QUERIES,
@@ -189,6 +192,10 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     shipments,
     revenueByClass: byClass,
     revenueScope: revenueScope(byClass, "mfg", model.revenue.targetCents, {
+      dueSoFarCents: model.revenue.dueSoFarCents,
+      remaining: model.calendar.remaining,
+    }),
+    revenueGoal: revenueScope(byClass, "all", model.revenue.targetCents, {
       dueSoFarCents: model.revenue.dueSoFarCents,
       remaining: model.calendar.remaining,
     }),

@@ -25,7 +25,7 @@ test.describe("goals & production", () => {
     await expect(line1).toContainText("72,652 kg in FileMaker + 19,050 kg entered by hand");
     await expect(line1.locator(".pv-chip")).toHaveText("Behind");
     await expect(page.getByTestId("goals-card-truckloads")).toContainText("2 in Sage + 1 entered by hand");
-    await expect(page.getByTestId("goals-card-revenue")).toContainText("$408,628 of $1,000,000");
+    await expect(page.getByTestId("goals-card-revenue")).toContainText("$390,827 of $1,000,000");
     await expect(page.getByTestId("goals-card-revenue").locator(".gp-big")).toHaveAttribute(
       "title",
       "From query revenue-by-currency · run #41, Oct 14, 6:00 AM"

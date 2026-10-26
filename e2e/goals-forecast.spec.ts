@@ -142,7 +142,7 @@ test.describe("goals revenue forecast", () => {
     await expect(waiting).toContainText("sage.oe_order_header: type, expdate");
     await expect(waiting).toContainText("public.assembly_order: qtytotal");
     await expect(section(page).getByRole("region", { name: "Open orders this month" })).toHaveCount(0);
-    await expect(page.getByTestId("goals-card-revenue")).toContainText("$408,628 of $1,000,000");
+    await expect(page.getByTestId("goals-card-revenue")).toContainText("$390,827 of $1,000,000");
   });
 
   for (const mode of ["light", "dark"] as const) {

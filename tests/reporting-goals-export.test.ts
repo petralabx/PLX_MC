@@ -647,7 +647,17 @@ describe("at the Sage rate", () => {
     expect(ws.getCell("G11").value).toBe(page.model!.revenue.totalCents / 100);
     expect(formulaOf(ws.getCell("G12"))).toBe("G11-G9");
     expect(String(ws.getCell("A14").value)).toContain("shared across the classes by largest remainder");
-    expect(String(ws.getCell("A15").value)).toBe("Unclassified includes 1 shipment entered by hand without a Sage customer (5,000.00 CAD).");
+    expect(ws.getCell("I4").value).toBe("Freight & other charges, CAD");
+    expect(ws.getCell("J4").value).toBe("Toward the goal, CAD");
+    page.revenueByClass!.rows.forEach((c, i) => {
+      const r = 5 + i;
+      expect(ws.getCell(`I${r}`).value).toBe(c.charges.totalCadCents / 100);
+      expect(formulaOf(ws.getCell(`J${r}`))).toBe(`G${r}-I${r}`);
+    });
+    expect(formulaOf(ws.getCell("I9"))).toBe("SUM(I5:I8)");
+    expect(formulaOf(ws.getCell("J9"))).toBe("SUM(J5:J8)");
+    expect(String(ws.getCell("A15").value)).toContain("Freight & other charges");
+    expect(String(ws.getCell("A16").value)).toBe("Unclassified includes 1 shipment entered by hand without a Sage customer (5,000.00 CAD).");
   });
 
   it("says when the export has no revenue by class", async () => {

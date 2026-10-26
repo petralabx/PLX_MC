@@ -125,7 +125,7 @@ test.describe("goals & production: entries by hand", () => {
 
   test("an Editor edits an entry and the figures follow", async ({ page }) => {
     const api = await open(page);
-    await expect(page.getByTestId("goals-card-revenue")).toContainText("$408,628 of $1,000,000");
+    await expect(page.getByTestId("goals-card-revenue")).toContainText("$390,827 of $1,000,000");
     await table(page).getByRole("button", { name: "Edit M007" }).click();
     const dialog = page.getByRole("dialog", { name: "Edit entry M007" });
     await expect(dialog.getByRole("radio", { name: "Shipment" })).toBeChecked();
@@ -137,7 +137,7 @@ test.describe("goals & production: entries by hand", () => {
 
     await expect(page.getByTestId("goals-entries-status")).toHaveText("Saved M007.");
     await expect(row(page, "M007")).toContainText("6,000.00");
-    await expect(page.getByTestId("goals-card-revenue")).toContainText("$409,628 of $1,000,000");
+    await expect(page.getByTestId("goals-card-revenue")).toContainText("$391,827 of $1,000,000");
     await expect(table(page).getByRole("button", { name: "Edit M007" })).toBeFocused();
     expect(api.writes()).toEqual([expect.objectContaining({ method: "PATCH", path: "/api/reporting/goals/entries/M007" })]);
   });
@@ -156,7 +156,7 @@ test.describe("goals & production: entries by hand", () => {
     await expect(table(page).locator("tbody tr")).toHaveCount(6);
     await expect(table(page).locator("tbody tr.retired")).toHaveCount(3);
     for (const id of ["M004", "M005", "M006"]) await expect(row(page, id)).toBeVisible();
-    await expect(page.getByTestId("goals-card-revenue")).toContainText("$403,628 of $1,000,000");
+    await expect(page.getByTestId("goals-card-revenue")).toContainText("$385,827 of $1,000,000");
     await expect(table(page).getByRole("region", { name: "Entries by hand" })).toBeFocused();
     expect(api.writes()).toEqual([{ method: "DELETE", path: "/api/reporting/goals/entries/M007", body: {} }]);
   });

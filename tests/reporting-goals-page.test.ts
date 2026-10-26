@@ -234,7 +234,7 @@ describe("goal cards (2026-10-14 with M1–M7)", () => {
     const markup = html(GoalCards, { page: READY });
     expect(markup).toContain('<span class="gp-amber">19,050 kg entered by hand</span>');
     expect(markup).toContain('title="From query batches · run #41, Oct 14, 6:00 AM"');
-    expect(markup).toContain('title="From query revenue-by-currency · run #41, Oct 14, 6:00 AM"');
+    expect(markup).toContain('title="From queries revenue-by-currency, credit-notes · run #41, Oct 14, 6:00 AM"');
   });
 
   it("hides the amber part at zero and flags a stored exchange rate", () => {

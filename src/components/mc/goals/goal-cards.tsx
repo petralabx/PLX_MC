@@ -102,6 +102,10 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
   const revTotal = goal ? goal.goalCadCents : rev.totalCents;
   const revStatus = goal ? (goal.status ?? rev.status) : rev.status;
   const revNeeded = goal ? (goal.neededPerDayCents ?? rev.neededPerDayCents) : rev.neededPerDayCents;
+  // Returns (TASK-3987): the run's credit notes, subtracted from the headline; null for a run stored before them.
+  const creditNotes = page.creditNotes;
+  const returned = page.revenueByClass?.total.returns ?? null;
+  const returnsPlus = (s: { returnsCadCents: number }) => (s.returnsCadCents !== 0 ? ` + ${dollars(s.returnsCadCents)} returns` : "");
   const scheduled = Math.max(0, l1.ifAllRunKg - l1.totalKg);
   const fullScale = Math.max(tl.lastMonth.full, tl.full.total, 1);
   // The rate the figures are at: the run's Bank of Canada rate, or the fixed Sage rate (TASK-3780).
@@ -181,14 +185,14 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
         id="revenue"
         title="Revenue"
         status={revStatus}
-        definition={`Invoiced in CAD, product before tax (freight and other charges left out)${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
+        definition={`Invoiced in CAD, product before tax (freight and other charges left out${creditNotes?.access === "read" ? ", returns deducted" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
         big={dollars(revTotal)}
         of={`of ${dollars(rev.targetCents)}`}
         source={revSource}
       >
         {mfg ? (
           <p className="gp-split" title={revSource} data-testid="goals-revenue-mfg">
-            + {dollars(mfg.chargesCadCents)} freight &amp; other charges + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out ={" "}
+            + {dollars(mfg.chargesCadCents)} freight &amp; other charges{returnsPlus(mfg)} + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out ={" "}
             {dollars(mfg.totalCadCents + mfg.excludedCadCents)} all customers, charges included
             {mfg.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the class table until the next one"}
           </p>
@@ -201,7 +205,7 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
               title={revSource}
             />
             <p className="gp-split" title={revSource} data-testid="goals-revenue-charges">
-              + {dollars(goal.chargesCadCents)} freight &amp; other charges left out = {dollars(goal.totalCadCents)} invoiced
+              + {dollars(goal.chargesCadCents)} freight &amp; other charges left out{returnsPlus(goal)} = {dollars(goal.totalCadCents)} invoiced
               {goal.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the card until the next one"}
             </p>
           </>
@@ -213,6 +217,20 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
             title={revSource}
           />
         )}
+        {goal && creditNotes ? (
+          creditNotes.access === "read" ? (
+            <p className="gp-split" title={revSource} data-testid="goals-revenue-returns">
+              − {dollars(goal.returnsCadCents)} returns ({count(goal.returnsNotes)} {goal.returnsNotes === 1 ? "credit note" : "credit notes"})
+              {goal.returnsChargesCadCents !== 0
+                ? `; ${dollars(goal.returnsChargesCadCents)} of credited freight & other charges left out, as charges are`
+                : ""}
+            </p>
+          ) : (
+            <p className="gp-split gp-amber" title={revSource} data-testid="goals-revenue-returns">
+              Returns not deducted: Sage&apos;s credit notes can&apos;t be read yet (needs {creditNotes.missing.join(", ")})
+            </p>
+          )
+        ) : null}
         <Bar
           parts={
             mfg
@@ -241,6 +259,16 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
             invoices, {dollars(rev.usd.cadCents)} at {rateText})
             {rev.byHandCents !== 0 ? ` + ${dollars(rev.byHandCents)} entered by hand` : ""} = {dollars(rev.totalCents)}, charges included
           </li>
+          {returned && returned.notes > 0 ? (
+            <li data-testid="goals-revenue-currency-returns">
+              Credit notes: CAD {dollars(returned.cad.cents)} ({count(returned.cad.notes)}) + USD {usd(returned.usd.cents)} (
+              {count(returned.usd.notes)}, {dollars(returned.usd.cadCents)} at {rateText}) = {dollars(returned.totalCadCents)}{" "}
+              returned, charges included
+              {returned.otherCurrencies.length > 0
+                ? `; not converted: ${returned.otherCurrencies.map((c) => `${c.currency} ${(c.cents / 100).toLocaleString("en-US")} (${count(c.notes)})`).join(", ")}`
+                : ""}
+            </li>
+          ) : null}
           {rev.otherCurrencies.length > 0 ? (
             <li>
               Not converted:{" "}

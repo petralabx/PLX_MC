@@ -1,0 +1,9 @@
+{
+  "access": "read",
+  "missing": [],
+  "notes": [
+    { "creditNote": "CN0001201", "invoice": "IN0045110", "customerCode": "1HRA01", "customer": "Fixture Manufacturing Co", "creditDate": "2026-10-06", "currency": "CAD", "productValue": "1200.00", "otherCharges": "0.00", "netBeforeTax": "1200.00" },
+    { "creditNote": "CN0001202", "invoice": "IN0045133", "customerCode": "5STA10", "customer": "Fixture Mixed Inc", "creditDate": "2026-10-09", "currency": "USD", "productValue": "500.00", "otherCharges": "50.00", "netBeforeTax": "550.00" },
+    { "creditNote": "CN0001203", "invoice": null, "customerCode": "ACECA01", "customer": "Fixture Distribution Ltd", "creditDate": "2026-10-13", "currency": "CAD", "productValue": "300.00", "otherCharges": "0.00", "netBeforeTax": "300.00" }
+  ]
+}

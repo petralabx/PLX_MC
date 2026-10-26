@@ -19,6 +19,7 @@ import { referencesQuery } from "./queries/references";
 import { revenueByCurrencyQuery } from "./queries/revenue-by-currency";
 import type { DatasetQuery } from "./queries/shared";
 import { SHIPMENT_LINE_COLUMNS, shipmentLinesQuery } from "./queries/shipment-lines";
+import { CREDIT_NOTE_COLUMNS, creditNotesQuery } from "./queries/credit-notes";
 import { shipmentsQuery } from "./queries/shipments";
 import { truckloadsQuery } from "./queries/truckloads";
 import { latestRateOnOrBefore } from "./rules";
@@ -36,7 +37,7 @@ import {
   type GoalsConfig,
   type ResolvedRate,
 } from "./store";
-import type { Datasets, IsoDate, RefreshRun, RefreshTrigger, ShipmentLinesDataset } from "./types";
+import type { CreditNotesDataset, Datasets, IsoDate, RefreshRun, RefreshTrigger, ShipmentLinesDataset } from "./types";
 
 /** Time a refresh may take in total: the routes' maxDuration (300 s) less a margin. */
 export const REFRESH_BUDGET_MS = 280_000;
@@ -83,6 +84,16 @@ async function readShipmentLines(q: SourceQuery, today: IsoDate): Promise<Shipme
 }
 
 /**
+ * This month's credit notes (TASK-3987), like the invoice lines: the catalog
+ * check first, then the query, or neither. Missing grants never fail the refresh.
+ */
+async function readCreditNotes(q: SourceQuery, today: IsoDate): Promise<CreditNotesDataset> {
+  const missing = await missingColumns(q, CREDIT_NOTE_COLUMNS);
+  if (missing.length > 0) return { access: "missing", missing, notes: [] };
+  return { access: "read", missing: [], notes: creditNotesQuery.map(await q(creditNotesQuery.sql, [today])) };
+}
+
+/**
  * Read every dataset for `today` from the replica: through plx-reporting-mcp
  * when REPORTING_MCP_URL and REPORTING_MCP_TOKEN are set, else in one
  * consistent transaction on REPORTING_DATABASE_URL.
@@ -109,6 +120,8 @@ export async function readDatasets(
       customers: await read(customersQuery, []),
       // Only when the login can read Sage's invoice lines (TASK-3144).
       shipmentLines: await readShipmentLines(q, today),
+      // Only when the login can read Sage's credit notes (TASK-3987).
+      creditNotes: await readCreditNotes(q, today),
       // Last, and only when the login can read its tables (TASK-3151).
       forecast: await readForecast(q, today),
     };

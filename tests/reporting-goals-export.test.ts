@@ -652,12 +652,13 @@ describe("at the Sage rate", () => {
     page.revenueByClass!.rows.forEach((c, i) => {
       const r = 5 + i;
       expect(ws.getCell(`I${r}`).value).toBe(c.charges.totalCadCents / 100);
-      expect(formulaOf(ws.getCell(`J${r}`))).toBe(`G${r}-I${r}`);
+      expect(formulaOf(ws.getCell(`J${r}`))).toBe(`G${r}-I${r}-L${r}`);
     });
     expect(formulaOf(ws.getCell("I9"))).toBe("SUM(I5:I8)");
     expect(formulaOf(ws.getCell("J9"))).toBe("SUM(J5:J8)");
     expect(String(ws.getCell("A15").value)).toContain("Freight & other charges");
-    expect(String(ws.getCell("A16").value)).toBe("Unclassified includes 1 shipment entered by hand without a Sage customer (5,000.00 CAD).");
+    expect(String(ws.getCell("A16").value)).toContain("Sage credit notes");
+    expect(String(ws.getCell("A17").value)).toBe("Unclassified includes 1 shipment entered by hand without a Sage customer (5,000.00 CAD).");
   });
 
   it("says when the export has no revenue by class", async () => {

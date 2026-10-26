@@ -21,7 +21,7 @@ import type ExcelJS from "exceljs";
 
 import { REPORT_TIME_ZONE, monthLabel } from "../calendar";
 import type { CustomerRanking, CustomerRevenue } from "../customer-revenue";
-import { FORECAST_BUCKET_LABELS, type ForecastBucket, type ForecastView } from "../forecast";
+import { FORECAST_BUCKET_LABELS, customerClassOf, type ForecastBucket, type ForecastView } from "../forecast";
 import { formatAmount, toCents } from "../money";
 import { missingByRelation } from "../queries/read-access";
 import type { RevenueByClass } from "../revenue-by-class";
@@ -35,7 +35,7 @@ import {
   type LoadTally,
 } from "../rules";
 import { invoiceLines, linesMismatch, type InvoiceHeader } from "../shipment-lines";
-import type { FxRate, GoalSettings, IsoDate, RefreshRun, ShipmentLinesDataset, ShipmentRow, TruckloadRow } from "../types";
+import type { CreditNotesDataset, FxRate, GoalSettings, IsoDate, RefreshRun, ShipmentLinesDataset, ShipmentRow, TruckloadRow } from "../types";
 import {
   AMBER_FILL,
   AMBER_FONT,
@@ -78,6 +78,8 @@ export interface GoalsWorkbookInput {
   shipmentLines?: ShipmentLinesDataset | null;
   /** The page's revenue by customer class (TASK-3781); absent: the Revenue by class sheet says so. */
   revenueByClass?: RevenueByClass | null;
+  /** The run's credit notes (TASK-3987), listed under Revenue by class; absent: a run stored before them. */
+  creditNotes?: CreditNotesDataset | null;
   /** The page's potential and realized revenue by customer; absent: the Customers sheet says so. */
   customerRevenue?: CustomerRevenue | null;
 }
@@ -976,7 +978,7 @@ const CLASS_HEADER_ROW = 4;
 function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   const { model } = input;
   const data = input.revenueByClass ?? null;
-  columns(ws, [26, 12, 16, 18, 16, 18, 16, 10, 20, 18]);
+  columns(ws, [26, 12, 16, 18, 16, 18, 16, 10, 20, 18, 12, 18, 20]);
   put(ws, 1, 1, `Revenue by customer class — ${model.month.label}`, { title: true });
   if (!data) {
     put(ws, 2, 1, "Revenue by customer class isn’t in this export.", { note: true });
@@ -1002,6 +1004,9 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     { text: "Share" },
     { text: "Freight & other charges, CAD" },
     { text: "Toward the goal, CAD" },
+    { text: "Credit notes (Sage)" },
+    { text: "Returns, CAD" },
+    { text: "Credited charges, CAD" },
   ]);
   freeze(ws, CLASS_HEADER_ROW);
   const first = CLASS_HEADER_ROW + 1;
@@ -1018,7 +1023,11 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     put(ws, r, 8, { formula: `IF($G${total}>0,G${r}/$G${total},"")` }, { numFmt: PERCENT_FORMAT });
     // TASK-3952: charges are inside Total; the goal counts Total less them.
     put(ws, r, 9, dollars(c.charges.totalCadCents), { numFmt: AMOUNT_FORMAT });
-    put(ws, r, 10, { formula: `G${r}-I${r}` }, { numFmt: AMOUNT_FORMAT, bold: true });
+    // TASK-3987: returns (credit notes' product before tax) come off the goal; their credited charges never counted.
+    put(ws, r, 10, { formula: `G${r}-I${r}-L${r}` }, { numFmt: AMOUNT_FORMAT, bold: true });
+    put(ws, r, 11, c.returns.notes, { numFmt: COUNT_FORMAT });
+    put(ws, r, 12, dollars(c.returns.productCadCents), { numFmt: AMOUNT_FORMAT });
+    put(ws, r, 13, dollars(c.returns.chargesCadCents), { numFmt: AMOUNT_FORMAT });
   });
   put(ws, total, 1, "All classes", { bold: true });
   for (let col = 2; col <= 7; col += 1) {
@@ -1029,16 +1038,24 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
       amber: col === 6,
     });
   }
-  for (const col of [9, 10]) {
+  for (const col of [9, 10, 11, 12, 13]) {
     const letter = ws.getColumn(col).letter;
-    put(ws, total, col, { formula: `SUM(${letter}${first}:${letter}${total - 1})` }, { numFmt: AMOUNT_FORMAT, bold: true });
+    put(ws, total, col, { formula: `SUM(${letter}${first}:${letter}${total - 1})` }, {
+      numFmt: col === 11 ? COUNT_FORMAT : AMOUNT_FORMAT,
+      bold: true,
+    });
   }
   // Manufacturing customers (the page's `scope=mfg` line): every class but Exclusive Distribution, as a formula on the rows above.
   const distribution = data.rows.findIndex((c) => c.customerClass === "Exclusive Distribution");
   put(ws, total + 1, 1, "Manufacturing customers (all but Exclusive Distribution)");
   put(ws, total + 1, 7, { formula: distribution >= 0 ? `G${total}-G${first + distribution}` : `G${total}` }, { numFmt: AMOUNT_FORMAT });
   put(ws, total + 1, 9, { formula: distribution >= 0 ? `I${total}-I${first + distribution}` : `I${total}` }, { numFmt: AMOUNT_FORMAT });
-  put(ws, total + 1, 10, { formula: `G${total + 1}-I${total + 1}` }, { numFmt: AMOUNT_FORMAT });
+  for (const [col, letter] of [[11, "K"], [12, "L"], [13, "M"]] as const) {
+    put(ws, total + 1, col, { formula: distribution >= 0 ? `${letter}${total}-${letter}${first + distribution}` : `${letter}${total}` }, {
+      numFmt: col === 11 ? COUNT_FORMAT : AMOUNT_FORMAT,
+    });
+  }
+  put(ws, total + 1, 10, { formula: `G${total + 1}-I${total + 1}-L${total + 1}` }, { numFmt: AMOUNT_FORMAT });
   let r = total + 2;
   // The card as the page shows it, which the table checks itself against (Goals!G8 adds up the Daily sheet instead).
   put(ws, r, 1, "Revenue card (on the page)");
@@ -1052,6 +1069,9 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     "Freight & other charges are each invoice's other charges (Sage line type 2, such as freight, lab and service charges) " +
       "and the freight of shipments entered by hand. They are inside Total and left out of the goal: the Revenue card's " +
       "headline is Toward the goal. The Shipment lines sheet lists each charge line.",
+    "Returns are this month's Sage credit notes (by the credit note's date, the class of its own customer): their product " +
+      "value before tax comes off Toward the goal. They are not inside Total, which is what was invoiced; credited freight " +
+      "and other charges are left out, as charges are. Each credit note is listed below.",
   ];
   if (data.unresolvedByHand.entries > 0) {
     notes.push(
@@ -1071,6 +1091,49 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
     );
   }
   for (const text of notes) put(ws, r++, 1, text, { note: true });
+  creditNotesBlock(ws, r + 1, input.creditNotes ?? null);
+}
+
+/** Every credit note behind the Returns column (TASK-3987), so the export drops none. */
+function creditNotesBlock(ws: ExcelJS.Worksheet, start: number, notes: CreditNotesDataset | null): void {
+  put(ws, start, 1, "Credit notes this month (returns)", { bold: true });
+  if (!notes) {
+    put(ws, start + 1, 1, "This run was stored before credit notes were read: returns aren't deducted.", { note: true });
+    return;
+  }
+  if (notes.access === "missing") {
+    put(ws, start + 1, 1, `Returns aren't deducted: Sage's credit notes can't be read yet (needs ${notes.missing.join(", ")}).`, { note: true });
+    return;
+  }
+  if (notes.notes.length === 0) {
+    put(ws, start + 1, 1, "No credit notes this month.", { note: true });
+    return;
+  }
+  headerRow(ws, start + 1, [
+    { text: "Credit note" },
+    { text: "Invoice" },
+    { text: "Customer code" },
+    { text: "Customer" },
+    { text: "Customer class" },
+    { text: "Date" },
+    { text: "Currency" },
+    { text: "Product before tax" },
+    { text: "Other charges" },
+    { text: "Net before tax" },
+  ]);
+  notes.notes.forEach((n, i) => {
+    const r = start + 2 + i;
+    put(ws, r, 1, n.creditNote);
+    put(ws, r, 2, n.invoice);
+    put(ws, r, 3, n.customerCode);
+    put(ws, r, 4, n.customer);
+    put(ws, r, 5, customerClassOf(n.customerCode));
+    put(ws, r, 6, excelDate(n.creditDate), { numFmt: DATE_FORMAT });
+    put(ws, r, 7, n.currency);
+    put(ws, r, 8, decimal(n.productValue), { numFmt: AMOUNT_FORMAT });
+    put(ws, r, 9, decimal(n.otherCharges), { numFmt: AMOUNT_FORMAT });
+    put(ws, r, 10, decimal(n.netBeforeTax), { numFmt: AMOUNT_FORMAT });
+  });
 }
 
 function rankingBlock(ws: ExcelJS.Worksheet, start: number, title: string, ranking: CustomerRanking): number {

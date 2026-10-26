@@ -71,3 +71,9 @@ GRANT SELECT (invuniq) ON sage.oe_invoice_header TO mc_goals_ro;
 
 GRANT SELECT (invuniq, linenum, linetype, item, misccharge, "desc", qtyshipped, invunit, unitprice, extinvmisc, invdisc)
     ON sage.oe_invoice_detail TO mc_goals_ro;
+
+-- Returns (TASK-3987): this month's credit notes (queries/credit-notes.ts,
+-- CREDIT_NOTE_COLUMNS). An existing login gets exactly these from
+-- readonly-grants-credit-notes.sql instead.
+GRANT SELECT (crdnumber, invnumber, customer, bilname, crddate, crdsourcurr, crditmtot, crddiscamt, crdmisc, crdnetnotx, adjtype)
+    ON sage.oe_credit_note_header TO mc_goals_ro;

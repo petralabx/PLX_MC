@@ -9,10 +9,10 @@
 
 import { customerClassOf } from "./forecast";
 import { CUSTOMER_CLASSES, type CustomerClass } from "./forecast-list";
-import { allocateConvertedCents, convertCents } from "./money";
+import { allocateConvertedCents, convertCents, toCents } from "./money";
 import { truckloadCustomerFor, type GoalsModel } from "./rules";
 import type { ShipmentListRow } from "./shipment-list";
-import type { FtlCustomer } from "./types";
+import type { CreditNoteRow, FtlCustomer } from "./types";
 
 export interface ClassRevenueTotals {
   /** Sage invoices this month, every currency. */
@@ -33,6 +33,26 @@ export interface ClassRevenueTotals {
    * largest remainder, as usd.cadCents is; by hand at the revenue rate.
    */
   charges: { cadCents: number; usdCents: number; usdCadCents: number; byHandCadCents: number; totalCadCents: number };
+  /**
+   * This month's Sage credit notes (TASK-3987), by the note's customer code, as
+   * positive amounts: NOT inside totalCadCents (which stays what was invoiced).
+   * USD converted once for the month and shared by largest remainder, as
+   * usd.cadCents is. productCadCents (items less discount, before tax) comes off
+   * the goal; chargesCadCents (credited freight and other charges) never counted
+   * toward it. Other currencies are listed, never converted or counted.
+   */
+  returns: {
+    notes: number;
+    cad: { notes: number; cents: number; chargesCents: number };
+    usd: { notes: number; cents: number; chargesCents: number; cadCents: number; chargesCadCents: number };
+    otherCurrencies: { currency: string; notes: number; cents: number }[];
+    /** cad.cents + usd.cadCents: the notes' net before tax in CAD. */
+    totalCadCents: number;
+    /** cad.chargesCents + usd.chargesCadCents. */
+    chargesCadCents: number;
+    /** totalCadCents less chargesCadCents: what comes off the goal. */
+    productCadCents: number;
+  };
 }
 
 export interface ClassRevenueRow extends ClassRevenueTotals {
@@ -67,7 +87,27 @@ function emptyTotals(): ClassRevenueTotals {
     byHand: { entries: 0, cadCents: 0 },
     totalCadCents: 0,
     charges: { cadCents: 0, usdCents: 0, usdCadCents: 0, byHandCadCents: 0, totalCadCents: 0 },
+    returns: emptyReturns(),
   };
+}
+
+function emptyReturns(): ClassRevenueTotals["returns"] {
+  return {
+    notes: 0,
+    cad: { notes: 0, cents: 0, chargesCents: 0 },
+    usd: { notes: 0, cents: 0, chargesCents: 0, cadCents: 0, chargesCadCents: 0 },
+    otherCurrencies: [],
+    totalCadCents: 0,
+    chargesCadCents: 0,
+    productCadCents: 0,
+  };
+}
+
+function addOtherReturn(list: ClassRevenueTotals["returns"]["otherCurrencies"], currency: string, notes: number, cents: number): void {
+  let found = list.find((c) => c.currency === currency);
+  if (!found) list.push((found = { currency, notes: 0, cents: 0 }));
+  found.notes += notes;
+  found.cents += cents;
 }
 
 function addOther(list: ClassRevenueTotals["otherCurrencies"], currency: string, invoices: number, cents: number): void {
@@ -93,7 +133,8 @@ function classOf(row: ShipmentListRow, ftlCustomers: readonly FtlCustomer[]): { 
 export function revenueByClass(
   rows: readonly ShipmentListRow[],
   model: Pick<GoalsModel, "revenue">,
-  ftlCustomers: readonly FtlCustomer[]
+  ftlCustomers: readonly FtlCustomer[],
+  creditNotes: readonly CreditNoteRow[] = []
 ): RevenueByClass {
   const sums = new Map<CustomerClass, ClassRevenueTotals>(CUSTOMER_CLASSES.map((c) => [c, emptyTotals()]));
   const unresolvedByHand = { entries: 0, cadCents: 0 };
@@ -124,7 +165,34 @@ export function revenueByClass(
     }
   }
 
+  // Returns (TASK-3987): each credit note by its own customer code.
+  for (const note of creditNotes) {
+    const ret = sums.get(customerClassOf(note.customerCode))!.returns;
+    const net = toCents(note.netBeforeTax);
+    const charges = toCents(note.otherCharges);
+    ret.notes += 1;
+    if (note.currency === "CAD") {
+      ret.cad.notes += 1;
+      ret.cad.cents += net;
+      ret.cad.chargesCents += charges;
+    } else if (note.currency === "USD") {
+      ret.usd.notes += 1;
+      ret.usd.cents += net;
+      ret.usd.chargesCents += charges;
+    } else {
+      addOtherReturn(ret.otherCurrencies, note.currency, 1, net);
+    }
+  }
+
   const classes = [...sums.values()];
+  const returnsUsdCad = allocateConvertedCents(
+    classes.map((c) => c.returns.usd.cents),
+    model.revenue.rate
+  );
+  const returnsChargesUsdCad = allocateConvertedCents(
+    classes.map((c) => c.returns.usd.chargesCents),
+    model.revenue.rate
+  );
   const usdCad = allocateConvertedCents(
     classes.map((c) => c.usd.cents),
     model.revenue.rate
@@ -139,6 +207,13 @@ export function revenueByClass(
     c.charges.totalCadCents = c.charges.cadCents + c.charges.usdCadCents + c.charges.byHandCadCents;
     c.otherCurrencies.sort(byCurrency);
     c.totalCadCents = c.cad.cents + c.usd.cadCents + c.byHand.cadCents;
+    const ret = c.returns;
+    ret.usd.cadCents = returnsUsdCad[i];
+    ret.usd.chargesCadCents = returnsChargesUsdCad[i];
+    ret.otherCurrencies.sort(byCurrency);
+    ret.totalCadCents = ret.cad.cents + ret.usd.cadCents;
+    ret.chargesCadCents = ret.cad.chargesCents + ret.usd.chargesCadCents;
+    ret.productCadCents = ret.totalCadCents - ret.chargesCadCents;
   });
 
   const total = emptyTotals();
@@ -158,8 +233,23 @@ export function revenueByClass(
     total.charges.byHandCadCents += c.charges.byHandCadCents;
     total.charges.totalCadCents += c.charges.totalCadCents;
     for (const o of c.otherCurrencies) addOther(total.otherCurrencies, o.currency, o.invoices, o.cents);
+    const ret = total.returns;
+    ret.notes += c.returns.notes;
+    ret.cad.notes += c.returns.cad.notes;
+    ret.cad.cents += c.returns.cad.cents;
+    ret.cad.chargesCents += c.returns.cad.chargesCents;
+    ret.usd.notes += c.returns.usd.notes;
+    ret.usd.cents += c.returns.usd.cents;
+    ret.usd.chargesCents += c.returns.usd.chargesCents;
+    ret.usd.cadCents += c.returns.usd.cadCents;
+    ret.usd.chargesCadCents += c.returns.usd.chargesCadCents;
+    ret.totalCadCents += c.returns.totalCadCents;
+    ret.chargesCadCents += c.returns.chargesCadCents;
+    ret.productCadCents += c.returns.productCadCents;
+    for (const o of c.returns.otherCurrencies) addOtherReturn(ret.otherCurrencies, o.currency, o.notes, o.cents);
   }
   total.otherCurrencies.sort(byCurrency);
+  total.returns.otherCurrencies.sort(byCurrency);
 
   const card = model.revenue;
   const cardOthers = [...card.otherCurrencies].sort(byCurrency);

@@ -1,8 +1,8 @@
 // Stars persistence (TASK-3842): one row per person in nav_stars (migration
-// 049), and the key check the API applies to a new star. Uses Postgres when
-// configured; otherwise a process-local fallback keeps tests and local dev from
-// needing PLX_MC_DATABASE_URL (the contract the skills-directory and
-// vendor-spend stores keep). Server-only.
+// 049; the cap is 10 since 053), and the key check the API applies to a new
+// star. Uses Postgres when configured; otherwise a process-local fallback keeps
+// tests and local dev from needing PLX_MC_DATABASE_URL (the contract the
+// skills-directory and vendor-spend stores keep). Server-only.
 
 import { SCREEN_VALUES } from "@/components/mc/route";
 import { query } from "@/lib/db";
@@ -56,7 +56,8 @@ export async function readStars(personId: string): Promise<string[]> {
 /**
  * Apply one change to a person's stars and return the stored list. Each change
  * is one statement on the person's row, so two devices starring at once both
- * land. Adding to a full list changes nothing and throws StarsFullError.
+ * land. Adding to a full list changes nothing and throws StarsFullError. A move
+ * of a key the row does not hold changes nothing.
  */
 export async function changeStars(personId: string, change: StarChange): Promise<string[]> {
   if (!databaseConfigured()) {
@@ -71,6 +72,18 @@ export async function changeStars(personId: string, change: StarChange): Promise
       [personId, change.key]
     );
     return rows[0]?.stars ?? [];
+  }
+  if (change.op === "move") {
+    // The list without the key, cut at place `to`, with the key between.
+    const rows = await query<{ stars: string[] }>(
+      `UPDATE nav_stars
+          SET stars = (array_remove(stars, $2::text))[1:$3::int] || ARRAY[$2::text] || (array_remove(stars, $2::text))[$3::int + 1:],
+              updated_at = now()
+        WHERE person_id = $1 AND $2::text = ANY (stars)
+        RETURNING stars`,
+      [personId, change.key, change.to]
+    );
+    return rows[0]?.stars ?? readStars(personId);
   }
   // A full list fails the WHERE, so no row comes back.
   const rows = await query<{ stars: string[] }>(

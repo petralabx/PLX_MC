@@ -1,5 +1,5 @@
-// The command palette's Recent and Starred groups and the g 1 to g 6 keys
-// (TASK-3853), in the zoned shell (opted in per browser, as UAT does). The
+// The command palette's Recent and Starred groups and the g then digit keys
+// (TASK-3853; 1 to 9 and 0 since TASK-3956), in the zoned shell (opted in per browser, as UAT does). The
 // harness has no database, so stars live in the server's memory: every test
 // starts and ends with none. Recents live in this browser's storage.
 import { expect, test, type Page } from "@playwright/test";
@@ -59,7 +59,7 @@ test.describe("palette recents and the g keys", () => {
     await expect(page).toHaveURL(/screen=task&taskId=TASK-221/);
   });
 
-  test("g 1 to g 6 open the stars in their order, and the palette lists them with their keys", async ({ page }) => {
+  test("g then a digit opens the stars in their order, and the palette lists them with their keys", async ({ page }) => {
     await setStars(page, ["screen:goals", "project:PRJ-PORTAL-GOLIVE"]);
     await open(page, "/?screen=home");
     await page.keyboard.press("g");
@@ -74,7 +74,16 @@ test.describe("palette recents and the g keys", () => {
     await expect(page).toHaveURL(/screen=project&projectId=PRJ-PORTAL-GOLIVE/);
     await openPalette(page);
     const starred = group(page, "Starred").locator(".cres");
-    await expect(starred).toHaveText([/Go to Goals & production\s*g 1$/, /Project · PLX Portal Go-Live\s*g 2$/]);
+    await expect(starred).toHaveText([
+      /Go to Goals & production\s*g 1$/,
+      /Project · PLX Portal Go-Live\s*g 2$/,
+      /Unstar this page\s*Shift S$/,
+      /Edit starred\s*Alt ↑ ↓ to move$/,
+    ]);
+    // Edit starred puts focus on the first starred copy, where Alt and an arrow move it.
+    await group(page, "Starred").getByText("Edit starred").click();
+    await expect(palette(page)).toBeHidden();
+    await expect(page.locator("nav.mc-side").getByRole("link", { name: /^Goals & production\s*, g then 1$/ })).toBeFocused();
   });
 
   test("the default shell keeps its palette, and g 1 does nothing", async ({ page: zonedPage, browser, baseURL }) => {

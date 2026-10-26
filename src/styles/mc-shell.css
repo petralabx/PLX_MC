@@ -1650,7 +1650,7 @@
   .mc .mc-body[data-nav="zones"] .mc-side .item[aria-current="page"] {
     box-shadow: inset 2px 0 0 var(--p-accent);
   }
-  .mc .mc-body[data-nav="zones"] .mc-side .item > :is(.ic, .hl, .chev, .guide) {
+  .mc .mc-body[data-nav="zones"] .mc-side .item > :is(.ic, .hl, .chev, .guide, .grip) {
     grid-column: 1;
     justify-self: center;
   }
@@ -1729,8 +1729,9 @@
   .mc .mc-body[data-nav="zones"] .mc-side .item.star-rail {
     display: none;
   }
-  /* A star toggle (the top bar's, a Projects row's): filled when starred. */
-  .mc .star-toggle[aria-pressed="true"] .ic {
+  /* A star toggle (the top bar's, a sidebar row's) and a starred copy's
+     Unstar: filled when starred. */
+  .mc :is(.star-toggle, .star-act)[aria-pressed="true"] .ic {
     fill: currentColor;
     color: var(--p-accent);
   }
@@ -1769,7 +1770,7 @@
   .mc .mc-side .tree-row > .row-act[aria-expanded="true"] {
     color: var(--p-accent);
   }
-  .mc .mc-side .tree-kids > .item {
+  .mc .mc-side .tree-kids .item {
     font-size: var(--p-text-small);
   }
   .mc .mc-side .tree-filter {
@@ -1817,8 +1818,49 @@
     border-top: 1px solid var(--p-grid-2);
   }
   .mc .mc-side .tree-closed > .item,
-  .mc .mc-side .tree-closed .tree-kids > .item:not([aria-current="page"]) {
+  .mc .mc-side .tree-closed .tree-kids .item:not([aria-current="page"]) {
     color: var(--p-muted);
+  }
+  /* A row's star (TASK-3956, portal ADR-011 v2 Row grid 5): in the action
+     column, shown on hover and focus, kept when the item is starred, and
+     always on touch. */
+  .mc .mc-side .tree-row > .star-act {
+    opacity: 0;
+  }
+  .mc .mc-side .tree-row:is(:hover, :focus-within) > .star-act,
+  .mc .mc-side .tree-row > .star-act[aria-pressed="true"],
+  .mc .mc-side .star-row > .star-act {
+    opacity: 1;
+  }
+  .mc .mc-side .tree-row > .star-act .ic {
+    width: 14px;
+    height: 14px;
+  }
+  /* Starred copies: the digit g opens each with, a grip in place of the
+     icon while a mouse hovers (drag to move), and a muted row for a closed,
+     archived or deleted item. */
+  .mc .mc-body[data-nav="zones"] .mc-side .stars > .h .h-cnt {
+    margin-right: calc(var(--p-shell-col-action, 24px) + 10px);
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+    color: var(--p-muted);
+  }
+  .mc .mc-side .star-row .item > .grip {
+    display: none;
+    width: 14px;
+    height: 14px;
+    color: var(--p-muted);
+    cursor: grab;
+  }
+  .mc .mc-side .star-row:is(.closed, .archived, .gone) .item:not(:hover) {
+    color: var(--p-muted);
+  }
+  .mc .mc-side .star-row .mark {
+    color: var(--p-muted);
+  }
+  .mc .mc-side .star-row.drop > .item {
+    box-shadow: inset 0 2px 0 var(--p-accent);
   }
   @media (hover: hover) {
     .mc .mc-side .tree-row:hover > .item {
@@ -1839,6 +1881,19 @@
     .mc .mc-side .tree-q {
       height: var(--p-touch);
       font-size: 16px;
+    }
+  }
+  @media (hover: none) {
+    .mc .mc-side .tree-row > .star-act {
+      opacity: 1;
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .mc .mc-side .star-row:hover .item > .ic {
+      display: none;
+    }
+    .mc .mc-side .star-row:hover .item > .grip {
+      display: block;
     }
   }
   /* Without the Popover API the panel would sit in the page: leave it out. */

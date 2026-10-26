@@ -2,9 +2,10 @@
 
 ## What
 
-Starred (navigation redesign P2c, TASK-3842): the screens, projects and
-initiatives a person stars, stored per person on the server so they follow the
-person to every device, the way MRP pins work in the portal. This module owns
+Starred (navigation redesign P2c, TASK-3842; v2, TASK-3956): the screens,
+reports, projects and initiatives a person stars, up to 10, in their order,
+stored per person on the server so they follow the person to every device, the
+way MRP pins work in the portal. Tasks are not starred (Vince, 2026-10-26). This module owns
 the `nav_stars` table, the star key rule and `GET|PATCH /api/stars`. The
 sidebar's Starred zone and the star toggles are the web module's
 (`src/components/mc/`); this module only stores and checks the list.
@@ -20,26 +21,33 @@ would be lost on the next device, so Vince chose server-side stars on
 
 1. **Table** — `db/migrations/049_nav_stars.sql`: one `nav_stars` row per
    person (`person_id` text primary key, `stars` text[], `updated_at`). The
-   table checks the cap (at most 6) and that no element is NULL. Rollback:
-   `db/rollback/049_nav_stars_rollback.sql`.
-2. **Keys** — `isStarKey` (`index.ts`, client-safe): `screen:<screen>` for any
+   table checks the cap and that no element is NULL. 049 capped it at 6;
+   `053_nav_stars_cap_10.sql` raises the cap to 10 under the fixed name
+   `nav_stars_stars_check` (portal ADR-011 v2, Starred 1). Rollbacks:
+   `db/rollback/053_nav_stars_cap_10_rollback.sql` puts 6 back and refuses
+   while anyone holds more than 6; `db/rollback/049_nav_stars_rollback.sql`
+   drops the table, which undoes 053 too.
+2. **Keys** — `isStarKey` (`store.ts`): `screen:<screen>` for any
    screen but a task, project or initiative page, `project:PRJ-…` or
    `bucket:BKT-…` (the sync mapping's id rules), at most 120 characters.
-   `STAR_CAP` is 6. `applyStarChange` is the one rule for a change: a new
-   star goes last, and adding or removing it twice changes nothing.
+   `STAR_CAP` is 10. `applyStarChange` is the one rule for a change: a new
+   star goes last, adding or removing it twice changes nothing, and a move
+   puts a kept star at a place (0 first; past the end means last).
 3. **Store** — `readStars(personId)` and `changeStars(personId, change)`
    (`store.ts`, server-only, imported as `@/lib/stars/store` the way
    `@/lib/api/route` is). Each change is one parameterized statement on the
    person's row: an `INSERT … ON CONFLICT DO UPDATE` that appends once and
-   leaves a full list alone, or an `array_remove`. So two devices changing
-   stars at once both land, and racing adds stop at 6. A full list throws
+   leaves a full list alone, an `array_remove`, or for a move an `UPDATE`
+   that splices the key back in at its new place. So two devices changing
+   stars at once both land, and racing adds stop at 10. A full list throws
    `StarsFullError`. Without `PLX_MC_DATABASE_URL` it falls back to
    process-local memory (the skills-directory and vendor-spend contract), so
    tests and the e2e server need no database.
 4. **API** — `src/app/api/stars/route.ts`, through the shared `route()`
    wrapper. `GET` returns `{ stars }`. `PATCH` takes one change,
-   `{ op: "add" | "remove", key }` (Zod), and returns the stored list; a full
-   list answers 409 `stars_full`. No request ever sends a whole list, so a
+   `{ op: "add" | "remove", key }` or `{ op: "move", key, to }` with `to` 0 to
+   9 (Zod), and returns the stored list; a full list answers 409 `stars_full`
+   with "Starred is full. Unstar one to add another." (Starred 7). No request ever sends a whole list, so a
    stale tab cannot overwrite another device's stars. The person is the
    session's Entra object id (`requireSessionActor("task.read")`), which
    survives an email or directory change; the body never names it. Dormant
@@ -49,10 +57,13 @@ would be lost on the next device, so Vince chose server-side stars on
    change shows at once and goes to the server in order, one at a time; the
    server's list replaces the copy, and a refused change is put back with a
    notice. A failed load retries a few times, and on focus. `nav-model.ts`
-   turns keys into rows (a closed or archived record still shows). A star
-   that cannot show (its record is gone, or its screen is behind an off flag)
-   keeps its place until the list is full and the person stars something
-   new; then it makes room.
+   turns keys into rows, each with its kind's icon and its slot; g then 1 to
+   9 opens slots 0 to 8, and g 0 the tenth. A closed or archived record shows
+   marked. Once the data is live, a star whose record or screen is gone shows
+   marked deleted, with Remove; it keeps its slot until the person removes it
+   (Starred 6), and a full list refuses a new star rather than making room. A
+   screen behind an off flag does not show but keeps its slot, since flags can
+   differ between devices.
 
 ## Dependencies
 
@@ -64,8 +75,8 @@ would be lost on the next device, so Vince chose server-side stars on
 
 ### Key Files
 
-- `db/migrations/049_nav_stars.sql` — the table.
-- `src/lib/stars/index.ts` — `STAR_CAP`, `isStarKey`, `applyStarChange` (client-safe).
+- `db/migrations/049_nav_stars.sql` — the table; `053_nav_stars_cap_10.sql` — the cap of 10.
+- `src/lib/stars/index.ts` — `STAR_CAP`, `STARS_FULL_MESSAGE`, `applyStarChange` (client-safe).
 - `src/lib/stars/store.ts` — `readStars`, `changeStars`, `StarsFullError`, memory fallback.
 - `src/app/api/stars/route.ts` — `GET|PATCH /api/stars`.
 - `tests/stars-routes.test.ts`, `tests/stars-postgres.test.ts` — the API and
@@ -78,5 +89,5 @@ Vince Alton
 ## Criticality
 
 Low — a lost star costs a person one click to star again. Every API route
-waits on the schema check, so migration 049 must be live before the code that
-lists it deploys (`docs/runbooks/db-migrate.md`).
+waits on the schema check, so migrations 049 and 053 must be live before the
+code that lists them deploys (`docs/runbooks/db-migrate.md`).

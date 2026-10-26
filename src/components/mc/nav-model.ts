@@ -5,7 +5,7 @@
 // Grouped by what a colleague is doing — My work · Plan · Knowledge · Reporting
 // · Admin & health — not by system internals. Pure: no React, no store reads (badge
 // counts are resolved by the shell; icon names map to Lucide in nav-icon.tsx).
-import { isClosedStage, type Bucket, type Project, type Task } from "@/lib/mc-data";
+import { isArchived, isClosedStage, isProjectClosed, type Bucket, type Project, type Task } from "@/lib/mc-data";
 import { STAR_CAP, type StarChange, type StarKey } from "@/lib/stars";
 
 import type { Route, Screen } from "./route";
@@ -27,7 +27,7 @@ export type NavIconName =
   | "House" | "LayoutDashboard" | "CircleUser" | "SquareCheck" | "SquareKanban" | "List" | "CalendarRange" | "ChartPie"
   | "BookOpen" | "ClipboardList" | "Wrench" | "Network" | "CircleHelp" | "GitBranch" | "Activity"
   | "File" | "RefreshCw" | "FileText" | "CircleDollarSign" | "Grid3x3" | "Radio" | "Inbox" | "Route"
-  | "Target" | "Ellipsis" | "Settings" | "FolderKanban" | "Search" | "Gauge";
+  | "Target" | "Ellipsis" | "Settings" | "FolderKanban" | "Search" | "Gauge" | "Layers";
 
 export interface NavItem {
   screen: Screen;
@@ -368,24 +368,37 @@ export function treeKeyAction(rows: readonly TreeRow[], index: number, key: stri
   return null;
 }
 
-// ─── Starred (zoned sidebar, TASK-3842) ─────────────────────────────────────
-// Copies of the screens, projects and initiatives a person starred, at most
-// STAR_CAP, in the order they starred them, kept on the server (src/lib/stars).
-// A copy is never the lit row; the item's own row is. Screens carry their zoned
-// label, and Board, List and Timeline are one All work star. A closed or
-// archived project or initiative still shows: the person starred it. A screen
-// behind an off flag does not show, but keeps its place: flags can differ
-// between devices. Only a dead star (its record is gone, or its key no longer
-// names anything) makes room when the list is full and the person stars
-// something new.
+// ─── Starred (zoned sidebar, TASK-3842; v2, TASK-3956) ──────────────────────
+// Copies of the screens, reports, projects and initiatives a person starred, at
+// most STAR_CAP (10), in their order, kept on the server (src/lib/stars). A copy
+// is never the lit row; the item's own row is. Screens carry their zoned label,
+// and Board, List and Timeline are one All work star. Each star keeps its slot,
+// and g then its digit opens it (1 to 9, 0 for the tenth). A closed, archived or
+// deleted project or initiative stays, marked, until the person removes it
+// (portal ADR-011 v2, Starred 6); a full list refuses a new star. A screen
+// behind an off flag does not show, but keeps its slot: flags can differ
+// between devices.
 
 export interface StarRow {
   key: StarKey;
   label: string;
   target: Route;
-  /** A screen's icon; a project or initiative shows its health tick instead. */
-  lucide?: NavIconName;
-  health?: Project["health"];
+  /** The kind's icon: a screen's own, or a project's or initiative's. */
+  lucide: NavIconName;
+  /** Its place in the person's list, 0 to 9. */
+  slot: number;
+  /** Still opens, but closed or archived; or gone: its record was deleted, so only Remove. */
+  mark?: "closed" | "archived" | "gone";
+}
+
+/** The key after g that opens the star in `slot`: 1 to 9, then 0 for the tenth. */
+export function starDigit(slot: number): string {
+  return String((slot + 1) % 10);
+}
+
+/** The slot g then `digit` opens; null for anything but 0 to 9. */
+export function starSlotOf(digit: string): number | null {
+  return /^[0-9]$/.test(digit) ? (Number(digit) + 9) % 10 : null;
 }
 
 const STAR_SCREENS = new Map<Screen, NavItem>(
@@ -409,66 +422,54 @@ function splitStar(key: string): { kind: string; id: string } {
 
 /**
  * The rows for a person's stars, in their order. Pass every project and
- * initiative (allProjects, allBuckets): a closed or archived one still shows.
- * A star whose record is gone, or whose screen is behind an off flag, does not.
+ * initiative (allProjects, allBuckets): a closed or archived one shows marked.
+ * With `live` records, a star whose record or screen is gone shows as gone, so
+ * the person can remove it; seed or cached records would make real ones look
+ * gone, so until then it does not show. A screen behind an off flag never shows.
  */
 export function starRows(
   stars: readonly string[],
   projects: readonly Project[],
   initiatives: readonly Bucket[],
-  flags: NavFlags
+  flags: NavFlags,
+  live = true
 ): StarRow[] {
   const projectById = new Map(projects.map((p) => [p.id, p]));
   const initiativeById = new Map(initiatives.map((b) => [b.id, b]));
-  return stars.flatMap((stored): StarRow[] => {
+  return stars.flatMap((stored, slot): StarRow[] => {
     const key = stored as StarKey;
     const { kind, id } = splitStar(key);
+    const gone = (target: Route, lucide: NavIconName): StarRow[] =>
+      live ? [{ key, label: id || key, target, lucide, slot, mark: "gone" }] : [];
     if (kind === "project") {
       const project = projectById.get(id);
-      return project ? [{ key, label: project.name, target: { screen: "project", projectId: id }, health: project.health }] : [];
+      const target: Route = { screen: "project", projectId: id };
+      if (!project) return gone(target, "FolderKanban");
+      const mark = isProjectClosed(project) ? "closed" : isArchived(project) ? "archived" : undefined;
+      return [{ key, label: project.name, target, lucide: "FolderKanban", slot, ...(mark ? { mark } : {}) }];
     }
     if (kind === "bucket") {
       const initiative = initiativeById.get(id);
-      return initiative ? [{ key, label: initiative.name, target: { screen: "bucket", bucketId: id }, health: initiative.health }] : [];
+      const target: Route = { screen: "bucket", bucketId: id };
+      if (!initiative) return gone(target, "Layers");
+      return [{ key, label: initiative.name, target, lucide: "Layers", slot, ...(isArchived(initiative) ? { mark: "archived" as const } : {}) }];
     }
     const item = kind === "screen" ? STAR_SCREENS.get(id as Screen) : undefined;
-    return item && (!item.flag || flags[item.flag])
-      ? [{ key, label: item.label, target: { screen: item.screen }, lucide: item.lucide }]
+    if (!item) return gone({ screen: "home" }, "File");
+    return !item.flag || flags[item.flag]
+      ? [{ key, label: item.label, target: { screen: item.screen }, lucide: item.lucide, slot }]
       : [];
   });
 }
 
 /**
- * The stars that can never show: a project or initiative these records do not
- * hold, or a key that names no screen, project or initiative. A screen behind
- * an off flag is not dead. Pass the live records only: seed or cached data
- * would make real records look gone.
+ * The change that stars or unstars `key`: unstarring removes it, starring adds
+ * it last. Null when STAR_CAP stars are kept: a full list refuses a new star
+ * (portal ADR-011 v2, Starred 7), and a gone star keeps its slot until removed.
  */
-export function deadStars(stars: readonly string[], projects: readonly Project[], initiatives: readonly Bucket[]): Set<string> {
-  const projectIds = new Set(projects.map((p) => p.id));
-  const initiativeIds = new Set(initiatives.map((b) => b.id));
-  return new Set(
-    stars.filter((key) => {
-      const { kind, id } = splitStar(key);
-      if (kind === "project") return !projectIds.has(id);
-      if (kind === "bucket") return !initiativeIds.has(id);
-      return kind !== "screen" || !STAR_SCREENS.has(id as Screen);
-    })
-  );
-}
-
-/**
- * The changes that star or unstar `key`. Unstarring removes it. Starring adds
- * it last; when STAR_CAP stars are stored, it first removes as many `dead`
- * stars as make room. Null when there is no room.
- */
-export function starChanges(stars: readonly string[], dead: ReadonlySet<string>, key: StarKey): StarChange[] | null {
+export function starChanges(stars: readonly string[], key: StarKey): StarChange[] | null {
   if (stars.includes(key)) return [{ op: "remove", key }];
-  const over = stars.length - STAR_CAP + 1;
-  if (over <= 0) return [{ op: "add", key }];
-  const removable = stars.filter((k) => dead.has(k));
-  if (removable.length < over) return null;
-  return [...removable.slice(0, over).map((k): StarChange => ({ op: "remove", key: k })), { op: "add", key }];
+  return stars.length < STAR_CAP ? [{ op: "add", key }] : null;
 }
 
 /** The group a screen's nav item lives in (null for detail screens). */

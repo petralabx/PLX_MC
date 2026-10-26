@@ -22,7 +22,7 @@ export const TOUR_POINTS: readonly TourPoint[] = [
   { zone: "My work", text: "Home, My tasks and Approvals stay on top.", labels: ["Home", "My tasks", "Approvals"] },
   {
     zone: "Starred",
-    text: "Star a screen, project or initiative to keep it here, on every device. Press g\u00a01 to g\u00a06 to open them.",
+    text: "Star a project, initiative, report or screen to keep it here, on every device. Press g then its digit to open it.",
     labels: [],
   },
   {

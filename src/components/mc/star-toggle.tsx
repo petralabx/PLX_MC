@@ -1,4 +1,4 @@
-// The star toggle (TASK-3842): stars or unstars one screen, project or
+// The star toggle (TASK-3842): stars or unstars one screen, report, project or
 // initiative for the signed-in person (use-stars.ts). A toggle button: its
 // name stays "Star <label>" and aria-pressed says whether it is starred.
 // Disabled while the stars load.
@@ -13,11 +13,14 @@ export function StarToggle({
   starKey,
   label,
   className,
+  tabIndex,
 }: {
   stars: Stars;
   starKey: StarKey;
   label: string;
   className: string;
+  /** -1 in the sidebar: a row's star stays out of the Tab order, and Shift S stars the row. */
+  tabIndex?: number;
 }) {
   const on = stars.starred(starKey);
   return (
@@ -26,7 +29,8 @@ export function StarToggle({
       className={`${className} star-toggle`}
       aria-label={`Star ${label}`}
       aria-pressed={on}
-      title={on ? "Unstar" : stars.full ? "Stars are full: unstar one first" : "Star"}
+      title={on ? "Unstar" : stars.full ? "Starred is full: unstar one to add another" : "Star"}
+      tabIndex={tabIndex}
       disabled={!stars.ready}
       onClick={() => stars.toggle(starKey)}
     >

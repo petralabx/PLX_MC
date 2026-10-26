@@ -17,7 +17,7 @@ import {
 } from "@/lib/mc-data/store";
 import { meetingIntakeEnabled } from "@/lib/meeting-intake";
 
-import { RECENTS_CAP, createRecents, navCommands, recentKeyOf, type RecentKey } from "./nav-model";
+import { RECENTS_CAP, createRecents, navCommands, recentKeyOf, starDigit, starKeyOf, type RecentKey } from "./nav-model";
 import { useNavZones } from "./nav-zones";
 import type { Nav, Route } from "./route";
 import { routingInboxEnabled } from "./routing-inbox/flag";
@@ -104,6 +104,7 @@ export function CommandPalette({
   onOpenNewTask,
   onOpenNewInitiative,
   onOpenNewProject,
+  onEditStarred,
 }: {
   onClose: () => void;
   nav: Nav;
@@ -112,6 +113,8 @@ export function CommandPalette({
   onOpenNewTask: () => void;
   onOpenNewInitiative: () => void;
   onOpenNewProject: () => void;
+  /** The zoned shell's Edit starred: focus the starred copies (TASK-3956). */
+  onEditStarred?: () => void;
 }) {
   const version = useMcVersion();
   const zoned = useNavZones();
@@ -256,9 +259,37 @@ export function CommandPalette({
     ];
   }, [nav, onOpenNewTask, onOpenNewInitiative, version, zoned]);
 
+  // Star this page and Edit starred (portal ADR-011 v2, Starred 4), zoned only.
+  // They close the Starred group the palette opens on, and once the person types
+  // they are searched in a Starred group after Create. Kept out of the memo
+  // above, so a star does not rebuild every command.
+  const toggleStar = stars.toggle;
+  const pageStar = zoned && route && stars.ready && !stars.off ? starKeyOf(route) : null;
+  const pageStarred = pageStar ? stars.starred(pageStar) : false;
+  const canEditStarred = zoned && !!onEditStarred && stars.rows.length > 0;
+  const starCommands = useMemo(
+    (): PaletteCommand[] => [
+      ...(pageStar
+        ? [
+            {
+              key: "star:this-page",
+              icon: "★",
+              label: pageStarred ? "Unstar this page" : "Star this page",
+              hint: "Shift S",
+              run: () => toggleStar(pageStar),
+            },
+          ]
+        : []),
+      ...(canEditStarred && onEditStarred
+        ? [{ key: "star:edit", icon: "★", label: "Edit starred", hint: "Alt ↑ ↓ to move", run: onEditStarred }]
+        : []),
+    ],
+    [pageStar, pageStarred, canEditStarred, onEditStarred, toggleStar]
+  );
+
   // The zoned shell opens on Recent and Starred (TASK-3853), until the person
   // types: then every group is searched as before. Starred lists the stars in
-  // their order, with the g 1 to g 6 keys that open them.
+  // their order, with the g then digit keys that open them (1 to 9, 0 for the tenth).
   const currentKey = route ? recentKeyOf(route) : null;
   const leading = useMemo<PaletteGroup<PaletteCommand>[]>(() => {
     if (!zoned) return [];
@@ -269,23 +300,24 @@ export function CommandPalette({
         return command ? [{ ...command, key: `recent:${key}` }] : [];
       })
       .slice(0, RECENTS_CAP);
-    const starred = stars.rows.flatMap((row, index): PaletteCommand[] => {
-      const command = recordCommand(row.key, listed, nav);
+    const starred = stars.rows.flatMap((row): PaletteCommand[] => {
+      const command = row.mark === "gone" ? undefined : recordCommand(row.key, listed, nav);
       if (!command) return [];
       // A screen star reads as its zoned row does (All work, not Board).
       const label = row.key.startsWith("screen:") ? `Go to ${row.label}` : command.label;
-      return [{ ...command, key: `star:${row.key}`, label, hint: `g ${index + 1}` }];
+      return [{ ...command, key: `star:${row.key}`, label, hint: `g ${starDigit(row.slot)}` }];
     });
     return [
       { title: "Recent", items: recent },
-      { title: "Starred", items: starred },
+      { title: "Starred", items: [...starred, ...starCommands] },
     ].filter((group) => group.items.length > 0);
-  }, [zoned, groups, recentKeys, currentKey, stars.rows, nav]);
+  }, [zoned, groups, recentKeys, currentKey, stars.rows, nav, starCommands]);
 
-  const filtered = useMemo(
-    () => (query.trim() ? filterPaletteGroups(groups, query) : [...leading, ...groups]),
-    [groups, leading, query]
-  );
+  const filtered = useMemo(() => {
+    if (!query.trim()) return [...leading, ...groups];
+    const searched = starCommands.length > 0 ? [groups[0], { title: "Starred", items: starCommands }, ...groups.slice(1)] : groups;
+    return filterPaletteGroups(searched, query);
+  }, [groups, leading, query, starCommands]);
   const flat = useMemo(() => filtered.flatMap((group) => group.items), [filtered]);
   const selectedIndex = flat.length === 0 ? 0 : Math.min(selected, flat.length - 1);
   const indexedGroups = useMemo(() => {

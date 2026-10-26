@@ -16,9 +16,10 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { ChevronRight, PanelLeft, Plus, Search, Star, X } from "lucide-react";
+import { ChevronRight, GripVertical, PanelLeft, Plus, Search, Star, X } from "lucide-react";
 
 import { liveAgentCount, openQuestionsFor, pendingApprovalGates, type Human, type Task } from "@/lib/mc-data";
+import { STAR_CAP, type StarKey } from "@/lib/stars";
 import { useMcNotices, useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import {
   allBuckets,
@@ -52,6 +53,8 @@ import {
   openTaskCounts,
   projectTree,
   revealScrollTop,
+  starDigit,
+  starKeyOf,
   treeKeyAction,
   visibleAdminFlyout,
   visibleNavGroups,
@@ -62,6 +65,7 @@ import {
   type NavGroupId,
   type NavItem,
   type NavList,
+  type StarRow,
   type TreeRow,
 } from "./nav-model";
 import { useNavZones } from "./nav-zones";
@@ -69,6 +73,7 @@ import { needsMeCount, todayGridDay, viewerLoadState } from "./needs-me";
 import type { Nav, Route } from "./route";
 import { useFlyout } from "./use-flyout";
 import { hasOpenLayer, useLayer } from "./use-layer";
+import { StarToggle } from "./star-toggle";
 import { useStars } from "./use-stars";
 import { useVendorAlertCount } from "./vendor-spend/use-alert-badge";
 
@@ -187,8 +192,21 @@ interface TreeAttrs {
   "data-tree-open"?: "true" | "false";
   /** A project link's own disclosure state: → and ← open it with focus on the link. */
   "aria-expanded"?: boolean;
+  /** What Shift S stars or unstars from this row (TASK-3956). */
+  "data-star-key"?: string;
+  /** A starred copy's slot: Alt with ↑ or ↓ moves it. */
+  "data-star-slot"?: number;
   tabIndex?: number;
 }
+
+// What a starred copy's mark says (portal ADR-011 v2, Starred 6).
+const STAR_MARK: Record<NonNullable<StarRow["mark"]>, string> = {
+  closed: "closed",
+  archived: "archived",
+  gone: "deleted",
+};
+// The drag type a starred copy carries while it is moved.
+const STAR_DRAG = "application/x-mc-star";
 
 function shownTreeRows(side: HTMLElement): HTMLElement[] {
   return Array.from(side.querySelectorAll<HTMLElement>("[data-tree-key]")).filter((el) => el.getClientRects().length > 0);
@@ -352,6 +370,17 @@ export function Sidebar({
   const stopChosen = useRef(false);
   // When Shift F10 or the Menu key last opened a row menu (onTreeKeyDown).
   const menuKeyAt = useRef(Number.NEGATIVE_INFINITY);
+  // A starred copy moved with Alt and an arrow keeps focus in its new place.
+  const refocusKey = useRef<string | null>(null);
+  useEffect(() => {
+    const key = refocusKey.current;
+    if (!key) return;
+    refocusKey.current = null;
+    const row = document.querySelector<HTMLElement>(`#mc-nav [data-tree-key="${CSS.escape(key)}"]`);
+    if (row && row !== document.activeElement) row.focus();
+  });
+  // The slot a dragged starred copy would drop into.
+  const [dropSlot, setDropSlot] = useState<number | null>(null);
   const keepTreeStop = useCallback(() => {
     const side = zoned ? document.getElementById("mc-nav") : null;
     if (!side) return;
@@ -411,7 +440,26 @@ export function Sidebar({
   const onTreeKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     const row = event.target as HTMLElement;
     const key = row.dataset?.treeKey;
-    if (!key || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (!key || event.ctrlKey || event.metaKey) return;
+    // Alt with ↑ or ↓ moves a starred copy (portal ADR-011 v2, Starred 5).
+    const starKey = row.dataset.starKey;
+    if (event.altKey) {
+      const slot = row.dataset.starSlot === undefined ? NaN : Number(row.dataset.starSlot);
+      if (!starKey || Number.isNaN(slot) || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+      event.preventDefault();
+      const to = slot + (event.key === "ArrowUp" ? -1 : 1);
+      if (to < 0 || to >= stars.count) return;
+      refocusKey.current = key;
+      stars.move(starKey, to);
+      return;
+    }
+    // Shift S stars or unstars the focused row (Starred 4).
+    if (event.shiftKey && event.key.toLowerCase() === "s") {
+      if (!starKey || stars.off) return;
+      event.preventDefault();
+      stars.toggle(starKey as StarKey);
+      return;
+    }
     const side = event.currentTarget;
     // The row menu (portal ADR-011 v2, Keys 7): the Projects row's + menu.
     if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
@@ -512,6 +560,20 @@ export function Sidebar({
     </button>
   );
 
+  // A row's star (portal ADR-011 v2, Row grid 5): in its action column, out of
+  // the Tab order, shown on hover and focus and always on touch; Shift S does
+  // the same from the keyboard. The row and its star share one wrapper, since a
+  // button cannot sit inside a link.
+  const withStar = (row: ReactNode, wrapKey: string, starKey: StarKey | null, label: string) =>
+    zoned && starKey && !stars.off ? (
+      <div className="tree-row" key={wrapKey}>
+        {row}
+        <StarToggle stars={stars} starKey={starKey} label={label} className="row-act star-act" tabIndex={-1} />
+      </div>
+    ) : (
+      row
+    );
+
   const lists: Record<NavList, ReactNode> = {
     projects: (
       <div className="sub" role="group" aria-labelledby="mc-nav-h-projects" key="projects">
@@ -578,7 +640,7 @@ export function Sidebar({
           {filtering && shownTree.length === 0 ? "No project or initiative matches." : ""}
         </p>
         {shownTree.map(({ project, initiatives }) => {
-          const key = `project:${project.id}`;
+          const key = `project:${project.id}` as const;
           const bodyId = `mc-nav-tree-${project.id}`;
           const holds = initiatives.length > 0;
           const expanded = filtering || treeOpen[project.id] === true;
@@ -595,7 +657,10 @@ export function Sidebar({
                     <OpenCount n={openCounts.byProject.get(project.id) ?? 0} health={project.health} />
                   </>,
                   project.id === openProjectId,
-                  holds && !filtering ? { ...treeRow(key, null, expanded), "aria-expanded": expanded } : treeRow(key)
+                  {
+                    ...(holds && !filtering ? { ...treeRow(key, null, expanded), "aria-expanded": expanded } : treeRow(key)),
+                    "data-star-key": key,
+                  }
                 )}
                 {holds && !filtering ? (
                   <button
@@ -611,22 +676,30 @@ export function Sidebar({
                     <ChevronRight className="chev" aria-hidden="true" focusable="false" strokeWidth={2} />
                   </button>
                 ) : null}
+                {stars.off ? null : (
+                  <StarToggle stars={stars} starKey={key} label={project.name} className="row-act star-act" tabIndex={-1} />
+                )}
               </div>
               {holds ? (
                 <div id={bodyId} className="tree-kids" hidden={!expanded}>
                   {initiatives.map((b) =>
-                    link(
+                    withStar(
+                      link(
+                        `bucket:${b.id}`,
+                        { screen: "bucket", bucketId: b.id },
+                        route.screen === "bucket" && route.bucketId === b.id,
+                        b.name,
+                        <>
+                          <span className="guide" aria-hidden="true" />
+                          <span className="nm">{b.name}</span>
+                          <OpenCount n={openCounts.byInitiative.get(b.id) ?? 0} health={b.health} />
+                        </>,
+                        false,
+                        { ...treeRow(`bucket:${b.id}`, key), "data-star-key": `bucket:${b.id}` }
+                      ),
                       `bucket:${b.id}`,
-                      { screen: "bucket", bucketId: b.id },
-                      route.screen === "bucket" && route.bucketId === b.id,
-                      b.name,
-                      <>
-                        <span className="guide" aria-hidden="true" />
-                        <span className="nm">{b.name}</span>
-                        <OpenCount n={openCounts.byInitiative.get(b.id) ?? 0} health={b.health} />
-                      </>,
-                      false,
-                      treeRow(`bucket:${b.id}`, key)
+                      `bucket:${b.id}`,
+                      b.name
                     )
                   )}
                 </div>
@@ -656,17 +729,22 @@ export function Sidebar({
             </button>
             <div id="mc-nav-closed" className="tree-kids" hidden={!closedOpen}>
               {closedProjects.map((p) =>
-                link(
+                withStar(
+                  link(
+                    `closed:${p.id}`,
+                    { screen: "project", projectId: p.id },
+                    route.screen === "project" && route.projectId === p.id,
+                    p.name,
+                    <>
+                      <span className="guide" aria-hidden="true" />
+                      <span className="nm">{p.name}</span>
+                    </>,
+                    false,
+                    { ...treeRow(`closed:${p.id}`, "closed"), "data-star-key": `project:${p.id}` }
+                  ),
                   `closed:${p.id}`,
-                  { screen: "project", projectId: p.id },
-                  route.screen === "project" && route.projectId === p.id,
-                  p.name,
-                  <>
-                    <span className="guide" aria-hidden="true" />
-                    <span className="nm">{p.name}</span>
-                  </>,
-                  false,
-                  treeRow(`closed:${p.id}`, "closed")
+                  `project:${p.id}`,
+                  p.name
                 )
               )}
             </div>
@@ -676,14 +754,92 @@ export function Sidebar({
     ) : null,
   };
 
-  // Starred (TASK-3842): copies in the person's order, right after My work,
-  // never the lit row. The icon rail shows one Starred button instead, which
-  // opens the labelled drawer.
+  // Starred (TASK-3842; v2, TASK-3956): copies in the person's order, right
+  // after My work, never the lit row. Each shows its kind, the digit g opens it
+  // with, and its star; a closed, archived or deleted one is marked and keeps
+  // its slot until removed. Drag a copy, or press Alt with ↑ or ↓, to move it.
+  // The icon rail shows one Starred button instead, which opens the labelled drawer.
+  const starCopy = (row: StarRow) => {
+    const treeKey = `star:${row.key}`;
+    const digit = starDigit(row.slot);
+    const gone = row.mark === "gone";
+    return (
+      <div
+        className={`tree-row star-row${row.mark ? ` ${row.mark}` : ""}${dropSlot === row.slot ? " drop" : ""}`}
+        key={treeKey}
+        onDragStart={(event) => {
+          event.dataTransfer.setData(STAR_DRAG, row.key);
+          event.dataTransfer.effectAllowed = "move";
+        }}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes(STAR_DRAG)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          if (dropSlot !== row.slot) setDropSlot(row.slot);
+        }}
+        onDragLeave={() => setDropSlot(null)}
+        onDragEnd={() => setDropSlot(null)}
+        onDrop={(event) => {
+          const moved = event.dataTransfer.getData(STAR_DRAG);
+          setDropSlot(null);
+          if (!moved) return;
+          event.preventDefault();
+          stars.move(moved, row.slot);
+        }}
+      >
+        {link(
+          treeKey,
+          row.target,
+          false,
+          row.mark ? `${row.label} (${STAR_MARK[row.mark]})` : row.label,
+          <>
+            <NavIcon name={row.lucide} />
+            <GripVertical className="grip" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+            <span className="nm">
+              {row.label}
+              {row.mark ? <span className="mark"> · {STAR_MARK[row.mark]}</span> : null}
+            </span>
+            {gone ? null : (
+              <span className="cnt key" title={`g then ${digit}`}>
+                <span aria-hidden="true">{digit}</span>
+                <span className="vh">, g then {digit}</span>
+              </span>
+            )}
+          </>,
+          false,
+          { ...treeRow(treeKey), "data-star-key": row.key, "data-star-slot": row.slot }
+        )}
+        <button
+          type="button"
+          className="row-act star-act"
+          tabIndex={-1}
+          aria-pressed={gone ? undefined : true}
+          aria-label={gone ? `Remove ${row.label} from Starred` : `Unstar ${row.label}`}
+          title={gone ? "Remove" : "Unstar"}
+          onClick={() => stars.toggle(row.key)}
+        >
+          {gone ? (
+            <X className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+          ) : (
+            <Star className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+          )}
+        </button>
+      </div>
+    );
+  };
   const starredZone =
     stars.rows.length > 0 ? (
       <div className="grp stars" role="group" aria-labelledby="mc-nav-h-starred">
         <div className="h" id="mc-nav-h-starred">
-          Starred
+          <span>Starred</span>
+          <span className="h-cnt">
+            <span aria-hidden="true">
+              {stars.count} / {STAR_CAP}
+            </span>
+            <span className="vh">
+              , {stars.count} of {STAR_CAP}
+            </span>
+          </span>
         </div>
         <button
           type="button"
@@ -697,22 +853,7 @@ export function Sidebar({
           <Star className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
           <span className="nm">Starred</span>
         </button>
-        <div className="grp-body star-rows">
-          {stars.rows.map((row) =>
-            link(
-              `star:${row.key}`,
-              row.target,
-              false,
-              row.label,
-              <>
-                {row.lucide ? <NavIcon name={row.lucide} /> : <span className={`hl ${row.health}`} aria-hidden="true" />}
-                <span className="nm">{row.label}</span>
-              </>,
-              false,
-              treeRow(`star:${row.key}`)
-            )
-          )}
-        </div>
+        <div className="grp-body star-rows">{stars.rows.map(starCopy)}</div>
       </div>
     ) : null;
 
@@ -734,7 +875,7 @@ export function Sidebar({
         {!item.badge ? null : zoned ? <CountFigure count={counts[item.badge]} /> : <CountBadge count={counts[item.badge]} />}
       </>,
       false,
-      treeRow(`screen:${item.screen}`, parent)
+      { ...treeRow(`screen:${item.screen}`, parent), ...(zoned ? { "data-star-key": starKeyOf({ screen: item.screen }) ?? undefined } : {}) }
     );
 
   const sidebar = (
@@ -834,7 +975,7 @@ export function Sidebar({
                       </button>
                     </div>
                   ) : (
-                    itemRow(item, groupKey)
+                    withStar(itemRow(item, groupKey), item.screen, starKeyOf({ screen: item.screen }), item.label)
                   )
                 )}
                 {group.lists?.map((list) => lists[list])}
@@ -862,17 +1003,22 @@ export function Sidebar({
             <CountFigure count={counts.sync} />
             <ChevronRight className="act" aria-hidden="true" focusable="false" strokeWidth={1.5} />
           </button>
-          {link(
-            HELP_NAV_ITEM.screen,
-            { screen: HELP_NAV_ITEM.screen },
-            route.screen === HELP_NAV_ITEM.screen,
-            HELP_NAV_ITEM.label,
-            <>
-              <NavIcon name={HELP_NAV_ITEM.lucide} />
-              <span className="nm">{HELP_NAV_ITEM.label}</span>
-            </>,
-            false,
-            treeRow("help")
+          {withStar(
+            link(
+              HELP_NAV_ITEM.screen,
+              { screen: HELP_NAV_ITEM.screen },
+              route.screen === HELP_NAV_ITEM.screen,
+              HELP_NAV_ITEM.label,
+              <>
+                <NavIcon name={HELP_NAV_ITEM.lucide} />
+                <span className="nm">{HELP_NAV_ITEM.label}</span>
+              </>,
+              false,
+              { ...treeRow("help"), "data-star-key": `screen:${HELP_NAV_ITEM.screen}` }
+            ),
+            "help",
+            `screen:${HELP_NAV_ITEM.screen}`,
+            HELP_NAV_ITEM.label
           )}
         </div>
       ) : null}

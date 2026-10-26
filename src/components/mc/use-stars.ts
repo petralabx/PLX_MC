@@ -7,9 +7,9 @@
 // changes, in order, one at a time; the server's list after each one replaces
 // this copy. A change the server refuses is dropped with the rest of its
 // toggle, said on the store's notice channel, and the list is read again, so a
-// lost star is never silent. A failed load retries, and on focus. Rows, dead
-// stars and the cap are nav-model.ts's.
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+// lost star is never silent. A failed load retries, and on focus. Rows, their
+// slots and the cap are nav-model.ts's; a move reorders (TASK-3956).
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { ApiClientError, api } from "@/lib/api";
 import { useMcVersion } from "@/lib/mc-data/hooks";
@@ -17,7 +17,7 @@ import { allBuckets, allProjects, dataSource, pushNotice } from "@/lib/mc-data/s
 import { STARS_FULL_MESSAGE, STAR_CAP, applyStarChange, type StarChange, type StarKey } from "@/lib/stars";
 
 import { navFlags } from "./nav-flags";
-import { deadStars, starChanges, starRows, type StarRow } from "./nav-model";
+import { starChanges, starRows, type StarRow } from "./nav-model";
 
 type StarsStatus = "idle" | "loading" | "ready" | "error";
 
@@ -181,13 +181,17 @@ export interface Stars {
   /** The list has loaded; until then the toggles are disabled. */
   ready: boolean;
   rows: StarRow[];
-  /** The row a key would show as, starred or not; undefined when it cannot show. */
+  /** How many stars the person keeps, shown or not (a screen behind an off flag keeps its slot). */
+  count: number;
+  /** The row a key would show as, starred or not; undefined when it cannot show or its record is gone. */
   rowFor: (key: StarKey) => StarRow | undefined;
   starred: (key: StarKey) => boolean;
-  /** No room for a new star: STAR_CAP stars are kept, and none of them is dead. */
+  /** No room for a new star: STAR_CAP stars are kept (a gone one keeps its slot until removed). */
   full: boolean;
   /** Star or unstar `key`. When the stars are full, a new star is refused with a notice. */
   toggle: (key: StarKey) => void;
+  /** Put a starred `key` at place `to` (0 first). */
+  move: (key: string, to: number) => void;
 }
 
 /** The person's stars, for the zoned shell only (`enabled`); off, nothing loads. */
@@ -204,27 +208,41 @@ export function useStars(enabled: boolean): Stars {
   const flags = navFlags();
   const { meetingIntake, routingInbox } = flags;
   // One array until the stars, the store or a flag change, so callers can memoize on it.
-  const rows = useMemo(() => {
-    void version;
-    return ready ? starRows(current.stars, allProjects(), allBuckets(), { meetingIntake, routingInbox }) : NO_ROWS;
-  }, [ready, current.stars, version, meetingIntake, routingInbox]);
-  // Until the server's data is live the records are seed or cached, so no star counts as dead.
-  const dead = dataSource() === "live" ? deadStars(current.stars, allProjects(), allBuckets()) : new Set<string>();
-  return {
-    off: !enabled || current.status === "error",
-    ready,
-    rows,
-    rowFor: (key) => starRows([key], allProjects(), allBuckets(), flags)[0],
-    starred: (key) => current.stars.includes(key),
-    full: current.stars.length - dead.size >= STAR_CAP,
-    toggle: (key) => {
+  // Stable while `ready` holds, so callers can memoize on them.
+  const toggle = useCallback(
+    (key: StarKey) => {
       if (!ready) return;
-      const changes = starChanges(state.stars, dead, key);
+      const changes = starChanges(state.stars, key);
       if (!changes) {
         pushNotice(STARS_FULL_MESSAGE, "info");
         return;
       }
       send(changes);
     },
+    [ready]
+  );
+  const move = useCallback(
+    (key: string, to: number) => {
+      if (!ready || !state.stars.includes(key) || state.stars.indexOf(key) === to) return;
+      send([{ op: "move", key, to }]);
+    },
+    [ready]
+  );
+  // Until the server's data is live the records are seed or cached, so no star shows as gone.
+  const live = dataSource() === "live";
+  const rows = useMemo(() => {
+    void version;
+    return ready ? starRows(current.stars, allProjects(), allBuckets(), { meetingIntake, routingInbox }, live) : NO_ROWS;
+  }, [ready, current.stars, version, meetingIntake, routingInbox, live]);
+  return {
+    off: !enabled || current.status === "error",
+    ready,
+    rows,
+    count: current.stars.length,
+    rowFor: (key) => starRows([key], allProjects(), allBuckets(), flags, false)[0],
+    starred: (key) => current.stars.includes(key),
+    full: current.stars.length >= STAR_CAP,
+    toggle,
+    move,
   };
 }

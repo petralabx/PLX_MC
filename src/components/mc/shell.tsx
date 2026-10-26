@@ -29,7 +29,7 @@ import { ContextPane, LiveColumn, PaneEmpty } from "./context-pane";
 import { InboxView } from "./inbox";
 import { MoreSheet } from "./more-sheet";
 import { navFlags } from "./nav-flags";
-import { isPaneScreen, recentKeyOf, type StarRow } from "./nav-model";
+import { isPaneScreen, recentKeyOf, starKeyOf, starSlotOf } from "./nav-model";
 import { NavTour } from "./nav-tour";
 import { loadNavPrefs, useNavTour, useNavZones } from "./nav-zones";
 import { NewInitiativeModal } from "./new-initiative-modal";
@@ -148,10 +148,11 @@ export function MissionControlShell() {
     if (ready && navZones && recentKey) rememberRecent(recentKey);
   }, [ready, navZones, recentKey]);
 
-  // The stars g 1 to g 6 open (TASK-3853), for the key handler to read at key time.
-  const starRowsRef = useRef<StarRow[]>([]);
+  // The stars g then a digit opens (TASK-3853; 1 to 9 and 0 since TASK-3956),
+  // and Shift S's toggle, for the key handler to read at key time.
+  const starsRef = useRef(stars);
   useEffect(() => {
-    starRowsRef.current = stars.rows;
+    starsRef.current = stars;
   });
 
   // The latest route and pane preference, for nav() to read at click time
@@ -295,8 +296,27 @@ export function MissionControlShell() {
     drawer.send("toggle");
   }, [drawer]);
 
+  // ⌘K's Edit starred (TASK-3956): focus the first starred copy, where Alt and
+  // an arrow move it and its star removes it. Below 1025px the stars are in the
+  // drawer, so it opens first. After the palette has closed and given focus back.
+  const editStarred = useCallback(() => {
+    const firstStar = () => {
+      const row = document.querySelector<HTMLElement>("#mc-nav [data-star-slot]");
+      return row && row.getClientRects().length > 0 && getComputedStyle(row).visibility !== "hidden" ? row : null;
+    };
+    window.setTimeout(() => {
+      const row = firstStar();
+      if (row) {
+        row.focus();
+        return;
+      }
+      drawer.send("toggle");
+      window.setTimeout(() => firstStar()?.focus(), 50);
+    }, 0);
+  }, [drawer]);
+
   // Pending `g`-prefix for two-key view chords (g b / g l / g t / g m / g i, and
-  // in the zoned shell g 1 to g 6 for the stars). A ref (not state) so arming
+  // in the zoned shell g then 1 to 9 or 0 for the stars). A ref (not state) so arming
   // the prefix never triggers a render.
   const gPrefix = useRef<number | null>(null);
 
@@ -338,6 +358,17 @@ export function MissionControlShell() {
 
       const key = event.key.toLowerCase();
 
+      // Shift S stars or unstars the page (portal ADR-011 v2, Starred 4). In the
+      // sidebar's tree, chrome.tsx stars the focused row instead.
+      if (navZones && event.shiftKey && key === "s") {
+        const starKey = starKeyOf(routeRef.current);
+        if (starKey && !starsRef.current.off) {
+          event.preventDefault();
+          starsRef.current.toggle(starKey);
+        }
+        return;
+      }
+
       // Second key of a `g _` chord.
       if (gPrefix.current !== null) {
         window.clearTimeout(gPrefix.current);
@@ -348,8 +379,10 @@ export function MissionControlShell() {
           nav(screen);
           return;
         }
-        // g 1 to g 6: the person's first six stars, in their order.
-        const star = navZones && /^[1-6]$/.test(key) ? starRowsRef.current[Number(key) - 1] : undefined;
+        // g then 1 to 9, or 0 for the tenth: the star in that slot (a deleted one opens nothing).
+        const slot = navZones ? starSlotOf(key) : null;
+        const star =
+          slot === null ? undefined : starsRef.current.rows.find((row) => row.slot === slot && row.mark !== "gone");
         if (star) {
           event.preventDefault();
           const { screen: starScreen, ...extra } = star.target;
@@ -519,6 +552,7 @@ export function MissionControlShell() {
           onOpenNewTask={() => openNewTask({ bucketId: route.bucketId })}
           onOpenNewInitiative={openNewInitiative}
           onOpenNewProject={openNewProject}
+          onEditStarred={editStarred}
         />
       ) : null}
       {newTaskOpen ? <NewTaskModal ctx={newTaskCtx} onClose={closeNewTask} nav={nav} /> : null}

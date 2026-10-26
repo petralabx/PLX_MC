@@ -540,15 +540,21 @@ Exclusive Distribution (Exclusive Manufacturing, Mixed and Unclassified stay).
 - **Where.** The choice lives in the URL (`/?screen=goals&scope=mfg`, kept
   with `fx=sage`); "All" sends nothing. It is a display choice on the loaded
   page, so switching it makes no new read.
-- **What it shows.** A line on the Revenue card: the manufacturing customers'
-  month, its share of the monthly target and the Exclusive Distribution amount
-  left out (`revenueScope` on the page model, from
-  `src/lib/reporting/goals/revenue-scope.ts`). It is read from revenue by
-  customer class, so it adds up with that table to the cent, at whichever rate
-  the page is at; when the class split and the card are a refresh apart the
-  line says so.
-- **What doesn't move.** The card's headline, status, goal and every other
-  section stay on all customers.
+- **What it shows.** The Revenue card's headline becomes the manufacturing
+  customers' month (`revenueScope` on the page model, from
+  `src/lib/reporting/goals/revenue-scope.ts`). In place of the Sage / by-hand
+  split, a side line shows the Exclusive Distribution amount left out and the
+  all-customers total, so the two add back to it. Both are read from revenue
+  by customer class, so they add up with that table to the cent, at whichever
+  rate the page is at; when the class split and the card are a refresh apart
+  the line says so.
+- **Status and pace.** The status chip, the bar and "Needed per working day"
+  follow the headline: the manufacturing total against the same due-so-far
+  and target. The bar shows it as one segment (the class split has no
+  by-hand breakdown).
+- **What doesn't move.** The monthly goal (the "of" figure and due so far),
+  the CAD + USD detail line and every other section stay on all customers.
+  "All" is unchanged.
 - **The workbook.** The Revenue by class sheet always carries a "Manufacturing
   customers (all but Exclusive Distribution)" row under the total, as a formula
   over the class rows.

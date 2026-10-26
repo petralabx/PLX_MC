@@ -154,7 +154,7 @@ async function verifyUatTicketTx(
     taskId,
     { stage: "verified", activityLine: { who: ctx.actor, what: "verified (the submitter confirmed the fix)", kind: "move" } },
     ctx.actor,
-    { query: q, attribution: ctx.attribution }
+    { query: q, attribution: ctx.attribution, uatVerify: true }
   );
   if (!task) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
   const eventSeq = await appendEventTx(q, {

@@ -17,7 +17,14 @@ const h = vi.hoisted(() => ({
   session: null as { user?: { oid?: string | null; email?: string | null } } | null,
 }));
 
+// Gates are raised and decided under the task row lock (TASK-3796); run the transaction in memory.
+vi.mock("@/lib/db", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/db")>()),
+  withTransaction: async (fn: (q: unknown) => unknown) => fn({}),
+}));
+
 vi.mock("@/lib/sync", () => ({
+  ensureSeeded: async () => true,
   patchTask: async (id: string, patch: Record<string, unknown>, actor: string) => {
     const row = h.tasks.get(id);
     if (!row) return null;
@@ -37,6 +44,9 @@ vi.mock("@/lib/sync/repo", () => ({
 
 vi.mock("@/lib/compliance/repo", () => ({
   appendEvent: async (e: Record<string, unknown>) => {
+    h.events.push(e);
+  },
+  appendEventTx: async (_q: unknown, e: Record<string, unknown>) => {
     h.events.push(e);
   },
   eventsByKinds: async () => h.stored,

@@ -48,7 +48,8 @@ const dial = vi.hoisted(() => ({ repos: {} as Record<string, string>, buckets: {
 vi.mock("../config/autonomy-dial.json", () => ({ default: dial }));
 vi.mock("@/lib/mcp/sync-meta", () => ({ syncMetaForTask: async () => ({ status: "queued" }) }));
 
-// mc_complete_task writes the evidence under a row lock (TASK-3166); run it in memory.
+// mc_complete_task writes the evidence (TASK-3166), and gates are raised and
+// decided (TASK-3796), under a row lock; run them in memory.
 vi.mock("@/lib/db", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/db")>()),
   withTransaction: async (fn: (q: unknown) => unknown) => fn({}),
@@ -68,6 +69,7 @@ vi.mock("@/lib/sync", () => ({
     errors: [],
     lastSweep: null,
   }),
+  ensureSeeded: async () => true,
   patchTask: async (id: string, patch: Record<string, unknown>) => {
     const next = { ...mem.tasks.get(id), ...patch };
     delete next.activityLine;
@@ -77,6 +79,10 @@ vi.mock("@/lib/sync", () => ({
 }));
 vi.mock("@/lib/compliance/repo", () => ({
   appendEvent: async (e: { kind: string; payload?: Record<string, unknown> }) => {
+    mem.events.push(e);
+    return "1";
+  },
+  appendEventTx: async (_q: unknown, e: { kind: string; payload?: Record<string, unknown> }) => {
     mem.events.push(e);
     return "1";
   },

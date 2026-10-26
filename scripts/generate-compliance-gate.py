@@ -164,14 +164,14 @@ jobs:
           # *PROMPT*.md or *RUNBOOK*.md (e.g. docs/JBB_SYSTEM_PROMPT.md, copied into the
           # live AGENTS.md by the runtime guard), and anything
           # under .github/, .claude/, .cursor/, .codex/, .grok/, .agents/, .windsurf/,
-          # skills/, prompts/ or docs/training/ — at any depth, case-insensitive. Only
+          # .specify/ (agent-policy inputs), skills/, prompts/ or docs/training/ — at any depth, case-insensitive. Only
           # *.md can skip, so *.mdc rules and .cursorrules never do. Renames are
           # classified on BOTH paths (--no-renames; previous_filename in merge_group).
           n_changed=$(printf '%s' "$changed" | jq 'length')
           if [ "$n_changed" -gt 0 ] && [ "$n_changed" -lt 3000 ]; then
             non_docs=$(printf '%s' "$changed" | jq '[.[] | select(
                 (test("\\.md$"; "i") and
-                 (test("(^|/)(\\.github|\\.claude|\\.cursor|\\.codex|\\.grok|\\.agents?|\\.windsurf|skills|prompts)/"; "i")
+                 (test("(^|/)(\\.github|\\.claude|\\.cursor|\\.codex|\\.grok|\\.agents?|\\.windsurf|\\.specify|skills|prompts)/"; "i")
                   or test("(^|/)docs/training/"; "i")
                   or test("(^|/)(AGENTS|CLAUDE|CODEX|GROK|HERMES|GEMINI|COPILOT)[^/]*\\.md$"; "i")
                   or test("(^|/)(SKILL|SYSTEM|TOOLS|SOUL|IDENTITY|USER|HEARTBEAT|MEMORY|LESSONS|copilot-instructions)\\.md$"; "i")

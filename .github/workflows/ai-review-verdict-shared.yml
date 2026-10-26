@@ -131,17 +131,52 @@ jobs:
               (trustOrgMembers && t.type === 'User' && memberAssoc.has(String(t.assoc || '').toUpperCase()) &&
                Boolean(t.login) && t.login !== pr.user?.login);
 
+            // Statuses live on the SHA, not the PR: two open PRs with the same head would overwrite each other's
+            // ai-review/verdict. Such heads get one fixed failure naming every PR, so no PR can inherit another's pass.
+            const headPrs = new Map();
+            for (const p of prs) { const l = headPrs.get(p.head.sha) || []; l.push(p.number); headPrs.set(p.head.sha, l); }
+
+            // Edited markers: the REST author is the text's ORIGINAL author, so a marker edited later (e.g. by the PR
+            // author or another member) could pass. Read lastEditedAt/editor (GraphQL) for every trusted text that holds
+            // a marker; an edit counts only when the editor is the trusted bot, or the same trusted non-author member who
+            // wrote it. Anything else (unknown editor, editor = PR author) drops the marker. A failed lookup throws, and
+            // the PR gets an error status (fail closed).
+            const trustedEditorLogin = trustedBot.replace(/\[bot\]$/, '');
+            async function editedBadSet(items, pr) {
+              const bad = new Set();
+              const byId = new Map(items.map(t => [t.node, t]));
+              const nodeIds = [...byId.keys()];
+              for (let i = 0; i < nodeIds.length; i += 50) {
+                const ids = nodeIds.slice(i, i + 50);
+                const q = `query($ids:[ID!]!){nodes(ids:$ids){id ... on Comment{lastEditedAt editor{login __typename}}}}`;
+                const res = await github.graphql(q, { ids });
+                if ((res.nodes || []).length !== ids.length) throw new Error('edit-history lookup returned fewer nodes than asked');
+                for (const n of res.nodes || []) {
+                  if (!n || !n.lastEditedAt) continue;
+                  const t = byId.get(n.id);
+                  const ed = n.editor;
+                  const botEdit = ed && ed.__typename === 'Bot' && ed.login === trustedEditorLogin;
+                  const selfEdit = ed && ed.__typename === 'User' && t && t.type === 'User' && ed.login === t.login && ed.login !== pr.user?.login;
+                  if (!botEdit && !selfEdit) bad.add(n.id);
+                }
+              }
+              return bad;
+            }
+
             async function verdict(pr, collect = false) {
               const sha = pr.head.sha;
               const texts = [];
-              if (pr.body) texts.push({ body: pr.body, at: null, assoc: pr.author_association, login: pr.user?.login, type: pr.user?.type });
+              if (pr.body) texts.push({ node: pr.node_id, body: pr.body, at: null, assoc: pr.author_association, login: pr.user?.login, type: pr.user?.type });
               const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number, per_page: 100 });
-              for (const c of comments) texts.push({ body: c.body || '', at: c.updated_at || c.created_at, assoc: c.author_association, login: c.user?.login, type: c.user?.type });
+              for (const c of comments) texts.push({ node: c.node_id, edited: Boolean(c.updated_at && c.created_at && c.updated_at !== c.created_at), body: c.body || '', at: c.updated_at || c.created_at, assoc: c.author_association, login: c.user?.login, type: c.user?.type });
               const reviews = await github.paginate(github.rest.pulls.listReviews, { owner, repo, pull_number: pr.number, per_page: 100 });
-              for (const r of reviews) if (r.state !== 'DISMISSED') texts.push({ body: r.body || '', at: r.submitted_at, assoc: r.author_association, login: r.user?.login, type: r.user?.type });
+              for (const r of reviews) if (r.state !== 'DISMISSED') texts.push({ node: r.node_id, body: r.body || '', at: r.submitted_at, assoc: r.author_association, login: r.user?.login, type: r.user?.type });
               const agg = {};
+              const markerRe = /<!--\s*ai-review\s/;
+              const editedBad = await editedBadSet(texts.filter(t => t.node && isTrusted(t, pr) && markerRe.test(t.body)), pr);
               for (const t of texts) {
                 if (!isTrusted(t, pr)) continue;
+                if (t.node ? editedBad.has(t.node) : t.edited) { core.warning(`#${pr.number}: marker text ${t.node || '(no node id)'} was edited by someone other than its trusted author or ${trustedBot}; ignored`); continue; }
                 for (const m of t.body.matchAll(re)) {
                   let v; try { v = JSON.parse(m[1]); } catch { continue; }
                   const who = String(v.reviewer || '').toLowerCase();
@@ -183,11 +218,16 @@ jobs:
               else if (blocking.length) { state = 'failure'; desc = 'Open ' + blocking.map(w => `${w} P0=${agg[w].open_p0} P1=${agg[w].open_p1}`).join('; '); }
               else if (counted.length < minReviewers) { state = 'pending'; desc = `Need ${minReviewers} clean approved review on ${sha.slice(0, 7)}, have ${counted.length}${ownNote}`; }
               else desc = `Clean: ${counted.join(', ')} on ${sha.slice(0, 7)} (no open P0/P1)${ownNote}`;
-              const description = desc.slice(0, 140);
               // Head moved while computing: skip; the push's own run (or the next sweep) covers the new head.
               const now = (await github.rest.pulls.get({ owner, repo, pull_number: pr.number })).data;
               if (now.head.sha !== sha) { core.info(`#${pr.number}: head moved ${sha} -> ${now.head.sha}; skipped`); return; }
               if (collect) return { state, desc, sha }; // merge_group: graded, not posted on the PR head
+              const sharers = headPrs.get(sha) || [];
+              if (sharers.length > 1) {
+                state = 'failure';
+                desc = `Head ${sha.slice(0, 7)} is shared by open PRs ${sharers.map(n => '#' + n).join(', ')}; the status cannot be scoped per PR. Close the duplicates.`;
+              }
+              const description = desc.slice(0, 140);
               // Post only on change (statuses are capped at 1000 per SHA per context; newest first).
               const existing = (await github.rest.repos.listCommitStatusesForRef({ owner, repo, ref: sha, per_page: 100 })).data
                 .find(x => x.context === 'ai-review/verdict');

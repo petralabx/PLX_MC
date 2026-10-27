@@ -232,19 +232,18 @@ describe("service-principal separation", () => {
     expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.cancel" }).allowed).toBe(true);
   });
 
-  it("sp_mcp_cursor holds task.cancel and task.reopen (TASK-3374); sp_mcp_ledger holds task.cancel and task.reopen", () => {
+  it("sp_mcp_cursor holds task.cancel, task.reopen (TASK-3374) and task.link_merged_pr (TASK-3671); sp_mcp_ledger holds task.cancel and task.reopen", () => {
     const cursor = capabilitiesForServicePrincipal("sp_mcp_cursor");
     expect(cursor).toEqual(expect.arrayContaining(["task.cancel", "task.reopen"]));
-    expect(cursor).not.toContain("task.link_merged_pr");
-    // TASK-3374 grants reopen only: no verify capability, and nothing else beyond the agent bundle.
+    expect(cursor).toContain("task.link_merged_pr");
+    // TASK-3374 grants reopen, TASK-3671 link_merged_pr: no verify, no assign, nothing else beyond the agent bundle.
     expect(cursor as readonly string[]).not.toContain("task.verify");
     expect([...cursor].sort()).toEqual(
-      [...capabilitiesForServicePrincipal("sp_mcp_codex"), "task.cancel", "task.reopen"].sort()
+      [...capabilitiesForServicePrincipal("sp_mcp_codex"), "task.cancel", "task.reopen", "task.link_merged_pr"].sort()
     );
     expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.cancel" }).allowed).toBe(true);
     expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.reopen" }).allowed).toBe(true);
-    expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.link_merged_pr" }))
-      .toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
+    expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.link_merged_pr" }).allowed).toBe(true);
     const ledger = capabilitiesForServicePrincipal("sp_mcp_ledger");
     expect(ledger).toEqual(expect.arrayContaining(["task.cancel", "task.reopen"]));
     expect(authorize({ actor: service("sp_mcp_ledger"), capability: "task.cancel" }).allowed).toBe(true);
@@ -252,7 +251,7 @@ describe("service-principal separation", () => {
   });
 
   it("sp_mcp_cos is the cursor grant minus task.reopen plus exactly task.link_merged_pr and task.assign (TASK-3407)", () => {
-    const cursor = capabilitiesForServicePrincipal("sp_mcp_cursor").filter((c) => c !== "task.reopen");
+    const cursor = capabilitiesForServicePrincipal("sp_mcp_cursor").filter((c) => c !== "task.reopen" && c !== "task.link_merged_pr");
     expect([...capabilitiesForServicePrincipal("sp_mcp_cos")].sort()).toEqual(
       [...cursor, "task.link_merged_pr", "task.assign"].sort()
     );

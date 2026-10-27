@@ -100,7 +100,7 @@ beforeEach(() => {
 });
 
 describe("mc_link_merged_pr authorization (acceptance 1)", () => {
-  it.each(["sp_mcp_claude_code", "sp_mcp_cursor", "sp_mcp_codex", "sp_mcp_portal"])(
+  it.each(["sp_mcp_claude_code", "sp_mcp_codex", "sp_mcp_portal"])(
     "refuses %s with 403 and writes nothing, even with a steward operator email",
     async (principal) => {
       const deps = facts();
@@ -114,6 +114,11 @@ describe("mc_link_merged_pr authorization (acceptance 1)", () => {
 
   it("admits the steward principal regardless of operator email", async () => {
     const result = await actionLinkMergedPr(identity("sp_mcp_ledger", "someone@petrasoap.com"), input(), facts());
+    expect(result).toMatchObject({ linked: true });
+  });
+
+  it("admits sp_mcp_cursor, the shared Hub principal Ledger signs in as (TASK-3671)", async () => {
+    const result = await actionLinkMergedPr(identity("sp_mcp_cursor", "cos@petrasoap.com"), input(), facts());
     expect(result).toMatchObject({ linked: true });
   });
 
@@ -247,9 +252,9 @@ describe("PR held elsewhere only as an open row", () => {
 });
 
 describe("grant", () => {
-  it("only sp_mcp_ledger and sp_mcp_cos hold task.link_merged_pr", async () => {
+  it("only sp_mcp_cursor, sp_mcp_ledger and sp_mcp_cos hold task.link_merged_pr (TASK-3671)", async () => {
     const { MCP_AGENT_SERVICE_PRINCIPAL_IDS, capabilitiesForServicePrincipal } = await import("@/lib/permissions");
     const holders = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => capabilitiesForServicePrincipal(id).includes("task.link_merged_pr"));
-    expect(holders).toEqual(["sp_mcp_ledger", "sp_mcp_cos"]);
+    expect([...holders].sort()).toEqual(["sp_mcp_cos", "sp_mcp_cursor", "sp_mcp_ledger"]);
   });
 });

@@ -221,6 +221,14 @@ export function isStaleReview(review: Pick<DraftReview, "digest">, draft: Pick<D
   return review.digest !== draft.digest;
 }
 
+/** A claim older than this belongs to a crashed Accept; the next Accept takes over. */
+export const ACCEPT_CLAIM_STALE_MS = 10 * 60_000;
+
+/** An Accept is running: the draft is still in review and its claim is fresh. */
+export function acceptInProgress(draft: Pick<Draft, "status" | "acceptedAt">, nowMs = Date.now()): boolean {
+  return draft.status === "in_review" && draft.acceptedAt !== null && nowMs - Date.parse(draft.acceptedAt) < ACCEPT_CLAIM_STALE_MS;
+}
+
 /** Open blocking findings, on any version: each refuses Accept until closed. */
 export function openBlockingFindings(draft: Pick<Draft, "reviews">): DraftReview[] {
   return draft.reviews.filter((r) => r.kind === "finding" && r.blocking && r.status === "open");

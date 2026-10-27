@@ -1,6 +1,6 @@
 // GET /api/cursor/drafts — mc_list_drafts; POST /api/cursor/drafts — mc_save_draft
 // (Draft Projects, TASK-4059). Shared with the HTTP MCP tools through
-// src/lib/mcp/draft-actions.ts; off until PLX_MC_DRAFTS_ENABLED=1.
+// src/lib/mcp/draft-actions.ts; off when PLX_MC_DRAFTS_ENABLED=0.
 
 import { actionListDrafts, actionSaveDraft, saveDraftSchema } from "@/lib/mcp/draft-actions";
 import { cursorRoute, parseCursorBody } from "@/lib/mcp/route";

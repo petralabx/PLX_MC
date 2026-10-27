@@ -42,6 +42,7 @@ import { MAX_DRAFT_CONTENT_BYTES, draftContentBytes, draftDigest } from "./schem
 import * as store from "./store";
 import {
   OPEN_DRAFT_STATUSES,
+  acceptInProgress,
   emptyDraftContent,
   isStaleReview,
   type Draft,
@@ -121,6 +122,10 @@ export function isDraftWriter(draft: Pick<Draft, "author" | "createdBy">, actor:
 function assertOpen(draft: Draft): void {
   if (!OPEN_DRAFT_STATUSES.includes(draft.status)) {
     throw new ApiError("draft_closed", `${draft.id} is ${draft.status}; it can no longer change.`, 409);
+  }
+  // Accept creates records from the version under review; nothing changes the draft meanwhile.
+  if (acceptInProgress(draft)) {
+    throw new ApiError("accept_in_progress", `${draft.id} is being accepted; try again when the Accept ends.`, 409);
   }
 }
 

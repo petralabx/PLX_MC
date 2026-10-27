@@ -830,7 +830,7 @@ server.registerTool("mc_list_projects", {
 // Draft Projects (TASK-4059). The server validates plan and research in full
 // (src/lib/drafts/schema.ts); this client passes them through.
 server.registerTool("mc_save_draft", {
-  description: "Create or edit a Draft Project: a reviewable plan (one project, buckets and tasks under draft keys P, B1, T1) plus its research (summary, context, findings citing sources by ref, 2+ approaches with exactly one chosen, recommendation, risks, open questions, sources, artifacts). Nothing in a draft is live. Omit draftId to create (title required; the author is your operator email). With draftId, each section you send replaces that section. withdraw {reason} closes it. Returns preflight: the checks mc_submit_draft runs. Off until PLX_MC_DRAFTS_ENABLED=1.",
+  description: "Create or edit a Draft Project: a reviewable plan (one project, buckets and tasks under draft keys P, B1, T1) plus its research (summary, context, findings citing sources by ref, 2+ approaches with exactly one chosen, recommendation, risks, open questions, sources, artifacts). Nothing in a draft is live. Omit draftId to create (title required; the author is your operator email). With draftId, each section you send replaces that section. withdraw {reason} closes it. Returns preflight: the checks mc_submit_draft runs. Off when PLX_MC_DRAFTS_ENABLED=0.",
   inputSchema: z.object({
     draftId: z.string().trim().min(1).optional(),
     title: z.string().trim().min(1).max(255).optional(),

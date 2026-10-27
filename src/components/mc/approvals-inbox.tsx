@@ -91,6 +91,7 @@ import {
   type WaitingOn,
 } from "./approvals-inbox.helpers";
 import { viewerTokens } from "./needs-me";
+import { DraftsToReviewPanel } from "./drafts";
 import {
   ColleagueQuestionSheet,
   MyQuestionSheet,
@@ -1509,6 +1510,7 @@ export function ApprovalsInboxView({ route, nav }: ScreenProps) {
               : "The linked question is not open for you: it has an answer, or it was asked of someone else."}
           </div>
         ) : null}
+        {scope === "me" && tab === "all" ? <DraftsToReviewPanel nav={nav} /> : null}
         {scope === "me" && (tab === "all" || tab === "gates") ? (
           <CreatorApprovalsPanel
             rows={creators}

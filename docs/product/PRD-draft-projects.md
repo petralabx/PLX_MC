@@ -234,7 +234,7 @@ Not decided yet:
 |---|---|---|---|
 | 1 | TASK-4056 | This PRD and the workstream note | Merged (#487) |
 | 2 | TASK-4059 | Migration `056_drafts.sql` (054 and 055 were taken), `src/lib/drafts`, the five tools, REST routes, capabilities, `docs/modules/drafts/README.md` and the `DATA_MODEL.md` entry. 056 also adds the columns Accept needs, so step 3 has no migration | Merged (#489) |
-| 3 | TASK-4071 | Drafts screen, session routes under `/api/drafts`, Accept, the Drafts to review panel on Approvals, a Drafts nav item. Drafts turn on by default; `PLX_MC_DRAFTS_ENABLED=0` is the kill switch | In review |
+| 3 | TASK-4071 | Drafts screen, session routes under `/api/drafts`, Accept, the Drafts to review panel on Approvals, a Drafts nav item. Drafts turn on by default; `PLX_MC_DRAFTS_ENABLED=0` is the kill switch | Merged (#492) |
 | Follow-up | Not created | A "New draft" form on the screen, artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | Not started |
 | Follow-up | Not created | Review on a shared page: "Publish for review" and the comment relay, Claude Artifacts first (see Follow-up: review on a shared page). After step 3 is live and in use | Not started |
 

@@ -55,6 +55,13 @@ const agent = (email = "vince@petrasoap.com", principal = "sp_mcp_claude_code"):
   acl: principalFromTokens(principal),
 });
 const human = (email: string): DraftActor => ({ kind: "human", email, principalId: `oid-${email}`, acl: principalFromTokens(email, `oid-${email}`) });
+/** An agent under the shadow rollout: its operator email counts as a token, as aclPrincipalFromMcp gives today. */
+const shadowAgent = (email: string, principal = "sp_mcp_claude_code"): DraftActor => ({
+  kind: "agent",
+  email,
+  principalId: principal,
+  acl: { ...principalFromTokens(principal, email), principalOnlyTokens: [principal] },
+});
 
 const plan: DraftPlan = draftPlanSchema.parse({
   project: { name: "Draft Projects", owner: "vince", repos: ["plx-mc"] },
@@ -112,6 +119,26 @@ describe("validation", () => {
   it("refuses duplicate plan keys and a task in a non-draft bucket", () => {
     expect(draftPlanSchema.safeParse({ buckets: [{ key: "B1" }, { key: "B1" }] }).success).toBe(false);
     expect(draftPlanSchema.safeParse({ buckets: [{ key: "B1" }], tasks: [{ key: "T1", bucket: "BKT-INFRA" }] }).success).toBe(false);
+  });
+
+  it("takes only http(s) links, and scheme-less internal refs for sources; never javascript: or data:", () => {
+    const art = (url: string) => draftResearchSchema.safeParse({ artifacts: [{ kind: "diagram", name: "x", url }] }).success;
+    expect(art("https://example.com/a.svg")).toBe(true);
+    expect(art("javascript:alert(1)//x")).toBe(false);
+    expect(art("data:text/html,<script>alert(1)</script>")).toBe(false);
+    const src = (url: string) => draftResearchSchema.safeParse({ sources: [{ ref: "[1]", title: "x", kind: "internal", url }] }).success;
+    for (const ok of ["", "https://learn.microsoft.com/x", "docs/product/PRD-draft-projects.md", "src/lib/sync/state.ts:376", "TASK-3953"]) {
+      expect({ ok, valid: src(ok) }).toEqual({ ok, valid: true });
+    }
+    for (const bad of ["javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,x", "vbscript:x", "file:///etc/passwd"]) {
+      expect({ bad, valid: src(bad) }).toEqual({ bad, valid: false });
+    }
+  });
+
+  it("refuses a NUL character, which Postgres jsonb cannot store", () => {
+    expect(draftResearchSchema.safeParse({ summary: "a\u0000b" }).success).toBe(false);
+    expect(draftPlanSchema.safeParse({ buckets: [{ key: "B1", name: "x\u0000" }] }).success).toBe(false);
+    expect(draftResearchSchema.safeParse({ artifacts: [{ kind: "markdown", name: "x", inline: "\u0000" }] }).success).toBe(false);
   });
 
   it("takes an artifact as a link or inline content, never both or neither", () => {
@@ -228,6 +255,19 @@ describe("create, edit and submit", () => {
     expect(again.draft.version).toBe(1);
   });
 
+  it("keeps a dismissed duplicate dismissed across versions", async () => {
+    const actor = agent();
+    const created = await createDraft(actor, { title: "Draft Projects", plan, research });
+    const open = [{ id: "TASK-9", title: "Drafts storage migration", stage: "backlog", bucket: "BKT-OPEN" }] as Partial<Task>[];
+    const first = await submitDraft(actor, created.id, deps(open));
+    const dup = first.draft.reviews[0];
+    await closeFinding(human("vince@petrasoap.com"), created.id, dup.id, "dismiss", "Different scope from TASK-9.");
+    await saveDraft(actor, created.id, { title: "Draft Projects, revised" });
+    const second = await submitDraft(actor, created.id, deps(open));
+    expect(second).toMatchObject({ frozen: true, duplicates: 0 });
+    expect(second.draft.reviews.filter((r) => r.source === "mc")).toEqual([expect.objectContaining({ id: dup.id, status: "dismissed" })]);
+  });
+
   it("never raises a restricted project's task as a duplicate", async () => {
     const actor = agent();
     const created = await createDraft(actor, { title: "Draft Projects", plan, research });
@@ -265,13 +305,24 @@ describe("create, edit and submit", () => {
 });
 
 describe("visibility", () => {
-  it("hides a restricted draft from non-members as not found, and shows it to members, the author and its writer", async () => {
-    const draft = await createDraft(agent(), { title: "Secret plan", visibility: "restricted", members: ["sp_mcp_codex"] });
+  it("hides a restricted draft from non-members as not found, and shows it to its members and author", async () => {
+    const draft = await createDraft(shadowAgent("vince@petrasoap.com"), { title: "Secret plan", visibility: "restricted", members: ["sp_mcp_codex"] });
     await expect(getVisibleDraft(agent("ricardo@petrasoap.com", "sp_mcp_grok"), draft.id)).rejects.toMatchObject({ code: "not_found", status: 404 });
     await expect(getVisibleDraft(agent("ricardo@petrasoap.com", "sp_mcp_codex"), draft.id)).resolves.toMatchObject({ id: draft.id });
     await expect(getVisibleDraft(human("vince@petrasoap.com"), draft.id)).resolves.toMatchObject({ id: draft.id });
-    await expect(getVisibleDraft(agent(), draft.id)).resolves.toMatchObject({ id: draft.id });
     expect((await listVisibleDrafts(agent("ricardo@petrasoap.com", "sp_mcp_grok"))).map((d) => d.id)).toEqual([]);
+    expect((await listVisibleDrafts(agent("ricardo@petrasoap.com", "sp_mcp_codex"))).map((d) => d.id)).toEqual([draft.id]);
+  });
+
+  it("never lets the writing principal stand in for its person: another person on the same key sees nothing", async () => {
+    const draft = await createDraft(shadowAgent("vince@petrasoap.com"), { title: "Secret reorg", visibility: "restricted", members: ["vince@petrasoap.com"] });
+    const sameKeyOtherPerson = shadowAgent("ricardo@petrasoap.com");
+    await expect(getVisibleDraft(sameKeyOtherPerson, draft.id)).rejects.toMatchObject({ code: "not_found" });
+    expect(await listVisibleDrafts(sameKeyOtherPerson, { status: "all" })).toEqual([]);
+    // The author's own agent sees it through the author's email during the shadow rollout…
+    await expect(getVisibleDraft(shadowAgent("vince@petrasoap.com"), draft.id)).resolves.toMatchObject({ id: draft.id });
+    // …and under enforce (principal tokens only) only once its sp_* id is a member.
+    await expect(getVisibleDraft(agent(), draft.id)).rejects.toMatchObject({ code: "not_found" });
   });
 });
 

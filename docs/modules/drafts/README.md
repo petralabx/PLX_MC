@@ -48,8 +48,13 @@ withdraw an open draft (`withdrawn`).
    its raiser resolves it, or the author, signed in, resolves or dismisses it (a dismissal needs a
    reason of 10 characters or more). An open blocking finding refuses Accept.
 4. **Read** (`mc_get_draft`, `mc_list_drafts`): visibility follows projects. A `restricted` draft
-   fails closed to its members, plus its author and the principal that wrote it, with the same
-   member matching as `src/lib/permissions/project-acl.ts`. A hidden draft reads as not found.
+   fails closed to its members and its author, with the same member matching as
+   `src/lib/permissions/project-acl.ts`. The principal that wrote it is not a member by itself: a
+   principal is a runtime key many people share. Under `PLX_MC_MCP_PRINCIPAL_AUTHZ=enforce` an
+   agent sees a restricted draft only when its `sp_*` id is listed in `members`; in shadow mode a
+   read that would vanish under enforce logs `authz.shadow_mismatch` (site `drafts.read`). A hidden
+   draft reads as not found. Lists filter in the database (status, visibility, author, reviewer,
+   search) before their limit of 200, and carry counts, never working copies.
 
 Invariants:
 

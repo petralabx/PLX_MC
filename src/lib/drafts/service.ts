@@ -4,8 +4,10 @@
 // routes both call these, so the transports cannot disagree. Server-only.
 //
 // - Visibility follows projects: shared, or restricted to members. The author
-//   and the principal that wrote the draft always see it. A hidden draft reads
-//   as not found.
+//   always sees it; the principal that wrote it does not, by itself, because a
+//   principal is a runtime key that many people share. Under enforce, an agent
+//   sees a restricted draft only when its sp_* id is a member. A hidden draft
+//   reads as not found.
 // - Only the draft's writer edits, submits or withdraws it: for an agent, the
 //   same principal acting for the same person (author); for a person, the author.
 // - Submit freezes the working copy as the next version, after the completeness
@@ -30,6 +32,7 @@ import {
   restrictedProjectIds,
   type ProjectAclPrincipal,
 } from "@/lib/permissions/project-acl";
+import { recordShadowMismatch } from "@/lib/permissions/shadow-mismatch";
 import { databaseConfigured } from "@/lib/secrets";
 import { getBuckets, getEntities, getProjects, getRepos } from "@/lib/sync/repo";
 
@@ -105,11 +108,8 @@ async function recordEvent(kind: string, actor: DraftActor, payload: Record<stri
 
 // ─── Access ──────────────────────────────────────────────────────────────────
 
-export function canSeeDraft(draft: Pick<Draft, "visibility" | "members" | "author" | "createdBy">, actor: DraftActor): boolean {
-  return canAccessProject(
-    { visibility: draft.visibility, members: [...draft.members, draft.author, draft.createdBy] },
-    actor.acl
-  );
+export function canSeeDraft(draft: Pick<Draft, "visibility" | "members" | "author">, actor: Pick<DraftActor, "acl">): boolean {
+  return canAccessProject({ visibility: draft.visibility, members: [...draft.members, draft.author] }, actor.acl);
 }
 
 /** The draft's writer: the author in person, or the same principal acting for the author. */
@@ -138,6 +138,19 @@ function assertWriter(draft: Draft, actor: DraftActor): void {
 async function visibleDraft(id: string, actor: DraftActor): Promise<Draft> {
   const draft = await store.getDraft(id);
   if (!draft || !canSeeDraft(draft, actor)) throw notFound(id);
+  // TASK-3026 shadow log, as project reads keep: a restricted draft this agent
+  // sees only through its operator email would vanish under enforce.
+  const principalOnly = actor.acl.principalOnlyTokens;
+  if (principalOnly && draft.visibility === "restricted" && !canSeeDraft(draft, { acl: { tokens: principalOnly } })) {
+    void recordShadowMismatch({
+      site: "drafts.read",
+      mode: "shadow",
+      actor: principalOnly[0] ?? actor.principalId,
+      draftId: draft.id,
+      operatorAllowed: true,
+      principalAllowed: false,
+    });
+  }
   return draft;
 }
 
@@ -294,11 +307,8 @@ export async function submitDraft(actor: DraftActor, id: string, deps: DraftDeps
       frozenBy: actor.email,
       frozenAt: now(),
     };
-    const known = new Set(
-      draft.reviews
-        .filter((r) => r.source === "mc" && r.status === "open")
-        .map((r) => `${r.target}:${r.body}`)
-    );
+    // Every MC finding counts, closed ones too: a dismissal, with its reason, sticks.
+    const known = new Set(draft.reviews.filter((r) => r.source === "mc").map((r) => `${r.target}:${r.body}`));
     const raised = likelyDuplicates(draft.working.plan.tasks, openTasks)
       .map((hit) =>
         newReview({
@@ -347,6 +357,8 @@ export async function reviewDraft(actor: DraftActor, id: string, input: ReviewIn
   await visibleDraft(id, actor);
   let review: DraftReview | undefined;
   const result = await store.mutateDraft(id, (draft) => {
+    // Again under the lock: the writer may have restricted the draft meanwhile.
+    if (!canSeeDraft(draft, actor)) throw notFound(id);
     assertOpen(draft);
     if (draft.version === 0 || !draft.digest) {
       throw new ApiError("draft_not_submitted", `${id} has no submitted version to review yet.`, 409);
@@ -398,6 +410,7 @@ export async function closeFinding(
   await visibleDraft(id, actor);
   let closed: DraftReview | undefined;
   const result = await store.mutateDraft(id, (draft) => {
+    if (!canSeeDraft(draft, actor)) throw notFound(id);
     assertOpen(draft);
     const finding = draft.reviews.find((r) => r.id === findingId && r.kind === "finding");
     if (!finding) throw new ApiError("not_found", `Unknown finding ${findingId} on ${id}.`, 404);
@@ -465,35 +478,26 @@ export function needsReviewFrom(draft: Draft, actor: DraftActor): boolean {
   );
 }
 
-export async function listVisibleDrafts(actor: DraftActor, filter: DraftListFilter = {}): Promise<Draft[]> {
+/** The drafts the actor can see, filtered in the store before its limit, newest change first. */
+export async function listVisibleDrafts(actor: DraftActor, filter: DraftListFilter = {}): Promise<store.DraftSummary[]> {
   const status = filter.status ?? "open";
   const statuses: DraftStatus[] =
     status === "open" ? [...OPEN_DRAFT_STATUSES] : status === "all" ? ["drafting", "in_review", "accepted", "withdrawn"] : [status];
-  const q = filter.q?.trim().toLowerCase();
-  return (await store.listDrafts(statuses)).filter((draft) => {
-    if (!canSeeDraft(draft, actor)) return false;
-    if (filter.mine && !isDraftWriter(draft, actor) && normalizeMemberToken(draft.author) !== normalizeMemberToken(actor.email)) return false;
-    if (filter.needsMyReview && !needsReviewFrom(draft, actor)) return false;
-    return !q || draft.id.toLowerCase().includes(q) || draft.working.title.toLowerCase().includes(q);
+  return store.listDraftSummaries({
+    statuses,
+    tokens: actor.acl.tokens,
+    author: filter.mine ? actor.email : undefined,
+    reviewerTokens: filter.needsMyReview ? [...reviewerTokens(actor)] : undefined,
+    viewerEmail: actor.email,
+    q: filter.q?.trim() || undefined,
+    limit: DRAFT_LIST_LIMIT,
   });
 }
 
+/** At most this many drafts per list read. */
+export const DRAFT_LIST_LIMIT = 200;
+
 /** A compact row for lists: counts, not content. */
-export function draftSummary(draft: Draft) {
-  return {
-    id: draft.id,
-    title: draft.working.title,
-    status: draft.status,
-    author: draft.author,
-    createdBy: draft.createdBy,
-    visibility: draft.visibility,
-    version: draft.version,
-    digest: draft.digest,
-    reviewers: draft.reviewers,
-    buckets: draft.working.plan.buckets.length,
-    tasks: draft.working.plan.tasks.length,
-    openFindings: draft.reviews.filter((r) => r.kind === "finding" && r.status === "open").length,
-    openBlockingFindings: openBlockingFindings(draft).length,
-    updatedAt: draft.updatedAt,
-  };
+export function draftSummary(draft: Draft): store.DraftSummary {
+  return store.summarizeDraft(draft);
 }

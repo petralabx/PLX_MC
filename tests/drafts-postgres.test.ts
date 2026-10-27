@@ -28,7 +28,7 @@ vi.mock("@/lib/db/tls", () => ({ resolveDbSsl: () => false }));
 import { HUMANS } from "@/lib/mc-data/data";
 import type { Repo } from "@/lib/mc-data/types";
 import { draftPlanSchema, draftResearchSchema } from "@/lib/drafts/schema";
-import { createDraft, reviewDraft, submitDraft, type DraftActor, type DraftDeps } from "@/lib/drafts/service";
+import { createDraft, listVisibleDrafts, reviewDraft, submitDraft, type DraftActor, type DraftDeps } from "@/lib/drafts/service";
 import { getDraft, getDraftVersion } from "@/lib/drafts/store";
 import type { DraftPlan, DraftResearch } from "@/lib/drafts/types";
 import { principalFromTokens } from "@/lib/permissions/project-acl";
@@ -142,6 +142,8 @@ describe("Draft Projects on Postgres", () => {
     await submitDraft(actor, created.id, deps);
     expect(await sqlError("UPDATE draft_versions SET frozen_by = 'x' WHERE draft_id = $1", [created.id])).toBe("23514");
     expect(await sqlError("DELETE FROM draft_versions WHERE draft_id = $1", [created.id])).toBe("23514");
+    expect(await sqlError("TRUNCATE draft_versions")).toBe("23514");
+    expect(await sqlError("TRUNCATE drafts CASCADE")).toBe("23514");
     expect((await getDraftVersion(created.id, 1))?.frozenBy).toBe("vince@petrasoap.com");
   });
 
@@ -171,6 +173,31 @@ describe("Draft Projects on Postgres", () => {
     await Promise.all(reviewers.map((r, i) => reviewDraft(r, created.id, { kind: i % 2 ? "comment" : "approve", body: `Review ${i}` })));
     const stored = await getDraft(created.id);
     expect(stored?.reviews.map((r) => r.body).sort()).toEqual(["Review 0", "Review 1", "Review 2", "Review 3", "Review 4"]);
+  });
+
+  it("lists in SQL: restricted drafts only for members and the author, mine, needs-my-review and a literal search", async () => {
+    const vince = (principal: string): DraftActor => ({ kind: "agent", email: "vince@petrasoap.com", principalId: principal, acl: principalFromTokens(principal, "vince@petrasoap.com") });
+    const ricardo: DraftActor = { kind: "human", email: "ricardo@petrasoap.com", principalId: "oid-ricardo", acl: principalFromTokens("ricardo@petrasoap.com", "ricardo") };
+    const secret = await createDraft(vince("sp_mcp_claude_code"), { title: "Secret 100% plan_x", plan, research, visibility: "restricted", members: ["stephen@petrasoap.com"] });
+    const shared = await createDraft(vince("sp_mcp_claude_code"), { title: "Shared plan", plan, research, reviewers: ["ricardo"] });
+    await submitDraft(vince("sp_mcp_claude_code"), shared.id, deps);
+    const ids = async (actor: DraftActor, filter: Parameters<typeof listVisibleDrafts>[1] = {}) => (await listVisibleDrafts(actor, filter)).map((d) => d.id);
+    expect(await ids(ricardo, { status: "all" })).not.toContain(secret.id);
+    expect(await ids(vince("sp_mcp_codex"), { status: "all" })).toContain(secret.id);
+    const stephen: DraftActor = { kind: "human", email: "stephen@petrasoap.com", principalId: "oid-stephen", acl: principalFromTokens("stephen@petrasoap.com") };
+    expect(await ids(stephen, { status: "all" })).toContain(secret.id);
+    expect(await ids(ricardo, { needsMyReview: true })).toEqual([shared.id]);
+    await reviewDraft(ricardo, shared.id, { kind: "comment", body: "A comment is not a review." });
+    expect(await ids(ricardo, { needsMyReview: true })).toEqual([shared.id]);
+    await reviewDraft(ricardo, shared.id, { kind: "approve", body: "Yes." });
+    expect(await ids(ricardo, { needsMyReview: true })).toEqual([]);
+    expect(await ids(vince("sp_mcp_codex"), { status: "all", q: "100%" })).toEqual([secret.id]);
+    expect(await ids(vince("sp_mcp_codex"), { status: "all", q: "n_x" })).toEqual([secret.id]);
+    expect(await ids(vince("sp_mcp_codex"), { status: "all", q: "1_0" })).toEqual([]);
+    expect(await ids(ricardo, { status: "all", mine: true })).toEqual([]);
+    const summary = (await listVisibleDrafts(ricardo, { q: "Shared plan" }))[0];
+    expect(summary).toMatchObject({ id: shared.id, title: "Shared plan", buckets: 1, tasks: 1, openFindings: 0, openBlockingFindings: 0, version: 1 });
+    expect(summary).not.toHaveProperty("working");
   });
 
   it("rolls 056 back cleanly, and the runner applies it again", async () => {

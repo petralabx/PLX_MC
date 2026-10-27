@@ -5,7 +5,7 @@
 -- with its reviews in `reviews`, the house pattern for approval gates and
 -- questions on a task. draft_versions holds each frozen version. A version is
 -- immutable: its digest (sha256 over its canonical content) is its identity, and
--- a trigger refuses UPDATE and DELETE. Drafts are DB-only: no SharePoint list.
+-- triggers refuse UPDATE, DELETE and TRUNCATE. Drafts are DB-only: no SharePoint list.
 --
 -- The accept and materialized columns are for step 3, so step 3 needs no
 -- migration of its own. Nothing outside src/lib/drafts reads these tables.
@@ -63,3 +63,8 @@ DROP TRIGGER IF EXISTS draft_versions_no_change ON draft_versions;
 CREATE TRIGGER draft_versions_no_change
     BEFORE UPDATE OR DELETE ON draft_versions
     FOR EACH ROW EXECUTE FUNCTION draft_versions_immutable();
+
+DROP TRIGGER IF EXISTS draft_versions_no_truncate ON draft_versions;
+CREATE TRIGGER draft_versions_no_truncate
+    BEFORE TRUNCATE ON draft_versions
+    FOR EACH STATEMENT EXECUTE FUNCTION draft_versions_immutable();

@@ -18,10 +18,15 @@ import {
   type DraftResearch,
 } from "./types";
 
-const text = (max: number) => z.string().trim().max(max);
+// Postgres jsonb refuses a NUL character (22P05); refuse it here as a 400, not a 500.
+const NO_NUL = /^[^\u0000]*$/;
+const text = (max: number) => z.string().trim().max(max).regex(NO_NUL, "text may not contain a NUL character");
 const line = (max = 255) => text(max);
 const repos = z.array(z.string().trim().min(1).max(200)).max(20).default([]);
 const level = z.enum(["low", "medium", "high"]);
+
+/** Empty, http(s), or anything that does not start with a URI scheme. */
+const SAFE_SOURCE_URL = /^(?:|https?:\/\/\S+|(?![a-z][a-z0-9+.-]*:)\S[^\u0000]*)$/i;
 
 /** The largest working copy a draft may hold, as JSON (MCP bodies cap at 4 MiB). */
 export const MAX_DRAFT_CONTENT_BYTES = 512 * 1024;
@@ -87,7 +92,10 @@ const sourceSchema = z
   .object({
     ref: z.string().trim().regex(/^\[\d{1,3}\]$/, 'a source ref is "[1]", "[2]", …'),
     title: line(500),
-    url: text(2_000).default(""),
+    // A web link, or a scheme-less internal ref (a repo path, an MC id). Never javascript:, data: or another scheme.
+    url: text(2_000)
+      .regex(SAFE_SOURCE_URL, "a source url is http(s), or a repo path or MC id with no scheme")
+      .default(""),
     kind: z.enum(["internal", "external"]),
     excerpt: text(4_000).default(""),
     accessed: text(40).default(""),
@@ -98,8 +106,8 @@ const artifactSchema = z
   .object({
     kind: z.enum(DRAFT_ARTIFACT_KINDS),
     name: line(255),
-    url: z.string().trim().url().max(2_000).nullable().default(null),
-    inline: z.string().max(100_000).nullable().default(null),
+    url: z.string().trim().url().max(2_000).regex(/^https?:\/\//i, "an artifact link is http or https").nullable().default(null),
+    inline: z.string().max(100_000).regex(NO_NUL, "text may not contain a NUL character").nullable().default(null),
   })
   .strict()
   .refine((a) => (a.url === null) !== (a.inline === null), { message: "an artifact is either a url or inline content" });
@@ -142,7 +150,12 @@ export const draftResearchSchema = z
   })
   .strict();
 
-export const draftTitleSchema = z.string().trim().min(1).max(255);
+export const draftTitleSchema = z.string().trim().min(1).max(255).regex(NO_NUL, "text may not contain a NUL character");
+
+/** Free text from a caller (a review body, a reason): trimmed, bounded, no NUL. */
+export function draftTextSchema(min: number, max: number) {
+  return z.string().trim().min(min).max(max).regex(NO_NUL, "text may not contain a NUL character");
+}
 
 /** Parse a plan section; throws ZodError. */
 export function parseDraftPlan(input: unknown): DraftPlan {

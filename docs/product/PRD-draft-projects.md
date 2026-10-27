@@ -166,7 +166,7 @@ A member who accepts their own draft creates a project and buckets. Members cann
 
 A draft an agent writes names the agent's person as author. That is the operator email on its MCP call, and it must resolve to a known Petra person. The agent cannot accept for that person: Accept needs that person's own signed-in session.
 
-A restricted draft fails closed to its members for list, read and review. It uses the same member matching as `src/lib/permissions/project-acl.ts`.
+A restricted draft fails closed to its members and its author for list, read and review. It uses the same member matching as `src/lib/permissions/project-acl.ts`. The principal that wrote it is not a member by itself, because many people share one runtime key; under enforce, list the agent's `sp_*` id as a member.
 
 ## Agent tools
 
@@ -218,7 +218,7 @@ Step 2 touches a migration, so it lands only with a signed MC merge approval of 
 ## Rollback
 
 - **Step 1:** revert the PR. It changes docs only.
-- **Step 2:** the migration is additive, and its rollback script drops only what 056 added: the two tables, their id sequence and the trigger function. The tools and routes stay off until `PLX_MC_DRAFTS_ENABLED=1`, which is also the kill switch.
+- **Step 2:** the migration is additive, and its rollback script drops only what 056 added: the two tables, their id sequence and the trigger function. Revert and deploy the code, and 056's manifest entry, before running it: every API route checks the database against the manifest. To stop drafts without a rollback, turn `PLX_MC_DRAFTS_ENABLED` off, which is the kill switch.
 - **Step 3:** revert the PR, or set the flag off. Records that Accept already created are ordinary records. Archive them with the existing archive action.
 
 ## Open questions

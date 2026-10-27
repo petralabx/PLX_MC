@@ -110,20 +110,157 @@ export async function getDraft(id: string): Promise<Draft | null> {
   return rows[0] ? fromRow(rows[0]) : null;
 }
 
-/** Drafts in the given statuses, newest change first. The caller applies the ACL. */
-export async function listDrafts(statuses: readonly DraftStatus[], limit = 200): Promise<Draft[]> {
+/** A list row: counts, not content (a working copy may be 512 KiB). */
+export interface DraftSummary {
+  id: string;
+  title: string;
+  status: DraftStatus;
+  author: string;
+  createdBy: string;
+  visibility: "shared" | "restricted";
+  version: number;
+  digest: string | null;
+  reviewers: string[];
+  buckets: number;
+  tasks: number;
+  openFindings: number;
+  openBlockingFindings: number;
+  updatedAt: string;
+}
+
+export interface DraftListQuery {
+  statuses: readonly DraftStatus[];
+  /** The viewer's ACL tokens, lower-cased: a restricted draft lists only for its members and author. */
+  tokens: readonly string[];
+  /** Only drafts this email authors. */
+  author?: string;
+  /**
+   * Only in-review drafts naming one of these tokens as a reviewer, with no
+   * review other than a comment from `viewerEmail` on the current version.
+   */
+  reviewerTokens?: readonly string[];
+  viewerEmail: string;
+  /** Matches the id or title, case-insensitive. */
+  q?: string;
+  limit: number;
+}
+
+interface SummaryRow {
+  id: string;
+  title: string | null;
+  status: DraftStatus;
+  author: string;
+  created_by: string;
+  visibility: "shared" | "restricted";
+  version: number;
+  digest: string | null;
+  reviewers: string[];
+  buckets: number;
+  tasks: number;
+  open_findings: number;
+  open_blocking: number;
+  updated_at: Date;
+}
+
+/** The summary of one draft, as the list query computes it. */
+export function summarizeDraft(draft: Draft): DraftSummary {
+  const open = draft.reviews.filter((r) => r.kind === "finding" && r.status === "open");
+  return {
+    id: draft.id,
+    title: draft.working.title,
+    status: draft.status,
+    author: draft.author,
+    createdBy: draft.createdBy,
+    visibility: draft.visibility,
+    version: draft.version,
+    digest: draft.digest,
+    reviewers: draft.reviewers,
+    buckets: draft.working.plan.buckets.length,
+    tasks: draft.working.plan.tasks.length,
+    openFindings: open.length,
+    openBlockingFindings: open.filter((r) => r.blocking).length,
+    updatedAt: draft.updatedAt,
+  };
+}
+
+function matchesQuery(draft: Draft, filter: DraftListQuery): boolean {
+  const tokens = new Set(filter.tokens.map((t) => t.toLowerCase()));
+  if (!filter.statuses.includes(draft.status)) return false;
+  const visible =
+    draft.visibility === "shared" ||
+    tokens.has(draft.author.toLowerCase()) ||
+    draft.members.some((m) => tokens.has(m.toLowerCase()));
+  if (!visible) return false;
+  if (filter.author && draft.author.toLowerCase() !== filter.author.toLowerCase()) return false;
+  if (filter.reviewerTokens) {
+    const reviewer = new Set(filter.reviewerTokens.map((t) => t.toLowerCase()));
+    if (draft.status !== "in_review" || !draft.reviewers.some((r) => reviewer.has(r.toLowerCase()))) return false;
+    const viewer = filter.viewerEmail.toLowerCase();
+    if (draft.reviews.some((r) => r.digest === draft.digest && r.by.toLowerCase() === viewer && r.kind !== "comment")) return false;
+  }
+  const q = filter.q?.toLowerCase();
+  return !q || draft.id.toLowerCase().includes(q) || draft.working.title.toLowerCase().includes(q);
+}
+
+/** The drafts a viewer may list, filtered before the limit, newest change first. */
+export async function listDraftSummaries(filter: DraftListQuery): Promise<DraftSummary[]> {
   if (!databaseConfigured()) {
     return [...memory().drafts.values()]
-      .filter((d) => statuses.includes(d.status))
+      .filter((d) => matchesQuery(d, filter))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id))
-      .slice(0, limit)
-      .map(clone);
+      .slice(0, filter.limit)
+      .map(summarizeDraft);
   }
-  const rows = await query<DraftRow>(
-    "SELECT * FROM drafts WHERE status = ANY ($1::text[]) ORDER BY updated_at DESC, id DESC LIMIT $2",
-    [statuses, limit]
+  const like = filter.q ? `%${filter.q.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+  const rows = await query<SummaryRow>(
+    `SELECT id, working->>'title' AS title, status, author, created_by, visibility, version, digest, reviewers,
+            COALESCE(jsonb_array_length(working->'plan'->'buckets'), 0)::int AS buckets,
+            COALESCE(jsonb_array_length(working->'plan'->'tasks'), 0)::int AS tasks,
+            (SELECT count(*) FROM jsonb_array_elements(reviews) r
+              WHERE r->>'kind' = 'finding' AND r->>'status' = 'open')::int AS open_findings,
+            (SELECT count(*) FROM jsonb_array_elements(reviews) r
+              WHERE r->>'kind' = 'finding' AND r->>'status' = 'open' AND r->>'blocking' = 'true')::int AS open_blocking,
+            updated_at
+       FROM drafts
+      WHERE status = ANY ($1::text[])
+        AND (visibility = 'shared'
+             OR lower(author) = ANY ($2::text[])
+             OR EXISTS (SELECT 1 FROM unnest(members) m WHERE lower(m) = ANY ($2::text[])))
+        AND ($3::text IS NULL OR lower(author) = $3)
+        AND ($4::text[] IS NULL
+             OR (status = 'in_review'
+                 AND EXISTS (SELECT 1 FROM unnest(reviewers) rv WHERE lower(rv) = ANY ($4::text[]))
+                 AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(reviews) r
+                                  WHERE r->>'digest' = drafts.digest AND lower(r->>'by') = $5 AND r->>'kind' <> 'comment')))
+        AND ($6::text IS NULL OR lower(id) LIKE $6 ESCAPE '\\' OR lower(working->>'title') LIKE $6 ESCAPE '\\')
+      ORDER BY updated_at DESC, id DESC
+      LIMIT $7`,
+    [
+      filter.statuses,
+      filter.tokens.map((t) => t.toLowerCase()),
+      filter.author?.toLowerCase() ?? null,
+      filter.reviewerTokens ? filter.reviewerTokens.map((t) => t.toLowerCase()) : null,
+      filter.viewerEmail.toLowerCase(),
+      like,
+      filter.limit,
+    ]
   );
-  return rows.map(fromRow);
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title ?? "",
+    status: row.status,
+    author: row.author,
+    createdBy: row.created_by,
+    visibility: row.visibility,
+    version: row.version,
+    digest: row.digest,
+    reviewers: row.reviewers,
+    buckets: row.buckets,
+    tasks: row.tasks,
+    openFindings: row.open_findings,
+    openBlockingFindings: row.open_blocking,
+    updatedAt: iso(row.updated_at)!,
+  }));
 }
 
 export async function getDraftVersion(id: string, version: number): Promise<DraftVersion | null> {

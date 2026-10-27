@@ -168,7 +168,9 @@ do directly; draft review stands in for the admin-only create. The restricted
 principals (`sp_mcp_portal`, `sp_mcp_workbench`, `sp_mcp_infra`,
 `sp_mcp_cip_auto_undraft`, `sp_mcp_workbench_intake`) hold none of the three.
 Draft visibility reuses the project ACL (`canAccessProject`) over the draft's
-members, author and writing principal.
+members and author. The writing principal is not a member by itself, because
+many people share one runtime key; under enforce, list the agent's `sp_*` id in
+`members`.
 
 **Approvals redesign (TASK-3720):** no new capability. `GET
 /api/approvals/projects` and `GET /api/approvals/decided` need `task.read` and

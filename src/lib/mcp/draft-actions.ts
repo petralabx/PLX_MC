@@ -13,7 +13,7 @@ import { z } from "zod";
 
 import { ApiError } from "@/lib/api/route";
 import { assertDraftsEnabled } from "@/lib/drafts/flag";
-import { draftPlanSchema, draftResearchSchema, draftTitleSchema } from "@/lib/drafts/schema";
+import { draftPlanSchema, draftResearchSchema, draftTextSchema, draftTitleSchema } from "@/lib/drafts/schema";
 import {
   closeFinding,
   createDraft,
@@ -38,7 +38,7 @@ import { mcpJsonResult } from "./envelope";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 
 const draftId = z.string().trim().regex(DRAFT_ID_RE, "a draft id is DRF-<n>");
-const people = (max: number) => z.array(z.string().trim().min(1).max(320)).max(max);
+const people = (max: number) => z.array(z.string().trim().regex(/^[^\s\u0000]{1,320}$/, "an email, oid, directory id or sp_* id")).max(max);
 
 export const saveDraftSchema = z
   .object({
@@ -49,7 +49,7 @@ export const saveDraftSchema = z
     visibility: z.enum(["shared", "restricted"]).optional(),
     members: people(200).optional().describe("Restricted drafts: emails, Entra oids, directory ids or sp_* ids"),
     reviewers: people(20).optional().describe("People asked to review: directory ids or emails"),
-    withdraw: z.object({ reason: z.string().trim().min(10).max(2000) }).strict().optional(),
+    withdraw: z.object({ reason: draftTextSchema(10, 2000) }).strict().optional(),
   })
   .strict()
   .superRefine((body, ctx) => {
@@ -86,9 +86,9 @@ export const reviewDraftSchema = z
   .object({
     draftId,
     kind: z.enum(["comment", "finding", "approve", "request_changes", "resolve"]),
-    body: z.string().trim().min(1).max(8_000).optional(),
+    body: draftTextSchema(1, 8_000).optional(),
     blocking: z.boolean().optional().describe("Findings only: a blocking finding refuses Accept until it is closed"),
-    target: z.string().trim().max(120).optional().describe("A plan key (P, B1, T3) or a research section"),
+    target: draftTextSchema(0, 120).optional().describe("A plan key (P, B1, T3) or a research section"),
     findingId: z.string().trim().regex(/^drv_[0-9a-f]{16}$/).optional().describe("resolve only: the finding you raised"),
   })
   .strict()
@@ -178,7 +178,7 @@ export async function actionGetDraft(identity: McpIdentity, input: unknown) {
 export async function actionListDrafts(identity: McpIdentity, input: unknown = {}) {
   const actor = guard(identity, "mc_list_drafts", "task.read");
   const filter = parseInput(listDraftsSchema, input ?? {});
-  const drafts = (await listVisibleDrafts(actor, filter)).map(draftSummary);
+  const drafts = await listVisibleDrafts(actor, filter);
   return { drafts, count: drafts.length, filter: { ...filter, status: filter.status ?? "open" } };
 }
 

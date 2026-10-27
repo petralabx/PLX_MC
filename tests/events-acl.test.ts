@@ -60,6 +60,23 @@ describe("filterEventsByProjectAcl", () => {
     const out = await filterEventsByProjectAcl([ev("2", "task.updated", "TASK-SECRET")], principalFromTokens("vince@petrasoap.com"));
     expect(out).toHaveLength(1);
   });
+
+  // TASK-4004: a rejected pr.task_link has no taskId but names its tasks in
+  // payload.taskIds; every named task the Hub holds must be open to the caller.
+  it("withholds a pr.task_link event that names a restricted task from non-members", async () => {
+    const link = (seq: string, taskIds: string[]) => ({
+      ...ev(seq, "pr.task_link", null),
+      payload: { outcome: "repo_mismatch", taskIds, title: "Fix it", branch: "feat/x" },
+    });
+    const events = [
+      link("1", ["TASK-SECRET"]),
+      link("2", ["TASK-OPEN", "TASK-SECRET"]),
+      link("3", ["TASK-OPEN"]),
+      link("4", ["TASK-UNKNOWN"]),
+    ];
+    expect((await filterEventsByProjectAcl(events, principalFromTokens("outsider@petrasoap.com"))).map((e) => e.seq)).toEqual(["3", "4"]);
+    expect(await filterEventsByProjectAcl(events, principalFromTokens("vince@petrasoap.com"))).toHaveLength(4);
+  });
 });
 
 describe("GET /api/events", () => {

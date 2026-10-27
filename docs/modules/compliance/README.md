@@ -233,6 +233,42 @@ truth table is proven before any plumbing exists.
   silent sparse creation). Optional HMAC compatibility:
   `PLX_MC_ROUTING_HMAC_PROPOSE=1` may call the same propose service from the
   webhook (not a phase-one prerequisite).
+- TASK-4004: a PR with no `MC-Checkout` stamp links to the task its title
+  names, else the one its branch names (`resolvePrTask` in `webhook.ts`). A
+  name is a whole upper-case `TASK-n` token, or a `task-n` in any case that
+  opens the text or a branch segment, so `subtask-2`, `setup-task-2` and
+  `MY_TASK-2` name nothing. The first source present decides: a stamped PR stays with its
+  checkouts even when they resolve to no task. On open the projection links
+  the PR row with no stage move (`linkedTaskIds`); like any open row, it holds
+  the task's promotion while it stays open (TASK-3797). A merge treats the task
+  as stamped, so a merge into the integration branch moves it to Merged; an
+  unmerged close only updates a row the task holds. These link nothing:
+  - a fork PR (`crossRepo`), as anyone can open one on a public repo;
+  - a revert: revert, reverts, reverted or reverting as a word anywhere in
+    the title (`Revert "…"`, `chore: revert …`, `TASK-1: Revert …`; not
+    `Revert-safe`), or a branch segment starting `revert-`. A title about a
+    revert feature is skipped too: a false skip is recorded, a miss would
+    promote the task the PR undoes;
+  - several distinct ids in the deciding source, or an id with no task;
+  - a task a caller with no project membership could not see (`restricted`:
+    a restricted project, a bucket naming a missing project, or a non-empty
+    bucket id with no row; an empty bucket stays shared, as in
+    `canAccessTask`), since ingestion has no project-authorized identity for
+    the PR's author;
+  - a task whose `repos` exclude the PR's owner/name (a task with no repos
+    takes any, as in routing's `assertRepoEligible`);
+  - a cancelled task, a Merged or Verified task that does not already hold the
+    PR, or a task waiting for creator approval (TASK-3530).
+
+  Each outcome is one `pr.task_link` event per PR, outcome and ids
+  (`outcome`: `resolved`, `fork`, `revert`, `ambiguous`, `unknown_task`,
+  `restricted`, `repo_mismatch`, `task_closed` or `creator_approval_pending`,
+  plus `source` and `taskIds`). `taskId` is set only on `resolved`.
+  `filterEventsByProjectAcl` scopes a `pr.task_link` event by every task in
+  its `payload.taskIds`, so non-members of a restricted project never see it.
+  It never changes the gate, approvals, the PR's `pr.*` events or the routing
+  triage. Kill switches: `COMPLIANCE_PR_TASK_LINK_ENABLED=0` (this link only;
+  default on) and `COMPLIANCE_PROJECTION_ENABLED=0` (all projection).
 
 Landed in P1b: the checkout/complete/verify handshake (`service.ts` + `repo.ts` +
 `/api/compliance/*`), the dispatch ledger + compliance-check ledger, and the

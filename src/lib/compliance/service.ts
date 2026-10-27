@@ -7,7 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { ApiError } from "@/lib/api/route";
 import { permissionsEnforcementEnabled } from "@/lib/auth";
-import { humanEmailFor, resolveHumanAccountableOwner, type Task } from "@/lib/mc-data";
+import { creatorApprovalPending, humanEmailFor, resolveHumanAccountableOwner, resolveRepoInput, type Task } from "@/lib/mc-data";
 import { publicMcBaseUrl } from "@/lib/mcp/envelope";
 import {
   GITHUB_ACTIONS_ROUTING_SERVICE_PRINCIPAL_ID,
@@ -36,10 +36,11 @@ import {
   upsertRoutingSession,
 } from "@/lib/routing/repo";
 import type { RoutingProposalState } from "@/lib/routing/types";
-import { isBucketInRestrictedProject } from "@/lib/permissions/project-acl-guard";
+import { canAccessTask } from "@/lib/permissions/project-acl";
+import { isBucketInRestrictedProject, loadProjectAclMaps } from "@/lib/permissions/project-acl-guard";
 import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask, snapshot } from "@/lib/sync";
-import { getEntity, getRegisterInboundCompletions } from "@/lib/sync/repo";
+import { getEntity, getRegisterInboundCompletions, getRepos } from "@/lib/sync/repo";
 import trackedReposRegistry from "../../../config/tracked-repos-registry.json";
 import { approvalPathClasses, pathApprovalMode } from "./approval-paths";
 import { approvalDeciderAllowlist, checkApproval } from "./approval-signature";
@@ -59,18 +60,19 @@ import {
 } from "./lease-chain";
 import { agentSignals, commitTrailers, shortSha } from "./commit-signals";
 import { githubHeadDescendsFrom, loadPrCommits, loadPrReviewLinks, loadPrState, type PrCommit, type PrState } from "./github-pr";
-import { projectPullRequest, projectionEnabled } from "./projection";
+import { projectPullRequest, projectionEnabled, samePr } from "./projection";
 import * as repo from "./repo";
 import { applyReviewLinks, reviewLinksReport, touchedModules, type ReviewLinksReport } from "./review-links";
 import { classifyRiskTier } from "./risk";
 import {
+  PR_TASK_LINK_EVENT,
   routingProposalsEnabled,
   type ActorKind,
   type RiskTier,
   type VerifyResult,
 } from "./types";
 import { verifyCompliance } from "./verify";
-import type { PrEvent } from "./webhook";
+import { resolvePrTask, type PrEvent, type PrTaskResolution } from "./webhook";
 
 // Decision 14, amended TASK-2011 (Vince, 2026-09-27): the 8h TTL applies
 // unless the live open PR still carries the stamp. Merge/close releases it.
@@ -1478,6 +1480,86 @@ export async function proposeRoutingFromPr(
   };
 }
 
+// Kill switch for the title/branch link alone; stamped projection is unaffected.
+function prTaskLinkEnabled(): boolean {
+  return process.env.COMPLIANCE_PR_TASK_LINK_ENABLED !== "0";
+}
+
+// As in routing's assertRepoEligible, a task with no repos takes any repo.
+// Otherwise the PR's owner/name must resolve to one of its registry ids.
+async function taskTakesRepo(task: Task, evt: PrEvent): Promise<boolean> {
+  if (!task.repos?.length) return true;
+  const registry = Object.fromEntries((await getRepos()).map((r) => [r.id, r]));
+  const resolved = resolveRepoInput(evt.repoFullName || evt.repo, registry);
+  return resolved.ok && task.repos.includes(resolved.id);
+}
+
+type PrTaskLinkOutcome =
+  | "resolved"
+  | "ambiguous"
+  | "revert"
+  | "fork"
+  | "unknown_task"
+  | "restricted"
+  | "repo_mismatch"
+  | "task_closed"
+  | "creator_approval_pending";
+
+// Ingestion has no project-authorized identity for the PR's author (unlike
+// mc_checkout_task or mc_link_merged_pr), so it links only a task that a caller
+// with no project membership could see (canAccessTask): not a restricted
+// project, nor a bucket naming a missing project. As the ACL does for projects,
+// an unparented task (empty bucket) stays shared while a non-empty bucket id
+// with no row is a dangling parent and fails closed.
+async function taskOpenToAll(task: Task): Promise<boolean> {
+  const { projectsById, bucketsById } = await loadProjectAclMaps();
+  if (task.bucket && !bucketsById.has(task.bucket)) return false;
+  return canAccessTask(task, bucketsById, projectsById, { tokens: [] });
+}
+
+async function prTaskLinkOutcome(
+  ref: Exclude<PrTaskResolution, { kind: "none" } | { kind: "checkout" }>,
+  evt: PrEvent
+): Promise<PrTaskLinkOutcome> {
+  if (ref.kind !== "resolved") return ref.kind;
+  const task = await loadTask(ref.taskIds[0]);
+  if (!task) return "unknown_task";
+  if (!(await taskOpenToAll(task))) return "restricted";
+  if (!(await taskTakesRepo(task, evt))) return "repo_mismatch";
+  // A cancelled task takes no link. A delivered one keeps its merge record: a
+  // later PR that only names it does not re-promote it. A PR the task already
+  // holds (a replay, or linked work still open) is projected as usual.
+  const holdsPr = (task.prs ?? []).some((p) => samePr(p, { repo: evt.repo, num: evt.prNumber }));
+  if (task.stage === "cancelled" || ((task.stage === "merged" || task.stage === "verified") && !holdsPr)) return "task_closed";
+  // TASK-3530: no checkout reaches such a task, and its merge is skipped before
+  // the row is rewritten, so a linked open row would stay open for good.
+  if (creatorApprovalPending(task)) return "creator_approval_pending";
+  return "resolved";
+}
+
+// TASK-4004: an unstamped PR links to the task its title or branch names
+// (resolvePrTask); the projection then moves that task to Merged on merge.
+// Any other outcome links nothing. Each outcome is one pr.task_link event per
+// PR. Gates, approvals and the PR's own events are untouched.
+async function prTaskLinks(evt: PrEvent, checkoutIds: string[], actor: string): Promise<string[]> {
+  const ref = resolvePrTask(evt, checkoutIds);
+  if (ref.kind === "none" || ref.kind === "checkout") return [];
+  const outcome = await prTaskLinkOutcome(ref, evt);
+  // taskId stays null unless the PR linked. filterEventsByProjectAcl scopes the
+  // event by every task in payload.taskIds, so a non-member of a restricted
+  // project never sees what MC decided about that project's task.
+  await repo.appendEvent({
+    kind: PR_TASK_LINK_EVENT,
+    actor,
+    repo: evt.repo,
+    taskId: outcome === "resolved" ? ref.taskIds[0] : null,
+    pr: String(evt.prNumber),
+    payload: { outcome, source: ref.source, taskIds: ref.taskIds, title: evt.title, branch: evt.branch },
+    dedupKey: `${PR_TASK_LINK_EVENT}:${evt.repo}:${evt.prNumber}:${outcome}:${ref.source}:${ref.taskIds.join(",")}`,
+  });
+  return outcome === "resolved" ? ref.taskIds : [];
+}
+
 // Maintain the system-of-record from the PR lifecycle. Appends typed events to
 // mc_events, then projects task state via projectPullRequest (P1).
 // Operator PRs without checkout no longer create sparse Tasks — optional
@@ -1517,6 +1599,9 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
   if (!HANDLED_ACTIONS.has(evt.action)) {
     return { action: evt.action, actorKind, taskId, recorded: false };
   }
+  // An unmerged close links nothing new (the projection only updates held rows).
+  const linkable = projectionEnabled() && prTaskLinkEnabled() && !(evt.action === "closed" && !evt.merged);
+  const linkedTaskIds = linkable ? await prTaskLinks(evt, ids, actorIdentity) : [];
   const idBase = `${evt.repo}:${evt.prNumber}:${evt.headSha}:${evt.action}`;
   const needsProposal = actorKind === "operator" && taskIds.length === 0;
   let proposalId: string | null = null;
@@ -1593,6 +1678,7 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
         actorIdentity,
         taskIds,
         sparse: needsProposal,
+        linkedTaskIds,
       });
     }
     // Attribute/project the merge before release. Release is not revocation:
@@ -1728,6 +1814,7 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
       actorIdentity,
       taskIds,
       sparse: needsProposal,
+      linkedTaskIds,
     });
   }
   return { action: evt.action, actorKind, taskId, recorded: true, proposalId, deepLink };

@@ -250,6 +250,11 @@ truth table is proven before any plumbing exists.
     revert feature is skipped too: a false skip is recorded, a miss would
     promote the task the PR undoes;
   - several distinct ids in the deciding source, or an id with no task;
+  - a task a caller with no project membership could not see (`restricted`:
+    a restricted project, a bucket naming a missing project, or a non-empty
+    bucket id with no row; an empty bucket stays shared, as in
+    `canAccessTask`), since ingestion has no project-authorized identity for
+    the PR's author;
   - a task whose `repos` exclude the PR's owner/name (a task with no repos
     takes any, as in routing's `assertRepoEligible`);
   - a cancelled task, a Merged or Verified task that does not already hold the
@@ -257,11 +262,13 @@ truth table is proven before any plumbing exists.
 
   Each outcome is one `pr.task_link` event per PR, outcome and ids
   (`outcome`: `resolved`, `fork`, `revert`, `ambiguous`, `unknown_task`,
-  `repo_mismatch`, `task_closed` or `creator_approval_pending`, plus `source`
-  and `taskIds`). It never changes the gate, approvals, the PR's `pr.*` events
-  or the routing triage. Kill switches: `COMPLIANCE_PR_TASK_LINK_ENABLED=0`
-  (this link only; default on) and `COMPLIANCE_PROJECTION_ENABLED=0` (all
-  projection).
+  `restricted`, `repo_mismatch`, `task_closed` or `creator_approval_pending`,
+  plus `source` and `taskIds`). `taskId` is set only on `resolved`.
+  `filterEventsByProjectAcl` scopes a `pr.task_link` event by every task in
+  its `payload.taskIds`, so non-members of a restricted project never see it.
+  It never changes the gate, approvals, the PR's `pr.*` events or the routing
+  triage. Kill switches: `COMPLIANCE_PR_TASK_LINK_ENABLED=0` (this link only;
+  default on) and `COMPLIANCE_PROJECTION_ENABLED=0` (all projection).
 
 Landed in P1b: the checkout/complete/verify handshake (`service.ts` + `repo.ts` +
 `/api/compliance/*`), the dispatch ledger + compliance-check ledger, and the

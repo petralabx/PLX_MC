@@ -54,6 +54,9 @@ export {
   COMPLIANCE_PROJECTION_SERVICE_PRINCIPAL_ID,
 };
 
+/** The mc_events kind recording each title/branch PR-to-task link outcome (TASK-4004). */
+export const PR_TASK_LINK_EVENT = "pr.task_link";
+
 /** Kill switch for operator routing proposals (never restores silent sparse Tasks). */
 export function routingProposalsEnabled(): boolean {
   return (process.env.PLX_MC_ROUTING_PROPOSALS_ENABLED ?? "1").trim() !== "0";

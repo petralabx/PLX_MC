@@ -56,6 +56,19 @@ vi.mock("@/lib/sync/repo", () => ({
   async getRepos() {
     return [{ id: "plx-mc", name: "PLX_MC", lang: "TypeScript", def: "main", owner: "petralabx", visibility: "public", scope: "" }];
   },
+  async getProjects() {
+    return [
+      { id: "PRJ-OPEN", visibility: "shared", members: [] },
+      { id: "PRJ-SECRET", visibility: "restricted", members: ["vince@petrasoap.com"] },
+    ];
+  },
+  async getBuckets() {
+    return [
+      { id: "BKT-OPEN", project: "PRJ-OPEN" },
+      { id: "BKT-SECRET", project: "PRJ-SECRET" },
+      { id: "BKT-ORPHAN", project: "PRJ-GONE" },
+    ];
+  },
   async getEntity(type: string, id: string) {
     const row = h.rows.get(`${type}:${id}`);
     return row ? structuredClone(row) : null;
@@ -105,7 +118,7 @@ import { parsePullRequestEvent } from "@/lib/compliance/webhook";
 const HOUR = 3_600_000;
 
 function seedTask(id: string, over: Partial<Task> = {}): void {
-  const data = { id, title: id, stage: "planned", repos: ["plx-mc"], prs: [], activity: [], ...over };
+  const data = { id, title: id, stage: "planned", bucket: "BKT-OPEN", repos: ["plx-mc"], prs: [], activity: [], ...over };
   h.rows.set(`task:${id}`, { entity_type: "task", id, data, sync_state: "synced", sp_item_id: "1", dirty_fields: [] });
 }
 
@@ -286,6 +299,30 @@ describe("ingestPullRequest — link a PR to the task its title or branch names 
     expect(statusOf("TASK-4101")).toEqual([]);
     expect(taskOf("TASK-4101").stage).toBe("progress");
     expect(links()).toMatchObject([{ taskId: null, payload: { outcome: "revert", source: "title", taskIds: ["TASK-4101"] } }]);
+  });
+
+  it("never links or promotes a task in a restricted project, or under a missing project", async () => {
+    seedTask("TASK-4106", { bucket: "BKT-SECRET" });
+    seedTask("TASK-4107", { bucket: "BKT-ORPHAN" });
+    await ingestPullRequest(pr("opened", [], { title: "Fix TASK-4106" }));
+    await ingestPullRequest(merge({ title: "Fix TASK-4106" }));
+    await ingestPullRequest(merge({ number: 43, title: "Fix TASK-4107" }));
+    expect(["TASK-4106", "TASK-4107"].map(statusOf)).toEqual([[], []]);
+    expect(["TASK-4106", "TASK-4107"].map((id) => taskOf(id).stage)).toEqual(["planned", "planned"]);
+    expect(h.events.filter((e) => e.kind === "task.promoted")).toEqual([]);
+    expect(links().every((e) => e.taskId === null)).toBe(true);
+    expect(new Set(links().map((e) => `${e.payload?.outcome}:${String(e.payload?.taskIds)}`))).toEqual(
+      new Set(["restricted:TASK-4106", "restricted:TASK-4107"])
+    );
+  });
+
+  it("links an unparented task (empty bucket, e.g. SharePoint-adopted) but not one whose bucket row is gone", async () => {
+    seedTask("TASK-4108", { bucket: "" });
+    seedTask("TASK-4109", { bucket: "BKT-DELETED" });
+    await ingestPullRequest(merge({ title: "Fix TASK-4108" }));
+    await ingestPullRequest(merge({ number: 43, title: "Fix TASK-4109" }));
+    expect([taskOf("TASK-4108").stage, taskOf("TASK-4109").stage]).toEqual(["merged", "planned"]);
+    expect(links().map((e) => e.payload?.outcome)).toEqual(["resolved", "restricted"]);
   });
 
   it("links nothing from a fork PR, and records the miss", async () => {

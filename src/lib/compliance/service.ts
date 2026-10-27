@@ -36,7 +36,8 @@ import {
   upsertRoutingSession,
 } from "@/lib/routing/repo";
 import type { RoutingProposalState } from "@/lib/routing/types";
-import { isBucketInRestrictedProject } from "@/lib/permissions/project-acl-guard";
+import { canAccessTask } from "@/lib/permissions/project-acl";
+import { isBucketInRestrictedProject, loadProjectAclMaps } from "@/lib/permissions/project-acl-guard";
 import { evidenceStoreEnabled } from "@/lib/secrets";
 import { patchTask, snapshot } from "@/lib/sync";
 import { getEntity, getRegisterInboundCompletions, getRepos } from "@/lib/sync/repo";
@@ -64,6 +65,7 @@ import * as repo from "./repo";
 import { applyReviewLinks, reviewLinksReport, touchedModules, type ReviewLinksReport } from "./review-links";
 import { classifyRiskTier } from "./risk";
 import {
+  PR_TASK_LINK_EVENT,
   routingProposalsEnabled,
   type ActorKind,
   type RiskTier,
@@ -1478,8 +1480,6 @@ export async function proposeRoutingFromPr(
   };
 }
 
-const PR_TASK_LINK_EVENT = "pr.task_link";
-
 // Kill switch for the title/branch link alone; stamped projection is unaffected.
 function prTaskLinkEnabled(): boolean {
   return process.env.COMPLIANCE_PR_TASK_LINK_ENABLED !== "0";
@@ -1500,9 +1500,22 @@ type PrTaskLinkOutcome =
   | "revert"
   | "fork"
   | "unknown_task"
+  | "restricted"
   | "repo_mismatch"
   | "task_closed"
   | "creator_approval_pending";
+
+// Ingestion has no project-authorized identity for the PR's author (unlike
+// mc_checkout_task or mc_link_merged_pr), so it links only a task that a caller
+// with no project membership could see (canAccessTask): not a restricted
+// project, nor a bucket naming a missing project. As the ACL does for projects,
+// an unparented task (empty bucket) stays shared while a non-empty bucket id
+// with no row is a dangling parent and fails closed.
+async function taskOpenToAll(task: Task): Promise<boolean> {
+  const { projectsById, bucketsById } = await loadProjectAclMaps();
+  if (task.bucket && !bucketsById.has(task.bucket)) return false;
+  return canAccessTask(task, bucketsById, projectsById, { tokens: [] });
+}
 
 async function prTaskLinkOutcome(
   ref: Exclude<PrTaskResolution, { kind: "none" } | { kind: "checkout" }>,
@@ -1511,6 +1524,7 @@ async function prTaskLinkOutcome(
   if (ref.kind !== "resolved") return ref.kind;
   const task = await loadTask(ref.taskIds[0]);
   if (!task) return "unknown_task";
+  if (!(await taskOpenToAll(task))) return "restricted";
   if (!(await taskTakesRepo(task, evt))) return "repo_mismatch";
   // A cancelled task takes no link. A delivered one keeps its merge record: a
   // later PR that only names it does not re-promote it. A PR the task already
@@ -1531,6 +1545,9 @@ async function prTaskLinks(evt: PrEvent, checkoutIds: string[], actor: string): 
   const ref = resolvePrTask(evt, checkoutIds);
   if (ref.kind === "none" || ref.kind === "checkout") return [];
   const outcome = await prTaskLinkOutcome(ref, evt);
+  // taskId stays null unless the PR linked. filterEventsByProjectAcl scopes the
+  // event by every task in payload.taskIds, so a non-member of a restricted
+  // project never sees what MC decided about that project's task.
   await repo.appendEvent({
     kind: PR_TASK_LINK_EVENT,
     actor,

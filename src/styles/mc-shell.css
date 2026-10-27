@@ -1266,6 +1266,17 @@
       grid-template-columns: var(--p-side-w) minmax(0, 1fr) clamp(var(--p-pane-min), var(--p-pane-w), var(--p-pane-max));
       grid-template-areas: "nav main pane";
     }
+    /* With the pane open, the sidebar's width gives way first, so the page
+       keeps 560px (TASK-3957, portal ADR-011 v2 Width 7). */
+    .mc .mc-body[data-nav="zones"][data-pane="open"] {
+      --p-side-w: max(
+        var(--p-shell-sidebar-min, 232px),
+        min(
+          var(--mc-side-w, var(--p-shell-sidebar, 248px)),
+          calc(100vw - 560px - clamp(var(--p-pane-min), var(--p-pane-w), var(--p-pane-max)))
+        )
+      );
+    }
     .mc .mc-body[data-pane="open"] .mc-pane {
       grid-area: pane;
       position: sticky;
@@ -1462,7 +1473,13 @@
      248px wide, 28px pointer rows, system tools in a footer pinned to the
      bottom, and the Admin & health flyout (a top-layer popover beside it). */
   .mc .mc-body[data-nav="zones"] {
-    --p-side-w: var(--p-shell-sidebar, 248px);
+    /* The person's width (TASK-3957: side-boot.ts paints --mc-side-w on
+       <html>), never more than leaves the page 560px (portal ADR-011 v2,
+       Width 7). */
+    --p-side-w: max(
+      var(--p-shell-sidebar-min, 232px),
+      min(var(--mc-side-w, var(--p-shell-sidebar, 248px)), calc(100vw - 560px))
+    );
   }
   .mc .mc-body[data-nav="zones"] .mc-side {
     display: flex;
@@ -1717,7 +1734,7 @@
   .mc .mc-side [aria-expanded="true"] > .chev:is(svg) {
     transform: rotate(90deg);
   }
-  .mc .mc-side .guide {
+  .mc :is(.mc-side, .projects-fly) .guide {
     align-self: stretch;
     width: 1px;
     background: var(--p-grid);
@@ -1773,20 +1790,20 @@
   .mc .mc-side .tree-kids .item {
     font-size: var(--p-text-small);
   }
-  .mc .mc-side .tree-filter {
+  .mc :is(.mc-side, .projects-fly) .tree-filter {
     display: grid;
     grid-template-columns: var(--p-icon, 16px) minmax(0, 1fr);
     column-gap: 10px;
     align-items: center;
     padding: 2px 4px 4px 10px;
   }
-  .mc .mc-side .tree-filter > .ic {
+  .mc :is(.mc-side, .projects-fly) .tree-filter > .ic {
     justify-self: center;
     width: 14px;
     height: 14px;
     color: var(--p-muted);
   }
-  .mc .mc-side .tree-q {
+  .mc :is(.mc-side, .projects-fly) .tree-q {
     width: 100%;
     min-width: 0;
     height: 28px;
@@ -1798,19 +1815,19 @@
     font-size: var(--p-text-ui);
     color: var(--p-ink);
   }
-  .mc .mc-side .tree-q::placeholder {
+  .mc :is(.mc-side, .projects-fly) .tree-q::placeholder {
     color: var(--p-muted);
   }
   /* Esc clears it; the browser's own clear icon is off-palette. */
-  .mc .mc-side .tree-q::-webkit-search-cancel-button {
+  .mc :is(.mc-side, .projects-fly) .tree-q::-webkit-search-cancel-button {
     appearance: none;
   }
-  .mc .mc-side .tree-none {
+  .mc :is(.mc-side, .projects-fly) .tree-none {
     margin: 4px 4px 8px 36px;
     font-size: var(--p-text-small);
     color: var(--p-muted);
   }
-  .mc .mc-side .tree-none:empty {
+  .mc :is(.mc-side, .projects-fly) .tree-none:empty {
     margin: 0;
   }
   .mc .mc-side .tree-closed {
@@ -1878,7 +1895,7 @@
   }
   /* A coarse pointer: 44px targets, and 16px type so a phone does not zoom. */
   @media (pointer: coarse) {
-    .mc .mc-side .tree-q {
+    .mc :is(.mc-side, .projects-fly) .tree-q {
       height: var(--p-touch);
       font-size: 16px;
     }
@@ -2000,6 +2017,217 @@
     .mc .mc-body[data-nav="zones"] .mc-side .item,
     .mc .mc-flyout .item {
       min-height: var(--p-shell-row, 28px);
+    }
+  }
+  /* ─── Sidebar width and rail, ≥1025px (TASK-3957, portal ADR-011 v2 Width;
+     MC ADR-006). <html> carries the person's choice: --mc-side-w, and
+     data-mc-side="rail" when collapsed. The splitter sits on the sidebar's
+     edge; the rail shows an expand button in its place. Out of flow, so the
+     body grid never places them. */
+  .mc .side-resize,
+  .mc .side-expand,
+  .mc .mc-top .side-toggle {
+    display: none;
+  }
+  /* The collapsed rail's Projects button: hidden in every other form, which
+     shows every .item. */
+  .mc .mc-body[data-nav="zones"] .mc-side .tree-row > .item.rail-fly {
+    display: none;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .mc .rail-label {
+    position: fixed;
+    z-index: calc(var(--p-z-drawer) + 1);
+    padding: 3px 8px;
+    background: var(--p-ink);
+    font-size: var(--p-text-small);
+    white-space: nowrap;
+    color: var(--p-paper);
+    pointer-events: none;
+    transform: translateY(-50%);
+  }
+  @media (min-width: 641px) {
+    /* The rail's Projects flyout hangs from its button and scrolls. */
+    .mc .mc-flyout.projects-fly[popover] {
+      inset: var(--fly-top, 8px) auto auto var(--fly-left, 8px);
+      max-height: calc(100dvh - var(--fly-top, 8px) - 8px);
+    }
+    .mc .projects-fly .tree-filter {
+      padding: 0 0 6px;
+    }
+    .mc .projects-fly .item .guide {
+      width: 16px;
+      align-self: stretch;
+      background: linear-gradient(var(--p-grid), var(--p-grid)) center / 1px 100% no-repeat;
+    }
+  }
+  @media (min-width: 1025px) {
+    .mc .mc-top .side-toggle {
+      display: inline-flex;
+    }
+    :root:not([data-mc-side="rail"]) .mc .mc-body[data-nav="zones"] .side-resize {
+      position: fixed;
+      top: var(--p-chrome-h);
+      bottom: 0;
+      left: calc(var(--p-side-w) - 3px);
+      z-index: 21;
+      display: block;
+      width: 6px;
+      cursor: col-resize;
+      touch-action: none;
+    }
+    .mc .side-resize::after {
+      content: "";
+      position: absolute;
+      inset: 0 2px;
+      background: transparent;
+    }
+    .mc .side-resize:is(:hover, .dragging)::after {
+      background: var(--p-accent);
+    }
+    .mc .side-resize:focus-visible {
+      outline: 2px solid var(--p-accent);
+      outline-offset: -2px;
+      background: var(--p-accent-soft);
+    }
+    .mc .side-resize-w {
+      position: absolute;
+      top: 8px;
+      left: 10px;
+      padding: 2px 6px;
+      border: 1px solid var(--p-grid);
+      background: var(--p-paper);
+      font-family: var(--p-font-mono);
+      font-size: var(--p-text-tick);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      color: var(--p-ink-2);
+    }
+    /* Atop the rail, in a slot of its own (the rail's top padding). */
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .side-expand {
+      position: fixed;
+      top: calc(var(--p-chrome-h) + 10px);
+      left: calc((var(--p-side-w) - 24px) / 2);
+      z-index: 21;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: 1px solid var(--p-grid);
+      border-radius: 50%;
+      background: var(--p-paper);
+      color: var(--p-muted);
+      cursor: pointer;
+    }
+    .mc .side-expand .ic {
+      width: 14px;
+      height: 14px;
+    }
+    .mc .side-expand:hover {
+      color: var(--p-ink);
+    }
+    .mc .side-expand:focus-visible {
+      outline: 2px solid var(--p-accent);
+      outline-offset: 2px;
+    }
+
+    /* The rail: the 641–1024px icon rail's form, from 1025px. My work, the
+       stars with their digits, All work, Projects (a flyout), Reporting,
+       Knowledge and the footer, as icons; each names itself on hover and
+       focus (side-resize.tsx). */
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] {
+      --p-side-w: var(--p-shell-rail, 56px);
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side {
+      padding: 44px 0 0;
+      overflow-x: hidden;
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .grp {
+      margin-bottom: 8px;
+      padding: 8px 0 0;
+      border-top: 1px solid var(--p-grid-2);
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .side-head + .grp {
+      padding-top: 0;
+      border-top: 0;
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side :is(.h, .sub, .tree, .item.star-rail) {
+      display: none;
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .grp-body[hidden],
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .star-rows {
+      display: block;
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .item {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      width: var(--p-touch);
+      min-height: 36px;
+      margin: 0 auto;
+      padding: 0;
+      border-left: 0;
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .item[aria-current="page"] {
+      box-shadow: inset 2px 0 0 var(--p-accent);
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .item .nm {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      clip-path: inset(50%);
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side :is(.row-act, .tree-toggle, .star-act),
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .item > :is(.act, .grip, .cnt.tasks) {
+      display: none;
+    }
+    /* Projects opens its flyout here, in place of the Projects row. */
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .item[data-tree-key="screen:projects"] {
+      display: none;
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .tree-row > .item.rail-fly {
+      display: flex;
+      align-items: center;
+    }
+    /* A count is a dot; a star's digit stays, small, in the corner. */
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .item > .cnt:not(.tasks) {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .item > .cnt:not(.tasks, .key) > [aria-hidden] {
+      display: none;
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .item > .cnt:not(.tasks, .key)::before {
+      content: "";
+      display: block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .item > .cnt.key {
+      top: 2px;
+      right: 2px;
+      font-size: var(--p-text-tick);
+      line-height: 1;
+    }
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] .mc-side .side-foot {
+      padding: 8px 0;
+    }
+  }
+  /* The rail is 64px on touch (portal ADR-011, --p-shell-rail-touch). */
+  @media (min-width: 1025px) and (pointer: coarse) {
+    :root[data-mc-side="rail"] .mc .mc-body[data-nav="zones"] {
+      --p-side-w: var(--p-shell-rail-touch, 64px);
     }
   }
   /* The one-screen tour of the new navigation (nav-tour.tsx, TASK-3855), on

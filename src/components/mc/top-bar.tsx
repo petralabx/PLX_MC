@@ -7,11 +7,25 @@
 //           In the zoned shell (TASK-3844) that label is the PLX app switcher,
 //           and the sync pill counts "sync conflicts".
 //           The zoned shell adds the page's star toggle (TASK-3842) at every tier.
+//   ≥1025   zoned: the sidebar's collapse button left of the logo (TASK-3957)
 //   ≥1600   + details-pane toggle on collection screens
 //   ≥2200   + pin the live column
 import type { ReactNode, RefObject } from "react";
 import Image from "next/image";
-import { Building2, Check, ChevronDown, Factory, Moon, PanelRight, Pin, Search, Shield, SquareKanban, Sun } from "lucide-react";
+import {
+  Building2,
+  Check,
+  ChevronDown,
+  Factory,
+  Moon,
+  PanelLeft,
+  PanelRight,
+  Pin,
+  Search,
+  Shield,
+  SquareKanban,
+  Sun,
+} from "lucide-react";
 
 import { useMcVersion, useViewer } from "@/lib/mc-data/hooks";
 import { dataSource, storeSyncCounts } from "@/lib/mc-data/store";
@@ -21,6 +35,7 @@ import { PMark } from "./atoms";
 import { isPlainLeftClick, navHref, screenTitle, starKeyOf } from "./nav-model";
 import { useNavZones } from "./nav-zones";
 import type { Nav, Route } from "./route";
+import { toggleSideRail, useSideLayout } from "./side-width";
 import { StarToggle } from "./star-toggle";
 import { useFlyout } from "./use-flyout";
 import { useStars } from "./use-stars";
@@ -190,9 +205,24 @@ export function Topbar({
   // The page's own star: shown only when its row would show in Starred.
   const starKey = stars.off ? null : starKeyOf(route);
   const starRow = starKey ? stars.rowFor(starKey) : undefined;
+  const { rail } = useSideLayout();
 
   return (
     <header className="mc-top">
+      {zoned ? (
+        // 1025px and wider (CSS): collapses the sidebar to the rail and back, as [ does.
+        <button
+          type="button"
+          className="iconbtn side-toggle"
+          aria-label={rail ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!rail}
+          aria-controls="mc-nav"
+          title={rail ? "Expand sidebar ([)" : "Collapse sidebar ([)"}
+          onClick={toggleSideRail}
+        >
+          <PanelLeft className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+        </button>
+      ) : null}
       <a
         href={navHref({ screen: "home" })}
         className="brand"

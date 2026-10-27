@@ -50,6 +50,8 @@ export function useFlyout(routeKey: string, placement: FlyoutPlacement) {
       if (side) {
         panel.style.setProperty("--fly-left", `${Math.round(side.getBoundingClientRect().right + 8)}px`);
         panel.style.setProperty("--fly-bottom", `${Math.max(8, Math.round(window.innerHeight - row.bottom))}px`);
+        // A long panel (the rail's Projects) hangs from the toggle's top instead.
+        panel.style.setProperty("--fly-top", `${Math.max(8, Math.round(row.top))}px`);
       }
       return true;
     },

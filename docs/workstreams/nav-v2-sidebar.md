@@ -2,8 +2,9 @@
 
 - Slug: `nav-v2-sidebar` (this file is `docs/workstreams/nav-v2-sidebar.md`)
 - Owner: Vince · agents: Claude Code on the web
-- Branches: `claude/nav-v2-sidebar-2` (TASK-3956); `claude/nav-v2-sidebar` (merged, PR 468)
-- MC tasks: TASK-3954, TASK-3955, TASK-3956, TASK-3957, TASK-3958, TASK-3959, TASK-3960, TASK-3961, TASK-3996
+- Branches: `claude/nav-v2-sidebar-3` (TASK-3957); `claude/nav-v2-sidebar-2` (merged, PR 472);
+  `claude/nav-v2-sidebar` (merged, PR 468)
+- MC tasks: TASK-3954, TASK-4010, TASK-3955, TASK-3956, TASK-3957, TASK-3958, TASK-3959, TASK-3960, TASK-3961, TASK-3996
 - SharePoint handoff: n/a
 
 ## Goal
@@ -14,11 +15,12 @@ width, one row grid, figures for counts, and one keyboard tree.
 
 ## Status
 
-active, as of 2026-10-26. The contract (TASK-3954) and the sidebar (TASK-3955, TASK-3996)
-merged. TASK-3956 is built on `claude/nav-v2-sidebar-2`: Starred holds 10 screens, reports,
-projects and initiatives (migration 053), each with its kind's icon and g digit, a star on every
-sidebar row, Shift S, moving by Alt ↑ ↓ or the grip, closed, archived and deleted marks, and
-Star this page and Edit starred in ⌘K. The migration needs a signed MC merge approval.
+active, as of 2026-10-27. The contract (TASK-3954), the sidebar (TASK-3955, TASK-3996) and
+Starred (TASK-3956) merged; DB Migrate on UAT must run 053 before the live release. TASK-4010
+revises the contract (232px, no task stars, off-track colour) in portal PR 3050. TASK-3957 is
+built on `claude/nav-v2-sidebar-3`: the splitter (drag, keys, double-click), collapse to the rail
+(Enter, `[`, the top bar's button), the rail's stars with digits, Projects flyout and labels, the
+560px page floor, and the width painted before first paint (MC ADR-006).
 
 ## Done
 
@@ -26,12 +28,13 @@ Star this page and Edit starred in ⌘K. The migration needs a signed MC merge a
   ([portal PR 3027](https://github.com/petralabx/plx-customer-portal/pull/3027), merged 2026-10-26).
 - TASK-3955 and TASK-3996: the v2 sidebar, and Projects opens the project Dashboard
   ([PLX_MC PR 468](https://github.com/petralabx/PLX_MC/pull/468), merged 2026-10-26).
+- TASK-3956: Starred holds 10, g 1 to g 0, row stars, Shift S, moves, migration 053
+  ([PLX_MC PR 472](https://github.com/petralabx/PLX_MC/pull/472), merged 2026-10-26).
 
 ## Next steps
 
-1. Land TASK-3956's PR after its signed MC merge approval; then DB Migrate on UAT runs 053.
-2. TASK-3957: amend portal ADR-011 first (Width, the size table, and Starred 2: no tasks), then
-   the width, 232 to 400px, snap to the rail, `[` to collapse.
+1. Run DB Migrate on UAT for 053 (TASK-3956), then the live release.
+2. Land TASK-4010 (portal PR 3050), then TASK-3957's PR.
 3. TASK-3958: the `?` shortcuts sheet with its single-key off switch, and the page path.
 4. TASK-3959 and TASK-3960: the portal's tokens (`--p-shell-sidebar-min: 232px`) and the MRP
    sidebar on the same grid.
@@ -56,6 +59,13 @@ Star this page and Edit starred in ⌘K. The migration needs a signed MC merge a
 - 2026-10-26 The narrowest width is 232px, not 200px, so a label keeps about 92px; 400px
   widest, 248px by default, snap to the rail below 160px. Why: at 200px most project names
   truncate to a few letters. Decided by: Claude (Vince deferred to Claude).
+- 2026-10-27 Mission Control paints the width before first paint with a `<head>` script, not a
+  cookie the server reads (MC ADR-006). Why: `/` is a static page; a cookie would make every
+  visit render on the server to fix one CSS width. MRP keeps the cookie. Decided by: Claude
+  (TASK-3957).
+- 2026-10-27 The splitter is a tab stop of its own, after the sidebar and before the page.
+  Why: ADR-011 Width 4 makes it a focusable window splitter, and that is where it sits.
+  Decided by: Claude (TASK-3957).
 - 2026-10-26 A deleted record's star shows as deleted, with Remove, only once the data is live;
   until then it does not show. Why: seed or cached records would make real ones look deleted.
   Decided by: Claude (TASK-3956).
@@ -68,20 +78,21 @@ Star this page and Edit starred in ⌘K. The migration needs a signed MC merge a
 
 - `src/components/mc/chrome.tsx`, `nav-model.ts`, `count-badge.tsx`, `use-layer.ts`,
   `shell.tsx`, `work-views.tsx`, `filter-bar.tsx`, `projects-view.tsx`, `use-stars.ts`,
-  `star-toggle.tsx`, `command-palette.tsx`, `more-sheet.tsx`
+  `star-toggle.tsx`, `command-palette.tsx`, `more-sheet.tsx`, `top-bar.tsx`, `use-flyout.ts`,
+  `side-boot.ts`, `side-width.ts`, `side-resize.tsx`; `src/app/layout.tsx` (the boot script)
 - `src/lib/mc-data/store.ts` (`closedNavProjects`); `src/lib/stars/`, `src/app/api/stars/route.ts`
 - `db/migrations/053_nav_stars_cap_10.sql`, `db/rollback/053_nav_stars_cap_10_rollback.sql`
 - `src/styles/mc-shell.css` (the zoned sidebar section)
 - `tests/mc-nav-model.test.ts`, `tests/mc-sidebar.test.ts`, `tests/mc-stars.test.ts`,
-  `tests/stars-routes.test.ts`, `tests/stars-postgres.test.ts`, `e2e/ui-shell-responsive.spec.ts`,
-  `e2e/stars.spec.ts`
+  `tests/stars-routes.test.ts`, `tests/stars-postgres.test.ts`, `tests/mc-side-width.test.ts`,
+  `e2e/ui-shell-responsive.spec.ts`, `e2e/stars.spec.ts`, `e2e/side-width.spec.ts`
 
 ## How to run the tests
 
 ```bash
 npm run typecheck && npm run lint
-npx vitest run tests/mc-nav-model.test.ts tests/mc-sidebar.test.ts tests/mc-stars.test.ts tests/stars-routes.test.ts
-npx playwright test e2e/ui-shell-responsive.spec.ts e2e/stars.spec.ts --project=chromium
+npx vitest run tests/mc-nav-model.test.ts tests/mc-sidebar.test.ts tests/mc-stars.test.ts tests/stars-routes.test.ts tests/mc-side-width.test.ts
+npx playwright test e2e/ui-shell-responsive.spec.ts e2e/stars.spec.ts e2e/side-width.spec.ts --project=chromium
 ```
 
 ## Blockers or dependencies on other workstreams
@@ -91,4 +102,4 @@ npx playwright test e2e/ui-shell-responsive.spec.ts e2e/stars.spec.ts --project=
 
 ## Last updated
 
-2026-10-26 by Claude Code (TASK-3956).
+2026-10-27 by Claude Code (TASK-3957).

@@ -479,3 +479,11 @@ describe("permissionActorFromDirectoryRole", () => {
       .toMatchObject({ allowed: false, reasonCode: "unknown_actor" });
   });
 });
+
+describe("TASK-4015 sp_mcp_vince personal principal", () => {
+  it("is registered and holds exactly sp_mcp_claude_code's grant", () => {
+    expect(MCP_AGENT_SERVICE_PRINCIPAL_IDS).toContain("sp_mcp_vince");
+    expect([...capabilitiesForServicePrincipal("sp_mcp_vince")].sort())
+      .toEqual([...capabilitiesForServicePrincipal("sp_mcp_claude_code")].sort());
+  });
+});

@@ -125,6 +125,7 @@ MCP_PRINCIPAL_IDS = {
     "sp_mcp_infra",
     "sp_mcp_cip_auto_undraft",
     "sp_mcp_workbench_intake",
+    "sp_mcp_vince",
 }
 
 

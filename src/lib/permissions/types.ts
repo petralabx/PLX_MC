@@ -179,6 +179,9 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
   "sp_mcp_infra",
   "sp_mcp_cip_auto_undraft",
   "sp_mcp_workbench_intake",
+  // TASK-4015: Vince's personal principal (his Claude and Cursor). Same
+  // grant as sp_mcp_claude_code (the default MCP_AGENT_CAPABILITIES bundle).
+  "sp_mcp_vince",
 ] as const;
 
 /**

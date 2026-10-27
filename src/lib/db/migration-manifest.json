@@ -50,5 +50,6 @@
   "049_nav_stars.sql",
   "050_nav_prefs.sql",
   "051_reporting_goals_credit_notes.sql",
-  "053_nav_stars_cap_10.sql"
+  "053_nav_stars_cap_10.sql",
+  "055_vince_personal_mcp_principal.sql"
 ]

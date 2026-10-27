@@ -361,7 +361,10 @@ assignee.
 The BKT-UAT initiative page (`/?screen=bucket&bucketId=BKT-UAT`) shows one row
 per UAT ticket task (`kind:code` plus `uat:<feedbackId>`): portal step, attempt,
 stage, lease, PR, staging, holder, age, and a link to the portal ticket
-(`https://staging.plxcustomer.io/uat?ticket=<feedbackId>`). Filters: All, Needs
+(`<portal>/uat?ticket=<feedbackId>`). `<portal>` is `PLX_MC_PORTAL_BASE_URL`,
+default `https://staging.plxcustomer.io`: the same host the portal read calls.
+The report carries it as `portalOrigin`, so links and the read change together
+(TASK-3975). The top bar's app links stay on the staging default. Filters: All, Needs
 a human (the bucket table's rule), In flight, Waiting on submitter (`uat:hold`,
 or merged and awaiting re-test) and Verified. No row cap.
 

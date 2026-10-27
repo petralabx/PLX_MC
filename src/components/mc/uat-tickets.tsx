@@ -100,12 +100,12 @@ export function fixLabel(fix: UatDriftFix): string {
 }
 
 /** Run one fix through the store's normal task writes; a refused write leaves a notice. */
-export async function runUatFix(fix: UatDriftFix): Promise<void> {
+export async function runUatFix(fix: UatDriftFix, portalOrigin?: string): Promise<void> {
   if (fix.kind === "cancel") {
     await cancelTaskWithReason(fix.taskId, { reason: fix.reason, replacedBy: fix.replacedBy ?? null, note: fix.note });
   } else if (fix.kind === "create") {
     try {
-      await api<Task>("/tasks", { method: "POST", body: JSON.stringify(ticketTaskDraft(fix)) });
+      await api<Task>("/tasks", { method: "POST", body: JSON.stringify(ticketTaskDraft(fix, portalOrigin)) });
       await refreshState();
     } catch (err) {
       pushNotice(`Couldn't create the task for ticket ${ticketShortCode(fix.feedbackId)}. ${err instanceof Error ? err.message : ""}`);
@@ -176,7 +176,7 @@ export function UatTickets({ tasks, nav }: { tasks: Task[]; nav: Nav }) {
   const fix = async (finding: UatDriftFinding) => {
     if (!finding.fix || busy) return;
     setBusy(true);
-    await runUatFix(finding.fix);
+    await runUatFix(finding.fix, view.report?.portalOrigin);
     setLoads((n) => n + 1);
   };
   return (
@@ -248,7 +248,7 @@ export function UatTicketsPanel({
             ))}
           </div>
           {shown.map((row) => (
-            <UatTicketRow key={row.task.id} row={row} facts={report?.facts[row.task.id]} now={now} nav={nav} />
+            <UatTicketRow key={row.task.id} row={row} facts={report?.facts[row.task.id]} origin={report?.portalOrigin} now={now} nav={nav} />
           ))}
         </div>
         {shown.length === 0 && (
@@ -259,7 +259,19 @@ export function UatTicketsPanel({
   );
 }
 
-function UatTicketRow({ row, facts, now, nav }: { row: UatRow; facts: UatTaskFacts | undefined; now: number; nav: Nav }) {
+function UatTicketRow({
+  row,
+  facts,
+  origin,
+  now,
+  nav,
+}: {
+  row: UatRow;
+  facts: UatTaskFacts | undefined;
+  origin: string | undefined;
+  now: number;
+  nav: Nav;
+}) {
   const { task, group, feedbackId, ticket } = row;
   const lease = facts?.lease ?? null;
   const note = stageNote(task);
@@ -274,7 +286,7 @@ function UatTicketRow({ row, facts, now, nav }: { row: UatRow; facts: UatTaskFac
       </span>
       <span role="cell" className="uat-ticket">
         <span className="ttl">{task.title}</span>
-        <a href={portalTicketUrl(feedbackId)} target="_blank" rel="noopener noreferrer" className="uat-portal-link">
+        <a href={portalTicketUrl(feedbackId, origin)} target="_blank" rel="noopener noreferrer" className="uat-portal-link">
           {ticketShortCode(feedbackId)} · Open in portal
           <ArrowUpRight size={10} aria-hidden="true" />
         </a>

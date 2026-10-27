@@ -224,7 +224,7 @@ export async function verify(opts = {}) {
       pass(`${taskId} evidence complete (summary + rollback), stage=${stage}`);
     } else {
       fail(
-        `${taskId} evidence incomplete (summary=${Boolean(summary)} rollback=${Boolean(rollback)}) — run mc_complete_task`
+        `${taskId} evidence incomplete (summary=${Boolean(summary)} rollback=${Boolean(rollback)}) — run mc_save_evidence (or mc_complete_task after merge)`
       );
     }
   }

@@ -20,6 +20,8 @@ import {
   actionListBuckets,
   actionProgress,
   progressSchemaShape,
+  actionSaveEvidence,
+  saveEvidenceInputShape,
   actionSearchTasks,
   actionSelfCheck,
 } from "./actions";
@@ -372,9 +374,16 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_complete_task",
-    "Mark agent work complete for a checkout credential. verificationCommands and rollback are required. When a person must verify the work (verify:human, kind:human-test, or a high-risk filesChanged), the summary must be STE-lite; pass filesChanged. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard; fix the summary and call again on the same checkout.",
+    "Mark agent work complete for a checkout credential. verificationCommands and rollback are required. Evidence saved earlier with mc_save_evidence is kept where this call sends nothing: testRun, shots and uploaded artifacts; the fields this call sends win. When a person must verify the work (verify:human, kind:human-test, or a high-risk filesChanged), the summary must be STE-lite; pass filesChanged. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard; fix the summary and call again on the same checkout.",
     completeTaskInputShape,
     async (body) => jsonResult(await actionComplete(identity, body))
+  );
+
+  server.tool(
+    "mc_save_evidence",
+    "Save summary, verificationCommands and rollback on a checked-out task before merge without completing it. Never changes stage. Compliance reads the saved evidence. Needs your own live checkout. Optional testRun and shots; fields you omit keep their saved values. The summary follows the mc_complete_task evidence standard; pass filesChanged.",
+    saveEvidenceInputShape,
+    async (body) => jsonResult(await actionSaveEvidence(identity, body))
   );
 
   server.tool(

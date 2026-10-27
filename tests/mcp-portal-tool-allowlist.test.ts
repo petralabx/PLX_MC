@@ -209,6 +209,12 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
     verificationCommands: ["npm test"],
     rollback: "revert",
   },
+  mc_save_evidence: {
+    checkoutId: "dsp_x",
+    summary: "done",
+    verificationCommands: ["npm test"],
+    rollback: "revert",
+  },
   mc_upload_evidence: {
     checkoutId: "dsp_x",
     kind: "diagram",

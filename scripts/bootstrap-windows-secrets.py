@@ -151,6 +151,7 @@ MCP_PRINCIPAL_IDS = {
     "sp_mcp_lane_cursor_cos",
     "sp_mcp_lane_cursor_uat",
     "sp_mcp_lane_cursor_vince",
+    "sp_mcp_vince",
 }
 
 

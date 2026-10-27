@@ -63,6 +63,7 @@ DEDICATED_PRINCIPAL_IDS = (
     "sp_mcp_lane_cursor_cos",
     "sp_mcp_lane_cursor_uat",
     "sp_mcp_lane_cursor_vince",
+    "sp_mcp_vince",
 )
 IDENTITY_LABELS = {
     CLAUDE_PRINCIPAL_ID: "claude",
@@ -105,6 +106,7 @@ IDENTITY_LABELS = {
     "sp_mcp_lane_cursor_cos": "lane-cursor-cos",
     "sp_mcp_lane_cursor_uat": "lane-cursor-uat",
     "sp_mcp_lane_cursor_vince": "lane-cursor-vince",
+    "sp_mcp_vince": "vince",
 }
 # The MCP tool allowlist denies mc_self_check to these principals (decision
 # CG-07b). The sync verifies them through the task search they may call:

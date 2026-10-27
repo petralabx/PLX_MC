@@ -3,7 +3,10 @@
 // version refuses it; Accept creates the project, buckets and tasks through the
 // create functions, in dependency order, with the frozen version's link as their
 // PRD; a failed Accept resumes without creating anything twice, adopts a record
-// a crashed Accept made, and a running Accept refuses a second one.
+// a crashed Accept made, and a running Accept refuses a second one. An unfinished
+// Accept pins the content, a blocking finding raised mid-Accept refuses the
+// claim, a retry re-checks the author's access to the project, and two buckets
+// with the same name stay two buckets.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +14,7 @@ vi.mock("@/lib/compliance/repo", () => ({ appendEvent: vi.fn(async () => "1") })
 
 import { HUMANS } from "@/lib/mc-data/data";
 import type { Bucket, Project, Repo, Task } from "@/lib/mc-data/types";
-import { acceptDraft, draftLink, type AcceptDeps } from "@/lib/drafts/accept";
+import { acceptDraft, draftBucketLink, draftLink, type AcceptDeps } from "@/lib/drafts/accept";
 import { completenessIssues, preflightIssues } from "@/lib/drafts/preflight";
 import { draftPlanSchema, draftResearchSchema } from "@/lib/drafts/schema";
 import { closeFinding, createDraft, reviewDraft, saveDraft, submitDraft, type DraftActor } from "@/lib/drafts/service";
@@ -30,22 +33,30 @@ interface Calls {
 function deps(calls: Calls, overrides: Partial<AcceptDeps> = {}): AcceptDeps {
   let bucketSeq = 0;
   let taskSeq = 100;
+  // What the create functions made, as the live reads then see it.
+  const madeProjects: Project[] = [];
+  const madeBuckets: Bucket[] = [];
   return {
     registry: async () => ({ "plx-mc": { id: "plx-mc", name: "PLX_MC" } as Repo }),
     projects: async () => [OPEN],
     buckets: async () => [],
     openTasks: async () => [],
     humans: () => Object.values(HUMANS),
-    liveProjects: async () => [OPEN],
-    liveBuckets: async () => [],
+    liveProjects: async () => [OPEN, ...madeProjects],
+    liveBuckets: async () => [...madeBuckets],
     createProject: vi.fn(async (input) => {
       calls.projects.push(input as never);
-      return { ...OPEN, id: "PRJ-NEW", name: input.name, prd: input.prd ?? null } as Project;
+      const project = { ...OPEN, id: "PRJ-NEW", name: input.name, prd: input.prd ?? null, visibility: input.visibility, members: input.members } as Project;
+      madeProjects.push(project);
+      return project;
     }),
     createBucket: vi.fn(async (input) => {
       calls.buckets.push(input as never);
       bucketSeq += 1;
-      return { id: `BKT-${bucketSeq}`, name: input.name, project: input.project, prd: input.prd } as Bucket;
+      // createBucket stores the PRD link normalized.
+      const bucket = { id: `BKT-${bucketSeq}`, name: input.name, project: input.project, prd: input.prd ? new URL(input.prd).href : null } as Bucket;
+      madeBuckets.push(bucket);
+      return bucket;
     }),
     createTask: vi.fn(async (input, _attr, options) => {
       calls.tasks.push(input as never);
@@ -112,6 +123,21 @@ describe("guards", () => {
     await expect(acceptDraft(vince, draft.id, 1, deps(calls))).resolves.toMatchObject({ alreadyAccepted: false });
   });
 
+  it("re-checks blocking findings under the claim: one raised during the Accept's checks refuses", async () => {
+    const draft = await inReview();
+    const calls: Calls = { projects: [], buckets: [], tasks: [] };
+    const racing = deps(calls, {
+      // A reviewer commits a blocking finding after Accept read the draft, before it claims.
+      registry: async () => {
+        await reviewDraft(person("stephen@petrasoap.com"), draft.id, { kind: "finding", version: 1, body: "Raised mid-Accept.", blocking: true });
+        return { "plx-mc": { id: "plx-mc", name: "PLX_MC" } as Repo };
+      },
+    });
+    await expect(acceptDraft(vince, draft.id, 1, racing)).rejects.toMatchObject({ code: "blocking_findings", status: 409 });
+    expect(calls).toEqual({ projects: [], buckets: [], tasks: [] });
+    expect(await getDraft(draft.id)).toMatchObject({ status: "in_review", acceptedAt: null, materialized: {} });
+  });
+
   it("refuses a version the author did not read, and unsubmitted edits", async () => {
     const draft = await inReview();
     const calls: Calls = { projects: [], buckets: [], tasks: [] };
@@ -157,9 +183,10 @@ describe("what Accept creates", () => {
     expect(result.created).toEqual({ P: "PRJ-NEW", B1: "BKT-1", B2: "BKT-2", T1: "TASK-101", T2: "TASK-102" });
     expect(calls.projects).toEqual([expect.objectContaining({ name: "Draft Projects", owner: "vince", prd: link, visibility: "shared" })]);
     expect(calls.buckets).toEqual([
-      expect.objectContaining({ name: "Storage", owner: "vince", prd: link, project: "PRJ-NEW" }),
-      expect.objectContaining({ name: "Screen", owner: "stephen", prd: link, project: "PRJ-NEW" }),
+      expect.objectContaining({ name: "Storage", owner: "vince", prd: draftBucketLink(draft.id, 1, "B1"), project: "PRJ-NEW" }),
+      expect.objectContaining({ name: "Screen", owner: "stephen", prd: draftBucketLink(draft.id, 1, "B2"), project: "PRJ-NEW" }),
     ]);
+    expect(draftBucketLink(draft.id, 1, "B1")).toBe(`${link}#B1`);
     // T1 first: T2 depends on it.
     expect(calls.tasks.map((t) => t.title)).toEqual(["Drafts tables", "Drafts screen"]);
     expect(calls.tasks[0]).toMatchObject({ bucket: "BKT-1", priority: "high", kind: "code", reporter: "vince@petrasoap.com", accountableOwner: "vince", labels: [`draft:${draft.id}`] });
@@ -188,6 +215,22 @@ describe("what Accept creates", () => {
     await acceptDraft(vince, secret.id, 1, deps(secretCalls));
     expect(secretCalls.projects[0]).toMatchObject({ visibility: "restricted", members: ["stephen@petrasoap.com", "vince@petrasoap.com"] });
   });
+
+  it("keeps two buckets with the same name apart, each with its own owner and tasks", async () => {
+    const twins = draftPlanSchema.parse({
+      ...plan,
+      buckets: [
+        { key: "B1", name: "Storage", owner: "vince" },
+        { key: "B2", name: "Storage", owner: "stephen@petrasoap.com" },
+      ],
+    }) as DraftPlan;
+    const draft = await inReview({ plan: twins });
+    const calls: Calls = { projects: [], buckets: [], tasks: [] };
+    const result = await acceptDraft(vince, draft.id, 1, deps(calls));
+    expect(result.created).toMatchObject({ B1: "BKT-1", B2: "BKT-2" });
+    expect(calls.buckets.map((b) => b.owner)).toEqual(["vince", "stephen"]);
+    expect(calls.tasks.find((t) => t.title === "Drafts screen")).toMatchObject({ bucket: "BKT-2" });
+  });
 });
 
 describe("resume", () => {
@@ -214,13 +257,71 @@ describe("resume", () => {
     expect(calls.tasks.filter((t) => t.title === "Drafts tables")).toHaveLength(1);
   });
 
+  it("pins the content of an unfinished Accept: no edit until it finishes, and the retry finishes that version", async () => {
+    const draft = await inReview();
+    const calls: Calls = { projects: [], buckets: [], tasks: [] };
+    const flaky = deps(calls);
+    const real = flaky.createTask;
+    let fail = true;
+    flaky.createTask = vi.fn(async (input, attr, options) => {
+      if (input.title === "Drafts screen" && fail) {
+        fail = false;
+        throw new Error("database went away");
+      }
+      return real(input, attr, options);
+    }) as AcceptDeps["createTask"];
+    await expect(acceptDraft(vince, draft.id, 1, flaky)).rejects.toThrow("database went away");
+    // A version 2 would pair version 1's records with content they do not hold.
+    await expect(saveDraft(agent, draft.id, { title: "Version 2" })).rejects.toMatchObject({ code: "accept_unfinished", status: 409 });
+    await expect(submitDraft(agent, draft.id, deps(calls))).resolves.toMatchObject({ frozen: false });
+    // Reviews still land on the version being accepted.
+    await reviewDraft(person("stephen@petrasoap.com"), draft.id, { kind: "comment", version: 1, body: "Looks right." });
+    expect(await getDraft(draft.id)).toMatchObject({ status: "in_review", version: 1, working: { title: "Draft Projects" } });
+    await expect(acceptDraft(vince, draft.id, 1, flaky)).resolves.toMatchObject({ alreadyAccepted: false });
+    expect(calls.tasks.map((t) => t.title)).toEqual(["Drafts tables", "Drafts screen"]);
+  });
+
+  it("re-checks the author's access to a project it did not create in this run", async () => {
+    // A recorded project: the owner drops the author from it between a failed Accept and the retry.
+    const secret = await inReview({ visibility: "restricted", members: ["stephen@petrasoap.com"] });
+    const calls: Calls = { projects: [], buckets: [], tasks: [] };
+    const flaky = deps(calls);
+    const real = flaky.createBucket;
+    let fail = true;
+    flaky.createBucket = vi.fn(async (input, by) => {
+      if (fail) {
+        fail = false;
+        throw new Error("database went away");
+      }
+      return real(input, by);
+    }) as AcceptDeps["createBucket"];
+    await expect(acceptDraft(vince, secret.id, 1, flaky)).rejects.toThrow("database went away");
+    expect((await getDraft(secret.id))?.materialized).toEqual({ P: "PRJ-NEW" });
+    const dropped: AcceptDeps = {
+      ...flaky,
+      liveProjects: async () => [OPEN, { ...OPEN, id: "PRJ-NEW", visibility: "restricted", members: ["stephen@petrasoap.com"] }],
+    };
+    await expect(acceptDraft(vince, secret.id, 1, dropped)).rejects.toMatchObject({ code: "unknown_project", status: 404 });
+    expect(calls.buckets).toEqual([]);
+    expect(await getDraft(secret.id)).toMatchObject({ status: "in_review", acceptedAt: null });
+
+    // An adopted project, found by its PRD link, that the author cannot see.
+    const other = await inReview();
+    const otherCalls: Calls = { projects: [], buckets: [], tasks: [] };
+    const notMine = deps(otherCalls, {
+      liveProjects: async () => [OPEN, { ...OPEN, id: "PRJ-MADE", prd: draftLink(other.id, 1), visibility: "restricted", members: ["stephen@petrasoap.com"] }],
+    });
+    await expect(acceptDraft(vince, other.id, 1, notMine)).rejects.toMatchObject({ code: "unknown_project", status: 404 });
+    expect(otherCalls).toEqual({ projects: [], buckets: [], tasks: [] });
+  });
+
   it("adopts a project and bucket a crashed Accept made, found by their PRD link", async () => {
     const draft = await inReview();
     const link = draftLink(draft.id, 1);
     const calls: Calls = { projects: [], buckets: [], tasks: [] };
     const crashed = deps(calls, {
       liveProjects: async () => [OPEN, { ...OPEN, id: "PRJ-MADE", prd: link }],
-      liveBuckets: async () => [{ id: "BKT-MADE", name: "Storage", project: "PRJ-MADE", prd: new URL(link).href } as Bucket],
+      liveBuckets: async () => [{ id: "BKT-MADE", name: "Storage", project: "PRJ-MADE", prd: new URL(draftBucketLink(draft.id, 1, "B1")).href } as Bucket],
     });
     const result = await acceptDraft(vince, draft.id, 1, crashed);
     expect(result.created).toMatchObject({ P: "PRJ-MADE", B1: "BKT-MADE" });

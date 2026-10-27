@@ -141,12 +141,14 @@ Accept creates the plan in order: the project (unless it exists), then the bucke
 Those calls do not share one transaction. Accept writes each new id into `materialized` before the next create starts, and a retry skips every key that already has an id. Step 3 closes the gap between a create and its record this way:
 
 - A task's id is written inside the transaction that creates it (`createTask`'s `options.inTransaction`), so a task never exists without its record.
-- The project and each bucket carry the frozen version's link as their PRD link. A retry finds a record that a crashed Accept made by that link, and adopts it instead of creating a second one.
-- Accept takes a claim on the draft first (`accepted_at`, while it is still `in_review`). The claim refuses a second Accept, and every edit and review, while one runs. A failed Accept clears its claim. A crashed one goes stale after 10 minutes, and the next Accept takes over.
+- The project carries the frozen version's link as its PRD link. Each bucket carries that link plus its draft key (`#B1`), so two buckets with the same name stay apart. A retry finds a record that a crashed Accept made by that link, and adopts it instead of creating a second one.
+- Accept takes a claim on the draft first (`accepted_at`, while it is still `in_review`). The claim checks again for an open blocking finding. The claim refuses a second Accept, and every edit and review, while one runs. A failed Accept clears its claim. A crashed one goes stale after 10 minutes, and the next Accept takes over.
+- Once Accept has created a record, the draft's content cannot change (409 `accept_unfinished`). A retry then always finishes the version it started. Reviews still land, and the author can withdraw the draft.
+- On a retry, Accept checks the author's access to the project again before it creates anything in it. An author removed from a restricted project cannot continue.
 
 On the created records:
 
-- The project's and each bucket's `prd` is the frozen version's link, `https://mc.plxcustomer.io/?screen=drafts&draftId=DRF-n&version=N`. `src/lib/compliance/bucket-prd.ts` counts any http(s) link, so tasks in those buckets pass the PRD check.
+- The project's `prd` is the frozen version's link, `https://mc.plxcustomer.io/?screen=drafts&draftId=DRF-n&version=N`. Each bucket's `prd` adds its draft key, for example `…&version=N#B1`. `src/lib/compliance/bucket-prd.ts` counts any http(s) link, so tasks in those buckets pass the PRD check.
 - Each task carries the label `draft:DRF-n`, and its description links the draft.
 - A task's accountable owner comes from the plan. With none set, it is the author.
 - A new project takes the draft's visibility and members.

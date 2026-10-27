@@ -8,8 +8,11 @@
 // - Each task's id is written to drafts.materialized inside the transaction
 //   that creates the task (createTask's inTransaction), so a task never exists
 //   without its record.
-// - A project or bucket carries the frozen version's link as its PRD link. A
-//   retry finds one Accept already made by that link and adopts it.
+// - A project carries the frozen version's link as its PRD link, and a bucket
+//   that link plus `#<bucket key>`. A retry finds one Accept already made by
+//   that link and adopts it.
+// - Once Accept has created a record, the draft's content cannot change
+//   (accept_unfinished), so a retry always finishes the version it started.
 // - A claim (accepted_at set while the draft is still in_review) refuses a
 //   second Accept, and every edit and review, while one runs. A failed Accept
 //   clears its claim; a crashed one goes stale after ACCEPT_CLAIM_STALE_MS.
@@ -19,6 +22,7 @@ import { appendEvent } from "@/lib/compliance/repo";
 import { HUMANS } from "@/lib/mc-data/data";
 import type { Bucket, Project, Task } from "@/lib/mc-data/types";
 import { publicMcBaseUrl } from "@/lib/mcp/envelope";
+import { canAccessProject } from "@/lib/permissions/project-acl";
 import { databaseConfigured } from "@/lib/secrets";
 import { createBucket, createProject, createTask } from "@/lib/sync";
 import { getBuckets, getProjects } from "@/lib/sync/repo";
@@ -32,6 +36,11 @@ import { acceptInProgress, openBlockingFindings, type Draft, type DraftContent }
 /** The frozen version's permanent link: the project's and buckets' PRD link. */
 export function draftLink(id: string, version: number): string {
   return `${publicMcBaseUrl()}/?screen=drafts&draftId=${encodeURIComponent(id)}&version=${version}`;
+}
+
+/** A bucket's PRD link: the version's link plus its draft key, so two buckets never share one. */
+export function draftBucketLink(id: string, version: number, key: string): string {
+  return `${draftLink(id, version)}#${key}`;
 }
 
 export interface AcceptDeps extends DraftDeps {
@@ -121,6 +130,11 @@ export async function acceptDraft(actor: DraftActor, id: string, version: number
     if (acceptInProgress(draft)) {
       throw new ApiError("accept_in_progress", `An Accept of ${id} started at ${draft.acceptedAt} is still running.`, 409);
     }
+    // Again under the lock: a reviewer may have raised a blocking finding since the read.
+    const blockingNow = openBlockingFindings(draft);
+    if (blockingNow.length > 0) {
+      throw new ApiError("blocking_findings", `${id} has ${blockingNow.length} open blocking finding(s): ${blockingNow.map((f) => f.id).join(", ")}.`, 409);
+    }
     return { draft: { ...draft, acceptedAt: claimedAt, acceptedBy: actor.email } };
   });
   if (!claimed) throw new ApiError("not_found", `Unknown draft ${id}.`, 404);
@@ -131,11 +145,13 @@ export async function acceptDraft(actor: DraftActor, id: string, version: number
   try {
     // The project.
     const plan = content.plan;
+    let createdProject = false;
     if (!done.P) {
       if (plan.project.existing) {
         done.P = plan.project.existing;
       } else {
         const adopted = (await deps.liveProjects()).find((p) => p.prd === link);
+        createdProject = !adopted;
         done.P =
           adopted?.id ??
           (
@@ -155,15 +171,25 @@ export async function acceptDraft(actor: DraftActor, id: string, version: number
       }
       await record(id, "P", done.P);
     }
+    // A project this run did not create (recorded, adopted or existing) may have
+    // dropped the author since; the create functions do not check the caller.
+    if (!createdProject) {
+      const project = (await deps.liveProjects()).find((p) => p.id === done.P);
+      if (!project || !canAccessProject(project, actor.acl)) {
+        throw new ApiError("unknown_project", `Project ${done.P} does not exist.`, 404);
+      }
+    }
 
     // The buckets, in plan order.
     for (const b of plan.buckets) {
       if (done[b.key]) continue;
       // createBucket stores the PRD link as new URL(link).href; match that form.
-      const adopted = (await deps.liveBuckets()).find((x) => x.prd === new URL(link).href && x.name === b.name.trim() && x.project === done.P);
+      const bucketLink = draftBucketLink(id, version, b.key);
+      const adopted = (await deps.liveBuckets()).find((x) => x.prd === new URL(bucketLink).href && x.project === done.P);
       done[b.key] =
         adopted?.id ??
-        (await deps.createBucket({ name: b.name.trim(), owner: ownerId(b.owner), desc: b.desc, repos: b.repos, prd: link, project: done.P }, actor.email)).id;
+        (await deps.createBucket({ name: b.name.trim(), owner: ownerId(b.owner), desc: b.desc, repos: b.repos, prd: bucketLink, project: done.P }, actor.email))
+          .id;
       await record(id, b.key, done[b.key]);
     }
 

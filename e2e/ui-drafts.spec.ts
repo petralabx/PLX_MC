@@ -1,8 +1,9 @@
 // Drafts screen (Draft Projects step 3, TASK-4071): the list, a draft's record
 // (plan, research, reviews, versions) and Accept, against mocked /api/drafts
 // routes. Accept states what it creates before it sends anything, and sends the
-// version the author read. Approvals lists the drafts waiting for the viewer's
-// review. Axe and horizontal overflow run at desktop, tablet and phone widths.
+// version the author read. An older version is read-only. Approvals lists the
+// drafts waiting for the viewer's review. Axe and horizontal overflow run at
+// desktop, tablet and phone widths.
 
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
@@ -122,6 +123,15 @@ function detail(viewer: Record<string, unknown> = {}) {
   };
 }
 
+const VERSION_1 = {
+  draftId: "DRF-7",
+  version: 1,
+  digest: DIGEST_1,
+  content: { ...WORKING, title: "Draft Projects rollout, first plan" },
+  frozenBy: "vince@petrasoap.com",
+  frozenAt: "2026-10-27T09:30:00.000Z",
+};
+
 const ROW = {
   id: "DRF-7",
   title: "Draft Projects rollout",
@@ -150,7 +160,10 @@ async function mockDraftsApi(page: Page, viewer: Record<string, unknown> = {}): 
       return route.fulfill(json({ created: { P: "PRJ-90", B1: "BKT-91", B2: "BKT-92", T1: "TASK-93", T2: "TASK-94" }, alreadyAccepted: false }));
     }
     if (request.method() !== "GET") return route.fulfill({ status: 405, body: "Method Not Allowed" });
-    if (/\/api\/drafts\/DRF-7$/.test(url.pathname)) return route.fulfill(json(detail(viewer)));
+    if (/\/api\/drafts\/DRF-7$/.test(url.pathname)) {
+      const old = url.searchParams.get("version") === "1";
+      return route.fulfill(json({ ...detail(viewer), ...(old ? { version: VERSION_1 } : {}) }));
+    }
     return route.fulfill(json({ drafts: [ROW], count: 1, viewer: "vince@petrasoap.com" }));
   });
   return mock;
@@ -197,6 +210,21 @@ test.describe("Drafts screen (Draft Projects)", () => {
     expect(mock.accepts).toEqual([]);
     await confirm.getByRole("button", { name: /^Accept: creates 1 project/ }).click();
     await expect.poll(() => mock.accepts).toEqual([{ version: 2 }]);
+  });
+
+  test("an older version is read-only: no review form, no finding actions and no Accept", async ({ page }) => {
+    await mockDraftsApi(page);
+    await openDrafts(page, "&draftId=DRF-7&version=1");
+    await expect(page.getByRole("heading", { name: "Draft Projects rollout, first plan" })).toBeVisible();
+    await expect(page.getByText("You are reading version 1. The current version is 2.")).toBeVisible();
+    const reviews = page.getByRole("region", { name: "Reviews" });
+    await expect(reviews.getByText("To review, read the current version.")).toBeVisible();
+    await expect(reviews.getByRole("textbox", { name: "Review" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Accept" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Read the current version" }).click();
+    await expect(page.getByRole("heading", { name: "Draft Projects rollout", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Reviews" }).getByRole("textbox", { name: "Review" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Accept" }).getByRole("button", { name: "Accept version 2…" })).toBeVisible();
   });
 
   test("Accept waits for every blocking finding", async ({ page }) => {

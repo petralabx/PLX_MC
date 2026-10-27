@@ -273,9 +273,10 @@ function DraftRecord({ id, version, nav }: { id: string; version: number | null;
 
       <PlanSection content={shown} issues={viewingOld ? [] : detail.preflight} />
       <ResearchSection content={shown} />
-      <ReviewsSection detail={detail} onChange={reload} />
+      {/* An older version is read-only: reviews and Accept act on the current version only. */}
+      <ReviewsSection detail={detail} onChange={reload} readOnly={viewingOld} />
       <VersionsSection detail={detail} nav={nav} />
-      {viewer.isAuthor && draft.status === "in_review" && <AcceptSection detail={detail} onAccepted={reload} />}
+      {viewer.isAuthor && draft.status === "in_review" && !viewingOld && <AcceptSection detail={detail} onAccepted={reload} />}
     </div>
   );
 }
@@ -521,7 +522,7 @@ export function ResearchSection({ content }: { content: DraftContent }) {
   );
 }
 
-function ReviewsSection({ detail, onChange }: { detail: DraftDetail; onChange: () => void }) {
+function ReviewsSection({ detail, onChange, readOnly }: { detail: DraftDetail; onChange: () => void; readOnly: boolean }) {
   const { draft, viewer } = detail;
   const [kind, setKind] = useState<DraftReviewKind>("comment");
   const [body, setBody] = useState("");
@@ -580,7 +581,7 @@ function ReviewsSection({ detail, onChange }: { detail: DraftDetail; onChange: (
                   {r.status} by {r.closedBy}: {r.closeReason}
                 </p>
               )}
-              {open && (viewer.isAuthor || raisedByMe) && (
+              {open && !readOnly && (viewer.isAuthor || raisedByMe) && (
                 <div className="dr-acts">
                   <button type="button" className="btn ghost sm" disabled={busy} onClick={() => close(r, "resolve")}>
                     Resolve
@@ -597,7 +598,8 @@ function ReviewsSection({ detail, onChange }: { detail: DraftDetail; onChange: (
         })}
       </ul>
 
-      {viewer.canReview && (
+      {readOnly && viewer.canReview && <p className="dr-task-meta">To review, read the current version.</p>}
+      {viewer.canReview && !readOnly && (
         <form
           className="dr-form"
           onSubmit={(event) => {

@@ -129,6 +129,21 @@ function assertOpen(draft: Draft): void {
   }
 }
 
+/**
+ * Once Accept has created a record, the content stays the version it started
+ * from: a retry finishes that version and never pairs its records with another.
+ */
+function assertAcceptNotStarted(draft: Draft): void {
+  const made = Object.keys(draft.materialized);
+  if (made.length > 0) {
+    throw new ApiError(
+      "accept_unfinished",
+      `An Accept of ${draft.id} created ${made.join(", ")} and did not finish. Accept it again to finish, or withdraw it.`,
+      409
+    );
+  }
+}
+
 function assertWriter(draft: Draft, actor: DraftActor): void {
   if (!isDraftWriter(draft, actor)) {
     throw new ApiError(
@@ -217,6 +232,7 @@ export async function saveDraft(actor: DraftActor, id: string, sections: DraftSe
     if (!canSeeDraft(draft, actor)) throw notFound(id);
     assertWriter(draft, actor);
     assertOpen(draft);
+    assertAcceptNotStarted(draft);
     const working = applySections(draft.working, sections);
     const next: Draft = {
       ...draft,

@@ -66,15 +66,23 @@ open draft (`withdrawn`).
    open blocking finding, or a preflight problem now (for example a parent project closed during
    review) refuses it. Accept creates the project (unless the plan names an existing one), then the
    buckets, then the tasks in dependency order, through `createProject`, `createBucket` and
-   `createTask`. The project's and buckets' PRD link is the frozen version's link
-   (`/?screen=drafts&draftId=DRF-n&version=N`), so the bucket-PRD check passes. Tasks carry
+   `createTask`. The project's PRD link is the frozen version's link
+   (`/?screen=drafts&draftId=DRF-n&version=N`); a bucket's adds its draft key (`#B1`), so two
+   buckets with the same name stay apart. The bucket-PRD check passes. Tasks carry
    `draft:DRF-n` and `depends-on:TASK-*` labels and link the draft in their description. A new
    project takes the draft's visibility and members. The draft records each new id in
    `materialized`:
    - a task's id commits inside the transaction that creates it (`createTask`'s `inTransaction`);
    - a project or bucket a crashed Accept made is found again by its PRD link and adopted;
    - a claim (`accepted_at` while still `in_review`) refuses a second Accept, and every edit and
-     review (409 `accept_in_progress`), for 10 minutes; a failed Accept clears it.
+     review (409 `accept_in_progress`), for 10 minutes; a failed Accept clears it. The claim
+     checks again for an open blocking finding;
+   - once a record exists, the content cannot change (409 `accept_unfinished`), so a retry
+     finishes the version it started; reviews and withdraw still work;
+   - a project the run did not create (recorded, adopted or existing) is checked again against
+     the author's access before anything is created in it (404 `unknown_project`).
+
+   An older version's page is read-only: no review form, no finding actions and no Accept.
 
 The Drafts screen (`?screen=drafts`, `src/components/mc/drafts.tsx`) lists drafts and opens one:
 the plan tree with preflight badges, the research, reviews, versions with a change summary, and,

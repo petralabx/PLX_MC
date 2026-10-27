@@ -292,6 +292,35 @@ export function filterProjectTree(nodes: readonly ProjectTreeNode[], query: stri
   });
 }
 
+/**
+ * The page path (portal ADR-011 zone 2; TASK-3958): the project and the
+ * initiative a project, initiative or task page sits in, for the top bar's
+ * Plan / project / initiative. Null on every other page, or when the page's
+ * record is not loaded.
+ */
+export interface PagePath {
+  project: Project | null;
+  initiative: Bucket | null;
+}
+
+export function pagePath(
+  route: Route,
+  find: {
+    project: (id: string) => Project | undefined;
+    initiative: (id: string) => Bucket | undefined;
+    task: (id: string) => Task | undefined;
+  }
+): PagePath | null {
+  const initiativeId =
+    route.screen === "bucket" ? route.bucketId : route.screen === "task" && route.taskId ? find.task(route.taskId)?.bucket : undefined;
+  const initiative = initiativeId ? (find.initiative(initiativeId) ?? null) : null;
+  const projectId = route.screen === "project" ? route.projectId : (initiative?.project ?? undefined);
+  const project = projectId ? (find.project(projectId) ?? null) : null;
+  if (route.screen === "project") return project ? { project, initiative: null } : null;
+  if (route.screen !== "bucket" && route.screen !== "task") return null;
+  return project || initiative ? { project, initiative } : null;
+}
+
 export interface OpenTaskCounts {
   byInitiative: Map<string, number>;
   byProject: Map<string, number>;

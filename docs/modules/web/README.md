@@ -96,7 +96,16 @@ icon names itself after 300ms of hover or at once on keyboard focus. Beside an
 open pane the sidebar gives way so the page keeps 560px. Each browser keeps
 the width and rail in localStorage (`mc.side.w`, `mc.side.rail`), and a script
 in `<head>` paints them onto `<html>` before the first paint, so the page stays
-static (ADR-006). Below 1025px `[` opens and closes the drawer. In the
+static (ADR-006). Below 1025px `[` opens and closes the drawer. On project,
+initiative and task pages the top bar shows the page path from 1025px
+(TASK-3958, portal ADR-011 zone 2): Plan / project / initiative, where the
+project opens a menu of every active project A to Z and the initiative a menu
+of its project's initiatives, each with its open tasks and the current one
+checked. `?` opens the shortcuts sheet, listed from `shortcuts.ts` (the shell
+reads its g chords from the same list), and so does the Help and shortcuts
+row; the sheet links on to the Help page. Its switch turns the single-key
+shortcuts off, per browser (`mc.keys.single`): `[`, `/`, `?`, the g chords and
+Shift S (WCAG 2.1.4). ⌘K and the keys inside the tree and the splitter stay. In the
 top bar (TASK-3844) the workspace label is the PLX app switcher (Mission
 Control, MRP Suite, Admin portal, Customer portal), the mark alone below a
 900px bar, and the sync pill names what to resolve ("2 sync conflicts, 1
@@ -214,6 +223,8 @@ mapped in `nav-icon.tsx`).
 - `src/components/mc/use-layer.ts` — layer stack: Esc (topmost only), focus in/back, Tab wrap, scroll lock
 - `src/components/mc/shell-prefs.ts` — pane width / hidden, live pin and pick (localStorage + memory), tier hooks
 - `src/components/mc/count-badge.tsx` — honest count badge (n · n+ · —)
+- `src/components/mc/shortcuts.ts` — every keyboard shortcut in one list (the ? sheet's groups and the shell's g chords), and the single-key switch
+- `src/components/mc/shortcuts-sheet.tsx` — the ? sheet: the shortcuts, the single-key switch, and a link to Help
 - `src/components/mc/side-boot.ts` — the sidebar's width limits and the `<head>` script that paints the stored width and rail onto `<html>` before the first paint (ADR-006)
 - `src/components/mc/side-width.ts` — the width and rail prefs, `paintSide`, and the splitter's key and drag rules
 - `src/components/mc/side-resize.tsx` — the splitter, the rail's expand button, and the rail's hover and focus labels

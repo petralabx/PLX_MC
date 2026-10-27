@@ -73,6 +73,8 @@ import { needsMeCount, todayGridDay, viewerLoadState } from "./needs-me";
 import type { Nav, Route } from "./route";
 import { useFlyout } from "./use-flyout";
 import { hasOpenLayer, useLayer } from "./use-layer";
+import { singleKeysPref } from "./shortcuts";
+import { RailLabel, SideResize } from "./side-resize";
 import { StarToggle } from "./star-toggle";
 import { useStars } from "./use-stars";
 import { useVendorAlertCount } from "./vendor-spend/use-alert-badge";
@@ -181,6 +183,8 @@ function useNavGroupOpen(id: NavGroupId): boolean {
 const ADMIN_FLYOUT_ID = "mc-nav-admin-flyout";
 // The menu behind the Projects row's + (TASK-3955): New project, New initiative.
 const NEW_MENU_ID = "mc-nav-new-menu";
+// The collapsed rail's Projects flyout (TASK-3957): every active project and the filter.
+const PROJECTS_FLYOUT_ID = "mc-nav-projects-flyout";
 
 // The zoned sidebar is one keyboard tree (TASK-3955, portal ADR-011 v2 Keys):
 // every row carries data-tree-key, a group row data-tree-open, a row inside a
@@ -235,6 +239,7 @@ export function Sidebar({
   onDrawer,
   drawerRef,
   onDrawerKeyDown,
+  onOpenShortcuts,
 }: {
   route: Route;
   nav: Nav;
@@ -246,6 +251,8 @@ export function Sidebar({
   onDrawer?: (event: DrawerEvent) => void;
   drawerRef?: RefObject<HTMLElement | null>;
   onDrawerKeyDown?: (event: ReactKeyboardEvent<HTMLElement>) => void;
+  /** The zoned shell's ? sheet (TASK-3958): the Help and shortcuts row opens it. */
+  onOpenShortcuts?: () => void;
 }) {
   const version = useMcVersion();
   const zoned = useNavZones();
@@ -276,6 +283,16 @@ export function Sidebar({
     onBeforeToggle: onNewBeforeToggle,
     onToggle: onNewToggle,
   } = useFlyout(navHref(route), "below");
+  const {
+    toggleRef: projectsToggleRef,
+    panelRef: projectsPanelRef,
+    open: projectsOpen,
+    hide: hideProjects,
+    onBlur: onProjectsBlur,
+    onBeforeToggle: onProjectsBeforeToggle,
+    onToggle: onProjectsToggle,
+  } = useFlyout(navHref(route), "beside-nav");
+  const [flyFilter, setFlyFilter] = useState("");
 
   // Keep the active screen visible: arriving on a screen in the collapsible
   // group (Admin & health; Knowledge in the zoned sidebar) expands it. The
@@ -336,6 +353,8 @@ export function Sidebar({
   const tree = useMemo(() => (zoned ? projectTree(navProjects(), navBuckets()) : []), [zoned, version]);
   const filtering = filter.trim() !== "";
   const shownTree = filtering ? filterProjectTree(tree, filter) : tree;
+  const flyFiltering = flyFilter.trim() !== "";
+  const flyTree = flyFiltering ? filterProjectTree(tree, flyFilter) : tree;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const closedProjects = useMemo(() => (zoned ? closedNavProjects().sort(byName) : []), [zoned, version]);
   // Counts only from live data: cached or demo tasks would make them up
@@ -414,7 +433,8 @@ export function Sidebar({
       if (event.key !== "/" || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest?.("input,textarea,[contenteditable],[data-tree-key]") || hasOpenLayer()) return;
-      if (document.querySelector("[data-page-filter]")) return;
+      // Off with the other single-key shortcuts (TASK-3958).
+      if (!singleKeysPref.get() || document.querySelector("[data-page-filter]")) return;
       const input = filterRef.current;
       // Not while the closed phone drawer hides it (visibility: hidden).
       if (!input || input.getClientRects().length === 0 || getComputedStyle(input).visibility === "hidden") return;
@@ -453,8 +473,9 @@ export function Sidebar({
       stars.move(starKey, to);
       return;
     }
-    // Shift S stars or unstars the focused row (Starred 4).
-    if (event.shiftKey && event.key.toLowerCase() === "s") {
+    // Shift S stars or unstars the focused row (Starred 4), unless single-key
+    // shortcuts are off (TASK-3958): then S is a letter like any other.
+    if (event.shiftKey && event.key.toLowerCase() === "s" && singleKeysPref.get()) {
       if (!starKey || stars.off) return;
       event.preventDefault();
       stars.toggle(starKey as StarKey);
@@ -510,7 +531,9 @@ export function Sidebar({
     label: string,
     body: ReactNode,
     onPath = false,
-    tree: TreeAttrs = {}
+    tree: TreeAttrs = {},
+    /** A plain click runs this instead of navigating; the href stays for a new tab. */
+    onOpen?: () => void
   ) => (
     <a
       key={key}
@@ -522,6 +545,11 @@ export function Sidebar({
       onClick={(event) => {
         if (!isPlainLeftClick(event)) return;
         event.preventDefault();
+        if (onOpen) {
+          onDrawer?.("navigate");
+          onOpen();
+          return;
+        }
         const { screen, ...extra } = target;
         nav(screen, extra);
         onDrawer?.("navigate");
@@ -958,6 +986,21 @@ export function Sidebar({
                   zoned && item.screen === "projects" ? (
                     <div className="tree-row" key={item.screen}>
                       {itemRow(item, groupKey)}
+                      {/* The collapsed rail only (CSS): Projects opens its flyout there. */}
+                      <button
+                        ref={projectsToggleRef}
+                        type="button"
+                        className="item rail-fly"
+                        {...treeRow("rail:projects", groupKey)}
+                        title="Projects"
+                        popoverTarget={PROJECTS_FLYOUT_ID}
+                        aria-controls={PROJECTS_FLYOUT_ID}
+                        aria-expanded={projectsOpen}
+                        onBlur={onProjectsBlur}
+                      >
+                        <NavIcon name={item.lucide} />
+                        <span className="nm">{item.label}</span>
+                      </button>
                       <button
                         ref={newToggleRef}
                         type="button"
@@ -1014,7 +1057,9 @@ export function Sidebar({
                 <span className="nm">{HELP_NAV_ITEM.label}</span>
               </>,
               false,
-              { ...treeRow("help"), "data-star-key": `screen:${HELP_NAV_ITEM.screen}` }
+              { ...treeRow("help"), "data-star-key": `screen:${HELP_NAV_ITEM.screen}` },
+              // The ? sheet, which links to the Help page (TASK-3958).
+              onOpenShortcuts
             ),
             "help",
             `screen:${HELP_NAV_ITEM.screen}`,
@@ -1029,6 +1074,8 @@ export function Sidebar({
   return (
     <>
       {sidebar}
+      <SideResize />
+      <RailLabel />
       {/* Siblings of the nav: the rail form's icon-only styles must not reach them. */}
       <div
         ref={flyoutRef}
@@ -1081,6 +1128,66 @@ export function Sidebar({
       >
         {newProjectButton}
         {newInitiativeButton}
+      </div>
+      <div
+        ref={projectsPanelRef}
+        id={PROJECTS_FLYOUT_ID}
+        popover="auto"
+        onBeforeToggle={onProjectsBeforeToggle}
+        onToggle={onProjectsToggle}
+        className="mc-flyout projects-fly"
+        role="group"
+        aria-label="Projects"
+        onBlur={onProjectsBlur}
+        onClick={(event) => {
+          if ((event.target as Element).closest("a")) hideProjects();
+        }}
+      >
+        <div className="tree-filter">
+          <Search className="ic" aria-hidden="true" focusable="false" strokeWidth={1.5} />
+          <input
+            type="search"
+            className="tree-q"
+            aria-label="Filter projects and initiatives"
+            placeholder="Filter projects"
+            autoComplete="off"
+            spellCheck={false}
+            value={flyFilter}
+            onChange={(event) => setFlyFilter(event.target.value)}
+          />
+        </div>
+        <p className="tree-none" role="status">
+          {flyFiltering && flyTree.length === 0 ? "No project or initiative matches." : ""}
+        </p>
+        {/* Projects A to Z; while filtering, their matching initiatives too. */}
+        {flyTree.map(({ project, initiatives }) => (
+          <Fragment key={project.id}>
+            {link(
+              `fly:${project.id}`,
+              { screen: "project", projectId: project.id },
+              route.screen === "project" && route.projectId === project.id,
+              project.name,
+              <>
+                <NavIcon name="FolderKanban" />
+                <span className="nm">{project.name}</span>
+              </>
+            )}
+            {flyFiltering
+              ? initiatives.map((b) =>
+                  link(
+                    `fly:${b.id}`,
+                    { screen: "bucket", bucketId: b.id },
+                    route.screen === "bucket" && route.bucketId === b.id,
+                    b.name,
+                    <>
+                      <span className="guide" aria-hidden="true" />
+                      <span className="nm">{b.name}</span>
+                    </>
+                  )
+                )
+              : null}
+          </Fragment>
+        ))}
       </div>
     </>
   );

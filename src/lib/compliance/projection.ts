@@ -38,7 +38,7 @@ async function loadTask(taskId: string): Promise<Task | null> {
 }
 
 // One row per repo and PR number; GitHub repo names are case-insensitive.
-function samePr(a: PullRequest, b: Pick<PullRequest, "repo" | "num">): boolean {
+export function samePr(a: PullRequest, b: Pick<PullRequest, "repo" | "num">): boolean {
   return a.repo.toLowerCase() === b.repo.toLowerCase() && a.num === b.num;
 }
 
@@ -395,29 +395,41 @@ export interface ProjectionInput {
    * close still updates the PR rows that tasks already hold.
    */
   sparse: boolean;
+  /**
+   * TASK-4004: the task an unstamped PR's title or branch names
+   * (resolvePrTask). An open links the PR row with no stage move; a merge is
+   * projected as for a stamped task, so it promotes; an unmerged close only
+   * updates a row the task already holds.
+   */
+  linkedTaskIds?: string[];
 }
 
 export async function projectPullRequest(evt: PrEvent, input: ProjectionInput): Promise<void> {
   if (!projectionEnabled()) return;
 
   const taskIds = [...input.taskIds];
+  const linkedTaskIds = input.linkedTaskIds ?? [];
 
   if (evt.action === "closed") {
-    for (const tid of taskIds) {
+    // A linked task is promoted like a stamped one; an unmerged close only
+    // updates the rows tasks already hold (the loop below).
+    const closing = evt.merged ? [...taskIds, ...linkedTaskIds] : taskIds;
+    for (const tid of closing) {
       if (evt.merged) await promoteMerged(tid, evt);
       else await linkPr(tid, evt, "closed");
     }
     // Any other task that holds a row for this PR (its stamp moved, or its
     // checkout expired or was released) sees it closed, with no stage move. Only
-    // a stamped task gets `merged` and the promotion; a merged row stays merged.
+    // a stamped or linked task gets `merged` and the promotion; a merged row
+    // stays merged.
     for (const tid of await taskIdsWithPr(evt.repo, evt.prNumber)) {
-      if (!taskIds.includes(tid)) await linkPr(tid, evt, "closed", true);
+      if (!closing.includes(tid)) await linkPr(tid, evt, "closed", true);
     }
     return;
   }
 
   // Sparse-task retirement: never auto-create Tasks for operator PRs.
-  if (input.sparse && taskIds.length === 0) {
+  if (input.sparse && taskIds.length === 0 && linkedTaskIds.length === 0) {
     return;
   }
 
@@ -426,5 +438,6 @@ export async function projectPullRequest(evt: PrEvent, input: ProjectionInput): 
       await setProgress(tid, evt);
       await linkPr(tid, evt, evt.draft ? "draft" : "open");
     }
+    for (const tid of linkedTaskIds) await linkPr(tid, evt, evt.draft ? "draft" : "open");
   }
 }

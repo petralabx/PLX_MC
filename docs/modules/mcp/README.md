@@ -28,7 +28,7 @@ Routing behavior is unchanged; owner: Vince. No migration is needed.
 |---------|------|
 | REST cursor API | `src/app/api/cursor/*` — self-auth via per-agent keys (`PLX_MC_MCP_AGENT_KEYS`) or the legacy shared `PLX_MC_MCP_API_KEY` (retire via `PLX_MC_MCP_SHARED_KEY_ENABLED=0`) + operator headers |
 | Planning hierarchy | `mc_create_project` + `mc_create_bucket` + `mc_update_bucket` + `mc_update_project` + `mc_list_projects` — capability-gated writes queued through the existing Projects/Roadmap SharePoint mirrors |
-| Merged-PR link | `mc_link_merged_pr` (Hub HTTP MCP only) — steward-only (`task.link_merged_pr`, held only by `sp_mcp_ledger` and `sp_mcp_cos`; operator email is audit context). Reads merged state, head SHA and merge SHA from GitHub, records `task.prs`, audits `task.pr.linked`, applies only the normal merged-PR promotion, never Verified, no checkout, no PR-body edit. Refuses unmerged PRs and PRs linked to another task unless `override` + `overrideReason`. An open, draft or closed row for the PR on this task is replaced by the merged row; on another task such a row does not count as linked elsewhere, and it turns `closed` (TASK-3743). Separate from routing confirm/attach (`PLX_MC_ROUTING_CONFIRM_ENABLED` unchanged) |
+| Merged-PR link | `mc_link_merged_pr` (Hub HTTP MCP only) — steward-only (`task.link_merged_pr`, held only by `sp_mcp_ledger`, `sp_mcp_cos` and the shared Hub principal `sp_mcp_cursor` (TASK-3671); operator email is audit context). Reads merged state, head SHA and merge SHA from GitHub, records `task.prs`, audits `task.pr.linked`, applies only the normal merged-PR promotion, never Verified, no checkout, no PR-body edit. Refuses unmerged PRs and PRs linked to another task unless `override` + `overrideReason`. An open, draft or closed row for the PR on this task is replaced by the merged row; on another task such a row does not count as linked elsewhere, and it turns `closed` (TASK-3743). Separate from routing confirm/attach (`PLX_MC_ROUTING_CONFIRM_ENABLED` unchanged) |
 | Routing suggest | `POST /api/cursor/routing/suggest` — `mc_suggest_work` (`routing.suggest`) |
 | Streamable HTTP MCP | `GET/POST/DELETE /api/cursor/mcp` — remote team registration |
 | Stdio MCP client | `tools/plx-mc-mcp/index.ts` — local Cursor + Cloud Agents |
@@ -320,6 +320,8 @@ portal key, because `mc_self_check` stays forbidden to it.
 **Infra principal:** `sp_mcp_infra` (PLX Infra; migration 040; owner Infra, approved by Vince 2026-10-15) is read-only like the Workbench: its grant is `task.read` only, its allowlist is the same six read tools, and every write tool gives 403. A later grant change can widen it.
 
 **CIP auto-undraft principal:** `sp_mcp_cip_auto_undraft` (PLX CIP Auto-Undraft; the agentic-swarm `cip-auto-undraft` workflow, agentic-swarm #1689; migration 046; approved by Vince 2026-10-18) is read-only: its grant is `task.read` only, and its allowlist is four read tools: `mc_self_check`, `mc_get_context`, `mc_search_tasks` and `mc_get_task`. It cannot call `mc_list_buckets` or `mc_search_knowledge`, and every write tool gives 403. Key sync verifies it through `mc_self_check`.
+
+**Per-consumer principals (TASK-4015):** Vince decided on 2026-10-27 (4:22 and 4:30 AM ET) that every team bot, every coding-1 lane and the team Cursor connectors get their own principal, so the shared `sp_mcp_cursor` key can be retired. Migration 054 adds `sp_mcp_cursor_team`, `sp_mcp_infra_bot`, `sp_mcp_plx_cos`, `sp_mcp_cip`, `sp_mcp_steward`, `sp_mcp_uat`, `sp_mcp_harness`, `sp_mcp_bc_golive`, `sp_mcp_azure`, `sp_mcp_aws_gh`, `sp_mcp_books`, `sp_mcp_mmm`, `sp_mcp_haggle`, `sp_mcp_recap`, `sp_mcp_cursor_helper`, `sp_mcp_taylo_infra`, `sp_mcp_nightly_audit`, `sp_mcp_lane_claude_cos`, `sp_mcp_lane_claude_uat`, `sp_mcp_lane_claude_vince`, `sp_mcp_lane_codex_cos`, `sp_mcp_lane_codex_uat`, `sp_mcp_lane_codex_vince`, `sp_mcp_lane_cursor_cos`, `sp_mcp_lane_cursor_uat`, `sp_mcp_lane_cursor_vince`. `sp_mcp_cursor_team` (interim team connectors) and `sp_mcp_steward` keep `sp_mcp_cursor` parity (`task.cancel`, `task.reopen`, `task.link_merged_pr`). `sp_mcp_cip`, `sp_mcp_aws_gh` and `sp_mcp_plx_cos` add `task.link_merged_pr`. All others hold the agent bundle only. Only `sp_mcp_portal` may set an `agent:` assignee. Keys are minted separately with Vince's approval.
 
 **Workbench intake principal:** `sp_mcp_workbench_intake` (PLX Workbench intake; TASK-3523; migration 048; approved by Vince 2026-10-20 at 4:28 PM and 5:00 PM ET) is least privilege like the portal: its grant is `task.read` and `task.create` in any bucket, and its allowlist is `mc_create_task` and `mc_search_tasks`. It cannot read agent reports, set an `agent:` assignee, or check out, progress or complete a task. Key sync verifies it through the task search, like the portal. **Creator approval gate (TASK-3530):** a task it creates starts with a pending `creatorApproval` (creator principal and time, in the task jsonb). While it is pending, `checkout()` refuses every checkout door and every launch, and `patchTask` refuses any move into progress or later on every door, the compliance projection included. SharePoint cannot skip it: `updateEntity` refuses the write, an inbound Status change raises a Sync conflict, and keep-SP on that conflict is refused. Each refusal is a `creator_approval.blocked` event. A create straight into progress is refused too. Only vince@ or cos@ (by session Entra oid; registry in `src/lib/permissions/grants.ts`) clears it, with `POST /api/tasks/{id}/creator-approval`, and only on a project they can access. The approval records who and when (`creator_approval.approved`), and any other caller gets 403 and a `creator_approval.denied` event. `approval.decide`, `mc_update_task` and `PATCH /api/tasks/{id}` cannot write `creatorApproval`.
 
@@ -649,6 +651,32 @@ sourced, so the key is not written into the file. `sp_mcp_cursor` stays on
 | `sp_mcp_swarm` | `plx/prod/mc/lane-swarm-key/v1` |
 | `sp_mcp_workbench` | `plx/prod/mc/lane-workbench-key/v1` |
 | `sp_mcp_workbench_intake` | `plx/prod/mc/lane-workbench-intake-key/v1` |
+| `sp_mcp_cursor_team` | `plx/prod/mc/lane-cursor-team-key/v1` |
+| `sp_mcp_infra_bot` | `plx/prod/mc/lane-infra-bot-key/v1` |
+| `sp_mcp_plx_cos` | `plx/prod/mc/lane-plx-cos-key/v1` |
+| `sp_mcp_cip` | `plx/prod/mc/lane-cip-key/v1` |
+| `sp_mcp_steward` | `plx/prod/mc/lane-steward-key/v1` |
+| `sp_mcp_uat` | `plx/prod/mc/lane-uat-key/v1` |
+| `sp_mcp_harness` | `plx/prod/mc/lane-harness-key/v1` |
+| `sp_mcp_bc_golive` | `plx/prod/mc/lane-bc-golive-key/v1` |
+| `sp_mcp_azure` | `plx/prod/mc/lane-azure-key/v1` |
+| `sp_mcp_aws_gh` | `plx/prod/mc/lane-aws-gh-key/v1` |
+| `sp_mcp_books` | `plx/prod/mc/lane-books-key/v1` |
+| `sp_mcp_mmm` | `plx/prod/mc/lane-mmm-key/v1` |
+| `sp_mcp_haggle` | `plx/prod/mc/lane-haggle-key/v1` |
+| `sp_mcp_recap` | `plx/prod/mc/lane-recap-key/v1` |
+| `sp_mcp_cursor_helper` | `plx/prod/mc/lane-cursor-helper-key/v1` |
+| `sp_mcp_taylo_infra` | `plx/prod/mc/lane-taylo-infra-key/v1` |
+| `sp_mcp_nightly_audit` | `plx/prod/mc/lane-nightly-audit-key/v1` |
+| `sp_mcp_lane_claude_cos` | `plx/prod/mc/lane-lane-claude-cos-key/v1` |
+| `sp_mcp_lane_claude_uat` | `plx/prod/mc/lane-lane-claude-uat-key/v1` |
+| `sp_mcp_lane_claude_vince` | `plx/prod/mc/lane-lane-claude-vince-key/v1` |
+| `sp_mcp_lane_codex_cos` | `plx/prod/mc/lane-lane-codex-cos-key/v1` |
+| `sp_mcp_lane_codex_uat` | `plx/prod/mc/lane-lane-codex-uat-key/v1` |
+| `sp_mcp_lane_codex_vince` | `plx/prod/mc/lane-lane-codex-vince-key/v1` |
+| `sp_mcp_lane_cursor_cos` | `plx/prod/mc/lane-lane-cursor-cos-key/v1` |
+| `sp_mcp_lane_cursor_uat` | `plx/prod/mc/lane-lane-cursor-uat-key/v1` |
+| `sp_mcp_lane_cursor_vince` | `plx/prod/mc/lane-lane-cursor-vince-key/v1` |
 
 ### MCP credential rotation and audit attribution
 

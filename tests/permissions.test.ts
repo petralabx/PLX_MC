@@ -214,37 +214,37 @@ describe("service-principal separation", () => {
     });
   });
 
-  it("task.cancel is held by sp_mcp_cursor, sp_mcp_cos, and sp_mcp_ledger only; task.reopen by sp_mcp_cursor and sp_mcp_ledger only (TASK-2580, TASK-3374)", () => {
+  it("task.cancel is held by sp_mcp_cursor, sp_mcp_cos, sp_mcp_ledger and the TASK-4015 cursor-parity principals only; task.reopen by sp_mcp_cursor, sp_mcp_ledger and the cursor-parity principals only (TASK-2580, TASK-3374, TASK-4015)", () => {
+    const cursorParity = ["sp_mcp_cursor_team", "sp_mcp_steward"];
     for (const role of ["admin", "owner"] as const) {
       expect(capabilitiesForRole(role)).toEqual(expect.arrayContaining(["task.cancel", "task.reopen"]));
     }
     expect(capabilitiesForRole("member")).not.toContain("task.cancel");
     expect(capabilitiesForRole("member")).not.toContain("task.reopen");
     for (const id of MCP_AGENT_SERVICE_PRINCIPAL_IDS) {
-      if (id !== "sp_mcp_cursor" && id !== "sp_mcp_ledger") {
+      if (id !== "sp_mcp_cursor" && id !== "sp_mcp_ledger" && !cursorParity.includes(id)) {
         expect(capabilitiesForServicePrincipal(id)).not.toContain("task.reopen");
         expect(authorize({ actor: service(id), capability: "task.reopen" }))
           .toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
       }
-      if (id === "sp_mcp_cursor" || id === "sp_mcp_cos" || id === "sp_mcp_ledger") continue;
+      if (id === "sp_mcp_cursor" || id === "sp_mcp_cos" || id === "sp_mcp_ledger" || cursorParity.includes(id)) continue;
       expect(capabilitiesForServicePrincipal(id)).not.toContain("task.cancel");
     }
     expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.cancel" }).allowed).toBe(true);
   });
 
-  it("sp_mcp_cursor holds task.cancel and task.reopen (TASK-3374); sp_mcp_ledger holds task.cancel and task.reopen", () => {
+  it("sp_mcp_cursor holds task.cancel, task.reopen (TASK-3374) and task.link_merged_pr (TASK-3671); sp_mcp_ledger holds task.cancel and task.reopen", () => {
     const cursor = capabilitiesForServicePrincipal("sp_mcp_cursor");
     expect(cursor).toEqual(expect.arrayContaining(["task.cancel", "task.reopen"]));
-    expect(cursor).not.toContain("task.link_merged_pr");
-    // TASK-3374 grants reopen only: no verify capability, and nothing else beyond the agent bundle.
+    expect(cursor).toContain("task.link_merged_pr");
+    // TASK-3374 grants reopen, TASK-3671 link_merged_pr: no verify, no assign, nothing else beyond the agent bundle.
     expect(cursor as readonly string[]).not.toContain("task.verify");
     expect([...cursor].sort()).toEqual(
-      [...capabilitiesForServicePrincipal("sp_mcp_codex"), "task.cancel", "task.reopen"].sort()
+      [...capabilitiesForServicePrincipal("sp_mcp_codex"), "task.cancel", "task.reopen", "task.link_merged_pr"].sort()
     );
     expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.cancel" }).allowed).toBe(true);
     expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.reopen" }).allowed).toBe(true);
-    expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.link_merged_pr" }))
-      .toMatchObject({ allowed: false, reasonCode: "capability_not_granted" });
+    expect(authorize({ actor: service("sp_mcp_cursor"), capability: "task.link_merged_pr" }).allowed).toBe(true);
     const ledger = capabilitiesForServicePrincipal("sp_mcp_ledger");
     expect(ledger).toEqual(expect.arrayContaining(["task.cancel", "task.reopen"]));
     expect(authorize({ actor: service("sp_mcp_ledger"), capability: "task.cancel" }).allowed).toBe(true);
@@ -252,7 +252,7 @@ describe("service-principal separation", () => {
   });
 
   it("sp_mcp_cos is the cursor grant minus task.reopen plus exactly task.link_merged_pr and task.assign (TASK-3407)", () => {
-    const cursor = capabilitiesForServicePrincipal("sp_mcp_cursor").filter((c) => c !== "task.reopen");
+    const cursor = capabilitiesForServicePrincipal("sp_mcp_cursor").filter((c) => c !== "task.reopen" && c !== "task.link_merged_pr");
     expect([...capabilitiesForServicePrincipal("sp_mcp_cos")].sort()).toEqual(
       [...cursor, "task.link_merged_pr", "task.assign"].sort()
     );
@@ -478,5 +478,29 @@ describe("permissionActorFromDirectoryRole", () => {
     expect(permissionActorFromDirectoryRole({ kind: "human", id: "x", role: "" })).toBeNull();
     expect(authorize({ actor: permissionActorFromDirectoryRole(undefined), capability: "task.read" }))
       .toMatchObject({ allowed: false, reasonCode: "unknown_actor" });
+  });
+});
+
+describe("TASK-4015 per-consumer MCP principals", () => {
+  const lanes = ["claude", "codex", "cursor"].flatMap((t) => ["cos", "uat", "vince"].map((o) => `sp_mcp_lane_${t}_${o}`));
+  it("registers the nine lane principals, the interim team key and the per-bot principals", () => {
+    for (const id of [...lanes, "sp_mcp_cursor_team", "sp_mcp_infra_bot", "sp_mcp_plx_cos", "sp_mcp_cip", "sp_mcp_steward", "sp_mcp_aws_gh"]) {
+      expect(MCP_AGENT_SERVICE_PRINCIPAL_IDS).toContain(id);
+      expect(capabilitiesForServicePrincipal(id)).toEqual(expect.arrayContaining(["task.read", "task.create", "task.checkout"]));
+    }
+  });
+  it("gives lanes and sp_mcp_infra_bot the agent bundle with no cancel, reopen, assign or link_merged_pr", () => {
+    for (const id of [...lanes, "sp_mcp_infra_bot"]) {
+      const caps = capabilitiesForServicePrincipal(id);
+      for (const c of ["task.cancel", "task.reopen", "task.assign", "task.link_merged_pr", "task.uat_sync"] as const) {
+        expect(caps).not.toContain(c);
+      }
+    }
+  });
+  it("keeps sp_mcp_plx_cos separate from sp_mcp_cos and without task.cancel or task.assign", () => {
+    const plxCos = capabilitiesForServicePrincipal("sp_mcp_plx_cos");
+    expect(plxCos).toContain("task.link_merged_pr");
+    expect(plxCos).not.toContain("task.cancel");
+    expect(plxCos).not.toContain("task.assign");
   });
 });

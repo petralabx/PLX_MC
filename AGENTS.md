@@ -191,7 +191,7 @@ Before first edit or any `PR_CREATE` on a tracked consumer:
    fails GitHub verify with `taskId:null`.
 3. Never invent a `dsp_*` id. Never write `MC-Checkout: pending` and
    open a PR. If tools are missing, stop — do not open the PR.
-4. Put the `MC-Checkout: dsp_…` line in the PR body at open — the compliance gate reads the body on opened/synchronize/reopened only. Never an empty commit/push to re-trigger CI.
+4. Put the `MC-Checkout: dsp_…` line in the PR body at open. A body edit does not start the compliance gate, but every run reads the live body (PLX_MC#438): after a body fix, re-run the failed `compliance` job. Never an empty commit/push, or a close and reopen, to re-trigger CI.
 5. `mc_complete_task` must include non-empty `verificationCommands`
    AND `rollback`.
 6. Local push uses the consumer's pre-push handshake when present.

@@ -4,14 +4,22 @@
 // Distribution out). A login without the grant records "missing", adds
 // nothing and doesn't fail; GOALS_PENDING_SHIPMENTS=off turns it off.
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import ExcelJS from "exceljs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import pendingJson from "./fixtures/reporting-goals/2026-10-14/pending-shipments.json";
+import { GoalCards } from "@/components/mc/goals/goal-cards";
+import { dollars, isReady } from "@/components/mc/goals/helpers";
 import { buildGoalsWorkbook } from "@/lib/reporting/goals/excel/export";
 import { WORKBOOK_SHEETS } from "@/lib/reporting/goals/excel/layout";
 import { convertCents } from "@/lib/reporting/goals/money";
 import { pendingShipmentsByClass, pendingShipmentsEnabled } from "@/lib/reporting/goals/pending-shipments";
+import { ITEM_LINES_SQL } from "@/lib/reporting/goals/queries/forecast-orders";
 import { PENDING_SHIPMENT_COLUMNS, pendingShipmentsQuery } from "@/lib/reporting/goals/queries/pending-shipments";
 import type { PendingShipmentsDataset } from "@/lib/reporting/goals/types";
 import { DATASETS, ENTRIES, FORECAST, RATE, RUN, SETTINGS, SHIPMENT_LINES_SUMMARY, TODAY, goalsPage } from "./reporting-goals-helpers";
@@ -72,7 +80,69 @@ describe("shipped, not yet invoiced on the Revenue goal", () => {
     const cols = PENDING_SHIPMENT_COLUMNS.flatMap(([, , c]) => [...c]);
     expect(cols.some((c) => /cost|margin/i.test(c))).toBe(false);
     expect(pendingShipmentsQuery.sql).toContain("NOT EXISTS (SELECT 1 FROM sage.oe_invoice_header h");
-    expect(pendingShipmentsQuery.sql).toContain("trim(coalesce(d.linetype::text, '1')) = '1'");
+  });
+
+  it("counts a blank or space-padded line type as an item line, as ITEM_LINES_SQL does", () => {
+    // trim(coalesce(linetype, '1')) turns '   ' into '', not '1', and dropped those item lines.
+    const itemLine = "coalesce(nullif(trim(d.linetype::text), ''), '1') = '1'";
+    expect(ITEM_LINES_SQL).toContain(itemLine);
+    expect(pendingShipmentsQuery.sql).toContain(itemLine);
+    expect(pendingShipmentsQuery.sql).not.toContain("trim(coalesce(d.linetype::text, '1'))");
+  });
+});
+
+describe("shipped, not yet invoiced in the card's equations", () => {
+  const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
+  const card = (scope: "all" | "mfg") => {
+    const p = page(PENDING);
+    if (!isReady(p)) throw new Error("ready");
+    return text(renderToStaticMarkup(createElement(GoalCards, { page: p, scope })));
+  };
+
+  it("all customers: headline + charges + returns - estimate = invoiced", () => {
+    const g = page(PENDING).revenueGoal!;
+    expect(g.pendingCadCents).toBeGreaterThan(0);
+    expect(g.goalCadCents + g.chargesCadCents + g.returnsCadCents - g.pendingCadCents).toBe(g.totalCadCents);
+    expect(card("all")).toContain(
+      `+ ${dollars(g.chargesCadCents)} freight & other charges left out − ${dollars(g.pendingCadCents)} shipped, not yet invoiced = ${dollars(g.totalCadCents)} invoiced`
+    );
+  });
+
+  it("manufacturing: headline + charges + returns - estimate + Exclusive Distribution = all customers", () => {
+    const m = page(PENDING).revenueScope!;
+    expect(m.pendingCadCents).toBeGreaterThan(0);
+    expect(m.goalCadCents + m.chargesCadCents + m.returnsCadCents - m.pendingCadCents + m.excludedCadCents).toBe(m.totalCadCents + m.excludedCadCents);
+    expect(card("mfg")).toContain(
+      `+ ${dollars(m.chargesCadCents)} freight & other charges − ${dollars(m.pendingCadCents)} shipped, not yet invoiced + ${dollars(m.excludedCadCents)} Exclusive Distribution left out = ${dollars(m.totalCadCents + m.excludedCadCents)} all customers`
+    );
+  });
+
+  it("leaves the equations unchanged without the estimate", () => {
+    const p = page();
+    if (!isReady(p)) throw new Error("ready");
+    expect(text(renderToStaticMarkup(createElement(GoalCards, { page: p, scope: "all" })))).not.toContain("shipped, not yet invoiced");
+  });
+});
+
+describe("rollback of migration 052", () => {
+  const sql = readFileSync(path.join(__dirname, "..", "db", "rollback", "052_reporting_goals_pending_shipments_rollback.sql"), "utf8");
+  const code = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n").trim();
+
+  it("says the code goes back first and the flag is no substitute", () => {
+    expect(sql).toMatch(/revert the code first, then run this/i);
+    expect(sql).toContain("GOALS_PENDING_SHIPMENTS=off is NOT a substitute");
+  });
+
+  it("drops nothing unless the operator says the code is reverted and no live run wrote a summary", () => {
+    // One DO block: a refusal raises before any DROP, even without ON_ERROR_STOP.
+    expect(code.startsWith("DO $$")).toBe(true);
+    expect(code.endsWith("END $$;")).toBe(true);
+    expect(code.match(/\$\$/g)).toHaveLength(2);
+    const drop = code.indexOf("DROP TABLE");
+    expect(code.indexOf("current_setting('plx.code_reverted', true)")).toBeGreaterThan(0);
+    expect(code.indexOf("current_setting('plx.code_reverted', true)")).toBeLessThan(drop);
+    expect(code.indexOf("FROM report_snap_pending_shipment_summary")).toBeLessThan(drop);
+    expect(code.indexOf("DELETE FROM schema_migrations")).toBeGreaterThan(drop);
   });
 });
 

@@ -108,6 +108,9 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
   // INTERIM (TASK-3992): shipped, not yet invoiced, inside goal.goalCadCents as an estimate; null when not read.
   const pending = page.pendingShipments;
   const returnsPlus = (s: { returnsCadCents: number }) => (s.returnsCadCents !== 0 ? ` + ${dollars(s.returnsCadCents)} returns` : "");
+  // The estimate is in the headline but not invoiced, so the equations back to the invoiced totals take it off (TASK-3992).
+  const pendingMinus = (s: { pendingCadCents: number }) =>
+    s.pendingCadCents !== 0 ? ` − ${dollars(s.pendingCadCents)} shipped, not yet invoiced` : "";
   const scheduled = Math.max(0, l1.ifAllRunKg - l1.totalKg);
   const fullScale = Math.max(tl.lastMonth.full, tl.full.total, 1);
   // The rate the figures are at: the run's Bank of Canada rate, or the fixed Sage rate (TASK-3780).
@@ -194,7 +197,7 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
       >
         {mfg ? (
           <p className="gp-split" title={revSource} data-testid="goals-revenue-mfg">
-            + {dollars(mfg.chargesCadCents)} freight &amp; other charges{returnsPlus(mfg)} + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out ={" "}
+            + {dollars(mfg.chargesCadCents)} freight &amp; other charges{returnsPlus(mfg)}{pendingMinus(mfg)} + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out ={" "}
             {dollars(mfg.totalCadCents + mfg.excludedCadCents)} all customers, charges included
             {mfg.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the class table until the next one"}
           </p>
@@ -207,7 +210,7 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
               title={revSource}
             />
             <p className="gp-split" title={revSource} data-testid="goals-revenue-charges">
-              + {dollars(goal.chargesCadCents)} freight &amp; other charges left out{returnsPlus(goal)} = {dollars(goal.totalCadCents)} invoiced
+              + {dollars(goal.chargesCadCents)} freight &amp; other charges left out{returnsPlus(goal)}{pendingMinus(goal)} = {dollars(goal.totalCadCents)} invoiced
               {goal.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the card until the next one"}
             </p>
           </>

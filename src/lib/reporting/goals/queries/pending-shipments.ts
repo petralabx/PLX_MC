@@ -58,7 +58,7 @@ SELECT trim(s.shinumber) AS shipment,
 FROM sage.oe_shipment_header s
 JOIN sage.oe_shipment_detail d ON d.shiuniq = s.shiuniq, cut
 WHERE s.shidate >= cut.m0s AND s.shidate < cut.n0s
-  AND trim(coalesce(d.linetype::text, '1')) = '1'
+  AND coalesce(nullif(trim(d.linetype::text), ''), '1') = '1'
   AND d.qtyshipped::numeric <> 0
   AND upper(trim(coalesce(d.item, ''))) NOT IN ('C', 'MISC')
   AND ${NOT_VOIDED}

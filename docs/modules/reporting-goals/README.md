@@ -633,6 +633,13 @@ not invoiced: not included (needs access)" and the refresh carries on.
 `GOALS_PENDING_SHIPMENTS=off` turns it off; to remove it, delete
 `pending-shipments.ts`, `queries/pending-shipments.ts` and the lines marked
 TASK-3992, then run `db/rollback/052_reporting_goals_pending_shipments_rollback.sql`.
+Rollback order: deploy the code and manifest from before 052 first, run one
+refresh on it, then run the rollback with
+`PGOPTIONS='-c plx.code_reverted=052_reporting_goals_pending_shipments.sql'`.
+The flag is no substitute: the page still reads the tables and the manifest
+still requires 052, so dropping them under that code turns every API to
+`503 schema_behind`. The rollback refuses without the setting, or while the
+newest good run has a pending summary.
 Open: shipments entered by hand are unchanged, so one also entered by hand
 before AR invoices it counts twice until then.
 

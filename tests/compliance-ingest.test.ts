@@ -4,7 +4,7 @@
 import { createHmac } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { parsePullRequestEvent, verifyGithubSignature } from "@/lib/compliance/webhook";
+import { parsePullRequestEvent, resolvePrTask, verifyGithubSignature } from "@/lib/compliance/webhook";
 
 const db = vi.hoisted(() => ({
   dispatches: new Map<string, { id: string; actorKind: "agent" | "operator"; taskId: string; revoked: boolean; repo: string; expiresAt: string }>(),
@@ -94,6 +94,13 @@ describe("parsePullRequestEvent", () => {
     expect(parsePullRequestEvent(prPayload())?.beforeSha).toBeNull();
   });
 
+  it("flags a PR whose head lives in a fork, or in a deleted fork, as crossRepo (TASK-4004)", () => {
+    const head = (repo: unknown) => prPayload({}, { head: { sha: "abc123", ref: "feat/x", repo } });
+    expect(parsePullRequestEvent(head({ full_name: "outsider/PLX_MC" }))?.crossRepo).toBe(true);
+    expect(parsePullRequestEvent(head(null))?.crossRepo).toBe(true);
+    expect(parsePullRequestEvent(head({ full_name: "petralabx/plx_mc" }))?.crossRepo).toBe(false);
+  });
+
   it("carries GitHub's draft flag (TASK-3743)", () => {
     expect(parsePullRequestEvent(prPayload({}, { draft: true }))?.draft).toBe(true);
     expect(parsePullRequestEvent(prPayload())?.draft).toBe(false);
@@ -115,6 +122,72 @@ describe("parsePullRequestEvent", () => {
     const evt = parsePullRequestEvent(prPayload())!;
     expect(evt.checkoutIds).toEqual([]);
     expect(evt.checkoutId).toBeNull();
+  });
+});
+
+// TASK-4004: the PR's task, from its checkout, else its title, else its branch.
+describe("resolvePrTask", () => {
+  const pr = (title: string, branch: string) => ({ title, branch });
+
+  it("leaves a stamped PR to its checkouts, whatever the title or branch names", () => {
+    expect(resolvePrTask(pr("Fix TASK-2", "claude/task-3-x"), ["dsp_a"])).toEqual({ kind: "checkout" });
+    expect(resolvePrTask(pr("TASK-1 and TASK-2", ""), ["dsp_a", "dsp_b"])).toEqual({ kind: "checkout" });
+  });
+
+  it("takes the title's id when no checkout resolves, over the branch's", () => {
+    expect(resolvePrTask(pr("feat(x): the thing (TASK-4004)", "claude/task-3999-y"), [])).toEqual({ kind: "resolved", source: "title", taskIds: ["TASK-4004"] });
+  });
+
+  it("takes the branch's id when the title names none, in any case at a segment start", () => {
+    expect(resolvePrTask(pr("feat(x): the thing", "cursor/task-4004-autolink"), [])).toEqual({ kind: "resolved", source: "branch", taskIds: ["TASK-4004"] });
+    expect(resolvePrTask(pr("Task-4005: autolink", "feat/x"), [])).toEqual({ kind: "resolved", source: "title", taskIds: ["TASK-4005"] });
+    expect(resolvePrTask(pr("feat(x): the thing", "Claude/Task-4006-x"), [])).toEqual({ kind: "resolved", source: "branch", taskIds: ["TASK-4006"] });
+  });
+
+  it("counts one id named twice as one", () => {
+    expect(resolvePrTask(pr("TASK-7: fix the TASK-7 regression", ""), [])).toEqual({ kind: "resolved", source: "title", taskIds: ["TASK-7"] });
+  });
+
+  it("is ambiguous when the title names several ids, and does not fall back to the branch", () => {
+    expect(resolvePrTask(pr("TASK-1 and TASK-2", "feat/task-3"), [])).toEqual({ kind: "ambiguous", source: "title", taskIds: ["TASK-1", "TASK-2"] });
+  });
+
+  it("is ambiguous when the branch names several ids", () => {
+    expect(resolvePrTask(pr("no id here", "feat/TASK-1/TASK-2"), [])).toEqual({ kind: "ambiguous", source: "branch", taskIds: ["TASK-1", "TASK-2"] });
+  });
+
+  it("resolves nothing when no source names a task", () => {
+    expect(resolvePrTask(pr("Add the thing", "feat/x"), [])).toEqual({ kind: "none" });
+  });
+
+  it("reads only whole TASK-n tokens: subtask-2, setup-task-2, MY_TASK-2 or TASK-12a name no task", () => {
+    expect(resolvePrTask(pr("Fix subtask-2 rendering", "feat/multitask-3-ui"), [])).toEqual({ kind: "none" });
+    expect(resolvePrTask(pr("Fix onboarding task-3 copy", "dependabot/github_actions/arduino/setup-task-2"), [])).toEqual({ kind: "none" });
+    expect(resolvePrTask(pr("MY_TASK-2 fix", "feat/SETUP-TASK-2-x"), [])).toEqual({ kind: "none" });
+    expect(resolvePrTask(pr("TASK-12a draft", "feat/TASK-4004_autolink"), [])).toEqual({ kind: "resolved", source: "branch", taskIds: ["TASK-4004"] });
+  });
+
+  it("marks a fork PR, which anyone can open on a public repo, so it links nothing", () => {
+    expect(resolvePrTask({ title: "Fix TASK-4004", branch: "main", crossRepo: true }, [])).toEqual({ kind: "fork", source: "title", taskIds: ["TASK-4004"] });
+  });
+
+  it("marks a revert, by its title or its branch, so it links nothing", () => {
+    const revert = (source: "title" | "branch") => ({ kind: "revert", source, taskIds: ["TASK-4004"] });
+    expect(resolvePrTask(pr('Revert "feat: x (TASK-4004)"', "revert-512-claude/task-4004-x"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("Undo x (TASK-4004)", "revert-512-claude/task-4004-x"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("revert: back out TASK-4004 autolink", "fix/x"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("revert(compliance): back out TASK-4004", "fix/x"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("Reverts TASK-4004 pricing change", "cos/undo-pricing"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("Reverted the TASK-4004 change", "cos/undo-pricing"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("Reverting TASK-4004 autolink", "cos/undo-autolink"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("chore: revert TASK-4004 pricing change", "cos/undo-pricing"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("fix(api)!: Revert TASK-4004", "cos/undo-pricing"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("TASK-4004: Revert pricing change", "cos/undo-pricing"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("[TASK-4004] Revert pricing", "cos/undo-pricing"), [])).toEqual(revert("title"));
+    // Conservative: a title about a revert feature is skipped too, and recorded.
+    expect(resolvePrTask(pr("Add revert button (TASK-4004)", "feat/x"), [])).toEqual(revert("title"));
+    expect(resolvePrTask(pr("Back out the autolink", "revert-512-claude/task-4004-x"), [])).toEqual(revert("branch"));
+    expect(resolvePrTask(pr("Revert-safe migrations (TASK-4004)", "feat/x"), [])).toEqual({ kind: "resolved", source: "title", taskIds: ["TASK-4004"] });
   });
 });
 

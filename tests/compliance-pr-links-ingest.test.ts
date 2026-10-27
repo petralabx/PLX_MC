@@ -20,7 +20,7 @@ type Dispatch = {
 const h = vi.hoisted(() => ({
   rows: new Map<string, { entity_type: string; id: string; data: Record<string, unknown>; sync_state: string; sp_item_id: string | null; dirty_fields: string[] }>(),
   dispatches: new Map<string, Dispatch>(),
-  events: [] as { kind: string; taskId?: string | null; dedupKey?: string | null }[],
+  events: [] as { kind: string; taskId?: string | null; dedupKey?: string | null; payload?: Record<string, unknown> }[],
   writes: [] as string[],
   tx: Promise.resolve() as Promise<unknown>,
 }));
@@ -150,6 +150,7 @@ beforeEach(() => {
   h.events.length = 0;
   h.writes.length = 0;
   delete process.env.COMPLIANCE_PROJECTION_ENABLED;
+  delete process.env.COMPLIANCE_PR_TASK_LINK_ENABLED;
 });
 
 describe("ingestPullRequest — PR rows after close and merge", () => {
@@ -235,5 +236,173 @@ describe("ingestPullRequest — PR rows after close and merge", () => {
     await ingestPullRequest(pr("closed", []));
     expect(statusOf("TASK-A")).toEqual(["open"]);
     expect(h.writes).toEqual([]);
+  });
+});
+
+// TASK-4004: a PR whose checkout resolves to no task links to the task its title,
+// else its branch, names. The existing merge rule then moves that task to Merged.
+describe("ingestPullRequest — link a PR to the task its title or branch names (TASK-4004)", () => {
+  const titled = "Add the thing (TASK-4101)";
+  const links = () => h.events.filter((e) => e.kind === "pr.task_link");
+  const merge = (over: Record<string, unknown> = {}) => pr("closed", [], { merged: true, merge_commit_sha: "m1", ...over });
+
+  it("links an unstamped PR to its title's task with no stage move, and the merge moves the task to Merged", async () => {
+    seedTask("TASK-4101");
+    await ingestPullRequest(pr("opened", [], { title: titled }));
+    expect(statusOf("TASK-4101")).toEqual(["open"]);
+    expect(taskOf("TASK-4101").stage).toBe("planned");
+    expect(links()).toMatchObject([{ taskId: "TASK-4101", payload: { outcome: "resolved", source: "title", taskIds: ["TASK-4101"] } }]);
+
+    await ingestPullRequest(merge({ title: titled }));
+    expect(statusOf("TASK-4101")).toEqual(["merged"]);
+    expect(taskOf("TASK-4101").stage).toBe("merged");
+    expect(h.events.filter((e) => e.kind === "task.promoted").map((e) => e.taskId)).toEqual(["TASK-4101"]);
+
+    // A replay of the merge still resolves to the task that now holds the PR.
+    await ingestPullRequest(merge({ title: titled }));
+    expect(taskOf("TASK-4101").stage).toBe("merged");
+    expect(new Set(links().map((e) => e.dedupKey)).size).toBe(1);
+  });
+
+  it("never re-promotes a delivered task, or links a cancelled one, that a PR only names", async () => {
+    const delivered = { sha: "d1", on: "2026-10-20" };
+    seedTask("TASK-4104", { stage: "merged", merge: delivered, prs: [{ repo: "PLX_MC", num: 7, status: "merged", title: "Ship it", base: "main" }] });
+    seedTask("TASK-4105", { stage: "cancelled" });
+    await ingestPullRequest(merge({ title: "Follow-up to TASK-4104" }));
+    await ingestPullRequest(pr("opened", [], { number: 43, title: "Retry TASK-4105" }));
+    expect(taskOf("TASK-4104").merge).toEqual(delivered);
+    expect(statusOf("TASK-4104")).toEqual(["merged"]);
+    expect(statusOf("TASK-4105")).toEqual([]);
+    expect(h.events.filter((e) => e.kind === "task.promoted")).toEqual([]);
+    expect(links()).toMatchObject([
+      { taskId: null, payload: { outcome: "task_closed", taskIds: ["TASK-4104"] } },
+      { taskId: null, payload: { outcome: "task_closed", taskIds: ["TASK-4105"] } },
+    ]);
+  });
+
+  it("records a revert that names a task and links nothing", async () => {
+    seedTask("TASK-4101", { stage: "progress" });
+    await ingestPullRequest(merge({ title: `Revert "${titled}"`, head: { sha: "abc123", ref: "revert-41-feat/x" } }));
+    expect(statusOf("TASK-4101")).toEqual([]);
+    expect(taskOf("TASK-4101").stage).toBe("progress");
+    expect(links()).toMatchObject([{ taskId: null, payload: { outcome: "revert", source: "title", taskIds: ["TASK-4101"] } }]);
+  });
+
+  it("links nothing from a fork PR, and records the miss", async () => {
+    seedTask("TASK-4101");
+    await ingestPullRequest(pr("opened", [], { title: titled, head: { sha: "abc123", ref: "main", repo: { full_name: "outsider/PLX_MC" } } }));
+    expect(statusOf("TASK-4101")).toEqual([]);
+    expect(links()).toMatchObject([{ taskId: null, payload: { outcome: "fork", source: "title", taskIds: ["TASK-4101"] } }]);
+  });
+
+  it("on an unmerged close, adds no row to a task that never held the PR and closes the row it holds", async () => {
+    seedTask("TASK-4101");
+    await ingestPullRequest(pr("closed", [], { title: titled }));
+    expect(statusOf("TASK-4101")).toEqual([]);
+    expect(links()).toEqual([]);
+    await ingestPullRequest(pr("reopened", [], { title: titled }));
+    await ingestPullRequest(pr("closed", [], { title: titled }));
+    expect(statusOf("TASK-4101")).toEqual(["closed"]);
+    expect(taskOf("TASK-4101").stage).toBe("planned");
+  });
+
+  it("falls back to the branch when the title names no task", async () => {
+    seedTask("TASK-4102");
+    await ingestPullRequest(pr("opened", [], { head: { sha: "abc123", ref: "claude/task-4102-autolink" } }));
+    expect(statusOf("TASK-4102")).toEqual(["open"]);
+    expect(links()).toMatchObject([{ taskId: "TASK-4102", payload: { outcome: "resolved", source: "branch" } }]);
+  });
+
+  it("lets a resolving checkout win: the title's task stays unlinked and no link event is recorded", async () => {
+    seedTask("TASK-A");
+    seedTask("TASK-4101");
+    checkout("dsp_a", "TASK-A");
+    await ingestPullRequest(pr("opened", ["dsp_a"], { title: titled }));
+    await ingestPullRequest(pr("closed", ["dsp_a"], { merged: true, merge_commit_sha: "m1", title: titled }));
+    expect(taskOf("TASK-A").stage).toBe("merged");
+    expect(statusOf("TASK-4101")).toEqual([]);
+    expect(taskOf("TASK-4101").stage).toBe("planned");
+    expect(links()).toEqual([]);
+  });
+
+  it("lets a stamp that resolves to no task still decide: the title's task is neither linked nor promoted", async () => {
+    seedTask("TASK-4101");
+    await ingestPullRequest(pr("opened", ["dsp_unknown"], { title: titled }));
+    await ingestPullRequest(pr("closed", ["dsp_unknown"], { merged: true, merge_commit_sha: "m1", title: titled }));
+    expect(statusOf("TASK-4101")).toEqual([]);
+    expect(taskOf("TASK-4101").stage).toBe("planned");
+    expect(links()).toEqual([]);
+  });
+
+  it("links nothing to a task of another repo, and records the miss", async () => {
+    seedTask("TASK-4103", { repos: ["portal-web"] });
+    await ingestPullRequest(pr("opened", [], { title: "Port the fix from TASK-4103" }));
+    await ingestPullRequest(merge({ title: "Port the fix from TASK-4103" }));
+    expect(statusOf("TASK-4103")).toEqual([]);
+    expect(taskOf("TASK-4103").stage).toBe("planned");
+    expect(links()[0]).toMatchObject({ taskId: null, payload: { outcome: "repo_mismatch", source: "title", taskIds: ["TASK-4103"] } });
+  });
+
+  it("links nothing for a title that names several tasks, records the miss, and the merge promotes neither", async () => {
+    seedTask("TASK-4101");
+    seedTask("TASK-4102");
+    const title = "Add TASK-4101 and TASK-4102";
+    await ingestPullRequest(pr("opened", [], { title, head: { sha: "abc123", ref: "feat/task-4101" } }));
+    await ingestPullRequest(merge({ title }));
+    expect([statusOf("TASK-4101"), statusOf("TASK-4102")]).toEqual([[], []]);
+    expect([taskOf("TASK-4101").stage, taskOf("TASK-4102").stage]).toEqual(["planned", "planned"]);
+    expect(links()[0]).toMatchObject({ taskId: null, payload: { outcome: "ambiguous", source: "title", taskIds: ["TASK-4101", "TASK-4102"] } });
+    // One event: the replay carries the same dedup key, which mc_events stores once.
+    expect(new Set(links().map((e) => e.dedupKey)).size).toBe(1);
+  });
+
+  it("links nothing for an unknown id, not even the branch's task, and records the miss", async () => {
+    seedTask("TASK-4101");
+    await ingestPullRequest(pr("opened", [], { title: "Add the thing (TASK-9999)", head: { sha: "abc123", ref: "feat/task-4101" } }));
+    expect(statusOf("TASK-4101")).toEqual([]);
+    expect(h.writes).toEqual([]);
+    expect(links()).toMatchObject([{ taskId: null, payload: { outcome: "unknown_task", source: "title", taskIds: ["TASK-9999"] } }]);
+  });
+
+  it("is idempotent: a replayed open or a push to a linked PR writes nothing and keys its event the same", async () => {
+    seedTask("TASK-4101");
+    await ingestPullRequest(pr("opened", [], { title: titled }));
+    const writes = h.writes.length;
+    await ingestPullRequest(pr("opened", [], { title: titled }));
+    await ingestPullRequest(pr("synchronize", [], { title: titled, head: { sha: "def456", ref: "feat/x" } }));
+    expect(h.writes.length).toBe(writes);
+    expect(statusOf("TASK-4101")).toEqual(["open"]);
+    expect(new Set(links().map((e) => e.dedupKey)).size).toBe(1);
+  });
+
+  it("never passes a gate: a task waiting for creator approval gets no row and no promotion", async () => {
+    seedTask("TASK-4101", { creatorApproval: { principal: "sp_bot", status: "pending", requestedAt: "2026-10-26T00:00:00Z" } });
+    await ingestPullRequest(pr("opened", [], { title: titled }));
+    await ingestPullRequest(merge({ title: titled }));
+    expect(statusOf("TASK-4101")).toEqual([]);
+    expect(taskOf("TASK-4101").stage).toBe("planned");
+    expect(taskOf("TASK-4101").creatorApproval?.status).toBe("pending");
+    expect(links()[0]).toMatchObject({ taskId: null, payload: { outcome: "creator_approval_pending", taskIds: ["TASK-4101"] } });
+  });
+
+  it.each(["COMPLIANCE_PROJECTION_ENABLED", "COMPLIANCE_PR_TASK_LINK_ENABLED"])(
+    "links nothing and records nothing while %s=0",
+    async (flag) => {
+      seedTask("TASK-4101");
+      process.env[flag] = "0";
+      await ingestPullRequest(pr("opened", [], { title: titled }));
+      await ingestPullRequest(merge({ title: titled }));
+      expect(statusOf("TASK-4101")).toEqual([]);
+      expect(taskOf("TASK-4101").stage).toBe("planned");
+      expect(links()).toEqual([]);
+    }
+  );
+
+  it("keeps stamped projection while only the link switch is off", async () => {
+    seedTask("TASK-A");
+    checkout("dsp_a", "TASK-A");
+    process.env.COMPLIANCE_PR_TASK_LINK_ENABLED = "0";
+    await ingestPullRequest(pr("opened", ["dsp_a"], { title: titled }));
+    expect(statusOf("TASK-A")).toEqual(["open"]);
   });
 });

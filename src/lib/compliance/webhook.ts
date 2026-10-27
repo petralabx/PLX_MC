@@ -27,6 +27,8 @@ export interface PrEvent {
   mergedAt?: string | null;
   branch: string;
   baseBranch?: string;
+  /** The head branch lives in another repository (a fork), or that fork is gone (TASK-4004). */
+  crossRepo?: boolean;
   title: string;
   author: string;
   labels: string[];
@@ -98,6 +100,10 @@ export function parsePullRequestEvent(payload: unknown): PrEvent | null {
       : null;
   const mergeCommitSha = asStr(pr.merge_commit_sha);
   const merged = pr.merged === true;
+  // GitHub sends head.repo as null once the fork is deleted.
+  const headRepo = head.repo === null ? null : asObj(head.repo);
+  const headFullName = headRepo ? asStr(headRepo.full_name) : "";
+  const crossRepo = headRepo === null || (!!headFullName && !!fullName && headFullName.toLowerCase() !== fullName.toLowerCase());
 
   return {
     action: asStr(p.action),
@@ -113,6 +119,7 @@ export function parsePullRequestEvent(payload: unknown): PrEvent | null {
     mergedAt: merged && asStr(pr.merged_at) ? asStr(pr.merged_at) : null,
     branch: asStr(head.ref),
     baseBranch: asStr(base.ref) || "main",
+    crossRepo,
     title: asStr(pr.title),
     author: asStr(user.login),
     labels: labelsRaw.map((l) => asStr(asObj(l).name)).filter((s) => s.length > 0),
@@ -122,6 +129,49 @@ export function parsePullRequestEvent(payload: unknown): PrEvent | null {
     body,
     changedPaths: [],
   };
+}
+
+export type PrTaskResolution =
+  | { kind: "none" }
+  | { kind: "checkout" }
+  | { kind: "resolved" | "ambiguous" | "revert" | "fork"; source: "title" | "branch"; taskIds: string[] };
+
+// A whole upper-case TASK-n token, or a task-n in any case that opens the text
+// or a branch segment ("claude/task-4004-x"). So "subtask-2", Dependabot's
+// "setup-task-2" and "MY_TASK-2" name no task. Stricter than routing's
+// extractBranchTaskIds, which only scores suggestions; this one links.
+const TASK_REF_RE = /(?<![A-Za-z0-9_-])TASK-(\d+)(?![A-Za-z0-9])|(?:^|(?<=\/))[Tt][Aa][Ss][Kk]-(\d+)(?![A-Za-z0-9])/g;
+// "revert", "reverts", "reverted" or "reverting" as a word anywhere in the title
+// ("chore: revert …", "TASK-1: Revert …"), but not "Revert-safe". A false match
+// only skips the link (and records it); a miss would promote the undone task.
+const REVERT_TITLE_RE = /(?<![\w-])revert(?:s|ed|ing)?(?![\w-])/i;
+
+function taskRefs(text: string): string[] {
+  const ids = new Set<string>();
+  for (const m of text.matchAll(TASK_REF_RE)) ids.add(`TASK-${m[1] ?? m[2]}`);
+  return Array.from(ids);
+}
+
+// TASK-4004: the task a PR delivers. The first source present decides: the PR's
+// MC-Checkout stamps (the dispatch ledger resolves them, even to no task), then
+// a TASK-n in the title, then one in the branch. A title or branch that names
+// several distinct ids is ambiguous and never falls through to the next. A
+// revert (REVERT_TITLE_RE, or a branch segment starting `revert-`) names the
+// task it undoes: kind "revert". A fork PR can come from anyone on a public
+// repo: kind "fork". Neither links.
+export function resolvePrTask(
+  pr: Pick<PrEvent, "title" | "branch" | "crossRepo">,
+  checkoutIds: string[]
+): PrTaskResolution {
+  if (checkoutIds.length > 0) return { kind: "checkout" };
+  const revert = REVERT_TITLE_RE.test(pr.title) || /(^|\/)revert-/i.test(pr.branch);
+  for (const source of ["title", "branch"] as const) {
+    const taskIds = taskRefs(pr[source]);
+    if (taskIds.length === 0) continue;
+    const kind = pr.crossRepo ? "fork" : revert ? "revert" : taskIds.length === 1 ? "resolved" : "ambiguous";
+    return { kind, source, taskIds };
+  }
+  return { kind: "none" };
 }
 
 /** Strip in-memory body before any durable / cross-boundary handoff. */

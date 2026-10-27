@@ -95,18 +95,20 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
 // sp_mcp_cursor is the principal Ledger's Task calls authenticate as (no
 // sp_mcp_ledger key, and no events under that principal). Vince approved
 // task.cancel on 2026-10-16 (TASK-3089) and task.reopen on 2026-10-19
-// (TASK-3374). Not task.link_merged_pr.
+// (TASK-3374). Vince granted task.link_merged_pr on 2026-10-27 at 1:40 AM
+// and 2:02 AM ET (TASK-3671): Ledger signs in through the shared Hub key.
 const CURSOR_MCP_CAPABILITIES: readonly Capability[] = [
   ...MCP_AGENT_CAPABILITIES,
   "task.cancel",
   "task.reopen",
+  "task.link_merged_pr",
 ];
 
 // sp_mcp_ledger is the steward principal: the agent bundle plus
 // task.link_merged_pr (mc_link_merged_pr), task.cancel (Ledger dedup; Vince
 // 2026-10-15 16:37 ET), and task.reopen (TASK-2580). sp_mcp_cos holds cancel
-// and link_merged_pr but not reopen. sp_mcp_cursor holds task.cancel and
-// task.reopen.
+// and link_merged_pr but not reopen. sp_mcp_cursor holds task.cancel,
+// task.reopen and task.link_merged_pr.
 const LEDGER_MCP_CAPABILITIES: readonly Capability[] = [
   ...MCP_AGENT_CAPABILITIES,
   "task.cancel",

@@ -25,11 +25,11 @@ import { isArchived, isPetraEmail } from "@/lib/mc-data/helpers";
 import { isClosedStage } from "@/lib/mc-data/policy";
 import type { Bucket, Human, Project, Repo, Task } from "@/lib/mc-data/types";
 import {
+  canAccessBucket,
   canAccessProject,
+  indexById,
   normalizeMemberToken,
   normalizeProjectMembers,
-  restrictedBucketIds,
-  restrictedProjectIds,
   type ProjectAclPrincipal,
 } from "@/lib/permissions/project-acl";
 import { recordShadowMismatch } from "@/lib/permissions/shadow-mismatch";
@@ -206,6 +206,8 @@ export async function createDraft(actor: DraftActor, sections: DraftSections & {
 export async function saveDraft(actor: DraftActor, id: string, sections: DraftSections): Promise<{ draft: Draft; changed: boolean }> {
   await visibleDraft(id, actor);
   const result = await store.mutateDraft(id, (draft) => {
+    // Again under the lock: the author may have restricted the draft meanwhile.
+    if (!canSeeDraft(draft, actor)) throw notFound(id);
     assertWriter(draft, actor);
     assertOpen(draft);
     const working = applySections(draft.working, sections);
@@ -232,6 +234,7 @@ export async function saveDraft(actor: DraftActor, id: string, sections: DraftSe
 export async function withdrawDraft(actor: DraftActor, id: string, reason: string): Promise<Draft> {
   await visibleDraft(id, actor);
   const result = await store.mutateDraft(id, (draft) => {
+    if (!canSeeDraft(draft, actor)) throw notFound(id);
     assertWriter(draft, actor);
     assertOpen(draft);
     return { draft: { ...draft, status: "withdrawn", withdrawnAt: now(), withdrawnBy: actor.email, withdrawReason: reason } };
@@ -253,12 +256,22 @@ export async function draftPreflight(actor: DraftActor, draft: Draft, deps: Draf
   return preflightIssues(draft.working, await preflightContext(actor, deps));
 }
 
-/** Open tasks in shared projects only: a finding must not leak a restricted task's title. */
+/**
+ * Open tasks in shared projects only: a finding must not leak a restricted
+ * task's title. A task whose bucket, or whose bucket's project, the Hub does not
+ * hold is left out too, as task reads fail closed (canAccessBucket).
+ */
 async function sharedOpenTasks(deps: DraftDeps): Promise<OpenTaskTitle[]> {
   const [tasks, buckets, projects] = await Promise.all([deps.openTasks(), deps.buckets(), deps.projects()]);
-  const hiddenBuckets = restrictedBucketIds(buckets, restrictedProjectIds(projects));
-  const archived = new Set(buckets.filter(isArchived).map((b) => b.id));
-  return tasks.filter((t) => !hiddenBuckets.has(t.bucket) && !archived.has(t.bucket)).map((t) => ({ id: t.id, title: t.title }));
+  const bucketsById = indexById(buckets);
+  const projectsById = indexById(projects);
+  return tasks
+    .filter((t) => {
+      const bucket = bucketsById.get(t.bucket);
+      // A null principal holds no tokens, so it sees shared projects only.
+      return bucket !== undefined && !isArchived(bucket) && canAccessBucket(bucket, projectsById, null);
+    })
+    .map((t) => ({ id: t.id, title: t.title }));
 }
 
 function newReview(fields: Omit<DraftReview, "id" | "at" | "closedBy" | "closedAt" | "closeReason">): DraftReview {
@@ -289,6 +302,7 @@ export async function submitDraft(actor: DraftActor, id: string, deps: DraftDeps
   let frozen = false;
   let duplicates = 0;
   const result = await store.mutateDraft(id, (draft) => {
+    if (!canSeeDraft(draft, actor)) throw notFound(id);
     assertWriter(draft, actor);
     assertOpen(draft);
     const digest = draftDigest(draft.working);
@@ -347,6 +361,8 @@ export async function submitDraft(actor: DraftActor, id: string, deps: DraftDeps
 
 export interface ReviewInput {
   kind: DraftReviewKind;
+  /** The version the reviewer read; a review never lands on content they did not see. */
+  version: number;
   body: string;
   blocking?: boolean;
   target?: string | null;
@@ -361,6 +377,9 @@ export async function reviewDraft(actor: DraftActor, id: string, input: ReviewIn
     assertOpen(draft);
     if (draft.version === 0 || !draft.digest) {
       throw new ApiError("draft_not_submitted", `${id} has no submitted version to review yet.`, 409);
+    }
+    if (draft.version !== input.version) {
+      throw new ApiError("draft_version_moved", `${id} is at version ${draft.version}, not ${input.version}. Read it again before you review.`, 409);
     }
     const finding = input.kind === "finding";
     review = newReview({

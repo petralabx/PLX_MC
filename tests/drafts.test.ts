@@ -27,6 +27,7 @@ import {
   type DraftActor,
   type DraftDeps,
 } from "@/lib/drafts/service";
+import * as draftStore from "@/lib/drafts/store";
 import { __resetDraftsMemoryForTests, getDraftVersion } from "@/lib/drafts/store";
 import { emptyDraftContent, openBlockingFindings, type DraftContent, type DraftPlan, type DraftResearch } from "@/lib/drafts/types";
 import { capabilitiesForRole, capabilitiesForServicePrincipal } from "@/lib/permissions";
@@ -42,7 +43,11 @@ function deps(openTasks: Partial<Task>[] = []): DraftDeps {
   return {
     registry: async () => REGISTRY,
     projects: async () => [OPEN, CLOSED, ARCHIVED, SECRET],
-    buckets: async () => [{ id: "BKT-SECRET", project: "PRJ-SECRET" } as never, { id: "BKT-OPEN", project: "PRJ-OPEN" } as never],
+    buckets: async () => [
+      { id: "BKT-SECRET", project: "PRJ-SECRET" } as never,
+      { id: "BKT-OPEN", project: "PRJ-OPEN" } as never,
+      { id: "BKT-ORPHAN", project: "PRJ-GONE" } as never,
+    ],
     openTasks: async () => openTasks as Task[],
     humans: () => Object.values(HUMANS),
   };
@@ -191,8 +196,8 @@ describe("preflight", () => {
   it("needs two approaches with exactly one chosen, and findings that cite real sources", () => {
     const c = content();
     c.research.approaches = [c.research.approaches[0]];
-    c.research.findings = [{ text: "x", sources: ["[9]"] }];
-    expect(completenessIssues(c).map((i) => i.code)).toEqual(["approaches_required", "unknown_source_ref"]);
+    c.research.findings = [{ text: "x", sources: ["[9]"] }, { text: "Uncited.", sources: [] }];
+    expect(completenessIssues(c).map((i) => i.code)).toEqual(["approaches_required", "unknown_source_ref", "finding_uncited"]);
     c.research.approaches = [
       { ...research.approaches[0], chosen: true },
       { ...research.approaches[1], chosen: true },
@@ -275,10 +280,20 @@ describe("create, edit and submit", () => {
     expect((await submitDraft(actor, created.id, deps(hidden as Partial<Task>[]))).duplicates).toBe(0);
   });
 
+  it("fails closed on a missing parent: a task whose bucket or project the Hub does not hold is never raised", async () => {
+    const actor = agent();
+    const created = await createDraft(actor, { title: "Draft Projects", plan, research });
+    const dangling = [
+      { id: "TASK-8", title: "Drafts storage migration", stage: "backlog", bucket: "BKT-ORPHAN" },
+      { id: "TASK-9", title: "Drafts storage migration", stage: "backlog", bucket: "BKT-GONE" },
+    ];
+    expect((await submitDraft(actor, created.id, deps(dangling as Partial<Task>[]))).duplicates).toBe(0);
+  });
+
   it("returns an edited draft to drafting, and the next submit freezes version 2; older reviews go stale", async () => {
     const actor = agent();
     const draft = await submitted(actor);
-    await reviewDraft(human("ricardo@petrasoap.com"), draft.id, { kind: "approve", body: "Looks right." });
+    await reviewDraft(human("ricardo@petrasoap.com"), draft.id, { kind: "approve", version: 1, body: "Looks right." });
     const { draft: edited } = await saveDraft(actor, draft.id, { title: "Draft Projects v2" });
     expect(edited.status).toBe("drafting");
     const second = (await submitDraft(actor, draft.id, deps())).draft;
@@ -286,6 +301,20 @@ describe("create, edit and submit", () => {
     expect(second.digest).not.toBe(draft.digest);
     expect(second.reviews[0].digest).toBe(draft.digest);
     expect((await getDraftVersion(draft.id, 1))?.content.title).toBe("Draft Projects");
+  });
+
+  it("lands a review only on the version its reviewer read", async () => {
+    const actor = agent();
+    const draft = await submitted(actor);
+    await saveDraft(actor, draft.id, { title: "Draft Projects v2" });
+    await submitDraft(actor, draft.id, deps());
+    const ricardo = human("ricardo@petrasoap.com");
+    await expect(reviewDraft(ricardo, draft.id, { kind: "approve", version: 1, body: "Read v1." })).rejects.toMatchObject({
+      code: "draft_version_moved",
+      status: 409,
+    });
+    const { review } = await reviewDraft(ricardo, draft.id, { kind: "approve", version: 2, body: "Read v2." });
+    expect(review).toMatchObject({ version: 2 });
   });
 
   it("lets only the writer edit: the same principal acting for the same person", async () => {
@@ -300,7 +329,7 @@ describe("create, edit and submit", () => {
     const draft = await submitted(actor);
     await withdrawDraft(actor, draft.id, "Superseded by a smaller plan.");
     await expect(saveDraft(actor, draft.id, { title: "x" })).rejects.toMatchObject({ code: "draft_closed", status: 409 });
-    await expect(reviewDraft(agent(), draft.id, { kind: "comment", body: "x" })).rejects.toMatchObject({ code: "draft_closed" });
+    await expect(reviewDraft(agent(), draft.id, { kind: "comment", version: 1, body: "x" })).rejects.toMatchObject({ code: "draft_closed" });
   });
 });
 
@@ -324,18 +353,35 @@ describe("visibility", () => {
     // …and under enforce (principal tokens only) only once its sp_* id is a member.
     await expect(getVisibleDraft(agent(), draft.id)).rejects.toMatchObject({ code: "not_found" });
   });
+
+  it("checks again under the lock: a draft restricted mid-call refuses its writer's save, submit and withdraw", async () => {
+    const writer = agent();
+    const draft = await createDraft(writer, { title: "Draft Projects", plan, research });
+    const shared = await draftStore.getDraft(draft.id);
+    await saveDraft(human("vince@petrasoap.com"), draft.id, { visibility: "restricted", members: ["stephen@petrasoap.com"] });
+    // The writer's read raced the author's change: it still sees the shared copy.
+    const read = vi.spyOn(draftStore, "getDraft").mockResolvedValue(shared);
+    try {
+      await expect(saveDraft(writer, draft.id, { title: "Changed" })).rejects.toMatchObject({ code: "not_found" });
+      await expect(submitDraft(writer, draft.id, deps())).rejects.toMatchObject({ code: "not_found" });
+      await expect(withdrawDraft(writer, draft.id, "No longer needed.")).rejects.toMatchObject({ code: "not_found" });
+    } finally {
+      read.mockRestore();
+    }
+    expect(await draftStore.getDraft(draft.id)).toMatchObject({ status: "drafting", visibility: "restricted", working: { title: "Draft Projects" } });
+  });
 });
 
 describe("reviews and findings", () => {
   it("needs a submitted version before anyone reviews", async () => {
     const draft = await createDraft(agent(), { title: "Draft Projects" });
-    await expect(reviewDraft(agent(), draft.id, { kind: "comment", body: "x" })).rejects.toMatchObject({ code: "draft_not_submitted" });
+    await expect(reviewDraft(agent(), draft.id, { kind: "comment", version: 1, body: "x" })).rejects.toMatchObject({ code: "draft_not_submitted" });
   });
 
   it("keeps a blocking finding open until its raiser resolves it; nobody else's agent may", async () => {
     const draft = await submitted();
     const raiser = agent("ricardo@petrasoap.com", "sp_mcp_codex");
-    const { review } = await reviewDraft(raiser, draft.id, { kind: "finding", body: "T2 needs an owner.", blocking: true, target: "T2" });
+    const { review } = await reviewDraft(raiser, draft.id, { kind: "finding", version: 1, body: "T2 needs an owner.", blocking: true, target: "T2" });
     expect(review).toMatchObject({ status: "open", blocking: true, version: 1, digest: draft.digest, byKind: "agent", byPrincipal: "sp_mcp_codex" });
     expect(openBlockingFindings(await getVisibleDraft(agent(), draft.id)).map((r) => r.id)).toEqual([review.id]);
     await expect(closeFinding(agent(), draft.id, review.id, "resolve", null)).rejects.toMatchObject({ status: 403 });
@@ -348,7 +394,7 @@ describe("reviews and findings", () => {
 
   it("lets only the author in person dismiss a finding, with a reason", async () => {
     const draft = await submitted();
-    const { review } = await reviewDraft(human("stephen@petrasoap.com"), draft.id, { kind: "finding", body: "Too big.", blocking: true });
+    const { review } = await reviewDraft(human("stephen@petrasoap.com"), draft.id, { kind: "finding", version: 1, body: "Too big.", blocking: true });
     await expect(closeFinding(agent(), draft.id, review.id, "dismiss", "The author's agent cannot.")).rejects.toMatchObject({ status: 403 });
     await expect(closeFinding(human("vince@petrasoap.com"), draft.id, review.id, "dismiss", "no")).rejects.toMatchObject({ status: 422 });
     const { review: dismissed } = await closeFinding(human("vince@petrasoap.com"), draft.id, review.id, "dismiss", "Scope agreed with Stephen.");
@@ -361,7 +407,7 @@ describe("reviews and findings", () => {
     expect(needsReviewFrom(draft, ricardo)).toBe(true);
     expect(needsReviewFrom(draft, human("stephen@petrasoap.com"))).toBe(false);
     expect((await listVisibleDrafts(ricardo, { needsMyReview: true })).map((d) => d.id)).toEqual([draft.id]);
-    await reviewDraft(ricardo, draft.id, { kind: "approve", body: "Yes." });
+    await reviewDraft(ricardo, draft.id, { kind: "approve", version: 1, body: "Yes." });
     expect(needsReviewFrom(await getVisibleDraft(ricardo, draft.id), ricardo)).toBe(false);
   });
 });

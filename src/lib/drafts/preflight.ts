@@ -104,6 +104,8 @@ export function completenessIssues(content: DraftContent): DraftIssue[] {
     refs.add(s.ref);
   }
   r.findings.forEach((f, i) => {
+    // The PRD's research: every finding cites the sources behind it.
+    if (f.sources.length === 0) add("finding_uncited", `research.findings[${i}].sources`, `Finding ${i + 1} cites no source.`);
     for (const ref of f.sources) {
       if (!refs.has(ref)) add("unknown_source_ref", `research.findings[${i}].sources`, `Finding ${i + 1} cites ${ref}, which is not a source.`);
     }

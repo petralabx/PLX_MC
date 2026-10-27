@@ -23,8 +23,9 @@ vi.mock("@/lib/compliance/repo", async (importOriginal) => ({
 vi.mock("@/lib/sync/repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sync/repo")>()),
   getRepos: vi.fn(async () => [{ id: "plx-mc", name: "PLX_MC" }]),
-  getProjects: vi.fn(async () => []),
-  getBuckets: vi.fn(async () => []),
+  getProjects: vi.fn(async () => [{ id: "PRJ-INFRA", name: "Infra", visibility: "shared", members: [] }]),
+  // A duplicate is raised only for a task whose bucket and project the Hub holds.
+  getBuckets: vi.fn(async () => [{ id: "BKT-INFRA", name: "Infra", project: "PRJ-INFRA" }]),
   getEntities: vi.fn(async () => [
     { data: { id: "TASK-9", title: "Drafts storage migration", stage: "backlog", bucket: "BKT-INFRA" } },
   ]),
@@ -137,10 +138,16 @@ describe("draft tools", () => {
     const finding = await callTool(
       "codex-key",
       "mc_review_draft",
-      { draftId: "DRF-1", kind: "finding", body: "T1 has no repo.", blocking: true, target: "T1" },
+      { draftId: "DRF-1", kind: "finding", version: 1, body: "T1 has no repo.", blocking: true, target: "T1" },
       "ricardo@petrasoap.com"
     );
     expect(finding.body.data.review).toMatchObject({ kind: "finding", blocking: true, status: "open", by: "ricardo@petrasoap.com", byPrincipal: "sp_mcp_codex" });
+
+    // A review names the version it read: a version it did not read refuses.
+    const unread = await callTool("codex-key", "mc_review_draft", { draftId: "DRF-1", kind: "approve", version: 2, body: "Yes." }, "ricardo@petrasoap.com");
+    expect(unread.body).toMatchObject({ error: { code: "draft_version_moved" } });
+    const noVersion = await callTool("codex-key", "mc_review_draft", { draftId: "DRF-1", kind: "approve", body: "Yes." }, "ricardo@petrasoap.com");
+    expect(noVersion.isError).toBe(true);
 
     const read = await callTool("claude-key", "mc_get_draft", { draftId: "DRF-1" });
     expect(read.body.data.draft.openBlockingFindings).toEqual([finding.body.data.review.id]);
@@ -199,7 +206,7 @@ describe("draft REST routes", () => {
     const submitted = await submitRoute(post("/api/cursor/drafts/submit", { draftId: "DRF-1" }), ctx());
     expect(((await submitted.json()) as Body).data.draft.version).toBe(1);
 
-    const review = await reviewRoute(post("/api/cursor/drafts/review", { draftId: "DRF-1", kind: "approve", body: "Good." }), ctx());
+    const review = await reviewRoute(post("/api/cursor/drafts/review", { draftId: "DRF-1", kind: "approve", version: 1, body: "Good." }), ctx());
     expect(((await review.json()) as Body).data.review).toMatchObject({ kind: "approve", byKind: "agent" });
 
     const listed = (await (await listRoute(get("/api/cursor/drafts?status=in_review&mine=true"), ctx())).json()) as Body;

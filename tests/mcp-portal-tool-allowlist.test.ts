@@ -249,7 +249,7 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   mc_submit_draft: { draftId: "DRF-1" },
   mc_get_draft: { draftId: "DRF-1" },
   mc_list_drafts: {},
-  mc_review_draft: { draftId: "DRF-1", kind: "comment", body: "x" },
+  mc_review_draft: { draftId: "DRF-1", kind: "comment", version: 1, body: "x" },
 };
 
 beforeEach(() => {

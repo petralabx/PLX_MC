@@ -170,7 +170,7 @@ describe("Draft Projects on Postgres", () => {
       principalId: `oid-${id}`,
       acl: principalFromTokens(HUMANS[id].email!),
     }));
-    await Promise.all(reviewers.map((r, i) => reviewDraft(r, created.id, { kind: i % 2 ? "comment" : "approve", body: `Review ${i}` })));
+    await Promise.all(reviewers.map((r, i) => reviewDraft(r, created.id, { kind: i % 2 ? "comment" : "approve", version: 1, body: `Review ${i}` })));
     const stored = await getDraft(created.id);
     expect(stored?.reviews.map((r) => r.body).sort()).toEqual(["Review 0", "Review 1", "Review 2", "Review 3", "Review 4"]);
   });
@@ -187,9 +187,9 @@ describe("Draft Projects on Postgres", () => {
     const stephen: DraftActor = { kind: "human", email: "stephen@petrasoap.com", principalId: "oid-stephen", acl: principalFromTokens("stephen@petrasoap.com") };
     expect(await ids(stephen, { status: "all" })).toContain(secret.id);
     expect(await ids(ricardo, { needsMyReview: true })).toEqual([shared.id]);
-    await reviewDraft(ricardo, shared.id, { kind: "comment", body: "A comment is not a review." });
+    await reviewDraft(ricardo, shared.id, { kind: "comment", version: 1, body: "A comment is not a review." });
     expect(await ids(ricardo, { needsMyReview: true })).toEqual([shared.id]);
-    await reviewDraft(ricardo, shared.id, { kind: "approve", body: "Yes." });
+    await reviewDraft(ricardo, shared.id, { kind: "approve", version: 1, body: "Yes." });
     expect(await ids(ricardo, { needsMyReview: true })).toEqual([]);
     expect(await ids(vince("sp_mcp_codex"), { status: "all", q: "100%" })).toEqual([secret.id]);
     expect(await ids(vince("sp_mcp_codex"), { status: "all", q: "n_x" })).toEqual([secret.id]);

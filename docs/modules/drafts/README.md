@@ -40,10 +40,13 @@ withdraw an open draft (`withdrawn`).
    known owners, names, task buckets and dependencies inside the plan. On a pass it freezes the
    working copy as version N+1 in one transaction. The version's id is the sha256 of its canonical
    content (`draftDigest`), and the `draft_versions` trigger refuses any later change. Likely
-   duplicate open tasks (word overlap, shared projects only) are raised as non-blocking findings
-   by Mission Control. Submitting an unchanged draft changes nothing.
+   duplicate open tasks (word overlap, shared projects only; a task whose bucket or project the
+   Hub does not hold is left out) are raised as non-blocking findings by Mission Control. Every
+   research finding must cite a source (`finding_uncited`). Submitting an unchanged draft changes
+   nothing.
 3. **Review** (`mc_review_draft`): a comment, a finding (blocking or not), an approval or a
-   request for changes, each bound to the current version and digest. A review of an older version
+   request for changes, each bound to the current version and digest. The reviewer sends the
+   version they read; a newer one refuses (409 `draft_version_moved`). A review of an older version
    reads as `stale`. An agent's approval is advisory. A finding stays open across versions until
    its raiser resolves it, or the author, signed in, resolves or dismisses it (a dismissal needs a
    reason of 10 characters or more). An open blocking finding refuses Accept.
@@ -62,11 +65,14 @@ Invariants:
   kill switch. While off, nothing reads or writes the drafts tables, and every tool answers 404
   `drafts_disabled`.
 - Agents never accept. There is no accept tool, and no service principal holds `draft.accept`.
-- Every change locks the draft row (`mutateDraft` in `src/lib/drafts/store.ts`), so racing
-  reviews all land. Submit freezes only the content its checks ran on (409 `draft_changed`
+- Every change locks the draft row (`mutateDraft` in `src/lib/drafts/store.ts`) and checks
+  visibility again under the lock, so racing reviews all land and a draft restricted meanwhile
+  refuses the change. Submit freezes only the content its checks ran on (409 `draft_changed`
   otherwise).
 - Events: `draft.created`, `draft.updated`, `draft.submitted`, `draft.reviewed`,
-  `draft.finding.resolved`, `draft.finding.dismissed`, `draft.withdrawn` in `mc_events`.
+  `draft.finding.resolved`, `draft.finding.dismissed`, `draft.withdrawn` in `mc_events`. Each
+  names its draft in `payload.draftId`, and the `/api/events` export
+  (`src/lib/compliance/events-acl.ts`) shows it only to a principal who can see that draft.
 
 Storage (migration `056_drafts.sql`, rollback `db/rollback/056_drafts_rollback.sql`): `drafts`
 (working copy and reviews as jsonb, the house pattern for gates and questions; ids from

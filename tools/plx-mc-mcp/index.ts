@@ -886,10 +886,11 @@ server.registerTool("mc_list_drafts", {
 });
 
 server.registerTool("mc_review_draft", {
-  description: "Review a submitted draft's current version: comment, finding (blocking: true refuses Accept until closed), approve (advisory for an agent) or request_changes, with an optional target (plan key or research section). resolve {findingId} closes a finding you raised. Agents never accept drafts.",
+  description: "Review a submitted draft's current version: comment, finding (blocking: true refuses Accept until closed), approve (advisory for an agent) or request_changes, with an optional target (plan key or research section). Send version: the version you read; a newer one refuses with draft_version_moved. resolve {findingId} closes a finding you raised. Agents never accept drafts.",
   inputSchema: z.object({
     draftId: z.string().trim().min(1),
     kind: z.enum(["comment", "finding", "approve", "request_changes", "resolve"]),
+    version: z.number().int().positive().optional(),
     body: z.string().trim().min(1).max(8000).optional(),
     blocking: z.boolean().optional(),
     target: z.string().trim().max(120).optional(),

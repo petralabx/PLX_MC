@@ -461,7 +461,7 @@ rows only.
 | `mc_submit_draft` | `POST /api/cursor/drafts/submit` | `draft.create`; writer only | `frozen` (false when unchanged), `duplicatesRaised`, `draft` summary with `version` and `digest`; 422 `draft_not_ready` lists every problem |
 | `mc_get_draft` | `GET /api/cursor/drafts/{id}?version=` | `task.read` + draft visibility | the draft (reviews marked `stale`, `openBlockingFindings`) or one frozen version |
 | `mc_list_drafts` | `GET /api/cursor/drafts?status=&q=&mine=&needsMyReview=` | `task.read` + draft visibility | `drafts[]` summaries (counts of buckets, tasks, open and blocking findings), newest change first |
-| `mc_review_draft` | `POST /api/cursor/drafts/review` | `draft.review` + draft visibility | `review` (`comment`, `finding` with `blocking`, `approve`, `request_changes`) bound to the current version; `resolve {findingId}` closes a finding the same principal and person raised |
+| `mc_review_draft` | `POST /api/cursor/drafts/review` | `draft.review` + draft visibility | `review` (`comment`, `finding` with `blocking`, `approve`, `request_changes`) with the `version` the reviewer read, which must be the current one (409 `draft_version_moved`); `resolve {findingId}` closes a finding the same principal and person raised |
 
 The author is the operator email on the call and must be a Petra person. An agent's approval is advisory, an agent never dismisses a finding, and there is no accept tool: Accept (step 3) is a signed-in session action, and no service principal holds `draft.accept`.
 

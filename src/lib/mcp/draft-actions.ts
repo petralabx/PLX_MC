@@ -86,6 +86,7 @@ export const reviewDraftSchema = z
   .object({
     draftId,
     kind: z.enum(["comment", "finding", "approve", "request_changes", "resolve"]),
+    version: z.number().int().positive().optional().describe("The version you read (mc_get_draft returns it); required except for resolve"),
     body: draftTextSchema(1, 8_000).optional(),
     blocking: z.boolean().optional().describe("Findings only: a blocking finding refuses Accept until it is closed"),
     target: draftTextSchema(0, 120).optional().describe("A plan key (P, B1, T3) or a research section"),
@@ -95,8 +96,9 @@ export const reviewDraftSchema = z
   .superRefine((body, ctx) => {
     if (body.kind === "resolve") {
       if (!body.findingId) ctx.addIssue({ code: "custom", path: ["findingId"], message: "resolve needs findingId." });
-    } else if (!body.body) {
-      ctx.addIssue({ code: "custom", path: ["body"], message: `A ${body.kind} needs a body.` });
+    } else {
+      if (!body.body) ctx.addIssue({ code: "custom", path: ["body"], message: `A ${body.kind} needs a body.` });
+      if (body.version === undefined) ctx.addIssue({ code: "custom", path: ["version"], message: `A ${body.kind} needs the version you read.` });
     }
     if (body.blocking !== undefined && body.kind !== "finding") {
       ctx.addIssue({ code: "custom", path: ["blocking"], message: "blocking applies to findings only." });
@@ -188,7 +190,7 @@ export async function actionReviewDraft(identity: McpIdentity, input: unknown) {
   const result =
     body.kind === "resolve"
       ? await closeFinding(actor, body.draftId, body.findingId!, "resolve", body.body ?? null)
-      : await reviewDraft(actor, body.draftId, { kind: body.kind, body: body.body!, blocking: body.blocking, target: body.target });
+      : await reviewDraft(actor, body.draftId, { kind: body.kind, version: body.version!, body: body.body!, blocking: body.blocking, target: body.target });
   return { draftId: body.draftId, review: result.review, draft: draftSummary(result.draft) };
 }
 
@@ -215,7 +217,7 @@ export function registerDraftTools(server: McpServer, identity: McpIdentity): vo
   }, async (args) => mcpJsonResult({ data: await actionListDrafts(identity, args) }));
   server.registerTool("mc_review_draft", {
     description:
-      "Review a submitted draft's current version: comment, finding (blocking: true refuses Accept until it is closed), approve (advisory for an agent) or request_changes; target names a plan key or research section. resolve {findingId} closes a finding you raised. Only the author, signed in, dismisses a finding. Agents never accept drafts.",
+      "Review a submitted draft's current version: comment, finding (blocking: true refuses Accept until it is closed), approve (advisory for an agent) or request_changes; target names a plan key or research section. Send version: the version you read; a newer one refuses with draft_version_moved. resolve {findingId} closes a finding you raised. Only the author, signed in, dismisses a finding. Agents never accept drafts.",
     inputSchema: reviewDraftSchema,
   }, async (args) => mcpJsonResult({ data: await actionReviewDraft(identity, args) }));
 }

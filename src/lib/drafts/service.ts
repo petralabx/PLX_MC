@@ -44,7 +44,6 @@ import {
   OPEN_DRAFT_STATUSES,
   emptyDraftContent,
   isStaleReview,
-  openBlockingFindings,
   type Draft,
   type DraftContent,
   type DraftIssue,

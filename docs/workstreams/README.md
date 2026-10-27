@@ -57,3 +57,4 @@ after 30 days; git history keeps them.
 | [workstream-protocol](workstream-protocol.md) | Vince | `claude/trusting-albattani-44ngue` | active | ci-redesign | TASK-3953 |
 | [ci-redesign](https://github.com/petralabx/agentic-swarm/blob/main/docs/workstreams/ci-redesign.md) | Vince | `claude/intelligent-wozniak-oe7nwe` | active | — | TASK-3420 |
 | [nav-v2-sidebar](nav-v2-sidebar.md) | Vince | `claude/nav-v2-sidebar-4` | active | — | TASK-3954 to TASK-3961, TASK-3996 |
+| [draft-projects](draft-projects.md) | Vince | `claude/brave-heisenberg-7t8mks` | active | — | TASK-4056 |

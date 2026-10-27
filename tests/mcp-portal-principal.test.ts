@@ -259,9 +259,12 @@ describe("sp_mcp_portal grant", () => {
     // sp_mcp_workbench, sp_mcp_infra and sp_mcp_cip_auto_undraft are read-only, and
     // sp_mcp_workbench_intake creates and reads; their grants are checked below.
     const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
-      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA && id !== CIP && id !== INTAKE
+      // TASK-4015 (056): sp_mcp_person_* hold the member bundle; checked in permissions.test.ts.
+      (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA && id !== CIP && id !== INTAKE && !id.startsWith("sp_mcp_person_")
     );
-    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 5);
+    const people = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => id.startsWith("sp_mcp_person_"));
+    expect(people).toHaveLength(7);
+    expect(others).toHaveLength(MCP_AGENT_SERVICE_PRINCIPAL_IDS.length - 5 - people.length);
     for (const principalId of others) {
       // sp_mcp_cursor adds task.cancel, task.reopen (TASK-3374) and task.link_merged_pr (TASK-3671). sp_mcp_cos
       // adds task.cancel plus task.link_merged_pr. sp_mcp_ledger adds all three (TASK-2580).

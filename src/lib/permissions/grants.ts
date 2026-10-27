@@ -187,7 +187,18 @@ const CLOSE_OUT_MCP_CAPABILITIES: readonly Capability[] = [
   ...MCP_AGENT_CAPABILITIES,
   "task.link_merged_pr",
 ];
+// TASK-4015 (migration 056): personal principals for MC humans. Least
+// privilege: exactly the human member role bundle, whatever the person's
+// web role, so a personal key never carries admin/owner powers.
+const PERSON_MCP_CAPABILITIES: readonly Capability[] = MEMBER_CAPABILITIES;
 const PER_CONSUMER_MCP_GRANTS: Readonly<Record<string, readonly Capability[]>> = {
+  sp_mcp_person_greg: PERSON_MCP_CAPABILITIES,
+  sp_mcp_person_luis: PERSON_MCP_CAPABILITIES,
+  sp_mcp_person_oleg: PERSON_MCP_CAPABILITIES,
+  sp_mcp_person_ricardo: PERSON_MCP_CAPABILITIES,
+  sp_mcp_person_rishi: PERSON_MCP_CAPABILITIES,
+  sp_mcp_person_stephen: PERSON_MCP_CAPABILITIES,
+  sp_mcp_person_tanush: PERSON_MCP_CAPABILITIES,
   sp_mcp_cursor_team: CURSOR_PARITY_MCP_CAPABILITIES,
   sp_mcp_steward: CURSOR_PARITY_MCP_CAPABILITIES,
   sp_mcp_cip: CLOSE_OUT_MCP_CAPABILITIES,

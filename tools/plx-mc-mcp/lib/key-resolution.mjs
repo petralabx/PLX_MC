@@ -41,6 +41,13 @@ const SUPPORTED_MCP_PRINCIPAL_IDS = new Set([
   "sp_mcp_lane_cursor_uat",
   "sp_mcp_lane_cursor_vince",
   "sp_mcp_vince",
+  "sp_mcp_person_greg",
+  "sp_mcp_person_luis",
+  "sp_mcp_person_oleg",
+  "sp_mcp_person_ricardo",
+  "sp_mcp_person_rishi",
+  "sp_mcp_person_stephen",
+  "sp_mcp_person_tanush",
 ]);
 
 const RUNTIME_PRINCIPAL_IDS = new Map([

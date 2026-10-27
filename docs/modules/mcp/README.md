@@ -453,6 +453,18 @@ rows only.
 
 **Questions for a named person (TASK-3567):** `mc_ask_question {taskId, addressee, question, options?, recommended?, recommendationReason?, context?}` (`actionAskQuestion` in `src/lib/mcp/question-actions.ts`; service `src/lib/compliance/questions.ts`) stores a `q_*` question on the task (`Task.questions`, DB-only, never pushed). `addressee` is a directory id or an email; an email of a listed person becomes their directory id, and an agent or unknown id is refused (400 `invalid_addressee`), as is a person outside the task's restricted project (400 `addressee_no_access`). The question, options and reason are stored on one line. `context` (TASK-3720) is background shown under the question: trimmed, at most 2000 characters (longer is 400), omitted when empty, may span lines, and is not part of the re-ask match. Asking the same open question (same wording, options and recommendation) of the same person again returns it (`created: false`). Unlike a gate, an open question never freezes the stage. The person answers on the Approvals screen (`GET /api/questions`, `POST /api/questions/answer`); agents read the answer from the task (`mc_get_task`: `questions[].answer` and the comment it names). Events: `question.asked`, `question.answered`, `question.denied`.
 
+**Draft Projects (TASK-4059):** five tools over `src/lib/mcp/draft-actions.ts` (rules: `src/lib/drafts/service.ts`; contract: [`docs/modules/drafts/README.md`](../drafts/README.md)). All are off until `PLX_MC_DRAFTS_ENABLED=1` and answer 404 `drafts_disabled` while off. None is on a restricted principal's allowlist.
+
+| Tool | REST (stdio proxy) | Auth | Returns |
+|------|--------------------|------|---------|
+| `mc_save_draft` | `POST /api/cursor/drafts` | `draft.create`; edits only by the writer (same principal and operator email) | `draftId`, `created`, `changed`, `preflight` (the checks submit runs), `draft` summary; `withdraw {reason}` closes the draft |
+| `mc_submit_draft` | `POST /api/cursor/drafts/submit` | `draft.create`; writer only | `frozen` (false when unchanged), `duplicatesRaised`, `draft` summary with `version` and `digest`; 422 `draft_not_ready` lists every problem |
+| `mc_get_draft` | `GET /api/cursor/drafts/{id}?version=` | `task.read` + draft visibility | the draft (reviews marked `stale`, `openBlockingFindings`) or one frozen version |
+| `mc_list_drafts` | `GET /api/cursor/drafts?status=&q=&mine=&needsMyReview=` | `task.read` + draft visibility | `drafts[]` summaries (counts of buckets, tasks, open and blocking findings), newest change first |
+| `mc_review_draft` | `POST /api/cursor/drafts/review` | `draft.review` + draft visibility | `review` (`comment`, `finding` with `blocking`, `approve`, `request_changes`) bound to the current version; `resolve {findingId}` closes a finding the same principal and person raised |
+
+The author is the operator email on the call and must be a Petra person. An agent's approval is advisory, an agent never dismisses a finding, and there is no accept tool: Accept (step 3) is a signed-in session action, and no service principal holds `draft.accept`.
+
 **Signed approvals (TASK-3408):** `mc_request_approval` also takes `scope`,
 one of `{kind: "launch", lane, promptHash}` (one `<runtime>/<lane>`, one
 SHA-256 prompt hash), `{kind: "merge", repo, pr, headSha}` or

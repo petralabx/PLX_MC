@@ -46,6 +46,7 @@ import { registerTaskUpdateTools } from "./task-update-actions";
 import { registerProjectTools } from "./project-actions";
 import { registerLinkMergedPrTools } from "./link-merged-pr-actions";
 import { registerSessionTelemetryTools } from "./session-telemetry-actions";
+import { registerDraftTools } from "./draft-actions";
 
 function jsonResult(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -446,6 +447,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   registerProjectTools(server, identity);
   registerLinkMergedPrTools(server, identity);
   registerSessionTelemetryTools(server, identity);
+  registerDraftTools(server, identity);
 
   return server;
 }

@@ -57,6 +57,12 @@ export const CAPABILITIES = [
   "skill.install",
   // Replay the compliance reconciliation queue by hand (the cron run is CRON_SECRET-gated).
   "compliance.reconcile",
+  // TASK-4059 Draft Projects: write, submit and withdraw a draft one authors or wrote.
+  "draft.create",
+  // Review a draft one can see: comment, finding, approve, request changes.
+  "draft.review",
+  // Accept a draft into live records (step 3). The action also requires the session to be the author.
+  "draft.accept",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];

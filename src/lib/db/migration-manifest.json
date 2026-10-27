@@ -51,5 +51,6 @@
   "050_nav_prefs.sql",
   "051_reporting_goals_credit_notes.sql",
   "053_nav_stars_cap_10.sql",
-  "054_per_consumer_mcp_principals.sql"
+  "054_per_consumer_mcp_principals.sql",
+  "056_drafts.sql"
 ]

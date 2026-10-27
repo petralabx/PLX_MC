@@ -303,7 +303,10 @@ describe("tool registry", () => {
     expect(names).toContain("mc_upload_evidence");
     expect(names).toContain("mc_record_checkout_head");
     expect(names).toContain("mc_ask_question");
-    expect(names).toHaveLength(42);
+    for (const tool of ["mc_save_draft", "mc_submit_draft", "mc_get_draft", "mc_list_drafts", "mc_review_draft"]) {
+      expect(names).toContain(tool);
+    }
+    expect(names).toHaveLength(47);
   });
 });
 

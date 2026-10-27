@@ -157,6 +157,19 @@ mode, so an owner gets 403 `not_addressee` for someone else's question. The
 predicate context-denies `question.answer` to every service actor, like
 `approval.decide`, so a mistaken grant can never let a bot answer.
 
+**Draft Projects (TASK-4059; Vince, 2026-10-27):** `draft.create` and
+`draft.review` are in the member role and the shared agent bundle; `draft.accept`
+is in the member role only, so no service principal can accept a draft. The
+draft rules add a check the capability cannot: only the draft's writer (the same
+principal acting for the same person, or the author signed in) edits, submits or
+withdraws it, and Accept (step 3) requires the session to be the author. A member
+who accepts their own draft creates a project and buckets, which members cannot
+do directly; draft review stands in for the admin-only create. The restricted
+principals (`sp_mcp_portal`, `sp_mcp_workbench`, `sp_mcp_infra`,
+`sp_mcp_cip_auto_undraft`, `sp_mcp_workbench_intake`) hold none of the three.
+Draft visibility reuses the project ACL (`canAccessProject`) over the draft's
+members, author and writing principal.
+
 **Approvals redesign (TASK-3720):** no new capability. `GET
 /api/approvals/projects` and `GET /api/approvals/decided` need `task.read` and
 are project-ACL scoped. `POST /api/questions/remind` needs `task.progress` (the

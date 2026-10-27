@@ -200,8 +200,8 @@ Nothing blocks a direct create.
 
 | Step | Task | What ships | State |
 |---|---|---|---|
-| 1 | TASK-4056 | This PRD and the workstream note | This PR |
-| 2 | Not created | Migration (next free number; open PRs #484 and #486 hold 054 and 055), `src/lib/drafts`, the five tools, REST routes, capabilities, `docs/modules/drafts/README.md` and the `DATA_MODEL.md` entry | Not started |
+| 1 | TASK-4056 | This PRD and the workstream note | Merged (#487) |
+| 2 | TASK-4059 | Migration `056_drafts.sql` (054 and 055 were taken), `src/lib/drafts`, the five tools, REST routes, capabilities, `docs/modules/drafts/README.md` and the `DATA_MODEL.md` entry. 056 also adds the columns Accept needs, so step 3 has no migration | In review |
 | 3 | Not created | Drafts screen, Accept, Approvals rows | Not started |
 | Follow-up | Not created | Artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | Not started |
 
@@ -218,7 +218,7 @@ Step 2 touches a migration, so it lands only with a signed MC merge approval of 
 ## Rollback
 
 - **Step 1:** revert the PR. It changes docs only.
-- **Step 2:** the migration is additive, and its rollback script drops only the two new tables. The tools and routes stay off until `PLX_MC_DRAFTS_ENABLED=1`, which is also the kill switch.
+- **Step 2:** the migration is additive, and its rollback script drops only what 056 added: the two tables, their id sequence and the trigger function. The tools and routes stay off until `PLX_MC_DRAFTS_ENABLED=1`, which is also the kill switch.
 - **Step 3:** revert the PR, or set the flag off. Records that Accept already created are ordinary records. Archive them with the existing archive action.
 
 ## Open questions

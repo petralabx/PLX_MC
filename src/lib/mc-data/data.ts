@@ -170,7 +170,7 @@ export const BUCKETS: Bucket[] = [
   { id: "BKT-QMS", name: "QMS", owner: "vince", health: "track", target: "Jul 20", started: "2026.06.11", desc: "Quality management system — forms + DocuSign.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
   { id: "BKT-SHOP", name: "Shopify → Business Central", owner: "vince", health: "track", target: "Aug 31", started: "2026.06.11", desc: "Shopify to Business Central migration — owned by Greg and Stephen (directory entries pending).", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
   { id: "BKT-INFRA", name: "Backend Infra", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Cross-cutting platform/infra work supporting go-live.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
-  { id: "BKT-UAT", name: "UAT", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "Owns parallel testing and the go-live milestones. UAT posture is the portal-published uat quality-ledger surfaced via Loop Ledgers; see docs/modules/uat.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
+  { id: "BKT-UAT", name: "UAT", owner: "vince", health: "track", target: "Oct 01", started: "2026.06.11", desc: "UAT feedback tickets: one task per portal ticket attempt (kind:code + uat:<feedbackId>), leased by PLX Steward, with the UAT tickets view and the daily drift check. UAT case runs stay in the portal uat quality ledger (Loop Ledgers). See docs/modules/uat.", repos: ["portal-web"], sync: { state: "pending", ts: "—", sp: "Roadmap · unprovisioned" }, prd: null, project: "PRJ-PORTAL-GOLIVE" },
 ];
 
 export const BUCKET_IDX: Record<string, Bucket> = Object.fromEntries(
@@ -336,7 +336,7 @@ export const MILESTONES: Milestone[] = [
   // PLX Portal go-live plan (2026-06-11). col is days from Jun 1 — these fall
   // beyond the 30-day June timeline grid, so the timeline pins them at the
   // grid's right edge (pctOfDay clamps); milestone lists show them in full.
-  { id: "M-6", bucket: "BKT-UAT", name: "Parallel System Testing", col: 93, state: "upcoming", sp: "Milestone Register · unprovisioned" },
+  { id: "M-6", bucket: "BKT-UAT", name: "Parallel System Testing", col: 93, state: "now", sp: "Milestone Register · unprovisioned" },
   { id: "M-7", bucket: "BKT-UAT", name: "Production Go-Live", col: 123, state: "upcoming", sp: "Milestone Register · unprovisioned" },
 ];
 

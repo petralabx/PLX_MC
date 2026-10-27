@@ -168,7 +168,9 @@ export interface Draft {
   reviews: DraftReview[];
   /** Draft key to created record id, written by Accept (step 3). */
   materialized: Record<string, string>;
+  /** In review: when the running Accept claimed the draft (null once it fails). Accepted: when. */
   acceptedAt: string | null;
+  /** Who accepted, or whose Accept started; set while in review, it pins the content (accept_unfinished). */
   acceptedBy: string | null;
   withdrawnAt: string | null;
   withdrawnBy: string | null;

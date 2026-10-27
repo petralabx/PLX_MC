@@ -1,8 +1,9 @@
 // Drafts screen (Draft Projects step 3, TASK-4071): the list, a draft's record
 // (plan, research, reviews, versions) and Accept, against mocked /api/drafts
 // routes. Accept states what it creates before it sends anything, and sends the
-// version the author read. An older version is read-only. Approvals lists the
-// drafts waiting for the viewer's review. Axe and horizontal overflow run at
+// version the author read, then reloads the shared snapshot before it links the
+// new records. An older version is read-only, and a closed draft offers no
+// finding actions. Approvals lists the drafts waiting for the viewer's review. Axe and horizontal overflow run at
 // desktop, tablet and phone widths.
 
 import AxeBuilder from "@axe-core/playwright";
@@ -81,7 +82,16 @@ const REVIEW = {
   stale: false,
 };
 
-function detail(viewer: Record<string, unknown> = {}) {
+const OPEN_FINDING = {
+  ...REVIEW,
+  id: "drv_00000000000000aa",
+  kind: "finding",
+  body: "Split B2 before Accept.",
+  blocking: true,
+  status: "open",
+};
+
+function detail(viewer: Record<string, unknown> = {}, draftFields: Record<string, unknown> = {}) {
   return {
     draft: {
       id: "DRF-7",
@@ -103,6 +113,7 @@ function detail(viewer: Record<string, unknown> = {}) {
       withdrawReason: null,
       createdAt: "2026-10-27T09:00:00.000Z",
       updatedAt: "2026-10-27T10:00:00.000Z",
+      ...draftFields,
     },
     versions: [
       { version: 1, digest: DIGEST_1, frozenBy: "vince@petrasoap.com", frozenAt: "2026-10-27T09:30:00.000Z" },
@@ -147,10 +158,16 @@ const ROW = {
 
 interface Mock {
   accepts: unknown[];
+  /** Request paths in order: an Accept, then the shared snapshot load. */
+  order: string[];
 }
 
-async function mockDraftsApi(page: Page, viewer: Record<string, unknown> = {}): Promise<Mock> {
-  const mock: Mock = { accepts: [] };
+async function mockDraftsApi(page: Page, viewer: Record<string, unknown> = {}, draftFields: Record<string, unknown> = {}): Promise<Mock> {
+  const mock: Mock = { accepts: [], order: [] };
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/state" || path.endsWith("/accept")) mock.order.push(`${request.method()} ${path}`);
+  });
   const json = (data: unknown) => ({ status: 200, contentType: "application/json", body: JSON.stringify({ data }) });
   await page.route(/\/api\/drafts(\/|\?|$)/, async (route) => {
     const request = route.request();
@@ -159,10 +176,14 @@ async function mockDraftsApi(page: Page, viewer: Record<string, unknown> = {}): 
       mock.accepts.push(request.postDataJSON());
       return route.fulfill(json({ created: { P: "PRJ-90", B1: "BKT-91", B2: "BKT-92", T1: "TASK-93", T2: "TASK-94" }, alreadyAccepted: false }));
     }
+    if (request.method() === "POST" && url.pathname.endsWith("/review")) {
+      const error = { code: "draft_version_moved", message: "DRF-7 is at version 3, not 2. Read it again before you review." };
+      return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error }) });
+    }
     if (request.method() !== "GET") return route.fulfill({ status: 405, body: "Method Not Allowed" });
     if (/\/api\/drafts\/DRF-7$/.test(url.pathname)) {
       const old = url.searchParams.get("version") === "1";
-      return route.fulfill(json({ ...detail(viewer), ...(old ? { version: VERSION_1 } : {}) }));
+      return route.fulfill(json({ ...detail(viewer, draftFields), ...(old ? { version: VERSION_1 } : {}) }));
     }
     return route.fulfill(json({ drafts: [ROW], count: 1, viewer: "vince@petrasoap.com" }));
   });
@@ -210,6 +231,24 @@ test.describe("Drafts screen (Draft Projects)", () => {
     expect(mock.accepts).toEqual([]);
     await confirm.getByRole("button", { name: /^Accept: creates 1 project/ }).click();
     await expect.poll(() => mock.accepts).toEqual([{ version: 2 }]);
+    // The created records' screens read the shared snapshot: it reloads after the Accept.
+    await expect.poll(() => mock.order.slice(mock.order.indexOf("POST /api/drafts/DRF-7/accept"))).toContain("GET /api/state");
+  });
+
+  test("finding actions show only while the draft takes them, and a failed close shows its error", async ({ page }) => {
+    await mockDraftsApi(page, { canReview: false }, { reviews: [OPEN_FINDING] });
+    await openDrafts(page, "&draftId=DRF-7");
+    const reviews = page.getByRole("region", { name: "Reviews" });
+    await reviews.getByRole("button", { name: "Resolve" }).click();
+    await expect(reviews.getByText("DRF-7 is at version 3, not 2.")).toBeVisible();
+
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await mockDraftsApi(page, {}, { status: "withdrawn", reviews: [OPEN_FINDING] });
+    await openDrafts(page, "&draftId=DRF-7");
+    const closed = page.getByRole("region", { name: "Reviews" });
+    await expect(closed.getByText("Split B2 before Accept.")).toBeVisible();
+    await expect(closed.getByRole("button", { name: "Resolve" })).toHaveCount(0);
+    await expect(closed.getByRole("button", { name: "Dismiss…" })).toHaveCount(0);
   });
 
   test("an older version is read-only: no review form, no finding actions and no Accept", async ({ page }) => {

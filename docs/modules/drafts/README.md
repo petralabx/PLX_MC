@@ -77,12 +77,16 @@ open draft (`withdrawn`).
    - a claim (`accepted_at` while still `in_review`) refuses a second Accept, and every edit and
      review (409 `accept_in_progress`), for 10 minutes; a failed Accept clears it. The claim
      checks again for an open blocking finding;
-   - once a record exists, the content cannot change (409 `accept_unfinished`), so a retry
-     finishes the version it started; reviews and withdraw still work;
+   - once an Accept has claimed the draft, the content cannot change (409 `accept_unfinished`),
+     even after it fails: `accepted_by` stays set, as a create may commit before its record. A
+     retry finishes the version it started; reviews and withdraw still work;
    - a project the run did not create (recorded, adopted or existing) is checked again against
-     the author's access before anything is created in it (404 `unknown_project`).
+     the author's access before anything is created in it (404 `unknown_project`), and each
+     recorded bucket must still be in that project (404 `unknown_bucket`).
 
-   An older version's page is read-only: no review form, no finding actions and no Accept.
+   An older version's page is read-only: no review form, no finding actions and no Accept. A
+   closed draft, or one an Accept is running on, offers no finding actions. After Accept the screen
+   reloads the shared snapshot before it links the new records.
 
 The Drafts screen (`?screen=drafts`, `src/components/mc/drafts.tsx`) lists drafts and opens one:
 the plan tree with preflight badges, the research, reviews, versions with a change summary, and,

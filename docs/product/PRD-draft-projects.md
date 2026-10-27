@@ -143,8 +143,8 @@ Those calls do not share one transaction. Accept writes each new id into `materi
 - A task's id is written inside the transaction that creates it (`createTask`'s `options.inTransaction`), so a task never exists without its record.
 - The project carries the frozen version's link as its PRD link. Each bucket carries that link plus its draft key (`#B1`), so two buckets with the same name stay apart. A retry finds a record that a crashed Accept made by that link, and adopts it instead of creating a second one.
 - Accept takes a claim on the draft first (`accepted_at`, while it is still `in_review`). The claim checks again for an open blocking finding. The claim refuses a second Accept, and every edit and review, while one runs. A failed Accept clears its claim. A crashed one goes stale after 10 minutes, and the next Accept takes over.
-- Once Accept has created a record, the draft's content cannot change (409 `accept_unfinished`). A retry then always finishes the version it started. Reviews still land, and the author can withdraw the draft.
-- On a retry, Accept checks the author's access to the project again before it creates anything in it. An author removed from a restricted project cannot continue.
+- Once an Accept has claimed the draft, its content cannot change (409 `accept_unfinished`), even when that Accept fails. A create can commit before its record, so a retry must read the same version's link. `accepted_by` stays set after a failure and keeps the pin. A retry then always finishes the version it started. Reviews still land, and the author can withdraw the draft.
+- On a retry, Accept checks the author's access to the project again before it creates anything in it. It also checks that each recorded bucket is still in that project. An author removed from a restricted project cannot continue, and no task goes into a bucket that moved.
 
 On the created records:
 

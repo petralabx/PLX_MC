@@ -5,8 +5,8 @@
 // PRD; a failed Accept resumes without creating anything twice, adopts a record
 // a crashed Accept made, and a running Accept refuses a second one. An unfinished
 // Accept pins the content, a blocking finding raised mid-Accept refuses the
-// claim, a retry re-checks the author's access to the project, and two buckets
-// with the same name stay two buckets.
+// claim, a retry re-checks the author's access to the project and each recorded
+// bucket's parent, and two buckets with the same name stay two buckets.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -279,6 +279,52 @@ describe("resume", () => {
     expect(await getDraft(draft.id)).toMatchObject({ status: "in_review", version: 1, working: { title: "Draft Projects" } });
     await expect(acceptDraft(vince, draft.id, 1, flaky)).resolves.toMatchObject({ alreadyAccepted: false });
     expect(calls.tasks.map((t) => t.title)).toEqual(["Drafts tables", "Drafts screen"]);
+  });
+
+  it("pins the content once an Accept claimed the draft, even when a create committed before its record", async () => {
+    const draft = await inReview();
+    const calls: Calls = { projects: [], buckets: [], tasks: [] };
+    const flaky = deps(calls);
+    const real = flaky.createProject;
+    let fail = true;
+    // The project commits, then its audit insert fails: nothing reaches materialized.
+    flaky.createProject = vi.fn(async (input, by) => {
+      const project = await real(input, by);
+      if (fail) {
+        fail = false;
+        throw new Error("audit insert failed");
+      }
+      return project;
+    }) as AcceptDeps["createProject"];
+    await expect(acceptDraft(vince, draft.id, 1, flaky)).rejects.toThrow("audit insert failed");
+    expect(await getDraft(draft.id)).toMatchObject({ status: "in_review", acceptedAt: null, acceptedBy: "vince@petrasoap.com", materialized: {} });
+    await expect(saveDraft(agent, draft.id, { title: "Version 2" })).rejects.toMatchObject({ code: "accept_unfinished", status: 409 });
+    // The retry reads version 1's link again, so it adopts the committed project.
+    const done = await acceptDraft(vince, draft.id, 1, flaky);
+    expect(done.created.P).toBe("PRJ-NEW");
+    expect(calls.projects).toHaveLength(1);
+  });
+
+  it("re-checks each recorded bucket's parent before it creates tasks in it", async () => {
+    const draft = await inReview();
+    const calls: Calls = { projects: [], buckets: [], tasks: [] };
+    const flaky = deps(calls);
+    const real = flaky.createTask;
+    flaky.createTask = vi.fn(async (input, attr, options) => {
+      if (input.title === "Drafts screen") throw new Error("database went away");
+      return real(input, attr, options);
+    }) as AcceptDeps["createTask"];
+    await expect(acceptDraft(vince, draft.id, 1, flaky)).rejects.toThrow("database went away");
+    expect((await getDraft(draft.id))?.materialized).toMatchObject({ B2: "BKT-2" });
+    // BKT-2 moves into a restricted project the author cannot see.
+    const moved: AcceptDeps = {
+      ...flaky,
+      createTask: real,
+      liveBuckets: async () => (await flaky.liveBuckets()).map((b) => (b.id === "BKT-2" ? { ...b, project: "PRJ-SECRET" } : b)),
+    };
+    await expect(acceptDraft(vince, draft.id, 1, moved)).rejects.toMatchObject({ code: "unknown_bucket", status: 404 });
+    expect(calls.tasks.map((t) => t.title)).toEqual(["Drafts tables"]);
+    expect(await getDraft(draft.id)).toMatchObject({ status: "in_review", acceptedAt: null });
   });
 
   it("re-checks the author's access to a project it did not create in this run", async () => {

@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, ApiClientError } from "@/lib/api";
+import { refreshState } from "@/lib/mc-data/store";
 import type {
   Draft,
   DraftContent,
@@ -524,6 +525,8 @@ export function ResearchSection({ content }: { content: DraftContent }) {
 
 function ReviewsSection({ detail, onChange, readOnly }: { detail: DraftDetail; onChange: () => void; readOnly: boolean }) {
   const { draft, viewer } = detail;
+  // closeFinding refuses a closed draft and a running Accept; offer only what it takes.
+  const canClose = !readOnly && (draft.status === "drafting" || draft.status === "in_review") && !viewer.acceptInProgress;
   const [kind, setKind] = useState<DraftReviewKind>("comment");
   const [body, setBody] = useState("");
   const [blocking, setBlocking] = useState(false);
@@ -581,7 +584,7 @@ function ReviewsSection({ detail, onChange, readOnly }: { detail: DraftDetail; o
                   {r.status} by {r.closedBy}: {r.closeReason}
                 </p>
               )}
-              {open && !readOnly && (viewer.isAuthor || raisedByMe) && (
+              {open && canClose && (viewer.isAuthor || raisedByMe) && (
                 <div className="dr-acts">
                   <button type="button" className="btn ghost sm" disabled={busy} onClick={() => close(r, "resolve")}>
                     Resolve
@@ -598,6 +601,7 @@ function ReviewsSection({ detail, onChange, readOnly }: { detail: DraftDetail; o
         })}
       </ul>
 
+      {error && <div className="dr-banner bad">{error}</div>}
       {readOnly && viewer.canReview && <p className="dr-task-meta">To review, read the current version.</p>}
       {viewer.canReview && !readOnly && (
         <form
@@ -633,7 +637,6 @@ function ReviewsSection({ detail, onChange, readOnly }: { detail: DraftDetail; o
               waits until this is closed
             </label>
           )}
-          {error && <div className="dr-banner bad">{error}</div>}
           <button type="submit" className="btn acc sm" disabled={busy || !body.trim()}>
             Post {REVIEW_LABEL[kind].toLowerCase()}
           </button>
@@ -713,6 +716,8 @@ function AcceptSection({ detail, onAccepted }: { detail: DraftDetail; onAccepted
     setError(null);
     try {
       await api(`/drafts/${encodeURIComponent(draft.id)}/accept`, { method: "POST", body: JSON.stringify({ version: draft.version }) });
+      // The project, bucket and task screens read the shared snapshot: load the new records before linking them.
+      await refreshState();
       setConfirming(false);
       onAccepted();
     } catch (err) {

@@ -130,15 +130,17 @@ function assertOpen(draft: Draft): void {
 }
 
 /**
- * Once Accept has created a record, the content stays the version it started
- * from: a retry finishes that version and never pairs its records with another.
+ * Once an Accept has claimed the draft, the content stays the version it
+ * started from: a create may have committed before its record, so a retry
+ * finishes that version and never pairs its records with another. A failed
+ * Accept clears accepted_at and keeps accepted_by (accept.ts releaseClaim).
  */
 function assertAcceptNotStarted(draft: Draft): void {
   const made = Object.keys(draft.materialized);
-  if (made.length > 0) {
+  if (made.length > 0 || draft.acceptedBy !== null) {
     throw new ApiError(
       "accept_unfinished",
-      `An Accept of ${draft.id} created ${made.join(", ")} and did not finish. Accept it again to finish, or withdraw it.`,
+      `An Accept of ${draft.id} started${made.length > 0 ? ` and created ${made.join(", ")}` : ""} and did not finish. Accept it again to finish, or withdraw it.`,
       409
     );
   }

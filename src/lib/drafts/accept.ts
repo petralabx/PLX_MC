@@ -11,11 +11,13 @@
 // - A project carries the frozen version's link as its PRD link, and a bucket
 //   that link plus `#<bucket key>`. A retry finds one Accept already made by
 //   that link and adopts it.
-// - Once Accept has created a record, the draft's content cannot change
-//   (accept_unfinished), so a retry always finishes the version it started.
 // - A claim (accepted_at set while the draft is still in_review) refuses a
 //   second Accept, and every edit and review, while one runs. A failed Accept
 //   clears its claim; a crashed one goes stale after ACCEPT_CLAIM_STALE_MS.
+// - Once an Accept has claimed the draft, its content cannot change
+//   (accept_unfinished): accepted_by stays set after a failure, as a create may
+//   have committed before its record. A retry always finishes that version.
+// - A retry checks the project, and each recorded bucket's parent, again.
 
 import { ApiError } from "@/lib/api/route";
 import { appendEvent } from "@/lib/compliance/repo";
@@ -73,9 +75,10 @@ async function record(id: string, key: string, recordId: string): Promise<void> 
   );
 }
 
+/** Ends a failed Accept's claim. accepted_by stays: it pins the content until an Accept finishes. */
 async function releaseClaim(id: string, claimedAt: string): Promise<void> {
   await store.mutateDraft(id, (draft) =>
-    draft.status === "in_review" && draft.acceptedAt === claimedAt ? { draft: { ...draft, acceptedAt: null, acceptedBy: null } } : null
+    draft.status === "in_review" && draft.acceptedAt === claimedAt ? { draft: { ...draft, acceptedAt: null } } : null
   );
 }
 
@@ -182,7 +185,14 @@ export async function acceptDraft(actor: DraftActor, id: string, version: number
 
     // The buckets, in plan order.
     for (const b of plan.buckets) {
-      if (done[b.key]) continue;
+      if (done[b.key]) {
+        // A bucket a failed Accept recorded may have moved since; its tasks go only into done.P.
+        const recorded = (await deps.liveBuckets()).find((x) => x.id === done[b.key]);
+        if (!recorded || recorded.project !== done.P) {
+          throw new ApiError("unknown_bucket", `Bucket ${done[b.key]} is not in project ${done.P}.`, 404);
+        }
+        continue;
+      }
       // createBucket stores the PRD link as new URL(link).href; match that form.
       const bucketLink = draftBucketLink(id, version, b.key);
       const adopted = (await deps.liveBuckets()).find((x) => x.prd === new URL(bucketLink).href && x.project === done.P);

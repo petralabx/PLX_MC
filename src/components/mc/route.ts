@@ -34,6 +34,7 @@ export const SCREEN_VALUES = [
   "ci-scorecard",
   "routing-inbox",
   "approvals",
+  "drafts",
   "activity",
   "goals",
   "help",
@@ -58,6 +59,10 @@ export interface Route {
   question?: string;
   /** One approval gate on the Approvals screen (TASK-3559): `/?screen=approvals&gate=<apg_id>`. */
   gate?: string;
+  /** One draft (Draft Projects, TASK-4071): `/?screen=drafts&draftId=DRF-<n>`. */
+  draftId?: string;
+  /** One frozen version of that draft: `&version=<n>`, the link Accept writes as the PRD. */
+  version?: string;
   /** Goals & Production revenue at the Sage rate (TASK-3780): `/?screen=goals&fx=sage`; absent = the run's Bank of Canada rate. */
   fx?: "sage";
   /** Goals & Production revenue for manufacturing customers only (every class but Exclusive Distribution): `/?screen=goals&scope=mfg`; absent = all customers. */
@@ -83,7 +88,7 @@ export interface ScreenProps {
 // serialized (see NOTES.md in the phase artifacts): it is a complex nested
 // object carried by one Insights → Board hand-off, not a shareable location.
 
-const ENTITY_PARAMS = ["projectId", "bucketId", "taskId", "sop", "diagram", "node", "question", "gate"] as const;
+const ENTITY_PARAMS = ["projectId", "bucketId", "taskId", "sop", "diagram", "node", "question", "gate", "draftId", "version"] as const;
 
 // Stable link names that read as another screen (TASK-3559): `?screen=my-tasks`
 // is the shareable name for My tasks, whose screen key is "mine".

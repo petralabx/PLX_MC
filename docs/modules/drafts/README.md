@@ -10,12 +10,12 @@ A draft is a reviewable bundle with two parts:
 - **The research:** summary, context, findings that cite sources by ref, two or more approaches
   with exactly one chosen, the recommendation, risks, open questions, sources and artifacts.
 
-PLX members and their agents review a draft. Its human author accepts it (step 3). Nothing in a
-draft is live, and drafts are DB-only: no SharePoint list.
+PLX members and their agents review a draft. Its human author accepts it. Nothing in a draft is
+live until then, and drafts are DB-only: no SharePoint list.
 
-This module owns the draft and version records, the submit checks, and the review rules. It does
-**not** create projects, buckets or tasks itself: Accept (step 3) calls the `sync` create
-functions unchanged, so every guard on those paths still applies.
+This module owns the draft and version records, the submit checks, the review rules and Accept. It
+does **not** create projects, buckets or tasks itself: Accept calls the `sync` create functions
+unchanged, so every guard on those paths still applies.
 
 ## Why
 
@@ -26,8 +26,8 @@ reasons and sources, before it became work. Members also had no way to propose a
 
 ## How
 
-Lifecycle: `drafting` → submit → `in_review` → Accept (step 3) → `accepted`; the author may
-withdraw an open draft (`withdrawn`).
+Lifecycle: `drafting` → submit → `in_review` → Accept → `accepted`; the author may withdraw an
+open draft (`withdrawn`).
 
 1. **Save** (`mc_save_draft`): creates a draft, or replaces the sections sent (title, plan,
    research, visibility, members, reviewers). The author is the agent's operator email and must be
@@ -61,10 +61,43 @@ withdraw an open draft (`withdrawn`).
    draft reads as not found. Lists filter in the database (status, visibility, author, reviewer,
    search) before their limit of 200, and carry counts, never working copies.
 
+5. **Accept** (`POST /api/drafts/{id}/accept {version}`, session only; `src/lib/drafts/accept.ts`):
+   the author, signed in, accepts the version they read. A moved version, unsubmitted edits, an
+   open blocking finding, or a preflight problem now (for example a parent project closed during
+   review) refuses it. Accept creates the project (unless the plan names an existing one), then the
+   buckets, then the tasks in dependency order, through `createProject`, `createBucket` and
+   `createTask`. The project's PRD link is the frozen version's link
+   (`/?screen=drafts&draftId=DRF-n&version=N`); a bucket's adds its draft key (`#B1`), so two
+   buckets with the same name stay apart. The bucket-PRD check passes. Tasks carry
+   `draft:DRF-n` and `depends-on:TASK-*` labels and link the draft in their description. A new
+   project takes the draft's visibility and members. The draft records each new id in
+   `materialized`:
+   - a task's id commits inside the transaction that creates it (`createTask`'s `inTransaction`);
+   - a project or bucket a crashed Accept made is found again by its PRD link and adopted;
+   - a claim (`accepted_at` while still `in_review`) refuses a second Accept, and every edit and
+     review (409 `accept_in_progress`), for 10 minutes; a failed Accept clears it. The claim
+     checks again for an open blocking finding;
+   - once an Accept has claimed the draft, the content cannot change (409 `accept_unfinished`),
+     even after it fails: `accepted_by` stays set, as a create may commit before its record. A
+     retry finishes the version it started; reviews and withdraw still work;
+   - a project the run did not create (recorded, adopted or existing) is checked again against
+     the author's access before anything is created in it (404 `unknown_project`), and each
+     recorded bucket must still be in that project (404 `unknown_bucket`).
+
+   An older version's page is read-only: no review form, no finding actions and no Accept. A
+   closed draft, or one an Accept is running on, offers no finding actions. After Accept the screen
+   reloads the shared snapshot before it links the new records.
+
+The Drafts screen (`?screen=drafts`, `src/components/mc/drafts.tsx`) lists drafts and opens one:
+the plan tree with preflight badges, the research, reviews, versions with a change summary, and,
+for the author, Accept with a confirmation that states what it creates. The Approvals screen lists
+drafts waiting for the viewer's review. Session routes: `GET /api/drafts`, `GET
+/api/drafts/{id}[?version=N]`, `POST /api/drafts/{id}/review`, `POST /api/drafts/{id}/accept`.
+
 Invariants:
 
-- Everything is off until `PLX_MC_DRAFTS_ENABLED=1` (`src/lib/drafts/flag.ts`), which is also the
-  kill switch. While off, nothing reads or writes the drafts tables, and every tool answers 404
+- Drafts are on unless `PLX_MC_DRAFTS_ENABLED=0` (`src/lib/drafts/flag.ts`), the kill switch.
+  While it is set, nothing reads or writes the drafts tables, and every tool and route answers 404
   `drafts_disabled`.
 - Agents never accept. There is no accept tool, and no service principal holds `draft.accept`.
 - Every change locks the draft row (`mutateDraft` in `src/lib/drafts/store.ts`) and checks
@@ -72,24 +105,26 @@ Invariants:
   refuses the change. Submit freezes only the content its checks ran on (409 `draft_changed`
   otherwise).
 - Events: `draft.created`, `draft.updated`, `draft.submitted`, `draft.reviewed`,
-  `draft.finding.resolved`, `draft.finding.dismissed`, `draft.withdrawn` in `mc_events`. Each
-  names its draft in `payload.draftId`, and the `/api/events` export
-  (`src/lib/compliance/events-acl.ts`) shows it only to a principal who can see that draft.
+  `draft.finding.resolved`, `draft.finding.dismissed`, `draft.withdrawn`, `draft.accepted` in
+  `mc_events`; the created records keep their own audit entries. Each names its draft in
+  `payload.draftId`, and the `/api/events` export (`src/lib/compliance/events-acl.ts`) shows it
+  only to a principal who can see that draft.
 
 Storage (migration `056_drafts.sql`, rollback `db/rollback/056_drafts_rollback.sql`): `drafts`
 (working copy and reviews as jsonb, the house pattern for gates and questions; ids from
-`mc_draft_id_seq`) and `draft_versions` (immutable). The accept and `materialized` columns are for
-step 3, so step 3 needs no migration.
+`mc_draft_id_seq`) and `draft_versions` (immutable), plus the accept and `materialized` columns
+Accept writes.
 
 ## Dependencies
 
 - **mcp**: the five tools and `/api/cursor/drafts` routes (`src/lib/mcp/draft-actions.ts`).
 - **permissions**: `draft.create`, `draft.review`, `draft.accept`; the project-ACL helpers.
-- **sync**: live repos, projects, buckets and tasks for the checks (`src/lib/sync/repo.ts`);
-  Accept (step 3) will call the create functions in `src/lib/sync/state.ts`.
+- **sync**: live repos, projects, buckets and tasks for the checks (`src/lib/sync/repo.ts`); Accept
+  calls the create functions in `src/lib/sync/state.ts`.
 - **compliance**: `appendEvent` for the audit trail.
 
-Depended on by: the `mcp` module (tools); the Drafts screen and Accept in step 3.
+Depended on by: the `mcp` module (tools); the `web` module (the Drafts screen and the Approvals
+panel).
 
 ### Key Files
 
@@ -99,7 +134,11 @@ Depended on by: the `mcp` module (tools); the Drafts screen and Accept in step 3
 - `src/lib/drafts/duplicates.ts` — likely-duplicate scoring (pure).
 - `src/lib/drafts/store.ts` — Postgres store with the process-local fallback.
 - `src/lib/drafts/service.ts` — the rules: visibility, writer, submit, reviews, findings.
-- `src/lib/drafts/flag.ts` — `PLX_MC_DRAFTS_ENABLED`.
+- `src/lib/drafts/flag.ts` — `PLX_MC_DRAFTS_ENABLED` (the kill switch).
+- `src/lib/drafts/accept.ts` — Accept: guards, the claim, creation in order, resume and adoption.
+- `src/lib/drafts/session.ts` — the signed-in person as a draft actor.
+- `src/app/api/drafts/**` — the session routes.
+- `src/components/mc/drafts.tsx` — the Drafts screen and the Approvals panel.
 - `src/lib/mcp/draft-actions.ts` — the MCP tools, shared with the REST routes.
 - `db/migrations/056_drafts.sql` — the tables, sequence and immutability trigger.
 

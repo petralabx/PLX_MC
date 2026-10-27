@@ -13,7 +13,7 @@ import { normalizeRepoInputs } from "@/lib/mc-data/repos";
 import type { Human, Project, Repo } from "@/lib/mc-data/types";
 import { canAccessProject, type ProjectAclPrincipal } from "@/lib/permissions/project-acl";
 
-import type { DraftContent, DraftIssue } from "./types";
+import type { DraftContent, DraftIssue, DraftPlanTask } from "./types";
 
 export interface PreflightContext {
   registry: Record<string, Repo>;
@@ -29,6 +29,29 @@ export function isKnownPerson(raw: string, humans: readonly Human[]): boolean {
   if (!needle) return false;
   if (humans.some((h) => h.id.toLowerCase() === needle || (h.email ?? "").toLowerCase() === needle)) return true;
   return isPetraEmail(needle);
+}
+
+/** Tasks ordered so each comes after the draft tasks it depends on; null on a cycle. */
+export function dependencyOrder(tasks: readonly DraftPlanTask[]): DraftPlanTask[] | null {
+  const byKey = new Map(tasks.map((t) => [t.key, t]));
+  const done = new Set<string>();
+  const visiting = new Set<string>();
+  const out: DraftPlanTask[] = [];
+  const visit = (task: DraftPlanTask): boolean => {
+    if (done.has(task.key)) return true;
+    if (visiting.has(task.key)) return false;
+    visiting.add(task.key);
+    for (const dep of task.dependsOn) {
+      const inner = byKey.get(dep);
+      if (inner && inner.key !== task.key && !visit(inner)) return false;
+    }
+    visiting.delete(task.key);
+    done.add(task.key);
+    out.push(task);
+    return true;
+  };
+  for (const task of tasks) if (!visit(task)) return null;
+  return out;
 }
 
 export function preflightIssues(content: DraftContent, ctx: PreflightContext): DraftIssue[] {
@@ -85,6 +108,8 @@ export function preflightIssues(content: DraftContent, ctx: PreflightContext): D
       else if (/^T\d+$/.test(dep) && !taskKeys.has(dep)) add("unknown_dependency", `${at}.dependsOn`, `Task ${t.key} depends on ${dep}, which the plan does not have.`);
     }
   }
+  // Accept creates each task after the ones it depends on, so the order must exist.
+  if (!dependencyOrder(content.plan.tasks)) add("dependency_cycle", "plan.tasks", "The task dependencies form a cycle.");
   return issues;
 }
 

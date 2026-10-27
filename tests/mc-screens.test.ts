@@ -37,6 +37,7 @@ const EXPECTED_SCREENS = {
   "ci-scorecard": true,
   "routing-inbox": true,
   approvals: true,
+  drafts: true,
   activity: true,
   goals: true,
   help: true,

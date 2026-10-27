@@ -168,7 +168,9 @@ export interface Draft {
   reviews: DraftReview[];
   /** Draft key to created record id, written by Accept (step 3). */
   materialized: Record<string, string>;
+  /** In review: when the running Accept claimed the draft (null once it fails). Accepted: when. */
   acceptedAt: string | null;
+  /** Who accepted, or whose Accept started; set while in review, it pins the content (accept_unfinished). */
   acceptedBy: string | null;
   withdrawnAt: string | null;
   withdrawnBy: string | null;
@@ -219,6 +221,14 @@ export function emptyDraftContent(title = ""): DraftContent {
 /** A review given on an older version than the draft's current one. */
 export function isStaleReview(review: Pick<DraftReview, "digest">, draft: Pick<Draft, "digest">): boolean {
   return review.digest !== draft.digest;
+}
+
+/** A claim older than this belongs to a crashed Accept; the next Accept takes over. */
+export const ACCEPT_CLAIM_STALE_MS = 10 * 60_000;
+
+/** An Accept is running: the draft is still in review and its claim is fresh. */
+export function acceptInProgress(draft: Pick<Draft, "status" | "acceptedAt">, nowMs = Date.now()): boolean {
+  return draft.status === "in_review" && draft.acceptedAt !== null && nowMs - Date.parse(draft.acceptedAt) < ACCEPT_CLAIM_STALE_MS;
 }
 
 /** Open blocking findings, on any version: each refuses Accept until closed. */

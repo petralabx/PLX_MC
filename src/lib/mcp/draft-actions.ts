@@ -2,7 +2,7 @@
 // mc_save_draft, mc_submit_draft, mc_get_draft, mc_list_drafts and
 // mc_review_draft, shared by the HTTP MCP transport and the /api/cursor/drafts
 // REST routes (the stdio client proxies to those). The rules live in
-// src/lib/drafts/service.ts. Every tool is off until PLX_MC_DRAFTS_ENABLED=1.
+// src/lib/drafts/service.ts. Every tool is off when PLX_MC_DRAFTS_ENABLED=0.
 //
 // An agent writes and reviews drafts for its person, the operator email on the
 // call. It never accepts one: there is no accept tool (step 3 is a signed-in
@@ -197,7 +197,7 @@ export async function actionReviewDraft(identity: McpIdentity, input: unknown) {
 export function registerDraftTools(server: McpServer, identity: McpIdentity): void {
   server.registerTool("mc_save_draft", {
     description:
-      "Create or edit a Draft Project: a reviewable plan (one project, its buckets and tasks under draft keys P, B1, T1) plus its research (summary, context, findings citing sources by ref, two or more approaches with exactly one chosen, recommendation, risks, open questions, sources, artifacts). Nothing in a draft is live. Omit draftId to create; the author is your operator email and must be a person in the PLX directory, not a service mailbox. With draftId, each section you send replaces that section; an edit during review returns the draft to drafting. withdraw {reason} closes the draft. Only the agent that wrote the draft, for the same person, may edit it. Returns preflight: the checks mc_submit_draft will run. Off until PLX_MC_DRAFTS_ENABLED=1.",
+      "Create or edit a Draft Project: a reviewable plan (one project, its buckets and tasks under draft keys P, B1, T1) plus its research (summary, context, findings citing sources by ref, two or more approaches with exactly one chosen, recommendation, risks, open questions, sources, artifacts). Nothing in a draft is live. Omit draftId to create; the author is your operator email and must be a person in the PLX directory, not a service mailbox. With draftId, each section you send replaces that section; an edit during review returns the draft to drafting. withdraw {reason} closes the draft. Only the agent that wrote the draft, for the same person, may edit it. Returns preflight: the checks mc_submit_draft will run. Off when PLX_MC_DRAFTS_ENABLED=0.",
     inputSchema: saveDraftSchema,
   }, async (args) => mcpJsonResult({ data: await actionSaveDraft(identity, args) }));
   server.registerTool("mc_submit_draft", {

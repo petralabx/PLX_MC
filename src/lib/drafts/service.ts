@@ -42,6 +42,7 @@ import { MAX_DRAFT_CONTENT_BYTES, draftContentBytes, draftDigest } from "./schem
 import * as store from "./store";
 import {
   OPEN_DRAFT_STATUSES,
+  acceptInProgress,
   emptyDraftContent,
   isStaleReview,
   type Draft,
@@ -121,6 +122,27 @@ export function isDraftWriter(draft: Pick<Draft, "author" | "createdBy">, actor:
 function assertOpen(draft: Draft): void {
   if (!OPEN_DRAFT_STATUSES.includes(draft.status)) {
     throw new ApiError("draft_closed", `${draft.id} is ${draft.status}; it can no longer change.`, 409);
+  }
+  // Accept creates records from the version under review; nothing changes the draft meanwhile.
+  if (acceptInProgress(draft)) {
+    throw new ApiError("accept_in_progress", `${draft.id} is being accepted; try again when the Accept ends.`, 409);
+  }
+}
+
+/**
+ * Once an Accept has claimed the draft, the content stays the version it
+ * started from: a create may have committed before its record, so a retry
+ * finishes that version and never pairs its records with another. A failed
+ * Accept clears accepted_at and keeps accepted_by (accept.ts releaseClaim).
+ */
+function assertAcceptNotStarted(draft: Draft): void {
+  const made = Object.keys(draft.materialized);
+  if (made.length > 0 || draft.acceptedBy !== null) {
+    throw new ApiError(
+      "accept_unfinished",
+      `An Accept of ${draft.id} started${made.length > 0 ? ` and created ${made.join(", ")}` : ""} and did not finish. Accept it again to finish, or withdraw it.`,
+      409
+    );
   }
 }
 
@@ -212,6 +234,7 @@ export async function saveDraft(actor: DraftActor, id: string, sections: DraftSe
     if (!canSeeDraft(draft, actor)) throw notFound(id);
     assertWriter(draft, actor);
     assertOpen(draft);
+    assertAcceptNotStarted(draft);
     const working = applySections(draft.working, sections);
     const next: Draft = {
       ...draft,

@@ -3,7 +3,7 @@
 // routes the stdio client proxies to. The live-state reads (repos, projects,
 // buckets, tasks) are mocked; the drafts store runs on its process-local
 // fallback, so the real actions, capabilities and allowlists run without a
-// database. Every tool is off until PLX_MC_DRAFTS_ENABLED=1.
+// database. Every tool is on unless PLX_MC_DRAFTS_ENABLED=0, the kill switch.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -102,7 +102,7 @@ beforeEach(() => {
   vi.stubEnv("PLX_MC_MCP_API_KEY", "");
   vi.stubEnv("PLX_MC_MCP_AGENT_KEYS", JSON.stringify(KEYS));
   vi.stubEnv("PLX_MC_ALLOWED_USERS", "vince@petrasoap.com,ricardo@petrasoap.com");
-  vi.stubEnv("PLX_MC_DRAFTS_ENABLED", "1");
+  vi.stubEnv("PLX_MC_DRAFTS_ENABLED", "");
   vi.stubEnv("VMC_API_KEY", "");
   __resetDraftsMemoryForTests();
 });
@@ -117,8 +117,8 @@ describe("draft tools", () => {
     expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(DRAFT_TOOLS));
   });
 
-  it("refuses every tool and route while the flag is off", async () => {
-    vi.stubEnv("PLX_MC_DRAFTS_ENABLED", "");
+  it("refuses every tool and route while the kill switch is on", async () => {
+    vi.stubEnv("PLX_MC_DRAFTS_ENABLED", "0");
     const { isError, body } = await callTool("claude-key", "mc_list_drafts", {});
     expect(isError).toBe(true);
     expect(body.error.code).toBe("drafts_disabled");

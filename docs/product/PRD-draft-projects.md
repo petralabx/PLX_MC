@@ -132,17 +132,23 @@ A finding stays open across versions until someone closes it:
 
 An open blocking finding refuses Accept (decision 2).
 
-The author names reviewers. Each named reviewer sees a draft-review row on the Approvals screen, like a question. Agents read drafts with `mc_list_drafts` and `mc_get_draft`.
+The author names reviewers. Each named reviewer sees the draft in a Drafts to review panel on the Approvals screen until they review its current version. Agents read drafts with `mc_list_drafts` and `mc_get_draft`.
 
 ## Accept
 
 Accept creates the plan in order: the project (unless it exists), then the buckets, then the tasks. It calls `createProject`, `createBucket` and `createTask` in `src/lib/sync/state.ts` unchanged. Every guard on those paths still applies: the repo allow-list, archive and close checks, the audit log and the SharePoint mirror queue. Accept also checks the project ACL on an existing parent project, as the MCP create actions do (`src/lib/permissions/project-acl-guard.ts`).
 
-Those calls do not share one transaction. So Accept writes each new id into `materialized` before the next create starts. A retry after a failure skips every key that already has an id. Step 3 closes the gap between a create and its record (see Open questions).
+Those calls do not share one transaction. Accept writes each new id into `materialized` before the next create starts, and a retry skips every key that already has an id. Step 3 closes the gap between a create and its record this way:
+
+- A task's id is written inside the transaction that creates it (`createTask`'s `options.inTransaction`), so a task never exists without its record.
+- The project carries the frozen version's link as its PRD link. Each bucket carries that link plus its draft key (`#B1`), so two buckets with the same name stay apart. A retry finds a record that a crashed Accept made by that link, and adopts it instead of creating a second one.
+- Accept takes a claim on the draft first (`accepted_at`, while it is still `in_review`). The claim checks again for an open blocking finding. The claim refuses a second Accept, and every edit and review, while one runs. A failed Accept clears its claim. A crashed one goes stale after 10 minutes, and the next Accept takes over.
+- Once an Accept has claimed the draft, its content cannot change (409 `accept_unfinished`), even when that Accept fails. A create can commit before its record, so a retry must read the same version's link. `accepted_by` stays set after a failure and keeps the pin. A retry then always finishes the version it started. Reviews still land, and the author can withdraw the draft.
+- On a retry, Accept checks the author's access to the project again before it creates anything in it. It also checks that each recorded bucket is still in that project. An author removed from a restricted project cannot continue, and no task goes into a bucket that moved.
 
 On the created records:
 
-- The project's and each bucket's `prd` is the frozen version's link, `https://mc.plxcustomer.io/?screen=drafts&draftId=DRF-n&version=N`. `src/lib/compliance/bucket-prd.ts` counts any http(s) link, so tasks in those buckets pass the PRD check.
+- The project's `prd` is the frozen version's link, `https://mc.plxcustomer.io/?screen=drafts&draftId=DRF-n&version=N`. Each bucket's `prd` adds its draft key, for example `…&version=N#B1`. `src/lib/compliance/bucket-prd.ts` counts any http(s) link, so tasks in those buckets pass the PRD check.
 - Each task carries the label `draft:DRF-n`, and its description links the draft.
 - A task's accountable owner comes from the plan. With none set, it is the author.
 - A new project takes the draft's visibility and members.
@@ -185,10 +191,10 @@ There is no accept tool. REST routes under `/api/cursor/drafts` mirror the tools
 - `?screen=drafts` lists drafts, with filters for mine, needs my review and status.
 - `?screen=drafts&draftId=DRF-n` opens the record. It shows:
   - the plan tree with preflight badges, such as "repo not in the allow-list" or "possible duplicate of TASK-…";
-  - Research, Reviews and Versions tabs, with a diff between versions;
+  - Research, Reviews and Versions sections, with a diff between versions;
   - an Accept button, for the author only. Its confirmation states the counts, such as "Creates 1 project, 3 buckets and 14 tasks".
-- "New draft" sits beside "New project" in the shell's create actions.
-- The Approvals screen gets draft-review rows for named reviewers.
+- A person writes a draft through their agent (`mc_save_draft`). A "New draft" form on the screen is a follow-up.
+- The Approvals screen shows a Drafts to review panel for named reviewers.
 
 ## Convention for agents (decision 3)
 
@@ -196,14 +202,41 @@ A rule goes into `config/governance-contract.yaml`: a plan that adds a project, 
 
 Nothing blocks a direct create.
 
+## Follow-up: review on a shared page (Vince, 2026-10-27)
+
+Colleagues, commentators and editors can review a draft on a page outside Mission Control: a Claude Artifact, or a Cursor Canvas if it exposes its comments. Their comments come back to the draft as reviews. This brings people into the review who do not work in Mission Control.
+
+Mission Control stays the system of record. The page is a view; it never holds the draft.
+
+- **One frozen version per page.** "Publish for review" renders a submitted version as a page and records the page's link on the draft. When the author submits a new version, the page is published again for it. Comments on an older version show as stale, as reviews on an older version already do.
+- **Comments flow one way, into Mission Control.** Each comment on the page becomes a draft review on the version it was given on. It goes through the existing review path (`reviewDraft`), so every review rule still applies. A comment anchored to part of the page keeps that part's draft key (P, B1, T3) or research section as the review's `target`.
+- **Nobody edits the plan from the page.** A change still goes through the author, or their agent, and a new version. Two-way editing would make two sources of truth.
+- **Blocking stays in Mission Control.** A comment from the page lands as a non-blocking comment. Only a PLX member, in Mission Control, raises a blocking finding or approves. Decisions 1 and 2 do not change: the author accepts, and an open blocking finding refuses Accept.
+- **Who said it.** A relayed review records `source: "artifact"` (or `"canvas"`), the commenter as the page reports them, and the agent that relayed it. A commenter Mission Control does not know shows as external.
+- **Visibility.** A page publishes the draft's content outside Mission Control's access rules. Shared drafts may be published. A restricted draft goes only to its members. The page starts private, and the author chooses whom to share it with.
+
+What it needs:
+
+- A "Publish for review" action, by the author or their agent, on a submitted draft.
+- A relay that turns each new page comment into a review. For Claude Artifacts, an agent watches the artifact's comment threads and calls `mc_review_draft`.
+- `"artifact"` and `"canvas"` as review sources, plus fields for the commenter and the relaying agent. Reviews are jsonb on `drafts`, so this needs no migration.
+- The external-integration declaration before it merges: owner, scope, auth source, default state (off), kill switch, health check, fallback and data boundary.
+
+Not decided yet:
+
+- Whether people outside Petra may comment at all, or only Petra people who do not use Mission Control.
+- Whether Cursor Canvas exposes comments that an outside service can read. Check this before promising Canvas.
+- Whether a page comment can ever raise a blocking finding, for example after a PLX member confirms it in Mission Control.
+
 ## Steps
 
 | Step | Task | What ships | State |
 |---|---|---|---|
 | 1 | TASK-4056 | This PRD and the workstream note | Merged (#487) |
-| 2 | TASK-4059 | Migration `056_drafts.sql` (054 and 055 were taken), `src/lib/drafts`, the five tools, REST routes, capabilities, `docs/modules/drafts/README.md` and the `DATA_MODEL.md` entry. 056 also adds the columns Accept needs, so step 3 has no migration | In review |
-| 3 | Not created | Drafts screen, Accept, Approvals rows | Not started |
-| Follow-up | Not created | Artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | Not started |
+| 2 | TASK-4059 | Migration `056_drafts.sql` (054 and 055 were taken), `src/lib/drafts`, the five tools, REST routes, capabilities, `docs/modules/drafts/README.md` and the `DATA_MODEL.md` entry. 056 also adds the columns Accept needs, so step 3 has no migration | Merged (#489) |
+| 3 | TASK-4071 | Drafts screen, session routes under `/api/drafts`, Accept, the Drafts to review panel on Approvals, a Drafts nav item. Drafts turn on by default; `PLX_MC_DRAFTS_ENABLED=0` is the kill switch | In review |
+| Follow-up | Not created | A "New draft" form on the screen, artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | Not started |
+| Follow-up | Not created | Review on a shared page: "Publish for review" and the comment relay, Claude Artifacts first (see Follow-up: review on a shared page). After step 3 is live and in use | Not started |
 
 Step 2 touches a migration, so it lands only with a signed MC merge approval of its exact head.
 
@@ -218,9 +251,9 @@ Step 2 touches a migration, so it lands only with a signed MC merge approval of 
 ## Rollback
 
 - **Step 1:** revert the PR. It changes docs only.
-- **Step 2:** the migration is additive, and its rollback script drops only what 056 added: the two tables, their id sequence and the trigger function. Revert and deploy the code, and 056's manifest entry, before running it: every API route checks the database against the manifest. To stop drafts without a rollback, turn `PLX_MC_DRAFTS_ENABLED` off, which is the kill switch.
-- **Step 3:** revert the PR, or set the flag off. Records that Accept already created are ordinary records. Archive them with the existing archive action.
+- **Step 2:** the migration is additive, and its rollback script drops only what 056 added: the two tables, their id sequence and the trigger function. Revert and deploy the code, and 056's manifest entry, before running it: every API route checks the database against the manifest. To stop drafts without a rollback, set `PLX_MC_DRAFTS_ENABLED=0`, the kill switch.
+- **Step 3:** revert the PR, or set `PLX_MC_DRAFTS_ENABLED=0`. Records that Accept already created are ordinary records. Archive them with the existing archive action.
 
 ## Open questions
 
-- **Accept and a crash between a create and its record.** Step 3 picks one of two fixes. The create functions can accept the caller's transaction; today `createTask` only runs extra caller work inside its own transaction (`options.inTransaction`), and `createProject` and `createBucket` have no transaction option. Or an idempotency claim per draft key can reuse the `mc_events` claim pattern in `src/lib/mcp/task-create-idempotency.ts`. Ricardo or Stephen reviews the choice.
+- **Accept and a crash between a create and its record.** Resolved in step 3 (see Accept): the task's record commits with the task, a project or bucket is adopted by its PRD link, and a claim refuses a parallel Accept. The create functions stay unchanged. Ricardo or Stephen reviews the choice on the step 3 PR.

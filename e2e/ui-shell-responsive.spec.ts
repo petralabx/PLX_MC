@@ -876,12 +876,13 @@ test.describe("shell — zoned sidebar", () => {
     expect(await page.evaluate(() => (window as unknown as { __esc: number }).__esc)).toBe(0);
 
     // Tab past the last item: focus moves on and the flyout closes. The
-    // sidebar is one tab stop (TASK-3955), so Help is not next: the page is.
+    // sidebar is one tab stop (TASK-3955), so Help is not next: the sidebar's
+    // edge is (TASK-3957), then the page.
     await toggle.click();
     await page.keyboard.press("Tab");
     for (let i = 0; i < 20 && (await panel.isVisible()); i += 1) await page.keyboard.press("Tab");
     await expect(panel).toBeHidden();
-    expect(await page.evaluate(() => !!document.activeElement?.closest("#mc-main"))).toBe(true);
+    await expect(page.getByRole("separator", { name: "Resize sidebar" })).toBeFocused();
 
     // ⌘K takes focus to the palette, and the flyout gets out of its way.
     await toggle.click();
@@ -1198,8 +1199,11 @@ test.describe("shell — zoned sidebar", () => {
     await open(page, 1440, "/?screen=dashboard");
     const nav = side(page);
     const focused = (name: string | RegExp) => expect(nav.getByRole("link", { name })).toBeFocused();
-    // Shift+Tab from the page lands on the current row: the tree's one stop.
+    // Shift+Tab from the page crosses the sidebar's edge (TASK-3957), then
+    // lands on the current row: the tree's one stop.
     await page.locator("#mc-main").focus();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("separator", { name: "Resize sidebar" })).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     await focused(/^Dashboard/);
     await page.keyboard.press("ArrowDown");

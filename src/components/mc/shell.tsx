@@ -49,6 +49,7 @@ import {
   useMinWidth,
   usePref,
 } from "./shell-prefs";
+import { toggleSideRail } from "./side-width";
 import { TaskDetailView } from "./task-detail";
 import { Topbar } from "./top-bar";
 import { hasOpenLayer, useLayerSlot } from "./use-layer";
@@ -69,6 +70,7 @@ export function MissionControlShell() {
   const [ready, setReady] = useState(false);
   // <1025px: the sidebar is a drawer (phone: More → All screens; tablet: the rail toggle).
   const drawer = useNavDrawer();
+  const sendDrawer = drawer.send;
   const moreRef = useRef<HTMLButtonElement | null>(null);
   const paneToggleRef = useRef<HTMLButtonElement | null>(null);
   const liveToggleRef = useRef<HTMLButtonElement | null>(null);
@@ -358,6 +360,15 @@ export function MissionControlShell() {
 
       const key = event.key.toLowerCase();
 
+      // [ collapses the zoned sidebar to the rail and back from 1025px, and
+      // opens or closes the drawer below (portal ADR-011 v2, Keys 1; TASK-3957).
+      if (navZones && event.key === "[" && !event.shiftKey) {
+        event.preventDefault();
+        if (minWidthNow(1025)) toggleSideRail();
+        else sendDrawer("toggle");
+        return;
+      }
+
       // Shift S stars or unstars the page (portal ADR-011 v2, Starred 4). In the
       // sidebar's tree, chrome.tsx stars the focused row instead.
       if (navZones && event.shiftKey && key === "s") {
@@ -405,7 +416,7 @@ export function MissionControlShell() {
       window.removeEventListener("keydown", onKeyDown);
       if (gPrefix.current !== null) window.clearTimeout(gPrefix.current);
     };
-  }, [nav, navZones, newTaskOpen, newInitiativeOpen, paletteOpen]);
+  }, [nav, navZones, newTaskOpen, newInitiativeOpen, paletteOpen, sendDrawer]);
 
   // Flip the readiness flag once, AFTER mount — i.e. after the client effects
   // above (notably the global ⌘K / `g _` chord keydown listener) have attached.

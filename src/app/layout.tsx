@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 
+import { SIDE_BOOT_SCRIPT } from "@/components/mc/side-boot";
+
 import "./globals.css";
 
 const maziusDisplay = localFont({
@@ -102,11 +104,18 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // The boot script paints the person's sidebar width onto <html> before the
+  // first paint (TASK-3957, ADR-006), so React must not flag <html>'s
+  // attributes as a hydration mismatch.
   return (
     <html
       lang="en"
       className={`${maziusDisplay.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: SIDE_BOOT_SCRIPT }} />
+      </head>
       <body>{children}</body>
     </html>
   );

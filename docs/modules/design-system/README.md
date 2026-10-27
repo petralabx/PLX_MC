@@ -35,7 +35,10 @@ language. See `docs/design-system/decisions/ADR-003-mission-control-surface.md`.
 - Responsive governance: RESPONSIVE.md's pivots (641 / 1025) plus, for Mission
   Control only, the wide (≥1600) and ultra-wide (≥2200) tiers waived by
   `decisions/ADR-005-mc-wide-and-ultrawide-tiers.md`; 44px touch targets;
-  tables and boards are the only horizontal-scroll surfaces.
+  tables and boards are the only horizontal-scroll surfaces. The sidebar's
+  width is painted before first paint without a cookie
+  (`decisions/ADR-006-mc-sidebar-width-before-first-paint.md`, a recorded
+  deviation from portal ADR-011's Width 6).
 
 ## Dependencies
 

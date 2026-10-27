@@ -31,6 +31,8 @@ import { MoreSheet } from "./more-sheet";
 import { navFlags } from "./nav-flags";
 import { isPaneScreen, recentKeyOf, starKeyOf, starSlotOf } from "./nav-model";
 import { NavTour } from "./nav-tour";
+import { ShortcutsSheet } from "./shortcuts-sheet";
+import { VIEW_CHORDS, singleKeysPref } from "./shortcuts";
 import { loadNavPrefs, useNavTour, useNavZones } from "./nav-zones";
 import { NewInitiativeModal } from "./new-initiative-modal";
 import { NewProjectModal } from "./new-project-modal";
@@ -59,6 +61,8 @@ export function MissionControlShell() {
   const [dark, setDark] = useState(false);
   const [route, setRoute] = useState<Route>({ screen: "home" });
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // The ? sheet (TASK-3958).
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskCtx, setNewTaskCtx] = useState<{ bucketId?: string } | undefined>(undefined);
   const [newInitiativeOpen, setNewInitiativeOpen] = useState(false);
@@ -323,21 +327,8 @@ export function MissionControlShell() {
   const gPrefix = useRef<number | null>(null);
 
   useEffect(() => {
-    // Prefixed `g _` view chords. SPEC §3: PR-A adds a persistent filter input
-    // to the views surface, so bare single-key chords would fire while typing.
-    // `g m` (My Tasks) is the PR-D1 chord deferred from PR-A; it rides the same
-    // guard (newTaskOpen || paletteOpen + the input/textarea/contenteditable
-    // check below).
-    const VIEW_CHORDS: Record<string, Screen> = {
-      b: "board",
-      l: "list",
-      t: "timeline",
-      m: "mine",
-      // `g i` (Insights) is the Module E chord; rides the same guard as g b/l/t/m
-      // (newTaskOpen || paletteOpen + the input/textarea/contenteditable check).
-      i: "insights",
-    };
-
+    // Prefixed `g _` view chords (VIEW_CHORDS, shortcuts.ts). SPEC §3: bare
+    // single-key chords would fire while typing, so they ride the guards below.
     const onKeyDown = (event: KeyboardEvent) => {
       // ⌘K / Ctrl-K toggles the palette (a modifier combo — safe while typing);
       // only suppressed while the New Task modal is open, as before.
@@ -354,9 +345,21 @@ export function MissionControlShell() {
       // surface; PeoplePicker's capture-phase Esc closes a picker first).
       if (newTaskOpen || newInitiativeOpen || paletteOpen || hasOpenLayer()) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      // In the zoned sidebar's tree (chrome.tsx) a letter only jumps between rows.
       const target = event.target as HTMLElement | null;
-      if (target?.closest?.("input,textarea,[contenteditable],[data-tree-key]")) return;
+      if (target?.closest?.("input,textarea,[contenteditable]")) return;
+      // Every key below is a single-key shortcut: the ? sheet's switch turns
+      // them off (WCAG 2.1.4; TASK-3958). The classic shell has no sheet, so
+      // its keys stay on.
+      if (navZones && !singleKeysPref.get()) return;
+      // ? opens the shortcuts sheet, from the sidebar's tree too (portal
+      // ADR-011 v2, Keys 6).
+      if (navZones && event.key === "?") {
+        event.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+      // In the zoned sidebar's tree (chrome.tsx) a letter only jumps between rows.
+      if (target?.closest?.("[data-tree-key]")) return;
 
       const key = event.key.toLowerCase();
 
@@ -475,6 +478,7 @@ export function MissionControlShell() {
           onDrawer={drawer.send}
           drawerRef={drawer.panelRef}
           onDrawerKeyDown={drawer.onKeyDown}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
         />
         <NavScrim open={drawer.open} onDrawer={drawer.send} />
         <main
@@ -555,6 +559,7 @@ export function MissionControlShell() {
       />
       {/* Before the palette, so ⌘K over the tour opens on top of it. */}
       {navTour ? <NavTour /> : null}
+      {shortcutsOpen ? <ShortcutsSheet onClose={() => setShortcutsOpen(false)} nav={nav} /> : null}
       {paletteOpen ? (
         <CommandPalette
           onClose={closePalette}

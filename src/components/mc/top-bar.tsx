@@ -7,7 +7,9 @@
 //           In the zoned shell (TASK-3844) that label is the PLX app switcher,
 //           and the sync pill counts "sync conflicts".
 //           The zoned shell adds the page's star toggle (TASK-3842) at every tier.
-//   ≥1025   zoned: the sidebar's collapse button left of the logo (TASK-3957)
+//   ≥1025   zoned: the sidebar's collapse button left of the logo (TASK-3957),
+//           and on project, initiative and task pages the page path, Plan /
+//           project / initiative, each a menu of its siblings (TASK-3958)
 //   ≥1600   + details-pane toggle on collection screens
 //   ≥2200   + pin the live column
 import type { ReactNode, RefObject } from "react";
@@ -28,11 +30,22 @@ import {
 } from "lucide-react";
 
 import { useMcVersion, useViewer } from "@/lib/mc-data/hooks";
-import { dataSource, storeSyncCounts } from "@/lib/mc-data/store";
+import {
+  allBuckets,
+  allTasks,
+  bucketById,
+  dataSource,
+  navBuckets,
+  navProjects,
+  projectById,
+  storeSyncCounts,
+  taskById,
+} from "@/lib/mc-data/store";
 import { PORTAL_ORIGIN } from "@/lib/tasks/uat-tickets";
 
 import { PMark } from "./atoms";
-import { isPlainLeftClick, navHref, screenTitle, starKeyOf } from "./nav-model";
+import { OpenCount } from "./count-badge";
+import { byName, isPlainLeftClick, navHref, openTaskCounts, pagePath, screenTitle, starKeyOf } from "./nav-model";
 import { useNavZones } from "./nav-zones";
 import type { Nav, Route } from "./route";
 import { toggleSideRail, useSideLayout } from "./side-width";
@@ -173,6 +186,155 @@ function AppSwitcher({ route, nav }: { route: Route; nav: Nav }) {
   );
 }
 
+const PATH_PROJECTS_ID = "mc-path-projects";
+const PATH_INITIATIVES_ID = "mc-path-initiatives";
+
+/**
+ * The page path (portal ADR-011 zone 2; TASK-3958): Plan / project /
+ * initiative on project, initiative and task pages. The project opens a menu
+ * of every active project, A to Z, and the initiative a menu of its project's
+ * initiatives, each with its open tasks and the current one checked; picking
+ * one opens its page. Open-task counts only from live data, as the sidebar's.
+ */
+function PagePath({ route, nav }: { route: Route; nav: Nav }) {
+  const routeKey = navHref(route);
+  const {
+    toggleRef: projectsToggleRef,
+    panelRef: projectsPanelRef,
+    open: projectsOpen,
+    hide: hideProjects,
+    onBlur: onProjectsBlur,
+    onBeforeToggle: onProjectsBeforeToggle,
+    onToggle: onProjectsToggle,
+  } = useFlyout(routeKey, "below");
+  const {
+    toggleRef: initiativesToggleRef,
+    panelRef: initiativesPanelRef,
+    open: initiativesOpen,
+    hide: hideInitiatives,
+    onBlur: onInitiativesBlur,
+    onBeforeToggle: onInitiativesBeforeToggle,
+    onToggle: onInitiativesToggle,
+  } = useFlyout(routeKey, "below");
+  const path = pagePath(route, { project: projectById, initiative: bucketById, task: taskById });
+  if (!path) return null;
+  const counts = openTaskCounts(dataSource() === "live" ? allTasks() : [], allBuckets());
+  const { project, initiative } = path;
+  const siblings = project ? navBuckets().filter((b) => b.project === project.id).sort(byName) : [];
+  const option = (key: string, target: Route, name: string, current: boolean, count: ReactNode, hide: () => void) => (
+    <a
+      key={key}
+      href={navHref(target)}
+      className="item"
+      aria-current={current ? "true" : undefined}
+      onClick={(event) => {
+        if (!isPlainLeftClick(event)) return;
+        event.preventDefault();
+        hide();
+        const { screen, ...extra } = target;
+        nav(screen, extra);
+      }}
+    >
+      <span className="nm">{name}</span>
+      {count}
+      {current ? <Check className="ic cur" aria-hidden="true" focusable="false" strokeWidth={2} /> : null}
+    </a>
+  );
+  return (
+    <nav className="crumbs" aria-label="Page path">
+      <span className="crumb-root">Plan</span>
+      {project ? (
+        <>
+          <span className="sep" aria-hidden="true">
+            /
+          </span>
+          <button
+            ref={projectsToggleRef}
+            type="button"
+            className="crumb"
+            popoverTarget={PATH_PROJECTS_ID}
+            aria-controls={PATH_PROJECTS_ID}
+            aria-expanded={projectsOpen}
+            aria-label={`Project: ${project.name}. Other projects`}
+            onBlur={onProjectsBlur}
+          >
+            <span className="crumb-nm">{project.name}</span>
+            <ChevronDown className="ic chev" aria-hidden="true" focusable="false" strokeWidth={1.75} />
+          </button>
+          <div
+            ref={projectsPanelRef}
+            id={PATH_PROJECTS_ID}
+            popover="auto"
+            className="mc-flyout drop crumb-menu"
+            role="group"
+            aria-label="Projects"
+            onBeforeToggle={onProjectsBeforeToggle}
+            onToggle={onProjectsToggle}
+            onBlur={onProjectsBlur}
+          >
+            <p className="fly-h">Projects</p>
+            {navProjects()
+              .sort(byName)
+              .map((p) =>
+                option(
+                  p.id,
+                  { screen: "project", projectId: p.id },
+                  p.name,
+                  p.id === project.id,
+                  <OpenCount n={counts.byProject.get(p.id) ?? 0} health={p.health} />,
+                  hideProjects
+                )
+              )}
+          </div>
+        </>
+      ) : null}
+      {initiative ? (
+        <>
+          <span className="sep" aria-hidden="true">
+            /
+          </span>
+          <button
+            ref={initiativesToggleRef}
+            type="button"
+            className="crumb"
+            popoverTarget={PATH_INITIATIVES_ID}
+            aria-controls={PATH_INITIATIVES_ID}
+            aria-expanded={initiativesOpen}
+            aria-label={`Initiative: ${initiative.name}. Other initiatives`}
+            onBlur={onInitiativesBlur}
+          >
+            <span className="crumb-nm">{initiative.name}</span>
+            <ChevronDown className="ic chev" aria-hidden="true" focusable="false" strokeWidth={1.75} />
+          </button>
+          <div
+            ref={initiativesPanelRef}
+            id={PATH_INITIATIVES_ID}
+            popover="auto"
+            className="mc-flyout drop crumb-menu"
+            role="group"
+            aria-label={project ? `Initiatives in ${project.name}` : "Initiatives"}
+            onBeforeToggle={onInitiativesBeforeToggle}
+            onToggle={onInitiativesToggle}
+            onBlur={onInitiativesBlur}
+          >
+            <p className="fly-h">{project ? `Initiatives in ${project.name}` : "Initiatives"}</p>
+            {(siblings.length > 0 ? siblings : [initiative]).map((b) =>
+              option(
+                b.id,
+                { screen: "bucket", bucketId: b.id },
+                b.name,
+                b.id === initiative.id,
+                <OpenCount n={counts.byInitiative.get(b.id) ?? 0} health={b.health} />,
+                hideInitiatives
+              )
+            )}
+          </div>
+        </>
+      ) : null}
+    </nav>
+  );
+}
+
 export function Topbar({
   route,
   nav,
@@ -251,6 +413,7 @@ export function Topbar({
           <span>PLX Engineering</span>
         </span>
       )}
+      {zoned ? <PagePath route={route} nav={nav} /> : null}
       <span className="title">{screenTitle(route.screen, zoned)}</span>
       <div className="r">
         <button type="button" className="search" onClick={onOpenPalette}>

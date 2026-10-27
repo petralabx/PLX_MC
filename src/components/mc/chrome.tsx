@@ -73,6 +73,7 @@ import { needsMeCount, todayGridDay, viewerLoadState } from "./needs-me";
 import type { Nav, Route } from "./route";
 import { useFlyout } from "./use-flyout";
 import { hasOpenLayer, useLayer } from "./use-layer";
+import { singleKeysPref } from "./shortcuts";
 import { RailLabel, SideResize } from "./side-resize";
 import { StarToggle } from "./star-toggle";
 import { useStars } from "./use-stars";
@@ -238,6 +239,7 @@ export function Sidebar({
   onDrawer,
   drawerRef,
   onDrawerKeyDown,
+  onOpenShortcuts,
 }: {
   route: Route;
   nav: Nav;
@@ -249,6 +251,8 @@ export function Sidebar({
   onDrawer?: (event: DrawerEvent) => void;
   drawerRef?: RefObject<HTMLElement | null>;
   onDrawerKeyDown?: (event: ReactKeyboardEvent<HTMLElement>) => void;
+  /** The zoned shell's ? sheet (TASK-3958): the Help and shortcuts row opens it. */
+  onOpenShortcuts?: () => void;
 }) {
   const version = useMcVersion();
   const zoned = useNavZones();
@@ -429,7 +433,8 @@ export function Sidebar({
       if (event.key !== "/" || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest?.("input,textarea,[contenteditable],[data-tree-key]") || hasOpenLayer()) return;
-      if (document.querySelector("[data-page-filter]")) return;
+      // Off with the other single-key shortcuts (TASK-3958).
+      if (!singleKeysPref.get() || document.querySelector("[data-page-filter]")) return;
       const input = filterRef.current;
       // Not while the closed phone drawer hides it (visibility: hidden).
       if (!input || input.getClientRects().length === 0 || getComputedStyle(input).visibility === "hidden") return;
@@ -468,8 +473,9 @@ export function Sidebar({
       stars.move(starKey, to);
       return;
     }
-    // Shift S stars or unstars the focused row (Starred 4).
-    if (event.shiftKey && event.key.toLowerCase() === "s") {
+    // Shift S stars or unstars the focused row (Starred 4), unless single-key
+    // shortcuts are off (TASK-3958): then S is a letter like any other.
+    if (event.shiftKey && event.key.toLowerCase() === "s" && singleKeysPref.get()) {
       if (!starKey || stars.off) return;
       event.preventDefault();
       stars.toggle(starKey as StarKey);
@@ -525,7 +531,9 @@ export function Sidebar({
     label: string,
     body: ReactNode,
     onPath = false,
-    tree: TreeAttrs = {}
+    tree: TreeAttrs = {},
+    /** A plain click runs this instead of navigating; the href stays for a new tab. */
+    onOpen?: () => void
   ) => (
     <a
       key={key}
@@ -537,6 +545,11 @@ export function Sidebar({
       onClick={(event) => {
         if (!isPlainLeftClick(event)) return;
         event.preventDefault();
+        if (onOpen) {
+          onDrawer?.("navigate");
+          onOpen();
+          return;
+        }
         const { screen, ...extra } = target;
         nav(screen, extra);
         onDrawer?.("navigate");
@@ -1044,7 +1057,9 @@ export function Sidebar({
                 <span className="nm">{HELP_NAV_ITEM.label}</span>
               </>,
               false,
-              { ...treeRow("help"), "data-star-key": `screen:${HELP_NAV_ITEM.screen}` }
+              { ...treeRow("help"), "data-star-key": `screen:${HELP_NAV_ITEM.screen}` },
+              // The ? sheet, which links to the Help page (TASK-3958).
+              onOpenShortcuts
             ),
             "help",
             `screen:${HELP_NAV_ITEM.screen}`,

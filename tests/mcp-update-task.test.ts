@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntityRow } from "@/lib/sync/repo";
 import type { TxQuery } from "@/lib/db";
 import type { McpIdentity } from "@/lib/mcp/auth";
+import { needsHuman } from "@/components/mc/project-overview.helpers";
 
 const h = vi.hoisted(() => ({
   rows: new Map<string, EntityRow>(),
@@ -688,11 +689,30 @@ describe("UAT ticket task mirror (TASK-3697)", () => {
     expect(h.events).toHaveLength(2);
   });
 
+  // TASK-3967: Steward marks a ticket it gave up on before any lane is leased.
+  it("lets Steward block a lane-less UAT ticket task with uat:blocked and uat:cause:<x> alone, and clear it", async () => {
+    uat("TASK-UAT", { stage: "backlog", accountableOwner: "vince" });
+    expect(needsHuman(data())).toBe(false);
+    expect((await agent({ addLabels: ["uat:blocked", "uat:cause:quota"] })).ok).toBe(true);
+    expect(data().labels).toEqual(expect.arrayContaining(["uat:blocked", "uat:cause:quota"]));
+    expect(needsHuman(data())).toBe(true);
+    expect((await agent({ removeLabels: ["uat:blocked", "uat:cause:quota"] })).ok).toBe(true);
+    expect(data().labels).toEqual(["kind:code", "uat:cmfb7q2xk0001", "uat-attempt:1", "repo:petralabx/plx-customer-portal"]);
+    // An empty cause, or a block on a task that is not a UAT ticket task, still needs a lane.
+    expect((await agent({ addLabels: ["uat:cause:"] })).ok).toBe(false);
+    seed("TASK-1", { labels: ["kind:code"] });
+    const plain = await agent({ addLabels: ["uat:blocked"] }, "TASK-1");
+    expect(plain.ok).toBe(false);
+    expect(plain.body.error.code).toBe("invalid_request");
+    expect(h.events).toHaveLength(2);
+  });
+
   it("refuses the portal every other patch, and every task that is not a UAT ticket task", async () => {
     uat("TASK-UAT", { stage: "merged" });
     for (const patch of [
       { title: "Renamed" }, { description: "x" }, { priority: "low" }, { bucket: "BKT-PROJECT" },
-      { reopen: {} }, { addLabels: ["lane:claude-uat"] }, { addLabels: ["uat:blocked"] }, { removeLabels: ["uat:cmfb7q2xk0001"] },
+      { reopen: {} }, { addLabels: ["lane:claude-uat"] }, { addLabels: ["uat:blocked"] }, { addLabels: ["uat:cause:quota"] },
+      { removeLabels: ["uat:cmfb7q2xk0001"] },
     ]) {
       const result = await portal(patch);
       expect({ patch, ok: result.ok, code: result.body.error?.code }).toEqual({ patch, ok: false, code: "forbidden" });

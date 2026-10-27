@@ -1,10 +1,11 @@
-// Server side of the BKT-UAT tickets view (TASK-3706): the bucket's UAT ticket
-// tasks, when each was filed, its lease (mc_dispatch, without checkout ids),
+// Server side of the BKT-UAT tickets view (TASK-3706): the UAT ticket tasks in
+// any bucket (TASK-3973; ticket tasks are filed in BKT-UAT), when each was filed, its lease (mc_dispatch, without checkout ids),
 // the portal read, and the drift findings. Read-only: fixes run from the page
 // through the normal task routes. The daily cron records each run as one
 // uat.drift.checked event; the page shows the newest one.
 
-import { getBucketTasks } from "@/lib/sync/repo";
+import { portalBaseUrl } from "@/lib/secrets";
+import { getUatTicketTasks } from "@/lib/sync/repo";
 import { isUatTicketTask } from "@/lib/tasks/uat-labels";
 import {
   UAT_TICKET_BUCKET,
@@ -35,8 +36,9 @@ export function pickLease(rows: readonly DispatchListRow[], nowMs: number): UatL
   };
 }
 
-export async function loadUatTickets(now = new Date()): Promise<UatTicketsReport> {
-  const rows = (await getBucketTasks(UAT_TICKET_BUCKET)).filter((row) => isUatTicketTask(row.task));
+/** `hiddenBuckets`: buckets the viewer may not read (restricted projects); the cron passes none. */
+export async function loadUatTickets(now = new Date(), hiddenBuckets: string[] = []): Promise<UatTicketsReport> {
+  const rows = (await getUatTicketTasks(hiddenBuckets)).filter((row) => isUatTicketTask(row.task));
   const taskIds = rows.map((row) => row.task.id);
   const [dispatches, portal, last] = await Promise.all([
     taskIds.length > 0 ? listDispatches({ taskIds, limit: DISPATCH_LIMIT }) : Promise.resolve([]),
@@ -54,6 +56,7 @@ export async function loadUatTickets(now = new Date()): Promise<UatTicketsReport
     bucketId: UAT_TICKET_BUCKET,
     facts,
     portal,
+    portalOrigin: portalBaseUrl(),
     drift: findUatDrift({ tasks: rows.map((row) => row.task), facts, portal, now }),
     lastDailyCheck: last[0]
       ? {

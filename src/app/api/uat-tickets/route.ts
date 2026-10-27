@@ -5,7 +5,8 @@
 
 import { route } from "@/lib/api/route";
 import { loadUatTickets } from "@/lib/compliance/uat-tickets";
-import { assertBucketProjectAccess } from "@/lib/permissions/project-acl-guard";
+import { canAccessBucket } from "@/lib/permissions/project-acl";
+import { assertBucketProjectAccess, loadProjectAclMaps } from "@/lib/permissions/project-acl-guard";
 import { aclPrincipalFromAuthorized, requireSessionActor } from "@/lib/routing/mutations/actors";
 import { UAT_TICKET_BUCKET } from "@/lib/tasks/uat-tickets";
 
@@ -13,6 +14,10 @@ export const dynamic = "force-dynamic";
 
 export const GET = route(async () => {
   const authorized = await requireSessionActor("task.read", { type: "bucket", id: UAT_TICKET_BUCKET });
-  await assertBucketProjectAccess(UAT_TICKET_BUCKET, aclPrincipalFromAuthorized(authorized));
-  return loadUatTickets();
+  const principal = aclPrincipalFromAuthorized(authorized);
+  await assertBucketProjectAccess(UAT_TICKET_BUCKET, principal);
+  // Ticket tasks count in any bucket (TASK-3973), except buckets of restricted projects this viewer can't read.
+  const { buckets, projectsById } = await loadProjectAclMaps();
+  const hidden = buckets.filter((bucket) => !canAccessBucket(bucket, projectsById, principal)).map((bucket) => bucket.id);
+  return loadUatTickets(new Date(), hidden);
 });

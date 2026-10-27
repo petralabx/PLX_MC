@@ -1,5 +1,6 @@
-// GET|PATCH /api/stars (TASK-3842): the envelope, one change per request
-// (add or remove, a new star last, at most STAR_CAP, 409 stars_full), the key
+// GET|PATCH /api/stars (TASK-3842; v2, TASK-3956): the envelope, one change per
+// request (add, remove or move; a new star last, at most STAR_CAP, 409
+// stars_full; a move to a place, 0 first), the key
 // rules, whose stars they are (the session's Entra object id, never the body;
 // the operator in dormant local/test mode), and the store's two paths: the
 // memory fallback and the single-statement changes on nav_stars. The writes run
@@ -63,6 +64,7 @@ const patch = (body: unknown) =>
   );
 const add = (key: string) => patch({ op: "add", key });
 const remove = (key: string) => patch({ op: "remove", key });
+const move = (key: string, to: number) => patch({ op: "move", key, to });
 const signIn = (email: string, oid = `oid-${email}`) => {
   authState.session = { user: { oid, email } };
 };
@@ -111,19 +113,29 @@ describe("GET|PATCH /api/stars", () => {
     expect(await read()).toEqual(["screen:goals", "project:PRJ-PORTAL-GOLIVE", "screen:help"]);
   });
 
-  it("refuses a star past STAR_CAP with 409 stars_full, and keeps the list", async () => {
-    const six = Array.from({ length: STAR_CAP }, (_, i) => `project:PRJ-${i}`);
-    for (const key of six) expect((await add(key)).status).toBe(200);
+  it("keeps 10 and refuses an eleventh with 409 stars_full, keeping the list", async () => {
+    expect(STAR_CAP).toBe(10);
+    const full = Array.from({ length: STAR_CAP }, (_, i) => `project:PRJ-${i}`);
+    for (const key of full) expect((await add(key)).status).toBe(200);
     const resp = await add("screen:goals");
     expect(resp.status).toBe(409);
     expect(await resp.json()).toEqual({
-      error: { code: "stars_full", message: `You can keep up to ${STAR_CAP} stars. Unstar one first.` },
+      error: { code: "stars_full", message: "Starred is full. Unstar one to add another." },
     });
-    expect(await read()).toEqual(six);
+    expect(await read()).toEqual(full);
     // A star already there is no new star, and unstarring makes room.
-    expect((await add(six[0])).status).toBe(200);
-    await remove(six[0]);
+    expect((await add(full[0])).status).toBe(200);
+    await remove(full[0]);
     expect((await add("screen:goals")).status).toBe(200);
+  });
+
+  it("moves a star to a place, 0 first, and changes nothing for a star not there", async () => {
+    for (const key of STARS) await add(key);
+    expect(await (await move(STARS[2], 0)).json()).toEqual({ data: { stars: [STARS[2], STARS[0], STARS[1]] } });
+    expect(await (await move(STARS[2], 2)).json()).toEqual({ data: { stars: [STARS[0], STARS[1], STARS[2]] } });
+    // Past the end means last.
+    expect(await (await move(STARS[0], 9)).json()).toEqual({ data: { stars: [STARS[1], STARS[2], STARS[0]] } });
+    expect(await (await move("screen:home", 0)).json()).toEqual({ data: { stars: [STARS[1], STARS[2], STARS[0]] } });
   });
 
   it("follows the person's Entra object id, not their email, and keeps each person's own", async () => {
@@ -155,6 +167,11 @@ describe("GET|PATCH /api/stars", () => {
     ["no key", { op: "add" }, "key"],
     ["an empty key to remove", { op: "remove", key: "" }, "key"],
     ["a remove over 120 characters", { op: "remove", key: "x".repeat(121) }, "key"],
+    ["a move with no place", { op: "move", key: "screen:goals" }, "to"],
+    ["a move past the tenth place", { op: "move", key: "screen:goals", to: 10 }, "to"],
+    ["a move to a negative place", { op: "move", key: "screen:goals", to: -1 }, "to"],
+    ["a move to a fractional place", { op: "move", key: "screen:goals", to: 0.5 }, "to"],
+    ["a move with an empty key", { op: "move", key: "", to: 0 }, "key"],
   ])("refuses %s with 400 and keeps the stored list", async (_name, body, message) => {
     await add("screen:goals");
     const resp = await patch(body);
@@ -251,6 +268,27 @@ describe("the nav_stars store on Postgres", () => {
     ]);
     db.rows = [];
     expect(await (await remove("screen:goals")).json()).toEqual({ data: { stars: [] } });
+  });
+
+  it("moves in one statement on the person's row, splicing the key in at place to", async () => {
+    db.rows = [{ stars: [STARS[2], STARS[0], STARS[1]] }];
+    expect(await (await move(STARS[2], 0)).json()).toEqual({ data: { stars: [STARS[2], STARS[0], STARS[1]] } });
+    const [write] = db.calls;
+    expect(write.text).toContain(
+      "SET stars = (array_remove(stars, $2::text))[1:$3::int] || ARRAY[$2::text] || (array_remove(stars, $2::text))[$3::int + 1:]"
+    );
+    expect(write.text).toContain("WHERE person_id = $1 AND $2::text = ANY (stars)");
+    expect(write.text).not.toContain(STARS[2]);
+    expect(write.params).toEqual(["oid-greg.m@petrasoap.com", STARS[2], 0]);
+  });
+
+  it("reads the list back when a move finds no row holding the key", async () => {
+    db.rows = [];
+    expect(await (await move("screen:goals", 0)).json()).toEqual({ data: { stars: [] } });
+    expect(db.calls.map((c) => c.text.split("\n")[0].trim())).toEqual([
+      "UPDATE nav_stars",
+      "SELECT stars FROM nav_stars WHERE person_id = $1",
+    ]);
   });
 
   it("writes nothing for a refused body", async () => {

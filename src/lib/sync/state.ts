@@ -40,6 +40,7 @@ import type {
   Task,
 } from "@/lib/mc-data/types";
 import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
+import { isUatTicketTask } from "@/lib/tasks/uat-labels";
 import { assertCreatorApprovedForStage, CreatorApprovalRefusal } from "@/lib/compliance/creator-approval";
 import { assertMoveTargetProjectOpen, assertNoSharedEvidenceInRestricted } from "./bucket-move";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
@@ -678,6 +679,8 @@ export interface PatchTaskOptions {
   enforceClosedProject?: boolean;
   /** Set only by approveCreatorApproval (TASK-3530); required to write creatorApproval. */
   creatorApproval?: boolean;
+  /** Set only by the portal's UAT verify (verifyUatTicketTx, TASK-3697); required to move a UAT ticket task to verified (TASK-3963). */
+  uatVerify?: boolean;
 }
 
 // Persistence tiers:
@@ -791,6 +794,21 @@ export async function patchTask(
   if ("assignee" in taskPatch) {
     const violation = assignmentViolation(effective, taskPatch.assignee ?? null);
     if (violation) throw new ApiError("human_only_violation", violation, 409);
+  }
+  // A UAT ticket task is verified only when its submitter confirms the fix,
+  // through the portal's mc_update_task verify (TASK-3697). Every other door
+  // that reaches patchTask, the web PATCH included, is refused (TASK-3963).
+  if (
+    taskPatch.stage === "verified" &&
+    current.stage !== "verified" &&
+    !opts.uatVerify &&
+    (isUatTicketTask(current) || isUatTicketTask(effective))
+  ) {
+    throw new ApiError(
+      "forbidden",
+      `Task ${id} is a UAT ticket task; only the portal's mc_update_task verify (task.uat_sync) moves it to verified.`,
+      403
+    );
   }
   if ("stage" in taskPatch && taskPatch.stage) {
     // The creator gate (TASK-3530) holds on every door, the compliance

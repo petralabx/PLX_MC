@@ -17,7 +17,7 @@ import {
   type Task,
 } from "@/lib/mc-data";
 import { approvalExpiry, deciderViolation, signApproval } from "./approval-signature";
-import { APPROVAL_WAIT_MAX_MS, pendingApprovalGates } from "@/lib/mc-data/policy";
+import { APPROVAL_WAIT_MAX_MS, creatorApprovalPending, pendingApprovalGates } from "@/lib/mc-data/policy";
 import { isCreatorApprover } from "@/lib/permissions";
 import type { ProjectAclPrincipal } from "@/lib/permissions/project-acl";
 import { loadProjectAclMaps, scopeHierarchy } from "@/lib/permissions/project-acl-guard";
@@ -461,6 +461,38 @@ export async function listPendingApprovals(principal: ProjectAclPrincipal): Prom
     }
   }
   out.sort((a, b) => a.gate.requestedAt.localeCompare(b.gate.requestedAt));
+  return out;
+}
+
+export interface PendingCreatorApprovalRow {
+  taskId: string;
+  taskTitle: string;
+  stage: string;
+  /** The gated service principal that created the task. */
+  principal: string;
+  requestedAt: string;
+}
+
+/**
+ * Tasks from a gated creator principal that wait for creator approval
+ * (TASK-3530), in the projects this principal may see (TASK-3629). The route
+ * returns them to creator approvers only. Cancelled tasks need no approval.
+ */
+export async function listPendingCreatorApprovals(principal: ProjectAclPrincipal): Promise<PendingCreatorApprovalRow[]> {
+  const [rows, { projects, buckets }] = await Promise.all([getEntities("task"), loadProjectAclMaps()]);
+  const tasks = rows.map((row) => row.data as unknown as Task);
+  const out: PendingCreatorApprovalRow[] = [];
+  for (const task of scopeHierarchy({ tasks, buckets, projects, principal }).tasks) {
+    if (!creatorApprovalPending(task) || task.stage === "cancelled") continue;
+    out.push({
+      taskId: task.id,
+      taskTitle: task.title,
+      stage: task.stage,
+      principal: task.creatorApproval!.principal,
+      requestedAt: task.creatorApproval!.requestedAt,
+    });
+  }
+  out.sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
   return out;
 }
 

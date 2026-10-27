@@ -88,7 +88,10 @@ export function useFlyout(routeKey: string, placement: FlyoutPlacement) {
       const focused = document.activeElement;
       const inside = panel.contains(focused) || focused === toggleRef.current;
       hide();
-      if (inside) toggleRef.current?.focus();
+      // The browser may already have put focus back where it was before the
+      // flyout opened (the sidebar row that opened it with Shift F10): keep it.
+      const now = document.activeElement;
+      if (inside && (!now || now === document.body || panel.contains(now))) toggleRef.current?.focus();
     };
     document.addEventListener("keydown", onEscape, true);
     return () => document.removeEventListener("keydown", onEscape, true);

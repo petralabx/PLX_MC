@@ -163,7 +163,7 @@ describe("the palette's Recent and Starred groups", () => {
     __resetStarsForTests(["project:PRJ-DONE"]);
     const html = groups(palette({ screen: "home" }));
     expect(html.find((g) => g.title === "Recent")?.rows).toEqual([["Project · Done project", "PRJ-DONE"]]);
-    expect(html.find((g) => g.title === "Starred")?.rows).toEqual([["Project · Done project", "g 1"]]);
+    expect(html.find((g) => g.title === "Starred")?.rows[0]).toEqual(["Project · Done project", "g 1"]);
     expect(html.find((g) => g.title === "Projects")?.rows.map(([label]) => label)).not.toContain("Project · Done project");
   });
 
@@ -181,7 +181,58 @@ describe("the palette's Recent and Starred groups", () => {
       ["Go to All work", "g 1"],
       ["Project · PLX Portal Go-Live", "g 2"],
       [`Initiative · ${bucket.name}`, "g 3"],
+      ["Star this page", "Shift S"],
     ]);
+  });
+
+  it("opens the tenth star with g 0, and leaves out a gone star, which keeps its slot", async () => {
+    __setStateLoaderForTests(async () => ({
+      tasks: allTasks(),
+      risks: [],
+      files: [],
+      conflicts: openConflicts(),
+      errors: openErrors(),
+      audit: [],
+      counts: {},
+      lastSweep: "2026.10.26 · 04:00",
+      projects: allProjects(),
+      buckets: allBuckets(),
+    }));
+    await hydrate();
+    const screens = ["home", "mine", "approvals", "board", "goals", "help", "dashboard", "feed"].map((s) => `screen:${s}`);
+    __resetStarsForTests([...screens.slice(0, 2), "project:PRJ-GONE", ...screens.slice(2), "screen:sync"]);
+    const starred = groups(palette({ screen: "insights" })).find((g) => g.title === "Starred");
+    expect(starred?.rows.map(([, hint]) => hint)).toEqual(["g 1", "g 2", "g 4", "g 5", "g 6", "g 7", "g 8", "g 9", "g 0", "Shift S"]);
+  });
+
+  it("closes Starred with Unstar this page and Edit starred, and searches them once in Starred", () => {
+    __resetStarsForTests(["screen:goals"]);
+    const editing = (route: Route) =>
+      renderToStaticMarkup(
+        createElement(CommandPalette, {
+          onClose: noop,
+          nav: noop,
+          route,
+          onOpenNewTask: noop,
+          onOpenNewInitiative: noop,
+          onOpenNewProject: noop,
+          onEditStarred: noop,
+        })
+      );
+    const opened = groups(editing({ screen: "goals" }));
+    expect(opened.find((g) => g.title === "Starred")?.rows).toEqual([
+      ["Go to Goals & production", "g 1"],
+      ["Unstar this page", "Shift S"],
+      ["Edit starred", "Alt ↑ ↓ to move"],
+    ]);
+    // Each group shows once: React keys the groups by title.
+    const titles = opened.map((g) => g.title);
+    expect(new Set(titles).size).toBe(titles.length);
+    // No page star where a page cannot be starred, as on a task.
+    const [task] = allTasks();
+    expect(groups(editing({ screen: "task", taskId: task.id })).flatMap((g) => g.rows.map(([label]) => label))).not.toContain(
+      "Star this page"
+    );
   });
 
   it("opens straight on Create when there are no recents and no stars", () => {

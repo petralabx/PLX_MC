@@ -145,6 +145,7 @@ export const REPOS: Record<string, Repo> = {
   "for-and-against": { id: "for-and-against", name: "for-and-against", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "public", scope: "For & Against consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
   "furgenics": { id: "furgenics", name: "furgenics", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "public", scope: "Furgenics consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
   "1hr-after": { id: "1hr-after", name: "1hr-after", lang: "—", def: "main", owner: REPO_ORG_PLX, visibility: "public", scope: "1HR-After consumer brand — marketing site, design system, and brand assets (PLX-structure, own tokens)." },
+  "plx-secondbrain": { id: "plx-secondbrain", name: "plx_secondbrain", lang: "TypeScript", def: "main", owner: REPO_ORG_PLX, visibility: "private", scope: "Knowledge Hub — the second brain (plx-brain) knowledge service." },
 };
 
 // Demo/prototype buckets purged 2026-06-11 — only the PLX Portal go-live plan

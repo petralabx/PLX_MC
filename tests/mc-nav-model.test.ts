@@ -15,12 +15,12 @@ import {
   NAV_TABS,
   PANE_SCREENS,
   PROJECTS_NAV_ITEM,
-  PROJECT_TREE_CAP,
   ZONED_NAV_GROUPS,
   ZONED_NAV_TABS,
   createNavGroupState,
   createTabMemory,
   createZonedTabMemory,
+  filterProjectTree,
   isNavItemCurrent,
   isPaneScreen,
   navItemTarget,
@@ -29,13 +29,13 @@ import {
   navCommands,
   navGroupOf,
   navHref,
+  openTaskCounts,
   projectTree,
   revealScrollTop,
   screenTitle,
   tabOf,
   tabScreens,
-  unfiledInitiatives,
-  viewerProjectIds,
+  treeKeyAction,
   visibleAdminFlyout,
   visibleNavGroups,
   visibleZonedNavGroups,
@@ -43,6 +43,7 @@ import {
   zonedTabOf,
   zonedTabScreens,
   type NavFlags,
+  type TreeRow,
 } from "@/components/mc/nav-model";
 import { SCREEN_VALUES, type Screen } from "@/components/mc/route";
 import type { Bucket, Project, Task } from "@/lib/mc-data";
@@ -302,7 +303,7 @@ describe("zoned phone tabs", () => {
   });
 });
 
-// TASK-3841 — the zoned sidebar's Projects tree and the Projects page.
+// TASK-3841, v2 TASK-3955 — the zoned sidebar's Projects tree.
 describe("projects tree model", () => {
   const project = (id: string, name: string, extra: Partial<Project> = {}): Project => ({
     id,
@@ -330,53 +331,91 @@ describe("projects tree model", () => {
     prd: null,
     project: projectId,
   });
-  const vince = { id: "vince", email: "Vince@petrasoap.com" };
-  const names = (tree: ReturnType<typeof projectTree>) => tree.nodes.map((n) => n.project.name);
+  const names = (tree: ReturnType<typeof projectTree>) => tree.map((n) => n.project.name);
   const task = (bucket: string, extra: Partial<Task>): Task => ({ id: `T-${bucket}`, bucket, stage: "approved", assignee: "greg", coassignees: [], ...extra }) as Task;
 
-  it("knows the viewer's projects by the Approvals rule: member, owner, or an open task", () => {
-    const projects = [
-      project("P1", "Owned", { owner: "VINCE@petrasoap.com" }),
-      project("P2", "Member", { members: [" vince "] }),
-      project("P3", "Assigned"),
-      project("P4", "Coassigned"),
-      project("P5", "Closed task"),
-      project("P6", "Someone else's", { members: ["greg@petrasoap.com"] }),
-    ];
-    const initiatives = ["P3", "P4", "P5", "P6"].map((id) => initiative(`B-${id}`, id));
+  it("nests each initiative under its project, the projects A to Z", () => {
+    const projects = [project("P1", "Zeta"), project("P2", "Alpha"), project("P3", "Mine")];
+    const tree = projectTree(projects, [initiative("B1", "P1"), initiative("B2", "P2"), initiative("B3", "P1")]);
+    expect(names(tree)).toEqual(["Alpha", "Mine", "Zeta"]);
+    expect(tree.map((n) => n.initiatives.map((b) => b.id))).toEqual([["B2"], [], ["B1", "B3"]]);
+  });
+
+  // The sidebar (portal ADR-011 v2, Lists 1): no cap, no View all.
+  it("lists every project A to Z with no viewer, numbers in order", () => {
+    const projects = Array.from({ length: 12 }, (_, i) => project(`P${i + 1}`, `Project ${12 - i}`));
+    expect(names(projectTree(projects, []))).toEqual(Array.from({ length: 12 }, (_, i) => `Project ${i + 1}`));
+  });
+
+  it("filters by project or initiative name, keeping a matched project's initiatives", () => {
+    const tree = projectTree(
+      [project("P1", "BC Go-Live"), project("P2", "Portal"), project("P3", "Dell disk health")],
+      [{ ...initiative("B1", "P1"), name: "BC cutover" }, { ...initiative("B2", "P2"), name: "Portal cutover" }, { ...initiative("B3", "P2"), name: "WMS" }]
+    );
+    const shown = (query: string) =>
+      filterProjectTree(tree, query).map((n) => `${n.project.name}: ${n.initiatives.map((b) => b.name).join(", ")}`);
+    expect(shown("  ")).toHaveLength(3);
+    expect(shown("PORTAL")).toEqual(["Portal: Portal cutover, WMS"]);
+    expect(shown("cutover")).toEqual(["BC Go-Live: BC cutover", "Portal: Portal cutover"]);
+    expect(shown("disk")).toEqual(["Dell disk health: "]);
+    expect(shown("nothing")).toEqual([]);
+  });
+
+  it("counts open tasks per initiative and per project, leaving merged, verified and cancelled out", () => {
+    const initiatives = [initiative("B1", "P1"), initiative("B2", "P1"), initiative("B3", null)];
     const tasks = [
-      task("B-P3", { assignee: "vince" }),
-      task("B-P4", { coassignees: ["vince@petrasoap.com"] }),
-      task("B-P5", { assignee: "vince", stage: "verified" }),
+      task("B1", { id: "T1", stage: "approved" }),
+      task("B1", { id: "T2", stage: "progress" }),
+      task("B1", { id: "T3", stage: "merged" }),
+      task("B2", { id: "T4", stage: "verified" }),
+      task("B2", { id: "T5", stage: "cancelled" }),
+      task("B2", { id: "T6", stage: "review" }),
+      task("B3", { id: "T7", stage: "approved" }),
     ];
-    expect([...viewerProjectIds(projects, initiatives, tasks, vince)].sort()).toEqual(["P1", "P2", "P3", "P4"]);
-    expect(viewerProjectIds(projects, initiatives, tasks, null).size).toBe(0);
+    const { byInitiative, byProject } = openTaskCounts(tasks, initiatives);
+    expect(Object.fromEntries(byInitiative)).toEqual({ B1: 2, B2: 1, B3: 1 });
+    expect(Object.fromEntries(byProject)).toEqual({ P1: 3 });
   });
 
-  it("nests each initiative under its project, the viewer's projects first, then by name", () => {
-    const projects = [project("P1", "Zeta"), project("P2", "Alpha"), project("P3", "Mine", { owner: "vince" })];
-    const tree = projectTree(projects, [initiative("B1", "P1"), initiative("B2", "P2"), initiative("B3", "P1")], new Set(["P3"]));
-    expect(names(tree)).toEqual(["Mine", "Alpha", "Zeta"]);
-    expect(tree.nodes.map((n) => n.initiatives.map((b) => b.id))).toEqual([[], ["B2"], ["B1", "B3"]]);
-    expect(tree.total).toBe(3);
+});
+
+// TASK-3955 — the zoned sidebar's keyboard tree (portal ADR-011 v2, Keys 5).
+describe("treeKeyAction", () => {
+  const rows: TreeRow[] = [
+    { key: "screen:home", parent: null, open: null, label: "Home" },
+    { key: "project:P1", parent: null, open: true, label: "BC Go-Live" },
+    { key: "bucket:B1", parent: "project:P1", open: null, label: "BC cutover" },
+    { key: "project:P2", parent: null, open: false, label: "Portal" },
+    { key: "group:knowledge", parent: null, open: false, label: "Knowledge" },
+    { key: "help", parent: null, open: null, label: "Help and shortcuts" },
+  ];
+
+  it("moves with the arrows, Home and End, and stops at the ends", () => {
+    expect(treeKeyAction(rows, 0, "ArrowDown")).toEqual({ focus: 1 });
+    expect(treeKeyAction(rows, 2, "ArrowUp")).toEqual({ focus: 1 });
+    expect(treeKeyAction(rows, 0, "ArrowUp")).toBeNull();
+    expect(treeKeyAction(rows, 5, "ArrowDown")).toBeNull();
+    expect(treeKeyAction(rows, 3, "Home")).toEqual({ focus: 0 });
+    expect(treeKeyAction(rows, 1, "End")).toEqual({ focus: 5 });
   });
 
-  it(`caps the rows at ${PROJECT_TREE_CAP}, keeps the current project in, and counts every project`, () => {
-    const projects = Array.from({ length: 9 }, (_, i) => project(`P${i + 1}`, `Project ${i + 1}`));
-    const none = new Set<string>();
-    expect(names(projectTree(projects, [], none))).toEqual(projects.slice(0, PROJECT_TREE_CAP).map((p) => p.name));
-    const withCurrent = projectTree(projects, [], none, "P9");
-    expect(withCurrent.nodes).toHaveLength(PROJECT_TREE_CAP);
-    expect(names(withCurrent).at(-1)).toBe("Project 9");
-    expect(names(withCurrent)).not.toContain(`Project ${PROJECT_TREE_CAP}`);
-    expect(withCurrent.total).toBe(9);
-    expect(projectTree(projects, [], none, "P2").nodes).toHaveLength(PROJECT_TREE_CAP);
+  it("opens a closed group with →, enters an open one, and closes or climbs with ←", () => {
+    expect(treeKeyAction(rows, 3, "ArrowRight")).toEqual({ toggle: 3 });
+    expect(treeKeyAction(rows, 1, "ArrowRight")).toEqual({ focus: 2 });
+    expect(treeKeyAction(rows, 0, "ArrowRight")).toBeNull();
+    expect(treeKeyAction(rows, 1, "ArrowLeft")).toEqual({ toggle: 1 });
+    expect(treeKeyAction(rows, 2, "ArrowLeft")).toEqual({ focus: 1 });
+    expect(treeKeyAction(rows, 3, "ArrowLeft")).toBeNull();
   });
 
-  it("puts initiatives with no open project under No project", () => {
-    const projects = [project("P1", "Open")];
-    const unfiled = unfiledInitiatives(projects, [initiative("B1", "P1"), initiative("B2", null), initiative("B3", "P-GONE")]);
-    expect(unfiled.map((b) => b.id)).toEqual(["B2", "B3"]);
+  it("jumps to the next row starting with a letter, wrapping, in either case", () => {
+    expect(treeKeyAction(rows, 0, "b")).toEqual({ focus: 1 });
+    expect(treeKeyAction(rows, 1, "b")).toEqual({ focus: 2 });
+    expect(treeKeyAction(rows, 2, "B")).toEqual({ focus: 1 });
+    expect(treeKeyAction(rows, 5, "h")).toEqual({ focus: 0 });
+    expect(treeKeyAction(rows, 0, "z")).toBeNull();
+    expect(treeKeyAction(rows, 0, " ")).toBeNull();
+    expect(treeKeyAction(rows, 0, "Enter")).toBeNull();
   });
 });
 

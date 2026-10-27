@@ -361,7 +361,10 @@ assignee.
 The BKT-UAT initiative page (`/?screen=bucket&bucketId=BKT-UAT`) shows one row
 per UAT ticket task (`kind:code` plus `uat:<feedbackId>`): portal step, attempt,
 stage, lease, PR, staging, holder, age, and a link to the portal ticket
-(`https://staging.plxcustomer.io/uat?ticket=<feedbackId>`). Filters: All, Needs
+(`<portal>/uat?ticket=<feedbackId>`). `<portal>` is `PLX_MC_PORTAL_BASE_URL`,
+default `https://staging.plxcustomer.io`: the same host the portal read calls.
+The report carries it as `portalOrigin`, so links and the read change together
+(TASK-3975). The top bar's app links stay on the staging default. Filters: All, Needs
 a human (the bucket table's rule), In flight, Waiting on submitter (`uat:hold`,
 or merged and awaiting re-test) and Verified. No row cap.
 
@@ -376,6 +379,10 @@ Above the table, the portal ↔ Mission Control check lists each disagreement
 with a one-click fix. Fixes run through `PATCH /api/tasks/{id}` and
 `POST /api/tasks` under the person's session, so the usual capabilities and
 audit apply. Mission Control never verifies a ticket task from this check.
+The check counts a ticket's task in any bucket (TASK-3973), so a ticket task
+moved out of BKT-UAT never reads as `no_task` or offers a duplicate Create.
+The page leaves out buckets of restricted projects the viewer cannot read; the
+table still lists the BKT-UAT rows.
 
 | Case | Needs the portal read | Fix |
 |---|---|---|

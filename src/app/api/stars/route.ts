@@ -1,8 +1,9 @@
 // GET /api/stars — the signed-in person's stars, in their order.
-// PATCH /api/stars — one change, { op: "add" | "remove", key }, and the stored
-// list back. A new star is a screen, project or initiative (isStarKey in
-// src/lib/stars/store.ts) and goes last; adding to a full list (STAR_CAP)
-// answers 409 stars_full.
+// PATCH /api/stars — one change, { op: "add" | "remove", key } or
+// { op: "move", key, to }, and the stored list back. A new star is a screen,
+// project or initiative (isStarKey in src/lib/stars/store.ts) and goes last;
+// adding to a full list (STAR_CAP) answers 409 stars_full. A move puts a stored
+// star at place `to` (0 first), to reorder (TASK-3956).
 // One change at a time, never a whole list, so a device never overwrites
 // another's stars. Stars are a personal preference (TASK-3842): anyone who can
 // read Mission Control (task.read) keeps their own, under their Entra object
@@ -14,7 +15,7 @@ import { z } from "zod";
 
 import { ApiError, parseBody, route } from "@/lib/api/route";
 import { sessionPersonId } from "@/lib/api/session-actor";
-import type { StarChange } from "@/lib/stars";
+import { STAR_CAP, type StarChange } from "@/lib/stars";
 import { MAX_STAR_KEY_LENGTH, StarsFullError, changeStars, isStarKey, readStars } from "@/lib/stars/store";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,11 @@ export const dynamic = "force-dynamic";
 const changeSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("add"), key: z.string().refine(isStarKey, "not a screen, project or initiative") }),
   z.object({ op: z.literal("remove"), key: z.string().min(1).max(MAX_STAR_KEY_LENGTH) }),
+  z.object({
+    op: z.literal("move"),
+    key: z.string().min(1).max(MAX_STAR_KEY_LENGTH),
+    to: z.number().int().min(0).max(STAR_CAP - 1),
+  }),
 ]);
 
 export const GET = route(async () => ({ stars: await readStars(await sessionPersonId()) }));

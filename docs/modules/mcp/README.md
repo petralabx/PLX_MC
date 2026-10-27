@@ -33,7 +33,7 @@ Routing behavior is unchanged; owner: Vince. No migration is needed.
 | Streamable HTTP MCP | `GET/POST/DELETE /api/cursor/mcp` — remote team registration |
 | Stdio MCP client | `tools/plx-mc-mcp/index.ts` — local Cursor + Cloud Agents |
 | Swarm compose | `tools/plx-mc-mcp/lib/swarm-client.mjs` (composed into the PLX-MC client) |
-| Audit | `mcp.tool.invoked` events in `mc_events` via `src/lib/mcp/audit.ts` |
+| Audit | `mcp.tool.invoked` events in `mc_events` via `src/lib/mcp/audit.ts`. A failed Draft Projects tool keeps only its error code (`src/lib/mcp/audit-error.ts`): its message can quote a restricted draft |
 | Capture hook | `scripts/compliance-checkout.mjs` prefers `/api/cursor/checkout` when `MC_MCP_API_KEY` set; missing `MC_TASK_ID` calls `/api/cursor/routing/suggest` and stops for explicit selection/`MC_CREATE_TASK=1` |
 | Portal lane cap | `src/lib/mcp/checkout-lane-cap.ts` (D15, TASK-3863) — on `petralabx/plx-customer-portal`, `mc_checkout_task` with `branch` refuses a checkout for a new PR when the branch's lane (`claude/`, `task/`, `cip/`, Feature Map) already holds its cap of open PRs (409 `lane_cap_full`). Caps come from the portal's `scripts/lib/lane-pr-cap.mjs` on `staging` (5-minute cache), open PRs from GitHub (30-second cache). Drafts and the excluded author never count; a branch that already has an open PR always passes; a PR in the merge queue counts until it merges. Without `branch`, or when GitHub cannot be read within 5 s, the checkout proceeds with a `lane_cap_unverified` warning. `PLX_MC_LANE_CAP_CHECKOUT=warn` reports without refusing; `off` skips the check |
 | Agent read tools | `src/lib/mcp/read-actions.ts` — `task.read` only, never a write grant (table below) |
@@ -321,6 +321,8 @@ portal key, because `mc_self_check` stays forbidden to it.
 
 **CIP auto-undraft principal:** `sp_mcp_cip_auto_undraft` (PLX CIP Auto-Undraft; the agentic-swarm `cip-auto-undraft` workflow, agentic-swarm #1689; migration 046; approved by Vince 2026-10-18) is read-only: its grant is `task.read` only, and its allowlist is four read tools: `mc_self_check`, `mc_get_context`, `mc_search_tasks` and `mc_get_task`. It cannot call `mc_list_buckets` or `mc_search_knowledge`, and every write tool gives 403. Key sync verifies it through `mc_self_check`.
 
+**Per-consumer principals (TASK-4015):** Vince decided on 2026-10-27 (4:22 and 4:30 AM ET) that every team bot, every coding-1 lane and the team Cursor connectors get their own principal, so the shared `sp_mcp_cursor` key can be retired. Migration 054 adds `sp_mcp_cursor_team`, `sp_mcp_infra_bot`, `sp_mcp_plx_cos`, `sp_mcp_cip`, `sp_mcp_steward`, `sp_mcp_uat`, `sp_mcp_harness`, `sp_mcp_bc_golive`, `sp_mcp_azure`, `sp_mcp_aws_gh`, `sp_mcp_books`, `sp_mcp_mmm`, `sp_mcp_haggle`, `sp_mcp_recap`, `sp_mcp_cursor_helper`, `sp_mcp_taylo_infra`, `sp_mcp_nightly_audit`, `sp_mcp_lane_claude_cos`, `sp_mcp_lane_claude_uat`, `sp_mcp_lane_claude_vince`, `sp_mcp_lane_codex_cos`, `sp_mcp_lane_codex_uat`, `sp_mcp_lane_codex_vince`, `sp_mcp_lane_cursor_cos`, `sp_mcp_lane_cursor_uat`, `sp_mcp_lane_cursor_vince`. `sp_mcp_cursor_team` (interim team connectors) and `sp_mcp_steward` keep `sp_mcp_cursor` parity (`task.cancel`, `task.reopen`, `task.link_merged_pr`). `sp_mcp_cip`, `sp_mcp_aws_gh` and `sp_mcp_plx_cos` add `task.link_merged_pr`. All others hold the agent bundle only. Only `sp_mcp_portal` may set an `agent:` assignee. Keys are minted separately with Vince's approval.
+
 **Workbench intake principal:** `sp_mcp_workbench_intake` (PLX Workbench intake; TASK-3523; migration 048; approved by Vince 2026-10-20 at 4:28 PM and 5:00 PM ET) is least privilege like the portal: its grant is `task.read` and `task.create` in any bucket, and its allowlist is `mc_create_task` and `mc_search_tasks`. It cannot read agent reports, set an `agent:` assignee, or check out, progress or complete a task. Key sync verifies it through the task search, like the portal. **Creator approval gate (TASK-3530):** a task it creates starts with a pending `creatorApproval` (creator principal and time, in the task jsonb). While it is pending, `checkout()` refuses every checkout door and every launch, and `patchTask` refuses any move into progress or later on every door, the compliance projection included. SharePoint cannot skip it: `updateEntity` refuses the write, an inbound Status change raises a Sync conflict, and keep-SP on that conflict is refused. Each refusal is a `creator_approval.blocked` event. A create straight into progress is refused too. Only vince@ or cos@ (by session Entra oid; registry in `src/lib/permissions/grants.ts`) clears it, with `POST /api/tasks/{id}/creator-approval`, and only on a project they can access. The approval records who and when (`creator_approval.approved`), and any other caller gets 403 and a `creator_approval.denied` event. `approval.decide`, `mc_update_task` and `PATCH /api/tasks/{id}` cannot write `creatorApproval`.
 
 **Agent reports (agent fleet P8, D12):** `POST /api/cursor/agent-report`
@@ -450,6 +452,18 @@ rows only.
 **Approval gates (TASK-629):** `mc_request_approval` (`POST /api/cursor/request-approval`, and the HTTP/stdio MCP tool — both call `actionRequestApproval` in `src/lib/mcp/approval-actions.ts`) raises a runtime approval gate on a task (`approval.request`); the task freezes input-required until a human decides in the Approvals inbox. Optional `checkoutId` marks that checkout blocked-on-approval (`mc_dispatch.approval_gate_id`, migration 036; the full id is never stored on the task, in events or in any response, only `checkoutRef`; a checkout with a pending gate refuses a new one with 409): `mc_complete_task` refuses with `approval_pending` while the gate is pending and `approval_rejected` after a rejection (the checkout stays blocked; raise a new gate on it or release it). Optional `proposal` `{summary, action?, diff?, plan?, risk?}` is a strict object capped at 32 KB, stored on the gate and shown in the Approvals inbox; `reason` stays a short string (max 500). `mc_get_approval_gate {checkoutId|taskId, gateId?, waitSeconds?}` is the agent resume signal: it returns pending/approved/rejected with decider, decidedAt and note; `waitSeconds` (hard cap 25) long-polls and returns early on a decision.
 
 **Questions for a named person (TASK-3567):** `mc_ask_question {taskId, addressee, question, options?, recommended?, recommendationReason?, context?}` (`actionAskQuestion` in `src/lib/mcp/question-actions.ts`; service `src/lib/compliance/questions.ts`) stores a `q_*` question on the task (`Task.questions`, DB-only, never pushed). `addressee` is a directory id or an email; an email of a listed person becomes their directory id, and an agent or unknown id is refused (400 `invalid_addressee`), as is a person outside the task's restricted project (400 `addressee_no_access`). The question, options and reason are stored on one line. `context` (TASK-3720) is background shown under the question: trimmed, at most 2000 characters (longer is 400), omitted when empty, may span lines, and is not part of the re-ask match. Asking the same open question (same wording, options and recommendation) of the same person again returns it (`created: false`). Unlike a gate, an open question never freezes the stage. The person answers on the Approvals screen (`GET /api/questions`, `POST /api/questions/answer`); agents read the answer from the task (`mc_get_task`: `questions[].answer` and the comment it names). Events: `question.asked`, `question.answered`, `question.denied`.
+
+**Draft Projects (TASK-4059):** five tools over `src/lib/mcp/draft-actions.ts` (rules: `src/lib/drafts/service.ts`; contract: [`docs/modules/drafts/README.md`](../drafts/README.md)). All are off until `PLX_MC_DRAFTS_ENABLED=1` and answer 404 `drafts_disabled` while off. None is on a restricted principal's allowlist.
+
+| Tool | REST (stdio proxy) | Auth | Returns |
+|------|--------------------|------|---------|
+| `mc_save_draft` | `POST /api/cursor/drafts` | `draft.create`; edits only by the writer (same principal and operator email) | `draftId`, `created`, `changed`, `preflight` (the checks submit runs), `draft` summary; `withdraw {reason}` closes the draft |
+| `mc_submit_draft` | `POST /api/cursor/drafts/submit` | `draft.create`; writer only | `frozen` (false when unchanged), `duplicatesRaised`, `draft` summary with `version` and `digest`; 422 `draft_not_ready` lists every problem |
+| `mc_get_draft` | `GET /api/cursor/drafts/{id}?version=` | `task.read` + draft visibility | the draft (reviews marked `stale`, `openBlockingFindings`) or one frozen version |
+| `mc_list_drafts` | `GET /api/cursor/drafts?status=&q=&mine=&needsMyReview=` | `task.read` + draft visibility | `drafts[]` summaries (counts of buckets, tasks, open and blocking findings), newest change first |
+| `mc_review_draft` | `POST /api/cursor/drafts/review` | `draft.review` + draft visibility | `review` (`comment`, `finding` with `blocking`, `approve`, `request_changes`) with the `version` the reviewer read, which must be the current one (409 `draft_version_moved`); `resolve {findingId}` closes a finding the same principal and person raised |
+
+The author is the operator email on the call and must be a person in the PLX directory, not a service mailbox such as `cos@`. An agent's approval is advisory, an agent never dismisses a finding, and there is no accept tool: Accept (step 3) is a signed-in session action, and no service principal holds `draft.accept`.
 
 **Signed approvals (TASK-3408):** `mc_request_approval` also takes `scope`,
 one of `{kind: "launch", lane, promptHash}` (one `<runtime>/<lane>`, one
@@ -654,6 +668,32 @@ sourced, so the key is not written into the file. `sp_mcp_cursor` stays on
 | `sp_mcp_swarm` | `plx/prod/mc/lane-swarm-key/v1` |
 | `sp_mcp_workbench` | `plx/prod/mc/lane-workbench-key/v1` |
 | `sp_mcp_workbench_intake` | `plx/prod/mc/lane-workbench-intake-key/v1` |
+| `sp_mcp_cursor_team` | `plx/prod/mc/lane-cursor-team-key/v1` |
+| `sp_mcp_infra_bot` | `plx/prod/mc/lane-infra-bot-key/v1` |
+| `sp_mcp_plx_cos` | `plx/prod/mc/lane-plx-cos-key/v1` |
+| `sp_mcp_cip` | `plx/prod/mc/lane-cip-key/v1` |
+| `sp_mcp_steward` | `plx/prod/mc/lane-steward-key/v1` |
+| `sp_mcp_uat` | `plx/prod/mc/lane-uat-key/v1` |
+| `sp_mcp_harness` | `plx/prod/mc/lane-harness-key/v1` |
+| `sp_mcp_bc_golive` | `plx/prod/mc/lane-bc-golive-key/v1` |
+| `sp_mcp_azure` | `plx/prod/mc/lane-azure-key/v1` |
+| `sp_mcp_aws_gh` | `plx/prod/mc/lane-aws-gh-key/v1` |
+| `sp_mcp_books` | `plx/prod/mc/lane-books-key/v1` |
+| `sp_mcp_mmm` | `plx/prod/mc/lane-mmm-key/v1` |
+| `sp_mcp_haggle` | `plx/prod/mc/lane-haggle-key/v1` |
+| `sp_mcp_recap` | `plx/prod/mc/lane-recap-key/v1` |
+| `sp_mcp_cursor_helper` | `plx/prod/mc/lane-cursor-helper-key/v1` |
+| `sp_mcp_taylo_infra` | `plx/prod/mc/lane-taylo-infra-key/v1` |
+| `sp_mcp_nightly_audit` | `plx/prod/mc/lane-nightly-audit-key/v1` |
+| `sp_mcp_lane_claude_cos` | `plx/prod/mc/lane-lane-claude-cos-key/v1` |
+| `sp_mcp_lane_claude_uat` | `plx/prod/mc/lane-lane-claude-uat-key/v1` |
+| `sp_mcp_lane_claude_vince` | `plx/prod/mc/lane-lane-claude-vince-key/v1` |
+| `sp_mcp_lane_codex_cos` | `plx/prod/mc/lane-lane-codex-cos-key/v1` |
+| `sp_mcp_lane_codex_uat` | `plx/prod/mc/lane-lane-codex-uat-key/v1` |
+| `sp_mcp_lane_codex_vince` | `plx/prod/mc/lane-lane-codex-vince-key/v1` |
+| `sp_mcp_lane_cursor_cos` | `plx/prod/mc/lane-lane-cursor-cos-key/v1` |
+| `sp_mcp_lane_cursor_uat` | `plx/prod/mc/lane-lane-cursor-uat-key/v1` |
+| `sp_mcp_lane_cursor_vince` | `plx/prod/mc/lane-lane-cursor-vince-key/v1` |
 
 ### MCP credential rotation and audit attribution
 

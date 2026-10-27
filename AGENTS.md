@@ -88,6 +88,7 @@ Staging fallback hostname `mc-staging.plxcustomer.io` may exist for preview/brea
 | routing | Vince | Critical |
 | permissions | Vince | Critical |
 | meeting-intake | Vince | Medium |
+| drafts | Vince | Medium |
 | loop-ledgers | Vince | Medium |
 | github-app | Vince | Medium |
 | mcp | Vince | Critical |

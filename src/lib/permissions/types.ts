@@ -57,6 +57,12 @@ export const CAPABILITIES = [
   "skill.install",
   // Replay the compliance reconciliation queue by hand (the cron run is CRON_SECRET-gated).
   "compliance.reconcile",
+  // TASK-4059 Draft Projects: write, submit and withdraw a draft one authors or wrote.
+  "draft.create",
+  // Review a draft one can see: comment, finding, approve, request changes.
+  "draft.review",
+  // Accept a draft into live records (step 3). The action also requires the session to be the author.
+  "draft.accept",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -179,6 +185,38 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
   "sp_mcp_infra",
   "sp_mcp_cip_auto_undraft",
   "sp_mcp_workbench_intake",
+  // TASK-4015 (Vince 2026-10-27 4:22 and 4:30 AM ET): one principal per team
+  // bot, per coding-1 lane, and an interim key for the team Cursor connectors,
+  // so the shared sp_mcp_cursor key can be retired. Keys are minted separately.
+  "sp_mcp_cursor_team",
+  "sp_mcp_infra_bot",
+  "sp_mcp_plx_cos",
+  "sp_mcp_cip",
+  "sp_mcp_steward",
+  "sp_mcp_uat",
+  "sp_mcp_harness",
+  "sp_mcp_bc_golive",
+  "sp_mcp_azure",
+  "sp_mcp_aws_gh",
+  "sp_mcp_books",
+  "sp_mcp_mmm",
+  "sp_mcp_haggle",
+  "sp_mcp_recap",
+  "sp_mcp_cursor_helper",
+  "sp_mcp_taylo_infra",
+  "sp_mcp_nightly_audit",
+  "sp_mcp_lane_claude_cos",
+  "sp_mcp_lane_claude_uat",
+  "sp_mcp_lane_claude_vince",
+  "sp_mcp_lane_codex_cos",
+  "sp_mcp_lane_codex_uat",
+  "sp_mcp_lane_codex_vince",
+  "sp_mcp_lane_cursor_cos",
+  "sp_mcp_lane_cursor_uat",
+  "sp_mcp_lane_cursor_vince",
+  // TASK-4015: Vince's personal principal (his Claude and Cursor). Same
+  // grant as sp_mcp_claude_code (the default MCP_AGENT_CAPABILITIES bundle).
+  "sp_mcp_vince",
 ] as const;
 
 /**

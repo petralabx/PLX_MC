@@ -32,3 +32,4 @@ key files change, update its contract in the same PR.
 | stars | Vince | Low | `docs/modules/stars/README.md` |
 | nav-prefs | Vince | Low | `docs/modules/nav-prefs/README.md` |
 | ci-scorecard | Vince | Low | `docs/modules/ci-scorecard/README.md` |
+| drafts | Vince | Medium | `docs/modules/drafts/README.md` |

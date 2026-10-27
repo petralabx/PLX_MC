@@ -147,6 +147,8 @@ const FULL_MCP_BUNDLE = [
   "question.ask",
   "telemetry.report",
   "sync.mutate",
+  "draft.create",
+  "draft.review",
 ];
 
 const KEYS: Record<string, string> = {
@@ -266,14 +268,18 @@ describe("sp_mcp_portal grant", () => {
       // sp_mcp_cursor adds task.cancel, task.reopen (TASK-3374) and task.link_merged_pr (TASK-3671). sp_mcp_cos
       // adds task.cancel plus task.link_merged_pr. sp_mcp_ledger adds all three (TASK-2580).
       // Both stewards also hold task.assign (TASK-3407); no other agent does.
+      // TASK-4015: sp_mcp_cursor_team and sp_mcp_steward keep sp_mcp_cursor parity;
+      // sp_mcp_cip, sp_mcp_aws_gh and sp_mcp_plx_cos add task.link_merged_pr.
       const extra =
-        principalId === "sp_mcp_cursor"
+        principalId === "sp_mcp_cursor" || principalId === "sp_mcp_cursor_team" || principalId === "sp_mcp_steward"
           ? ["task.cancel", "task.reopen", "task.link_merged_pr"]
           : principalId === "sp_mcp_ledger"
             ? ["task.cancel", "task.reopen", "task.link_merged_pr", "task.assign"]
             : principalId === "sp_mcp_cos"
               ? ["task.cancel", "task.link_merged_pr", "task.assign"]
-              : [];
+              : principalId === "sp_mcp_cip" || principalId === "sp_mcp_aws_gh" || principalId === "sp_mcp_plx_cos"
+                ? ["task.link_merged_pr"]
+                : [];
       expect([...capabilitiesForServicePrincipal(principalId)].sort()).toEqual(
         [...FULL_MCP_BUNDLE, ...extra].sort()
       );

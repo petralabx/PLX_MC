@@ -38,8 +38,10 @@ function ev(seq: string, kind: string, taskId: string | null): EventRow {
 
 import { filterEventsByProjectAcl } from "@/lib/compliance/events-acl";
 import { GET } from "@/app/api/events/route";
+import { __resetDraftsMemoryForTests, insertDraft } from "@/lib/drafts/store";
+import { emptyDraftContent } from "@/lib/drafts/types";
 
-beforeEach(() => { h.session.email = "outsider@petrasoap.com"; h.rows = null; });
+beforeEach(() => { h.session.email = "outsider@petrasoap.com"; h.rows = null; __resetDraftsMemoryForTests(); });
 
 describe("filterEventsByProjectAcl", () => {
   it("withholds task-bound events of restricted projects from non-members", async () => {
@@ -77,6 +79,26 @@ describe("filterEventsByProjectAcl", () => {
     expect((await filterEventsByProjectAcl(events, principalFromTokens("outsider@petrasoap.com"))).map((e) => e.seq)).toEqual(["3", "4"]);
     expect(await filterEventsByProjectAcl(events, principalFromTokens("vince@petrasoap.com"))).toHaveLength(4);
   });
+
+  // TASK-4059: a restricted draft's events carry free text (a withdraw or dismiss reason).
+  it("withholds a restricted draft's events from non-members, and events of a draft the Hub does not hold", async () => {
+    const draft = (visibility: "shared" | "restricted", members: string[]) =>
+      insertDraft({ author: "vince@petrasoap.com", createdBy: "sp_mcp_claude_code", visibility, members, reviewers: [], working: emptyDraftContent("Plan") });
+    const secret = await draft("restricted", ["stephen@petrasoap.com"]);
+    const open = await draft("shared", []);
+    const events = [
+      { ...ev("1", "draft.withdrawn", null), payload: { draftId: secret.id, reason: "private" } },
+      { ...ev("2", "draft.created", null), payload: { draftId: open.id } },
+      { ...ev("3", "draft.reviewed", null), payload: { draftId: "DRF-999" } },
+      ev("4", "task.updated", "TASK-OPEN"),
+    ];
+    const seqs = async (who: string) => (await filterEventsByProjectAcl(events, principalFromTokens(who))).map((e) => e.seq);
+    expect(await seqs("outsider@petrasoap.com")).toEqual(["2", "4"]);
+    expect(await seqs("stephen@petrasoap.com")).toEqual(["1", "2", "4"]);
+    expect(await seqs("vince@petrasoap.com")).toEqual(["1", "2", "4"]);
+    // Only draft events: the project maps are not needed, and the rule still holds.
+    expect((await filterEventsByProjectAcl(events.slice(0, 3), principalFromTokens("outsider@petrasoap.com"))).map((e) => e.seq)).toEqual(["2"]);
+  });
 });
 
 describe("GET /api/events", () => {
@@ -88,6 +110,33 @@ describe("GET /api/events", () => {
     expect(data.nextCursor).toBe("4");
     expect(data.hasMore).toBe(true);
     expect(JSON.stringify(data)).not.toContain("TASK-SECRET");
+  });
+
+  // TASK-4059 P1: a restricted draft's withdraw reason must not reach a non-member.
+  it("shows a restricted draft's withdrawal only to its members and author", async () => {
+    const secret = await insertDraft({
+      author: "vince@petrasoap.com",
+      createdBy: "sp_mcp_claude_code",
+      visibility: "restricted",
+      members: ["stephen@petrasoap.com"],
+      reviewers: [],
+      working: emptyDraftContent("Secret reorg"),
+    });
+    h.rows = [
+      { ...ev("1", "draft.withdrawn", null), payload: { draftId: secret.id, reason: "The reorg is confidential." } },
+      ev("2", "pr.merged", null),
+    ];
+    const read = async (email: string) => {
+      h.session.email = email;
+      const body = await (await GET(new Request("http://localhost/api/events?limit=50"), { params: Promise.resolve({}) } as never)).json();
+      return (body.data ?? body) as { events: EventRow[]; nextCursor: string | null };
+    };
+    const outsider = await read("outsider@petrasoap.com");
+    expect(outsider.events.map((e) => e.seq)).toEqual(["2"]);
+    expect(JSON.stringify(outsider)).not.toContain("confidential");
+    expect(outsider.nextCursor).toBe("2");
+    expect((await read("stephen@petrasoap.com")).events.map((e) => e.seq)).toEqual(["1", "2"]);
+    expect((await read("vince@petrasoap.com")).events.map((e) => e.seq)).toEqual(["1", "2"]);
   });
 
   it("cuts a page at the byte budget and resumes the cursor at the first unsent event", async () => {

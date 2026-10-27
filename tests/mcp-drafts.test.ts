@@ -37,6 +37,7 @@ import { GET as getRoute } from "@/app/api/cursor/drafts/[id]/route";
 import { POST as submitRoute } from "@/app/api/cursor/drafts/submit/route";
 import { POST as reviewRoute } from "@/app/api/cursor/drafts/review/route";
 import { __resetDraftsMemoryForTests } from "@/lib/drafts/store";
+import { recordMcpToolCall } from "@/lib/mcp/audit";
 
 const DRAFT_TOOLS = ["mc_save_draft", "mc_submit_draft", "mc_get_draft", "mc_list_drafts", "mc_review_draft"];
 
@@ -173,6 +174,23 @@ describe("draft tools", () => {
     expect(submit.body.error.message).toContain("research.approaches");
     const other = await callTool("codex-key", "mc_save_draft", { draftId: "DRF-1", title: "Mine now" });
     expect(other.body.error.code).toBe("not_draft_writer");
+  });
+
+  // sol-6.1 P1 on ae15231: /api/events shows mcp.tool.invoked rows to every reader.
+  it("keeps only the error code in the audit row of a failed draft call, on HTTP MCP and REST", async () => {
+    const audit = vi.mocked(recordMcpToolCall);
+    const secretPlan = { ...plan, tasks: [{ key: "T1", bucket: "B1", title: "Reorg", repos: ["secret-repo"] }] };
+    await callTool("claude-key", "mc_save_draft", { title: "Secret plan", visibility: "restricted", members: ["vince@petrasoap.com"], plan: secretPlan, research });
+    audit.mockClear();
+    const failed = await callTool("claude-key", "mc_submit_draft", { draftId: "DRF-1" });
+    expect(failed.body.error.message).toContain("secret-repo");
+    const res = await submitRoute(post("/api/cursor/drafts/submit", { draftId: "DRF-1" }), ctx());
+    expect(res.status).toBe(422);
+    expect(audit.mock.calls.map(([row]) => [row.tool, row.ok, row.error])).toEqual([
+      ["mc_submit_draft", false, "draft_not_ready"],
+      ["mc_submit_draft", false, "draft_not_ready"],
+    ]);
+    expect(JSON.stringify(audit.mock.calls)).not.toContain("secret-repo");
   });
 
   it("validates inputs before anything is stored", async () => {

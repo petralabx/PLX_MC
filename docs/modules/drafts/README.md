@@ -31,7 +31,8 @@ withdraw an open draft (`withdrawn`).
 
 1. **Save** (`mc_save_draft`): creates a draft, or replaces the sections sent (title, plan,
    research, visibility, members, reviewers). The author is the agent's operator email and must be
-   a Petra person. Only the writer edits: the same principal acting for the same person, or the
+   a person in the PLX directory (`humanEmailFor`), never a service mailbox such as `cos@`. Only
+   the writer edits: the same principal acting for the same person, or the
    author signed in. An edit during review returns the draft to `drafting`. The result carries the
    preflight problems, as advice.
 2. **Submit** (`mc_submit_draft`): runs the completeness and preflight checks
@@ -46,7 +47,8 @@ withdraw an open draft (`withdrawn`).
    nothing.
 3. **Review** (`mc_review_draft`): a comment, a finding (blocking or not), an approval or a
    request for changes, each bound to the current version and digest. The reviewer sends the
-   version they read; a newer one refuses (409 `draft_version_moved`). A review of an older version
+   version they read; a newer one refuses (409 `draft_version_moved`), and so does a draft whose
+   edits are not submitted yet (409 `draft_not_in_review`). A review of an older version
    reads as `stale`. An agent's approval is advisory. A finding stays open across versions until
    its raiser resolves it, or the author, signed in, resolves or dismisses it (a dismissal needs a
    reason of 10 characters or more). An open blocking finding refuses Accept.

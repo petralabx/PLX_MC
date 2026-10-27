@@ -164,7 +164,7 @@ The restricted principals get none of these: `sp_mcp_portal`, `sp_mcp_workbench`
 
 A member who accepts their own draft creates a project and buckets. Members cannot do that directly today. This is the intended effect: draft review stands in for the admin-only create. Vince was told this with decision 1 and approved going ahead on 2026-10-27.
 
-A draft an agent writes names the agent's person as author. That is the operator email on its MCP call, and it must resolve to a known Petra person. The agent cannot accept for that person: Accept needs that person's own signed-in session.
+A draft an agent writes names the agent's person as author. That is the operator email on its MCP call, and it must resolve to a person in the PLX directory, never a service mailbox such as `cos@`. The agent cannot accept for that person: Accept needs that person's own signed-in session.
 
 A restricted draft fails closed to its members and its author for list, read and review. It uses the same member matching as `src/lib/permissions/project-acl.ts`. The principal that wrote it is not a member by itself, because many people share one runtime key; under enforce, list the agent's `sp_*` id as a member.
 

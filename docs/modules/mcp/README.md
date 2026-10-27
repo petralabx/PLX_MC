@@ -33,7 +33,7 @@ Routing behavior is unchanged; owner: Vince. No migration is needed.
 | Streamable HTTP MCP | `GET/POST/DELETE /api/cursor/mcp` — remote team registration |
 | Stdio MCP client | `tools/plx-mc-mcp/index.ts` — local Cursor + Cloud Agents |
 | Swarm compose | `tools/plx-mc-mcp/lib/swarm-client.mjs` (composed into the PLX-MC client) |
-| Audit | `mcp.tool.invoked` events in `mc_events` via `src/lib/mcp/audit.ts` |
+| Audit | `mcp.tool.invoked` events in `mc_events` via `src/lib/mcp/audit.ts`. A failed Draft Projects tool keeps only its error code (`src/lib/mcp/audit-error.ts`): its message can quote a restricted draft |
 | Capture hook | `scripts/compliance-checkout.mjs` prefers `/api/cursor/checkout` when `MC_MCP_API_KEY` set; missing `MC_TASK_ID` calls `/api/cursor/routing/suggest` and stops for explicit selection/`MC_CREATE_TASK=1` |
 | Portal lane cap | `src/lib/mcp/checkout-lane-cap.ts` (D15, TASK-3863) — on `petralabx/plx-customer-portal`, `mc_checkout_task` with `branch` refuses a checkout for a new PR when the branch's lane (`claude/`, `task/`, `cip/`, Feature Map) already holds its cap of open PRs (409 `lane_cap_full`). Caps come from the portal's `scripts/lib/lane-pr-cap.mjs` on `staging` (5-minute cache), open PRs from GitHub (30-second cache). Drafts and the excluded author never count; a branch that already has an open PR always passes; a PR in the merge queue counts until it merges. Without `branch`, or when GitHub cannot be read within 5 s, the checkout proceeds with a `lane_cap_unverified` warning. `PLX_MC_LANE_CAP_CHECKOUT=warn` reports without refusing; `off` skips the check |
 | Agent read tools | `src/lib/mcp/read-actions.ts` — `task.read` only, never a write grant (table below) |
@@ -463,7 +463,7 @@ rows only.
 | `mc_list_drafts` | `GET /api/cursor/drafts?status=&q=&mine=&needsMyReview=` | `task.read` + draft visibility | `drafts[]` summaries (counts of buckets, tasks, open and blocking findings), newest change first |
 | `mc_review_draft` | `POST /api/cursor/drafts/review` | `draft.review` + draft visibility | `review` (`comment`, `finding` with `blocking`, `approve`, `request_changes`) with the `version` the reviewer read, which must be the current one (409 `draft_version_moved`); `resolve {findingId}` closes a finding the same principal and person raised |
 
-The author is the operator email on the call and must be a Petra person. An agent's approval is advisory, an agent never dismisses a finding, and there is no accept tool: Accept (step 3) is a signed-in session action, and no service principal holds `draft.accept`.
+The author is the operator email on the call and must be a person in the PLX directory, not a service mailbox such as `cos@`. An agent's approval is advisory, an agent never dismisses a finding, and there is no accept tool: Accept (step 3) is a signed-in session action, and no service principal holds `draft.accept`.
 
 **Signed approvals (TASK-3408):** `mc_request_approval` also takes `scope`,
 one of `{kind: "launch", lane, promptHash}` (one `<runtime>/<lane>`, one

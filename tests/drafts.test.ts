@@ -228,11 +228,15 @@ describe("likely duplicates", () => {
 });
 
 describe("create, edit and submit", () => {
-  it("makes the agent's person the author, and refuses a non-Petra operator", async () => {
+  it("makes the agent's person the author, and refuses anyone who is not a person in the directory", async () => {
     const draft = await createDraft(agent(), { title: "Draft Projects" });
     expect(draft).toMatchObject({ id: "DRF-1", status: "drafting", author: "vince@petrasoap.com", createdBy: "sp_mcp_claude_code", version: 0, digest: null });
     expect(draft.working.plan.project.name).toBe("Draft Projects");
     await expect(createDraft(agent("bot@example.com"), { title: "x" })).rejects.toMatchObject({ code: "invalid_author", status: 422 });
+    // A service mailbox on Petra's domain is not a person: it cannot accept or dismiss in person.
+    await expect(createDraft(agent("cos@petrasoap.com"), { title: "x" })).rejects.toMatchObject({ code: "invalid_author", status: 422 });
+    // A directory id resolves to that person's email.
+    expect((await createDraft(agent("ricardo"), { title: "y" })).author).toBe("ricardo@petrasoap.com");
   });
 
   it("refuses an incomplete draft and freezes nothing", async () => {
@@ -301,6 +305,19 @@ describe("create, edit and submit", () => {
     expect(second.digest).not.toBe(draft.digest);
     expect(second.reviews[0].digest).toBe(draft.digest);
     expect((await getDraftVersion(draft.id, 1))?.content.title).toBe("Draft Projects");
+  });
+
+  it("takes no review while the working copy has edits that are not submitted", async () => {
+    const actor = agent();
+    const draft = await submitted(actor);
+    await saveDraft(actor, draft.id, { title: "Draft Projects v2" });
+    const ricardo = human("ricardo@petrasoap.com");
+    await expect(reviewDraft(ricardo, draft.id, { kind: "approve", version: 1, body: "Looks right." })).rejects.toMatchObject({
+      code: "draft_not_in_review",
+      status: 409,
+    });
+    await submitDraft(actor, draft.id, deps());
+    await expect(reviewDraft(ricardo, draft.id, { kind: "approve", version: 2, body: "Looks right." })).resolves.toMatchObject({ review: { version: 2 } });
   });
 
   it("lands a review only on the version its reviewer read", async () => {

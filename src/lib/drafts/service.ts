@@ -21,8 +21,8 @@ import { randomBytes } from "node:crypto";
 import { ApiError } from "@/lib/api/route";
 import { appendEvent } from "@/lib/compliance/repo";
 import { HUMANS } from "@/lib/mc-data/data";
-import { isArchived, isPetraEmail } from "@/lib/mc-data/helpers";
-import { isClosedStage } from "@/lib/mc-data/policy";
+import { isArchived } from "@/lib/mc-data/helpers";
+import { humanEmailFor, isClosedStage } from "@/lib/mc-data/policy";
 import type { Bucket, Human, Project, Repo, Task } from "@/lib/mc-data/types";
 import {
   canAccessBucket,
@@ -181,11 +181,13 @@ function normalizeReviewers(reviewers: readonly string[]): string[] {
 }
 
 export async function createDraft(actor: DraftActor, sections: DraftSections & { title: string }): Promise<Draft> {
-  const author = normalizeMemberToken(actor.email);
-  if (!isPetraEmail(author)) {
+  // The author accepts in person, so it is a person in the directory: never a
+  // service mailbox such as cos@, which humanEmailFor does not resolve.
+  const author = humanEmailFor(actor.email);
+  if (!author) {
     throw new ApiError(
       "invalid_author",
-      "A draft's author is a Petra person. Send x-mc-operator-email for the person the agent works for.",
+      "A draft's author is a person in the PLX directory, not a service mailbox. Send x-mc-operator-email for the person the agent works for.",
       422
     );
   }
@@ -380,6 +382,11 @@ export async function reviewDraft(actor: DraftActor, id: string, input: ReviewIn
     }
     if (draft.version !== input.version) {
       throw new ApiError("draft_version_moved", `${id} is at version ${draft.version}, not ${input.version}. Read it again before you review.`, 409);
+    }
+    // An edit after submit returns the draft to drafting: the working copy is no
+    // longer what version N froze, so a review waits for the next submit.
+    if (draft.status !== "in_review") {
+      throw new ApiError("draft_not_in_review", `${id} has edits that are not submitted yet. Review it after the next submit.`, 409);
     }
     const finding = input.kind === "finding";
     review = newReview({

@@ -32,6 +32,11 @@ const MEMBER_CAPABILITIES: readonly Capability[] = [
   "skill.install",
   // TASK-3567: the route also requires the session to be the question's addressee.
   "question.answer",
+  // TASK-4059 (Vince, 2026-10-27): members propose projects as drafts and
+  // accept their own. draft.accept also requires the session to be the author.
+  "draft.create",
+  "draft.review",
+  "draft.accept",
 ];
 
 const ADMIN_CAPABILITIES: readonly Capability[] = [
@@ -90,6 +95,9 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "question.ask",
   "telemetry.report",
   "sync.mutate",
+  // TASK-4059: agents write and review drafts for their person. Never draft.accept.
+  "draft.create",
+  "draft.review",
 ];
 
 // sp_mcp_cursor is the principal Ledger's Task calls authenticate as (no

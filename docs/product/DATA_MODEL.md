@@ -76,6 +76,27 @@ Bands (`MC_BANDS`): `todo` "To do" · `doing` "In progress" · `done` "Done". Th
 - **Sync posture:** two-way mirror with the SharePoint `Projects` list (`SHAREPOINT_INTEGRATION.md §3.2`): `pullProjects` reads routing-relevant fields inbound, while Owner and PRD remain Mission Control push-only (`docs/modules/sync/README.md`). Production site `/sites/plx-mission-control` has the list provisioned (cutover evidence: `artifacts/sync/2026-07-13-prod-site-cutover/`; P2 re-verify: `artifacts/sync/2026-07-22-elegant-architecture-hygiene/`). When the list is missing, pending rows are skipped with an audit note and `sync.sp` reads `Projects · unprovisioned`. Projects push before buckets so Roadmap can resolve the Project lookup column.
 - Decision record: `docs/product/PRD-project-entity.md`.
 
+## Draft  (`drafts` + `draft_versions` tables; DB-only, never mirrored)
+```jsonc
+{
+  "id": "DRF-12",                    // from mc_draft_id_seq
+  "status": "in_review",             // drafting | in_review | accepted | withdrawn
+  "author": "vince@petrasoap.com",   // always a Petra person
+  "createdBy": "sp_mcp_claude_code", // principal or session that wrote it
+  "visibility": "shared",            // shared | restricted (+ members[]), like Project
+  "members": [],
+  "reviewers": ["ricardo"],
+  "version": 3,                      // latest frozen version; 0 before the first submit
+  "digest": "sha256:…",              // that version's identity
+  "working": { "title": "…", "plan": { "project": { "key": "P", "existing": null }, "buckets": [{ "key": "B1" }], "tasks": [{ "key": "T1", "bucket": "B1" }] }, "research": { "summary": "…", "approaches": [], "sources": [] } },
+  "reviews": [ { "id": "drv_…", "kind": "finding", "blocking": true, "status": "open", "version": 3, "digest": "sha256:…" } ],
+  "materialized": {}                 // draft key → created record id, written by Accept (step 3)
+}
+```
+- A frozen version (`draft_versions`: `draft_id`, `version`, `digest`, `content`, `frozen_by`, `frozen_at`) is immutable: a trigger refuses UPDATE and DELETE.
+- Plan items use draft keys (`P`, `B1`, `T1`); no real `PRJ-*`, `BKT-*` or `TASK-*` id exists before Accept.
+- Contract and rules: `docs/modules/drafts/README.md`; PRD: `docs/product/PRD-draft-projects.md`.
+
 ## Initiative / Bucket  (`MC_BUCKETS`, indexed by `MC_BUCKET_IDX`)
 ```jsonc
 {

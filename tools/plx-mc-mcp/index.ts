@@ -827,6 +827,80 @@ server.registerTool("mc_list_projects", {
   return printResult(await mcFetch(`/projects${query}`));
 });
 
+// Draft Projects (TASK-4059). The server validates plan and research in full
+// (src/lib/drafts/schema.ts); this client passes them through.
+server.registerTool("mc_save_draft", {
+  description: "Create or edit a Draft Project: a reviewable plan (one project, buckets and tasks under draft keys P, B1, T1) plus its research (summary, context, findings citing sources by ref, 2+ approaches with exactly one chosen, recommendation, risks, open questions, sources, artifacts). Nothing in a draft is live. Omit draftId to create (title required; the author is your operator email). With draftId, each section you send replaces that section. withdraw {reason} closes it. Returns preflight: the checks mc_submit_draft runs. Off until PLX_MC_DRAFTS_ENABLED=1.",
+  inputSchema: z.object({
+    draftId: z.string().trim().min(1).optional(),
+    title: z.string().trim().min(1).max(255).optional(),
+    plan: z.unknown().optional().describe("{project:{key:'P', existing, name, owner, repos, desc}, buckets:[{key:'B1', name, owner, repos, desc}], tasks:[{key:'T1', bucket:'B1', title, description, priority, kind, repos, accountableOwner, dependsOn}]}"),
+    research: z.unknown().optional().describe("{summary, context, findings:[{text, sources:['[1]']}], approaches:[{name, pros, cons, risk, effort, chosen}], recommendation, risks:[{text, likelihood, impact, mitigation}], openQuestions, sources:[{ref:'[1]', title, url, kind, excerpt, accessed}], artifacts:[{kind, name, url|inline}]}"),
+    visibility: z.enum(["shared", "restricted"]).optional(),
+    members: z.array(z.string().trim().min(1).max(320)).max(200).optional(),
+    reviewers: z.array(z.string().trim().min(1).max(320)).max(20).optional(),
+    withdraw: z.object({ reason: z.string().trim().min(10).max(2000) }).strict().optional(),
+  }).strict(),
+}, async (body) => {
+  if (!MCP_ENABLED) return disabledTool("mc_save_draft");
+  return printResult(await mcFetch("/drafts", { method: "POST", body }));
+});
+
+server.registerTool("mc_submit_draft", {
+  description: "Freeze a draft's working copy as its next version and open it for review. Refuses with draft_not_ready and every problem when the research is incomplete or the plan fails preflight. Raises likely duplicate open tasks as non-blocking findings.",
+  inputSchema: z.object({ draftId: z.string().trim().min(1) }).strict(),
+}, async (body) => {
+  if (!MCP_ENABLED) return disabledTool("mc_submit_draft");
+  return printResult(await mcFetch("/drafts/submit", { method: "POST", body }));
+});
+
+server.registerTool("mc_get_draft", {
+  description: "Read a draft you can see (working copy, status, version, digest, reviews marked stale, open blocking findings), or one frozen version with version.",
+  inputSchema: z.object({
+    draftId: z.string().trim().min(1),
+    version: z.number().int().positive().optional(),
+  }).strict(),
+}, async ({ draftId, version }) => {
+  if (!MCP_ENABLED) return disabledTool("mc_get_draft");
+  const query = version !== undefined ? `?version=${version}` : "";
+  return printResult(await mcFetch(`/drafts/${encodeURIComponent(draftId)}${query}`));
+});
+
+server.registerTool("mc_list_drafts", {
+  description: "List drafts you can see, newest change first. status: open (default) | all | drafting | in_review | accepted | withdrawn; q matches id or title; mine; needsMyReview.",
+  inputSchema: z.object({
+    status: z.enum(["open", "all", "drafting", "in_review", "accepted", "withdrawn"]).optional(),
+    q: z.string().trim().max(200).optional(),
+    mine: z.boolean().optional(),
+    needsMyReview: z.boolean().optional(),
+  }).strict(),
+}, async ({ status, q, mine, needsMyReview }) => {
+  if (!MCP_ENABLED) return disabledTool("mc_list_drafts");
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (q) params.set("q", q);
+  if (mine !== undefined) params.set("mine", String(mine));
+  if (needsMyReview !== undefined) params.set("needsMyReview", String(needsMyReview));
+  const query = params.size ? `?${params.toString()}` : "";
+  return printResult(await mcFetch(`/drafts${query}`));
+});
+
+server.registerTool("mc_review_draft", {
+  description: "Review a submitted draft's current version: comment, finding (blocking: true refuses Accept until closed), approve (advisory for an agent) or request_changes, with an optional target (plan key or research section). Send version: the version you read; a newer one refuses with draft_version_moved. resolve {findingId} closes a finding you raised. Agents never accept drafts.",
+  inputSchema: z.object({
+    draftId: z.string().trim().min(1),
+    kind: z.enum(["comment", "finding", "approve", "request_changes", "resolve"]),
+    version: z.number().int().positive().optional(),
+    body: z.string().trim().min(1).max(8000).optional(),
+    blocking: z.boolean().optional(),
+    target: z.string().trim().max(120).optional(),
+    findingId: z.string().trim().min(1).optional(),
+  }).strict(),
+}, async (body) => {
+  if (!MCP_ENABLED) return disabledTool("mc_review_draft");
+  return printResult(await mcFetch("/drafts/review", { method: "POST", body }));
+});
+
 server.registerTool("mc_update_task", {
   description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, removing the only kind leaves kind:needs-review, swap with removeLabels:[old], addLabels:[new]. Exactly one lane:* must remain, unless a lane-less task only gains/loses kind:* or closed:* closure labels (or not-needed; on a UAT ticket task with kind:code plus uat:<feedbackId>, also uat:hold, uat-attempt:<n>, uat:blocked and uat:cause:<x>) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. assignee (person id or agent:<slug>; null clears) and accountableOwner (a person) need task.assign plus reason (10+ characters); audits task.assignment.changed. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
   inputSchema: z.object({

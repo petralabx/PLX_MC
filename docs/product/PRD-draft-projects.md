@@ -164,9 +164,9 @@ The restricted principals get none of these: `sp_mcp_portal`, `sp_mcp_workbench`
 
 A member who accepts their own draft creates a project and buckets. Members cannot do that directly today. This is the intended effect: draft review stands in for the admin-only create. Vince was told this with decision 1 and approved going ahead on 2026-10-27.
 
-A draft an agent writes names the agent's person as author. That is the operator email on its MCP call, and it must resolve to a known Petra person. The agent cannot accept for that person: Accept needs that person's own signed-in session.
+A draft an agent writes names the agent's person as author. That is the operator email on its MCP call, and it must resolve to a person in the PLX directory, never a service mailbox such as `cos@`. The agent cannot accept for that person: Accept needs that person's own signed-in session.
 
-A restricted draft fails closed to its members for list, read and review. It uses the same member matching as `src/lib/permissions/project-acl.ts`.
+A restricted draft fails closed to its members and its author for list, read and review. It uses the same member matching as `src/lib/permissions/project-acl.ts`. The principal that wrote it is not a member by itself, because many people share one runtime key; under enforce, list the agent's `sp_*` id as a member.
 
 ## Agent tools
 
@@ -200,8 +200,8 @@ Nothing blocks a direct create.
 
 | Step | Task | What ships | State |
 |---|---|---|---|
-| 1 | TASK-4056 | This PRD and the workstream note | This PR |
-| 2 | Not created | Migration (next free number; open PRs #484 and #486 hold 054 and 055), `src/lib/drafts`, the five tools, REST routes, capabilities, `docs/modules/drafts/README.md` and the `DATA_MODEL.md` entry | Not started |
+| 1 | TASK-4056 | This PRD and the workstream note | Merged (#487) |
+| 2 | TASK-4059 | Migration `056_drafts.sql` (054 and 055 were taken), `src/lib/drafts`, the five tools, REST routes, capabilities, `docs/modules/drafts/README.md` and the `DATA_MODEL.md` entry. 056 also adds the columns Accept needs, so step 3 has no migration | In review |
 | 3 | Not created | Drafts screen, Accept, Approvals rows | Not started |
 | Follow-up | Not created | Artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | Not started |
 
@@ -218,7 +218,7 @@ Step 2 touches a migration, so it lands only with a signed MC merge approval of 
 ## Rollback
 
 - **Step 1:** revert the PR. It changes docs only.
-- **Step 2:** the migration is additive, and its rollback script drops only the two new tables. The tools and routes stay off until `PLX_MC_DRAFTS_ENABLED=1`, which is also the kill switch.
+- **Step 2:** the migration is additive, and its rollback script drops only what 056 added: the two tables, their id sequence and the trigger function. Revert and deploy the code, and 056's manifest entry, before running it: every API route checks the database against the manifest. To stop drafts without a rollback, turn `PLX_MC_DRAFTS_ENABLED` off, which is the kill switch.
 - **Step 3:** revert the PR, or set the flag off. Records that Accept already created are ordinary records. Archive them with the existing archive action.
 
 ## Open questions

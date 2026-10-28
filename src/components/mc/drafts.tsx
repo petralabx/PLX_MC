@@ -7,6 +7,8 @@
 // changes on the current version. The author, and only the author, accepts it,
 // after a confirmation that states what Accept creates. Everything comes from
 // the /api/drafts session routes; agents use the mc_*_draft tools instead.
+// A person also writes drafts here: New draft and Edit open the form in
+// ./draft-editor.tsx (TASK-4109).
 // Text from a draft is shown as text, never as HTML, and only http(s) links
 // become links.
 
@@ -25,6 +27,7 @@ import type {
   DraftVersion,
 } from "@/lib/drafts";
 
+import { DraftAuthorActions, DraftEditor } from "./draft-editor";
 import type { ScreenProps } from "./route";
 
 interface DraftRow {
@@ -40,11 +43,13 @@ interface DraftRow {
   updatedAt: string;
 }
 
-interface DraftDetail {
+export interface DraftDetail {
   draft: Omit<Draft, "reviews"> & { reviews: (DraftReview & { stale: boolean })[] };
   versions: { version: number; digest: string; frozenBy: string; frozenAt: string }[];
   version: DraftVersion | null;
   preflight: DraftIssue[];
+  /** What submit still needs (completeness checks), for an open draft. */
+  completeness: DraftIssue[];
   viewer: {
     email: string;
     isAuthor: boolean;
@@ -53,6 +58,11 @@ interface DraftDetail {
     acceptInProgress: boolean;
     canReview: boolean;
     canAccept: boolean;
+    canEdit: boolean;
+    canSubmit: boolean;
+    canWithdraw: boolean;
+    /** Sent back with a save or submit; a draft that moved since refuses it. */
+    editBase: string;
   };
 }
 
@@ -88,6 +98,8 @@ function errorText(err: unknown): string {
 }
 
 export function DraftsView({ route, nav }: ScreenProps) {
+  if (route.draftId === "new") return <DraftEditor key="new" id={null} nav={nav} />;
+  if (route.draftId && route.edit === "1") return <DraftEditor key={`edit:${route.draftId}`} id={route.draftId} nav={nav} />;
   // Keyed by draft and version, so a new record starts from a clean state.
   return route.draftId ? (
     <DraftRecord
@@ -140,6 +152,11 @@ function DraftList({ nav }: Pick<ScreenProps, "nav">) {
             them. Reviewers check them here. The author accepts a draft, and Mission Control creates the records.
           </p>
         </div>
+        <div className="dr-acts">
+          <button type="button" className="btn acc" onClick={() => nav("drafts", { draftId: "new" })}>
+            + New draft
+          </button>
+        </div>
       </div>
 
       <div className="dr-filters" role="tablist" aria-label="Which drafts">
@@ -166,7 +183,7 @@ function DraftList({ nav }: Pick<ScreenProps, "nav">) {
 
       {error && <div className="dr-banner bad">{error}</div>}
       {!error && rows === null && <div className="colempty">Loading drafts…</div>}
-      {rows && rows.length === 0 && <div className="colempty">No drafts here yet. Agents add them with mc_save_draft.</div>}
+      {rows && rows.length === 0 && <div className="colempty">No drafts here yet. Start one with New draft, or ask your agent (mc_save_draft).</div>}
       {rows && rows.length > 0 && (
         <ul className="dr-list">
           {rows.map((row) => (
@@ -271,6 +288,12 @@ function DraftRecord({ id, version, nav }: { id: string; version: number | null;
         </div>
       )}
       {draft.status === "accepted" && <AcceptedRecords draft={draft} nav={nav} />}
+      {!viewingOld && (viewer.canEdit || viewer.canSubmit || viewer.canWithdraw) && (
+        <section className="dr-section" aria-label="Your draft">
+          <h2>Your draft</h2>
+          <DraftAuthorActions detail={detail} onEdit={() => nav("drafts", { draftId: draft.id, edit: "1" })} onChanged={reload} />
+        </section>
+      )}
 
       <PlanSection content={shown} issues={viewingOld ? [] : detail.preflight} />
       <ResearchSection content={shown} />

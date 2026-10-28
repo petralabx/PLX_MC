@@ -2,12 +2,15 @@
 // Node), so parts are rendered with renderToStaticMarkup. Draft text is shown
 // as text, never as HTML; only http(s) links become links; preflight problems
 // show against the plan item they name; the version summary names what changed.
+// The New draft form (TASK-4109) opens at draftId=new, or with edit=1 on a draft,
+// and that route survives the URL.
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { DraftsView, PlanSection, ResearchSection, VersionDiff } from "@/components/mc/drafts";
+import { routeToUrl, urlToRoute } from "@/components/mc/route";
 import { draftPlanSchema, draftResearchSchema } from "@/lib/drafts/schema";
 import type { DraftContent, DraftPlan, DraftResearch } from "@/lib/drafts/types";
 
@@ -79,5 +82,23 @@ describe("Drafts screen", () => {
     const nav = vi.fn();
     expect(renderToStaticMarkup(createElement(DraftsView, { route: { screen: "drafts" }, nav }))).toContain("Loading drafts");
     expect(renderToStaticMarkup(createElement(DraftsView, { route: { screen: "drafts", draftId: "DRF-4" }, nav }))).toContain("Loading DRF-4");
+  });
+
+  it("opens the New draft form, or the form for one draft while it loads", () => {
+    const nav = vi.fn();
+    const fresh = renderToStaticMarkup(createElement(DraftsView, { route: { screen: "drafts", draftId: "new" }, nav }));
+    expect(fresh).toContain("New <em>draft</em>");
+    expect(fresh).toContain("Create draft");
+    expect(fresh).toContain('aria-label="Plan"');
+    expect(fresh).toContain('aria-label="Research"');
+    const editing = renderToStaticMarkup(createElement(DraftsView, { route: { screen: "drafts", draftId: "DRF-4", edit: "1" }, nav }));
+    expect(editing).toContain("Loading DRF-4");
+    expect(editing).not.toContain('aria-label="Reviews"');
+  });
+
+  it("keeps the form in the URL", () => {
+    expect(routeToUrl({ screen: "drafts", draftId: "DRF-4", edit: "1" })).toBe("/?screen=drafts&draftId=DRF-4&edit=1");
+    expect(urlToRoute("/?screen=drafts&draftId=DRF-4&edit=1")).toEqual({ screen: "drafts", draftId: "DRF-4", edit: "1" });
+    expect(urlToRoute("/?screen=drafts&draftId=DRF-4&edit=yes")).toEqual({ screen: "drafts", draftId: "DRF-4" });
   });
 });

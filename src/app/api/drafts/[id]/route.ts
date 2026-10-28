@@ -2,11 +2,24 @@
 // Projects step 3): the working copy, reviews (each marked stale when given on
 // an older version), every frozen version's digest, the preflight problems,
 // and what the signed-in person may do with it. With version, that frozen
-// version's content too. Off when PLX_MC_DRAFTS_ENABLED=0.
+// version's content too.
+// PATCH /api/drafts/{id} {base, ...sections} — the author saves the New draft
+// form (TASK-4109). base is the editBase GET returned; once the draft has moved
+// (an agent's save, another tab), the save refuses with 409 draft_changed.
+// Off when PLX_MC_DRAFTS_ENABLED=0.
 
-import { ApiError, route } from "@/lib/api/route";
-import { draftDigest } from "@/lib/drafts/schema";
-import { draftPreflight, getVisibleDraft, getVisibleDraftVersion, isDraftWriter } from "@/lib/drafts/service";
+import { ApiError, parseBody, route } from "@/lib/api/route";
+import { completenessIssues } from "@/lib/drafts/preflight";
+import { draftDigest, draftEditBaseSchema, draftSectionsSchema } from "@/lib/drafts/schema";
+import {
+  draftEditBase,
+  draftPreflight,
+  draftSummary,
+  getVisibleDraft,
+  getVisibleDraftVersion,
+  isDraftWriter,
+  saveDraft,
+} from "@/lib/drafts/service";
 import { draftActorFromSession } from "@/lib/drafts/session";
 import { getDraftVersion } from "@/lib/drafts/store";
 import { acceptInProgress, isStaleReview, openBlockingFindings } from "@/lib/drafts/types";
@@ -32,11 +45,14 @@ export const GET = route(async (req, ctx) => {
   const unsubmitted = draft.version > 0 && draftDigest(draft.working) !== draft.digest;
   const open = draft.status === "drafting" || draft.status === "in_review";
   const accepting = acceptInProgress(draft);
+  // Once an Accept has claimed the draft its content is pinned (service assertAcceptNotStarted).
+  const acceptStarted = Object.keys(draft.materialized).length > 0 || draft.acceptedBy !== null;
   return {
     draft: { ...draft, reviews: draft.reviews.map((r) => ({ ...r, stale: isStaleReview(r, draft) })) },
     versions,
     version: requested !== null ? await getVisibleDraftVersion(actor, id, requested) : null,
     preflight: open ? await draftPreflight(actor, draft) : [],
+    completeness: open ? completenessIssues(draft.working) : [],
     viewer: {
       email: actor.email,
       isAuthor,
@@ -46,6 +62,22 @@ export const GET = route(async (req, ctx) => {
       // A draft with edits that are not submitted takes no review (draft_not_in_review).
       canReview: draft.status === "in_review" && !accepting,
       canAccept: isAuthor && draft.status === "in_review" && !unsubmitted && blocking.length === 0 && !accepting,
+      canEdit: isAuthor && open && !accepting && !acceptStarted,
+      canSubmit: isAuthor && draft.status === "drafting" && !accepting,
+      canWithdraw: isAuthor && open && !accepting,
+      editBase: draftEditBase(draft),
     },
   };
+});
+
+const saveSchema = draftSectionsSchema
+  .extend({ base: draftEditBaseSchema })
+  .refine((body) => Object.keys(body).some((k) => k !== "base"), "Send at least one of title, plan, research, visibility, members or reviewers.");
+
+export const PATCH = route(async (req, ctx) => {
+  const { id } = await ctx.params;
+  const actor = await draftActorFromSession("draft.create");
+  const { base, ...sections } = await parseBody(req, saveSchema);
+  const result = await saveDraft(actor, id, sections, { base });
+  return { draft: draftSummary(result.draft), changed: result.changed, editBase: draftEditBase(result.draft) };
 });

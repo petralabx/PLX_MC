@@ -3,7 +3,9 @@
 // routes. Accept states what it creates before it sends anything, and sends the
 // version the author read, then reloads the shared snapshot before it links the
 // new records. An older version is read-only, and a closed draft offers no
-// finding actions. Approvals lists the drafts waiting for the viewer's review. Axe and horizontal overflow run at
+// finding actions. Approvals lists the drafts waiting for the viewer's review.
+// The New draft form (TASK-4109) creates a draft, saves from the edit base it
+// read and keeps what it does not show; submit and withdraw are the author's. Axe and horizontal overflow run at
 // desktop, tablet and phone widths.
 
 import AxeBuilder from "@axe-core/playwright";
@@ -23,6 +25,8 @@ const WIDTHS = [
 
 const DIGEST_1 = `sha256:${"b".repeat(64)}`;
 const DIGEST_2 = `sha256:${"a".repeat(64)}`;
+const EDIT_BASE = `sha256:${"c".repeat(64)}`;
+const EDIT_BASE_2 = `sha256:${"d".repeat(64)}`;
 
 const WORKING = {
   title: "Draft Projects rollout",
@@ -121,6 +125,7 @@ function detail(viewer: Record<string, unknown> = {}, draftFields: Record<string
     ],
     version: null,
     preflight: [],
+    completeness: [],
     viewer: {
       email: "vince@petrasoap.com",
       isAuthor: true,
@@ -129,6 +134,10 @@ function detail(viewer: Record<string, unknown> = {}, draftFields: Record<string
       acceptInProgress: false,
       canReview: true,
       canAccept: true,
+      canEdit: true,
+      canSubmit: false,
+      canWithdraw: true,
+      editBase: EDIT_BASE,
       ...viewer,
     },
   };
@@ -160,10 +169,28 @@ interface Mock {
   accepts: unknown[];
   /** Request paths in order: an Accept, then the shared snapshot load. */
   order: string[];
+  creates: Record<string, unknown>[];
+  saves: Record<string, unknown>[];
+  submits: unknown[];
+  withdraws: unknown[];
 }
 
-async function mockDraftsApi(page: Page, viewer: Record<string, unknown> = {}, draftFields: Record<string, unknown> = {}): Promise<Mock> {
-  const mock: Mock = { accepts: [], order: [] };
+interface MockOptions {
+  /** What submit still needs, as GET /api/drafts/{id} reports it. */
+  completeness?: unknown[];
+  /** The draft moved since the form read it: a save refuses with 409 draft_changed. */
+  refuseSave?: boolean;
+}
+
+async function mockDraftsApi(
+  page: Page,
+  viewer: Record<string, unknown> = {},
+  draftFields: Record<string, unknown> = {},
+  options: MockOptions = {}
+): Promise<Mock> {
+  const mock: Mock = { accepts: [], order: [], creates: [], saves: [], submits: [], withdraws: [] };
+  // A save moves the edit base, as the server's does.
+  let editBase = EDIT_BASE;
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
     if (path === "/api/state" || path.endsWith("/accept")) mock.order.push(`${request.method()} ${path}`);
@@ -176,6 +203,27 @@ async function mockDraftsApi(page: Page, viewer: Record<string, unknown> = {}, d
       mock.accepts.push(request.postDataJSON());
       return route.fulfill(json({ created: { P: "PRJ-90", B1: "BKT-91", B2: "BKT-92", T1: "TASK-93", T2: "TASK-94" }, alreadyAccepted: false }));
     }
+    if (request.method() === "POST" && url.pathname === "/api/drafts") {
+      mock.creates.push(request.postDataJSON());
+      return route.fulfill(json({ draft: { ...ROW, id: "DRF-8", status: "drafting", version: 0 } }));
+    }
+    if (request.method() === "PATCH" && url.pathname === "/api/drafts/DRF-7") {
+      mock.saves.push(request.postDataJSON());
+      if (options.refuseSave) {
+        const error = { code: "draft_changed", message: "DRF-7 changed since you opened it. Copy your edits, reload it, and edit again." };
+        return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error }) });
+      }
+      editBase = EDIT_BASE_2;
+      return route.fulfill(json({ draft: ROW, changed: true, editBase }));
+    }
+    if (request.method() === "POST" && url.pathname.endsWith("/submit")) {
+      mock.submits.push(request.postDataJSON());
+      return route.fulfill(json({ draft: ROW, frozen: true, duplicates: 0 }));
+    }
+    if (request.method() === "POST" && url.pathname.endsWith("/withdraw")) {
+      mock.withdraws.push(request.postDataJSON());
+      return route.fulfill(json({ draft: { ...ROW, status: "withdrawn" } }));
+    }
     if (request.method() === "POST" && url.pathname.endsWith("/review")) {
       const error = { code: "draft_version_moved", message: "DRF-7 is at version 3, not 2. Read it again before you review." };
       return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error }) });
@@ -183,7 +231,22 @@ async function mockDraftsApi(page: Page, viewer: Record<string, unknown> = {}, d
     if (request.method() !== "GET") return route.fulfill({ status: 405, body: "Method Not Allowed" });
     if (/\/api\/drafts\/DRF-7$/.test(url.pathname)) {
       const old = url.searchParams.get("version") === "1";
-      return route.fulfill(json({ ...detail(viewer, draftFields), ...(old ? { version: VERSION_1 } : {}) }));
+      return route.fulfill(
+        json({ ...detail({ editBase, ...viewer }, draftFields), ...(old ? { version: VERSION_1 } : {}), completeness: options.completeness ?? [] })
+      );
+    }
+    if (/\/api\/drafts\/DRF-8$/.test(url.pathname)) {
+      // The draft the New draft form just created, as the form sent it.
+      const made = mock.creates.at(-1) ?? {};
+      const working = { title: made.title, plan: made.plan, research: made.research };
+      return route.fulfill(
+        json(
+          detail(
+            { canSubmit: true, canAccept: false, canReview: false },
+            { id: "DRF-8", status: "drafting", version: 0, digest: null, working, reviews: [], reviewers: [] }
+          )
+        )
+      );
     }
     return route.fulfill(json({ drafts: [ROW], count: 1, viewer: "vince@petrasoap.com" }));
   });
@@ -266,6 +329,111 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await expect(page.getByRole("region", { name: "Accept" }).getByRole("button", { name: "Accept version 2…" })).toBeVisible();
   });
 
+  test("New draft creates a draft from the form, then opens it to edit", async ({ page }) => {
+    const mock = await mockDraftsApi(page);
+    await openDrafts(page);
+    await page.getByRole("button", { name: "+ New draft" }).click();
+    await expect(page).toHaveURL(/draftId=new/);
+    await expect(page.getByRole("heading", { name: "New draft" })).toBeVisible();
+    await page.getByLabel("Title", { exact: true }).fill("Supplier onboarding");
+    await page.getByLabel("Project name", { exact: true }).fill("Supplier onboarding");
+    await page.getByRole("button", { name: "+ Add bucket" }).click();
+    await page.getByLabel("B1 name", { exact: true }).fill("Intake");
+    await page.getByRole("button", { name: "+ Add task" }).click();
+    await page.getByLabel("T1 title", { exact: true }).fill("Intake form");
+    await page.getByRole("button", { name: "+ Add approach" }).click();
+    await page.getByLabel("Approach 1 name", { exact: true }).fill("A form in Mission Control");
+    await page.getByRole("button", { name: "Create draft" }).click();
+    await expect.poll(() => mock.creates.length).toBe(1);
+    expect(mock.creates[0]).toMatchObject({
+      title: "Supplier onboarding",
+      plan: {
+        project: { existing: null, name: "Supplier onboarding" },
+        buckets: [{ key: "B1", name: "Intake" }],
+        tasks: [{ key: "T1", bucket: "B1", title: "Intake form", dependsOn: [] }],
+      },
+      research: { approaches: [{ name: "A form in Mission Control", chosen: true }] },
+      visibility: "shared",
+      members: [],
+      reviewers: [],
+    });
+    await expect(page).toHaveURL(/draftId=DRF-8&edit=1/);
+    await expect(page.getByRole("heading", { name: "Edit DRF-8" })).toBeVisible();
+    await expect(page.getByLabel("T1 title", { exact: true })).toHaveValue("Intake form");
+  });
+
+  test("Edit saves from the edit base it read, and keeps what the form does not show", async ({ page }) => {
+    const mock = await mockDraftsApi(page);
+    await openDrafts(page, "&draftId=DRF-7");
+    await page.getByRole("region", { name: "Your draft" }).getByRole("button", { name: "Edit draft" }).click();
+    await expect(page).toHaveURL(/draftId=DRF-7&edit=1/);
+    await page.getByLabel("Title", { exact: true }).fill("Draft Projects rollout, revised");
+    await expect(page.getByText("Saving keeps the draft's 1 risk(s), 1 open question(s) as they are.")).toBeVisible();
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    expect(mock.saves[0]).toMatchObject({
+      base: EDIT_BASE,
+      title: "Draft Projects rollout, revised",
+      plan: WORKING.plan,
+      research: { risks: WORKING.research.risks, openQuestions: WORKING.research.openQuestions, sources: WORKING.research.sources },
+    });
+    // The next save names the base the last one returned.
+    await expect(page.getByText("Saved.")).toBeVisible();
+    await page.getByLabel("Title", { exact: true }).fill("Draft Projects rollout, revised twice");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(2);
+    expect(mock.saves[1]).toMatchObject({ base: EDIT_BASE_2, title: "Draft Projects rollout, revised twice" });
+  });
+
+  test("a draft that moved refuses the save, and the form keeps the edits", async ({ page }) => {
+    await mockDraftsApi(page, {}, {}, { refuseSave: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await page.getByLabel("Title", { exact: true }).fill("My edit");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    const footer = page.getByRole("region", { name: "Save" });
+    await expect(footer.getByRole("alert")).toContainText("DRF-7 changed since you opened it.");
+    await expect(footer.getByRole("button", { name: "Reload DRF-7 (drops your edits)" })).toBeVisible();
+    await expect(page.getByLabel("Title", { exact: true })).toHaveValue("My edit");
+  });
+
+  test("Submit lists what is missing, then sends the edit base the author read", async ({ page }) => {
+    const missing = [{ code: "summary_required", path: "research.summary", message: "Write a summary of the plan." }];
+    await mockDraftsApi(page, { canSubmit: true }, { status: "drafting" }, { completeness: missing });
+    await openDrafts(page, "&draftId=DRF-7");
+    const waiting = page.getByRole("region", { name: "Your draft" });
+    await expect(waiting).toContainText("Before you can submit:");
+    await expect(waiting).toContainText("Write a summary of the plan.");
+    await expect(waiting.getByRole("button", { name: "Submit for review" })).toBeDisabled();
+
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    const mock = await mockDraftsApi(page, { canSubmit: true }, { status: "drafting" });
+    await openDrafts(page, "&draftId=DRF-7");
+    await page.getByRole("region", { name: "Your draft" }).getByRole("button", { name: "Submit for review" }).click();
+    await expect.poll(() => mock.submits).toEqual([{ base: EDIT_BASE }]);
+  });
+
+  test("Withdraw takes a reason of 10 characters or more", async ({ page }) => {
+    const mock = await mockDraftsApi(page);
+    await openDrafts(page, "&draftId=DRF-7");
+    const mine = page.getByRole("region", { name: "Your draft" });
+    await mine.getByRole("button", { name: "Withdraw…" }).click();
+    const reason = mine.getByLabel(/Why withdraw DRF-7/);
+    await reason.fill("too short");
+    await expect(mine.getByRole("button", { name: "Withdraw DRF-7" })).toBeDisabled();
+    await reason.fill("Folded into the supplier plan.");
+    await mine.getByRole("button", { name: "Withdraw DRF-7" }).click();
+    await expect.poll(() => mock.withdraws).toEqual([{ reason: "Folded into the supplier plan." }]);
+  });
+
+  test("only the author gets the author actions and the form", async ({ page }) => {
+    await mockDraftsApi(page, { isAuthor: false, canEdit: false, canSubmit: false, canWithdraw: false, canAccept: false });
+    await openDrafts(page, "&draftId=DRF-7");
+    await expect(page.getByRole("region", { name: "Plan" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Your draft" })).toHaveCount(0);
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await expect(page.getByText("Only vince@petrasoap.com edits DRF-7.")).toBeVisible();
+  });
+
   test("Accept waits for every blocking finding", async ({ page }) => {
     await mockDraftsApi(page, { openBlockingFindings: ["drv_00000000000000aa"], canAccept: false });
     await openDrafts(page, "&draftId=DRF-7");
@@ -292,11 +460,11 @@ test.describe("Drafts screen (Draft Projects)", () => {
 
   test("has no axe violations and no horizontal overflow at any width", async ({ page }) => {
     await mockDraftsApi(page);
-    for (const query of ["", "&draftId=DRF-7"]) {
+    for (const query of ["", "&draftId=DRF-7", "&draftId=new", "&draftId=DRF-7&edit=1"]) {
       for (const [name, width, height] of WIDTHS) {
         await page.setViewportSize({ width, height });
         await openDrafts(page, query);
-        const label = `drafts${query ? "-record" : "-list"}/${name}`;
+        const label = `drafts-${query.includes("edit") ? "edit" : query.includes("new") ? "new" : query ? "record" : "list"}/${name}`;
         await page.screenshot({ path: `${SHOT_DIR}/${label.replace("/", "-")}.png`, fullPage: true });
         await expectSurfaceNoHorizontalOverflow(page, "drafts-screen", label);
         const results = await new AxeBuilder({ page }).include("[data-testid='drafts-screen']").withTags(TAGS).analyze();

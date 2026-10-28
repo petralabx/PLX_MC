@@ -13,7 +13,7 @@ import { z } from "zod";
 
 import { ApiError } from "@/lib/api/route";
 import { assertDraftsEnabled } from "@/lib/drafts/flag";
-import { draftPlanSchema, draftResearchSchema, draftTextSchema, draftTitleSchema } from "@/lib/drafts/schema";
+import { draftPeopleSchema, draftPlanSchema, draftResearchSchema, draftTextSchema, draftTitleSchema } from "@/lib/drafts/schema";
 import {
   closeFinding,
   createDraft,
@@ -38,7 +38,6 @@ import { mcpJsonResult } from "./envelope";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 
 const draftId = z.string().trim().regex(DRAFT_ID_RE, "a draft id is DRF-<n>");
-const people = (max: number) => z.array(z.string().trim().regex(/^[^\s\u0000]{1,320}$/, "an email, oid, directory id or sp_* id")).max(max);
 
 export const saveDraftSchema = z
   .object({
@@ -47,8 +46,8 @@ export const saveDraftSchema = z
     plan: draftPlanSchema.optional().describe("Replaces the whole plan: {project, buckets[], tasks[]} under draft keys P, B1, T1"),
     research: draftResearchSchema.optional().describe("Replaces the whole research section"),
     visibility: z.enum(["shared", "restricted"]).optional(),
-    members: people(200).optional().describe("Restricted drafts: emails, Entra oids, directory ids or sp_* ids"),
-    reviewers: people(20).optional().describe("People asked to review: directory ids or emails"),
+    members: draftPeopleSchema(200).optional().describe("Restricted drafts: emails, Entra oids, directory ids or sp_* ids"),
+    reviewers: draftPeopleSchema(20).optional().describe("People asked to review: directory ids or emails"),
     withdraw: z.object({ reason: draftTextSchema(10, 2000) }).strict().optional(),
   })
   .strict()

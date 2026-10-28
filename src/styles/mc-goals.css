@@ -547,6 +547,35 @@
   color: var(--p-ink);
 }
 
+/* Column labels sit on the same right edge as the figures under them. */
+.mc .goals .gp-table thead th.num {
+  text-align: right;
+}
+
+/* Truckloads: each group header is one cell over Full, Partial and Product.
+   Equal numeric columns keep that cell on exactly those three, at desktop
+   and in the phone scroller. */
+.mc .goals .gp-table.gp-grouped {
+  table-layout: fixed;
+  min-width: 70rem;
+}
+
+.mc .goals .gp-table.gp-grouped col.gp-col-name {
+  width: 18%;
+}
+
+.mc .goals .gp-table.gp-grouped col.gp-col-num {
+  width: 9.11%;
+}
+
+.mc .goals .gp-table thead th.grp:not(.hand) {
+  background: color-mix(in srgb, var(--p-ink) 6%, var(--p-card));
+}
+
+.mc .goals .gp-table .grp-edge {
+  box-shadow: inset 1px 0 0 var(--p-grid);
+}
+
 .mc .goals .gp-table :is(td, tbody th, tfoot th) {
   padding: 7px 10px;
   border-bottom: 1px solid var(--p-grid);

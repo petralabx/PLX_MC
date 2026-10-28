@@ -117,11 +117,11 @@ export function RevenueByClassTable({ page }: { page: ReadyPage }) {
 
 // ─── Truckloads by customer ───────────────────────────────────────────────
 
-function TallyCells({ t, hand }: { t: LoadTally; hand?: boolean }) {
+function TallyCells({ t, hand, edge }: { t: LoadTally; hand?: boolean; edge?: boolean }) {
   const cls = hand ? "num hand" : "num";
   return (
     <>
-      <td className={cls}>{count(t.full)}</td>
+      <td className={edge ? `${cls} grp-edge` : cls}>{count(t.full)}</td>
       <td className={cls}>{count(t.partial)}</td>
       <td className={cls}>{amount(t.productUsdCents)}</td>
     </>
@@ -136,16 +136,38 @@ const sumTally = (rows: LoadTally[]): LoadTally =>
 
 export function TruckloadTable({ page }: { page: ReadyPage }) {
   const rows = page.model.truckloads.customers;
-  const head = (group: string, hand?: boolean) =>
-    ["Full", "Partial", "Product US$"].map((label) => (
-      <th key={label} scope="col" className={hand ? "num hand" : "num"}>
+  const head = (group: string, hand?: boolean, edge?: boolean) =>
+    ["Full", "Partial", "Product US$"].map((label, i) => (
+      <th
+        key={label}
+        scope="col"
+        className={[hand ? "num hand" : "num", edge && i === 0 ? "grp-edge" : ""].filter(Boolean).join(" ")}
+      >
         <span className="vh">{group}: </span>
         {label}
       </th>
     ));
   return (
     <div className="gp-table-wrap" role="region" aria-label="Truckloads by customer" tabIndex={0}>
-      <table className="gp-table">
+      <table className="gp-table gp-grouped">
+        <colgroup>
+          <col className="gp-col-name" />
+        </colgroup>
+        <colgroup>
+          <col className="gp-col-num" />
+          <col className="gp-col-num" />
+          <col className="gp-col-num" />
+        </colgroup>
+        <colgroup>
+          <col className="gp-col-num" />
+          <col className="gp-col-num" />
+          <col className="gp-col-num" />
+        </colgroup>
+        <colgroup>
+          <col className="gp-col-num" />
+          <col className="gp-col-num" />
+          <col className="gp-col-num" />
+        </colgroup>
         <thead>
           <tr>
             <th scope="col" rowSpan={2}>
@@ -154,17 +176,17 @@ export function TruckloadTable({ page }: { page: ReadyPage }) {
             <th scope="colgroup" colSpan={3} className="grp">
               This month (Sage)
             </th>
-            <th scope="colgroup" colSpan={3} className="grp hand">
+            <th scope="colgroup" colSpan={3} className="grp hand grp-edge">
               Entered by hand
             </th>
-            <th scope="colgroup" colSpan={3} className="grp">
+            <th scope="colgroup" colSpan={3} className="grp grp-edge">
               Last month
             </th>
           </tr>
           <tr>
             {head("This month")}
-            {head("By hand", true)}
-            {head("Last month")}
+            {head("By hand", true, true)}
+            {head("Last month", false, true)}
           </tr>
         </thead>
         <tbody>
@@ -174,8 +196,8 @@ export function TruckloadTable({ page }: { page: ReadyPage }) {
                 {r.name} <span className="code">{r.code}</span>
               </th>
               <TallyCells t={r.thisMonth} />
-              <TallyCells t={r.byHand} hand />
-              <TallyCells t={r.lastMonth} />
+              <TallyCells t={r.byHand} hand edge />
+              <TallyCells t={r.lastMonth} edge />
             </tr>
           ))}
         </tbody>
@@ -183,8 +205,8 @@ export function TruckloadTable({ page }: { page: ReadyPage }) {
           <tr>
             <th scope="row">Total</th>
             <TallyCells t={sumTally(rows.map((r) => r.thisMonth))} />
-            <TallyCells t={sumTally(rows.map((r) => r.byHand))} hand />
-            <TallyCells t={sumTally(rows.map((r) => r.lastMonth))} />
+            <TallyCells t={sumTally(rows.map((r) => r.byHand))} hand edge />
+            <TallyCells t={sumTally(rows.map((r) => r.lastMonth))} edge />
           </tr>
         </tfoot>
       </table>

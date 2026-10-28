@@ -21,6 +21,7 @@ import datasetsJson from "./fixtures/reporting-goals/2026-10-14/datasets.json";
 import entriesJson from "./fixtures/reporting-goals/2026-10-14/entries.json";
 import expectedJson from "./fixtures/reporting-goals/2026-10-14/expected.json";
 import forecastJson from "./fixtures/reporting-goals/2026-10-14/forecast.json";
+import forecastSourceJson from "./fixtures/reporting-goals/2026-10-14/forecast-source.json";
 import shipmentLinesJson from "./fixtures/reporting-goals/2026-10-14/shipment-lines.json";
 
 export const TODAY = "2026-10-14";
@@ -40,6 +41,16 @@ export const SHIPMENT_LINES = shipmentLinesJson as ShipmentLineRow[];
 
 /** The fixture run's stored summary of them: read, 133 lines. */
 export const SHIPMENT_LINES_SUMMARY: ShipmentLinesSummary = { access: "read", missing: [], lines: SHIPMENT_LINES.length };
+
+/** Finished-good codes in the fixture MRP (erp_code and code). Blank codes are dropped. */
+export const FINISHED_GOOD_CODES: ReadonlySet<string> = new Set(
+  (forecastSourceJson.finishedProducts as { code: string | null; erp_code: string | null }[]).flatMap((row) =>
+    [row.code, row.erp_code].flatMap((raw) => {
+      const code = (raw ?? "").trim().toUpperCase();
+      return code ? [code] : [];
+    })
+  )
+);
 
 /** The goal settings migrations 039 and 042 seed (042's Line 1 settings replaced the large-batch ones). */
 export const SETTINGS: GoalSettings = {
@@ -120,7 +131,8 @@ export function goalsPage(
   forecast: ForecastSnapshot | null = FORECAST,
   shipmentLines: ShipmentLinesSummary | null = SHIPMENT_LINES_SUMMARY,
   basis: RevenueRateBasis = "boc",
-  snapshot: Datasets = DATASETS
+  snapshot: Datasets = DATASETS,
+  lineRows: readonly ShipmentLineRow[] | null = null
 ): GoalsPage {
   const view = buildGoalsView({
     configured: true,
@@ -136,6 +148,8 @@ export function goalsPage(
     rates: [{ date: TODAY, rate: RATE }],
     forecast,
     shipmentLines,
+    shipmentLineRows: shipmentLines?.access === "read" ? lineRows ?? SHIPMENT_LINES : null,
+    finishedGoodCodes: shipmentLines?.access === "read" ? FINISHED_GOOD_CODES : null,
     revenueBasis: basis,
   });
   return { ...view, viewer: { editor: true }, ...overrides };

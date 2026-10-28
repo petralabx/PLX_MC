@@ -86,7 +86,9 @@ traceable to a refresh run and a named query.
    carries the run (cutoffs, rate, row counts) and the query behind each
    section. The newest run is reported beside it when it failed or is still
    running. It is built at a revenue rate (`?fx=`, **Revenue rate**) and
-   carries revenue by customer class (**Revenue by customer class**).
+   carries revenue by customer class (**Revenue by customer class**) and the
+   headline split into Manufacturing, Distribution and Services (**Revenue by
+   business line**).
 6. **Access** — `access.ts`. Two Entra app roles on Mission Control's sign-in
    app, `Goals.Viewer` (see and export) and `Goals.Editor` (also refresh and
    manual entries), are assigned to the two Entra groups.
@@ -616,6 +618,51 @@ goal cards and on the workbook's Revenue by class sheet (`revenue-by-class.ts`).
   the browser bundle (a test walks every runtime import of the page's client
   files).
 
+### Revenue by business line
+
+The Revenue headline split three ways (Ricardo Savelli, 26 Oct 2026), on the
+Revenue card (`business-line.ts`). Manufacturing + Distribution + Services
+equal that headline to the cent, at either rate and at either customer scope.
+
+- **Manufacturing.** An item line whose code is a finished good in the MRP:
+  `silver.finished_products.erp_code` or `code`, upper-cased and trimmed. The
+  page reads those two columns for this month's item codes only. Both columns
+  are already granted. There is no new table and no migration.
+- **Services.** A 3PL service: item code `3PL`, `3PL-…` or `3PL_…`, or a
+  description that contains the token 3PL, and the code is not a finished
+  good. Ricardo Savelli (28 Oct 2026): a 3PL miscellaneous charge (Sage line
+  type 2) counts as Services too, inside the headline. A product code that is
+  both a finished good and a 3PL service counts as Manufacturing, and the
+  card names it. A 3PL charge line counts as Services even in that case.
+- **Distribution.** Every other product. A by-hand shipment has no item code,
+  so it is Distribution unless its customer or reference says 3PL.
+- **Left out.** Freight, lab and other accessorial miscellaneous charges stay
+  on the charges side line, out of the three totals and out of the headline.
+  The headline plus that side line plus returns equals the invoiced total.
+  An invoice's product (`net before tax` less every charge) is shared across
+  its item lines by largest remainder, so the parts add up to the invoice
+  even when the lines and the header disagree. Its charges are shared the
+  same way between 3PL and the accessorial side line.
+- **Returns.** A credit note has no detail lines. When its invoice is in this
+  month's item lines, the note's product follows that invoice's mix. Otherwise
+  it follows the class's invoiced product mix, and if the class has none it
+  is Distribution. Credited charges follow that invoice's charge mix: the 3PL
+  portion comes off Services, and the rest stays on the accessorial side line.
+  A credit note whose invoice is not in this month leaves every credited charge
+  on the side line. The card says how many notes were shared that way. USD
+  return product uses the class table's already-converted CAD.
+- **Shipped, not invoiced.** When a refresh stores that estimate, it is split
+  the same way and shown beside the headline. A shipment total with no item
+  lines counts as Distribution. It is not inside the three headline totals
+  until the headline itself includes the estimate; then the card adds it in,
+  so the three still match. A hand-entered shipment already counted is left
+  out, as the estimate leaves it out.
+- **When it waits.** No lines on the run, lines the login cannot read, or a
+  finished-good lookup that failed: the card says so and the rest of the page
+  still loads. A successful lookup is cached for five minutes. The list is
+  read live at page load, so it is today's MRP against the stored run.
+- **Workbook.** The workbook does not carry this split yet.
+
 ### Line 1 bulk
 
 Approved by Vince Alton on 2026-10-16 (TASK-3142), in place of the large-batch
@@ -646,6 +693,20 @@ goal (2 batches of 7,500 kg or more per working day).
   only if the Line 1 settings must go too.
 
 ### Interpretations to confirm
+
+- Revenue by business line: only the 3PL code and the 3PL description token
+  count as Services. Any other service item is Distribution until it is named.
+  Ricardo Savelli (28 Oct 2026) decided that a 3PL miscellaneous charge (Sage
+  line type 2) counts as Services, inside the headline. Freight, lab and other
+  accessorial charges stay on the side line. A finished good whose description
+  also says 3PL counts as Manufacturing. A Sage item that matches neither
+  `erp_code` nor `code` is Distribution even when the description says finished
+  good. A credit note has no charge lines: a credited 3PL charge comes off
+  Services only when its invoice is in this month and that invoice's charges
+  show the mix. Otherwise the credited charges stay on the side line. Credit
+  notes and shipped-not-invoiced shipments without item lines cannot be
+  classified from the product, so they follow the rules in **Revenue by
+  business line**.
 
 - Returns (TASK-3987): a credit note counts in the month of its own date
   (`crddate`), not its invoice's ship date, and comes off the goal at its

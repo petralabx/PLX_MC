@@ -13,6 +13,7 @@ import {
   barParts,
   count,
   day,
+  cents,
   dollars,
   pct,
   rate,
@@ -34,6 +35,81 @@ function Bar({ parts, tickLabel }: { parts: BarParts; tickLabel: string }) {
       <span className="hand" style={{ width: pct(parts.byHand) }} />
       <span className="sched" style={{ width: pct(parts.schedule) }} />
       {parts.tick !== null ? <span className="tick" style={{ left: pct(parts.tick) }} title={tickLabel} /> : null}
+    </div>
+  );
+}
+
+type LineAmounts = {
+  manufacturingCadCents: number;
+  distributionCadCents: number;
+  servicesCadCents: number;
+};
+
+function plusLines(a: LineAmounts, b: LineAmounts): LineAmounts {
+  return {
+    manufacturingCadCents: a.manufacturingCadCents + b.manufacturingCadCents,
+    distributionCadCents: a.distributionCadCents + b.distributionCadCents,
+    servicesCadCents: a.servicesCadCents + b.servicesCadCents,
+  };
+}
+
+const LINE_RULE =
+  "Manufacturing: the item code is a finished good in the MRP. Services: a 3PL service, including a Sage miscellaneous charge whose code or description is 3PL. Distribution: every other product. Freight, lab and other accessorial charges stay on the charges line.";
+
+function lineText(amounts: LineAmounts): string {
+  return `Manufacturing ${cents(amounts.manufacturingCadCents)} · Distribution ${cents(amounts.distributionCadCents)} · Services (3PL) ${cents(amounts.servicesCadCents)}`;
+}
+
+/** The headline's three product lines. They add to the headline to the cent. */
+function RevenueByLine({ page, scope, title }: { page: ReadyPage; scope: RevenueScope; title: string }) {
+  const split = page.revenueByBusinessLine;
+  if (!split) return null;
+  if (split.state === "waiting") {
+    return (
+      <p className="gp-split gp-amber" title={title} data-testid="goals-revenue-lines">
+        Business lines: {split.waiting}
+      </p>
+    );
+  }
+  const block = scope === "mfg" ? split.mfg : split.all;
+  const goal = scope === "mfg" ? page.revenueScope : page.revenueGoal;
+  // When a later headline includes shipped-not-invoiced, fold that estimate into the three totals.
+  const includePending = !!goal && "pendingCadCents" in goal;
+  const shown = includePending ? plusLines(block.amounts, block.pending) : block.amounts;
+  const pendingSum =
+    block.pending.manufacturingCadCents + block.pending.distributionCadCents + block.pending.servicesCadCents;
+  return (
+    <div data-testid="goals-revenue-lines" title={LINE_RULE}>
+      <p className="gp-split" title={LINE_RULE}>
+        Product lines: {lineText(shown)}. These add to the headline.
+      </p>
+      {!includePending && pendingSum !== 0 ? (
+        <p className="gp-split" title={LINE_RULE}>
+          Shipped, not invoiced (not in this headline): {lineText(block.pending)}.
+        </p>
+      ) : null}
+      {split.ambiguousCodes.length > 0 ? (
+        <p className="gp-split gp-amber" title={LINE_RULE}>
+          Counted as Manufacturing (also a 3PL code): {split.ambiguousCodes.join(", ")}.
+        </p>
+      ) : null}
+      {split.unitemizedInvoices > 0 ? (
+        <p className="gp-split" title={LINE_RULE}>
+          {split.unitemizedInvoices} {split.unitemizedInvoices === 1 ? "invoice has" : "invoices have"} product and no item lines, so that product counts as Distribution.
+        </p>
+      ) : null}
+      {split.returnsShared > 0 ? (
+        <p className="gp-split" title={LINE_RULE}>
+          {split.returnsShared} {split.returnsShared === 1 ? "credit note has" : "credit notes have"} no item lines this month, so{" "}
+          {split.returnsShared === 1 ? "it follows" : "they follow"} the class&apos;s product mix.
+        </p>
+      ) : null}
+      {split.pendingWithoutLines > 0 && (includePending || pendingSum !== 0) ? (
+        <p className="gp-split" title={LINE_RULE}>
+          {split.pendingWithoutLines} shipped-not-invoiced {split.pendingWithoutLines === 1 ? "shipment has" : "shipments have"} no item lines, so{" "}
+          {split.pendingWithoutLines === 1 ? "it counts" : "they count"} as Distribution.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -185,7 +261,7 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
         id="revenue"
         title="Revenue"
         status={revStatus}
-        definition={`Invoiced in CAD, product before tax (freight and other charges left out${creditNotes?.access === "read" ? ", returns deducted" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
+        definition={`Invoiced in CAD, product before tax (freight, lab and other accessorial charges left out; 3PL service charges count${creditNotes?.access === "read" ? "; returns deducted" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
         big={dollars(revTotal)}
         of={`of ${dollars(rev.targetCents)}`}
         source={revSource}
@@ -231,6 +307,7 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
             </p>
           )
         ) : null}
+        <RevenueByLine page={page} scope={scope} title={revSource} />
         <Bar
           parts={
             mfg

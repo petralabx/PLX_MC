@@ -18,7 +18,7 @@ import {
 } from "@/lib/reporting/goals/business-line";
 import { allocateCents } from "@/lib/reporting/goals/money";
 import { FINISHED_GOOD_MATCH_SQL } from "@/lib/reporting/goals/queries/finished-goods";
-import type { CreditNotesDataset, Datasets, RevenueRateBasis } from "@/lib/reporting/goals/types";
+import type { CreditNoteRow, CreditNotesDataset, Datasets, RevenueRateBasis, ShipmentLineRow } from "@/lib/reporting/goals/types";
 
 import creditNotesJson from "./fixtures/reporting-goals/2026-10-14/credit-notes.json";
 import {
@@ -54,7 +54,10 @@ describe("revenue by business line", () => {
       expect(businessLineSum(split.mfg.amounts)).toBe(page.revenueScope!.goalCadCents);
       expect(split.all.amounts.manufacturingCadCents).toBeGreaterThan(0);
       expect(split.all.amounts.servicesCadCents).toBe(0);
+      expect(split.all.serviceChargesCadCents).toBe(0);
       expect(split.all.amounts.distributionCadCents).toBeGreaterThan(split.all.amounts.manufacturingCadCents);
+      const goal = page.revenueGoal!;
+      expect(goal.goalCadCents + goal.chargesCadCents + goal.returnsCadCents).toBe(goal.totalCadCents);
     }
   });
 
@@ -94,6 +97,80 @@ describe("revenue by business line", () => {
     expect(moved.all.amounts.distributionCadCents).toBeLessThan(page.revenueByBusinessLine!.all.amounts.distributionCadCents);
     expect(both.ambiguousCodes).toContain("FP-2002");
     expect(both.all.amounts.manufacturingCadCents).toBe(page.revenueByBusinessLine!.all.amounts.manufacturingCadCents);
+  });
+
+  it("counts a 3PL miscellaneous charge as Services inside the headline, and leaves freight on the side line", () => {
+    const sample = pageAt("boc");
+    const chosen = new Set<string>();
+    for (const row of sample.shipments) {
+      if (row.source === "Sage" && (row.currency === "CAD" || row.currency === "USD") && row.otherCents > 0) chosen.add(row.invoice);
+    }
+    const seen = new Set<string>();
+    const lines: ShipmentLineRow[] = SHIPMENT_LINES.map((line) => {
+      if (line.kind !== "charge" || !chosen.has(line.invoice) || seen.has(line.invoice)) return line;
+      seen.add(line.invoice);
+      return { ...line, code: "3PL", description: "3PL storage" };
+    });
+    expect(seen.size).toBeGreaterThan(0);
+    for (const basis of ["boc", "sage"] as const) {
+      const before = pageAt(basis);
+      const page = goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, basis, DATASETS, lines);
+      if (!isReady(page) || !page.revenueGoal || !page.revenueScope || !page.revenueByBusinessLine) throw new Error("ready");
+      const split = page.revenueByBusinessLine;
+      const goal = page.revenueGoal;
+      expect(split.state).toBe("ready");
+      expect(split.all.serviceChargesCadCents).toBeGreaterThan(0);
+      expect(split.all.amounts.servicesCadCents).toBe(split.all.serviceChargesCadCents);
+      expect(businessLineSum(split.all.amounts)).toBe(goal.goalCadCents);
+      expect(businessLineSum(split.mfg.amounts)).toBe(page.revenueScope.goalCadCents);
+      expect(goal.goalCadCents + goal.chargesCadCents + goal.returnsCadCents).toBe(goal.totalCadCents);
+      expect(goal.goalCadCents - before.revenueGoal!.goalCadCents).toBe(split.all.serviceChargesCadCents);
+      expect(before.revenueGoal!.chargesCadCents - goal.chargesCadCents).toBe(split.all.serviceChargesCadCents);
+      expect(goal.chargesCadCents).toBeGreaterThan(0);
+    }
+  });
+
+  it("takes a credited 3PL charge off Services when that invoice is in this month", () => {
+    const sample = pageAt("boc");
+    const invoice = sample.shipments.find((row) => row.source === "Sage" && row.currency === "CAD" && row.otherCents > 0);
+    if (!invoice) throw new Error("fixture should have a CAD invoice with charges");
+    const lines = SHIPMENT_LINES.map((line) =>
+      line.invoice === invoice.invoice && line.kind === "charge" ? { ...line, code: "3PL", description: "3PL storage" } : line
+    );
+    const charged = goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "boc", DATASETS, lines);
+    const amount = (invoice.otherCents / 100).toFixed(2);
+    const note: CreditNoteRow = {
+      creditNote: "CN-3PL",
+      invoice: invoice.invoice,
+      customerCode: invoice.customerCode,
+      customer: invoice.customer,
+      creditDate: "2026-10-10",
+      currency: "CAD",
+      productValue: "0.00",
+      otherCharges: amount,
+      netBeforeTax: amount,
+    };
+    const credited = goalsPage(
+      {},
+      ENTRIES,
+      FORECAST,
+      SHIPMENT_LINES_SUMMARY,
+      "boc",
+      { ...DATASETS, creditNotes: { access: "read", missing: [], notes: [note] } },
+      lines
+    );
+    if (!isReady(charged) || !isReady(credited) || !charged.revenueGoal || !credited.revenueGoal) throw new Error("ready");
+    const moved = charged.revenueByBusinessLine!.all.serviceChargesCadCents;
+    const back = credited.revenueByBusinessLine!.all.creditedServiceChargesCadCents;
+    expect(moved).toBe(invoice.otherCents);
+    expect(back).toBe(moved);
+    expect(charged.revenueByBusinessLine!.all.amounts.servicesCadCents - credited.revenueByBusinessLine!.all.amounts.servicesCadCents).toBe(back);
+    expect(businessLineSum(credited.revenueByBusinessLine!.all.amounts)).toBe(credited.revenueGoal.goalCadCents);
+    expect(credited.revenueGoal.goalCadCents + credited.revenueGoal.chargesCadCents + credited.revenueGoal.returnsCadCents).toBe(
+      credited.revenueGoal.totalCadCents
+    );
+    const unrelated = pageAt("boc", { ...DATASETS, creditNotes: CREDIT_NOTES });
+    expect(unrelated.revenueByBusinessLine!.all.creditedServiceChargesCadCents).toBe(0);
   });
 
   it("subtracts returns and still matches the headline", () => {

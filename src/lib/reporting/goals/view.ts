@@ -4,7 +4,7 @@
 // USD revenue converts at the run's Bank of Canada rate, or at the fixed Sage
 // rate when the page asks for it (TASK-3780); truckloads stay on the Bank of Canada rate.
 
-import { countedShipmentRefs, pendingProductsOf, revenueByBusinessLine, type RevenueByBusinessLine } from "./business-line";
+import { applyServiceCharges, countedShipmentRefs, pendingProductsOf, revenueByBusinessLine, type RevenueByBusinessLine } from "./business-line";
 import { customerRevenue, type CustomerRevenue } from "./customer-revenue";
 import { buildForecast, type CustomerClass, type ForecastSnapshot, type ForecastView } from "./forecast";
 import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
@@ -197,6 +197,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
   });
   const notes = input.snapshot.creditNotes ?? null;
   const byClass = revenueByClass(shipments, model, input.ftlCustomers, notes?.access === "read" ? notes.notes : []);
+  const pace = { dueSoFarCents: model.revenue.dueSoFarCents, remaining: model.calendar.remaining };
   const invoicedByClass = Object.fromEntries(byClass.rows.map((r) => [r.customerClass, r.totalCadCents])) as Record<CustomerClass, number>;
   const forecast = buildForecast({
     snapshot: input.forecast ?? null,
@@ -207,6 +208,23 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     invoicedByClassMatchesCard: byClass.matchesCard,
     aoQtyUnreadable: run.rowCounts.forecastAoQtyUnreadable ?? null,
   });
+  const businessLine = revenueByBusinessLine({
+    shipments,
+    lines: input.shipmentLineRows ?? null,
+    linesSummary: input.shipmentLines ?? null,
+    finishedGoodCodes: input.finishedGoodCodes ?? null,
+    creditNotes: notes?.access === "read" ? notes.notes : [],
+    ftlCustomers: input.ftlCustomers,
+    rate: model.revenue.rate,
+    byClass,
+    // Present only when a refresh stored the estimate. The headline on this
+    // branch does not include it; the split keeps it on `pending`.
+    pending: pendingProductsOf(input.snapshot, countedShipmentRefs(model.entries)),
+  });
+  const mfgScope = revenueScope(byClass, "mfg", model.revenue.targetCents, pace);
+  const allScope = revenueScope(byClass, "all", model.revenue.targetCents, pace);
+  // 3PL miscellaneous charges move into the headline only once the lines are readable.
+  const linesReady = businessLine.state === "ready";
   return {
     state: "ready",
     run,
@@ -215,27 +233,9 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     model,
     shipments,
     revenueByClass: byClass,
-    revenueScope: revenueScope(byClass, "mfg", model.revenue.targetCents, {
-      dueSoFarCents: model.revenue.dueSoFarCents,
-      remaining: model.calendar.remaining,
-    }),
-    revenueGoal: revenueScope(byClass, "all", model.revenue.targetCents, {
-      dueSoFarCents: model.revenue.dueSoFarCents,
-      remaining: model.calendar.remaining,
-    }),
-    revenueByBusinessLine: revenueByBusinessLine({
-      shipments,
-      lines: input.shipmentLineRows ?? null,
-      linesSummary: input.shipmentLines ?? null,
-      finishedGoodCodes: input.finishedGoodCodes ?? null,
-      creditNotes: notes?.access === "read" ? notes.notes : [],
-      ftlCustomers: input.ftlCustomers,
-      rate: model.revenue.rate,
-      byClass,
-      // Present only when a refresh stored the estimate. The headline on this
-      // branch does not include it; the split keeps it on `pending`.
-      pending: pendingProductsOf(input.snapshot, countedShipmentRefs(model.entries)),
-    }),
+    revenueScope: linesReady ? applyServiceCharges(mfgScope, businessLine.mfg, model.revenue.targetCents, pace) : mfgScope,
+    revenueGoal: linesReady ? applyServiceCharges(allScope, businessLine.all, model.revenue.targetCents, pace) : allScope,
+    revenueByBusinessLine: businessLine,
     creditNotes: notes ? { access: notes.access, missing: notes.missing, notes: notes.notes.length } : null,
     shipmentLines: shipmentLinesView(input.shipmentLines ?? null),
     settings: input.settings,

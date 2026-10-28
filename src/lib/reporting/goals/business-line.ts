@@ -3,11 +3,13 @@
 // three ways, and the three add up to it to the cent:
 //   Manufacturing — the item code is a finished good in the MRP
 //     (silver.finished_products erp_code or code)
-//   Services — a service charge such as 3PL, and not a finished good
+//   Services — a 3PL service: an item, or a Sage miscellaneous charge
+//     (line type 2) whose code or description is 3PL (Ricardo, 28 Oct 2026).
+//     Those charges are inside the headline.
 //   Distribution — every other product
-// Accessorial lines (Sage line type 2: freight, lab, other miscellaneous
-// charges) stay out, as they do on the headline. A code that is both a
-// finished good and a 3PL service counts as Manufacturing.
+// Freight, lab and other accessorial miscellaneous charges stay out of the
+// headline. A product code that is both a finished good and a 3PL service
+// counts as Manufacturing. A 3PL miscellaneous charge counts as Services.
 //
 // Shipped-not-invoiced product, when a caller passes it, is split the same
 // way and returned beside the headline (`pending`). It is not inside the
@@ -16,9 +18,9 @@
 
 import { CUSTOMER_CLASSES, type CustomerClass } from "./forecast-list";
 import { customerClassOf } from "./forecast";
-import { allocateCents, allocateConvertedCents, convertCents, sumToCents, toCents } from "./money";
+import { allocateCents, allocateConvertedCents, convertCents, prorateCents, sumToCents, toCents } from "./money";
 import { shipmentCustomerClass, type RevenueByClass } from "./revenue-by-class";
-import { SCOPE_EXCLUDES, type RevenueScope } from "./revenue-scope";
+import { SCOPE_EXCLUDES, type RevenueScope, type RevenueScopePace, type RevenueScopeView } from "./revenue-scope";
 import { normalizeRef } from "./rules";
 import type { ShipmentListRow } from "./shipment-list";
 import type { CreditNoteRow, FtlCustomer, ShipmentLineRow, ShipmentLinesSummary } from "./types";
@@ -33,13 +35,17 @@ export interface BusinessLineAmounts {
 }
 
 export interface BusinessLineScope {
-  /** Invoiced product less returns. Adds up to the Revenue headline. */
+  /** Invoiced product plus 3PL service charges, less returns. Adds up to the Revenue headline. */
   amounts: BusinessLineAmounts;
   /**
    * Shipped, not yet invoiced, split the same way. Zero when that dataset
    * is absent. Not part of the headline on this branch.
    */
   pending: BusinessLineAmounts;
+  /** 3PL miscellaneous charges included in `amounts` (and therefore in the headline). */
+  serviceChargesCadCents: number;
+  /** Credited 3PL charges subtracted inside `amounts`. Zero when the credit note's invoice has no charge lines this month. */
+  creditedServiceChargesCadCents: number;
 }
 
 export interface RevenueByBusinessLine {
@@ -213,8 +219,59 @@ function weightsOf(
   return weights;
 }
 
+/**
+ * Move 3PL miscellaneous charges into the headline and take credited 3PL
+ * charges back off it. Freight, lab and other accessorial charges stay in
+ * `chargesCadCents`. Headline + accessorial charges + returns = the invoiced
+ * total (`totalCadCents`).
+ */
+export function applyServiceCharges(
+  scope: RevenueScopeView,
+  line: BusinessLineScope,
+  targetCents: number,
+  pace?: RevenueScopePace,
+): RevenueScopeView {
+  const chargesCadCents = scope.chargesCadCents - line.serviceChargesCadCents;
+  const returnsChargesCadCents = scope.returnsChargesCadCents - line.creditedServiceChargesCadCents;
+  const returnsCadCents = scope.returnsCadCents + line.creditedServiceChargesCadCents;
+  const goalCadCents = scope.totalCadCents - chargesCadCents - returnsCadCents;
+  return {
+    ...scope,
+    chargesCadCents,
+    returnsChargesCadCents,
+    returnsCadCents,
+    goalCadCents,
+    progress: targetCents > 0 ? goalCadCents / targetCents : null,
+    status: pace ? (goalCadCents >= pace.dueSoFarCents ? "on_track" : "behind") : null,
+    neededPerDayCents: pace
+      ? pace.remaining > 0
+        ? prorateCents(Math.max(0, targetCents - goalCadCents), 1, pace.remaining)
+        : 0
+      : null,
+  };
+}
+
+/** Share `total` across 3PL miscellaneous charges and every other charge line. No charge lines: all of it is accessorial. */
+function chargeParts(
+  lines: readonly { kind?: "item" | "charge"; code: string | null; description: string | null; amount: string; discount?: string }[],
+  total: number,
+): { services: number; accessorial: number } {
+  let service = 0;
+  let other = 0;
+  for (const line of lines) {
+    if (line.kind !== "charge") continue;
+    const net = sumToCents([line.amount], [line.discount ?? "0"]);
+    const weight = net > 0 ? net : 0;
+    if (isServiceItem(line.code, line.description)) service += weight;
+    else other += weight;
+  }
+  if (service + other === 0) return { services: 0, accessorial: total };
+  const [services, accessorial] = allocateCents(total, [service, other]);
+  return { services, accessorial };
+}
+
 function waiting(message: string): RevenueByBusinessLine {
-  const empty = { amounts: toPublic(zero()), pending: toPublic(zero()) };
+  const empty = { amounts: toPublic(zero()), pending: toPublic(zero()), serviceChargesCadCents: 0, creditedServiceChargesCadCents: 0 };
   return {
     state: "waiting",
     waiting: message,
@@ -292,22 +349,53 @@ interface ClassBucket {
   returnsUsd: Parts;
   /** Invoiced product weights (CAD and USD native) for sharing a return that has no lines. */
   mix: Parts;
+  /** Native 3PL miscellaneous charges, and the other charges beside them (USD only, for sharing the class's converted charge CAD). */
+  serviceChargesCad: number;
+  serviceChargesUsd: number;
+  accessorialUsd: number;
+  /** Credited 3PL charges, and the credited accessorial charges beside them. */
+  creditedServiceCad: number;
+  creditedServiceUsd: number;
+  creditedAccessorialUsd: number;
 }
 
 function emptyBucket(): ClassBucket {
-  return { cad: zero(), usd: zero(), hand: zero(), returnsCad: zero(), returnsUsd: zero(), mix: zero() };
+  return {
+    cad: zero(),
+    usd: zero(),
+    hand: zero(),
+    returnsCad: zero(),
+    returnsUsd: zero(),
+    mix: zero(),
+    serviceChargesCad: 0,
+    serviceChargesUsd: 0,
+    accessorialUsd: 0,
+    creditedServiceCad: 0,
+    creditedServiceUsd: 0,
+    creditedAccessorialUsd: 0,
+  };
 }
 
-function scopeOf(byClass: ReadonlyMap<CustomerClass, Parts>, pending: ReadonlyMap<CustomerClass, Parts>, scope: RevenueScope): BusinessLineScope {
+function scopeOf(
+  byClass: ReadonlyMap<CustomerClass, Parts>,
+  pending: ReadonlyMap<CustomerClass, Parts>,
+  serviceCharges: ReadonlyMap<CustomerClass, number>,
+  credited: ReadonlyMap<CustomerClass, number>,
+  scope: RevenueScope,
+): BusinessLineScope {
   const excluded = SCOPE_EXCLUDES[scope];
   const amounts = zero();
   const pendingParts = zero();
+  let serviceChargesCadCents = 0;
+  let creditedServiceChargesCadCents = 0;
   for (const customerClass of CUSTOMER_CLASSES) {
     if (excluded.includes(customerClass)) continue;
     add(amounts, byClass.get(customerClass) ?? zero());
     add(pendingParts, pending.get(customerClass) ?? zero());
+    serviceChargesCadCents += serviceCharges.get(customerClass) ?? 0;
+    creditedServiceChargesCadCents += credited.get(customerClass) ?? 0;
   }
-  return { amounts: toPublic(amounts), pending: toPublic(pendingParts) };
+  return { amounts: toPublic(amounts), pending: toPublic(pendingParts), serviceChargesCadCents, creditedServiceChargesCadCents };
 }
 
 export function revenueByBusinessLine(input: BusinessLineInput): RevenueByBusinessLine {
@@ -351,6 +439,12 @@ export function revenueByBusinessLine(input: BusinessLineInput): RevenueByBusine
     const split = fromWeights(product, weights);
     add(row.currency === "CAD" ? bucket.cad : bucket.usd, split);
     add(bucket.mix, split);
+    const charges = chargeParts(byInvoice.get(row.invoice) ?? [], row.otherCents);
+    if (row.currency === "CAD") bucket.serviceChargesCad += charges.services;
+    else {
+      bucket.serviceChargesUsd += charges.services;
+      bucket.accessorialUsd += charges.accessorial;
+    }
   }
 
   for (const note of input.creditNotes) {
@@ -365,21 +459,50 @@ export function revenueByBusinessLine(input: BusinessLineInput): RevenueByBusine
     }
     const split = weights ? fromWeights(product, weights) : fromWeights(product, zero());
     add(note.currency === "CAD" ? bucket.returnsCad : bucket.returnsUsd, split);
+    const invoiceLines = note.invoice ? byInvoice.get(note.invoice) ?? [] : [];
+    const credited = chargeParts(invoiceLines, toCents(note.otherCharges));
+    if (note.currency === "CAD") bucket.creditedServiceCad += credited.services;
+    else {
+      bucket.creditedServiceUsd += credited.services;
+      bucket.creditedAccessorialUsd += credited.accessorial;
+    }
   }
 
   const classAmounts = new Map<CustomerClass, Parts>();
+  const serviceByClass = new Map<CustomerClass, number>();
+  const creditedByClass = new Map<CustomerClass, number>();
   for (const customerClass of CUSTOMER_CLASSES) {
     const bucket = buckets.get(customerClass)!;
     const row = input.byClass.rows.find((r) => r.customerClass === customerClass);
     const usdCad = fromWeights((row?.usd.cadCents ?? 0) - (row?.charges.usdCadCents ?? 0), bucket.usd);
     const returnsUsdCad = fromWeights((row?.returns.usd.cadCents ?? 0) - (row?.returns.usd.chargesCadCents ?? 0), bucket.returnsUsd);
+    const chargeNativeUsd = bucket.serviceChargesUsd + bucket.accessorialUsd;
+    const usdServiceCad =
+      chargeNativeUsd === 0
+        ? 0
+        : fromWeights(row?.charges.usdCadCents ?? 0, { manufacturing: 0, distribution: bucket.accessorialUsd, services: bucket.serviceChargesUsd }).services;
+    const creditNativeUsd = bucket.creditedServiceUsd + bucket.creditedAccessorialUsd;
+    const creditedUsdCad =
+      creditNativeUsd === 0
+        ? 0
+        : fromWeights(row?.returns.usd.chargesCadCents ?? 0, {
+            manufacturing: 0,
+            distribution: bucket.creditedAccessorialUsd,
+            services: bucket.creditedServiceUsd,
+          }).services;
+    const serviceCad = bucket.serviceChargesCad + usdServiceCad;
+    const creditedCad = bucket.creditedServiceCad + creditedUsdCad;
     const amounts = zero();
     add(amounts, bucket.cad);
     add(amounts, usdCad);
     add(amounts, bucket.hand);
+    amounts.services += serviceCad;
     add(amounts, bucket.returnsCad, -1);
     add(amounts, returnsUsdCad, -1);
+    amounts.services -= creditedCad;
     classAmounts.set(customerClass, amounts);
+    serviceByClass.set(customerClass, serviceCad);
+    creditedByClass.set(customerClass, creditedCad);
   }
 
   const pendingByClass = pendingAmounts(input.pending ?? [], finished, ambiguous, input.rate, (n) => {
@@ -389,8 +512,8 @@ export function revenueByBusinessLine(input: BusinessLineInput): RevenueByBusine
   return {
     state: "ready",
     waiting: null,
-    all: scopeOf(classAmounts, pendingByClass, "all"),
-    mfg: scopeOf(classAmounts, pendingByClass, "mfg"),
+    all: scopeOf(classAmounts, pendingByClass, serviceByClass, creditedByClass, "all"),
+    mfg: scopeOf(classAmounts, pendingByClass, serviceByClass, creditedByClass, "mfg"),
     ambiguousCodes: [...ambiguous].sort(),
     unitemizedInvoices,
     returnsShared,

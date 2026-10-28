@@ -54,7 +54,7 @@ function plusLines(a: LineAmounts, b: LineAmounts): LineAmounts {
 }
 
 const LINE_RULE =
-  "Manufacturing: the item code is a finished good in the MRP. Services: a 3PL service item that is not a finished good. Distribution: every other product. Freight, lab and other accessorial charges stay on the charges line.";
+  "Manufacturing: the item code is a finished good in the MRP. Services: a 3PL service, including a Sage miscellaneous charge whose code or description is 3PL. Distribution: every other product. Freight, lab and other accessorial charges stay on the charges line.";
 
 function lineText(amounts: LineAmounts): string {
   return `Manufacturing ${cents(amounts.manufacturingCadCents)} · Distribution ${cents(amounts.distributionCadCents)} · Services (3PL) ${cents(amounts.servicesCadCents)}`;
@@ -261,7 +261,7 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
         id="revenue"
         title="Revenue"
         status={revStatus}
-        definition={`Invoiced in CAD, product before tax (freight and other charges left out${creditNotes?.access === "read" ? ", returns deducted" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
+        definition={`Invoiced in CAD, product before tax (freight, lab and other accessorial charges left out; 3PL service charges count${creditNotes?.access === "read" ? "; returns deducted" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
         big={dollars(revTotal)}
         of={`of ${dollars(rev.targetCents)}`}
         source={revSource}

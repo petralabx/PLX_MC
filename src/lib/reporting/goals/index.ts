@@ -313,6 +313,7 @@ export {
   countedShipmentRefs,
   isServiceItem,
   normalizeItemCode,
+  applyServiceCharges,
   pendingProductsOf,
   revenueByBusinessLine,
 } from "./business-line";

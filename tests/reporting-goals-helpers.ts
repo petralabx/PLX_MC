@@ -131,7 +131,8 @@ export function goalsPage(
   forecast: ForecastSnapshot | null = FORECAST,
   shipmentLines: ShipmentLinesSummary | null = SHIPMENT_LINES_SUMMARY,
   basis: RevenueRateBasis = "boc",
-  snapshot: Datasets = DATASETS
+  snapshot: Datasets = DATASETS,
+  lineRows: readonly ShipmentLineRow[] | null = null
 ): GoalsPage {
   const view = buildGoalsView({
     configured: true,
@@ -147,7 +148,7 @@ export function goalsPage(
     rates: [{ date: TODAY, rate: RATE }],
     forecast,
     shipmentLines,
-    shipmentLineRows: shipmentLines?.access === "read" ? SHIPMENT_LINES : null,
+    shipmentLineRows: shipmentLines?.access === "read" ? lineRows ?? SHIPMENT_LINES : null,
     finishedGoodCodes: shipmentLines?.access === "read" ? FINISHED_GOOD_CODES : null,
     revenueBasis: basis,
   });

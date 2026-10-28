@@ -87,7 +87,7 @@ A task may name existing ids in `dependsOn`. A draft may set `plan.project.exist
 
 The research sections follow `project-researcher`'s `RESEARCH.md`. A draft needs at least two approaches, with exactly one chosen. Each finding cites its sources by `ref`.
 
-A source is internal (a repo path, an MC id, a SharePoint document) or external (a web page). Step 2 accepts artifacts as links, inline markdown and inline Mermaid. File uploads wait for a follow-up, because `mc_upload_evidence` needs a task and a live checkout (`src/lib/mcp/evidence-actions.ts`).
+A source is internal (a repo path, an MC id, a SharePoint document) or external (a web page). Step 2 accepts artifacts as links, inline markdown and inline Mermaid. `mc_upload_evidence` needs a task and a live checkout (`src/lib/mcp/evidence-actions.ts`), so a draft has its own upload tool, `mc_upload_draft_artifact` (TASK-4130; see Follow-up: artifact uploads).
 
 ## Lifecycle
 
@@ -227,6 +227,16 @@ Slice B (TASK-4110):
 - Buckets and tasks move up and down. Their keys stay; the order is the plan's order.
 - A save drops rows left empty and names the rows that are half filled, such as a risk with a mitigation and no text.
 
+## Follow-up: artifact uploads (TASK-4130)
+
+An agent uploads a file for a draft it wrote with `mc_upload_draft_artifact`:
+
+- The kinds are diagram (svg, png), screenshot (png, jpeg, webp) and web page (html), 3 MiB or less. The checks are the ones `mc_upload_evidence` runs.
+- MC stores the file in the PLX site's `Mission Control` library under `Drafts/DRF-n/`, and adds it to the draft's research artifacts as a link.
+- Only the draft's writer uploads, to an open draft. An upload during review returns the draft to drafting, as any edit does.
+- A restricted draft refuses: everyone with access to the shared library could open the file, and MC never narrows access.
+- Uploads are off until a person sets `PLX_MC_EVIDENCE_STORE_ENABLED=1`, the switch evidence uploads use.
+
 ## Follow-up: review on a shared page (Vince, 2026-10-27)
 
 Colleagues, commentators and editors can review a draft on a page outside Mission Control: a Claude Artifact, or a Cursor Canvas if it exposes its comments. Their comments come back to the draft as reviews. This brings people into the review who do not work in Mission Control.
@@ -262,7 +272,9 @@ Not decided yet:
 | 3 | TASK-4071 | Drafts screen, session routes under `/api/drafts`, Accept, the Drafts to review panel on Approvals, a Drafts nav item. Drafts turn on by default; `PLX_MC_DRAFTS_ENABLED=0` is the kill switch | Merged (#492) |
 | Follow-up A | TASK-4109 | New draft form, slice A: session routes to create, save, submit and withdraw; the form for the settings, the plan and the research submit needs (see Follow-up: New draft form) | Merged (#497, #499) |
 | Follow-up B | TASK-4110 | New draft form, slice B: risks, open questions and artifacts in the form; a dependency picker; reordering | Merged (#503) |
-| Follow-up | TASK-4129 to TASK-4132 | Artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | In progress |
+| Follow-up C | TASK-4130 | Artifact uploads: `mc_upload_draft_artifact` stores a draft's file under `Drafts/DRF-n/` in the `Mission Control` library (see Follow-up: artifact uploads) | In review |
+| Follow-up D | TASK-4129 | Skill updates: `project-researcher` and `guided-project-discovery` end by saving a draft (`petralabx/skills` 1.6.15) | Merged (petralabx/skills#48) |
+| Follow-up | TASK-4131, TASK-4132 | Uploads from the New draft form; the governance-contract rule and the skills catalog pin | In progress |
 | Follow-up | Not created | Review on a shared page: "Publish for review" and the comment relay, Claude Artifacts first (see Follow-up: review on a shared page). After step 3 is live and in use | Not started |
 
 Step 2 touches a migration, so it lands only with a signed MC merge approval of its exact head.

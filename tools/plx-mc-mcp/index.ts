@@ -926,6 +926,27 @@ server.registerTool("mc_review_draft", {
   return printResult(await mcFetch("/drafts/review", { method: "POST", body }));
 });
 
+server.registerTool("mc_upload_draft_artifact", {
+  description: "Upload a file to a draft you wrote, as one of its research artifacts: kind diagram (svg, png), screenshot (png, jpeg, webp) or web-page (html), 3 MiB or less. Send filePath (an absolute path to a local file) or contentBase64 with fileName. MC stores it in the Mission Control library under Drafts/DRF-<n>/ and adds it to the draft's artifacts as a link named name (default fileName). A restricted draft refuses with draft_restricted, because the library is shared. evidence_store_unavailable says what a person must set up.",
+  inputSchema: z.object({
+    draftId: z.string().trim().min(1),
+    kind: z.enum(["diagram", "screenshot", "web-page"]),
+    contentType: z.string().trim().min(1),
+    name: z.string().trim().min(1).max(255).optional(),
+    // Absolute: a relative path would resolve against this server's working directory, not the agent's.
+    filePath: z.string().min(1).refine(isAbsolute, "filePath must be an absolute path.").optional(),
+    contentBase64: z.string().min(1).optional(),
+    fileName: z.string().trim().min(1).max(120).optional(),
+  }).strict(),
+}, async ({ filePath, contentBase64, fileName, ...rest }) => {
+  if (!MCP_ENABLED) return disabledTool("mc_upload_draft_artifact");
+  if (!filePath === !contentBase64) throw new Error("Send exactly one of filePath or contentBase64.");
+  const name = fileName ?? (filePath ? basename(filePath) : undefined);
+  if (!name) throw new Error("fileName is required with contentBase64.");
+  const content = contentBase64 ?? (await readFile(filePath!)).toString("base64");
+  return printResult(await mcFetch("/drafts/artifact", { method: "POST", body: { ...rest, fileName: name, contentBase64: content } }));
+});
+
 server.registerTool("mc_update_task", {
   description: "Hub only: {taskId, patch} edits labels (replace) or addLabels/removeLabels, description (replace) or appendDescription, title, priority, bucket (+note; moves the task, audits task.moved). Mutually exclusive forms cannot mix. Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, removing the only kind leaves kind:needs-review, swap with removeLabels:[old], addLabels:[new]. Exactly one lane:* must remain, unless a lane-less task only gains/loses kind:* or closed:* closure labels (or not-needed; on a UAT ticket task with kind:code plus uat:<feedbackId>, also uat:hold, uat-attempt:<n>, uat:blocked and uat:cause:<x>) in a label-only patch, is moved by bucket alone, or is merged/verified. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy? (TASK-n; required for duplicate/superseded), note?} and reopen {stage?, note?}: stage changes, not combinable with other fields; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing; audit task.cancelled / task.reopened. assignee (person id or agent:<slug>; null clears) and accountableOwner (a person) need task.assign plus reason (10+ characters); audits task.assignment.changed. Evidence, checkouts and unknown fields are rejected. Audits task.updated; labels stay DB-only, other fields use normal ToDos sync.",
   inputSchema: z.object({

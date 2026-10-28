@@ -31,6 +31,9 @@ const SAFE_SOURCE_URL = /^(?:|https?:\/\/\S+|(?![a-z][a-z0-9+.-]*:)\S[^\u0000]*)
 /** The largest working copy a draft may hold, as JSON (MCP bodies cap at 4 MiB). */
 export const MAX_DRAFT_CONTENT_BYTES = 512 * 1024;
 
+/** The most artifacts a draft's research holds, uploaded files included. */
+export const MAX_DRAFT_ARTIFACTS = 50;
+
 export const draftProjectSchema = z
   .object({
     key: z.literal("P").default("P"),
@@ -146,7 +149,7 @@ export const draftResearchSchema = z
       .default([]),
     openQuestions: z.array(text(2_000).min(1)).max(100).default([]),
     sources: z.array(sourceSchema).max(200).default([]),
-    artifacts: z.array(artifactSchema).max(50).default([]),
+    artifacts: z.array(artifactSchema).max(MAX_DRAFT_ARTIFACTS).default([]),
   })
   .strict();
 

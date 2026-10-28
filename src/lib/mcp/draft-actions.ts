@@ -1,22 +1,29 @@
 // Draft Projects tools (TASK-4059; PRD docs/product/PRD-draft-projects.md):
-// mc_save_draft, mc_submit_draft, mc_get_draft, mc_list_drafts and
-// mc_review_draft, shared by the HTTP MCP transport and the /api/cursor/drafts
-// REST routes (the stdio client proxies to those). The rules live in
-// src/lib/drafts/service.ts. Every tool is off when PLX_MC_DRAFTS_ENABLED=0.
+// mc_save_draft, mc_submit_draft, mc_get_draft, mc_list_drafts,
+// mc_review_draft and mc_upload_draft_artifact (TASK-4130), shared by the HTTP
+// MCP transport and the /api/cursor/drafts REST routes (the stdio client proxies
+// to those). The rules live in src/lib/drafts/service.ts. Every tool is off when
+// PLX_MC_DRAFTS_ENABLED=0; uploads also wait for PLX_MC_EVIDENCE_STORE_ENABLED=1.
 //
 // An agent writes and reviews drafts for its person, the operator email on the
 // call. It never accepts one: there is no accept tool (step 3 is a signed-in
 // session action), and the agent bundle holds no draft.accept.
 
+import { createHash } from "node:crypto";
+
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { ApiError } from "@/lib/api/route";
+import { MAX_ARTIFACT_BYTES, artifactProblem, sharePointSafeName } from "@/lib/compliance";
 import { assertDraftsEnabled } from "@/lib/drafts/flag";
 import { draftPeopleSchema, draftPlanSchema, draftResearchSchema, draftTextSchema, draftTitleSchema } from "@/lib/drafts/schema";
 import {
+  addDraftArtifact,
   closeFinding,
   createDraft,
+  draftEditBase,
+  draftForUpload,
   draftPreflight,
   draftSummary,
   getVisibleDraft,
@@ -30,11 +37,14 @@ import {
   type DraftDeps,
   defaultDraftDeps,
 } from "@/lib/drafts/service";
-import { DRAFT_ID_RE, isStaleReview, openBlockingFindings, type Draft } from "@/lib/drafts/types";
+import { DRAFT_ID_RE, isStaleReview, openBlockingFindings, type Draft, type DraftArtifact } from "@/lib/drafts/types";
 import { aclPrincipalFromMcp, requireMcpActor } from "@/lib/routing/mutations/actors";
+import { evidenceStoreEnabled } from "@/lib/secrets";
+import { uploadSmallDriveFile } from "@/lib/sync/graph";
 
 import type { McpIdentity } from "./auth";
 import { mcpJsonResult } from "./envelope";
+import { PERSON_ACTION, evidenceDriveId, onSharePoint, storedName, unavailable } from "./evidence-actions";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 
 const draftId = z.string().trim().regex(DRAFT_ID_RE, "a draft id is DRF-<n>");
@@ -103,6 +113,20 @@ export const reviewDraftSchema = z
       ctx.addIssue({ code: "custom", path: ["blocking"], message: "blocking applies to findings only." });
     }
   });
+
+/** The visual evidence kinds: a draft's uploads pass the checks mc_upload_evidence runs. */
+const DRAFT_UPLOAD_KINDS = ["diagram", "screenshot", "web-page"] as const;
+
+export const uploadDraftArtifactSchema = z
+  .object({
+    draftId,
+    kind: z.enum(DRAFT_UPLOAD_KINDS),
+    fileName: z.string().trim().min(1).max(120),
+    contentType: z.string().trim().min(1),
+    name: z.string().trim().min(1).max(255).optional().describe("The artifact's name on the draft; defaults to fileName"),
+    contentBase64: z.string().min(1).max(Math.ceil(MAX_ARTIFACT_BYTES / 3) * 4),
+  })
+  .strict();
 
 function parseInput<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
   const parsed = schema.safeParse(input);
@@ -193,6 +217,55 @@ export async function actionReviewDraft(identity: McpIdentity, input: unknown) {
   return { draftId: body.draftId, review: result.review, draft: draftSummary(result.draft) };
 }
 
+/** A draft's files share one folder in the Mission Control library. */
+export const draftArtifactFolder = (draftId: string) => `Drafts/${draftId}`;
+
+/** Whether a draft's artifact links a file stored from these bytes and name: a retry adds nothing. */
+function isStoredFile(artifact: DraftArtifact, draftId: string, sha256: string, fileName: string): boolean {
+  if (!artifact.url) return false;
+  try {
+    const path = decodeURIComponent(new URL(artifact.url).pathname);
+    return path.includes(`/${draftArtifactFolder(draftId)}/`) && path.endsWith(`-${sha256.slice(0, 8)}-${sharePointSafeName(fileName)}`);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stores a file for a draft and links it from the draft's research artifacts:
+ * mc_upload_draft_artifact for an agent, and the New draft form's upload for its
+ * signed-in author, who sends the edit base the form was read with.
+ */
+export async function uploadDraftArtifact(
+  actor: DraftActor,
+  body: z.infer<typeof uploadDraftArtifactSchema>,
+  options: { base?: string } = {}
+) {
+  const bytes = new Uint8Array(Buffer.from(body.contentBase64, "base64"));
+  const problem = artifactProblem(body.kind, body.contentType, bytes, bytes.length);
+  if (problem) throw new ApiError("invalid_artifact", problem, 400);
+  if (!evidenceStoreEnabled()) throw unavailable(`Uploads are off. ${PERSON_ACTION} Then set PLX_MC_EVIDENCE_STORE_ENABLED=1.`);
+
+  const draft = await draftForUpload(actor, body.draftId, options);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const sameFile = (artifact: DraftArtifact) => isStoredFile(artifact, draft.id, sha256, body.fileName);
+  const existing = draft.working.research.artifacts.find(sameFile);
+  if (existing) return { draftId: draft.id, artifact: existing, duplicate: true, draft: draftSummary(draft), editBase: draftEditBase(draft) };
+
+  // MC never deletes a stored file: one whose draft closes before it is linked stays in the library.
+  const path = `${draftArtifactFolder(draft.id)}/${storedName(new Date().toISOString(), sha256, body.fileName)}`;
+  const item = await onSharePoint(async () => uploadSmallDriveFile(await evidenceDriveId(), path, bytes, body.contentType));
+  const stored: DraftArtifact = { kind: body.kind, name: body.name ?? body.fileName, url: item.webUrl, inline: null };
+  // A concurrent upload of the same file may have linked its copy first; this copy then stays unlinked.
+  const { draft: saved, artifact, added } = await addDraftArtifact(actor, draft.id, stored, sameFile, options);
+  return { draftId: saved.id, artifact, duplicate: !added, sha256, size: bytes.length, draft: draftSummary(saved), editBase: draftEditBase(saved) };
+}
+
+export async function actionUploadDraftArtifact(identity: McpIdentity, input: unknown) {
+  const actor = guard(identity, "mc_upload_draft_artifact", "draft.create");
+  return uploadDraftArtifact(actor, parseInput(uploadDraftArtifactSchema, input));
+}
+
 export function registerDraftTools(server: McpServer, identity: McpIdentity): void {
   server.registerTool("mc_save_draft", {
     description:
@@ -219,4 +292,9 @@ export function registerDraftTools(server: McpServer, identity: McpIdentity): vo
       "Review a submitted draft's current version: comment, finding (blocking: true refuses Accept until it is closed), approve (advisory for an agent) or request_changes; target names a plan key or research section. Send version: the version you read; a newer one refuses with draft_version_moved. resolve {findingId} closes a finding you raised. Only the author, signed in, dismisses a finding. Agents never accept drafts.",
     inputSchema: reviewDraftSchema,
   }, async (args) => mcpJsonResult({ data: await actionReviewDraft(identity, args) }));
+  server.registerTool("mc_upload_draft_artifact", {
+    description:
+      "Upload a file to a draft you wrote, as one of its research artifacts: kind diagram (svg, png), screenshot (png, jpeg, webp) or web-page (html), 3 MiB or less, sent as contentBase64 with fileName and contentType. MC stores it in the Mission Control library on the PLX SharePoint site under Drafts/DRF-<n>/ and adds it to the draft's artifacts as a link named name (default fileName). The same file again adds nothing. A restricted draft refuses with draft_restricted, because the library is shared. An upload during review returns the draft to drafting. evidence_store_unavailable says what a person must set up. Off when PLX_MC_DRAFTS_ENABLED=0.",
+    inputSchema: uploadDraftArtifactSchema,
+  }, async (args) => mcpJsonResult({ data: await actionUploadDraftArtifact(identity, args) }));
 }

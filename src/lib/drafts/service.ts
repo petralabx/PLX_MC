@@ -15,6 +15,9 @@
 // - Reviews name the version they were given on. An agent's approval is advisory.
 //   A blocking finding stays open until its raiser resolves it, or the author
 //   resolves or dismisses it (a person, with a reason). Accept is step 3.
+// - A file uploaded for a draft (TASK-4130) goes to the shared Mission Control
+//   library, so a restricted draft refuses uploads; the stored file joins the
+//   research artifacts as a link, under the same writer rules as a save.
 
 import { createHash, randomBytes } from "node:crypto";
 
@@ -38,7 +41,7 @@ import { getBuckets, getEntities, getProjects, getRepos } from "@/lib/sync/repo"
 
 import { likelyDuplicates, type OpenTaskTitle } from "./duplicates";
 import { preflightIssues, submitIssues, type PreflightContext } from "./preflight";
-import { MAX_DRAFT_CONTENT_BYTES, draftContentBytes, draftDigest } from "./schema";
+import { MAX_DRAFT_ARTIFACTS, MAX_DRAFT_CONTENT_BYTES, draftContentBytes, draftDigest } from "./schema";
 import * as store from "./store";
 import {
   OPEN_DRAFT_STATUSES,
@@ -46,6 +49,7 @@ import {
   emptyDraftContent,
   isStaleReview,
   type Draft,
+  type DraftArtifact,
   type DraftContent,
   type DraftIssue,
   type DraftPlan,
@@ -277,6 +281,73 @@ export async function saveDraft(
     sections: Object.keys(sections).filter((k) => sections[k as keyof DraftSections] !== undefined),
   });
   return result;
+}
+
+// ─── Uploaded artifacts ──────────────────────────────────────────────────────
+
+/** Everyone with access to the shared library could open the file. MC never narrows access, so it refuses. */
+function assertUploadable(draft: Draft): void {
+  if (draft.visibility === "restricted") {
+    throw new ApiError(
+      "draft_restricted",
+      `${draft.id} is restricted, and a file in the shared Mission Control library is open to everyone on the PLX site. Link the file from a place that keeps the draft's access instead.`,
+      409
+    );
+  }
+  if (draft.working.research.artifacts.length >= MAX_DRAFT_ARTIFACTS) {
+    throw new ApiError("too_many_artifacts", `${draft.id} already holds ${MAX_DRAFT_ARTIFACTS} artifacts. Remove one first.`, 409);
+  }
+}
+
+/**
+ * The draft a file is about to be stored for, after the checks a save runs.
+ * Nothing is stored for a refused draft. The form sends the base it was read
+ * with, as a save does; an agent sends none.
+ */
+export async function draftForUpload(actor: DraftActor, id: string, options: { base?: string } = {}): Promise<Draft> {
+  const draft = await visibleDraft(id, actor);
+  assertWriter(draft, actor);
+  assertOpen(draft);
+  assertAcceptNotStarted(draft);
+  assertBase(draft, options.base);
+  assertUploadable(draft);
+  return draft;
+}
+
+/**
+ * Adds a stored file to the draft's research artifacts. When the draft already
+ * links the same file (`sameFile`, checked under the lock so identical
+ * concurrent uploads record one link), it returns that link and adds nothing.
+ */
+export async function addDraftArtifact(
+  actor: DraftActor,
+  id: string,
+  artifact: DraftArtifact,
+  sameFile: (linked: DraftArtifact) => boolean = (linked) => linked.url === artifact.url,
+  options: { base?: string } = {}
+): Promise<{ draft: Draft; artifact: DraftArtifact; added: boolean }> {
+  await visibleDraft(id, actor);
+  let linked: DraftArtifact | undefined;
+  const result = await store.mutateDraft(id, (draft) => {
+    // Again under the lock, as a save checks: the draft may have closed or been restricted meanwhile.
+    if (!canSeeDraft(draft, actor)) throw notFound(id);
+    assertWriter(draft, actor);
+    assertOpen(draft);
+    assertAcceptNotStarted(draft);
+    linked = draft.working.research.artifacts.find(sameFile);
+    if (linked) return null;
+    assertBase(draft, options.base);
+    assertUploadable(draft);
+    const research = { ...draft.working.research, artifacts: [...draft.working.research.artifacts, artifact] };
+    const working = applySections(draft.working, { research });
+    const next: Draft = { ...draft, working };
+    if (next.status === "in_review" && draftDigest(working) !== draft.digest) next.status = "drafting";
+    return { draft: next };
+  });
+  if (!result) throw notFound(id);
+  if (!result.changed) return { draft: result.draft, artifact: linked ?? artifact, added: false };
+  await recordEvent("draft.artifact_uploaded", actor, { draftId: id, kind: artifact.kind, name: artifact.name, url: artifact.url, status: result.draft.status });
+  return { draft: result.draft, artifact, added: true };
 }
 
 export async function withdrawDraft(actor: DraftActor, id: string, reason: string): Promise<Draft> {

@@ -11,6 +11,7 @@ const tasks = [
   { id: "TASK-3992", data: { stage: "review", prs: [{ repo: "PLX_MC", num: 463, status: "open" }] } },
   { id: "TASK-3304", data: { stage: "backlog", prs: [{ repo: "PLX_MC", num: 10, status: "closed" }] } },
   { id: "TASK-3303", data: { stage: "backlog", prs: [] } }, // never completed
+  { id: "TASK-3973", data: { stage: "backlog", prs: [], labels: ["kind:code", "uat:feedback-123"] } },
 ];
 const events = [
   { seq: 1, task_id: "TASK-3229", payload: { outcome: "completed", prUrl: null } },
@@ -21,6 +22,7 @@ const events = [
   { seq: 7, task_id: "TASK-3992", payload: { outcome: "completed" } },
   { seq: 8, task_id: "TASK-3304", payload: {} },
   { seq: 6, task_id: "TASK-3302", payload: { prUrl: "https://github.com/petralabx/PLX_MC/pull/2" } },
+  { seq: 9, task_id: "TASK-3973", payload: { outcome: "completed" } },
 ];
 
 describe("planPromotions", () => {
@@ -32,7 +34,10 @@ describe("planPromotions", () => {
     ]);
   });
   it("skips tasks with PRs, a blocked latest outcome, or a prUrl; ignores never-completed", () => {
-    expect(plan.skipped.map((s: { id: string }) => s.id)).toEqual(["TASK-3300", "TASK-3301", "TASK-3302", "TASK-3992", "TASK-3304"]);
+    expect(plan.skipped.map((s: { id: string }) => s.id)).toEqual(["TASK-3300", "TASK-3301", "TASK-3302", "TASK-3992", "TASK-3304", "TASK-3973"]);
+    expect(plan.skipped.find((s: { id: string }) => s.id === "TASK-3973")).toMatchObject({
+      reason: "UAT ticket task; done stage only comes from a PR merge",
+    });
   });
 });
 

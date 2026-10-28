@@ -60,7 +60,7 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
   aclPrincipalFromMcp: () => ({ tokens: ["sp_mcp_cursor"] }),
 }));
 
-import { actionComplete } from "@/lib/mcp/actions";
+import { actionComplete, shouldPromotePrlessCompletion } from "@/lib/mcp/actions";
 import type { McpIdentity } from "@/lib/mcp/auth";
 
 const identity: McpIdentity = {
@@ -176,8 +176,15 @@ describe("UAT code completion requires a PR", () => {
     expect(db.patched).toHaveLength(1);
   });
 
+  it("refuses a ticket task that has been moved out of BKT-UAT", async () => {
+    db.taskBucket = "BKT-OPEN";
+    db.taskLabels = ["kind:code", "uat:feedback-123"];
+    await expect(handIn()).rejects.toMatchObject({ code: "uat_code_pr_required", status: 400 });
+    expect(complete).not.toHaveBeenCalled();
+    expect(db.patched).toHaveLength(0);
+  });
+
   it.each([
-    { bucket: "BKT-OPEN", labels: ["kind:code", "uat:feedback-123"] },
     { bucket: "BKT-UAT", labels: ["kind:docs", "uat:feedback-123"] },
     { bucket: "BKT-UAT", labels: ["kind:code"] },
     { bucket: "BKT-UAT", labels: ["kind:code", "uat:"] },
@@ -322,5 +329,12 @@ describe("PR-less completion moves the task to the done stage", () => {
     db.taskPrs = [{ repo: "PLX_MC", num: 463, status: "open" }];
     await handIn();
     expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+  });
+
+  it("does not promote a UAT ticket task", () => {
+    expect(shouldPromotePrlessCompletion(
+      { stage: "backlog", prs: [], labels: ["kind:code", "uat:feedback-123"] },
+      {},
+    )).toBe(false);
   });
 });

@@ -767,15 +767,16 @@ export const completeTaskInputShape = {
 export const PRLESS_COMPLETION_STAGE = "merged" as const;
 const PRLESS_PROMOTABLE_STAGES = new Set(["backlog", "specced", "approved", "planned", "progress", "qa", "review"]);
 
-/** A completed (not blocked/failed) hand-in with no prUrl, on a task with no PR rows, below the done stage. */
+/** A completed (not blocked/failed) hand-in with no prUrl, on a task with no PR rows, below the done stage. A UAT ticket task is excluded: its done stage only comes from a PR merge, whichever bucket it sits in. */
 export function shouldPromotePrlessCompletion(
-  task: Pick<Task, "stage" | "prs"> | undefined,
+  task: Pick<Task, "stage" | "prs" | "labels"> | undefined,
   input: { prUrl?: string; outcome?: "completed" | "blocked" | "failed" }
 ): boolean {
   if (!task) return false;
   if ((input.outcome ?? "completed") !== "completed") return false;
   if (input.prUrl?.trim()) return false;
   if ((task.prs ?? []).length > 0) return false;
+  if (isUatTicketTask(task)) return false;
   return typeof task.stage === "string" && PRLESS_PROMOTABLE_STAGES.has(task.stage);
 }
 
@@ -817,10 +818,12 @@ export async function actionComplete(
       );
     }
   }
-  // A pushed branch is not a reviewable UAT fix. Check before any evidence or
-  // completion event is written; blocked/failed hand-ins remain auditable.
+  // A pushed branch is not a reviewable UAT fix. The ticket is the label
+  // (kind:code plus uat:<id>), not the bucket: TASK-3973 can move a ticket
+  // task out of BKT-UAT and it is still a ticket. Check before any evidence
+  // or completion event is written; blocked/failed hand-ins remain auditable.
   if (
-    task?.bucket === "BKT-UAT" &&
+    task &&
     isUatTicketTask(task) &&
     !input.prUrl?.trim() &&
     input.outcome !== "blocked" && input.outcome !== "failed"

@@ -31,6 +31,16 @@ export const PROMOTABLE_STAGES = ["backlog", "specced", "approved", "planned", "
 
 const hasPrs = (data) => Array.isArray(data?.prs) && data.prs.length > 0;
 
+// Keep in step with isUatTicketTask in src/lib/tasks/uat-labels.ts.
+// A ticket task's done stage only comes from a PR merge, so the backfill
+// must not move one to merged. uat:blocked and uat:hold are state, not an id.
+const UAT_STATE_LABELS = new Set(["uat:blocked", "uat:hold"]);
+const UAT_TICKET_RE = /^uat:[^\s:]+$/;
+const isUatTicketTask = (data) => {
+  const labels = Array.isArray(data?.labels) ? data.labels : [];
+  return labels.includes("kind:code") && labels.some((label) => UAT_TICKET_RE.test(label) && !UAT_STATE_LABELS.has(label));
+};
+
 /**
  * Pure planning. `tasks`: [{id, data}]. `events`: task.completed rows
  * [{seq, task_id, payload}] in any order. Returns { promote: [{id, from}], skipped: [{id, reason}] }.
@@ -49,6 +59,10 @@ export function planPromotions(tasks, events) {
     if (!PROMOTABLE_STAGES.includes(data.stage)) continue; // already done/cancelled/etc.
     if (hasPrs(data)) {
       skipped.push({ id: task.id, reason: "has PR rows; left to the merged-PR projection" });
+      continue;
+    }
+    if (isUatTicketTask(data)) {
+      skipped.push({ id: task.id, reason: "UAT ticket task; done stage only comes from a PR merge" });
       continue;
     }
     const outcome = ev.payload?.outcome ?? "completed";

@@ -586,18 +586,21 @@ function ResearchFields({ research, setResearch }: { research: DraftResearch; se
 /**
  * Edit, Submit for review and Withdraw, for the draft's author. Submit sends
  * the edit base the page was read with, waits for saved edits, and lists what
- * the completeness and preflight checks still need.
+ * the completeness and preflight checks still need. onBusy tells the form when
+ * a Submit or Withdraw is on its way, so it can lock meanwhile.
  */
 export function DraftAuthorActions({
   detail,
   dirty = false,
   onEdit,
   onChanged,
+  onBusy,
 }: {
   detail: DraftDetail;
   dirty?: boolean;
   onEdit?: () => void;
   onChanged: () => void;
+  onBusy?: (busy: boolean) => void;
 }) {
   const { draft, viewer } = detail;
   const [withdrawing, setWithdrawing] = useState(false);
@@ -608,6 +611,7 @@ export function DraftAuthorActions({
 
   const send = async (path: string, body: unknown) => {
     setBusy(true);
+    onBusy?.(true);
     setError(null);
     try {
       await api(`/drafts/${encodeURIComponent(draft.id)}/${path}`, { method: "POST", body: JSON.stringify(body) });
@@ -617,6 +621,7 @@ export function DraftAuthorActions({
       setError(errorOf(err).message);
     } finally {
       setBusy(false);
+      onBusy?.(false);
     }
   };
 
@@ -693,6 +698,8 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
   const [initial, setInitial] = useState<FormState | null>(() => (id ? null : blankForm()));
   const [form, setFormState] = useState<FormState | null>(() => (id ? null : blankForm()));
   const [busy, setBusy] = useState(false);
+  // A Submit or Withdraw on its way: it opens the draft when it lands.
+  const [acting, setActing] = useState(false);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [saved, setSaved] = useState(false);
   const [tick, setTick] = useState(0);
@@ -700,6 +707,9 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
   // for, or the read-back of a save made with no typing since; never over edits.
   const replaceNext = useRef(true);
   const sent = useRef<FormState | null>(null);
+  // Saves started. A load that a later save overtook is dropped: it shows the
+  // draft before that save, and the save reads the draft back itself.
+  const saves = useRef(0);
   // The form as shown, for the load below to compare at the time it lands.
   const shown = useRef<FormState | null>(form);
   useEffect(() => {
@@ -709,9 +719,10 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
   useEffect(() => {
     if (!id) return;
     let live = true;
+    const startedAfter = saves.current;
     api<DraftDetail>(`/drafts/${encodeURIComponent(id)}`)
       .then((data) => {
-        if (!live) return;
+        if (!live || saves.current !== startedAfter) return;
         setLoadError(null);
         const fill = replaceNext.current || shown.current === null || shown.current === sent.current;
         replaceNext.current = false;
@@ -727,7 +738,7 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
         // overwrite a change another writer made meanwhile, unseen.
         setDetail((previous) => ({ ...data, viewer: { ...data.viewer, editBase: previous?.viewer.editBase ?? data.viewer.editBase } }));
       })
-      .catch((err) => live && setLoadError(errorOf(err).message));
+      .catch((err) => live && saves.current === startedAfter && setLoadError(errorOf(err).message));
     return () => {
       live = false;
     };
@@ -785,6 +796,7 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
         nav("drafts", { draftId: made.draft.id, edit: "1" });
         return;
       }
+      saves.current += 1;
       sent.current = form;
       const result = await api<{ editBase: string }>(`/drafts/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -839,8 +851,8 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
         </div>
       </div>
 
-      {/* Locked while Create runs: the new draft reopens with what was sent, so later typing would be lost. */}
-      <fieldset className="dr-edit-lock" disabled={busy && id === null}>
+      {/* Locked while Create, Submit or Withdraw runs: each opens the draft when it lands, so later typing would be lost. */}
+      <fieldset className="dr-edit-lock" disabled={(busy && id === null) || acting}>
         <SettingsFields form={form} setForm={setForm} />
         <PlanFields plan={form.content.plan} setPlan={setPlan} />
         <ResearchFields research={form.content.research} setResearch={setResearch} />
@@ -867,7 +879,7 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
         )}
         {saved && !dirty && <p className="dr-task-meta">Saved.</p>}
         <div className="dr-acts">
-          <button type="button" className="btn acc" disabled={busy || (id !== null && !dirty)} onClick={() => void save()}>
+          <button type="button" className="btn acc" disabled={busy || acting || (id !== null && !dirty)} onClick={() => void save()}>
             {busy ? "Saving…" : id ? "Save draft" : "Create draft"}
           </button>
           <button type="button" className="btn ghost" disabled={busy} onClick={close}>
@@ -882,6 +894,7 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
               leaving.current = true;
               nav("drafts", { draftId: detail.draft.id });
             }}
+            onBusy={setActing}
           />
         )}
       </section>

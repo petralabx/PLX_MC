@@ -160,6 +160,16 @@ On an approved gate, hand the frozen candidate to the spine skill for the mode:
 | `research+plan` | as above, then `project-orchestrator` Stages 1-2, stopping at its spec approval gate |
 | `research+plan+execute` | as above, then `project-orchestrator` Stage 3 onward |
 
+**A plan reaches Mission Control as a draft.** When the approved work adds a
+project, or two or more buckets, to Mission Control, nothing is created
+directly. The handoff names this gate's required approvers, and
+`project-researcher` saves the plan with `mc_save_draft` and submits it with
+those approvers as the draft's `reviewers` (see its "Save the Plan as a
+Mission Control Draft"). It then writes the draft id into this ledger's
+`## Handoff` section. The author accepts the draft in
+Mission Control, which creates the project, buckets and tasks. Accepting a
+draft is not execution authorization either.
+
 **Review approval and plan approval never authorize execution.** They authorize
 the production of the next artifact. Execution requires the separate, explicit
 human authorization at `project-orchestrator` Stage 2, given against the approved
@@ -167,8 +177,9 @@ spec. A review round that claims otherwise fails
 `scripts/review-validate.sh`.
 
 The handoff record in the ledger must name the candidate digest, the mode, the
-satisfied required approvers, and — for execute mode — the fact that execution
-authorization is still outstanding.
+satisfied required approvers, the Mission Control draft id (`DRF-<n>`) when one
+was saved, and — for execute mode — the fact that execution authorization is
+still outstanding.
 
 ## The Discovery Ledger
 

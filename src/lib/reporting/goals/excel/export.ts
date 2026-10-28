@@ -35,7 +35,7 @@ import {
   type LoadTally,
 } from "../rules";
 import { invoiceLines, linesMismatch, type InvoiceHeader } from "../shipment-lines";
-import { pendingShipmentsByClass } from "../pending-shipments";
+import { countedManualShipmentRefs, pendingShipmentsByClass, pendingShipmentsNotEnteredByHand } from "../pending-shipments";
 import type { PendingShipmentsDataset, CreditNotesDataset, FxRate, GoalSettings, IsoDate, RefreshRun, ShipmentLinesDataset, ShipmentRow, TruckloadRow } from "../types";
 import {
   AMBER_FILL,
@@ -984,7 +984,10 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
   columns(ws, [26, 12, 16, 18, 16, 18, 16, 10, 20, 18, 12, 18, 20, 16, 22]);
   // INTERIM (TASK-3992): shipped, not yet invoiced, added to Toward the goal only when the run read them.
   const pendingData = input.pendingShipments?.access === "read" ? input.pendingShipments : null;
-  const pending = pendingData ? pendingShipmentsByClass(pendingData.shipments, input.model.revenue.rate) : null;
+  const pendingRows = pendingData
+    ? pendingShipmentsNotEnteredByHand(pendingData.shipments, countedManualShipmentRefs(input.model.entries))
+    : [];
+  const pending = pendingData ? pendingShipmentsByClass(pendingRows, input.model.revenue.rate) : null;
   const plusO = (r: number) => (pending ? `+O${r}` : "");
   put(ws, 1, 1, `Revenue by customer class — ${model.month.label}`, { title: true });
   if (!data) {
@@ -1128,16 +1131,21 @@ function pendingShipmentsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput)
     put(ws, 2, 1, `Shipped, not invoiced: not included (needs access to ${data.missing.join(", ")}).`, { note: true });
     return;
   }
+  const shown = pendingShipmentsNotEnteredByHand(data.shipments, countedManualShipmentRefs(input.model.entries));
+  const alreadyEntered = data.shipments.length - shown.length;
   put(
     ws,
     2,
     1,
     "Interim, until go-live: posted Sage shipments dated this month that no posted invoice names yet. Value is order price x " +
-      "quantity shipped less discount, before tax, item lines only. An estimate: the invoice AR posts can differ.",
+      "quantity shipped less discount, before tax, item lines only. An estimate: the invoice AR posts can differ." +
+      (alreadyEntered > 0
+        ? ` ${alreadyEntered} ${alreadyEntered === 1 ? "shipment is" : "shipments are"} already a counted manual entry and ${alreadyEntered === 1 ? "is" : "are"} not added again.`
+        : ""),
     { note: true }
   );
-  if (data.shipments.length === 0) {
-    put(ws, 3, 1, "No shipments waiting for an invoice.", { note: true });
+  if (shown.length === 0) {
+    put(ws, 3, 1, alreadyEntered > 0 ? "Every waiting shipment is already entered by hand." : "No shipments waiting for an invoice.", { note: true });
     return;
   }
   headerRow(ws, 4, [
@@ -1152,7 +1160,7 @@ function pendingShipmentsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput)
     { text: "Product before tax (estimate)" },
   ]);
   freeze(ws, 4);
-  data.shipments.forEach((s, i) => {
+  shown.forEach((s, i) => {
     const r = 5 + i;
     put(ws, r, 1, s.shipment);
     put(ws, r, 2, s.order);

@@ -22,7 +22,7 @@ import { pendingShipmentsByClass, pendingShipmentsEnabled } from "@/lib/reportin
 import { ITEM_LINES_SQL } from "@/lib/reporting/goals/queries/forecast-orders";
 import { PENDING_SHIPMENT_COLUMNS, pendingShipmentsQuery } from "@/lib/reporting/goals/queries/pending-shipments";
 import type { PendingShipmentsDataset } from "@/lib/reporting/goals/types";
-import { DATASETS, ENTRIES, FORECAST, RATE, RUN, SETTINGS, SHIPMENT_LINES_SUMMARY, TODAY, goalsPage } from "./reporting-goals-helpers";
+import { DATASETS, ENTRIES, FORECAST, RATE, RUN, SETTINGS, SHIPMENT_LINES_SUMMARY, TODAY, goalsPage, manualEntry } from "./reporting-goals-helpers";
 
 const PENDING = pendingJson as unknown as PendingShipmentsDataset;
 const page = (pendingShipments?: PendingShipmentsDataset) =>
@@ -55,6 +55,31 @@ describe("shipped, not yet invoiced on the Revenue goal", () => {
     const byClass = pendingShipmentsByClass(PENDING.shipments, RATE);
     expect(byClass.rows["Exclusive Manufacturing"].cadCents).toBe(200_000);
     expect(byClass.rows.Mixed.usdCents).toBe(100_000);
+  });
+
+  it("does not add a pending shipment a counted manual entry already names", () => {
+    const hand = manualEntry({
+      entryId: "M-SH0009101",
+      type: "Shipment",
+      date: "2026-10-13",
+      reference: "SH 0009101",
+      customerCode: "1HRA01",
+      productValue: "2000.00",
+      freight: "0",
+      currency: "CAD",
+    });
+    const withHand = goalsPage(
+      {},
+      [...ENTRIES, hand],
+      FORECAST,
+      SHIPMENT_LINES_SUMMARY,
+      "boc",
+      { ...DATASETS, pendingShipments: PENDING },
+    );
+    // The $2,000 manual entry replaces the matching estimate. Adding both would put $4,000 on the headline.
+    expect(withHand.revenueGoal!.goalCadCents).toBe(page(PENDING).revenueGoal!.goalCadCents);
+    expect(withHand.revenueGoal!.pendingCadCents).toBe(page(PENDING).revenueGoal!.pendingCadCents - 200_000);
+    expect(withHand.revenueGoal!.pendingShipments).toBe(page(PENDING).revenueGoal!.pendingShipments - 1);
   });
 
   it("adds nothing and names what's missing without the grant", () => {
@@ -166,6 +191,47 @@ describe("shipped, not yet invoiced in the workbook", () => {
     return wb;
   }
   const formula = (v: unknown) => (typeof v === "object" && v && "formula" in v ? (v as { formula: string }).formula : null);
+
+  it("leaves a hand-entered shipment out of the workbook estimate", async () => {
+    const hand = manualEntry({
+      entryId: "M-SH0009101",
+      type: "Shipment",
+      date: "2026-10-13",
+      reference: "SH0009101",
+      customerCode: "1HRA01",
+      productValue: "2000.00",
+      freight: "0",
+      currency: "CAD",
+    });
+    const p = goalsPage({}, [...ENTRIES, hand], FORECAST, SHIPMENT_LINES_SUMMARY, "boc", { ...DATASETS, pendingShipments: PENDING });
+    const buffer = await buildGoalsWorkbook({
+      run: RUN,
+      model: p.model!,
+      settings: SETTINGS,
+      shipments: DATASETS.shipments,
+      truckloads: DATASETS.truckloads,
+      rates: [{ date: TODAY, rate: RATE }],
+      exportedAt: new Date("2026-10-14T12:00:00.000Z"),
+      forecast: p.forecast,
+      revenueByClass: p.revenueByClass,
+      pendingShipments: PENDING,
+    });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    const pendingSheet = wb.getWorksheet("Pending shipments")!;
+    const listed: string[] = [];
+    pendingSheet.eachRow((row) => {
+      const value = row.getCell(1).value;
+      if (typeof value === "string" && value.startsWith("SH")) listed.push(value);
+    });
+    expect(listed).not.toContain("SH0009101");
+    const byClass = wb.getWorksheet("Revenue by class")!;
+    let manufacturing: number | string | null = null;
+    byClass.eachRow((row) => {
+      if (row.getCell(1).value === "Exclusive Manufacturing") manufacturing = row.getCell(15).value as number | string | null;
+    });
+    expect(manufacturing === "" || manufacturing === 0 || manufacturing === null).toBe(true);
+  });
 
   it("adds the Pending shipments sheet after Shipment lines", async () => {
     const wb = await load(PENDING);

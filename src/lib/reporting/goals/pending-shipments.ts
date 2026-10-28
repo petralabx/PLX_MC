@@ -8,11 +8,37 @@
 import { customerClassOf } from "./forecast";
 import { CUSTOMER_CLASSES, type CustomerClass } from "./forecast-list";
 import { allocateConvertedCents, toCents } from "./money";
+import { normalizeRef } from "./rules";
 import type { PendingShipmentRow } from "./types";
 
 /** Off with GOALS_PENDING_SHIPMENTS=off: the refresh doesn't read them and nothing shows. */
 export function pendingShipmentsEnabled(env: Record<string, string | undefined> = process.env): boolean {
   return (env.GOALS_PENDING_SHIPMENTS ?? "").trim().toLowerCase() !== "off";
+}
+
+/** Normalized references of counted manual shipments. Those goods are already on the card. */
+export function countedManualShipmentRefs(
+  entries: readonly { type: string; counts: boolean; reference: string | null }[],
+): Set<string> {
+  const refs = new Set<string>();
+  for (const entry of entries) {
+    if (entry.type !== "Shipment" || !entry.counts) continue;
+    const ref = normalizeRef(entry.reference);
+    if (ref) refs.add(ref);
+  }
+  return refs;
+}
+
+/**
+ * Pending Sage rows whose shipment number is already a counted manual entry.
+ * Leaving them in the estimate counts the same goods twice (TASK-3992).
+ */
+export function pendingShipmentsNotEnteredByHand<T extends { shipment: string }>(
+  rows: readonly T[],
+  countedRefs: ReadonlySet<string>,
+): T[] {
+  if (countedRefs.size === 0) return [...rows];
+  return rows.filter((row) => !countedRefs.has(normalizeRef(row.shipment)));
 }
 
 export interface PendingClassTotals {

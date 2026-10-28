@@ -6,7 +6,7 @@
 
 import { customerRevenue, type CustomerRevenue } from "./customer-revenue";
 import { buildForecast, type CustomerClass, type ForecastSnapshot, type ForecastView } from "./forecast";
-import { pendingShipmentsByClass } from "./pending-shipments";
+import { countedManualShipmentRefs, pendingShipmentsByClass, pendingShipmentsNotEnteredByHand } from "./pending-shipments";
 import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
 import { revenueScope, type RevenueScopeView } from "./revenue-scope";
 import { computeGoals, type GoalsModel } from "./rules";
@@ -200,7 +200,11 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
   const byClass = revenueByClass(shipments, model, input.ftlCustomers, notes?.access === "read" ? notes.notes : []);
   // INTERIM (TASK-3992): shipped, not yet invoiced, added to the card as an estimate.
   const pendingData = input.snapshot.pendingShipments ?? null;
-  const pending = pendingData?.access === "read" ? pendingShipmentsByClass(pendingData.shipments, model.revenue.rate) : null;
+  const pendingRows =
+    pendingData?.access === "read"
+      ? pendingShipmentsNotEnteredByHand(pendingData.shipments, countedManualShipmentRefs(model.entries))
+      : [];
+  const pending = pendingData?.access === "read" ? pendingShipmentsByClass(pendingRows, model.revenue.rate) : null;
   const invoicedByClass = Object.fromEntries(byClass.rows.map((r) => [r.customerClass, r.totalCadCents])) as Record<CustomerClass, number>;
   const forecast = buildForecast({
     snapshot: input.forecast ?? null,

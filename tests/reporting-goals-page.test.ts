@@ -255,7 +255,10 @@ describe("tables and tiles", () => {
     expect(out).toContain("A1 American A1TEXT11 1 0 31,394.40 1 0 24,500.00 3 1 88,512.70");
     expect(out).toContain("Diversified Hospitality DIVE11 1 0 22,705.92");
     expect(out).toContain("Total 2 0 54,100.32 1 0 24,500.00 7 5 215,065.66");
-    expect(markup).toContain('<td class="num hand">1</td>');
+    expect(markup).toContain('<td class="num hand grp-edge">1</td>');
+    // Each group header is one cell over its own three columns.
+    expect(markup.match(/colSpan="3"/g)).toHaveLength(3);
+    expect(markup.match(/<col class="gp-col-num"\/>/g)).toHaveLength(9);
   });
 
   it("shows every entry with its status; ones that no longer count are dimmed, not hidden", () => {

@@ -5,8 +5,10 @@
 // new records. An older version is read-only, and a closed draft offers no
 // finding actions. Approvals lists the drafts waiting for the viewer's review.
 // The New draft form (TASK-4109) creates a draft, saves from the edit base it
-// read and keeps what it does not show; submit and withdraw are the author's, and the form locks while either
-// runs. Axe and horizontal overflow run at desktop, tablet and phone widths.
+// read and sends back what it did not change; submit and withdraw are the
+// author's, and the form locks while either runs. It edits risks, open
+// questions, artifacts, dependencies and the order of tasks too (TASK-4110).
+// Axe and horizontal overflow run at desktop, tablet and phone widths.
 
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
@@ -188,6 +190,8 @@ interface MockOptions {
   failReadBack?: boolean;
   /** Another writer saves right after the form does: the read-back is slow, and moved on. */
   otherWriterAfterSave?: boolean;
+  /** With otherWriterAfterSave: the other writer also set T2's dependencies to these. */
+  otherWriterDependsOn?: string[];
   /** Create takes a while, so the form can be seen locked meanwhile. */
   slowCreate?: boolean;
   /** The first save's read-back takes a second and the second save two: the read-back lands while that save is on its way. */
@@ -251,7 +255,9 @@ async function mockDraftsApi(
     }
     if (request.method() !== "GET") return route.fulfill({ status: 405, body: "Method Not Allowed" });
     if (/\/api\/drafts\/DRF-7$/.test(url.pathname)) {
-      const working = { ...WORKING, title };
+      const otherDeps = options.otherWriterAfterSave && mock.saves.length > 0 ? options.otherWriterDependsOn : undefined;
+      const tasks = otherDeps ? WORKING.plan.tasks.map((t) => (t.key === "T2" ? { ...t, dependsOn: otherDeps } : t)) : WORKING.plan.tasks;
+      const working = { ...WORKING, title, plan: { ...WORKING.plan, tasks } };
       if (options.slowSecondSave && mock.saves.length === 1) await pause(1_000);
       if (options.otherWriterAfterSave && mock.saves.length > 0) {
         await pause(1_500);
@@ -394,13 +400,12 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await expect(page.getByLabel("T1 title", { exact: true })).toHaveValue("Intake form");
   });
 
-  test("Edit saves from the edit base it read, and keeps what the form does not show", async ({ page }) => {
+  test("Edit saves from the edit base it read, and sends back what it did not change", async ({ page }) => {
     const mock = await mockDraftsApi(page);
     await openDrafts(page, "&draftId=DRF-7");
     await page.getByRole("region", { name: "Your draft" }).getByRole("button", { name: "Edit draft" }).click();
     await expect(page).toHaveURL(/draftId=DRF-7&edit=1/);
     await page.getByLabel("Title", { exact: true }).fill("Draft Projects rollout, revised");
-    await expect(page.getByText("Saving keeps the draft's 1 risk(s), 1 open question(s) as they are.")).toBeVisible();
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect.poll(() => mock.saves.length).toBe(1);
     expect(mock.saves[0]).toMatchObject({
@@ -501,6 +506,34 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await expect(page).toHaveURL(/draftId=DRF-7$/);
   });
 
+  test("edits risks, open questions, artifacts, dependencies and the order of tasks", async ({ page }) => {
+    const mock = await mockDraftsApi(page);
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await page.getByRole("button", { name: "+ Add risk" }).click();
+    await page.getByLabel("Risk 2", { exact: true }).fill("Reviewers skip drafts.");
+    await page.getByLabel(/^Risk 2 impact/).selectOption("high");
+    await page.getByLabel("Open questions (one per line)").fill("Who reviews by default?\nDo drafts expire?");
+    await page.getByRole("button", { name: "+ Add artifact" }).click();
+    await page.getByLabel("Artifact 1 name", { exact: true }).fill("Flow");
+    await page.getByLabel(/^Artifact 1 kind/).selectOption("mermaid");
+    await page.getByLabel("Inline markdown or Mermaid").check();
+    await page.getByLabel("Artifact 1 content", { exact: true }).fill("graph TD; A-->B");
+    await page.getByRole("group", { name: "T2 depends on" }).getByLabel(/T1/).uncheck();
+    await page.getByLabel("T2 also depends on existing tasks (TASK ids, separated by commas)").fill("TASK-3953");
+    await page.getByRole("button", { name: "Move T2 up" }).click();
+    await expect(page.getByRole("button", { name: "Move T2 up" })).toBeDisabled();
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    expect(mock.saves[0]).toMatchObject({
+      plan: { tasks: [{ key: "T2", dependsOn: ["TASK-3953"] }, { key: "T1", dependsOn: [] }] },
+      research: {
+        risks: [WORKING.research.risks[0], { text: "Reviewers skip drafts.", likelihood: "medium", impact: "high", mitigation: "" }],
+        openQuestions: ["Who reviews by default?", "Do drafts expire?"],
+        artifacts: [{ kind: "mermaid", name: "Flow", url: null, inline: "graph TD; A-->B" }],
+      },
+    });
+  });
+
   test("a draft that moved refuses the save, and the form keeps the edits", async ({ page }) => {
     await mockDraftsApi(page, {}, {}, { refuseSave: true });
     await openDrafts(page, "&draftId=DRF-7&edit=1");
@@ -539,6 +572,39 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await expect(page.getByRole("button", { name: "← Back to DRF-7" })).toBeDisabled();
     await expect(page).toHaveURL(/draftId=DRF-7$/);
     expect(mock.submits).toEqual([{ base: EDIT_BASE }]);
+  });
+
+  test("a dependency typed key by key stays as typed, even past a shorter task key", async ({ page }) => {
+    const mock = await mockDraftsApi(page);
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    const typed = page.getByLabel("T2 also depends on existing tasks (TASK ids, separated by commas)");
+    await page.getByRole("group", { name: "T2 depends on" }).getByLabel(/T1/).uncheck();
+    // T10 passes through T1, a key the plan holds, on the way.
+    await typed.pressSequentially("T10");
+    await expect(typed).toHaveValue("T10");
+    await expect(page.getByRole("group", { name: "T2 depends on" }).getByLabel(/T1/)).not.toBeChecked();
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    expect(mock.saves[0]).toMatchObject({ plan: { tasks: [{ key: "T1" }, { key: "T2", dependsOn: ["T10"] }] } });
+  });
+
+  test("a read-back that replaces the form while a dependency field has focus restarts the edit from it", async ({ page }) => {
+    const mock = await mockDraftsApi(page, {}, {}, { otherWriterAfterSave: true, otherWriterDependsOn: ["TASK-77"] });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await page.getByLabel("Title", { exact: true }).fill("Saved before the read-back");
+    const readBack = page.waitForResponse((r) => r.request().method() === "GET" && new URL(r.url()).pathname === "/api/drafts/DRF-7");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    // Focus before the read-back lands, and type after: the field shows, and builds on, what it brought.
+    const typed = page.getByLabel("T2 also depends on existing tasks (TASK ids, separated by commas)");
+    await typed.focus();
+    await readBack;
+    await expect(typed).toHaveValue("TASK-77");
+    await typed.press("End");
+    await typed.pressSequentially(",TASK-88");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(2);
+    expect(mock.saves[1]).toMatchObject({ plan: { tasks: [{ key: "T1" }, { key: "T2", dependsOn: ["TASK-77", "TASK-88"] }] } });
   });
 
   test("a frozen version, the current one too, offers no Submit: it would send the working copy", async ({ page }) => {

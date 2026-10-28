@@ -3,19 +3,21 @@
 // The New draft form (TASK-4109; PRD "Follow-up: New draft form"). A signed-in
 // person writes a draft on the Drafts screen instead of through their agent:
 // `?screen=drafts&draftId=new` starts one, and `&draftId=DRF-n&edit=1` edits one
-// they author. The form covers who sees and reviews the draft, the plan, and
-// the research submit needs. Risks, open questions and artifacts are not in the
-// form yet (TASK-4110); a save sends them back as they were. Each save and
-// submit names the edit base the form was read with, so a draft that moved
-// meanwhile (an agent's save, another tab) refuses it instead of being
-// overwritten. The server validates; the form only drops rows left empty.
+// they author. The form covers who sees and reviews the draft, the plan (with
+// a dependency picker and the order of buckets and tasks, TASK-4110) and the
+// whole research section. Each save and submit names the edit base the form
+// was read with, so a draft that moved meanwhile (an agent's save, another
+// tab) refuses it instead of being overwritten. The server validates; the form
+// drops rows left empty and names rows that are half filled.
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { api, ApiClientError } from "@/lib/api";
 import {
+  DRAFT_ARTIFACT_KINDS,
   emptyDraftContent,
   type DraftApproach,
+  type DraftArtifact,
   type DraftContent,
   type DraftFinding,
   type DraftIssue,
@@ -23,6 +25,7 @@ import {
   type DraftPlanBucket,
   type DraftPlanTask,
   type DraftResearch,
+  type DraftRisk,
   type DraftSource,
 } from "@/lib/drafts";
 import { useMcVersion } from "@/lib/mc-data/hooks";
@@ -33,7 +36,7 @@ import type { DraftDetail } from "./drafts";
 import { setNavGuard } from "./nav-guard";
 import type { Nav } from "./route";
 
-interface FormState {
+export interface FormState {
   content: DraftContent;
   visibility: "shared" | "restricted";
   /** As typed: emails or directory ids, separated by commas. */
@@ -53,6 +56,14 @@ const splitList = (text: string) =>
 const tidy = (items: string[]) => items.map((s) => s.trim()).filter(Boolean);
 const nextNumber = (values: string[]) => Math.max(0, ...values.map((v) => Number(v.replace(/\D/g, "")) || 0)) + 1;
 const at = <T,>(list: T[], i: number, patch: Partial<T>): T[] => list.map((item, j) => (j === i ? { ...item, ...patch } : item));
+/** The list with item i moved one place up (-1) or down (+1). */
+const move = <T,>(list: T[], i: number, step: -1 | 1): T[] => {
+  const j = i + step;
+  if (j < 0 || j >= list.length) return list;
+  const next = [...list];
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+};
 
 function blankForm(): FormState {
   return { content: emptyDraftContent(""), visibility: "shared", members: "", reviewers: "" };
@@ -68,28 +79,58 @@ function formFrom(detail: DraftDetail): FormState {
   };
 }
 
-/** The request body for a save, or what the person must fix first. */
-function prepare(form: FormState): { body: Record<string, unknown>; problems: string[] } {
+/** The rows the person filled in, tidied, each with its number in the form: a problem names the row they see. */
+function filledRows<T>(rows: T[], tidyRow: (row: T) => T, isFilled: (row: T) => boolean): { row: T; n: number }[] {
+  return rows.map((row, i) => ({ row: tidyRow(row), n: i + 1 })).filter(({ row }) => isFilled(row));
+}
+
+/** The request body for a save, or what the person must fix first. Exported for tests. */
+export function prepare(form: FormState): { body: Record<string, unknown>; problems: string[] } {
   const problems: string[] = [];
   const { content } = form;
   const title = content.title.trim();
   if (!title) problems.push("Give the draft a title.");
   if (content.plan.project.existing === "") problems.push("Choose the existing project, or plan a new one.");
-  const approaches = content.research.approaches
-    .map((a) => ({ ...a, name: a.name.trim(), pros: tidy(a.pros), cons: tidy(a.cons) }))
-    .filter((a) => a.name || a.pros.length > 0 || a.cons.length > 0);
-  approaches.forEach((a, i) => {
-    if (!a.name) problems.push(`Approach ${i + 1} needs a name.`);
+  const approaches = filledRows(
+    content.research.approaches,
+    (a) => ({ ...a, name: a.name.trim(), pros: tidy(a.pros), cons: tidy(a.cons) }),
+    (a) => Boolean(a.name) || a.pros.length > 0 || a.cons.length > 0
+  );
+  approaches.forEach(({ row, n }) => {
+    if (!row.name) problems.push(`Approach ${n} needs a name.`);
   });
-  const findings = content.research.findings.map((f) => ({ ...f, text: f.text.trim() })).filter((f) => f.text || f.sources.length > 0);
-  findings.forEach((f, i) => {
-    if (!f.text) problems.push(`Finding ${i + 1} needs its text.`);
+  const findings = filledRows(content.research.findings, (f) => ({ ...f, text: f.text.trim() }), (f) => Boolean(f.text) || f.sources.length > 0);
+  findings.forEach(({ row, n }) => {
+    if (!row.text) problems.push(`Finding ${n} needs its text.`);
   });
+  const risks = filledRows(content.research.risks, (r) => ({ ...r, text: r.text.trim(), mitigation: r.mitigation.trim() }), (r) => Boolean(r.text || r.mitigation));
+  risks.forEach(({ row, n }) => {
+    if (!row.text) problems.push(`Risk ${n} needs its text.`);
+  });
+  // An artifact is a link or inline content, never both (schema artifactSchema).
+  const artifacts = filledRows(
+    content.research.artifacts,
+    (a) => ({ ...a, name: a.name.trim(), url: a.url === null ? null : a.url.trim() }),
+    (a) => Boolean(a.name) || (a.url ?? "") !== "" || (a.inline ?? "").trim() !== ""
+  );
+  artifacts.forEach(({ row, n }) => {
+    if (!row.name) problems.push(`Artifact ${n} needs a name.`);
+    if (row.url !== null && !row.url) problems.push(`Artifact ${n} needs its link.`);
+    if (row.inline !== null && !row.inline.trim()) problems.push(`Artifact ${n} needs its content.`);
+  });
+  const rows = <T,>(kept: { row: T }[]) => kept.map(({ row }) => row);
   const plan: DraftPlan = {
     ...content.plan,
     tasks: content.plan.tasks.map((t) => ({ ...t, dependsOn: tidy(t.dependsOn) })),
   };
-  const research: DraftResearch = { ...content.research, approaches, findings };
+  const research: DraftResearch = {
+    ...content.research,
+    approaches: rows(approaches),
+    findings: rows(findings),
+    risks: rows(risks),
+    openQuestions: tidy(content.research.openQuestions),
+    artifacts: rows(artifacts),
+  };
   return {
     body: { title, plan, research, visibility: form.visibility, members: splitList(form.members), reviewers: splitList(form.reviewers) },
     problems,
@@ -225,6 +266,54 @@ function SettingsFields({ form, setForm }: { form: FormState; setForm: (fn: (f: 
   );
 }
 
+/**
+ * A task's dependencies: the draft's other tasks as checkboxes, and existing
+ * TASK ids (or a key the plan does not hold) as text, kept as typed until save.
+ */
+function DependsOn({ task, tasks, onChange }: { task: DraftPlanTask; tasks: DraftPlanTask[]; onChange: (dependsOn: string[]) => void }) {
+  const others = tasks.filter((x) => x.key !== task.key);
+  const isOther = (dep: string) => others.some((x) => x.key === dep.trim());
+  const picked = task.dependsOn.filter(isOther).map((d) => d.trim());
+  const typed = task.dependsOn.filter((d) => !isOther(d));
+  // While the field has focus it keeps its text as typed, over the boxes ticked
+  // before: typing T10 must not turn its T1 prefix into a ticked box on the way.
+  // The edit holds the list it last set; a list that changed under it (a read-back
+  // replaced the form) starts the edit again from the new one.
+  const [editing, setEditing] = useState<{ text: string; picked: string[]; deps: string[] } | null>(null);
+  const live = editing && editing.deps === task.dependsOn ? editing : null;
+  return (
+    <>
+      <fieldset className="dr-edit-chips wide">
+        <legend>{task.key} depends on</legend>
+        {others.length === 0 && <span className="dr-task-meta">No other task in this draft yet.</span>}
+        {others.map((o) => (
+          <label key={o.key} className="dr-check">
+            <input
+              type="checkbox"
+              checked={picked.includes(o.key)}
+              onChange={(e) => onChange([...(e.target.checked ? [...picked, o.key] : picked.filter((k) => k !== o.key)), ...typed])}
+            />{" "}
+            {o.key} {o.title}
+          </label>
+        ))}
+      </fieldset>
+      <Field label={`${task.key} also depends on existing tasks (TASK ids, separated by commas)`} wide>
+        <input
+          value={live ? live.text : typed.join(",")}
+          onFocus={() => setEditing({ text: typed.join(","), picked, deps: task.dependsOn })}
+          onChange={(e) => {
+            const base = live?.picked ?? picked;
+            const deps = [...base, ...e.target.value.split(",")];
+            setEditing({ text: e.target.value, picked: base, deps });
+            onChange(deps);
+          }}
+          onBlur={() => setEditing(null)}
+        />
+      </Field>
+    </>
+  );
+}
+
 function PlanFields({ plan, setPlan }: { plan: DraftPlan; setPlan: (fn: (p: DraftPlan) => DraftPlan) => void }) {
   const modeName = useId();
   const { project, buckets, tasks } = plan;
@@ -325,6 +414,17 @@ function PlanFields({ plan, setPlan }: { plan: DraftPlan; setPlan: (fn: (p: Draf
               </Field>
             </div>
             <div className="dr-acts">
+              <button type="button" className="btn ghost sm" disabled={i === 0} onClick={() => setPlan((p) => ({ ...p, buckets: move(p.buckets, i, -1) }))}>
+                Move {b.key} up
+              </button>
+              <button
+                type="button"
+                className="btn ghost sm"
+                disabled={i === buckets.length - 1}
+                onClick={() => setPlan((p) => ({ ...p, buckets: move(p.buckets, i, 1) }))}
+              >
+                Move {b.key} down
+              </button>
               <button
                 type="button"
                 className="btn ghost sm"
@@ -372,15 +472,24 @@ function PlanFields({ plan, setPlan }: { plan: DraftPlan; setPlan: (fn: (p: Draf
               empty="The draft's author"
               onChange={(owner) => setTask(i, { accountableOwner: owner || null })}
             />
-            <Field label={`${t.key} depends on (task keys or TASK ids, separated by commas)`}>
-              <input value={t.dependsOn.join(",")} onChange={(e) => setTask(i, { dependsOn: e.target.value.split(",") })} />
-            </Field>
+            <DependsOn task={t} tasks={tasks} onChange={(dependsOn) => setTask(i, { dependsOn })} />
             <RepoChips label={`${t.key} repos`} value={t.repos} onChange={(repos) => setTask(i, { repos })} />
             <Field label={`${t.key} description`} wide>
               <textarea rows={3} value={t.description} onChange={(e) => setTask(i, { description: e.target.value })} />
             </Field>
           </div>
           <div className="dr-acts">
+            <button type="button" className="btn ghost sm" disabled={i === 0} onClick={() => setPlan((p) => ({ ...p, tasks: move(p.tasks, i, -1) }))}>
+              Move {t.key} up
+            </button>
+            <button
+              type="button"
+              className="btn ghost sm"
+              disabled={i === tasks.length - 1}
+              onClick={() => setPlan((p) => ({ ...p, tasks: move(p.tasks, i, 1) }))}
+            >
+              Move {t.key} down
+            </button>
             <button type="button" className="btn ghost sm" onClick={() => removeTask(t.key)}>
               Remove {t.key}
             </button>
@@ -397,6 +506,57 @@ function PlanFields({ plan, setPlan }: { plan: DraftPlan; setPlan: (fn: (p: Draf
   );
 }
 
+function ArtifactFields({
+  index,
+  artifact,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  artifact: DraftArtifact;
+  onChange: (patch: Partial<DraftArtifact>) => void;
+  onRemove: () => void;
+}) {
+  const formName = useId();
+  const n = index + 1;
+  const inline = artifact.inline !== null;
+  return (
+    <fieldset className="dr-edit-item">
+      <legend>Artifact {n}</legend>
+      <div className="dr-edit-grid">
+        <Field label={`Artifact ${n} name`}>
+          <input value={artifact.name} maxLength={255} onChange={(e) => onChange({ name: e.target.value })} />
+        </Field>
+        <Choice label={`Artifact ${n} kind`} value={artifact.kind} options={DRAFT_ARTIFACT_KINDS} onChange={(kind) => onChange({ kind })} />
+        <fieldset className="dr-edit-radios wide">
+          <legend>Artifact {n} is</legend>
+          <label>
+            <input type="radio" name={formName} checked={!inline} onChange={() => onChange({ url: artifact.url ?? "", inline: null })} /> A link
+          </label>
+          <label>
+            <input type="radio" name={formName} checked={inline} onChange={() => onChange({ url: null, inline: artifact.inline ?? "" })} /> Inline
+            markdown or Mermaid
+          </label>
+        </fieldset>
+        {inline ? (
+          <Field label={`Artifact ${n} content`} wide>
+            <textarea rows={5} value={artifact.inline ?? ""} onChange={(e) => onChange({ inline: e.target.value })} />
+          </Field>
+        ) : (
+          <Field label={`Artifact ${n} link (http or https)`} wide>
+            <input type="url" value={artifact.url ?? ""} maxLength={2000} onChange={(e) => onChange({ url: e.target.value })} />
+          </Field>
+        )}
+      </div>
+      <div className="dr-acts">
+        <button type="button" className="btn ghost sm" onClick={onRemove}>
+          Remove artifact {n}
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
 function ResearchFields({ research, setResearch }: { research: DraftResearch; setResearch: (fn: (r: DraftResearch) => DraftResearch) => void }) {
   const chosenName = useId();
   const set = (patch: Partial<DraftResearch>) => setResearch((r) => ({ ...r, ...patch }));
@@ -410,11 +570,8 @@ function ResearchFields({ research, setResearch }: { research: DraftResearch; se
       sources: r.sources.filter((s) => s.ref !== ref),
       findings: r.findings.map((f) => ({ ...f, sources: f.sources.filter((x) => x !== ref) })),
     }));
-  const kept = [
-    research.risks.length > 0 ? `${research.risks.length} risk(s)` : null,
-    research.openQuestions.length > 0 ? `${research.openQuestions.length} open question(s)` : null,
-    research.artifacts.length > 0 ? `${research.artifacts.length} artifact(s)` : null,
-  ].filter(Boolean);
+  const setRisk = (i: number, patch: Partial<DraftRisk>) => setResearch((r) => ({ ...r, risks: at(r.risks, i, patch) }));
+  const setArtifact = (i: number, patch: Partial<DraftArtifact>) => setResearch((r) => ({ ...r, artifacts: at(r.artifacts, i, patch) }));
 
   return (
     <section className="dr-section dr-edit" aria-label="Research">
@@ -572,11 +729,60 @@ function ResearchFields({ research, setResearch }: { research: DraftResearch; se
           + Add finding
         </button>
       </div>
-      {kept.length > 0 && (
-        <p className="dr-task-meta">
-          This form does not edit risks, open questions or artifacts yet. Saving keeps the draft&apos;s {kept.join(", ")} as they are.
-        </p>
-      )}
+
+      <h3>Risks</h3>
+      {research.risks.map((risk, i) => (
+        <fieldset className="dr-edit-item" key={i}>
+          <legend>Risk {i + 1}</legend>
+          <div className="dr-edit-grid">
+            <Field label={`Risk ${i + 1}`} wide>
+              <textarea rows={2} value={risk.text} onChange={(e) => setRisk(i, { text: e.target.value })} />
+            </Field>
+            <Choice label={`Risk ${i + 1} likelihood`} value={risk.likelihood} options={LEVELS} onChange={(likelihood) => setRisk(i, { likelihood })} />
+            <Choice label={`Risk ${i + 1} impact`} value={risk.impact} options={LEVELS} onChange={(impact) => setRisk(i, { impact })} />
+            <Field label={`Risk ${i + 1} mitigation`} wide>
+              <textarea rows={2} value={risk.mitigation} onChange={(e) => setRisk(i, { mitigation: e.target.value })} />
+            </Field>
+          </div>
+          <div className="dr-acts">
+            <button type="button" className="btn ghost sm" onClick={() => setResearch((r) => ({ ...r, risks: r.risks.filter((_, j) => j !== i) }))}>
+              Remove risk {i + 1}
+            </button>
+          </div>
+        </fieldset>
+      ))}
+      <div className="dr-acts">
+        <button
+          type="button"
+          className="btn ghost sm"
+          disabled={research.risks.length >= 100}
+          onClick={() => set({ risks: [...research.risks, { text: "", likelihood: "medium", impact: "medium", mitigation: "" }] })}
+        >
+          + Add risk
+        </button>
+      </div>
+
+      <div className="dr-edit-grid">
+        <Field label="Open questions (one per line)" wide>
+          <textarea rows={3} value={research.openQuestions.join("\n")} onChange={(e) => set({ openQuestions: e.target.value.split("\n") })} />
+        </Field>
+      </div>
+
+      <h3>Artifacts</h3>
+      <p className="dr-task-meta">A link to a diagram, screenshot, page or document, or inline markdown or Mermaid.</p>
+      {research.artifacts.map((a, i) => (
+        <ArtifactFields key={i} index={i} artifact={a} onChange={(patch) => setArtifact(i, patch)} onRemove={() => setResearch((r) => ({ ...r, artifacts: r.artifacts.filter((_, j) => j !== i) }))} />
+      ))}
+      <div className="dr-acts">
+        <button
+          type="button"
+          className="btn ghost sm"
+          disabled={research.artifacts.length >= 50}
+          onClick={() => set({ artifacts: [...research.artifacts, { kind: "web-page", name: "", url: "", inline: null }] })}
+        >
+          + Add artifact
+        </button>
+      </div>
     </section>
   );
 }

@@ -210,7 +210,7 @@ Slice A (TASK-4109):
 
 - **New draft** on the list opens `?screen=drafts&draftId=new`. **Edit draft** on a draft the person authors opens `&draftId=DRF-n&edit=1`.
 - The form edits the title, who sees the draft (shared or restricted, and its members), the reviewers, the plan (a new or an existing project, buckets and tasks), and the research that submit needs: summary, context, approaches, recommendation, sources and findings.
-- Risks, open questions and artifacts are not in the form yet. A save sends them back unchanged.
+- Slice A left risks, open questions and artifacts out of the form; a save sent them back unchanged. Slice B adds them.
 - Session routes, each for the author only (`draft.create`):
   - `POST /api/drafts` creates a draft. The signed-in person is its author.
   - `PATCH /api/drafts/{id}` saves the sections it sends.
@@ -220,7 +220,12 @@ Slice A (TASK-4109):
 - Before submit, the draft's record and the form list what the completeness and preflight checks still need. Submit waits for saved edits, and only the working copy's page offers it, never a frozen version's.
 - Unsaved edits ask before the person leaves: an in-app move or Back asks first, and closing the tab warns. The form locks while Create, Submit or Withdraw runs. Edits typed after a save keep the edit base they were made from, and a save's read-back never undoes a later save.
 
-Slice B (TASK-4110): risks, open questions and artifacts in the form, a dependency picker for tasks, and reordering buckets and tasks.
+Slice B (TASK-4110):
+
+- The form edits the rest of the research: risks (likelihood, impact, mitigation), open questions (one per line) and artifacts. An artifact is a link (http or https) or inline markdown or Mermaid, never both.
+- A task's dependencies are a picker: the draft's other tasks as checkboxes, and existing `TASK-*` ids as text.
+- Buckets and tasks move up and down. Their keys stay; the order is the plan's order.
+- A save drops rows left empty and names the rows that are half filled, such as a risk with a mitigation and no text.
 
 ## Follow-up: review on a shared page (Vince, 2026-10-27)
 
@@ -255,8 +260,8 @@ Not decided yet:
 | 1 | TASK-4056 | This PRD and the workstream note | Merged (#487) |
 | 2 | TASK-4059 | Migration `056_drafts.sql` (054 and 055 were taken), `src/lib/drafts`, the five tools, REST routes, capabilities, `docs/modules/drafts/README.md` and the `DATA_MODEL.md` entry. 056 also adds the columns Accept needs, so step 3 has no migration | Merged (#489) |
 | 3 | TASK-4071 | Drafts screen, session routes under `/api/drafts`, Accept, the Drafts to review panel on Approvals, a Drafts nav item. Drafts turn on by default; `PLX_MC_DRAFTS_ENABLED=0` is the kill switch | Merged (#492) |
-| Follow-up A | TASK-4109 | New draft form, slice A: session routes to create, save, submit and withdraw; the form for the settings, the plan and the research submit needs (see Follow-up: New draft form) | In review |
-| Follow-up B | TASK-4110 | New draft form, slice B: risks, open questions and artifacts in the form; a dependency picker; reordering | Not started |
+| Follow-up A | TASK-4109 | New draft form, slice A: session routes to create, save, submit and withdraw; the form for the settings, the plan and the research submit needs (see Follow-up: New draft form) | Merged (#497, #499) |
+| Follow-up B | TASK-4110 | New draft form, slice B: risks, open questions and artifacts in the form; a dependency picker; reordering | In review |
 | Follow-up | Not created | Artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | Not started |
 | Follow-up | Not created | Review on a shared page: "Publish for review" and the comment relay, Claude Artifacts first (see Follow-up: review on a shared page). After step 3 is live and in use | Not started |
 

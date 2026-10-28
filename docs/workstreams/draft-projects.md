@@ -2,7 +2,7 @@
 
 - Slug: `draft-projects` (this file is `docs/workstreams/draft-projects.md`)
 - Owner: Vince · agents: Claude Code on the web
-- Branches: `claude/brave-heisenberg-7t8mks` (step 1 merged as #487, TASK-4056; step 2 merged as #489, TASK-4059; step 3, TASK-4071)
+- Branches: `claude/brave-heisenberg-7t8mks` (step 1 merged as #487, TASK-4056; step 2 merged as #489, TASK-4059; step 3 merged as #492, TASK-4071)
 - MC tasks: TASK-4056, TASK-4059, TASK-4071
 - SharePoint handoff: n/a
 
@@ -12,21 +12,19 @@ Let PLX members and their agents put a planned project, its buckets and tasks, a
 
 ## Status
 
-active, as of 2026-10-27. Steps 1 (PRD) and 2 (storage, the five agent tools, capabilities; migration 056) merged. Step 3 (the Drafts screen, Accept and the Approvals panel; TASK-4071) is built on `claude/brave-heisenberg-7t8mks` and in review. It turns drafts on by default.
+done, as of 2026-10-27. All three steps merged and are live on https://mc.plxcustomer.io. DB Migrate applied 055 and 056 on 2026-10-27. Drafts are on by default. The follow-ups below are not started and need their own workstream or PR.
 
 ## Done
 
 - TASK-4056: the PRD and this note ([PLX_MC PR 487](https://github.com/petralabx/PLX_MC/pull/487)).
 - TASK-4059: migration `056_drafts.sql`, `src/lib/drafts`, `mc_save_draft`, `mc_submit_draft`, `mc_get_draft`, `mc_list_drafts`, `mc_review_draft` on HTTP MCP, stdio and `/api/cursor/drafts`, capabilities `draft.create`, `draft.review`, `draft.accept`, the module contract `docs/modules/drafts/README.md` ([PLX_MC PR 489](https://github.com/petralabx/PLX_MC/pull/489)).
-- TASK-4071 (in review): the Drafts screen (`src/components/mc/drafts.tsx`), session routes under `/api/drafts`, Accept (`src/lib/drafts/accept.ts`), the Drafts to review panel on Approvals, the Drafts nav item. Drafts are on unless `PLX_MC_DRAFTS_ENABLED=0`.
+- TASK-4071: the Drafts screen (`src/components/mc/drafts.tsx`), session routes under `/api/drafts`, Accept (`src/lib/drafts/accept.ts`), the Drafts to review panel on Approvals, the Drafts nav item. Drafts are on unless `PLX_MC_DRAFTS_ENABLED=0` ([PLX_MC PR 492](https://github.com/petralabx/PLX_MC/pull/492)). Production checked on 2026-10-27: `/api/drafts` answers with the sign-in envelope, `GET /api/cursor/drafts` with an MC key returns 200, and `?screen=drafts` goes to sign-in.
 
 ## Next steps
 
-1. Land step 3: review, then the merge queue. It has no migration, so it needs no signed approval.
-2. Check the Drafts screen on production once it deploys: list, record, review, Accept.
-3. Close this workstream: set its index row to done.
-4. Follow-up, not started: a "New draft" form on the screen, artifact uploads under `Drafts/DRF-n/`, the governance-contract rule, skill updates.
-5. Follow-up, not started: review on a shared page (Claude Artifacts first, Cursor Canvas if it exposes comments). Spec: PRD "Follow-up: review on a shared page".
+1. A signed-in check of the Drafts screen on production: list, record, review, Accept. The first real draft is the test; no draft exists yet.
+2. Follow-up, not started: a "New draft" form on the screen, artifact uploads under `Drafts/DRF-n/`, the governance-contract rule, skill updates.
+3. Follow-up, not started: review on a shared page (Claude Artifacts first, Cursor Canvas if it exposes comments). Spec: PRD "Follow-up: review on a shared page".
 
 ## Decisions and why
 
@@ -69,8 +67,8 @@ bash scripts/preflight.sh --mode pre-commit
 
 ## Blockers or dependencies on other workstreams
 
-- Step 3 needs migration 056 live. It is: DB Migrate applied 055 and 056 on 2026-10-27. No other dependency.
+- None. Migration 056 is live (DB Migrate, 2026-10-27).
 
 ## Last updated
 
-2026-10-27 by Claude Code (TASK-4071).
+2026-10-27 by Claude Code (TASK-4071): closed after #492 merged and deployed.

@@ -640,8 +640,15 @@ The flag is no substitute: the page still reads the tables and the manifest
 still requires 052, so dropping them under that code turns every API to
 `503 schema_behind`. The rollback refuses without the setting, or while the
 newest good run has a pending summary.
-Open: shipments entered by hand are unchanged, so one also entered by hand
-before AR invoices it counts twice until then.
+A counted shipment entered by hand is left out of the estimate when its
+reference is that Sage shipment number (spaces and case ignored). The page
+and the workbook both skip it, so those goods sit on the card once, at the
+hand entry's amount. A hand entry that does not count (another month, or no
+value) does not hide the Sage row. A hand entry whose reference is the order
+number, a customer PO, or blank still sits beside the Sage shipment until AR
+invoices it. Matching the order would also drop every other shipment of that
+order, and matching on customer and value can drop a different shipment.
+That unmatched hand entry is the remaining gap.
 
 ### Line 1 bulk
 

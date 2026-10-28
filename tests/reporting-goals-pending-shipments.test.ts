@@ -82,6 +82,54 @@ describe("shipped, not yet invoiced on the Revenue goal", () => {
     expect(withHand.revenueGoal!.pendingShipments).toBe(page(PENDING).revenueGoal!.pendingShipments - 1);
   });
 
+  it("keeps the Sage row when the hand entry does not count", () => {
+    const hand = manualEntry({
+      entryId: "M-SH0009101-old",
+      type: "Shipment",
+      date: "2026-09-30",
+      reference: "SH0009101",
+      customerCode: "1HRA01",
+      productValue: "2000.00",
+      freight: "0",
+      currency: "CAD",
+    });
+    const withHand = goalsPage(
+      {},
+      [...ENTRIES, hand],
+      FORECAST,
+      SHIPMENT_LINES_SUMMARY,
+      "boc",
+      { ...DATASETS, pendingShipments: PENDING },
+    );
+    expect(withHand.revenueGoal!.pendingCadCents).toBe(page(PENDING).revenueGoal!.pendingCadCents);
+    expect(withHand.revenueGoal!.pendingShipments).toBe(page(PENDING).revenueGoal!.pendingShipments);
+  });
+
+  it("keeps the Sage row when the hand entry names the order, not the shipment", () => {
+    const hand = manualEntry({
+      entryId: "M-ORD0045101",
+      type: "Shipment",
+      date: "2026-10-13",
+      reference: "ORD0045101",
+      customerCode: "1HRA01",
+      productValue: "2000.00",
+      freight: "0",
+      currency: "CAD",
+    });
+    const withHand = goalsPage(
+      {},
+      [...ENTRIES, hand],
+      FORECAST,
+      SHIPMENT_LINES_SUMMARY,
+      "boc",
+      { ...DATASETS, pendingShipments: PENDING },
+    );
+    // Matching the order would also drop every other shipment of that order. This entry stays beside the estimate.
+    const base = page(PENDING).revenueGoal!;
+    expect(withHand.revenueGoal!.pendingCadCents).toBe(base.pendingCadCents);
+    expect(withHand.revenueGoal!.goalCadCents).toBe(base.goalCadCents + 200_000);
+  });
+
   it("adds nothing and names what's missing without the grant", () => {
     const missing: PendingShipmentsDataset = { access: "missing", missing: ["sage.oe_shipment_header.shidate"], shipments: [] };
     const p = page(missing);

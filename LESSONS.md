@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-28 (UTC) — TASK-3931: a helper's refresh merge no longer blocks a PR for good
+
+- **What happened:** PLX_MC #407 (TASK-3743) was blocked for good when plx-cip merged `main` into it: the merge commit carried `Agent: plx-cip/merge-queue` and the PR's own `MC-Checkout`, whose record says `claude-code/claude-code`. The same shape recurred on #489 (TASK-4059, next entry). Each time the only way out was a re-cut or a rewritten head.
+- **Root cause:** `checkoutTrailerCheck` compared every stamped commit's `Agent` to its checkout with no notion of a refresh merge, so a helper's merge of the base branch failed a comparison it could never pass without a checkout of its own.
+- **Rule going forward:** the gate treats a helper runtime's merge commit (plx-cip, cip, grok, grok-bot) whose second parent is on the PR's base branch (GitHub compare proves it) as a refresh: an Agent mismatch on it is a warning, not a block, and anything short of that proof blocks and says why. Every other commit is compared as before, On-Behalf-Of and the trailer shape still hold, and the moved head still needs its own signed approval where one is required. Helpers still take their own checkout when they can (TASK-4059 rule); the gate no longer strands a PR when they do not.
+
 ### 2026-10-27 (UTC) — TASK-4059: a helper's merge commit reused the PR's checkout, and the gate blocked an approved PR
 
 - **What happened:** On PLX_MC #489, CIP merged `main` into the Claude Code branch to resolve a migration-manifest conflict (84efa7a). The merge commit ended with `Agent: grok-bot/cip` and the branch's own `MC-Checkout: dsp_mvqjqvpj6vxw96`. `compliance` then blocked with `Agent grok-bot/cip does not match the checkout's runtime claude-code`, after the merge approval for that head was signed. Vince allowed one exception: the same merge, with an identical tree and re-stamped by the branch's agent, replaced it with a `--force-with-lease` push. The new head then needed another signed approval.

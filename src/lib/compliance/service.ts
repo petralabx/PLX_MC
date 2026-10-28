@@ -58,8 +58,16 @@ import {
   namesLaunchLane,
   webhookExtendsChain,
 } from "./lease-chain";
-import { agentSignals, commitTrailers, shortSha } from "./commit-signals";
-import { githubHeadDescendsFrom, loadPrCommits, loadPrReviewLinks, loadPrState, type PrCommit, type PrState } from "./github-pr";
+import { REFRESH_MERGE_RUNTIMES, agentSignals, commitTrailers, shortSha } from "./commit-signals";
+import {
+  githubBranchContains,
+  githubHeadDescendsFrom,
+  loadPrCommits,
+  loadPrReviewLinks,
+  loadPrState,
+  type PrCommit,
+  type PrState,
+} from "./github-pr";
 import { projectPullRequest, projectionEnabled, samePr } from "./projection";
 import * as repo from "./repo";
 import { applyReviewLinks, reviewLinksReport, touchedModules, type ReviewLinksReport } from "./review-links";
@@ -798,7 +806,7 @@ interface AgentCommit {
   signals: string[];
 }
 
-type CommitTrailerRow = ReturnType<typeof commitTrailers> & { sha: string };
+type CommitTrailerRow = ReturnType<typeof commitTrailers> & { sha: string; parents: string[] };
 
 // TASK-3336: the commits, not the PR author, say whether agent work is in a PR.
 // The merge queue never reads GitHub (P16); the pull_request run checked this
@@ -823,13 +831,54 @@ function unstampedAgentCommitsReason(agentCommits: AgentCommit[]): string {
   return `${checkoutBlockReason("unstamped_agent_commits")}: ${listed.join("; ")}${more}`;
 }
 
+// TASK-3931: a refresh merge is a helper runtime's merge commit whose second
+// parent is on the PR's base branch (the base merged into the PR). GitHub
+// proves the parent: the base branch tip descends from it. The PR is read
+// lazily, once, and each parent is compared once, only when such a commit's
+// Agent does not match its checkout. Null means proven; otherwise the reason
+// it is not. A GitHub failure proves nothing, so the commit is compared as any
+// other (fail closed to a block, as leaseChainCheck does). The merge queue
+// loads no commits (P16), so it never asks.
+function refreshMergeChecker(
+  input: VerifyPrInput
+): (row: CommitTrailerRow, agentRuntime: string) => Promise<string | null> {
+  const repoFullName = input.repoFullName ?? input.repo;
+  let state: Promise<PrState> | undefined;
+  const proofs = new Map<string, Promise<string | null>>();
+  return (row, agentRuntime) => {
+    if (row.parents.length < 2) return Promise.resolve("one parent");
+    if (!REFRESH_MERGE_RUNTIMES.has(agentRuntime)) return Promise.resolve(`Agent runtime ${agentRuntime} is not a helper`);
+    const parent = row.parents[1];
+    let proof = proofs.get(parent);
+    if (!proof) {
+      proof = (async () => {
+        try {
+          state ??= loadPrState(repoFullName, input.prNumber);
+          const { baseBranch } = await state;
+          if (!baseBranch) return "base branch unknown";
+          if (!(await githubBranchContains(repoFullName, baseBranch, parent))) {
+            return `second parent ${shortSha(parent)} is not on ${baseBranch}`;
+          }
+          return null;
+        } catch {
+          return "GitHub could not prove the second parent";
+        }
+      })();
+      proofs.set(parent, proof);
+    }
+    return proof;
+  };
+}
+
 // Agent and On-Behalf-Of on the commits stamped with this checkout must match
 // its record. The Agent check is strict when the checkout recorded its agent or
-// a non-default runtime; a legacy default-runtime checkout only warns.
+// a non-default runtime; a legacy default-runtime checkout only warns. On a
+// refresh merge (TASK-3931) an Agent mismatch warns too.
 async function checkoutTrailerCheck(
   d: repo.DispatchRow,
   rows: CommitTrailerRow[],
-  task: Pick<Task, "accountableOwner"> | null
+  task: Pick<Task, "accountableOwner"> | null,
+  isRefreshMerge: (row: CommitTrailerRow, agentRuntime: string) => Promise<string | null>
 ): Promise<{ reasons: string[]; notes: string[] }> {
   const reasons: string[] = [];
   const notes: string[] = [];
@@ -846,14 +895,23 @@ async function checkoutTrailerCheck(
     if (!t.agent) continue;
     const agent = t.agent.trim().toLowerCase();
     const agentRuntime = agent.split("/")[0];
+    // TASK-3931: a helper (plx-cip, cip, grok-bot) refreshes an agent PR by
+    // merging the base branch into it and stamps that merge with the PR's own
+    // checkout, so its Agent names the helper, not the checkout's agent. On a
+    // proven refresh merge the mismatch is noted, not blocked; On-Behalf-Of and
+    // the trailer shape still hold, and the moved head still needs its own
+    // signed approval where one is required. Every other commit is compared as
+    // before; a merge that fails the proof says why.
+    const mismatch = async (what: string) => {
+      const text = `commit ${t.sha}: Agent ${t.agent} does not match the checkout's ${what}`;
+      const why = await isRefreshMerge(t, agentRuntime);
+      if (why === null) notes.push(`warning: ${text}; a refresh merge of the base branch is not compared (TASK-3931)`);
+      else reasons.push(t.parents.length >= 2 ? `${text} (not a refresh merge: ${why})` : text);
+    };
     if (recorded) {
-      if (agent !== recorded.trim().toLowerCase()) {
-        reasons.push(`commit ${t.sha}: Agent ${t.agent} does not match the checkout's agent ${recorded}`);
-      }
+      if (agent !== recorded.trim().toLowerCase()) await mismatch(`agent ${recorded}`);
     } else if (runtime !== DEFAULT_CHECKOUT_RUNTIME) {
-      if (agentRuntime !== runtime) {
-        reasons.push(`commit ${t.sha}: Agent ${t.agent} does not match the checkout's runtime ${d.runtime}`);
-      }
+      if (agentRuntime !== runtime) await mismatch(`runtime ${d.runtime}`);
     } else if (agentRuntime !== DEFAULT_CHECKOUT_RUNTIME) {
       notes.push(
         `warning: commit ${t.sha}: Agent ${t.agent} not checked — the checkout records only the default runtime "${DEFAULT_CHECKOUT_RUNTIME}"; pass agent to mc_checkout_task`
@@ -1044,6 +1102,7 @@ export async function verifyPr(
   // Shape problems and unknown stamps hold every task on the PR.
   const trailerRows: CommitTrailerRow[] = agentCommits.map(({ commit }) => ({
     sha: shortSha(commit.sha),
+    parents: commit.parents,
     ...commitTrailers(commit.message),
   }));
   const prCommitReasons = trailerRows.flatMap((t) => [
@@ -1055,6 +1114,7 @@ export async function verifyPr(
   // TASK-3916: looked up once, and only when a task's own gates do not cover the head.
   let headApproval: Promise<boolean> | null = null;
   const headApprovedOnPr = () => (headApproval ??= anyTaskApprovesHead(ids, input));
+  const isRefreshMerge = refreshMergeChecker(input);
   for (const cid of ids) {
     const resolution = await resolveForPr(cid);
     const stamped = trailerRows.filter((t) => t.checkoutId === cid);
@@ -1087,7 +1147,7 @@ export async function verifyPr(
                 bucketPrd,
                 evidenceStoreEnabled: canUploadEvidence,
               });
-    const trailerCheck = d ? await checkoutTrailerCheck(d, stamped, task) : { reasons: [], notes: [] };
+    const trailerCheck = d ? await checkoutTrailerCheck(d, stamped, task, isRefreshMerge) : { reasons: [], notes: [] };
     // A released checkout's SHA chain is never extended or bound (reuse is read-only).
     const chainCheck = d
       ? await leaseChainCheck(d, stamped, input, record && !reuse)

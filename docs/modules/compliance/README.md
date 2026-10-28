@@ -42,7 +42,15 @@ truth table is proven before any plumbing exists.
   `Agent:`/`On-Behalf-Of:`/`MC-Checkout:` trailer. Agent commits with no body
   stamp block. On a stamped PR, each agent commit must end with `Agent:`,
   `On-Behalf-Of:`, then `MC-Checkout:` as the last line, naming a body stamp.
-  On-Behalf-Of must equal the checkout's accountable person. When the checkout
+  On-Behalf-Of must equal the checkout's accountable person. `Agent:` must
+  match the checkout's recorded agent, or its runtime when none was recorded;
+  a checkout that recorded only the default runtime (`cursor`) warns instead.
+  On a refresh merge (a helper runtime's merge commit, `plx-cip`, `cip`,
+  `grok` or `grok-bot`, whose second parent is on the PR's base branch, proven
+  through GitHub compare), an Agent mismatch is noted, not blocked, because the
+  helper stamps that merge with the PR's own checkout (TASK-3931). Short of
+  that proof the mismatch blocks and the reason says why; the moved head
+  still needs its own signed approval where one is required. When the checkout
   was minted through a shared service alias (`cos@…`, not a person), the task's
   human accountable owner is accepted too (TASK-3483); `mc_checkout_task`
   returns that person as `accountablePerson`, and `mc_get_task` and

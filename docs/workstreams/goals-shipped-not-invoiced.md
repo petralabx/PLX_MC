@@ -12,16 +12,17 @@ Until go-live, add this month's posted Sage shipments whose header numinvoice is
 
 ## Status
 
-active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pull/463) is open. Ricardo Savelli checked the UAT Sage copy on 2026-10-28: pending is `numinvoice` 0, and C and MISC item lines stay in the estimate. `origin/main` (PR 495, the business-line split) is merged into this branch. The estimate stays in the headline and counts as Distribution when the shipment has no item lines. The merge commit needs its own signed merge approval. Migration 052 is not applied. The read grant is not run.
+active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pull/463) is open and mergeable with `main`. Merge commit `400a71fc` brings the business-line split onto this branch. The estimate stays in the Revenue headline. A stored shipment total counts as Distribution. Compliance on `400a71fc` blocked with `head_sha_mismatch` before unsigned gate `apg_98f26b4f70be5de6` existed. That gate covers `400a71fc` only. The signature has to cover the head that contains this note. Migration 052 is not applied. The read grant is not run.
 
 ## Done
 
 - TASK-3992 on [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pull/463): the estimate, migration 052 and its guarded rollback, the Pending shipments sheet, the card equations, and the hand-entry exclusion when the reference is the Sage shipment number.
-- Returns (TASK-3987) landed in [PLX_MC PR 459](https://github.com/petralabx/PLX_MC/pull/459) on 2026-10-26. This branch was rebased onto that work by merges of `main`.
+- Returns (TASK-3987) landed in [PLX_MC PR 459](https://github.com/petralabx/PLX_MC/pull/459) on 2026-10-26. This branch picked that up by merges of `main`.
+- `origin/main` (PR 495, business-line split) is merged into this branch at `400a71fc`. The estimate stays in the headline. A stored shipment total counts as Distribution. Item amounts use the finished-good and 3PL rules. The three lines add to the headline to the cent. Goals tests: 32 passed. Pre-commit preflight passed.
 
 ## Next steps
 
-1. A person signs the merge gate for the head that merges the business-line split with this estimate. Vince, Ricardo, Rishi or Stephen can approve it. Earlier gates cover earlier heads only.
+1. Ricardo Savelli signs the merge gate for the head that contains this note. Vince, Rishi or Stephen can approve it if he cannot. `apg_98f26b4f70be5de6` covers `400a71fc` only. Ricardo already signed `apg_65b0994a5bd9e40f` for the pre-merge head.
 2. CIP merges the PR. Do not apply migration 052 or the read grant from an agent session.
 3. A DBA runs the grant script. It grants `oe_shipment_header.numinvoice` and does not grant `oe_invoice_header`.
 
@@ -46,7 +47,7 @@ active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pu
 - `src/lib/reporting/goals/` (pending shipments, business line, view, refresh, store, excel export)
 - `src/components/mc/goals/goal-cards.tsx`
 - `docs/modules/reporting-goals/README.md`, `docs/modules/reporting-goals/readonly-grants-shipments-pending.sql`
-- `tests/reporting-goals-pending-shipments.test.ts`, `e2e/goals-pending-shipments.spec.ts`
+- `tests/reporting-goals-pending-shipments.test.ts`, `tests/reporting-goals-business-line.test.ts`, `e2e/goals-pending-shipments.spec.ts`
 
 ## How to run the tests
 
@@ -60,8 +61,8 @@ Postgres harness tests need Docker. This host has none, so those tests fail with
 
 ## Blockers or dependencies on other workstreams
 
-- None. PR 459 (returns) is merged. This PR waits on a person's signed merge approval, then CIP.
+- None on another workstream. PR 459 (returns) is merged. PR 495 (business-line split) is merged into this branch. This PR waits on a signed merge approval of the head that contains this note, then CIP.
 
 ## Last updated
 
-2026-10-28 by cursor/grok-4.7. Merged the business-line split. The estimate stays in the headline and counts as Distribution when the shipment has no item lines.
+2026-10-28 by cursor/grok-4.7. Recorded merge `400a71fc`, the compliance block on that head, and unsigned gate `apg_98f26b4f70be5de6`. The signature has to cover the head that contains this note.

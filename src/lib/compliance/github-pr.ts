@@ -22,6 +22,8 @@ const MAX_FILE_PAGES = 30;
 export interface PrState {
   open: boolean;
   checkoutIds: string[];
+  /** The branch the PR merges into (base.ref); "" when GitHub omits it (TASK-3931). */
+  baseBranch: string;
 }
 
 /** Live attachment proof for expired checkouts; never reads the files listing. */
@@ -33,12 +35,12 @@ export async function loadPrState(repoFullName: string, prNumber: number): Promi
   const pr = (await githubGet(
     `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${prNumber}`,
     token
-  )) as { state?: string; number?: number; base?: { repo?: unknown } };
+  )) as { state?: string; number?: number; base?: { repo?: unknown; ref?: string } };
   const evt = parsePullRequestEvent({ action: "verify", pull_request: pr, repository: pr?.base?.repo });
   if (!evt || pr.number !== prNumber || !["open", "closed"].includes(pr.state ?? "")) {
     throw new ApiError("github_error", "GitHub returned an unrecognized pull request payload.", 502);
   }
-  return { open: pr.state === "open", checkoutIds: evt.checkoutIds };
+  return { open: pr.state === "open", checkoutIds: evt.checkoutIds, baseBranch: pr.base?.ref ?? "" };
 }
 
 /**
@@ -181,6 +183,8 @@ export interface PrCommit {
   committerName: string;
   committerEmail: string;
   committerLogin: string;
+  /** Parent SHAs: two or more on a merge commit (TASK-3931). */
+  parents: string[];
 }
 
 /** The PR's head commits (TASK-3336 agent signals). Messages are used in memory only. */
@@ -195,6 +199,7 @@ export async function loadPrCommits(repoFullName: string, prNumber: number): Pro
     commit?: { message?: string; author?: { name?: string; email?: string }; committer?: { name?: string; email?: string } };
     author?: { login?: string } | null;
     committer?: { login?: string } | null;
+    parents?: { sha?: string }[];
   };
   const commits: PrCommit[] = [];
   for (let page = 1; page <= MAX_COMMIT_PAGES; page++) {
@@ -210,6 +215,7 @@ export async function loadPrCommits(repoFullName: string, prNumber: number): Pro
         committerName: c.commit?.committer?.name ?? "",
         committerEmail: c.commit?.committer?.email ?? "",
         committerLogin: c.committer?.login ?? "",
+        parents: (c.parents ?? []).map((p) => p.sha ?? "").filter(Boolean),
       });
     }
     if (list.length < FILES_PER_PAGE) break;
@@ -259,6 +265,22 @@ export async function loadMergedPrFacts(repoFullName: string, prNumber: number):
     repoFullName: pr.base?.repo?.full_name ?? repoFullName,
     baseBranch: pr.base?.ref ?? "",
   };
+}
+
+/**
+ * Whether `branch` contains `sha`: the branch tip descends from it (TASK-3931).
+ * The branch name keeps its slashes; only its segments are encoded.
+ */
+export async function githubBranchContains(repoFullName: string, branch: string, sha: string): Promise<boolean> {
+  const [owner, name] = repoFullName.split("/");
+  const token = await resolveGithubToken({ repoOwner: owner });
+  if (!token) throw new ApiError("github_unavailable", "GitHub auth is unavailable for ancestry verification.", 503);
+  const ref = branch.split("/").map(encodeURIComponent).join("/");
+  const comparison = (await githubGet(
+    `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/compare/${encodeURIComponent(sha)}...${ref}?per_page=1`,
+    token
+  )) as { status?: string };
+  return comparison.status === "ahead" || comparison.status === "identical";
 }
 
 /** Prove immutable SHA ancestry without relying on a webhook's `before`. */

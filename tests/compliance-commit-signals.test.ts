@@ -12,6 +12,7 @@ const human: PrCommit = {
   committerName: "GitHub",
   committerEmail: "noreply@github.com",
   committerLogin: "web-flow",
+  parents: ["b".repeat(40)],
 };
 const BLOCK = "Agent: claude/claude-uat\nOn-Behalf-Of: cos@petrasoap.com\nMC-Checkout: dsp_abc123";
 

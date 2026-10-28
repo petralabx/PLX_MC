@@ -8,7 +8,7 @@ const m = vi.hoisted(() => ({ resolveGithubToken: vi.fn() }));
 
 vi.mock("@/lib/github-app", () => ({ resolveGithubToken: m.resolveGithubToken }));
 
-import { githubHeadDescendsFrom, loadPrCommits, loadPrState, loadPrVerifyInput } from "@/lib/compliance/github-pr";
+import { githubBranchContains, githubHeadDescendsFrom, loadPrCommits, loadPrState, loadPrVerifyInput } from "@/lib/compliance/github-pr";
 
 const PR = {
   number: 7,
@@ -103,7 +103,11 @@ describe("loadPrState", () => {
   it.each(["open", "closed"])("reads %s state and live stamps in one GET", async (state) => {
     const fetchMock = vi.fn(async () => Response.json({ ...PR, state }));
     vi.stubGlobal("fetch", fetchMock);
-    expect(await loadPrState("petralabx/plx-customer-portal", 7)).toEqual({ open: state === "open", checkoutIds: ["dsp_one", "dsp_two"] });
+    expect(await loadPrState("petralabx/plx-customer-portal", 7)).toEqual({
+      open: state === "open",
+      checkoutIds: ["dsp_one", "dsp_two"],
+      baseBranch: (PR as { base?: { ref?: string } }).base?.ref ?? "",
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]).toMatchObject(["https://api.github.com/repos/petralabx/plx-customer-portal/pulls/7", { cache: "no-store" }]);
   });
@@ -135,6 +139,7 @@ describe("loadPrCommits (TASK-3336)", () => {
     commit: { message: `m${i}`, author: { name: "PLX Agent", email: "uat@petrasoap.com" }, committer: { name: "GitHub", email: "noreply@github.com" } },
     author: i === 0 ? null : { login: "taylorvalton" },
     committer: { login: "web-flow" },
+    parents: i === 0 ? [{ sha: "p0a" }, { sha: "p0b" }] : i === 1 ? undefined : [{ sha: `p${i}` }],
   });
 
   it("pages through the PR commits and maps identities and messages", async () => {
@@ -152,8 +157,10 @@ describe("loadPrCommits (TASK-3336)", () => {
     expect(commits[0]).toEqual({
       sha: "sha0", message: "m0", authorName: "PLX Agent", authorEmail: "uat@petrasoap.com", authorLogin: "",
       committerName: "GitHub", committerEmail: "noreply@github.com", committerLogin: "web-flow",
+      parents: ["p0a", "p0b"],
     });
     expect(commits[1].authorLogin).toBe("taylorvalton");
+    expect(commits[1].parents).toEqual([]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -163,6 +170,19 @@ describe("loadPrCommits (TASK-3336)", () => {
     await expect(loadPrCommits("petralabx/PLX_MC", 7)).rejects.toMatchObject({ code: "github_unavailable" });
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ message: "odd" })));
     await expect(loadPrCommits("petralabx/PLX_MC", 7)).rejects.toMatchObject({ code: "github_error" });
+  });
+});
+
+describe("githubBranchContains (TASK-3931)", () => {
+  it.each([ ["ahead", true], ["identical", true], ["behind", false], ["diverged", false] ])("reads compare status %s and keeps the branch's slashes", async (status, expected) => {
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL) => Response.json({ status }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await githubBranchContains("petralabx/PLX_MC", "release/2026 11", "a".repeat(40))).toBe(expected);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(`/compare/${"a".repeat(40)}...release/2026%2011?per_page=1`);
+  });
+  it("fails closed when GitHub cannot answer", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 503 })));
+    await expect(githubBranchContains("petralabx/PLX_MC", "main", "a".repeat(40))).rejects.toMatchObject({ code: "github_error" });
   });
 });
 

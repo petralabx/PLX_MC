@@ -152,6 +152,29 @@ export const draftResearchSchema = z
 
 export const draftTitleSchema = z.string().trim().min(1).max(255).regex(NO_NUL, "text may not contain a NUL character");
 
+/** Members or reviewers: emails, Entra oids, directory ids or sp_* ids. */
+export function draftPeopleSchema(max: number) {
+  return z.array(z.string().trim().regex(/^[^\s\u0000]{1,320}$/, "an email, oid, directory id or sp_* id")).max(max);
+}
+
+/**
+ * The sections a person sends from the Drafts screen's form (TASK-4109): each
+ * one sent replaces that section, as mc_save_draft does.
+ */
+export const draftSectionsSchema = z
+  .object({
+    title: draftTitleSchema.optional(),
+    plan: draftPlanSchema.optional(),
+    research: draftResearchSchema.optional(),
+    visibility: z.enum(["shared", "restricted"]).optional(),
+    members: draftPeopleSchema(200).optional(),
+    reviewers: draftPeopleSchema(20).optional(),
+  })
+  .strict();
+
+/** The edit base a form was loaded from (service draftEditBase). */
+export const draftEditBaseSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/, "base is the editBase the draft was read with");
+
 /** Free text from a caller (a review body, a reason): trimmed, bounded, no NUL. */
 export function draftTextSchema(min: number, max: number) {
   return z.string().trim().min(min).max(max).regex(NO_NUL, "text may not contain a NUL character");

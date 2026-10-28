@@ -2,8 +2,8 @@
 
 - Slug: `draft-projects` (this file is `docs/workstreams/draft-projects.md`)
 - Owner: Vince · agents: Claude Code on the web
-- Branches: `claude/brave-heisenberg-7t8mks` (step 1 merged as #487, TASK-4056; step 2 merged as #489, TASK-4059; step 3 merged as #492, TASK-4071)
-- MC tasks: TASK-4056, TASK-4059, TASK-4071
+- Branches: `claude/brave-heisenberg-7t8mks` (step 1 merged as #487, TASK-4056; step 2 merged as #489, TASK-4059; step 3 merged as #492, TASK-4071; New draft form slice A, TASK-4109)
+- MC tasks: TASK-4056, TASK-4059, TASK-4071, TASK-4109, TASK-4110
 - SharePoint handoff: n/a
 
 ## Goal
@@ -12,7 +12,7 @@ Let PLX members and their agents put a planned project, its buckets and tasks, a
 
 ## Status
 
-done, as of 2026-10-27. All three steps merged and are live on https://mc.plxcustomer.io. DB Migrate applied 055 and 056 on 2026-10-27. Drafts are on by default. The follow-ups below are not started and need their own workstream or PR.
+active, as of 2026-10-28. Steps 1 to 3 are merged and live on https://mc.plxcustomer.io (DB Migrate applied 055 and 056 on 2026-10-27). Reopened for the New draft form follow-up: slice A (TASK-4109) is built on `claude/brave-heisenberg-7t8mks` and in review; slice B (TASK-4110) starts after it lands.
 
 ## Done
 
@@ -22,9 +22,11 @@ done, as of 2026-10-27. All three steps merged and are live on https://mc.plxcus
 
 ## Next steps
 
-1. A signed-in check of the Drafts screen on production: list, record, review, Accept. The first real draft is the test; no draft exists yet.
-2. Follow-up, not started: a "New draft" form on the screen, artifact uploads under `Drafts/DRF-n/`, the governance-contract rule, skill updates.
-3. Follow-up, not started: review on a shared page (Claude Artifacts first, Cursor Canvas if it exposes comments). Spec: PRD "Follow-up: review on a shared page".
+1. Land slice A of the New draft form (TASK-4109): review, then the merge queue. No migration.
+2. Slice B (TASK-4110), on a new branch from `main` after slice A lands: risks, open questions and artifacts in the form, a dependency picker, reordering.
+3. A signed-in check of the Drafts screen on production: list, record, review, Accept, and now New draft. The first real draft is the test.
+4. Follow-up, not started: artifact uploads under `Drafts/DRF-n/`, the governance-contract rule, skill updates.
+5. Follow-up, not started: review on a shared page (Claude Artifacts first, Cursor Canvas if it exposes comments). Spec: PRD "Follow-up: review on a shared page".
 
 ## Decisions and why
 
@@ -42,6 +44,9 @@ done, as of 2026-10-27. All three steps merged and are live on https://mc.plxcus
 - 2026-10-27 Review on a shared page is a follow-up, after step 3 is live and in use. Mission Control stays the record: page comments come back one way as non-blocking reviews, and blocking findings and Accept stay in Mission Control. Why: people outside Mission Control can review without a second source of truth. Decided by: Vince (the follow-up); Claude (the design, in the PRD).
 - 2026-10-27 Once an Accept has claimed a draft, its content is pinned until an Accept finishes (409 `accept_unfinished`); `accepted_by` stays set after a failure and holds the pin, so no migration is needed. A bucket's PRD link carries its draft key (`#B1`), and a retry checks the project and each recorded bucket's parent again. Why: the sol-6.1 reviews of step 3 found that a retry could pair version 1's records with version 2's content, merge two same-name buckets, or let a removed author keep writing. Decided by: Claude (TASK-4071).
 - 2026-10-27 A person writes a draft through their agent in step 3; a "New draft" form is a follow-up. Why: the tools already validate a whole draft, and an editor is a large screen of its own. Decided by: Claude (TASK-4071).
+- 2026-10-28 The New draft form ships in two PRs: slice A (session routes, and the form for the settings, the plan and the research submit needs) and slice B (risks, open questions, artifacts, polish). Why: step 3 took three review rounds as one PR, and a person can write and submit a complete draft after slice A. Decided by: Vince.
+- 2026-10-28 A form save and submit carry an edit base (the working copy's digest, visibility, members and reviewers) and refuse with 409 `draft_changed` once the draft has moved; a review does not move it. Why: an agent and its person can both write a draft, and each save replaces whole sections. Decided by: Claude (TASK-4109).
+- 2026-10-28 The form's Save sits at the end of the form, not in a sticky bar. Why: on a phone a sticky bar sits on the tab bar, and the list of what submit needs can be long. Decided by: Claude (TASK-4109).
 
 ## Open questions
 
@@ -55,11 +60,13 @@ done, as of 2026-10-27. All three steps merged and are live on https://mc.plxcus
 - `src/lib/drafts/`, `src/lib/mcp/draft-actions.ts`, `src/app/api/cursor/drafts/`, `src/lib/permissions/`
 - `tools/plx-mc-mcp/` (stdio tools)
 - Step 3: `src/app/api/drafts/`, `src/components/mc/drafts.tsx`, `src/styles/mc-drafts.css`, and one line each in `src/components/mc/` `route.ts`, `screens.tsx`, `nav-model.ts`, `nav-icon.tsx`, `approvals-inbox.tsx`. The nav files are shared with the `nav-v2-sidebar` workstream.
+- New draft form (TASK-4109): `src/components/mc/draft-editor.tsx`, `src/app/api/drafts/` (create, save, submit, withdraw), the `edit` route param in `src/components/mc/route.ts`, `draftEditBase` in `src/lib/drafts/service.ts`.
 
 ## How to run the tests
 
 ```bash
-npx vitest run tests/drafts.test.ts tests/mcp-drafts.test.ts tests/drafts-accept.test.ts tests/drafts-ui.test.ts
+npx vitest run tests/drafts.test.ts tests/mcp-drafts.test.ts tests/drafts-accept.test.ts tests/drafts-ui.test.ts tests/drafts-session-routes.test.ts
+node scripts/run-playwright.mjs e2e/ui-drafts.spec.ts --project=chromium
 npx vitest run tests/drafts-postgres.test.ts   # needs Docker (CI) or a local PG16
 node scripts/workstream-note.mjs check
 bash scripts/preflight.sh --mode pre-commit
@@ -71,4 +78,4 @@ bash scripts/preflight.sh --mode pre-commit
 
 ## Last updated
 
-2026-10-27 by Claude Code (TASK-4071): closed after #492 merged and deployed.
+2026-10-28 by Claude Code (TASK-4109): reopened for the New draft form; slice A built and in review.

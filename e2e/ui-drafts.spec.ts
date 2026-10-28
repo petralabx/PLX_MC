@@ -3,7 +3,9 @@
 // routes. Accept states what it creates before it sends anything, and sends the
 // version the author read, then reloads the shared snapshot before it links the
 // new records. An older version is read-only, and a closed draft offers no
-// finding actions. Approvals lists the drafts waiting for the viewer's review. Axe and horizontal overflow run at
+// finding actions. Approvals lists the drafts waiting for the viewer's review.
+// The New draft form (TASK-4109) creates a draft, saves from the edit base it
+// read and keeps what it does not show; submit and withdraw are the author's. Axe and horizontal overflow run at
 // desktop, tablet and phone widths.
 
 import AxeBuilder from "@axe-core/playwright";
@@ -23,6 +25,10 @@ const WIDTHS = [
 
 const DIGEST_1 = `sha256:${"b".repeat(64)}`;
 const DIGEST_2 = `sha256:${"a".repeat(64)}`;
+const EDIT_BASE = `sha256:${"c".repeat(64)}`;
+const EDIT_BASE_2 = `sha256:${"d".repeat(64)}`;
+/** The base after another writer saved: an agent, or another tab. */
+const EDIT_BASE_OTHER = `sha256:${"e".repeat(64)}`;
 
 const WORKING = {
   title: "Draft Projects rollout",
@@ -121,6 +127,7 @@ function detail(viewer: Record<string, unknown> = {}, draftFields: Record<string
     ],
     version: null,
     preflight: [],
+    completeness: [],
     viewer: {
       email: "vince@petrasoap.com",
       isAuthor: true,
@@ -129,6 +136,10 @@ function detail(viewer: Record<string, unknown> = {}, draftFields: Record<string
       acceptInProgress: false,
       canReview: true,
       canAccept: true,
+      canEdit: true,
+      canSubmit: false,
+      canWithdraw: true,
+      editBase: EDIT_BASE,
       ...viewer,
     },
   };
@@ -142,6 +153,8 @@ const VERSION_1 = {
   frozenBy: "vince@petrasoap.com",
   frozenAt: "2026-10-27T09:30:00.000Z",
 };
+
+const VERSION_2 = { ...VERSION_1, version: 2, digest: DIGEST_2, content: WORKING, frozenAt: "2026-10-27T09:50:00.000Z" };
 
 const ROW = {
   id: "DRF-7",
@@ -160,10 +173,36 @@ interface Mock {
   accepts: unknown[];
   /** Request paths in order: an Accept, then the shared snapshot load. */
   order: string[];
+  creates: Record<string, unknown>[];
+  saves: Record<string, unknown>[];
+  submits: unknown[];
+  withdraws: unknown[];
 }
 
-async function mockDraftsApi(page: Page, viewer: Record<string, unknown> = {}, draftFields: Record<string, unknown> = {}): Promise<Mock> {
-  const mock: Mock = { accepts: [], order: [] };
+interface MockOptions {
+  /** What submit still needs, as GET /api/drafts/{id} reports it. */
+  completeness?: unknown[];
+  /** The draft moved since the form read it: a save refuses with 409 draft_changed. */
+  refuseSave?: boolean;
+  /** Every read of DRF-7 after a save fails, as a read-back after a save can. */
+  failReadBack?: boolean;
+  /** Another writer saves right after the form does: the read-back is slow, and moved on. */
+  otherWriterAfterSave?: boolean;
+  /** Create takes a while, so the form can be seen locked meanwhile. */
+  slowCreate?: boolean;
+}
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function mockDraftsApi(
+  page: Page,
+  viewer: Record<string, unknown> = {},
+  draftFields: Record<string, unknown> = {},
+  options: MockOptions = {}
+): Promise<Mock> {
+  const mock: Mock = { accepts: [], order: [], creates: [], saves: [], submits: [], withdraws: [] };
+  // A save moves the edit base, as the server's does.
+  let editBase = EDIT_BASE;
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
     if (path === "/api/state" || path.endsWith("/accept")) mock.order.push(`${request.method()} ${path}`);
@@ -176,14 +215,59 @@ async function mockDraftsApi(page: Page, viewer: Record<string, unknown> = {}, d
       mock.accepts.push(request.postDataJSON());
       return route.fulfill(json({ created: { P: "PRJ-90", B1: "BKT-91", B2: "BKT-92", T1: "TASK-93", T2: "TASK-94" }, alreadyAccepted: false }));
     }
+    if (request.method() === "POST" && url.pathname === "/api/drafts") {
+      mock.creates.push(request.postDataJSON());
+      if (options.slowCreate) await pause(1_500);
+      return route.fulfill(json({ draft: { ...ROW, id: "DRF-8", status: "drafting", version: 0 } }));
+    }
+    if (request.method() === "PATCH" && url.pathname === "/api/drafts/DRF-7") {
+      mock.saves.push(request.postDataJSON());
+      if (options.refuseSave) {
+        const error = { code: "draft_changed", message: "DRF-7 changed since you opened it. Copy your edits, reload it, and edit again." };
+        return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error }) });
+      }
+      editBase = EDIT_BASE_2;
+      return route.fulfill(json({ draft: ROW, changed: true, editBase }));
+    }
+    if (request.method() === "POST" && url.pathname.endsWith("/submit")) {
+      mock.submits.push(request.postDataJSON());
+      return route.fulfill(json({ draft: ROW, frozen: true, duplicates: 0 }));
+    }
+    if (request.method() === "POST" && url.pathname.endsWith("/withdraw")) {
+      mock.withdraws.push(request.postDataJSON());
+      return route.fulfill(json({ draft: { ...ROW, status: "withdrawn" } }));
+    }
     if (request.method() === "POST" && url.pathname.endsWith("/review")) {
       const error = { code: "draft_version_moved", message: "DRF-7 is at version 3, not 2. Read it again before you review." };
       return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error }) });
     }
     if (request.method() !== "GET") return route.fulfill({ status: 405, body: "Method Not Allowed" });
     if (/\/api\/drafts\/DRF-7$/.test(url.pathname)) {
-      const old = url.searchParams.get("version") === "1";
-      return route.fulfill(json({ ...detail(viewer, draftFields), ...(old ? { version: VERSION_1 } : {}) }));
+      if (options.otherWriterAfterSave && mock.saves.length > 0) {
+        await pause(1_500);
+        editBase = EDIT_BASE_OTHER;
+      }
+      if (options.failReadBack && mock.saves.length > 0) {
+        const error = { code: "internal", message: "Internal error." };
+        return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error }) });
+      }
+      const frozen = { "1": VERSION_1, "2": VERSION_2 }[url.searchParams.get("version") ?? ""] ?? null;
+      return route.fulfill(
+        json({ ...detail({ editBase, ...viewer }, draftFields), ...(frozen ? { version: frozen } : {}), completeness: options.completeness ?? [] })
+      );
+    }
+    if (/\/api\/drafts\/DRF-8$/.test(url.pathname)) {
+      // The draft the New draft form just created, as the form sent it.
+      const made = mock.creates.at(-1) ?? {};
+      const working = { title: made.title, plan: made.plan, research: made.research };
+      return route.fulfill(
+        json(
+          detail(
+            { canSubmit: true, canAccept: false, canReview: false },
+            { id: "DRF-8", status: "drafting", version: 0, digest: null, working, reviews: [], reviewers: [] }
+          )
+        )
+      );
     }
     return route.fulfill(json({ drafts: [ROW], count: 1, viewer: "vince@petrasoap.com" }));
   });
@@ -260,10 +344,193 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await expect(reviews.getByText("To review, read the current version.")).toBeVisible();
     await expect(reviews.getByRole("textbox", { name: "Review" })).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Accept" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Your draft" })).toHaveCount(0);
     await page.getByRole("button", { name: "Read the current version" }).click();
     await expect(page.getByRole("heading", { name: "Draft Projects rollout", exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "Reviews" }).getByRole("textbox", { name: "Review" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Accept" }).getByRole("button", { name: "Accept version 2…" })).toBeVisible();
+  });
+
+  test("New draft creates a draft from the form, then opens it to edit", async ({ page }) => {
+    const mock = await mockDraftsApi(page);
+    await openDrafts(page);
+    await page.getByRole("button", { name: "+ New draft" }).click();
+    await expect(page).toHaveURL(/draftId=new/);
+    await expect(page.getByRole("heading", { name: "New draft" })).toBeVisible();
+    await page.getByLabel("Title", { exact: true }).fill("Supplier onboarding");
+    await page.getByLabel("Project name", { exact: true }).fill("Supplier onboarding");
+    await page.getByRole("button", { name: "+ Add bucket" }).click();
+    await page.getByLabel("B1 name", { exact: true }).fill("Intake");
+    await page.getByRole("button", { name: "+ Add task" }).click();
+    await page.getByLabel("T1 title", { exact: true }).fill("Intake form");
+    await page.getByRole("button", { name: "+ Add approach" }).click();
+    await page.getByLabel("Approach 1 name", { exact: true }).fill("A form in Mission Control");
+    await page.getByRole("button", { name: "Create draft" }).click();
+    await expect.poll(() => mock.creates.length).toBe(1);
+    expect(mock.creates[0]).toMatchObject({
+      title: "Supplier onboarding",
+      plan: {
+        project: { existing: null, name: "Supplier onboarding" },
+        buckets: [{ key: "B1", name: "Intake" }],
+        tasks: [{ key: "T1", bucket: "B1", title: "Intake form", dependsOn: [] }],
+      },
+      research: { approaches: [{ name: "A form in Mission Control", chosen: true }] },
+      visibility: "shared",
+      members: [],
+      reviewers: [],
+    });
+    await expect(page).toHaveURL(/draftId=DRF-8&edit=1/);
+    await expect(page.getByRole("heading", { name: "Edit DRF-8" })).toBeVisible();
+    await expect(page.getByLabel("T1 title", { exact: true })).toHaveValue("Intake form");
+  });
+
+  test("Edit saves from the edit base it read, and keeps what the form does not show", async ({ page }) => {
+    const mock = await mockDraftsApi(page);
+    await openDrafts(page, "&draftId=DRF-7");
+    await page.getByRole("region", { name: "Your draft" }).getByRole("button", { name: "Edit draft" }).click();
+    await expect(page).toHaveURL(/draftId=DRF-7&edit=1/);
+    await page.getByLabel("Title", { exact: true }).fill("Draft Projects rollout, revised");
+    await expect(page.getByText("Saving keeps the draft's 1 risk(s), 1 open question(s) as they are.")).toBeVisible();
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    expect(mock.saves[0]).toMatchObject({
+      base: EDIT_BASE,
+      title: "Draft Projects rollout, revised",
+      plan: WORKING.plan,
+      research: { risks: WORKING.research.risks, openQuestions: WORKING.research.openQuestions, sources: WORKING.research.sources },
+    });
+    // The next save names the base the last one returned.
+    await expect(page.getByText("Saved.")).toBeVisible();
+    await page.getByLabel("Title", { exact: true }).fill("Draft Projects rollout, revised twice");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(2);
+    expect(mock.saves[1]).toMatchObject({ base: EDIT_BASE_2, title: "Draft Projects rollout, revised twice" });
+  });
+
+  test("a failed reload after a save keeps the form, and the save counts as saved", async ({ page }) => {
+    const mock = await mockDraftsApi(page, {}, {}, { failReadBack: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await page.getByLabel("Title", { exact: true }).fill("Saved, then the read-back fails");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    const footer = page.getByRole("region", { name: "Save" });
+    await expect(footer).toContainText("Could not reload DRF-7: Internal error.");
+    await expect(footer.getByRole("button", { name: "Try again" })).toBeVisible();
+    await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Saved, then the read-back fails");
+    await expect(footer.getByRole("button", { name: "Done" })).toBeVisible();
+    await expect(footer.getByRole("button", { name: "Save draft" })).toBeDisabled();
+  });
+
+  test("edits typed during a save's read-back keep the base they were made from", async ({ page }) => {
+    const mock = await mockDraftsApi(page, {}, {}, { otherWriterAfterSave: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    const title = page.getByLabel("Title", { exact: true });
+    await title.fill("First save");
+    const readBack = page.waitForResponse((r) => r.request().method() === "GET" && new URL(r.url()).pathname === "/api/drafts/DRF-7");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    await title.fill("Typed while the read-back was on its way");
+    await readBack;
+    await expect(title).toHaveValue("Typed while the read-back was on its way");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(2);
+    // The base the edits were made from: another writer's change refuses this save instead of being overwritten.
+    expect(mock.saves[1]).toMatchObject({ base: EDIT_BASE_2, title: "Typed while the read-back was on its way" });
+  });
+
+  test("the form is locked while Create runs", async ({ page }) => {
+    const mock = await mockDraftsApi(page, {}, {}, { slowCreate: true });
+    await openDrafts(page, "&draftId=new");
+    await page.getByLabel("Title", { exact: true }).fill("Supplier onboarding");
+    await page.getByRole("button", { name: "Create draft" }).click();
+    await expect(page.getByLabel("Title", { exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "+ Add bucket" })).toBeDisabled();
+    await expect(page).toHaveURL(/draftId=DRF-8&edit=1/);
+    expect(mock.creates).toHaveLength(1);
+  });
+
+  test("unsaved edits ask before an in-app move or Back", async ({ page }) => {
+    await mockDraftsApi(page);
+    await openDrafts(page, "&draftId=DRF-7");
+    await page.getByRole("region", { name: "Your draft" }).getByRole("button", { name: "Edit draft" }).click();
+    const title = page.getByLabel("Title", { exact: true });
+    await title.fill("Not saved yet");
+    const asked: string[] = [];
+    page.once("dialog", (dialog) => {
+      asked.push(dialog.message());
+      void dialog.dismiss();
+    });
+    await page.getByRole("button", { name: "← Back to DRF-7" }).click();
+    await expect.poll(() => asked).toEqual(["Leave without saving your edits?"]);
+    await expect(page).toHaveURL(/draftId=DRF-7&edit=1/);
+    await expect(title).toHaveValue("Not saved yet");
+
+    page.once("dialog", (dialog) => void dialog.dismiss());
+    await page.goBack();
+    await expect(page).toHaveURL(/draftId=DRF-7&edit=1/);
+    await expect(title).toHaveValue("Not saved yet");
+
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "← Back to DRF-7" }).click();
+    await expect(page).toHaveURL(/draftId=DRF-7$/);
+  });
+
+  test("a draft that moved refuses the save, and the form keeps the edits", async ({ page }) => {
+    await mockDraftsApi(page, {}, {}, { refuseSave: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await page.getByLabel("Title", { exact: true }).fill("My edit");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    const footer = page.getByRole("region", { name: "Save" });
+    await expect(footer.getByRole("alert")).toContainText("DRF-7 changed since you opened it.");
+    await expect(footer.getByRole("button", { name: "Reload DRF-7 (drops your edits)" })).toBeVisible();
+    await expect(page.getByLabel("Title", { exact: true })).toHaveValue("My edit");
+  });
+
+  test("Submit lists what is missing, then sends the edit base the author read", async ({ page }) => {
+    const missing = [{ code: "summary_required", path: "research.summary", message: "Write a summary of the plan." }];
+    await mockDraftsApi(page, { canSubmit: true }, { status: "drafting" }, { completeness: missing });
+    await openDrafts(page, "&draftId=DRF-7");
+    const waiting = page.getByRole("region", { name: "Your draft" });
+    await expect(waiting).toContainText("Before you can submit:");
+    await expect(waiting).toContainText("Write a summary of the plan.");
+    await expect(waiting.getByRole("button", { name: "Submit for review" })).toBeDisabled();
+
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    const mock = await mockDraftsApi(page, { canSubmit: true }, { status: "drafting" });
+    await openDrafts(page, "&draftId=DRF-7");
+    await page.getByRole("region", { name: "Your draft" }).getByRole("button", { name: "Submit for review" }).click();
+    await expect.poll(() => mock.submits).toEqual([{ base: EDIT_BASE }]);
+  });
+
+  test("a frozen version, the current one too, offers no Submit: it would send the working copy", async ({ page }) => {
+    await mockDraftsApi(page, { canSubmit: true, unsubmittedEdits: true }, { status: "drafting" });
+    await openDrafts(page, "&draftId=DRF-7&version=2");
+    await expect(page.getByRole("region", { name: "Plan" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Your draft" })).toHaveCount(0);
+    await openDrafts(page, "&draftId=DRF-7");
+    await expect(page.getByRole("region", { name: "Your draft" }).getByRole("button", { name: "Submit for review" })).toBeVisible();
+  });
+
+  test("Withdraw takes a reason of 10 characters or more", async ({ page }) => {
+    const mock = await mockDraftsApi(page);
+    await openDrafts(page, "&draftId=DRF-7");
+    const mine = page.getByRole("region", { name: "Your draft" });
+    await mine.getByRole("button", { name: "Withdraw…" }).click();
+    const reason = mine.getByLabel(/Why withdraw DRF-7/);
+    await reason.fill("too short");
+    await expect(mine.getByRole("button", { name: "Withdraw DRF-7" })).toBeDisabled();
+    await reason.fill("Folded into the supplier plan.");
+    await mine.getByRole("button", { name: "Withdraw DRF-7" }).click();
+    await expect.poll(() => mock.withdraws).toEqual([{ reason: "Folded into the supplier plan." }]);
+  });
+
+  test("only the author gets the author actions and the form", async ({ page }) => {
+    await mockDraftsApi(page, { isAuthor: false, canEdit: false, canSubmit: false, canWithdraw: false, canAccept: false });
+    await openDrafts(page, "&draftId=DRF-7");
+    await expect(page.getByRole("region", { name: "Plan" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Your draft" })).toHaveCount(0);
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await expect(page.getByText("Only vince@petrasoap.com edits DRF-7.")).toBeVisible();
   });
 
   test("Accept waits for every blocking finding", async ({ page }) => {
@@ -292,11 +559,11 @@ test.describe("Drafts screen (Draft Projects)", () => {
 
   test("has no axe violations and no horizontal overflow at any width", async ({ page }) => {
     await mockDraftsApi(page);
-    for (const query of ["", "&draftId=DRF-7"]) {
+    for (const query of ["", "&draftId=DRF-7", "&draftId=new", "&draftId=DRF-7&edit=1"]) {
       for (const [name, width, height] of WIDTHS) {
         await page.setViewportSize({ width, height });
         await openDrafts(page, query);
-        const label = `drafts${query ? "-record" : "-list"}/${name}`;
+        const label = `drafts-${query.includes("edit") ? "edit" : query.includes("new") ? "new" : query ? "record" : "list"}/${name}`;
         await page.screenshot({ path: `${SHOT_DIR}/${label.replace("/", "-")}.png`, fullPage: true });
         await expectSurfaceNoHorizontalOverflow(page, "drafts-screen", label);
         const results = await new AxeBuilder({ page }).include("[data-testid='drafts-screen']").withTags(TAGS).analyze();

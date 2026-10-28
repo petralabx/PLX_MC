@@ -16,7 +16,7 @@
 //   A blocking finding stays open until its raiser resolves it, or the author
 //   resolves or dismisses it (a person, with a reason). Accept is step 3.
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import { ApiError } from "@/lib/api/route";
 import { appendEvent } from "@/lib/compliance/repo";
@@ -146,6 +146,23 @@ function assertAcceptNotStarted(draft: Draft): void {
   }
 }
 
+/**
+ * What a person edits on the Drafts screen: the working copy, and who sees and
+ * reviews the draft. A save or submit that names the base it was made from
+ * refuses once the draft has moved, so a person never overwrites, or submits,
+ * what they did not see. A review does not move it.
+ */
+export function draftEditBase(draft: Pick<Draft, "working" | "visibility" | "members" | "reviewers">): string {
+  const parts = [draftDigest(draft.working), draft.visibility, draft.members, draft.reviewers];
+  return `sha256:${createHash("sha256").update(JSON.stringify(parts)).digest("hex")}`;
+}
+
+function assertBase(draft: Draft, base: string | undefined): void {
+  if (base !== undefined && draftEditBase(draft) !== base) {
+    throw new ApiError("draft_changed", `${draft.id} changed since you opened it. Copy your edits, reload it, and edit again.`, 409);
+  }
+}
+
 function assertWriter(draft: Draft, actor: DraftActor): void {
   if (!isDraftWriter(draft, actor)) {
     throw new ApiError(
@@ -227,7 +244,12 @@ export async function createDraft(actor: DraftActor, sections: DraftSections & {
   return draft;
 }
 
-export async function saveDraft(actor: DraftActor, id: string, sections: DraftSections): Promise<{ draft: Draft; changed: boolean }> {
+export async function saveDraft(
+  actor: DraftActor,
+  id: string,
+  sections: DraftSections,
+  options: { base?: string } = {}
+): Promise<{ draft: Draft; changed: boolean }> {
   await visibleDraft(id, actor);
   const result = await store.mutateDraft(id, (draft) => {
     // Again under the lock: the author may have restricted the draft meanwhile.
@@ -235,6 +257,7 @@ export async function saveDraft(actor: DraftActor, id: string, sections: DraftSe
     assertWriter(draft, actor);
     assertOpen(draft);
     assertAcceptNotStarted(draft);
+    assertBase(draft, options.base);
     const working = applySections(draft.working, sections);
     const next: Draft = {
       ...draft,
@@ -310,10 +333,16 @@ export interface SubmitResult {
   duplicates: number;
 }
 
-export async function submitDraft(actor: DraftActor, id: string, deps: DraftDeps = defaultDraftDeps): Promise<SubmitResult> {
+export async function submitDraft(
+  actor: DraftActor,
+  id: string,
+  deps: DraftDeps = defaultDraftDeps,
+  options: { base?: string } = {}
+): Promise<SubmitResult> {
   const current = await visibleDraft(id, actor);
   assertWriter(current, actor);
   assertOpen(current);
+  assertBase(current, options.base);
   const issues = submitIssues(current.working, await preflightContext(actor, deps));
   if (issues.length > 0) {
     throw new ApiError(
@@ -330,6 +359,7 @@ export async function submitDraft(actor: DraftActor, id: string, deps: DraftDeps
     if (!canSeeDraft(draft, actor)) throw notFound(id);
     assertWriter(draft, actor);
     assertOpen(draft);
+    assertBase(draft, options.base);
     const digest = draftDigest(draft.working);
     // The checks ran on the working copy read before the lock; never freeze other content.
     if (digest !== checked) throw new ApiError("draft_changed", `${id} changed during the submit; submit again.`, 409);

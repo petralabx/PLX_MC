@@ -193,7 +193,7 @@ There is no accept tool. REST routes under `/api/cursor/drafts` mirror the tools
   - the plan tree with preflight badges, such as "repo not in the allow-list" or "possible duplicate of TASK-…";
   - Research, Reviews and Versions sections, with a diff between versions;
   - an Accept button, for the author only. Its confirmation states the counts, such as "Creates 1 project, 3 buckets and 14 tasks".
-- A person writes a draft through their agent (`mc_save_draft`). A "New draft" form on the screen is a follow-up.
+- A person writes a draft through their agent (`mc_save_draft`), or on the screen with the New draft form (see Follow-up: New draft form).
 - The Approvals screen shows a Drafts to review panel for named reviewers.
 
 ## Convention for agents (decision 3)
@@ -201,6 +201,26 @@ There is no accept tool. REST routes under `/api/cursor/drafts` mirror the tools
 A rule goes into `config/governance-contract.yaml`: a plan that adds a project, or two or more buckets, goes through a draft. The generators carry the rule into `AGENTS.md` and `CLAUDE.md`. `project-researcher` and `guided-project-discovery` end by saving a draft. Those skill changes ship through `petralabx/skills` and the catalog pin.
 
 Nothing blocks a direct create.
+
+## Follow-up: New draft form (Vince, 2026-10-28)
+
+A person writes a draft on the Drafts screen, without an agent. It ships in two slices.
+
+Slice A (TASK-4109):
+
+- **New draft** on the list opens `?screen=drafts&draftId=new`. **Edit draft** on a draft the person authors opens `&draftId=DRF-n&edit=1`.
+- The form edits the title, who sees the draft (shared or restricted, and its members), the reviewers, the plan (a new or an existing project, buckets and tasks), and the research that submit needs: summary, context, approaches, recommendation, sources and findings.
+- Risks, open questions and artifacts are not in the form yet. A save sends them back unchanged.
+- Session routes, each for the author only (`draft.create`):
+  - `POST /api/drafts` creates a draft. The signed-in person is its author.
+  - `PATCH /api/drafts/{id}` saves the sections it sends.
+  - `POST /api/drafts/{id}/submit` submits the working copy.
+  - `POST /api/drafts/{id}/withdraw` withdraws the draft, with a reason of 10 characters or more.
+- A save and a submit carry the **edit base** the form was read with: a digest of the working copy, the visibility, the members and the reviewers. A draft that has moved since (an agent's save, another tab) refuses with 409 `draft_changed`, and the form keeps the person's edits. A review does not move the base.
+- Before submit, the draft's record and the form list what the completeness and preflight checks still need. Submit waits for saved edits, and only the working copy's page offers it, never a frozen version's.
+- Unsaved edits ask before the person leaves: an in-app move or Back asks first, and closing the tab warns. The form locks while Create runs. Edits typed after a save keep the edit base they were made from.
+
+Slice B (TASK-4110): risks, open questions and artifacts in the form, a dependency picker for tasks, and reordering buckets and tasks.
 
 ## Follow-up: review on a shared page (Vince, 2026-10-27)
 
@@ -235,7 +255,9 @@ Not decided yet:
 | 1 | TASK-4056 | This PRD and the workstream note | Merged (#487) |
 | 2 | TASK-4059 | Migration `056_drafts.sql` (054 and 055 were taken), `src/lib/drafts`, the five tools, REST routes, capabilities, `docs/modules/drafts/README.md` and the `DATA_MODEL.md` entry. 056 also adds the columns Accept needs, so step 3 has no migration | Merged (#489) |
 | 3 | TASK-4071 | Drafts screen, session routes under `/api/drafts`, Accept, the Drafts to review panel on Approvals, a Drafts nav item. Drafts turn on by default; `PLX_MC_DRAFTS_ENABLED=0` is the kill switch | Merged (#492) |
-| Follow-up | Not created | A "New draft" form on the screen, artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | Not started |
+| Follow-up A | TASK-4109 | New draft form, slice A: session routes to create, save, submit and withdraw; the form for the settings, the plan and the research submit needs (see Follow-up: New draft form) | In review |
+| Follow-up B | TASK-4110 | New draft form, slice B: risks, open questions and artifacts in the form; a dependency picker; reordering | Not started |
+| Follow-up | Not created | Artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | Not started |
 | Follow-up | Not created | Review on a shared page: "Publish for review" and the comment relay, Claude Artifacts first (see Follow-up: review on a shared page). After step 3 is live and in use | Not started |
 
 Step 2 touches a migration, so it lands only with a signed MC merge approval of its exact head.

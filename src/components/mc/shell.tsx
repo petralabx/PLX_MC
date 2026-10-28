@@ -37,6 +37,7 @@ import { loadNavPrefs, useNavTour, useNavZones } from "./nav-zones";
 import { NewInitiativeModal } from "./new-initiative-modal";
 import { NewProjectModal } from "./new-project-modal";
 import { NewTaskModal } from "./new-task-modal";
+import { navAllowed } from "./nav-guard";
 import type { Nav, Route, Screen } from "./route";
 import { routeToUrl, urlToRoute } from "./route";
 import { SCREENS } from "./screens";
@@ -122,6 +123,13 @@ export function MissionControlShell() {
     return () => window.removeEventListener("focus", loadNavPrefs);
   }, []);
 
+  // The URL of the route on show, for Back or Forward to return to when a screen
+  // with unsaved edits refuses to leave (./nav-guard.ts).
+  const shownUrl = useRef("/");
+  useEffect(() => {
+    shownUrl.current = routeToUrl(route);
+  });
+
   // P3 deep links — route state ⇄ URL. The URL is adopted AFTER mount (not in
   // the useState initializer) so the SSR HTML and the first client render stay
   // identical ("home") and hydration never mismatches; browser back/forward
@@ -134,7 +142,14 @@ export function MissionControlShell() {
     // before the readiness timer, i.e. data-mc-ready still implies the deep
     // link has been adopted.
     const timer = window.setTimeout(() => setRoute(urlToRoute(window.location.search)), 0);
-    const onPopState = () => setRoute(urlToRoute(window.location.search));
+    const onPopState = () => {
+      // A screen with unsaved edits may refuse: put the URL it left back.
+      if (!navAllowed()) {
+        window.history.pushState(null, "", shownUrl.current);
+        return;
+      }
+      setRoute(urlToRoute(window.location.search));
+    };
     window.addEventListener("popstate", onPopState);
     return () => {
       window.clearTimeout(timer);
@@ -171,6 +186,7 @@ export function MissionControlShell() {
   });
 
   const go = useCallback((next: Route) => {
+    if (!navAllowed()) return;
     setRoute(next);
     // Shallow history update via the native History API: Next 14+ syncs its
     // router state from pushState without re-rendering server components or

@@ -4,11 +4,13 @@
 // USD revenue converts at the run's Bank of Canada rate, or at the fixed Sage
 // rate when the page asks for it (TASK-3780); truckloads stay on the Bank of Canada rate.
 
+import { applyServiceCharges, pendingProductsOf, revenueByBusinessLine, type BusinessLineScope, type RevenueByBusinessLine } from "./business-line";
 import { customerRevenue, type CustomerRevenue } from "./customer-revenue";
 import { buildForecast, type CustomerClass, type ForecastSnapshot, type ForecastView } from "./forecast";
+import { prorateCents } from "./money";
 import { countedManualShipmentRefs, pendingShipmentsByClass, pendingShipmentsNotEnteredByHand } from "./pending-shipments";
 import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
-import { revenueScope, type RevenueScopeView } from "./revenue-scope";
+import { revenueScope, type RevenueScopePace, type RevenueScopeView } from "./revenue-scope";
 import { computeGoals, type GoalsModel } from "./rules";
 import { buildShipmentList, type ShipmentListRow } from "./shipment-list";
 import { shipmentLinesView, type ShipmentLinesView } from "./shipment-lines";
@@ -22,6 +24,7 @@ import type {
   RefreshRun,
   RevenueRateBasis,
   CreditNotesAccess,
+  ShipmentLineRow,
   ShipmentLinesSummary,
   SnapshotData,
 } from "./types";
@@ -88,6 +91,14 @@ export interface GoalsView {
   /** The Revenue card's month for every customer, freight and other charges left out (TASK-3952): the card's headline, status and pace at `scope=all`. */
   revenueGoal: RevenueScopeView | null;
   /**
+   * The headline split into Manufacturing, Distribution and Services. null
+   * without a model. `pending` on each scope is the shipped-not-invoiced
+   * estimate. The headline includes that estimate. A stored shipment total
+   * has no item lines, so it sits in Distribution; item amounts use the
+   * finished-good and 3PL rules. The three lines add to the headline.
+   */
+  revenueByBusinessLine: RevenueByBusinessLine | null;
+  /**
    * Whether the run read this month's credit notes (TASK-3987), which the
    * Revenue card subtracts: read (notes: how many), or missing (the columns the
    * login lacked, so returns aren't deducted). null without a model, or for a
@@ -140,8 +151,37 @@ export interface GoalsViewInput {
   forecast?: ForecastSnapshot | null;
   /** The run's stored summary of its invoice lines; null or absent when the run predates them. */
   shipmentLines?: ShipmentLinesSummary | null;
+  /** Those lines, when the loader has them. The page model keeps only the split. */
+  shipmentLineRows?: readonly ShipmentLineRow[] | null;
+  /** Finished-good codes read from the MRP. null: not read. An empty set was read. */
+  finishedGoodCodes?: ReadonlySet<string> | null;
   /** The rate USD revenue converts at (TASK-3780); absent, the run's Bank of Canada rate. */
   revenueBasis?: RevenueRateBasis;
+}
+
+/**
+ * 3PL miscellaneous charges are already inside the figure from
+ * applyServiceCharges. That rebuild drops the shipped-not-invoiced estimate,
+ * so this adds it back. A stored shipment total has no item lines and counts
+ * as Distribution; the three lines then add to this headline to the cent.
+ */
+function headlineAfterServiceCharges(
+  scope: RevenueScopeView,
+  line: BusinessLineScope,
+  targetCents: number,
+  pace: RevenueScopePace,
+): RevenueScopeView {
+  const moved = applyServiceCharges(scope, line, targetCents, pace);
+  const goalCadCents = moved.goalCadCents + moved.pendingCadCents;
+  return {
+    ...moved,
+    invoicedProductCadCents: moved.totalCadCents - moved.chargesCadCents,
+    goalCadCents,
+    progress: targetCents > 0 ? goalCadCents / targetCents : null,
+    status: goalCadCents >= pace.dueSoFarCents ? "on_track" : "behind",
+    neededPerDayCents:
+      pace.remaining > 0 ? prorateCents(Math.max(0, targetCents - goalCadCents), 1, pace.remaining) : 0,
+  };
 }
 
 export function buildGoalsView(input: GoalsViewInput): GoalsView {
@@ -158,6 +198,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       revenueByClass: null,
       revenueScope: null,
       revenueGoal: null,
+      revenueByBusinessLine: null,
       creditNotes: null,
     pendingShipments: null,
       shipmentLines: null,
@@ -198,11 +239,13 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
   });
   const notes = input.snapshot.creditNotes ?? null;
   const byClass = revenueByClass(shipments, model, input.ftlCustomers, notes?.access === "read" ? notes.notes : []);
+  const pace = { dueSoFarCents: model.revenue.dueSoFarCents, remaining: model.calendar.remaining };
   // INTERIM (TASK-3992): shipped, not yet invoiced, added to the card as an estimate.
   const pendingData = input.snapshot.pendingShipments ?? null;
+  const countedRefs = countedManualShipmentRefs(model.entries);
   const pendingRows =
     pendingData?.access === "read"
-      ? pendingShipmentsNotEnteredByHand(pendingData.shipments, countedManualShipmentRefs(model.entries))
+      ? pendingShipmentsNotEnteredByHand(pendingData.shipments, countedRefs)
       : [];
   const pending = pendingData?.access === "read" ? pendingShipmentsByClass(pendingRows, model.revenue.rate) : null;
   const invoicedByClass = Object.fromEntries(byClass.rows.map((r) => [r.customerClass, r.totalCadCents])) as Record<CustomerClass, number>;
@@ -215,6 +258,22 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     invoicedByClassMatchesCard: byClass.matchesCard,
     aoQtyUnreadable: run.rowCounts.forecastAoQtyUnreadable ?? null,
   });
+  const businessLine = revenueByBusinessLine({
+    shipments,
+    lines: input.shipmentLineRows ?? null,
+    linesSummary: input.shipmentLines ?? null,
+    finishedGoodCodes: input.finishedGoodCodes ?? null,
+    creditNotes: notes?.access === "read" ? notes.notes : [],
+    ftlCustomers: input.ftlCustomers,
+    rate: model.revenue.rate,
+    byClass,
+    // Same hand-entry skip as the headline. No item lines: Distribution.
+    pending: pendingProductsOf(input.snapshot, countedRefs),
+  });
+  const mfgScope = revenueScope(byClass, "mfg", model.revenue.targetCents, pace, pending);
+  const allScope = revenueScope(byClass, "all", model.revenue.targetCents, pace, pending);
+  // 3PL miscellaneous charges move into the headline only once the lines are readable.
+  const linesReady = businessLine.state === "ready";
   return {
     state: "ready",
     run,
@@ -223,14 +282,9 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     model,
     shipments,
     revenueByClass: byClass,
-    revenueScope: revenueScope(byClass, "mfg", model.revenue.targetCents, {
-      dueSoFarCents: model.revenue.dueSoFarCents,
-      remaining: model.calendar.remaining,
-    }, pending),
-    revenueGoal: revenueScope(byClass, "all", model.revenue.targetCents, {
-      dueSoFarCents: model.revenue.dueSoFarCents,
-      remaining: model.calendar.remaining,
-    }, pending),
+    revenueScope: linesReady ? headlineAfterServiceCharges(mfgScope, businessLine.mfg, model.revenue.targetCents, pace) : mfgScope,
+    revenueGoal: linesReady ? headlineAfterServiceCharges(allScope, businessLine.all, model.revenue.targetCents, pace) : allScope,
+    revenueByBusinessLine: businessLine,
     pendingShipments: pendingData
       ? { access: pendingData.access, missing: pendingData.missing, shipments: pendingData.shipments.length, otherCurrencies: pending?.otherCurrencies ?? [] }
       : null,

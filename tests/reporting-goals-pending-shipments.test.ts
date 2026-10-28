@@ -18,6 +18,7 @@ import { dollars, isReady } from "@/components/mc/goals/helpers";
 import { buildGoalsWorkbook } from "@/lib/reporting/goals/excel/export";
 import { WORKBOOK_SHEETS } from "@/lib/reporting/goals/excel/layout";
 import { convertCents } from "@/lib/reporting/goals/money";
+import { businessLineSum } from "@/lib/reporting/goals/business-line";
 import { pendingShipmentsByClass, pendingShipmentsEnabled } from "@/lib/reporting/goals/pending-shipments";
 import { ITEM_LINES_SQL } from "@/lib/reporting/goals/queries/forecast-orders";
 import { PENDING_SHIPMENT_COLUMNS, pendingShipmentsQuery } from "@/lib/reporting/goals/queries/pending-shipments";
@@ -45,6 +46,22 @@ describe("shipped, not yet invoiced on the Revenue goal", () => {
     expect(goal.totalCadCents).toBe(base.totalCadCents);
     expect(goal.invoicedProductCadCents).toBe(base.totalCadCents - base.chargesCadCents);
     expect(goal.status).toBe(goal.goalCadCents >= page().model!.revenue.dueSoFarCents ? "on_track" : "behind");
+  });
+
+  it("counts a stored shipment total as Distribution, and the three lines add to the headline to the cent", () => {
+    const p = page(PENDING);
+    const split = p.revenueByBusinessLine!;
+    const goal = p.revenueGoal!;
+    const mfg = p.revenueScope!;
+    expect(split.state).toBe("ready");
+    // The snapshot stores a line count, not item codes, so none of the three is Manufacturing or Services.
+    expect(split.pendingWithoutLines).toBe(3);
+    expect(split.all.pending.manufacturingCadCents).toBe(0);
+    expect(split.all.pending.servicesCadCents).toBe(0);
+    expect(businessLineSum(split.all.pending)).toBe(goal.pendingCadCents);
+    expect(businessLineSum(split.mfg.pending)).toBe(mfg.pendingCadCents);
+    expect(businessLineSum(split.all.amounts) + businessLineSum(split.all.pending)).toBe(goal.goalCadCents);
+    expect(businessLineSum(split.mfg.amounts) + businessLineSum(split.mfg.pending)).toBe(mfg.goalCadCents);
   });
 
   it("classes by customer: scope=mfg leaves Exclusive Distribution out", () => {

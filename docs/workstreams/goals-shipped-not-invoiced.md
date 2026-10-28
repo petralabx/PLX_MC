@@ -12,7 +12,7 @@ Until go-live, add this month's posted Sage shipments whose header numinvoice is
 
 ## Status
 
-active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pull/463) is open. Ricardo Savelli checked the UAT Sage copy on 2026-10-28: pending is `numinvoice` 0, and C and MISC item lines stay in the estimate. The commit that lands that correction needs its own signed merge approval. Migration 052 is not applied. The read grant is not run.
+active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pull/463) is open. Ricardo Savelli checked the UAT Sage copy on 2026-10-28: pending is `numinvoice` 0, and C and MISC item lines stay in the estimate. `origin/main` (PR 495, the business-line split) is merged into this branch. The estimate stays in the headline and counts as Distribution when the shipment has no item lines. The merge commit needs its own signed merge approval. Migration 052 is not applied. The read grant is not run.
 
 ## Done
 
@@ -21,7 +21,7 @@ active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pu
 
 ## Next steps
 
-1. A person signs the merge gate for the head that includes the UAT correction. Vince, Ricardo, Rishi or Stephen can approve it. Earlier gates cover earlier heads only.
+1. A person signs the merge gate for the head that merges the business-line split with this estimate. Vince, Ricardo, Rishi or Stephen can approve it. Earlier gates cover earlier heads only.
 2. CIP merges the PR. Do not apply migration 052 or the read grant from an agent session.
 3. A DBA runs the grant script. It grants `oe_shipment_header.numinvoice` and does not grant `oe_invoice_header`.
 
@@ -34,6 +34,7 @@ active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pu
 - 2026-10-28 A shipment is pending when `trim(numinvoice) = '0'`. Why: UAT's `oe_invoice_header` has no `shinumber`, so the NOT EXISTS join can never match. `numinvoice` 0 was 103 shipments, April through August 2026. Decided by: Ricardo Savelli, from a read-only check of the UAT Sage copy.
 - 2026-10-28 The estimate keeps item codes C and MISC, and still drops line type 2 and zero-quantity lines. Why: those codes are real type-1 lines (screening fees, filling fees, pumps, bottles, artwork). The open-order forecast and the invoiced Revenue card stay as they are. Decided by: Ricardo Savelli, same check.
 - 2026-10-28 Table names, the shipment columns as text, `shidate` as YYYYMMDD, currency CAD or USD, and `shidisc` as an amount are confirmed. There is no void column. The void test stays `true`. Header `complete` = 1 on the uninvoiced rows. Decided by: Ricardo Savelli, same check.
+- 2026-10-28 The estimate stays inside the Revenue headline after the business-line split lands. A stored shipment total has no item code, so it counts as Distribution. Item amounts, when a row has them, use the finished-good and 3PL rules. Manufacturing, Distribution and Services add to the headline to the cent. Why: migration 052 stores a line count and an amount, not item lines, so classifying those rows would need a new schema. Decided by: cursor/grok-4.7 while merging `origin/main` (PR 495) into this branch.
 
 ## Open questions
 
@@ -42,7 +43,7 @@ active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pu
 ## Files / areas touched
 
 - `db/migrations/052_reporting_goals_pending_shipments.sql`, `db/rollback/052_reporting_goals_pending_shipments_rollback.sql`, `src/lib/db/migration-manifest.json`
-- `src/lib/reporting/goals/` (pending shipments, view, refresh, store, excel export)
+- `src/lib/reporting/goals/` (pending shipments, business line, view, refresh, store, excel export)
 - `src/components/mc/goals/goal-cards.tsx`
 - `docs/modules/reporting-goals/README.md`, `docs/modules/reporting-goals/readonly-grants-shipments-pending.sql`
 - `tests/reporting-goals-pending-shipments.test.ts`, `e2e/goals-pending-shipments.spec.ts`
@@ -50,7 +51,7 @@ active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pu
 ## How to run the tests
 
 ```bash
-npx vitest run tests/reporting-goals-pending-shipments.test.ts
+npx vitest run tests/reporting-goals-pending-shipments.test.ts tests/reporting-goals-business-line.test.ts
 ./scripts/preflight.sh --mode pre-commit
 node scripts/workstream-note.mjs check
 ```
@@ -63,4 +64,4 @@ Postgres harness tests need Docker. This host has none, so those tests fail with
 
 ## Last updated
 
-2026-10-28 by cursor/grok-4.7. Recorded Ricardo Savelli's UAT check: numinvoice 0, and C and MISC stay in the estimate.
+2026-10-28 by cursor/grok-4.7. Merged the business-line split. The estimate stays in the headline and counts as Distribution when the shipment has no item lines.

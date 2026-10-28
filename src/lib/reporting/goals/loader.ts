@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/api/route";
 import { databaseConfigured, reportingDatabaseConfigured } from "@/lib/secrets";
 
 import { previousMonthStart } from "./calendar";
+import { lookupFinishedGoodCodes } from "./finished-goods";
 import { loadForecast } from "./forecast-store";
 import { normalizeRef } from "./rules";
 import {
@@ -18,7 +19,7 @@ import {
   loadShipmentLines,
   loadSnapshot,
 } from "./store";
-import type { CreditNotesDataset, PendingShipmentsDataset, FxRate, RevenueRateBasis, ShipmentLinesDataset, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
+import type { CreditNotesDataset, PendingShipmentsDataset, FxRate, RevenueRateBasis, ShipmentLineRow, ShipmentLinesDataset, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
 import { buildGoalsView, type GoalsView } from "./view";
 
 const EMPTY_SETTINGS = {
@@ -99,6 +100,17 @@ async function loadGoals(basis: RevenueRateBasis): Promise<{ view: GoalsView; sn
   );
   const forecast = await loadForecast(succeeded);
   const shipmentLines = await loadShipmentLineSummary(succeeded.id);
+  // The lines stay off the page payload. Only the business-line totals need them.
+  let shipmentLineRows: ShipmentLineRow[] | null = null;
+  let finishedGoodCodes: ReadonlySet<string> | null = null;
+  if (shipmentLines?.access === "read") {
+    const dataset = await loadShipmentLines(succeeded.id);
+    shipmentLineRows = dataset?.lines ?? null;
+    if (shipmentLineRows) {
+      const itemCodes = shipmentLineRows.filter((line) => line.kind === "item").map((line) => line.code ?? "");
+      finishedGoodCodes = await lookupFinishedGoodCodes(itemCodes);
+    }
+  }
   const view = buildGoalsView({
     configured,
     run: succeeded,
@@ -113,6 +125,8 @@ async function loadGoals(basis: RevenueRateBasis): Promise<{ view: GoalsView; sn
     rates,
     forecast,
     shipmentLines,
+    shipmentLineRows,
+    finishedGoodCodes,
     revenueBasis: basis,
   });
   return { view, snapshot, rates };

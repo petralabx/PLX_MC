@@ -124,7 +124,7 @@ const byCurrency = (a: { currency: string }, b: { currency: string }) => a.curre
  * hand's by the Sage customer picked for it, else by the truckload customer its
  * name matches (as the Truckloads card matches it), else Unclassified.
  */
-function classOf(row: ShipmentListRow, ftlCustomers: readonly FtlCustomer[]): { customerClass: CustomerClass; resolved: boolean } {
+export function shipmentCustomerClass(row: ShipmentListRow, ftlCustomers: readonly FtlCustomer[]): { customerClass: CustomerClass; resolved: boolean } {
   if (row.source === "Sage" || row.customerCode) return { customerClass: customerClassOf(row.customerCode), resolved: true };
   const truckload = truckloadCustomerFor(row, ftlCustomers);
   return truckload ? { customerClass: customerClassOf(truckload.code), resolved: true } : { customerClass: "Unclassified", resolved: false };
@@ -139,7 +139,7 @@ export function revenueByClass(
   const sums = new Map<CustomerClass, ClassRevenueTotals>(CUSTOMER_CLASSES.map((c) => [c, emptyTotals()]));
   const unresolvedByHand = { entries: 0, cadCents: 0 };
   for (const row of rows) {
-    const { customerClass, resolved } = classOf(row, ftlCustomers);
+    const { customerClass, resolved } = shipmentCustomerClass(row, ftlCustomers);
     const sum = sums.get(customerClass)!;
     if (row.source === "By hand") {
       sum.byHand.entries += 1;

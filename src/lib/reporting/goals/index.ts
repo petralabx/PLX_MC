@@ -59,6 +59,7 @@ export {
 export type { Holiday } from "./calendar";
 
 export {
+  allocateCents,
   allocateConvertedCents,
   centsToDecimal,
   convertCents,
@@ -309,6 +310,27 @@ export { FORECAST_CATEGORY_COLUMNS, FORECAST_COLUMNS } from "./queries/forecast-
 // Revenue by customer class (TASK-3781): its exports go below this line. Server-only (it reads the customer roster).
 export { revenueByClass } from "./revenue-by-class";
 export type { ClassRevenueRow, ClassRevenueTotals, RevenueByClass } from "./revenue-by-class";
+export {
+  BUSINESS_LINES,
+  businessLineOf,
+  businessLinePlus,
+  businessLineSum,
+  countedShipmentRefs,
+  isServiceItem,
+  normalizeItemCode,
+  applyServiceCharges,
+  pendingProductsOf,
+  revenueByBusinessLine,
+} from "./business-line";
+export type {
+  BusinessLine,
+  BusinessLineAmounts,
+  BusinessLineInput,
+  BusinessLineScope,
+  PendingProduct,
+  PendingProductLine,
+  RevenueByBusinessLine,
+} from "./business-line";
 export { revenueScope, SCOPE_EXCLUDES } from "./revenue-scope";
 export { addWorkingDays, BATCH_LEAD_WORKING_DAYS, customerRevenue, searchCustomers, weekOf } from "./customer-revenue";
 export type { CustomerRanking, CustomerRevenue, CustomerRevenueRow, UnpricedProduction } from "./customer-revenue";

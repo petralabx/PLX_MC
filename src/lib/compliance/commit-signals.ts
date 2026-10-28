@@ -31,6 +31,11 @@ export function agentSignals(c: PrCommit): string[] {
   return [...signals];
 }
 
+// TASK-3931: Agent runtimes the helpers write on a refresh merge of the base
+// branch (observed: plx-cip/merge-queue, cip/ci-queue, cip/plx-cip, cip, grok/cip,
+// grok-bot/cip). The runtime is the part before the first slash.
+export const REFRESH_MERGE_RUNTIMES: ReadonlySet<string> = new Set(["plx-cip", "cip", "grok", "grok-bot"]);
+
 export interface CommitTrailers {
   agent: string | null;
   onBehalfOf: string | null;

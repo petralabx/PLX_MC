@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/mc-data";
 import type { PrEvent } from "@/lib/compliance/webhook";
 
-const github = vi.hoisted(() => ({ loadPrState: vi.fn(), loadPrCommits: vi.fn(), githubHeadDescendsFrom: vi.fn() }));
+const github = vi.hoisted(() => ({ loadPrState: vi.fn(), loadPrCommits: vi.fn(), githubHeadDescendsFrom: vi.fn(), githubBranchContains: vi.fn() }));
 vi.mock("@/lib/compliance/github-pr", () => github);
 
 const db = vi.hoisted(() => ({
@@ -195,6 +195,7 @@ beforeEach(() => {
   github.loadPrState.mockReset().mockResolvedValue({ open: true, checkoutIds: ["dsp_old"] });
   github.loadPrCommits.mockReset().mockResolvedValue([]);
   github.githubHeadDescendsFrom.mockReset().mockResolvedValue(false);
+  github.githubBranchContains.mockReset().mockResolvedValue(false);
   db.dispatches.clear();
   db.events.length = 0;
   db.checks.length = 0;
@@ -707,8 +708,8 @@ describe("strict dispatch repository identity", () => {
 // TASK-3336: the PR's head commits, not the PR author, decide whether agent work
 // is in it. Today's human-opened PRs carried agent commits and passed unstamped.
 describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
-  const human = { authorName: "Taylor Alton", authorEmail: "taylor@petralabx.com", authorLogin: "taylorvalton", committerName: "GitHub", committerEmail: "noreply@github.com", committerLogin: "web-flow" };
-  const agentIdentity = { authorName: "PLX Agent", authorEmail: "uat@petrasoap.com", authorLogin: "", committerName: "PLX Agent", committerEmail: "uat@petrasoap.com", committerLogin: "" };
+  const human = { authorName: "Taylor Alton", authorEmail: "taylor@petralabx.com", authorLogin: "taylorvalton", committerName: "GitHub", committerEmail: "noreply@github.com", committerLogin: "web-flow", parents: ["p0"] };
+  const agentIdentity = { authorName: "PLX Agent", authorEmail: "uat@petrasoap.com", authorLogin: "", committerName: "PLX Agent", committerEmail: "uat@petrasoap.com", committerLogin: "", parents: ["p0"] };
   const commit = (sha: string, message: string, who: typeof human = agentIdentity) => ({ sha, message, ...who });
   const trailers = (checkoutId: string, agent = "claude/claude-uat", onBehalfOf = "cos@petrasoap.com") =>
     `TASK-900: change\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nAgent: ${agent}\nOn-Behalf-Of: ${onBehalfOf}\nMC-Checkout: ${checkoutId}`;
@@ -793,6 +794,97 @@ describe("verifyPr — agent commits and their trailers (TASK-3336)", () => {
       "TASK-900: commit 2222222: Agent claude/claude-cos does not match the checkout's agent claude/claude-uat",
       "TASK-900: commit 2222222: On-Behalf-Of vince@petrasoap.com does not match the checkout's accountable person (greg.m@petrasoap.com or cos@petrasoap.com)",
     ]));
+  });
+
+  // TASK-3931: a helper (plx-cip) refreshes an agent PR with a merge commit (base
+  // into the PR branch) stamped with the PR's own checkout. Its Agent names the
+  // helper, so the strict match blocked PLX_MC #407 for good. A helper runtime's
+  // merge commit whose second parent is on the base branch warns instead; GitHub
+  // proves the parent, and anything short of that proof blocks and says why.
+  describe("refresh merge of the base branch (TASK-3931)", () => {
+    const cip = { authorName: "plx-cip", authorEmail: "plx-cip@users.noreply.github.com", authorLogin: "", committerName: "plx-cip", committerEmail: "plx-cip@users.noreply.github.com", committerLogin: "", parents: ["p0", "p1"] };
+    const refresh = (cid: string, agent = "plx-cip/merge-queue") => `merge: refresh TASK-900 on main\n\nAgent: ${agent}\nOn-Behalf-Of: cos@petrasoap.com\nMC-Checkout: ${cid}`;
+    const mismatchOn = (sha: string) => `TASK-900: commit ${sha}: Agent plx-cip/merge-queue does not match the checkout's agent claude-code/claude-code`;
+    const prOnMain = (cid: string) => github.loadPrState.mockResolvedValue({ open: true, checkoutIds: [cid], baseBranch: "main" });
+    const parentOnBase = () =>
+      github.githubBranchContains.mockImplementation(async (_repo: string, branch: string, sha: string) => branch === "main" && sha === "p1");
+
+    it("passes with a warning when the merge's Agent is not the checkout's agent", async () => {
+      const cid = await stamped("claude-code/claude-code", "claude-code");
+      prOnMain(cid);
+      parentOnBase();
+      github.loadPrCommits.mockResolvedValue([commit("5555555e", trailers(cid, "claude-code/claude-code")), commit("9999999c", refresh(cid), cip)]);
+      const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+      expect(r.verdict).toBe("pass");
+      expect(r.reasons).toContain(`${mismatchOn("9999999")}; a refresh merge of the base branch is not compared (TASK-3931)`.replace("TASK-900: ", "TASK-900: warning: "));
+      expect(r.reasons.join(" ")).not.toContain("commit 5555555");
+      expect(github.loadPrState).toHaveBeenCalledExactlyOnceWith("petralabx/PLX_MC", 2621);
+      expect(github.githubBranchContains).toHaveBeenCalledExactlyOnceWith("petralabx/PLX_MC", "main", "p1");
+    });
+
+    it("passes the same way on a checkout that recorded only its runtime, whatever the helper's Agent spelling", async () => {
+      const cid = await stamped(undefined, "claude-code");
+      prOnMain(cid);
+      parentOnBase();
+      github.loadPrCommits.mockResolvedValue([commit("9999999c", refresh(cid, "cip/ci-queue"), cip)]);
+      const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+      expect(r.verdict).toBe("pass");
+      expect(r.reasons.join(" ")).toContain("Agent cip/ci-queue does not match the checkout's runtime claude-code; a refresh merge of the base branch is not compared");
+    });
+
+    it("never asks GitHub when the merge's Agent matches", async () => {
+      const cid = await stamped("claude-code/claude-code", "claude-code");
+      github.loadPrCommits.mockResolvedValue([commit("9999999c", trailers(cid, "claude-code/claude-code"), cip)]);
+      const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+      expect(r.verdict).toBe("pass");
+      expect(r.reasons.join(" ")).not.toContain("warning: commit");
+      expect(github.loadPrState).not.toHaveBeenCalled();
+      expect(github.githubBranchContains).not.toHaveBeenCalled();
+    });
+
+    it("still blocks a one-parent commit, without asking GitHub", async () => {
+      const cid = await stamped("claude-code/claude-code", "claude-code");
+      github.loadPrCommits.mockResolvedValue([commit("9999999c", refresh(cid), { ...cip, parents: ["p0"] })]);
+      const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+      expect(r.verdict).toBe("block");
+      expect(r.reasons).toContain(mismatchOn("9999999"));
+      expect(github.githubBranchContains).not.toHaveBeenCalled();
+    });
+
+    it("still blocks a merge by a non-helper Agent, without asking GitHub", async () => {
+      const cid = await stamped("claude-code/claude-code", "claude-code");
+      github.loadPrCommits.mockResolvedValue([commit("8888888d", trailers(cid, "codex/cloud"), cip)]);
+      const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+      expect(r.verdict).toBe("block");
+      expect(r.reasons).toContain("TASK-900: commit 8888888: Agent codex/cloud does not match the checkout's agent claude-code/claude-code (not a refresh merge: Agent runtime codex is not a helper)");
+      expect(github.loadPrState).not.toHaveBeenCalled();
+    });
+
+    it("still blocks a merge whose second parent is not on the base branch, and says so", async () => {
+      const cid = await stamped("claude-code/claude-code", "claude-code");
+      prOnMain(cid);
+      github.loadPrCommits.mockResolvedValue([commit("9999999c", refresh(cid), cip)]);
+      const r = await verifyPr({ ...pr, checkoutIds: [cid] });
+      expect(r.verdict).toBe("block");
+      expect(r.reasons).toContain(`${mismatchOn("9999999")} (not a refresh merge: second parent p1 is not on main)`);
+      expect(github.githubBranchContains).toHaveBeenCalledExactlyOnceWith("petralabx/PLX_MC", "main", "p1");
+    });
+
+    it("blocks when the base branch is unknown or GitHub cannot prove the parent", async () => {
+      const cid = await stamped("claude-code/claude-code", "claude-code");
+      github.loadPrCommits.mockResolvedValue([commit("9999999c", refresh(cid), cip)]);
+      github.loadPrState.mockResolvedValue({ open: true, checkoutIds: [cid], baseBranch: "" });
+      let r = await verifyPr({ ...pr, checkoutIds: [cid] });
+      expect(r.verdict).toBe("block");
+      expect(r.reasons).toContain(`${mismatchOn("9999999")} (not a refresh merge: base branch unknown)`);
+      expect(github.githubBranchContains).not.toHaveBeenCalled();
+
+      prOnMain(cid);
+      github.githubBranchContains.mockRejectedValue(new Error("compare failed"));
+      r = await verifyPr({ ...pr, checkoutIds: [cid] });
+      expect(r.verdict).toBe("block");
+      expect(r.reasons).toContain(`${mismatchOn("9999999")} (not a refresh merge: GitHub could not prove the second parent)`);
+    });
   });
 
   // TASK-3483 (Vince, 2026-10-20): a checkout minted through a shared service key
@@ -1211,7 +1303,7 @@ describe("checkout lease chain (TASK-3410)", () => {
   const other = { kind: "service" as const, id: "sp_mcp_claude_code", status: "active" as const };
   const sha = (c: string) => c.repeat(40);
   const base = sha("0");
-  const agentIdentity = { authorName: "PLX Agent", authorEmail: "uat@petrasoap.com", authorLogin: "", committerName: "PLX Agent", committerEmail: "uat@petrasoap.com", committerLogin: "" };
+  const agentIdentity = { authorName: "PLX Agent", authorEmail: "uat@petrasoap.com", authorLogin: "", committerName: "PLX Agent", committerEmail: "uat@petrasoap.com", committerLogin: "", parents: ["p0"] };
   const lane = "claude-code/coding-1-l1";
   const commit = (s: string, message: string) => ({ sha: s, message, ...agentIdentity });
   const trailers = (cid: string, agent: string) =>

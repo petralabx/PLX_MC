@@ -79,6 +79,11 @@ function formFrom(detail: DraftDetail): FormState {
   };
 }
 
+/** The rows the person filled in, tidied, each with its number in the form: a problem names the row they see. */
+function filledRows<T>(rows: T[], tidyRow: (row: T) => T, isFilled: (row: T) => boolean): { row: T; n: number }[] {
+  return rows.map((row, i) => ({ row: tidyRow(row), n: i + 1 })).filter(({ row }) => isFilled(row));
+}
+
 /** The request body for a save, or what the person must fix first. Exported for tests. */
 export function prepare(form: FormState): { body: Record<string, unknown>; problems: string[] } {
   const problems: string[] = [];
@@ -86,42 +91,45 @@ export function prepare(form: FormState): { body: Record<string, unknown>; probl
   const title = content.title.trim();
   if (!title) problems.push("Give the draft a title.");
   if (content.plan.project.existing === "") problems.push("Choose the existing project, or plan a new one.");
-  const approaches = content.research.approaches
-    .map((a) => ({ ...a, name: a.name.trim(), pros: tidy(a.pros), cons: tidy(a.cons) }))
-    .filter((a) => a.name || a.pros.length > 0 || a.cons.length > 0);
-  approaches.forEach((a, i) => {
-    if (!a.name) problems.push(`Approach ${i + 1} needs a name.`);
+  const approaches = filledRows(
+    content.research.approaches,
+    (a) => ({ ...a, name: a.name.trim(), pros: tidy(a.pros), cons: tidy(a.cons) }),
+    (a) => Boolean(a.name) || a.pros.length > 0 || a.cons.length > 0
+  );
+  approaches.forEach(({ row, n }) => {
+    if (!row.name) problems.push(`Approach ${n} needs a name.`);
   });
-  const findings = content.research.findings.map((f) => ({ ...f, text: f.text.trim() })).filter((f) => f.text || f.sources.length > 0);
-  findings.forEach((f, i) => {
-    if (!f.text) problems.push(`Finding ${i + 1} needs its text.`);
+  const findings = filledRows(content.research.findings, (f) => ({ ...f, text: f.text.trim() }), (f) => Boolean(f.text) || f.sources.length > 0);
+  findings.forEach(({ row, n }) => {
+    if (!row.text) problems.push(`Finding ${n} needs its text.`);
   });
-  const risks = content.research.risks
-    .map((r) => ({ ...r, text: r.text.trim(), mitigation: r.mitigation.trim() }))
-    .filter((r) => r.text || r.mitigation);
-  risks.forEach((r, i) => {
-    if (!r.text) problems.push(`Risk ${i + 1} needs its text.`);
+  const risks = filledRows(content.research.risks, (r) => ({ ...r, text: r.text.trim(), mitigation: r.mitigation.trim() }), (r) => Boolean(r.text || r.mitigation));
+  risks.forEach(({ row, n }) => {
+    if (!row.text) problems.push(`Risk ${n} needs its text.`);
   });
   // An artifact is a link or inline content, never both (schema artifactSchema).
-  const artifacts = content.research.artifacts
-    .map((a) => ({ ...a, name: a.name.trim(), url: a.url === null ? null : a.url.trim(), inline: a.inline }))
-    .filter((a) => a.name || (a.url ?? "") !== "" || (a.inline ?? "").trim() !== "");
-  artifacts.forEach((a, i) => {
-    if (!a.name) problems.push(`Artifact ${i + 1} needs a name.`);
-    if (a.url !== null && !a.url) problems.push(`Artifact ${i + 1} needs its link.`);
-    if (a.inline !== null && !a.inline.trim()) problems.push(`Artifact ${i + 1} needs its content.`);
+  const artifacts = filledRows(
+    content.research.artifacts,
+    (a) => ({ ...a, name: a.name.trim(), url: a.url === null ? null : a.url.trim() }),
+    (a) => Boolean(a.name) || (a.url ?? "") !== "" || (a.inline ?? "").trim() !== ""
+  );
+  artifacts.forEach(({ row, n }) => {
+    if (!row.name) problems.push(`Artifact ${n} needs a name.`);
+    if (row.url !== null && !row.url) problems.push(`Artifact ${n} needs its link.`);
+    if (row.inline !== null && !row.inline.trim()) problems.push(`Artifact ${n} needs its content.`);
   });
+  const rows = <T,>(kept: { row: T }[]) => kept.map(({ row }) => row);
   const plan: DraftPlan = {
     ...content.plan,
     tasks: content.plan.tasks.map((t) => ({ ...t, dependsOn: tidy(t.dependsOn) })),
   };
   const research: DraftResearch = {
     ...content.research,
-    approaches,
-    findings,
-    risks,
+    approaches: rows(approaches),
+    findings: rows(findings),
+    risks: rows(risks),
     openQuestions: tidy(content.research.openQuestions),
-    artifacts,
+    artifacts: rows(artifacts),
   };
   return {
     body: { title, plan, research, visibility: form.visibility, members: splitList(form.members), reviewers: splitList(form.reviewers) },
@@ -267,6 +275,9 @@ function DependsOn({ task, tasks, onChange }: { task: DraftPlanTask; tasks: Draf
   const isOther = (dep: string) => others.some((x) => x.key === dep.trim());
   const picked = task.dependsOn.filter(isOther).map((d) => d.trim());
   const typed = task.dependsOn.filter((d) => !isOther(d));
+  // While the field has focus it keeps its text as typed, over the boxes ticked
+  // before: typing T10 must not turn its T1 prefix into a ticked box on the way.
+  const [editing, setEditing] = useState<{ text: string; picked: string[] } | null>(null);
   return (
     <>
       <fieldset className="dr-edit-chips wide">
@@ -284,7 +295,16 @@ function DependsOn({ task, tasks, onChange }: { task: DraftPlanTask; tasks: Draf
         ))}
       </fieldset>
       <Field label={`${task.key} also depends on existing tasks (TASK ids, separated by commas)`} wide>
-        <input value={typed.join(",")} onChange={(e) => onChange([...picked, ...e.target.value.split(",")])} />
+        <input
+          value={editing ? editing.text : typed.join(",")}
+          onFocus={() => setEditing({ text: typed.join(","), picked })}
+          onChange={(e) => {
+            const base = editing?.picked ?? picked;
+            setEditing({ text: e.target.value, picked: base });
+            onChange([...base, ...e.target.value.split(",")]);
+          }}
+          onBlur={() => setEditing(null)}
+        />
       </Field>
     </>
   );

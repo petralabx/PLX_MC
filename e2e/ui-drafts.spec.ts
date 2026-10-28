@@ -570,6 +570,20 @@ test.describe("Drafts screen (Draft Projects)", () => {
     expect(mock.submits).toEqual([{ base: EDIT_BASE }]);
   });
 
+  test("a dependency typed key by key stays as typed, even past a shorter task key", async ({ page }) => {
+    const mock = await mockDraftsApi(page);
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    const typed = page.getByLabel("T2 also depends on existing tasks (TASK ids, separated by commas)");
+    await page.getByRole("group", { name: "T2 depends on" }).getByLabel(/T1/).uncheck();
+    // T10 passes through T1, a key the plan holds, on the way.
+    await typed.pressSequentially("T10");
+    await expect(typed).toHaveValue("T10");
+    await expect(page.getByRole("group", { name: "T2 depends on" }).getByLabel(/T1/)).not.toBeChecked();
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    expect(mock.saves[0]).toMatchObject({ plan: { tasks: [{ key: "T1" }, { key: "T2", dependsOn: ["T10"] }] } });
+  });
+
   test("a frozen version, the current one too, offers no Submit: it would send the working copy", async ({ page }) => {
     await mockDraftsApi(page, { canSubmit: true, unsubmittedEdits: true }, { status: "drafting" });
     await openDrafts(page, "&draftId=DRF-7&version=2");

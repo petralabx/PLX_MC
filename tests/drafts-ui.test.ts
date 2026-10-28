@@ -153,6 +153,25 @@ describe("the New draft form's save", () => {
     expect((body.plan as DraftPlan).tasks[0].dependsOn).toEqual(["T2", "TASK-12"]);
   });
 
+  it("names a half-filled row by its place in the form, past rows left empty", () => {
+    const empty = { likelihood: "low", impact: "low" } as const;
+    const { problems } = prepare(
+      form((c) => {
+        c.research.approaches = [
+          { name: "", pros: [], cons: [], risk: "medium", effort: "M", chosen: false },
+          { name: "", pros: ["Fast"], cons: [], risk: "medium", effort: "M", chosen: false },
+        ];
+        c.research.findings = [{ text: "", sources: [] }, { text: "", sources: ["[1]"] }];
+        c.research.risks = [{ ...empty, text: "", mitigation: "" }, { ...empty, text: "", mitigation: "Retry the import." }];
+        c.research.artifacts = [
+          { kind: "web-page", name: "", url: "", inline: null },
+          { kind: "web-page", name: "", url: "https://example.com/a", inline: null },
+        ];
+      })
+    );
+    expect(problems).toEqual(["Approach 2 needs a name.", "Finding 2 needs its text.", "Risk 2 needs its text.", "Artifact 2 needs a name."]);
+  });
+
   it("names a half-filled row instead of sending it", () => {
     const { problems } = prepare(
       form((c) => {

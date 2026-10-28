@@ -5,8 +5,8 @@
 // new records. An older version is read-only, and a closed draft offers no
 // finding actions. Approvals lists the drafts waiting for the viewer's review.
 // The New draft form (TASK-4109) creates a draft, saves from the edit base it
-// read and keeps what it does not show; submit and withdraw are the author's. Axe and horizontal overflow run at
-// desktop, tablet and phone widths.
+// read and keeps what it does not show; submit and withdraw are the author's, and the form locks while either
+// runs. Axe and horizontal overflow run at desktop, tablet and phone widths.
 
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
@@ -190,6 +190,10 @@ interface MockOptions {
   otherWriterAfterSave?: boolean;
   /** Create takes a while, so the form can be seen locked meanwhile. */
   slowCreate?: boolean;
+  /** The first save's read-back takes a second and the second save two: the read-back lands while that save is on its way. */
+  slowSecondSave?: boolean;
+  /** Submit takes a while, so the form can be seen locked meanwhile. */
+  slowSubmit?: boolean;
 }
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -201,8 +205,9 @@ async function mockDraftsApi(
   options: MockOptions = {}
 ): Promise<Mock> {
   const mock: Mock = { accepts: [], order: [], creates: [], saves: [], submits: [], withdraws: [] };
-  // A save moves the edit base, as the server's does.
+  // A save moves the edit base and the title it sent, as the server's does.
   let editBase = EDIT_BASE;
+  let title = WORKING.title;
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
     if (path === "/api/state" || path.endsWith("/accept")) mock.order.push(`${request.method()} ${path}`);
@@ -226,11 +231,14 @@ async function mockDraftsApi(
         const error = { code: "draft_changed", message: "DRF-7 changed since you opened it. Copy your edits, reload it, and edit again." };
         return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error }) });
       }
+      if (options.slowSecondSave && mock.saves.length === 2) await pause(2_000);
       editBase = EDIT_BASE_2;
+      title = String(mock.saves.at(-1)?.title ?? title);
       return route.fulfill(json({ draft: ROW, changed: true, editBase }));
     }
     if (request.method() === "POST" && url.pathname.endsWith("/submit")) {
       mock.submits.push(request.postDataJSON());
+      if (options.slowSubmit) await pause(1_500);
       return route.fulfill(json({ draft: ROW, frozen: true, duplicates: 0 }));
     }
     if (request.method() === "POST" && url.pathname.endsWith("/withdraw")) {
@@ -243,6 +251,8 @@ async function mockDraftsApi(
     }
     if (request.method() !== "GET") return route.fulfill({ status: 405, body: "Method Not Allowed" });
     if (/\/api\/drafts\/DRF-7$/.test(url.pathname)) {
+      const working = { ...WORKING, title };
+      if (options.slowSecondSave && mock.saves.length === 1) await pause(1_000);
       if (options.otherWriterAfterSave && mock.saves.length > 0) {
         await pause(1_500);
         editBase = EDIT_BASE_OTHER;
@@ -253,7 +263,7 @@ async function mockDraftsApi(
       }
       const frozen = { "1": VERSION_1, "2": VERSION_2 }[url.searchParams.get("version") ?? ""] ?? null;
       return route.fulfill(
-        json({ ...detail({ editBase, ...viewer }, draftFields), ...(frozen ? { version: frozen } : {}), completeness: options.completeness ?? [] })
+        json({ ...detail({ editBase, ...viewer }, { working, ...draftFields }), ...(frozen ? { version: frozen } : {}), completeness: options.completeness ?? [] })
       );
     }
     if (/\/api\/drafts\/DRF-8$/.test(url.pathname)) {
@@ -438,6 +448,22 @@ test.describe("Drafts screen (Draft Projects)", () => {
     expect(mock.saves[1]).toMatchObject({ base: EDIT_BASE_2, title: "Typed while the read-back was on its way" });
   });
 
+  test("a save's read-back that lands during the next save does not undo it", async ({ page }) => {
+    const mock = await mockDraftsApi(page, {}, {}, { slowSecondSave: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    const title = page.getByLabel("Title", { exact: true });
+    await title.fill("First save");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(page.getByText("Saved.")).toBeVisible();
+    await title.fill("Second save");
+    const secondSave = page.waitForResponse((r) => r.request().method() === "PATCH");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await secondSave;
+    expect(mock.saves.map((s) => s.title)).toEqual(["First save", "Second save"]);
+    await expect(page.getByText("Saved.")).toBeVisible();
+    await expect(title).toHaveValue("Second save");
+  });
+
   test("the form is locked while Create runs", async ({ page }) => {
     const mock = await mockDraftsApi(page, {}, {}, { slowCreate: true });
     await openDrafts(page, "&draftId=new");
@@ -500,6 +526,19 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await openDrafts(page, "&draftId=DRF-7");
     await page.getByRole("region", { name: "Your draft" }).getByRole("button", { name: "Submit for review" }).click();
     await expect.poll(() => mock.submits).toEqual([{ base: EDIT_BASE }]);
+  });
+
+  test("the form is locked while Submit runs, so no edit is lost when it opens the draft", async ({ page }) => {
+    const mock = await mockDraftsApi(page, { canSubmit: true }, { status: "drafting" }, { slowSubmit: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    const footer = page.getByRole("region", { name: "Save" });
+    await footer.getByRole("button", { name: "Submit for review" }).click();
+    await expect(page.getByLabel("Title", { exact: true })).toBeDisabled();
+    // Done or Back would open the record before Submit lands, and it would keep showing the draft as it was.
+    await expect(footer.getByRole("button", { name: "Done" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "← Back to DRF-7" })).toBeDisabled();
+    await expect(page).toHaveURL(/draftId=DRF-7$/);
+    expect(mock.submits).toEqual([{ base: EDIT_BASE }]);
   });
 
   test("a frozen version, the current one too, offers no Submit: it would send the working copy", async ({ page }) => {

@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api/route";
 import { verifyMcpRequest, type McpIdentity } from "./auth";
 import { buildMeta, wrapMcpResponse, type McpResponseMeta } from "./envelope";
 import { recordMcpToolCall } from "./audit";
+import { auditErrorText } from "./audit-error";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 
 type RouteContext = { params: Promise<Record<string, string>> };
@@ -68,7 +69,7 @@ export function cursorRoute(toolName: string, handler: CursorHandler) {
           requestId: requestId || buildMeta(identity).requestId,
           ok: false,
           durationMs: Date.now() - started,
-          error: err instanceof ApiError ? err.message : "internal",
+          error: auditErrorText(toolName, err),
         }).catch(() => {});
       }
       if (err instanceof ApiError) {

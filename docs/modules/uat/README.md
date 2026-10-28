@@ -34,7 +34,8 @@ rollups count a fix as done only when the person who filed it confirmed it.
   `uat:hold` (an open question, mirrored by the portal) and `needs-vince`.
   `uat:<id>` is one segment, so `uat:cause:*` never reads as a ticket.
 - **Completion** needs `prUrl` unless the outcome is `blocked` or `failed`
-  (`src/lib/mcp/actions.ts`).
+  (`src/lib/mcp/actions.ts`). The check applies only while the task sits in
+  `BKT-UAT`; a ticket task moved to another bucket is not held to it.
 
 ### Stages
 
@@ -67,8 +68,10 @@ blocked flag, no human owner) (`src/components/mc/project-overview.helpers.ts`).
 ### UAT tickets view and drift check
 
 - **View:** a block on the `BKT-UAT` bucket page (`src/components/mc/uat-tickets.tsx`,
-  `GET /api/uat-tickets`). One row per ticket task, with lease, PR, holder and age.
-- **Drift check:** `src/lib/compliance/uat-tickets.ts` `findUatDrift` finds five
+  `GET /api/uat-tickets`). One row per ticket task filed in `BKT-UAT`, with lease, PR,
+  holder and age. The table lists that bucket only, while the check below counts any
+  bucket, so a moved task can appear in a finding with no row.
+- **Drift check:** `src/lib/tasks/uat-tickets.ts` `findUatDrift` finds five
   cases. It counts a ticket's task in any bucket, not only `BKT-UAT` (TASK-3973). A daily cron (`/api/cron/uat-drift`, 10:00 UTC) records one
   `uat.drift.checked` event and fixes nothing.
 - **Portal read:** the view and three of the five drift cases need the portal's

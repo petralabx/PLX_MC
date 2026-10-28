@@ -252,9 +252,18 @@ describe("PR held elsewhere only as an open row", () => {
 });
 
 describe("grant", () => {
-  it("only sp_mcp_cursor, sp_mcp_ledger and sp_mcp_cos hold task.link_merged_pr (TASK-3671)", async () => {
+  it("only sp_mcp_cursor, sp_mcp_ledger, sp_mcp_cos and the TASK-4015 close-out principals hold task.link_merged_pr", async () => {
     const { MCP_AGENT_SERVICE_PRINCIPAL_IDS, capabilitiesForServicePrincipal } = await import("@/lib/permissions");
     const holders = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => capabilitiesForServicePrincipal(id).includes("task.link_merged_pr"));
-    expect([...holders].sort()).toEqual(["sp_mcp_cos", "sp_mcp_cursor", "sp_mcp_ledger"]);
+    expect([...holders].sort()).toEqual([
+      "sp_mcp_aws_gh",
+      "sp_mcp_cip",
+      "sp_mcp_cos",
+      "sp_mcp_cursor",
+      "sp_mcp_cursor_team",
+      "sp_mcp_ledger",
+      "sp_mcp_plx_cos",
+      "sp_mcp_steward",
+    ]);
   });
 });

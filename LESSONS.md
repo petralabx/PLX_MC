@@ -16,6 +16,12 @@
 
 ## Lessons
 
+### 2026-10-27 (UTC) — TASK-4059: a helper's merge commit reused the PR's checkout, and the gate blocked an approved PR
+
+- **What happened:** On PLX_MC #489, CIP merged `main` into the Claude Code branch to resolve a migration-manifest conflict (84efa7a). The merge commit ended with `Agent: grok-bot/cip` and the branch's own `MC-Checkout: dsp_mvqjqvpj6vxw96`. `compliance` then blocked with `Agent grok-bot/cip does not match the checkout's runtime claude-code`, after the merge approval for that head was signed. Vince allowed one exception: the same merge, with an identical tree and re-stamped by the branch's agent, replaced it with a `--force-with-lease` push. The new head then needed another signed approval.
+- **Root cause:** `checkoutTrailerCheck` (`src/lib/compliance/service.ts`) matches each commit to the checkout its `MC-Checkout` trailer names, and requires that commit's `Agent` to match the checkout's runtime or recorded agent. The gate reads every commit in the PR, so a later commit cannot clear a bad one.
+- **Rule going forward:** Before you push to someone else's PR, take your own checkout on its task, stamp your commits with that checkout only, and add its `MC-Checkout` line to the PR body. Never stamp a commit with another runtime's checkout. On a migration PR, a merge of `main` moves the head, so it also needs a new signed approval: merge `main` only when the PR conflicts.
+
 ### 2026-10-26 (UTC) — TASK-3955, TASK-3996: one commit stamped two checkouts, and the gate blocked the PR for good
 
 - **What happened:** PLX_MC #466 carried two tasks. Its second commit ended with two `MC-Checkout` trailers, one per task. `compliance` blocked with `commit ad01cea: more than one MC-Checkout trailer`, and no later commit could clear it. The PR was re-cut on a new branch, because the rules forbid a force-push.

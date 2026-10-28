@@ -189,6 +189,43 @@ closed and never falls back to the shared Cursor key.
    `GET /api/cursor/tasks?limit=1` with the portal key). Require
    `meta.actor.servicePrincipalId` to equal `sp_mcp_portal` before revoking
    the old value.
+5. Update every lane copy secret in the same change window. A lane copy
+   holds one principal's key for a coding box and is not refreshed by the
+   sync script. Known copies:
+   - `plx/prod/mc/lane-claude-code-key/v1` = copy of `sp_mcp_claude_code`
+   - `plx/prod/mc/lane-ledger-key/v1` = copy of `sp_mcp_ledger`
+
+   Do not trust this list. Enumerate the current copies by name only:
+
+   ```bash
+   aws secretsmanager list-secrets --region us-east-1 \
+     --query "SecretList[?starts_with(Name,'plx/prod/mc/lane-')].Name" --output text
+   ```
+
+   Every `plx/prod/mc/lane-<suffix>-key/v1` maps to `sp_mcp_<suffix>`
+   (hyphens become underscores). Keep each copy's existing shape
+   (`MC_MCP_API_KEY`, `api_key`, or a raw string). The 2026-10-27 rotation
+   missed `lane-claude-code-key`, and the coding-1 lanes got 401 (TASK-4013).
+6. Verify each lane copy matches the registry by hash, never by value. Read
+   both secrets inside one process, compare SHA-256 digests, and print only
+   the secret name, the principal and `match`/`MISMATCH` (optionally an
+   8-character digest prefix). Never echo, log or diff the values. Any
+   `MISMATCH` stops the rotation before step 8.
+7. Restart the coding-1 lanes (via Infra over SSM). Lanes read
+   `MC_MCP_API_KEY` once at launch, so a running lane keeps the old key and
+   gets 401 after revocation until it re-reads the secret. Confirm each lane
+   reports its principal through `mc_self_check` after restart.
+8. Reinstall every client right after the sync. The sync replaces the
+   whole `PLX_MC_MCP_AGENT_KEYS` list at once, so old keys are revoked
+   immediately; there is no overlap window. Have the team connector,
+   per-bot key cards and lane restarts ready before running step 2, and
+   expect every client on a rotated principal to fail until reinstalled.
+
+**Known stale mirror:** `prod/ec2-secrets` still carries a
+`PLX_MC_MCP_AGENT_KEYS` field. It is not updated by the sync script and is
+stale; the source of truth is `plx/prod/mc/mcp-agent-keys/v1`. Do not read
+keys from that mirror, and do not treat a mismatch there as a rotation
+failure. Retire it or resync it as a separate, approved change.
 
 The shared-key procedure remains compatibility-only: update
 `PLX_MC_MCP_API_KEY` in `prod/ec2-secrets` and Vercel Production, redeploy,

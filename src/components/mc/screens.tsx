@@ -7,6 +7,7 @@ import { AgentFeed } from "./agent-feed";
 import { BucketDetail } from "./bucket-detail";
 import { CiScorecardView } from "./ci-scorecard";
 import { DashboardView } from "./dashboard";
+import { DraftsView } from "./drafts";
 import { ProjectDetail } from "./project-detail";
 import { FilesView } from "./files-view";
 import { GoalsView } from "./goals";
@@ -58,6 +59,7 @@ export const SCREENS: Record<Screen, ComponentType<ScreenProps>> = {
   "ci-scorecard": CiScorecardView,
   "routing-inbox": RoutingInboxView,
   approvals: ApprovalsInboxView,
+  drafts: DraftsView,
   activity: ActivityView,
   goals: GoalsView,
   help: HelpView,

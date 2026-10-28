@@ -32,6 +32,11 @@ const MEMBER_CAPABILITIES: readonly Capability[] = [
   "skill.install",
   // TASK-3567: the route also requires the session to be the question's addressee.
   "question.answer",
+  // TASK-4059 (Vince, 2026-10-27): members propose projects as drafts and
+  // accept their own. draft.accept also requires the session to be the author.
+  "draft.create",
+  "draft.review",
+  "draft.accept",
 ];
 
 const ADMIN_CAPABILITIES: readonly Capability[] = [
@@ -90,6 +95,9 @@ const MCP_AGENT_CAPABILITIES: readonly Capability[] = [
   "question.ask",
   "telemetry.report",
   "sync.mutate",
+  // TASK-4059: agents write and review drafts for their person. Never draft.accept.
+  "draft.create",
+  "draft.review",
 ];
 
 // sp_mcp_cursor is the principal Ledger's Task calls authenticate as (no
@@ -168,11 +176,40 @@ const CIP_AUTO_UNDRAFT_MCP_CAPABILITIES: readonly Capability[] = ["task.read"];
 // or launch (CREATOR_APPROVAL_GATED_PRINCIPALS below, TASK-3530).
 const WORKBENCH_INTAKE_MCP_CAPABILITIES: readonly Capability[] = ["task.read", "task.create"];
 
+// TASK-4015 per-consumer principals (Vince 2026-10-27 4:22 and 4:30 AM ET).
+// Each replaces a consumer of the shared sp_mcp_cursor key. Every one carries
+// the agent bundle; these add exactly what that consumer does today:
+// - sp_mcp_cursor_team (interim team Cursor connectors) and sp_mcp_steward keep
+//   sp_mcp_cursor parity: task.cancel, task.reopen, task.link_merged_pr.
+// - sp_mcp_cip, sp_mcp_aws_gh and sp_mcp_plx_cos close out merged PRs:
+//   task.link_merged_pr.
+// Every other TASK-4015 principal (sp_mcp_infra_bot, the other bots and the
+// nine sp_mcp_lane_* principals) gets MCP_AGENT_CAPABILITIES only.
+const CURSOR_PARITY_MCP_CAPABILITIES: readonly Capability[] = [
+  ...MCP_AGENT_CAPABILITIES,
+  "task.cancel",
+  "task.reopen",
+  "task.link_merged_pr",
+];
+const CLOSE_OUT_MCP_CAPABILITIES: readonly Capability[] = [
+  ...MCP_AGENT_CAPABILITIES,
+  "task.link_merged_pr",
+];
+const PER_CONSUMER_MCP_GRANTS: Readonly<Record<string, readonly Capability[]>> = {
+  sp_mcp_cursor_team: CURSOR_PARITY_MCP_CAPABILITIES,
+  sp_mcp_steward: CURSOR_PARITY_MCP_CAPABILITIES,
+  sp_mcp_cip: CLOSE_OUT_MCP_CAPABILITIES,
+  sp_mcp_aws_gh: CLOSE_OUT_MCP_CAPABILITIES,
+  sp_mcp_plx_cos: CLOSE_OUT_MCP_CAPABILITIES,
+};
+
 const SERVICE_GRANTS: Record<string, readonly Capability[]> = {
   ...Object.fromEntries(
     MCP_AGENT_SERVICE_PRINCIPAL_IDS.map((id) => [
       id,
-      id === PORTAL_MCP_SERVICE_PRINCIPAL_ID
+      Object.prototype.hasOwnProperty.call(PER_CONSUMER_MCP_GRANTS, id)
+        ? PER_CONSUMER_MCP_GRANTS[id]
+        : id === PORTAL_MCP_SERVICE_PRINCIPAL_ID
         ? PORTAL_MCP_CAPABILITIES
         : id === LEDGER_MCP_SERVICE_PRINCIPAL_ID
           ? LEDGER_MCP_CAPABILITIES

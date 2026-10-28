@@ -27,7 +27,7 @@ export type NavIconName =
   | "House" | "LayoutDashboard" | "CircleUser" | "SquareCheck" | "SquareKanban" | "List" | "CalendarRange" | "ChartPie"
   | "BookOpen" | "ClipboardList" | "Wrench" | "Network" | "CircleHelp" | "GitBranch" | "Activity"
   | "File" | "RefreshCw" | "FileText" | "CircleDollarSign" | "Grid3x3" | "Radio" | "Inbox" | "Route"
-  | "Target" | "Ellipsis" | "Settings" | "FolderKanban" | "Search" | "Gauge" | "Layers";
+  | "Target" | "Ellipsis" | "Settings" | "FolderKanban" | "Search" | "Gauge" | "Layers" | "FilePen";
 
 export interface NavItem {
   screen: Screen;
@@ -89,6 +89,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { screen: "list", label: "List", icon: "≣", lucide: "List" },
       { screen: "timeline", label: "Timeline", icon: "▭", lucide: "CalendarRange" },
       { screen: "insights", label: "Insights", icon: "◔", lucide: "ChartPie" },
+      { screen: "drafts", label: "Drafts", icon: "✎", lucide: "FilePen", hint: "plans to review before they go live" },
     ],
     lists: ["projects", "initiatives"],
   },
@@ -200,7 +201,7 @@ export const ZONED_NAV_GROUPS: readonly NavGroup[] = [
   {
     id: "plan",
     label: "Plan",
-    items: [ALL_WORK_NAV_ITEM, PROJECTS_NAV_ITEM],
+    items: [ALL_WORK_NAV_ITEM, PROJECTS_NAV_ITEM, navItem("drafts")],
     lists: ["project-tree"],
   },
   {

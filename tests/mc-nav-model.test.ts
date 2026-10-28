@@ -75,7 +75,7 @@ describe("nav model — grouped by task", () => {
   });
 
   it("plans with the four views plus the live project and initiative lists", () => {
-    expect(screensOf(OFF, "plan")).toEqual(["board", "list", "timeline", "insights"]);
+    expect(screensOf(OFF, "plan")).toEqual(["board", "list", "timeline", "insights", "drafts"]);
     expect(NAV_GROUPS.find((g) => g.id === "plan")!.lists).toEqual(["projects", "initiatives"]);
   });
 
@@ -169,7 +169,7 @@ describe("zoned sidebar model", () => {
     expect(ZONED_NAV_GROUPS.map((g) => g.label)).toEqual(["My work", "Plan", "Reporting", "Knowledge"]);
     expect(zonedScreensOf(OFF, "my-work")).toEqual(["home", "mine", "approvals"]);
     // Board, List and Timeline share the All work row (TASK-3843).
-    expect(zonedScreensOf(OFF, "plan")).toEqual(["board", "projects"]);
+    expect(zonedScreensOf(OFF, "plan")).toEqual(["board", "projects", "drafts"]);
     expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.items[0]).toBe(ALL_WORK_NAV_ITEM);
     expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.lists).toEqual(["project-tree"]);
     expect(zonedScreensOf(OFF, "reporting")).toEqual(["dashboard", "insights", "goals", "ai-spend", "ci-scorecard"]);
@@ -235,7 +235,7 @@ describe("zoned sidebar model", () => {
   });
 
   it("leaves the classic phone tabs and the palette on the classic groups", () => {
-    expect(tabScreens("plan", OFF).map((i) => i.screen)).toEqual(["board", "list", "timeline", "insights"]);
+    expect(tabScreens("plan", OFF).map((i) => i.screen)).toEqual(["board", "list", "timeline", "insights", "drafts"]);
     expect(tabOf("dashboard")).toBe("my-work");
     expect(navCommands(OFF).map((c) => c.label)).toContain("Go to SharePoint sync issues");
   });
@@ -257,9 +257,9 @@ describe("zoned phone tabs", () => {
     for (const screen of SCREEN_VALUES) (byTab[zonedTabOf(screen)] ??= []).push(screen);
     expect(byTab.home).toEqual(["home", "approvals"]);
     expect(byTab.mine).toEqual(["mine"]);
-    expect([...byTab.projects].sort()).toEqual(["board", "bucket", "list", "project", "projects", "task", "timeline"]);
+    expect([...byTab.projects].sort()).toEqual(["board", "bucket", "drafts", "list", "project", "projects", "task", "timeline"]);
     expect(byTab.search).toBeUndefined();
-    expect(byTab.more).toHaveLength(SCREEN_VALUES.length - 10);
+    expect(byTab.more).toHaveLength(SCREEN_VALUES.length - 11);
     for (const screen of ["dashboard", "brain-ask", "repos", "sync", "help"] as const) expect(byTab.more).toContain(screen);
   });
 
@@ -277,7 +277,7 @@ describe("zoned phone tabs", () => {
     expect(screenTitle("list")).toBe("List");
     expect(screenTitle("dashboard", true)).toBe("Dashboard");
     expect(zonedTabScreens("home", OFF).map((i) => i.screen)).toEqual(["home", "approvals"]);
-    expect(zonedTabScreens("projects", OFF).map((i) => i.label)).toEqual(["All work", "Projects"]);
+    expect(zonedTabScreens("projects", OFF).map((i) => i.label)).toEqual(["All work", "Projects", "Drafts"]);
     for (const tab of ["mine", "search", "more"] as const) expect(zonedTabScreens(tab, OFF)).toEqual([]);
   });
 
@@ -576,7 +576,7 @@ describe("phone tabs — one per group, derived from the model", () => {
   });
 
   it("gives each tab's group strip that group's visible items; More has none", () => {
-    expect(tabScreens("plan", OFF).map((i) => i.screen)).toEqual(["board", "list", "timeline", "insights"]);
+    expect(tabScreens("plan", OFF).map((i) => i.screen)).toEqual(["board", "list", "timeline", "insights", "drafts"]);
     expect(tabScreens("my-work", OFF).map((i) => i.screen)).toEqual(["home", "dashboard", "mine", "approvals"]);
     expect(tabScreens("more", ON)).toEqual([]);
   });

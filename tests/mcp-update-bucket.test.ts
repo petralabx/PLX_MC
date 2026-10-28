@@ -71,7 +71,7 @@ describe("MCP bucket.update grant", () => {
     // sp_mcp_portal, sp_mcp_workbench, sp_mcp_infra, sp_mcp_cip_auto_undraft and sp_mcp_workbench_intake hold least-privilege grants (decision CG-07b).
     for (const principalId of MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
       (id) =>
-        !id.startsWith("sp_mcp_person_") && // TASK-4015 056: member bundle
+        !id.startsWith("sp_mcp_person_") && // TASK-4015 057: member bundle
         id !== PORTAL_MCP_SERVICE_PRINCIPAL_ID &&
         id !== WORKBENCH_MCP_SERVICE_PRINCIPAL_ID &&
         id !== INFRA_MCP_SERVICE_PRINCIPAL_ID &&

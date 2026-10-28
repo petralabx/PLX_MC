@@ -90,7 +90,7 @@ test.describe("shell — nav form per width", () => {
     await expect(tabs.getByRole("button", { name: "More" })).toBeVisible();
     await expect(tabs.getByRole("link", { name: /Plan/ })).toHaveAttribute("aria-current", "page");
     const strip = page.getByRole("navigation", { name: "Plan screens" });
-    await expect(strip.getByRole("link")).toHaveText(["Board", "List", "Timeline", "Insights"]);
+    await expect(strip.getByRole("link")).toHaveText(["Board", "List", "Timeline", "Insights", "Drafts"]);
     await expect(strip.getByRole("link", { name: "List" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("button", { name: "New task" }).last()).toBeVisible();
     await expect(page.locator("nav.mc-side")).toBeHidden();
@@ -1017,9 +1017,9 @@ test.describe("shell — zoned sidebar", () => {
       expect(Math.round(box.width)).toBe(Math.round(boxes[0].width));
     }
     await expect(tabs.getByRole("link", { name: /^Projects/ })).toHaveAttribute("aria-current", "page");
-    // Under Projects: All work and Projects, with All work lit on any view.
+    // Under Projects: All work, Projects and Drafts, with All work lit on any view.
     const strip = page.getByRole("navigation", { name: "Projects screens" });
-    await expect(strip.getByRole("link")).toHaveText(["All work", "Projects"]);
+    await expect(strip.getByRole("link")).toHaveText(["All work", "Projects", "Drafts"]);
     await expect(strip.getByRole("link", { name: "All work" })).toHaveAttribute("aria-current", "page");
     await tabs.getByRole("button", { name: "Search" }).click();
     await expect(page.getByLabel("Command palette search")).toBeVisible();

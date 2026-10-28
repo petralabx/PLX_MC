@@ -245,6 +245,11 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   mc_dismiss_conflicts: { conflictIds: ["cf-1"] },
   mc_resolve_conflict: { conflictId: "cf-1", resolution: "keep_mc" },
   mc_resolve_conflicts: { conflictIds: ["cf-1"], resolution: "keep_mc" },
+  mc_save_draft: { title: "Draft" },
+  mc_submit_draft: { draftId: "DRF-1" },
+  mc_get_draft: { draftId: "DRF-1" },
+  mc_list_drafts: {},
+  mc_review_draft: { draftId: "DRF-1", kind: "comment", version: 1, body: "x" },
 };
 
 beforeEach(() => {

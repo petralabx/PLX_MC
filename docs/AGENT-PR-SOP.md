@@ -490,7 +490,7 @@ Full matrix: [`COLLABORATOR-SOP.md`](COLLABORATOR-SOP.md) §2, [`ROLLBACK-PLAN-S
 
 ## 9. PR visibility (not a commit feed)
 
-MC records **PR lifecycle events** — opened, synchronized, merged, closed — via GitHub webhooks and compliance projection. On merge, tasks may advance to `merged` and record merge SHA in `task.merge` / `prs[]`.
+MC records **PR lifecycle events** — opened, synchronized, merged, closed — via GitHub webhooks and compliance projection. On merge, tasks may advance to `merged` and record merge SHA in `task.merge` / `prs[]`. A task advances only when its PR merges into the repo's **integration branch** (`config/tracked-repos-registry.json`: `main` for PLX_MC, `staging` for the portal); a merge into any other branch is recorded on the task with no stage move. A merge while another PR on the task is still open **holds** the task at its stage until that last PR merges or closes (TASK-3797).
 
 MC does **not** mirror every commit push. Do not expect a per-commit activity feed in MC.
 

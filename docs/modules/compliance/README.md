@@ -266,6 +266,8 @@ truth table is proven before any plumbing exists.
   plus `source` and `taskIds`). `taskId` is set only on `resolved`.
   `filterEventsByProjectAcl` scopes a `pr.task_link` event by every task in
   its `payload.taskIds`, so non-members of a restricted project never see it.
+  It also scopes a Draft Projects event by its `payload.draftId`: only a
+  principal who can see that draft gets it (TASK-4059).
   It never changes the gate, approvals, the PR's `pr.*` events or the routing
   triage. Kill switches: `COMPLIANCE_PR_TASK_LINK_ENABLED=0` (this link only;
   default on) and `COMPLIANCE_PROJECTION_ENABLED=0` (all projection).

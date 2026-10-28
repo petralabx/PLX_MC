@@ -147,6 +147,8 @@ const FULL_MCP_BUNDLE = [
   "question.ask",
   "telemetry.report",
   "sync.mutate",
+  "draft.create",
+  "draft.review",
 ];
 
 const KEYS: Record<string, string> = {
@@ -259,7 +261,7 @@ describe("sp_mcp_portal grant", () => {
     // sp_mcp_workbench, sp_mcp_infra and sp_mcp_cip_auto_undraft are read-only, and
     // sp_mcp_workbench_intake creates and reads; their grants are checked below.
     const others = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter(
-      // TASK-4015 (056): sp_mcp_person_* hold the member bundle; checked in permissions.test.ts.
+      // TASK-4015 (057): sp_mcp_person_* hold the member bundle; checked in permissions.test.ts.
       (id) => id !== PORTAL && id !== WORKBENCH && id !== INFRA && id !== CIP && id !== INTAKE && !id.startsWith("sp_mcp_person_")
     );
     const people = MCP_AGENT_SERVICE_PRINCIPAL_IDS.filter((id) => id.startsWith("sp_mcp_person_"));

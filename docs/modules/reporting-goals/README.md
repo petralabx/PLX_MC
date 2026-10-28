@@ -481,9 +481,8 @@ disable `mc-goals-report` in the token map.
    instead. Until then an opened invoice waits for read access and everything
    else works.
 8. Returns (TASK-3987): apply migration 051 the same way before its code
-   deploys. Confirm the replica's name for Sage's credit note header (assumed
-   `sage.oe_credit_note_header`, OECRDH's columns lower-cased; see
-   `queries/credit-notes.ts`), then a DBA runs `readonly-grants-credit-notes.sql`
+   deploys. Sage's credit note header on the replica is `sage.oe_crdh`
+   (OECRDH; source currency `crsourcurr`). A DBA runs `readonly-grants-credit-notes.sql`
    for the existing `mc_goals_ro` login (or `-v role=<role>` through
    plx-reporting-mcp). Until then the Revenue card says returns aren't deducted
    and everything else works.
@@ -650,7 +649,8 @@ goal (2 batches of 7,500 kg or more per working day).
 - Returns (TASK-3987): a credit note counts in the month of its own date
   (`crddate`), not its invoice's ship date, and comes off the goal at its
   product value before tax (`crditmtot - crddiscamt`); credited charges
-  (`crdmisc`) are left out, as invoice charges are. Debit notes (`adjtype` 2)
+  (`crdmisc`) are left out, as invoice charges are. Source currency is
+  `crsourcurr` on `sage.oe_crdh`. Debit notes (`adjtype` 2)
   are not returns. A credit note takes the class of its own Sage customer.
 
 - Covered-through dates never run past today. A manual entry dated later this

@@ -9,10 +9,15 @@
 -- writes, no new role. Re-running it changes nothing. Fresh installs get the
 -- same grants from readonly-grants.sql.
 --
--- ASSUMPTION to confirm first: Sage 300's credit/debit note header (OECRDH) is
--- replicated as sage.oe_credit_note_header with Sage's column names
--- lower-cased. If the replica names it otherwise, correct the query and this
--- script together; until then the refresh reports the columns as missing.
+-- Confirmed 2026-10-27 on the staging replica: Sage 300's credit/debit note
+-- header (OECRDH) is sage.oe_crdh. It is not in the sync's friendly-name map,
+-- so there is no sage.oe_credit_note_header. Source currency is crsourcurr
+-- (an invoice's insourcurr), not crdsourcurr.
+--
+-- The build already on Mission Control still selects sage.oe_credit_note_header
+-- .crdsourcurr. Until this correction is deployed, a compatibility view of that
+-- name (crsourcurr AS crdsourcurr) on the staging primary lets that build read
+-- the real table. Drop the view once the deployed refresh reads sage.oe_crdh.
 --
 --   psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f readonly-grants-credit-notes.sql
 --
@@ -33,5 +38,5 @@
 
 GRANT USAGE ON SCHEMA sage TO :"role";
 
-GRANT SELECT (crdnumber, invnumber, customer, bilname, crddate, crdsourcurr, crditmtot, crddiscamt, crdmisc, crdnetnotx, adjtype)
-    ON sage.oe_credit_note_header TO :"role";
+GRANT SELECT (crdnumber, invnumber, customer, bilname, crddate, crsourcurr, crditmtot, crddiscamt, crdmisc, crdnetnotx, adjtype)
+    ON sage.oe_crdh TO :"role";

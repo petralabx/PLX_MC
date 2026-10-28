@@ -34,7 +34,7 @@ test.describe("goals returns", () => {
   });
 
   test("says returns aren't deducted when credit notes can't be read", async ({ page }) => {
-    await mockGoalsApi(page, pageWith({ access: "missing", missing: ["sage.oe_credit_note_header"], notes: [] }));
+    await mockGoalsApi(page, pageWith({ access: "missing", missing: ["sage.oe_crdh"], notes: [] }));
     await gotoGoals(page);
     await expect(page.getByTestId("goals-revenue-returns")).toContainText("Returns not deducted");
   });

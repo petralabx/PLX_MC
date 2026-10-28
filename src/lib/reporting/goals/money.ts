@@ -122,6 +122,35 @@ export function allocateConvertedCents(parts: readonly number[], rate: string): 
   return floors.map(toSafeNumber);
 }
 
+/**
+ * Split `total` cents across `weights` so the parts add up to `total`.
+ * Each weight is a non-negative integer. A zero sum leaves every part at 0
+ * (the caller chooses where a total with no weight goes). Parts are floored,
+ * then the cents still owed go one each to the largest remainders; a tie goes
+ * to the earlier part. A part that divides exactly is never bumped.
+ */
+export function allocateCents(total: number, weights: readonly number[]): number[] {
+  if (weights.length === 0) return [];
+  const sum = weights.reduce((n, w) => n + w, 0);
+  if (sum === 0) return weights.map(() => 0);
+  const totalB = BigInt(total);
+  const sumB = BigInt(sum);
+  const products = weights.map((w) => totalB * BigInt(w));
+  const floors = products.map((p) => floorDiv(p, sumB));
+  const remainders = products.map((p, i) => p - floors[i] * sumB);
+  let owed = Number(totalB - floors.reduce((n, f) => n + f, ZERO));
+  const order = weights
+    .map((_, i) => i)
+    .sort((a, b) => (remainders[b] > remainders[a] ? 1 : remainders[b] < remainders[a] ? -1 : a - b));
+  const step = owed < 0 ? -ONE : ONE;
+  for (const i of order) {
+    if (owed === 0 || remainders[i] === ZERO) break;
+    floors[i] += step;
+    owed -= Number(step);
+  }
+  return floors.map(toSafeNumber);
+}
+
 /** numerator × factor ÷ divisor in cents, rounded half to even (pro-rata targets). */
 export function prorateCents(cents: number, factor: number, divisor: number): number {
   if (divisor <= 0) return 0;

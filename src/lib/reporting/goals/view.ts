@@ -4,6 +4,7 @@
 // USD revenue converts at the run's Bank of Canada rate, or at the fixed Sage
 // rate when the page asks for it (TASK-3780); truckloads stay on the Bank of Canada rate.
 
+import { countedShipmentRefs, pendingProductsOf, revenueByBusinessLine, type RevenueByBusinessLine } from "./business-line";
 import { customerRevenue, type CustomerRevenue } from "./customer-revenue";
 import { buildForecast, type CustomerClass, type ForecastSnapshot, type ForecastView } from "./forecast";
 import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
@@ -21,6 +22,7 @@ import type {
   RefreshRun,
   RevenueRateBasis,
   CreditNotesAccess,
+  ShipmentLineRow,
   ShipmentLinesSummary,
   SnapshotData,
 } from "./types";
@@ -86,6 +88,12 @@ export interface GoalsView {
   /** The Revenue card's month for every customer, freight and other charges left out (TASK-3952): the card's headline, status and pace at `scope=all`. */
   revenueGoal: RevenueScopeView | null;
   /**
+   * The headline split into Manufacturing, Distribution and Services. null
+   * without a model. `pending` on each scope is the shipped-not-invoiced
+   * estimate when the snapshot has it; it is not inside the headline here.
+   */
+  revenueByBusinessLine: RevenueByBusinessLine | null;
+  /**
    * Whether the run read this month's credit notes (TASK-3987), which the
    * Revenue card subtracts: read (notes: how many), or missing (the columns the
    * login lacked, so returns aren't deducted). null without a model, or for a
@@ -127,6 +135,10 @@ export interface GoalsViewInput {
   forecast?: ForecastSnapshot | null;
   /** The run's stored summary of its invoice lines; null or absent when the run predates them. */
   shipmentLines?: ShipmentLinesSummary | null;
+  /** Those lines, when the loader has them. The page model keeps only the split. */
+  shipmentLineRows?: readonly ShipmentLineRow[] | null;
+  /** Finished-good codes read from the MRP. null: not read. An empty set was read. */
+  finishedGoodCodes?: ReadonlySet<string> | null;
   /** The rate USD revenue converts at (TASK-3780); absent, the run's Bank of Canada rate. */
   revenueBasis?: RevenueRateBasis;
 }
@@ -145,6 +157,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
       revenueByClass: null,
       revenueScope: null,
       revenueGoal: null,
+      revenueByBusinessLine: null,
       creditNotes: null,
       shipmentLines: null,
       settings: null,
@@ -209,6 +222,19 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     revenueGoal: revenueScope(byClass, "all", model.revenue.targetCents, {
       dueSoFarCents: model.revenue.dueSoFarCents,
       remaining: model.calendar.remaining,
+    }),
+    revenueByBusinessLine: revenueByBusinessLine({
+      shipments,
+      lines: input.shipmentLineRows ?? null,
+      linesSummary: input.shipmentLines ?? null,
+      finishedGoodCodes: input.finishedGoodCodes ?? null,
+      creditNotes: notes?.access === "read" ? notes.notes : [],
+      ftlCustomers: input.ftlCustomers,
+      rate: model.revenue.rate,
+      byClass,
+      // Present only when a refresh stored the estimate. The headline on this
+      // branch does not include it; the split keeps it on `pending`.
+      pending: pendingProductsOf(input.snapshot, countedShipmentRefs(model.entries)),
     }),
     creditNotes: notes ? { access: notes.access, missing: notes.missing, notes: notes.notes.length } : null,
     shipmentLines: shipmentLinesView(input.shipmentLines ?? null),

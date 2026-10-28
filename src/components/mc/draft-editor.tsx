@@ -277,7 +277,10 @@ function DependsOn({ task, tasks, onChange }: { task: DraftPlanTask; tasks: Draf
   const typed = task.dependsOn.filter((d) => !isOther(d));
   // While the field has focus it keeps its text as typed, over the boxes ticked
   // before: typing T10 must not turn its T1 prefix into a ticked box on the way.
-  const [editing, setEditing] = useState<{ text: string; picked: string[] } | null>(null);
+  // The edit holds the list it last set; a list that changed under it (a read-back
+  // replaced the form) starts the edit again from the new one.
+  const [editing, setEditing] = useState<{ text: string; picked: string[]; deps: string[] } | null>(null);
+  const live = editing && editing.deps === task.dependsOn ? editing : null;
   return (
     <>
       <fieldset className="dr-edit-chips wide">
@@ -296,12 +299,13 @@ function DependsOn({ task, tasks, onChange }: { task: DraftPlanTask; tasks: Draf
       </fieldset>
       <Field label={`${task.key} also depends on existing tasks (TASK ids, separated by commas)`} wide>
         <input
-          value={editing ? editing.text : typed.join(",")}
-          onFocus={() => setEditing({ text: typed.join(","), picked })}
+          value={live ? live.text : typed.join(",")}
+          onFocus={() => setEditing({ text: typed.join(","), picked, deps: task.dependsOn })}
           onChange={(e) => {
-            const base = editing?.picked ?? picked;
-            setEditing({ text: e.target.value, picked: base });
-            onChange([...base, ...e.target.value.split(",")]);
+            const base = live?.picked ?? picked;
+            const deps = [...base, ...e.target.value.split(",")];
+            setEditing({ text: e.target.value, picked: base, deps });
+            onChange(deps);
           }}
           onBlur={() => setEditing(null)}
         />

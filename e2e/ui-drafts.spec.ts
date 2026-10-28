@@ -190,6 +190,8 @@ interface MockOptions {
   failReadBack?: boolean;
   /** Another writer saves right after the form does: the read-back is slow, and moved on. */
   otherWriterAfterSave?: boolean;
+  /** With otherWriterAfterSave: the other writer also set T2's dependencies to these. */
+  otherWriterDependsOn?: string[];
   /** Create takes a while, so the form can be seen locked meanwhile. */
   slowCreate?: boolean;
   /** The first save's read-back takes a second and the second save two: the read-back lands while that save is on its way. */
@@ -253,7 +255,9 @@ async function mockDraftsApi(
     }
     if (request.method() !== "GET") return route.fulfill({ status: 405, body: "Method Not Allowed" });
     if (/\/api\/drafts\/DRF-7$/.test(url.pathname)) {
-      const working = { ...WORKING, title };
+      const otherDeps = options.otherWriterAfterSave && mock.saves.length > 0 ? options.otherWriterDependsOn : undefined;
+      const tasks = otherDeps ? WORKING.plan.tasks.map((t) => (t.key === "T2" ? { ...t, dependsOn: otherDeps } : t)) : WORKING.plan.tasks;
+      const working = { ...WORKING, title, plan: { ...WORKING.plan, tasks } };
       if (options.slowSecondSave && mock.saves.length === 1) await pause(1_000);
       if (options.otherWriterAfterSave && mock.saves.length > 0) {
         await pause(1_500);
@@ -582,6 +586,25 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect.poll(() => mock.saves.length).toBe(1);
     expect(mock.saves[0]).toMatchObject({ plan: { tasks: [{ key: "T1" }, { key: "T2", dependsOn: ["T10"] }] } });
+  });
+
+  test("a read-back that replaces the form while a dependency field has focus restarts the edit from it", async ({ page }) => {
+    const mock = await mockDraftsApi(page, {}, {}, { otherWriterAfterSave: true, otherWriterDependsOn: ["TASK-77"] });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await page.getByLabel("Title", { exact: true }).fill("Saved before the read-back");
+    const readBack = page.waitForResponse((r) => r.request().method() === "GET" && new URL(r.url()).pathname === "/api/drafts/DRF-7");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    // Focus before the read-back lands, and type after: the field shows, and builds on, what it brought.
+    const typed = page.getByLabel("T2 also depends on existing tasks (TASK ids, separated by commas)");
+    await typed.focus();
+    await readBack;
+    await expect(typed).toHaveValue("TASK-77");
+    await typed.press("End");
+    await typed.pressSequentially(",TASK-88");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(2);
+    expect(mock.saves[1]).toMatchObject({ plan: { tasks: [{ key: "T1" }, { key: "T2", dependsOn: ["TASK-77", "TASK-88"] }] } });
   });
 
   test("a frozen version, the current one too, offers no Submit: it would send the working copy", async ({ page }) => {

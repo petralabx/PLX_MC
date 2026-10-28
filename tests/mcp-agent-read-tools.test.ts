@@ -306,7 +306,8 @@ describe("tool registry", () => {
     for (const tool of ["mc_save_draft", "mc_submit_draft", "mc_get_draft", "mc_list_drafts", "mc_review_draft"]) {
       expect(names).toContain(tool);
     }
-    expect(names).toHaveLength(47);
+    expect(names).toContain("mc_save_evidence");
+    expect(names).toHaveLength(48);
   });
 });
 

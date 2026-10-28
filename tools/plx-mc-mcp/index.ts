@@ -431,7 +431,7 @@ server.tool(
 
 server.tool(
   "mc_complete_task",
-  "Complete agent work for a checkout credential. verificationCommands and rollback are required. When a person must verify the work (verify:human, kind:human-test, or a high-risk filesChanged), the summary must be STE-lite; pass filesChanged. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard; fix the summary and call again on the same checkout.",
+  "Complete agent work for a checkout credential. verificationCommands and rollback are required. Evidence saved earlier with mc_save_evidence is kept where this call sends nothing: testRun, shots and uploaded artifacts; the fields this call sends win. When a person must verify the work (verify:human, kind:human-test, or a high-risk filesChanged), the summary must be STE-lite; pass filesChanged. Warns until 2026-10-24 (result.evidenceStandard), then refuses with evidence_standard; fix the summary and call again on the same checkout.",
   {
     checkoutId: z.string().min(1),
     summary: z.string().min(1),
@@ -457,6 +457,31 @@ server.tool(
   async (body) => {
     if (!MCP_ENABLED) return disabledTool("mc_complete_task");
     return printResult(await mcFetch("/complete", { method: "POST", body }));
+  }
+);
+
+server.tool(
+  "mc_save_evidence",
+  "Save summary, verificationCommands and rollback on a checked-out task before merge without completing it. Never changes stage. Compliance reads the saved evidence. Needs your own live checkout. Optional testRun and shots; fields you omit keep their saved values. The summary follows the mc_complete_task evidence standard; pass filesChanged.",
+  {
+    checkoutId: z.string().min(1),
+    summary: z.string().min(1),
+    verificationCommands: z.array(z.string().trim().min(1)).optional(),
+    filesChanged: z.array(z.string()).optional(),
+    rollback: z.string().optional(),
+    testRun: z
+      .object({
+        suite: z.string().min(1),
+        passed: z.number().int().nonnegative(),
+        failed: z.number().int().nonnegative(),
+        total: z.number().int().nonnegative().optional(),
+      })
+      .optional(),
+    shots: z.array(z.object({ label: z.string(), cap: z.string() })).optional(),
+  },
+  async (body) => {
+    if (!MCP_ENABLED) return disabledTool("mc_save_evidence");
+    return printResult(await mcFetch("/save-evidence", { method: "POST", body }));
   }
 );
 

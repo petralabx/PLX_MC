@@ -501,6 +501,11 @@ MCP flow. Non-empty `verificationCommands` and `rollback` are required on every
 transport (HTTP MCP, stdio, `POST /api/cursor/complete`); a completion missing
 either is rejected before it reaches the task. The stdio tool exposes the same
 `rollback`, `testRun`, and `shots` evidence fields as `POST /api/cursor/complete`.
+`mc_save_evidence` (`POST /api/cursor/save-evidence`, TASK-4055) writes the same
+evidence on the caller's own live checkout while the PR is open, so the gate can
+pass before merge. It patches only `evidence` (artifacts kept), never stage,
+completedAt or the checkout, and skips the autonomy approval check. Fields a later
+save or `mc_complete_task` omits keep their saved values; sent fields win.
 Every HTTP MCP tool call is audited as `mcp.tool.invoked`, like the REST wrapper. The verify
 gate matches `repo` on the **bare** GitHub name (`github.event.repository.name`), so
 a checkout minted with either `MC_REPO=PLX_MC` or `MC_REPO=petralabx/PLX_MC`

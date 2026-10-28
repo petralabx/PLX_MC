@@ -217,7 +217,8 @@ Slice A (TASK-4109):
   - `POST /api/drafts/{id}/submit` submits the working copy.
   - `POST /api/drafts/{id}/withdraw` withdraws the draft, with a reason of 10 characters or more.
 - A save and a submit carry the **edit base** the form was read with: a digest of the working copy, the visibility, the members and the reviewers. A draft that has moved since (an agent's save, another tab) refuses with 409 `draft_changed`, and the form keeps the person's edits. A review does not move the base.
-- Before submit, the draft's record and the form list what the completeness and preflight checks still need. Submit waits for saved edits.
+- Before submit, the draft's record and the form list what the completeness and preflight checks still need. Submit waits for saved edits, and only the working copy's page offers it, never a frozen version's.
+- Unsaved edits ask before the person leaves: an in-app move or Back asks first, and closing the tab warns. The form locks while Create runs. Edits typed after a save keep the edit base they were made from.
 
 Slice B (TASK-4110): risks, open questions and artifacts in the form, a dependency picker for tasks, and reordering buckets and tasks.
 

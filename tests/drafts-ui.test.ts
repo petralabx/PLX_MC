@@ -10,6 +10,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { DraftsView, PlanSection, ResearchSection, VersionDiff } from "@/components/mc/drafts";
+import { navAllowed, setNavGuard } from "@/components/mc/nav-guard";
 import { routeToUrl, urlToRoute } from "@/components/mc/route";
 import { draftPlanSchema, draftResearchSchema } from "@/lib/drafts/schema";
 import type { DraftContent, DraftPlan, DraftResearch } from "@/lib/drafts/types";
@@ -100,5 +101,28 @@ describe("Drafts screen", () => {
     expect(routeToUrl({ screen: "drafts", draftId: "DRF-4", edit: "1" })).toBe("/?screen=drafts&draftId=DRF-4&edit=1");
     expect(urlToRoute("/?screen=drafts&draftId=DRF-4&edit=1")).toEqual({ screen: "drafts", draftId: "DRF-4", edit: "1" });
     expect(urlToRoute("/?screen=drafts&draftId=DRF-4&edit=yes")).toEqual({ screen: "drafts", draftId: "DRF-4" });
+  });
+});
+
+describe("the navigation guard", () => {
+  it("asks the guard while it is set, and lets navigation go once it is cleared", () => {
+    expect(navAllowed()).toBe(true);
+    let answer = false;
+    const clear = setNavGuard(() => answer);
+    expect(navAllowed()).toBe(false);
+    answer = true;
+    expect(navAllowed()).toBe(true);
+    clear();
+    answer = false;
+    expect(navAllowed()).toBe(true);
+  });
+
+  it("does not clear a guard that replaced it", () => {
+    const clearFirst = setNavGuard(() => false);
+    const clearSecond = setNavGuard(() => false);
+    clearFirst();
+    expect(navAllowed()).toBe(false);
+    clearSecond();
+    expect(navAllowed()).toBe(true);
   });
 });

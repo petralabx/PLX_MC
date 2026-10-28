@@ -414,3 +414,14 @@
 .mc .dr-edit-foot {
   border-color: var(--p-accent);
 }
+
+/* Wraps the form's sections so Create can lock them; lays them out like the page. */
+.mc .dr-edit-lock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

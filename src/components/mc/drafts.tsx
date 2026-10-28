@@ -288,7 +288,8 @@ function DraftRecord({ id, version, nav }: { id: string; version: number | null;
         </div>
       )}
       {draft.status === "accepted" && <AcceptedRecords draft={draft} nav={nav} />}
-      {!viewingOld && (viewer.canEdit || viewer.canSubmit || viewer.canWithdraw) && (
+      {/* Author actions act on the working copy, so only its page offers them, never a frozen version's. */}
+      {detail.version === null && (viewer.canEdit || viewer.canSubmit || viewer.canWithdraw) && (
         <section className="dr-section" aria-label="Your draft">
           <h2>Your draft</h2>
           <DraftAuthorActions detail={detail} onEdit={() => nav("drafts", { draftId: draft.id, edit: "1" })} onChanged={reload} />

@@ -100,7 +100,10 @@ need `draft.create` and are the author's alone: `POST /api/drafts` (create), `PA
 /api/drafts/{id}` (save), `POST /api/drafts/{id}/submit` and `POST /api/drafts/{id}/withdraw`.
 A save and a submit carry the edit base GET returned (service `draftEditBase`: the working copy's
 digest, the visibility, the members and the reviewers); a draft that has moved since refuses with
-409 `draft_changed`. A review does not move it. The form does not edit risks, open questions or
+409 `draft_changed`. A review does not move it, and edits typed after a save keep the base they
+were made from. While the form holds unsaved edits it sets the shell's navigation guard
+(`src/components/mc/nav-guard.ts`), so an in-app move or Back asks first. Author actions show only
+on the working copy's page. The form does not edit risks, open questions or
 artifacts yet (TASK-4110); a save sends them back unchanged.
 
 Invariants:

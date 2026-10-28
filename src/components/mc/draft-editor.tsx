@@ -30,6 +30,7 @@ import { allRepos, directory, pickerProjects } from "@/lib/mc-data/store";
 import { TASK_KINDS } from "@/lib/tasks/kind-labels";
 
 import type { DraftDetail } from "./drafts";
+import { setNavGuard } from "./nav-guard";
 import type { Nav } from "./route";
 
 interface FormState {
@@ -699,6 +700,11 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
   // for, or the read-back of a save made with no typing since; never over edits.
   const replaceNext = useRef(true);
   const sent = useRef<FormState | null>(null);
+  // The form as shown, for the load below to compare at the time it lands.
+  const shown = useRef<FormState | null>(form);
+  useEffect(() => {
+    shown.current = form;
+  }, [form]);
 
   useEffect(() => {
     if (!id) return;
@@ -706,12 +712,20 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
     api<DraftDetail>(`/drafts/${encodeURIComponent(id)}`)
       .then((data) => {
         if (!live) return;
-        const loaded = formFrom(data);
-        setDetail(data);
-        setInitial(loaded);
-        setFormState((current) => (replaceNext.current || current === sent.current ? loaded : current));
-        replaceNext.current = false;
         setLoadError(null);
+        const fill = replaceNext.current || shown.current === null || shown.current === sent.current;
+        replaceNext.current = false;
+        if (fill) {
+          const loaded = formFrom(data);
+          setDetail(data);
+          setInitial(loaded);
+          setFormState(loaded);
+          return;
+        }
+        // The person typed on after the save: keep their edits, and the base they
+        // were made from. Taking the read-back's base would let their next save
+        // overwrite a change another writer made meanwhile, unseen.
+        setDetail((previous) => ({ ...data, viewer: { ...data.viewer, editBase: previous?.viewer.editBase ?? data.viewer.editBase } }));
       })
       .catch((err) => live && setLoadError(errorOf(err).message));
     return () => {
@@ -721,11 +735,18 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
 
   const dirty = form !== null && initial !== null && JSON.stringify(form) !== JSON.stringify(initial);
 
+  // Unsaved edits: closing or reloading the tab warns, and an in-app move (a
+  // link, Back, the sidebar) asks first. The form's own moves set `leaving`.
+  const leaving = useRef(false);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
+    const clearGuard = setNavGuard(() => leaving.current || window.confirm("Leave without saving your edits?"));
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      clearGuard();
+    };
   }, [dirty]);
 
   const setForm = useCallback((fn: (f: FormState) => FormState) => {
@@ -744,10 +765,8 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
     setTick((t) => t + 1);
   };
 
-  const close = () => {
-    if (dirty && !window.confirm("Leave without saving your edits?")) return;
-    nav("drafts", id ? { draftId: id } : {});
-  };
+  // Unsaved edits are asked about by the navigation guard above.
+  const close = () => nav("drafts", id ? { draftId: id } : {});
 
   const save = async () => {
     if (!form) return;
@@ -761,7 +780,8 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
     try {
       if (!id) {
         const made = await api<{ draft: { id: string } }>("/drafts", { method: "POST", body: JSON.stringify(body) });
-        setInitial(form);
+        // The new draft opens with what was sent; the form was locked meanwhile.
+        leaving.current = true;
         nav("drafts", { draftId: made.draft.id, edit: "1" });
         return;
       }
@@ -819,9 +839,12 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
         </div>
       </div>
 
-      <SettingsFields form={form} setForm={setForm} />
-      <PlanFields plan={form.content.plan} setPlan={setPlan} />
-      <ResearchFields research={form.content.research} setResearch={setResearch} />
+      {/* Locked while Create runs: the new draft reopens with what was sent, so later typing would be lost. */}
+      <fieldset className="dr-edit-lock" disabled={busy && id === null}>
+        <SettingsFields form={form} setForm={setForm} />
+        <PlanFields plan={form.content.plan} setPlan={setPlan} />
+        <ResearchFields research={form.content.research} setResearch={setResearch} />
+      </fieldset>
 
       <section className="dr-section dr-edit-foot" aria-label="Save">
         {error && (
@@ -851,7 +874,16 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
             {dirty ? "Cancel" : "Done"}
           </button>
         </div>
-        {detail && <DraftAuthorActions detail={detail} dirty={dirty} onChanged={() => nav("drafts", { draftId: detail.draft.id })} />}
+        {detail && (
+          <DraftAuthorActions
+            detail={detail}
+            dirty={dirty}
+            onChanged={() => {
+              leaving.current = true;
+              nav("drafts", { draftId: detail.draft.id });
+            }}
+          />
+        )}
       </section>
     </>
   );

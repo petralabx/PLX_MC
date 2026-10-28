@@ -52,7 +52,7 @@ Approved defaults (the questions the brief raised):
    sign-in app, assigned to the two groups and checked on the server for every
    request. A role change applies at the next sign-in.
 5. **Truckload target.** A setting, empty until the business sets one.
-6. **Credit notes.** Deducted (TASK-3987, Ricardo, 26 Oct 2026): this month's Sage credit notes, bucketed by the credit note's date, come off the Revenue headline, status and pace at their product value before tax (credited freight and other charges left out, as charges are), within the selected customer scope; the card shows them as a side line ("− $R returns (N credit notes)") and the export lists them. Debit notes are not returns. The replica's table name (`sage.oe_credit_note_header`) is to confirm.
+6. **Credit notes.** Deducted (TASK-3987, Ricardo, 26 Oct 2026): this month's Sage credit notes, bucketed by the credit note's date, come off the Revenue headline, status and pace at their product value before tax (credited freight and other charges left out, as charges are), within the selected customer scope; the card shows them as a side line ("− $R returns (N credit notes)") and the export lists them. Debit notes are not returns. The replica table is `sage.oe_crdh` (source currency `crsourcurr`).
 7. **Civic Holiday.** A working day: it is not statutory.
 8. **Refresh.** 06:00 Toronto, Monday to Friday, holidays included; Editors can
    refresh at any time.

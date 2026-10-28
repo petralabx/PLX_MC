@@ -4,10 +4,11 @@
 // invoices (queries/shipments.ts): items less discount before tax, other charges
 // apart, so returns come off the goal on the same basis as revenue counts
 // toward it (TASK-3952). Debit notes (adjustment type 2) are not returns and
-// are left out. ASSUMPTION to confirm with the replica's owner: the Sage 300
-// OECRDH header is replicated as sage.oe_credit_note_header with Sage's own
-// column names lower-cased (README, "Interpretations to confirm"). The login
-// reads it only once a DBA runs
+// are left out. Sage 300's OECRDH header is replicated as sage.oe_crdh
+// (the sync's module-prefix name; it is not in the friendly-name map, so there
+// is no sage.oe_credit_note_header). Source currency is crsourcurr, the same
+// role as an invoice's insourcurr. Confirmed on the staging replica 2026-10-27.
+// The login reads it only once a DBA runs
 // docs/modules/reporting-goals/readonly-grants-credit-notes.sql: the refresh
 // checks CREDIT_NOTE_COLUMNS first (./read-access.ts), so a missing grant (or a
 // differently named table) skips the returns and names what's missing, and
@@ -21,8 +22,8 @@ import { MONTH_WINDOW, type DatasetQuery } from "./shared";
 export const CREDIT_NOTE_COLUMNS = [
   [
     "sage",
-    "oe_credit_note_header",
-    ["crdnumber", "invnumber", "customer", "bilname", "crddate", "crdsourcurr", "crditmtot", "crddiscamt", "crdmisc", "crdnetnotx", "adjtype"],
+    "oe_crdh",
+    ["crdnumber", "invnumber", "customer", "bilname", "crddate", "crsourcurr", "crditmtot", "crddiscamt", "crdmisc", "crdnetnotx", "adjtype"],
   ],
 ] as const satisfies ColumnList;
 
@@ -46,11 +47,11 @@ SELECT trim(c.crdnumber) AS credit_note,
        nullif(trim(c.customer), '') AS customer_code,
        nullif(trim(c.bilname), '') AS customer,
        to_date(c.crddate, 'YYYYMMDD')::text AS credit_date,
-       trim(c.crdsourcurr) AS currency,
+       trim(c.crsourcurr) AS currency,
        c.crditmtot::numeric - c.crddiscamt::numeric AS product_value,
        c.crdmisc::numeric AS other_charges,
        c.crdnetnotx::numeric AS net_before_tax
-FROM sage.oe_credit_note_header c, cut
+FROM sage.oe_crdh c, cut
 WHERE c.crddate >= cut.m0s AND c.crddate < cut.n0s
   AND trim(coalesce(c.adjtype::text, '')) <> '2'
 ORDER BY credit_date, credit_note`,

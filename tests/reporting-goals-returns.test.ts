@@ -51,9 +51,9 @@ describe("returns on the Revenue goal", () => {
   });
 
   it("deducts nothing and says what's missing when the login can't read credit notes", () => {
-    const missing: CreditNotesDataset = { access: "missing", missing: ["sage.oe_credit_note_header"], notes: [] };
+    const missing: CreditNotesDataset = { access: "missing", missing: ["sage.oe_crdh"], notes: [] };
     const p = page(missing);
-    expect(p.creditNotes).toEqual({ access: "missing", missing: ["sage.oe_credit_note_header"], notes: 0 });
+    expect(p.creditNotes).toEqual({ access: "missing", missing: ["sage.oe_crdh"], notes: 0 });
     expect(p.revenueGoal!.goalCadCents).toBe(page().revenueGoal!.goalCadCents);
   });
 });
@@ -97,7 +97,7 @@ describe("returns in the workbook", () => {
   });
 
   it("says returns aren't deducted when the grant is missing", async () => {
-    const all = await cells({ access: "missing", missing: ["sage.oe_credit_note_header"], notes: [] });
-    expect(all.some((v) => v.includes("needs sage.oe_credit_note_header"))).toBe(true);
+    const all = await cells({ access: "missing", missing: ["sage.oe_crdh"], notes: [] });
+    expect(all.some((v) => v.includes("needs sage.oe_crdh"))).toBe(true);
   });
 });

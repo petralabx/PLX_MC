@@ -8,11 +8,11 @@
 
 ## Goal
 
-Until go-live, add this month's posted Sage shipments that no posted invoice names yet to the Goals Revenue card as an estimate. A counted hand entry that names the same shipment number is left out, so those goods sit on the card once.
+Until go-live, add this month's posted Sage shipments whose header numinvoice is 0 to the Goals Revenue card as an estimate. A counted hand entry that names the same shipment number is left out, so those goods sit on the card once.
 
 ## Status
 
-active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pull/463) is open. Product work last landed at `25db82da`, with unsigned merge gate `apg_4a339c2c8e9056c7`. This note moves the head, so that gate does not cover the new commit. Migration 052 is not applied. The read grant is not run.
+active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pull/463) is open. Ricardo Savelli checked the UAT Sage copy on 2026-10-28: pending is `numinvoice` 0, and C and MISC item lines stay in the estimate. The commit that lands that correction needs its own signed merge approval. Migration 052 is not applied. The read grant is not run.
 
 ## Done
 
@@ -21,9 +21,9 @@ active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pu
 
 ## Next steps
 
-1. Raise a new unsigned merge gate for the head that includes this note, then a person signs it. Vince, Ricardo, Rishi or Stephen can approve it. Gate `apg_4a339c2c8e9056c7` and question `q_a0a12df3af42a279` cover `25db82da` only.
+1. A person signs the merge gate for the head that includes the UAT correction. Vince, Ricardo, Rishi or Stephen can approve it. Earlier gates cover earlier heads only.
 2. CIP merges the PR. Do not apply migration 052 or the read grant from an agent session.
-3. Confirm the Sage shipment table and column names, and the void flag, before the card's numbers are trusted.
+3. A DBA runs the grant script. It grants `oe_shipment_header.numinvoice` and does not grant `oe_invoice_header`.
 
 ## Decisions and why
 
@@ -31,12 +31,13 @@ active, as of 2026-10-28. [PLX_MC PR 463](https://github.com/petralabx/PLX_MC/pu
 - 2026-10-27 The 052 rollback refuses unless `plx.code_reverted` is set and the newest good refresh has no pending summary. Why: dropping the tables under live code makes every API return `503 schema_behind`. The flag is not a substitute. Decided by: claude/claude-vince-c on the PR 463 review.
 - 2026-10-28 A counted hand entry whose reference is the Sage shipment number is left out of the estimate. An entry that names the order number, a customer PO, or is blank stays beside it. Why: matching the order would also drop every other shipment of that order, and a customer-and-value match can drop a different shipment. Decided by: cursor/grok-4.7.
 - 2026-10-28 An agent does not sign the merge approval. Why: the PR includes migration 052 and revenue figures, so a person signs the exact head. Decided by: the operator instruction for this session.
+- 2026-10-28 A shipment is pending when `trim(numinvoice) = '0'`. Why: UAT's `oe_invoice_header` has no `shinumber`, so the NOT EXISTS join can never match. `numinvoice` 0 was 103 shipments, April through August 2026. Decided by: Ricardo Savelli, from a read-only check of the UAT Sage copy.
+- 2026-10-28 The estimate keeps item codes C and MISC, and still drops line type 2 and zero-quantity lines. Why: those codes are real type-1 lines (screening fees, filling fees, pumps, bottles, artwork). The open-order forecast and the invoiced Revenue card stay as they are. Decided by: Ricardo Savelli, same check.
+- 2026-10-28 Table names, the shipment columns as text, `shidate` as YYYYMMDD, currency CAD or USD, and `shidisc` as an amount are confirmed. There is no void column. The void test stays `true`. Header `complete` = 1 on the uninvoiced rows. Decided by: Ricardo Savelli, same check.
 
 ## Open questions
 
-- Are `sage.oe_shipment_header` and `sage.oe_shipment_detail` the replica names, and are `shsourcurr` and `shidisc` the currency and discount columns? Who: the replica owner.
-- Which column marks a voided or deleted shipment? The query uses `true` until that is confirmed. Who: the replica owner.
-- Who runs `docs/modules/reporting-goals/readonly-grants-shipments-pending.sql`? Who: a DBA. Until then the card says the estimate needs access.
+- Who runs `docs/modules/reporting-goals/readonly-grants-shipments-pending.sql`? Who: a DBA. Until then the card says the estimate needs access. The script now grants `numinvoice` and does not grant the invoice header.
 
 ## Files / areas touched
 
@@ -62,4 +63,4 @@ Postgres harness tests need Docker. This host has none, so those tests fail with
 
 ## Last updated
 
-2026-10-28 by cursor/grok-4.7. Opened the note after several sessions on the one open PR.
+2026-10-28 by cursor/grok-4.7. Recorded Ricardo Savelli's UAT check: numinvoice 0, and C and MISC stay in the estimate.

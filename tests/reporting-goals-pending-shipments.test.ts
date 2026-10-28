@@ -1,5 +1,5 @@
 // INTERIM (TASK-3992): shipped, not yet invoiced. Posted Sage shipments this
-// month that no posted invoice names yet are added to the Revenue goal as an
+// month whose header numinvoice is 0 are added to the Revenue goal as an
 // estimate, by the shipment's customer class (scope=mfg leaves Exclusive
 // Distribution out). A login without the grant records "missing", adds
 // nothing and doesn't fail; GOALS_PENDING_SHIPMENTS=off turns it off.
@@ -149,10 +149,39 @@ describe("shipped, not yet invoiced on the Revenue goal", () => {
     expect(pendingShipmentsEnabled({ GOALS_PENDING_SHIPMENTS: " OFF " })).toBe(false);
   });
 
-  it("reads no cost column and skips invoiced shipments", () => {
+  it("treats numinvoice 0 as pending and 1 as invoiced, and keeps C and MISC item lines", () => {
+    const sql = pendingShipmentsQuery.sql;
     const cols = PENDING_SHIPMENT_COLUMNS.flatMap(([, , c]) => [...c]);
     expect(cols.some((c) => /cost|margin/i.test(c))).toBe(false);
-    expect(pendingShipmentsQuery.sql).toContain("NOT EXISTS (SELECT 1 FROM sage.oe_invoice_header h");
+    // 0 is not yet invoiced. 1 is invoiced, so it fails this equality and stays off the estimate.
+    expect(sql).toContain("trim(s.numinvoice) = '0'");
+    expect(sql).not.toContain("trim(s.numinvoice) = '1'");
+    expect(sql).not.toContain("oe_invoice_header");
+    expect(sql).not.toMatch(/NOT IN \('C', 'MISC'\)/);
+    expect(sql).toContain("d.qtyshipped::numeric <> 0");
+    const header = PENDING_SHIPMENT_COLUMNS.find(([, table]) => table === "oe_shipment_header");
+    expect(header?.[2]).toContain("numinvoice");
+    expect(PENDING_SHIPMENT_COLUMNS.map(([, table]) => table)).not.toContain("oe_invoice_header");
+    // Needs-access names numinvoice on the shipment header, and never the invoice header's shinumber.
+    const checked = PENDING_SHIPMENT_COLUMNS.flatMap(([schema, table, columns]) => columns.map((column) => `${schema}.${table}.${column}`));
+    expect(checked).toContain("sage.oe_shipment_header.numinvoice");
+    expect(checked).not.toContain("sage.oe_invoice_header.shinumber");
+  });
+
+  it("the grant script grants the columns the refresh checks, and not the invoice header", () => {
+    const sql = readFileSync(
+      path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants-shipments-pending.sql"),
+      "utf8",
+    ).replace(/--.*$/gm, "");
+    const grants: Record<string, string[]> = {};
+    for (const m of sql.matchAll(/GRANT\s+SELECT\s*\(([^)]*)\)\s*ON\s+([\w.]+)\s+TO\s+:"role"/gi)) {
+      grants[m[2]] = m[1].split(",").map((c) => c.trim());
+    }
+    const wanted = Object.fromEntries(
+      PENDING_SHIPMENT_COLUMNS.map(([schema, table, columns]) => [`${schema}.${table}`, [...columns]]),
+    );
+    expect(grants).toEqual(wanted);
+    expect(sql).not.toContain("oe_invoice_header");
   });
 
   it("counts a blank or space-padded line type as an item line, as ITEM_LINES_SQL does", () => {

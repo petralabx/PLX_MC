@@ -620,10 +620,23 @@ goal cards and on the workbook's Revenue by class sheet (`revenue-by-class.ts`).
 
 Until go-live, Sage posts a shipment (OESHIH/OESHID) before AR posts its
 invoice. The Revenue card adds each posted shipment dated this month (by ship
-date) that no posted invoice names yet (`oe_invoice_header.shinumber`), as an
-estimate: order price x quantity shipped less discount, before tax, item lines
-only (charges left out), USD at the card's rate, classed by the shipment's
-customer (so `scope=mfg` leaves Exclusive Distribution out). It moves the
+date) whose header `numinvoice` is 0, as an estimate: order price x quantity
+shipped less the discount amount (`shidisc`), before tax, USD at the card's
+rate, classed by the shipment's customer (so `scope=mfg` leaves Exclusive
+Distribution out). Sage stores `numinvoice` as 0 until AR posts the invoice
+and 1 after; `lastinvnum` then holds the invoice number. Confirmed on the UAT
+Sage copy on 2026-10-28 (Ricardo Savelli): `oe_invoice_header` has no
+`shinumber` (only invuniq, customer, invdate, audtdate), so a join on that
+column can never see an invoice. On that copy, `numinvoice` 0 is 103 shipments,
+all from April through August 2026; January through March are fully invoiced.
+Item lines include codes C and MISC (custom screening fees, filling service
+fees, pumps, bottles, artwork). Line type 2 charge lines and zero-quantity
+lines stay out. The open-order forecast still leaves C and MISC out, and the
+invoiced Revenue card is unchanged. The query does not read `item`. The same
+check confirmed the table names, that the shipment columns are text, that
+`shidate` is YYYYMMDD text, and that currency is only CAD or USD. There is no
+void column, so the void test stays `true`. Header `complete` = 1 on the
+uninvoiced rows, so that flag is not a void marker. The estimate moves the
 headline, status chip, bar and pace; the side line reads "$A invoiced + $B
 shipped, not yet invoiced (estimate) - $R returns". The export lists them on
 the Pending shipments sheet and adds columns N-O to Revenue by class (Toward

@@ -1,16 +1,21 @@
 // INTERIM (TASK-3992), until go-live: shipments Sage has posted that AR hasn't
 // invoiced yet. Sage posts a shipment (OESHIH/OESHID) first and AR posts its
 // invoice later, so for those days the goods are out but not on the Revenue
-// card. One row per posted shipment dated this month (by ship date) that no
-// posted invoice names yet (oe_invoice_header.shinumber). Value: each item
-// line's order price x quantity shipped, less its discount, before tax;
-// freight and other charge lines (line type 2) are left out, as on the card
-// (TASK-3952). No cost column is read. ASSUMPTION to confirm with the
-// replica's owner: OESHIH/OESHID are replicated as sage.oe_shipment_header /
-// sage.oe_shipment_detail with Sage's own column names lower-cased
-// (README, "Interpretations to confirm"). Sage 300 deletes a cancelled
-// shipment rather than flagging it, so NOT_VOIDED is a placeholder: if the
-// replica keeps deleted or voided shipments with a flag, put the test there.
+// card. One row per posted shipment dated this month (by ship date) whose
+// header numinvoice is 0. Sage stores 0 until AR posts the invoice and 1
+// after; lastinvnum then holds the invoice number. UAT's invoice header has
+// no shinumber (Ricardo Savelli, 2026-10-28), so a join on that column cannot
+// see an invoice. Value: each item line's order price x quantity shipped,
+// less its discount amount (shidisc), before tax. Line type 2 (charges) and
+// zero-quantity lines are left out. Item codes C and MISC stay in: they are
+// type-1 lines (custom screening fees, filling service fees, pumps, bottles,
+// artwork). The open-order forecast still drops those codes; this query does
+// not change that, or the invoiced Revenue card. No cost column is read.
+// Confirmed on the UAT Sage copy the same day: the tables are
+// sage.oe_shipment_header and sage.oe_shipment_detail, the shipment columns
+// are text, shidate is YYYYMMDD, and currency is only CAD or USD. There is
+// no void column. NOT_VOIDED stays a placeholder (`true`). Header complete
+// is 1 on the uninvoiced rows, so that flag is not a void marker.
 // The login reads these only once a DBA runs
 // docs/modules/reporting-goals/readonly-grants-shipments-pending.sql; the
 // refresh checks PENDING_SHIPMENT_COLUMNS first, so a missing grant (or a
@@ -25,9 +30,8 @@ import { MONTH_WINDOW, type DatasetQuery } from "./shared";
 
 /** Exactly the columns the query reads (the grant script grants these). */
 export const PENDING_SHIPMENT_COLUMNS = [
-  ["sage", "oe_shipment_header", ["shiuniq", "shinumber", "ordnumber", "customer", "bilname", "shidate", "shsourcurr"]],
-  ["sage", "oe_shipment_detail", ["shiuniq", "linetype", "item", "qtyshipped", "unitprice", "shidisc"]],
-  ["sage", "oe_invoice_header", ["shinumber"]],
+  ["sage", "oe_shipment_header", ["shiuniq", "shinumber", "ordnumber", "customer", "bilname", "shidate", "shsourcurr", "numinvoice"]],
+  ["sage", "oe_shipment_detail", ["shiuniq", "linetype", "qtyshipped", "unitprice", "shidisc"]],
 ] as const satisfies ColumnList;
 
 /** Placeholder for a void / deleted flag on the replica (see the header). */
@@ -60,9 +64,8 @@ JOIN sage.oe_shipment_detail d ON d.shiuniq = s.shiuniq, cut
 WHERE s.shidate >= cut.m0s AND s.shidate < cut.n0s
   AND coalesce(nullif(trim(d.linetype::text), ''), '1') = '1'
   AND d.qtyshipped::numeric <> 0
-  AND upper(trim(coalesce(d.item, ''))) NOT IN ('C', 'MISC')
   AND ${NOT_VOIDED}
-  AND NOT EXISTS (SELECT 1 FROM sage.oe_invoice_header h WHERE trim(h.shinumber) = trim(s.shinumber))
+  AND trim(s.numinvoice) = '0'
 GROUP BY 1, 2, 3, 4, 5, 6
 ORDER BY ship_date, shipment`,
   map: (rows) =>

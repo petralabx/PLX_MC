@@ -179,6 +179,7 @@ interface Mock {
   saves: Record<string, unknown>[];
   submits: unknown[];
   withdraws: unknown[];
+  uploads: Record<string, unknown>[];
 }
 
 interface MockOptions {
@@ -208,7 +209,7 @@ async function mockDraftsApi(
   draftFields: Record<string, unknown> = {},
   options: MockOptions = {}
 ): Promise<Mock> {
-  const mock: Mock = { accepts: [], order: [], creates: [], saves: [], submits: [], withdraws: [] };
+  const mock: Mock = { accepts: [], order: [], creates: [], saves: [], submits: [], withdraws: [], uploads: [] };
   // A save moves the edit base and the title it sent, as the server's does.
   let editBase = EDIT_BASE;
   let title = WORKING.title;
@@ -244,6 +245,14 @@ async function mockDraftsApi(
       mock.submits.push(request.postDataJSON());
       if (options.slowSubmit) await pause(1_500);
       return route.fulfill(json({ draft: ROW, frozen: true, duplicates: 0 }));
+    }
+    if (request.method() === "POST" && url.pathname.endsWith("/artifacts")) {
+      // As the server does: the file is stored and linked, and the edit base moves.
+      const body = request.postDataJSON() as Record<string, string>;
+      mock.uploads.push(body);
+      editBase = EDIT_BASE_2;
+      const link = `https://petrasoap.sharepoint.com/sites/PLXSite/Mission%20Control/Drafts/DRF-7/20261028T220000Z-abcdef12-${body.fileName}`;
+      return route.fulfill(json({ artifact: { kind: body.kind, name: body.fileName, url: link, inline: null }, duplicate: false, editBase, draft: ROW }));
     }
     if (request.method() === "POST" && url.pathname.endsWith("/withdraw")) {
       mock.withdraws.push(request.postDataJSON());
@@ -607,6 +616,31 @@ test.describe("Drafts screen (Draft Projects)", () => {
     expect(mock.saves[1]).toMatchObject({ plan: { tasks: [{ key: "T1" }, { key: "T2", dependsOn: ["TASK-77", "TASK-88"] }] } });
   });
 
+  test("uploads a file into the draft's artifacts, and the next save names the base the upload returned", async ({ page }) => {
+    const mock = await mockDraftsApi(page, { canUpload: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await page.getByLabel(/^Upload as/).selectOption("screenshot");
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
+    await page.getByLabel(/^Upload a file/).setInputFiles({ name: "form.png", mimeType: "image/png", buffer: png });
+    await expect.poll(() => mock.uploads.length).toBe(1);
+    expect(mock.uploads[0]).toEqual({ base: EDIT_BASE, kind: "screenshot", fileName: "form.png", contentType: "image/png", contentBase64: png.toString("base64") });
+    // The link joins the form at once, and nothing is left to save.
+    await expect(page.getByLabel("Artifact 1 name", { exact: true })).toHaveValue("form.png");
+    await expect(page.getByRole("button", { name: "Save draft" })).toBeDisabled();
+
+    await page.getByLabel("Title", { exact: true }).fill("After the upload");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    expect(mock.saves[0]).toMatchObject({ base: EDIT_BASE_2, research: { artifacts: [expect.objectContaining({ kind: "screenshot", name: "form.png" })] } });
+  });
+
+  test("offers no upload when the draft cannot take one", async ({ page }) => {
+    await mockDraftsApi(page, { canUpload: false });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await expect(page.getByLabel("Title", { exact: true })).toBeVisible();
+    await expect(page.getByLabel(/^Upload a file/)).toHaveCount(0);
+  });
+
   test("a frozen version, the current one too, offers no Submit: it would send the working copy", async ({ page }) => {
     await mockDraftsApi(page, { canSubmit: true, unsubmittedEdits: true }, { status: "drafting" });
     await openDrafts(page, "&draftId=DRF-7&version=2");
@@ -663,7 +697,8 @@ test.describe("Drafts screen (Draft Projects)", () => {
   });
 
   test("has no axe violations and no horizontal overflow at any width", async ({ page }) => {
-    await mockDraftsApi(page);
+    // canUpload: the edit page shows the upload control too (TASK-4131).
+    await mockDraftsApi(page, { canUpload: true });
     for (const query of ["", "&draftId=DRF-7", "&draftId=new", "&draftId=DRF-7&edit=1"]) {
       for (const [name, width, height] of WIDTHS) {
         await page.setViewportSize({ width, height });

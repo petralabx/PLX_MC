@@ -115,6 +115,11 @@ were made from. While the form holds unsaved edits it sets the shell's navigatio
 on the working copy's page. The form edits the whole research section, a task's dependencies (the
 draft's other tasks, or `TASK-*` ids) and the order of buckets and tasks (TASK-4110). A save drops
 rows left empty and names half-filled ones; the server validates.
+The form uploads a file for a saved, shared draft (TASK-4131): `POST /api/drafts/{id}/artifacts`
+with the edit base, through the same core as `mc_upload_draft_artifact` (`uploadDraftArtifact`). A
+draft that has moved refuses before anything is stored; on success the link joins the form and the
+form takes the returned base. GET's `viewer.canUpload` offers the control only to the author of an
+open, shared draft while the store is on.
 
 Invariants:
 

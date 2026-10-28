@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { api, ApiClientError } from "@/lib/api";
+import { ARTIFACT_CONTENT_TYPES, MAX_ARTIFACT_BYTES } from "@/lib/compliance/evidence-artifacts";
 import {
   DRAFT_ARTIFACT_KINDS,
   emptyDraftContent,
@@ -82,6 +83,23 @@ function formFrom(detail: DraftDetail): FormState {
 /** The rows the person filled in, tidied, each with its number in the form: a problem names the row they see. */
 function filledRows<T>(rows: T[], tidyRow: (row: T) => T, isFilled: (row: T) => boolean): { row: T; n: number }[] {
   return rows.map((row, i) => ({ row: tidyRow(row), n: i + 1 })).filter(({ row }) => isFilled(row));
+}
+
+/** The form with one more artifact, unless it already links that file. */
+function withArtifact(form: FormState, artifact: DraftArtifact): FormState {
+  const { research } = form.content;
+  if (research.artifacts.some((a) => a.url === artifact.url)) return form;
+  return { ...form, content: { ...form.content, research: { ...research, artifacts: [...research.artifacts, artifact] } } };
+}
+
+/** A file's bytes as base64, for the JSON body of an upload. */
+function base64Of(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).slice(String(reader.result).indexOf(",") + 1));
+    reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}.`));
+    reader.readAsDataURL(file);
+  });
 }
 
 /** The request body for a save, or what the person must fix first. Exported for tests. */
@@ -557,7 +575,55 @@ function ArtifactFields({
   );
 }
 
-function ResearchFields({ research, setResearch }: { research: DraftResearch; setResearch: (fn: (r: DraftResearch) => DraftResearch) => void }) {
+/** What the form uploads: the kinds mc_upload_draft_artifact takes (TASK-4130). */
+const UPLOAD_KINDS = ["diagram", "screenshot", "web-page"] as const;
+type UploadKind = (typeof UPLOAD_KINDS)[number];
+
+/** Uploads a file; resolves to what went wrong, or null once the draft links it. */
+type Uploader = (file: File, kind: UploadKind) => Promise<string | null>;
+
+function UploadArtifact({ onUpload }: { onUpload: Uploader }) {
+  const [kind, setKind] = useState<UploadKind>("diagram");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  return (
+    <div className="dr-edit-grid">
+      <Choice label="Upload as" value={kind} options={UPLOAD_KINDS} onChange={setKind} />
+      <Field label={`Upload a file (${ARTIFACT_CONTENT_TYPES[kind].join(" or ")}, 3 MiB or less)`}>
+        <input
+          type="file"
+          accept={ARTIFACT_CONTENT_TYPES[kind].join(",")}
+          disabled={busy}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            setBusy(true);
+            setProblem(null);
+            setProblem(await onUpload(file, kind));
+            setBusy(false);
+          }}
+        />
+      </Field>
+      {busy && <p className="dr-task-meta wide">Uploading…</p>}
+      {problem && (
+        <div className="dr-banner bad wide" role="alert">
+          {problem}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResearchFields({
+  research,
+  setResearch,
+  onUpload,
+}: {
+  research: DraftResearch;
+  setResearch: (fn: (r: DraftResearch) => DraftResearch) => void;
+  onUpload?: Uploader;
+}) {
   const chosenName = useId();
   const set = (patch: Partial<DraftResearch>) => setResearch((r) => ({ ...r, ...patch }));
   const setApproach = (i: number, patch: Partial<DraftApproach>) => setResearch((r) => ({ ...r, approaches: at(r.approaches, i, patch) }));
@@ -783,6 +849,12 @@ function ResearchFields({ research, setResearch }: { research: DraftResearch; se
           + Add artifact
         </button>
       </div>
+      {onUpload && research.artifacts.length < 50 && (
+        <>
+          <p className="dr-task-meta">Or upload a file. Mission Control keeps it in its SharePoint library and links it here at once.</p>
+          <UploadArtifact onUpload={onUpload} />
+        </>
+      )}
     </section>
   );
 }
@@ -985,6 +1057,31 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
   // Unsaved edits are asked about by the navigation guard above.
   const close = () => nav("drafts", id ? { draftId: id } : {});
 
+  // An upload (TASK-4131) stores the file and links it from the saved draft at
+  // once. It names the base the form read, so it refuses once the draft has moved.
+  // The link then joins both what was saved and what is shown, and the form takes
+  // the new base. The form is locked meanwhile, as for Submit.
+  const upload: Uploader = async (file, kind) => {
+    if (!id || !detail) return null;
+    if (file.size > MAX_ARTIFACT_BYTES) return `${file.name} has ${file.size} bytes. The limit is ${MAX_ARTIFACT_BYTES} bytes (3 MiB).`;
+    setActing(true);
+    try {
+      const contentBase64 = await base64Of(file);
+      const result = await api<{ artifact: DraftArtifact; editBase: string }>(`/drafts/${encodeURIComponent(id)}/artifacts`, {
+        method: "POST",
+        body: JSON.stringify({ base: detail.viewer.editBase, kind, fileName: file.name, contentType: file.type, contentBase64 }),
+      });
+      setInitial((f) => f && withArtifact(f, result.artifact));
+      setFormState((f) => f && withArtifact(f, result.artifact));
+      setDetail((d) => (d ? { ...d, viewer: { ...d.viewer, editBase: result.editBase } } : d));
+      return null;
+    } catch (err) {
+      return errorOf(err).message;
+    } finally {
+      setActing(false);
+    }
+  };
+
   const save = async () => {
     if (!form) return;
     const { body, problems } = prepare(form);
@@ -1062,7 +1159,7 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
       <fieldset className="dr-edit-lock" disabled={(busy && id === null) || acting}>
         <SettingsFields form={form} setForm={setForm} />
         <PlanFields plan={form.content.plan} setPlan={setPlan} />
-        <ResearchFields research={form.content.research} setResearch={setResearch} />
+        <ResearchFields research={form.content.research} setResearch={setResearch} onUpload={id && detail?.viewer.canUpload ? upload : undefined} />
       </fieldset>
 
       <section className="dr-section dr-edit-foot" aria-label="Save">

@@ -236,6 +236,7 @@ An agent uploads a file for a draft it wrote with `mc_upload_draft_artifact`:
 - Only the draft's writer uploads, to an open draft. An upload during review returns the draft to drafting, as any edit does.
 - A restricted draft refuses: everyone with access to the shared library could open the file, and MC never narrows access.
 - Uploads are off until a person sets `PLX_MC_EVIDENCE_STORE_ENABLED=1`, the switch evidence uploads use.
+- The New draft form uploads too (TASK-4131). For a saved, shared draft whose author is signed in, the Artifacts section offers **Upload a file**. `POST /api/drafts/{id}/artifacts` sends the file with the edit base the form read, so a draft that has moved refuses before anything is stored. The link joins the form at once, and the form takes the new base. `GET /api/drafts/{id}` says whether uploads are on (`viewer.canUpload`).
 
 ## Follow-up: review on a shared page (Vince, 2026-10-27)
 
@@ -274,7 +275,8 @@ Not decided yet:
 | Follow-up B | TASK-4110 | New draft form, slice B: risks, open questions and artifacts in the form; a dependency picker; reordering | Merged (#503) |
 | Follow-up C | TASK-4130 | Artifact uploads: `mc_upload_draft_artifact` stores a draft's file under `Drafts/DRF-n/` in the `Mission Control` library (see Follow-up: artifact uploads) | In review |
 | Follow-up D | TASK-4129 | Skill updates: `project-researcher` and `guided-project-discovery` end by saving a draft (`petralabx/skills` 1.6.15) | Merged (petralabx/skills#48) |
-| Follow-up | TASK-4131, TASK-4132 | Uploads from the New draft form; the governance-contract rule and the skills catalog pin | In progress |
+| Follow-up E | TASK-4131 | Uploads from the New draft form (`POST /api/drafts/{id}/artifacts`) | In review |
+| Follow-up | TASK-4132 | The governance-contract rule and the skills catalog pin | In progress |
 | Follow-up | Not created | Review on a shared page: "Publish for review" and the comment relay, Claude Artifacts first (see Follow-up: review on a shared page). After step 3 is live and in use | Not started |
 
 Step 2 touches a migration, so it lands only with a signed MC merge approval of its exact head.

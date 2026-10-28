@@ -261,8 +261,8 @@ Not decided yet:
 | 2 | TASK-4059 | Migration `056_drafts.sql` (054 and 055 were taken), `src/lib/drafts`, the five tools, REST routes, capabilities, `docs/modules/drafts/README.md` and the `DATA_MODEL.md` entry. 056 also adds the columns Accept needs, so step 3 has no migration | Merged (#489) |
 | 3 | TASK-4071 | Drafts screen, session routes under `/api/drafts`, Accept, the Drafts to review panel on Approvals, a Drafts nav item. Drafts turn on by default; `PLX_MC_DRAFTS_ENABLED=0` is the kill switch | Merged (#492) |
 | Follow-up A | TASK-4109 | New draft form, slice A: session routes to create, save, submit and withdraw; the form for the settings, the plan and the research submit needs (see Follow-up: New draft form) | Merged (#497, #499) |
-| Follow-up B | TASK-4110 | New draft form, slice B: risks, open questions and artifacts in the form; a dependency picker; reordering | In review |
-| Follow-up | Not created | Artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | Not started |
+| Follow-up B | TASK-4110 | New draft form, slice B: risks, open questions and artifacts in the form; a dependency picker; reordering | Merged (#503) |
+| Follow-up | TASK-4129 to TASK-4132 | Artifact uploads under `Drafts/DRF-n/` in the `Mission Control` library, the governance-contract rule, skill updates | In progress |
 | Follow-up | Not created | Review on a shared page: "Publish for review" and the comment relay, Claude Artifacts first (see Follow-up: review on a shared page). After step 3 is live and in use | Not started |
 
 Step 2 touches a migration, so it lands only with a signed MC merge approval of its exact head.

@@ -32,6 +32,10 @@ composed swarm delegation.
 | `mc_release_checkout` | Release a stray or expired lease by `checkoutId`, or `checkoutRef` + `taskId`, with a `reason`; never changes the task |
 | `mc_release_checkouts` | Batch form of `mc_release_checkout` with per-item outcomes |
 | `mc_report_session_telemetry` | Report session token usage and cost (cents) at close; one row per `sessionId` |
+| `mc_save_draft` | Create or edit a Draft Project (plan under keys P, B1, T1, plus research); returns the preflight result; `withdraw` closes it. Off when `PLX_MC_DRAFTS_ENABLED=0` (TASK-4059) |
+| `mc_submit_draft` | Freeze a draft as its next version and open review; refuses with every preflight problem |
+| `mc_get_draft` / `mc_list_drafts` | Read a draft or one frozen version; list visible drafts (`mine`, `needsMyReview`) |
+| `mc_review_draft` | Comment, finding (`blocking`), approve (advisory for agents) or request changes on the `version` you read; or resolve a finding you raised. Agents never accept |
 | `dispatch_to_swarm` | COS swarm delegation |
 | `list_swarm_teams` / `swarm_health` | Swarm helpers |
 

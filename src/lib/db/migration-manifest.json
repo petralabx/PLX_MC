@@ -52,5 +52,7 @@
   "051_reporting_goals_credit_notes.sql",
   "052_reporting_goals_pending_shipments.sql",
   "053_nav_stars_cap_10.sql",
-  "054_per_consumer_mcp_principals.sql"
+  "054_per_consumer_mcp_principals.sql",
+  "055_vince_personal_mcp_principal.sql",
+  "056_drafts.sql"
 ]

@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { TASK_KINDS } from "@/lib/tasks/kind";
-import { ApiError } from "@/lib/api/route";
 import { SKILL_ID_PATTERN } from "@/lib/skills-directory";
 import type { McpIdentity } from "./auth";
 import {
@@ -24,6 +23,7 @@ import {
   actionSelfCheck,
 } from "./actions";
 import { recordMcpToolCall } from "./audit";
+import { auditErrorText } from "./audit-error";
 import { actionUploadEvidence, uploadEvidenceInputShape } from "./evidence-actions";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 import { installMcpToolErrorEnvelope, taskLink } from "./envelope";
@@ -46,6 +46,7 @@ import { registerTaskUpdateTools } from "./task-update-actions";
 import { registerProjectTools } from "./project-actions";
 import { registerLinkMergedPrTools } from "./link-merged-pr-actions";
 import { registerSessionTelemetryTools } from "./session-telemetry-actions";
+import { registerDraftTools } from "./draft-actions";
 
 function jsonResult(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -107,7 +108,7 @@ function auditToolCalls(server: McpServer, identity: McpIdentity): void {
             requestId,
             ok: false,
             durationMs: Date.now() - started,
-            error: err instanceof ApiError ? err.message : "internal",
+            error: auditErrorText(tool, err),
           }).catch(() => {});
           throw err;
         }
@@ -446,6 +447,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
   registerProjectTools(server, identity);
   registerLinkMergedPrTools(server, identity);
   registerSessionTelemetryTools(server, identity);
+  registerDraftTools(server, identity);
 
   return server;
 }

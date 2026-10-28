@@ -40,6 +40,7 @@ const SUPPORTED_MCP_PRINCIPAL_IDS = new Set([
   "sp_mcp_lane_cursor_cos",
   "sp_mcp_lane_cursor_uat",
   "sp_mcp_lane_cursor_vince",
+  "sp_mcp_vince",
 ]);
 
 const RUNTIME_PRINCIPAL_IDS = new Map([

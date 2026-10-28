@@ -57,6 +57,12 @@ export const CAPABILITIES = [
   "skill.install",
   // Replay the compliance reconciliation queue by hand (the cron run is CRON_SECRET-gated).
   "compliance.reconcile",
+  // TASK-4059 Draft Projects: write, submit and withdraw a draft one authors or wrote.
+  "draft.create",
+  // Review a draft one can see: comment, finding, approve, request changes.
+  "draft.review",
+  // Accept a draft into live records (step 3). The action also requires the session to be the author.
+  "draft.accept",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -208,6 +214,9 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
   "sp_mcp_lane_cursor_cos",
   "sp_mcp_lane_cursor_uat",
   "sp_mcp_lane_cursor_vince",
+  // TASK-4015: Vince's personal principal (his Claude and Cursor). Same
+  // grant as sp_mcp_claude_code (the default MCP_AGENT_CAPABILITIES bundle).
+  "sp_mcp_vince",
 ] as const;
 
 /**

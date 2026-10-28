@@ -147,6 +147,8 @@ const FULL_MCP_BUNDLE = [
   "question.ask",
   "telemetry.report",
   "sync.mutate",
+  "draft.create",
+  "draft.review",
 ];
 
 const KEYS: Record<string, string> = {

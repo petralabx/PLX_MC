@@ -817,7 +817,8 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
 
   const page = (children: ReactNode) => (
     <div className="mc-main dr-page" data-testid="drafts-screen">
-      <button type="button" className="btn ghost sm dr-back" onClick={close}>
+      {/* Off while Create, Save, Submit or Withdraw runs: each opens a page of its own when it lands. */}
+      <button type="button" className="btn ghost sm dr-back" disabled={busy || acting} onClick={close}>
         {id ? `← Back to ${id}` : "← All drafts"}
       </button>
       {children}
@@ -882,7 +883,7 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
           <button type="button" className="btn acc" disabled={busy || acting || (id !== null && !dirty)} onClick={() => void save()}>
             {busy ? "Saving…" : id ? "Save draft" : "Create draft"}
           </button>
-          <button type="button" className="btn ghost" disabled={busy} onClick={close}>
+          <button type="button" className="btn ghost" disabled={busy || acting} onClick={close}>
             {dirty ? "Cancel" : "Done"}
           </button>
         </div>

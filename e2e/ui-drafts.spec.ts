@@ -531,8 +531,12 @@ test.describe("Drafts screen (Draft Projects)", () => {
   test("the form is locked while Submit runs, so no edit is lost when it opens the draft", async ({ page }) => {
     const mock = await mockDraftsApi(page, { canSubmit: true }, { status: "drafting" }, { slowSubmit: true });
     await openDrafts(page, "&draftId=DRF-7&edit=1");
-    await page.getByRole("region", { name: "Save" }).getByRole("button", { name: "Submit for review" }).click();
+    const footer = page.getByRole("region", { name: "Save" });
+    await footer.getByRole("button", { name: "Submit for review" }).click();
     await expect(page.getByLabel("Title", { exact: true })).toBeDisabled();
+    // Done or Back would open the record before Submit lands, and it would keep showing the draft as it was.
+    await expect(footer.getByRole("button", { name: "Done" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "← Back to DRF-7" })).toBeDisabled();
     await expect(page).toHaveURL(/draftId=DRF-7$/);
     expect(mock.submits).toEqual([{ base: EDIT_BASE }]);
   });

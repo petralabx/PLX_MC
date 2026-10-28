@@ -37,7 +37,7 @@ export function evidenceCompleteForTier(
   const missing: string[] = [];
 
   // Reasons name the FIELD to send, not the abstract artifact. The checklist is
-  // derived in actionComplete from verificationCommands + rollback, so "missing
+  // derived in buildTaskEvidence from verificationCommands + rollback, so "missing
   // a complete evidence checklist" sent readers hunting for an `items` field
   // that no caller supplies. Say what to do instead.
   if (!ev || !ev.summary.trim()) missing.push("an evidence summary (send `summary`)");
@@ -46,7 +46,7 @@ export function evidenceCompleteForTier(
   const checklistComplete = !!ev && ev.items.length > 0 && ev.items.every((i) => i.done);
   if (!checklistComplete) {
     missing.push(
-      "a complete evidence checklist (send `verificationCommands` and `rollback` to mc_complete_task; the checklist is derived from them)"
+      "a complete evidence checklist (send `verificationCommands` and `rollback` to mc_save_evidence, or to mc_complete_task after merge; the checklist is derived from them)"
     );
   }
   if (req.rollback && !ev?.rollback?.trim()) missing.push("a rollback plan (send `rollback`)");

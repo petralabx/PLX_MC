@@ -850,32 +850,9 @@ export async function actionComplete(
   const dispatch = await complianceRepo.getDispatch(input.checkoutId);
   const taskId = dispatch?.taskId ?? "";
 
-  const qa = input.testRun
-    ? {
-        pass: input.testRun.passed,
-        fail: input.testRun.failed,
-        total: input.testRun.total ?? input.testRun.passed + input.testRun.failed,
-        suite: input.testRun.suite,
-        ran: new Date().toISOString(),
-        tests: [],
-      }
-    : undefined;
+  // Sent fields win; evidence saved earlier with mc_save_evidence fills the rest (TASK-4055).
+  const { evidence, qa } = buildTaskEvidence(input, task?.evidence);
   if (taskId) {
-    const evidence: Evidence = {
-      summary: input.summary,
-      items: [
-        { key: "summary", label: "Summary — what changed", done: true },
-        {
-          key: "verification",
-          label: "Verification commands run",
-          done: (input.verificationCommands?.length ?? 0) > 0,
-        },
-        { key: "rollback", label: "Rollback plan", done: !!input.rollback?.trim() },
-      ],
-      rollback: input.rollback?.trim() || null,
-      ...(qa ? { qa } : {}),
-      ...(input.shots?.length ? { shots: input.shots } : {}),
-    };
     // Files from mc_upload_evidence (TASK-3166) outlive a new hand-in. They are
     // read under the task row lock, so an upload that lands meanwhile is kept.
     await withTransaction(async (q) => {
@@ -907,5 +884,124 @@ export async function actionComplete(
     },
     evidenceStandard,
     sync: taskId ? await syncMetaForTask(taskId) : undefined,
+  };
+}
+
+type EvidenceInput = {
+  summary: string;
+  verificationCommands?: string[];
+  rollback?: string;
+  testRun?: { suite: string; passed: number; failed: number; total?: number };
+  shots?: { label: string; cap: string }[];
+};
+
+/**
+ * The task evidence mc_complete_task and mc_save_evidence write (TASK-4055).
+ * The checklist is derived from verificationCommands and rollback. A field the
+ * call does not send falls back to the evidence saved before it. Artifacts are
+ * not built here: each caller keeps them under the task row lock.
+ */
+export function buildTaskEvidence(
+  input: EvidenceInput,
+  saved: Evidence | undefined
+): { evidence: Evidence; qa: Evidence["qa"] } {
+  const qa = input.testRun
+    ? {
+        pass: input.testRun.passed,
+        fail: input.testRun.failed,
+        total: input.testRun.total ?? input.testRun.passed + input.testRun.failed,
+        suite: input.testRun.suite,
+        ran: new Date().toISOString(),
+        tests: [],
+      }
+    : saved?.qa;
+  const verified =
+    (input.verificationCommands?.length ?? 0) > 0 ||
+    !!saved?.items?.some((i) => i.key === "verification" && i.done);
+  const rollback = input.rollback?.trim() || saved?.rollback?.trim() || null;
+  const shots = input.shots?.length ? input.shots : saved?.shots;
+  const evidence: Evidence = {
+    summary: input.summary,
+    items: [
+      { key: "summary", label: "Summary — what changed", done: true },
+      { key: "verification", label: "Verification commands run", done: verified },
+      { key: "rollback", label: "Rollback plan", done: !!rollback },
+    ],
+    rollback,
+    ...(qa ? { qa } : {}),
+    ...(shots?.length ? { shots } : {}),
+  };
+  return { evidence, qa };
+}
+
+// mc_save_evidence (TASK-4055): the compliance gate reads task.evidence while the
+// PR is open, but mc_complete_task hands the work in. This saves the same
+// evidence on a live checkout before merge and changes nothing else.
+export const saveEvidenceInputShape = {
+  checkoutId: z.string().min(1),
+  summary: z.string().min(1),
+  verificationCommands: z.array(nonBlank).optional(),
+  filesChanged: z.array(z.string()).optional(),
+  rollback: z.string().optional(),
+  testRun: completeTaskInputShape.testRun,
+  shots: completeTaskInputShape.shots,
+};
+
+export async function actionSaveEvidence(
+  identity: McpIdentity,
+  input: EvidenceInput & { checkoutId: string; filesChanged?: string[] }
+) {
+  const dispatch = await complianceRepo.getDispatch(input.checkoutId);
+  if (!dispatch?.taskId || dispatch.revoked || dispatch.releasedAt || new Date(dispatch.expiresAt).getTime() <= Date.now()) {
+    throw new ApiError("invalid_checkout", "Unknown, revoked, released, or expired checkout.", 409);
+  }
+  const taskId = dispatch.taskId;
+  // The hand-in's grant. No autonomy approval check: saving evidence completes nothing.
+  requireMcpActor(identity, "task.complete", { type: "task", id: taskId }, { repositoryId: dispatch.repo });
+  await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
+  if ((await complianceRepo.getDispatchCheckoutPrincipal(dispatch.id)) !== identity.actor.id) {
+    throw new ApiError("forbidden", `Another principal holds this checkout of ${taskId}. Save evidence on your own checkout.`, 403);
+  }
+  const task = (await getEntity("task", taskId))?.data as unknown as Task | undefined;
+  if (!task) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
+  // The same evidence standard as the hand-in (TASK-3165), before anything is written.
+  const evidenceStandard = evidenceStandardReport(
+    input.summary,
+    requiresHumanVerification(task.labels, classifyRiskTier(input.filesChanged ?? []))
+  );
+  assertEvidenceStandard("The evidence summary", evidenceStandard);
+  // Patches only `evidence`, under the task row lock, so an upload or an
+  // earlier save that lands meanwhile is kept.
+  const evidence = await withTransaction(async (q) => {
+    const locked = (await getEntity("task", taskId, q, true))?.data as unknown as Task | undefined;
+    if (!locked) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
+    const artifacts = locked.evidence?.artifacts;
+    const next: Evidence = {
+      ...buildTaskEvidence(input, locked.evidence).evidence,
+      ...(artifacts?.length ? { artifacts } : {}),
+    };
+    await patchTask(
+      taskId,
+      { evidence: next } as Parameters<typeof patchTask>[1],
+      dispatch.accountableHuman ?? identity.operatorEmail,
+      { query: q, attribution: { source: "service", actorId: identity.actor.id } }
+    );
+    await complianceRepo.appendEventTx(q, {
+      kind: "task.evidence.saved",
+      actor: mcpAuditActor(identity),
+      repo: dispatch.repo,
+      taskId,
+      payload: { items: next.items.map((i) => ({ key: i.key, done: i.done })), qa: !!next.qa, shots: next.shots?.length ?? 0 },
+    });
+    return next;
+  });
+  return {
+    ok: true,
+    checkoutId: input.checkoutId,
+    taskId,
+    link: taskLink(taskId),
+    evidence,
+    evidenceStandard,
+    sync: await syncMetaForTask(taskId),
   };
 }

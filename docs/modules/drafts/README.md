@@ -103,8 +103,9 @@ digest, the visibility, the members and the reviewers); a draft that has moved s
 409 `draft_changed`. A review does not move it, and edits typed after a save keep the base they
 were made from. While the form holds unsaved edits it sets the shell's navigation guard
 (`src/components/mc/nav-guard.ts`), so an in-app move or Back asks first. Author actions show only
-on the working copy's page. The form does not edit risks, open questions or
-artifacts yet (TASK-4110); a save sends them back unchanged.
+on the working copy's page. The form edits the whole research section, a task's dependencies (the
+draft's other tasks, or `TASK-*` ids) and the order of buckets and tasks (TASK-4110). A save drops
+rows left empty and names half-filled ones; the server validates.
 
 Invariants:
 

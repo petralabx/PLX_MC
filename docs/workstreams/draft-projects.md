@@ -2,7 +2,7 @@
 
 - Slug: `draft-projects` (this file is `docs/workstreams/draft-projects.md`)
 - Owner: Vince · agents: Claude Code on the web
-- Branches: `claude/brave-heisenberg-7t8mks` (step 1 merged as #487, TASK-4056; step 2 merged as #489, TASK-4059; step 3 merged as #492, TASK-4071; New draft form slice A merged as #497, TASK-4109)
+- Branches: `claude/brave-heisenberg-7t8mks` (step 1 merged as #487, TASK-4056; step 2 merged as #489, TASK-4059; step 3 merged as #492, TASK-4071; New draft form slice A merged as #497 and #499, TASK-4109; slice B, TASK-4110)
 - MC tasks: TASK-4056, TASK-4059, TASK-4071, TASK-4109, TASK-4110
 - SharePoint handoff: n/a
 
@@ -12,22 +12,21 @@ Let PLX members and their agents put a planned project, its buckets and tasks, a
 
 ## Status
 
-active, as of 2026-10-28. Steps 1 to 3 are merged and live on https://mc.plxcustomer.io (DB Migrate applied 055 and 056 on 2026-10-27). Reopened for the New draft form follow-up: slice A (TASK-4109) is merged; its review follow-up is in review on `claude/brave-heisenberg-7t8mks`. Slice B (TASK-4110) follows on the same branch after it lands.
+active, as of 2026-10-28. Steps 1 to 3 are merged and live on https://mc.plxcustomer.io (DB Migrate applied 055 and 056 on 2026-10-27). Reopened for the New draft form follow-up: slice A (TASK-4109) is merged (#497, and its review follow-up #499). Slice B (TASK-4110: risks, open questions, artifacts, the dependency picker, reordering) is in review on `claude/brave-heisenberg-7t8mks`.
 
 ## Done
 
 - TASK-4056: the PRD and this note ([PLX_MC PR 487](https://github.com/petralabx/PLX_MC/pull/487)).
 - TASK-4059: migration `056_drafts.sql`, `src/lib/drafts`, `mc_save_draft`, `mc_submit_draft`, `mc_get_draft`, `mc_list_drafts`, `mc_review_draft` on HTTP MCP, stdio and `/api/cursor/drafts`, capabilities `draft.create`, `draft.review`, `draft.accept`, the module contract `docs/modules/drafts/README.md` ([PLX_MC PR 489](https://github.com/petralabx/PLX_MC/pull/489)).
 - TASK-4071: the Drafts screen (`src/components/mc/drafts.tsx`), session routes under `/api/drafts`, Accept (`src/lib/drafts/accept.ts`), the Drafts to review panel on Approvals, the Drafts nav item. Drafts are on unless `PLX_MC_DRAFTS_ENABLED=0` ([PLX_MC PR 492](https://github.com/petralabx/PLX_MC/pull/492)). Production checked on 2026-10-27: `/api/drafts` answers with the sign-in envelope, `GET /api/cursor/drafts` with an MC key returns 200, and `?screen=drafts` goes to sign-in.
-- TASK-4109, slice A of the New draft form: the form for settings, the plan and core research (`src/components/mc/draft-editor.tsx`), and the session routes to create, save, submit and withdraw ([PLX_MC PR 497](https://github.com/petralabx/PLX_MC/pull/497)).
+- TASK-4109, slice A of the New draft form: the form for settings, the plan and core research (`src/components/mc/draft-editor.tsx`), and the session routes to create, save, submit and withdraw ([PLX_MC PR 497](https://github.com/petralabx/PLX_MC/pull/497); review follow-up [PLX_MC PR 499](https://github.com/petralabx/PLX_MC/pull/499)).
 
 ## Next steps
 
-1. Land the slice A review follow-up (TASK-4109): a save's read-back never undoes a later save, and the form locks while Submit or Withdraw runs.
-2. Slice B (TASK-4110), from `main` after the follow-up lands: risks, open questions and artifacts in the form, a dependency picker, reordering.
-3. A signed-in check of the Drafts screen on production: list, record, review, Accept, and now New draft. The first real draft is the test.
-4. Follow-up, not started: artifact uploads under `Drafts/DRF-n/`, the governance-contract rule, skill updates.
-5. Follow-up, not started: review on a shared page (Claude Artifacts first, Cursor Canvas if it exposes comments). Spec: PRD "Follow-up: review on a shared page".
+1. Land slice B of the New draft form (TASK-4110): review, then the merge queue. No migration. Then set this workstream back to done.
+2. A signed-in check of the Drafts screen on production: list, record, review, Accept, and now New draft. The first real draft is the test.
+3. Follow-up, not started: artifact uploads under `Drafts/DRF-n/`, the governance-contract rule, skill updates.
+4. Follow-up, not started: review on a shared page (Claude Artifacts first, Cursor Canvas if it exposes comments). Spec: PRD "Follow-up: review on a shared page".
 
 ## Decisions and why
 
@@ -61,7 +60,7 @@ active, as of 2026-10-28. Steps 1 to 3 are merged and live on https://mc.plxcust
 - `src/lib/drafts/`, `src/lib/mcp/draft-actions.ts`, `src/app/api/cursor/drafts/`, `src/lib/permissions/`
 - `tools/plx-mc-mcp/` (stdio tools)
 - Step 3: `src/app/api/drafts/`, `src/components/mc/drafts.tsx`, `src/styles/mc-drafts.css`, and one line each in `src/components/mc/` `route.ts`, `screens.tsx`, `nav-model.ts`, `nav-icon.tsx`, `approvals-inbox.tsx`. The nav files are shared with the `nav-v2-sidebar` workstream.
-- New draft form (TASK-4109): `src/components/mc/draft-editor.tsx`, `src/app/api/drafts/` (create, save, submit, withdraw), the `edit` route param in `src/components/mc/route.ts`, `draftEditBase` in `src/lib/drafts/service.ts`.
+- New draft form (TASK-4109, TASK-4110): `src/components/mc/draft-editor.tsx`, `src/app/api/drafts/` (create, save, submit, withdraw), the `edit` route param in `src/components/mc/route.ts`, `draftEditBase` in `src/lib/drafts/service.ts`.
 
 ## How to run the tests
 
@@ -79,4 +78,4 @@ bash scripts/preflight.sh --mode pre-commit
 
 ## Last updated
 
-2026-10-28 by Claude Code (TASK-4109): slice A merged (#497); its review follow-up in review.
+2026-10-28 by Claude Code (TASK-4110): slice A merged (#497, #499); slice B in review.

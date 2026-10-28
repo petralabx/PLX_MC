@@ -3,17 +3,19 @@
 // as text, never as HTML; only http(s) links become links; preflight problems
 // show against the plan item they name; the version summary names what changed.
 // The New draft form (TASK-4109) opens at draftId=new, or with edit=1 on a draft,
-// and that route survives the URL.
+// and that route survives the URL. Its save (TASK-4110) drops rows left empty,
+// names half-filled ones, and sends an artifact as a link or inline content.
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { DraftsView, PlanSection, ResearchSection, VersionDiff } from "@/components/mc/drafts";
+import { prepare, type FormState } from "@/components/mc/draft-editor";
 import { navAllowed, setNavGuard } from "@/components/mc/nav-guard";
 import { routeToUrl, urlToRoute } from "@/components/mc/route";
 import { draftPlanSchema, draftResearchSchema } from "@/lib/drafts/schema";
-import type { DraftContent, DraftPlan, DraftResearch } from "@/lib/drafts/types";
+import { emptyDraftContent, type DraftContent, type DraftPlan, type DraftPlanTask, type DraftResearch } from "@/lib/drafts/types";
 
 const content = (): DraftContent => ({
   title: "Draft Projects",
@@ -124,5 +126,66 @@ describe("the navigation guard", () => {
     expect(navAllowed()).toBe(false);
     clearSecond();
     expect(navAllowed()).toBe(true);
+  });
+});
+
+describe("the New draft form's save", () => {
+  const form = (edit: (c: DraftContent) => void): FormState => {
+    const content = emptyDraftContent("A plan");
+    edit(content);
+    return { content, visibility: "shared", members: "", reviewers: "" };
+  };
+  const task: DraftPlanTask = { key: "T1", bucket: "B1", title: "x", description: "", priority: "medium", kind: "code", repos: [], accountableOwner: null, dependsOn: [] };
+
+  it("drops rows left empty, and tidies lists typed one per line or by commas", () => {
+    const { body, problems } = prepare(
+      form((c) => {
+        c.research.approaches = [{ name: "", pros: ["", " "], cons: [], risk: "medium", effort: "M", chosen: false }];
+        c.research.findings = [{ text: " ", sources: [] }];
+        c.research.risks = [{ text: "", likelihood: "low", impact: "low", mitigation: " " }];
+        c.research.openQuestions = ["Who reviews?", "", "  "];
+        c.research.artifacts = [{ kind: "web-page", name: "", url: "", inline: null }];
+        c.plan.tasks = [{ ...task, dependsOn: ["T2", " ", " TASK-12"] }];
+      })
+    );
+    expect(problems).toEqual([]);
+    expect(body.research).toMatchObject({ approaches: [], findings: [], risks: [], openQuestions: ["Who reviews?"], artifacts: [] });
+    expect((body.plan as DraftPlan).tasks[0].dependsOn).toEqual(["T2", "TASK-12"]);
+  });
+
+  it("names a half-filled row instead of sending it", () => {
+    const { problems } = prepare(
+      form((c) => {
+        c.title = " ";
+        c.research.risks = [{ text: "", likelihood: "low", impact: "low", mitigation: "Retry the import." }];
+        c.research.artifacts = [
+          { kind: "mermaid", name: "Flow", url: null, inline: " " },
+          { kind: "web-page", name: "", url: "https://example.com/a", inline: null },
+          { kind: "document", name: "Spec", url: " ", inline: null },
+        ];
+      })
+    );
+    expect(problems).toEqual([
+      "Give the draft a title.",
+      "Risk 1 needs its text.",
+      "Artifact 1 needs its content.",
+      "Artifact 2 needs a name.",
+      "Artifact 3 needs its link.",
+    ]);
+  });
+
+  it("sends an artifact as a link or as inline content, never both", () => {
+    const { body } = prepare(
+      form((c) => {
+        c.research.artifacts = [
+          { kind: "mermaid", name: "Flow", url: null, inline: "graph TD; A-->B" },
+          { kind: "web-page", name: "Spec", url: " https://example.com/spec ", inline: null },
+        ];
+      })
+    );
+    expect((body.research as DraftResearch).artifacts).toEqual([
+      { kind: "mermaid", name: "Flow", url: null, inline: "graph TD; A-->B" },
+      { kind: "web-page", name: "Spec", url: "https://example.com/spec", inline: null },
+    ]);
   });
 });

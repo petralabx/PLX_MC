@@ -5,8 +5,10 @@
 // new records. An older version is read-only, and a closed draft offers no
 // finding actions. Approvals lists the drafts waiting for the viewer's review.
 // The New draft form (TASK-4109) creates a draft, saves from the edit base it
-// read and keeps what it does not show; submit and withdraw are the author's, and the form locks while either
-// runs. Axe and horizontal overflow run at desktop, tablet and phone widths.
+// read and sends back what it did not change; submit and withdraw are the
+// author's, and the form locks while either runs. It edits risks, open
+// questions, artifacts, dependencies and the order of tasks too (TASK-4110).
+// Axe and horizontal overflow run at desktop, tablet and phone widths.
 
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
@@ -394,13 +396,12 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await expect(page.getByLabel("T1 title", { exact: true })).toHaveValue("Intake form");
   });
 
-  test("Edit saves from the edit base it read, and keeps what the form does not show", async ({ page }) => {
+  test("Edit saves from the edit base it read, and sends back what it did not change", async ({ page }) => {
     const mock = await mockDraftsApi(page);
     await openDrafts(page, "&draftId=DRF-7");
     await page.getByRole("region", { name: "Your draft" }).getByRole("button", { name: "Edit draft" }).click();
     await expect(page).toHaveURL(/draftId=DRF-7&edit=1/);
     await page.getByLabel("Title", { exact: true }).fill("Draft Projects rollout, revised");
-    await expect(page.getByText("Saving keeps the draft's 1 risk(s), 1 open question(s) as they are.")).toBeVisible();
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect.poll(() => mock.saves.length).toBe(1);
     expect(mock.saves[0]).toMatchObject({
@@ -499,6 +500,34 @@ test.describe("Drafts screen (Draft Projects)", () => {
     page.once("dialog", (dialog) => void dialog.accept());
     await page.getByRole("button", { name: "← Back to DRF-7" }).click();
     await expect(page).toHaveURL(/draftId=DRF-7$/);
+  });
+
+  test("edits risks, open questions, artifacts, dependencies and the order of tasks", async ({ page }) => {
+    const mock = await mockDraftsApi(page);
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await page.getByRole("button", { name: "+ Add risk" }).click();
+    await page.getByLabel("Risk 2", { exact: true }).fill("Reviewers skip drafts.");
+    await page.getByLabel(/^Risk 2 impact/).selectOption("high");
+    await page.getByLabel("Open questions (one per line)").fill("Who reviews by default?\nDo drafts expire?");
+    await page.getByRole("button", { name: "+ Add artifact" }).click();
+    await page.getByLabel("Artifact 1 name", { exact: true }).fill("Flow");
+    await page.getByLabel(/^Artifact 1 kind/).selectOption("mermaid");
+    await page.getByLabel("Inline markdown or Mermaid").check();
+    await page.getByLabel("Artifact 1 content", { exact: true }).fill("graph TD; A-->B");
+    await page.getByRole("group", { name: "T2 depends on" }).getByLabel(/T1/).uncheck();
+    await page.getByLabel("T2 also depends on existing tasks (TASK ids, separated by commas)").fill("TASK-3953");
+    await page.getByRole("button", { name: "Move T2 up" }).click();
+    await expect(page.getByRole("button", { name: "Move T2 up" })).toBeDisabled();
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    expect(mock.saves[0]).toMatchObject({
+      plan: { tasks: [{ key: "T2", dependsOn: ["TASK-3953"] }, { key: "T1", dependsOn: [] }] },
+      research: {
+        risks: [WORKING.research.risks[0], { text: "Reviewers skip drafts.", likelihood: "medium", impact: "high", mitigation: "" }],
+        openQuestions: ["Who reviews by default?", "Do drafts expire?"],
+        artifacts: [{ kind: "mermaid", name: "Flow", url: null, inline: "graph TD; A-->B" }],
+      },
+    });
   });
 
   test("a draft that moved refuses the save, and the form keeps the edits", async ({ page }) => {

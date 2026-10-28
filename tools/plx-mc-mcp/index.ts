@@ -91,7 +91,8 @@ const server = new McpServer(
   {
     instructions:
       "PLX Mission Control — create projects/buckets, checkout tasks (mc_checkout_task), suggest work (mc_suggest_work), report progress, complete with evidence, " +
-      "manage the PLX skills directory, and optionally dispatch_to_swarm. Prefer mc_suggest_work when Task ID is unknown. Append MC-Checkout lines from checkout responses to PR bodies.",
+      "manage the PLX skills directory, and optionally dispatch_to_swarm. Prefer mc_suggest_work when Task ID is unknown. Append MC-Checkout lines from checkout responses to PR bodies. " +
+      "A plan that adds a project, or two or more buckets, goes through a draft: mc_save_draft, then mc_submit_draft; its author accepts it in Mission Control.",
   }
 );
 // Before any registration: failed tools return { error: { code, message } } JSON.
@@ -149,7 +150,7 @@ server.tool(
 
 server.tool(
   "mc_create_project",
-  "Create a Mission Control project. repos[] uses MC registry ids; the project is queued for the SharePoint Projects mirror.",
+  "Create a Mission Control project. repos[] uses MC registry ids; the project is queued for the SharePoint Projects mirror. A plan that adds a project, or two or more buckets, goes through a draft instead (mc_save_draft, then mc_submit_draft); its author accepts it, which creates the records.",
   {
     name: z.string().min(1),
     description: z.string().optional(),
@@ -187,7 +188,7 @@ server.tool(
 
 server.tool(
   "mc_create_bucket",
-  "Create a Mission Control bucket/initiative, optionally under an existing project. repos[] uses MC registry ids; the bucket is queued for the SharePoint Roadmap mirror.",
+  "Create a Mission Control bucket/initiative, optionally under an existing project. repos[] uses MC registry ids; the bucket is queued for the SharePoint Roadmap mirror. A plan that adds a project, or two or more buckets, goes through a draft instead (mc_save_draft, then mc_submit_draft); its author accepts it, which creates the records.",
   {
     name: z.string().min(1),
     description: z.string().optional(),

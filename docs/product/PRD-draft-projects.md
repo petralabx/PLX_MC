@@ -198,7 +198,7 @@ There is no accept tool. REST routes under `/api/cursor/drafts` mirror the tools
 
 ## Convention for agents (decision 3)
 
-A rule goes into `config/governance-contract.yaml`: a plan that adds a project, or two or more buckets, goes through a draft. The generators carry the rule into `AGENTS.md` and `CLAUDE.md`. `project-researcher` and `guided-project-discovery` end by saving a draft. Those skill changes ship through `petralabx/skills` and the catalog pin.
+A rule in `config/governance-contract.yaml` ("Plans go through a draft", TASK-4132) says that a plan that adds a project, or two or more buckets, goes through a draft. The generators carry the rule into `AGENTS.md` and `CLAUDE.md`, and the MCP server instructions and the `mc_create_project` and `mc_create_bucket` descriptions say the same. `project-researcher` and `guided-project-discovery` end by saving a draft (TASK-4129, `petralabx/skills` v1.6.15); the catalog pin in `config/skills-catalog.json` moved to that release.
 
 Nothing blocks a direct create.
 

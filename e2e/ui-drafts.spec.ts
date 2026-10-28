@@ -180,6 +180,8 @@ interface MockOptions {
   completeness?: unknown[];
   /** The draft moved since the form read it: a save refuses with 409 draft_changed. */
   refuseSave?: boolean;
+  /** Every read of DRF-7 after a save fails, as a read-back after a save can. */
+  failReadBack?: boolean;
 }
 
 async function mockDraftsApi(
@@ -230,6 +232,10 @@ async function mockDraftsApi(
     }
     if (request.method() !== "GET") return route.fulfill({ status: 405, body: "Method Not Allowed" });
     if (/\/api\/drafts\/DRF-7$/.test(url.pathname)) {
+      if (options.failReadBack && mock.saves.length > 0) {
+        const error = { code: "internal", message: "Internal error." };
+        return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error }) });
+      }
       const old = url.searchParams.get("version") === "1";
       return route.fulfill(
         json({ ...detail({ editBase, ...viewer }, draftFields), ...(old ? { version: VERSION_1 } : {}), completeness: options.completeness ?? [] })
@@ -383,6 +389,20 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect.poll(() => mock.saves.length).toBe(2);
     expect(mock.saves[1]).toMatchObject({ base: EDIT_BASE_2, title: "Draft Projects rollout, revised twice" });
+  });
+
+  test("a failed reload after a save keeps the form, and the save counts as saved", async ({ page }) => {
+    const mock = await mockDraftsApi(page, {}, {}, { failReadBack: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await page.getByLabel("Title", { exact: true }).fill("Saved, then the read-back fails");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    const footer = page.getByRole("region", { name: "Save" });
+    await expect(footer).toContainText("Could not reload DRF-7: Internal error.");
+    await expect(footer.getByRole("button", { name: "Try again" })).toBeVisible();
+    await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Saved, then the read-back fails");
+    await expect(footer.getByRole("button", { name: "Done" })).toBeVisible();
+    await expect(footer.getByRole("button", { name: "Save draft" })).toBeDisabled();
   });
 
   test("a draft that moved refuses the save, and the form keeps the edits", async ({ page }) => {

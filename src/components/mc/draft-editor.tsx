@@ -772,6 +772,8 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
       });
       // The next save names this one's base at once, before the read-back lands.
       setDetail((d) => (d ? { ...d, viewer: { ...d.viewer, editBase: result.editBase } } : d));
+      // What was sent is saved, even if the read-back below fails.
+      setInitial(form);
       setSaved(true);
       setTick((t) => t + 1);
     } catch (err) {
@@ -790,7 +792,8 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
     </div>
   );
 
-  if (loadError) return page(<div className="dr-banner bad">{loadError}</div>);
+  // A failed first load has nothing to show; a failed reload keeps the form (see the Save section).
+  if (loadError && (!form || (id && !detail))) return page(<div className="dr-banner bad">{loadError}</div>);
   if (!form || (id && !detail)) return page(<div className="colempty">Loading {id}…</div>);
   if (detail && !detail.viewer.canEdit) {
     return page(
@@ -829,6 +832,14 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
                 Reload {id} (drops your edits)
               </button>
             )}
+          </div>
+        )}
+        {loadError && (
+          <div className="dr-banner warn" role="status">
+            Could not reload {id}: {loadError}{" "}
+            <button type="button" className="btn ghost sm" onClick={() => setTick((t) => t + 1)}>
+              Try again
+            </button>
           </div>
         )}
         {saved && !dirty && <p className="dr-task-meta">Saved.</p>}

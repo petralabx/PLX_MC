@@ -3,6 +3,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// TASK-3779: approving now requires the signing key; tests run with a fake one.
+beforeEach(() => {
+  process.env.PLX_MC_APPROVAL_SIGNING_KEY ??= "test-signing-key";
+});
+
 import { authorize } from "@/lib/permissions";
 import { principalFromTokens } from "@/lib/permissions/project-acl";
 import {
@@ -504,6 +509,28 @@ describe("mc_get_approval_gate resume signal (TASK-629 gap 3)", () => {
       actor: { kind: "service", id: "sp_unknown", status: "active" },
     };
     await expect(actionGetApprovalGate(noRead, { checkoutId: "dsp_a" })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("returns a clear reason, not a 500, when a stored gate is malformed (TASK-3779)", async () => {
+    mem.tasks.set("TASK-700", { id: "TASK-700", stage: "progress", approvalGates: "corrupt" });
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(actionGetApprovalGate(IDENTITY, { taskId: "TASK-700", gateId: "apg_x" })).rejects.toMatchObject({
+        code: "approval_gate_read_failed",
+        status: 503,
+        message: expect.stringContaining("apg_x"),
+      });
+    } finally {
+      err.mockRestore();
+    }
+  });
+
+  it("keeps a known error (unknown gate is 404) instead of masking it as a read failure (TASK-3779)", async () => {
+    mem.tasks.set("TASK-700", { id: "TASK-700", stage: "progress", approvalGates: [] });
+    await expect(actionGetApprovalGate(IDENTITY, { taskId: "TASK-700", gateId: "apg_missing" })).rejects.toMatchObject({
+      code: "not_found",
+      status: 404,
+    });
   });
 
   it("404s on a checkout with no gate", async () => {

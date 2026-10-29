@@ -4,6 +4,11 @@
 // action. The repo seams are in-memory; patchTask, checkout(), actionCheckout,
 // the approvals service and the projection run for real.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// TASK-3779: approving now requires the signing key; tests run with a fake one.
+beforeEach(() => {
+  process.env.PLX_MC_APPROVAL_SIGNING_KEY ??= "test-signing-key";
+});
 import type { Task } from "@/lib/mc-data";
 import type { McpIdentity } from "@/lib/mcp/auth";
 

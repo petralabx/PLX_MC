@@ -246,8 +246,21 @@ export async function decideApprovalGate(
     // An approval is stamped with its expiry, then signed over the whole record.
     const stamped: ApprovalGate =
       input.decision === "approved" ? { ...base, expiresAt: approvalExpiry(fresh.scope, decidedAt) } : base;
-    const decided: ApprovalGate =
-      input.decision === "approved" ? { ...stamped, signature: signApproval(input.taskId, stamped) } : stamped;
+    // TASK-3779: never store an approval unsigned. A missing signing key fails
+    // the decision loudly (nothing is written) instead of saving a gate that
+    // every signed-approval check will later refuse as "unsigned".
+    let signature: string | null = null;
+    if (input.decision === "approved") {
+      signature = signApproval(input.taskId, stamped);
+      if (!signature) {
+        throw new ApiError(
+          "approval_signing_unavailable",
+          "approval not recorded: PLX_MC_APPROVAL_SIGNING_KEY is not configured on the server, so the approval cannot be signed. Ask an operator to set it, then approve again.",
+          503
+        );
+      }
+    }
+    const decided: ApprovalGate = signature ? { ...stamped, signature } : stamped;
     const updated = await patchTask(
       input.taskId,
       {

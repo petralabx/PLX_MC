@@ -525,6 +525,14 @@ describe("mc_get_approval_gate resume signal (TASK-629 gap 3)", () => {
     }
   });
 
+  it("keeps a known error (unknown gate is 404) instead of masking it as a read failure (TASK-3779)", async () => {
+    mem.tasks.set("TASK-700", { id: "TASK-700", stage: "progress", approvalGates: [] });
+    await expect(actionGetApprovalGate(IDENTITY, { taskId: "TASK-700", gateId: "apg_missing" })).rejects.toMatchObject({
+      code: "not_found",
+      status: 404,
+    });
+  });
+
   it("404s on a checkout with no gate", async () => {
     await expect(actionGetApprovalGate(IDENTITY, { checkoutId: "dsp_a" })).rejects.toMatchObject({ status: 404 });
   });

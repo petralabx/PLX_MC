@@ -305,15 +305,25 @@ export function assertArtifactRoom(draft: Draft): void {
   }
 }
 
+/** The live state the Trading Lab check reads: the registry, and the projects a draft may add to. */
+interface SiteContext {
+  registry: Record<string, Repo>;
+  projects: Project[];
+}
+
+async function siteContext(deps: DraftDeps): Promise<SiteContext> {
+  const [registry, projects] = await Promise.all([deps.registry(), deps.projects()]);
+  return { registry, projects };
+}
+
 /**
  * The own SharePoint site of a repo the draft's plan names (Trading Lab), or null
  * when the draft's files go on the PLX site. The project, buckets and tasks count,
  * and so do the repos of the existing project a draft adds to.
  */
-export async function draftOwnSite(draft: Draft, deps: DraftDeps = defaultDraftDeps): Promise<string | null> {
+function ownSiteOf(draft: Draft, { registry, projects }: SiteContext): string | null {
   const plan = draft.working.plan;
-  const [registry, projects] = await Promise.all([deps.registry(), plan.project.existing ? deps.projects() : Promise.resolve([])]);
-  const existing = projects.find((p) => p.id === plan.project.existing);
+  const existing = plan.project.existing ? projects.find((p) => p.id === plan.project.existing) : undefined;
   const named = [plan.project.repos, ...plan.buckets.map((b) => b.repos), ...plan.tasks.map((t) => t.repos), existing?.repos ?? []].flat();
   for (const raw of named) {
     const resolved = resolveRepoInput(raw, registry);
@@ -322,6 +332,22 @@ export async function draftOwnSite(draft: Draft, deps: DraftDeps = defaultDraftD
     if (site) return site;
   }
   return null;
+}
+
+export async function draftOwnSite(draft: Draft, deps: DraftDeps = defaultDraftDeps): Promise<string | null> {
+  return ownSiteOf(draft, await siteContext(deps));
+}
+
+/** Trading Lab files go on its own SharePoint site, never the PLX site (as mc_upload_evidence enforces). */
+function assertPlxSite(draft: Draft, context: SiteContext): void {
+  const site = ownSiteOf(draft, context);
+  if (site) {
+    throw new ApiError(
+      "evidence_store_unavailable",
+      `${site} files go on its own SharePoint site, never the PLX site. A person must set that site up first. Until then, link the file from where it is.`,
+      503
+    );
+  }
 }
 
 /**
@@ -336,6 +362,7 @@ export async function draftForUpload(actor: DraftActor, id: string, options: { b
   assertAcceptNotStarted(draft);
   assertBase(draft, options.base);
   assertUploadable(draft);
+  assertPlxSite(draft, await siteContext(defaultDraftDeps));
   return draft;
 }
 
@@ -352,9 +379,11 @@ export async function addDraftArtifact(
   options: { base?: string } = {}
 ): Promise<{ draft: Draft; artifact: DraftArtifact; added: boolean }> {
   await visibleDraft(id, actor);
+  // Read before the lock: the callback is synchronous.
+  const sites = await siteContext(defaultDraftDeps);
   let linked: DraftArtifact | undefined;
   const result = await store.mutateDraft(id, (draft) => {
-    // Again under the lock, as a save checks: the draft may have closed or been restricted meanwhile.
+    // Again under the lock, as a save checks: the draft may have closed, been restricted or named Trading Lab meanwhile.
     if (!canSeeDraft(draft, actor)) throw notFound(id);
     assertWriter(draft, actor);
     assertOpen(draft);
@@ -364,6 +393,7 @@ export async function addDraftArtifact(
     linked = draft.working.research.artifacts.find(sameFile);
     if (linked) return null;
     assertUploadable(draft);
+    assertPlxSite(draft, sites);
     assertArtifactRoom(draft);
     const research = { ...draft.working.research, artifacts: [...draft.working.research.artifacts, artifact] };
     const working = applySections(draft.working, { research });

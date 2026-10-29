@@ -280,6 +280,19 @@ describe("mc_upload_draft_artifact", () => {
     expect(h.uploads).toHaveLength(0);
   });
 
+  // Bugbot on d2640e3: a save that names the Trading Lab repo while a file is stored keeps it unlinked.
+  it("checks the Trading Lab rule again under the lock, and links nothing", async () => {
+    await newDraft({ plan: { ...plan, tasks: [{ ...plan.tasks[0], repos: ["agentic-swarm"] }] } });
+    const stored: DraftArtifact = {
+      kind: "diagram",
+      name: "Plan diagram",
+      url: "https://petrasoap.sharepoint.com/sites/PLXSite/Mission%20Control/Drafts/DRF-1/20261029T020000Z-abcdef12-plan.png",
+      inline: null,
+    };
+    await expect(addDraftArtifact(writer, "DRF-1", stored)).rejects.toMatchObject({ code: "evidence_store_unavailable", status: 503 });
+    expect((await read("DRF-1")).body.data.draft.working.research.artifacts).toEqual([]);
+  });
+
   // sol-6.1 P1 on 06fd992: a link that is there already is no way past the base check.
   it("refuses a moved base under the lock even when the file is linked already", async () => {
     await newDraft();

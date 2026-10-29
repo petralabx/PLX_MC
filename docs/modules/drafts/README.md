@@ -59,7 +59,8 @@ web page for an open draft. The file goes through the same checks as `mc_upload_
 returns the draft to `drafting`. A restricted draft refuses (409 `draft_restricted`): the library is
 shared, and MC never narrows access. A draft whose plan names the Trading Lab repo
 (`petralabx/agentic-swarm`, in its project, a bucket, a task or the existing project it adds to)
-refuses (503 `evidence_store_unavailable`): Trading Lab files go on its own site (`draftOwnSite`).
+refuses (503 `evidence_store_unavailable`): Trading Lab files go on its own site. Both refusals are
+checked again under the draft lock, so a save that lands while a file is stored keeps it unlinked.
 The same file again adds nothing, even at the 50-link cap. Uploads are off until a person
 sets `PLX_MC_EVIDENCE_STORE_ENABLED=1` (503 `evidence_store_unavailable`). MC never deletes a stored
 file; removing the link from the draft leaves the file in the library.

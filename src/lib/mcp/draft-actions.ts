@@ -25,7 +25,6 @@ import {
   createDraft,
   draftEditBase,
   draftForUpload,
-  draftOwnSite,
   draftPreflight,
   draftSummary,
   getVisibleDraft,
@@ -249,10 +248,6 @@ export async function uploadDraftArtifact(
   if (!evidenceStoreEnabled()) throw unavailable(`Uploads are off. ${PERSON_ACTION} Then set PLX_MC_EVIDENCE_STORE_ENABLED=1.`);
 
   const draft = await draftForUpload(actor, body.draftId, options);
-  const ownSite = await draftOwnSite(draft);
-  if (ownSite) {
-    throw unavailable(`${ownSite} files go on its own SharePoint site, never the PLX site. A person must set that site up first. Until then, link the file from where it is.`);
-  }
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const sameFile = (artifact: DraftArtifact) => isStoredFile(artifact, draft.id, sha256, body.fileName);
   const existing = draft.working.research.artifacts.find(sameFile);

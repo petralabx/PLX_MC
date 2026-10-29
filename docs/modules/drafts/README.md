@@ -67,6 +67,31 @@ cap, and no other file passes for it. Uploads are off until a person
 sets `PLX_MC_EVIDENCE_STORE_ENABLED=1` (503 `evidence_store_unavailable`). MC never deletes a stored
 file; removing the link from the draft leaves the file in the library.
 
+**Review pages** (TASK-4135; decisions in the PRD, "Follow-up: review on a shared page"): a
+version under review, published as a private Claude Artifact, collects comments from Petra people
+who do not use Mission Control. Mission Control stays the record: nobody edits the plan from the
+page, and a page comment never blocks. Off until an operator sets `PLX_MC_DRAFT_PAGES_ENABLED=1`
+(503 `draft_pages_off`); a restricted draft is never published (409 `draft_restricted`). The
+writer's agent:
+
+1. Renders the version with `mc_render_draft_page` (`src/lib/drafts/page.ts`: one HTML file, every
+   value escaped, no script, `data-target` on each plan item and research section). Stdio writes it
+   to an absolute `outPath`.
+2. Publishes it as a private Claude Artifact and shares it with the reviewers the author chooses.
+3. Records the link with `mc_publish_draft_page {draftId, version, url}` (`publishDraftPage`). The
+   draft keeps it as a `source: "page"` entry among its reviews; the same link again records nothing.
+4. Reads the page's comment threads (Claude Code: `ArtifactComments`) and relays each new comment with
+   `mc_review_draft {kind: "comment", version, body, target, relay: {pageUrl, commentId, commenter}}`
+   (`relayPageComment`). `version` is the version the page showed when the comment was made;
+   `target` is the `data-target` of the part it is anchored to. The review lands on that version as a
+   comment by the commenter (`source: "artifact"`, `relayedBy`, `relayedFor`). Only a Petra commenter
+   comes back (422 `commenter_not_petra`); a comment relayed twice is recorded once.
+5. Republishes the page for each new version and records it again. Comments on an older version
+   show as stale.
+
+Restricting a draft after its page is published does not take the page down: the author deletes the
+artifact or changes its sharing.
+
 4. **Read** (`mc_get_draft`, `mc_list_drafts`): visibility follows projects. A `restricted` draft
    fails closed to its members and its author, with the same member matching as
    `src/lib/permissions/project-acl.ts`. The principal that wrote it is not a member by itself: a

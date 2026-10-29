@@ -579,31 +579,54 @@ function ReviewsSection({ detail, onChange, readOnly }: { detail: DraftDetail; o
     void send({ kind: action, findingId: finding.id, ...(note ? { body: note } : {}) });
   };
 
+  // Review pages (TASK-4135): the page for the version under review, if one is published.
+  const currentPage = draft.reviews.findLast((r) => r.source === "page" && r.pageUrl && !r.stale);
+
   return (
     <section className="dr-section" aria-label="Reviews">
       <h2>Reviews</h2>
+      {currentPage?.pageUrl && (
+        <p className="dr-task-meta">
+          Version {currentPage.version} is on a{" "}
+          <a href={currentPage.pageUrl} target="_blank" rel="noopener noreferrer">
+            review page
+          </a>
+          . Comments from Petra people there come back here as comments.
+        </p>
+      )}
       {draft.reviews.length === 0 && <p className="dr-text">No reviews yet.</p>}
       <ul className="dr-reviews">
         {draft.reviews.map((r) => {
           const open = r.kind === "finding" && r.status === "open";
           const raisedByMe = r.byKind === "human" && r.by.toLowerCase() === viewer.email.toLowerCase();
+          const page = r.source === "page";
           return (
             <li key={r.id} className={`dr-review ${r.stale ? "stale" : ""}`}>
               <div className="dr-bucket-head">
                 <span className={`pill ${r.kind === "approve" ? "ok" : r.kind === "finding" && r.blocking ? "hot" : "muted"}`}>
                   <span className="dot" />
-                  {REVIEW_LABEL[r.kind]}
+                  {page ? "Review page" : REVIEW_LABEL[r.kind]}
                   {r.kind === "finding" && r.blocking ? " · blocking" : ""}
                 </span>
                 {r.kind === "finding" && <span className="pill muted">{r.status}</span>}
                 <span className="dr-task-meta">
-                  {r.source === "mc" ? "Mission Control" : r.by}
-                  {r.byKind === "agent" && r.source !== "mc" ? ` (agent ${r.byPrincipal}; advisory)` : ""} · v{r.version}
+                  {r.source === "mc" ? "Mission Control" : page ? `published by ${r.by}` : r.by}
+                  {r.byKind === "agent" && r.source !== "mc" ? (page ? ` (agent ${r.byPrincipal})` : ` (agent ${r.byPrincipal}; advisory)`) : ""}
+                  {r.source === "artifact" ? ` · from the review page, relayed by ${r.relayedBy ?? "an agent"} for ${r.relayedFor ?? "the author"}` : ""}{" "}
+                  · v{r.version}
                   {r.stale ? " · stale" : ""} · {when(r.at)}
                   {r.target ? ` · on ${r.target}` : ""}
                 </span>
               </div>
-              <p className="dr-text">{r.body}</p>
+              {page && r.pageUrl ? (
+                <p className="dr-text">
+                  <a href={r.pageUrl} target="_blank" rel="noopener noreferrer">
+                    Open the review page for version {r.version}
+                  </a>
+                </p>
+              ) : (
+                <p className="dr-text">{r.body}</p>
+              )}
               {r.closeReason && (
                 <p className="dr-task-meta">
                   {r.status} by {r.closedBy}: {r.closeReason}

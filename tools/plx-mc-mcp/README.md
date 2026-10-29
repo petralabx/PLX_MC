@@ -37,6 +37,7 @@ composed swarm delegation.
 | `mc_submit_draft` | Freeze a draft as its next version and open review; refuses with every preflight problem |
 | `mc_get_draft` / `mc_list_drafts` | Read a draft or one frozen version; list visible drafts (`mine`, `needsMyReview`) |
 | `mc_review_draft` | Comment, finding (`blocking`), approve (advisory for agents) or request changes on the `version` you read; or resolve a finding you raised. Agents never accept |
+| `mc_render_draft_page` / `mc_publish_draft_page` | Review pages (TASK-4135): render a submitted version as a self-contained page (`outPath`, absolute, writes it to a file), then record the Claude Artifact you published it as. Relay page comments with `mc_review_draft` `relay`. Off until `PLX_MC_DRAFT_PAGES_ENABLED=1` |
 | `mc_upload_draft_artifact` | Upload a diagram, screenshot or web page (absolute `filePath` or `contentBase64`, 3 MiB or less) for a draft you wrote; MC stores it under `Drafts/DRF-n/` in the `Mission Control` library and adds it to the draft's artifacts as a link (TASK-4130) |
 | `dispatch_to_swarm` | COS swarm delegation |
 | `list_swarm_teams` / `swarm_health` | Swarm helpers |

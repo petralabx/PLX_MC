@@ -16,3 +16,18 @@ export function assertDraftsEnabled(): void {
   if (draftsEnabled()) return;
   throw new ApiError("drafts_disabled", `Draft Projects are off (${DRAFTS_FLAG}=0). An operator turns them back on by removing it.`, 404);
 }
+
+// Review pages (TASK-4135): a frozen version published as a Claude Artifact, its
+// comments relayed back as reviews. Off by default (Vince, 2026-10-29); an
+// operator sets PLX_MC_DRAFT_PAGES_ENABLED=1 to turn it on, and unsets it to stop
+// every render, publish and relay at once.
+export const DRAFT_PAGES_FLAG = "PLX_MC_DRAFT_PAGES_ENABLED";
+
+export function draftPagesEnabled(): boolean {
+  return (process.env[DRAFT_PAGES_FLAG] ?? "0").trim() === "1";
+}
+
+export function assertDraftPagesEnabled(): void {
+  if (draftPagesEnabled()) return;
+  throw new ApiError("draft_pages_off", `Review pages are off. An operator turns them on with ${DRAFT_PAGES_FLAG}=1.`, 503);
+}

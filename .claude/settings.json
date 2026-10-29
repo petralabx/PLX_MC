@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "enabledMcpjsonServers": ["PLX-MC-Hub"],
+  "enabledMcpjsonServers": ["PLX-MC-Hub", "Internal-Seller-API"],
   "permissions": {
     "allow": [
       "mcp__PLX-MC-Hub__mc_self_check",
@@ -12,6 +12,14 @@
       "mcp__PLX-MC-Hub__mc_checkout_task",
       "mcp__PLX-MC-Hub__mc_report_progress",
       "mcp__PLX-MC-Hub__mc_complete_task",
+      "mcp__Internal-Seller-API__seller_self_check",
+      "mcp__Internal-Seller-API__list_marketplaces",
+      "mcp__Internal-Seller-API__get_sales_metrics",
+      "mcp__Internal-Seller-API__get_fba_inventory",
+      "mcp__Internal-Seller-API__search_catalog",
+      "mcp__Internal-Seller-API__get_listing",
+      "mcp__Internal-Seller-API__get_pricing",
+      "mcp__Internal-Seller-API__list_financial_events",
       "Bash(node scripts/compliance-checkout.mjs*)",
       "Bash(COMPLIANCE_CAPTURE=1 * node scripts/compliance-checkout.mjs*)",
       "Bash(node scripts/compliance-pr-verify.mjs*)"

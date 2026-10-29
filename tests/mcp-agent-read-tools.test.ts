@@ -303,11 +303,11 @@ describe("tool registry", () => {
     expect(names).toContain("mc_upload_evidence");
     expect(names).toContain("mc_record_checkout_head");
     expect(names).toContain("mc_ask_question");
-    for (const tool of ["mc_save_draft", "mc_submit_draft", "mc_get_draft", "mc_list_drafts", "mc_review_draft", "mc_upload_draft_artifact"]) {
+    for (const tool of ["mc_save_draft", "mc_submit_draft", "mc_get_draft", "mc_list_drafts", "mc_review_draft", "mc_upload_draft_artifact", "mc_render_draft_page", "mc_publish_draft_page"]) {
       expect(names).toContain(tool);
     }
     expect(names).toContain("mc_save_evidence");
-    expect(names).toHaveLength(49);
+    expect(names).toHaveLength(51);
   });
 });
 

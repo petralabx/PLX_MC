@@ -12,7 +12,7 @@ import { taskSearchShape } from "./task-search-schema";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createHash, randomBytes } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import os from "node:os";
 import { z } from "zod";
@@ -912,7 +912,7 @@ server.registerTool("mc_list_drafts", {
 });
 
 server.registerTool("mc_review_draft", {
-  description: "Review a submitted draft's current version: comment, finding (blocking: true refuses Accept until closed), approve (advisory for an agent) or request_changes, with an optional target (plan key or research section). Send version: the version you read; a newer one refuses with draft_version_moved. resolve {findingId} closes a finding you raised. Agents never accept drafts.",
+  description: "Review a submitted draft's current version: comment, finding (blocking: true refuses Accept until closed), approve (advisory for an agent) or request_changes, with an optional target (plan key or research section). Send version: the version you read; a newer one refuses with draft_version_moved. resolve {findingId} closes a finding you raised. Agents never accept drafts. relay {pageUrl, commentId, commenter} records a comment from a review page you published (mc_publish_draft_page) as a comment by its commenter, on version: the version the page showed when the comment was made.",
   inputSchema: z.object({
     draftId: z.string().trim().min(1),
     kind: z.enum(["comment", "finding", "approve", "request_changes", "resolve"]),
@@ -921,6 +921,11 @@ server.registerTool("mc_review_draft", {
     blocking: z.boolean().optional(),
     target: z.string().trim().max(120).optional(),
     findingId: z.string().trim().min(1).optional(),
+    relay: z.object({
+      pageUrl: z.string().trim().min(1),
+      commentId: z.string().trim().min(1).max(200),
+      commenter: z.string().trim().min(3).max(320),
+    }).strict().optional(),
   }).strict(),
 }, async (body) => {
   if (!MCP_ENABLED) return disabledTool("mc_review_draft");
@@ -946,6 +951,37 @@ server.registerTool("mc_upload_draft_artifact", {
   if (!name) throw new Error("fileName is required with contentBase64.");
   const content = contentBase64 ?? (await readFile(filePath!)).toString("base64");
   return printResult(await mcFetch("/drafts/artifact", { method: "POST", body: { ...rest, fileName: name, contentBase64: content } }));
+});
+
+server.registerTool("mc_render_draft_page", {
+  description: "Render a submitted draft version (default: the one under review) as a self-contained review page. With outPath (an absolute path) the html is written there, ready to publish as a private Claude Artifact; then record its link with mc_publish_draft_page. Each plan item and research section carries data-target (P, B1, T3, research.summary): relay a comment anchored there with that target. Off until PLX_MC_DRAFT_PAGES_ENABLED=1.",
+  inputSchema: z.object({
+    draftId: z.string().trim().min(1),
+    version: z.number().int().positive().optional(),
+    // Absolute: a relative path would resolve against this server's working directory, not the agent's.
+    outPath: z.string().min(1).refine(isAbsolute, "outPath must be an absolute path.").optional(),
+  }).strict(),
+}, async ({ draftId, version, outPath }) => {
+  if (!MCP_ENABLED) return disabledTool("mc_render_draft_page");
+  const query = version !== undefined ? `?version=${version}` : "";
+  const result = await mcFetch(`/drafts/${encodeURIComponent(draftId)}/page${query}`);
+  const html = (result as { data?: { html?: unknown } })?.data?.html;
+  if (!outPath || typeof html !== "string") return printResult(result);
+  await writeFile(outPath, html, "utf8");
+  const data = { ...(result as { data: Record<string, unknown> }).data, html: undefined, savedTo: outPath };
+  return printResult({ ...(result as Record<string, unknown>), data });
+});
+
+server.registerTool("mc_publish_draft_page", {
+  description: "Record the review page you published for a draft you wrote: url is the Claude Artifact link, version the version under review. The same link again records nothing. Then relay each new comment on the page with mc_review_draft {kind: comment, version, body, target, relay: {pageUrl, commentId, commenter}}: only Petra people's comments come back, a relayed comment never blocks, and one relayed twice is recorded once. A restricted draft refuses. Off until PLX_MC_DRAFT_PAGES_ENABLED=1.",
+  inputSchema: z.object({
+    draftId: z.string().trim().min(1),
+    version: z.number().int().positive(),
+    url: z.string().trim().min(1),
+  }).strict(),
+}, async (body) => {
+  if (!MCP_ENABLED) return disabledTool("mc_publish_draft_page");
+  return printResult(await mcFetch("/drafts/page", { method: "POST", body }));
 });
 
 server.registerTool("mc_update_task", {

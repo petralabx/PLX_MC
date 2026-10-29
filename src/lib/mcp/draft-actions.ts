@@ -1,6 +1,7 @@
 // Draft Projects tools (TASK-4059; PRD docs/product/PRD-draft-projects.md):
 // mc_save_draft, mc_submit_draft, mc_get_draft, mc_list_drafts,
-// mc_review_draft and mc_upload_draft_artifact (TASK-4130), shared by the HTTP
+// mc_review_draft, mc_upload_draft_artifact (TASK-4130), and mc_render_draft_page
+// and mc_publish_draft_page (review pages, TASK-4135), shared by the HTTP
 // MCP transport and the /api/cursor/drafts REST routes (the stdio client proxies
 // to those). The rules live in src/lib/drafts/service.ts. Every tool is off when
 // PLX_MC_DRAFTS_ENABLED=0; uploads also wait for PLX_MC_EVIDENCE_STORE_ENABLED=1.
@@ -16,11 +17,14 @@ import { z } from "zod";
 
 import { ApiError } from "@/lib/api/route";
 import { MAX_ARTIFACT_BYTES, artifactProblem, sharePointSafeName } from "@/lib/compliance";
-import { assertDraftsEnabled } from "@/lib/drafts/flag";
+import { assertDraftPagesEnabled, assertDraftsEnabled } from "@/lib/drafts/flag";
+import { draftPageTitle, renderDraftPage } from "@/lib/drafts/page";
 import { draftPeopleSchema, draftPlanSchema, draftResearchSchema, draftTextSchema, draftTitleSchema } from "@/lib/drafts/schema";
 import {
+  DRAFT_PAGE_URL_RE,
   addDraftArtifact,
   assertArtifactRoom,
+  assertPublishable,
   closeFinding,
   createDraft,
   draftEditBase,
@@ -30,6 +34,8 @@ import {
   getVisibleDraft,
   getVisibleDraftVersion,
   listVisibleDrafts,
+  publishDraftPage,
+  relayPageComment,
   reviewDraft,
   saveDraft,
   submitDraft,
@@ -101,9 +107,21 @@ export const reviewDraftSchema = z
     blocking: z.boolean().optional().describe("Findings only: a blocking finding refuses Accept until it is closed"),
     target: draftTextSchema(0, 120).optional().describe("A plan key (P, B1, T3) or a research section"),
     findingId: z.string().trim().regex(/^drv_[0-9a-f]{16}$/).optional().describe("resolve only: the finding you raised"),
+    relay: z
+      .object({
+        pageUrl: z.string().trim().regex(DRAFT_PAGE_URL_RE, "pageUrl is the review page's Claude Artifact link"),
+        commentId: z.string().trim().min(1).max(200).describe("The page's id for the comment"),
+        commenter: z.string().trim().toLowerCase().email().max(320).describe("The commenter's email, as the page reports it"),
+      })
+      .strict()
+      .optional()
+      .describe("Review pages: relay a comment from a page you published (kind comment), with version the version the page showed when it was made. It lands on that version, by its commenter"),
   })
   .strict()
   .superRefine((body, ctx) => {
+    if (body.relay && body.kind !== "comment") {
+      ctx.addIssue({ code: "custom", path: ["relay"], message: "A relayed page comment is kind comment: it never blocks or approves." });
+    }
     if (body.kind === "resolve") {
       if (!body.findingId) ctx.addIssue({ code: "custom", path: ["findingId"], message: "resolve needs findingId." });
     } else {
@@ -211,11 +229,57 @@ export async function actionListDrafts(identity: McpIdentity, input: unknown = {
 export async function actionReviewDraft(identity: McpIdentity, input: unknown) {
   const actor = guard(identity, "mc_review_draft", "draft.review");
   const body = parseInput(reviewDraftSchema, input);
+  if (body.relay) {
+    const relayed = await relayPageComment(actor, body.draftId, { ...body.relay, version: body.version!, body: body.body!, target: body.target ?? null });
+    return { draftId: body.draftId, review: relayed.review, duplicate: relayed.duplicate, draft: draftSummary(relayed.draft) };
+  }
   const result =
     body.kind === "resolve"
       ? await closeFinding(actor, body.draftId, body.findingId!, "resolve", body.body ?? null)
       : await reviewDraft(actor, body.draftId, { kind: body.kind, version: body.version!, body: body.body!, blocking: body.blocking, target: body.target });
   return { draftId: body.draftId, review: result.review, draft: draftSummary(result.draft) };
+}
+
+export const renderDraftPageSchema = z
+  .object({
+    draftId,
+    version: z.number().int().positive().optional().describe("Default: the version under review"),
+  })
+  .strict();
+
+export const publishDraftPageSchema = z
+  .object({
+    draftId,
+    version: z.number().int().positive().describe("The version the page shows: the one under review"),
+    url: z.string().trim().regex(DRAFT_PAGE_URL_RE, "url is the Claude Artifact link (https://claude.ai/artifact/<id>)"),
+  })
+  .strict();
+
+/** A frozen version as a review page, for the writer's agent to publish as a private Claude Artifact (TASK-4135). */
+export async function actionRenderDraftPage(identity: McpIdentity, input: unknown) {
+  const actor = guard(identity, "mc_render_draft_page", "task.read");
+  assertDraftPagesEnabled();
+  const body = parseInput(renderDraftPageSchema, input);
+  const draft = await getVisibleDraft(actor, body.draftId);
+  assertPublishable(draft);
+  const version = body.version ?? draft.version;
+  if (version < 1) throw new ApiError("draft_not_submitted", `${draft.id} has no submitted version to show yet.`, 409);
+  const frozen = await getVisibleDraftVersion(actor, draft.id, version);
+  return {
+    draftId: draft.id,
+    version,
+    digest: frozen.digest,
+    title: draftPageTitle(draft.id, version),
+    html: renderDraftPage(draft, frozen),
+    next: `Publish html as a private Claude Artifact, share it with the people who should review, then call mc_publish_draft_page with its link.`,
+  };
+}
+
+export async function actionPublishDraftPage(identity: McpIdentity, input: unknown) {
+  const actor = guard(identity, "mc_publish_draft_page", "draft.create");
+  const body = parseInput(publishDraftPageSchema, input);
+  const result = await publishDraftPage(actor, body.draftId, { version: body.version, url: body.url });
+  return { draftId: body.draftId, page: result.page, published: result.published, draft: draftSummary(result.draft) };
 }
 
 /** A draft's files share one folder in the Mission Control library. */
@@ -293,7 +357,7 @@ export function registerDraftTools(server: McpServer, identity: McpIdentity): vo
   }, async (args) => mcpJsonResult({ data: await actionListDrafts(identity, args) }));
   server.registerTool("mc_review_draft", {
     description:
-      "Review a submitted draft's current version: comment, finding (blocking: true refuses Accept until it is closed), approve (advisory for an agent) or request_changes; target names a plan key or research section. Send version: the version you read; a newer one refuses with draft_version_moved. resolve {findingId} closes a finding you raised. Only the author, signed in, dismisses a finding. Agents never accept drafts.",
+      "Review a submitted draft's current version: comment, finding (blocking: true refuses Accept until it is closed), approve (advisory for an agent) or request_changes; target names a plan key or research section. Send version: the version you read; a newer one refuses with draft_version_moved. resolve {findingId} closes a finding you raised. Only the author, signed in, dismisses a finding. Agents never accept drafts. relay {pageUrl, commentId, commenter} records a comment from a review page you published (mc_publish_draft_page) as a comment by its commenter, on version: the version the page showed when the comment was made.",
     inputSchema: reviewDraftSchema,
   }, async (args) => mcpJsonResult({ data: await actionReviewDraft(identity, args) }));
   server.registerTool("mc_upload_draft_artifact", {
@@ -301,4 +365,14 @@ export function registerDraftTools(server: McpServer, identity: McpIdentity): vo
       "Upload a file to a draft you wrote, as one of its research artifacts: kind diagram (svg, png), screenshot (png, jpeg, webp) or web-page (html), 3 MiB or less, sent as contentBase64 with fileName and contentType. MC stores it in the Mission Control library on the PLX SharePoint site under Drafts/DRF-<n>/ and adds it to the draft's artifacts as a link named name (default fileName). The same file again adds nothing. A restricted draft refuses with draft_restricted, because the library is shared; a Trading Lab draft (its plan names petralabx/agentic-swarm) refuses with evidence_store_unavailable, because its files go on its own site. An upload during review returns the draft to drafting. evidence_store_unavailable says what a person must set up. Off when PLX_MC_DRAFTS_ENABLED=0.",
     inputSchema: uploadDraftArtifactSchema,
   }, async (args) => mcpJsonResult({ data: await actionUploadDraftArtifact(identity, args) }));
+  server.registerTool("mc_render_draft_page", {
+    description:
+      "Render a submitted draft version (default: the one under review) as a self-contained review page: returns html and a title. Publish the html as a private Claude Artifact, share it with the reviewers you choose, then record its link with mc_publish_draft_page. Each plan item and research section carries data-target (P, B1, T3, research.summary): relay a comment anchored there with that target. A restricted draft refuses (draft_restricted). Off until PLX_MC_DRAFT_PAGES_ENABLED=1 (draft_pages_off).",
+    inputSchema: renderDraftPageSchema,
+  }, async (args) => mcpJsonResult({ data: await actionRenderDraftPage(identity, args) }));
+  server.registerTool("mc_publish_draft_page", {
+    description:
+      "Record the review page you published for a draft you wrote: url is the Claude Artifact link, version the version under review. The same link again records nothing. Then relay each new comment on the page with mc_review_draft {kind: comment, version, body, target, relay: {pageUrl, commentId, commenter}}: only Petra people's comments come back (commenter_not_petra), a relayed comment never blocks, and one relayed twice is recorded once. A restricted draft refuses. Off until PLX_MC_DRAFT_PAGES_ENABLED=1.",
+    inputSchema: publishDraftPageSchema,
+  }, async (args) => mcpJsonResult({ data: await actionPublishDraftPage(identity, args) }));
 }

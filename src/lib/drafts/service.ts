@@ -25,7 +25,7 @@ import { ApiError } from "@/lib/api/route";
 import { ownEvidenceSite } from "@/lib/compliance";
 import { appendEvent } from "@/lib/compliance/repo";
 import { HUMANS } from "@/lib/mc-data/data";
-import { isArchived } from "@/lib/mc-data/helpers";
+import { isArchived, isPetraEmail } from "@/lib/mc-data/helpers";
 import { humanEmailFor, isClosedStage } from "@/lib/mc-data/policy";
 import { resolveRepoInput } from "@/lib/mc-data/repos";
 import type { Bucket, Human, Project, Repo, Task } from "@/lib/mc-data/types";
@@ -42,12 +42,14 @@ import { databaseConfigured } from "@/lib/secrets";
 import { getBuckets, getEntities, getProjects, getRepos } from "@/lib/sync/repo";
 
 import { likelyDuplicates, type OpenTaskTitle } from "./duplicates";
+import { assertDraftPagesEnabled } from "./flag";
 import { preflightIssues, submitIssues, type PreflightContext } from "./preflight";
 import { MAX_DRAFT_ARTIFACTS, MAX_DRAFT_CONTENT_BYTES, draftContentBytes, draftDigest } from "./schema";
 import * as store from "./store";
 import {
   OPEN_DRAFT_STATUSES,
   acceptInProgress,
+  draftPages,
   emptyDraftContent,
   isStaleReview,
   type Draft,
@@ -597,6 +599,146 @@ export async function reviewDraft(actor: DraftActor, id: string, input: ReviewIn
     version: review.version,
   });
   return { draft: result.draft, review };
+}
+
+// ─── Review pages (TASK-4135) ────────────────────────────────────────────────
+// A frozen version published as a Claude Artifact, whose comments come back as
+// comment reviews. Mission Control stays the record: the page is a view, nobody
+// edits the plan from it, and a page comment never blocks. Decisions (Vince,
+// 2026-10-29): Claude Artifacts only, only Petra people's comments come back,
+// shared drafts only, off until PLX_MC_DRAFT_PAGES_ENABLED=1.
+
+/** A Claude Artifact link: the only kind of review page. */
+export const DRAFT_PAGE_URL_RE = /^https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9-]{6,128}$/;
+
+/** A review page would show the draft outside Mission Control's access rules. */
+export function assertPublishable(draft: Pick<Draft, "id" | "visibility">): void {
+  if (draft.visibility !== "shared") {
+    throw new ApiError("draft_restricted", `${draft.id} is restricted. A review page would show it outside its members, so it is not published.`, 409);
+  }
+}
+
+/**
+ * Records the page the writer published for the version under review. The same
+ * link again records nothing. A new version needs a page of its own; reviews
+ * from an older version's page show as stale.
+ */
+export async function publishDraftPage(
+  actor: DraftActor,
+  id: string,
+  input: { version: number; url: string }
+): Promise<{ draft: Draft; page: DraftReview; published: boolean }> {
+  assertDraftPagesEnabled();
+  await visibleDraft(id, actor);
+  let page: DraftReview | undefined;
+  const result = await store.mutateDraft(id, (draft) => {
+    if (!canSeeDraft(draft, actor)) throw notFound(id);
+    assertWriter(draft, actor);
+    assertOpen(draft);
+    assertPublishable(draft);
+    if (draft.status !== "in_review" || !draft.digest) {
+      throw new ApiError("draft_not_in_review", `${id} has no version under review. Submit it, then publish that version.`, 409);
+    }
+    if (draft.version !== input.version) {
+      throw new ApiError("draft_version_moved", `${id} is at version ${draft.version}, not ${input.version}. Render and publish the version under review.`, 409);
+    }
+    page = draftPages(draft).find((r) => r.pageUrl === input.url && r.version === input.version);
+    if (page) return null;
+    page = newReview({
+      kind: "comment",
+      body: `Version ${draft.version} is on a review page.`,
+      blocking: false,
+      target: null,
+      version: draft.version,
+      digest: draft.digest,
+      by: actor.email,
+      byKind: actor.kind,
+      byPrincipal: actor.kind === "agent" ? actor.principalId : null,
+      source: "page",
+      status: null,
+      pageUrl: input.url,
+    });
+    return { draft: { ...draft, reviews: [...draft.reviews, page] } };
+  });
+  if (!result || !page) throw notFound(id);
+  if (result.changed) await recordEvent("draft.page_published", actor, { draftId: id, version: page.version, url: input.url });
+  return { draft: result.draft, page, published: result.changed };
+}
+
+export interface PageCommentInput {
+  /** The review page the comment is on: one the draft recorded. */
+  pageUrl: string;
+  /**
+   * The version the page showed when the comment was made. A republished
+   * artifact keeps its link, so one link can carry several versions.
+   */
+  version: number;
+  /** The page's id for the comment. */
+  commentId: string;
+  /** The commenter's email, as the page reports it. */
+  commenter: string;
+  body: string;
+  /** The plan key (P, B1, T3) or research section the comment is anchored to. */
+  target?: string | null;
+}
+
+/**
+ * Records a comment from a review page as a comment review on the version that
+ * page shows, by its commenter and relayed by the writer's agent. It never
+ * blocks. Only a Petra person's comment comes back; a comment relayed twice is
+ * recorded once.
+ */
+export async function relayPageComment(
+  actor: DraftActor,
+  id: string,
+  input: PageCommentInput
+): Promise<{ draft: Draft; review: DraftReview; duplicate: boolean }> {
+  assertDraftPagesEnabled();
+  const commenter = input.commenter.trim().toLowerCase();
+  if (!isPetraEmail(commenter)) {
+    throw new ApiError("commenter_not_petra", `Only Petra people's comments come back from a review page; ${commenter} is not one. Leave the comment on the page.`, 422);
+  }
+  await visibleDraft(id, actor);
+  let review: DraftReview | undefined;
+  const result = await store.mutateDraft(id, (draft) => {
+    if (!canSeeDraft(draft, actor)) throw notFound(id);
+    assertWriter(draft, actor);
+    assertOpen(draft);
+    const page = draftPages(draft).find((r) => r.pageUrl === input.pageUrl && r.version === input.version);
+    if (!page) {
+      throw new ApiError(
+        "page_not_published",
+        `${id} has no review page for version ${input.version} at ${input.pageUrl}. Record it with mc_publish_draft_page first.`,
+        409
+      );
+    }
+    review = draft.reviews.find((r) => r.source === "artifact" && r.pageUrl === input.pageUrl && r.pageCommentId === input.commentId);
+    if (review) return null;
+    review = newReview({
+      kind: "comment",
+      body: input.body,
+      blocking: false,
+      target: input.target ?? null,
+      // The version the page showed: a comment on an older version shows as stale.
+      version: page.version,
+      digest: page.digest,
+      by: commenter,
+      byKind: "human",
+      byPrincipal: null,
+      source: "artifact",
+      status: null,
+      pageUrl: input.pageUrl,
+      pageCommentId: input.commentId,
+      relayedBy: actor.kind === "agent" ? actor.principalId : null,
+      relayedFor: actor.email,
+    });
+    return { draft: { ...draft, reviews: [...draft.reviews, review] } };
+  });
+  if (!result || !review) throw notFound(id);
+  if (result.changed) {
+    await recordEvent("draft.page_comment_relayed", actor, { draftId: id, reviewId: review.id, version: review.version, pageUrl: input.pageUrl });
+  }
+  return { draft: result.draft, review, duplicate: !result.changed };
 }
 
 function raisedBy(review: DraftReview, actor: DraftActor): boolean {

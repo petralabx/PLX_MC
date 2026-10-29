@@ -332,6 +332,41 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await expect(plan.getByText("after T1")).toBeVisible();
   });
 
+  test("links the review page and labels the comments relayed from it", async ({ page }) => {
+    const url = "https://claude.ai/artifact/0f9d3c2a-7b1e-4c55-9d2e-1a2b3c4d5e6f";
+    const pageEntry = {
+      ...REVIEW,
+      id: "drv_00000000000000p1",
+      kind: "comment",
+      body: "Version 2 is on a review page.",
+      by: "vince@petrasoap.com",
+      byKind: "agent",
+      byPrincipal: "sp_mcp_claude_code",
+      source: "page",
+      pageUrl: url,
+    };
+    const relayed = {
+      ...REVIEW,
+      id: "drv_00000000000000c1",
+      kind: "comment",
+      body: "B1 needs an owner who reviews the pages.",
+      target: "B1",
+      source: "artifact",
+      pageUrl: url,
+      pageCommentId: "cmt_1",
+      relayedBy: "sp_mcp_claude_code",
+      relayedFor: "vince@petrasoap.com",
+    };
+    await mockDraftsApi(page, {}, { reviews: [pageEntry, relayed] });
+    await openDrafts(page, "&draftId=DRF-7");
+    const reviews = page.getByRole("region", { name: "Reviews" });
+    await expect(reviews.getByRole("link", { name: "review page", exact: true })).toHaveAttribute("href", url);
+    await expect(reviews.getByRole("link", { name: "Open the review page for version 2" })).toHaveAttribute("href", url);
+    await expect(reviews.getByText("published by vince@petrasoap.com (agent sp_mcp_claude_code)", { exact: false })).toBeVisible();
+    await expect(reviews.getByText("B1 needs an owner who reviews the pages.")).toBeVisible();
+    await expect(reviews.getByText("from the review page, relayed by sp_mcp_claude_code for vince@petrasoap.com", { exact: false })).toBeVisible();
+  });
+
   test("shows the research, the reviews and the versions of a draft", async ({ page }) => {
     await mockDraftsApi(page);
     await openDrafts(page, "&draftId=DRF-7");

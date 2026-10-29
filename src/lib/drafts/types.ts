@@ -140,13 +140,29 @@ export interface DraftReview {
   /** The MCP service principal for an agent review. */
   byPrincipal: string | null;
   at: string;
-  /** "mc" when Mission Control raised it (a likely duplicate task at submit). */
-  source: "review" | "mc";
+  /**
+   * "mc" when Mission Control raised it (a likely duplicate task at submit).
+   * Review pages (TASK-4135): "page" records a published page, "artifact" a
+   * comment relayed from one.
+   */
+  source: "review" | "mc" | "page" | "artifact";
   /** Findings only. */
   status: DraftFindingStatus | null;
   closedBy: string | null;
   closedAt: string | null;
   closeReason: string | null;
+  /** "page" and "artifact": the review page's link. */
+  pageUrl?: string | null;
+  /** "artifact": the page's comment id, so a comment relayed twice is recorded once. */
+  pageCommentId?: string | null;
+  /** "artifact": the agent that relayed the comment, and the person it works for. */
+  relayedBy?: string | null;
+  relayedFor?: string | null;
+}
+
+/** The review pages published for a draft (TASK-4135), oldest first. */
+export function draftPages(draft: Pick<Draft, "reviews">): DraftReview[] {
+  return draft.reviews.filter((r) => r.source === "page" && r.pageUrl);
 }
 
 export interface Draft {

@@ -257,6 +257,8 @@ const REFUSED_TOOL_ARGS: Record<string, Record<string, unknown>> = {
   mc_list_drafts: {},
   mc_review_draft: { draftId: "DRF-1", kind: "comment", version: 1, body: "x" },
   mc_upload_draft_artifact: { draftId: "DRF-1", kind: "diagram", fileName: "plan.png", contentType: "image/png", contentBase64: "iVBORw0KGgo=" },
+  mc_render_draft_page: { draftId: "DRF-1" },
+  mc_publish_draft_page: { draftId: "DRF-1", version: 1, url: "https://claude.ai/artifact/abcdef123456" },
 };
 
 beforeEach(() => {

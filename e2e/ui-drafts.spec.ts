@@ -199,6 +199,10 @@ interface MockOptions {
   slowSecondSave?: boolean;
   /** Submit takes a while, so the form can be seen locked meanwhile. */
   slowSubmit?: boolean;
+  /** Every save takes a while, so the form can be seen while one is on its way. */
+  slowSave?: boolean;
+  /** What GET /api/drafts/{id} reports once a file is uploaded, as when an upload returns a draft in review to drafting. */
+  afterUpload?: { viewer?: Record<string, unknown>; draftFields?: Record<string, unknown> };
 }
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -237,6 +241,7 @@ async function mockDraftsApi(
         return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error }) });
       }
       if (options.slowSecondSave && mock.saves.length === 2) await pause(2_000);
+      if (options.slowSave) await pause(1_500);
       editBase = EDIT_BASE_2;
       title = String(mock.saves.at(-1)?.title ?? title);
       return route.fulfill(json({ draft: ROW, changed: true, editBase }));
@@ -277,8 +282,13 @@ async function mockDraftsApi(
         return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error }) });
       }
       const frozen = { "1": VERSION_1, "2": VERSION_2 }[url.searchParams.get("version") ?? ""] ?? null;
+      const uploaded = mock.uploads.length > 0 ? options.afterUpload : undefined;
       return route.fulfill(
-        json({ ...detail({ editBase, ...viewer }, { working, ...draftFields }), ...(frozen ? { version: frozen } : {}), completeness: options.completeness ?? [] })
+        json({
+          ...detail({ editBase, ...viewer, ...uploaded?.viewer }, { working, ...draftFields, ...uploaded?.draftFields }),
+          ...(frozen ? { version: frozen } : {}),
+          completeness: options.completeness ?? [],
+        })
       );
     }
     if (/\/api\/drafts\/DRF-8$/.test(url.pathname)) {
@@ -632,6 +642,35 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect.poll(() => mock.saves.length).toBe(1);
     expect(mock.saves[0]).toMatchObject({ base: EDIT_BASE_2, research: { artifacts: [expect.objectContaining({ kind: "screenshot", name: "form.png" })] } });
+  });
+
+  test("an upload to a draft in review returns it to drafting, and the form offers Submit again", async ({ page }) => {
+    await mockDraftsApi(page, { canUpload: true }, {}, { afterUpload: { viewer: { canSubmit: true }, draftFields: { status: "drafting" } } });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    const footer = page.getByRole("region", { name: "Save" });
+    await expect(footer.getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+    await page.getByLabel(/^Upload as/).selectOption("screenshot");
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
+    await page.getByLabel(/^Upload a file/).setInputFiles({ name: "form.png", mimeType: "image/png", buffer: png });
+    await expect(page.getByLabel("Artifact 1 name", { exact: true })).toHaveValue("form.png");
+    await expect(footer.getByRole("button", { name: "Submit for review" })).toBeEnabled();
+  });
+
+  test("an upload waits for a save on its way, and then names the base that save returned", async ({ page }) => {
+    const mock = await mockDraftsApi(page, { canUpload: true }, {}, { slowSave: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    await page.getByLabel("Title", { exact: true }).fill("Saved before the upload");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect.poll(() => mock.saves.length).toBe(1);
+    // Both would name the base the form read: one would be refused, or store a file it never links.
+    const file = page.getByLabel(/^Upload a file/);
+    await expect(file).toBeDisabled();
+    await expect(file).toBeEnabled();
+    await page.getByLabel(/^Upload as/).selectOption("screenshot");
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
+    await file.setInputFiles({ name: "form.png", mimeType: "image/png", buffer: png });
+    await expect.poll(() => mock.uploads.length).toBe(1);
+    expect(mock.uploads[0]).toMatchObject({ base: EDIT_BASE_2 });
   });
 
   test("offers no upload when the draft cannot take one", async ({ page }) => {

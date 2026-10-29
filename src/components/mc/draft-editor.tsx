@@ -582,7 +582,8 @@ type UploadKind = (typeof UPLOAD_KINDS)[number];
 /** Uploads a file; resolves to what went wrong, or null once the draft links it. */
 type Uploader = (file: File, kind: UploadKind) => Promise<string | null>;
 
-function UploadArtifact({ onUpload }: { onUpload: Uploader }) {
+// `locked` while a save is on its way: an upload would name the same base.
+function UploadArtifact({ onUpload, locked }: { onUpload: Uploader; locked: boolean }) {
   const [kind, setKind] = useState<UploadKind>("diagram");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -593,7 +594,7 @@ function UploadArtifact({ onUpload }: { onUpload: Uploader }) {
         <input
           type="file"
           accept={ARTIFACT_CONTENT_TYPES[kind].join(",")}
-          disabled={busy}
+          disabled={busy || locked}
           onChange={async (e) => {
             const file = e.target.files?.[0];
             e.target.value = "";
@@ -619,10 +620,12 @@ function ResearchFields({
   research,
   setResearch,
   onUpload,
+  uploadLocked = false,
 }: {
   research: DraftResearch;
   setResearch: (fn: (r: DraftResearch) => DraftResearch) => void;
   onUpload?: Uploader;
+  uploadLocked?: boolean;
 }) {
   const chosenName = useId();
   const set = (patch: Partial<DraftResearch>) => setResearch((r) => ({ ...r, ...patch }));
@@ -852,7 +855,7 @@ function ResearchFields({
       {onUpload && research.artifacts.length < 50 && (
         <>
           <p className="dr-task-meta">Or upload a file. Mission Control keeps it in its SharePoint library and links it here at once.</p>
-          <UploadArtifact onUpload={onUpload} />
+          <UploadArtifact onUpload={onUpload} locked={uploadLocked} />
         </>
       )}
     </section>
@@ -1058,9 +1061,11 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
   const close = () => nav("drafts", id ? { draftId: id } : {});
 
   // An upload (TASK-4131) stores the file and links it from the saved draft at
-  // once. It names the base the form read, so it refuses once the draft has moved.
-  // The link then joins both what was saved and what is shown, and the form takes
-  // the new base. The form is locked meanwhile, as for Submit.
+  // once. It names the base the form read, so it refuses once the draft has moved,
+  // and waits for a save on its way. The link then joins both what was saved and
+  // what is shown, and the form takes the new base. The form is locked meanwhile,
+  // as for Submit. The draft is then read back, as after a save: an upload returns
+  // a draft in review to drafting, so Submit is offered again.
   const upload: Uploader = async (file, kind) => {
     if (!id || !detail) return null;
     if (file.size > MAX_ARTIFACT_BYTES) return `${file.name} has ${file.size} bytes. The limit is ${MAX_ARTIFACT_BYTES} bytes (3 MiB).`;
@@ -1074,6 +1079,9 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
       setInitial((f) => f && withArtifact(f, result.artifact));
       setFormState((f) => f && withArtifact(f, result.artifact));
       setDetail((d) => (d ? { ...d, viewer: { ...d.viewer, editBase: result.editBase } } : d));
+      // A load from before the upload is dropped; this one keeps the form and its new base.
+      saves.current += 1;
+      setTick((t) => t + 1);
       return null;
     } catch (err) {
       return errorOf(err).message;
@@ -1159,7 +1167,12 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
       <fieldset className="dr-edit-lock" disabled={(busy && id === null) || acting}>
         <SettingsFields form={form} setForm={setForm} />
         <PlanFields plan={form.content.plan} setPlan={setPlan} />
-        <ResearchFields research={form.content.research} setResearch={setResearch} onUpload={id && detail?.viewer.canUpload ? upload : undefined} />
+        <ResearchFields
+          research={form.content.research}
+          setResearch={setResearch}
+          onUpload={id && detail?.viewer.canUpload ? upload : undefined}
+          uploadLocked={busy}
+        />
       </fieldset>
 
       <section className="dr-section dr-edit-foot" aria-label="Save">

@@ -82,9 +82,10 @@ import {
 import { verifyCompliance } from "./verify";
 import { resolvePrTask, type PrEvent, type PrTaskResolution } from "./webhook";
 
-// Decision 14, amended TASK-2011 (Vince, 2026-09-27): the 8h TTL applies
-// unless the live open PR still carries the stamp. Merge/close releases it.
-const CHECKOUT_TTL_MIN = 8 * 60;
+// Decision 14, amended TASK-2011 (Vince, 2026-09-27) and TASK-4156 (Vince,
+// 2026-10-29, 8h to 24h): the 24h TTL applies unless the live open PR still
+// carries the stamp. Merge/close releases it.
+const CHECKOUT_TTL_MIN = 24 * 60;
 
 function genId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;

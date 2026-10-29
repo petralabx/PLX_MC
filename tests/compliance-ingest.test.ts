@@ -201,7 +201,7 @@ describe("ingestPullRequest", () => {
     expect(e.taskId).toBe("TASK-900");
     expect(e.payload).toMatchObject({ sparse: false, actorKind: "agent" });
     // TASK-3409: activity on the stamped PR keeps its checkout alive.
-    expect(renewDispatches).toHaveBeenCalledWith(["dsp_x"], { repo: "petralabx/PLX_MC", pr: evt.prNumber, ttlMinutes: 480 });
+    expect(renewDispatches).toHaveBeenCalledWith(["dsp_x"], { repo: "petralabx/PLX_MC", pr: evt.prNumber, ttlMinutes: 1440 });
   });
 
   it("records an operator PR (no checkout) as unrouted/action_required — not a sparse Task", async () => {

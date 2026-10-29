@@ -262,13 +262,27 @@ export async function actionGetApprovalGate(
     gateId = gates[gates.length - 1]?.id;
     if (!gateId) throw new ApiError("not_found", `task ${taskId} has no approval gate.`, 404);
   }
-  const state = await getApprovalGateState({
-    taskId,
-    gateId,
-    // Bound to the authenticated API-key principal, not the caller-supplied operator header.
-    requesterPrincipal: identity.servicePrincipalId,
-    waitMs: (input.waitSeconds ?? 0) * 1000,
-  });
+  let state: Awaited<ReturnType<typeof getApprovalGateState>>;
+  try {
+    state = await getApprovalGateState({
+      taskId,
+      gateId,
+      // Bound to the authenticated API-key principal, not the caller-supplied operator header.
+      requesterPrincipal: identity.servicePrincipalId,
+      waitMs: (input.waitSeconds ?? 0) * 1000,
+    });
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    // TASK-3779: an unexpected failure (e.g. a malformed stored gate) is a named,
+    // logged error with a clear reason, never a bare 500.
+    const kind = err instanceof Error ? err.name : typeof err;
+    console.error("mc_get_approval_gate read failed", { taskId, gateId, err });
+    throw new ApiError(
+      "approval_gate_read_failed",
+      `could not read approval gate ${gateId} on ${taskId}: unexpected ${kind} while loading the stored gate. The gate is unchanged; retry, or report this gate id to an operator.`,
+      503
+    );
+  }
   return { ...state, link: taskLink(taskId), gateLink: gateLink(state.gateId) };
 }
 

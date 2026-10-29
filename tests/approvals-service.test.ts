@@ -3,6 +3,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// TASK-3779: approving now requires the signing key; tests run with a fake one.
+beforeEach(() => {
+  process.env.PLX_MC_APPROVAL_SIGNING_KEY ??= "test-signing-key";
+});
+
 import { ApiError } from "@/lib/api/route";
 import type { ApprovalGate, Task } from "@/lib/mc-data";
 import { principalFromTokens } from "@/lib/permissions/project-acl";
@@ -164,6 +169,24 @@ describe("decideApprovalGate", () => {
     expect((h.events[0].payload as Record<string, unknown>).requestedBy).toBe(
       "vince@petrasoap.com"
     );
+  });
+
+  it("refuses to approve, writing nothing, when the signing key is missing (TASK-3779)", async () => {
+    const prev = process.env.PLX_MC_APPROVAL_SIGNING_KEY;
+    delete process.env.PLX_MC_APPROVAL_SIGNING_KEY;
+    try {
+      seedTask("TASK-700", { approvalGates: [pending] });
+      await expect(
+        decideApprovalGate({ taskId: "TASK-700", gateId: "apg_1", decision: "approved", decidedBy: "greg@petrasoap.com" })
+      ).rejects.toMatchObject({ code: "approval_signing_unavailable", status: 503 });
+      expect(h.patches).toHaveLength(0);
+      expect(h.events).toHaveLength(0);
+      seedTask("TASK-701", { approvalGates: [pending] });
+      const { gate } = await decideApprovalGate({ taskId: "TASK-701", gateId: "apg_1", decision: "rejected", decidedBy: "greg@petrasoap.com" });
+      expect(gate.status).toBe("rejected");
+    } finally {
+      if (prev !== undefined) process.env.PLX_MC_APPROVAL_SIGNING_KEY = prev;
+    }
   });
 
   it("signs an approval and stamps its expiry; a rejection stays unsigned (TASK-3408)", async () => {

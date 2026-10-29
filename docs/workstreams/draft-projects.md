@@ -3,7 +3,7 @@
 - Slug: `draft-projects` (this file is `docs/workstreams/draft-projects.md`)
 - Owner: Vince · agents: Claude Code on the web
 - Branches: `claude/brave-heisenberg-7t8mks` (step 1 merged as #487, TASK-4056; step 2 merged as #489, TASK-4059; step 3 merged as #492, TASK-4071; New draft form slice A merged as #497 and #499, TASK-4109; slice B merged as #503, TASK-4110)
-- MC tasks: TASK-4056, TASK-4059, TASK-4071, TASK-4109, TASK-4110
+- MC tasks: TASK-4056, TASK-4059, TASK-4071, TASK-4109, TASK-4110, TASK-4129 to TASK-4132, TASK-4135
 - SharePoint handoff: n/a
 
 ## Goal
@@ -12,7 +12,7 @@ Let PLX members and their agents put a planned project, its buckets and tasks, a
 
 ## Status
 
-done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and the follow-ups for skills, artifact uploads and the governance rule are merged and live on https://mc.plxcustomer.io (DB Migrate applied 055 and 056 on 2026-10-27). Review on a shared page is not started.
+done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and every follow-up (skills, artifact uploads, the governance rule, review pages) are merged and live on https://mc.plxcustomer.io (DB Migrate applied 055 and 056 on 2026-10-27). Review pages stay off until an operator turns them on.
 
 ## Done
 
@@ -24,12 +24,13 @@ done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and th
 - TASK-4129: `project-researcher` and `guided-project-discovery` save a plan as a draft ([petralabx/skills PR 48](https://github.com/petralabx/skills/pull/48), release 1.6.15).
 - TASK-4130 and TASK-4131: artifact uploads, as the agent tool `mc_upload_draft_artifact` and from the New draft form ([PLX_MC PR 505](https://github.com/petralabx/PLX_MC/pull/505)).
 - TASK-4132: the governance-contract rule "Plans go through a draft" and the skills catalog pin to 1.6.15 ([PLX_MC PR 507](https://github.com/petralabx/PLX_MC/pull/507)).
+- TASK-4135: review pages: `mc_render_draft_page`, `mc_publish_draft_page` and the comment relay on `mc_review_draft`, with the page link and relayed comments on the Drafts screen ([PLX_MC PR 508](https://github.com/petralabx/PLX_MC/pull/508)).
 
 ## Next steps
 
 1. A signed-in check of the Drafts screen on production: list, record, review, Accept, and the New draft form. The first real draft is the test.
 2. Uploads are on in production: on 2026-10-29 an upload for an unknown draft passed the store check and answered 404. The first real upload shows whether the Mission Control library takes draft files under `Drafts/`.
-3. Follow-up, not started: review on a shared page (Claude Artifacts first, Cursor Canvas if it exposes comments). Spec: PRD "Follow-up: review on a shared page".
+3. Turn review pages on: an operator sets `PLX_MC_DRAFT_PAGES_ENABLED=1`. The first draft published as a page, and its first relayed comment, are the test. The steps are in `docs/modules/drafts/README.md` ("Review pages").
 
 ## Decisions and why
 
@@ -50,6 +51,8 @@ done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and th
 - 2026-10-28 The New draft form ships in two PRs: slice A (session routes, and the form for the settings, the plan and the research submit needs) and slice B (risks, open questions, artifacts, polish). Why: step 3 took three review rounds as one PR, and a person can write and submit a complete draft after slice A. Decided by: Vince.
 - 2026-10-28 A form save and submit carry an edit base (the working copy's digest, visibility, members and reviewers) and refuse with 409 `draft_changed` once the draft has moved; a review does not move it. Why: an agent and its person can both write a draft, and each save replaces whole sections. Decided by: Claude (TASK-4109).
 - 2026-10-28 The form's Save sits at the end of the form, not in a sticky bar. Why: on a phone a sticky bar sits on the tab bar, and the list of what submit needs can be long. Decided by: Claude (TASK-4109).
+- 2026-10-29 Review pages start now, with safe defaults: only Petra people's comments come back, Claude Artifacts only, a page comment never blocks, a restricted draft is never published, and pages are off until an operator sets `PLX_MC_DRAFT_PAGES_ENABLED=1`. Why: it opens review to Petra people outside Mission Control without a second source of truth, and each default can be loosened later. Decided by: Vince (TASK-4135).
+- 2026-10-29 A page link and a relayed comment live among a draft's reviews (`source: "page"`, `source: "artifact"`), and a relay names the version its page showed. Why: reviews are jsonb, so there is no migration, and a republished artifact keeps its link across versions. Decided by: Claude (TASK-4135).
 
 ## Open questions
 
@@ -81,4 +84,4 @@ bash scripts/preflight.sh --mode pre-commit
 
 ## Last updated
 
-2026-10-29 by Claude Code (TASK-4132): artifact uploads merged (#505) and the governance rule with the skills pin merged (#507); only review on a shared page is left.
+2026-10-29 by Claude Code (TASK-4135): review pages merged (#508), the last follow-up; the workstream is done.

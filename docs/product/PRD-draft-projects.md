@@ -259,11 +259,21 @@ What it needs:
 - `"artifact"` and `"canvas"` as review sources, plus fields for the commenter and the relaying agent. Reviews are jsonb on `drafts`, so this needs no migration.
 - The external-integration declaration before it merges: owner, scope, auth source, default state (off), kill switch, health check, fallback and data boundary.
 
-Not decided yet:
+Decided (Vince, 2026-10-29; built as TASK-4135):
 
-- Whether people outside Petra may comment at all, or only Petra people who do not use Mission Control.
-- Whether Cursor Canvas exposes comments that an outside service can read. Check this before promising Canvas.
-- Whether a page comment can ever raise a blocking finding, for example after a PLX member confirms it in Mission Control.
+- Only Petra people's comments come back. A comment from anyone else stays on the page (422 `commenter_not_petra`).
+- Claude Artifacts only. Cursor Canvas is not built.
+- A page comment never blocks: it lands as a comment, and only a PLX member raises a finding in Mission Control.
+- Review pages are off until an operator sets `PLX_MC_DRAFT_PAGES_ENABLED=1`, the kill switch.
+- Only a shared draft is published. A restricted draft refuses (409 `draft_restricted`), rather than relying on the page's sharing to keep it to its members.
+
+How it works:
+
+1. The writer's agent calls `mc_render_draft_page`. MC renders the version under review as one self-contained HTML page: every value escaped, no script, and `data-target` on each plan item and research section (P, B1, T3, `research.summary`).
+2. The agent publishes the page as a private Claude Artifact and shares it with the reviewers the author chooses.
+3. The agent records the page's link with `mc_publish_draft_page {draftId, version, url}`. The draft keeps it as a `source: "page"` entry among its reviews, so the record page links it. Reviews are jsonb on `drafts`, so there is no migration.
+4. The agent reads the page's comment threads and relays each new one with `mc_review_draft {kind: "comment", version, body, target, relay: {pageUrl, commentId, commenter}}`. `version` is the version the page showed when the comment was made: a republished artifact keeps its link. The review records `source: "artifact"`, the commenter as `by`, and the relaying agent (`relayedBy`, `relayedFor`). A comment relayed twice is recorded once.
+5. A new version needs a new page, or the same artifact republished and recorded again. Comments on an older version show as stale.
 
 ## Steps
 
@@ -278,7 +288,7 @@ Not decided yet:
 | Follow-up D | TASK-4129 | Skill updates: `project-researcher` and `guided-project-discovery` end by saving a draft (`petralabx/skills` 1.6.15) | Merged (petralabx/skills#48) |
 | Follow-up E | TASK-4131 | Uploads from the New draft form (`POST /api/drafts/{id}/artifacts`) | Merged (#505) |
 | Follow-up F | TASK-4132 | The governance-contract rule and the skills catalog pin | Merged (#507) |
-| Follow-up | Not created | Review on a shared page: "Publish for review" and the comment relay, Claude Artifacts first (see Follow-up: review on a shared page). After step 3 is live and in use | Not started |
+| Follow-up G | TASK-4135 | Review on a shared page: `mc_render_draft_page`, `mc_publish_draft_page` and the comment relay on `mc_review_draft`, Claude Artifacts only, off until `PLX_MC_DRAFT_PAGES_ENABLED=1` (see Follow-up: review on a shared page) | Merged (#508) |
 
 Step 2 touches a migration, so it lands only with a signed MC merge approval of its exact head.
 

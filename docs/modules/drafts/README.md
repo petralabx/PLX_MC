@@ -92,6 +92,19 @@ writer's agent:
 Restricting a draft after its page is published does not take the page down: the author deletes the
 artifact or changes its sharing.
 
+To turn review pages on, an operator with write access to the Vercel project (team `petralabx`,
+project `plx-mission-control`):
+
+1. Adds `PLX_MC_DRAFT_PAGES_ENABLED` = `1` for Production only. No other value turns pages on.
+2. Redeploys the current production deployment on the same commit. A changed variable reaches only
+   a new deployment.
+3. Checks with `mc_render_draft_page {draftId: "DRF-999999"}` (or `GET
+   /api/cursor/drafts/DRF-999999/page`), which only reads. 404 `not_found` means pages are on. 503
+   `draft_pages_off` means the variable is missing, is not `1`, or the deployment is older than it.
+
+To turn them off, the operator removes the variable, or sets it to `0`, and redeploys. Published
+pages stay on claude.ai under their author's account, and relayed comments stay on their drafts.
+
 4. **Read** (`mc_get_draft`, `mc_list_drafts`): visibility follows projects. A `restricted` draft
    fails closed to its members and its author, with the same member matching as
    `src/lib/permissions/project-acl.ts`. The principal that wrote it is not a member by itself: a

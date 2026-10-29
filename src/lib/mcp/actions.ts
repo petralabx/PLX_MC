@@ -763,6 +763,23 @@ export const completeTaskInputShape = {
   shots: z.array(z.object({ label: z.string(), cap: z.string() })).optional(),
 };
 
+// TASK-4017: the done stage for a PR-less completion. Never "verified".
+export const PRLESS_COMPLETION_STAGE = "merged" as const;
+const PRLESS_PROMOTABLE_STAGES = new Set(["backlog", "specced", "approved", "planned", "progress", "qa", "review"]);
+
+/** A completed (not blocked/failed) hand-in with no prUrl, on a task with no PR rows, below the done stage. A UAT ticket task is excluded: its done stage only comes from a PR merge, whichever bucket it sits in. */
+export function shouldPromotePrlessCompletion(
+  task: Pick<Task, "stage" | "prs" | "labels"> | undefined,
+  input: { prUrl?: string; outcome?: "completed" | "blocked" | "failed" }
+): boolean {
+  if (!task) return false;
+  if ((input.outcome ?? "completed") !== "completed") return false;
+  if (input.prUrl?.trim()) return false;
+  if ((task.prs ?? []).length > 0) return false;
+  if (isUatTicketTask(task)) return false;
+  return typeof task.stage === "string" && PRLESS_PROMOTABLE_STAGES.has(task.stage);
+}
+
 export async function actionComplete(
   identity: McpIdentity,
   input: {
@@ -801,10 +818,12 @@ export async function actionComplete(
       );
     }
   }
-  // A pushed branch is not a reviewable UAT fix. Check before any evidence or
-  // completion event is written; blocked/failed hand-ins remain auditable.
+  // A pushed branch is not a reviewable UAT fix. The ticket is the label
+  // (kind:code plus uat:<id>), not the bucket: TASK-3973 can move a ticket
+  // task out of BKT-UAT and it is still a ticket. Check before any evidence
+  // or completion event is written; blocked/failed hand-ins remain auditable.
   if (
-    task?.bucket === "BKT-UAT" &&
+    task &&
     isUatTicketTask(task) &&
     !input.prUrl?.trim() &&
     input.outcome !== "blocked" && input.outcome !== "failed"
@@ -856,10 +875,27 @@ export async function actionComplete(
     // Files from mc_upload_evidence (TASK-3166) outlive a new hand-in. They are
     // read under the task row lock, so an upload that lands meanwhile is kept.
     await withTransaction(async (q) => {
-      const artifacts = ((await getEntity("task", taskId, q, true))?.data as unknown as Task | undefined)?.evidence?.artifacts;
+      const locked = (await getEntity("task", taskId, q, true))?.data as unknown as Task | undefined;
+      const artifacts = locked?.evidence?.artifacts;
+      // TASK-4017: a completed hand-in on a task with no PR has no merge to
+      // promote it, so it stayed in backlog. Move it to the done stage
+      // ("merged") here; tasks with PRs keep the merged-PR projection path.
+      const promote = shouldPromotePrlessCompletion(locked, input);
       await patchTask(
         taskId,
-        { evidence: { ...evidence, ...(artifacts?.length ? { artifacts } : {}) } } as Parameters<typeof patchTask>[1],
+        {
+          evidence: { ...evidence, ...(artifacts?.length ? { artifacts } : {}) },
+          ...(promote
+            ? {
+                stage: PRLESS_COMPLETION_STAGE,
+                activityLine: {
+                  who: dispatch?.accountableHuman ?? identity.operatorEmail,
+                  what: "Completed with no linked PR (mc_complete_task); moved to merged",
+                  kind: "move",
+                },
+              }
+            : {}),
+        } as Parameters<typeof patchTask>[1],
         dispatch?.accountableHuman ?? identity.operatorEmail,
         { query: q, attribution: { source: "service", actorId: identity.actor.id } }
       );

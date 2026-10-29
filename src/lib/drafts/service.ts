@@ -15,14 +15,19 @@
 // - Reviews name the version they were given on. An agent's approval is advisory.
 //   A blocking finding stays open until its raiser resolves it, or the author
 //   resolves or dismisses it (a person, with a reason). Accept is step 3.
+// - A file uploaded for a draft (TASK-4130) goes to the shared Mission Control
+//   library, so a restricted draft refuses uploads; the stored file joins the
+//   research artifacts as a link, under the same writer rules as a save.
 
 import { createHash, randomBytes } from "node:crypto";
 
 import { ApiError } from "@/lib/api/route";
+import { ownEvidenceSite } from "@/lib/compliance";
 import { appendEvent } from "@/lib/compliance/repo";
 import { HUMANS } from "@/lib/mc-data/data";
 import { isArchived } from "@/lib/mc-data/helpers";
 import { humanEmailFor, isClosedStage } from "@/lib/mc-data/policy";
+import { resolveRepoInput } from "@/lib/mc-data/repos";
 import type { Bucket, Human, Project, Repo, Task } from "@/lib/mc-data/types";
 import {
   canAccessBucket,
@@ -38,7 +43,7 @@ import { getBuckets, getEntities, getProjects, getRepos } from "@/lib/sync/repo"
 
 import { likelyDuplicates, type OpenTaskTitle } from "./duplicates";
 import { preflightIssues, submitIssues, type PreflightContext } from "./preflight";
-import { MAX_DRAFT_CONTENT_BYTES, draftContentBytes, draftDigest } from "./schema";
+import { MAX_DRAFT_ARTIFACTS, MAX_DRAFT_CONTENT_BYTES, draftContentBytes, draftDigest } from "./schema";
 import * as store from "./store";
 import {
   OPEN_DRAFT_STATUSES,
@@ -46,6 +51,7 @@ import {
   emptyDraftContent,
   isStaleReview,
   type Draft,
+  type DraftArtifact,
   type DraftContent,
   type DraftIssue,
   type DraftPlan,
@@ -277,6 +283,131 @@ export async function saveDraft(
     sections: Object.keys(sections).filter((k) => sections[k as keyof DraftSections] !== undefined),
   });
   return result;
+}
+
+// ─── Uploaded artifacts ──────────────────────────────────────────────────────
+
+/** Everyone with access to the shared library could open the file. MC never narrows access, so it refuses. */
+function assertUploadable(draft: Draft): void {
+  if (draft.visibility === "restricted") {
+    throw new ApiError(
+      "draft_restricted",
+      `${draft.id} is restricted, and a file in the shared Mission Control library is open to everyone on the PLX site. Link the file from a place that keeps the draft's access instead.`,
+      409
+    );
+  }
+}
+
+/** A new link needs room; a file the draft links already does not. */
+export function assertArtifactRoom(draft: Draft): void {
+  if (draft.working.research.artifacts.length >= MAX_DRAFT_ARTIFACTS) {
+    throw new ApiError("too_many_artifacts", `${draft.id} already holds ${MAX_DRAFT_ARTIFACTS} artifacts. Remove one first.`, 409);
+  }
+}
+
+/** The live state the Trading Lab check reads: the registry, and the projects a draft may add to. */
+interface SiteContext {
+  registry: Record<string, Repo>;
+  projects: Project[];
+}
+
+async function siteContext(deps: DraftDeps): Promise<SiteContext> {
+  const [registry, projects] = await Promise.all([deps.registry(), deps.projects()]);
+  return { registry, projects };
+}
+
+/**
+ * The own SharePoint site of a repo the draft's plan names (Trading Lab), or null
+ * when the draft's files go on the PLX site. The project, buckets and tasks count,
+ * and so do the repos of the existing project a draft adds to.
+ */
+function ownSiteOf(draft: Draft, { registry, projects }: SiteContext): string | null {
+  const plan = draft.working.plan;
+  const existing = plan.project.existing ? projects.find((p) => p.id === plan.project.existing) : undefined;
+  const named = [plan.project.repos, ...plan.buckets.map((b) => b.repos), ...plan.tasks.map((t) => t.repos), existing?.repos ?? []].flat();
+  for (const raw of named) {
+    const resolved = resolveRepoInput(raw, registry);
+    const repo = resolved.ok ? registry[resolved.id] : undefined;
+    const site = ownEvidenceSite(repo ? `${repo.owner}/${repo.name}` : raw);
+    if (site) return site;
+  }
+  return null;
+}
+
+export async function draftOwnSite(draft: Draft, deps: DraftDeps = defaultDraftDeps): Promise<string | null> {
+  return ownSiteOf(draft, await siteContext(deps));
+}
+
+/** Trading Lab files go on its own SharePoint site, never the PLX site (as mc_upload_evidence enforces). */
+function assertPlxSite(draft: Draft, context: SiteContext): void {
+  const site = ownSiteOf(draft, context);
+  if (site) {
+    throw new ApiError(
+      "evidence_store_unavailable",
+      `${site} files go on its own SharePoint site, never the PLX site. A person must set that site up first. Until then, link the file from where it is.`,
+      503
+    );
+  }
+}
+
+/**
+ * The draft a file is about to be stored for, after the checks a save runs.
+ * Nothing is stored for a refused draft. The form sends the base it was read
+ * with, as a save does; an agent sends none.
+ */
+export async function draftForUpload(actor: DraftActor, id: string, options: { base?: string } = {}): Promise<Draft> {
+  const draft = await visibleDraft(id, actor);
+  assertWriter(draft, actor);
+  assertOpen(draft);
+  assertAcceptNotStarted(draft);
+  assertBase(draft, options.base);
+  assertUploadable(draft);
+  assertPlxSite(draft, await siteContext(defaultDraftDeps));
+  return draft;
+}
+
+/**
+ * Stores a file for the draft (`storeFile`) and adds it to the draft's research
+ * artifacts. The draft stays locked from the checks through the store, so no
+ * save can restrict it or name Trading Lab between them. When the draft already
+ * links the same file (`sameFile`), it returns that link and stores nothing, so
+ * identical concurrent uploads store and link one copy.
+ */
+export async function addDraftArtifact(
+  actor: DraftActor,
+  id: string,
+  storeFile: () => Promise<DraftArtifact>,
+  sameFile: (linked: DraftArtifact) => boolean,
+  options: { base?: string } = {}
+): Promise<{ draft: Draft; artifact: DraftArtifact; added: boolean }> {
+  await visibleDraft(id, actor);
+  const sites = await siteContext(defaultDraftDeps);
+  let linked: DraftArtifact | undefined;
+  let artifact: DraftArtifact | undefined;
+  const result = await store.mutateDraft(id, async (draft) => {
+    // Again under the lock, as a save checks: the draft may have closed, been restricted or named Trading Lab meanwhile.
+    if (!canSeeDraft(draft, actor)) throw notFound(id);
+    assertWriter(draft, actor);
+    assertOpen(draft);
+    assertAcceptNotStarted(draft);
+    // The base first: a caller that takes the link it finds also takes the base returned.
+    assertBase(draft, options.base);
+    linked = draft.working.research.artifacts.find(sameFile);
+    if (linked) return null;
+    assertUploadable(draft);
+    assertPlxSite(draft, sites);
+    assertArtifactRoom(draft);
+    artifact = await storeFile();
+    const research = { ...draft.working.research, artifacts: [...draft.working.research.artifacts, artifact] };
+    const working = applySections(draft.working, { research });
+    const next: Draft = { ...draft, working };
+    if (next.status === "in_review" && draftDigest(working) !== draft.digest) next.status = "drafting";
+    return { draft: next };
+  });
+  if (!result) throw notFound(id);
+  if (!result.changed || !artifact) return { draft: result.draft, artifact: linked!, added: false };
+  await recordEvent("draft.artifact_uploaded", actor, { draftId: id, kind: artifact.kind, name: artifact.name, url: artifact.url, status: result.draft.status });
+  return { draft: result.draft, artifact, added: true };
 }
 
 export async function withdrawDraft(actor: DraftActor, id: string, reason: string): Promise<Draft> {

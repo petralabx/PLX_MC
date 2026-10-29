@@ -6,6 +6,7 @@
 // PATCH /api/drafts/{id} {base, ...sections} — the author saves the New draft
 // form (TASK-4109). base is the editBase GET returned; once the draft has moved
 // (an agent's save, another tab), the save refuses with 409 draft_changed.
+// viewer.canUpload tells the form to offer file uploads (TASK-4131).
 // Off when PLX_MC_DRAFTS_ENABLED=0.
 
 import { ApiError, parseBody, route } from "@/lib/api/route";
@@ -13,6 +14,7 @@ import { completenessIssues } from "@/lib/drafts/preflight";
 import { draftDigest, draftEditBaseSchema, draftSectionsSchema } from "@/lib/drafts/schema";
 import {
   draftEditBase,
+  draftOwnSite,
   draftPreflight,
   draftSummary,
   getVisibleDraft,
@@ -23,6 +25,7 @@ import {
 import { draftActorFromSession } from "@/lib/drafts/session";
 import { getDraftVersion } from "@/lib/drafts/store";
 import { acceptInProgress, isStaleReview, openBlockingFindings } from "@/lib/drafts/types";
+import { evidenceStoreEnabled } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +50,10 @@ export const GET = route(async (req, ctx) => {
   const accepting = acceptInProgress(draft);
   // Once an Accept has claimed the draft its content is pinned (service assertAcceptNotStarted).
   const acceptStarted = Object.keys(draft.materialized).length > 0 || draft.acceptedBy !== null;
+  // Files go to the shared Mission Control library on the PLX site: a restricted
+  // draft, or one for Trading Lab (its own site), keeps links only.
+  const canUpload =
+    isAuthor && open && !accepting && !acceptStarted && draft.visibility === "shared" && evidenceStoreEnabled() && !(await draftOwnSite(draft));
   return {
     draft: { ...draft, reviews: draft.reviews.map((r) => ({ ...r, stale: isStaleReview(r, draft) })) },
     versions,
@@ -65,6 +72,7 @@ export const GET = route(async (req, ctx) => {
       canEdit: isAuthor && open && !accepting && !acceptStarted,
       canSubmit: isAuthor && draft.status === "drafting" && !accepting,
       canWithdraw: isAuthor && open && !accepting,
+      canUpload,
       editBase: draftEditBase(draft),
     },
   };

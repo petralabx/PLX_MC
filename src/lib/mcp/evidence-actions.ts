@@ -47,7 +47,7 @@ import { getBuckets, getEntity, lockSharedEvidence } from "@/lib/sync/repo";
 import { mcpAuditActor, type McpIdentity } from "./auth";
 import { taskLink } from "./envelope";
 
-const PERSON_ACTION =
+export const PERSON_ACTION =
   `A person must create the "${PLX_EVIDENCE_STORE.library}" library on the PLX SharePoint site ` +
   `(${PLX_EVIDENCE_STORE.site}) and allow the Mission Control app to use the site.`;
 
@@ -65,11 +65,12 @@ export const uploadEvidenceInputShape = {
 };
 type UploadEvidenceInput = z.infer<z.ZodObject<typeof uploadEvidenceInputShape>>;
 
-const unavailable = (message: string) => new ApiError("evidence_store_unavailable", message, 503);
+export const unavailable = (message: string) => new ApiError("evidence_store_unavailable", message, 503);
 
 // The library's drive id does not change: look it up once per process. A miss is never cached.
+// Draft artifact uploads (TASK-4130) use the same library, so these helpers are shared.
 let cachedDriveId: string | null = null;
-async function evidenceDriveId(): Promise<string> {
+export async function evidenceDriveId(): Promise<string> {
   if (cachedDriveId) return cachedDriveId;
   const driveId = await driveIdByName(await siteIdByPath(PLX_EVIDENCE_STORE.site), PLX_EVIDENCE_STORE.library);
   if (!driveId) {
@@ -104,11 +105,11 @@ function uploadStep(input: UploadEvidenceInput): UploadStep {
 }
 
 // The second and the content hash make the name unique: no upload replaces another.
-const storedName = (uploadedAt: string, sha256: string, fileName: string) =>
-  `${uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha256.slice(0, 8)}-${sharePointSafeName(fileName)}`;
+export const storedName = (uploadedAt: string, sha256: string, fileName: string, hashChars = 8) =>
+  `${uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha256.slice(0, hashChars)}-${sharePointSafeName(fileName)}`;
 
 /** Every SharePoint failure becomes a 503 that says what to do; other errors stay errors. */
-async function onSharePoint<T>(call: () => Promise<T>): Promise<T> {
+export async function onSharePoint<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (err) {

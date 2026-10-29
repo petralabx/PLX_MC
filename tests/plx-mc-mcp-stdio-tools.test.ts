@@ -44,6 +44,8 @@ describe("stdio wave 4 tool parity (plus TASK-2326 release tools)", () => {
       mc_get_draft: "`/drafts/${encodeURIComponent(draftId)}${query}`",
       mc_list_drafts: "`/drafts${query}`",
       mc_review_draft: '"/drafts/review"',
+      // TASK-4130 draft artifact uploads.
+      mc_upload_draft_artifact: '"/drafts/artifact"',
     };
     for (const [tool, path] of Object.entries(routes)) {
       expect(stdioSource).toContain(`"${tool}"`);

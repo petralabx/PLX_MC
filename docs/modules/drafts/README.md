@@ -52,6 +52,21 @@ open draft (`withdrawn`).
    reads as `stale`. An agent's approval is advisory. A finding stays open across versions until
    its raiser resolves it, or the author, signed in, resolves or dismisses it (a dismissal needs a
    reason of 10 characters or more). An open blocking finding refuses Accept.
+**Uploads** (`mc_upload_draft_artifact`, TASK-4130): the writer uploads a diagram, screenshot or
+web page for an open draft. The file goes through the same checks as `mc_upload_evidence`
+(`artifactProblem`) to the PLX site's `Mission Control` library under `Drafts/DRF-n/`, then joins
+`research.artifacts` as a link (`addDraftArtifact`), so an upload during review returns the draft
+to `drafting`. A restricted draft refuses (409 `draft_restricted`): the library is shared, and MC
+never narrows access. A draft whose plan names the Trading Lab repo (`petralabx/agentic-swarm`, in
+its project, a bucket, a task or the existing project it adds to) refuses (503
+`evidence_store_unavailable`): Trading Lab files go on its own site. The draft stays locked from
+these checks through the SharePoint write and the link (`mutateDraft` takes an async change), so no
+save can restrict the draft or name Trading Lab in between; a save waits for the upload. A stored
+file's name carries its whole SHA-256, so the same file again adds nothing, even at the 50-link
+cap, and no other file passes for it. Uploads are off until a person
+sets `PLX_MC_EVIDENCE_STORE_ENABLED=1` (503 `evidence_store_unavailable`). MC never deletes a stored
+file; removing the link from the draft leaves the file in the library.
+
 4. **Read** (`mc_get_draft`, `mc_list_drafts`): visibility follows projects. A `restricted` draft
    fails closed to its members and its author, with the same member matching as
    `src/lib/permissions/project-acl.ts`. The principal that wrote it is not a member by itself: a
@@ -106,6 +121,11 @@ were made from. While the form holds unsaved edits it sets the shell's navigatio
 on the working copy's page. The form edits the whole research section, a task's dependencies (the
 draft's other tasks, or `TASK-*` ids) and the order of buckets and tasks (TASK-4110). A save drops
 rows left empty and names half-filled ones; the server validates.
+The form uploads a file for a saved, shared draft (TASK-4131): `POST /api/drafts/{id}/artifacts`
+with the edit base, through the same core as `mc_upload_draft_artifact` (`uploadDraftArtifact`). A
+draft that has moved refuses before anything is stored; on success the link joins the form and the
+form takes the returned base. GET's `viewer.canUpload` offers the control only to the author of an
+open, shared draft while the store is on.
 
 Invariants:
 
@@ -130,11 +150,11 @@ Accept writes.
 
 ## Dependencies
 
-- **mcp**: the five tools and `/api/cursor/drafts` routes (`src/lib/mcp/draft-actions.ts`).
+- **mcp**: the six tools and `/api/cursor/drafts` routes (`src/lib/mcp/draft-actions.ts`); uploads share the evidence store helpers in `src/lib/mcp/evidence-actions.ts`.
 - **permissions**: `draft.create`, `draft.review`, `draft.accept`; the project-ACL helpers.
 - **sync**: live repos, projects, buckets and tasks for the checks (`src/lib/sync/repo.ts`); Accept
   calls the create functions in `src/lib/sync/state.ts`.
-- **compliance**: `appendEvent` for the audit trail.
+- **compliance**: `appendEvent` for the audit trail; `artifactProblem` and `sharePointSafeName` for uploads.
 
 Depended on by: the `mcp` module (tools); the `web` module (the Drafts screen and the Approvals
 panel).

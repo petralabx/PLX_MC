@@ -61,6 +61,7 @@ export interface DraftDetail {
     canEdit: boolean;
     canSubmit: boolean;
     canWithdraw: boolean;
+    canUpload: boolean;
     /** Sent back with a save or submit; a draft that moved since refuses it. */
     editBase: string;
   };

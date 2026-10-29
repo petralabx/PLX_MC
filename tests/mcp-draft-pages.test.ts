@@ -135,6 +135,11 @@ describe("review pages", () => {
     await submitted({
       title: "Pages <script>alert(1)</script>",
       plan: { ...plan, tasks: [{ ...plan.tasks[0], description: '<img src=x onerror="alert(2)">' }] },
+      research: {
+        ...research,
+        findings: [{ text: "Reviewers outside MC need a page.", sources: ["[1]"] }],
+        sources: [{ ref: "[1]", title: "Review survey", url: "https://example.com/survey", kind: "external", excerpt: "Most <b>reviewers</b> skip MC.", accessed: "2026-10-28" }],
+      },
     });
     const res = await render("DRF-1");
     expect(res.status).toBe(200);
@@ -145,6 +150,9 @@ describe("review pages", () => {
     expect(html).toContain("Pages &lt;script&gt;alert(1)&lt;/script&gt;");
     expect(html).toContain("&lt;img src=x onerror=&quot;alert(2)&quot;&gt;");
     expect(html).not.toMatch(/<script|<img|onerror="/i);
+    // sol-6.1 P2 on 4940308: a finding's source shows its excerpt, so a reviewer can judge it.
+    expect(html).toContain("Most &lt;b&gt;reviewers&lt;/b&gt; skip MC.");
+    expect(html).toContain("2026-10-28");
     for (const target of ["P", "B1", "T1", "research.summary", "research.approaches"]) {
       expect(html).toContain(`data-target="${target}"`);
     }

@@ -57,6 +57,7 @@ article { margin: 12px 0 0; }
 .meta { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 6px 0; color: var(--p-muted); font-size: 14px; }
 .meta dt { font-weight: 600; }
 .meta dd { margin: 0; overflow-wrap: anywhere; }
+blockquote { margin: 6px 0 0; padding-left: 10px; border-left: 3px solid var(--p-line); color: var(--p-muted); }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--p-note); border-radius: 6px; padding: 10px; font-size: 13px; }
 ul { padding-left: 20px; }
 `;
@@ -142,7 +143,14 @@ export function renderDraftPage(draft: Pick<Draft, "id" | "author">, frozen: Dra
     part(
       "research.sources",
       "Sources",
-      list([...sources.values()].map((s) => `<code>${esc(s.ref)}</code> ${esc(s.title)}${s.url ? ` · ${link(s.url)}` : ""}`))
+      list(
+        [...sources.values()].map(
+          (s) =>
+            `<code>${esc(s.ref)}</code> ${esc(s.title)}${s.url ? ` · ${link(s.url)}` : ""}` +
+            (s.accessed ? ` <span class="kicker">read ${esc(s.accessed)}</span>` : "") +
+            (s.excerpt ? `<blockquote class="text">${esc(s.excerpt.trim())}</blockquote>` : "")
+        )
+      )
     ),
     part(
       "research.artifacts",

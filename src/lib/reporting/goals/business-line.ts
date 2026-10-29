@@ -16,6 +16,9 @@
 // A shipment total with no item lines counts as Distribution. Item amounts
 // use the finished-good and 3PL rules above. The stored estimate is a
 // shipment total (a line count and an amount), so it counts as Distribution.
+// A finished-good lookup that failed still runs this split (TASK-4103):
+// nothing is Manufacturing, 3PL charges still count as Services, and the
+// card says the list could not be read.
 
 import { CUSTOMER_CLASSES, type CustomerClass } from "./forecast-list";
 import { customerClassOf } from "./forecast";
@@ -64,6 +67,11 @@ export interface RevenueByBusinessLine {
   returnsShared: number;
   /** Pending shipments that had no item lines. Their product is in Distribution. */
   pendingWithoutLines: number;
+  /**
+   * The MRP finished-good list could not be read. Nothing is Manufacturing.
+   * 3PL charges still count as Services. false when the list was read.
+   */
+  finishedGoodsUnavailable: boolean;
 }
 
 export interface PendingProductLine {
@@ -252,22 +260,26 @@ export function applyServiceCharges(
   };
 }
 
-/** Share `total` across 3PL miscellaneous charges and every other charge line. No charge lines: all of it is accessorial. */
+/**
+ * Share `total` across 3PL miscellaneous charges and every other charge line.
+ * The weight is the charge amount. A charge's own discount is not a weight:
+ * O/E discounts items, not charges (shipment-lines.ts). Amounts are summed
+ * exactly and rounded once. No charge lines, or a zero sum: all of it is accessorial.
+ */
 function chargeParts(
   lines: readonly { kind?: "item" | "charge"; code: string | null; description: string | null; amount: string; discount?: string }[],
   total: number,
 ): { services: number; accessorial: number } {
-  let service = 0;
-  let other = 0;
+  const service: string[] = [];
+  const other: string[] = [];
   for (const line of lines) {
     if (line.kind !== "charge") continue;
-    const net = sumToCents([line.amount], [line.discount ?? "0"]);
-    const weight = net > 0 ? net : 0;
-    if (isServiceItem(line.code, line.description)) service += weight;
-    else other += weight;
+    (isServiceItem(line.code, line.description) ? service : other).push(line.amount);
   }
-  if (service + other === 0) return { services: 0, accessorial: total };
-  const [services, accessorial] = allocateCents(total, [service, other]);
+  const serviceCents = Math.max(0, sumToCents(service));
+  const otherCents = Math.max(0, sumToCents(other));
+  if (serviceCents + otherCents === 0) return { services: 0, accessorial: total };
+  const [services, accessorial] = allocateCents(total, [serviceCents, otherCents]);
   return { services, accessorial };
 }
 
@@ -282,6 +294,7 @@ function waiting(message: string): RevenueByBusinessLine {
     unitemizedInvoices: 0,
     returnsShared: 0,
     pendingWithoutLines: 0,
+    finishedGoodsUnavailable: false,
   };
 }
 
@@ -406,9 +419,9 @@ export function revenueByBusinessLine(input: BusinessLineInput): RevenueByBusine
     return waiting(`Invoice lines can’t be read yet (needs ${summary.missing.join(", ")}).`);
   }
   if (!input.lines) return waiting("Invoice lines aren’t loaded.");
-  if (!input.finishedGoodCodes) return waiting("The MRP finished-good list can’t be read yet.");
-
-  const finished = normalizeGoods(input.finishedGoodCodes);
+  // A failed lookup is an empty list plus a flag, not a wait: 3PL charges still count (TASK-4103).
+  const finishedGoodsUnavailable = input.finishedGoodCodes === null;
+  const finished = normalizeGoods(input.finishedGoodCodes ?? new Set<string>());
   const ambiguous = new Set<string>();
   let unitemizedInvoices = 0;
   let returnsShared = 0;
@@ -519,6 +532,7 @@ export function revenueByBusinessLine(input: BusinessLineInput): RevenueByBusine
     unitemizedInvoices,
     returnsShared,
     pendingWithoutLines,
+    finishedGoodsUnavailable,
   };
 }
 

@@ -1,7 +1,8 @@
 // Read-only lookup of MRP finished-good codes for the Goals business-line
 // split. The page asks the reporting replica (the same path as a refresh) for
-// the item codes on this month's invoices. A failure leaves the split waiting
-// and the rest of the page up. Server-only.
+// the item codes on this month's invoices. A failure leaves the code set null:
+// the split still runs, nothing is Manufacturing, 3PL charges still count as
+// Services, and the card says the list could not be read. Server-only.
 
 import { reportingDatabaseConfigured, reportingMcpConfigured } from "@/lib/secrets";
 
@@ -21,8 +22,9 @@ function normalize(codes: readonly string[]): string[] {
 
 /**
  * The subset of `codes` that are finished goods (`silver.finished_products`
- * code or erp_code). null when the replica can't be read: the split waits.
- * An empty set means the lookup ran and none of the codes are finished goods.
+ * code or erp_code). null when the replica can't be read: nothing is
+ * Manufacturing, and 3PL charges still count as Services. An empty set
+ * means the lookup ran and none of the codes are finished goods.
  */
 export async function lookupFinishedGoodCodes(codes: readonly string[]): Promise<ReadonlySet<string> | null> {
   const wanted = normalize(codes);

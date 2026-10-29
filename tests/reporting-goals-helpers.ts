@@ -132,7 +132,9 @@ export function goalsPage(
   shipmentLines: ShipmentLinesSummary | null = SHIPMENT_LINES_SUMMARY,
   basis: RevenueRateBasis = "boc",
   snapshot: Datasets = DATASETS,
-  lineRows: readonly ShipmentLineRow[] | null = null
+  lineRows: readonly ShipmentLineRow[] | null = null,
+  /** null: the finished-good lookup failed. Omitted: the fixture's finished goods. */
+  finishedGoods: ReadonlySet<string> | null = FINISHED_GOOD_CODES
 ): GoalsPage {
   const view = buildGoalsView({
     configured: true,
@@ -149,7 +151,7 @@ export function goalsPage(
     forecast,
     shipmentLines,
     shipmentLineRows: shipmentLines?.access === "read" ? lineRows ?? SHIPMENT_LINES : null,
-    finishedGoodCodes: shipmentLines?.access === "read" ? FINISHED_GOOD_CODES : null,
+    finishedGoodCodes: shipmentLines?.access === "read" ? finishedGoods : null,
     revenueBasis: basis,
   });
   return { ...view, viewer: { editor: true }, ...overrides };

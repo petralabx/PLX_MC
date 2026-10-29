@@ -17,7 +17,7 @@ import {
   pendingProductsOf,
   revenueByBusinessLine,
 } from "@/lib/reporting/goals/business-line";
-import { allocateCents } from "@/lib/reporting/goals/money";
+import { allocateCents, sumToCents } from "@/lib/reporting/goals/money";
 import { FINISHED_GOOD_MATCH_SQL } from "@/lib/reporting/goals/queries/finished-goods";
 import type { CreditNoteRow, CreditNotesDataset, Datasets, RevenueRateBasis, ShipmentLineRow } from "@/lib/reporting/goals/types";
 
@@ -234,7 +234,7 @@ describe("revenue by business line", () => {
     expect(markup).not.toContain("$0.10");
   });
 
-  it("waits when the lines or the finished-good list are missing", () => {
+  it("waits when the lines are missing, and still splits when the finished-good list can't be read", () => {
     const page = pageAt("boc");
     const input = {
       shipments: page.shipments,
@@ -248,7 +248,12 @@ describe("revenue by business line", () => {
     };
     expect(revenueByBusinessLine({ ...input, linesSummary: null }).waiting).toBe("Invoice lines aren’t in this refresh yet.");
     expect(revenueByBusinessLine({ ...input, lines: null }).waiting).toBe("Invoice lines aren’t loaded.");
-    expect(revenueByBusinessLine({ ...input, finishedGoodCodes: null }).waiting).toBe("The MRP finished-good list can’t be read yet.");
+    const unread = revenueByBusinessLine({ ...input, finishedGoodCodes: null });
+    expect(unread.state).toBe("ready");
+    expect(unread.finishedGoodsUnavailable).toBe(true);
+    expect(unread.waiting).toBeNull();
+    expect(unread.all.amounts.manufacturingCadCents).toBe(0);
+    expect(unread.all.amounts.distributionCadCents).toBeGreaterThan(0);
     expect(
       revenueByBusinessLine({
         ...input,
@@ -267,6 +272,101 @@ describe("revenue by business line", () => {
     expect(FINISHED_GOOD_MATCH_SQL.toLowerCase()).not.toMatch(/\b(insert|update|delete|drop)\b/);
   });
 
+  function withCharges(replace: (line: ShipmentLineRow) => ShipmentLineRow[]): { invoice: string; otherCents: number; lines: ShipmentLineRow[] } {
+    const sample = pageAt("boc");
+    const invoice = sample.shipments.find((row) => row.source === "Sage" && row.currency === "CAD" && row.otherCents > 0);
+    if (!invoice) throw new Error("fixture should have a CAD invoice with charges");
+    let replaced = false;
+    const lines = SHIPMENT_LINES.flatMap((line) => {
+      if (line.invoice !== invoice.invoice || line.kind !== "charge") return [line];
+      if (replaced) return [];
+      replaced = true;
+      return replace(line);
+    });
+    expect(replaced).toBe(true);
+    return { invoice: invoice.invoice, otherCents: invoice.otherCents, lines };
+  }
+
+  function tiesToHeadline(page: ReturnType<typeof goalsPage>) {
+    if (!isReady(page) || !page.revenueGoal || !page.revenueScope || !page.revenueByBusinessLine) throw new Error("ready");
+    const split = page.revenueByBusinessLine;
+    const goal = page.revenueGoal;
+    const mfg = page.revenueScope;
+    expect(split.state).toBe("ready");
+    expect(businessLineSum(split.all.amounts) + businessLineSum(split.all.pending)).toBe(goal.goalCadCents);
+    expect(businessLineSum(split.mfg.amounts) + businessLineSum(split.mfg.pending)).toBe(mfg.goalCadCents);
+    expect(goal.goalCadCents + goal.chargesCadCents + goal.returnsCadCents - goal.pendingCadCents).toBe(goal.totalCadCents);
+  }
+
+  it("keeps a 3PL charge in Services when the finished-good lookup fails, and the three lines add to the headline", () => {
+    const sample = pageAt("boc");
+    const chosen = new Set<string>();
+    for (const row of sample.shipments) {
+      if (row.source === "Sage" && (row.currency === "CAD" || row.currency === "USD") && row.otherCents > 0) chosen.add(row.invoice);
+    }
+    const seen = new Set<string>();
+    const lines = SHIPMENT_LINES.map((line) => {
+      if (line.kind !== "charge" || !chosen.has(line.invoice) || seen.has(line.invoice)) return line;
+      seen.add(line.invoice);
+      return { ...line, code: "3PL", description: "3PL storage" };
+    });
+    const read = goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "boc", DATASETS, lines);
+    const failed = goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "boc", DATASETS, lines, null);
+    if (!isReady(read) || !isReady(failed) || !read.revenueGoal || !failed.revenueGoal || !failed.revenueByBusinessLine) {
+      throw new Error("ready");
+    }
+    const split = failed.revenueByBusinessLine;
+    tiesToHeadline(failed);
+    tiesToHeadline(read);
+    expect(split.finishedGoodsUnavailable).toBe(true);
+    expect(read.revenueByBusinessLine!.finishedGoodsUnavailable).toBe(false);
+    expect(split.all.amounts.manufacturingCadCents).toBe(0);
+    expect(split.all.serviceChargesCadCents).toBe(read.revenueByBusinessLine!.all.serviceChargesCadCents);
+    expect(split.all.serviceChargesCadCents).toBeGreaterThan(0);
+    expect(split.all.amounts.servicesCadCents).toBe(split.all.serviceChargesCadCents);
+    expect(failed.revenueGoal.goalCadCents).toBe(read.revenueGoal.goalCadCents);
+    expect(split.all.amounts.distributionCadCents).toBe(
+      read.revenueByBusinessLine!.all.amounts.manufacturingCadCents + read.revenueByBusinessLine!.all.amounts.distributionCadCents
+    );
+    const markup = text(html(GoalCards, { page: failed }));
+    expect(markup).toContain("The MRP finished-good list can’t be read, so nothing is counted as Manufacturing.");
+    expect(markup).toContain("3PL charges still count as Services.");
+    expect(markup).toContain(`Services (3PL) ${cents(split.all.amounts.servicesCadCents)}`);
+  });
+
+  it("weights a 3PL charge by its amount, not its discount, and the three lines add to the headline", () => {
+    const { otherCents, lines } = withCharges((line) => [
+      { ...line, code: "3PL", description: "3PL storage", amount: "100.000", discount: "90.000" },
+      { ...line, lineNo: (line.lineNo ?? 0) + 1, code: "FRT", description: "Freight", amount: "10.000", discount: "0.000" },
+    ]);
+    const gross = allocateCents(otherCents, [sumToCents(["100.000"]), sumToCents(["10.000"])])[0];
+    const net = allocateCents(otherCents, [sumToCents(["100.000"], ["90.000"]), sumToCents(["10.000"])])[0];
+    expect(gross).not.toBe(net);
+    const page = goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "boc", DATASETS, lines);
+    if (!isReady(page) || !page.revenueGoal || !page.revenueByBusinessLine) throw new Error("ready");
+    tiesToHeadline(page);
+    expect(page.revenueByBusinessLine.all.serviceChargesCadCents).toBe(gross);
+    expect(page.revenueByBusinessLine.all.amounts.servicesCadCents).toBe(gross);
+  });
+
+  it("rounds charge weights once after summing, and the three lines add to the headline", () => {
+    const { otherCents, lines } = withCharges((line) => [
+      { ...line, code: "3PL", description: "3PL storage", amount: "0.004", discount: "0.000" },
+      { ...line, lineNo: (line.lineNo ?? 0) + 1, code: "3PL", description: "3PL handling", amount: "0.004", discount: "0.000" },
+      { ...line, lineNo: (line.lineNo ?? 0) + 2, code: "FRT", description: "Freight", amount: "0.004", discount: "0.000" },
+    ]);
+    const service = sumToCents(["0.004", "0.004"]);
+    const accessorial = sumToCents(["0.004"]);
+    expect(service).toBe(1);
+    expect(accessorial).toBe(0);
+    expect(sumToCents(["0.004"])).toBe(0);
+    const page = goalsPage({}, ENTRIES, FORECAST, SHIPMENT_LINES_SUMMARY, "boc", DATASETS, lines);
+    if (!isReady(page) || !page.revenueGoal || !page.revenueByBusinessLine) throw new Error("ready");
+    tiesToHeadline(page);
+    expect(page.revenueByBusinessLine.all.serviceChargesCadCents).toBe(allocateCents(otherCents, [service, accessorial])[0]);
+    expect(page.revenueByBusinessLine.all.serviceChargesCadCents).toBe(otherCents);
+  });
+
   it("shows the three totals on the Revenue card", () => {
     const page = pageAt("boc");
     const amounts = page.revenueByBusinessLine!.all.amounts;
@@ -277,6 +377,7 @@ describe("revenue by business line", () => {
     expect(out).toContain(`Distribution ${cents(amounts.distributionCadCents)}`);
     expect(out).toContain(`Services (3PL) ${cents(amounts.servicesCadCents)}`);
     expect(out).toContain("These add to the headline.");
+    expect(out).not.toContain("finished-good list");
     expect(cents(businessLineSum(amounts))).toBe(cents(page.revenueGoal!.goalCadCents));
 
     const mfg = text(html(GoalCards, { page, scope: "mfg" }));

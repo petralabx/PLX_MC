@@ -185,6 +185,19 @@ describe("shipped, not yet invoiced on the Revenue goal", () => {
     expect(checked).not.toContain("sage.oe_invoice_header.shinumber");
   });
 
+  it("subtracts the header discount spread onto each line, and does not test a void flag", () => {
+    const sql = pendingShipmentsQuery.sql;
+    // unitprice * qtyshipped - shidisc matches Sage SHIITMTOT. SHIDISCAMT is spread onto the lines as HDRDISC.
+    expect(sql).toContain(
+      "sum(d.unitprice::numeric * d.qtyshipped::numeric - coalesce(d.shidisc::numeric, 0) - coalesce(d.hdrdisc::numeric, 0))"
+    );
+    expect(sql).not.toContain("NOT_VOIDED");
+    expect(sql).not.toMatch(/\bAND true\b/);
+    const detail = PENDING_SHIPMENT_COLUMNS.find(([, table]) => table === "oe_shipment_detail");
+    expect(detail?.[2]).toContain("hdrdisc");
+    expect(detail?.[2]).not.toEqual(expect.arrayContaining(["unitcost", "exticost"]));
+  });
+
   it("the grant script grants the columns the refresh checks, and not the invoice header", () => {
     const sql = readFileSync(
       path.join(__dirname, "..", "docs", "modules", "reporting-goals", "readonly-grants-shipments-pending.sql"),

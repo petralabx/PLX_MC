@@ -622,7 +622,8 @@ goal cards and on the workbook's Revenue by class sheet (`revenue-by-class.ts`).
 Until go-live, Sage posts a shipment (OESHIH/OESHID) before AR posts its
 invoice. The Revenue card adds each posted shipment dated this month (by ship
 date) whose header `numinvoice` is 0, as an estimate: order price x quantity
-shipped less the discount amount (`shidisc`), before tax, USD at the card's
+shipped, less the line discount (`shidisc`) and the header discount spread
+onto the line (`hdrdisc`), before tax, USD at the card's
 rate, classed by the shipment's customer (so `scope=mfg` leaves Exclusive
 Distribution out). Sage stores `numinvoice` as 0 until AR posts the invoice
 and 1 after; `lastinvnum` then holds the invoice number. Confirmed on the UAT
@@ -635,9 +636,10 @@ fees, pumps, bottles, artwork). Line type 2 charge lines and zero-quantity
 lines stay out. The open-order forecast still leaves C and MISC out, and the
 invoiced Revenue card is unchanged. The query does not read `item`. The same
 check confirmed the table names, that the shipment columns are text, that
-`shidate` is YYYYMMDD text, and that currency is only CAD or USD. There is no
-void column, so the void test stays `true`. Header `complete` = 1 on the
-uninvoiced rows, so that flag is not a void marker. The estimate moves the
+`shidate` is YYYYMMDD text, and that currency is only CAD or USD. Sage has
+no void flag. A deleted shipment is removed. Verified on live Sage:
+uninvoiced means `numinvoice` 0, and that check leaves no orphan rows.
+Header `complete` = 1 on the uninvoiced rows, so that flag is not a void marker. The estimate moves the
 headline, status chip, bar and pace; the side line reads "$A invoiced + $B
 shipped, not yet invoiced (estimate) - $R returns". The export lists them on
 the Pending shipments sheet and adds columns N-O to Revenue by class (Toward
@@ -699,7 +701,9 @@ equal that headline to the cent, at either rate and at either customer scope.
   An invoice's product (`net before tax` less every charge) is shared across
   its item lines by largest remainder, so the parts add up to the invoice
   even when the lines and the header disagree. Its charges are shared the
-  same way between 3PL and the accessorial side line.
+  same way between 3PL and the accessorial side line. The weight is the
+  charge amount, not the charge's discount: O/E discounts items, not charges.
+  Those amounts are summed exactly and rounded once.
 - **Returns.** A credit note has no detail lines. When its invoice is in this
   month's item lines, the note's product follows that invoice's mix. Otherwise
   it follows the class's invoiced product mix, and if the class has none it
@@ -713,9 +717,12 @@ equal that headline to the cent, at either rate and at either customer scope.
   A stored shipment total has no item lines, so it counts as Distribution.
   Item amounts, when a row has them, follow the finished-good and 3PL rules
   above. A hand-entered shipment already counted is left out of both.
-- **When it waits.** No lines on the run, lines the login cannot read, or a
-  finished-good lookup that failed: the card says so and the rest of the page
-  still loads. The estimate still sits in the headline. A successful lookup
+- **When it waits.** No lines on the run, or lines the login cannot read:
+  the card says so and the rest of the page still loads. A finished-good
+  lookup that failed does not wait. Nothing is counted as Manufacturing,
+  3PL charges still count as Services inside the headline, and the card says
+  the list could not be read. The three lines still add to the headline to
+  the cent. The estimate still sits in the headline. A successful lookup
   is cached for five minutes. The list is read live at page load, so it is
   today's MRP against the stored run.
 - **Workbook.** The workbook does not carry this split yet. The Pending

@@ -88,6 +88,11 @@ function RevenueByLine({ page, scope, title }: { page: ReadyPage; scope: Revenue
           Shipped, not invoiced (not in this headline): {lineText(block.pending)}.
         </p>
       ) : null}
+      {split.finishedGoodsUnavailable ? (
+        <p className="gp-split gp-amber" data-testid="goals-finished-goods-unavailable" title={LINE_RULE}>
+          The MRP finished-good list can’t be read, so nothing is counted as Manufacturing. 3PL charges still count as Services.
+        </p>
+      ) : null}
       {split.ambiguousCodes.length > 0 ? (
         <p className="gp-split gp-amber" title={LINE_RULE}>
           Counted as Manufacturing (also a 3PL code): {split.ambiguousCodes.join(", ")}.

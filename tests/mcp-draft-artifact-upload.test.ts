@@ -5,6 +5,8 @@
 // (Microsoft Graph) and the live-state reads are mocked. Nothing is stored for a
 // draft that refuses the upload.
 
+import { createHash } from "node:crypto";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const KEYS: Record<string, string> = {
@@ -15,6 +17,9 @@ const KEYS: Record<string, string> = {
 const h = vi.hoisted(() => ({
   uploads: [] as { driveId: string; path: string; size: number; contentType: string }[],
   uploadError: null as Error | null,
+  /** When set, a store waits for it, and `storing` resolves as the store begins. */
+  gate: null as Promise<void> | null,
+  storing: null as ((path: string) => void) | null,
 }));
 
 vi.mock("@/lib/permissions/decision-log", () => ({ recordPermissionDecision: vi.fn(async () => true) }));
@@ -41,6 +46,8 @@ vi.mock("@/lib/sync/graph", async () => {
     driveIdByName: vi.fn(async () => "drive-mc"),
     uploadSmallDriveFile: vi.fn(async (driveId: string, path: string, bytes: Uint8Array, contentType: string) => {
       if (h.uploadError) throw h.uploadError;
+      h.storing?.(path);
+      if (h.gate) await h.gate;
       h.uploads.push({ driveId, path, size: bytes.length, contentType });
       // SharePoint encodes the library name's space in webUrl.
       return { id: `item-${h.uploads.length}`, webUrl: `https://petrasoap.sharepoint.com/sites/PLXSite/Mission%20Control/${path}`, size: bytes.length };
@@ -134,6 +141,8 @@ beforeEach(() => {
   __clearEvidenceDriveCacheForTests();
   h.uploads = [];
   h.uploadError = null;
+  h.gate = null;
+  h.storing = null;
 });
 
 afterEach(() => {
@@ -147,7 +156,7 @@ describe("mc_upload_draft_artifact", () => {
     expect(res.status).toBe(200);
     expect(h.uploads).toHaveLength(1);
     expect(h.uploads[0]).toMatchObject({ driveId: "drive-mc", contentType: "image/png", size: 12 });
-    expect(h.uploads[0].path).toMatch(/^Drafts\/DRF-1\/\d{8}T\d{6}Z-[0-9a-f]{8}-plan\.png$/);
+    expect(h.uploads[0].path).toMatch(/^Drafts\/DRF-1\/\d{8}T\d{6}Z-[0-9a-f]{64}-plan\.png$/);
     const url = `https://petrasoap.sharepoint.com/sites/PLXSite/Mission%20Control/${h.uploads[0].path}`;
     expect(res.body.data).toMatchObject({ draftId: "DRF-1", duplicate: false, size: 12, artifact: { kind: "diagram", name: "Plan diagram", url, inline: null } });
 
@@ -176,7 +185,7 @@ describe("mc_upload_draft_artifact", () => {
 
   it("links one copy when the same file is stored twice at once", async () => {
     await newDraft();
-    // Two copies of plan.png, stored a second apart by two calls that both found no link.
+    // Two calls that both found no link before the lock.
     const copy = (second: number): DraftArtifact => ({
       kind: "diagram",
       name: "Plan diagram",
@@ -184,12 +193,16 @@ describe("mc_upload_draft_artifact", () => {
       inline: null,
     });
     const sameFile = (linked: DraftArtifact) => linked.url?.endsWith("-abcdef12-plan.png") ?? false;
+    const stores: number[] = [];
+    const store = (second: number) => async () => (stores.push(second), copy(second));
     const [first, second] = await Promise.all([
-      addDraftArtifact(writer, "DRF-1", copy(1), sameFile),
-      addDraftArtifact(writer, "DRF-1", copy(2), sameFile),
+      addDraftArtifact(writer, "DRF-1", store(1), sameFile),
+      addDraftArtifact(writer, "DRF-1", store(2), sameFile),
     ]);
     expect([first.added, second.added].sort()).toEqual([false, true]);
     expect(second.artifact).toEqual(first.artifact);
+    // The second waits for the lock, finds the link, and stores nothing.
+    expect(stores).toHaveLength(1);
     expect((await read("DRF-1")).body.data.draft.working.research.artifacts).toHaveLength(1);
   });
 
@@ -280,7 +293,7 @@ describe("mc_upload_draft_artifact", () => {
     expect(h.uploads).toHaveLength(0);
   });
 
-  // Bugbot on d2640e3: a save that names the Trading Lab repo while a file is stored keeps it unlinked.
+  // Bugbot on d2640e3: a save that names the Trading Lab repo before the lock keeps the file from being stored.
   it("checks the Trading Lab rule again under the lock, and links nothing", async () => {
     await newDraft({ plan: { ...plan, tasks: [{ ...plan.tasks[0], repos: ["agentic-swarm"] }] } });
     const stored: DraftArtifact = {
@@ -289,8 +302,48 @@ describe("mc_upload_draft_artifact", () => {
       url: "https://petrasoap.sharepoint.com/sites/PLXSite/Mission%20Control/Drafts/DRF-1/20261029T020000Z-abcdef12-plan.png",
       inline: null,
     };
-    await expect(addDraftArtifact(writer, "DRF-1", stored)).rejects.toMatchObject({ code: "evidence_store_unavailable", status: 503 });
+    const storeFile = vi.fn(async () => stored);
+    await expect(addDraftArtifact(writer, "DRF-1", storeFile, (linked) => linked.url === stored.url)).rejects.toMatchObject({
+      code: "evidence_store_unavailable",
+      status: 503,
+    });
+    expect(storeFile).not.toHaveBeenCalled();
     expect((await read("DRF-1")).body.data.draft.working.research.artifacts).toEqual([]);
+  });
+
+  // sol-6.1 P1 on d2640e3: a save that restricts the draft cannot land between the checks and the write.
+  it("keeps the draft locked while the file is stored: a save that restricts it waits", async () => {
+    await newDraft();
+    let release!: () => void;
+    h.gate = new Promise<void>((resolve) => (release = resolve));
+    const storing = new Promise<string>((resolve) => (h.storing = resolve));
+    const done: string[] = [];
+    const uploaded = upload(diagram).then((res) => (done.push("upload"), res));
+    await storing;
+    const restricted = save({ draftId: "DRF-1", visibility: "restricted", members: ["vince@petrasoap.com"] }).then((res) => (done.push("save"), res));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(done).toEqual([]);
+    release();
+    const [up, saved] = await Promise.all([uploaded, restricted]);
+    expect(up).toMatchObject({ status: 200, body: { data: { duplicate: false } } });
+    expect(saved.status).toBe(200);
+    expect(done).toEqual(["upload", "save"]);
+    expect(h.uploads).toHaveLength(1);
+  });
+
+  // sol-6.1 P2 on d2640e3: a file that only shares the first 8 hex of its hash is another file.
+  it("tells files apart by their whole SHA-256, not its first 8 characters", async () => {
+    const sha256 = createHash("sha256").update(Buffer.from(PNG, "base64")).digest("hex");
+    const other = {
+      kind: "diagram",
+      name: "Another plan",
+      url: `https://petrasoap.sharepoint.com/sites/PLXSite/Mission%20Control/Drafts/DRF-1/20261029T000000Z-${sha256.slice(0, 8)}-plan.png`,
+    };
+    await newDraft({ research: { ...research, artifacts: [other] } });
+    const res = await upload(diagram);
+    expect(res).toMatchObject({ status: 200, body: { data: { duplicate: false } } });
+    expect(h.uploads).toHaveLength(1);
+    expect(h.uploads[0].path).toContain(`-${sha256}-plan.png`);
   });
 
   // sol-6.1 P1 on 06fd992: a link that is there already is no way past the base check.
@@ -299,7 +352,7 @@ describe("mc_upload_draft_artifact", () => {
     const base = draftEditBase(await getVisibleDraft(writer, "DRF-1"));
     const first = await uploadDraftArtifact(writer, diagram);
     const sameFile = (linked: DraftArtifact) => linked.url === first.artifact.url;
-    await expect(addDraftArtifact(writer, "DRF-1", first.artifact, sameFile, { base })).rejects.toMatchObject({ code: "draft_changed", status: 409 });
+    await expect(addDraftArtifact(writer, "DRF-1", async () => first.artifact, sameFile, { base })).rejects.toMatchObject({ code: "draft_changed", status: 409 });
   });
 
   // sol-6.1 P2 on 06fd992: the cap on links counts new links only.

@@ -226,7 +226,8 @@ function isStoredFile(artifact: DraftArtifact, draftId: string, sha256: string, 
   if (!artifact.url) return false;
   try {
     const path = decodeURIComponent(new URL(artifact.url).pathname);
-    return path.includes(`/${draftArtifactFolder(draftId)}/`) && path.endsWith(`-${sha256.slice(0, 8)}-${sharePointSafeName(fileName)}`);
+    // A draft file's name carries its whole SHA-256, so no other file passes for it.
+    return path.includes(`/${draftArtifactFolder(draftId)}/`) && path.endsWith(`-${sha256}-${sharePointSafeName(fileName)}`);
   } catch {
     return false;
   }
@@ -254,12 +255,13 @@ export async function uploadDraftArtifact(
   if (existing) return { draftId: draft.id, artifact: existing, duplicate: true, draft: draftSummary(draft), editBase: draftEditBase(draft) };
   assertArtifactRoom(draft);
 
-  // MC never deletes a stored file: one whose draft closes before it is linked stays in the library.
-  const path = `${draftArtifactFolder(draft.id)}/${storedName(new Date().toISOString(), sha256, body.fileName)}`;
-  const item = await onSharePoint(async () => uploadSmallDriveFile(await evidenceDriveId(), path, bytes, body.contentType));
-  const stored: DraftArtifact = { kind: body.kind, name: body.name ?? body.fileName, url: item.webUrl, inline: null };
-  // A concurrent upload of the same file may have linked its copy first; this copy then stays unlinked.
-  const { draft: saved, artifact, added } = await addDraftArtifact(actor, draft.id, stored, sameFile, options);
+  // Stored under the draft lock, after the checks run again (addDraftArtifact). MC never deletes a stored file.
+  const storeFile = async (): Promise<DraftArtifact> => {
+    const path = `${draftArtifactFolder(draft.id)}/${storedName(new Date().toISOString(), sha256, body.fileName, sha256.length)}`;
+    const item = await onSharePoint(async () => uploadSmallDriveFile(await evidenceDriveId(), path, bytes, body.contentType));
+    return { kind: body.kind, name: body.name ?? body.fileName, url: item.webUrl, inline: null };
+  };
+  const { draft: saved, artifact, added } = await addDraftArtifact(actor, draft.id, storeFile, sameFile, options);
   return { draftId: saved.id, artifact, duplicate: !added, sha256, size: bytes.length, draft: draftSummary(saved), editBase: draftEditBase(saved) };
 }
 

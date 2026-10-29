@@ -367,22 +367,24 @@ export async function draftForUpload(actor: DraftActor, id: string, options: { b
 }
 
 /**
- * Adds a stored file to the draft's research artifacts. When the draft already
- * links the same file (`sameFile`, checked under the lock so identical
- * concurrent uploads record one link), it returns that link and adds nothing.
+ * Stores a file for the draft (`storeFile`) and adds it to the draft's research
+ * artifacts. The draft stays locked from the checks through the store, so no
+ * save can restrict it or name Trading Lab between them. When the draft already
+ * links the same file (`sameFile`), it returns that link and stores nothing, so
+ * identical concurrent uploads store and link one copy.
  */
 export async function addDraftArtifact(
   actor: DraftActor,
   id: string,
-  artifact: DraftArtifact,
-  sameFile: (linked: DraftArtifact) => boolean = (linked) => linked.url === artifact.url,
+  storeFile: () => Promise<DraftArtifact>,
+  sameFile: (linked: DraftArtifact) => boolean,
   options: { base?: string } = {}
 ): Promise<{ draft: Draft; artifact: DraftArtifact; added: boolean }> {
   await visibleDraft(id, actor);
-  // Read before the lock: the callback is synchronous.
   const sites = await siteContext(defaultDraftDeps);
   let linked: DraftArtifact | undefined;
-  const result = await store.mutateDraft(id, (draft) => {
+  let artifact: DraftArtifact | undefined;
+  const result = await store.mutateDraft(id, async (draft) => {
     // Again under the lock, as a save checks: the draft may have closed, been restricted or named Trading Lab meanwhile.
     if (!canSeeDraft(draft, actor)) throw notFound(id);
     assertWriter(draft, actor);
@@ -395,6 +397,7 @@ export async function addDraftArtifact(
     assertUploadable(draft);
     assertPlxSite(draft, sites);
     assertArtifactRoom(draft);
+    artifact = await storeFile();
     const research = { ...draft.working.research, artifacts: [...draft.working.research.artifacts, artifact] };
     const working = applySections(draft.working, { research });
     const next: Draft = { ...draft, working };
@@ -402,7 +405,7 @@ export async function addDraftArtifact(
     return { draft: next };
   });
   if (!result) throw notFound(id);
-  if (!result.changed) return { draft: result.draft, artifact: linked ?? artifact, added: false };
+  if (!result.changed || !artifact) return { draft: result.draft, artifact: linked!, added: false };
   await recordEvent("draft.artifact_uploaded", actor, { draftId: id, kind: artifact.kind, name: artifact.name, url: artifact.url, status: result.draft.status });
   return { draft: result.draft, artifact, added: true };
 }

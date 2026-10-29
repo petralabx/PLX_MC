@@ -316,19 +316,30 @@ export interface DraftChange {
   freeze?: DraftVersion;
 }
 
+// The process-local store's stand-in for the row lock: one change to a draft at a time.
+const memoryLocks = new Map<string, Promise<unknown>>();
+
+function memoryLocked<T>(id: string, run: () => Promise<T>): Promise<T> {
+  const result = (memoryLocks.get(id) ?? Promise.resolve()).then(run, run);
+  memoryLocks.set(id, result.catch(() => undefined));
+  return result;
+}
+
 /**
  * Lock a draft, apply `change` to it and store the result. `change` returns
  * null to leave the draft as it is. Returns null when the draft does not exist.
+ * The draft stays locked while `change` awaits, so keep any await in it short
+ * (an artifact upload stores its file there, TASK-4130).
  */
 export async function mutateDraft(
   id: string,
-  change: (current: Draft) => DraftChange | null
+  change: (current: Draft) => DraftChange | null | Promise<DraftChange | null>
 ): Promise<{ draft: Draft; changed: boolean } | null> {
-  if (!databaseConfigured()) {
+  if (!databaseConfigured()) return memoryLocked(id, async () => {
     const mem = memory();
     const current = mem.drafts.get(id);
     if (!current) return null;
-    const next = change(clone(current));
+    const next = await change(clone(current));
     if (!next) return { draft: clone(current), changed: false };
     const stored = { ...clone(next.draft), id, updatedAt: new Date().toISOString() };
     if (next.freeze) {
@@ -338,12 +349,12 @@ export async function mutateDraft(
     }
     mem.drafts.set(id, stored);
     return { draft: clone(stored), changed: true };
-  }
+  });
   return withTransaction(async (q: TxQuery) => {
     const rows = await q<DraftRow>("SELECT * FROM drafts WHERE id = $1 FOR UPDATE", [id]);
     if (!rows[0]) return null;
     const current = fromRow(rows[0]);
-    const next = change(current);
+    const next = await change(current);
     if (!next) return { draft: current, changed: false };
     if (next.freeze) {
       const v = next.freeze;

@@ -105,8 +105,8 @@ function uploadStep(input: UploadEvidenceInput): UploadStep {
 }
 
 // The second and the content hash make the name unique: no upload replaces another.
-export const storedName = (uploadedAt: string, sha256: string, fileName: string) =>
-  `${uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha256.slice(0, 8)}-${sharePointSafeName(fileName)}`;
+export const storedName = (uploadedAt: string, sha256: string, fileName: string, hashChars = 8) =>
+  `${uploadedAt.replace(/[-:]/g, "").slice(0, 15)}Z-${sha256.slice(0, hashChars)}-${sharePointSafeName(fileName)}`;
 
 /** Every SharePoint failure becomes a 503 that says what to do; other errors stay errors. */
 export async function onSharePoint<T>(call: () => Promise<T>): Promise<T> {

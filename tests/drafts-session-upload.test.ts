@@ -134,7 +134,7 @@ describe("POST /api/drafts/{id}/artifacts", () => {
     const res = await upload("DRF-1", { base: editBase, ...file });
     expect(res.status).toBe(200);
     expect(h.uploads).toHaveLength(1);
-    expect(h.uploads[0]).toMatch(/^Drafts\/DRF-1\/\d{8}T\d{6}Z-[0-9a-f]{8}-form\.png$/);
+    expect(h.uploads[0]).toMatch(/^Drafts\/DRF-1\/\d{8}T\d{6}Z-[0-9a-f]{64}-form\.png$/);
     expect(res.data).toMatchObject({ duplicate: false, artifact: { kind: "screenshot", name: "form.png", inline: null } });
     expect(res.data!.editBase).not.toBe(editBase);
     expect(res.data!.editBase).toBe((await viewerOf("DRF-1")).editBase);

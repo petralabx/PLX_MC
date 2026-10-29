@@ -33,6 +33,7 @@ Project Researcher — <slug>
 - [ ] 4) Score against rubric (0-100)
 - [ ] 5) Run control arm (re-score prior unchanged brief)
 - [ ] 6) Decide converge vs iterate (fixpoint + stop guards)
+- [ ] 7) Save the plan as a Mission Control draft (when it adds a project or 2+ buckets)
 ```
 
 ### 0) Frame mission and scope
@@ -94,6 +95,45 @@ action.
 `project-orchestrator` Stage 1 consumes `.orchestrator/<slug>/RESEARCH.md` when
 present to seed candidate trade-offs and recommendation into `SPEC.md`; when
 absent, orchestration follows its existing behavior.
+
+## Save the Plan as a Mission Control Draft
+
+When the converged brief recommends new Mission Control work that adds a
+project, or two or more buckets, end by saving it as a draft. Do not create the
+project or the buckets with `mc_create_project` or `mc_create_bucket`. A draft
+holds the plan and the research behind it. Reviewers check it, and its author
+accepts it in Mission Control, which creates the live records. Smaller work
+(tasks in an existing bucket, or one new bucket) needs no draft.
+
+1. Call `mc_save_draft` with no `draftId`, a `title`, a `plan` and a `research`
+   section. The author is your operator email, so it must be the person you
+   work for.
+   - `plan`: `project` (key `P`; set `existing` to a `PRJ-*` id to add buckets
+     to a live project), `buckets` (keys `B1`, `B2`, …) and `tasks` (keys `T1`,
+     `T2`, …, each naming its bucket key). `dependsOn` takes draft task keys or
+     `TASK-*` ids. Never put a real `PRJ-*`, `BKT-*` or `TASK-*` id on a new item.
+   - `research`, from `RESEARCH.md`: `summary` and `context` from Mission and
+     Context; `findings` from Internal and External Findings, citing sources by
+     ref (`[1]`); `approaches` from Candidate Approaches, with exactly the
+     recommended one `chosen`; `recommendation`; `risks` from the chosen
+     approach's risks and blast radius; `openQuestions`; `sources` (`ref`,
+     `title`, `url`, `kind` internal or external); `artifacts` as links or
+     inline markdown or Mermaid.
+   - `reviewers`: the people who should check the plan. When the work came from
+     a `guided-project-discovery` handoff, these are its gate's required
+     approvers, which the handoff names; otherwise, the people the person named.
+2. Fix what the returned `preflight` lists, with `mc_save_draft` and the
+   `draftId`. Each section you send replaces that section.
+3. Call `mc_submit_draft`. It refuses with `draft_not_ready` and every problem
+   until the draft is complete; fix them and submit again.
+4. Tell the person the draft id (`DRF-<n>`) and that they accept it in Mission
+   Control once the reviews are in. Agents never accept a draft.
+5. When the work came from a `guided-project-discovery` handoff, add the draft
+   id to that run's ledger, in the `## Handoff` section of
+   `.discovery/<slug>/DISCOVERY.md`.
+
+If the draft tools are missing or answer `drafts_disabled`, stop at the
+`RESEARCH.md` handoff and say why. Do not create the project directly instead.
 
 ## Escalation Intake (Edge 3 return path)
 

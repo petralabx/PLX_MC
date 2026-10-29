@@ -162,7 +162,8 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
     {
       instructions:
         "PLX Mission Control MCP — project/bucket creation, task lifecycle (checkout/progress/complete), routing suggestions (mc_suggest_work), skills directory install/sync/submit, and optional swarm delegation. " +
-        "Prefer mc_suggest_work when the Task is unknown; always mc_checkout_task before agent work; append MC-Checkout stamp lines to PR bodies.",
+        "Prefer mc_suggest_work when the Task is unknown; always mc_checkout_task before agent work; append MC-Checkout stamp lines to PR bodies. " +
+        "A plan that adds a project, or two or more buckets, goes through a draft: mc_save_draft, then mc_submit_draft; its author accepts it in Mission Control.",
     }
   );
   // Before any registration: every tool (incl. split modules) returns a thrown
@@ -213,7 +214,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_create_project",
-    "Create a Mission Control project. repos[] uses MC registry ids. visibility=restricted + members[] (emails/oids/sp_*) fail-closes the project; shared is the default and still queues the SharePoint Projects mirror.",
+    "Create a Mission Control project. repos[] uses MC registry ids. visibility=restricted + members[] (emails/oids/sp_*) fail-closes the project; shared is the default and still queues the SharePoint Projects mirror. A plan that adds a project, or two or more buckets, goes through a draft instead (mc_save_draft, then mc_submit_draft); its author accepts it, which creates the records.",
     {
       name: z.string().min(1),
       description: z.string().optional(),
@@ -242,7 +243,7 @@ export function createPlxMcMcpServer(identity: McpIdentity): McpServer {
 
   server.tool(
     "mc_create_bucket",
-    "Create a Mission Control bucket/initiative, optionally under an existing project. repos[] uses MC registry ids; the bucket is queued for the SharePoint Roadmap mirror.",
+    "Create a Mission Control bucket/initiative, optionally under an existing project. repos[] uses MC registry ids; the bucket is queued for the SharePoint Roadmap mirror. A plan that adds a project, or two or more buckets, goes through a draft instead (mc_save_draft, then mc_submit_draft); its author accepts it, which creates the records.",
     {
       name: z.string().min(1),
       description: z.string().optional(),

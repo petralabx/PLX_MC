@@ -27,11 +27,11 @@ done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and ev
 - Production smoke test, 2026-10-29, through the agent API (approved by Vince): DRF-1, "DRF smoke test (Claude)", was created and submitted (version 1). Its upload stored `smoke-test.svg` in the Mission Control library under `Drafts/DRF-1/` and returned it to drafting. The same file again was a duplicate. The review page answered 503 `draft_pages_off`. It was then withdrawn with that reason. Uploads work on production.
 - TASK-4135: review pages: `mc_render_draft_page`, `mc_publish_draft_page` and the comment relay on `mc_review_draft`, with the page link and relayed comments on the Drafts screen ([PLX_MC PR 508](https://github.com/petralabx/PLX_MC/pull/508)).
 - Review pages on in production, 2026-10-29 (Vince's decision, TASK-4135): `PLX_MC_DRAFT_PAGES_ENABLED=1` is set for Production, and production was redeployed on main at `c394755` (`dpl_9CYnDgTwPJeogBpESphumk42RsWj`). At 16:11 UTC a render of an unknown draft answered 404 `not_found` instead of 503 `draft_pages_off`; sign-in answered 200 and the self-check was ok. The operator steps are in `docs/modules/drafts/README.md` ("Review pages", [PLX_MC PR 512](https://github.com/petralabx/PLX_MC/pull/512)).
+- Signed-in check on production, 2026-10-29: Vince checked the Drafts list, a draft's record, review, Accept and the New draft form on https://mc.plxcustomer.io, and reported that all of them worked.
 
 ## Next steps
 
-1. A signed-in check of the Drafts screen on production: list, record, review, Accept, and the New draft form. The server side is proven (see Done: the smoke test); the screens need a person.
-2. The first draft published as a review page, and its first relayed comment, test review pages end to end. The agent's steps are in `docs/modules/drafts/README.md` ("Review pages").
+1. The first draft published as a review page, and its first relayed comment, test review pages end to end. The agent's steps are in `docs/modules/drafts/README.md` ("Review pages").
 
 ## Decisions and why
 
@@ -85,4 +85,4 @@ bash scripts/preflight.sh --mode pre-commit
 
 ## Last updated
 
-2026-10-29 by Claude Code (TASK-4135): review pages are on in production (404 `not_found` at 16:11 UTC); the workstream is done.
+2026-10-29 by Claude Code (TASK-4135): Vince's signed-in check of the screens on production passed; the workstream is done.

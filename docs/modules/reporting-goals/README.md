@@ -617,6 +617,63 @@ goal cards and on the workbook's Revenue by class sheet (`revenue-by-class.ts`).
   the browser bundle (a test walks every runtime import of the page's client
   files).
 
+### Shipped, not yet invoiced (interim, TASK-3992)
+
+Until go-live, Sage posts a shipment (OESHIH/OESHID) before AR posts its
+invoice. The Revenue card adds each posted shipment dated this month (by ship
+date) whose header `numinvoice` is 0, as an estimate: order price x quantity
+shipped less the discount amount (`shidisc`), before tax, USD at the card's
+rate, classed by the shipment's customer (so `scope=mfg` leaves Exclusive
+Distribution out). Sage stores `numinvoice` as 0 until AR posts the invoice
+and 1 after; `lastinvnum` then holds the invoice number. Confirmed on the UAT
+Sage copy on 2026-10-28 (Ricardo Savelli): `oe_invoice_header` has no
+`shinumber` (only invuniq, customer, invdate, audtdate), so a join on that
+column can never see an invoice. On that copy, `numinvoice` 0 is 103 shipments,
+all from April through August 2026; January through March are fully invoiced.
+Item lines include codes C and MISC (custom screening fees, filling service
+fees, pumps, bottles, artwork). Line type 2 charge lines and zero-quantity
+lines stay out. The open-order forecast still leaves C and MISC out, and the
+invoiced Revenue card is unchanged. The query does not read `item`. The same
+check confirmed the table names, that the shipment columns are text, that
+`shidate` is YYYYMMDD text, and that currency is only CAD or USD. There is no
+void column, so the void test stays `true`. Header `complete` = 1 on the
+uninvoiced rows, so that flag is not a void marker. The estimate moves the
+headline, status chip, bar and pace; the side line reads "$A invoiced + $B
+shipped, not yet invoiced (estimate) - $R returns". The export lists them on
+the Pending shipments sheet and adds columns N-O to Revenue by class (Toward
+the goal becomes `G-I-L+O` when they were read). Without the grant
+(`readonly-grants-shipments-pending.sql`, for a DBA) the card says "Shipped,
+not invoiced: not included (needs access)" and the refresh carries on.
+`GOALS_PENDING_SHIPMENTS=off` turns it off; to remove it, delete
+`pending-shipments.ts`, `queries/pending-shipments.ts` and the lines marked
+TASK-3992, then run `db/rollback/052_reporting_goals_pending_shipments_rollback.sql`.
+Rollback order: deploy the code and manifest from before 052 first, run one
+refresh on it, then run the rollback with
+`PGOPTIONS='-c plx.code_reverted=052_reporting_goals_pending_shipments.sql'`.
+The flag is no substitute: the page still reads the tables and the manifest
+still requires 052, so dropping them under that code turns every API to
+`503 schema_behind`. The rollback refuses without the setting, or while the
+newest good run has a pending summary.
+A counted shipment entered by hand is left out of the estimate when its
+reference is that Sage shipment number (spaces and case ignored). The page
+and the workbook both skip it, so those goods sit on the card once, at the
+hand entry's amount. A hand entry that does not count (another month, or no
+value) does not hide the Sage row. A hand entry whose reference is the order
+number, a customer PO, or blank still sits beside the Sage shipment until AR
+invoices it. Matching the order would also drop every other shipment of that
+order, and matching on customer and value can drop a different shipment.
+That unmatched hand entry is the remaining gap.
+
+The business-line split below includes this estimate in the headline. A stored
+shipment is one total: the snapshot keeps a line count and a product amount,
+not an item code or a description, so the finished-good and 3PL rules cannot
+run on it. The split's existing rule for a shipment with no item lines applies:
+the total counts as Distribution. Manufacturing + Distribution + Services,
+including that Distribution amount, add to the headline to the cent. A row
+that does carry item amounts is classified with the finished-good and 3PL
+rules. The Sage query does not return those amounts today. The same hand-entry
+skip applies to the split.
+
 ### Revenue by business line
 
 The Revenue headline split three ways (Ricardo Savelli, 26 Oct 2026), on the
@@ -637,7 +694,8 @@ equal that headline to the cent, at either rate and at either customer scope.
   so it is Distribution unless its customer or reference says 3PL.
 - **Left out.** Freight, lab and other accessorial miscellaneous charges stay
   on the charges side line, out of the three totals and out of the headline.
-  The headline plus that side line plus returns equals the invoiced total.
+  The headline plus that side line plus returns, less the shipped-not-invoiced
+  estimate, equals the invoiced total.
   An invoice's product (`net before tax` less every charge) is shared across
   its item lines by largest remainder, so the parts add up to the invoice
   even when the lines and the header disagree. Its charges are shared the
@@ -650,17 +708,18 @@ equal that headline to the cent, at either rate and at either customer scope.
   A credit note whose invoice is not in this month leaves every credited charge
   on the side line. The card says how many notes were shared that way. USD
   return product uses the class table's already-converted CAD.
-- **Shipped, not invoiced.** When a refresh stores that estimate, it is split
-  the same way and shown beside the headline. A shipment total with no item
-  lines counts as Distribution. It is not inside the three headline totals
-  until the headline itself includes the estimate; then the card adds it in,
-  so the three still match. A hand-entered shipment already counted is left
-  out, as the estimate leaves it out.
+- **Shipped, not invoiced.** The headline includes that estimate, and the
+  three lines include it too, so they still add to the headline to the cent.
+  A stored shipment total has no item lines, so it counts as Distribution.
+  Item amounts, when a row has them, follow the finished-good and 3PL rules
+  above. A hand-entered shipment already counted is left out of both.
 - **When it waits.** No lines on the run, lines the login cannot read, or a
   finished-good lookup that failed: the card says so and the rest of the page
-  still loads. A successful lookup is cached for five minutes. The list is
-  read live at page load, so it is today's MRP against the stored run.
-- **Workbook.** The workbook does not carry this split yet.
+  still loads. The estimate still sits in the headline. A successful lookup
+  is cached for five minutes. The list is read live at page load, so it is
+  today's MRP against the stored run.
+- **Workbook.** The workbook does not carry this split yet. The Pending
+  shipments sheet still lists the estimate.
 
 ### Line 1 bulk
 

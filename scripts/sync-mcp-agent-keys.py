@@ -64,6 +64,13 @@ DEDICATED_PRINCIPAL_IDS = (
     "sp_mcp_lane_cursor_uat",
     "sp_mcp_lane_cursor_vince",
     "sp_mcp_vince",
+    "sp_mcp_person_greg",
+    "sp_mcp_person_luis",
+    "sp_mcp_person_oleg",
+    "sp_mcp_person_ricardo",
+    "sp_mcp_person_rishi",
+    "sp_mcp_person_stephen",
+    "sp_mcp_person_tanush",
 )
 IDENTITY_LABELS = {
     CLAUDE_PRINCIPAL_ID: "claude",
@@ -107,6 +114,13 @@ IDENTITY_LABELS = {
     "sp_mcp_lane_cursor_uat": "lane-cursor-uat",
     "sp_mcp_lane_cursor_vince": "lane-cursor-vince",
     "sp_mcp_vince": "vince",
+    "sp_mcp_person_greg": "person-greg",
+    "sp_mcp_person_luis": "person-luis",
+    "sp_mcp_person_oleg": "person-oleg",
+    "sp_mcp_person_ricardo": "person-ricardo",
+    "sp_mcp_person_rishi": "person-rishi",
+    "sp_mcp_person_stephen": "person-stephen",
+    "sp_mcp_person_tanush": "person-tanush",
 }
 # The MCP tool allowlist denies mc_self_check to these principals (decision
 # CG-07b). The sync verifies them through the task search they may call:

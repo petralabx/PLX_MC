@@ -217,6 +217,15 @@ export const MCP_AGENT_SERVICE_PRINCIPAL_IDS = [
   // TASK-4015: Vince's personal principal (his Claude and Cursor). Same
   // grant as sp_mcp_claude_code (the default MCP_AGENT_CAPABILITIES bundle).
   "sp_mcp_vince",
+  // TASK-4015: one principal per MC human without one (migration 057).
+  // Member-scoped: MEMBER_CAPABILITIES only (grants.ts PERSON_MCP).
+  "sp_mcp_person_greg",
+  "sp_mcp_person_luis",
+  "sp_mcp_person_oleg",
+  "sp_mcp_person_ricardo",
+  "sp_mcp_person_rishi",
+  "sp_mcp_person_stephen",
+  "sp_mcp_person_tanush",
 ] as const;
 
 /**

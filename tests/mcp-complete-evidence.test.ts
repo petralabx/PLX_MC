@@ -15,6 +15,8 @@ const db = vi.hoisted(() => ({
   taskLabels: [] as string[],
   taskBucket: "BKT-OPEN",
   taskEvidence: undefined as unknown,
+  taskStage: undefined as string | undefined,
+  taskPrs: undefined as unknown[] | undefined,
 }));
 
 vi.mock("@/lib/compliance/service", () => ({
@@ -39,7 +41,7 @@ vi.mock("@/lib/sync", () => ({
 }));
 
 vi.mock("@/lib/sync/repo", () => ({
-  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: db.taskBucket, labels: db.taskLabels, evidence: db.taskEvidence } })),
+  getEntity: vi.fn(async () => ({ data: { id: "TASK-1", bucket: db.taskBucket, labels: db.taskLabels, evidence: db.taskEvidence, stage: db.taskStage, prs: db.taskPrs } })),
   getBuckets: vi.fn(async () => [{ id: "BKT-OPEN", project: null }]),
   getProjects: vi.fn(async () => []),
 }));
@@ -58,7 +60,7 @@ vi.mock("@/lib/routing/mutations/actors", () => ({
   aclPrincipalFromMcp: () => ({ tokens: ["sp_mcp_cursor"] }),
 }));
 
-import { actionComplete } from "@/lib/mcp/actions";
+import { actionComplete, shouldPromotePrlessCompletion } from "@/lib/mcp/actions";
 import type { McpIdentity } from "@/lib/mcp/auth";
 
 const identity: McpIdentity = {
@@ -76,6 +78,8 @@ beforeEach(() => {
   db.taskLabels = [];
   db.taskBucket = "BKT-OPEN";
   db.taskEvidence = undefined;
+  db.taskStage = undefined;
+  db.taskPrs = undefined;
   vi.mocked(complete).mockClear();
   db.dispatches.set("dsp_test", { taskId: "TASK-900", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
 });
@@ -172,8 +176,15 @@ describe("UAT code completion requires a PR", () => {
     expect(db.patched).toHaveLength(1);
   });
 
+  it("refuses a ticket task that has been moved out of BKT-UAT", async () => {
+    db.taskBucket = "BKT-OPEN";
+    db.taskLabels = ["kind:code", "uat:feedback-123"];
+    await expect(handIn()).rejects.toMatchObject({ code: "uat_code_pr_required", status: 400 });
+    expect(complete).not.toHaveBeenCalled();
+    expect(db.patched).toHaveLength(0);
+  });
+
   it.each([
-    { bucket: "BKT-OPEN", labels: ["kind:code", "uat:feedback-123"] },
     { bucket: "BKT-UAT", labels: ["kind:docs", "uat:feedback-123"] },
     { bucket: "BKT-UAT", labels: ["kind:code"] },
     { bucket: "BKT-UAT", labels: ["kind:code", "uat:"] },
@@ -268,5 +279,62 @@ describe("mc_complete_task transport contracts", () => {
     // The HTTP tool and REST route share one required-evidence shape.
     expect(block).toContain("completeTaskInputShape");
     expect(block).toContain("actionComplete(identity, body)");
+  });
+});
+
+// TASK-4017: a PR-less completion used to leave the task in backlog.
+describe("PR-less completion moves the task to the done stage", () => {
+  const handIn = (over: Partial<Parameters<typeof actionComplete>[1]> = {}) =>
+    actionComplete(identity, { checkoutId: "dsp_test", summary: "done", verificationCommands: ["npm test"], rollback: "revert", ...over });
+
+  it("backlog task with no PR rows goes to merged, never verified", async () => {
+    db.taskStage = "backlog";
+    db.taskPrs = [];
+    await handIn();
+    const patch = db.patched.at(-1)?.patch;
+    expect(patch?.stage).toBe("merged");
+    expect(patch?.stage).not.toBe("verified");
+  });
+
+  it("task with a PR row keeps its existing path (no stage change)", async () => {
+    db.taskStage = "backlog";
+    db.taskPrs = [{ repo: "PLX_MC", num: 12, status: "open" }];
+    await handIn();
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+  });
+
+  it("a hand-in carrying prUrl stays on the PR path", async () => {
+    db.taskStage = "progress";
+    db.taskPrs = [];
+    await handIn({ prUrl: "https://github.com/petralabx/PLX_MC/pull/1" });
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+  });
+
+  it("blocked/failed outcomes do not promote", async () => {
+    db.taskStage = "backlog";
+    db.taskPrs = [];
+    await handIn({ outcome: "blocked" });
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+  });
+
+  it("already-done stages are left alone", async () => {
+    db.taskStage = "verified";
+    db.taskPrs = [];
+    await handIn();
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+  });
+
+  it("TASK-3992 shape: completed early with an open PR at review stays at review", async () => {
+    db.taskStage = "review";
+    db.taskPrs = [{ repo: "PLX_MC", num: 463, status: "open" }];
+    await handIn();
+    expect(db.patched.at(-1)?.patch.stage).toBeUndefined();
+  });
+
+  it("does not promote a UAT ticket task", () => {
+    expect(shouldPromotePrlessCompletion(
+      { stage: "backlog", prs: [], labels: ["kind:code", "uat:feedback-123"] },
+      {},
+    )).toBe(false);
   });
 });

@@ -237,6 +237,23 @@ async function insertSnapshot(q: TxQuery, runId: number, d: Datasets): Promise<v
       id([[d.creditNotes.access, JSON.stringify(d.creditNotes.missing), d.creditNotes.notes.length]])
     );
   }
+  // INTERIM (TASK-3992): shipped, not yet invoiced (migration 052).
+  if (d.pendingShipments) {
+    await insertRows(
+      q,
+      "report_snap_pending_shipment",
+      [["run_id", "bigint"], ["row_no", "integer"], ["shipment", "text"], ["order_no", "text"], ["customer_code", "text"],
+        ["customer", "text"], ["ship_date", "date"], ["currency", "text"], ["lines", "integer"], ["product_value", "numeric"]],
+      id(d.pendingShipments.shipments.map((r, i) => [i + 1, r.shipment, r.order, r.customerCode, r.customer, r.shipDate, r.currency,
+        r.lines, r.productValue]))
+    );
+    await insertRows(
+      q,
+      "report_snap_pending_shipment_summary",
+      [["run_id", "bigint"], ["access", "text"], ["missing", "jsonb"], ["shipments", "integer"]],
+      id([[d.pendingShipments.access, JSON.stringify(d.pendingShipments.missing), d.pendingShipments.shipments.length]])
+    );
+  }
   await insertRows(
     q,
     "report_snap_batch",
@@ -276,6 +293,7 @@ export function rowCounts(d: Datasets): Record<string, number> {
     customers: d.customers.length,
     shipmentLines: d.shipmentLines.lines.length,
     ...(d.creditNotes ? { creditNotes: d.creditNotes.notes.length } : {}),
+    ...(d.pendingShipments ? { pendingShipments: d.pendingShipments.shipments.length } : {}),
     forecastLines: d.forecast.lines.length,
     forecastAos: d.forecast.aos.length,
     // AOs whose FileMaker quantity is set but isn't a number: they cover nothing (TASK-3791).
@@ -303,6 +321,9 @@ export async function completeRun(run: RefreshRun, datasets: Datasets, fx: Resol
     }
     if (datasets.shipmentLines.access === "missing") {
       console.warn("[reporting-goals] run=%s shipment lines skipped: no read access to %s", run.id, datasets.shipmentLines.missing.join(", "));
+    }
+    if (datasets.pendingShipments?.access === "missing") {
+      console.warn("[reporting-goals] run=%s shipped, not invoiced left out: no read access to %s", run.id, datasets.pendingShipments.missing.join(", "));
     }
     if (datasets.creditNotes?.access === "missing") {
       console.warn("[reporting-goals] run=%s credit notes skipped: no read access to %s", run.id, datasets.creditNotes.missing.join(", "));
@@ -343,6 +364,7 @@ export async function completeRun(run: RefreshRun, datasets: Datasets, fx: Resol
         fxSource: fx.source,
         shipmentLines: datasets.shipmentLines.access,
         ...(datasets.creditNotes ? { creditNotes: datasets.creditNotes.access } : {}),
+        ...(datasets.pendingShipments ? { pendingShipments: datasets.pendingShipments.access } : {}),
         forecast: datasets.forecast.access,
       },
     });
@@ -412,6 +434,22 @@ export async function loadSnapshot(run: RefreshRun): Promise<SnapshotData> {
          FROM report_snap_batch_history WHERE run_id = $1 ORDER BY day, batch`,
       [run.id]
     );
+    // INTERIM (TASK-3992): none stored for a run before migration 052.
+    const [pendingSummary] = await q<{ access: "read" | "missing"; missing: string[] }>(
+      `SELECT access, missing FROM report_snap_pending_shipment_summary WHERE run_id = $1`,
+      [run.id]
+    );
+    const pending = pendingSummary
+      ? await q<{
+          shipment: string; order_no: string | null; customer_code: string | null; customer: string | null; ship_date: string;
+          currency: string; lines: number; product_value: string;
+        }>(
+          `SELECT shipment, order_no, customer_code, customer, ship_date::text AS ship_date, currency, lines,
+                  product_value::text AS product_value
+             FROM report_snap_pending_shipment WHERE run_id = $1 ORDER BY row_no`,
+          [run.id]
+        )
+      : [];
     // The run's credit notes (TASK-3987): none stored for a run before migration 051.
     const [notesSummary] = await q<{ access: CreditNotesAccess; missing: string[] }>(
       `SELECT access, missing FROM report_snap_credit_note_summary WHERE run_id = $1`,
@@ -450,6 +488,18 @@ export async function loadSnapshot(run: RefreshRun): Promise<SnapshotData> {
         line: r.line, date: r.day, kg: r.kg,
       })),
       batchHistory: history.map((r) => ({ id: r.batch_id, batch: r.batch, date: r.day, kg: r.kg, statusQc: r.status_qc })),
+      ...(pendingSummary
+        ? {
+            pendingShipments: {
+              access: pendingSummary.access,
+              missing: pendingSummary.missing,
+              shipments: pending.map((r) => ({
+                shipment: r.shipment, order: r.order_no, customerCode: r.customer_code, customer: r.customer,
+                shipDate: r.ship_date, currency: r.currency, lines: Number(r.lines), productValue: r.product_value,
+              })),
+            },
+          }
+        : {}),
       ...(notesSummary
         ? {
             creditNotes: {

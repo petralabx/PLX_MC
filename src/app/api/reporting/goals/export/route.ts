@@ -23,7 +23,7 @@ export const GET = route(async (req) => {
   const actor = await requireGoalsRole("viewer");
   const basis = revenueBasisParam(new URL(req.url).searchParams.get("fx"));
   if (!basis) throw new ApiError("invalid_request", "fx must be boc or sage.");
-  const { view, shipments, shipmentLines, truckloads, rates, creditNotes } = await loadGoalsExport(basis);
+  const { view, shipments, shipmentLines, truckloads, rates, creditNotes, pendingShipments } = await loadGoalsExport(basis);
   const { run, model, settings } = view;
   if (view.state !== "ready" || !run || !model || !settings) {
     throw new ApiError(
@@ -46,6 +46,7 @@ export const GET = route(async (req) => {
     forecast: view.forecast,
     revenueByClass: view.revenueByClass,
     creditNotes,
+    pendingShipments,
     customerRevenue: view.customerRevenue,
   });
   await appendEvent({ kind: "reporting.goals.export", actor: `human:${actor.label}`, payload: { runId: run.id, fx: basis } });

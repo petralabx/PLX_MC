@@ -181,7 +181,12 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
   // Returns (TASK-3987): the run's credit notes, subtracted from the headline; null for a run stored before them.
   const creditNotes = page.creditNotes;
   const returned = page.revenueByClass?.total.returns ?? null;
+  // INTERIM (TASK-3992): shipped, not yet invoiced, inside goal.goalCadCents as an estimate; null when not read.
+  const pending = page.pendingShipments;
   const returnsPlus = (s: { returnsCadCents: number }) => (s.returnsCadCents !== 0 ? ` + ${dollars(s.returnsCadCents)} returns` : "");
+  // The estimate is in the headline but not invoiced, so the equations back to the invoiced totals take it off (TASK-3992).
+  const pendingMinus = (s: { pendingCadCents: number }) =>
+    s.pendingCadCents !== 0 ? ` − ${dollars(s.pendingCadCents)} shipped, not yet invoiced` : "";
   const scheduled = Math.max(0, l1.ifAllRunKg - l1.totalKg);
   const fullScale = Math.max(tl.lastMonth.full, tl.full.total, 1);
   // The rate the figures are at: the run's Bank of Canada rate, or the fixed Sage rate (TASK-3780).
@@ -261,14 +266,14 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
         id="revenue"
         title="Revenue"
         status={revStatus}
-        definition={`Invoiced in CAD, product before tax (freight, lab and other accessorial charges left out; 3PL service charges count${creditNotes?.access === "read" ? "; returns deducted" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
+        definition={`Invoiced in CAD, product before tax (freight, lab and other accessorial charges left out; 3PL service charges count${creditNotes?.access === "read" ? "; returns deducted" : ""}${pending?.access === "read" ? "; shipped but not yet invoiced added as an estimate" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
         big={dollars(revTotal)}
         of={`of ${dollars(rev.targetCents)}`}
         source={revSource}
       >
         {mfg ? (
           <p className="gp-split" title={revSource} data-testid="goals-revenue-mfg">
-            + {dollars(mfg.chargesCadCents)} freight &amp; other charges{returnsPlus(mfg)} + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out ={" "}
+            + {dollars(mfg.chargesCadCents)} freight &amp; other charges{returnsPlus(mfg)}{pendingMinus(mfg)} + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out ={" "}
             {dollars(mfg.totalCadCents + mfg.excludedCadCents)} all customers, charges included
             {mfg.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the class table until the next one"}
           </p>
@@ -281,7 +286,7 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
               title={revSource}
             />
             <p className="gp-split" title={revSource} data-testid="goals-revenue-charges">
-              + {dollars(goal.chargesCadCents)} freight &amp; other charges left out{returnsPlus(goal)} = {dollars(goal.totalCadCents)} invoiced
+              + {dollars(goal.chargesCadCents)} freight &amp; other charges left out{returnsPlus(goal)}{pendingMinus(goal)} = {dollars(goal.totalCadCents)} invoiced
               {goal.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the card until the next one"}
             </p>
           </>
@@ -304,6 +309,19 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
           ) : (
             <p className="gp-split gp-amber" title={revSource} data-testid="goals-revenue-returns">
               Returns not deducted: Sage&apos;s credit notes can&apos;t be read yet (needs {creditNotes.missing.join(", ")})
+            </p>
+          )
+        ) : null}
+        {goal && pending ? (
+          pending.access === "read" ? (
+            <p className="gp-split" title={revSource} data-testid="goals-revenue-pending">
+              {dollars(goal.invoicedProductCadCents)} invoiced + {dollars(goal.pendingCadCents)} shipped, not yet invoiced (estimate,{" "}
+              {count(goal.pendingShipments)} {goal.pendingShipments === 1 ? "shipment" : "shipments"})
+              {goal.returnsCadCents !== 0 ? ` − ${dollars(goal.returnsCadCents)} returns` : ""} = {dollars(goal.goalCadCents)}
+            </p>
+          ) : (
+            <p className="gp-split gp-amber" title={revSource} data-testid="goals-revenue-pending">
+              Shipped, not invoiced: not included (needs access)
             </p>
           )
         ) : null}

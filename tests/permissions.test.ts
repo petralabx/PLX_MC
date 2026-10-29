@@ -512,3 +512,15 @@ describe("TASK-4015 sp_mcp_vince personal principal", () => {
       .toEqual([...capabilitiesForServicePrincipal("sp_mcp_claude_code")].sort());
   });
 });
+
+describe("TASK-4015 personal principals for MC humans (057)", () => {
+  const people = ["sp_mcp_person_greg", "sp_mcp_person_luis", "sp_mcp_person_oleg", "sp_mcp_person_ricardo", "sp_mcp_person_rishi", "sp_mcp_person_stephen", "sp_mcp_person_tanush"];
+  it("registers each and grants exactly the member role bundle", () => {
+    for (const id of people) {
+      expect(MCP_AGENT_SERVICE_PRINCIPAL_IDS).toContain(id);
+      expect([...capabilitiesForServicePrincipal(id)].sort())
+        .toEqual([...capabilitiesForRole("member")].sort());
+      expect(capabilitiesForServicePrincipal(id)).not.toContain("task.assign");
+    }
+  });
+});

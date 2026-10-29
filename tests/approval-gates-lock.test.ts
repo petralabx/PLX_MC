@@ -8,6 +8,11 @@
 // the fresh one: it drops a new gate, undoes a decision, or decides twice.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// TASK-3779: approving now requires the signing key; tests run with a fake one.
+beforeEach(() => {
+  process.env.PLX_MC_APPROVAL_SIGNING_KEY ??= "test-signing-key";
+});
+
 import type { ApprovalGate } from "@/lib/mc-data";
 
 const h = vi.hoisted(() => ({

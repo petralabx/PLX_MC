@@ -1110,7 +1110,7 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
   if (input.pendingShipments) notes.push(
     pending
       ? "Shipped, not invoiced (estimate) is each posted Sage shipment this month whose numinvoice is 0: order price " +
-          "x quantity shipped less discount, before tax, item lines including C and MISC, charge lines left out, by the shipment's customer. It's added to Toward the " +
+          "x quantity shipped less the line discount and the header discount on the line, before tax, item lines including C and MISC, charge lines left out, by the shipment's customer. It's added to Toward the " +
           "goal until AR posts the invoice, and isn't inside Total. The Pending shipments sheet lists each one."
       : `Shipped, not invoiced: not included (needs access to ${input.pendingShipments.missing.join(", ")}).`
   );
@@ -1138,7 +1138,7 @@ function pendingShipmentsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput)
     2,
     1,
     "Interim, until go-live: posted Sage shipments dated this month whose numinvoice is 0. Value is order price x " +
-      "quantity shipped less discount, before tax, item lines including C and MISC, charge lines left out. An estimate: the invoice AR posts can differ." +
+      "quantity shipped less the line discount and the header discount on the line, before tax, item lines including C and MISC, charge lines left out. An estimate: the invoice AR posts can differ." +
       (alreadyEntered > 0
         ? ` ${alreadyEntered} ${alreadyEntered === 1 ? "shipment is" : "shipments are"} already a counted manual entry and ${alreadyEntered === 1 ? "is" : "are"} not added again.`
         : ""),

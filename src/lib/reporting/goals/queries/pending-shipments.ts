@@ -6,16 +6,19 @@
 // after; lastinvnum then holds the invoice number. UAT's invoice header has
 // no shinumber (Ricardo Savelli, 2026-10-28), so a join on that column cannot
 // see an invoice. Value: each item line's order price x quantity shipped,
-// less its discount amount (shidisc), before tax. Line type 2 (charges) and
+// less its line discount (shidisc) and the header discount spread onto the
+// line (hdrdisc), before tax. unitprice * qtyshipped - shidisc matches Sage
+// SHIITMTOT; SHIDISCAMT is HDRDISC on the lines. Line type 2 (charges) and
 // zero-quantity lines are left out. Item codes C and MISC stay in: they are
 // type-1 lines (custom screening fees, filling service fees, pumps, bottles,
 // artwork). The open-order forecast still drops those codes; this query does
 // not change that, or the invoiced Revenue card. No cost column is read.
 // Confirmed on the UAT Sage copy the same day: the tables are
 // sage.oe_shipment_header and sage.oe_shipment_detail, the shipment columns
-// are text, shidate is YYYYMMDD, and currency is only CAD or USD. There is
-// no void column. NOT_VOIDED stays a placeholder (`true`). Header complete
-// is 1 on the uninvoiced rows, so that flag is not a void marker.
+// are text, shidate is YYYYMMDD, and currency is only CAD or USD. Sage has
+// no void flag. A deleted shipment is removed. Verified on live Sage:
+// uninvoiced means numinvoice 0, and that check leaves no orphan rows.
+// Header complete is 1 on the uninvoiced rows, so that flag is not a void marker.
 // The login reads these only once a DBA runs
 // docs/modules/reporting-goals/readonly-grants-shipments-pending.sql; the
 // refresh checks PENDING_SHIPMENT_COLUMNS first, so a missing grant (or a
@@ -31,11 +34,8 @@ import { MONTH_WINDOW, type DatasetQuery } from "./shared";
 /** Exactly the columns the query reads (the grant script grants these). */
 export const PENDING_SHIPMENT_COLUMNS = [
   ["sage", "oe_shipment_header", ["shiuniq", "shinumber", "ordnumber", "customer", "bilname", "shidate", "shsourcurr", "numinvoice"]],
-  ["sage", "oe_shipment_detail", ["shiuniq", "linetype", "qtyshipped", "unitprice", "shidisc"]],
+  ["sage", "oe_shipment_detail", ["shiuniq", "linetype", "qtyshipped", "unitprice", "shidisc", "hdrdisc"]],
 ] as const satisfies ColumnList;
-
-/** Placeholder for a void / deleted flag on the replica (see the header). */
-const NOT_VOIDED = "true";
 
 interface Row {
   shipment: string;
@@ -58,13 +58,12 @@ SELECT trim(s.shinumber) AS shipment,
        to_date(s.shidate, 'YYYYMMDD')::text AS ship_date,
        trim(s.shsourcurr) AS currency,
        count(*)::int AS lines,
-       sum(d.unitprice::numeric * d.qtyshipped::numeric - coalesce(d.shidisc::numeric, 0)) AS product_value
+       sum(d.unitprice::numeric * d.qtyshipped::numeric - coalesce(d.shidisc::numeric, 0) - coalesce(d.hdrdisc::numeric, 0)) AS product_value
 FROM sage.oe_shipment_header s
 JOIN sage.oe_shipment_detail d ON d.shiuniq = s.shiuniq, cut
 WHERE s.shidate >= cut.m0s AND s.shidate < cut.n0s
   AND coalesce(nullif(trim(d.linetype::text), ''), '1') = '1'
   AND d.qtyshipped::numeric <> 0
-  AND ${NOT_VOIDED}
   AND trim(s.numinvoice) = '0'
 GROUP BY 1, 2, 3, 4, 5, 6
 ORDER BY ship_date, shipment`,

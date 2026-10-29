@@ -14,11 +14,14 @@
 --
 -- Confirmed on the UAT Sage copy (Ricardo Savelli, 2026-10-28): the tables
 -- are sage.oe_shipment_header and sage.oe_shipment_detail, the columns are
--- text, shidate is YYYYMMDD, shsourcurr is CAD or USD, and shidisc is the
--- line's discount amount. A shipment is pending when trim(numinvoice) = '0'
+-- text, shidate is YYYYMMDD, shsourcurr is CAD or USD, shidisc is the
+-- line's discount amount, and hdrdisc is the header discount spread onto
+-- the line. A shipment is pending when trim(numinvoice) = '0'
 -- (1 means AR has posted the invoice; lastinvnum holds that invoice number).
 -- The invoice header has no shinumber, so this script does not grant it.
--- There is no void column. Header complete = 1 on the uninvoiced rows.
+-- Sage has no void flag. A deleted shipment is removed. Verified on live
+-- Sage: uninvoiced means numinvoice 0, and that check leaves no orphan rows.
+-- Header complete = 1 on the uninvoiced rows.
 --
 --   psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f readonly-grants-shipments-pending.sql
 --   psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -v role=<role> -f readonly-grants-shipments-pending.sql
@@ -37,5 +40,5 @@ GRANT USAGE ON SCHEMA sage TO :"role";
 GRANT SELECT (shiuniq, shinumber, ordnumber, customer, bilname, shidate, shsourcurr, numinvoice)
     ON sage.oe_shipment_header TO :"role";
 
-GRANT SELECT (shiuniq, linetype, qtyshipped, unitprice, shidisc)
+GRANT SELECT (shiuniq, linetype, qtyshipped, unitprice, shidisc, hdrdisc)
     ON sage.oe_shipment_detail TO :"role";

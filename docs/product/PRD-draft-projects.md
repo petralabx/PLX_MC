@@ -274,10 +274,10 @@ Not decided yet:
 | 3 | TASK-4071 | Drafts screen, session routes under `/api/drafts`, Accept, the Drafts to review panel on Approvals, a Drafts nav item. Drafts turn on by default; `PLX_MC_DRAFTS_ENABLED=0` is the kill switch | Merged (#492) |
 | Follow-up A | TASK-4109 | New draft form, slice A: session routes to create, save, submit and withdraw; the form for the settings, the plan and the research submit needs (see Follow-up: New draft form) | Merged (#497, #499) |
 | Follow-up B | TASK-4110 | New draft form, slice B: risks, open questions and artifacts in the form; a dependency picker; reordering | Merged (#503) |
-| Follow-up C | TASK-4130 | Artifact uploads: `mc_upload_draft_artifact` stores a draft's file under `Drafts/DRF-n/` in the `Mission Control` library (see Follow-up: artifact uploads) | In review |
+| Follow-up C | TASK-4130 | Artifact uploads: `mc_upload_draft_artifact` stores a draft's file under `Drafts/DRF-n/` in the `Mission Control` library (see Follow-up: artifact uploads) | Merged (#505) |
 | Follow-up D | TASK-4129 | Skill updates: `project-researcher` and `guided-project-discovery` end by saving a draft (`petralabx/skills` 1.6.15) | Merged (petralabx/skills#48) |
-| Follow-up E | TASK-4131 | Uploads from the New draft form (`POST /api/drafts/{id}/artifacts`) | In review |
-| Follow-up | TASK-4132 | The governance-contract rule and the skills catalog pin | In progress |
+| Follow-up E | TASK-4131 | Uploads from the New draft form (`POST /api/drafts/{id}/artifacts`) | Merged (#505) |
+| Follow-up F | TASK-4132 | The governance-contract rule and the skills catalog pin | Merged (#507) |
 | Follow-up | Not created | Review on a shared page: "Publish for review" and the comment relay, Claude Artifacts first (see Follow-up: review on a shared page). After step 3 is live and in use | Not started |
 
 Step 2 touches a migration, so it lands only with a signed MC merge approval of its exact head.

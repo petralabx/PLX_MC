@@ -12,7 +12,7 @@ Let PLX members and their agents put a planned project, its buckets and tasks, a
 
 ## Status
 
-done, as of 2026-10-28. Steps 1 to 3 and the New draft form (slices A and B) are merged and live on https://mc.plxcustomer.io (DB Migrate applied 055 and 056 on 2026-10-27). The follow-ups below ship as their own PRs.
+done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and the follow-ups for skills, artifact uploads and the governance rule are merged and live on https://mc.plxcustomer.io (DB Migrate applied 055 and 056 on 2026-10-27). Review on a shared page is not started.
 
 ## Done
 
@@ -21,14 +21,15 @@ done, as of 2026-10-28. Steps 1 to 3 and the New draft form (slices A and B) are
 - TASK-4071: the Drafts screen (`src/components/mc/drafts.tsx`), session routes under `/api/drafts`, Accept (`src/lib/drafts/accept.ts`), the Drafts to review panel on Approvals, the Drafts nav item. Drafts are on unless `PLX_MC_DRAFTS_ENABLED=0` ([PLX_MC PR 492](https://github.com/petralabx/PLX_MC/pull/492)). Production checked on 2026-10-27: `/api/drafts` answers with the sign-in envelope, `GET /api/cursor/drafts` with an MC key returns 200, and `?screen=drafts` goes to sign-in.
 - TASK-4109, slice A of the New draft form: the form for settings, the plan and core research (`src/components/mc/draft-editor.tsx`), and the session routes to create, save, submit and withdraw ([PLX_MC PR 497](https://github.com/petralabx/PLX_MC/pull/497); review follow-up [PLX_MC PR 499](https://github.com/petralabx/PLX_MC/pull/499)).
 - TASK-4110, slice B of the New draft form: risks, open questions and artifacts in the form, the dependency picker, and reordering buckets and tasks ([PLX_MC PR 503](https://github.com/petralabx/PLX_MC/pull/503)).
+- TASK-4129: `project-researcher` and `guided-project-discovery` save a plan as a draft ([petralabx/skills PR 48](https://github.com/petralabx/skills/pull/48), release 1.6.15).
+- TASK-4130 and TASK-4131: artifact uploads, as the agent tool `mc_upload_draft_artifact` and from the New draft form ([PLX_MC PR 505](https://github.com/petralabx/PLX_MC/pull/505)).
+- TASK-4132: the governance-contract rule "Plans go through a draft" and the skills catalog pin to 1.6.15 ([PLX_MC PR 507](https://github.com/petralabx/PLX_MC/pull/507)).
 
 ## Next steps
 
 1. A signed-in check of the Drafts screen on production: list, record, review, Accept, and the New draft form. The first real draft is the test.
-2. Follow-up, merged: `project-researcher` and `guided-project-discovery` save a draft (TASK-4129, [petralabx/skills PR 48](https://github.com/petralabx/skills/pull/48), release 1.6.15 tagged).
-3. Follow-up, built: artifact uploads, as an agent tool (TASK-4130, `mc_upload_draft_artifact`) and from the New draft form (TASK-4131). They need `PLX_MC_EVIDENCE_STORE_ENABLED=1`, which a person sets once the Mission Control library is ready.
-4. Follow-up, built: the governance-contract rule and the skills catalog pin to 1.6.15 (TASK-4132).
-5. Follow-up, not started: review on a shared page (Claude Artifacts first, Cursor Canvas if it exposes comments). Spec: PRD "Follow-up: review on a shared page".
+2. Uploads are on in production: on 2026-10-29 an upload for an unknown draft passed the store check and answered 404. The first real upload shows whether the Mission Control library takes draft files under `Drafts/`.
+3. Follow-up, not started: review on a shared page (Claude Artifacts first, Cursor Canvas if it exposes comments). Spec: PRD "Follow-up: review on a shared page".
 
 ## Decisions and why
 
@@ -80,4 +81,4 @@ bash scripts/preflight.sh --mode pre-commit
 
 ## Last updated
 
-2026-10-28 by Claude Code (TASK-4110): slice B merged (#503); the workstream is done, and the follow-ups ship as their own PRs.
+2026-10-29 by Claude Code (TASK-4132): artifact uploads merged (#505) and the governance rule with the skills pin merged (#507); only review on a shared page is left.

@@ -57,7 +57,10 @@ web page for an open draft. The file goes through the same checks as `mc_upload_
 (`artifactProblem`) to the PLX site's `Mission Control` library under `Drafts/DRF-n/`, then joins
 `research.artifacts` as a link under the draft lock (`addDraftArtifact`), so an upload during review
 returns the draft to `drafting`. A restricted draft refuses (409 `draft_restricted`): the library is
-shared, and MC never narrows access. The same file again adds nothing. Uploads are off until a person
+shared, and MC never narrows access. A draft whose plan names the Trading Lab repo
+(`petralabx/agentic-swarm`, in its project, a bucket, a task or the existing project it adds to)
+refuses (503 `evidence_store_unavailable`): Trading Lab files go on its own site (`draftOwnSite`).
+The same file again adds nothing, even at the 50-link cap. Uploads are off until a person
 sets `PLX_MC_EVIDENCE_STORE_ENABLED=1` (503 `evidence_store_unavailable`). MC never deletes a stored
 file; removing the link from the draft leaves the file in the library.
 

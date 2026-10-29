@@ -20,10 +20,12 @@ import { assertDraftsEnabled } from "@/lib/drafts/flag";
 import { draftPeopleSchema, draftPlanSchema, draftResearchSchema, draftTextSchema, draftTitleSchema } from "@/lib/drafts/schema";
 import {
   addDraftArtifact,
+  assertArtifactRoom,
   closeFinding,
   createDraft,
   draftEditBase,
   draftForUpload,
+  draftOwnSite,
   draftPreflight,
   draftSummary,
   getVisibleDraft,
@@ -247,10 +249,15 @@ export async function uploadDraftArtifact(
   if (!evidenceStoreEnabled()) throw unavailable(`Uploads are off. ${PERSON_ACTION} Then set PLX_MC_EVIDENCE_STORE_ENABLED=1.`);
 
   const draft = await draftForUpload(actor, body.draftId, options);
+  const ownSite = await draftOwnSite(draft);
+  if (ownSite) {
+    throw unavailable(`${ownSite} files go on its own SharePoint site, never the PLX site. A person must set that site up first. Until then, link the file from where it is.`);
+  }
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const sameFile = (artifact: DraftArtifact) => isStoredFile(artifact, draft.id, sha256, body.fileName);
   const existing = draft.working.research.artifacts.find(sameFile);
   if (existing) return { draftId: draft.id, artifact: existing, duplicate: true, draft: draftSummary(draft), editBase: draftEditBase(draft) };
+  assertArtifactRoom(draft);
 
   // MC never deletes a stored file: one whose draft closes before it is linked stays in the library.
   const path = `${draftArtifactFolder(draft.id)}/${storedName(new Date().toISOString(), sha256, body.fileName)}`;
@@ -294,7 +301,7 @@ export function registerDraftTools(server: McpServer, identity: McpIdentity): vo
   }, async (args) => mcpJsonResult({ data: await actionReviewDraft(identity, args) }));
   server.registerTool("mc_upload_draft_artifact", {
     description:
-      "Upload a file to a draft you wrote, as one of its research artifacts: kind diagram (svg, png), screenshot (png, jpeg, webp) or web-page (html), 3 MiB or less, sent as contentBase64 with fileName and contentType. MC stores it in the Mission Control library on the PLX SharePoint site under Drafts/DRF-<n>/ and adds it to the draft's artifacts as a link named name (default fileName). The same file again adds nothing. A restricted draft refuses with draft_restricted, because the library is shared. An upload during review returns the draft to drafting. evidence_store_unavailable says what a person must set up. Off when PLX_MC_DRAFTS_ENABLED=0.",
+      "Upload a file to a draft you wrote, as one of its research artifacts: kind diagram (svg, png), screenshot (png, jpeg, webp) or web-page (html), 3 MiB or less, sent as contentBase64 with fileName and contentType. MC stores it in the Mission Control library on the PLX SharePoint site under Drafts/DRF-<n>/ and adds it to the draft's artifacts as a link named name (default fileName). The same file again adds nothing. A restricted draft refuses with draft_restricted, because the library is shared; a Trading Lab draft (its plan names petralabx/agentic-swarm) refuses with evidence_store_unavailable, because its files go on its own site. An upload during review returns the draft to drafting. evidence_store_unavailable says what a person must set up. Off when PLX_MC_DRAFTS_ENABLED=0.",
     inputSchema: uploadDraftArtifactSchema,
   }, async (args) => mcpJsonResult({ data: await actionUploadDraftArtifact(identity, args) }));
 }

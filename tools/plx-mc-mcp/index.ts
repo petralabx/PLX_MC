@@ -927,7 +927,7 @@ server.registerTool("mc_review_draft", {
 });
 
 server.registerTool("mc_upload_draft_artifact", {
-  description: "Upload a file to a draft you wrote, as one of its research artifacts: kind diagram (svg, png), screenshot (png, jpeg, webp) or web-page (html), 3 MiB or less. Send filePath (an absolute path to a local file) or contentBase64 with fileName. MC stores it in the Mission Control library under Drafts/DRF-<n>/ and adds it to the draft's artifacts as a link named name (default fileName). A restricted draft refuses with draft_restricted, because the library is shared. evidence_store_unavailable says what a person must set up.",
+  description: "Upload a file to a draft you wrote, as one of its research artifacts: kind diagram (svg, png), screenshot (png, jpeg, webp) or web-page (html), 3 MiB or less. Send filePath (an absolute path to a local file) or contentBase64 with fileName. MC stores it in the Mission Control library under Drafts/DRF-<n>/ and adds it to the draft's artifacts as a link named name (default fileName). A restricted draft refuses with draft_restricted, because the library is shared; a Trading Lab draft (its plan names petralabx/agentic-swarm) refuses with evidence_store_unavailable, because its files go on its own site. evidence_store_unavailable says what a person must set up.",
   inputSchema: z.object({
     draftId: z.string().trim().min(1),
     kind: z.enum(["diagram", "screenshot", "web-page"]),

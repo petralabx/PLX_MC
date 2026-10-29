@@ -34,7 +34,10 @@ vi.mock("@/lib/compliance/repo", async (importOriginal) => ({
 }));
 vi.mock("@/lib/sync/repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sync/repo")>()),
-  getRepos: vi.fn(async () => [{ id: "plx-mc", name: "PLX_MC" }]),
+  getRepos: vi.fn(async () => [
+    { id: "plx-mc", name: "PLX_MC", owner: "petralabx" },
+    { id: "agentic-swarm", name: "agentic-swarm", owner: "petralabx" },
+  ]),
   getProjects: vi.fn(async () => []),
   getBuckets: vi.fn(async () => []),
   getEntities: vi.fn(async () => []),
@@ -115,6 +118,11 @@ describe("what GET tells the form", () => {
 
   it("keeps a restricted draft to links: the library is shared", async () => {
     await create({ title: "Private plan", visibility: "restricted", members: [VINCE] });
+    expect(await viewerOf("DRF-1")).toMatchObject({ canUpload: false });
+  });
+
+  it("keeps a Trading Lab draft to links: its files go on its own site", async () => {
+    await create({ title: "Trading plan", plan: { project: { name: "Trading", repos: ["agentic-swarm"] } } });
     expect(await viewerOf("DRF-1")).toMatchObject({ canUpload: false });
   });
 });

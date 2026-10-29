@@ -25,7 +25,10 @@ vi.mock("@/lib/compliance/repo", async (importOriginal) => ({
 }));
 vi.mock("@/lib/sync/repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sync/repo")>()),
-  getRepos: vi.fn(async () => [{ id: "plx-mc", name: "PLX_MC" }]),
+  getRepos: vi.fn(async () => [
+    { id: "plx-mc", name: "PLX_MC", owner: "petralabx" },
+    { id: "agentic-swarm", name: "agentic-swarm", owner: "petralabx" },
+  ]),
   getProjects: vi.fn(async () => []),
   getBuckets: vi.fn(async () => []),
   getEntities: vi.fn(async () => []),
@@ -53,9 +56,11 @@ import { POST as uploadRoute } from "@/app/api/cursor/drafts/artifact/route";
 import { addDraftArtifact, draftEditBase, getVisibleDraft, type DraftActor } from "@/lib/drafts/service";
 import { __resetDraftsMemoryForTests } from "@/lib/drafts/store";
 import type { DraftArtifact } from "@/lib/drafts/types";
+import { recordMcpToolCall } from "@/lib/mcp/audit";
 import { uploadDraftArtifact } from "@/lib/mcp/draft-actions";
 import { __clearEvidenceDriveCacheForTests } from "@/lib/mcp/evidence-actions";
 import { GraphError } from "@/lib/sync/graph";
+import { getProjects } from "@/lib/sync/repo";
 
 // Parsed JSON is asserted field by field below.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -250,5 +255,68 @@ describe("mc_upload_draft_artifact", () => {
     expect(result.isError).not.toBe(true);
     expect(JSON.parse(result.content[0].text).data).toMatchObject({ draftId: "DRF-1", duplicate: false, artifact: { kind: "diagram" } });
     expect(h.uploads).toHaveLength(1);
+  });
+
+  // sol-6.1 P1 on 06fd992: Trading Lab work goes on its own SharePoint site, never the PLX site.
+  it("keeps a Trading Lab draft's files off the PLX site, and stores nothing", async () => {
+    await newDraft({ plan: { ...plan, tasks: [{ ...plan.tasks[0], repos: ["agentic-swarm"] }] } });
+    const res = await upload(diagram);
+    expect(res).toMatchObject({ status: 503, body: { error: { code: "evidence_store_unavailable" } } });
+    expect(res.body.error.message).toContain("Trading Lab");
+
+    __resetDraftsMemoryForTests();
+    await newDraft({ plan: { ...plan, buckets: [{ ...plan.buckets[0], repos: ["petralabx/agentic-swarm"] }] } });
+    expect(await upload(diagram)).toMatchObject({ status: 503, body: { error: { code: "evidence_store_unavailable" } } });
+
+    // A draft that adds to an existing Trading Lab project, naming no repo itself.
+    __resetDraftsMemoryForTests();
+    vi.mocked(getProjects).mockImplementation(async () => [{ id: "PRJ-TRADING", repos: ["agentic-swarm"] }] as never);
+    try {
+      await newDraft({ plan: { ...plan, project: { existing: "PRJ-TRADING" } } });
+      expect(await upload(diagram)).toMatchObject({ status: 503, body: { error: { code: "evidence_store_unavailable" } } });
+    } finally {
+      vi.mocked(getProjects).mockImplementation(async () => []);
+    }
+    expect(h.uploads).toHaveLength(0);
+  });
+
+  // sol-6.1 P1 on 06fd992: a link that is there already is no way past the base check.
+  it("refuses a moved base under the lock even when the file is linked already", async () => {
+    await newDraft();
+    const base = draftEditBase(await getVisibleDraft(writer, "DRF-1"));
+    const first = await uploadDraftArtifact(writer, diagram);
+    const sameFile = (linked: DraftArtifact) => linked.url === first.artifact.url;
+    await expect(addDraftArtifact(writer, "DRF-1", first.artifact, sameFile, { base })).rejects.toMatchObject({ code: "draft_changed", status: 409 });
+  });
+
+  // sol-6.1 P2 on 06fd992: the cap on links counts new links only.
+  it("returns the link it has for a retry, even when the draft holds the most artifacts", async () => {
+    const links = Array.from({ length: 49 }, (_, i) => ({ kind: "document", name: `Doc ${i + 1}`, url: `https://example.com/doc-${i + 1}` }));
+    await newDraft({ research: { ...research, artifacts: links } });
+    const first = await upload(diagram);
+    expect(first.status).toBe(200);
+    const again = await upload(diagram);
+    expect(again).toMatchObject({ status: 200, body: { data: { duplicate: true, artifact: first.body.data.artifact } } });
+    expect(await upload({ ...diagram, fileName: "other.png" })).toMatchObject({ status: 409, body: { error: { code: "too_many_artifacts" } } });
+    expect(h.uploads).toHaveLength(1);
+  });
+
+  // sol-6.1 P2 on 06fd992: /api/events shows mcp.tool.invoked rows to every reader.
+  it("keeps only the error code in the audit row of a failed upload, on HTTP MCP and REST", async () => {
+    await newDraft({ visibility: "restricted", members: ["vince@petrasoap.com"] });
+    const audit = vi.mocked(recordMcpToolCall);
+    audit.mockClear();
+    expect((await upload(diagram)).status).toBe(409);
+    await mcpPost(
+      new Request("http://localhost/api/cursor/mcp", {
+        method: "POST",
+        headers: headers("claude-key"),
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "mc_upload_draft_artifact", arguments: diagram } }),
+      })
+    );
+    expect(audit.mock.calls.map(([row]) => [row.tool, row.ok, row.error])).toEqual([
+      ["mc_upload_draft_artifact", false, "draft_restricted"],
+      ["mc_upload_draft_artifact", false, "draft_restricted"],
+    ]);
   });
 });

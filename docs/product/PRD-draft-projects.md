@@ -235,6 +235,7 @@ An agent uploads a file for a draft it wrote with `mc_upload_draft_artifact`:
 - MC stores the file in the PLX site's `Mission Control` library under `Drafts/DRF-n/`, and adds it to the draft's research artifacts as a link.
 - Only the draft's writer uploads, to an open draft. An upload during review returns the draft to drafting, as any edit does.
 - A restricted draft refuses: everyone with access to the shared library could open the file, and MC never narrows access.
+- A draft for Trading Lab (its plan names `petralabx/agentic-swarm`) refuses too: Trading Lab files go on its own SharePoint site, never the PLX site.
 - Uploads are off until a person sets `PLX_MC_EVIDENCE_STORE_ENABLED=1`, the switch evidence uploads use.
 - The New draft form uploads too (TASK-4131). For a saved, shared draft whose author is signed in, the Artifacts section offers **Upload a file**. `POST /api/drafts/{id}/artifacts` sends the file with the edit base the form read, so a draft that has moved refuses before anything is stored. The link joins the form at once, and the form takes the new base. `GET /api/drafts/{id}` says whether uploads are on (`viewer.canUpload`).
 

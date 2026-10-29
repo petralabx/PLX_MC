@@ -22,10 +22,12 @@
 import { createHash, randomBytes } from "node:crypto";
 
 import { ApiError } from "@/lib/api/route";
+import { ownEvidenceSite } from "@/lib/compliance";
 import { appendEvent } from "@/lib/compliance/repo";
 import { HUMANS } from "@/lib/mc-data/data";
 import { isArchived } from "@/lib/mc-data/helpers";
 import { humanEmailFor, isClosedStage } from "@/lib/mc-data/policy";
+import { resolveRepoInput } from "@/lib/mc-data/repos";
 import type { Bucket, Human, Project, Repo, Task } from "@/lib/mc-data/types";
 import {
   canAccessBucket,
@@ -294,9 +296,32 @@ function assertUploadable(draft: Draft): void {
       409
     );
   }
+}
+
+/** A new link needs room; a file the draft links already does not. */
+export function assertArtifactRoom(draft: Draft): void {
   if (draft.working.research.artifacts.length >= MAX_DRAFT_ARTIFACTS) {
     throw new ApiError("too_many_artifacts", `${draft.id} already holds ${MAX_DRAFT_ARTIFACTS} artifacts. Remove one first.`, 409);
   }
+}
+
+/**
+ * The own SharePoint site of a repo the draft's plan names (Trading Lab), or null
+ * when the draft's files go on the PLX site. The project, buckets and tasks count,
+ * and so do the repos of the existing project a draft adds to.
+ */
+export async function draftOwnSite(draft: Draft, deps: DraftDeps = defaultDraftDeps): Promise<string | null> {
+  const plan = draft.working.plan;
+  const [registry, projects] = await Promise.all([deps.registry(), plan.project.existing ? deps.projects() : Promise.resolve([])]);
+  const existing = projects.find((p) => p.id === plan.project.existing);
+  const named = [plan.project.repos, ...plan.buckets.map((b) => b.repos), ...plan.tasks.map((t) => t.repos), existing?.repos ?? []].flat();
+  for (const raw of named) {
+    const resolved = resolveRepoInput(raw, registry);
+    const repo = resolved.ok ? registry[resolved.id] : undefined;
+    const site = ownEvidenceSite(repo ? `${repo.owner}/${repo.name}` : raw);
+    if (site) return site;
+  }
+  return null;
 }
 
 /**
@@ -334,10 +359,12 @@ export async function addDraftArtifact(
     assertWriter(draft, actor);
     assertOpen(draft);
     assertAcceptNotStarted(draft);
+    // The base first: a caller that takes the link it finds also takes the base returned.
+    assertBase(draft, options.base);
     linked = draft.working.research.artifacts.find(sameFile);
     if (linked) return null;
-    assertBase(draft, options.base);
     assertUploadable(draft);
+    assertArtifactRoom(draft);
     const research = { ...draft.working.research, artifacts: [...draft.working.research.artifacts, artifact] };
     const working = applySections(draft.working, { research });
     const next: Draft = { ...draft, working };

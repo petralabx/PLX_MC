@@ -12,9 +12,10 @@
 // counts as Manufacturing. A 3PL miscellaneous charge counts as Services.
 //
 // Shipped-not-invoiced product, when a caller passes it, is split the same
-// way and returned beside the headline (`pending`). It is not inside the
-// headline figures: this branch's headline does not include that estimate.
-// A shipment total with no item lines counts as Distribution.
+// way and returned on `pending`. The Goals view adds that into the headline.
+// A shipment total with no item lines counts as Distribution. Item amounts
+// use the finished-good and 3PL rules above. The stored estimate is a
+// shipment total (a line count and an amount), so it counts as Distribution.
 
 import { CUSTOMER_CLASSES, type CustomerClass } from "./forecast-list";
 import { customerClassOf } from "./forecast";
@@ -35,11 +36,11 @@ export interface BusinessLineAmounts {
 }
 
 export interface BusinessLineScope {
-  /** Invoiced product plus 3PL service charges, less returns. Adds up to the Revenue headline. */
+  /** Invoiced product plus 3PL service charges, less returns. Plus `pending`, this is the Revenue headline. */
   amounts: BusinessLineAmounts;
   /**
    * Shipped, not yet invoiced, split the same way. Zero when that dataset
-   * is absent. Not part of the headline on this branch.
+   * is absent. The view adds this into the headline. No item lines: Distribution.
    */
   pending: BusinessLineAmounts;
   /** 3PL miscellaneous charges included in `amounts` (and therefore in the headline). */

@@ -9,6 +9,7 @@
 
 import type { CustomerClass } from "./forecast-list";
 import { prorateCents } from "./money";
+import type { PendingShipmentsByClass } from "./pending-shipments";
 import type { RevenueByClass } from "./revenue-by-class";
 import type { GoalStatus } from "./rules";
 
@@ -35,6 +36,12 @@ export interface RevenueScopeView {
   returnsChargesCadCents: number;
   /** totalCadCents less chargesCadCents less returnsCadCents: what counts toward the goal (the card's headline). */
   goalCadCents: number;
+  /** INTERIM (TASK-3992): shipped, not yet invoiced, CAD estimate; inside goalCadCents, not totalCadCents. 0 without the dataset. */
+  pendingCadCents: number;
+  /** The scope's shipments behind pendingCadCents. */
+  pendingShipments: number;
+  /** goalCadCents less pendingCadCents, before returns: invoiced product (the side line's $A). */
+  invoicedProductCadCents: number;
   /** Of goalCadCents, shipments entered by hand (their product value; freight is in chargesCadCents). */
   byHandGoalCadCents: number;
   /** CAD cents of the classes left out, their charges included. */
@@ -60,6 +67,7 @@ export function revenueScope(
   scope: RevenueScope,
   targetCents: number,
   pace?: RevenueScopePace,
+  pending?: PendingShipmentsByClass | null,
 ): RevenueScopeView {
   const excluded = SCOPE_EXCLUDES[scope];
   let totalCadCents = 0;
@@ -81,7 +89,16 @@ export function revenueScope(
     returnsNotes += (row.returns?.notes ?? 0);
     returnsChargesCadCents += (row.returns?.chargesCadCents ?? 0);
   }
-  const goalCadCents = totalCadCents - chargesCadCents - returnsCadCents;
+  let pendingCadCents = 0;
+  let pendingShipments = 0;
+  if (pending) {
+    for (const [cls, t] of Object.entries(pending.rows)) {
+      if (excluded.includes(cls as CustomerClass)) continue;
+      pendingCadCents += t.totalCadCents;
+      pendingShipments += t.shipments;
+    }
+  }
+  const goalCadCents = totalCadCents - chargesCadCents - returnsCadCents + pendingCadCents;
   return {
     scope,
     excluded,
@@ -91,6 +108,9 @@ export function revenueScope(
     returnsNotes,
     returnsChargesCadCents,
     goalCadCents,
+    pendingCadCents,
+    pendingShipments,
+    invoicedProductCadCents: totalCadCents - chargesCadCents,
     byHandGoalCadCents,
     excludedCadCents,
     progress: targetCents > 0 ? goalCadCents / targetCents : null,

@@ -1,15 +1,16 @@
 // Revenue by business line (Ricardo Savelli, 26 Oct 2026). Manufacturing +
 // Distribution + Services equal the Revenue headline to the cent. Freight and
 // other charges stay out. Returns come off. A shipped-not-invoiced estimate,
-// when the snapshot has one, is split the same way and stays beside the
-// headline until the headline itself includes it.
+// when the snapshot has one, is inside the headline. Item amounts follow the
+// finished-good and 3PL rules. A total with no item lines is Distribution.
+// The three lines add to the headline to the cent.
 
 import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { GoalCards } from "@/components/mc/goals/goal-cards";
-import { cents, isReady, type ReadyPage } from "@/components/mc/goals/helpers";
+import { cents, isReady } from "@/components/mc/goals/helpers";
 import {
   businessLineOf,
   businessLineSum,
@@ -183,7 +184,7 @@ describe("revenue by business line", () => {
     expect(split.returnsShared).toBe(CREDIT_NOTES.notes.length);
   });
 
-  it("splits a shipped-not-invoiced estimate beside the headline, and skips a hand-entered duplicate", () => {
+  it("puts a shipped-not-invoiced estimate in the headline, classifies item lines, and skips a hand-entered duplicate", () => {
     const snapshot = {
       ...DATASETS,
       pendingShipments: {
@@ -203,14 +204,21 @@ describe("revenue by business line", () => {
           { shipment: "PO0104001", customerCode: "ACECA01", currency: "CAD", productValue: "10.00" },
         ],
       },
-    } as Datasets;
+    } as unknown as Datasets;
     const kept = pendingProductsOf(snapshot, new Set(["po0104001"]));
     expect(kept.map((row) => row.productValue)).toEqual(["100.00", "40.00"]);
     expect(kept[0].lines).toBeUndefined();
 
     const page = pageAt("boc", snapshot);
     const split = page.revenueByBusinessLine!;
-    expect(businessLineSum(split.all.amounts)).toBe(page.revenueGoal!.goalCadCents);
+    const goal = page.revenueGoal!;
+    const mfg = page.revenueScope!;
+    // Invoiced lines add to the headline before the estimate. The estimate is inside the headline.
+    expect(businessLineSum(split.all.amounts) + businessLineSum(split.all.pending)).toBe(goal.goalCadCents);
+    expect(businessLineSum(split.mfg.amounts) + businessLineSum(split.mfg.pending)).toBe(mfg.goalCadCents);
+    expect(businessLineSum(split.all.pending)).toBe(goal.pendingCadCents);
+    expect(businessLineSum(split.mfg.pending)).toBe(mfg.pendingCadCents);
+    expect(goal.goalCadCents + goal.chargesCadCents + goal.returnsCadCents - goal.pendingCadCents).toBe(goal.totalCadCents);
     expect(split.pendingWithoutLines).toBe(1);
     expect(split.all.pending.distributionCadCents).toBe(10_000);
     expect(split.all.pending.manufacturingCadCents).toBeGreaterThan(0);
@@ -219,16 +227,11 @@ describe("revenue by business line", () => {
       10_000 + split.all.pending.manufacturingCadCents + split.all.pending.servicesCadCents
     );
     const markup = text(html(GoalCards, { page }));
-    expect(markup).toContain("Shipped, not invoiced (not in this headline)");
+    expect(markup).not.toContain("not in this headline");
+    expect(markup).toContain("no item lines");
+    expect(markup).toContain("shipped, not yet invoiced");
+    expect(markup).toContain(cents(split.all.amounts.distributionCadCents + split.all.pending.distributionCadCents));
     expect(markup).not.toContain("$0.10");
-
-    const included = {
-      ...page,
-      revenueGoal: { ...page.revenueGoal!, pendingCadCents: businessLineSum(split.all.pending) },
-    } as ReadyPage;
-    const folded = text(html(GoalCards, { page: included }));
-    expect(folded).not.toContain("not in this headline");
-    expect(folded).toContain(cents(split.all.amounts.distributionCadCents + split.all.pending.distributionCadCents));
   });
 
   it("waits when the lines or the finished-good list are missing", () => {

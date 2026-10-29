@@ -29,6 +29,8 @@ export type {
   ShipmentLineKind,
   ShipmentLineRow,
   CreditNoteRow,
+  PendingShipmentRow,
+  PendingShipmentsDataset,
   CreditNotesAccess,
   CreditNotesDataset,
   ShipmentLinesAccess,
@@ -195,6 +197,9 @@ export { invoiceLines, linesMismatch, linesSearchText, shipmentLinesView } from 
 export type { InvoiceHeader, InvoiceLines, LinesCheck, ShipmentLinesView } from "./shipment-lines";
 export { SHIPMENT_LINE_COLUMNS } from "./queries/shipment-lines";
 export { CREDIT_NOTE_COLUMNS } from "./queries/credit-notes";
+export { PENDING_SHIPMENT_COLUMNS, pendingShipmentsQuery } from "./queries/pending-shipments";
+export { pendingShipmentsByClass, pendingShipmentsEnabled } from "./pending-shipments";
+export type { PendingClassTotals, PendingShipmentsByClass } from "./pending-shipments";
 
 export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView, revenueBasisParam } from "./view";
 export type { DatasetQuery, GoalsPage, GoalsView, GoalsViewInput, GoalsViewState, GoalsViewer } from "./view";

@@ -9,6 +9,13 @@
         "x-mc-repo": "petralabx/PLX_MC",
         "x-mc-runtime": "claude-code"
       }
+    },
+    "Internal-Seller-API": {
+      "type": "http",
+      "url": "https://7exmyzkrwm.us-east-1.awsapprunner.com/mcp",
+      "headers": {
+        "x-mc-runtime": "claude-code"
+      }
     }
   }
 }

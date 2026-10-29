@@ -411,6 +411,12 @@ describe("checkout", () => {
     expect(db.events.some((e) => e.kind === "checkout")).toBe(true);
   });
 
+  // TASK-4156: a new checkout lives 24 hours (it was 8).
+  it("mints the checkout with a 24-hour lease", async () => {
+    const { checkoutId } = await checkout({ taskId: "TASK-900", runtime: "cursor-cloud", accountableHuman: "vince", repo: "petralabx/PLX_MC" });
+    expect(db.dispatches.get(checkoutId)).toMatchObject({ ttlMinutes: 24 * 60 });
+  });
+
   it("records door provenance on the checkout audit payload (P5)", async () => {
     await checkout({
       taskId: "TASK-900",

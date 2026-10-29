@@ -507,7 +507,7 @@ export function DashboardView({ nav }: ScreenProps) {
             <li>A project’s figures are the sum of its initiatives. Closed projects appear under Closed and All.</li>
             <li>
               <b>In flight</b> lists every task an agent has checked out. A checkout ends when it’s released (usually when
-              its pull request merges or closes) or after 8 hours, so it doesn’t prove an agent is still working: each
+              its pull request merges or closes) or after 24 hours, so it doesn’t prove an agent is still working: each
               task shows its latest activity, and one with no activity for 2 hours or more is flagged. In flight and Live
               activity refresh every 20 seconds while this page is open; the other figures reload when a task changes, at
               most every 2 minutes.

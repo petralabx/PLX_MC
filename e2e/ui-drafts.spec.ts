@@ -201,6 +201,8 @@ interface MockOptions {
   slowSubmit?: boolean;
   /** Every save takes a while, so the form can be seen while one is on its way. */
   slowSave?: boolean;
+  /** An upload takes a while, so the page can be seen while one is on its way. */
+  slowUpload?: boolean;
   /** What GET /api/drafts/{id} reports once a file is uploaded, as when an upload returns a draft in review to drafting. */
   afterUpload?: { viewer?: Record<string, unknown>; draftFields?: Record<string, unknown> };
 }
@@ -255,6 +257,7 @@ async function mockDraftsApi(
       // As the server does: the file is stored and linked, and the edit base moves.
       const body = request.postDataJSON() as Record<string, string>;
       mock.uploads.push(body);
+      if (options.slowUpload) await pause(1_500);
       editBase = EDIT_BASE_2;
       const link = `https://petrasoap.sharepoint.com/sites/PLXSite/Mission%20Control/Drafts/DRF-7/20261028T220000Z-abcdef12-${body.fileName}`;
       return route.fulfill(json({ artifact: { kind: body.kind, name: body.fileName, url: link, inline: null }, duplicate: false, editBase, draft: ROW }));
@@ -671,6 +674,36 @@ test.describe("Drafts screen (Draft Projects)", () => {
     await file.setInputFiles({ name: "form.png", mimeType: "image/png", buffer: png });
     await expect.poll(() => mock.uploads.length).toBe(1);
     expect(mock.uploads[0]).toMatchObject({ base: EDIT_BASE_2 });
+  });
+
+  test("an upload waits for unsaved edits: they could make the draft restricted or Trading Lab's", async ({ page }) => {
+    await mockDraftsApi(page, { canUpload: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    const file = page.getByLabel(/^Upload a file/);
+    await expect(file).toBeEnabled();
+    await page.getByLabel("Title", { exact: true }).fill("Not saved yet");
+    await expect(file).toBeDisabled();
+    await expect(page.getByText("Save your edits before you upload a file.")).toBeVisible();
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(file).toBeEnabled();
+    await expect(page.getByText("Save your edits before you upload a file.")).toHaveCount(0);
+  });
+
+  test("Submit and Withdraw wait for an upload on its way", async ({ page }) => {
+    await mockDraftsApi(page, { canUpload: true, canSubmit: true }, { status: "drafting" }, { slowUpload: true });
+    await openDrafts(page, "&draftId=DRF-7&edit=1");
+    const footer = page.getByRole("region", { name: "Save" });
+    await expect(footer.getByRole("button", { name: "Submit for review" })).toBeEnabled();
+    await footer.getByRole("button", { name: "Withdraw…" }).click();
+    await footer.getByLabel(/^Why withdraw DRF-7/).fill("Not needed any more, for now.");
+    await page.getByLabel(/^Upload as/).selectOption("screenshot");
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
+    await page.getByLabel(/^Upload a file/).setInputFiles({ name: "form.png", mimeType: "image/png", buffer: png });
+    // Submit would freeze a version without the file; the upload would then return the draft to drafting.
+    await expect(footer.getByRole("button", { name: "Submit for review" })).toBeDisabled();
+    await expect(footer.getByRole("button", { name: "Withdraw DRF-7" })).toBeDisabled();
+    await expect(page.getByLabel("Artifact 1 name", { exact: true })).toHaveValue("form.png");
+    await expect(footer.getByRole("button", { name: "Submit for review" })).toBeEnabled();
   });
 
   test("offers no upload when the draft cannot take one", async ({ page }) => {

@@ -582,8 +582,9 @@ type UploadKind = (typeof UPLOAD_KINDS)[number];
 /** Uploads a file; resolves to what went wrong, or null once the draft links it. */
 type Uploader = (file: File, kind: UploadKind) => Promise<string | null>;
 
-// `locked` while a save is on its way: an upload would name the same base.
-function UploadArtifact({ onUpload, locked }: { onUpload: Uploader; locked: boolean }) {
+// `locked` while a save is on its way (an upload would name the same base) or
+// edits are unsaved (they could restrict the draft or name Trading Lab); `note` says why.
+function UploadArtifact({ onUpload, locked, note }: { onUpload: Uploader; locked: boolean; note: string | null }) {
   const [kind, setKind] = useState<UploadKind>("diagram");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -607,6 +608,7 @@ function UploadArtifact({ onUpload, locked }: { onUpload: Uploader; locked: bool
         />
       </Field>
       {busy && <p className="dr-task-meta wide">Uploading…</p>}
+      {note && <p className="dr-task-meta wide">{note}</p>}
       {problem && (
         <div className="dr-banner bad wide" role="alert">
           {problem}
@@ -621,11 +623,13 @@ function ResearchFields({
   setResearch,
   onUpload,
   uploadLocked = false,
+  uploadNote = null,
 }: {
   research: DraftResearch;
   setResearch: (fn: (r: DraftResearch) => DraftResearch) => void;
   onUpload?: Uploader;
   uploadLocked?: boolean;
+  uploadNote?: string | null;
 }) {
   const chosenName = useId();
   const set = (patch: Partial<DraftResearch>) => setResearch((r) => ({ ...r, ...patch }));
@@ -855,7 +859,7 @@ function ResearchFields({
       {onUpload && research.artifacts.length < 50 && (
         <>
           <p className="dr-task-meta">Or upload a file. Mission Control keeps it in its SharePoint library and links it here at once.</p>
-          <UploadArtifact onUpload={onUpload} locked={uploadLocked} />
+          <UploadArtifact onUpload={onUpload} locked={uploadLocked} note={uploadNote} />
         </>
       )}
     </section>
@@ -868,17 +872,20 @@ function ResearchFields({
  * Edit, Submit for review and Withdraw, for the draft's author. Submit sends
  * the edit base the page was read with, waits for saved edits, and lists what
  * the completeness and preflight checks still need. onBusy tells the form when
- * a Submit or Withdraw is on its way, so it can lock meanwhile.
+ * a Submit or Withdraw is on its way, so it can lock meanwhile; `locked` holds
+ * them while the form's upload is on its way.
  */
 export function DraftAuthorActions({
   detail,
   dirty = false,
+  locked = false,
   onEdit,
   onChanged,
   onBusy,
 }: {
   detail: DraftDetail;
   dirty?: boolean;
+  locked?: boolean;
   onEdit?: () => void;
   onChanged: () => void;
   onBusy?: (busy: boolean) => void;
@@ -918,7 +925,7 @@ export function DraftAuthorActions({
           <button
             type="button"
             className="btn acc sm"
-            disabled={busy || dirty || issues.length > 0}
+            disabled={busy || locked || dirty || issues.length > 0}
             onClick={() => void send("submit", { base: viewer.editBase })}
           >
             Submit for review
@@ -956,7 +963,7 @@ export function DraftAuthorActions({
             <textarea rows={2} value={reason} maxLength={2000} onChange={(e) => setReason(e.target.value)} />
           </label>
           <div className="dr-acts">
-            <button type="submit" className="btn acc sm" disabled={busy || reason.trim().length < 10}>
+            <button type="submit" className="btn acc sm" disabled={busy || locked || reason.trim().length < 10}>
               Withdraw {draft.id}
             </button>
             <button type="button" className="btn ghost sm" disabled={busy} onClick={() => setWithdrawing(false)}>
@@ -1171,7 +1178,8 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
           research={form.content.research}
           setResearch={setResearch}
           onUpload={id && detail?.viewer.canUpload ? upload : undefined}
-          uploadLocked={busy}
+          uploadLocked={busy || dirty}
+          uploadNote={dirty && !busy ? "Save your edits before you upload a file." : null}
         />
       </fieldset>
 
@@ -1207,6 +1215,7 @@ export function DraftEditor({ id, nav }: { id: string | null; nav: Nav }) {
           <DraftAuthorActions
             detail={detail}
             dirty={dirty}
+            locked={acting}
             onChanged={() => {
               leaving.current = true;
               nav("drafts", { draftId: detail.draft.id });

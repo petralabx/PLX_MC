@@ -17,9 +17,14 @@ vi.mock("@/lib/compliance/projection", () => ({
 }));
 
 const renewDispatches = vi.hoisted(() => vi.fn(async () => {}));
+const order = vi.hoisted(() => [] as string[]);
+const recordMergeOnTask = vi.hoisted(() => vi.fn(async (r: { taskId: string }) => { order.push(`note:${r.taskId}`); return true; }));
+const releaseDispatches = vi.hoisted(() => vi.fn(async (ids: string[]) => { order.push(`release:${ids.join(",")}`); }));
+
+vi.mock("@/lib/compliance/merge-note", () => ({ recordMergeOnTask }));
 
 vi.mock("@/lib/compliance/repo", () => ({
-  releaseDispatches: vi.fn(async () => {}),
+  releaseDispatches,
   openPrCandidatesForTask: async () => [],
   renewDispatches,
   dispatchHeads: async () => [],
@@ -41,6 +46,9 @@ beforeEach(() => {
   db.dispatches.clear();
   db.events.length = 0;
   renewDispatches.mockClear();
+  recordMergeOnTask.mockClear();
+  releaseDispatches.mockClear();
+  order.length = 0;
 });
 
 function prPayload(over: Record<string, unknown> = {}, prOver: Record<string, unknown> = {}) {
@@ -308,5 +316,54 @@ describe("ingestPullRequest", () => {
     const promo = db.events.filter((e) => e.kind === "task.promotion.requested");
     expect(promo.map((e) => e.taskId).sort()).toEqual(["TASK-1", "TASK-2"]);
     expect(db.events.find((e) => e.kind === "pr.merged")!.payload).toMatchObject({ taskIds: ["TASK-1", "TASK-2"] });
+  });
+
+  // TASK-4150: the merge SHA, PR link and rollback land on the task before release.
+  describe("merge note before release", () => {
+    const live = (id: string, taskId: string) => ({
+      id, actorKind: "agent" as const, taskId, revoked: false, repo: "petralabx/PLX_MC", runtime: "cursor-cloud",
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+
+    it("records the merge on the task, then releases with reason merged", async () => {
+      db.dispatches.set("dsp_x", live("dsp_x", "TASK-900"));
+      const evt = parsePullRequestEvent(
+        prPayload({ action: "closed" }, { merged: true, merge_commit_sha: "abc999", body: "x\nMC-Checkout: dsp_x" })
+      )!;
+      await ingestPullRequest(evt);
+      expect(recordMergeOnTask).toHaveBeenCalledWith({
+        taskId: "TASK-900", repo: "petralabx/PLX_MC", prNumber: evt.prNumber, mergeSha: "abc999", checkoutIds: ["dsp_x"], actor: "cursor-cloud",
+      });
+      expect(releaseDispatches).toHaveBeenCalledWith(["dsp_x"], { repo: "petralabx/PLX_MC", pr: evt.prNumber, reason: "merged" });
+      expect(order).toEqual(["note:TASK-900", "release:dsp_x"]);
+    });
+
+    it("writes one note per task when two checkouts of different tasks merge", async () => {
+      db.dispatches.set("dsp_a", live("dsp_a", "TASK-1"));
+      db.dispatches.set("dsp_b", live("dsp_b", "TASK-2"));
+      const evt = parsePullRequestEvent(
+        prPayload({ action: "closed" }, { merged: true, merge_commit_sha: "abc999", body: "two\nMC-Checkout: dsp_a\nMC-Checkout: dsp_b" })
+      )!;
+      await ingestPullRequest(evt);
+      expect(order).toEqual(["note:TASK-1", "note:TASK-2", "release:dsp_a", "release:dsp_b"]);
+    });
+
+    it("does not release when the note fails, so the replay retries both", async () => {
+      db.dispatches.set("dsp_x", live("dsp_x", "TASK-900"));
+      recordMergeOnTask.mockRejectedValueOnce(new Error("db down"));
+      const evt = parsePullRequestEvent(
+        prPayload({ action: "closed" }, { merged: true, merge_commit_sha: "abc999", body: "x\nMC-Checkout: dsp_x" })
+      )!;
+      await expect(ingestPullRequest(evt)).rejects.toThrow("db down");
+      expect(releaseDispatches).not.toHaveBeenCalled();
+    });
+
+    it("writes no note for a PR closed without merging, and releases as closed", async () => {
+      db.dispatches.set("dsp_x", live("dsp_x", "TASK-900"));
+      const evt = parsePullRequestEvent(prPayload({ action: "closed" }, { merged: false, body: "x\nMC-Checkout: dsp_x" }))!;
+      await ingestPullRequest(evt);
+      expect(recordMergeOnTask).not.toHaveBeenCalled();
+      expect(releaseDispatches).toHaveBeenCalledWith(["dsp_x"], { repo: "petralabx/PLX_MC", pr: evt.prNumber, reason: "closed" });
+    });
   });
 });

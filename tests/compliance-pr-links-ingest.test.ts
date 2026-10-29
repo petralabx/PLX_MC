@@ -88,6 +88,9 @@ vi.mock("@/lib/sync/repo", () => ({
   async appendAudit() {},
 }));
 
+// TASK-4150: the merge note has its own tests (compliance-merge-note).
+vi.mock("@/lib/compliance/merge-note", () => ({ recordMergeOnTask: async () => true }));
+
 vi.mock("@/lib/compliance/repo", () => ({
   async getDispatch(id: string) {
     const d = h.dispatches.get(id);

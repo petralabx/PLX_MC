@@ -68,6 +68,7 @@ import {
   type PrCommit,
   type PrState,
 } from "./github-pr";
+import { recordMergeOnTask } from "./merge-note";
 import { projectPullRequest, projectionEnabled, samePr } from "./projection";
 import * as repo from "./repo";
 import { applyReviewLinks, reviewLinksReport, touchedModules, type ReviewLinksReport } from "./review-links";
@@ -1746,6 +1747,7 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
     // TASK-3813: a checkout another open PR still stamps (a stacked PR) stays
     // live. A GitHub error throws, so ingestOrQueue replays the release later.
     const reason = evt.merged ? "merged" : "closed";
+    const toRelease: repo.DispatchRow[] = [];
     for (const cid of new Set(ids)) {
       const d = await repo.getDispatch(cid);
       if (!d || d.revoked || d.releasedAt || !dispatchRepoMatches(d.repo, evt.repo, evt.repoFullName)) continue;
@@ -1758,7 +1760,26 @@ export async function ingestPullRequest(evt: PrEvent): Promise<IngestResult> {
         });
         continue;
       }
-      await repo.releaseDispatches([cid], { repo: d.repo, pr: evt.prNumber, reason });
+      toRelease.push(d);
+    }
+    // TASK-4150: a merge writes its SHA, PR link and rollback on each task
+    // before the release. A failure throws, so the replay retries both.
+    if (evt.merged && evt.mergeSha) {
+      const byTask = new Map<string, repo.DispatchRow[]>();
+      for (const d of toRelease) byTask.set(d.taskId, [...(byTask.get(d.taskId) ?? []), d]);
+      for (const [tid, ds] of byTask) {
+        await recordMergeOnTask({
+          taskId: tid,
+          repo: evt.repoFullName?.includes("/") ? evt.repoFullName : ds[0].repo,
+          prNumber: evt.prNumber,
+          mergeSha: evt.mergeSha,
+          checkoutIds: ds.map((d) => d.id),
+          actor: ds[0].runtime,
+        });
+      }
+    }
+    for (const d of toRelease) {
+      await repo.releaseDispatches([d.id], { repo: d.repo, pr: evt.prNumber, reason });
     }
     return { action: evt.action, actorKind, taskId, recorded: true, proposalId, deepLink };
   }

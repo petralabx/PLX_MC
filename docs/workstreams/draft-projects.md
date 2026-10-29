@@ -24,13 +24,13 @@ done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and ev
 - TASK-4129: `project-researcher` and `guided-project-discovery` save a plan as a draft ([petralabx/skills PR 48](https://github.com/petralabx/skills/pull/48), release 1.6.15).
 - TASK-4130 and TASK-4131: artifact uploads, as the agent tool `mc_upload_draft_artifact` and from the New draft form ([PLX_MC PR 505](https://github.com/petralabx/PLX_MC/pull/505)).
 - TASK-4132: the governance-contract rule "Plans go through a draft" and the skills catalog pin to 1.6.15 ([PLX_MC PR 507](https://github.com/petralabx/PLX_MC/pull/507)).
+- Production smoke test, 2026-10-29, through the agent API (approved by Vince): DRF-1, "DRF smoke test (Claude)", was created and submitted (version 1). Its upload stored `smoke-test.svg` in the Mission Control library under `Drafts/DRF-1/` and returned it to drafting. The same file again was a duplicate. The review page answered 503 `draft_pages_off`. It was then withdrawn with that reason. Uploads work on production.
 - TASK-4135: review pages: `mc_render_draft_page`, `mc_publish_draft_page` and the comment relay on `mc_review_draft`, with the page link and relayed comments on the Drafts screen ([PLX_MC PR 508](https://github.com/petralabx/PLX_MC/pull/508)).
 
 ## Next steps
 
-1. A signed-in check of the Drafts screen on production: list, record, review, Accept, and the New draft form. The first real draft is the test.
-2. Uploads are on in production: on 2026-10-29 an upload for an unknown draft passed the store check and answered 404. The first real upload shows whether the Mission Control library takes draft files under `Drafts/`.
-3. Turn review pages on: an operator sets `PLX_MC_DRAFT_PAGES_ENABLED=1`. The first draft published as a page, and its first relayed comment, are the test. The steps are in `docs/modules/drafts/README.md` ("Review pages").
+1. A signed-in check of the Drafts screen on production: list, record, review, Accept, and the New draft form. The server side is proven (see Done: the smoke test); the screens need a person.
+2. Turn review pages on: an operator sets `PLX_MC_DRAFT_PAGES_ENABLED=1`. The first draft published as a page, and its first relayed comment, are the test. The steps are in `docs/modules/drafts/README.md` ("Review pages").
 
 ## Decisions and why
 
@@ -84,4 +84,4 @@ bash scripts/preflight.sh --mode pre-commit
 
 ## Last updated
 
-2026-10-29 by Claude Code (TASK-4135): review pages merged (#508), the last follow-up; the workstream is done.
+2026-10-29 by Claude Code (TASK-4135): review pages merged (#508), the last follow-up, and the production smoke test passed (DRF-1, withdrawn); the workstream is done.

@@ -12,7 +12,7 @@ Let PLX members and their agents put a planned project, its buckets and tasks, a
 
 ## Status
 
-done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and every follow-up (skills, artifact uploads, the governance rule, review pages) are merged and live on https://mc.plxcustomer.io (DB Migrate applied 055 and 056 on 2026-10-27). Review pages stay off until an operator turns them on.
+done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and every follow-up (skills, artifact uploads, the governance rule, review pages) are merged and live on https://mc.plxcustomer.io (DB Migrate applied 055 and 056 on 2026-10-27). Review pages are on in production since 2026-10-29 16:11 UTC.
 
 ## Done
 
@@ -26,11 +26,12 @@ done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and ev
 - TASK-4132: the governance-contract rule "Plans go through a draft" and the skills catalog pin to 1.6.15 ([PLX_MC PR 507](https://github.com/petralabx/PLX_MC/pull/507)).
 - Production smoke test, 2026-10-29, through the agent API (approved by Vince): DRF-1, "DRF smoke test (Claude)", was created and submitted (version 1). Its upload stored `smoke-test.svg` in the Mission Control library under `Drafts/DRF-1/` and returned it to drafting. The same file again was a duplicate. The review page answered 503 `draft_pages_off`. It was then withdrawn with that reason. Uploads work on production.
 - TASK-4135: review pages: `mc_render_draft_page`, `mc_publish_draft_page` and the comment relay on `mc_review_draft`, with the page link and relayed comments on the Drafts screen ([PLX_MC PR 508](https://github.com/petralabx/PLX_MC/pull/508)).
+- Review pages on in production, 2026-10-29 (Vince's decision, TASK-4135): `PLX_MC_DRAFT_PAGES_ENABLED=1` is set for Production, and production was redeployed on main at `c394755` (`dpl_9CYnDgTwPJeogBpESphumk42RsWj`). At 16:11 UTC a render of an unknown draft answered 404 `not_found` instead of 503 `draft_pages_off`; sign-in answered 200 and the self-check was ok. The operator steps are in `docs/modules/drafts/README.md` ("Review pages", [PLX_MC PR 512](https://github.com/petralabx/PLX_MC/pull/512)).
 
 ## Next steps
 
 1. A signed-in check of the Drafts screen on production: list, record, review, Accept, and the New draft form. The server side is proven (see Done: the smoke test); the screens need a person.
-2. Turn review pages on: an operator with write access to the Vercel project sets `PLX_MC_DRAFT_PAGES_ENABLED=1` for Production and redeploys. Vince and this Claude Code session cannot reach Vercel, so on 2026-10-29 Vince handed the switch to another agent. The steps, the check (404 `not_found`, not 503 `draft_pages_off`) and the kill switch are in `docs/modules/drafts/README.md` ("Review pages"). The first draft published as a page, and its first relayed comment, are the test.
+2. The first draft published as a review page, and its first relayed comment, test review pages end to end. The agent's steps are in `docs/modules/drafts/README.md` ("Review pages").
 
 ## Decisions and why
 
@@ -84,4 +85,4 @@ bash scripts/preflight.sh --mode pre-commit
 
 ## Last updated
 
-2026-10-29 by Claude Code (TASK-4135): the operator steps for turning review pages on are in the drafts module contract, and the switch is handed to an agent with Vercel access; the workstream is done.
+2026-10-29 by Claude Code (TASK-4135): review pages are on in production (404 `not_found` at 16:11 UTC); the workstream is done.

@@ -30,7 +30,7 @@ done, as of 2026-10-29. Steps 1 to 3, the New draft form (slices A and B) and ev
 ## Next steps
 
 1. A signed-in check of the Drafts screen on production: list, record, review, Accept, and the New draft form. The server side is proven (see Done: the smoke test); the screens need a person.
-2. Turn review pages on: an operator sets `PLX_MC_DRAFT_PAGES_ENABLED=1`. The first draft published as a page, and its first relayed comment, are the test. The steps are in `docs/modules/drafts/README.md` ("Review pages").
+2. Turn review pages on: an operator with write access to the Vercel project sets `PLX_MC_DRAFT_PAGES_ENABLED=1` for Production and redeploys. Vince and this Claude Code session cannot reach Vercel, so on 2026-10-29 Vince handed the switch to another agent. The steps, the check (404 `not_found`, not 503 `draft_pages_off`) and the kill switch are in `docs/modules/drafts/README.md` ("Review pages"). The first draft published as a page, and its first relayed comment, are the test.
 
 ## Decisions and why
 
@@ -84,4 +84,4 @@ bash scripts/preflight.sh --mode pre-commit
 
 ## Last updated
 
-2026-10-29 by Claude Code (TASK-4135): review pages merged (#508), the last follow-up, and the production smoke test passed (DRF-1, withdrawn); the workstream is done.
+2026-10-29 by Claude Code (TASK-4135): the operator steps for turning review pages on are in the drafts module contract, and the switch is handed to an agent with Vercel access; the workstream is done.

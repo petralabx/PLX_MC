@@ -16,6 +16,16 @@
 
 ## Lessons
 
+### 2026-10-30 (UTC) — TASK-4196: a new nav entry broke an e2e pin that a stopped local preflight never ran
+
+- **What happened:** PLX_MC #526 added "UAT scorecard" to the zoned Reporting group. CI's `Preflight + full suite` then failed `e2e/ui-shell-responsive.spec.ts` ("1440: a 248px sidebar in zones"), whose `toHaveText` pins exactly five Reporting links. The PR body said every pre-push stage passed, but the local run had stopped before the production build and Playwright.
+- **Root cause:** In the cloud container, `preflight.sh --mode pre-push` exits at the 7 `*-postgres.test.ts` files. Docker Hub answered 429 and ECR Public "Data limit exceeded" to the image pull. `set -euo pipefail` then skips every later stage. This repeats the 2026-10-14 cloud-container lesson. The change updated the unit pin (`tests/mc-nav-model.test.ts`) but not the e2e pin.
+- **Rule going forward:**
+  - When preflight stops early, name the stages it never reached, and run them by hand: `npm run build`, then the touched e2e specs through the uncommitted `executablePath` override.
+  - In a worktree, hard-link `node_modules` (`cp -al`) instead of symlinking it; Turbopack does not build through a symlink outside the root.
+  - Never write that a stage passed unless it ran.
+  - When a change adds or renames a nav entry or other UI text, grep `e2e/` for the pinned strings in the same commit.
+
 ### 2026-10-28 (UTC) — TASK-3931: a helper's refresh merge no longer blocks a PR for good
 
 - **What happened:** PLX_MC #407 (TASK-3743) was blocked for good when plx-cip merged `main` into it: the merge commit carried `Agent: plx-cip/merge-queue` and the PR's own `MC-Checkout`, whose record says `claude-code/claude-code`. The same shape recurred on #489 (TASK-4059, next entry). Each time the only way out was a re-cut or a rewritten head.

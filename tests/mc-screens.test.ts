@@ -35,6 +35,7 @@ const EXPECTED_SCREENS = {
   "brain-ask": true,
   "ai-spend": true,
   "ci-scorecard": true,
+  "uat-scorecard": true,
   "routing-inbox": true,
   approvals: true,
   drafts: true,

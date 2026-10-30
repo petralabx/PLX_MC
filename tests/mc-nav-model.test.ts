@@ -109,6 +109,7 @@ describe("nav model — grouped by task", () => {
       "activity",
       "ai-spend",
       "ci-scorecard",
+      "uat-scorecard",
       "matrix",
       "feed",
     ]);
@@ -120,6 +121,7 @@ describe("nav model — grouped by task", () => {
       "activity",
       "ai-spend",
       "ci-scorecard",
+      "uat-scorecard",
       "matrix",
       "feed",
       "intake",
@@ -172,7 +174,7 @@ describe("zoned sidebar model", () => {
     expect(zonedScreensOf(OFF, "plan")).toEqual(["board", "projects", "drafts"]);
     expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.items[0]).toBe(ALL_WORK_NAV_ITEM);
     expect(ZONED_NAV_GROUPS.find((g) => g.id === "plan")!.lists).toEqual(["project-tree"]);
-    expect(zonedScreensOf(OFF, "reporting")).toEqual(["dashboard", "insights", "goals", "ai-spend", "ci-scorecard"]);
+    expect(zonedScreensOf(OFF, "reporting")).toEqual(["dashboard", "insights", "goals", "ai-spend", "ci-scorecard", "uat-scorecard"]);
     expect(zonedScreensOf(OFF, "knowledge")).toEqual(["brain-ask", "governance-sops", "skills-directory", "architecture"]);
     expect(ZONED_NAV_GROUPS.filter((g) => g.collapsible).map((g) => g.id)).toEqual(["knowledge"]);
   });

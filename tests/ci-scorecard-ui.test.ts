@@ -149,6 +149,6 @@ describe("CI scorecard registration", () => {
     const admin = NAV_GROUPS.find((g) => g.id === "admin")!.items.map((i) => i.screen);
     expect(admin.indexOf("ci-scorecard")).toBe(admin.indexOf("ai-spend") + 1);
     const reporting = ZONED_NAV_GROUPS.find((g) => g.id === "reporting")!.items.map((i) => i.screen);
-    expect(reporting.at(-1)).toBe("ci-scorecard");
+    expect(reporting.indexOf("ci-scorecard")).toBe(reporting.indexOf("ai-spend") + 1);
   });
 });

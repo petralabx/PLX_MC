@@ -415,8 +415,8 @@ a human (the bucket table's rule), In flight, Waiting on submitter (`uat:hold`,
 or merged and awaiting re-test) and Verified. No row cap.
 
 Portal step and staging come from the portal's read-only ticket snapshot, off by
-default (`PLX_MC_UAT_PORTAL_READ_ENABLED`). The portal endpoint does not exist
-yet: `GET /api/internal/uat-feedback/mc-snapshot`, Bearer
+default (`PLX_MC_UAT_PORTAL_READ_ENABLED`). The portal serves it since 28 Oct
+(TASK-3798, portal PR #3052): `GET /api/internal/uat-feedback/mc-snapshot`, Bearer
 `PLX_MC_PORTAL_READ_TOKEN`, answering `{ "tickets": PortalTicket[] }` (the type
 in `src/lib/tasks/uat-tickets.ts`) for open tickets and those closed in the last
 30 days. Declaration: `config/integrations.yaml` → `uat-portal-read`.
@@ -441,7 +441,8 @@ table still lists the BKT-UAT rows.
 The check runs on page open, on **Check now**, after each fix, and daily:
 `GET /api/cron/uat-drift` (`CRON_SECRET`, kill switch
 `PLX_MC_UAT_DRIFT_CRON_ENABLED`, default off) records one `uat.drift.checked`
-event and fixes nothing.
+event and fixes nothing. After the check it pulls the UAT scorecard's weeks
+through `readPortalScorecard` (`docs/modules/uat-scorecard/README.md`).
 
 ### Key Files
 

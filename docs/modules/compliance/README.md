@@ -207,7 +207,10 @@ truth table is proven before any plumbing exists.
   authenticated MC deep link. Agent hard-gate remains unchanged.
 - `projectPullRequest` (projection) — after `mc_events` are appended, mutates sync
   tasks for **checked-out** work: open/sync → `progress`, merge → `merged` +
-  `prs[]` + `task.promoted`. Open, reopen, sync and ready-for-review also put
+  `prs[]` + `task.promoted`. Only a to-do task (Backlog to Planned) moves to
+  `progress`: a task In Progress, In QA or In Review keeps its stage when its PR
+  opens, reopens, gets a push or is marked ready (TASK-4257). Open, reopen, sync
+  and ready-for-review also put
   the PR on `prs[]` as `open` (or `draft`); a close without merge sets `closed`;
   the merged row always wins; one row per repo + PR number (TASK-3743). A close
   or merge also sets `closed` on every other task that already holds a row for

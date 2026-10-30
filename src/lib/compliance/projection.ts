@@ -27,6 +27,9 @@ const PROJECTION_ACTOR = "compliance-projection";
 const DONE_STAGES: StageKey[] = ["merged", "verified"];
 const OPEN_ACTIONS = ["opened", "reopened", "synchronize", "ready_for_review"];
 const STAGE_NAME = new Map<string, string>(STAGES.map((s) => [s.key, s.name]));
+// A PR moves only a to-do task to In Progress. In Progress, In QA and In Review
+// keep their stage: a push or a ready PR never sends a task back (TASK-4257).
+const DOING_STAGES = new Set<StageKey>(STAGES.filter((s) => s.band === "doing").map((s) => s.key));
 
 export function projectionEnabled(): boolean {
   return process.env.COMPLIANCE_PROJECTION_ENABLED !== "0";
@@ -100,7 +103,7 @@ export async function requireProjectionAuthorized(
 async function setProgress(taskId: string, evt: PrEvent): Promise<void> {
   const task = await loadTask(taskId);
   if (!task || DONE_STAGES.includes(task.stage)) return;
-  if (task.stage === "progress") return;
+  if (DOING_STAGES.has(task.stage)) return;
   if (await skipBlockedPromotion(task, evt)) return;
 
   await requireProjectionAuthorized(

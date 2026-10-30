@@ -381,6 +381,21 @@ describe("projectPullRequest", () => {
     });
     expect((store.rows.get("task:TASK-400")!.data as unknown as Task).stage).toBe("merged");
   });
+
+  it("keeps a task In QA or In Review when its PR opens, gets a push or is marked ready (TASK-4257)", async () => {
+    // An agent completes its task, moves it to In Review, then marks the PR
+    // ready. The ready event must not send the task back to In Progress.
+    for (const [id, stage] of [["TASK-410", "qa"], ["TASK-411", "review"]] as const) {
+      seedTask({ id, stage, prs: [{ repo: "PLX_MC", num: 42, status: "draft", title: "Add the thing" }] });
+      for (const action of ["ready_for_review", "synchronize", "opened", "reopened"]) {
+        await projectPullRequest(prEvt({ action }), { actorKind: "agent", actorIdentity: "dsp_abc", taskIds: [id], sparse: false });
+      }
+      const task = store.rows.get(`task:${id}`)!.data as unknown as Task;
+      expect(task.stage).toBe(stage);
+      expect(task.prs).toEqual([{ repo: "PLX_MC", num: 42, status: "open", title: "Add the thing" }]);
+      expect(task.activity).toEqual([]);
+    }
+  });
 });
 
 // TASK-3743: a task shows its open PRs before merge, one row per repo and PR.

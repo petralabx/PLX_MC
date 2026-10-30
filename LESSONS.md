@@ -26,6 +26,12 @@
   - Never write that a stage passed unless it ran.
   - When a change adds or renames a nav entry or other UI text, grep `e2e/` for the pinned strings in the same commit.
 
+### 2026-10-30 (UTC) — TASK-4257: marking a PR ready sent its task from In Review back to In Progress
+
+- **What happened:** A Claude Code session completed TASK-4201, TASK-4204, TASK-4205 and TASK-4206 and moved each to In Review. Seconds later it marked each PR ready (PLX_MC #519, #521, #522, #523). On each `pr.ready_for_review` event the compliance projection moved the task back to In Progress, so the board showed four tasks in progress while they waited for review.
+- **Root cause:** `setProgress` in `src/lib/compliance/projection.ts` skipped only Merged, Verified and In Progress. It runs on open, reopen, push and ready-for-review, so each of those events moved an In QA or In Review task back.
+- **Rule going forward:** The projection moves only a to-do task (Backlog to Planned) to In Progress. A task In Progress, In QA or In Review keeps its stage; only an agent or a person moves it back. When code moves a stage automatically, test it from every later stage too, not only the earlier ones.
+
 ### 2026-10-28 (UTC) — TASK-3931: a helper's refresh merge no longer blocks a PR for good
 
 - **What happened:** PLX_MC #407 (TASK-3743) was blocked for good when plx-cip merged `main` into it: the merge commit carried `Agent: plx-cip/merge-queue` and the PR's own `MC-Checkout`, whose record says `claude-code/claude-code`. The same shape recurred on #489 (TASK-4059, next entry). Each time the only way out was a re-cut or a rewritten head.

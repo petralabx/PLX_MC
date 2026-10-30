@@ -49,6 +49,13 @@ describe("classifyRiskTier (decision 12)", () => {
     expect(classifyRiskTier(["scripts/deploy.sh"])).toBe("high");
   });
 
+  it("flags the portal's Prisma migrations as high, not their schema or docs", () => {
+    expect(classifyRiskTier(["portal/prisma/migrations/20261030000000_x/migration.sql"])).toBe("high");
+    expect(classifyRiskTier(["prisma/migrations/migration_lock.toml"])).toBe("high");
+    expect(classifyRiskTier(["portal/prisma/schema.prisma"])).toBe("standard");
+    expect(classifyRiskTier(["docs/runbooks/prisma-migrations.md"])).toBe("low");
+  });
+
   it("treats docs/test-only changes as low", () => {
     expect(classifyRiskTier(["docs/product/SYSTEM_OF_RECORD.md"])).toBe("low");
     expect(classifyRiskTier(["README.md", "docs/x.md"])).toBe("low");

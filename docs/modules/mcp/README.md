@@ -219,7 +219,10 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   400. The owner, evidence and approval-gate checks still apply (409
   `stage_blocked`). It needs `task.uat_sync`, which only `sp_mcp_portal` holds.
   An agent gets 403 and a `task.verify_denied` event, and `mc_report_progress`
-  refuses `stage: "verified"` on a UAT ticket task. A PR merge never moves a
+  refuses `stage: "verified"` on a UAT ticket task. On every other task
+  `mc_report_progress` and `POST /api/cursor/tasks` refuse `stage: "verified"`
+  with 403 `verified_needs_person` (W02): only a person marks a task Verified,
+  in Mission Control. A PR merge never moves a
   verified task back to merged: the projection records the PR and writes
   `task.promotion_skipped` (`reason: task_verified`).
 - Auth: existing MCP key/operator checks, `task.progress` and the task's

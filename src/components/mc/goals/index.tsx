@@ -10,7 +10,8 @@
 // Viewers and Editors can export it all to Excel (GET /api/reporting/goals/export).
 // US dollar revenue shows at today's Bank of Canada rate or at the fixed Sage
 // rate (TASK-3780): the choice lives in the URL (`fx=sage`), and the page model
-// and the export are asked for at it (`?fx=sage`), so every figure agrees.
+// and the export are asked for at it (`?fx=sage`), so every figure agrees. The
+// salesperson filter (TASK-4277) works the same way (`sales=GGC,SM`).
 // Module contract: docs/modules/reporting-goals/README.md.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -20,6 +21,7 @@ import { signInAgainAction } from "@/lib/auth/actions";
 import type { EvaluatedEntry, GoalsPage, RefreshRun, RevenueRateBasis, RevenueScope } from "@/lib/reporting/goals";
 import { torontoDate } from "@/lib/reporting/goals/calendar";
 import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
+import { salesParam } from "@/lib/reporting/goals/salesperson-filter";
 
 import type { ScreenProps } from "../route";
 
@@ -45,6 +47,7 @@ import {
   type ReadyPage,
 } from "./helpers";
 import { watchRun } from "./run-watch";
+import { SalespeopleNote, SalespeoplePicker } from "./salespeople";
 import { Section, type SectionState } from "./section";
 import { ShipmentList } from "./shipments";
 import {
@@ -146,24 +149,39 @@ function saveFile(blob: Blob, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-/** The page model's path at a revenue rate: today's rate needs no query, so the default request stays exactly as it was. */
-const goalsPath = (basis: RevenueRateBasis) => (basis === "sage" ? "/reporting/goals?fx=sage" : "/reporting/goals");
+/**
+ * A Goals path (the page model or the workbook) at a revenue rate and for some
+ * salespeople: today's rate and every customer need no query, so the default
+ * request stays exactly as it was.
+ */
+function goalsPath(base: string, basis: RevenueRateBasis, sales: readonly string[]): string {
+  const params = new URLSearchParams();
+  if (basis === "sage") params.set("fx", "sage");
+  if (sales.length > 0) params.set("sales", sales.join(","));
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
+}
 
 export function GoalsView({ route, nav }: ScreenProps) {
   const basis: RevenueRateBasis = route.fx === "sage" ? "sage" : "boc";
   // Manufacturing customers only (`scope=mfg`): a display choice on the loaded page, so it needs no new read.
   const scope: RevenueScope = route.scope === "mfg" ? "mfg" : "all";
-  // load() reads the chosen rate from here, so it keeps one identity and a rate change never stops a refresh being followed.
+  // Some salespeople's customers only (`sales=`, TASK-4277): a malformed link shows every customer.
+  const salesKey = (salesParam(route.sales ?? null) ?? []).join(",");
+  const sales = salesKey ? salesKey.split(",") : [];
+  // load() reads the chosen rate and salespeople from here, so it keeps one identity and a change never stops a refresh being followed.
   const basisRef = useRef(basis);
+  const salesRef = useRef(salesKey);
   useEffect(() => {
     basisRef.current = basis;
+    salesRef.current = salesKey;
   });
   // Every read is numbered; only the newest one is shown, so a slower answer at the other rate never overwrites it.
   const loadSeq = useRef(0);
   const [page, setPage] = useState<GoalsPage | null>(null);
   const [status, setStatus] = useState<SectionState>("loading");
-  // The rate the failed read asked for, so a failure at one rate is never shown as the other's.
-  const [loadError, setLoadError] = useState<{ code: string; message: string; basis: RevenueRateBasis } | null>(null);
+  // The rate and salespeople the failed read asked for, so a failure for one choice is never shown as another's.
+  const [loadError, setLoadError] = useState<{ code: string; message: string; basis: RevenueRateBasis; sales: string } | null>(null);
   const [refresh, setRefresh] = useState<Refresh>({ kind: "idle" });
   const [download, setDownload] = useState<Download>({ kind: "idle" });
   // The run this page started or attached to: it counts toward the 5-minute
@@ -180,7 +198,8 @@ export function GoalsView({ route, nav }: ScreenProps) {
   const load = useCallback((): Promise<GoalsPage | null> => {
     const seq = ++loadSeq.current;
     const wanted = basisRef.current;
-    return api<GoalsPage>(goalsPath(wanted))
+    const wantedSales = salesRef.current;
+    return api<GoalsPage>(goalsPath("/reporting/goals", wanted, wantedSales ? wantedSales.split(",") : []))
       .then((data) => {
         if (seq !== loadSeq.current) return data;
         setPage(data);
@@ -191,7 +210,7 @@ export function GoalsView({ route, nav }: ScreenProps) {
       .catch((err: Error) => {
         if (seq !== loadSeq.current) return null;
         setStatus((prev) => (prev === "ready" ? prev : "failed"));
-        setLoadError({ code: err instanceof ApiClientError ? err.code : "error", message: err.message, basis: wanted });
+        setLoadError({ code: err instanceof ApiClientError ? err.code : "error", message: err.message, basis: wanted, sales: wantedSales });
         return null;
       });
   }, []);
@@ -226,13 +245,13 @@ export function GoalsView({ route, nav }: ScreenProps) {
     return () => watcher.current?.stop();
   }, [load, follow]);
 
-  // A new rate (the toggle, or Back and Forward) reads the page model again at it; the first render's read is above.
-  const loadedBasis = useRef(basis);
+  // A new rate or salespeople (the switches, or Back and Forward) read the page model again; the first render's read is above.
+  const loadedChoice = useRef(`${basis}|${salesKey}`);
   useEffect(() => {
-    if (loadedBasis.current === basis) return;
-    loadedBasis.current = basis;
+    if (loadedChoice.current === `${basis}|${salesKey}`) return;
+    loadedChoice.current = `${basis}|${salesKey}`;
     void load();
-  }, [basis, load]);
+  }, [basis, salesKey, load]);
 
   const retry = () => {
     setStatus((prev) => (prev === "failed" ? "loading" : prev));
@@ -266,13 +285,13 @@ export function GoalsView({ route, nav }: ScreenProps) {
     }
   }
 
-  /** The workbook at the rate the figures on screen are at (not one still loading). */
-  async function exportWorkbook(today: string, shown: RevenueRateBasis) {
+  /** The workbook at the rate, and for the salespeople, the figures on screen are at (not ones still loading). */
+  async function exportWorkbook(today: string, shown: RevenueRateBasis, shownSales: readonly string[]) {
     setEntryNotice("");
     setDownload({ kind: "working" });
     try {
-      const { blob, fileName } = await apiDownload(shown === "sage" ? "/reporting/goals/export?fx=sage" : "/reporting/goals/export");
-      const name = fileName ?? workbookFileName(today, shown);
+      const { blob, fileName } = await apiDownload(goalsPath("/reporting/goals/export", shown, shownSales));
+      const name = fileName ?? workbookFileName(today, shown, shownSales);
       saveFile(blob, name);
       setDownload({ kind: "done", fileName: name });
     } catch (err) {
@@ -296,15 +315,34 @@ export function GoalsView({ route, nav }: ScreenProps) {
   const shownBasis = ready?.model.revenue.basis ?? basis;
   const rateWaiting = ready && shownBasis !== basis ? revenueRateLabel(basis, ready) : null;
   const rateFailed = loadError?.basis === basis && (rateWaiting !== null || (!ready && basis === "sage"));
+  // The salespeople the figures on screen are for (none: every customer), and whether the ones picked are still loading.
+  const salespeople = ready?.salespeople ?? null;
+  const shownSales = salespeople?.applied ? salespeople.selected : [];
+  const salesWaiting = !!ready && (salespeople?.selected ?? []).join(",") !== salesKey;
+  const salesFailed = salesWaiting && loadError?.sales === salesKey;
+  const goTo = (next: { basis?: RevenueRateBasis; scope?: RevenueScope; sales?: readonly string[] }) => {
+    const b = next.basis ?? basis;
+    const s = next.scope ?? scope;
+    const who = next.sales ?? sales;
+    nav("goals", {
+      ...(b === "sage" ? { fx: "sage" as const } : {}),
+      ...(s === "mfg" ? { scope: "mfg" as const } : {}),
+      ...(who.length > 0 ? { sales: (salesParam(who.join(",")) ?? []).join(",") } : {}),
+    });
+  };
   const chooseBasis = (next: RevenueRateBasis) => {
     if (next === basis) return;
     // A new read starts: an earlier failure (at either rate) no longer describes what's on screen.
     setLoadError(null);
-    nav("goals", { ...(next === "sage" ? { fx: "sage" as const } : {}), ...(scope === "mfg" ? { scope: "mfg" as const } : {}) });
+    goTo({ basis: next });
   };
   const chooseScope = (next: RevenueScope) => {
     if (next === scope) return;
-    nav("goals", { ...(basis === "sage" ? { fx: "sage" as const } : {}), ...(next === "mfg" ? { scope: "mfg" as const } : {}) });
+    goTo({ scope: next });
+  };
+  const chooseSales = (next: readonly string[]) => {
+    setLoadError(null);
+    goTo({ sales: next });
   };
   const retryRate = () => {
     setLoadError(null);
@@ -348,7 +386,7 @@ export function GoalsView({ route, nav }: ScreenProps) {
               <button
                 type="button"
                 className={canRefresh ? "btn ghost" : "btn"}
-                onClick={() => void exportWorkbook(ready.model.today, shownBasis)}
+                onClick={() => void exportWorkbook(ready.model.today, shownBasis, shownSales)}
                 disabled={download.kind === "working"}
                 aria-describedby="goals-refresh-status"
               >
@@ -437,6 +475,10 @@ export function GoalsView({ route, nav }: ScreenProps) {
             </div>
           </div>
         ) : null}
+        {ready && salespeople ? (
+          <SalespeoplePicker view={salespeople} picked={sales} waiting={salesWaiting} failed={salesFailed} onPick={chooseSales} onRetry={retryRate} />
+        ) : null}
+        {ready && salespeople ? <SalespeopleNote view={salespeople} /> : null}
         {ready ? <p className="gp-takeaway">{ready.model.takeaway}</p> : null}
         <p id="goals-refresh-status" className="gp-status" role="status">
           {line ||
@@ -600,7 +642,11 @@ function Body({
                 <DailyLine1Chart page={p} />
               </figure>
               <figure className="gp-chart">
-                <figcaption>Revenue against the {dollars(p.settings.revenueTargetCadCents)} target (CAD)</figcaption>
+                <figcaption>
+                  {p.salespeople?.applied
+                    ? `Revenue for the customers of ${p.salespeople.label} (CAD)`
+                    : `Revenue against the ${dollars(p.settings.revenueTargetCadCents)} target (CAD)`}
+                </figcaption>
                 <DailyRevenueChart page={p} />
               </figure>
             </div>

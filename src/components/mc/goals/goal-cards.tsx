@@ -3,7 +3,9 @@
 // The three goal cards (brief §Screens 3): a status chip, the definition, the
 // big number against its target, the system + by-hand split (amber), a
 // progress bar and the detail lines. Every figure's tooltip names its query
-// and run; the bars are decorative (the text carries every value).
+// and run; the bars are decorative (the text carries every value). Narrowed to
+// some salespeople's customers (TASK-4277), revenue is set against every
+// customer's instead of the month's goal, and Line 1 stays every customer's.
 
 import type { ReactNode } from "react";
 
@@ -171,6 +173,14 @@ function Card({
 export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: RevenueScope }) {
   const { model, settings, run, fx, sections } = page;
   const mfg = scope === "mfg" ? page.revenueScope : null;
+  // Some salespeople's customers (TASK-4277): no status or pace against the goal, which is every customer's.
+  const narrowed = page.salespeople?.applied ? page.salespeople : null;
+  const every = narrowed?.everyCustomer
+    ? mfg
+      ? narrowed.everyCustomer.revenueScopeGoalCadCents
+      : narrowed.everyCustomer.revenueGoalCadCents
+    : null;
+  const allWord = narrowed ? "all their customers" : "all customers";
   const l1 = model.line1;
   const tl = model.truckloads;
   const rev = model.revenue;
@@ -217,6 +227,11 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
           hasHand={l1.byHandKg > 0}
           title={l1Source}
         />
+        {narrowed ? (
+          <p className="gp-split" data-testid="goals-line1-every-customer">
+            Every customer’s: FileMaker has no salesperson.
+          </p>
+        ) : null}
         <Bar
           parts={barParts({ inSystem: l1.inSystemKg, byHand: l1.byHandKg, schedule: scheduled, scale: l1.targetKg, tickAt: l1.dueSoFarKg })}
           tickLabel={`Due so far: ${wholeKg(l1.dueSoFarKg)} kg`}
@@ -239,7 +254,7 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
         id="truckloads"
         title="Full truckloads"
         status={null}
-        definition={`Shipments with ${usd(settings.fullTruckloadMinUsdCents)} or more of product to the ${count(tl.customers.length)} truckload customers.`}
+        definition={`Shipments with ${usd(settings.fullTruckloadMinUsdCents)} or more of product to the ${count(tl.customers.length)} truckload customers${narrowed ? ` of ${narrowed.label}` : ""}.`}
         big={count(tl.full.total)}
         of={tl.target === null ? "· no monthly target set" : `of ${count(tl.target)}`}
         source={tlSource}
@@ -270,16 +285,16 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
       <Card
         id="revenue"
         title="Revenue"
-        status={revStatus}
-        definition={`Invoiced in CAD, product before tax (freight, lab and other accessorial charges left out; 3PL service charges count${creditNotes?.access === "read" ? "; returns deducted" : ""}${pending?.access === "read" ? "; shipped but not yet invoiced added as an estimate" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}, against ${dollars(rev.targetCents)} a month.`}
+        status={narrowed ? null : revStatus}
+        definition={`Invoiced in CAD, product before tax (freight, lab and other accessorial charges left out; 3PL service charges count${creditNotes?.access === "read" ? "; returns deducted" : ""}${pending?.access === "read" ? "; shipped but not yet invoiced added as an estimate" : ""})${mfg ? ", manufacturing customers (every class but Exclusive Distribution)" : ""}${narrowed ? `, for the customers of ${narrowed.label}, set against every customer’s.` : `, against ${dollars(rev.targetCents)} a month.`}`}
         big={dollars(revTotal)}
-        of={`of ${dollars(rev.targetCents)}`}
+        of={narrowed ? (every === null ? "" : `of ${dollars(every)} for every ${mfg ? "manufacturing " : ""}customer`) : `of ${dollars(rev.targetCents)}`}
         source={revSource}
       >
         {mfg ? (
           <p className="gp-split" title={revSource} data-testid="goals-revenue-mfg">
             + {dollars(mfg.chargesCadCents)} freight &amp; other charges{returnsPlus(mfg)}{pendingMinus(mfg)} + {dollars(mfg.excludedCadCents)} Exclusive Distribution left out ={" "}
-            {dollars(mfg.totalCadCents + mfg.excludedCadCents)} all customers, charges included
+            {dollars(mfg.totalCadCents + mfg.excludedCadCents)} {allWord}, charges included
             {mfg.matchesCard ? "" : ". Sage changed during this refresh, so this can be off from the class table until the next one"}
           </p>
         ) : goal ? (
@@ -333,7 +348,9 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
         <RevenueByLine page={page} scope={scope} title={revSource} />
         <Bar
           parts={
-            mfg
+            narrowed
+              ? barParts({ inSystem: revTotal, byHand: 0, scale: every ?? rev.targetCents, tickAt: null })
+              : mfg
               ? barParts({ inSystem: mfg.goalCadCents, byHand: 0, scale: rev.targetCents, tickAt: rev.dueSoFarCents })
               : goal
               ? barParts({
@@ -347,12 +364,21 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
           tickLabel={`Due so far: ${dollars(rev.dueSoFarCents)}`}
         />
         <ul className="gp-details" title={revSource}>
-          <li>
-            Due so far: <b>{dollars(rev.dueSoFarCents)}</b> by {day(rev.dueBy)}
-          </li>
-          <li>
-            Needed per working day: <b>{dollars(revNeeded)}</b>
-          </li>
+          {narrowed ? (
+            <li data-testid="goals-revenue-share">
+              Share of every customer’s: <b>{every !== null && every > 0 ? pct(revTotal / every) : "—"}</b>. The bar shows it; the{" "}
+              {dollars(rev.targetCents)} monthly goal is every customer’s.
+            </li>
+          ) : (
+            <>
+              <li>
+                Due so far: <b>{dollars(rev.dueSoFarCents)}</b> by {day(rev.dueBy)}
+              </li>
+              <li>
+                Needed per working day: <b>{dollars(revNeeded)}</b>
+              </li>
+            </>
+          )}
           <li data-testid="goals-revenue-currency">
             {/* Adds up to the all-in total (TASK-3952): before, the figure after "=" was only the USD converted. */}
             CAD {dollars(rev.cad.cents)} ({count(rev.cad.invoices)} invoices) + USD {usd(rev.usd.cents)} ({count(rev.usd.invoices)}{" "}

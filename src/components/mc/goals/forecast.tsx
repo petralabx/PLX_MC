@@ -64,7 +64,7 @@ export function ForecastSection({ page }: { page: ReadyPage }) {
       </div>
     );
   }
-  return <ForecastReadyView f={forecast} />;
+  return <ForecastReadyView f={forecast} salespeople={page.salespeople?.applied ? page.salespeople.label : null} />;
 }
 
 /** How the chosen filters read in a sentence: "Exclusive Manufacturing customers", "PLABEL (Manufacturing) items". */
@@ -81,7 +81,7 @@ function filterWords(f: ForecastReady, filter: ForecastKpiFilter): { who: string
  * numbers and the list follow the same ones; with neither chosen the numbers
  * are the page model's whole-month numbers, exactly as before.
  */
-function ForecastReadyView({ f }: { f: ForecastReady }) {
+function ForecastReadyView({ f, salespeople }: { f: ForecastReady; salespeople: string | null }) {
   const [customerClass, setCustomerClass] = useState<ForecastClassFilter>("all");
   const [chosenCategory, setCategory] = useState<ForecastCategoryFilter>("all");
   const categoriesRead = f.categoryMissing !== null && f.categoryMissing.length === 0;
@@ -97,6 +97,12 @@ function ForecastReadyView({ f }: { f: ForecastReady }) {
 
   return (
     <>
+      {/* Narrowed to some salespeople (TASK-4277): the rows and invoiced follow them; the target and hit rate don't. */}
+      {salespeople ? (
+        <p className="gp-line" data-testid="goals-forecast-salespeople">
+          For the customers of {salespeople} only. The target and the hit rate are for all customers.
+        </p>
+      ) : null}
       {words ? (
         <p className="gp-line" data-testid="goals-forecast-filtered">
           {words.what
@@ -104,7 +110,7 @@ function ForecastReadyView({ f }: { f: ForecastReady }) {
             : `For ${words.who} only. The target and the hit rate are for all customers.`}
         </p>
       ) : null}
-      <ForecastNumbers k={k} targetCents={f.targetCents} measuredFrom={f.measuredFrom} filtered={words !== null} />
+      <ForecastNumbers k={k} targetCents={f.targetCents} measuredFrom={f.measuredFrom} filtered={words !== null || salespeople !== null} />
       <ForecastNotes f={f} k={k} words={words} />
       <ForecastList
         rows={f.rows}

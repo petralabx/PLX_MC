@@ -85,6 +85,14 @@ export interface GoalsWorkbookInput {
   pendingShipments?: PendingShipmentsDataset | null;
   /** The page's potential and realized revenue by customer; absent: the Customers sheet says so. */
   customerRevenue?: CustomerRevenue | null;
+  /** The salespeople the figures are narrowed to, in words (TASK-4277); absent or "": every customer. */
+  salespeople?: string;
+  /**
+   * Every live entry, evaluated, whatever the salesperson filter (TASK-4277); absent, the model's. "Manual entries" is
+   * the import template and an import removes any entry it doesn't list, so the sheet always lists them all; and the
+   * estimate leaves out the Sage shipments they stand for, as the page does.
+   */
+  allEntries?: readonly EvaluatedEntry[];
 }
 
 // ─── Fixed cells (the brief's formulas name them: =B13*B11, Goals!$B$17, …) ─
@@ -236,6 +244,15 @@ function orList(items: readonly string[]): string {
 
 const EXAMPLE_COLUMNS = ENTRY_COLUMNS.filter((c) => c.key !== "status");
 
+/** What a workbook narrowed to some salespeople's customers covers (TASK-4277). */
+function salespeopleNote(who: string): string {
+  return (
+    `Only the customers of ${who}: revenue, returns, shipments, truckloads, entries by hand, revenue by customer and the forecast. ` +
+    "Line 1 bulk and the batches are every customer’s (FileMaker has no salesperson), and last month’s revenue is left out (it isn’t split by customer). " +
+    "The Manual entries sheet still lists every entry, so importing it changes no other customer’s."
+  );
+}
+
 function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   const { model, run, settings } = input;
   columns(ws, [16, 12, 12, 16, 22, 30, 10, 14, 10, 10, 34, 14]);
@@ -249,16 +266,14 @@ function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
       `Sage through ${model.cutoffs.sageCutoff ?? "—"}.`,
     { note: true }
   );
-  if (model.revenue.basis === "sage") {
-    put(
-      ws,
-      3,
-      1,
-      `US dollar revenue is at ${revenueRateText(input)}. Full truckloads are still tested at Bank of Canada rates: a CAD ` +
-        `shipment’s own day’s, else ${rateText(model.truckloads.rate)}.`,
-      { note: true }
-    );
-  }
+  const notes = [
+    model.revenue.basis === "sage"
+      ? `US dollar revenue is at ${revenueRateText(input)}. Full truckloads are still tested at Bank of Canada rates: a CAD ` +
+        `shipment’s own day’s, else ${rateText(model.truckloads.rate)}.`
+      : "",
+    input.salespeople ? salespeopleNote(input.salespeople) : "",
+  ].filter(Boolean);
+  if (notes.length > 0) put(ws, 3, 1, notes.join(" "), { note: true });
   put(ws, 4, 1, "Colour", { bold: true });
   put(ws, 5, 1, "Amber cells", { amber: true });
   put(ws, 5, 2, "were entered by hand by your team and aren’t in FileMaker or Sage yet. Everything else comes from the system data.");
@@ -301,7 +316,8 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
     ws,
     2,
     1,
-    "In system = FileMaker (batches) or Sage (shipments and revenue). By hand = entries made by your team that the system doesn’t have yet (amber).",
+    "In system = FileMaker (batches) or Sage (shipments and revenue). By hand = entries made by your team that the system doesn’t have yet (amber)." +
+      (input.salespeople ? ` ${salespeopleNote(input.salespeople)} The targets are the whole month’s, so revenue has no status or pace.` : ""),
     { note: true }
   );
   headerRow(ws, R.header, [
@@ -353,8 +369,9 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
   put(ws, R.revenue, 5, { formula: `Daily!F${daily.total}+${usdToCadFormula(`Daily!G${daily.total}`)}` }, { numFmt: DOLLAR_FORMAT });
   put(ws, R.revenue, 6, { formula: `Daily!H${daily.total}` }, { numFmt: DOLLAR_FORMAT, amber: true });
   put(ws, R.revenue, 7, total(R.revenue), { numFmt: DOLLAR_FORMAT, bold: true });
-  put(ws, R.revenue, 8, status(R.revenue));
-  put(ws, R.revenue, 9, needed(R.revenue), { numFmt: DOLLAR_FORMAT });
+  // Narrowed to some salespeople (TASK-4277): the goal is every customer's, so no status or pace, as on the page.
+  put(ws, R.revenue, 8, input.salespeople ? "—" : status(R.revenue));
+  put(ws, R.revenue, 9, input.salespeople ? "—" : needed(R.revenue), { numFmt: DOLLAR_FORMAT });
 
   const rateNote =
     model.revenue.basis === "sage"
@@ -434,7 +451,8 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
       { numFmt: DOLLAR_FORMAT }
     );
     // Last month on the same day of the month, at the revenue rate (its daily figures aren't in the workbook).
-    put(ws, r, 11, dollars(d.lastMonthToDateCents), { numFmt: DOLLAR_FORMAT });
+    // Blank when narrowed to some salespeople: last month's revenue isn't split by customer (TASK-4277).
+    put(ws, r, 11, d.lastMonthToDateCents === null ? null : dollars(d.lastMonthToDateCents), { numFmt: DOLLAR_FORMAT });
   });
   const total = 2 + input.model.daily.length;
   put(ws, total, 1, "Total", { bold: true });
@@ -665,7 +683,7 @@ function listValidation(ws: ExcelJS.Worksheet, key: EntryColumnKey, label: strin
 }
 
 function entriesSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
-  const entries = input.model.entries;
+  const entries = input.allEntries ?? input.model.entries;
   columns(ws, [10, 10, 12, 18, 22, 32, 10, 14, 12, 10, 36, 14, 26]);
   // The import reads only this sheet; the status column is computed, so it is not amber.
   headerRow(ws, ENTRY_HEADER_ROW, ENTRY_COLUMNS.map((c) => ({ text: c.header, amber: c.key !== "status" })));
@@ -985,7 +1003,7 @@ function revenueByClassSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): 
   // INTERIM (TASK-3992): shipped, not yet invoiced, added to Toward the goal only when the run read them.
   const pendingData = input.pendingShipments?.access === "read" ? input.pendingShipments : null;
   const pendingRows = pendingData
-    ? pendingShipmentsNotEnteredByHand(pendingData.shipments, countedManualShipmentRefs(input.model.entries))
+    ? pendingShipmentsNotEnteredByHand(pendingData.shipments, countedManualShipmentRefs(input.allEntries ?? input.model.entries))
     : [];
   const pending = pendingData ? pendingShipmentsByClass(pendingRows, input.model.revenue.rate) : null;
   const plusO = (r: number) => (pending ? `+O${r}` : "");
@@ -1131,7 +1149,7 @@ function pendingShipmentsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput)
     put(ws, 2, 1, `Shipped, not invoiced: not included (needs access to ${data.missing.join(", ")}).`, { note: true });
     return;
   }
-  const shown = pendingShipmentsNotEnteredByHand(data.shipments, countedManualShipmentRefs(input.model.entries));
+  const shown = pendingShipmentsNotEnteredByHand(data.shipments, countedManualShipmentRefs(input.allEntries ?? input.model.entries));
   const alreadyEntered = data.shipments.length - shown.length;
   put(
     ws,

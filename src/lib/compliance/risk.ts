@@ -7,6 +7,8 @@ import type { BundleRequirement, RiskTier } from "./types";
 
 const HIGH_PATH: RegExp[] = [
   /(^|\/)db\/migrations\//i,
+  // The portal's Prisma migrations (portal/prisma/migrations/), W03.
+  /(^|\/)prisma\/migrations\//i,
   /(^|\/)auth(\/|\.)/i,
   // Anchored so docs like `permissions-guide.md` are NOT high-risk (review N4) —
   // only a permissions dir or a permissions code file.

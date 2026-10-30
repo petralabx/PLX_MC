@@ -21,7 +21,8 @@ truth table is proven before any plumbing exists.
 ## How
 
 - `classifyRiskTier(changedPaths, labels)` — `low | standard | high`. Explicit
-  labels (`risk:high`/`risk:low`) win, then high-risk paths (migrations, auth/
+  labels (`risk:high`/`risk:low`) win, then high-risk paths (migrations under
+  `db/migrations/` or the portal's `prisma/migrations/`, auth/
   permissions, infra, `.github/workflows`, deploy), then docs/test-only = low,
   else standard. Mirrors the governance contract's Database Safety / External
   Integrations risk surface.

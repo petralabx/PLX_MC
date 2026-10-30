@@ -132,9 +132,11 @@ describe("UAT ticket tasks (TASK-3697)", () => {
     expect(h.events).toEqual([]);
   });
 
-  it("still lets a checkout holder verify a task that is not a UAT ticket task", async () => {
+  it("refuses Verified on a task that is not a UAT ticket task too: only a person marks it (W02)", async () => {
     h.task = { id: "TASK-1", stage: "merged", labels: ["kind:code"], comments: [], accountableOwner: "vince" };
-    await expect(actionProgress(identity, { taskId: "TASK-1", stage: "verified" })).resolves.toMatchObject({ ok: true, stage: "verified" });
+    await expectRefused(actionProgress(identity, { taskId: "TASK-1", stage: "verified" }), 403, "verified_needs_person");
+    expect(h.patches).toEqual([]);
+    expect(h.events).toEqual([]);
   });
 });
 

@@ -259,6 +259,13 @@ export async function actionSearchTasks(input: SearchTasksInput = {}, identity?:
   return { ...result, filter };
 }
 
+/**
+ * W02: every MCP and cursor-API caller is a service principal, and only a
+ * person marks a task Verified: on the web, or through the portal's
+ * mc_update_task verify for a UAT ticket task.
+ */
+const VERIFIED_NEEDS_PERSON = "Only a person marks a task Verified, in Mission Control.";
+
 export type CreateTaskActionInput = CreateTaskInput & {
   /** Optional idempotency key (fleet P8b): a repeat returns the original task. */
   idempotencyKey?: string;
@@ -274,6 +281,8 @@ export async function actionCreateTask(identity: McpIdentity, createInput: Creat
   // Only a signed-in person or sp_mcp_portal may set an `agent:` assignee
   // (agent fleet P8, D16). This covers the MCP tool and POST /api/cursor/tasks.
   assertAgentAssigneeAllowed(identity.actor, input.assignee, { capability: "task.create" });
+  // POST /api/cursor/tasks takes a stage; a task is never born Verified (W02).
+  if (input.stage === "verified") throw new ApiError("verified_needs_person", VERIFIED_NEEDS_PERSON, 403);
   const principal = aclPrincipalFromMcp(identity);
   await assertBucketProjectAccess(input.bucket, principal);
   // Evidence standard (TASK-3165): a task a person must verify gets an STE-lite
@@ -663,6 +672,10 @@ export async function actionProgress(
       `Task ${input.taskId} is a UAT ticket task; only the portal's mc_update_task verify (task.uat_sync) moves it to verified.`,
       403
     );
+  }
+  // Every other task is verified by a person, in Mission Control (W02).
+  if (input.stage === "verified" && current.stage !== "verified") {
+    throw new ApiError("verified_needs_person", VERIFIED_NEEDS_PERSON, 403);
   }
   // The authenticated principal must hold an active checkout of this task.
   // X-MC-Operator-Email is audit context only and never authorizes.

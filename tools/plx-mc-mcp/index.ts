@@ -339,7 +339,7 @@ server.tool(
 
 server.tool(
   "mc_report_progress",
-  "Report task progress (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing. stage=verified is refused on a UAT ticket task (kind:code plus uat:<feedbackId>): only the portal's mc_update_task verify sets it.",
+  "Report task progress (stage, notes). stage=cancelled needs cancelReason (duplicate|obsolete|superseded|delivered_without_pr) plus replacedBy (TASK-n, required for duplicate/superseded) and optional note; needs a principal granted task.cancel (cancel) / task.reopen (reopen); the operator email grants nothing. stage=verified is refused with 403 verified_needs_person: only a person marks a task Verified, in Mission Control. On a UAT ticket task (kind:code plus uat:<feedbackId>) only the portal's mc_update_task verify sets it.",
   {
     taskId: z.string().min(1),
     stage: z

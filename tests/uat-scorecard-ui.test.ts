@@ -224,6 +224,23 @@ describe("UAT scorecard screen states", () => {
     expect(html).not.toContain("The shaded week");
   });
 
+  it("names each data cell's column, so a narrow card can stack a row and still label every value", () => {
+    const html = render(ready([week(1, "2026-10-12", { fail: 3 }), week(2, "2026-10-19"), week(3, "2026-10-26", { complete: false })]));
+    // The UAT-only styles (stacked rows, thinned week labels) hang off the screen's own class.
+    expect(html).toContain('<div class="mc-main cs cs-uat" data-testid="uat-scorecard-screen">');
+    const tables = [...html.matchAll(/<table class="cs-table">([\s\S]*?)<\/table>/g)].map((m) => m[1]);
+    expect(tables).toHaveLength(6); // the weekly scores and the five areas
+    for (const table of tables) {
+      const headers = [...table.matchAll(/<th scope="col"[^>]*>([^<]*)<\/th>/g)].map((m) => m[1]);
+      const rows = [...table.matchAll(/<tr>(?:(?!<\/tr>)[\s\S])*?<th scope="row"[\s\S]*?<\/tr>/g)].map((m) => m[0]);
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td\b[^>]*>/g)].map((m) => /data-label="([^"]*)"/.exec(m[0])?.[1]);
+        expect(cells, row.slice(0, 60)).toEqual(headers.slice(1));
+      }
+    }
+  });
+
   it("links the Loop board on the portal origin the read uses", () => {
     expect(render(ready([], { ...ON, portalOrigin: "https://uat.portal.test" }))).toContain('href="https://uat.portal.test/uat?view=loop"');
   });

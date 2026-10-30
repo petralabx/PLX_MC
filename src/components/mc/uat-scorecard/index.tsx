@@ -80,19 +80,21 @@ function CardView({ card, week }: { card: Card; week: string }) {
                     <span className="cs-metric">{m.label}</span>
                     <span className="cs-detail">{m.detail}</span>
                   </th>
-                  <td className="num">
+                  <td className="num" data-label={week}>
                     {formatValue(m.value, m.unit)}
                     {m.basis ? <span className="cs-detail">{m.basis}</span> : null}
                     {m.note ? <span className="cs-note">{m.note}</span> : null}
                   </td>
-                  <td>
+                  <td data-label="Grade">
                     <span className={`cs-grade cs-g-${m.grade}`}>{GRADE_LABELS[m.grade]}</span>
                   </td>
-                  <td className="num">
+                  <td className="num" data-label="Target">
                     {formatTarget(m)}
                     {near ? <span className="cs-next">{near}</span> : null}
                   </td>
-                  <td className={m.trend ? `cs-t-${m.trend}` : undefined}>{trendLabel(m)}</td>
+                  <td className={m.trend ? `cs-t-${m.trend}` : undefined} data-label="Previous week">
+                    {trendLabel(m)}
+                  </td>
                 </tr>
               );
             })}
@@ -149,7 +151,7 @@ function TrendView({ history }: { history: readonly WeekScore[] }) {
                 <tr key={w.week}>
                   <th scope="row">{weekName(w)}</th>
                   {columns.map((c) => (
-                    <td key={c.key} className="num">
+                    <td key={c.key} className="num" data-label={c.label}>
                       {c.values[i] ?? "—"}
                     </td>
                   ))}
@@ -238,7 +240,7 @@ export function UatScorecardBody({ state, nav }: { state: UatScorecardState; nav
   const lastRead = data?.history.at(-1)?.generatedAt ?? null;
   const pulling = data ? data.source.portalRead && data.source.dailyCheck : false;
   return (
-    <div className="mc-main cs" data-testid="uat-scorecard-screen">
+    <div className="mc-main cs cs-uat" data-testid="uat-scorecard-screen">
       <div className="ph">
         <div>
           <span className="kk">Reporting · weekly</span>

@@ -179,10 +179,10 @@
 .mc .cs-g-no-target {
   color: var(--p-muted);
 }
-.mc .cs-t-better {
+.mc .cs-table .cs-t-better {
   color: var(--p-ok-text);
 }
-.mc .cs-t-worse {
+.mc .cs-table .cs-t-worse {
   color: var(--p-hot-text);
 }
 
@@ -252,4 +252,80 @@
 .mc .cs-links :is(a, button):focus-visible {
   outline: 2px solid var(--p-accent);
   outline-offset: 2px;
+}
+
+/* UAT scorecard (.cs-uat): the week labels beside the score, as meta text, each set apart. */
+.mc .cs-uat .ph .count {
+  font-family: var(--p-font-mono);
+  font-size: var(--p-text-meta);
+  letter-spacing: var(--p-track-meta);
+  text-transform: uppercase;
+  color: var(--p-muted);
+}
+.mc .cs-uat .ph .count + .count {
+  padding-left: 8px;
+  border-left: 1px solid var(--p-grid);
+}
+
+/* UAT scorecard tables tier by their own width: a card is narrower than its table in two columns
+   and on a phone. Narrow, a row stacks its header over its cells, each cell under its column's
+   name (data-label); the column headers stay for screen readers. */
+.mc .cs-uat .cs-table-wrap {
+  container: cs-uat-table / inline-size;
+}
+.mc .cs-uat .cs-table thead th {
+  white-space: normal;
+}
+@container cs-uat-table (max-width: 559px) {
+  .mc .cs-uat .cs-table,
+  .mc .cs-uat .cs-table tbody {
+    display: block;
+  }
+  .mc .cs-uat .cs-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .mc .cs-uat .cs-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+    border-bottom: 1px solid var(--p-grid);
+  }
+  .mc .cs-uat .cs-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .mc .cs-uat .cs-table tbody :is(th, td) {
+    border-bottom: 0;
+    text-align: left;
+    white-space: normal;
+  }
+  .mc .cs-uat .cs-table tbody th {
+    grid-column: 1 / -1;
+    padding-bottom: 2px;
+  }
+  .mc .cs-uat .cs-table td::before {
+    content: attr(data-label);
+    content: attr(data-label) / "";
+    display: block;
+    margin-bottom: 2px;
+    font-family: var(--p-font-mono);
+    font-size: var(--p-text-tick);
+    letter-spacing: var(--p-track-data);
+    text-transform: uppercase;
+    color: var(--p-ink-2);
+  }
+}
+
+/* UAT trend: when the card is too narrow for 12 week labels, from 8 weeks the axis keeps every
+   other label, the newest included. The read-out and the weekly scores keep every date. */
+.mc .cs-uat .cs-trend {
+  container: cs-uat-trend / inline-size;
+}
+@container cs-uat-trend (max-width: 487px) {
+  .mc .cs-uat .colchart-x:has(> :nth-child(8)) > :nth-last-child(even) {
+    visibility: hidden;
+  }
 }

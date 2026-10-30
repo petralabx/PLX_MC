@@ -104,6 +104,9 @@ export function SalespeopleNote({ view }: { view: SalespeopleView }) {
       {view.shared > 0
         ? ` A customer with more than one salesperson on Sage counts in full under each of them (${customers(view.shared)} this month).`
         : ""}
+      {view.everyCustomer && !view.everyCustomer.matchesCard
+        ? " Sage changed during this refresh, so these figures follow the invoice list and can be off from the unfiltered Revenue card until the next refresh."
+        : ""}
     </p>
   );
 }

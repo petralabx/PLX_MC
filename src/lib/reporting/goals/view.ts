@@ -13,7 +13,7 @@ import { prorateCents } from "./money";
 import { countedManualShipmentRefs, pendingShipmentsByClass, pendingShipmentsNotEnteredByHand } from "./pending-shipments";
 import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
 import { revenueScope, type RevenueScopePace, type RevenueScopeView } from "./revenue-scope";
-import { computeGoals, salespeopleTakeaway, type GoalsModel } from "./rules";
+import { computeGoals, salespeopleTakeaway, type EvaluatedEntry, type GoalsModel } from "./rules";
 import {
   canonicalSales,
   filterRunBySalespeople,
@@ -167,8 +167,12 @@ export interface SalespeopleView {
   label: string;
   /** Whether the figures follow `selected`: false when nothing is picked, or when the salespeople couldn't be read (the figures are every customer's). */
   applied: boolean;
-  /** Every customer's Revenue headlines (all, and manufacturing customers) and invoiced total, which the narrowed ones are set against; null unless applied. */
-  everyCustomer: { revenueGoalCadCents: number | null; revenueScopeGoalCadCents: number | null; revenueTotalCents: number } | null;
+  /**
+   * Every customer's Revenue headlines (all, and manufacturing customers), which the narrowed ones are set against, and
+   * whether every customer's card and class table agree (false: Sage changed during the refresh, and the narrowed figures,
+   * built from the invoice list, can be off from the unfiltered card until the next one). null unless applied.
+   */
+  everyCustomer: { revenueGoalCadCents: number | null; revenueScopeGoalCadCents: number | null; matchesCard: boolean } | null;
 }
 
 /** What the signed-in viewer may do on the page (from the Entra app roles). */
@@ -237,27 +241,37 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
 /**
  * The page model and the run it was built from: narrowed to the picked
  * salespeople's customers when the filter applies (TASK-4277), which is what
- * the workbook's rows must come from.
+ * the workbook's rows must come from. `entries` is every live entry, evaluated,
+ * whatever the filter: the workbook's import template lists them all.
  */
-export function buildGoalsViewAndRun(input: GoalsViewInput): { view: GoalsView; run: GoalsViewInput } {
+export function buildGoalsViewAndRun(input: GoalsViewInput): { view: GoalsView; run: GoalsViewInput; entries: EvaluatedEntry[] } {
   const whole = buildView(input);
+  const entries = whole.model?.entries ?? [];
   const sales = input.salespeople;
-  if (!sales || !whole.model) return { view: { ...whole, salespeople: null }, run: input };
+  if (!sales || !whole.model) return { view: { ...whole, salespeople: null }, run: input, entries };
   const filter = salespeopleView(input, sales.lookup, canonicalSales(sales.selected));
-  if (filter.selected.length === 0 || sales.lookup.state !== "ready") return { view: { ...whole, salespeople: filter }, run: input };
+  if (filter.selected.length === 0 || sales.lookup.state !== "ready") return { view: { ...whole, salespeople: filter }, run: input, entries };
   const run = filterRunBySalespeople(input, salespeopleScope(sales.lookup, filter.selected));
   const view = buildView(run, {
     revenueCoveredThrough: whole.model.coveredThrough.revenue,
     // A Sage shipment a hand entry stands for stays out of the estimate whoever the entry was typed for, so the pages add up to the whole.
     countedRefs: countedManualShipmentRefs(whole.model.entries),
   });
-  if (view.model) view.model.takeaway = salespeopleTakeaway(view.model, `For ${filter.label}`, whole.model.revenue.totalCents);
   const everyCustomer = {
     revenueGoalCadCents: whole.revenueGoal?.goalCadCents ?? null,
     revenueScopeGoalCadCents: whole.revenueScope?.goalCadCents ?? null,
-    revenueTotalCents: whole.model.revenue.totalCents,
+    matchesCard: whole.revenueByClass?.matchesCard ?? true,
   };
-  return { view: { ...view, salespeople: { ...filter, applied: true, everyCustomer } }, run };
+  // The takeaway's share is the Revenue card's: the headline against every customer's.
+  if (view.model) {
+    view.model.takeaway = salespeopleTakeaway(
+      view.model,
+      `For ${filter.label}`,
+      view.revenueGoal?.goalCadCents ?? view.model.revenue.totalCents,
+      everyCustomer.revenueGoalCadCents ?? whole.model.revenue.totalCents
+    );
+  }
+  return { view: { ...view, salespeople: { ...filter, applied: true, everyCustomer } }, run, entries };
 }
 
 /** Who the page can be narrowed to: this run's customers' salespeople, with how many of its customers each has. */

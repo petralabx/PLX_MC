@@ -635,18 +635,28 @@ calls them, salespeople.
   totals, so a narrowed page leaves last month's revenue out (null): the daily
   chart drops that line and the workbook leaves its column blank. Truckloads
   keep last month: their rows carry the customer.
-- **The Revenue card.** Narrowed, it has no On track or Behind and no pace: the
-  monthly goal is every customer's. Its headline is set against every
+- **No comparison with the goal.** The monthly goal is every customer's, so a
+  narrowed page never sets the picked customers against it. The Revenue card
+  has no On track or Behind and no pace: its headline is set against every
   customer's headline instead ("of $X for every customer", the share, and the
-  bar). The Customers switch still applies on top.
+  bar). The daily revenue chart drops the target line, the forecast's four
+  numbers say the target and hit rate are for all customers, and the takeaway
+  gives the card's share. The Customers switch still applies on top.
 - **Adds up.** Every salesperson and "No salesperson" ticked gives back the
-  whole page to the cent. Salespeople with no customer in common add up to the
-  whole in native currency; each page converts its own US dollars once, so
-  headlines can differ by a few cents.
+  whole page to the cent, when the refresh read Sage at one moment. On the
+  reporting MCP path the card's and the invoice list's datasets are two reads
+  (**Revenue by customer class**); when they differ, a narrowed page follows
+  the invoice list and says Sage changed during the refresh. Salespeople with
+  no customer in common add up to the whole in native currency; each page
+  converts its own US dollars once, so headlines can differ by a few cents.
 - **The workbook.** `?sales=` narrows it the same way and names it
   (`… (GGC, SM).xlsx`, or `(4 salespeople)` past three). The Read me and Goals
-  sheets say whose customers it covers. It is refused rather than exported for
-  every customer under their names when the salespeople can't be read.
+  sheets say whose customers it covers, and the Goals sheet's revenue row has
+  no status or pace. "Manual entries" still lists every entry: it is the import
+  template, and an import removes any entry it doesn't list. The estimate
+  leaves out the Sage shipments every customer's hand entries stand for, as the
+  page does. It is refused rather than exported for every customer under their
+  names when the salespeople can't be read.
 
 ### Revenue by customer
 

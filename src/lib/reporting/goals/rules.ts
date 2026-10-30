@@ -764,14 +764,15 @@ export function takeaway(model: GoalsModel): string {
 /**
  * The takeaway of a page narrowed to some salespeople's customers (TASK-4277):
  * Line 1 stays every customer's (production has no salesperson), and their
- * revenue is set against every customer's instead of the month's goal.
+ * revenue toward the goal (the Revenue card's headline) is set against every
+ * customer's instead of the month's goal.
  */
-export function salespeopleTakeaway(model: GoalsModel, who: string, everyCustomerCents: number): string {
-  const { line1, truckloads, revenue } = model;
+export function salespeopleTakeaway(model: GoalsModel, who: string, revenueCents: number, everyCustomerCents: number): string {
+  const { line1, truckloads } = model;
   const share =
-    everyCustomerCents > 0 ? `, ${Math.round((revenue.totalCents / everyCustomerCents) * 100)}% of every customer’s ${formatDollars(everyCustomerCents)}` : "";
+    everyCustomerCents > 0 ? `, ${Math.round((revenueCents / everyCustomerCents) * 100)}% of every customer’s ${formatDollars(everyCustomerCents)}` : "";
   return (
     `${wholeKg(line1.totalKg)} kg of Line 1 bulk against ${wholeKg(line1.dueSoFarKg)} kg due so far for every customer. ` +
-    `${who}: ${plural(truckloads.full.total, "full truckload", "full truckloads")} and ${formatDollars(revenue.totalCents)} of revenue${share}.`
+    `${who}: ${plural(truckloads.full.total, "full truckload", "full truckloads")} and ${formatDollars(revenueCents)} of revenue toward the goal${share}.`
   );
 }

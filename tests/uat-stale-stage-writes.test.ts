@@ -190,6 +190,17 @@ describe("uat:stale as history (S1-07)", () => {
   });
 });
 
+describe("a web PATCH that moves no stage", () => {
+  it("keeps uat:stale through a label-only edit and a title-only edit of a STALE-closed task", async () => {
+    putTask("merged", [...UAT, "uat:stale"]);
+    expect(await webPatch({ labels: [...UAT, "uat:stale", "api"] })).toMatchObject({ stage: "merged", labels: [...UAT, "uat:stale", "api"] });
+    expect(await webPatch({ title: "Renamed" })).toMatchObject({ title: "Renamed", stage: "merged" });
+    const stored = await read();
+    expect(stored.labels).toEqual([...UAT, "uat:stale", "api"]);
+    expect(isStaleClosed(stored)).toBe(true);
+  });
+});
+
 describe("a web PATCH that reopens with the labels it read (S1-08)", () => {
   it("succeeds in one call: the reopen ended the close, so the echoed uat:stale is not an add", async () => {
     putTask("cancelled", [...UAT, "uat:stale"]);
@@ -198,8 +209,11 @@ describe("a web PATCH that reopens with the labels it read (S1-08)", () => {
     expect((await read()).labels).toEqual([...UAT, "needs-vince"]);
   });
 
-  it("still refuses a reopen that adds uat:stale to a task that never had it", async () => {
-    putTask("cancelled", UAT);
-    await expect(webPatch({ stage: "backlog", labels: [...UAT, "uat:stale"] })).rejects.toMatchObject({ code: "forbidden", status: 403 });
+  it("still refuses a reopen that adds uat:stale or a near-copy to a task that never had it, before the reopen commits", async () => {
+    for (const label of ["uat:stale", " UAT:Stale", "uat:stale "]) {
+      putTask("cancelled", UAT);
+      await expect(webPatch({ stage: "backlog", labels: [...UAT, label] })).rejects.toMatchObject({ code: "forbidden", status: 403 });
+      expect(await read()).toMatchObject({ stage: "cancelled", labels: UAT });
+    }
   });
 });

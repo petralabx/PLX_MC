@@ -354,7 +354,11 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
       await assertProjectIdAccess(target!.project, aclPrincipalFromMcp(identity), q);
     }
 
-    const requested: Partial<EditableFields> = { labels };
+    // Labels are written only when the call sends a label field. An edit of
+    // another field never rewrites the stored list, where trimming a stored
+    // near-copy of uat:stale would read as an add of the label.
+    const labelFieldsSent = patch.labels !== undefined || patch.addLabels !== undefined || patch.removeLabels !== undefined;
+    const requested: Partial<EditableFields> = labelFieldsSent ? { labels } : {};
     if (patch.title !== undefined) requested.title = patch.title;
     if (patch.priority !== undefined) requested.priority = patch.priority;
     if (patch.bucket !== undefined) requested.bucket = patch.bucket;

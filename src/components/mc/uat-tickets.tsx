@@ -55,13 +55,15 @@ const COLUMNS = ["Task", "Portal ticket", "Portal step", "Try", "MC stage", "Lea
  * (uat:hold) and a fix awaiting re-test wait on the submitter, unless the
  * portal says the fix is not ready for re-test yet. A re-test nobody answered
  * closed as STALE (TASK-4200): the task carries uat:stale, or it is merged and
- * the portal says STALE before its closeStale lands. Nobody holds a STALE close.
+ * the portal says STALE before its closeStale lands, unless the bucket table
+ * says it needs a human. Nobody holds a STALE close.
  */
 export function uatGroup(task: Task, ticket?: PortalTicket): UatGroup {
   if (task.stage === "cancelled") return "cancelled";
   if (task.stage === "verified") return "verified";
-  if (isStaleClosed(task) || (task.stage === "merged" && ticket?.status === "STALE")) return "stale";
+  if (isStaleClosed(task)) return "stale";
   if (needsHuman(task)) return "human";
+  if (task.stage === "merged" && ticket?.status === "STALE") return "stale";
   if (task.labels.includes(UAT_HOLD_LABEL)) return "submitter";
   if (task.stage === "merged") return ticket && ticket.status !== "READY_FOR_RETEST" ? "flight" : "submitter";
   return "flight";
@@ -101,7 +103,7 @@ function stageNote({ task, group, ticket }: UatRow): string | null {
   }
   if (needsVince(task)) return "needs-vince";
   if (!task.labels.includes(UAT_HOLD_LABEL)) return null;
-  return ticket?.status === "STALE" ? "uat:hold · ticket closed as STALE" : "uat:hold · question open";
+  return ticket?.status === "STALE" ? "uat:hold · ticket closed as STALE, late result possible" : "uat:hold · question open";
 }
 
 export function fixLabel(fix: UatDriftFix): string {

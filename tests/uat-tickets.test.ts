@@ -141,6 +141,22 @@ describe("uatGroup and uatHolder", () => {
     for (const t of tasks) expect({ id: t.id, human: uatGroup(t) === "human" }).toEqual({ id: t.id, human: needsHuman(t) });
   });
 
+  // The portal says STALE before closeStale lands: a merged task the bucket
+  // table counts as Needs a human stays there, and only the others read STALE.
+  it("agrees with the bucket table's Needs a human on a merged task whose ticket the portal closed as STALE", () => {
+    const stale = ticket(FB_A, { status: "STALE", step: "STALE, no re-test result" });
+    const tasks = [
+      ticketTask(FB_A, { stage: "merged", accountableOwner: null }),
+      ticketTask(FB_A, { stage: "merged", blocked: true }),
+      ticketTask(FB_A, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "needs-vince"] }),
+      ticketTask(FB_A, { stage: "merged" }),
+    ];
+    for (const t of tasks) {
+      const group = uatGroup(t, stale);
+      expect({ id: t.id, group }).toEqual({ id: t.id, group: needsHuman(t) ? "human" : "stale" });
+    }
+  });
+
   it("names the holder", () => {
     const progress = ticketTask(FB_A, { stage: "progress" });
     expect(uatHolder(progress, "flight", lease(), nowMs)).toBe("Claude Code");
@@ -153,9 +169,10 @@ describe("uatGroup and uatHolder", () => {
     expect(uatHolder(progress, "verified", null, nowMs)).toBe("Closed");
   });
 
-  // TASK-4200: a STALE close is closed and unconfirmed. The task carries
-  // uat:stale, or it is merged and the portal already says STALE while
-  // closeStale is on its way, so it never shows as In flight.
+  // TASK-4200: a STALE close shows in its own closed group, never In flight.
+  // The task carries uat:stale (closed and unconfirmed in rollups), or it is
+  // merged and the portal already says STALE while closeStale is on its way
+  // (rollups still count it in progress until the label lands).
   it("puts a STALE close in its own closed group, never In flight or Waiting on submitter", () => {
     const stale = ticketTask(FB_A, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "uat:stale", "uat:blocked"] });
     const unlabelled = ticketTask(FB_A, { stage: "merged" });
@@ -254,8 +271,30 @@ describe("UatTicketsPanel", () => {
     const heldQuestion = ticketTask(FB_B, { stage: "review", labels: ["kind:code", `uat:${FB_B}`, "uat:hold"] });
     const r = report({ portal: ok([staleOf(FB_A), ticket(FB_B, { status: "IN_PROGRESS", step: "Question open" })]) });
     const html = renderPanel([heldStale, heldQuestion], r);
-    expect(rowOf(html, heldStale.id)).toContain("uat:hold · ticket closed as STALE");
+    expect(rowOf(html, heldStale.id)).toContain("uat:hold · ticket closed as STALE, late result possible");
     expect(rowOf(html, heldQuestion.id)).toContain("uat:hold · question open");
+    // Deliberate: only the submitter can move a STALE ticket during the late window, so it waits on them.
+    const group = uatGroup(heldStale, staleOf(FB_A));
+    expect(group).toBe("submitter");
+    expect(uatHolder(heldStale, group, null, nowMs)).toBe("Submitter");
+  });
+
+  // Before closeStale lands, a merged task the bucket table counts as Needs a
+  // human shows its human reason and holder, never the STALE-pending note.
+  it("shows a Needs a human row on a STALE ticket with its reason and holder", () => {
+    const vince = ticketTask(FB_A, { stage: "merged", labels: ["kind:code", `uat:${FB_A}`, "needs-vince"] });
+    const blocked = ticketTask(FB_B, { stage: "merged", labels: ["kind:code", `uat:${FB_B}`, "uat:blocked", "uat:cause:quota"] });
+    const html = renderPanel([vince, blocked], report({ portal: ok([staleOf(FB_A), staleOf(FB_B)]) }));
+    // needs-vince names Vince; a Steward block names the accountable owner.
+    for (const [t, note, holder] of [[vince, "needs-vince", "Vince"], [blocked, "uat:blocked · quota", "Vince Alton"]] as const) {
+      const seg = rowOf(html, t.id);
+      expect(seg).toContain("g-human");
+      expect(seg).toContain(note);
+      expect(seg).toContain(`>${holder}</span>`);
+      expect(seg).not.toContain("closeStale pending");
+    }
+    expect(html).toContain("Needs a human · 2");
+    expect(html).toContain("STALE · 0");
   });
 
   // S1-02: the label stays until the portal's verify or cancel lands, but the re-test was answered.

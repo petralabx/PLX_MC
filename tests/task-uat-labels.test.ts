@@ -108,8 +108,10 @@ describe("uat:stale", () => {
     expect(staleLabelPatchViolation(labels, [...labels, "uat:hold"], false)).toBeNull();
   });
 
-  // S1-06: a stored near-copy would read as inert here, then turn into the
-  // exact label when MCP trims labels on a later edit.
+  // S1-06: a stored padded near-copy reads as inert here, but as an add of the
+  // exact label once an MCP label edit trims it, so every later MCP label edit
+  // on the task would be refused. A case variant is refused as createTask
+  // refuses it (trimmed, lower case).
   it("refuses a new near-copy of uat:stale on every door, closeStale included", () => {
     const labels = ["kind:code", ticket];
     for (const variant of [" uat:stale", "UAT:STALE", "uat:stale "]) {
@@ -118,7 +120,8 @@ describe("uat:stale", () => {
       // Swapping the real label for a near-copy would end a real close: refused too.
       expect(staleLabelPatchViolation([...labels, UAT_STALE_LABEL], [...labels, variant], false)).not.toBeNull();
     }
-    // A near-copy already stored may stay or go; only the exact label is protected.
+    // A near-copy already stored may stay or go (a web PATCH, or an MCP edit
+    // that sends no label field); only the exact label is protected.
     expect(staleLabelPatchViolation([...labels, " uat:stale"], [...labels, " uat:stale", "api"], false)).toBeNull();
     expect(staleLabelPatchViolation([...labels, " uat:stale"], labels, false)).toBeNull();
   });

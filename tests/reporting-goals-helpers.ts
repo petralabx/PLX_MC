@@ -4,6 +4,7 @@
 import { ontarioStatutoryHolidays } from "@/lib/reporting/goals/calendar";
 import type { ForecastSnapshot } from "@/lib/reporting/goals/forecast";
 import { normalizeRef, type GoalsInput } from "@/lib/reporting/goals/rules";
+import { runCustomerCodes, type SalespeopleRun, type SalespersonLookup } from "@/lib/reporting/goals/salesperson-filter";
 import type {
   Datasets,
   ForecastDatasets,
@@ -15,7 +16,7 @@ import type {
   ShipmentLineRow,
   ShipmentLinesSummary,
 } from "@/lib/reporting/goals/types";
-import { buildGoalsView, type GoalsPage } from "@/lib/reporting/goals/view";
+import { buildGoalsView, type GoalsPage, type GoalsViewInput } from "@/lib/reporting/goals/view";
 
 import datasetsJson from "./fixtures/reporting-goals/2026-10-14/datasets.json";
 import entriesJson from "./fixtures/reporting-goals/2026-10-14/entries.json";
@@ -136,7 +137,21 @@ export function goalsPage(
   /** null: the finished-good lookup failed. Omitted: the fixture's finished goods. */
   finishedGoods: ReadonlySet<string> | null = FINISHED_GOOD_CODES
 ): GoalsPage {
-  const view = buildGoalsView({
+  const view = buildGoalsView(goalsViewInput(entries, forecast, shipmentLines, basis, snapshot, lineRows, finishedGoods));
+  return { ...view, viewer: { editor: true }, ...overrides };
+}
+
+/** What goalsPage builds its page model from. */
+export function goalsViewInput(
+  entries: ManualEntry[] = ENTRIES,
+  forecast: ForecastSnapshot | null = FORECAST,
+  shipmentLines: ShipmentLinesSummary | null = SHIPMENT_LINES_SUMMARY,
+  basis: RevenueRateBasis = "boc",
+  snapshot: Datasets = DATASETS,
+  lineRows: readonly ShipmentLineRow[] | null = null,
+  finishedGoods: ReadonlySet<string> | null = FINISHED_GOOD_CODES
+): GoalsViewInput {
+  return {
     configured: true,
     run: RUN,
     latestRun: RUN,
@@ -153,8 +168,26 @@ export function goalsPage(
     shipmentLineRows: shipmentLines?.access === "read" ? lineRows ?? SHIPMENT_LINES : null,
     finishedGoodCodes: shipmentLines?.access === "read" ? finishedGoods : null,
     revenueBasis: basis,
+  };
+}
+
+/** The fixture's salespeople (TASK-4277): its customers in code order take AA, BB, AA and CC (shared), then none, in turn. */
+export const FIXTURE_SALESPERSON_NAMES = { AA: "Alpha Rep", BB: "Bravo Rep", CC: "Charlie Rep" } as const;
+
+export function fixtureSalespeople(run: SalespeopleRun = goalsViewInput()): SalespersonLookup {
+  const turns = [["AA"], ["BB"], ["AA", "CC"], []];
+  const customers: Record<string, string[]> = {};
+  runCustomerCodes(run).forEach((code, i) => {
+    const own = turns[i % turns.length];
+    if (own.length > 0) customers[code] = own;
   });
-  return { ...view, viewer: { editor: true }, ...overrides };
+  return { state: "ready", customers, names: { ...FIXTURE_SALESPERSON_NAMES } };
+}
+
+/** The fixture's page narrowed to `selected` salespeople (`sales=`), with the fixture's roster unless another lookup is given. */
+export function salesGoalsPage(selected: string[], input: GoalsViewInput = goalsViewInput(), lookup?: SalespersonLookup): GoalsPage {
+  const view = buildGoalsView({ ...input, salespeople: { lookup: lookup ?? fixtureSalespeople(input), selected } });
+  return { ...view, viewer: { editor: true } };
 }
 
 export function goalsInput(overrides: Partial<GoalsInput> = {}): GoalsInput {

@@ -78,18 +78,20 @@ export function DailyRevenueChart({ page }: { page: ReadyPage }) {
   const { model } = page;
   const rev = model.revenue;
   const past = (d: (typeof model.daily)[number], value: number) => (d.isFuture ? null : value);
+  // Narrowed to some salespeople (TASK-4277), last month's revenue isn't split by customer, so its line is left out.
+  const lastMonth = rev.lastMonthCadCents;
   const keys: ChartKey[] = [
     { label: "Sage", colorVar: C.done, kind: "line" },
     { label: "Sage + entered by hand", colorVar: C.hand, kind: "line" },
-    { label: "Last month, same day", colorVar: C.lastMonth, kind: "line" },
+    ...(lastMonth === null ? [] : [{ label: "Last month, same day", colorVar: C.lastMonth, kind: "line" } as const]),
     { label: "Target to date", colorVar: C.target, kind: "dashed" },
   ];
   return (
     <RunningLines
-      summary={`Revenue to date in CAD, ${model.month.label}: ${dollars(rev.inSystemCents)} in Sage and ${dollars(rev.totalCents)} with entries by hand, against ${dollars(rev.dueSoFarCents)} due so far and ${dollars(rev.targetCents)} for the month. Last month reached ${dollars(rev.lastMonthCadCents)}.`}
+      summary={`Revenue to date in CAD, ${model.month.label}: ${dollars(rev.inSystemCents)} in Sage and ${dollars(rev.totalCents)} with entries by hand, against ${dollars(rev.dueSoFarCents)} due so far and ${dollars(rev.targetCents)} for the month.${lastMonth === null ? "" : ` Last month reached ${dollars(lastMonth)}.`}`}
       axis={dayAxis(page)}
       series={[
-        { key: "last-month", values: model.daily.map((d) => d.lastMonthToDateCents), colorVar: C.lastMonth },
+        ...(lastMonth === null ? [] : [{ key: "last-month", values: model.daily.map((d) => d.lastMonthToDateCents), colorVar: C.lastMonth }]),
         { key: "target", values: model.daily.map((d) => d.targetToDateCents), colorVar: C.target, dashed: true, step: true },
         { key: "with-hand", values: model.daily.map((d) => past(d, d.withHandToDateCents)), colorVar: C.hand },
         { key: "sage", values: model.daily.map((d) => past(d, d.sageToDateCents)), colorVar: C.done },
@@ -104,7 +106,7 @@ export function DailyRevenueChart({ page }: { page: ReadyPage }) {
             <b>{day(d.day)}</b>
             {d.isFuture ? null : <span>Sage: {dollars(d.sageToDateCents)}</span>}
             {d.isFuture ? null : <span className="gp-amber">With entries by hand: {dollars(d.withHandToDateCents)}</span>}
-            <span>Last month, same day: {dollars(d.lastMonthToDateCents)}</span>
+            {d.lastMonthToDateCents === null ? null : <span>Last month, same day: {dollars(d.lastMonthToDateCents)}</span>}
             <span>Target to date: {dollars(d.targetToDateCents)}</span>
           </>
         );
@@ -151,7 +153,7 @@ export function DailyTable({ page }: { page: ReadyPage }) {
                 <td className="num">{d.isFuture ? "—" : amount(d.sageToDateCents)}</td>
                 <td className="num hand">{d.isFuture ? "—" : amount(d.withHandToDateCents)}</td>
                 <td className="num">{amount(d.targetToDateCents)}</td>
-                <td className="num">{amount(d.lastMonthToDateCents)}</td>
+                <td className="num">{d.lastMonthToDateCents === null ? "—" : amount(d.lastMonthToDateCents)}</td>
               </tr>
             ))}
           </tbody>

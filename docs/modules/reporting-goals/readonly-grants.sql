@@ -77,3 +77,12 @@ GRANT SELECT (invuniq, linenum, linetype, item, misccharge, "desc", qtyshipped, 
 -- readonly-grants-credit-notes.sql instead.
 GRANT SELECT (crdnumber, invnumber, customer, bilname, crddate, crsourcurr, crditmtot, crddiscamt, crdmisc, crdnetnotx, adjtype)
     ON sage.oe_crdh TO mc_goals_ro;
+
+-- Salesperson filter (TASK-4277): each customer's five salesperson slots and
+-- the salespeople's names (queries/salespeople.ts, SALESPERSON_COLUMNS), never
+-- the split percents or commissions. An existing login gets exactly these from
+-- readonly-grants-salespeople.sql instead.
+GRANT SELECT (codeslsp1, codeslsp2, codeslsp3, codeslsp4, codeslsp5)
+    ON sage.ar_customer TO mc_goals_ro;
+
+GRANT SELECT (codeslsp, nameempl) ON sage.ar_salesperson TO mc_goals_ro;

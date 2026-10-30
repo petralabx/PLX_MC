@@ -85,6 +85,8 @@ export interface GoalsWorkbookInput {
   pendingShipments?: PendingShipmentsDataset | null;
   /** The page's potential and realized revenue by customer; absent: the Customers sheet says so. */
   customerRevenue?: CustomerRevenue | null;
+  /** The salespeople the figures are narrowed to, in words (TASK-4277); absent or "": every customer. */
+  salespeople?: string;
 }
 
 // ─── Fixed cells (the brief's formulas name them: =B13*B11, Goals!$B$17, …) ─
@@ -236,6 +238,14 @@ function orList(items: readonly string[]): string {
 
 const EXAMPLE_COLUMNS = ENTRY_COLUMNS.filter((c) => c.key !== "status");
 
+/** What a workbook narrowed to some salespeople's customers covers (TASK-4277). */
+function salespeopleNote(who: string): string {
+  return (
+    `Only the customers of ${who}: revenue, returns, shipments, truckloads, entries by hand, revenue by customer and the forecast. ` +
+    "Line 1 bulk and the batches are every customer’s (FileMaker has no salesperson), and last month’s revenue is left out (it isn’t split by customer)."
+  );
+}
+
 function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
   const { model, run, settings } = input;
   columns(ws, [16, 12, 12, 16, 22, 30, 10, 14, 10, 10, 34, 14]);
@@ -249,16 +259,14 @@ function readMeSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): void {
       `Sage through ${model.cutoffs.sageCutoff ?? "—"}.`,
     { note: true }
   );
-  if (model.revenue.basis === "sage") {
-    put(
-      ws,
-      3,
-      1,
-      `US dollar revenue is at ${revenueRateText(input)}. Full truckloads are still tested at Bank of Canada rates: a CAD ` +
-        `shipment’s own day’s, else ${rateText(model.truckloads.rate)}.`,
-      { note: true }
-    );
-  }
+  const notes = [
+    model.revenue.basis === "sage"
+      ? `US dollar revenue is at ${revenueRateText(input)}. Full truckloads are still tested at Bank of Canada rates: a CAD ` +
+        `shipment’s own day’s, else ${rateText(model.truckloads.rate)}.`
+      : "",
+    input.salespeople ? salespeopleNote(input.salespeople) : "",
+  ].filter(Boolean);
+  if (notes.length > 0) put(ws, 3, 1, notes.join(" "), { note: true });
   put(ws, 4, 1, "Colour", { bold: true });
   put(ws, 5, 1, "Amber cells", { amber: true });
   put(ws, 5, 2, "were entered by hand by your team and aren’t in FileMaker or Sage yet. Everything else comes from the system data.");
@@ -301,7 +309,8 @@ function goalsSheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput, daily: { t
     ws,
     2,
     1,
-    "In system = FileMaker (batches) or Sage (shipments and revenue). By hand = entries made by your team that the system doesn’t have yet (amber).",
+    "In system = FileMaker (batches) or Sage (shipments and revenue). By hand = entries made by your team that the system doesn’t have yet (amber)." +
+      (input.salespeople ? ` ${salespeopleNote(input.salespeople)} The targets are the whole month’s.` : ""),
     { note: true }
   );
   headerRow(ws, R.header, [
@@ -434,7 +443,8 @@ function dailySheet(ws: ExcelJS.Worksheet, input: GoalsWorkbookInput): { total: 
       { numFmt: DOLLAR_FORMAT }
     );
     // Last month on the same day of the month, at the revenue rate (its daily figures aren't in the workbook).
-    put(ws, r, 11, dollars(d.lastMonthToDateCents), { numFmt: DOLLAR_FORMAT });
+    // Blank when narrowed to some salespeople: last month's revenue isn't split by customer (TASK-4277).
+    put(ws, r, 11, d.lastMonthToDateCents === null ? null : dollars(d.lastMonthToDateCents), { numFmt: DOLLAR_FORMAT });
   });
   const total = 2 + input.model.daily.length;
   put(ws, total, 1, "Total", { bold: true });

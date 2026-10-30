@@ -186,6 +186,14 @@ export interface GoalsInput {
   entries: readonly ManualEntry[];
   filemakerRefs: ReadonlySet<string>;
   sageRefs: ReadonlySet<string>;
+  /**
+   * A page narrowed to some salespeople's customers (TASK-4277) keeps the
+   * whole page's revenue covered-through date, so a hand entry of a customer
+   * left out still says how far the data reaches, and due so far stays the same.
+   */
+  revenueCoveredThrough?: IsoDate;
+  /** false when last month's revenue can't follow the page (Sage's month totals aren't split by customer): its figures are null. */
+  lastMonthRevenue?: boolean;
 }
 
 export interface CalendarDay {
@@ -230,7 +238,8 @@ export interface DailyPoint {
   sageToDateCents: number;
   withHandToDateCents: number;
   targetToDateCents: number;
-  lastMonthToDateCents: number;
+  /** null when last month's revenue can't follow a salesperson filter (TASK-4277). */
+  lastMonthToDateCents: number | null;
 }
 
 export type BatchStage = "completed" | "completed_by_hand" | "scheduled" | "open_past_date";
@@ -321,7 +330,8 @@ export interface GoalsModel {
     usd: { invoices: number; cents: number; cadCents: number };
     /** Currencies other than CAD and USD are not converted; listed so they are never silently dropped. */
     otherCurrencies: { currency: string; invoices: number; cents: number }[];
-    lastMonthCadCents: number;
+    /** null when last month's revenue can't follow a salesperson filter (TASK-4277). */
+    lastMonthCadCents: number | null;
   };
   daily: DailyPoint[];
   batches: BatchListRow[];
@@ -461,12 +471,14 @@ export function computeGoals(input: GoalsInput): GoalsModel {
     start,
     today
   );
-  const revenueThrough = coveredThrough(
-    data.cutoffs.sageCutoff,
-    countedShipments.map((e) => e.date as IsoDate),
-    start,
-    today
-  );
+  const revenueThrough =
+    input.revenueCoveredThrough ??
+    coveredThrough(
+      data.cutoffs.sageCutoff,
+      countedShipments.map((e) => e.date as IsoDate),
+      start,
+      today
+    );
   const productionCovered = workingDaysBetween(start, productionThrough, holidays);
   const revenueCovered = workingDaysBetween(start, revenueThrough, holidays);
 
@@ -505,8 +517,10 @@ export function computeGoals(input: GoalsInput): GoalsModel {
   const totalCents = inSystemCents + byHandCents;
   const targetCents = settings.revenueTargetCadCents;
   const dueSoFarCents = prorateCents(targetCents, revenueCovered, workingDays);
-  const lastMonthCadCents =
-    toCents(revenueRow("CAD", false)?.netBeforeTax) + convertCents(toCents(revenueRow("USD", false)?.netBeforeTax), revenueRate);
+  const lastMonth = input.lastMonthRevenue ?? true;
+  const lastMonthCadCents = lastMonth
+    ? toCents(revenueRow("CAD", false)?.netBeforeTax) + convertCents(toCents(revenueRow("USD", false)?.netBeforeTax), revenueRate)
+    : null;
 
   // ── Batch list: FileMaker rows, with hand entries merged in ──
   const batches: BatchListRow[] = data.batches.map((b) => {
@@ -622,7 +636,7 @@ export function computeGoals(input: GoalsInput): GoalsModel {
       sageToDateCents,
       withHandToDateCents: sageToDateCents + cumByHand,
       targetToDateCents: prorateCents(targetCents, wdToDate, workingDays),
-      lastMonthToDateCents: cumCadLast + convertCents(cumUsdLast, revenueRate),
+      lastMonthToDateCents: lastMonth ? cumCadLast + convertCents(cumUsdLast, revenueRate) : null,
     };
   });
 
@@ -744,5 +758,20 @@ export function takeaway(model: GoalsModel): string {
     `${wholeKg(line1.totalKg)} kg of Line 1 bulk against ${wholeKg(line1.dueSoFarKg)} kg due so far, ` +
     `${plural(truckloads.full.total, "full truckload", "full truckloads")}, and ` +
     `${formatDollars(revenue.totalCents)} of the ${formatDollars(revenue.dueSoFarCents)} revenue due so far.`
+  );
+}
+
+/**
+ * The takeaway of a page narrowed to some salespeople's customers (TASK-4277):
+ * Line 1 stays every customer's (production has no salesperson), and their
+ * revenue is set against every customer's instead of the month's goal.
+ */
+export function salespeopleTakeaway(model: GoalsModel, who: string, everyCustomerCents: number): string {
+  const { line1, truckloads, revenue } = model;
+  const share =
+    everyCustomerCents > 0 ? `, ${Math.round((revenue.totalCents / everyCustomerCents) * 100)}% of every customer’s ${formatDollars(everyCustomerCents)}` : "";
+  return (
+    `${wholeKg(line1.totalKg)} kg of Line 1 bulk against ${wholeKg(line1.dueSoFarKg)} kg due so far for every customer. ` +
+    `${who}: ${plural(truckloads.full.total, "full truckload", "full truckloads")} and ${formatDollars(revenue.totalCents)} of revenue${share}.`
   );
 }

@@ -84,6 +84,13 @@ describe("restErrorFromResponse", () => {
     expect(err).toMatchObject({ code: "repo_not_allowlisted", status: 403 });
   });
 
+  it("keeps the server's hint, so stdio callers get the same next step (W04)", () => {
+    const err = restErrorFromResponse(409, {
+      error: { code: "checkout_held", message: "held", hint: "Call mc_checkout_task with reuse." },
+    });
+    expect(err).toMatchObject({ code: "checkout_held", status: 409, hint: "Call mc_checkout_task with reuse." });
+  });
+
   it("falls back to http_<status> for a non-envelope body", () => {
     expect(restErrorFromResponse(502, { raw: "<html>bad gateway</html>" })).toMatchObject({
       code: "http_502",
@@ -113,6 +120,19 @@ describe("installToolErrorEnvelope over MCP", () => {
     const [content] = result.content as { type: string; text: string }[];
     expect(JSON.parse(content.text)).toEqual({
       error: { code: "repo_not_allowlisted", message: "not on the allowlist" },
+    });
+  });
+
+  it("passes the server's hint through (W04)", async () => {
+    const client = await connect((server) =>
+      server.tool("mc_checkout_task", { taskId: z.string() }, async () => {
+        throw new McRestError("checkout_held", "held", 409, "Call mc_checkout_task with reuse.");
+      })
+    );
+    const result = await client.callTool({ name: "mc_checkout_task", arguments: { taskId: "T" } });
+    const [content] = result.content as { type: string; text: string }[];
+    expect(JSON.parse(content.text)).toEqual({
+      error: { code: "checkout_held", message: "held", hint: "Call mc_checkout_task with reuse." },
     });
   });
 

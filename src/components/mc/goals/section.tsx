@@ -51,7 +51,9 @@ export function Section({
       {state === "loading" ? <Skeleton /> : null}
       {state === "failed" ? <Failed onRetry={onRetry} /> : null}
       {state === "ready" ? (
-        <SectionBoundary onRetry={onRetry} resetKey={resetKey}>
+        // key={id}: the tab panel reuses this Section. Without a new boundary,
+        // a section that threw would stay "Failed to load" on the next tab.
+        <SectionBoundary key={id} onRetry={onRetry} resetKey={resetKey}>
           {children}
         </SectionBoundary>
       ) : null}

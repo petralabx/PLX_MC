@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import { gotoGoals, mockGoalsApi } from "./helpers/goals";
+import { gotoGoals, mockGoalsApi, openGoalsTab } from "./helpers/goals";
 
 // G4 for Goals & Production (TASK-2896): zero axe violations on the screen,
 // light and dark, with the chart tables open. No allowlist entry.
@@ -13,22 +13,33 @@ test.describe("goals a11y (G4)", () => {
     await mockGoalsApi(page);
     await gotoGoals(page);
     await expect(page.getByTestId("goals-card-line1")).toBeVisible();
-    await page.getByText("Day-by-day numbers").click();
-    await page.getByText("Monthly numbers").click();
   });
 
   test("goals view has no axe violations", async ({ page }) => {
-    const results = await new AxeBuilder({ page }).include('[data-testid="goals-screen"]').withTags(TAGS).analyze();
-    expect(results.violations).toEqual([]);
+    await openGoalsTab(page, "Batches: Day by day");
+    await page.getByText("Day-by-day numbers").click();
+    const daily = await new AxeBuilder({ page }).include('[data-testid="goals-screen"]').withTags(TAGS).analyze();
+    expect(daily.violations).toEqual([]);
+    await openGoalsTab(page, "Batches: By size");
+    await page.getByText("Monthly numbers").click();
+    const sizes = await new AxeBuilder({ page }).include('[data-testid="goals-screen"]').withTags(TAGS).analyze();
+    expect(sizes.violations).toEqual([]);
   });
 
   test("goals view has no axe violations in dark mode", async ({ page }) => {
     await page.locator(".mc").first().evaluate((el) => el.classList.add("dark"));
-    const results = await new AxeBuilder({ page }).include('[data-testid="goals-screen"]').withTags(TAGS).analyze();
-    expect(results.violations).toEqual([]);
+    await openGoalsTab(page, "Batches: Day by day");
+    await page.getByText("Day-by-day numbers").click();
+    const daily = await new AxeBuilder({ page }).include('[data-testid="goals-screen"]').withTags(TAGS).analyze();
+    expect(daily.violations).toEqual([]);
+    await openGoalsTab(page, "Batches: By size");
+    await page.getByText("Monthly numbers").click();
+    const sizes = await new AxeBuilder({ page }).include('[data-testid="goals-screen"]').withTags(TAGS).analyze();
+    expect(sizes.violations).toEqual([]);
   });
 
   test("the shipments list has no axe violations with a filter and a search on, light and dark", async ({ page }) => {
+    await openGoalsTab(page, "Revenue: Shipments");
     const section = page.getByTestId("goals-shipments");
     await section.getByRole("button", { name: /^Truckload customers/ }).click();
     await section.getByLabel("Search shipments").fill("a1");

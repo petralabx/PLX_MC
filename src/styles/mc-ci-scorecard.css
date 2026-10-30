@@ -1,6 +1,7 @@
 /* CI scorecard screen (TASK-3913) — imported into the mc.screens layer (ADR-005):
    phone-first, wider tiers by @container main, --p-* tokens only. One card per repo and one for the fleet; a
-   grade chip says met, near or missed, and the letter carries the week's score. */
+   grade chip says met, near or missed, and the letter carries the week's score. The UAT scorecard
+   (TASK-4196) wears the same classes, one card per area, plus its links row at the end. */
 
 .mc .cs-cards {
   display: grid;
@@ -223,4 +224,32 @@
   border: 1px solid var(--p-warn);
   border-radius: var(--p-radius-sm);
   color: var(--p-warn-text);
+}
+
+/* UAT scorecard: the Loop board and parent task links under the header. */
+.mc .cs-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 16px;
+  margin: 0 var(--mc-page-edge, var(--p-gutter));
+  font-size: var(--p-text-small);
+  color: var(--p-ink-2);
+}
+.mc .cs-links :is(a, button) {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--p-touch);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--p-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.mc .cs-links :is(a, button):focus-visible {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 2px;
 }

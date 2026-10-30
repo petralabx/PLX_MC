@@ -230,9 +230,9 @@ export function githubBackfillEnabled(): boolean {
   return (process.env.PLX_MC_GITHUB_BACKFILL_ENABLED ?? "0").trim() === "1";
 }
 
-// UAT tickets view (TASK-3706): the portal's read-only ticket snapshot
-// (GET <portal>/api/internal/uat-feedback/mc-snapshot, Bearer
-// PLX_MC_PORTAL_READ_TOKEN). Default OFF: the portal does not serve it yet.
+// UAT tickets view (TASK-3706) and UAT scorecard (TASK-4196): the portal's
+// read-only UAT endpoints (GET <portal>/api/internal/uat-feedback/mc-snapshot
+// and .../scorecard, Bearer PLX_MC_PORTAL_READ_TOKEN). Default OFF.
 const DEFAULT_PORTAL_BASE_URL = "https://staging.plxcustomer.io";
 
 export function uatPortalReadEnabled(): boolean {

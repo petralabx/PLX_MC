@@ -322,7 +322,11 @@ describe("GET /api/cron/uat-drift", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     h.ticketTasks.mockResolvedValue([{ task: ticketTask("TASK-11"), createdAt: at(30) }]);
     h.dispatches.mockResolvedValue([dispatch("TASK-11")]);
-    expect(await (await call("Bearer topsecret")).json()).toEqual({ data: { enabled: true, findings: 1, portal: "off" } });
+    // The portal read is off, so the scorecard pull (TASK-4196) reads and stores nothing.
+    const off = expect.objectContaining({ status: "off" });
+    expect(await (await call("Bearer topsecret")).json()).toEqual({
+      data: { enabled: true, findings: 1, portal: "off", scorecard: { status: "off", weeks: [off, off] } },
+    });
     expect(h.append).toHaveBeenCalledTimes(1);
     expect(h.append.mock.calls[0][0]).toEqual({
       kind: UAT_DRIFT_EVENT_KIND,

@@ -27,7 +27,7 @@ export type NavIconName =
   | "House" | "LayoutDashboard" | "CircleUser" | "SquareCheck" | "SquareKanban" | "List" | "CalendarRange" | "ChartPie"
   | "BookOpen" | "ClipboardList" | "Wrench" | "Network" | "CircleHelp" | "GitBranch" | "Activity"
   | "File" | "RefreshCw" | "FileText" | "CircleDollarSign" | "Grid3x3" | "Radio" | "Inbox" | "Route"
-  | "Target" | "Ellipsis" | "Settings" | "FolderKanban" | "Search" | "Gauge" | "Layers" | "FilePen";
+  | "Target" | "Ellipsis" | "Settings" | "FolderKanban" | "Search" | "Gauge" | "Layers" | "FilePen" | "ClipboardCheck";
 
 export interface NavItem {
   screen: Screen;
@@ -144,6 +144,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { screen: "activity", label: "Repo activity", icon: "↯", lucide: "Activity", hint: "cross-repo freshness" },
       { screen: "ai-spend", label: "AI spend", icon: "◎", lucide: "CircleDollarSign", badge: "ai-spend" },
       { screen: "ci-scorecard", label: "CI scorecard", icon: "◫", lucide: "Gauge", hint: "weekly CI grades against the targets" },
+      { screen: "uat-scorecard", label: "UAT scorecard", icon: "☑", lucide: "ClipboardCheck", hint: "weekly UAT fix-loop grades against the targets" },
       { screen: "matrix", label: "Traceability", icon: "⊞", lucide: "Grid3x3" },
       { screen: "feed", label: "Agent activity", icon: "◉", lucide: "Radio", badge: "agents" },
       { screen: "intake", label: "Meeting intake", icon: "🗒", lucide: "Inbox", flag: "meetingIntake" },
@@ -207,7 +208,7 @@ export const ZONED_NAV_GROUPS: readonly NavGroup[] = [
   {
     id: "reporting",
     label: "Reporting",
-    items: [navItem("dashboard"), navItem("insights"), navItem("goals"), navItem("ai-spend"), navItem("ci-scorecard")],
+    items: [navItem("dashboard"), navItem("insights"), navItem("goals"), navItem("ai-spend"), navItem("ci-scorecard"), navItem("uat-scorecard")],
   },
   {
     id: "knowledge",

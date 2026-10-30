@@ -101,9 +101,13 @@ TASK-3697 adds `task.uat_sync` and the allowlist name `mc_update_task`. The
 portal uses them to mirror a ticket onto its UAT ticket task (`kind:code` plus
 `uat:<feedbackId>`). It may verify the task (merged to verified), cancel it,
 or add and remove `uat:hold`, `uat-attempt:<n>`, `kind:*` and closure labels.
+TASK-4200 widens `task.uat_sync` with `closeStale`, which only adds `uat:stale`
+to a merged UAT ticket task whose re-test nobody answered; the capability list
+in `grants.ts` does not change (the owner's OK, Vince, 2026-10-30, decision 7).
 `mc_update_task` refuses it every other patch field and every other task. Only
 `sp_mcp_portal` holds `task.uat_sync`; no other principal and no human role
-does. An agent that sends `verify` gets 403 and a `task.verify_denied` event.
+does. An agent that sends `verify` or `closeStale` gets 403 and a
+`task.verify_denied` or `task.close_stale_denied` event.
 
 **Vendor spend (TASK-2928):** `vendor_spend.write` authorizes saving a vendor
 budget (`PATCH /api/vendor-spend/budgets`) and entering a manual cost snapshot
@@ -322,7 +326,7 @@ concrete rule cannot be expressed that way.
 - `db/migrations/030_chatgpt_mcp_principal.sql` — ChatGPT MCP principal
 - `db/migrations/034_ledger_mcp_principal.sql` — Ledger steward MCP principal (`task.link_merged_pr`)
 - `task.assign` (TASK-3407) — set a task's assignee or accountable owner through `mc_update_task` with a reason; human admin/owner roles, `sp_mcp_ledger` and `sp_mcp_cos` only (`grants.ts`)
-- `task.uat_sync` (TASK-3697) — mirror a portal ticket onto its UAT ticket task through `mc_update_task` (verify, cancel, UAT labels); `sp_mcp_portal` only (`grants.ts`)
+- `task.uat_sync` (TASK-3697) — mirror a portal ticket onto its UAT ticket task through `mc_update_task` (verify, closeStale (TASK-4200), cancel, UAT labels); `sp_mcp_portal` only (`grants.ts`)
 - `src/lib/auth/identity.ts` — Entra `oid` session helpers, enforcement mode, sign-in `mc_users` sync
 - `src/lib/auth/gate.ts` — MC.* role → access_role mapping, admission decision, session validity
 

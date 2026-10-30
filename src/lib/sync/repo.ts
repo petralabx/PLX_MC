@@ -24,6 +24,7 @@ import type {
 import { creatorApprovalViolation, TERMINAL_STAGES } from "@/lib/mc-data/policy";
 import type { Cancellation } from "@/lib/mc-data/cancellation";
 import { ApiError } from "@/lib/api/route";
+import { endsStaleClose, UAT_STALE_LABEL } from "@/lib/tasks/uat-labels";
 import type {
   EntityData,
   EntityType,
@@ -302,6 +303,12 @@ export async function updateEntity(
   const dirtyFields = firstCompletion
     ? [...new Set([...(opts.dirtyFields ?? row.dirty_fields), "completedAt"])]
     : opts.dirtyFields;
+  // A move that ends a STALE close drops uat:stale in this same UPDATE (TASK-4200),
+  // so a reworked fix that merges again awaits re-test on every door.
+  const labels = (data as Partial<Task>).labels;
+  if (type === "task" && labels?.includes(UAT_STALE_LABEL) && endsStaleClose(row.data.stage as string | undefined, nextStage)) {
+    data.labels = labels.filter((label) => label !== UAT_STALE_LABEL);
+  }
   // cancellation <=> stage cancelled. This is the one write path (UI, MCP,
   // SharePoint inbound, conflict keep-SP), so the invariant is held here: entering
   // cancelled needs a validated object, leaving it clears the column, and a

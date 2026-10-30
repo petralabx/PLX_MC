@@ -16,13 +16,17 @@ import { patchTask } from "@/lib/sync";
 import { bucketMoveTargetViolation } from "@/lib/sync/bucket-move";
 import { cancelTaskTx, reopenTaskTx, type CancelContext } from "@/lib/sync/cancel";
 import { TASK_KIND_DEFAULT, assertValidKinds, isKindLabel, kindsOf } from "@/lib/tasks/kind";
-import { isUatBlockLabel, isUatSyncLabel, isUatTicketTask } from "@/lib/tasks/uat-labels";
+import {
+  UAT_STALE_LABEL, isStaleClosed, isUatBlockLabel, isUatSyncLabel, isUatTicketTask,
+} from "@/lib/tasks/uat-labels";
 import { BUCKET_ID_RE } from "@/lib/sync/mapping";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
 import { mcpAuditActor, type McpIdentity } from "./auth";
 import { mcpJsonResult, taskLink } from "./envelope";
 import { assertEvidenceStandard } from "./evidence-standard-guard";
-import { assertMayCloseOrReopen, cancelContextFor, cancelPatchSchema, reopenPatchSchema, verifyPatchSchema } from "./task-cancel-actions";
+import {
+  assertMayCloseOrReopen, cancelContextFor, cancelPatchSchema, reopenPatchSchema, staleClosePatchSchema, verifyPatchSchema,
+} from "./task-cancel-actions";
 import { assertMcpToolAllowed } from "./tool-allowlist";
 
 export const UPDATE_TASK_BATCH_MAX = 100;
@@ -54,6 +58,7 @@ export const taskUpdatePatchSchema = z.object({
   cancel: cancelPatchSchema.optional(),
   reopen: reopenPatchSchema.optional(),
   verify: verifyPatchSchema.optional(),
+  closeStale: staleClosePatchSchema.optional(),
   bucket: z.string().trim().regex(BUCKET_ID_RE, "bucket must be a BKT-* id").optional(),
   note: z.string().trim().min(1).max(500).optional(),
   // TASK-3407: who executes the task (person id or agent:<slug>; null clears)
@@ -74,6 +79,9 @@ export const taskUpdatePatchSchema = z.object({
   }
   if (patch.verify !== undefined && Object.entries(patch).some(([key, value]) => value !== undefined && key !== "verify")) {
     ctx.addIssue({ code: "custom", message: "verify is a stage change and cannot be combined with other patch fields." });
+  }
+  if (patch.closeStale !== undefined && Object.entries(patch).some(([key, value]) => value !== undefined && key !== "closeStale")) {
+    ctx.addIssue({ code: "custom", message: "closeStale is a closure and cannot be combined with other patch fields." });
   }
   if (patch.labels !== undefined && (patch.addLabels !== undefined || patch.removeLabels !== undefined)) {
     ctx.addIssue({ code: "custom", message: "labels cannot be combined with addLabels or removeLabels." });
@@ -139,7 +147,8 @@ function stageChangeResult(taskId: string, task: Task, diff: TaskDiff, eventSeq:
 // moves from merged to verified, with an audited task.verified event. Verified
 // again changes nothing, so a retried mirror succeeds. Runs on the caller's
 // locked row; patchTask still applies the owner, evidence and approval-gate
-// checks, and refuses with 409 stage_blocked, which a retry cannot fix.
+// checks, and refuses with 409 stage_blocked, which a retry cannot fix. A late
+// PASS on a task closed as STALE keeps uat:stale as history (TASK-4200).
 async function verifyUatTicketTx(
   q: TxQuery, taskId: string, before: Task, note: string | undefined, ctx: CancelContext
 ) {
@@ -147,6 +156,11 @@ async function verifyUatTicketTx(
     throw new ApiError("invalid_request", `Only a UAT ticket task (kind:code plus uat:<feedbackId>) can be verified here; ${taskId} is not one.`, 400);
   }
   if (before.stage === "verified") return stageChangeResult(taskId, before, {}, undefined);
+  // already_cancelled, not not_merged: the portal retries not_merged as merge lag,
+  // and waiting never verifies a cancelled task.
+  if (before.stage === "cancelled") {
+    throw new ApiError("already_cancelled", `${taskId} is cancelled; a cancelled UAT ticket task is never verified.`, 409);
+  }
   if (before.stage !== "merged") {
     throw new ApiError("not_merged", `${taskId} is ${before.stage}; a UAT ticket task is verified only after its fix merged.`, 409);
   }
@@ -162,15 +176,71 @@ async function verifyUatTicketTx(
     actor: ctx.eventActor,
     repo: ctx.eventRepo,
     taskId,
-    payload: { ...ctx.eventExtra, previousStage: before.stage, verifiedBy: ctx.actorId, note: note?.trim() || null },
+    payload: {
+      ...ctx.eventExtra, previousStage: before.stage, verifiedBy: ctx.actorId, note: note?.trim() || null,
+      ...(isStaleClosed(before) ? { previousClosure: "stale" } : {}),
+    },
   });
   return stageChangeResult(taskId, task, { stage: { before: before.stage, after: task.stage } }, eventSeq);
 }
 
+// The owner's decision behind a STALE close, recorded on every task.uat_stale_closed event.
+const STALE_CLOSE_DECISION = "TASK-4200 (Vince, 2026-10-30)";
+
+// The portal's STALE close (TASK-4200, Vince 2026-10-30): nobody answered the
+// re-test within 9 Toronto business days. A merged UAT ticket task gains
+// uat:stale and nothing else (decision 7), with an audited task.uat_stale_closed
+// event. The stage stays merged, so rollups count it closed and unconfirmed;
+// stage, PRs, evidence, checkouts and the other labels never change, and
+// Mission Control never verifies or cancels it here. A merged task that already
+// has uat:stale returns an empty diff and writes nothing, so a retried close
+// succeeds; a verified or cancelled task gets its 409 even with the label. Runs
+// on the caller's locked row.
+export async function staleCloseUatTicketTx(
+  q: TxQuery, taskId: string, before: Task, input: { note?: string; staleClosedAt?: string }, ctx: CancelContext
+) {
+  if (!isUatTicketTask(before)) {
+    throw new ApiError("invalid_request", `Only a UAT ticket task (kind:code plus uat:<feedbackId>) can be closed as STALE; ${taskId} is not one.`, 400);
+  }
+  if (before.stage === "verified") {
+    throw new ApiError("already_verified", `${taskId} is verified; the submitter's PASS already closed it.`, 409);
+  }
+  if (before.stage === "cancelled") {
+    throw new ApiError("already_cancelled", `${taskId} is cancelled; a cancelled UAT ticket task is never closed as STALE.`, 409);
+  }
+  if (before.stage !== "merged") {
+    throw new ApiError("not_merged", `${taskId} is ${before.stage}; a UAT ticket task is closed as STALE only after its fix merged.`, 409);
+  }
+  const labels = before.labels ?? [];
+  if (labels.includes(UAT_STALE_LABEL)) return stageChangeResult(taskId, before, {}, undefined);
+  const task = await patchTask(
+    taskId,
+    {
+      labels: [...labels, UAT_STALE_LABEL],
+      activityLine: { who: ctx.actor, what: "closed as STALE: no re-test result (closed, unconfirmed)", kind: "move" },
+    },
+    ctx.actor,
+    { query: q, attribution: ctx.attribution, uatStaleClose: true }
+  );
+  if (!task) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
+  const eventSeq = await appendEventTx(q, {
+    kind: "task.uat_stale_closed",
+    actor: ctx.eventActor,
+    repo: ctx.eventRepo,
+    taskId,
+    payload: {
+      ...ctx.eventExtra, previousStage: before.stage, closedBy: ctx.actorId, note: input.note?.trim() || null,
+      staleClosedAt: input.staleClosedAt ?? null, decision: STALE_CLOSE_DECISION,
+    },
+  });
+  return stageChangeResult(taskId, task, { labels: { before: labels, after: task.labels } }, eventSeq);
+}
+
 // TASK-3697: task.uat_sync covers a portal ticket's mirror onto its UAT ticket
-// task: verify, cancel, or a label-only patch. A principal holding it without
-// task.progress (the portal) may send nothing else, on no other task.
-const UAT_SYNC_FIELDS: readonly string[] = ["verify", "cancel", "labels", "addLabels", "removeLabels"];
+// task: verify, closeStale (TASK-4200; the owner's OK, Vince 2026-10-30),
+// cancel, or a label-only patch. A principal holding it without task.progress
+// (the portal) may send nothing else, on no other task.
+const UAT_SYNC_FIELDS: readonly string[] = ["verify", "closeStale", "cancel", "labels", "addLabels", "removeLabels"];
 
 function holds(identity: McpIdentity, capability: Capability): boolean {
   return authorize({ actor: identity.actor, capability }).allowed;
@@ -188,21 +258,24 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
   if (uatSyncOnly) {
     const fields = Object.entries(patch).filter(([, value]) => value !== undefined).map(([key]) => key);
     if (!fields.every((key) => UAT_SYNC_FIELDS.includes(key))) {
-      throw uatSyncForbidden(`only verify, cancel and label edits are allowed; got ${fields.join(", ")}.`);
+      throw uatSyncForbidden(`only verify, closeStale, cancel and label edits are allowed; got ${fields.join(", ")}.`);
     }
   }
   if (patch.assignee !== undefined || patch.accountableOwner !== undefined) {
     requireMcpActor(identity, "task.assign", { type: "task", id: taskId });
     if (patch.assignee) assertAgentAssigneeAllowed(identity.actor, patch.assignee, { capability: "task.assign" });
   }
-  // task.uat_sync already authorized the portal's cancel and verify.
-  if ((patch.cancel || patch.reopen || patch.verify) && !uatSyncOnly) {
+  // task.uat_sync already authorized the portal's cancel, verify and closeStale.
+  if ((patch.cancel || patch.reopen || patch.verify || patch.closeStale) && !uatSyncOnly) {
     // Authorize before the transaction: a denial is audited on its own connection
     // and must survive the rollback an exception would trigger inside it.
     const current = await getEntity("task", taskId);
     if (!current) throw new ApiError("not_found", `unknown task ${taskId}`, 404);
     await assertTaskProjectAccess(taskId, aclPrincipalFromMcp(identity));
-    await assertMayCloseOrReopen(identity, current.data as unknown as Task, patch.cancel ? "cancel" : patch.reopen ? "reopen" : "verify");
+    await assertMayCloseOrReopen(
+      identity, current.data as unknown as Task,
+      patch.cancel ? "cancel" : patch.reopen ? "reopen" : patch.verify ? "verify" : "close_stale"
+    );
   }
   return withTransaction(async (q) => {
     const row = await getEntity("task", taskId, q, true);
@@ -216,6 +289,9 @@ export async function actionUpdateTask(identity: McpIdentity, input: unknown) {
 
     if (patch.verify) {
       return verifyUatTicketTx(q, taskId, before, patch.verify.note, cancelContextFor(identity, authorized.actorId));
+    }
+    if (patch.closeStale) {
+      return staleCloseUatTicketTx(q, taskId, before, patch.closeStale, cancelContextFor(identity, authorized.actorId));
     }
 
     // Stage changes with their own audited event; the lane/label rules below are
@@ -450,7 +526,7 @@ export async function actionUpdateTasks(identity: McpIdentity, input: unknown) {
 export function registerTaskUpdateTools(server: McpServer, identity: McpIdentity): void {
   // Full strict schemas preserve unknown-field rejection at the MCP boundary.
   server.registerTool("mc_update_task", {
-    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority, bucket (move to a BKT-* id; optional note; audits task.moved). Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, and removing the only kind leaves kind:needs-review; swap with removeLabels:[old], addLabels:[new] in one call. Exactly one lane:* must remain, except lane-less tasks may gain/lose kind:* labels, closed:duplicate|obsolete|superseded|delivered|wontfix or not-needed (and, on a UAT ticket task with kind:code plus uat:<feedbackId>, uat:hold and uat-attempt:<n>), be moved by bucket alone, or be in a terminal stage; labels cannot mix with incremental fields, nor description with appendDescription. Moves reject unknown, archived or closed-project targets and restricted projects without access; stage, labels, PRs and checkouts are untouched and the ToDos bucket syncs outbound. assignee (person id or agent:<slug>; null clears) and accountableOwner (a person) need the task.assign capability plus reason (10+ characters), and audit task.assignment.changed. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy?: TASK-n (required for duplicate/superseded), note?} and reopen {stage?, note?} (default: the stage before the cancel; clears cancellation, keeps completedAt): stage changes that cannot be combined with other fields; cancel needs the task.cancel capability and reopen task.reopen, granted to the authenticated principal (the operator email grants nothing); audits task.cancelled / task.reopened. Also verify {note?}: moves a merged UAT ticket task to verified (verified again changes nothing), audits task.verified, cannot be combined with other fields, and needs task.uat_sync. Only the portal holds task.uat_sync; with it the portal may only verify, cancel, or edit kind:*, closure, uat:hold and uat-attempt:<n> labels, and only on UAT ticket tasks. Rejects all other fields, including evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. On a task a person must verify (verify:human or kind:human-test), new description text must be STE-lite: warns until 2026-10-24 (result.evidenceStandard), then refused with evidence_standard. Hub only, apart from the portal's UAT ticket mirror.",
+    description: "Edit task metadata with {taskId, patch}: labels (replace), addLabels/removeLabels (incremental), description (replace), appendDescription (two-newline append), title, priority, bucket (move to a BKT-* id; optional note; audits task.moved). Exactly one kind:* (code|admin-setup|human-test|decision|blocked-external|needs-review) must remain: two kinds or an unknown kind is rejected, and removing the only kind leaves kind:needs-review; swap with removeLabels:[old], addLabels:[new] in one call. Exactly one lane:* must remain, except lane-less tasks may gain/lose kind:* labels, closed:duplicate|obsolete|superseded|delivered|wontfix or not-needed (and, on a UAT ticket task with kind:code plus uat:<feedbackId>, uat:hold and uat-attempt:<n>), be moved by bucket alone, or be in a terminal stage; labels cannot mix with incremental fields, nor description with appendDescription. Moves reject unknown, archived or closed-project targets and restricted projects without access; stage, labels, PRs and checkouts are untouched and the ToDos bucket syncs outbound. assignee (person id or agent:<slug>; null clears) and accountableOwner (a person) need the task.assign capability plus reason (10+ characters), and audit task.assignment.changed. Also cancel {reason: duplicate|obsolete|superseded|delivered_without_pr, replacedBy?: TASK-n (required for duplicate/superseded), note?} and reopen {stage?, note?} (default: the stage before the cancel; clears cancellation, keeps completedAt): stage changes that cannot be combined with other fields; cancel needs the task.cancel capability and reopen task.reopen, granted to the authenticated principal (the operator email grants nothing); audits task.cancelled / task.reopened. Also verify {note?}: moves a merged UAT ticket task to verified (verified again changes nothing; cancelled gives 409 already_cancelled), audits task.verified, cannot be combined with other fields, and needs task.uat_sync. Also closeStale {note?, staleClosedAt?: ISO time the portal closed the ticket} (TASK-4200): closes a merged UAT ticket task whose re-test nobody answered as STALE: adds uat:stale and changes nothing else, so the task stays merged and rollups count it closed and unconfirmed; audits task.uat_stale_closed; a merged task that already has uat:stale returns an empty diff and writes nothing; verified gives 409 already_verified and cancelled 409 already_cancelled, even with the label; any other stage 409 not_merged; cannot be combined with other fields; needs task.uat_sync. No label edit adds or removes uat:stale, and while it is on, kind:code and the uat:<feedbackId> label stay. A later move to an open stage, or from verified back to merged, drops it on every door, SharePoint included. Only the portal holds task.uat_sync; with it the portal may only verify, closeStale, cancel, or edit kind:*, closure, uat:hold and uat-attempt:<n> labels, and only on UAT ticket tasks. Rejects all other fields, including evidence and checkouts. Audits task.updated. Labels stay DB-only; other fields use normal ToDos sync. On a task a person must verify (verify:human or kind:human-test), new description text must be STE-lite: warns until 2026-10-24 (result.evidenceStandard), then refused with evidence_standard. Hub only, apart from the portal's UAT ticket mirror.",
     inputSchema: updateTaskSchema,
   }, async (args) => mcpJsonResult({ data: await actionUpdateTask(identity, args) }));
   server.registerTool("mc_update_tasks", {

@@ -3,8 +3,8 @@
 // UatTickets — the BKT-UAT tickets view (TASK-3706): one row per UAT ticket
 // task with portal step, attempt, stage, lease, PR, staging, holder, age and a
 // link to the portal ticket; filters All · Needs a human · In flight · Waiting
-// on submitter · Verified; no row cap. Above it, the portal vs Mission
-// Control check lists each disagreement with its one-click fix. Task fields
+// on submitter · STALE (TASK-4200) · PASS; no row cap. Above it, the portal vs
+// Mission Control check lists each disagreement with its one-click fix. Task fields
 // come from the store; filed time, lease, portal fields and drift come from
 // GET /api/uat-tickets (on open, on Check now and after each fix).
 
@@ -15,7 +15,7 @@ import { api } from "@/lib/api";
 import { ACTORS, STAGES, STAGE_IDX } from "@/lib/mc-data";
 import type { Task } from "@/lib/mc-data";
 import { cancelTaskWithReason, pushNotice, refreshState, setTaskStage } from "@/lib/mc-data/store";
-import { UAT_HOLD_LABEL, isStewardBlocked, isUatTicketTask, needsVince, uatBlockCauses } from "@/lib/tasks/uat-labels";
+import { UAT_HOLD_LABEL, isStaleClosed, isStewardBlocked, isUatTicketTask, needsVince, uatBlockCauses } from "@/lib/tasks/uat-labels";
 import {
   leaseState,
   portalTicketUrl,
@@ -35,27 +35,32 @@ import { ago, duration, until } from "./dashboard-live";
 import { needsHuman, stageChipTone } from "./project-overview.helpers";
 import type { Nav } from "./route";
 
-export type UatGroup = "human" | "flight" | "submitter" | "verified" | "cancelled";
-export type UatFilterKey = "all" | "human" | "flight" | "submitter" | "verified";
+export type UatGroup = "human" | "flight" | "submitter" | "stale" | "verified" | "cancelled";
+export type UatFilterKey = "all" | "human" | "flight" | "submitter" | "stale" | "verified";
 
+// The verified filter reads PASS: UAT results are PASS, FAIL or STALE, never Verified.
 const FILTERS: Array<{ key: UatFilterKey; label: string }> = [
   { key: "all", label: "All" },
   { key: "human", label: "Needs a human" },
   { key: "flight", label: "In flight" },
   { key: "submitter", label: "Waiting on submitter" },
-  { key: "verified", label: "Verified" },
+  { key: "stale", label: "STALE" },
+  { key: "verified", label: "PASS" },
 ];
-const GROUP_ORDER: UatGroup[] = ["human", "flight", "submitter", "verified", "cancelled"];
+const GROUP_ORDER: UatGroup[] = ["human", "flight", "submitter", "stale", "verified", "cancelled"];
 const COLUMNS = ["Task", "Portal ticket", "Portal step", "Try", "MC stage", "Lease", "PR", "Staging", "Holder", "Age"];
 
 /**
  * Who has the ball. Needs a human is the bucket table's rule; a held ticket
  * (uat:hold) and a fix awaiting re-test wait on the submitter, unless the
- * portal says the fix is not ready for re-test yet.
+ * portal says the fix is not ready for re-test yet. A re-test nobody answered
+ * closed as STALE (TASK-4200): the task carries uat:stale, or it is merged and
+ * the portal says STALE before its closeStale lands. Nobody holds a STALE close.
  */
 export function uatGroup(task: Task, ticket?: PortalTicket): UatGroup {
   if (task.stage === "cancelled") return "cancelled";
   if (task.stage === "verified") return "verified";
+  if (isStaleClosed(task) || (task.stage === "merged" && ticket?.status === "STALE")) return "stale";
   if (needsHuman(task)) return "human";
   if (task.labels.includes(UAT_HOLD_LABEL)) return "submitter";
   if (task.stage === "merged") return ticket && ticket.status !== "READY_FOR_RETEST" ? "flight" : "submitter";
@@ -63,7 +68,7 @@ export function uatGroup(task: Task, ticket?: PortalTicket): UatGroup {
 }
 
 export function uatHolder(task: Task, group: UatGroup, lease: UatLease | null, nowMs: number): string {
-  if (group === "verified" || group === "cancelled") return "Closed";
+  if (group === "verified" || group === "cancelled" || group === "stale") return "Closed";
   if (group === "submitter") return "Submitter";
   if (group === "human") {
     if (needsVince(task)) return "Vince";
@@ -82,14 +87,21 @@ export function leaseText(lease: UatLease | null, nowMs: number): string {
   return lease.releasedReason ? `Released · ${lease.releasedReason}` : "Released";
 }
 
-/** The note under the stage chip: why the task waits, from its UAT labels. */
-function stageNote(task: Task): string | null {
+/** The note under the stage chip: why the task waits, or why it closed, from its UAT labels and the portal ticket. */
+function stageNote({ task, group, ticket }: UatRow): string | null {
+  if (isStaleClosed(task)) {
+    // Once the ticket has left STALE, a late result is on its way from the portal.
+    return !ticket || ticket.status === "STALE" ? "uat:stale · re-test never answered" : "uat:stale · late result in the portal";
+  }
+  // The portal says STALE, and its closeStale has not landed yet (TASK-4200).
+  if (group === "stale") return "STALE in the portal · closeStale pending";
   if (isStewardBlocked(task)) {
     const causes = uatBlockCauses(task.labels);
     return causes.length > 0 ? `uat:blocked · ${causes.join(", ")}` : "uat:blocked";
   }
   if (needsVince(task)) return "needs-vince";
-  return task.labels.includes(UAT_HOLD_LABEL) ? "uat:hold · question open" : null;
+  if (!task.labels.includes(UAT_HOLD_LABEL)) return null;
+  return ticket?.status === "STALE" ? "uat:hold · ticket closed as STALE" : "uat:hold · question open";
 }
 
 export function fixLabel(fix: UatDriftFix): string {
@@ -139,7 +151,10 @@ export function uatRows(tasks: readonly Task[], report: UatTicketsReport | null)
 
 export function uatFilterCounts(rows: readonly UatRow[]): Record<UatFilterKey, number> {
   const count = (group: UatGroup) => rows.filter((row) => row.group === group).length;
-  return { all: rows.length, human: count("human"), flight: count("flight"), submitter: count("submitter"), verified: count("verified") };
+  return {
+    all: rows.length, human: count("human"), flight: count("flight"), submitter: count("submitter"), stale: count("stale"),
+    verified: count("verified"),
+  };
 }
 
 export function UatTickets({ tasks, nav }: { tasks: Task[]; nav: Nav }) {
@@ -274,8 +289,8 @@ function UatTicketRow({
 }) {
   const { task, group, feedbackId, ticket } = row;
   const lease = facts?.lease ?? null;
-  const note = stageNote(task);
-  const closed = group === "verified" || group === "cancelled";
+  const note = stageNote(row);
+  const closed = group === "verified" || group === "cancelled" || group === "stale";
   const prs = task.prs.map((pr) => `#${pr.num} ${pr.status}`).join(" · ");
   return (
     <div className={`uat-row g-${group}`} role="row">
@@ -294,7 +309,7 @@ function UatTicketRow({
       <span role="cell">{ticket?.step ?? "—"}</span>
       <span role="cell" className="mono">{ticket?.attempt ?? uatAttempt(task.labels)}</span>
       <span role="cell" className="uat-stage">
-        <span className={`pv-chip ${stageChipTone(task)}`}>{STAGES[STAGE_IDX[task.stage]].name}</span>
+        <span className={`pv-chip ${group === "stale" ? "muted" : stageChipTone(task)}`}>{STAGES[STAGE_IDX[task.stage]].name}</span>
         {note && <span className={`uat-note${group === "human" ? " warn" : ""}`}>{note}</span>}
       </span>
       <span role="cell" className={`mono${leaseState(lease, now) === "expired" ? " warn" : ""}`}>{leaseText(lease, now)}</span>

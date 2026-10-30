@@ -756,6 +756,11 @@
   background: var(--p-grid);
 }
 
+/* Closed as STALE (TASK-4200): closed, never confirmed. */
+.mc .pv-workbar .seg.unconfirmed {
+  background: var(--p-muted);
+}
+
 .mc .pv-workbar .seg.doing {
   background: var(--p-accent);
 }

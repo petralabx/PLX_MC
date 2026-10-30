@@ -221,13 +221,38 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   An agent gets 403 and a `task.verify_denied` event, and `mc_report_progress`
   refuses `stage: "verified"` on a UAT ticket task. A PR merge never moves a
   verified task back to merged: the projection records the PR and writes
-  `task.promotion_skipped` (`reason: task_verified`).
+  `task.promotion_skipped` (`reason: task_verified`). A cancelled task gives 409
+  `already_cancelled`, which the portal does not retry. On a task closed as
+  STALE (a late PASS), verify keeps `uat:stale` and adds
+  `previousClosure: "stale"` to `task.verified`.
+- `closeStale {note?, staleClosedAt?}` (TASK-4200) is the portal's STALE close:
+  nobody answered the re-test within 9 Toronto business days. `staleClosedAt`
+  is the ISO time the portal closed the ticket. On a merged UAT ticket task it
+  adds `uat:stale` and changes nothing else, so the task stays merged and
+  rollups count it closed and unconfirmed. It audits `task.uat_stale_closed`
+  (`previousStage`, `closedBy`, `note`, `staleClosedAt`, `decision`) and cannot
+  be combined with other fields. A merged task that already has `uat:stale`
+  returns an empty `diff` and writes nothing. Verified gives 409
+  `already_verified` and cancelled 409 `already_cancelled`, even when the task
+  has the label. Any other stage gives 409 `not_merged`, and a task that is not
+  a UAT ticket task gives 400 (the portal gets 403 first: its scope is UAT
+  ticket tasks). It needs `task.uat_sync`: an agent gets 403 and a
+  `task.close_stale_denied` event. `patchTask` refuses, with 403, any other add
+  of `uat:stale` or of a near-copy such as ` UAT:Stale`, and every removal in a
+  label patch, from the portal or anyone else. While the label is on, a label
+  patch must keep `kind:code` and the `uat:<feedbackId>` label; a web PATCH
+  that also ends the close is free of both rules. A move to an open stage, or
+  from verified back to merged, ends the close:
+  `repo.updateEntity` drops the label in the same write on every door, the
+  SharePoint ToDos pull and keep-SP included. `mc_create_task` refuses the
+  label before its idempotency claim.
 - Auth: existing MCP key/operator checks, `task.progress` and the task's
   restricted-project ACL. The portal principal (`sp_mcp_portal`) holds
   `task.uat_sync` instead of `task.progress` (TASK-3697). Its tool allowlist
   adds `mc_update_task` only, not `mc_update_tasks`. It may send `verify`,
-  `cancel` (no `task.cancel` needed), or a label-only patch of `kind:*`,
-  closure, `uat:hold` and `uat-attempt:<n>` labels, on UAT ticket tasks only.
+  `closeStale`, `cancel` (no `task.cancel` needed), or a label-only patch of
+  `kind:*`, closure, `uat:hold` and `uat-attempt:<n>` labels, on UAT ticket
+  tasks only.
   The result must keep `kind:code` and `uat:<feedbackId>`. Every other field or
   task gives 403 `forbidden`. A replayed portal cancel returns an empty `diff`
   instead of 409 `already_cancelled`. Unknown task ids return `not_found`
@@ -309,8 +334,8 @@ allowlist. Fleet P8b adds one read: the grant gains `agent_report.read` and the
 allowlist gains `mc_list_agent_reports` (`GET /api/cursor/agent-reports`). No
 other principal holds that capability. TASK-3697 adds `task.uat_sync` and the
 allowlist name `mc_update_task`: the portal mirrors a ticket onto its UAT
-ticket task (`verify`, `cancel`, `uat:hold`, `uat-attempt:<n>`; see Task
-metadata edits above). The portal's existing MC key does not change. `mc_search_tasks`
+ticket task (`verify`, `closeStale` (TASK-4200), `cancel`, `uat:hold`,
+`uat-attempt:<n>`; see Task metadata edits above). The portal's existing MC key does not change. `mc_search_tasks`
 (HTTP MCP and `GET /api/cursor/tasks`) returns the calling principal in
 `meta.actor.servicePrincipalId`. Key rotation uses that search to verify the
 portal key, because `mc_self_check` stays forbidden to it.
@@ -382,9 +407,12 @@ service principal, otherwise 422 `invalid_owner`. Each change writes a
 Projects mirror (status itself is MC-side only until a SharePoint column is
 provisioned). `mc_list_projects` (`GET /api/cursor/projects?status=&q=`) takes
 `status` `active` (default) | `closed` | `all`, and returns id, name, owner,
-status, health, `bucketCount`, `openTaskCount`, `doneTaskCount` (merged or
-verified) and `closedAt`. Creating a bucket or task in a closed project fails
-with 409 `project_closed`; reopen with `status=active`. The same 409 covers
+status, health, `bucketCount`, `openTaskCount`, `doneTaskCount` and
+`closedAt`. `doneTaskCount` counts verified or merged work, except a merged
+UAT ticket task: one that awaits re-test counts in `openTaskCount`, and a
+STALE close (merged plus `uat:stale`) counts in neither, like a cancelled
+task. Creating a bucket or task in a closed project fails with 409
+`project_closed`; reopen with `status=active`. The same 409 covers
 every path that moves work into a closed project (TASK-2558): REST
 `PATCH /api/tasks/{id}` with a new `bucket`, bucket re-parenting
 (`patchBucket` / `mc_update_bucket` `project`), and keeping the SharePoint value

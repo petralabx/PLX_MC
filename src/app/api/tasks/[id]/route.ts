@@ -15,6 +15,7 @@ import { patchTask } from "@/lib/sync";
 import { cancelTask, reopenTask } from "@/lib/sync/cancel";
 import { getBuckets, getEntity, getProjects } from "@/lib/sync/repo";
 import { assertMoveTargetProjectOpen } from "@/lib/sync/bucket-move";
+import { UAT_STALE_LABEL } from "@/lib/tasks/uat-labels";
 
 const STAGES = ["backlog", "specced", "approved", "planned", "progress", "qa", "review", "merged", "verified"] as const;
 
@@ -136,6 +137,11 @@ export const PATCH = route(async (req, ctx) => {
         attribution: { source: "human", actorId: reopener.actorId },
       });
       reopened = true;
+      // The reopen ended the STALE close and dropped uat:stale (TASK-4200), so the
+      // label echoed back from the client's read of the cancelled task is no add.
+      if (rest.labels && (current.data.labels as string[] | undefined)?.includes(UAT_STALE_LABEL)) {
+        rest.labels = rest.labels.filter((label) => label !== UAT_STALE_LABEL);
+      }
     }
   }
   const task = await patchTask(id, reopened ? rest : patch, authorized.auditLabel, {

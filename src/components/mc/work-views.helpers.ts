@@ -1,5 +1,6 @@
 import { ACTORS, BANDS, BUCKETS, PRIORITY, STAGES, bandOf, isClosedStage } from "@/lib/mc-data";
 import type { Band, Bucket, PriorityKey, StageKey, Task } from "@/lib/mc-data";
+import { isStaleClosed } from "@/lib/tasks/uat-labels";
 
 // Buckets are INJECTED (default = fixture) so these stay pure, deterministic
 // functions of their inputs — no store reads. The view passes the live
@@ -249,6 +250,8 @@ export interface FilterState {
   stage?: StageKey[];
   dueStart?: number; // inclusive day offset (dueDay scale); undefined = open
   dueEnd?: number; // inclusive; undefined = open
+  /** STALE closes (TASK-4200): false hides them, true keeps only them; undefined = open. */
+  staleClosed?: boolean;
 }
 
 // A task's due date falls within an explicit [start, end] day-offset range (both
@@ -273,7 +276,8 @@ export function hasActiveFilters(f: FilterState): boolean {
     !!f.label?.length ||
     !!f.stage?.length ||
     f.dueStart != null ||
-    f.dueEnd != null
+    f.dueEnd != null ||
+    f.staleClosed !== undefined
   );
 }
 
@@ -299,6 +303,7 @@ export function applyFilters(tasks: Task[], f: FilterState): Task[] {
     if (stages && !stages.has(task.stage)) return false;
     if (labels && !task.labels.some((label) => labels.has(label))) return false;
     if (hasDueRange && !isTaskDueInRange(task, f.dueStart, f.dueEnd)) return false;
+    if (f.staleClosed !== undefined && isStaleClosed(task) !== f.staleClosed) return false;
     return true;
   });
 }

@@ -22,6 +22,7 @@ export const CAPABILITIES = [
   "task.assign",
   // TASK-3697: mirror a portal ticket onto its UAT ticket task through mc_update_task:
   // verify (merged to verified), cancel, and the uat:hold / uat-attempt:<n> labels.
+  // TASK-4200 adds closeStale: uat:stale on a merged task (Vince's OK, 2026-10-30).
   "task.uat_sync",
   "routing.suggest",
   "routing.resolve",

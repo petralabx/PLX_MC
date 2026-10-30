@@ -405,8 +405,9 @@ export function BucketDetail({ route, nav }: ScreenProps) {
           target={bucket.target}
           subline={
             <>
-              {progress.total} tasks · {progress.done} done · {progress.cancelled} cancelled · {progress.doing} in
-              flight · <span className={blocked > 0 ? "warn" : ""}>{blocked} blocked</span>
+              {progress.total} tasks · {progress.done} done · {progress.cancelled} cancelled ·{" "}
+              {progress.unconfirmed > 0 && `${progress.unconfirmed} unconfirmed · `}
+              {progress.doing} in flight · <span className={blocked > 0 ? "warn" : ""}>{blocked} blocked</span>
             </>
           }
         >

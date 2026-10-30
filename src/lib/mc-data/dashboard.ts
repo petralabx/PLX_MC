@@ -4,7 +4,8 @@
 // ACL-scoped snapshot): delivery progress by project and by bucket, open work by
 // stage, and the tasks still to do. No React, no store reads. Closed progress
 // includes merged, verified and cancelled, except that a merged UAT ticket task
-// stays in progress until verified (TASK-3697); delivered work
+// stays in progress until verified (TASK-3697), or counts as closed and
+// unconfirmed once its re-test closed as STALE (TASK-4200); delivered work
 // remains the done band, "in progress" the doing band and "not started"
 // the todo band — the same split mc_list_projects and the project overview use,
 // so every surface counts progress identically.
@@ -81,7 +82,8 @@ function sumCounts(rows: readonly ProgressCounts[]): ProgressCounts {
     rows.reduce((n, r) => n + r.done, 0),
     rows.reduce((n, r) => n + r.inProgress, 0),
     rows.reduce((n, r) => n + r.notStarted, 0),
-    rows.reduce((n, r) => n + r.cancelled, 0)
+    rows.reduce((n, r) => n + r.cancelled, 0),
+    rows.reduce((n, r) => n + r.unconfirmed, 0)
   );
 }
 

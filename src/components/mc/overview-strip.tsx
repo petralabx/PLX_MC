@@ -8,11 +8,13 @@ import { BUCKET_HEALTH } from "./atoms";
 import { schedulePace, shortDate, type PaceKey, type SchedulePace } from "./project-overview.helpers";
 
 export interface StripProgress {
-  /** Closed (done + cancelled) share of all tasks, 0–100. */
+  /** Closed (done + cancelled + unconfirmed) share of all tasks, 0–100. */
   pct: number;
   total: number;
   done: number;
   cancelled: number;
+  /** Closed as STALE (TASK-4200): closed, never done. */
+  unconfirmed: number;
   /** In flight (doing band). */
   doing: number;
 }
@@ -48,10 +50,11 @@ export function OverviewStrip({
 }) {
   const today = new Date();
   const sched = schedulePace(progress.pct, started, target, today);
-  const rest = Math.max(0, progress.total - progress.done - progress.cancelled - progress.doing);
+  const rest = Math.max(0, progress.total - progress.done - progress.cancelled - progress.unconfirmed - progress.doing);
   const segments = [
     ["done", progress.done],
     ["cancelled", progress.cancelled],
+    ["unconfirmed", progress.unconfirmed],
     ["doing", progress.doing],
     ["rest", rest],
   ] as const;

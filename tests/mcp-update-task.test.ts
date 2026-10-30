@@ -94,8 +94,11 @@ import { POST as mcpPost } from "@/app/api/cursor/mcp/route";
 import { POST as updateRoute } from "@/app/api/cursor/tasks/update/route";
 import { POST as batchRoute } from "@/app/api/cursor/tasks/update-batch/route";
 import {
-  BATCH_FINDINGS_PER_ITEM_MAX, BATCH_FINDINGS_TOTAL_MAX, BATCH_FINDING_MESSAGE_MAX, actionUpdateTask,
+  BATCH_FINDINGS_PER_ITEM_MAX, BATCH_FINDINGS_TOTAL_MAX, BATCH_FINDING_MESSAGE_MAX, CLOSURE_LABELS, actionUpdateTask,
+  staleCloseUatTicketTx,
 } from "@/lib/mcp/task-update-actions";
+import { cancelContextFor } from "@/lib/mcp/task-cancel-actions";
+import { withTransaction } from "@/lib/db";
 import { outboundFields } from "@/lib/sync/mapping";
 import { STAGES, STAGE_IDX, countTaskProgress } from "@/lib/mc-data";
 import type { Task } from "@/lib/mc-data";
@@ -740,5 +743,191 @@ describe("UAT ticket task mirror (TASK-3697)", () => {
     }
     expect(data().stage).toBe("merged");
     expect(h.events).toEqual([]);
+  });
+
+  it("refuses to verify a cancelled task with 409 already_cancelled, which the portal does not retry", async () => {
+    uat("TASK-UAT", { stage: "cancelled" });
+    const result = await portal({ verify: {} });
+    expect({ ok: result.ok, status: result.status, code: result.body.error?.code }).toEqual({ ok: false, status: 409, code: "already_cancelled" });
+    expect(data().stage).toBe("cancelled");
+    expect(h.events).toEqual([]);
+  });
+
+  // TASK-4200 (Vince, 2026-10-30): a re-test nobody answers in 9 Toronto
+  // business days closes as STALE. The portal's closeStale adds uat:stale to
+  // the merged task, which then counts as closed and unconfirmed. Mission
+  // Control never verifies or cancels the task on a STALE close.
+  describe("closeStale (TASK-4200)", () => {
+    const LABELS = ["kind:code", "uat:cmfb7q2xk0001", "uat-attempt:1", "repo:petralabx/plx-customer-portal"];
+    const refusal = (result: { ok: boolean; status: number | null; body: Body }) =>
+      ({ ok: result.ok, code: result.body.error?.code });
+
+    for (const transport of ["MCP", "REST"] as const) {
+      it("lets the portal close a merged task as STALE: it stays merged, gains only uat:stale, and a replay changes nothing via " + transport, async () => {
+        uat("TASK-UAT", { stage: "merged", labels: [...LABELS, "uat:hold"] });
+        const before = structuredClone(data());
+        const result = await portal(
+          { closeStale: { note: "No re-test result in 9 business days", staleClosedAt: "2026-10-30T14:00:00.000Z" } }, "TASK-UAT", transport
+        );
+        expect(result.ok).toBe(true);
+        // Decision 7: the verb only adds uat:stale. uat:hold and every other label stay.
+        expect(result.body.data.diff).toEqual({ labels: { before: [...LABELS, "uat:hold"], after: [...LABELS, "uat:hold", "uat:stale"] } });
+        // Stage, PRs and evidence never change on a STALE close.
+        expect(data()).toMatchObject({ stage: "merged", labels: [...LABELS, "uat:hold", "uat:stale"], prs: before.prs, evidence: before.evidence });
+        expect(data().activity?.at(-1)).toMatchObject({ kind: "move", what: expect.stringContaining("STALE") });
+        // Labels are DB-only: nothing is queued for SharePoint.
+        expect(h.rows.get("TASK-UAT")!.sync_state).toBe("synced");
+        expect(h.events).toEqual([{
+          kind: "task.uat_stale_closed", actor: "codex:vince@petrasoap.com", repo: "petralabx/PLX_MC", taskId: "TASK-UAT",
+          payload: {
+            servicePrincipalId: "sp_mcp_portal", workerId: "update-test", previousStage: "merged", closedBy: "sp_mcp_portal",
+            note: "No re-test result in 9 business days", staleClosedAt: "2026-10-30T14:00:00.000Z",
+            decision: "TASK-4200 (Vince, 2026-10-30)",
+          },
+        }]);
+        // Closed and unconfirmed: never done, never open, never Needs a human.
+        expect(countTaskProgress([data()])).toMatchObject({ done: 0, unconfirmed: 1, inProgress: 0, remaining: 0, closedTasks: 1, total: 1 });
+        expect(needsHuman(data())).toBe(false);
+        // An outbox retry of the same close succeeds and writes nothing.
+        const replay = await portal({ closeStale: {} }, "TASK-UAT", transport);
+        expect(replay.ok).toBe(true);
+        expect(replay.body.data.diff).toEqual({});
+        expect(h.events).toHaveLength(1);
+      });
+    }
+
+    it("refuses a task whose fix has not merged with 409 not_merged, and verified or cancelled tasks with their own 409", async () => {
+      for (const [stage, code] of [
+        ["review", "not_merged"], ["backlog", "not_merged"], ["verified", "already_verified"], ["cancelled", "already_cancelled"],
+      ] as const) {
+        uat("TASK-UAT", { stage });
+        const result = await portal({ closeStale: {} });
+        expect({ stage, status: result.status, ...refusal(result) }).toEqual({ stage, status: 409, ok: false, code });
+        expect(data()).toMatchObject({ stage, labels: LABELS });
+      }
+      expect(h.events).toEqual([]);
+    });
+
+    it("refuses a task that is not a UAT ticket task: 403 under the portal's scope, and 400 from the door itself", async () => {
+      seed("TASK-1", { labels: ["kind:code"], stage: "merged" });
+      const result = await portal({ closeStale: {} }, "TASK-1");
+      expect({ status: result.status, ...refusal(result) }).toEqual({ status: 403, ok: false, code: "forbidden" });
+      const portalIdentity: McpIdentity = {
+        ...identity, servicePrincipalId: "sp_mcp_portal", actor: { kind: "service", id: "sp_mcp_portal", status: "active" },
+      };
+      const ctx = cancelContextFor(portalIdentity, "sp_mcp_portal");
+      await expect(withTransaction((q) => staleCloseUatTicketTx(q, "TASK-1", data("TASK-1"), {}, ctx)))
+        .rejects.toMatchObject({ code: "invalid_request", status: 400 });
+      expect(data("TASK-1").labels).toEqual(["kind:code"]);
+      expect(h.events).toEqual([]);
+    });
+
+    it("never lets an agent close a task as STALE, and audits the attempt", async () => {
+      h.allowPool = true; // the denial is audited on its own connection, before the transaction
+      uat("TASK-UAT", { stage: "merged" });
+      const result = await agent({ closeStale: {} });
+      expect(refusal(result)).toEqual({ ok: false, code: "forbidden" });
+      expect(result.body.error.message).toContain("task.uat_sync");
+      expect(data().labels).toEqual(LABELS);
+      expect(h.events.map((e) => e.kind)).toEqual(["task.close_stale_denied"]);
+    });
+
+    it("records a null staleClosedAt when the portal sends none", async () => {
+      uat("TASK-UAT", { stage: "merged" });
+      expect((await portal({ closeStale: {} })).ok).toBe(true);
+      expect(h.events).toEqual([expect.objectContaining({
+        kind: "task.uat_stale_closed", payload: expect.objectContaining({ note: null, staleClosedAt: null }),
+      })]);
+    });
+
+    it("rejects closeStale combined with any other field, or with a staleClosedAt that is not an ISO time", async () => {
+      uat("TASK-UAT", { stage: "merged" });
+      for (const patch of [
+        { closeStale: {}, title: "x" }, { closeStale: {}, verify: {} }, { closeStale: {}, cancel: { reason: "obsolete" } },
+        { closeStale: {}, addLabels: ["uat:hold"] }, { closeStale: { extra: 1 } }, { closeStale: { staleClosedAt: "yesterday" } },
+      ]) {
+        const result = await portal(patch);
+        expect({ patch, ...refusal(result) }).toEqual({ patch, ok: false, code: "invalid_request" });
+      }
+      expect(data().labels).toEqual(LABELS);
+      expect(h.events).toEqual([]);
+    });
+
+    it("never takes uat:stale from a label edit: adding or removing it is 403 for the portal and for agents", async () => {
+      expect(CLOSURE_LABELS).not.toContain("uat:stale");
+      uat("TASK-UAT", { stage: "merged" });
+      for (const send of [
+        () => portal({ addLabels: ["uat:stale"] }),
+        () => agent({ addLabels: ["uat:stale"] }),
+        () => agent({ labels: [...LABELS, "uat:stale"] }),
+      ]) {
+        expect(refusal(await send())).toEqual({ ok: false, code: "forbidden" });
+      }
+      // A laned task in progress is refused the label too, not only for its lane.
+      uat("TASK-UAT", { stage: "progress", labels: [...LABELS, "lane:codex"] });
+      expect(refusal(await agent({ addLabels: ["uat:stale"] }))).toEqual({ ok: false, code: "forbidden" });
+      uat("TASK-UAT", { stage: "merged" });
+      expect((await portal({ closeStale: {} })).ok).toBe(true);
+      for (const send of [
+        () => portal({ removeLabels: ["uat:stale"] }),
+        () => agent({ removeLabels: ["uat:stale"] }),
+        () => agent({ labels: LABELS }),
+      ]) {
+        expect(refusal(await send())).toEqual({ ok: false, code: "forbidden" });
+      }
+      // Other label edits on the closed task still work, and keep uat:stale.
+      expect((await agent({ addLabels: ["needs-review-later"] })).ok).toBe(true);
+      expect(data().labels).toEqual([...LABELS, "uat:stale", "needs-review-later"]);
+      expect(h.events.map((e) => e.kind)).toEqual(["task.uat_stale_closed", "task.updated"]);
+    });
+
+    // S1-05: a label edit could carry the close to another ticket, or drop
+    // kind:code and make it count as done.
+    it("refuses an agent label edit that moves a STALE close's ticket label or kind:code", async () => {
+      uat("TASK-UAT", { stage: "merged" });
+      expect((await portal({ closeStale: {} })).ok).toBe(true);
+      for (const patch of [
+        { removeLabels: ["uat:cmfb7q2xk0001"], addLabels: ["uat:cmfb7q2xk0002"] },
+        { removeLabels: ["kind:code"], addLabels: ["kind:decision"] },
+        { removeLabels: ["uat:cmfb7q2xk0001"] },
+      ]) {
+        const result = await agent(patch);
+        expect({ patch, ...refusal(result) }).toEqual({ patch, ok: false, code: "forbidden" });
+        expect(result.body.error.message).toContain("keeps kind:code and its uat:<feedbackId> label");
+      }
+      expect(data().labels).toEqual([...LABELS, "uat:stale"]);
+      expect(countTaskProgress([data()])).toMatchObject({ unconfirmed: 1, done: 0 });
+      expect(h.events.map((e) => e.kind)).toEqual(["task.uat_stale_closed"]);
+    });
+
+    it("a late PASS: verify moves the task to verified, keeps uat:stale as history and records previousClosure stale", async () => {
+      uat("TASK-UAT", { stage: "merged" });
+      expect((await portal({ closeStale: {} })).ok).toBe(true);
+      const result = await portal({ verify: { note: "Late PASS on R5JD2K" } });
+      expect(result.ok).toBe(true);
+      expect(data()).toMatchObject({ stage: "verified", labels: [...LABELS, "uat:stale"] });
+      expect(h.events.at(-1)).toMatchObject({
+        kind: "task.verified",
+        payload: { previousStage: "merged", previousClosure: "stale", verifiedBy: "sp_mcp_portal", note: "Late PASS on R5JD2K" },
+      });
+      expect(countTaskProgress([data()])).toMatchObject({ done: 1, unconfirmed: 0, remaining: 0 });
+      // A close that arrives after the late PASS is refused, not applied.
+      const late = await portal({ closeStale: {} });
+      expect({ status: late.status, ...refusal(late) }).toEqual({ status: 409, ok: false, code: "already_verified" });
+      expect(h.events.map((e) => e.kind)).toEqual(["task.uat_stale_closed", "task.verified"]);
+    });
+
+    it("a later cancel keeps uat:stale, and the task then counts as cancelled", async () => {
+      uat("TASK-UAT", { stage: "merged" });
+      expect((await portal({ closeStale: {} })).ok).toBe(true);
+      const result = await portal({ cancel: { reason: "obsolete", note: "Late FAIL: the next attempt has its own task" } });
+      expect(result.ok).toBe(true);
+      expect(data()).toMatchObject({ stage: "cancelled", labels: [...LABELS, "uat:stale"] });
+      expect(countTaskProgress([data()])).toMatchObject({ cancelled: 1, unconfirmed: 0, done: 0 });
+      // The replay no-op is for a merged task only: a retried close on the cancelled task gets its 409.
+      const retry = await portal({ closeStale: {} });
+      expect({ status: retry.status, ...refusal(retry) }).toEqual({ status: 409, ok: false, code: "already_cancelled" });
+      expect(h.events.map((e) => e.kind)).toEqual(["task.uat_stale_closed", "task.cancelled"]);
+    });
   });
 });

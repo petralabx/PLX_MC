@@ -10,8 +10,10 @@ The User Acceptance Testing (UAT) contract between `plx-customer-portal` and
 | **UAT feedback tickets**: a person files a bug in the portal and an agent fixes it | The portal's gold `Feedback` record (Prisma). SharePoint is a projection. | Mirrors each ticket attempt as one `BKT-UAT` task, shows the UAT tickets view, runs a daily drift check. |
 | **UAT case runs**: SOP scenarios and go-live readiness | The portal `uat` quality ledger, `docs/portal/quality-ledger/uat.artifacts.json` | Reads it through Loop Ledgers. |
 
-MC never authors a re-test result. UAT results are **PASS**, **FAIL** or
-**unverified**, never Verified (Vince, 2026-10-26).
+MC never authors a re-test result. A ticket's re-test result is **PASS**,
+**FAIL** or **STALE**, never Verified (Vince, 2026-10-26). STALE means nobody
+answered the re-test within 9 Toronto business days, so the ticket closed with
+no result, never as FAIL (Vince, 2026-10-30, TASK-4200).
 
 ## Why
 
@@ -31,8 +33,11 @@ rollups count a fix as done only when the person who filed it confirmed it.
   `uat-<feedbackId>` (or `uat-<feedbackId>-a<n>`). PLX Steward leases it. Agents
   find it by label and never create one.
 - **State labels:** `uat:blocked` and `uat:cause:<cause>` (set by Steward),
-  `uat:hold` (an open question, mirrored by the portal) and `needs-vince`.
-  `uat:<id>` is one segment, so `uat:cause:*` never reads as a ticket.
+  `uat:hold` (an open question, or a STALE ticket whose fix never merged,
+  mirrored by the portal), `uat:stale` (a STALE close, set only by the portal's
+  `closeStale`) and `needs-vince`.
+  `uat:<id>` is one segment, so `uat:cause:*` never reads as a ticket, and
+  `uat:stale` is a state label, never a ticket id.
 - **Completion** needs `prUrl` unless the outcome is `blocked` or `failed`
   (`src/lib/mcp/actions.ts`). The check applies only while the task sits in
   `BKT-UAT`; a ticket task moved to another bucket is not held to it.
@@ -43,6 +48,7 @@ rollups count a fix as done only when the person who filed it confirmed it.
 |---|---|
 | backlog → progress | Steward leased it; the PR is open or being written. |
 | merged | The fix is on `staging` and waits for the person's re-test. It stays open in rollups (`src/lib/mc-data/policy.ts`, `awaitsRetest`). |
+| merged + `uat:stale` | Closed as STALE: nobody answered the re-test (TASK-4200). Rollups count it **closed and unconfirmed**: in the closed share, never done and never open (`isStaleClosed`, `src/lib/tasks/uat-labels.ts`). Needs a human never lists it. |
 | verified | The portal recorded the person's pass. Only the portal's `mc_update_task { verify }` sets it, under `task.uat_sync`; MCP refuses `stage: verified` from anyone else (`src/lib/mcp/actions.ts`). |
 | cancelled | The portal cancels an obsolete, superseded or delivered-without-PR task. |
 
@@ -54,16 +60,68 @@ branch, `staging` for the portal.
 
 The portal key holds `task.read`, `task.create`, `agent_report.read` and
 `task.uat_sync` (`src/lib/permissions/grants.ts`). With `task.uat_sync` alone,
-`mc_update_task` accepts only `verify`, `cancel` and the `uat:hold`,
-`uat-attempt:<n>`, `kind:*` and closure labels, and only on UAT ticket tasks
-(`src/lib/mcp/task-update-actions.ts`). The portal mirrors hold, re-attempt,
-cancel and the re-test result from its reconcile sweep.
+`mc_update_task` accepts only `verify`, `closeStale`, `cancel` and the
+`uat:hold`, `uat-attempt:<n>`, `kind:*` and closure labels, and only on UAT
+ticket tasks (`src/lib/mcp/task-update-actions.ts`). The portal mirrors hold,
+re-attempt, cancel, the STALE close and the re-test result from its reconcile
+sweep.
+
+### STALE close (TASK-4200)
+
+A re-test nobody answers within 9 Toronto business days closes as STALE in the
+portal (gold `FeedbackStatus` `STALE`). The portal then sends
+`mc_update_task { closeStale: { note?, staleClosedAt? } }` for the ticket's
+merged task. `closeStale` widens what `task.uat_sync` covers; `grants.ts` keeps
+the same four capabilities. The owner typed OK to that widening (decision 7,
+Vince, 2026-10-30, recorded on TASK-4200): a verb that only adds `uat:stale`
+to a merged UAT ticket task.
+
+- **The close:** it adds `uat:stale` and changes nothing else. The stage stays
+  merged, and stage, PRs, evidence, checkouts and the other labels never
+  change, so MC never verifies or cancels a task on a STALE close (decision 6).
+  It audits `task.uat_stale_closed` (`previousStage`, `closedBy`, `note`,
+  `staleClosedAt`, `decision`).
+- **Refusals:** a merged task that already has `uat:stale` returns an empty
+  diff and writes nothing. Verified gives 409 `already_verified` and cancelled
+  409 `already_cancelled`, even when the task has the label. Any other stage
+  gives 409 `not_merged`, the only 409 the portal retries. Any other principal
+  gets 403 and a `task.close_stale_denied` event.
+- **One door:** only `closeStale` adds `uat:stale`, and no door adds a
+  near-copy such as ` UAT:Stale`. No label patch removes it, whoever sends it.
+  While it is on, a label patch keeps `kind:code` and the `uat:<feedbackId>`
+  label. A web PATCH that also ends the close (below) is free of both rules,
+  because the label goes with the move. No task is created with it.
+  `mc_create_task` refuses it before its idempotency claim; `POST /api/tasks`
+  and the routing create refuse it before any write. Each gets 403
+  (`src/lib/tasks/uat-labels.ts`).
+- **The close ends:** a move to an open stage, or from verified back to merged,
+  ends it. `repo.updateEntity` (`src/lib/sync/repo.ts`) drops the label in the
+  same write, which covers every door: a reopen, a person's move back, the
+  SharePoint ToDos pull and a keep-SP resolution. A reworked fix that merges
+  again then awaits re-test and never counts as stale-closed.
+- **A late result:** the portal accepts one until the end of the 30th Toronto
+  calendar day after the close day. A late PASS verifies the task through
+  `verify`, which keeps `uat:stale` as history and records
+  `previousClosure: "stale"`. A late FAIL starts a new attempt task, and the
+  portal cancels the old one as `superseded` (decision 10); the cancel keeps
+  the label too.
+- **Readers:** the portal snapshot may carry status `STALE`, a closed status.
+  The UAT tickets view shows a STALE close (`uat:stale`, or a merged task whose
+  ticket is STALE) in its own STALE group and filter, held by nobody. The drift
+  check calls the ticket "closed as STALE (no re-test result)", never rejected
+  or resolved. It asks the portal for a missing `uat:stale` with no fix in MC,
+  and offers a person a cancel for an open task that never merged. When a late
+  PASS resolves the ticket while its newest task is still closed as STALE, the
+  check asks the portal to re-send its verify, with no fix in MC.
+- **Deploy order:** MC deploys before the portal sends `STALE`. An older MC
+  fails the whole snapshot read on one `STALE` row and refuses `closeStale`.
 
 ### Needs a human
 
 A UAT ticket task counts as Needs a human when it carries `uat:blocked` or
 `needs-vince`, as well as on the general rules (a pending approval gate, a
 blocked flag, no human owner) (`src/components/mc/project-overview.helpers.ts`).
+A STALE close is closed, so it never does.
 
 ### UAT tickets view and drift check
 
@@ -120,8 +178,8 @@ creates one "UAT agent run …" task per run.
 - `src/lib/compliance/uat-tickets.ts`, `src/lib/compliance/uat-portal-read.ts`: loader, drift check, portal read.
 - `src/app/api/uat-tickets/route.ts`, `src/app/api/cron/uat-drift/route.ts`: the view's read and the daily cron.
 - `src/components/mc/uat-tickets.tsx`: the UAT tickets view.
-- `src/lib/mcp/task-update-actions.ts`: `task.uat_sync` limits and `verifyUatTicketTx`.
-- `src/lib/mc-data/policy.ts`: the verified stage and rollups.
+- `src/lib/mcp/task-update-actions.ts`: `task.uat_sync` limits, `verifyUatTicketTx` and `staleCloseUatTicketTx`.
+- `src/lib/mc-data/policy.ts`: the verified stage, STALE closes and rollups.
 - `config/integrations.yaml` (`uat-portal-read`), `config/loop-ledgers-registry.json`.
 - `.cursor/skills/uat-runner/SKILL.md`: the UAT runner skill (canonical copy in `petralabx/skills`).
 

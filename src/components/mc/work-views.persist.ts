@@ -115,6 +115,9 @@ export function sanitizeFilterState(raw: unknown): FilterState {
   if (typeof src.dueStart === "number" && Number.isFinite(src.dueStart)) out.dueStart = src.dueStart;
   if (typeof src.dueEnd === "number" && Number.isFinite(src.dueEnd)) out.dueEnd = src.dueEnd;
 
+  // staleClosed (TASK-4200) → keep only a boolean; drop otherwise.
+  if (typeof src.staleClosed === "boolean") out.staleClosed = src.staleClosed;
+
   return out;
 }
 

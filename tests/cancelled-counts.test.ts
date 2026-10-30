@@ -34,9 +34,9 @@ vi.mock("@/lib/compliance/repo", () => ({ getDispatch: vi.fn(), appendEvent: vi.
 import { actionGetContext, actionSearchTasks } from "@/lib/mcp/actions";
 import { buildInsights, isOverdue } from "@/lib/mc-data/insights";
 import { confidenceOf } from "@/lib/mc-data/helpers";
-import { isClosedStage, TERMINAL_STAGES, countTaskProgress } from "@/lib/mc-data/policy";
+import { awaitsRetest, isClosedStage, isOpenInRollup, TERMINAL_STAGES, countTaskProgress } from "@/lib/mc-data/policy";
 import { BANDS, STAGES, WORKFLOW_STAGES, bandOf } from "@/lib/mc-data";
-import { projectProgress, rollupForProject, stageChipTone } from "@/components/mc/project-overview.helpers";
+import { isDoneStage, isOutstanding, projectProgress, rollupForProject, stageChipTone } from "@/components/mc/project-overview.helpers";
 import { timelineSegmentClass } from "@/components/mc/work-views.helpers";
 
 beforeEach(() => vi.clearAllMocks());
@@ -64,8 +64,8 @@ describe("dashboard / project / bucket counts", () => {
   it("classifies every stage once, independent of labels and completedAt", () => {
     const allStages = STAGES.map((s) => task(s.key, s.key, { labels: ["closed:obsolete"], completedAt: "2026-10-07T00:00:00.000Z" }));
     const counts = countTaskProgress(allStages);
-    expect(counts).toMatchObject({ done: 2, cancelled: 1, closedTasks: 3, inProgress: 3, notStarted: 4, remaining: 7, total: 10, pctDone: 0.3 });
-    expect(counts.total).toBe(counts.done + counts.cancelled + counts.remaining);
+    expect(counts).toMatchObject({ done: 2, cancelled: 1, unconfirmed: 0, closedTasks: 3, inProgress: 3, notStarted: 4, remaining: 7, total: 10, pctDone: 0.3 });
+    expect(counts.total).toBe(counts.done + counts.cancelled + counts.unconfirmed + counts.remaining);
   });
 
   it("the dashboard donut and totals skip cancelled work", () => {
@@ -84,6 +84,53 @@ describe("dashboard / project / bucket counts", () => {
     const [roll] = rollupForProject([{ id: "BKT-A" } as never], tasks);
     expect(roll).toMatchObject({ done: 1, cancelled: 2, closedTasks: 3, remaining: 1, total: 4, pct: 75 });
     expect(roll.tasks).toHaveLength(4); // still listed under the Cancelled filter
+  });
+});
+
+// TASK-4200 (Vince, 2026-10-30): a re-test nobody answers closes as STALE. Its
+// merged UAT ticket task carries uat:stale and counts as closed and
+// unconfirmed: in closed %, never in done, never in open or remaining work.
+describe("STALE closes (TASK-4200)", () => {
+  const uat = ["kind:code", "uat:cmfb7q2xk0001"];
+  const stale = task("TASK-S", "merged", { labels: [...uat, "uat:stale"], due: "Jan 01" });
+  const awaiting = task("TASK-R", "merged", { labels: uat });
+  const latePass = task("TASK-P", "verified", { labels: [...uat, "uat:stale"] });
+  const mixed = [...tasks, stale, awaiting, latePass];
+
+  it("counts a STALE-closed task as unconfirmed: closed, never done, never open", () => {
+    const counts = countTaskProgress(mixed);
+    expect(counts).toMatchObject({ done: 2, cancelled: 2, unconfirmed: 1, closedTasks: 5, inProgress: 2, notStarted: 0, remaining: 2, total: 7 });
+    expect(counts.total).toBe(counts.done + counts.cancelled + counts.unconfirmed + counts.remaining);
+    expect(counts.pctDone).toBeCloseTo(5 / 7);
+    expect(countTaskProgress([stale])).toMatchObject({ done: 0, unconfirmed: 1, remaining: 0, closedTasks: 1, total: 1, pctDone: 1 });
+  });
+
+  it("no longer awaits re-test, is not outstanding and never reads as done", () => {
+    expect(awaitsRetest(stale)).toBe(false);
+    expect(isOpenInRollup(stale)).toBe(false);
+    expect(isOutstanding(stale)).toBe(false);
+    expect(isDoneStage(stale)).toBe(false);
+    expect(stageChipTone(stale)).toBe("muted");
+    expect(confidenceOf(stale)).toMatchObject({ state: "gap", label: "STALE" });
+    expect(isOverdue(stale, 400)).toBe(false);
+    // A merged task still waiting for its re-test is unchanged, and a late PASS is done.
+    expect(awaitsRetest(awaiting)).toBe(true);
+    expect(stageChipTone(awaiting)).toBe("acc");
+    expect(isDoneStage(latePass)).toBe(true);
+    expect(stageChipTone(latePass)).toBe("ok");
+  });
+
+  it("the dashboard donut skips it, like cancelled work", () => {
+    const model = buildInsights(mixed);
+    expect(model.total).toBe(4);
+    expect(Object.fromEntries(model.byStatus.map((s) => [s.key, s.value]))).toEqual({ todo: 0, doing: 1, done: 3 });
+    expect(model.byStatus.reduce((n, s) => n + s.value, 0)).toBe(model.total);
+  });
+
+  it("project progress and bucket rollups carry the unconfirmed count", () => {
+    expect(projectProgress(mixed)).toMatchObject({ done: 2, cancelled: 2, unconfirmed: 1, closedTasks: 5, doing: 2, remaining: 2, total: 7, pct: 71 });
+    const [roll] = rollupForProject([{ id: "BKT-A" } as never], mixed);
+    expect(roll).toMatchObject({ done: 2, cancelled: 2, unconfirmed: 1, closedTasks: 5, remaining: 2, total: 7, pct: 71 });
   });
 });
 

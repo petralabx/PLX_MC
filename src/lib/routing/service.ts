@@ -4,6 +4,7 @@
 
 import { ApiError } from "@/lib/api/route";
 import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
+import { staleLabelCreateViolation } from "@/lib/tasks/uat-labels";
 import { isCreatorApprovalGated } from "@/lib/permissions";
 import { withTransaction, type TxQuery } from "@/lib/db";
 import { assertAutonomyAllowsConfirmation } from "@/lib/routing/autonomy";
@@ -463,6 +464,10 @@ export async function createConfirmedTask(
   authorized: AuthorizedActor,
   input: CreateRoutedTaskInput
 ): Promise<RoutingMutationResult> {
+  // No door creates a task with uat:stale (TASK-4200), as in createTask; refused
+  // before any intent, sequence or row is written.
+  const staleViolation = staleLabelCreateViolation(input.labels);
+  if (staleViolation) throw new ApiError("forbidden", staleViolation, 403);
   assertConfirmEnabled();
   assertMutableTrust(input.authorizationTrust);
   await assertRoutingFreshness();

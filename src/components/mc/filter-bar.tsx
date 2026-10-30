@@ -453,11 +453,19 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
     if (filters.dueStart != null || filters.dueEnd != null) {
       out.push({ key: "due", label: `Due · ${dueRangeLabel(filters)}`, onRemove: clearDue });
     }
+    // An Insights drill-down leaves STALE closes out, as its chart does (TASK-4200).
+    if (filters.staleClosed !== undefined) {
+      out.push({
+        key: "stale",
+        label: filters.staleClosed ? "STALE closes only" : "STALE closes hidden",
+        onRemove: () => onChange({ ...filters, staleClosed: undefined }),
+      });
+    }
     return out;
     // togglePriority/etc. close over `filters` + `onChange`; `filters` is the
-    // real input, so depend on the selection arrays + the due bounds.
+    // real input, so depend on the selection arrays + the due bounds + staleClosed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.priority, filters.stage, filters.assignee, filters.label, filters.dueStart, filters.dueEnd]);
+  }, [filters.priority, filters.stage, filters.assignee, filters.label, filters.dueStart, filters.dueEnd, filters.staleClosed]);
 
   const facetButton = (facet: Facet) => {
     const config = facetConfig[facet];

@@ -423,7 +423,9 @@ default `https://staging.plxcustomer.io`: the same host the portal read calls.
 The report carries it as `portalOrigin`, so links and the read change together
 (TASK-3975). The top bar's app links stay on the staging default. Filters: All, Needs
 a human (the bucket table's rule), In flight, Waiting on submitter (`uat:hold`,
-or merged and awaiting re-test) and Verified. No row cap.
+or merged and awaiting re-test), STALE (`uat:stale`, or merged on a ticket the
+portal closed as STALE: closed and unconfirmed, held by nobody, TASK-4200) and
+PASS (verified). No row cap.
 
 Portal step and staging come from the portal's read-only ticket snapshot, off by
 default (`PLX_MC_UAT_PORTAL_READ_ENABLED`). The portal serves it since 28 Oct
@@ -445,7 +447,7 @@ table still lists the BKT-UAT rows.
 |---|---|---|
 | Open ticket with no task | yes | Create the ticket task, with `needs-vince` so Steward waits for a person |
 | Final task while the portal expects one | yes | Reopen a cancelled task to backlog; after Verified, create the next attempt |
-| Open task while the ticket is closed | yes | Cancel as `obsolete`; a merged task on a resolved ticket has no fix (only the portal verifies) |
+| Open task while the ticket is closed (rejected, resolved, or STALE: "closed as STALE (no re-test result)") | yes | Cancel as `obsolete`; a merged task on a resolved or STALE ticket has no fix (only the portal's verify or closeStale closes it), nor has a resolved ticket's newest task while it is still closed as STALE (the portal re-sends its verify) |
 | More than one open task per ticket | no | Cancel the older ones as `superseded` by the newest attempt |
 | Expired lease with no PR, past backlog | no | Requeue to backlog |
 

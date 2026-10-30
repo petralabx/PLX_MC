@@ -115,7 +115,7 @@ function InitiativeSection({
   projectId: string;
   nav: Nav;
 }) {
-  const { bucket, tasks, done, cancelled, closedTasks, remaining, total, pct } = rollup;
+  const { bucket, tasks, done, cancelled, unconfirmed, closedTasks, remaining, total, pct } = rollup;
   const barStyle = { "--pct": `${pct}%` } as CSSProperties;
   const Chevron = collapsed ? ChevronRight : ChevronDown;
   return (
@@ -156,6 +156,7 @@ function InitiativeSection({
                 <>
                   <span className="long">
                     {remaining} outstanding · {closedTasks} / {total} closed · {done} done · {cancelled} cancelled
+                    {unconfirmed > 0 && ` · ${unconfirmed} unconfirmed`}
                   </span>
                   <span className="short">
                     {remaining} open · {closedTasks} / {total} closed

@@ -74,6 +74,19 @@ describe("actionCreateTask kind", () => {
     await expect(create({ labels: ["kind:banana"] })).rejects.toMatchObject({ status: 400 });
     expect(db.tasks).toEqual([]);
   });
+
+  // TASK-4200: uat:stale comes only from the portal's closeStale on a merged
+  // UAT ticket task, so no task is ever created with it.
+  it("refuses a uat:stale label with 403, in any case and with spaces", async () => {
+    for (const labels of [["kind:code", "uat:cmfb7q2xk0001", "uat:stale"], ["UAT:Stale"], [" uat:stale "]]) {
+      await expect(create({ labels, kind: "code" })).rejects.toMatchObject({
+        code: "forbidden",
+        status: 403,
+        message: expect.stringContaining("closeStale"),
+      });
+    }
+    expect(db.tasks).toEqual([]);
+  });
 });
 
 describe("taskCreatePayloadHash", () => {

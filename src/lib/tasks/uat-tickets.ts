@@ -7,7 +7,7 @@
 
 import { STAGES, STAGE_IDX, isOpenInRollup } from "@/lib/mc-data";
 import type { StageKey, Task } from "@/lib/mc-data";
-import { NEEDS_VINCE_LABEL, UAT_LABEL_PREFIX, isUatTicketTask, uatTicketLabel } from "./uat-labels";
+import { NEEDS_VINCE_LABEL, UAT_LABEL_PREFIX, isStaleClosed, isUatTicketTask, uatTicketLabel } from "./uat-labels";
 
 export const UAT_TICKET_BUCKET = "BKT-UAT";
 /**
@@ -44,8 +44,12 @@ export function uatAttempt(labels: readonly string[] | undefined): number {
   return attempt;
 }
 
-/** Gold Feedback statuses (the portal's FeedbackStatus enum). */
-export const PORTAL_TICKET_STATUSES = ["PENDING", "APPROVED", "AUTO_APPROVED", "REJECTED", "IN_PROGRESS", "READY_FOR_RETEST", "REOPENED", "RESOLVED"] as const;
+/**
+ * Gold Feedback statuses (the portal's FeedbackStatus enum). STALE: nobody
+ * answered the re-test within 9 Toronto business days, so the ticket closed
+ * with no result (TASK-4200). The snapshot read refuses any other value.
+ */
+export const PORTAL_TICKET_STATUSES = ["PENDING", "APPROVED", "AUTO_APPROVED", "REJECTED", "IN_PROGRESS", "READY_FOR_RETEST", "REOPENED", "RESOLVED", "STALE"] as const;
 export type PortalTicketStatus = (typeof PORTAL_TICKET_STATUSES)[number];
 
 /**
@@ -112,10 +116,19 @@ export interface UatTicketsReport {
 
 // ─── Drift: where Mission Control and the portal disagree ───────────────────
 
-/** Staff rejected the ticket, or it is resolved. */
-export function isClosedTicket(status: PortalTicketStatus): boolean {
-  return status === "REJECTED" || status === "RESOLVED";
+type ClosedTicketStatus = Extract<PortalTicketStatus, "REJECTED" | "RESOLVED" | "STALE">;
+
+/** Staff rejected the ticket, it is resolved, or it closed as STALE (TASK-4200). */
+export function isClosedTicket(status: PortalTicketStatus): status is ClosedTicketStatus {
+  return status === "REJECTED" || status === "RESOLVED" || status === "STALE";
 }
+
+/** How a finding names a closed ticket: a STALE close is never "rejected" or "resolved". */
+const CLOSED_TICKET_WORD: Record<ClosedTicketStatus, string> = {
+  REJECTED: "rejected",
+  RESOLVED: "resolved",
+  STALE: "closed as STALE (no re-test result)",
+};
 
 export type UatDriftCase =
   | "no_task"
@@ -149,7 +162,8 @@ const byNewest = (a: DriftTask, b: DriftTask) => uatAttempt(b.labels) - uatAttem
 
 /**
  * One finding per task (or per ticket with no task). Pure; only UAT ticket
- * tasks count. "Open" is not verified and not cancelled: merged awaits re-test.
+ * tasks count. "Open" is not verified, not cancelled and not closed as STALE
+ * (uat:stale): merged awaits re-test.
  * With the portal read off or failed, only the last two cases run.
  */
 export function findUatDrift(input: {
@@ -175,18 +189,36 @@ export function findUatDrift(input: {
 
     if (ticket && isClosedTicket(ticket.status)) {
       // Every open task should close too. A merged task on a resolved ticket
-      // waits for the portal's verify, which Mission Control never sends.
-      const word = ticket.status === "RESOLVED" ? "resolved" : "rejected";
+      // waits for the portal's verify, and one on a STALE ticket for the
+      // portal's closeStale (TASK-4200); Mission Control sends neither.
+      const word = CLOSED_TICKET_WORD[ticket.status];
+      const stale = ticket.status === "STALE";
       for (const task of open) {
-        const waitsOnVerify = task.stage === "merged" && ticket.status === "RESOLVED";
+        const waitsOnPortal = task.stage === "merged" && (ticket.status === "RESOLVED" || stale);
+        const text = waitsOnPortal
+          ? `Ticket ${code} is ${word} in the portal, but ${task.id} still awaits re-test. ` +
+            (stale ? "Only the portal's closeStale closes it." : "Only the portal's verify closes it, so re-send it from the portal.")
+          : `${task.id} is open (${stageName(task.stage)}), but ticket ${code} is ${word} in the portal.` +
+            (stale ? "" : " An agent could still lease it.");
         findings.push({
           case: "open_task_closed_ticket",
           feedbackId,
           taskId: task.id,
-          text: waitsOnVerify
-            ? `Ticket ${code} is resolved in the portal, but ${task.id} still awaits re-test. Only the portal's verify closes it, so re-send it from the portal.`
-            : `${task.id} is open (${stageName(task.stage)}), but ticket ${code} is ${word} in the portal. An agent could still lease it.`,
-          fix: waitsOnVerify ? null : { kind: "cancel", taskId: task.id, reason: "obsolete", note: `Portal ticket ${code} is ${word}.` },
+          text,
+          // Only a person applies a cancel: the page runs it on a click, the daily check never does.
+          fix: waitsOnPortal ? null : { kind: "cancel", taskId: task.id, reason: "obsolete", note: `Portal ticket ${code} is ${word}.` },
+        });
+      }
+      // A late PASS resolves a ticket whose newest attempt closed as STALE. That
+      // task waits for the portal's verify too; an older attempt's close is history.
+      const newest = sorted[0];
+      if (ticket.status === "RESOLVED" && isStaleClosed(newest)) {
+        findings.push({
+          case: "open_task_closed_ticket",
+          feedbackId,
+          taskId: newest.id,
+          text: `Ticket ${code} is ${word} in the portal, but ${newest.id} is still closed as STALE. Only the portal's verify closes it, so re-send it from the portal.`,
+          fix: null,
         });
       }
       continue;

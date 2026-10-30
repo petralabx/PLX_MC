@@ -275,6 +275,23 @@ describe("createConfirmedTask", () => {
     })).rejects.toMatchObject({ code: "invalid_request", status: 400 });
   });
 
+  // TASK-4200 (S1-03): only the portal's closeStale adds uat:stale, so no create
+  // door stores it. Refused before the transaction: no intent, id or row.
+  it("refuses a uat:stale label with 403 before any write, in any case and with spaces", async () => {
+    await expect(createConfirmedTask(human, {
+      proposalId: "prop-create",
+      bucketId: "BKT-OPS",
+      title: "Stale on create",
+      accountableOwnerId: "oid-1",
+      kind: "code",
+      labels: ["uat:r5jd2k", " UAT:Stale "],
+    })).rejects.toMatchObject({ code: "forbidden", status: 403, message: expect.stringContaining("closeStale") });
+    expect(txState.seq).toBe(100);
+    expect(txState.intents).toEqual([]);
+    expect(txState.entities.size).toBe(0);
+    expect(txState.proposals.get("prop-create")!.state).toBe("action_required");
+  });
+
   it("requires accountable owner", async () => {
     await expect(
       createConfirmedTask(human, {

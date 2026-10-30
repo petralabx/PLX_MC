@@ -8,6 +8,7 @@
 
 import { ACTORS, BANDS, BUCKETS, PRIORITY, STAGES, bandOf, isClosedStage } from "@/lib/mc-data";
 import type { Band, Bucket, PriorityKey, Task } from "@/lib/mc-data";
+import { isStaleClosed } from "@/lib/tasks/uat-labels";
 import {
   UNASSIGNED_KEY,
   assigneeUniverse,
@@ -73,17 +74,21 @@ export function isOverdue(task: Task, todayDay = INSIGHTS_TODAY_DAY): boolean {
 // may be the UNASSIGNED_KEY sentinel, round-tripping through applyFilters). The
 // bucket axis has NO FilterState facet, so it is handled at the call site
 // (nav by bucketId), never here — passing "bucket" is unreachable by design.
+// A STALE close (TASK-4200) is merged but counts in no slice, so each slice
+// that could list one leaves it out (staleClosed: false), as §3.B.7 requires.
 export function filterForSegment(
   kind: "status" | "priority" | "assignee",
   key: string
 ): FilterState {
   switch (kind) {
-    case "status":
-      return { stage: stagesForBand(key as Band) };
+    case "status": {
+      const stage = stagesForBand(key as Band);
+      return stage.includes("merged") ? { stage, staleClosed: false } : { stage };
+    }
     case "priority":
-      return { priority: [key as PriorityKey] };
+      return { priority: [key as PriorityKey], staleClosed: false };
     case "assignee":
-      return { assignee: [key] };
+      return { assignee: [key], staleClosed: false };
   }
 }
 
@@ -96,8 +101,9 @@ export function buildInsights(
   buckets: Bucket[] = BUCKETS
 ): InsightsModel {
   // Cancelled work is neither open nor done: every dashboard count skips it
-  // (TASK-2529). The Cancelled stage filter lists it separately.
-  tasks = tasks.filter((task) => task.stage !== "cancelled");
+  // (TASK-2529). The Cancelled stage filter lists it separately. A STALE close
+  // (TASK-4200) is closed and unconfirmed, so it is skipped the same way.
+  tasks = tasks.filter((task) => task.stage !== "cancelled" && !isStaleClosed(task));
   // ── Status (band) — the donut. BANDS order; bandOf maps each stage to a band,
   // so the partition is disjoint + complete over `tasks`. ──────────────────────
   const statusBands = BANDS.filter((b) => b.key !== "cancelled");

@@ -40,7 +40,9 @@ import type {
   Task,
 } from "@/lib/mc-data/types";
 import { createLabelsWithKind, type TaskKind } from "@/lib/tasks/kind";
-import { isUatTicketTask } from "@/lib/tasks/uat-labels";
+import {
+  endsStaleClose, isUatTicketTask, staleLabelCreateViolation, staleLabelPatchViolation,
+} from "@/lib/tasks/uat-labels";
 import { assertCreatorApprovedForStage, recordingCreatorRefusal } from "@/lib/compliance/creator-approval";
 import { assertMoveTargetProjectOpen, assertNoSharedEvidenceInRestricted } from "./bucket-move";
 import { ensureBucketsSeeded, ensureProjectsSeeded, ensureReposSeeded, ensureSeeded } from "./engine";
@@ -534,6 +536,12 @@ export async function createTask(
   attribution?: MutationAttribution,
   options: CreateTaskOptions = {}
 ): Promise<Task> {
+  // uat:stale closes a merged UAT ticket task as closed and unconfirmed
+  // (TASK-4200), so no door creates a task with it: MCP, REST and the web all
+  // come through here, before any write. Routing's createConfirmedTask, which
+  // writes its own row, refuses it the same way.
+  const staleViolation = staleLabelCreateViolation(input.labels);
+  if (staleViolation) throw new ApiError("forbidden", staleViolation, 403);
   await ensureSeeded();
   await ensureReposSeeded();
   await ensureBucketsSeeded();
@@ -681,6 +689,8 @@ export interface PatchTaskOptions {
   creatorApproval?: boolean;
   /** Set only by the portal's UAT verify (verifyUatTicketTx, TASK-3697); required to move a UAT ticket task to verified (TASK-3963). */
   uatVerify?: boolean;
+  /** Set only by staleCloseUatTicketTx (TASK-4200); required to add uat:stale. No patch removes it; a move to an open stage drops it. */
+  uatStaleClose?: boolean;
 }
 
 // Persistence tiers:
@@ -805,6 +815,15 @@ export async function patchTask(
       403
     );
   }
+  // uat:stale closes a merged UAT ticket task as closed and unconfirmed
+  // (TASK-4200). Only the portal's closeStale adds it, on any task and door. No
+  // label patch removes it or moves the task's ticket identity. A stage move
+  // that ends the close drops it in repo.updateEntity, which every door's
+  // stage write reaches (this one, the SharePoint pull and keep-SP).
+  const staleViolation = taskPatch.labels
+    ? staleLabelPatchViolation(current.labels, taskPatch.labels, !!opts.uatStaleClose, endsStaleClose(current.stage, taskPatch.stage))
+    : null;
+  if (staleViolation) throw new ApiError("forbidden", `Task ${id}: ${staleViolation}`, 403);
   if ("stage" in taskPatch && taskPatch.stage) {
     // The creator gate (TASK-3530) holds on every door, the compliance
     // projection included. The caller that owns the transaction audits it.

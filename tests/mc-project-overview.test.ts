@@ -26,6 +26,7 @@ import {
   shortDate,
   stageChipTone,
 } from "@/components/mc/project-overview.helpers";
+import { ProjectOverview } from "@/components/mc/project-overview";
 import { TaskTable } from "@/components/mc/task-table";
 
 const task = (over: Partial<Task>): Task =>
@@ -192,6 +193,52 @@ describe("UAT ticket tasks", () => {
     );
     expect(html).toContain("Blocked · quota");
     expect(html).toContain("Needs Vince");
+  });
+
+  // TASK-4200: a STALE close (merged plus uat:stale) is closed and unconfirmed.
+  it("counts a STALE close as closed and unconfirmed, never merged work, and never Needs a human", () => {
+    const bucket = BUCKETS[0];
+    const stale = uat({ bucket: bucket.id, stage: "merged", labels: ["kind:code", "uat:cmfb7q2xk0001", "uat:stale", "uat:blocked"] });
+    const tasks = [
+      stale,
+      uat({ bucket: bucket.id, stage: "merged" }),
+      uat({ bucket: bucket.id, stage: "verified" }),
+      task({ bucket: bucket.id, stage: "cancelled" }),
+    ];
+    const [r] = rollupForProject([bucket], tasks);
+    expect(r).toMatchObject({ done: 1, cancelled: 1, unconfirmed: 1, closedTasks: 3, remaining: 1, total: 4, pct: 75 });
+    expect(projectProgress(tasks)).toMatchObject({ done: 1, cancelled: 1, unconfirmed: 1, doing: 1, remaining: 1, total: 4, pct: 75 });
+    expect(isOutstanding(stale)).toBe(false);
+    expect(isDoneStage(stale)).toBe(false);
+    expect(stageChipTone(stale)).toBe("muted");
+    expect(needsHuman(stale)).toBe(false);
+    expect(filterTasks(tasks, "open")).toEqual([tasks[1]]);
+    const html = renderToStaticMarkup(
+      createElement(TaskTable, { tasks: filterTasks(tasks, "open"), closed: tasks.filter((t) => !isOutstanding(t)), nav: () => {}, emptyText: "None" })
+    );
+    expect(html).toContain("Show 3 closed · 1 merged · 1 cancelled · 1 STALE");
+  });
+
+  it("names a STALE close as unconfirmed in the initiative header's count line", () => {
+    const bucket = BUCKETS[0];
+    const tasks = [
+      uat({ bucket: bucket.id, stage: "verified" }),
+      uat({ bucket: bucket.id, stage: "merged", labels: ["kind:code", "uat:cmfb7q2xk0002", "uat:stale"] }),
+      task({ bucket: bucket.id, stage: "progress" }),
+      task({ bucket: bucket.id, stage: "backlog" }),
+    ];
+    const html = renderToStaticMarkup(
+      createElement(ProjectOverview, { projectId: "PRJ-X", rollups: rollupForProject([bucket], tasks), nav: () => {} })
+    );
+    expect(html).toContain('<span class="long">2 outstanding · 2 / 4 closed · 1 done · 0 cancelled · 1 unconfirmed</span>');
+  });
+
+  it("leaves the closed-rows footer as it was when nothing closed as STALE", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskTable, { tasks: [], closed: [uat({ stage: "verified" }), task({ stage: "cancelled" })], nav: () => {}, emptyText: "None" })
+    );
+    expect(html).toContain("Show 2 closed · 1 merged · 1 cancelled");
+    expect(html).not.toContain("STALE");
   });
 });
 

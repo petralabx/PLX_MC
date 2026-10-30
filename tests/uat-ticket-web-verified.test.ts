@@ -48,8 +48,10 @@ vi.mock("@/lib/api/route", async (importOriginal) => ({
   route: (handler: unknown) => handler,
 }));
 
+import { withTransaction } from "@/lib/db";
 import { patchTask } from "@/lib/sync/state";
 import { PATCH } from "@/app/api/tasks/[id]/route";
+import { POST } from "@/app/api/tasks/route";
 
 const UAT_LABELS = ["kind:code", "uat:R5JD2K", "uat-attempt:1"];
 
@@ -115,5 +117,104 @@ describe("patchTask stage verified on a UAT ticket task (TASK-3963)", () => {
     await expect(patchTask("TASK-1", { stage: "verified" }, "someone")).rejects.toMatchObject(forbidden);
     expect(h.writes).toEqual([]);
     await expect(patchTask("TASK-1", { stage: "verified" }, "portal", { uatVerify: true })).resolves.toMatchObject({ stage: "verified" });
+  });
+});
+
+// TASK-4200: uat:stale closes a merged UAT ticket task as closed and
+// unconfirmed. Only the portal's mc_update_task closeStale writes it
+// (patchTask opts.uatStaleClose), so every other door is refused with 403 and
+// writes nothing: the web PATCH, a direct patchTask and both task creates.
+const staleForbidden = {
+  code: "forbidden",
+  status: 403,
+  message: expect.stringContaining("uat:stale is set only by the portal's mc_update_task closeStale (task.uat_sync)"),
+};
+
+describe("uat:stale through the web (TASK-4200)", () => {
+  it("refuses a web PATCH that adds uat:stale to a UAT ticket task", async () => {
+    putTask("TASK-1", UAT_LABELS);
+    await expect(webPatch("TASK-1", { labels: [...UAT_LABELS, "uat:stale"] })).rejects.toMatchObject(staleForbidden);
+    expect(h.writes).toEqual([]);
+    expect(h.tasks.get("TASK-1")!.data.labels).toEqual(UAT_LABELS);
+  });
+
+  it("refuses a web PATCH that removes uat:stale from a UAT ticket task", async () => {
+    putTask("TASK-1", [...UAT_LABELS, "uat:stale"]);
+    await expect(webPatch("TASK-1", { labels: UAT_LABELS })).rejects.toMatchObject(staleForbidden);
+    await expect(webPatch("TASK-1", { labels: [] })).rejects.toMatchObject(staleForbidden);
+    expect(h.writes).toEqual([]);
+  });
+
+  it("refuses uat:stale on a task that is not a UAT ticket task, so it cannot gain a ticket label later", async () => {
+    putTask("TASK-2", ["kind:code"]);
+    await expect(webPatch("TASK-2", { labels: ["kind:code", "uat:stale"] })).rejects.toMatchObject(staleForbidden);
+    expect(h.writes).toEqual([]);
+    // Other label edits on it are unchanged.
+    await expect(webPatch("TASK-2", { labels: ["kind:code", "api"] })).resolves.toMatchObject({ labels: ["kind:code", "api"] });
+  });
+
+  it("keeps uat:stale through other edits of a STALE-closed task", async () => {
+    putTask("TASK-1", [...UAT_LABELS, "uat:stale"]);
+    await expect(webPatch("TASK-1", { labels: [...UAT_LABELS, "uat:stale", "api"] })).resolves.toMatchObject({
+      labels: [...UAT_LABELS, "uat:stale", "api"],
+    });
+    await expect(webPatch("TASK-1", { title: "Renamed" })).resolves.toMatchObject({ title: "Renamed" });
+  });
+
+  it("patchTask lets only the portal's closeStale door add uat:stale, and nobody remove it", async () => {
+    putTask("TASK-1", UAT_LABELS);
+    await expect(patchTask("TASK-1", { labels: [...UAT_LABELS, "uat:stale"] }, "someone")).rejects.toMatchObject(staleForbidden);
+    await expect(patchTask("TASK-1", { labels: [...UAT_LABELS, "uat:stale"] }, "someone", { uatVerify: true })).rejects.toMatchObject(staleForbidden);
+    expect(h.writes).toEqual([]);
+    await expect(patchTask("TASK-1", { labels: [...UAT_LABELS, "uat:stale"] }, "portal", { uatStaleClose: true })).resolves.toMatchObject({
+      labels: [...UAT_LABELS, "uat:stale"],
+    });
+    // Removing it in a patch is refused for everyone, the closeStale door included.
+    await expect(patchTask("TASK-1", { labels: UAT_LABELS }, "portal", { uatStaleClose: true })).rejects.toMatchObject(staleForbidden);
+    expect(h.tasks.get("TASK-1")!.data.labels).toEqual([...UAT_LABELS, "uat:stale"]);
+  });
+
+  // S1-06: the web PATCH does not trim labels, so a near-copy would be stored,
+  // then turn into the exact label when MCP trims it on a later edit.
+  it("refuses a web PATCH that adds a near-copy of uat:stale", async () => {
+    putTask("TASK-1", UAT_LABELS);
+    for (const variant of [" uat:stale", "UAT:STALE"]) {
+      await expect(webPatch("TASK-1", { labels: [...UAT_LABELS, variant] })).rejects.toMatchObject(staleForbidden);
+    }
+    expect(h.writes).toEqual([]);
+  });
+
+  // S1-05: a label edit cannot carry a STALE close to another ticket, or make it count as done.
+  it("refuses a web PATCH that moves a STALE close's ticket label or kind:code", async () => {
+    putTask("TASK-1", [...UAT_LABELS, "uat:stale"]);
+    const identity = { code: "forbidden", status: 403, message: expect.stringContaining("keeps kind:code and its uat:<feedbackId> label") };
+    for (const labels of [
+      ["kind:code", "uat:OTHER1", "uat-attempt:1", "uat:stale"],
+      ["kind:decision", "uat:R5JD2K", "uat-attempt:1", "uat:stale"],
+      ["kind:code", "uat-attempt:1", "uat:stale"],
+    ]) {
+      await expect(webPatch("TASK-1", { labels })).rejects.toMatchObject(identity);
+    }
+    expect(h.writes).toEqual([]);
+  });
+
+  // The stage writes that end a STALE close run against the real updateEntity
+  // in tests/uat-stale-stage-writes.test.ts.
+
+  it("refuses POST /api/tasks with a uat:stale label, before any write", async () => {
+    vi.mocked(withTransaction).mockClear();
+    const create = (labels: string[]) =>
+      (POST as unknown as (req: Request, ctx: unknown) => Promise<unknown>)(
+        new Request("http://localhost/api/tasks", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title: "UAT ticket", bucket: "BKT-UAT", stage: "merged", labels }),
+        }),
+        { params: Promise.resolve({}) }
+      );
+    await expect(create([...UAT_LABELS, "uat:stale"])).rejects.toMatchObject(staleForbidden);
+    // createTask trims and lowercases labels, so these are uat:stale too.
+    await expect(create(["kind:code", " UAT:Stale "])).rejects.toMatchObject(staleForbidden);
+    expect(withTransaction).not.toHaveBeenCalled();
   });
 });

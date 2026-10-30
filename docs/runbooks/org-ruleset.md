@@ -40,6 +40,14 @@ The compliance gate checks that approval. The ruleset does not.
 5. Check the target: all repositories, default branch. Select **Create**.
 6. Set the old ruleset "PLX MC Compliance Gate" to Disabled. Phase 1 holds its workflow.
 7. In PLX_MC and agentic-swarm, set "cip-only-merge (TASK-3459)" to Disabled.
+8. In every repo, open Settings → General → Pull Requests. Keep **Allow merge
+   commits** on, and turn **Allow squash merging** and **Allow rebase merging**
+   off (Vince, 2026-10-30: never squash anything, TASK-4194). The ruleset covers
+   the default branch only. This setting also covers other bases, such as the
+   portal's `staging`. Read it back afterwards:
+   `gh api repos/petralabx/<repo> --jq '{merge: .allow_merge_commit, squash: .allow_squash_merge, rebase: .allow_rebase_merge}'`.
+   It is a repo-setting change, so it needs Vince's OK, typed in the acting
+   bot's chat.
 
 ## Apply phase 2
 

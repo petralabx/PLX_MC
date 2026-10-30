@@ -11,6 +11,9 @@
 // US dollar revenue shows at today's Bank of Canada rate or at the fixed Sage
 // rate (TASK-3780): the choice lives in the URL (`fx=sage`), and the page model
 // and the export are asked for at it (`?fx=sage`), so every figure agrees.
+// Sections other than the goal cards open from a tab bar (TASK-4094). The
+// cards stay pinned under the top bar. The open section is `tab=` (absent =
+// Revenue → By class), kept alongside `fx` and `scope`.
 // Module contract: docs/modules/reporting-goals/README.md.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -21,7 +24,7 @@ import type { EvaluatedEntry, GoalsPage, RefreshRun, RevenueRateBasis, RevenueSc
 import { torontoDate } from "@/lib/reporting/goals/calendar";
 import { workbookFileName } from "@/lib/reporting/goals/excel/layout";
 
-import type { ScreenProps } from "../route";
+import type { Route, ScreenProps } from "../route";
 
 import { DailyLine1Chart, DailyRevenueChart, DailyTable, SizeHistoryChart } from "./charts";
 import { CustomerRevenueSection } from "./customers";
@@ -46,6 +49,8 @@ import {
 } from "./helpers";
 import { watchRun } from "./run-watch";
 import { Section, type SectionState } from "./section";
+import { SectionNav } from "./section-nav";
+import { activeGoalsTab, DEFAULT_GOALS_TAB, type GoalsTab } from "./tabs";
 import { ShipmentList } from "./shipments";
 import {
   BatchList,
@@ -149,10 +154,20 @@ function saveFile(blob: Blob, fileName: string): void {
 /** The page model's path at a revenue rate: today's rate needs no query, so the default request stays exactly as it was. */
 const goalsPath = (basis: RevenueRateBasis) => (basis === "sage" ? "/reporting/goals?fx=sage" : "/reporting/goals");
 
+/** Goals URL parts. The default section is left out, so `/?screen=goals` stays the same link. */
+function goalsLocation(basis: RevenueRateBasis, scope: RevenueScope, tab: GoalsTab): Omit<Route, "screen"> {
+  return {
+    ...(basis === "sage" ? { fx: "sage" as const } : {}),
+    ...(scope === "mfg" ? { scope: "mfg" as const } : {}),
+    ...(tab !== DEFAULT_GOALS_TAB ? { tab } : {}),
+  };
+}
+
 export function GoalsView({ route, nav }: ScreenProps) {
   const basis: RevenueRateBasis = route.fx === "sage" ? "sage" : "boc";
   // Manufacturing customers only (`scope=mfg`): a display choice on the loaded page, so it needs no new read.
   const scope: RevenueScope = route.scope === "mfg" ? "mfg" : "all";
+  const tab = activeGoalsTab(route.tab);
   // load() reads the chosen rate from here, so it keeps one identity and a rate change never stops a refresh being followed.
   const basisRef = useRef(basis);
   useEffect(() => {
@@ -300,12 +315,30 @@ export function GoalsView({ route, nav }: ScreenProps) {
     if (next === basis) return;
     // A new read starts: an earlier failure (at either rate) no longer describes what's on screen.
     setLoadError(null);
-    nav("goals", { ...(next === "sage" ? { fx: "sage" as const } : {}), ...(scope === "mfg" ? { scope: "mfg" as const } : {}) });
+    nav("goals", goalsLocation(next, scope, tab));
   };
   const chooseScope = (next: RevenueScope) => {
     if (next === scope) return;
-    nav("goals", { ...(basis === "sage" ? { fx: "sage" as const } : {}), ...(next === "mfg" ? { scope: "mfg" as const } : {}) });
+    nav("goals", goalsLocation(basis, next, tab));
   };
+  const chooseTab = (next: GoalsTab) => {
+    if (next === tab) return;
+    nav("goals", goalsLocation(basis, scope, next));
+  };
+  // After a tab change, bring the section out from under the pinned cards.
+  // The first render is the page the link opened, so it stays where it is.
+  const tabLanded = useRef(false);
+  useEffect(() => {
+    if (!tabLanded.current) {
+      tabLanded.current = true;
+      return;
+    }
+    const panel = document.getElementById("goals-panel");
+    const sticky = document.querySelector(".gp-sticky");
+    if (!panel || !sticky) return;
+    const delta = panel.getBoundingClientRect().top - (sticky.getBoundingClientRect().bottom + 8);
+    if (delta < -4 || panel.getBoundingClientRect().top > window.innerHeight * 0.55) window.scrollBy(0, delta);
+  }, [tab]);
   const retryRate = () => {
     setLoadError(null);
     void load();
@@ -467,7 +500,7 @@ export function GoalsView({ route, nav }: ScreenProps) {
         ) : page && !ready ? (
           <NotReady page={page} editor={editor} />
         ) : (
-          <Body page={ready} status={status} onRetry={retry} entryActions={entryActions} scope={scope} />
+          <Body page={ready} status={status} onRetry={retry} entryActions={entryActions} scope={scope} tab={tab} onTab={chooseTab} />
         )}
 
         {ready && editor && entryDialog ? (
@@ -529,12 +562,16 @@ function Body({
   onRetry,
   entryActions,
   scope = "all",
+  tab,
+  onTab,
 }: {
   page: ReadyPage | null;
   status: SectionState;
   onRetry: () => void;
   entryActions?: EntryActions;
   scope?: RevenueScope;
+  tab: GoalsTab;
+  onTab: (tab: GoalsTab) => void;
 }) {
   const state: SectionState = page ? "ready" : status === "ready" ? "failed" : status;
   const src = (key: string) => (page ? sourceText(page.run, page.sections[key] ?? []) : null);
@@ -563,159 +600,221 @@ function Body({
         </p>
       ) : null}
 
-      <Section id="goals" title="This month’s goals" state={state} onRetry={onRetry} resetKey={page} size="lg" bare>
-        {ready((p) => (
-          <GoalCards page={p} scope={scope} />
-        ))}
-      </Section>
-
-      <Section
-        id="classes"
-        title="Revenue by customer class"
-        note="The Revenue card’s month split by each customer’s class, from Vince’s 5 Oct list."
-        source={src("classes")}
-        state={state}
-        onRetry={onRetry}
-        resetKey={page}
-      >
-        {ready((p) => (
-          <RevenueByClassTable page={p} />
-        ))}
-      </Section>
-
-      <Section
-        id="daily"
-        title="Day by day"
-        note="Weekends and holidays are shaded. Point at or tap a day for its numbers, or open the table under the charts."
-        source={src("daily")}
-        state={state}
-        onRetry={onRetry} resetKey={page}
-        size="lg"
-      >
-        {ready((p) => (
-          <>
-            <div className="gp-charts">
-              <figure className="gp-chart">
-                <figcaption>Line 1 bulk kg per day</figcaption>
-                <DailyLine1Chart page={p} />
-              </figure>
-              <figure className="gp-chart">
-                <figcaption>Revenue against the {dollars(p.settings.revenueTargetCadCents)} target (CAD)</figcaption>
-                <DailyRevenueChart page={p} />
-              </figure>
-            </div>
-            <DailyTable page={p} />
-          </>
-        ))}
-      </Section>
-
-      <Section id="truckloads" title="Truckloads by customer" source={src("truckloads")} state={state} onRetry={onRetry} resetKey={page}>
-        {ready((p) => (
-          <TruckloadTable page={p} />
-        ))}
-      </Section>
-
-      <Section
-        id="entries"
-        title="Entries by hand"
-        note="Everything your team entered by hand, with its status. Entries that no longer count are dimmed."
-        source={src("entries")}
-        state={state}
-        onRetry={onRetry} resetKey={page}
-      >
-        {ready((p) => (
-          <EntriesTable page={p} actions={entryActions} />
-        ))}
-      </Section>
-
-      <Section
-        id="sizes"
-        title="Batches completed by size"
-        note="Completed this month (FileMaker), with the pace per 20 working days. The chart compares the last three full months with this month’s pace."
-        source={src("sizes")}
-        state={state}
-        onRetry={onRetry} resetKey={page}
-        size="lg"
-      >
-        {ready((p) => (
-          <>
-            <CompletedTiles tiles={p.model.sizes.completed} />
-            <SizeHistoryChart page={p} />
-          </>
-        ))}
-      </Section>
-
-      <Section id="scheduled" title="Scheduled from today by size" source={src("batches")} state={state} onRetry={onRetry} resetKey={page} size="sm">
-        {ready((p) => (
-          <ScheduledTiles tiles={p.model.sizes.scheduledFromToday} openPastDate={p.model.sizes.openPastDate} />
-        ))}
-      </Section>
-
-      <Section
-        id="batches"
-        title="Batch list"
-        note="Every batch this month. Select a column heading to sort."
-        source={src("batches")}
-        state={state}
-        onRetry={onRetry} resetKey={page}
-        size="lg"
-      >
-        {ready((p) => (
-          <BatchList page={p} />
-        ))}
-      </Section>
-
-      <Section
-        id="shipments"
-        title="Shipments this month"
-        note="Every Sage invoice shipped this month, and the shipments entered by hand that count. The totals follow the search and filters."
-        source={src("shipments")}
-        state={state}
-        onRetry={onRetry} resetKey={page}
-        size="lg"
-      >
-        {ready((p) => (
-          <ShipmentList page={p} />
-        ))}
-      </Section>
-
-      <Section
-        id="customers"
-        title="Revenue by customer"
-        note="Potential revenue from production for open orders, and this month's invoiced revenue, by customer and week (weeks start Monday). Amounts in CAD at the page's rate."
-        source={src("customers")}
-        state={state}
-        onRetry={onRetry} resetKey={page}
-        size="lg"
-      >
-        {ready((p) => (
-          <CustomerRevenueSection page={p} />
-        ))}
-      </Section>
-
-      <Section
-        id="forecast"
-        title="Revenue forecast"
-        note={`This month’s open Sage orders, matched to FileMaker’s plan through their assembly orders. Amounts in CAD at ${
-          page?.model.revenue.basis === "sage" ? `the Sage rate ${rate(page.model.revenue.rate)}` : "the run’s Bank of Canada rate"
-        }.`}
-        source={src("forecast")}
-        state={state}
-        onRetry={onRetry} resetKey={page}
-        size="lg"
-      >
-        {ready((p) => (
-          <ForecastSection page={p} />
-        ))}
-      </Section>
-
-      <Section id="rules" title="How these numbers are worked out" state={state} onRetry={onRetry} resetKey={page} size="sm" bare>
-        {ready((p) => (
-          <div className="gp-rules">
-            <RulesText page={p} />
-          </div>
-        ))}
-      </Section>
+      <div className="gp-sticky">
+        <div className="gp-sticky-kpis" tabIndex={0} role="region" aria-label="Goal summary">
+          <Section id="goals" title="This month’s goals" state={state} onRetry={onRetry} resetKey={page} size="lg" bare>
+            {ready((p) => (
+              <GoalCards page={p} scope={scope} />
+            ))}
+          </Section>
+        </div>
+        <SectionNav active={tab} onSelect={onTab} />
+      </div>
+      <div role="tabpanel" id="goals-panel" aria-labelledby={`goals-tab-${tab}`} data-testid="goals-panel">
+        <ReportPanel tab={tab} page={page} state={state} onRetry={onRetry} entryActions={entryActions} src={src} ready={ready} />
+      </div>
     </>
   );
+}
+
+function ReportPanel({
+  tab,
+  page,
+  state,
+  onRetry,
+  entryActions,
+  src,
+  ready,
+}: {
+  tab: GoalsTab;
+  page: ReadyPage | null;
+  state: SectionState;
+  onRetry: () => void;
+  entryActions?: EntryActions;
+  src: (key: string) => string | null;
+  ready: (render: (p: ReadyPage) => ReactNode) => ReactNode;
+}) {
+  switch (tab) {
+    case "classes":
+      return (
+        <Section
+          id="classes"
+          title="Revenue by customer class"
+          note="The Revenue card’s month split by each customer’s class, from Vince’s 5 Oct list."
+          source={src("classes")}
+          state={state}
+          onRetry={onRetry}
+          resetKey={page}
+        >
+          {ready((p) => (
+            <RevenueByClassTable page={p} />
+          ))}
+        </Section>
+      );
+    case "daily":
+      return (
+        <Section
+          id="daily"
+          title="Day by day"
+          note="Weekends and holidays are shaded. Point at or tap a day for its numbers, or open the table under the charts."
+          source={src("daily")}
+          state={state}
+          onRetry={onRetry}
+          resetKey={page}
+          size="lg"
+        >
+          {ready((p) => (
+            <>
+              <div className="gp-charts">
+                <figure className="gp-chart">
+                  <figcaption>Line 1 bulk kg per day</figcaption>
+                  <DailyLine1Chart page={p} />
+                </figure>
+                <figure className="gp-chart">
+                  <figcaption>Revenue against the {dollars(p.settings.revenueTargetCadCents)} target (CAD)</figcaption>
+                  <DailyRevenueChart page={p} />
+                </figure>
+              </div>
+              <DailyTable page={p} />
+            </>
+          ))}
+        </Section>
+      );
+    case "truckloads":
+      return (
+        <Section id="truckloads" title="Truckloads by customer" source={src("truckloads")} state={state} onRetry={onRetry} resetKey={page}>
+          {ready((p) => (
+            <TruckloadTable page={p} />
+          ))}
+        </Section>
+      );
+    case "entries":
+      return (
+        <Section
+          id="entries"
+          title="Entries by hand"
+          note="Everything your team entered by hand, with its status. Entries that no longer count are dimmed."
+          source={src("entries")}
+          state={state}
+          onRetry={onRetry}
+          resetKey={page}
+        >
+          {ready((p) => (
+            <EntriesTable page={p} actions={entryActions} />
+          ))}
+        </Section>
+      );
+    case "sizes":
+      return (
+        <Section
+          id="sizes"
+          title="Batches completed by size"
+          note="Completed this month (FileMaker), with the pace per 20 working days. The chart compares the last three full months with this month’s pace."
+          source={src("sizes")}
+          state={state}
+          onRetry={onRetry}
+          resetKey={page}
+          size="lg"
+        >
+          {ready((p) => (
+            <>
+              <CompletedTiles tiles={p.model.sizes.completed} />
+              <SizeHistoryChart page={p} />
+            </>
+          ))}
+        </Section>
+      );
+    case "scheduled":
+      return (
+        <Section id="scheduled" title="Scheduled from today by size" source={src("batches")} state={state} onRetry={onRetry} resetKey={page} size="sm">
+          {ready((p) => (
+            <ScheduledTiles tiles={p.model.sizes.scheduledFromToday} openPastDate={p.model.sizes.openPastDate} />
+          ))}
+        </Section>
+      );
+    case "batches":
+      return (
+        <Section
+          id="batches"
+          title="Batch list"
+          note="Every batch this month. Select a column heading to sort."
+          source={src("batches")}
+          state={state}
+          onRetry={onRetry}
+          resetKey={page}
+          size="lg"
+        >
+          {ready((p) => (
+            <BatchList page={p} />
+          ))}
+        </Section>
+      );
+    case "shipments":
+      return (
+        <Section
+          id="shipments"
+          title="Shipments this month"
+          note="Every Sage invoice shipped this month, and the shipments entered by hand that count. The totals follow the search and filters."
+          source={src("shipments")}
+          state={state}
+          onRetry={onRetry}
+          resetKey={page}
+          size="lg"
+        >
+          {ready((p) => (
+            <ShipmentList page={p} />
+          ))}
+        </Section>
+      );
+    case "customers":
+      return (
+        <Section
+          id="customers"
+          title="Revenue by customer"
+          note={"Potential revenue from production for open orders, and this month's invoiced revenue, by customer and week (weeks start Monday). Amounts in CAD at the page's rate." /* pragma: allowlist secret */}
+          source={src("customers")}
+          state={state}
+          onRetry={onRetry}
+          resetKey={page}
+          size="lg"
+        >
+          {ready((p) => (
+            <CustomerRevenueSection page={p} />
+          ))}
+        </Section>
+      );
+    case "forecast":
+      return (
+        <Section
+          id="forecast"
+          title="Revenue forecast"
+          note={`This month’s open Sage orders, matched to FileMaker’s plan through their assembly orders. Amounts in CAD at ${
+            page?.model.revenue.basis === "sage" ? `the Sage rate ${rate(page.model.revenue.rate)}` : "the run’s Bank of Canada rate"
+          }.`}
+          source={src("forecast")}
+          state={state}
+          onRetry={onRetry}
+          resetKey={page}
+          size="lg"
+        >
+          {ready((p) => (
+            <ForecastSection page={p} />
+          ))}
+        </Section>
+      );
+    case "rules":
+      return (
+        <Section id="rules" title="How these numbers are worked out" state={state} onRetry={onRetry} resetKey={page} size="sm" bare>
+          {ready((p) => (
+            <div className="gp-rules">
+              <RulesText page={p} />
+            </div>
+          ))}
+        </Section>
+      );
+    default: {
+      const exhaustive: never = tab;
+      return exhaustive;
+    }
+  }
 }

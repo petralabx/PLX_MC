@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { waitForHydration } from "./helpers";
-import { goalsPage, gotoGoals, mockGoalsApi, runAt } from "./helpers/goals";
+import { goalsPage, gotoGoals, mockGoalsApi, openGoalsTab, runAt } from "./helpers/goals";
 
 // Goals & Production page (TASK-2896) against the 2026-10-14 fixture with
 // M1–M7 entered: the numbers, the batch list, the Editor refresh flow, and
@@ -30,13 +30,14 @@ test.describe("goals & production", () => {
       "title",
       "From queries revenue-by-currency, credit-notes · run #41, Oct 14, 6:00 AM"
     );
+    await openGoalsTab(page, "Truckloads: By customer");
     await expect(page.getByTestId("goals-truckloads")).toContainText("From query truckloads · run #41");
     await expect(page.getByTestId("goals-behind")).toHaveCount(0);
   });
 
   test("reads a chart day by hovering, and offers the numbers as a table", async ({ page }) => {
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Batches: Day by day");
     const chart = page.getByTestId("goals-daily").locator(".gp-chart").nth(1).locator(".colchart-plot");
     await chart.scrollIntoViewIfNeeded();
     const box = (await chart.boundingBox())!;
@@ -53,7 +54,7 @@ test.describe("goals & production", () => {
     const context = await browser.newContext({ hasTouch: true, viewport: { width: 393, height: 851 } });
     const page = await context.newPage();
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Batches: Day by day");
     const chart = page.getByTestId("goals-daily").locator(".gp-chart").first().locator(".colchart-plot");
     await chart.scrollIntoViewIfNeeded();
     const box = (await chart.boundingBox())!;
@@ -65,7 +66,7 @@ test.describe("goals & production", () => {
 
   test("filters, searches and sorts the batch list", async ({ page }) => {
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Batches: Batch list");
     const list = page.getByTestId("goals-batches");
     const total = goalsPage().model!.batches.length;
     await expect(list.getByText(`Showing ${total} of ${total} batches`)).toBeVisible();
@@ -90,7 +91,7 @@ test.describe("goals & production", () => {
 
   test("lists this month's shipments; search and a filter change the rows and the totals", async ({ page }) => {
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Shipments");
     const section = page.getByTestId("goals-shipments");
     await expect(section.getByRole("heading", { name: "Shipments this month" })).toBeVisible();
     await expect(section).toContainText("From queries shipments, truckloads, shipment-lines · run #41");
@@ -187,21 +188,26 @@ test.describe("goals & production", () => {
     });
     await page.goto("/?screen=goals");
     await waitForHydration(page);
-    // One skeleton per section (the revenue forecast's included), then one "Failed to load." each.
+    // The pinned cards and the open section each reserve a skeleton. A tab
+    // that isn't open isn't on the page yet; opening it shows its own failure.
     const sections = screen(page).locator("section.gp-sec");
+    await expect(sections).toHaveCount(2);
     await expect(sections.last()).toBeVisible();
-    const sectionCount = await sections.count();
-    await expect(screen(page).locator(".gp-skel")).toHaveCount(sectionCount);
-    const loading = await page.getByTestId("goals-batches").boundingBox();
+    await expect(screen(page).locator(".gp-skel")).toHaveCount(2);
+    const loading = await page.getByTestId("goals-classes").boundingBox();
     release();
-    await expect(page.getByText("Failed to load.")).toHaveCount(sectionCount);
+    await expect(page.getByText("Failed to load.")).toHaveCount(2);
     await expect(page.getByTestId("goals-as-of")).toHaveText("Couldn’t load the report: Internal error.");
     // The failed state takes the skeleton's place: nothing below moves.
-    const failed = await page.getByTestId("goals-batches").boundingBox();
+    const failed = await page.getByTestId("goals-classes").boundingBox();
     expect(failed?.y).toBe(loading?.y);
+    await openGoalsTab(page, "Batches: Batch list");
+    await expect(page.getByTestId("goals-batches")).toContainText("Failed to load.");
+    await expect(page.getByTestId("goals-classes")).toHaveCount(0);
     fail = false;
-    await page.getByTestId("goals-truckloads").getByRole("button", { name: "Retry" }).click();
+    await page.getByTestId("goals-batches").getByRole("button", { name: "Retry" }).click();
     await expect(page.getByTestId("goals-card-line1")).toContainText("91,702 of 420,000 kg");
+    await expect(page.getByTestId("goals-batches")).toContainText("Showing");
     await expect(page.getByText("Failed to load.")).toHaveCount(0);
   });
 
@@ -210,10 +216,12 @@ test.describe("goals & production", () => {
     // A daily series the charts can't read.
     (broken.model as unknown as { daily: null }).daily = null;
     await mockGoalsApi(page, broken);
-    await gotoGoals(page);
+    await gotoGoals(page, "Batches: Day by day");
     await expect(page.getByTestId("goals-daily")).toContainText("Failed to load.");
     await expect(page.getByTestId("goals-card-line1")).toContainText("91,702 of 420,000 kg");
+    await openGoalsTab(page, "Truckloads: By customer");
     await expect(page.getByTestId("goals-truckloads")).not.toContainText("Failed to load.");
+    await expect(page.getByTestId("goals-daily")).toHaveCount(0);
   });
 
   test("a section that failed to render recovers when a refresh brings good data", async ({ page }) => {
@@ -235,7 +243,7 @@ test.describe("goals & production", () => {
       const run = runAt({ id: 42, status: "succeeded", startedAt: "2026-10-14T13:41:50.000Z", finishedAt: "2026-10-14T13:42:20.000Z" });
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: run }) });
     });
-    await gotoGoals(page);
+    await gotoGoals(page, "Batches: Day by day");
     await expect(page.getByTestId("goals-daily")).toContainText("Failed to load.");
     await page.getByRole("button", { name: "Refresh" }).click();
     await expect(page.locator("#goals-refresh-status")).toContainText("Refreshed");

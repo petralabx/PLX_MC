@@ -201,7 +201,7 @@ export function GoalCards({ page, scope = "all" }: { page: ReadyPage; scope?: Re
       : `${rate(fx.rate)} (${fx.stale ? `stored rate from ${day(fx.date)}; the Bank of Canada rate couldn't be fetched` : `Bank of Canada, ${day(fx.date)}`})`;
 
   return (
-    <div className="gp-cards">
+    <div className="gp-cards" tabIndex={0} role="group" aria-label="The three goals">
       <Card
         id="line1"
         title="Line 1 bulk"

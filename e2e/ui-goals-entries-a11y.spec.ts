@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { entriesWorkbook, entryRow, excelDate } from "../tests/reporting-goals-workbook";
 import { ENTRIES } from "../tests/reporting-goals-helpers";
 
-import { gotoGoals } from "./helpers/goals";
+import { gotoGoals, openGoalsTab } from "./helpers/goals";
 import { EntriesApi } from "./helpers/goals-entries";
 
 // G4 for Goals & Production entries by hand (TASK-2897): zero axe violations
@@ -26,6 +26,7 @@ test.describe("goals entries a11y (G4)", () => {
     await new EntriesApi().install(page);
     await gotoGoals(page);
     await expect(page.getByTestId("goals-card-line1")).toBeVisible();
+    await openGoalsTab(page, "Entries: By hand");
   });
 
   test("the entry form, with its errors showing, has no axe violations", async ({ page }) => {

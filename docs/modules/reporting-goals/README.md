@@ -130,6 +130,11 @@ traceable to a refresh run and a named query.
      charts, truckloads by customer, entries by hand, completed and scheduled batches by size, the
      batch list (search, filters, "Line 1 only" toggle, sortable columns) and
      the rules in plain words.
+   - Section tabs (TASK-4094): the goal cards stay pinned under the top bar.
+     Every other section is one tab, grouped as Revenue (by class, shipments,
+     by customer, forecast), Batches (day by day, by size, scheduled, batch
+     list), Truckloads, Entries and Rules. The choice is `tab=` on
+     `/?screen=goals` (absent means Revenue → By class). `fx` and `scope` stay.
    - Charts: `StackedColumns` and `RunningLines` in
      `src/components/mc/charts/column-chart.tsx` (native SVG; HTML labels).
      Each has a one-sentence summary and its numbers in a table under it.

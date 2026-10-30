@@ -3,10 +3,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 import type { GoalsPage } from "../src/lib/reporting/goals";
 import { waitForHydration } from "./helpers";
-import { goalsPage, gotoGoals, mockGoalsApi } from "./helpers/goals";
+import { goalsPage, gotoGoals, mockGoalsApi, openGoalsTab } from "./helpers/goals";
 
 // Revenue forecast on Goals & Production (TASK-3151), against the 2026-10-14
-// fixture with M1–M7 entered: the section sits last, before the rules; its
+// fixture with M1–M7 entered: the section is the Forecast tab, before Rules; its
 // chips and search change the rows and the totals; and it says when it is
 // waiting for read access. Axe-clean in light and dark, with numbers and while
 // waiting. No sideways scrolling at desktop, tablet and phone widths is checked
@@ -27,15 +27,11 @@ const WAITING: GoalsPage = goalsPage({}, undefined, {
 });
 
 test.describe("goals revenue forecast", () => {
-  test("sits at the bottom, after the batch list and before the rules, with its four numbers", async ({ page }) => {
+  test("opens from its tab, with its four numbers, and the rules are one click away", async ({ page }) => {
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Forecast");
     await expect(section(page)).toBeVisible();
-    const order = await page
-      .locator("[data-testid='goals-screen'] section.gp-sec")
-      .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
-    expect(order.slice(-2)).toEqual(["goals-forecast", "goals-rules"]);
-    expect(order.indexOf("goals-forecast")).toBeGreaterThan(order.indexOf("goals-batches"));
+    await expect(page.getByTestId("goals-batches")).toHaveCount(0);
 
     const numbers = section(page).getByTestId("goals-forecast-numbers");
     await expect(numbers.locator("li")).toHaveCount(4);
@@ -46,12 +42,14 @@ test.describe("goals revenue forecast", () => {
     await expect(numbers.locator("li").nth(3)).toContainText("Pace$953,466");
     await expect(section(page)).toContainText("2 assembly orders scheduled this month (8,400 pieces) have no open Sage order behind them");
     await expect(section(page)).toContainText("From queries revenue-by-currency, forecast-orders, forecast-assembly-orders · run #41");
+    await openGoalsTab(page, "Rules: Rules");
     await expect(page.getByTestId("goals-rules")).toContainText("Revenue forecast takes every open Sage order line");
+    await expect(section(page)).toHaveCount(0);
   });
 
   test("bucket chips and the search change the rows and the totals", async ({ page }) => {
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Forecast");
     const list = section(page).getByRole("region", { name: "Open orders this month" });
     const status = section(page).locator(".gp-count");
     const search = section(page).getByLabel("Search open orders");
@@ -80,7 +78,7 @@ test.describe("goals revenue forecast", () => {
 
   test("the customer class and item category filters change the rows, the chips and the totals (TASK-3177)", async ({ page }) => {
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Forecast");
     const list = section(page).getByRole("region", { name: "Open orders this month" });
     const status = section(page).locator(".gp-count");
     await section(page).getByLabel("Customer class").selectOption("Exclusive Manufacturing");
@@ -105,7 +103,7 @@ test.describe("goals revenue forecast", () => {
 
   test("the four numbers follow the class and category filters, never the chips or the search (TASK-3190)", async ({ page }) => {
     await mockGoalsApi(page);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Forecast");
     const numbers = section(page).getByTestId("goals-forecast-numbers").locator("li");
     const caption = section(page).getByTestId("goals-forecast-filtered");
     await expect(caption).toHaveCount(0);
@@ -136,7 +134,7 @@ test.describe("goals revenue forecast", () => {
 
   test("while the login can't read the orders it says so, names what's missing, and the rest of the page stays", async ({ page }) => {
     await mockGoalsApi(page, WAITING);
-    await gotoGoals(page);
+    await gotoGoals(page, "Revenue: Forecast");
     const waiting = section(page).getByTestId("goals-forecast-waiting");
     await expect(waiting).toContainText("Waiting for read access to Sage orders and FileMaker assembly orders.");
     await expect(waiting).toContainText("sage.oe_order_header: type, expdate");
@@ -153,7 +151,7 @@ test.describe("goals revenue forecast", () => {
         expect(results.violations).toEqual([]);
       };
       await mockGoalsApi(page);
-      await gotoGoals(page);
+      await gotoGoals(page, "Revenue: Forecast");
       await section(page).getByRole("button", { name: /^Not planned/ }).click();
       await expect(section(page).locator("tbody tr")).toHaveCount(5);
       await scan();

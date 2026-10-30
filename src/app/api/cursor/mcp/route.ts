@@ -11,7 +11,7 @@ import {
   mcpBrowserHelpHtml,
 } from "@/lib/mcp/browser-help";
 import { createPlxMcMcpServer } from "@/lib/mcp/create-http-server";
-import { publicMcBaseUrl } from "@/lib/mcp/envelope";
+import { apiErrorBody, publicMcBaseUrl } from "@/lib/mcp/envelope";
 
 export const runtime = "nodejs";
 
@@ -31,7 +31,7 @@ async function handleMcpRequest(req: Request): Promise<Response> {
       return Response.json({ error: { code: err.code, message: err.message, schema: err.schema } }, { status: 503 });
     }
     if (err instanceof ApiError) {
-      return Response.json({ error: { code: err.code, message: err.message } }, {
+      return Response.json(apiErrorBody(err), {
         status: err.status,
         headers: err.status === 401 ? { "WWW-Authenticate": "Bearer" } : undefined,
       });

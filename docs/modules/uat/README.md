@@ -84,8 +84,9 @@ to a merged UAT ticket task.
 - **Refusals:** a merged task that already has `uat:stale` returns an empty
   diff and writes nothing. Verified gives 409 `already_verified` and cancelled
   409 `already_cancelled`, even when the task has the label. Any other stage
-  gives 409 `not_merged`, the only 409 the portal retries. Any other principal
-  gets 403 and a `task.close_stale_denied` event.
+  gives 409 `not_merged`, the only 409 the portal retries. An agent (a
+  principal with `task.progress`) gets 403 and a `task.close_stale_denied`
+  event.
 - **One door:** only `closeStale` adds `uat:stale`, and no door adds a
   near-copy such as ` UAT:Stale`. No label patch removes it, whoever sends it.
   While it is on, a label patch keeps `kind:code` and the `uat:<feedbackId>`
@@ -107,9 +108,14 @@ to a merged UAT ticket task.
   the label too.
 - **Readers:** the portal snapshot may carry status `STALE`, a closed status.
   The UAT tickets view shows a STALE close (`uat:stale`, or a merged task whose
-  ticket is STALE) in its own STALE group and filter, held by nobody. The drift
-  check calls the ticket "closed as STALE (no re-test result)", never rejected
-  or resolved. It asks the portal for a missing `uat:stale` with no fix in MC,
+  ticket is STALE) in its own STALE group and filter, held by nobody: its work
+  is done, and a late result only verifies it or supersedes it. Before
+  closeStale lands, a merged task the bucket table counts as Needs a human
+  stays in Needs a human. A held task that never merged stays in Waiting on
+  submitter, unless it needs a human: during the 30-day late window, only the
+  submitter can move a STALE ticket.
+  The drift check calls the ticket "closed as STALE (no re-test result)", never
+  rejected or resolved. It asks the portal for a missing `uat:stale` with no fix in MC,
   and offers a person a cancel for an open task that never merged. When a late
   PASS resolves the ticket while its newest task is still closed as STALE, the
   check asks the portal to re-send its verify, with no fix in MC.
@@ -121,7 +127,8 @@ to a merged UAT ticket task.
 A UAT ticket task counts as Needs a human when it carries `uat:blocked` or
 `needs-vince`, as well as on the general rules (a pending approval gate, a
 blocked flag, no human owner) (`src/components/mc/project-overview.helpers.ts`).
-A STALE close is closed, so it never does.
+A task closed as STALE (`uat:stale`) is closed, so it never does; before
+closeStale lands, a merged task on a STALE ticket still can.
 
 ### UAT tickets view and drift check
 

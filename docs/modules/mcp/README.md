@@ -218,9 +218,11 @@ stdio proxies to `POST /api/cursor/tasks/update` and `/tasks/update-batch`.
   It moves a merged UAT ticket task to `verified` and audits `task.verified`
   (`previousStage`, `verifiedBy`, `note`). It cannot be combined with other
   fields. A verified task returns an empty `diff` and writes nothing. Any other
-  stage gives 409 `not_merged`, and a task that is not a UAT ticket task gives
-  400. The owner, evidence and approval-gate checks still apply (409
-  `stage_blocked`). It needs `task.uat_sync`, which only `sp_mcp_portal` holds.
+  stage except cancelled gives 409 `not_merged`, and a task that is not a UAT
+  ticket task gives 400 (the portal gets 403 first: its scope is UAT ticket
+  tasks). The owner, evidence and approval-gate checks still
+  apply (409 `stage_blocked`). It needs `task.uat_sync`, which only
+  `sp_mcp_portal` holds.
   An agent gets 403 and a `task.verify_denied` event, and `mc_report_progress`
   refuses `stage: "verified"` on a UAT ticket task. On every other task
   `mc_report_progress` and `POST /api/cursor/tasks` refuse `stage: "verified"`

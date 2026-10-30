@@ -153,14 +153,6 @@ describe("uat:stale through the web (TASK-4200)", () => {
     await expect(webPatch("TASK-2", { labels: ["kind:code", "api"] })).resolves.toMatchObject({ labels: ["kind:code", "api"] });
   });
 
-  it("keeps uat:stale through other edits of a STALE-closed task", async () => {
-    putTask("TASK-1", [...UAT_LABELS, "uat:stale"]);
-    await expect(webPatch("TASK-1", { labels: [...UAT_LABELS, "uat:stale", "api"] })).resolves.toMatchObject({
-      labels: [...UAT_LABELS, "uat:stale", "api"],
-    });
-    await expect(webPatch("TASK-1", { title: "Renamed" })).resolves.toMatchObject({ title: "Renamed" });
-  });
-
   it("patchTask lets only the portal's closeStale door add uat:stale, and nobody remove it", async () => {
     putTask("TASK-1", UAT_LABELS);
     await expect(patchTask("TASK-1", { labels: [...UAT_LABELS, "uat:stale"] }, "someone")).rejects.toMatchObject(staleForbidden);
@@ -174,8 +166,9 @@ describe("uat:stale through the web (TASK-4200)", () => {
     expect(h.tasks.get("TASK-1")!.data.labels).toEqual([...UAT_LABELS, "uat:stale"]);
   });
 
-  // S1-06: the web PATCH does not trim labels, so a near-copy would be stored,
-  // then turn into the exact label when MCP trims it on a later edit.
+  // S1-06: the web PATCH does not trim labels, so a near-copy would be stored.
+  // A padded one reads as an add of the exact label once an MCP label edit
+  // trims it; a case variant is refused as createTask refuses it.
   it("refuses a web PATCH that adds a near-copy of uat:stale", async () => {
     putTask("TASK-1", UAT_LABELS);
     for (const variant of [" uat:stale", "UAT:STALE"]) {

@@ -226,8 +226,9 @@ export function findUatDrift(input: {
 
     if (ticket?.expectsTask && open.length === 0) {
       // The portal wants a task and every task is final. A cancelled one
-      // reopens; a verified one stays verified and the next attempt gets a
-      // new task. A ticket that only lags expects no task and is left alone.
+      // reopens; a verified one, or one closed as STALE, stays as it is and
+      // the next attempt gets a new task. A ticket that only lags expects no
+      // task and is left alone.
       const newest = sorted[0];
       findings.push({
         case: "final_task_open_ticket",

@@ -881,6 +881,19 @@ describe("UAT ticket task mirror (TASK-3697)", () => {
       expect(h.events.map((e) => e.kind)).toEqual(["task.uat_stale_closed", "task.updated"]);
     });
 
+    // A near-copy stored before S1 may stay: an edit that sends no label field
+    // writes no labels, so trimming the stored list cannot read as an add.
+    it("lets an agent edit the title or priority of a task that stores a padded near-copy of uat:stale", async () => {
+      for (const nearCopy of [" uat:stale", "uat:stale ", " UAT:Stale "]) {
+        uat("TASK-UAT", { stage: "merged", labels: [...LABELS, nearCopy] });
+        expect((await agent({ title: "Renamed" })).ok).toBe(true);
+        expect((await agent({ priority: "high" })).ok).toBe(true);
+        expect(data()).toMatchObject({ title: "Renamed", priority: "high", labels: [...LABELS, nearCopy] });
+        // Adding the real label is still refused.
+        expect(refusal(await agent({ addLabels: ["uat:stale"] }))).toEqual({ ok: false, code: "forbidden" });
+      }
+    });
+
     // S1-05: a label edit could carry the close to another ticket, or drop
     // kind:code and make it count as done.
     it("refuses an agent label edit that moves a STALE close's ticket label or kind:code", async () => {

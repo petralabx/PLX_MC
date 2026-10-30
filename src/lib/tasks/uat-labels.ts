@@ -73,11 +73,15 @@ export function staleLabelCreateViolation(labels: readonly string[] | undefined)
 
 /**
  * Why a label write may not change uat:stale, or null. Adding it needs the
- * portal's closeStale (`mayAdd`), and no door adds a near-copy such as
- * " UAT:Stale", which a later trimmed edit would turn into the label. No patch
- * removes it, and while it is on, the task keeps kind:code and its ticket
- * label. A write that ends the close (`endsClose`, see endsStaleClose) is free
- * of both rules, because the label goes with it.
+ * portal's closeStale (`mayAdd`), and no door adds a near-copy: a stored
+ * padded " uat:stale" reads as an add of the label once an MCP label edit
+ * trims it, so every later MCP label edit on the task, the portal's uat:hold
+ * and uat-attempt mirror included, would be refused. A case variant such as
+ * "UAT:Stale" is refused as createTask refuses it (trimmed, lower case). No
+ * patch removes it, and while it is on, the task
+ * keeps kind:code and its ticket label. A write that ends the close
+ * (`endsClose`, see endsStaleClose) is free of both rules, because the label
+ * goes with it.
  */
 export function staleLabelPatchViolation(
   before: readonly string[] | undefined, after: readonly string[], mayAdd: boolean, endsClose = false

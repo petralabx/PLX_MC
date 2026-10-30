@@ -3,6 +3,8 @@
 // query behind each section, so every figure can name its query and run. Pure.
 // USD revenue converts at the run's Bank of Canada rate, or at the fixed Sage
 // rate when the page asks for it (TASK-3780); truckloads stay on the Bank of Canada rate.
+// Narrowed to some salespeople's customers (TASK-4277), it is built again from
+// the run filterRunBySalespeople keeps, so every figure follows by the same rules.
 
 import { applyServiceCharges, pendingProductsOf, revenueByBusinessLine, type BusinessLineScope, type RevenueByBusinessLine } from "./business-line";
 import { customerRevenue, type CustomerRevenue } from "./customer-revenue";
@@ -11,7 +13,17 @@ import { prorateCents } from "./money";
 import { countedManualShipmentRefs, pendingShipmentsByClass, pendingShipmentsNotEnteredByHand } from "./pending-shipments";
 import { revenueByClass, type RevenueByClass } from "./revenue-by-class";
 import { revenueScope, type RevenueScopePace, type RevenueScopeView } from "./revenue-scope";
-import { computeGoals, type GoalsModel } from "./rules";
+import { computeGoals, salespeopleTakeaway, type GoalsModel } from "./rules";
+import {
+  canonicalSales,
+  filterRunBySalespeople,
+  NO_SALESPERSON,
+  runCustomerCodes,
+  salespeopleLabel,
+  salespeopleScope,
+  type SalespeopleRun,
+  type SalespersonLookup,
+} from "./salesperson-filter";
 import { buildShipmentList, type ShipmentListRow } from "./shipment-list";
 import { shipmentLinesView, type ShipmentLinesView } from "./shipment-lines";
 import type {
@@ -125,6 +137,38 @@ export interface GoalsView {
   forecast: ForecastView | null;
   /** Potential and realized revenue by customer (customer-revenue.ts); null without a model. */
   customerRevenue: CustomerRevenue | null;
+  /** The salesperson filter (TASK-4277); null without a model, or when the loader didn't look salespeople up. */
+  salespeople: SalespeopleView | null;
+}
+
+/** One salesperson the page can be narrowed to (TASK-4277). */
+export interface SalespersonOption {
+  code: string;
+  /** Sage's name for the code; null when it has none. */
+  name: string | null;
+  /** This run's customers with this salesperson on their Sage record. */
+  customers: number;
+}
+
+/** The salesperson filter (TASK-4277): who the page can be narrowed to, and whether it is. */
+export interface SalespeopleView {
+  /** ready: this run's customers' salespeople were read. waiting_for_access: the login lacks `missing`. unavailable: the replica couldn't be read. */
+  state: SalespersonLookup["state"];
+  missing: string[];
+  /** The salespeople on this run's customers, by name then code, and any asked for that aren't on them. */
+  options: SalespersonOption[];
+  /** This run's customers with no salesperson on their Sage record, or not in Sage: what `none` picks, with the hand entries that name no Sage customer. */
+  unassigned: number;
+  /** This run's customers with more than one salesperson: each counts in full under every one of them. */
+  shared: number;
+  /** The codes asked for (`sales`), sorted, `none` last; empty: every customer. */
+  selected: string[];
+  /** `selected` in words, e.g. "Glenn (GGC) and Sam (SM)"; "" when empty. */
+  label: string;
+  /** Whether the figures follow `selected`: false when nothing is picked, or when the salespeople couldn't be read (the figures are every customer's). */
+  applied: boolean;
+  /** Every customer's Revenue headlines (all, and manufacturing customers) and invoiced total, which the narrowed ones are set against; null unless applied. */
+  everyCustomer: { revenueGoalCadCents: number | null; revenueScopeGoalCadCents: number | null; revenueTotalCents: number } | null;
 }
 
 /** What the signed-in viewer may do on the page (from the Entra app roles). */
@@ -157,6 +201,8 @@ export interface GoalsViewInput {
   finishedGoodCodes?: ReadonlySet<string> | null;
   /** The rate USD revenue converts at (TASK-3780); absent, the run's Bank of Canada rate. */
   revenueBasis?: RevenueRateBasis;
+  /** The salesperson filter (TASK-4277): the live lookup of this run's customers and the codes asked for; absent, the page has none. */
+  salespeople?: { lookup: SalespersonLookup; selected: readonly string[] } | null;
 }
 
 /**
@@ -185,6 +231,75 @@ function headlineAfterServiceCharges(
 }
 
 export function buildGoalsView(input: GoalsViewInput): GoalsView {
+  return buildGoalsViewAndRun(input).view;
+}
+
+/**
+ * The page model and the run it was built from: narrowed to the picked
+ * salespeople's customers when the filter applies (TASK-4277), which is what
+ * the workbook's rows must come from.
+ */
+export function buildGoalsViewAndRun(input: GoalsViewInput): { view: GoalsView; run: GoalsViewInput } {
+  const whole = buildView(input);
+  const sales = input.salespeople;
+  if (!sales || !whole.model) return { view: { ...whole, salespeople: null }, run: input };
+  const filter = salespeopleView(input, sales.lookup, canonicalSales(sales.selected));
+  if (filter.selected.length === 0 || sales.lookup.state !== "ready") return { view: { ...whole, salespeople: filter }, run: input };
+  const run = filterRunBySalespeople(input, salespeopleScope(sales.lookup, filter.selected));
+  const view = buildView(run, {
+    revenueCoveredThrough: whole.model.coveredThrough.revenue,
+    // A Sage shipment a hand entry stands for stays out of the estimate whoever the entry was typed for, so the pages add up to the whole.
+    countedRefs: countedManualShipmentRefs(whole.model.entries),
+  });
+  if (view.model) view.model.takeaway = salespeopleTakeaway(view.model, `For ${filter.label}`, whole.model.revenue.totalCents);
+  const everyCustomer = {
+    revenueGoalCadCents: whole.revenueGoal?.goalCadCents ?? null,
+    revenueScopeGoalCadCents: whole.revenueScope?.goalCadCents ?? null,
+    revenueTotalCents: whole.model.revenue.totalCents,
+  };
+  return { view: { ...view, salespeople: { ...filter, applied: true, everyCustomer } }, run };
+}
+
+/** Who the page can be narrowed to: this run's customers' salespeople, with how many of its customers each has. */
+function salespeopleView(run: SalespeopleRun, lookup: SalespersonLookup, selected: string[]): SalespeopleView {
+  const names = lookup.state === "ready" ? lookup.names : {};
+  const counts = new Map<string, number>();
+  let unassigned = 0;
+  let shared = 0;
+  if (lookup.state === "ready") {
+    for (const code of runCustomerCodes(run)) {
+      const own = lookup.customers[code] ?? [];
+      if (own.length === 0) unassigned += 1;
+      if (own.length > 1) shared += 1;
+      for (const s of own) counts.set(s, (counts.get(s) ?? 0) + 1);
+    }
+  }
+  for (const code of selected) if (code !== NO_SALESPERSON && !counts.has(code)) counts.set(code, 0);
+  const options = [...counts]
+    .map(([code, customers]) => ({ code, name: names[code] ?? null, customers }))
+    .sort((a, b) => (a.name ?? a.code).localeCompare(b.name ?? b.code, "en", { sensitivity: "base" }) || (a.code < b.code ? -1 : 1));
+  return {
+    state: lookup.state,
+    missing: lookup.state === "waiting_for_access" ? lookup.missing : [],
+    options,
+    unassigned,
+    shared,
+    selected,
+    label: salespeopleLabel(selected, names),
+    applied: false,
+    everyCustomer: null,
+  };
+}
+
+/**
+ * The page model from `input`. `narrowed` (TASK-4277): a page narrowed to some
+ * salespeople's customers keeps the whole page's revenue covered-through date
+ * and counted hand shipments, and leaves last month's revenue out.
+ */
+function buildView(
+  input: GoalsViewInput,
+  narrowed?: { revenueCoveredThrough: IsoDate; countedRefs: ReadonlySet<string> }
+): Omit<GoalsView, "salespeople"> {
   const { run, latestRun } = input;
   const latestAttempt = latestRun && (!run || latestRun.id !== run.id) ? latestRun : null;
   if (!run || !input.snapshot || !run.fxRate) {
@@ -225,6 +340,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
     entries: input.entries,
     filemakerRefs: input.filemakerRefs,
     sageRefs: input.sageRefs,
+    ...(narrowed ? { revenueCoveredThrough: narrowed.revenueCoveredThrough, lastMonthRevenue: false } : {}),
   });
   const fxSource = run.fxSource ?? "boc";
   const shipments = buildShipmentList({
@@ -242,7 +358,7 @@ export function buildGoalsView(input: GoalsViewInput): GoalsView {
   const pace = { dueSoFarCents: model.revenue.dueSoFarCents, remaining: model.calendar.remaining };
   // INTERIM (TASK-3992): shipped, not yet invoiced, added to the card as an estimate.
   const pendingData = input.snapshot.pendingShipments ?? null;
-  const countedRefs = countedManualShipmentRefs(model.entries);
+  const countedRefs = narrowed?.countedRefs ?? countedManualShipmentRefs(model.entries);
   const pendingRows =
     pendingData?.access === "read"
       ? pendingShipmentsNotEnteredByHand(pendingData.shipments, countedRefs)

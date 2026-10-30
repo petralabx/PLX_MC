@@ -45,6 +45,9 @@ import { loadForecast } from "@/lib/reporting/goals/forecast-store";
 import { rowCounts } from "@/lib/reporting/goals/store";
 import { forecastAosQuery } from "@/lib/reporting/goals/queries/forecast-assembly-orders";
 import { missingColumns, type ColumnList } from "@/lib/reporting/goals/queries/read-access";
+import { CUSTOMER_SALESPEOPLE_SQL, SALESPERSON_COLUMNS } from "@/lib/reporting/goals/queries/salespeople";
+import { salespersonLookupFromRows, type SalespersonLookupRow } from "@/lib/reporting/goals/salesperson-filter";
+import { lookupSalespeople } from "@/lib/reporting/goals/salespeople";
 import type { SourceQuery } from "@/lib/reporting/goals/source-db";
 
 import { createForecastSourceTables, loadForecastSource } from "./reporting-goals-forecast-replica";
@@ -98,7 +101,11 @@ async function loadReplica(db: Client): Promise<void> {
       shipdate text, invdate text, insourcurr text, invitmtot text, invdiscamt text, invmisc text,
       invnetnotx text, audtdate text, inrate text DEFAULT '1.25'
     );
-    CREATE TABLE sage.ar_customer (idcust text, namecust text, codecurn text, swactv text DEFAULT '1');
+    CREATE TABLE sage.ar_customer (
+      idcust text, namecust text, codecurn text, swactv text DEFAULT '1',
+      codeslsp1 text, codeslsp2 text, codeslsp3 text, codeslsp4 text, codeslsp5 text, pctsasplt1 numeric
+    );
+    CREATE TABLE sage.ar_salesperson (codeslsp text, nameempl text, salescomm numeric);
     CREATE TABLE sage.oe_crdh (
       crdnumber text, invnumber text, customer text, bilname text, crddate text, crsourcurr text,
       crditmtot text, crddiscamt text, crdmisc text, crdnetnotx text, adjtype text
@@ -290,7 +297,7 @@ describe("refresh and page model", () => {
     expect(money(model.revenue.totalCents)).toBe("367014.16");
     expect(money(model.revenue.dueSoFarCents)).toBe("428571.43");
     expect(money(model.revenue.neededPerDayCents)).toBe("48691.22");
-    expect(money(model.revenue.lastMonthCadCents)).toBe("1007365.11");
+    expect(money(model.revenue.lastMonthCadCents!)).toBe("1007365.11");
     expect(model.takeaway).toBe(
       "72,652 kg of Line 1 bulk against 180,000 kg due so far, 2 full truckloads, and $367,014 of the $428,571 revenue due so far."
     );
@@ -889,6 +896,52 @@ describe("shipment lines (TASK-3144)", () => {
   });
 });
 
+describe("salesperson lookup (TASK-4277)", () => {
+  beforeAll(async () => {
+    // Sage keeps the codes space-padded; one customer has two salespeople, one has none.
+    await reportingAdmin.query(
+      `UPDATE sage.ar_customer SET codeslsp1 = 'VENE    ', codeslsp2 = 'VA      ', pctsasplt1 = 50 WHERE trim(idcust) = $1`,
+      [source.customers[0].idcust.trim()]
+    );
+    await reportingAdmin.query(`UPDATE sage.ar_customer SET codeslsp1 = 'GGC     ' WHERE trim(idcust) = $1`, [source.customers[1].idcust.trim()]);
+    await reportingAdmin.query(
+      `INSERT INTO sage.ar_salesperson (codeslsp, nameempl, salescomm) VALUES ('VENE    ', 'Venessa', 0), ('VA      ', 'Vince Alton', 5), ('GGC     ', 'Glenn', 3)`
+    );
+  });
+
+  it("reads each customer's salespeople and their names through the read-only login, never the split or the commission", async () => {
+    const ro = await connect(state.reportingUrl);
+    try {
+      const q: SourceQuery = async (text, params) => (await ro.query(text, params)).rows;
+      expect(await missingColumns(q, SALESPERSON_COLUMNS)).toEqual([]);
+      const [first, second, third] = source.customers.map((c) => c.idcust.trim().toUpperCase());
+      const rows = await q<SalespersonLookupRow>(CUSTOMER_SALESPEOPLE_SQL, [[first, second, third]]);
+      expect(salespersonLookupFromRows(rows)).toEqual({
+        state: "ready",
+        customers: { [first]: ["VENE", "VA"], [second]: ["GGC"] },
+        names: { VENE: "Venessa", VA: "Vince Alton", GGC: "Glenn" },
+      });
+      await expect(ro.query("SELECT pctsasplt1 FROM sage.ar_customer LIMIT 1")).rejects.toMatchObject({ code: "42501" });
+      await expect(ro.query("SELECT salescomm FROM sage.ar_salesperson LIMIT 1")).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await ro.end();
+    }
+    // The page's own lookup, through the same login, says the same.
+    const [first, second] = source.customers.map((c) => c.idcust.trim().toUpperCase());
+    expect(await lookupSalespeople([first, second])).toMatchObject({ state: "ready", customers: { [first]: ["VENE", "VA"], [second]: ["GGC"] } });
+  });
+
+  it("narrows the page model to the salespeople asked for", async () => {
+    const first = source.customers[0].idcust.trim().toUpperCase();
+    // Earlier page reads looked this run's customers up before they had salespeople: past the five-minute cache.
+    const later = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 6 * 60_000);
+    const view = await loadGoalsView("boc", ["GGC", "VA"]).finally(() => later.mockRestore());
+    expect(view.salespeople).toMatchObject({ state: "ready", applied: true, selected: ["GGC", "VA"], label: "Glenn (GGC) and Vince Alton (VA)" });
+    expect(view.shipments.filter((s) => s.source === "Sage").every((s) => [first, source.customers[1].idcust.trim().toUpperCase()].includes((s.customerCode ?? "").toUpperCase()))).toBe(true);
+    expect(view.model!.revenue.lastMonthCadCents).toBeNull();
+  });
+});
+
 describe("grant scripts for another role (TASK-3558)", () => {
   // Through plx-reporting-mcp the refresh's read-access checks run as the MCP server's own role, not mc_goals_ro.
   // The forecast's and the invoice lines' scripts grant the role psql's -v role names (here one that needs quoting).
@@ -932,6 +985,24 @@ describe("grant scripts for another role (TASK-3558)", () => {
     );
     expect(columns.rows.every((r) => r.privilege === "SELECT")).toBe(true);
     expect(columns.rows.map((r) => r.name).sort()).toEqual([...names(FORECAST_GRANTED), ...names(LINES_GRANTED)].sort());
+    expect((await reportingAdmin.query(`SELECT 1 FROM information_schema.table_privileges WHERE grantee = $1`, [ROLE])).rows).toEqual([]);
+  });
+
+  it("with -v role, readonly-grants-salespeople.sql grants that role exactly the columns the salesperson lookup reads (TASK-4277, re-runnable)", async () => {
+    const lookupTables = new Set(SALESPERSON_COLUMNS.map(([schema, table]) => `${schema}.${table}`));
+    expect(await missingColumns(q, SALESPERSON_COLUMNS)).toEqual(names(SALESPERSON_COLUMNS));
+    psqlScript("readonly-grants-salespeople.sql", { role: ROLE });
+    psqlScript("readonly-grants-salespeople.sql", { role: ROLE });
+    expect(await missingColumns(q, SALESPERSON_COLUMNS)).toEqual([]);
+    const columns = await reportingAdmin.query<{ name: string; privilege: string; relation: string }>(
+      `SELECT table_schema || '.' || table_name || '.' || column_name AS name, privilege_type AS privilege,
+              table_schema || '.' || table_name AS relation
+         FROM information_schema.column_privileges WHERE grantee = $1`,
+      [ROLE]
+    );
+    const onLookupTables = columns.rows.filter((r) => lookupTables.has(r.relation));
+    expect(onLookupTables.every((r) => r.privilege === "SELECT")).toBe(true);
+    expect(onLookupTables.map((r) => r.name).sort()).toEqual(names(SALESPERSON_COLUMNS).sort());
     expect((await reportingAdmin.query(`SELECT 1 FROM information_schema.table_privileges WHERE grantee = $1`, [ROLE])).rows).toEqual([]);
   });
 });

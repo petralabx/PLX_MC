@@ -3,6 +3,7 @@
 // "Manual entries" sheet the import reads, and the house styles. Taken from
 // the prototype workbook (PLX goals and production 2026-10-14.xlsx). Pure.
 
+import { NO_SALESPERSON } from "../salesperson-filter";
 import type { IsoDate, RevenueRateBasis } from "../types";
 
 /** Sheets, in order. */
@@ -22,9 +23,18 @@ export const WORKBOOK_SHEETS = [
 ] as const;
 export type WorkbookSheet = (typeof WORKBOOK_SHEETS)[number];
 
-/** "PLX goals and production 2026-10-14.xlsx"; at the Sage rate, "… 2026-10-14 (Sage rate).xlsx" (TASK-3780). */
-export function workbookFileName(today: IsoDate, basis: RevenueRateBasis = "boc"): string {
-  return `PLX goals and production ${today}${basis === "sage" ? " (Sage rate)" : ""}.xlsx`;
+/**
+ * "PLX goals and production 2026-10-14.xlsx"; at the Sage rate, "… 2026-10-14 (Sage rate).xlsx" (TASK-3780);
+ * narrowed to some salespeople's customers, "… (GGC, SM).xlsx", or "… (4 salespeople).xlsx" past three (TASK-4277).
+ */
+export function workbookFileName(today: IsoDate, basis: RevenueRateBasis = "boc", sales: readonly string[] = []): string {
+  const who =
+    sales.length === 0
+      ? ""
+      : sales.length > 3
+        ? ` (${sales.length} salespeople)`
+        : ` (${sales.map((c) => (c === NO_SALESPERSON ? "no salesperson" : c)).join(", ")})`;
+  return `PLX goals and production ${today}${basis === "sage" ? " (Sage rate)" : ""}${who}.xlsx`;
 }
 
 // ─── The "Manual entries" sheet (the import template) ──────────────────────

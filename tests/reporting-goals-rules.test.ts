@@ -241,7 +241,7 @@ describe("goals on 2026-10-14 (system data only)", () => {
     expect(money(r.totalCents)).toBe("367014.16");
     expect(money(r.dueSoFarCents)).toBe("428571.43");
     expect(money(r.neededPerDayCents)).toBe("48691.22");
-    expect(money(r.lastMonthCadCents)).toBe("1007365.11");
+    expect(money(r.lastMonthCadCents!)).toBe("1007365.11");
     expect(r.status).toBe("behind");
     expect(r.otherCurrencies).toEqual([]);
   });
@@ -258,7 +258,7 @@ describe("goals on 2026-10-14 (system data only)", () => {
       expect(money(point.cadCents)).toBe(proto.cadInvoiced);
       expect(money(point.usdCents)).toBe(proto.usdInvoiced);
       expect(Math.round(point.targetToDateCents / 100)).toBe(proto.targetToDate);
-      expect(Math.abs(point.lastMonthToDateCents / 100 - proto.lastMonthToDate)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(point.lastMonthToDateCents! / 100 - proto.lastMonthToDate)).toBeLessThanOrEqual(0.5);
     }
     expect(model.daily.at(-1)!.sageToDateCents).toBe(model.revenue.inSystemCents);
     expect(model.daily.find((d) => d.isToday)?.day).toBe(TODAY);

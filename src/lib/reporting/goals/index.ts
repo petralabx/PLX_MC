@@ -201,8 +201,33 @@ export { PENDING_SHIPMENT_COLUMNS, pendingShipmentsQuery } from "./queries/pendi
 export { pendingShipmentsByClass, pendingShipmentsEnabled } from "./pending-shipments";
 export type { PendingClassTotals, PendingShipmentsByClass } from "./pending-shipments";
 
-export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView, revenueBasisParam } from "./view";
-export type { DatasetQuery, GoalsPage, GoalsView, GoalsViewInput, GoalsViewState, GoalsViewer } from "./view";
+export { DATASET_QUERIES, SECTION_QUERIES, buildGoalsView, buildGoalsViewAndRun, revenueBasisParam } from "./view";
+export type {
+  DatasetQuery,
+  GoalsPage,
+  GoalsView,
+  GoalsViewInput,
+  GoalsViewState,
+  GoalsViewer,
+  SalespeopleView,
+  SalespersonOption,
+} from "./view";
+
+export {
+  MAX_SALES_CODES,
+  NO_SALESPERSON,
+  canonicalSales,
+  entryCustomerCode,
+  filterRunBySalespeople,
+  runCustomerCodes,
+  salesParam,
+  salespeopleLabel,
+  salespeopleScope,
+  salespersonLookupFromRows,
+} from "./salesperson-filter";
+export type { SalespeopleRun, SalespersonLookup, SalespersonLookupRow } from "./salesperson-filter";
+export { CUSTOMER_SALESPEOPLE_SQL, SALESPERSON_COLUMNS } from "./queries/salespeople";
+export { lookupSalespeople } from "./salespeople";
 
 export { FX_SERIES, fetchUsdCadRates } from "./fx";
 export type { FetchRates } from "./fx";

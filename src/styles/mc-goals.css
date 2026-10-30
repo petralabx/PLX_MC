@@ -743,6 +743,84 @@
   font-size: var(--p-text-meta);
 }
 
+/* The salesperson filter (TASK-4277): a disclosure of checkboxes that opens in
+   the flow, full width, so it needs no popover layer and works at 400 px. */
+.mc .goals .gp-pick {
+  min-width: 0;
+}
+
+.mc .goals .gp-pick[open] {
+  flex-basis: 100%;
+}
+
+.mc .goals .gp-pick > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: var(--p-touch);
+  padding: 4px 10px;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  color: var(--p-ink);
+  font-size: var(--p-text-small);
+  list-style: none;
+  cursor: pointer;
+}
+
+.mc .goals .gp-pick > summary::-webkit-details-marker {
+  display: none;
+}
+
+.mc .goals .gp-pick > summary::after {
+  content: "▾";
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-pick[open] > summary::after {
+  content: "▴";
+}
+
+.mc .goals .gp-pick.on > summary {
+  border-color: var(--p-accent);
+  background: var(--p-accent);
+  color: var(--p-paper);
+}
+
+.mc .goals .gp-pick.on > summary::after {
+  color: var(--p-paper);
+}
+
+.mc .goals .gp-pick-menu {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: 0 16px;
+  max-height: 22rem;
+  min-width: 0;
+  margin: 8px 0 0;
+  padding: 6px 12px;
+  overflow-y: auto;
+  border: 1px solid var(--p-grid);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-paper);
+}
+
+.mc .goals .gp-pick-menu .ct {
+  font-family: var(--mono);
+  font-size: var(--p-text-meta);
+  color: var(--p-ink-2);
+}
+
+.mc .goals .gp-pick-menu .n {
+  margin-left: auto;
+  font-size: var(--p-text-meta);
+  color: var(--p-muted);
+}
+
+.mc .goals .gp-pick-menu .gp-check {
+  display: flex;
+}
+
 .mc .goals .gp-check {
   display: inline-flex;
   align-items: center;

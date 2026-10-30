@@ -69,6 +69,12 @@ export interface Route {
   fx?: "sage";
   /** Goals & Production revenue for manufacturing customers only (every class but Exclusive Distribution): `/?screen=goals&scope=mfg`; absent = all customers. */
   scope?: "mfg";
+  /**
+   * Goals & Production narrowed to some salespeople's customers (TASK-4277):
+   * `/?screen=goals&sales=GGC,SM`, Sage salesperson codes and `none` for
+   * customers without one; absent = every customer. The page checks the codes.
+   */
+  sales?: string;
   // Module E (SPEC §3.B.3): an Insights chart segment click navigates to the
   // board carrying a FilterState here; WorkViews adopts it on mount/route change
   // through F's sanitizeFilterState. Optional, so all existing nav() sites carry
@@ -92,6 +98,9 @@ export interface ScreenProps {
 
 const ENTITY_PARAMS = ["projectId", "bucketId", "taskId", "sop", "diagram", "node", "question", "gate", "draftId", "version"] as const;
 
+// Goals salesperson codes as a link carries them (TASK-4277): letters, digits, `._-` and commas.
+const SALES_RE = /^[A-Za-z0-9._,-]{1,800}$/;
+
 // Stable link names that read as another screen (TASK-3559): `?screen=my-tasks`
 // is the shareable name for My tasks, whose screen key is "mine".
 const SCREEN_ALIASES: ReadonlyMap<string, Screen> = new Map([["my-tasks", "mine"]]);
@@ -107,6 +116,7 @@ export function routeToUrl(route: Route): string {
   if (route.focus === "evidence") params.set("focus", "evidence");
   if (route.fx === "sage") params.set("fx", "sage");
   if (route.scope === "mfg") params.set("scope", "mfg");
+  if (route.sales) params.set("sales", route.sales);
   if (route.edit === "1") params.set("edit", "1");
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
@@ -133,6 +143,8 @@ export function urlToRoute(url: string): Route {
   if (params.get("focus") === "evidence") route.focus = "evidence";
   if (params.get("fx") === "sage") route.fx = "sage";
   if (params.get("scope") === "mfg") route.scope = "mfg";
+  const sales = params.get("sales");
+  if (sales && SALES_RE.test(sales)) route.sales = sales;
   if (params.get("edit") === "1") route.edit = "1";
   return route;
 }

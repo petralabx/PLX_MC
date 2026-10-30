@@ -1,6 +1,7 @@
 // Loads the page model: the latest successful snapshot, the live manual entries
 // and the references they match, then hands them to the pure view builder. The
-// export also gets that snapshot's invoices, their lines and truckload shipments.
+// export also gets that snapshot's invoices, their lines and truckload shipments,
+// narrowed as the page is when it shows some salespeople's customers (TASK-4277).
 
 import { ApiError } from "@/lib/api/route";
 import { databaseConfigured, reportingDatabaseConfigured } from "@/lib/secrets";
@@ -9,6 +10,8 @@ import { previousMonthStart } from "./calendar";
 import { lookupFinishedGoodCodes } from "./finished-goods";
 import { loadForecast } from "./forecast-store";
 import { normalizeRef } from "./rules";
+import { runCustomerCodes } from "./salesperson-filter";
+import { lookupSalespeople } from "./salespeople";
 import {
   latestRuns,
   listEntries,
@@ -20,7 +23,7 @@ import {
   loadSnapshot,
 } from "./store";
 import type { CreditNotesDataset, PendingShipmentsDataset, FxRate, RevenueRateBasis, ShipmentLineRow, ShipmentLinesDataset, ShipmentRow, SnapshotData, TruckloadRow } from "./types";
-import { buildGoalsView, type GoalsView } from "./view";
+import { buildGoalsView, buildGoalsViewAndRun, type GoalsView } from "./view";
 
 const EMPTY_SETTINGS = {
   line1KgPerWorkingDay: 0,
@@ -31,9 +34,13 @@ const EMPTY_SETTINGS = {
   sageUsdCadRate: null,
 };
 
-/** The page model with USD revenue at `basis` (TASK-3780): the run's Bank of Canada rate, or the fixed Sage rate. */
-export async function loadGoalsView(basis: RevenueRateBasis = "boc"): Promise<GoalsView> {
-  return (await loadGoals(basis)).view;
+/**
+ * The page model with USD revenue at `basis` (TASK-3780): the run's Bank of
+ * Canada rate, or the fixed Sage rate. `sales` (TASK-4277): salesperson codes
+ * and `none` to narrow it to; empty, every customer.
+ */
+export async function loadGoalsView(basis: RevenueRateBasis = "boc", sales: readonly string[] = []): Promise<GoalsView> {
+  return (await loadGoals(basis, sales)).view;
 }
 
 /** The page model plus what the workbook adds, from the same run: its Sage invoices and their lines, truckload shipments and the stored rates. */
@@ -50,10 +57,13 @@ export interface GoalsExportData {
   pendingShipments?: PendingShipmentsDataset | null;
 }
 
-export async function loadGoalsExport(basis: RevenueRateBasis = "boc"): Promise<GoalsExportData> {
-  const { view, snapshot, rates } = await loadGoals(basis);
+export async function loadGoalsExport(basis: RevenueRateBasis = "boc", sales: readonly string[] = []): Promise<GoalsExportData> {
+  const { view, snapshot, rates } = await loadGoals(basis, sales);
   // Only the workbook reads them here; the page fetches them on demand (GET …/runs/[id]/shipment-lines).
-  const shipmentLines = view.run ? await loadShipmentLines(view.run.id) : null;
+  const stored = view.run ? await loadShipmentLines(view.run.id) : null;
+  // Narrowed to some salespeople's customers, the workbook lists only their invoices' lines.
+  const kept = view.salespeople?.applied ? new Set((snapshot?.shipments ?? []).map((s) => s.invoice)) : null;
+  const shipmentLines = stored && kept ? { ...stored, lines: stored.lines.filter((line) => kept.has(line.invoice)) } : stored;
   return {
     view,
     shipments: snapshot?.shipments ?? [],
@@ -65,7 +75,10 @@ export async function loadGoalsExport(basis: RevenueRateBasis = "boc"): Promise<
   };
 }
 
-async function loadGoals(basis: RevenueRateBasis): Promise<{ view: GoalsView; snapshot: SnapshotData | null; rates: FxRate[] }> {
+async function loadGoals(
+  basis: RevenueRateBasis,
+  sales: readonly string[]
+): Promise<{ view: GoalsView; snapshot: SnapshotData | null; rates: FxRate[] }> {
   const configured = reportingDatabaseConfigured();
   const empty = {
     configured,
@@ -102,16 +115,18 @@ async function loadGoals(basis: RevenueRateBasis): Promise<{ view: GoalsView; sn
   const shipmentLines = await loadShipmentLineSummary(succeeded.id);
   // The lines stay off the page payload. Only the business-line totals need them.
   let shipmentLineRows: ShipmentLineRow[] | null = null;
-  let finishedGoodCodes: ReadonlySet<string> | null = null;
+  let itemCodes: string[] | null = null;
   if (shipmentLines?.access === "read") {
     const dataset = await loadShipmentLines(succeeded.id);
     shipmentLineRows = dataset?.lines ?? null;
-    if (shipmentLineRows) {
-      const itemCodes = shipmentLineRows.filter((line) => line.kind === "item").map((line) => line.code ?? "");
-      finishedGoodCodes = await lookupFinishedGoodCodes(itemCodes);
-    }
+    if (shipmentLineRows) itemCodes = shipmentLineRows.filter((line) => line.kind === "item").map((line) => line.code ?? "");
   }
-  const view = buildGoalsView({
+  // Both live lookups read the reporting replica, not Mission Control's pool, so they run side by side.
+  const [finishedGoodCodes, salespersonLookup] = await Promise.all([
+    itemCodes ? lookupFinishedGoodCodes(itemCodes) : null,
+    lookupSalespeople(runCustomerCodes({ snapshot, entries, ftlCustomers: config.ftlCustomers, forecast })),
+  ]);
+  const { view, run } = buildGoalsViewAndRun({
     configured,
     run: succeeded,
     latestRun: latest,
@@ -128,6 +143,7 @@ async function loadGoals(basis: RevenueRateBasis): Promise<{ view: GoalsView; sn
     shipmentLineRows,
     finishedGoodCodes,
     revenueBasis: basis,
+    salespeople: { lookup: salespersonLookup, selected: sales },
   });
-  return { view, snapshot, rates };
+  return { view, snapshot: run.snapshot, rates };
 }
